@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Congratulations, your extension "famous-saying" is now active!');
+  console.log('Congratulations, your extension "mdtrans" is now active!');
 
   const disposable = vscode.commands.registerCommand(
-    "famous-saying.helloWorld",
+    "mdtrans.helloWorld",
     () => {
-      vscode.window.showInformationMessage("Hello World from famous-saying!");
+      vscode.window.showInformationMessage("Hello World from mdtrans!");
     }
   );
 
