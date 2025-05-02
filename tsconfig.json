@@ -8,7 +8,6 @@
     "rootDir": "src",
     "strict": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUnusedParameters": true
+    "noFallthroughCasesInSwitch": true
   }
 }

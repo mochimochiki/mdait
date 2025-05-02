@@ -1,7 +1,7 @@
 {
   "name": "mdtrans",
   "displayName": "mdtrans",
-  "description": "",
+  "description": "マークダウンおよびCSVファイルの翻訳拡張機能",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.99.0"
@@ -14,10 +14,65 @@
   "contributes": {
     "commands": [
       {
-        "command": "mdtrans.helloWorld",
-        "title": "Hello World"
+        "command": "mdtrans.syncHashes",
+        "title": "Sync Markdown Section Hashes"
+      },
+      {
+        "command": "mdtrans.translate",
+        "title": "MD Trans: ファイル翻訳を実行"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "MD Trans",
+      "properties": {
+        "mdtrans.directories.source": {
+          "type": "string",
+          "default": "./content/en",
+          "description": "翻訳元ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
+        },
+        "mdtrans.directories.target": {
+          "type": "string",
+          "default": "./content/ja",
+          "description": "翻訳先ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
+        },
+        "mdtrans.files.extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".md",
+            ".csv"
+          ],
+          "description": "翻訳対象のファイル拡張子"
+        },
+        "mdtrans.files.includePattern": {
+          "type": "string",
+          "default": "**/*",
+          "description": "翻訳対象のファイルパターン（glob形式）"
+        },
+        "mdtrans.files.excludePattern": {
+          "type": "string",
+          "default": "**/node_modules/**",
+          "description": "翻訳対象から除外するファイルパターン（glob形式）"
+        },
+        "mdtrans.translation.provider": {
+          "type": "string",
+          "default": "default",
+          "description": "翻訳プロバイダー（default: 組み込みの簡易翻訳）"
+        },
+        "mdtrans.translation.markdown.skipCodeBlocks": {
+          "type": "boolean",
+          "default": true,
+          "description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
+        },
+        "mdtrans.translation.csv.delimiter": {
+          "type": "string",
+          "default": ",",
+          "description": "CSV翻訳時のデリミタ（区切り文字）"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -26,6 +81,9 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "biome lint ./src",
     "test": "vscode-test"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
   },
   "devDependencies": {
     "@types/vscode": "^1.99.0",
