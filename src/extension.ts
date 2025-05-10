@@ -7,11 +7,11 @@ import { Configuration } from "./config/configuration";
 import { FileExplorer } from "./utils/file-explorer";
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Congratulations, your extension "mdtrans" is now active!');
+	console.log('Congratulations, your extension "mdait" is now active!');
 
 	// translate command
 	const translateDisposable = vscode.commands.registerCommand(
-		"mdtrans.translate",
+		"mdait.translate",
 		translateCommand,
 	);
 

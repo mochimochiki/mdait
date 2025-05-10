@@ -1,6 +1,6 @@
 {
-  "name": "mdtrans",
-  "displayName": "mdtrans",
+  "name": "mdait",
+  "displayName": "mdait",
   "description": "マークダウンおよびCSVファイルの翻訳拡張機能",
   "version": "0.0.1",
   "engines": {
@@ -11,31 +11,29 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
+  "contributes": {    "commands": [
       {
-        "command": "mdtrans.syncHashes",
+        "command": "mdait.syncHashes",
         "title": "Sync Markdown Section Hashes"
       },
       {
-        "command": "mdtrans.translate",
-        "title": "MD Trans: ファイル翻訳を実行"
+        "command": "mdait.translate",
+        "title": "MD AIT: ファイル翻訳を実行"
       }
-    ],
-    "configuration": {
-      "title": "MD Trans",
+    ],    "configuration": {
+      "title": "MD AIT",
       "properties": {
-        "mdtrans.directories.source": {
+        "mdait.directories.source": {
           "type": "string",
           "default": "./content/en",
           "description": "翻訳元ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
         },
-        "mdtrans.directories.target": {
+        "mdait.directories.target": {
           "type": "string",
           "default": "./content/ja",
           "description": "翻訳先ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
         },
-        "mdtrans.files.extensions": {
+        "mdait.files.extensions": {
           "type": "array",
           "items": {
             "type": "string"
@@ -45,28 +43,27 @@
             ".csv"
           ],
           "description": "翻訳対象のファイル拡張子"
-        },
-        "mdtrans.files.includePattern": {
+        },        "mdait.files.includePattern": {
           "type": "string",
           "default": "**/*",
           "description": "翻訳対象のファイルパターン（glob形式）"
         },
-        "mdtrans.files.excludePattern": {
+        "mdait.files.excludePattern": {
           "type": "string",
           "default": "**/node_modules/**",
           "description": "翻訳対象から除外するファイルパターン（glob形式）"
         },
-        "mdtrans.translation.provider": {
+        "mdait.translation.provider": {
           "type": "string",
           "default": "default",
           "description": "翻訳プロバイダー（default: 組み込みの簡易翻訳）"
         },
-        "mdtrans.translation.markdown.skipCodeBlocks": {
+        "mdait.translation.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,
           "description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
         },
-        "mdtrans.translation.csv.delimiter": {
+        "mdait.translation.csv.delimiter": {
           "type": "string",
           "default": ",",
           "description": "CSV翻訳時のデリミタ（区切り文字）"
