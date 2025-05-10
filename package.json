@@ -10,17 +10,16 @@
     "Other"
   ],
   "activationEvents": [],
-  "main": "./out/extension.js",
-  "contributes": {    "commands": [
+  "main": "./out/extension.js",  "contributes": {    "commands": [
       {
         "command": "mdait.syncHashes",
         "title": "Sync Markdown Section Hashes"
       },
       {
-        "command": "mdait.translate",
-        "title": "MD AIT: ファイル翻訳を実行"
+        "command": "mdait.trans",
+        "title": "MD AIT: セクション翻訳を実行"
       }
-    ],    "configuration": {
+    ],"configuration": {
       "title": "MD AIT",
       "properties": {
         "mdait.directories.source": {

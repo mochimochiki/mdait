@@ -6,9 +6,10 @@ import { FileExplorer } from "../../utils/file-explorer";
 import { DefaultTranslationProvider } from "./translation-provider";
 
 /**
- * translate command
+ * trans command
+ * markdownの翻訳を実行する
  */
-export async function translateCommand(): Promise<void> {
+export async function transCommand(): Promise<void> {
 	try {
 		// 翻訳処理の開始を通知
 		vscode.window.showInformationMessage("翻訳処理を開始します...");
