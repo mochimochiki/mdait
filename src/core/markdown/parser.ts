@@ -1,5 +1,7 @@
+import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
 import { MdaitHeader } from "./mdait-header";
+import type { FrontMatter, Markdown } from "./mdait-markdown";
 import { MdaitSection } from "./mdait-section";
 
 /**
@@ -11,14 +13,14 @@ export interface IMarkdownParser {
 	 * @param markdown Markdownテキスト
 	 * @returns パースされたMarkdownセクションの配列
 	 */
-	parse(markdown: string): MdaitSection[];
+	parse(markdown: string): Markdown;
 
 	/**
 	 * セクションをMarkdownテキストに変換
 	 * @param sections セクションの配列
 	 * @returns Markdownテキスト
 	 */
-	stringify(sections: MdaitSection[]): string;
+	stringify(doc: Markdown): string;
 }
 
 /**
@@ -40,40 +42,52 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param markdown Markdownテキスト
 	 * @returns パースされたMarkdownセクションの配列
 	 */
-	parse(markdown: string): MdaitSection[] {
+	parse(markdown: string): Markdown {
+		const fm = matter(markdown);
+		const frontMatter = fm.data as FrontMatter;
+		const content = fm.content;
+		let frontMatterRaw = "";
+		const idx = markdown.indexOf(content);
+		if (idx > 0) {
+			frontMatterRaw = markdown.substring(0, idx);
+		}
 		const sections: MdaitSection[] = [];
-		const tokens = this.md.parse(markdown, {});
+		const tokens = this.md.parse(content, {});
+		const lines = content.split(/\r?\n/);
 
 		let currentSection: {
 			mdaitHeader: MdaitHeader;
 			title: string;
 			level: number;
-			bodyTokens: MarkdownIt.Token[];
+			startLine: number | null;
+			endLine: number | null;
 		} | null = null;
 		let inHeading = false;
-		// 空のヘッダーで初期化（nullを許容しない）
 		let mdaitHeader = new MdaitHeader("");
 
-		// トークンを走査してセクションを抽出
 		for (let i = 0; i < tokens.length; i++) {
-			const token = tokens[i]; // HTMLコメントを処理
-			if (token.type === "html_block" && token.content.includes("<!-- mdait")) {
+			const token = tokens[i];
+			if (
+				(token.type === "inline" || token.type === "html_block") &&
+				token.content.includes("<!-- mdait")
+			) {
 				const parsedHeader = MdaitHeader.parse(token.content);
 				if (parsedHeader !== null) {
 					mdaitHeader = parsedHeader;
 				}
 				continue;
-			} // 見出しの開始を検出
+			}
 			if (token.type === "heading_open") {
 				inHeading = true;
 
 				// 前のセクションがあれば保存
-				if (currentSection) {
-					const bodyContent = this.renderTokens(currentSection.bodyTokens);
-					// 原文を再構築（見出し + 本文）
-					const heading = "#".repeat(currentSection.level);
-					const rawContent = `${heading} ${currentSection.title}\n\n${bodyContent}`;
-
+				if (currentSection && currentSection.startLine !== null) {
+					const start = currentSection.startLine;
+					const end =
+						currentSection.endLine !== null
+							? currentSection.endLine
+							: lines.length;
+					const rawContent = lines.slice(start, end).join("\n");
 					sections.push(
 						new MdaitSection(
 							currentSection.mdaitHeader,
@@ -82,44 +96,34 @@ export class MarkdownItParser implements IMarkdownParser {
 							rawContent,
 						),
 					);
-				} // 新しいセクションを開始
+				}
+				// 新しいセクションを開始
 				currentSection = {
 					mdaitHeader: mdaitHeader,
 					title: "",
 					level: Number.parseInt(token.tag.substring(1), 10),
-					bodyTokens: [],
+					startLine: token.map ? token.map[0] : null,
+					endLine: null,
 				};
-
-				// 空のヘッダーで初期化（nullを許容しない）
 				mdaitHeader = new MdaitHeader("");
 				continue;
 			}
-
-			// 見出しの終了を検出
 			if (token.type === "heading_close") {
 				inHeading = false;
 				continue;
 			}
-
-			// 見出し内のテキストを取得
 			if (inHeading && token.type === "inline") {
 				if (currentSection) {
 					currentSection.title = token.content;
 				}
-				continue;
-			}
-
-			// 見出し以外のトークンを本文に追加
-			if (!inHeading && currentSection) {
-				currentSection.bodyTokens.push(token);
 			}
 		}
 		// 最後のセクションを保存
-		if (currentSection) {
-			const bodyContent = this.renderTokens(currentSection.bodyTokens);
-			// 原文を再構築（見出し + 本文）
-			const heading = "#".repeat(currentSection.level);
-			const rawContent = `${heading} ${currentSection.title}\n\n${bodyContent}`;
+		if (currentSection && currentSection.startLine !== null) {
+			const start = currentSection.startLine;
+			const end =
+				currentSection.endLine !== null ? currentSection.endLine : lines.length;
+			const rawContent = lines.slice(start, end).join("\n");
 			sections.push(
 				new MdaitSection(
 					currentSection.mdaitHeader,
@@ -129,16 +133,7 @@ export class MarkdownItParser implements IMarkdownParser {
 				),
 			);
 		}
-
-		return sections;
-	}
-
-	/**
-	 * トークン配列をMarkdownテキストに変換
-	 */
-	private renderTokens(tokens: MarkdownIt.Token[]): string {
-		// 型を明示
-		return this.md.renderer.render(tokens, this.md.options, {});
+		return { frontMatter, frontMatterRaw, sections };
 	}
 
 	/**
@@ -146,8 +141,12 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param sections セクションの配列
 	 * @returns Markdownテキスト
 	 */
-	stringify(sections: MdaitSection[]): string {
-		return sections.map((section) => section.toString()).join("\n\n");
+	stringify(doc: Markdown): string {
+		let fm = "";
+		if (doc.frontMatterRaw && doc.frontMatterRaw.trim().length > 0) {
+			fm = `${doc.frontMatterRaw}`;
+		}
+		return fm + doc.sections.map((section) => section.toString()).join("\n\n");
 	}
 }
 

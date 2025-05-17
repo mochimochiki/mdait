@@ -177,3 +177,55 @@ Markdown文書をセクション単位に分割し、mdaitメタデータコメ�
 
 複数の翻訳エンジンに対応できるよう抽象インターフェースを提供。
 デフォルトプロバイダーと拡張可能なプラグイン構造を持たせる。
+
+## 8. Markdownオブジェクトとフロントマター設計
+
+### 8.1 Markdownオブジェクトの構造
+
+Markdown文書全体を表す上位オブジェクトとして `Markdown` を導入する。
+
+```ts
+interface Markdown {
+  frontMatter?: FrontMatter; // yaml/toml両対応
+  sections: MarkdownSection[];
+}
+
+interface FrontMatter {
+  mdait?: {
+    hash?: string;
+    srcHash?: string;
+    need?: string;
+  };
+  [key: string]: any;
+}
+
+interface MarkdownSection {
+  mdaitHeader?: MdaitHeader;
+  title: string;
+  headingLevel: number;
+  content: string;
+}
+```
+
+- frontMatterはYAML/TOMLどちらにも対応し、mdaitプロパティでグローバルなメタ情報（hash, srcHash, need）を持つ。
+- セクションごとのmdaitHeaderは見出し直前のmdaitコメントで管理。
+- frontMatterはMarkdownSectionより上位のMarkdownオブジェクトで一元管理する。
+
+### 8.2 パース・出力例
+
+```markdown
+---
+title: サンプル
+mdait:
+  hash: abcd1234
+---
+<!-- mdait zzzz9999 src:yyyy8888 need:review -->
+# セクション1
+本文1
+```
+
+- `Markdown.frontMatter.mdait.hash === "abcd1234"`
+- `Markdown.sections[0].mdaitHeader.hash === "zzzz9999"`
+- `Markdown.sections[0].title === "セクション1"`
+
+---

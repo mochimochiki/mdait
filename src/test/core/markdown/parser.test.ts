@@ -1,0 +1,268 @@
+import { strict as assert } from "node:assert";
+import { markdownParser } from "../../../core/markdown/parser";
+
+suite("MarkdownItParser: 基本セクション分割", () => {
+	test("単純な見出し2つ", () => {
+		const md = `
+# タイトル1
+
+本文1
+
+# タイトル2
+本文2`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 2);
+		assert.equal(sections[0].title, "タイトル1");
+		assert.equal(sections[1].title, "タイトル2");
+		assert.ok(sections[0].content.includes("タイトル1"));
+		assert.ok(sections[1].content.includes("タイトル2"));
+	});
+
+	test("mdaitコメント付き", () => {
+		const md = `<!-- mdait abcd1234 src:efgh5678 need:translate -->
+# 見出し
+本文`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.equal(sections[0].mdaitHeader.hash, "abcd1234");
+		assert.equal(sections[0].mdaitHeader.srcHash, "efgh5678");
+		assert.equal(sections[0].mdaitHeader.needTag, "translate");
+	});
+
+	test("本文にリストやコードブロック", () => {
+		const md = `
+# h1
+
+- item1
+- item2
+
+\`\`\`
+code
+block
+\`\`\``;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.ok(sections[0].content.includes("- item1"));
+		assert.ok(sections[0].content.includes("```"));
+	});
+
+	test("ファイル先頭・末尾の見出し", () => {
+		const md = `# first
+body
+
+# last
+end`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 2);
+		assert.equal(sections[0].title, "first");
+		assert.equal(sections[1].title, "last");
+	});
+
+	test("コードブロック内の#やmdaitコメントは無視", () => {
+		const md = `
+# h1
+\`\`\`
+# not heading
+<!-- mdait fake -->
+\`\`\`
+text`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.ok(sections[0].content.includes("# not heading"));
+		assert.ok(sections[0].content.includes("<!-- mdait fake -->"));
+	});
+
+	test("コードブロック内のコメントと見出しは無視される", () => {
+		const codeBlock = [
+			"```",
+			"# コード内見出し",
+			"<!-- mdait fakehash src:fakesrc need:ignore -->",
+			"コード本文",
+			"```",
+		].join("\n");
+		const md = `# 外部見出し\n\n${codeBlock}\nテキスト`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.equal(sections[0].title, "外部見出し");
+		assert.ok(sections[0].content.includes("# コード内見出し"));
+		assert.ok(
+			sections[0].content.includes(
+				"<!-- mdait fakehash src:fakesrc need:ignore -->",
+			),
+		);
+	});
+
+	test("parse→stringifyでロスレス", () => {
+		const md = `
+<!-- mdait abcd1234 src:efgh5678 need:translate -->
+# 見出し
+本文
+- list
+`;
+		const doc = markdownParser.parse(md);
+		const md2 = markdownParser.stringify(doc);
+		// 空白や改行の差異は許容
+		assert.ok(md2.replace(/\s+/g, "") === md.replace(/\s+/g, ""));
+	});
+
+	test("8文字未満のmdaitコメントは無視される", () => {
+		const md = "<!-- mdait abcd src:efgh need:translate -->\n# 見出し\n本文";
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		// mdaitHeaderはnullまたは空のhashになる（パース不可）
+		assert.equal(sections.length, 1);
+		assert.ok(
+			!sections[0].mdaitHeader ||
+				!sections[0].mdaitHeader.hash ||
+				sections[0].mdaitHeader.hash.length !== 8,
+		);
+	});
+
+	test("複数行のmdaitコメント", () => {
+		const md = `
+<!-- mdait abcd1234
+src:efgh5678
+need:translate -->
+# 見出し
+
+本文`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.equal(sections[0].mdaitHeader.hash, "abcd1234");
+		assert.equal(sections[0].mdaitHeader.srcHash, "efgh5678");
+		assert.equal(sections[0].mdaitHeader.needTag, "translate");
+	});
+
+	test("複数レベルにわたるmdaitコメント付き見出し", () => {
+		const md = `
+<!-- mdait hash1234 src:src45678 need:tag1 -->
+# 見出し1
+
+本文1
+
+<!-- mdait hash2345 src:src56789 need:tag2 -->
+## 見出し2
+
+本文2`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 2);
+		assert.equal(sections[0].title, "見出し1");
+		assert.equal(sections[0].mdaitHeader.hash, "hash1234");
+		assert.equal(sections[0].mdaitHeader.srcHash, "src45678");
+		assert.equal(sections[0].mdaitHeader.needTag, "tag1");
+		assert.equal(sections[1].title, "見出し2");
+		assert.equal(sections[1].mdaitHeader.hash, "hash2345");
+		assert.equal(sections[1].mdaitHeader.srcHash, "src56789");
+		assert.equal(sections[1].mdaitHeader.needTag, "tag2");
+	});
+
+	test("TOMLフロントマターにmdaitコメントはつかない", () => {
+		const tomlFrontMatter = [
+			"---",
+			"title: 'テスト'",
+			"lang: 'ja'",
+			"---",
+		].join("\n");
+		const md = `${tomlFrontMatter}\n\n# 見出し\n本文`;
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.equal(sections[0].title, "見出し");
+		assert.ok(doc.frontMatterRaw?.includes("---"));
+		assert.ok(doc.frontMatterRaw?.includes("title: 'テスト'"));
+	});
+
+	test("複数のmdaitコメント", () => {
+		const md = [
+			"<!-- mdait hashAAAA src:srcAAAAA need:tagA -->",
+			"",
+			"# 見出しA",
+			"本文A",
+			"",
+			"<!-- mdait hashBBBB src:srcBBBBB need:tagB -->",
+			"# 見出しB",
+			"本文B",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 2);
+		assert.equal(sections[0].mdaitHeader.hash, "hashAAAA");
+		// 直前のmdaitのみ有効
+		assert.equal(sections[1].mdaitHeader.hash, "hashBBBB");
+	});
+
+	test("複数行のmdaitコメントと複数見出し", () => {
+		const md = [
+			"<!-- mdait hashMMMM",
+			"src:srcMMMM1",
+			"need:tagM -->",
+			"# 見出しM",
+			"本文M",
+			"",
+			"# 見出しN",
+			"本文N",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 2);
+		assert.equal(sections[0].mdaitHeader.hash, "hashMMMM");
+		assert.equal(sections[0].mdaitHeader.srcHash, "srcMMMM1");
+		assert.equal(sections[0].mdaitHeader.needTag, "tagM");
+		assert.ok(!sections[1].mdaitHeader.hash);
+	});
+
+	test("フロントマター直後のmdaitコメントと見出し", () => {
+		const md = [
+			"---",
+			"title: 'フロントマター'",
+			"---",
+			"<!-- mdait hashFFF1 src:srcFFFF1 need:tagF -->",
+			"# 見出しF",
+			"本文F",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 1);
+		assert.equal(sections[0].mdaitHeader.hash, "hashFFF1");
+		assert.equal(sections[0].title, "見出しF");
+		assert.ok(doc.frontMatterRaw?.includes("title: 'フロントマター'"));
+	});
+
+	test("YAMLフロントマター＋複数見出し＋mdaitコメントの組み合わせ", () => {
+		const md = [
+			"---",
+			"title: '多見出しテスト'",
+			"lang: 'ja'",
+			"---",
+			"",
+			"<!-- mdait hashA123 src:srcA123 need:tagA -->",
+			"# 見出しA",
+			"本文A",
+			"",
+			"# 見出しB",
+			"本文B",
+			"",
+			"<!-- mdait hashB234 src:srcB234 need:tagB -->",
+			"# 見出しC",
+			"本文C",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const sections = doc.sections;
+		assert.equal(sections.length, 3);
+		assert.ok(doc.frontMatterRaw?.includes("title: '多見出しテスト'"));
+		assert.equal(sections[0].title, "見出しA");
+		assert.equal(sections[0].mdaitHeader.hash, "hashA123");
+		assert.equal(sections[1].title, "見出しB");
+		assert.ok(!sections[1].mdaitHeader.hash);
+		assert.equal(sections[2].title, "見出しC");
+		assert.equal(sections[2].mdaitHeader.hash, "hashB234");
+	});
+});

@@ -88,9 +88,6 @@ suite("MdaitHeader", () => {
 		// 完全に異なるコメント
 		assert.equal(MdaitHeader.parse("<!-- 通常のコメント -->"), null);
 
-		// 一部だけmdaitに似ているがフォーマットが異なる
-		assert.equal(MdaitHeader.parse("<!-- mdait invalid -->"), null);
-
 		// 空文字列
 		assert.equal(MdaitHeader.parse(""), null);
 

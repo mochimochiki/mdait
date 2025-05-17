@@ -45,7 +45,7 @@ export class MdaitHeader {
 
 		// mdaitコメントのパターン
 		const mdaitPattern =
-			/<!-- mdait ([a-zA-Z0-9]{8})(?:\s+src:([a-zA-Z0-9]{8}))?(?:\s+need:(\w+))?\s*-->/;
+			/<!-- mdait ([a-zA-Z0-9]+)(?:\s+src:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
 		const match = sanitizedText.match(mdaitPattern);
 
 		if (!match) {

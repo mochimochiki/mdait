@@ -69,15 +69,15 @@ export async function syncCommand(): Promise<void> {
 
 				if (extension === ".md") {
 					// Markdownのセクション分割
-					const sourceSections = markdownParser.parse(sourceContent);
-					const targetSections = targetContent
+					const source = markdownParser.parse(sourceContent);
+					const target = targetContent
 						? markdownParser.parse(targetContent)
-						: [];
+						: { sections: [] };
 
 					// セクションの対応付け
 					const matchResult = sectionMatcher.match(
-						sourceSections,
-						targetSections,
+						source.sections,
+						target.sections,
 					);
 
 					// 同期結果の生成
@@ -88,12 +88,18 @@ export async function syncCommand(): Promise<void> {
 
 					// 差分検出
 					const diffResult = diffDetector.detect(
-						targetSections,
+						target.sections,
 						syncedSections,
 					);
 
+					// 同期結果をMarkdownオブジェクトとして構築
+					const syncedDoc = {
+						frontMatter: target.frontMatter,
+						sections: syncedSections,
+					};
+
 					// 同期結果を文字列に変換
-					const syncedContent = markdownParser.stringify(syncedSections);
+					const syncedContent = markdownParser.stringify(syncedDoc);
 
 					// 出力先ディレクトリが存在するか確認し、なければ作成
 					fileExplorer.ensureTargetDirectoryExists(targetFile);
