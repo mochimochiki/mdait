@@ -10,7 +10,9 @@
     "Other"
   ],
   "activationEvents": [],
-  "main": "./out/extension.js",  "contributes": {    "commands": [
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
       {
         "command": "mdait.syncHashes",
         "title": "Sync Markdown Section Hashes"
@@ -19,7 +21,8 @@
         "command": "mdait.trans",
         "title": "MD AIT: セクション翻訳を実行"
       }
-    ],"configuration": {
+    ],
+    "configuration": {
       "title": "MD AIT",
       "properties": {
         "mdait.directories.source": {
@@ -42,7 +45,8 @@
             ".csv"
           ],
           "description": "翻訳対象のファイル拡張子"
-        },        "mdait.files.includePattern": {
+        },
+        "mdait.files.includePattern": {
           "type": "string",
           "default": "**/*",
           "description": "翻訳対象のファイルパターン（glob形式）"
@@ -71,23 +75,25 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
     "lint": "biome lint ./src",
-    "test": "vscode-test"
+    "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
+    "watch": "tsc -watch -p ./"
   },
   "dependencies": {
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.99.0",
+    "@biomejs/biome": "1.9.4",
+    "@types/markdown-it": "^14.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "typescript": "^5.7.3",
-    "@biomejs/biome": "1.9.4",
+    "@types/vscode": "^1.99.0",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "mocha": "^11.3.0",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }

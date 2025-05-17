@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { syncCommand } from "./commands/sync/sync-command";
 import { transCommand } from "./commands/trans/trans-command";
 import { DefaultTranslationProvider } from "./commands/trans/translation-provider";
 import { Configuration } from "./config/configuration";
@@ -15,5 +16,12 @@ export function activate(context: vscode.ExtensionContext) {
 		transCommand,
 	);
 
+	// sync command
+	const syncDisposable = vscode.commands.registerCommand(
+		"mdait.syncHashes",
+		syncCommand,
+	);
+
 	context.subscriptions.push(transDisposable);
+	context.subscriptions.push(syncDisposable);
 }
