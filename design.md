@@ -186,16 +186,11 @@ Markdown文書全体を表す上位オブジェクトとして `Markdown` を導
 
 ```ts
 interface Markdown {
-  frontMatter?: FrontMatter; // yaml/toml両対応
+  frontMatter?: FrontMatter; // yaml対応
   sections: MarkdownSection[];
 }
 
 interface FrontMatter {
-  mdait?: {
-    hash?: string;
-    srcHash?: string;
-    need?: string;
-  };
   [key: string]: any;
 }
 
@@ -207,7 +202,7 @@ interface MarkdownSection {
 }
 ```
 
-- frontMatterはYAML/TOMLどちらにも対応し、mdaitプロパティでグローバルなメタ情報（hash, srcHash, need）を持つ。
+- frontMatterはYAMLに対応する。
 - セクションごとのmdaitHeaderは見出し直前のmdaitコメントで管理。
 - frontMatterはMarkdownSectionより上位のMarkdownオブジェクトで一元管理する。
 
@@ -216,16 +211,13 @@ interface MarkdownSection {
 ```markdown
 ---
 title: サンプル
-mdait:
-  hash: abcd1234
 ---
 <!-- mdait zzzz9999 src:yyyy8888 need:review -->
 # セクション1
 本文1
 ```
 
-- `Markdown.frontMatter.mdait.hash === "abcd1234"`
-- `Markdown.sections[0].mdaitHeader.hash === "zzzz9999"`
+- `Markdown.sections[0].header.hash === "zzzz9999"`
 - `Markdown.sections[0].title === "セクション1"`
 
 ---
