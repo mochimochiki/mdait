@@ -14,16 +14,16 @@
   "contributes": {
     "commands": [
       {
-        "command": "mdait.syncHashes",
-        "title": "Sync Markdown Section Hashes"
+        "command": "mdait.sync",
+        "title": "Sync mdait"
       },
       {
         "command": "mdait.trans",
-        "title": "MD AIT: セクション翻訳を実行"
+        "title": "mdait: セクション翻訳を実行"
       }
     ],
     "configuration": {
-      "title": "MD AIT",
+      "title": "mdait",
       "properties": {
         "mdait.directories.source": {
           "type": "string",

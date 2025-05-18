@@ -8,7 +8,11 @@ import { Configuration } from "./config/configuration";
 import { FileExplorer } from "./utils/file-explorer";
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Congratulations, your extension "mdait" is now active!');
+	// sync command
+	const syncDisposable = vscode.commands.registerCommand(
+		"mdait.sync",
+		syncCommand,
+	);
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand(
@@ -16,12 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
 		transCommand,
 	);
 
-	// sync command
-	const syncDisposable = vscode.commands.registerCommand(
-		"mdait.syncHashes",
-		syncCommand,
-	);
-
+	console.log('"mdait" is now active.');
 	context.subscriptions.push(transDisposable);
 	context.subscriptions.push(syncDisposable);
 }

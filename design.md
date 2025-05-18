@@ -18,7 +18,7 @@
 本文内容...
 ```
 
-### タグ定義：
+### 2.1 タグ定義：
 
 | タグ名     | 説明                                                                         |
 | ---------- | ---------------------------------------------------------------------------- |
@@ -42,60 +42,55 @@
 
 ---
 
-## 4. セクション処理の概念
+## 4. コマンド設計
 
-### 4.1 正規化とハッシュ
+### 4.1 syncコマンド
 
-- 正規化：トリム・余分な空白除去など（将来的にオプション拡張可能）
-- ハッシュ：`sha256(normalized_text).slice(0, 8)` のような 8 文字短縮
+- 目的：source.mdとtarget.mdを比較し、セクション単位でハッシュ・src追跡・needフラグの同期を行う。
+- 主な処理フロー：
+  1. source側の各セクションごとに正規化＋ハッシュ計算
+  2. 既存ファイルにmdaitヘッダーがない場合、自動でmdaitヘッダーを生成。
+  3. target側でsrc一致セクションを探索し、対応付け・新規挿入・need:translate付与
+  4. target側の余剰セクションはauto-delete設定に応じて削除またはneed:verify-deletion付与
+  5. src重複時は、すべての該当targetセクションを同期対象とする
+  6. Markdown構造を再構築しtarget.mdとして保存
+- 設定値：auto-delete（デフォルトtrue）
 
-### 4.2 セクション対応の基本ロジック（`sync`）
+### 4.3 初回実行の流れ
 
-#### 4.2.1 sync 処理ロジック詳細
+既存ファイル導入時の処理:
 
-##### 基本方針
+1. **自動ヘッダー生成**:
+  初回sync時、source（ja.md）にmdaitヘッダーがなければ自動で生成
 
-- `source.md`を主に走査し、毎セクションごとに正規化・ハッシ計算を行い、`target.md`側のセクションと対応付けを試みる。
-- 対応が見つからない場合は `target.md`に新規セクションとして挿入し、`need:translate`を付与する。
-- 挿入・対応付けの順序は、**source のセクション順を優先**する。
+2. **ハッシュ計算**:
+  - source（ja.md）の各セクション本文を正規化しハッシュ値を計算
+  - target（en.md）も同様にハッシュ値を計算
 
-##### 処理フロー映像（擬似コード）
+3. **srcの付与 (セクション対応付け)**:
+  - targetの各セクションがsourceのどのセクションに対応するかを推定
+    - セクションの順序 / 見出し構造 / 内容の類似性
+    - ※ 対応付けロジックは拡張を考慮し、入れ替え可能な設計とする
+  - 対応が見つかったtargetセクションに`src:xxxx`（sourceのハッシュ値）を付与
 
-```ts
-for section in source:
-  hash = calcHash(section.body)
+#### 注意点
 
-  match = find section in target where src == hash
-
-  if match:
-    update head hash if needed
-  else:
-    insert to target:
-      <!-- mdait {newHash} src:{hash} need:translate -->
-
-      ## section.title
-      (empty body)
-```
-
-##### 処理上の注意点
-
-- `src:` が `target.md` 内で重複している場合は **上から順に 1 つ目のみを対象として処理し、以降は無視する**（整合性が曖昧になるため）
-- `src:` 重複が見つかった場合は **ログに警告として出力する**（自動修正は行わない）
+- `src:` が `target.md` 内で重複している場合は **すべての該当セクションを同期対象とする**
 - セクション削除については **設定可能** とする：
 
   - `auto-delete: true` の場合（デフォルト）→ `source` 側から削除されたセクションは `target` からも即時削除
   - `auto-delete: false` の場合 → 対象に `need:verify-deletion` を付与し、残す形でマーキング
 
-### 4.3 翻訳処理（`trans`）
 
-```ts
-for section in target:
-  if need in ['translate', 'review']:
-    srcText = find source section by src
-    translated = aiTranslate(srcText)
-    update section text + head hash
-    remove need
-```
+### 4.2 transコマンド
+
+- 目的：target.md内のneed:translateまたはneed:reviewなセクションをAI翻訳し、翻訳結果・ハッシュ更新・needタグ除去を行う。
+- 主な処理フロー：
+  1. target.mdをパースし、Markdownオブジェクトへ変換
+  2. need:translateまたはneed:reviewなセクションを列挙
+  3. srcでsource.md側の対応セクションを取得し、AI翻訳
+  4. 翻訳結果を反映し、ハッシュ更新・needタグ除去
+  5. Markdown構造を再構築しtarget.mdとして保存
 
 ---
 
@@ -107,13 +102,7 @@ for section in target:
 
 ---
 
-## 6. コメントタグ設計原則
-
-- コメントは `<!-- mdait ... -->` という形で明確に識別で
-
----
-
-## 7. リポジトリ構成
+## 6. リポジトリ構成
 
 本プロジェクトは、以下の構成でソースコードを管理します。
 
@@ -122,39 +111,15 @@ src/
   extension.ts           # エントリーポイント（コマンド登録など）
   commands/
     sync/                # syncコマンド関連処理
-      sync-command.ts    # syncコマンドの実装
-      section-matcher.ts # セクション対応処理
-      diff-detector.ts   # 差分検知
-    trans/           # transコマンド関連処理
-      trans-command.ts  # transコマンドの実装
-      translation-provider.ts  # 翻訳プロバイダーインターフェース
+    trans/               # transコマンド関連処理
   core/                  # 共通コア機能
-    markdown/
-      parser.ts          # Markdownパーサー
-      section.ts         # セクション管理
-      comment.ts         # mdaitコメント処理
-    hash/
-      normalizer.ts      # 正規化処理
-      hash-calculator.ts # ハッシュ計算
+    markdown/            # Markdownの構造解析、セクション分割、コメント処理など。
+    hash/                # 文書の正規化とハッシュ計算アルゴリズムを提供。
   config/
     configuration.ts     # 設定管理
   utils/
-    file-utils.ts        # ファイル操作関連
+    file-utils.ts        # ファイル操作など汎用的なユーティリティ。
 ```
-
-### 7.1 責任分担
-
-- **commands**: 各コマンド固有のロジックを実装。ユーザー操作との橋渡し役。
-  - **sync**: Markdown文書間の同期処理を担当。
-  - **trans**: 翻訳対象の特定と翻訳処理の実行を担当。
-
-- **core**: 複数のコマンドで共有される基本機能を実装。
-  - **markdown**: Markdownの構造解析、セクション分割、コメント処理など。
-  - **hash**: 文書の正規化とハッシュ計算アルゴリズムを提供。
-
-- **config**: 設定値の管理と構成。
-
-- **utils**: ファイル操作など汎用的なユーティリティ。
 
 ### 7.2 主要コンポーネント
 
