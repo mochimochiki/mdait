@@ -135,6 +135,7 @@ function syncMarkdownFile(sourceFile: string, targetFile: string) {
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
 		frontMatter: target.frontMatter,
+		frontMatterRaw: target.frontMatterRaw,
 		sections: syncedSections,
 	};
 
@@ -150,6 +151,7 @@ function syncMarkdownFile(sourceFile: string, targetFile: string) {
 	// source側にもmdaitヘッダー・hashを必ず付与・更新し、ファイル保存
 	const updatedSourceContent = markdownParser.stringify({
 		frontMatter: source.frontMatter,
+		frontMatterRaw: source.frontMatterRaw,
 		sections: source.sections,
 	});
 	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
@@ -205,16 +207,16 @@ function updateSectionHashes(
 		}
 		if (pair.source && pair.target) {
 			// targetのsrc/hashも最新化
-			const newHash = calculateHash(pair.source.content);
+			const srcHash = calculateHash(pair.source.content);
 			if (!pair.target.mdaitHeader) {
 				pair.target.mdaitHeader = new MdaitHeader(
 					calculateHash(pair.target.content),
-					newHash,
+					srcHash,
 				);
 			} else {
 				// hashはtargetの内容で、srcHashのみsourceの新しいhash
 				pair.target.mdaitHeader.hash = calculateHash(pair.target.content);
-				pair.target.mdaitHeader.srcHash = newHash;
+				pair.target.mdaitHeader.srcHash = srcHash;
 			}
 		}
 		if (pair.source && !pair.target) {

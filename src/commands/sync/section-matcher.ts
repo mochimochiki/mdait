@@ -124,13 +124,6 @@ export class SectionMatcher {
 		for (const pair of matchResult) {
 			if (pair.source && pair.target) {
 				// マッチ
-				const sourceHash = calculateHash(pair.source.content);
-				if (
-					pair.target.mdaitHeader &&
-					pair.target.mdaitHeader.hash !== sourceHash
-				) {
-					pair.target.mdaitHeader.updateHash(sourceHash);
-				}
 				result.push(pair.target);
 			} else if (pair.source && !pair.target) {
 				// 新規source

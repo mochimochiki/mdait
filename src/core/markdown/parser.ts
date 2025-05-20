@@ -71,6 +71,21 @@ export class MarkdownItParser implements IMarkdownParser {
 				(token.type === "inline" || token.type === "html_block") &&
 				token.content.includes("<!-- mdait")
 			) {
+				// mdaitコメントが現れた時点で、現在のセクションをここで区切る
+				if (currentSection && currentSection.startLine !== null) {
+					const start = currentSection.startLine;
+					const end = token.map ? token.map[0] : lines.length;
+					const rawContent = lines.slice(start, end).join("\n");
+					sections.push(
+						new MdaitSection(
+							currentSection.mdaitHeader,
+							currentSection.title,
+							currentSection.level,
+							rawContent,
+						),
+					);
+					currentSection = null;
+				}
 				const parsedHeader = MdaitHeader.parse(token.content);
 				if (parsedHeader !== null) {
 					mdaitHeader = parsedHeader;
@@ -78,15 +93,11 @@ export class MarkdownItParser implements IMarkdownParser {
 				continue;
 			}
 			if (token.type === "heading_open") {
-				inHeading = true;
-
 				// 前のセクションがあれば保存
 				if (currentSection && currentSection.startLine !== null) {
 					const start = currentSection.startLine;
-					const end =
-						currentSection.endLine !== null
-							? currentSection.endLine
-							: lines.length;
+					// 次の見出しが出てくるまでを1セクションとする
+					const end = token.map ? token.map[0] : lines.length;
 					const rawContent = lines.slice(start, end).join("\n");
 					sections.push(
 						new MdaitSection(
@@ -106,6 +117,7 @@ export class MarkdownItParser implements IMarkdownParser {
 					endLine: null,
 				};
 				mdaitHeader = new MdaitHeader("");
+				inHeading = true;
 				continue;
 			}
 			if (token.type === "heading_close") {
@@ -121,8 +133,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		// 最後のセクションを保存
 		if (currentSection && currentSection.startLine !== null) {
 			const start = currentSection.startLine;
-			const end =
-				currentSection.endLine !== null ? currentSection.endLine : lines.length;
+			const end = lines.length;
 			const rawContent = lines.slice(start, end).join("\n");
 			sections.push(
 				new MdaitSection(
@@ -146,7 +157,12 @@ export class MarkdownItParser implements IMarkdownParser {
 		if (doc.frontMatterRaw && doc.frontMatterRaw.trim().length > 0) {
 			fm = `${doc.frontMatterRaw}`;
 		}
-		return fm + doc.sections.map((section) => section.toString()).join("\n\n");
+		// セクション間は1つの改行で連結し、余分な改行増加を防ぐ
+		const body = doc.sections
+			.map((section) => section.toString().replace(/\n+$/g, ""))
+			.join("\n\n")
+			.replace(/\n{3,}/g, "\n\n");
+		return `${fm}${body}\n`;
 	}
 }
 
