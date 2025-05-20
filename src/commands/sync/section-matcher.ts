@@ -3,19 +3,13 @@ import { MdaitHeader } from "../../core/markdown/mdait-header";
 import { MdaitSection } from "../../core/markdown/mdait-section";
 
 /**
- * セクション対応の結果インターフェース
+ * セクション対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
  */
-export interface MatchResult {
-	/** ソースセクションとマッチしたターゲットセクション */
-	matches: Array<{
-		source: MdaitSection;
-		target: MdaitSection;
-	}>;
-	/** マッチしなかったソースセクション (新規または変更) */
-	unmatchedSources: MdaitSection[];
-	/** マッチしなかったターゲットセクション (削除または孤立) */
-	unmatchedTargets: MdaitSection[];
-}
+export type SectionPair = {
+	source: MdaitSection | null;
+	target: MdaitSection | null;
+};
+export type MatchResult = SectionPair[];
 
 /**
  * セクション対応処理を行うクラス
@@ -30,83 +24,95 @@ export class SectionMatcher {
 		sourceSections: MdaitSection[],
 		targetSections: MdaitSection[],
 	): MatchResult {
-		const matches: Array<{ source: MdaitSection; target: MdaitSection }> = [];
-		const unmatchedTargets = [...targetSections];
-		const unmatchedSources: MdaitSection[] = [];
+		const result: SectionPair[] = [];
+		const matchedTargetIndexes = new Set<number>();
+		const matchedSourceIndexes = new Set<number>();
 
-		// 対応付けの状態追跡用マップ
-		const processedSourceHashes = new Set<string>();
-		const processingSourceHashes = new Set<string>();
-
-		// dupicate src warning
-		const srcHashCount = new Map<string, number>();
-		for (const target of targetSections) {
-			const srcHash = target.getSourceHash();
-			if (srcHash) {
-				srcHashCount.set(srcHash, (srcHashCount.get(srcHash) || 0) + 1);
+		// 1. src一致優先
+		for (let sIdx = 0; sIdx < sourceSections.length; sIdx++) {
+			const source = sourceSections[sIdx];
+			const sourceHash = source.mdaitHeader?.hash;
+			if (!sourceHash) continue;
+			let found = false;
+			for (let tIdx = 0; tIdx < targetSections.length; tIdx++) {
+				const target = targetSections[tIdx];
+				if (matchedTargetIndexes.has(tIdx)) continue;
+				const targetSrc = target.getSourceHash();
+				if (targetSrc && targetSrc === sourceHash) {
+					result.push({ source, target });
+					matchedTargetIndexes.add(tIdx);
+					matchedSourceIndexes.add(sIdx);
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				// src一致しなかったsourceは後で順序ベース推定
+				// ここでは何もしない
 			}
 		}
 
-		// 警告出力（重複src）
-		srcHashCount.forEach((count, hash) => {
-			if (count > 1) {
-				console.warn(
-					`Warning: Source hash "${hash}" appears ${count} times in target file. Only the first occurrence will be matched.`,
-				);
-			}
-		});
+		// 2. 順序ベース推定（srcが付与されていないtargetのみ）
+		let sPtr = 0;
+		let tPtr = 0;
+		while (sPtr < sourceSections.length || tPtr < targetSections.length) {
+			// 次のマッチ済みsource/targetのindex
+			while (sPtr < sourceSections.length && matchedSourceIndexes.has(sPtr))
+				sPtr++;
+			while (tPtr < targetSections.length && matchedTargetIndexes.has(tPtr))
+				tPtr++;
 
-		// 各ソースセクションに対して対応するターゲットを探す
-		for (const source of sourceSections) {
-			// ソースセクションのハッシュを計算
-			const sourceHash = calculateHash(source.content);
+			if (sPtr >= sourceSections.length && tPtr >= targetSections.length) break;
 
-			// 循環参照チェック
-			if (processingSourceHashes.has(sourceHash)) {
-				console.error(`Circular reference detected for hash: ${sourceHash}`);
-				continue;
-			}
+			// srcが付与されていないtargetのみを順序ベース対象
+			const tIsEligible =
+				tPtr < targetSections.length &&
+				!matchedTargetIndexes.has(tPtr) &&
+				!targetSections[tPtr].getSourceHash();
+			const sIsEligible =
+				sPtr < sourceSections.length && !matchedSourceIndexes.has(sPtr);
 
-			// 既に処理済みのハッシュはスキップ
-			if (processedSourceHashes.has(sourceHash)) {
-				continue;
-			}
-
-			processingSourceHashes.add(sourceHash);
-
-			// ターゲットのsrcハッシュが一致するものを探す
-			const targetIndex = unmatchedTargets.findIndex(
-				(target) => target.getSourceHash() === sourceHash,
-			);
-
-			if (targetIndex !== -1) {
-				// マッチが見つかった場合
-				const target = unmatchedTargets[targetIndex];
-
-				// マッチをリストに追加
-				matches.push({ source, target });
-
-				// マッチしたターゲットをunmatchedから削除
-				unmatchedTargets.splice(targetIndex, 1);
+			if (sIsEligible && tIsEligible) {
+				result.push({
+					source: sourceSections[sPtr],
+					target: targetSections[tPtr],
+				});
+				matchedSourceIndexes.add(sPtr);
+				matchedTargetIndexes.add(tPtr);
+				sPtr++;
+				tPtr++;
+			} else if (sIsEligible) {
+				// 新規source
+				result.push({ source: sourceSections[sPtr], target: null });
+				matchedSourceIndexes.add(sPtr);
+				sPtr++;
+			} else if (tIsEligible) {
+				// 孤立target
+				result.push({ source: null, target: targetSections[tPtr] });
+				matchedTargetIndexes.add(tPtr);
+				tPtr++;
 			} else {
-				// マッチが見つからない場合、新規セクション
-				unmatchedSources.push(source);
+				// どちらも対象外（既にマッチ済み）
+				sPtr++;
+				tPtr++;
 			}
-
-			// 処理完了マーク
-			processedSourceHashes.add(sourceHash);
-			processingSourceHashes.delete(sourceHash);
 		}
 
-		return {
-			matches,
-			unmatchedSources,
-			unmatchedTargets,
-		};
+		// 3. srcがあるのにマッチしなかったtarget（孤立）
+		for (let tIdx = 0; tIdx < targetSections.length; tIdx++) {
+			if (matchedTargetIndexes.has(tIdx)) continue;
+			const target = targetSections[tIdx];
+			if (target.getSourceHash()) {
+				result.push({ source: null, target });
+				matchedTargetIndexes.add(tIdx);
+			}
+		}
+
+		return result;
 	}
 
 	/**
-	 * 同期結果からターゲットセクションの配列を生成
+	 * 統一ペア配列からターゲットセクションの配列を生成
 	 * @param matchResult セクション対応の結果
 	 * @param autoDeleteOrphans 孤立セクションを自動削除するかどうか
 	 */
@@ -115,44 +121,43 @@ export class SectionMatcher {
 		autoDeleteOrphans = true,
 	): MdaitSection[] {
 		const result: MdaitSection[] = [];
-		const { matches, unmatchedSources, unmatchedTargets } = matchResult;
-
-		// source順にセクションを配置
-		for (const { source, target } of matches) {
-			const sourceHash = calculateHash(source.content);
-
-			// ハッシュが変わっていれば更新
-			if (target.mdaitHeader && target.mdaitHeader.hash !== sourceHash) {
-				target.mdaitHeader.updateHash(sourceHash);
-			}
-
-			result.push(target);
-		}
-
-		// 新規セクションの作成と挿入
-		for (const source of unmatchedSources) {
-			const sourceHash = calculateHash(source.content);
-			const newTarget = MdaitSection.createEmptyTargetSection(
-				source,
-				sourceHash,
-			);
-			result.push(newTarget);
-		}
-
-		// 孤立セクション（マッチしなかったターゲット）の処理
-		if (!autoDeleteOrphans) {
-			// 削除せずに保持、need:verify-deletionタグを付与
-			for (const orphan of unmatchedTargets) {
-				if (orphan.mdaitHeader) {
-					orphan.mdaitHeader.needTag = "verify-deletion";
-				} else {
-					const hash = calculateHash(orphan.content);
-					orphan.mdaitHeader = new MdaitHeader(hash, null, "verify-deletion");
+		for (const pair of matchResult) {
+			if (pair.source && pair.target) {
+				// マッチ
+				const sourceHash = calculateHash(pair.source.content);
+				if (
+					pair.target.mdaitHeader &&
+					pair.target.mdaitHeader.hash !== sourceHash
+				) {
+					pair.target.mdaitHeader.updateHash(sourceHash);
 				}
-				result.push(orphan);
+				result.push(pair.target);
+			} else if (pair.source && !pair.target) {
+				// 新規source
+				const sourceHash = calculateHash(pair.source.content);
+				const newTarget = MdaitSection.createEmptyTargetSection(
+					pair.source,
+					sourceHash,
+				);
+				result.push(newTarget);
+			} else if (!pair.source && pair.target) {
+				// 孤立target
+				if (!autoDeleteOrphans) {
+					if (pair.target.mdaitHeader) {
+						pair.target.mdaitHeader.needTag = "verify-deletion";
+					} else {
+						const hash = calculateHash(pair.target.content);
+						pair.target.mdaitHeader = new MdaitHeader(
+							hash,
+							null,
+							"verify-deletion",
+						);
+					}
+					result.push(pair.target);
+				}
+				// autoDeleteOrphans=true の場合は何もしない（削除）
 			}
 		}
-
 		return result;
 	}
 }

@@ -2,6 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { calculateHash } from "../../core/hash/hash-calculator";
+import { MdaitHeader } from "../../core/markdown/mdait-header";
+import type { MdaitSection } from "../../core/markdown/mdait-section";
 import { markdownParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector } from "./diff-detector";
@@ -41,71 +44,19 @@ export async function syncCommand(): Promise<void> {
 		vscode.window.showInformationMessage(
 			`${files.length}個のファイルを同期します...`,
 		);
-
 		// 各ファイルを同期
 		let successCount = 0;
 		let errorCount = 0;
-
-		// セクション同期処理のインスタンス
-		const sectionMatcher = new SectionMatcher();
-		const diffDetector = new DiffDetector();
-
 		for (const sourceFile of files) {
 			try {
-				// ファイル読み込み
-				const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-
 				// 出力先パスを取得
 				const targetFile = fileExplorer.getTargetPath(sourceFile, config);
-				let targetContent = "";
-
-				// ターゲットファイルが存在するか確認
-				if (fs.existsSync(targetFile)) {
-					targetContent = fs.readFileSync(targetFile, "utf-8");
-				}
 
 				// ファイルタイプに応じて適切な同期処理を選択
 				const extension = path.extname(sourceFile).toLowerCase();
-
 				if (extension === ".md") {
-					// Markdownのセクション分割
-					const source = markdownParser.parse(sourceContent);
-					const target = targetContent
-						? markdownParser.parse(targetContent)
-						: { sections: [] };
-
-					// セクションの対応付け
-					const matchResult = sectionMatcher.match(
-						source.sections,
-						target.sections,
-					);
-
-					// 同期結果の生成
-					const syncedSections = sectionMatcher.createSyncedTargets(
-						matchResult,
-						true, // auto-delete (設定から取得するようにする予定)
-					);
-
-					// 差分検出
-					const diffResult = diffDetector.detect(
-						target.sections,
-						syncedSections,
-					);
-
-					// 同期結果をMarkdownオブジェクトとして構築
-					const syncedDoc = {
-						frontMatter: target.frontMatter,
-						sections: syncedSections,
-					};
-
-					// 同期結果を文字列に変換
-					const syncedContent = markdownParser.stringify(syncedDoc);
-
-					// 出力先ディレクトリが存在するか確認し、なければ作成
-					fileExplorer.ensureTargetDirectoryExists(targetFile);
-
-					// ファイル出力
-					fs.writeFileSync(targetFile, syncedContent, "utf-8");
+					// Markdownファイルの同期を実行
+					const diffResult = syncMarkdownFile(sourceFile, targetFile);
 
 					// ログ出力
 					console.log(`File: ${path.basename(sourceFile)}`);
@@ -114,9 +65,8 @@ export async function syncCommand(): Promise<void> {
 					console.log(`  Deleted: ${diffResult.deleted}`);
 					console.log(`  Unchanged: ${diffResult.unchanged}`);
 				} else {
-					// Markdown以外は現時点ではそのままコピー
-					fileExplorer.ensureTargetDirectoryExists(targetFile);
-					fs.writeFileSync(targetFile, sourceContent, "utf-8");
+					// Markdown以外はそのままコピー
+					syncNonMarkdownFile(sourceFile, targetFile);
 				}
 
 				successCount++;
@@ -136,5 +86,148 @@ export async function syncCommand(): Promise<void> {
 			`同期処理中にエラーが発生しました: ${(error as Error).message}`,
 		);
 		console.error(error);
+	}
+}
+
+/**
+ * Markdownファイルの同期処理を行う
+ * @param sourceFile ソースファイルのパス
+ * @param targetFile ターゲットファイルのパス
+ * @returns 差分検出結果
+ */
+function syncMarkdownFile(sourceFile: string, targetFile: string) {
+	const sectionMatcher = new SectionMatcher();
+	const diffDetector = new DiffDetector();
+	const fileExplorer = new FileExplorer();
+
+	// ファイル読み込み
+	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
+	let targetContent = "";
+	if (fs.existsSync(targetFile)) {
+		targetContent = fs.readFileSync(targetFile, "utf-8");
+	}
+
+	// Markdownのセクション分割
+	const source = markdownParser.parse(sourceContent);
+	const target = targetContent
+		? markdownParser.parse(targetContent)
+		: { sections: [] };
+
+	// src, target に hash を付与（ない場合のみ）
+	ensureSectionHash(source.sections);
+	ensureSectionHash(target.sections);
+
+	// セクションの対応付け
+	const matchResult = sectionMatcher.match(source.sections, target.sections);
+
+	// セクションのハッシュを更新
+	updateSectionHashes(matchResult);
+
+	// 同期結果の生成
+	const syncedSections = sectionMatcher.createSyncedTargets(
+		matchResult,
+		true, // auto-delete (設定から取得するようにする予定)
+	);
+
+	// 差分検出
+	const diffResult = diffDetector.detect(target.sections, syncedSections);
+
+	// 同期結果をMarkdownオブジェクトとして構築
+	const syncedDoc = {
+		frontMatter: target.frontMatter,
+		sections: syncedSections,
+	};
+
+	// 同期結果を文字列に変換
+	const syncedContent = markdownParser.stringify(syncedDoc);
+
+	// 出力先ディレクトリが存在するか確認し、なければ作成
+	fileExplorer.ensureTargetDirectoryExists(targetFile);
+
+	// ファイル出力
+	fs.writeFileSync(targetFile, syncedContent, "utf-8");
+
+	// source側にもmdaitヘッダー・hashを必ず付与・更新し、ファイル保存
+	const updatedSourceContent = markdownParser.stringify({
+		frontMatter: source.frontMatter,
+		sections: source.sections,
+	});
+	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
+
+	return diffResult;
+}
+
+/**
+ * Markdown以外のファイルの同期処理を行う
+ * @param sourceFile ソースファイルのパス
+ * @param targetFile ターゲットファイルのパス
+ */
+function syncNonMarkdownFile(sourceFile: string, targetFile: string): void {
+	// ファイル読み込み
+	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
+
+	// ファイルエクスプローラーインスタンス生成
+	const fileExplorer = new FileExplorer();
+
+	// Markdown以外は現時点ではそのままコピー
+	fileExplorer.ensureTargetDirectoryExists(targetFile);
+	fs.writeFileSync(targetFile, sourceContent, "utf-8");
+}
+
+/**
+ * セクションにmdaitヘッダーを付与する
+ * @param sections セクションの配列
+ */
+function ensureSectionHash(sections: MdaitSection[]) {
+	for (const section of sections) {
+		if (!section.mdaitHeader || !section.mdaitHeader.hash) {
+			const hash = calculateHash(section.content);
+			section.mdaitHeader = new MdaitHeader(hash);
+		}
+	}
+}
+
+/**
+ * セクションのハッシュを更新する
+ * @param matchResult セクションのマッチ結果
+ */
+function updateSectionHashes(
+	matchResult: { source: MdaitSection | null; target: MdaitSection | null }[],
+) {
+	for (const pair of matchResult) {
+		if (pair.source) {
+			const newHash = calculateHash(pair.source.content);
+			if (!pair.source.mdaitHeader) {
+				pair.source.mdaitHeader = new MdaitHeader(newHash);
+			} else if (pair.source.mdaitHeader.hash !== newHash) {
+				pair.source.mdaitHeader.hash = newHash;
+			}
+		}
+		if (pair.source && pair.target) {
+			// targetのsrc/hashも最新化
+			const newHash = calculateHash(pair.source.content);
+			if (!pair.target.mdaitHeader) {
+				pair.target.mdaitHeader = new MdaitHeader(
+					calculateHash(pair.target.content),
+					newHash,
+				);
+			} else {
+				// hashはtargetの内容で、srcHashのみsourceの新しいhash
+				pair.target.mdaitHeader.hash = calculateHash(pair.target.content);
+				pair.target.mdaitHeader.srcHash = newHash;
+			}
+		}
+		if (pair.source && !pair.target) {
+			// 新規挿入時のsourceのhashは既に上で最新化済み
+		}
+		if (!pair.source && pair.target) {
+			// 孤立targetもhashはtarget内容で最新化
+			const hash = calculateHash(pair.target.content);
+			if (!pair.target.mdaitHeader) {
+				pair.target.mdaitHeader = new MdaitHeader(hash);
+			} else if (pair.target.mdaitHeader.hash !== hash) {
+				pair.target.mdaitHeader.hash = hash;
+			}
+		}
 	}
 }

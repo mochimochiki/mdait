@@ -27,12 +27,12 @@
       "properties": {
         "mdait.directories.source": {
           "type": "string",
-          "default": "./content/en",
+          "default": "./content/ja",
           "description": "翻訳元ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
         },
         "mdait.directories.target": {
           "type": "string",
-          "default": "./content/ja",
+          "default": "./content/en",
           "description": "翻訳先ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
         },
         "mdait.files.extensions": {

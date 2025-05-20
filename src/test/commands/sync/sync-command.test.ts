@@ -11,33 +11,46 @@ import {
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+
+function copyDirSync(src: string, dest: string) {
+	if (!existsSync(dest)) {
+		mkdirSync(dest, { recursive: true });
+	}
+	for (const entry of require("node:fs").readdirSync(src, {
+		withFileTypes: true,
+	})) {
+		const srcPath = join(src, entry.name);
+		const destPath = join(dest, entry.name);
+		if (entry.isDirectory()) {
+			copyDirSync(srcPath, destPath);
+		} else {
+			copyFileSync(srcPath, destPath);
+		}
+	}
+}
 
 suite("syncコマンドE2E", () => {
-	const tmpDir = join(__dirname, "tmp");
+	const contentDir = join(__dirname, "content");
 	const sampleDir = join(__dirname, "../../../../sample/content");
-	const en1 = join(sampleDir, "en/test.md");
-	const ja1 = join(sampleDir, "ja/test.md");
-	const tmpEn = join(tmpDir, "en_test.md");
-	const tmpJa = join(tmpDir, "ja_test.md");
+	const tmpEnDir = join(contentDir, "en");
+	const tmpJaDir = join(contentDir, "ja");
 
 	function resetFiles() {
-		copyFileSync(en1, tmpEn);
-		copyFileSync(ja1, tmpJa);
+		// sample/content -> content に再帰コピー
+		copyDirSync(sampleDir, contentDir);
 	}
 
 	function cleanupFiles() {
-		try {
-			unlinkSync(tmpEn);
-		} catch {}
-		try {
-			unlinkSync(tmpJa);
-		} catch {}
+		if (existsSync(contentDir)) {
+			const fs = require("node:fs");
+			fs.rmSync(contentDir, { recursive: true, force: true });
+		}
 	}
 
 	setup(() => {
-		if (!existsSync(tmpDir)) {
-			mkdirSync(tmpDir, { recursive: true });
+		if (!existsSync(contentDir)) {
+			mkdirSync(contentDir, { recursive: true });
 		}
 		resetFiles();
 	});
@@ -46,13 +59,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("mdait管理下にない既存Markdownを同期するとmdaitヘッダーが付与されること", async () => {
-		// no_header.mdをtmpにコピー
-		const enNoHeader = join(sampleDir, "en/no_header.md");
-		const jaNoHeader = join(sampleDir, "ja/no_header.md");
-		const tmpEnNoHeader = join(tmpDir, "en_no_header.md");
-		const tmpJaNoHeader = join(tmpDir, "ja_no_header.md");
-		copyFileSync(enNoHeader, tmpEnNoHeader);
-		copyFileSync(jaNoHeader, tmpJaNoHeader);
+		// content/en/no_header.md, content/ja/no_header.md を使う
+		const tmpEnNoHeader = join(tmpEnDir, "no_header.md");
+		const tmpJaNoHeader = join(tmpJaDir, "no_header.md");
 
 		// VSCode拡張コマンドとしてsyncを実行
 		const vscode = require("vscode");
