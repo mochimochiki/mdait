@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import * as zlib from "node:zlib"; // zlib をインポート
 import { normalizeText } from "./normalizer";
 
 /**
@@ -10,10 +11,10 @@ export class HashCalculator {
 
 	/**
 	 * コンストラクタ
-	 * @param algorithm ハッシュアルゴリズム（デフォルト: sha256）
+	 * @param algorithm ハッシュアルゴリズム（デフォルト: crc32）
 	 * @param length 短縮ハッシュの長さ（デフォルト: 8）
 	 */
-	constructor(algorithm = "sha256", length = 8) {
+	constructor(algorithm = "crc32", length = 8) {
 		this.algorithm = algorithm;
 		this.length = length;
 	}
@@ -32,10 +33,18 @@ export class HashCalculator {
 			return "00000000"; // 空テキスト用の固定ハッシュ
 		}
 
-		const hash = crypto
-			.createHash(this.algorithm)
-			.update(processedText)
-			.digest("hex");
+		let hash: string;
+		if (this.algorithm.toLowerCase() === "crc32") {
+			const crcBuffer = Buffer.from(processedText);
+			const crcValue = zlib.crc32(crcBuffer);
+			// 符号なし32ビット整数に変換し、16進数文字列に変換後、8桁になるよう0でパディング
+			hash = (crcValue >>> 0).toString(16).padStart(8, "0");
+		} else {
+			hash = crypto
+				.createHash(this.algorithm)
+				.update(processedText)
+				.digest("hex");
+		}
 
 		return hash.substring(0, this.length);
 	}
@@ -44,7 +53,7 @@ export class HashCalculator {
 /**
  * デフォルトのハッシュ計算処理を行うインスタンス
  */
-export const defaultCalculator = new HashCalculator();
+export const defaultCalculator = new HashCalculator(); // デフォルトアルゴリズムが crc32 になる
 
 /**
  * テキストのハッシュを計算する

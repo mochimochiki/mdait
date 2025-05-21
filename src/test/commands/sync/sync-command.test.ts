@@ -66,11 +66,7 @@ suite("syncコマンドE2E", () => {
 		// VSCode拡張コマンドとしてsyncを実行
 		const vscode = require("vscode");
 		const commandId = "mdait.sync";
-		const result = await vscode.commands.executeCommand(
-			commandId,
-			tmpEnNoHeader,
-			tmpJaNoHeader,
-		);
+		const result = await vscode.commands.executeCommand(commandId);
 
 		const enText = readFileSync(tmpEnNoHeader, "utf8");
 		const jaText = readFileSync(tmpJaNoHeader, "utf8");
