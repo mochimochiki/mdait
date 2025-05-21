@@ -46,8 +46,11 @@ export class FileExplorer {
 	/**
 	 * 設定に基づいてファイルを取得する
 	 */
-	public async getSourceFiles(config: Configuration): Promise<string[]> {
-		let sourceDir = config.directories.source;
+	public async getSourceFiles(
+		sourceDirConfig: string,
+		config: Configuration,
+	): Promise<string[]> {
+		let sourceDir = sourceDirConfig;
 		// 相対パスの場合はワークスペースルートを基準に絶対パス化
 		if (!path.isAbsolute(sourceDir)) {
 			const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -74,9 +77,13 @@ export class FileExplorer {
 	/**
 	 * ソースファイルパスから対応するターゲットファイルパスを取得する
 	 */
-	public getTargetPath(sourcePath: string, config: Configuration): string {
-		let sourceDir = config.directories.source;
-		let targetDir = config.directories.target;
+	public getTargetPath(
+		sourcePath: string,
+		sourceDirConfig: string,
+		targetDirConfig: string,
+	): string {
+		let sourceDir = sourceDirConfig;
+		let targetDir = targetDirConfig;
 		// 相対パスの場合はワークスペースルートを基準に絶対パス化
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (!workspaceFolders || workspaceFolders.length === 0) {

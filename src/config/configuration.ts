@@ -5,12 +5,9 @@ import * as vscode from "vscode";
  */
 export class Configuration {
 	/**
-	 * ディレクトリ設定
+	 * 翻訳ペア設定
 	 */
-	public directories = {
-		source: "",
-		target: "",
-	};
+	public transPairs: Array<{ sourceDir: string; targetDir: string }> = [];
 
 	/**
 	 * ファイル設定
@@ -39,9 +36,11 @@ export class Configuration {
 	 */ public async load(): Promise<void> {
 		const config = vscode.workspace.getConfiguration("mdait");
 
-		// ディレクトリ設定の読み込み
-		this.directories.source = config.get<string>("directories.source") || "";
-		this.directories.target = config.get<string>("directories.target") || "";
+		// 翻訳ペア設定の読み込み
+		this.transPairs =
+			config.get<Array<{ sourceDir: string; targetDir: string }>>(
+				"transPairs",
+			) || [];
 
 		// ファイル設定の読み込み
 		const extensions = config.get<string[]>("files.extensions");
@@ -83,14 +82,19 @@ export class Configuration {
 	 * @returns エラーメッセージ。問題がなければnull
 	 */
 	public validate(): string | null {
-		// ソースディレクトリが設定されているか
-		if (!this.directories.source) {
-			return "翻訳元ディレクトリが設定されていません。";
+		// 翻訳ペアが設定されているか
+		if (!this.transPairs || this.transPairs.length === 0) {
+			return "翻訳ペア(mdait.transPairs)が設定されていません。";
 		}
 
-		// ターゲットディレクトリが設定されているか
-		if (!this.directories.target) {
-			return "翻訳先ディレクトリが設定されていません。";
+		// 各翻訳ペアのディレクトリが設定されているか
+		for (const pair of this.transPairs) {
+			if (!pair.sourceDir) {
+				return "翻訳ペアに翻訳元ディレクトリ(sourceDir)が設定されていません。";
+			}
+			if (!pair.targetDir) {
+				return "翻訳ペアに翻訳先ディレクトリ(targetDir)が設定されていません。";
+			}
 		}
 
 		// ファイル拡張子が少なくとも1つ設定されているか

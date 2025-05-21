@@ -25,59 +25,66 @@ export async function transCommand(): Promise<void> {
 			return;
 		}
 
-		// ファイル探索
-		const fileExplorer = new FileExplorer();
-		const files = await fileExplorer.getSourceFiles(config);
-
-		if (files.length === 0) {
-			vscode.window.showWarningMessage(
-				"翻訳対象のファイルが見つかりませんでした。",
-			);
-			return;
-		}
-
-		vscode.window.showInformationMessage(
-			`${files.length}個のファイルを翻訳します...`,
-		);
-
 		// 翻訳プロバイダーを初期化
 		const provider = new DefaultTranslationProvider();
 
-		// 各ファイルを翻訳
 		let successCount = 0;
 		let errorCount = 0;
 
-		for (const sourceFile of files) {
-			try {
-				// ファイル読み込み
-				const content = fs.readFileSync(sourceFile, "utf-8");
+		// 各翻訳ペアに対して処理を実行
+		for (const pair of config.transPairs) {
+			// ファイル探索
+			const fileExplorer = new FileExplorer();
+			// transコマンドでは、翻訳対象ファイルはtargetDirから取得する
+			const files = await fileExplorer.getSourceFiles(pair.targetDir, config);
 
-				// ファイルタイプに応じて適切な翻訳処理を選択
-				const extension = path.extname(sourceFile).toLowerCase();
-				let translatedContent: string;
+			if (files.length === 0) {
+				vscode.window.showWarningMessage(
+					`[${pair.sourceDir} -> ${pair.targetDir}] 翻訳対象のファイルが見つかりませんでした。`,
+				);
+				continue;
+			}
 
-				if (extension === ".md") {
-					translatedContent = await provider.translateMarkdown(content, config);
-				} else if (extension === ".csv") {
-					translatedContent = await provider.translateCsv(content, config);
-				} else {
-					// その他のファイルタイプはそのまま
-					translatedContent = content;
+			vscode.window.showInformationMessage(
+				`[${pair.sourceDir} -> ${pair.targetDir}] ${files.length}個のファイルを翻訳します...`,
+			);
+
+			// 各ファイルを翻訳
+			for (const targetFile of files) {
+				try {
+					// ファイル読み込み
+					const content = fs.readFileSync(targetFile, "utf-8");
+
+					// ファイルタイプに応じて適切な翻訳処理を選択
+					const extension = path.extname(targetFile).toLowerCase();
+					let translatedContent: string;
+
+					if (extension === ".md") {
+						translatedContent = await provider.translateMarkdown(
+							content,
+							config,
+						);
+					} else if (extension === ".csv") {
+						translatedContent = await provider.translateCsv(content, config);
+					} else {
+						// その他のファイルタイプはそのまま
+						translatedContent = content;
+					}
+
+					// 出力先ディレクトリが存在するか確認し、なければ作成
+					fileExplorer.ensureTargetDirectoryExists(targetFile);
+
+					// ファイル出力 (transコマンドはtargetFileを上書きする)
+					fs.writeFileSync(targetFile, translatedContent, "utf-8");
+
+					successCount++;
+				} catch (error) {
+					console.error(
+						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル翻訳エラー: ${targetFile}`,
+						error,
+					);
+					errorCount++;
 				}
-
-				// 出力先パスを取得
-				const targetFile = fileExplorer.getTargetPath(sourceFile, config);
-
-				// 出力先ディレクトリが存在するか確認し、なければ作成
-				fileExplorer.ensureTargetDirectoryExists(targetFile);
-
-				// ファイル出力
-				fs.writeFileSync(targetFile, translatedContent, "utf-8");
-
-				successCount++;
-			} catch (error) {
-				console.error(`ファイル翻訳エラー: ${sourceFile}`, error);
-				errorCount++;
 			}
 		}
 

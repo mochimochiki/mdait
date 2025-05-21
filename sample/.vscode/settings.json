@@ -1,0 +1,15 @@
+{
+  // 翻訳ペア
+  "mdait.transPairs": [
+    {
+      "sourceDir": "content/ja",
+      "targetDir": "content/en"
+    }
+  ],
+  // 自動削除設定
+  "mdait.sync.autoDelete": true,
+  // 翻訳プロバイダ
+  "mdait.trans.provider": "default",
+  // Markdown:コードブロックをスキップするか
+  "mdait.trans.markdown.skipCodeBlocks": true
+}

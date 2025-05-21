@@ -30,49 +30,61 @@ export async function syncCommand(): Promise<void> {
 			return;
 		}
 
-		// ファイル探索
-		const fileExplorer = new FileExplorer();
-		const files = await fileExplorer.getSourceFiles(config);
-
-		if (files.length === 0) {
-			vscode.window.showWarningMessage(
-				"同期対象のファイルが見つかりませんでした。",
-			);
-			return;
-		}
-
-		vscode.window.showInformationMessage(
-			`${files.length}個のファイルを同期します...`,
-		);
-		// 各ファイルを同期
 		let successCount = 0;
 		let errorCount = 0;
-		for (const sourceFile of files) {
-			try {
-				// 出力先パスを取得
-				const targetFile = fileExplorer.getTargetPath(sourceFile, config);
 
-				// ファイルタイプに応じて適切な同期処理を選択
-				const extension = path.extname(sourceFile).toLowerCase();
-				if (extension === ".md") {
-					// Markdownファイルの同期を実行
-					const diffResult = syncMarkdownFile(sourceFile, targetFile);
+		// 各翻訳ペアに対して処理を実行
+		for (const pair of config.transPairs) {
+			// ファイル探索
+			const fileExplorer = new FileExplorer();
+			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
 
-					// ログ出力
-					console.log(`File: ${path.basename(sourceFile)}`);
-					console.log(`  Added: ${diffResult.added}`);
-					console.log(`  Modified: ${diffResult.modified}`);
-					console.log(`  Deleted: ${diffResult.deleted}`);
-					console.log(`  Unchanged: ${diffResult.unchanged}`);
-				} else {
-					// Markdown以外はそのままコピー
-					syncNonMarkdownFile(sourceFile, targetFile);
+			if (files.length === 0) {
+				vscode.window.showWarningMessage(
+					`[${pair.sourceDir} -> ${pair.targetDir}] 同期対象のファイルが見つかりませんでした。`,
+				);
+				continue;
+			}
+
+			vscode.window.showInformationMessage(
+				`[${pair.sourceDir} -> ${pair.targetDir}] ${files.length}個のファイルを同期します...`,
+			);
+
+			// 各ファイルを同期
+			for (const sourceFile of files) {
+				try {
+					// 出力先パスを取得
+					const targetFile = fileExplorer.getTargetPath(
+						sourceFile,
+						pair.sourceDir,
+						pair.targetDir,
+					);
+
+					// ファイルタイプに応じて適切な同期処理を選択
+					const extension = path.extname(sourceFile).toLowerCase();
+					if (extension === ".md") {
+						// Markdownファイルの同期を実行
+						const diffResult = syncMarkdownFile(sourceFile, targetFile);
+
+						// ログ出力
+						console.log(`File: ${path.basename(sourceFile)}`);
+						console.log(`  Added: ${diffResult.added}`);
+						console.log(`  Modified: ${diffResult.modified}`);
+						console.log(`  Deleted: ${diffResult.deleted}`);
+						console.log(`  Unchanged: ${diffResult.unchanged}`);
+					} else {
+						// Markdown以外はそのままコピー
+						syncNonMarkdownFile(sourceFile, targetFile);
+					}
+
+					successCount++;
+				} catch (error) {
+					console.error(
+						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`,
+						error,
+					);
+					errorCount++;
 				}
-
-				successCount++;
-			} catch (error) {
-				console.error(`ファイル同期エラー: ${sourceFile}`, error);
-				errorCount++;
 			}
 		}
 

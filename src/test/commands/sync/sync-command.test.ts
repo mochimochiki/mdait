@@ -32,13 +32,13 @@ function copyDirSync(src: string, dest: string) {
 
 suite("syncコマンドE2E", () => {
 	const contentDir = join(__dirname, "content");
-	const sampleDir = join(__dirname, "../../../../sample/content");
+	const sampleDir = join(__dirname, "../../../../sample");
 	const tmpEnDir = join(contentDir, "en");
 	const tmpJaDir = join(contentDir, "ja");
 
 	function resetFiles() {
 		// sample/content -> content に再帰コピー
-		copyDirSync(sampleDir, contentDir);
+		copyDirSync(sampleDir, __dirname);
 	}
 
 	function cleanupFiles() {

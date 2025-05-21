@@ -25,51 +25,51 @@
     "configuration": {
       "title": "mdait",
       "properties": {
-        "mdait.directories.source": {
-          "type": "string",
-          "default": "./content/ja",
-          "description": "翻訳元ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
-        },
-        "mdait.directories.target": {
-          "type": "string",
-          "default": "./content/en",
-          "description": "翻訳先ディレクトリのパス（絶対パスまたはワークスペースからの相対パス）"
-        },
-        "mdait.files.extensions": {
+        "mdait.transPairs": {
           "type": "array",
+          "description": "翻訳のソースディレクトリとターゲットディレクトリのペアのリスト。パスはワークスペースルートからの相対パスです。",
+          "default": [],
+          "items": {
+            "type": "object",
+            "title": "翻訳ペア",
+            "properties": {
+              "sourceDir": {
+                "type": "string",
+                "description": "ソース言語のドキュメントが含まれるディレクトリのパス。"
+              },
+              "targetDir": {
+                "type": "string",
+                "description": "ターゲット言語のドキュメントを格納するディレクトリのパス。"
+              }
+            },
+            "required": [
+              "sourceDir",
+              "targetDir"
+            ]
+          }
+        },
+        "mdait.ignoredPatterns": {
+          "type": "array",
+          "default": [],
+          "description": "翻訳・同期処理から除外するファイルやディレクトリのglobパターンリスト。",
           "items": {
             "type": "string"
-          },
-          "default": [
-            ".md",
-            ".csv"
-          ],
-          "description": "翻訳対象のファイル拡張子"
+          }
         },
-        "mdait.files.includePattern": {
-          "type": "string",
-          "default": "**/*",
-          "description": "翻訳対象のファイルパターン（glob形式）"
+        "mdait.sync.autoDelete": {
+          "type": "boolean",
+          "default": true,
+          "description": "sync時にソース側で削除されたセクションをターゲット側でも自動的に削除します。"
         },
-        "mdait.files.excludePattern": {
-          "type": "string",
-          "default": "**/node_modules/**",
-          "description": "翻訳対象から除外するファイルパターン（glob形式）"
-        },
-        "mdait.translation.provider": {
+        "mdait.trans.provider": {
           "type": "string",
           "default": "default",
-          "description": "翻訳プロバイダー（default: 組み込みの簡易翻訳）"
+          "description": "翻訳プロバイダー（default: 推奨モデル）"
         },
-        "mdait.translation.markdown.skipCodeBlocks": {
+        "mdait.trans.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,
           "description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
-        },
-        "mdait.translation.csv.delimiter": {
-          "type": "string",
-          "default": ",",
-          "description": "CSV翻訳時のデリミタ（区切り文字）"
         }
       }
     }
