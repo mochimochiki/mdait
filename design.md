@@ -138,80 +138,26 @@ mdaitマーカーがユニットの開始を示し、その管理対象となる
 
 ## 6. 多段翻訳
 
-### 6.1 翻訳グラフパターン
+### 6.1 翻訳パターン
 
-mdaitは`transPairs`設定から翻訳グラフを構築し、以下のパターンをサポートします。
+**from制約**: 各ユニットは最大1つの`from`のみ。以下のパターンをサポート。
 
-**from制約**: 各ユニットは最大1つの`from`のみ。ここから以下のパターンとなります。
-
-#### パターン1: 片方向チェーン（基本形）
+#### パターン1: 片方向チェーン
 ```
-ja -> en -> de
-      ↓
-      fr
+ja -> en -> de/fr
 ```
+母語から多言語への標準ワークフロー。
 
-- **特徴**: 完全に一方向の翻訳チェーン
-- **用途**: 母語から多言語への標準的な翻訳ワークフロー
-
-**設定例:**
-```json
-{
-  "mdait.transPairs": [
-    { "sourceDir": "content/ja", "targetDir": "content/en" },
-    { "sourceDir": "content/en", "targetDir": "content/de" },
-    { "sourceDir": "content/en", "targetDir": "content/fr" }
-  ]
-}
+#### パターン2: ハブ言語双方向
 ```
-
-#### パターン2: ハブ言語双方向（拡張形）
-
+ja <-> en -> de/fr
 ```
-ja <-> en -> de
-      ↓
-      fr
-```
+母語とハブ言語（英語）で双方向編集、他は一方向。
 
-- **特徴**: ハブ言語（通常英語）と母語のみ双方向、他は一方向
-- **用途**: 母語およびハブ言語での原稿作成（母語へも逆伝搬）
-- **from制約**: ハブ言語ペアのみ相互参照、他は単一参照
+### 6.2 動作例
 
-**設定例:**
-```json
-{
-  "mdait.transPairs": [
-    { "sourceDir": "content/ja", "targetDir": "content/en" },
-    { "sourceDir": "content/en", "targetDir": "content/ja" },  // 双方向
-    { "sourceDir": "content/en", "targetDir": "content/de" },
-    { "sourceDir": "content/en", "targetDir": "content/fr" }
-  ]
-}
-```
-
-### 6.2 片方向翻訳での動作
-
-#### 初期状態
+#### 片方向（en編集 → de更新）
 ```markdown
-<!-- ja/doc.md -->
-<!-- mdait abc123 -->
-# 日本語の見出し
-
-<!-- en/doc.md -->
-<!-- mdait def456 from:abc123 -->
-# English Heading
-
-<!-- de/doc.md -->
-<!-- mdait ghi789 from:def456 -->
-# Deutsche Überschrift
-```
-
-#### enが編集された場合（下流のみ伝搬）
-```markdown
-<!-- ja/doc.md -->
-<!-- mdait abc123 -->
-# 日本語の見出し
-
 <!-- en/doc.md -->
 <!-- mdait xyz789 from:abc123 -->
 # Modified English Heading
@@ -221,59 +167,34 @@ ja <-> en -> de
 # Deutsche Überschrift
 ```
 
-### 6.3 双方向翻訳での動作
-
-#### 通常時（競合なし）
-
-**enが編集された場合:**
+#### 双方向 (ja編集 → en更新)
 ```markdown
 <!-- ja/doc.md -->
-<!-- mdait abc123 from:xyz789 need:translate -->
-# 日本語の見出し
+<!-- mdait new_abc123 from:def456 -->
+# 日本語の見出し編集済
 
 <!-- en/doc.md -->
-<!-- mdait xyz789 from:abc123 -->
-# Modified English Heading
+<!-- mdait def456 from:new_abc123 need:translate -->
+# English Heading
 ```
 
-**jaが編集された場合:**
-```markdown
-<!-- ja/doc.md -->
-<!-- mdait uvw012 -->
-# 変更された日本語の見出し
 
-<!-- en/doc.md -->
-<!-- mdait xyz789 from:uvw012 need:translate -->
-# Modified English Heading
-```
-
-#### 競合発生時
-
-双方向ペアで両方が同時に変更された場合：
-new_jahash, new_enhash は使わず古いハッシュのままにする。
-
+#### 双方向競合（両方編集）
 ```markdown
 <!-- ja/doc.md -->
 <!-- mdait abc123 from:def456 need:solve-conflict -->
-# 変更された日本語の見出し
+# 日本語の見出し編集済
 
 <!-- en/doc.md -->
 <!-- mdait def456 from:abc123 need:solve-conflict -->
 # Modified English Heading
 ```
+**解決**: `from`削除でマスター指定 → 相手側に`need:translate`付与
 
-- 既存の`from`関係を保持
-- `need:solve-conflict`を付与し、翻訳処理を停止
-- **競合解決**: ユーザーが手動で`from`を削除することで「このユニットをマスター」として指定
-- 次回`sync`実行時、`from`なしユニットを新マスターとして処理し、相手側に`need:translate`付与
-
-### 6.5 制約とバリデーション
-
-1. **単一ソース制約**: 各ターゲットディレクトリは最大1つのソースからのみ翻訳を受ける
-2. **双方向制限**: 双方向ペアは最大1つまで（通常はハブ言語ペア）
-3. **循環検出**: 3つ以上の言語を含む循環は禁止
-
-これらの制約により、`from`フィールドの複雑化を避け、翻訳関係を明確に保ちます。
+### 6.3 制約
+1. **単一ソース**: 各ターゲットは1つの`from`のみ付与
+2. **双方向制限**: 最大1つの双方向ペア
+3. **循環禁止**: 3つ以上の言語循環は不可
 
 ---
 
@@ -379,5 +300,7 @@ title: サンプル
 
 - `MarkdownDocument.units[0].mdaitUnit.hash === "zzzz9999"`
 - `MarkdownDocument.units[0].title === "ユニット1"`
+
+これらの制約により、`from`フィールドの複雑化を避け、翻訳関係を明確に保ちます。
 
 ---
