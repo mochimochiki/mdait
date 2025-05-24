@@ -4,6 +4,10 @@
     {
       "sourceDir": "content/ja",
       "targetDir": "content/en"
+    },
+    {
+      "sourceDir": "content/en",
+      "targetDir": "content/de"
     }
   ],
   // 自動削除設定
