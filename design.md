@@ -64,7 +64,8 @@ mdaitマーカーがユニットの開始を示し、その管理対象となる
   1. 全てのMarkdownファイルをパースし、各mdaitマーカーとそれに対応するコンテンツから正規化・計算したハッシュを取得。このまとまりを「ユニット」とする。
   2. **変更検出:** 各ユニットにおいて、mdaitマーカーに記録された自身のハッシュと、現在のコンテンツから計算したハッシュを比較。不一致の場合は「変更あり」とマーク。
   3. **影響伝播（グラフ同期）:** 「変更あり」とマークされたユニットの影響を受ける関連ファイルのユニットを探索し、影響を伝播させる。影響を受けたユニットには `need:translate` を付与し、`from` ハッシュを更新。
-  4. **マーカー自動挿入（初回など）:** ファイル内にmdaitマーカーがない場合、Markdown見出しの直前にmdaitマーカーを自動挿入する（対象とするレベルは設定可）。  5. 関連ファイル間で `from` ハッシュを元に対応付けを行い、新規挿入されたユニットや、`from` が見つからないユニットには適切に `need:translate` や `need:review` を付与。
+  4. **マーカー自動挿入（初回など）:** ファイル内にmdaitマーカーがない場合、Markdown見出しの直前にmdaitマーカーを自動挿入する（対象とするレベルは設定可）。
+  5. 関連ファイル間で `from` ハッシュを元に対応付けを行い、新規挿入されたユニットや、`from` が見つからないユニットには適切に `need:translate` や `need:review` を付与。
   6. 関連ファイル間で、対応する `from` が存在しなくなったユニットは、`auto-delete` 設定に応じて削除または `need:verify-deletion` を付与。
   7. Markdown構造（mdaitマーカーとそのコンテンツ）を再構築し、各ファイルを保存。
 - 設定値：auto-delete（デフォルトtrue）
@@ -189,7 +190,9 @@ ja <-> en -> de/fr
 <!-- mdait def456 from:abc123 need:solve-conflict -->
 # Modified English Heading
 ```
-**解決**: `from`削除でマスター指定 → 相手側に`need:translate`付与
+**解決**:
+1. 優先したい言語の`mdaitMarker`の`from`を削除
+2. sync実行により、`from`がついている言語に`need:translate`付与
 
 ### 6.3 制約
 1. **単一ソース**: 各ターゲットは1つの`from`のみ付与
@@ -299,8 +302,7 @@ title: サンプル
 ```
 
 - `MarkdownDocument.units[0].mdaitUnit.hash === "zzzz9999"`
-- `MarkdownDocument.units[0].title === "ユニット1"`
-
-これらの制約により、`from`フィールドの複雑化を避け、翻訳関係を明確に保ちます。
+- `MarkdownDocument.units[0].mdaitUnit.from === "yyyy8888"`
+- `MarkdownDocument.units[0].mdaitUnit.need === "review"`
 
 ---
