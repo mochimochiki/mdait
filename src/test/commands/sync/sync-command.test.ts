@@ -31,7 +31,10 @@ function copyDirSync(src: string, dest: string) {
 }
 
 suite("syncコマンドE2E", () => {
-	const sampleDir = join(__dirname, "../../../../sample");
+	const sampleContentDir = join(
+		__dirname,
+		"../../../../src/test/sample-content",
+	);
 	const workspaceDir = join(__dirname, "../../../../src/test/workspace");
 	const contentDir = join(workspaceDir, "content");
 	const tmpEnDir = join(contentDir, "en");
@@ -48,7 +51,7 @@ suite("syncコマンドE2E", () => {
 	}
 
 	setup(() => {
-		copyDirSync(sampleDir, workspaceDir);
+		copyDirSync(sampleContentDir, contentDir);
 	});
 	teardown(() => {
 		cleanupFiles();

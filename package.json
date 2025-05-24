@@ -78,7 +78,8 @@
     "compile": "tsc -p ./",
     "lint": "biome lint ./src",
     "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "copy-test-files": "node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\""
   },
   "dependencies": {
     "gray-matter": "^4.0.3",

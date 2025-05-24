@@ -6,12 +6,12 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "${workspaceFolder}/sample",
+        "${workspaceFolder}/src/test/workspace",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--profile-temp"
       ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
-      "preLaunchTask": "${defaultBuildTask}",
+      "preLaunchTask": "build-and-copy",
       "skipFiles": ["**/app/out/vs/**"]
     }
   ]
