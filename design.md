@@ -264,7 +264,7 @@ Markdown文書全体を表すオブジェクトとして `Markdown` を定義し
 ```ts
 interface Markdown {
   frontMatter?: FrontMatter; // yaml対応
-  units: MarkdownUnit[];    // mdaitマーカーで区切られたユニットのリスト
+  units: MdaitUnit[];    // mdaitマーカーで区切られたユニットのリスト
 }
 
 interface FrontMatter {
@@ -272,13 +272,13 @@ interface FrontMatter {
 }
 
 
-interface MarkdownUnit {
-  mdaitUnit: MdaitUnitInfo; // 各ユニットは必ずmdaitUnit情報を持つ
+interface MdaitUnit {
+  mdaitUnit: MdaitMarker; // 各ユニットは必ずmdaitUnit情報を持つ
   content: string;         // mdaitマーカーに続く、次のマーカーまたはファイルの末尾までのコンテンツ
 }
 
 // mdaitマーカーの情報を表すインターフェース
-interface MdaitUnitInfo {
+interface MdaitMarker {
   hash: string;
   from?: string;
   need?: string;
@@ -288,7 +288,7 @@ interface MdaitUnitInfo {
 
 - frontMatterはYAMLに対応する。
 - ユニットごとの`mdaitUnit`情報は、ユニットの開始を示す必須要素。
-- frontMatterは`MarkdownUnit`より上位の`Markdown`オブジェクトで一元管理する。
+- frontMatterは`MdaitUnit`より上位の`Markdown`オブジェクトで一元管理する。
 
 ### 9.2 パース・出力例
 

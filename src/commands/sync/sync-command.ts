@@ -3,8 +3,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { MdaitHeader } from "../../core/markdown/mdait-header";
-import type { MdaitSection } from "../../core/markdown/mdait-section";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector } from "./diff-detector";
@@ -22,6 +22,7 @@ export async function syncCommand(): Promise<void> {
 		// 設定を読み込む
 		const config = new Configuration();
 		await config.load();
+		console.log(`Loaded configuration: ${JSON.stringify(config)}`);
 
 		// 設定を検証
 		const validationError = config.validate();
@@ -192,11 +193,11 @@ function syncNonMarkdownFile(sourceFile: string, targetFile: string): void {
  * セクションにmdaitヘッダーを付与する
  * @param sections セクションの配列
  */
-function ensureSectionHash(sections: MdaitSection[]) {
-	for (const section of sections) {
-		if (!section.mdaitHeader || !section.mdaitHeader.hash) {
-			const hash = calculateHash(section.content);
-			section.mdaitHeader = new MdaitHeader(hash);
+function ensureSectionHash(sections: MdaitUnit[]) {
+	for (const unit of sections) {
+		if (!unit.marker || !unit.marker.hash) {
+			const hash = calculateHash(unit.content);
+			unit.marker = new MdaitMarker(hash);
 		}
 	}
 }
@@ -206,29 +207,29 @@ function ensureSectionHash(sections: MdaitSection[]) {
  * @param matchResult セクションのマッチ結果
  */
 function updateSectionHashes(
-	matchResult: { source: MdaitSection | null; target: MdaitSection | null }[],
+	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 ) {
 	for (const pair of matchResult) {
 		if (pair.source) {
 			const newHash = calculateHash(pair.source.content);
-			if (!pair.source.mdaitHeader) {
-				pair.source.mdaitHeader = new MdaitHeader(newHash);
-			} else if (pair.source.mdaitHeader.hash !== newHash) {
-				pair.source.mdaitHeader.hash = newHash;
+			if (!pair.source.marker) {
+				pair.source.marker = new MdaitMarker(newHash);
+			} else if (pair.source.marker.hash !== newHash) {
+				pair.source.marker.hash = newHash;
 			}
 		}
 		if (pair.source && pair.target) {
-			// targetのsrc/hashも最新化
-			const srcHash = calculateHash(pair.source.content);
-			if (!pair.target.mdaitHeader) {
-				pair.target.mdaitHeader = new MdaitHeader(
+			// targetのfrom/hashも最新化
+			const fromHash = calculateHash(pair.source.content);
+			if (!pair.target.marker) {
+				pair.target.marker = new MdaitMarker(
 					calculateHash(pair.target.content),
-					srcHash,
+					fromHash,
 				);
 			} else {
-				// hashはtargetの内容で、srcHashのみsourceの新しいhash
-				pair.target.mdaitHeader.hash = calculateHash(pair.target.content);
-				pair.target.mdaitHeader.srcHash = srcHash;
+				// hashはtargetの内容で、fromのみsourceの新しいhash
+				pair.target.marker.hash = calculateHash(pair.target.content);
+				pair.target.marker.from = fromHash;
 			}
 		}
 		if (pair.source && !pair.target) {
@@ -237,10 +238,10 @@ function updateSectionHashes(
 		if (!pair.source && pair.target) {
 			// 孤立targetもhashはtarget内容で最新化
 			const hash = calculateHash(pair.target.content);
-			if (!pair.target.mdaitHeader) {
-				pair.target.mdaitHeader = new MdaitHeader(hash);
-			} else if (pair.target.mdaitHeader.hash !== hash) {
-				pair.target.mdaitHeader.hash = hash;
+			if (!pair.target.marker) {
+				pair.target.marker = new MdaitMarker(hash);
+			} else if (pair.target.marker.hash !== hash) {
+				pair.target.marker.hash = hash;
 			}
 		}
 	}

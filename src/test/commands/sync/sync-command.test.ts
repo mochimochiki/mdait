@@ -31,28 +31,24 @@ function copyDirSync(src: string, dest: string) {
 }
 
 suite("syncコマンドE2E", () => {
-	const contentDir = join(__dirname, "content");
 	const sampleDir = join(__dirname, "../../../../sample");
+	const workspaceDir = join(__dirname, "../../../../src/test/workspace");
+	const contentDir = join(workspaceDir, "content");
 	const tmpEnDir = join(contentDir, "en");
 	const tmpJaDir = join(contentDir, "ja");
 
-	function resetFiles() {
-		// sample/content -> content に再帰コピー
-		copyDirSync(sampleDir, __dirname);
-	}
-
 	function cleanupFiles() {
-		if (existsSync(contentDir)) {
+		if (existsSync(workspaceDir)) {
 			const fs = require("node:fs");
-			fs.rmSync(contentDir, { recursive: true, force: true });
+			fs.rmSync(join(workspaceDir, "content"), {
+				recursive: true,
+				force: true,
+			});
 		}
 	}
 
 	setup(() => {
-		if (!existsSync(contentDir)) {
-			mkdirSync(contentDir, { recursive: true });
-		}
-		resetFiles();
+		copyDirSync(sampleDir, workspaceDir);
 	});
 	teardown(() => {
 		cleanupFiles();
@@ -74,10 +70,9 @@ suite("syncコマンドE2E", () => {
 		// 1. en, ja両方にmdaitヘッダーが付与されていること
 		assert.match(enText, /^<!--\s*mdait [^\s]+/m);
 		assert.match(jaText, /^<!--\s*mdait [^\s]+/m);
-
-		// 2. enのmdaitヘッダーにjaの対応するヘッダーのハッシュがsrc:として書き込まれていること
+		// 2. enのmdaitヘッダーにjaの対応するヘッダーのハッシュがfrom:として書き込まれていること
 		const jaHeader = jaText.match(/<!--\s*mdait ([^\s]+)/); // jaのハッシュ
-		const enHeader = enText.match(/<!--\s*mdait ([^\s]+) src:([^\s]+)/); // enのsrc:xxx
+		const enHeader = enText.match(/<!--\s*mdait ([^\s]+) from:([^\s]+)/); // enのfrom:xxx
 		assert.ok(jaHeader && enHeader);
 		assert.strictEqual(enHeader[2], jaHeader[1]);
 
@@ -129,8 +124,8 @@ suite("syncコマンドE2E", () => {
 	// 		);
 
 	// 		const jaTextAfter = readFileSync(tmpJa, "utf8");
-	// 		// 同じsrcを持つ2つのセクションが両方とも同期されていること（例: need:translateが両方消えている等）
-	// 		const matches = jaTextAfter.match(/mdait [^\s]+ src:[^\s]+/g) || [];
+	//		// 同じfromを持つ2つのセクションが両方とも同期されていること（例: need:translateが両方消えている等）
+	// 		const matches = jaTextAfter.match(/mdait [^\s]+ from:[^\s]+/g) || [];
 	// 		assert.ok(matches.length >= 2);
 	// 	});
 

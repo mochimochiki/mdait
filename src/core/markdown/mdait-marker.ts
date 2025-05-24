@@ -1,69 +1,66 @@
 /**
- * mdaitコメントクラス
- * Markdownセクションの前に配置されるmdaitメタデータコメントを表現する
+ * mdaitMarkerクラス
+ * mdaitUnitの前に配置されるmdaitメタデータコメントを表現する
  * @important このクラスはドメインオブジェクトです。変更時は理由を明示し、承認なしに編集しないでください。
  */
-export class MdaitHeader {
+export class MdaitMarker {
 	/**
 	 * コンストラクタ
-	 * @param hash セクション本文の短縮ハッシュ
-	 * @param srcHash 翻訳元のセクションハッシュ (オプショナル)
-	 * @param needTag 翻訳の必要性を表すタグ (オプショナル)
+	 * @param hash セクション本文のハッシュ
+	 * @param from 翻訳元ユニットのハッシュ
+	 * @param need 翻訳の必要性を表すタグ
 	 */
 	constructor(
 		public hash: string,
-		public srcHash: string | null = null,
-		public needTag: string | null = null,
+		public from: string | null = null,
+		public need: string | null = null,
 	) {}
-
 	/**
 	 * コメントをMarkdown形式の文字列として出力
 	 */
 	toString(): string {
 		let result = `<!-- mdait ${this.hash}`;
 
-		if (this.srcHash) {
-			result += ` src:${this.srcHash}`;
+		if (this.from) {
+			result += ` from:${this.from}`;
 		}
 
-		if (this.needTag) {
-			result += ` need:${this.needTag}`;
+		if (this.need) {
+			result += ` need:${this.need}`;
 		}
 
 		result += " -->";
 		return result;
 	}
-
 	/**
-	 * Markdownコメント文字列からMdaitHeaderを生成
+	 * MdaitMarker文字列からMdaitHeaderを生成
 	 * @param commentText Markdownコメント文字列
 	 * @returns MdaitHeaderオブジェクト、またはパース失敗時はnull
 	 */
-	static parse(commentText: string): MdaitHeader | null {
+	static parse(commentText: string): MdaitMarker | null {
 		// コメントテキストをサニタイズ（余分な空白や改行を削除）
 		const sanitizedText = commentText.trim().replace(/\s+/g, " ");
 
-		// mdaitコメントのパターン
+		// MdaitMarkerのパターン
 		const mdaitPattern =
-			/<!-- mdait ([a-zA-Z0-9]+)(?:\s+src:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+			/<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
 		const match = sanitizedText.match(mdaitPattern);
 
 		if (!match) {
 			return null;
 		}
 
-		const [, hash, srcHash, needTag] = match;
-		return new MdaitHeader(hash, srcHash || null, needTag || null);
+		const [, hash, from, needTag] = match;
+		return new MdaitMarker(hash, from || null, needTag || null);
 	}
-
 	/**
-	 * 指定されたhashとsrcHashでコメントを生成
+	 * 指定されたhashとfromでコメントを生成
 	 * @param hash セクション本文のハッシュ
-	 * @param srcHash 翻訳元のセクションハッシュ
+	 * @param from 翻訳元のセクションハッシュ
 	 * @returns 新しいMdaitCommentオブジェクト
 	 */
-	static createWithTranslateTag(hash: string, srcHash: string): MdaitHeader {
-		return new MdaitHeader(hash, srcHash, "translate");
+	static createWithTranslateTag(hash: string, from: string): MdaitMarker {
+		return new MdaitMarker(hash, from, "translate");
 	}
 
 	/**
@@ -78,13 +75,13 @@ export class MdaitHeader {
 	 * 翻訳必要タグを削除
 	 */
 	removeNeedTag(): void {
-		this.needTag = null;
+		this.need = null;
 	}
 
 	/**
 	 * 翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
-		return this.needTag === "translate" || this.needTag === "review";
+		return this.need === "translate" || this.need === "review";
 	}
 }

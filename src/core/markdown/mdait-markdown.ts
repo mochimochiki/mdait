@@ -1,4 +1,4 @@
-import type { MdaitSection } from "./mdait-section";
+import type { MdaitUnit } from "./mdait-unit";
 
 export interface FrontMatter {
 	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
@@ -8,5 +8,5 @@ export interface FrontMatter {
 export interface Markdown {
 	frontMatter?: FrontMatter;
 	frontMatterRaw?: string;
-	sections: MdaitSection[];
+	sections: MdaitUnit[];
 }

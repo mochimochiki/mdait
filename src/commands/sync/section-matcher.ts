@@ -1,13 +1,13 @@
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { MdaitHeader } from "../../core/markdown/mdait-header";
-import { MdaitSection } from "../../core/markdown/mdait-section";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
  * セクション対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
  */
 export type SectionPair = {
-	source: MdaitSection | null;
-	target: MdaitSection | null;
+	source: MdaitUnit | null;
+	target: MdaitUnit | null;
 };
 export type MatchResult = SectionPair[];
 
@@ -20,10 +20,7 @@ export class SectionMatcher {
 	 * @param sourceSections ソースのセクション配列
 	 * @param targetSections 対象のセクション配列
 	 */
-	match(
-		sourceSections: MdaitSection[],
-		targetSections: MdaitSection[],
-	): MatchResult {
+	match(sourceSections: MdaitUnit[], targetSections: MdaitUnit[]): MatchResult {
 		const result: SectionPair[] = [];
 		const matchedTargetIndexes = new Set<number>();
 		const matchedSourceIndexes = new Set<number>();
@@ -31,7 +28,7 @@ export class SectionMatcher {
 		// 1. src一致優先
 		for (let sIdx = 0; sIdx < sourceSections.length; sIdx++) {
 			const source = sourceSections[sIdx];
-			const sourceHash = source.mdaitHeader?.hash;
+			const sourceHash = source.marker?.hash;
 			if (!sourceHash) continue;
 			let found = false;
 			for (let tIdx = 0; tIdx < targetSections.length; tIdx++) {
@@ -119,8 +116,8 @@ export class SectionMatcher {
 	createSyncedTargets(
 		matchResult: MatchResult,
 		autoDeleteOrphans = true,
-	): MdaitSection[] {
-		const result: MdaitSection[] = [];
+	): MdaitUnit[] {
+		const result: MdaitUnit[] = [];
 		for (const pair of matchResult) {
 			if (pair.source && pair.target) {
 				// マッチ
@@ -128,7 +125,7 @@ export class SectionMatcher {
 			} else if (pair.source && !pair.target) {
 				// 新規source
 				const sourceHash = calculateHash(pair.source.content);
-				const newTarget = MdaitSection.createEmptyTargetSection(
+				const newTarget = MdaitUnit.createEmptyTargetUnit(
 					pair.source,
 					sourceHash,
 				);
@@ -136,15 +133,11 @@ export class SectionMatcher {
 			} else if (!pair.source && pair.target) {
 				// 孤立target
 				if (!autoDeleteOrphans) {
-					if (pair.target.mdaitHeader) {
-						pair.target.mdaitHeader.needTag = "verify-deletion";
+					if (pair.target.marker) {
+						pair.target.marker.need = "verify-deletion";
 					} else {
 						const hash = calculateHash(pair.target.content);
-						pair.target.mdaitHeader = new MdaitHeader(
-							hash,
-							null,
-							"verify-deletion",
-						);
+						pair.target.marker = new MdaitMarker(hash, null, "verify-deletion");
 					}
 					result.push(pair.target);
 				}

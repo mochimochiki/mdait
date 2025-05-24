@@ -1,21 +1,21 @@
 import { calculateHash } from "../hash/hash-calculator";
-import { MdaitHeader } from "./mdait-header";
+import { MdaitMarker } from "./mdait-marker";
 
 /**
  * Markdownセクションクラス
  * Markdownドキュメントのセクション（見出しから次の見出しまで）を表現する
  * @important このクラスはドメインオブジェクトです。変更時は理由を明示し、承認なしに編集しないでください。
  */
-export class MdaitSection {
+export class MdaitUnit {
 	/**
 	 * コンストラクタ
-	 * @param mdaitHeader mdaitヘッダー
+	 * @param marker mdaitMarker（セクションのメタデータ）
 	 * @param title セクションのタイトル（見出し）
 	 * @param headingLevel 見出しのレベル（1=h1, 2=h2, ...）
 	 * @param content 元のMarkdownコンテンツ（見出しと本文を含む原文）
 	 */
 	constructor(
-		public mdaitHeader: MdaitHeader,
+		public marker: MdaitMarker,
 		public title: string,
 		public headingLevel: number,
 		public content: string, // 元のMarkdownコンテンツを保持
@@ -28,8 +28,8 @@ export class MdaitSection {
 	toString(): string {
 		let result = "";
 
-		if (this.mdaitHeader) {
-			result += `${this.mdaitHeader.toString()}\n`;
+		if (this.marker) {
+			result += `${this.marker.toString()}\n`;
 		}
 
 		result += this.content;
@@ -40,45 +40,44 @@ export class MdaitSection {
 	 * セクションが翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
-		return this.mdaitHeader ? this.mdaitHeader.needsTranslation() : false;
+		return this.marker ? this.marker.needsTranslation() : false;
 	}
-
 	/**
 	 * 翻訳元セクションのハッシュを取得
 	 */
 	getSourceHash(): string | null {
-		return this.mdaitHeader ? this.mdaitHeader.srcHash : null;
+		return this.marker ? this.marker.from : null;
 	}
 
 	/**
 	 * 翻訳が完了したマークをする（needタグの除去）
 	 */
 	markAsTranslated(): void {
-		if (this.mdaitHeader) {
-			this.mdaitHeader.removeNeedTag();
+		if (this.marker) {
+			this.marker.removeNeedTag();
 		}
 	}
 
 	/**
 	 * 空のターゲットセクションを作成する
-	 * @param sourceSection ソースセクション
+	 * @param sourceUnit ソースユニット
 	 * @param sourceHash ソースハッシュ
-	 * @returns 空のターゲットセクション
+	 * @returns 空のターゲットユニット
 	 */
-	static createEmptyTargetSection(
-		sourceSection: MdaitSection,
+	static createEmptyTargetUnit(
+		sourceUnit: MdaitUnit,
 		sourceHash: string,
-	): MdaitSection {
+	): MdaitUnit {
 		// ソースセクションのハッシュを新しく計算
-		const newHash = calculateHash(sourceSection.content);
+		const newHash = calculateHash(sourceUnit.content);
 		// 新しいヘッダーを作成（needタグ付き）
-		const newHeader = new MdaitHeader(newHash, sourceHash, "need");
+		const newMarker = new MdaitMarker(newHash, sourceHash, "need");
 		// 新しいセクションを作成して返す
-		return new MdaitSection(
-			newHeader,
-			sourceSection.title,
-			sourceSection.headingLevel,
-			sourceSection.content,
+		return new MdaitUnit(
+			newMarker,
+			sourceUnit.title,
+			sourceUnit.headingLevel,
+			sourceUnit.content,
 		);
 	}
 }

@@ -33,7 +33,8 @@ export class Configuration {
 
 	/**
 	 * 設定を読み込む
-	 */ public async load(): Promise<void> {
+	 */
+	public async load(): Promise<void> {
 		const config = vscode.workspace.getConfiguration("mdait");
 
 		// 翻訳ペア設定の読み込み

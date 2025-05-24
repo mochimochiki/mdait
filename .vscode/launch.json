@@ -6,7 +6,7 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "./sample",
+        "${workspaceFolder}/sample",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--profile-temp"
       ],

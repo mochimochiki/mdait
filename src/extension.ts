@@ -20,7 +20,6 @@ export function activate(context: vscode.ExtensionContext) {
 		transCommand,
 	);
 
-	console.log('"mdait" is now active.');
 	context.subscriptions.push(transDisposable);
 	context.subscriptions.push(syncDisposable);
 }

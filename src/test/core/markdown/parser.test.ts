@@ -18,17 +18,16 @@ suite("MarkdownItParser: 基本セクション分割", () => {
 		assert.ok(sections[0].content.includes("タイトル1"));
 		assert.ok(sections[1].content.includes("タイトル2"));
 	});
-
 	test("mdaitコメント付き", () => {
-		const md = `<!-- mdait abcd1234 src:efgh5678 need:translate -->
+		const md = `<!-- mdait abcd1234 from:efgh5678 need:translate -->
 # 見出し
 本文`;
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		assert.equal(sections.length, 1);
-		assert.equal(sections[0].mdaitHeader.hash, "abcd1234");
-		assert.equal(sections[0].mdaitHeader.srcHash, "efgh5678");
-		assert.equal(sections[0].mdaitHeader.needTag, "translate");
+		assert.equal(sections[0].marker.hash, "abcd1234");
+		assert.equal(sections[0].marker.from, "efgh5678");
+		assert.equal(sections[0].marker.need, "translate");
 	});
 
 	test("本文にリストやコードブロック", () => {
@@ -81,7 +80,7 @@ text`;
 		const codeBlock = [
 			"```",
 			"# コード内見出し",
-			"<!-- mdait fakehash src:fakesrc need:ignore -->",
+			"<!-- mdait fakehash from:fakesrc need:ignore -->",
 			"コード本文",
 			"```",
 		].join("\n");
@@ -93,14 +92,13 @@ text`;
 		assert.ok(sections[0].content.includes("# コード内見出し"));
 		assert.ok(
 			sections[0].content.includes(
-				"<!-- mdait fakehash src:fakesrc need:ignore -->",
+				"<!-- mdait fakehash from:fakesrc need:ignore -->",
 			),
 		);
 	});
-
 	test("parse→stringifyでロスレス", () => {
 		const md = `
-<!-- mdait abcd1234 src:efgh5678 need:translate -->
+<!-- mdait abcd1234 from:efgh5678 need:translate -->
 # 見出し
 本文
 - list
@@ -110,24 +108,22 @@ text`;
 		// 空白や改行の差異は許容
 		assert.ok(md2.replace(/\s+/g, "") === md.replace(/\s+/g, ""));
 	});
-
 	test("8文字未満のmdaitコメントは無視される", () => {
-		const md = "<!-- mdait abcd src:efgh need:translate -->\n# 見出し\n本文";
+		const md = "<!-- mdait abcd from:efgh need:translate -->\n# 見出し\n本文";
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		// mdaitHeaderはnullまたは空のhashになる（パース不可）
 		assert.equal(sections.length, 1);
 		assert.ok(
-			!sections[0].mdaitHeader ||
-				!sections[0].mdaitHeader.hash ||
-				sections[0].mdaitHeader.hash.length !== 8,
+			!sections[0].marker ||
+				!sections[0].marker.hash ||
+				sections[0].marker.hash.length !== 8,
 		);
 	});
-
 	test("複数行のmdaitコメント", () => {
 		const md = `
 <!-- mdait abcd1234
-src:efgh5678
+from:efgh5678
 need:translate -->
 # 見出し
 
@@ -135,19 +131,19 @@ need:translate -->
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		assert.equal(sections.length, 1);
-		assert.equal(sections[0].mdaitHeader.hash, "abcd1234");
-		assert.equal(sections[0].mdaitHeader.srcHash, "efgh5678");
-		assert.equal(sections[0].mdaitHeader.needTag, "translate");
+		assert.equal(sections[0].marker.hash, "abcd1234");
+		assert.equal(sections[0].marker.from, "efgh5678");
+		assert.equal(sections[0].marker.need, "translate");
 	});
 
 	test("複数レベルにわたるmdaitコメント付き見出し", () => {
 		const md = `
-<!-- mdait hash1234 src:src45678 need:tag1 -->
+<!-- mdait hash1234 from:src45678 need:tag1 -->
 # 見出し1
 
 本文1
 
-<!-- mdait hash2345 src:src56789 need:tag2 -->
+<!-- mdait hash2345 from:src56789 need:tag2 -->
 ## 見出し2
 
 本文2`;
@@ -155,13 +151,13 @@ need:translate -->
 		const sections = doc.sections;
 		assert.equal(sections.length, 2);
 		assert.equal(sections[0].title, "見出し1");
-		assert.equal(sections[0].mdaitHeader.hash, "hash1234");
-		assert.equal(sections[0].mdaitHeader.srcHash, "src45678");
-		assert.equal(sections[0].mdaitHeader.needTag, "tag1");
+		assert.equal(sections[0].marker.hash, "hash1234");
+		assert.equal(sections[0].marker.from, "src45678");
+		assert.equal(sections[0].marker.need, "tag1");
 		assert.equal(sections[1].title, "見出し2");
-		assert.equal(sections[1].mdaitHeader.hash, "hash2345");
-		assert.equal(sections[1].mdaitHeader.srcHash, "src56789");
-		assert.equal(sections[1].mdaitHeader.needTag, "tag2");
+		assert.equal(sections[1].marker.hash, "hash2345");
+		assert.equal(sections[1].marker.from, "src56789");
+		assert.equal(sections[1].marker.need, "tag2");
 	});
 
 	test("TOMLフロントマターにmdaitコメントはつかない", () => {
@@ -179,30 +175,28 @@ need:translate -->
 		assert.ok(doc.frontMatterRaw?.includes("---"));
 		assert.ok(doc.frontMatterRaw?.includes("title: 'テスト'"));
 	});
-
 	test("複数のmdaitコメント", () => {
 		const md = [
-			"<!-- mdait hashAAAA src:srcAAAAA need:tagA -->",
+			"<!-- mdait hashAAAA from:srcAAAAA need:tagA -->",
 			"",
 			"# 見出しA",
 			"本文A",
 			"",
-			"<!-- mdait hashBBBB src:srcBBBBB need:tagB -->",
+			"<!-- mdait hashBBBB from:srcBBBBB need:tagB -->",
 			"# 見出しB",
 			"本文B",
 		].join("\n");
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		assert.equal(sections.length, 2);
-		assert.equal(sections[0].mdaitHeader.hash, "hashAAAA");
+		assert.equal(sections[0].marker.hash, "hashAAAA");
 		// 直前のmdaitのみ有効
-		assert.equal(sections[1].mdaitHeader.hash, "hashBBBB");
+		assert.equal(sections[1].marker.hash, "hashBBBB");
 	});
-
 	test("複数行のmdaitコメントと複数見出し", () => {
 		const md = [
 			"<!-- mdait hashMMMM",
-			"src:srcMMMM1",
+			"from:srcMMMM1",
 			"need:tagM -->",
 			"# 見出しM",
 			"本文M",
@@ -213,10 +207,10 @@ need:translate -->
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		assert.equal(sections.length, 2);
-		assert.equal(sections[0].mdaitHeader.hash, "hashMMMM");
-		assert.equal(sections[0].mdaitHeader.srcHash, "srcMMMM1");
-		assert.equal(sections[0].mdaitHeader.needTag, "tagM");
-		assert.ok(!sections[1].mdaitHeader.hash);
+		assert.equal(sections[0].marker.hash, "hashMMMM");
+		assert.equal(sections[0].marker.from, "srcMMMM1");
+		assert.equal(sections[0].marker.need, "tagM");
+		assert.ok(!sections[1].marker.hash);
 	});
 
 	test("フロントマター直後のmdaitコメントと見出し", () => {
@@ -224,14 +218,14 @@ need:translate -->
 			"---",
 			"title: 'フロントマター'",
 			"---",
-			"<!-- mdait hashFFF1 src:srcFFFF1 need:tagF -->",
+			"<!-- mdait hashFFF1 from:srcFFFF1 need:tagF -->",
 			"# 見出しF",
 			"本文F",
 		].join("\n");
 		const doc = markdownParser.parse(md);
 		const sections = doc.sections;
 		assert.equal(sections.length, 1);
-		assert.equal(sections[0].mdaitHeader.hash, "hashFFF1");
+		assert.equal(sections[0].marker.hash, "hashFFF1");
 		assert.equal(sections[0].title, "見出しF");
 		assert.ok(doc.frontMatterRaw?.includes("title: 'フロントマター'"));
 	});
@@ -243,14 +237,14 @@ need:translate -->
 			"lang: 'ja'",
 			"---",
 			"",
-			"<!-- mdait hashA123 src:srcA123 need:tagA -->",
+			"<!-- mdait hashA123 from:srcA123 need:tagA -->",
 			"# 見出しA",
 			"本文A",
 			"",
 			"# 見出しB",
 			"本文B",
 			"",
-			"<!-- mdait hashB234 src:srcB234 need:tagB -->",
+			"<!-- mdait hashB234 from:srcB234 need:tagB -->",
 			"# 見出しC",
 			"本文C",
 		].join("\n");
@@ -259,10 +253,10 @@ need:translate -->
 		assert.equal(sections.length, 3);
 		assert.ok(doc.frontMatterRaw?.includes("title: '多見出しテスト'"));
 		assert.equal(sections[0].title, "見出しA");
-		assert.equal(sections[0].mdaitHeader.hash, "hashA123");
+		assert.equal(sections[0].marker.hash, "hashA123");
 		assert.equal(sections[1].title, "見出しB");
-		assert.ok(!sections[1].mdaitHeader.hash);
+		assert.ok(!sections[1].marker.hash);
 		assert.equal(sections[2].title, "見出しC");
-		assert.equal(sections[2].mdaitHeader.hash, "hashB234");
+		assert.equal(sections[2].marker.hash, "hashB234");
 	});
 });

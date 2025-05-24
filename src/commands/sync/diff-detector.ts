@@ -1,4 +1,4 @@
-import type { MdaitSection } from "../../core/markdown/mdait-section";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
  * セクションの差分種別
@@ -21,9 +21,9 @@ export interface SectionDiff {
 	/** 差分種別 */
 	type: DiffType;
 	/** ソースセクション (削除の場合はnull) */
-	source: MdaitSection | null;
+	source: MdaitUnit | null;
 	/** ターゲットセクション (新規の場合はnull) */
-	target: MdaitSection | null;
+	target: MdaitUnit | null;
 }
 
 /**
@@ -52,8 +52,8 @@ export class DiffDetector {
 	 * @param syncedSections 同期後のセクション配列
 	 */
 	detect(
-		originalSections: MdaitSection[],
-		syncedSections: MdaitSection[],
+		originalSections: MdaitUnit[],
+		syncedSections: MdaitUnit[],
 	): DiffResult {
 		const diffs: SectionDiff[] = [];
 		let added = 0;
@@ -63,18 +63,18 @@ export class DiffDetector {
 
 		// 削除セクションの特定
 		// (syncedに無いoriginalのセクション)
-		const originalMap = new Map<string, MdaitSection>();
+		const originalMap = new Map<string, MdaitUnit>();
 		for (const section of originalSections) {
-			if (section.mdaitHeader?.hash) {
-				originalMap.set(section.mdaitHeader.hash, section);
+			if (section.marker?.hash) {
+				originalMap.set(section.marker.hash, section);
 			}
 		}
 
 		// 追加・変更セクションの特定
-		const syncedMap = new Map<string, MdaitSection>();
+		const syncedMap = new Map<string, MdaitUnit>();
 		for (const section of syncedSections) {
-			if (section.mdaitHeader?.hash) {
-				syncedMap.set(section.mdaitHeader.hash, section);
+			if (section.marker?.hash) {
+				syncedMap.set(section.marker.hash, section);
 			}
 		}
 

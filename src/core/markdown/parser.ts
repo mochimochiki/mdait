@@ -1,8 +1,8 @@
 import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
-import { MdaitHeader } from "./mdait-header";
 import type { FrontMatter, Markdown } from "./mdait-markdown";
-import { MdaitSection } from "./mdait-section";
+import { MdaitMarker } from "./mdait-marker";
+import { MdaitUnit } from "./mdait-unit";
 
 /**
  * Markdownパーサーインターフェース
@@ -51,19 +51,19 @@ export class MarkdownItParser implements IMarkdownParser {
 		if (idx > 0) {
 			frontMatterRaw = markdown.substring(0, idx);
 		}
-		const sections: MdaitSection[] = [];
+		const sections: MdaitUnit[] = [];
 		const tokens = this.md.parse(content, {});
 		const lines = content.split(/\r?\n/);
 
 		let currentSection: {
-			mdaitHeader: MdaitHeader;
+			marker: MdaitMarker;
 			title: string;
 			level: number;
 			startLine: number | null;
 			endLine: number | null;
 		} | null = null;
 		let inHeading = false;
-		let mdaitHeader = new MdaitHeader("");
+		let mdaitMarker = new MdaitMarker("");
 
 		for (let i = 0; i < tokens.length; i++) {
 			const token = tokens[i];
@@ -77,8 +77,8 @@ export class MarkdownItParser implements IMarkdownParser {
 					const end = token.map ? token.map[0] : lines.length;
 					const rawContent = lines.slice(start, end).join("\n");
 					sections.push(
-						new MdaitSection(
-							currentSection.mdaitHeader,
+						new MdaitUnit(
+							currentSection.marker,
 							currentSection.title,
 							currentSection.level,
 							rawContent,
@@ -86,9 +86,9 @@ export class MarkdownItParser implements IMarkdownParser {
 					);
 					currentSection = null;
 				}
-				const parsedHeader = MdaitHeader.parse(token.content);
+				const parsedHeader = MdaitMarker.parse(token.content);
 				if (parsedHeader !== null) {
-					mdaitHeader = parsedHeader;
+					mdaitMarker = parsedHeader;
 				}
 				continue;
 			}
@@ -100,8 +100,8 @@ export class MarkdownItParser implements IMarkdownParser {
 					const end = token.map ? token.map[0] : lines.length;
 					const rawContent = lines.slice(start, end).join("\n");
 					sections.push(
-						new MdaitSection(
-							currentSection.mdaitHeader,
+						new MdaitUnit(
+							currentSection.marker,
 							currentSection.title,
 							currentSection.level,
 							rawContent,
@@ -110,13 +110,13 @@ export class MarkdownItParser implements IMarkdownParser {
 				}
 				// 新しいセクションを開始
 				currentSection = {
-					mdaitHeader: mdaitHeader,
+					marker: mdaitMarker,
 					title: "",
 					level: Number.parseInt(token.tag.substring(1), 10),
 					startLine: token.map ? token.map[0] : null,
 					endLine: null,
 				};
-				mdaitHeader = new MdaitHeader("");
+				mdaitMarker = new MdaitMarker("");
 				inHeading = true;
 				continue;
 			}
@@ -136,8 +136,8 @@ export class MarkdownItParser implements IMarkdownParser {
 			const end = lines.length;
 			const rawContent = lines.slice(start, end).join("\n");
 			sections.push(
-				new MdaitSection(
-					currentSection.mdaitHeader,
+				new MdaitUnit(
+					currentSection.marker,
 					currentSection.title,
 					currentSection.level,
 					rawContent,
