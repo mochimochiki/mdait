@@ -306,3 +306,13 @@ title: サンプル
 - `MarkdownDocument.units[0].mdaitUnit.need === "review"`
 
 ---
+
+## 10. 開発・テスト環境
+
+開発およびテスト時には、一貫したテストコンテンツの配置と、それを利用するための自動コピー処理を行います。
+
+- **テストコンテンツ**: `src/test/sample-content/` にテスト用原稿を配置
+- **コピー先**: テスト実行前に、上記コンテンツを `src/test/workspace/content/` へコピー
+- **コピースクリプト**: `copy-test-files` を `package.json` に定義
+- **コンテンツコピータスク**: `.vscode/tasks.json` に `copy-test-content` タスクを定義
+- **デバッグ実行連携**: `launch.json` の `preLaunchTask` に `copy-test-content` を指定し、デバッグ実行前に自動でテストコンテンツをコピー
