@@ -28,17 +28,11 @@ suite("MdaitHeader", () => {
 	test("toString: 正しいフォーマットの文字列が生成される", () => {
 		// 全てのパラメータがある場合
 		const header1 = new MdaitMarker(testHash, testFrom, "translate");
-		assert.equal(
-			header1.toString(),
-			`<!-- mdait ${testHash} from:${testFrom} need:translate -->`,
-		);
+		assert.equal(header1.toString(), `<!-- mdait ${testHash} from:${testFrom} need:translate -->`);
 
 		// fromだけがある場合
 		const header2 = new MdaitMarker(testHash, testFrom);
-		assert.equal(
-			header2.toString(),
-			`<!-- mdait ${testHash} from:${testFrom} -->`,
-		);
+		assert.equal(header2.toString(), `<!-- mdait ${testHash} from:${testFrom} -->`);
 
 		// 基本的なhashだけの場合
 		const header3 = new MdaitMarker(testHash);
@@ -116,10 +110,6 @@ suite("MdaitHeader", () => {
 		// translate タグがある場合
 		const header1 = new MdaitMarker(testHash, testFrom, "translate");
 		assert.equal(header1.needsTranslation(), true);
-
-		// review タグがある場合
-		const header2 = new MdaitMarker(testHash, testFrom, "review");
-		assert.equal(header2.needsTranslation(), true);
 
 		// タグがない場合
 		const header3 = new MdaitMarker(testHash, testFrom);

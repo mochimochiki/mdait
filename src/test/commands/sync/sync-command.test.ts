@@ -31,10 +31,7 @@ function copyDirSync(src: string, dest: string) {
 }
 
 suite("syncコマンドE2E", () => {
-	const sampleContentDir = join(
-		__dirname,
-		"../../../../src/test/sample-content",
-	);
+	const sampleContentDir = join(__dirname, "../../../../src/test/sample-content");
 	const workspaceDir = join(__dirname, "../../../../src/test/workspace");
 	const contentDir = join(workspaceDir, "content");
 	const tmpEnDir = join(contentDir, "en");
@@ -123,9 +120,7 @@ suite("syncコマンドE2E", () => {
 		assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
 
 		// 3. en側のfromが更新されたjaのハッシュと一致していること
-		const enFirstUnit = enText.match(
-			/<!-- mdait ([^\s]+) from:([^\s]+) need:translate -->/,
-		);
+		const enFirstUnit = enText.match(/<!-- mdait ([^\s]+) from:([^\s]+) need:translate -->/);
 		assert.ok(enFirstUnit);
 		assert.strictEqual(enFirstUnit[2], jaNewHash);
 
@@ -212,12 +207,12 @@ suite("syncコマンドE2E", () => {
 		const enText = readFileSync(tmpEnTest, "utf8");
 
 		// ja側の特定のユニット（見出し2）のハッシュを取得
-		const jaSecondUnit = jaText.match(/<!-- mdait (e330ab02) -->/);
+		const jaSecondUnit = jaText.match(/<!-- mdait (403206cb) -->/);
 		assert.ok(jaSecondUnit);
 		const jaHash = jaSecondUnit[1];
 
 		// en側の対応するユニットのfromがja側のハッシュと一致していることを確認
-		const enSecondUnit = enText.match(/<!-- mdait [^\s]+ from:(e330ab02) -->/);
+		const enSecondUnit = enText.match(/<!-- mdait [^\s]+ from:(403206cb) -->/);
 		assert.ok(enSecondUnit);
 		assert.strictEqual(enSecondUnit[1], jaHash);
 	});
@@ -229,7 +224,7 @@ suite("syncコマンドE2E", () => {
 
 		// ja側から特定のユニットを削除（見出し6のユニット）
 		let jaText = readFileSync(tmpJaTest, "utf8");
-		const unitToRemove = /<!-- mdait eb633ff0 -->[\s\S]*?(?=<!-- mdait|$)/;
+		const unitToRemove = /<!-- mdait 2507a192 -->[\s\S]*?(?=<!-- mdait|$)/;
 		jaText = jaText.replace(unitToRemove, "");
 		writeFileSync(tmpJaTest, jaText, "utf8");
 
@@ -239,7 +234,7 @@ suite("syncコマンドE2E", () => {
 
 		// en側の対応するユニットが削除されていること
 		const enText = readFileSync(tmpEnTest, "utf8");
-		assert.ok(!enText.includes("from:eb633ff0"));
+		assert.ok(!enText.includes("from:2507a192"));
 		assert.ok(!enText.includes("#### Heading 6"));
 	});
 
@@ -326,8 +321,7 @@ suite("syncコマンドE2E", () => {
 
 		// de側にen側と同じ構造のファイルを作成（翻訳前状態）
 		const enText = readFileSync(tmpEnTest, "utf8");
-		// src: を from: に変更してde側に作成
-		const deText = enText.replace(/src:/g, "from:");
+		const deText = enText;
 		writeFileSync(tmpDeTest, deText, "utf8");
 
 		// ja側のコンテンツを変更

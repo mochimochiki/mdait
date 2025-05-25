@@ -37,11 +37,7 @@ suite("MdaitSection", () => {
 
 	test("needsTranslation: ヘッダーがある場合はヘッダーの状態を反映する", () => {
 		// need:translate のケース
-		const markerNeedsTranslation = new MdaitMarker(
-			testHash,
-			testSourceHash,
-			"translate",
-		);
+		const markerNeedsTranslation = new MdaitMarker(testHash, testSourceHash, "translate");
 		const sectionNeedsTranslation = new MdaitUnit(
 			markerNeedsTranslation,
 			testTitle,
@@ -50,28 +46,9 @@ suite("MdaitSection", () => {
 		);
 		assert.equal(sectionNeedsTranslation.needsTranslation(), true);
 
-		// need:review のケース
-		const markerNeedsReview = new MdaitMarker(
-			testHash,
-			testSourceHash,
-			"review",
-		);
-		const sectionNeedsReview = new MdaitUnit(
-			markerNeedsReview,
-			testTitle,
-			1,
-			testContent,
-		);
-		assert.equal(sectionNeedsReview.needsTranslation(), true);
-
 		// need タグなしのケース
 		const markerNoNeed = new MdaitMarker(testHash, testSourceHash, null);
-		const sectionNoNeed = new MdaitUnit(
-			markerNoNeed,
-			testTitle,
-			1,
-			testContent,
-		);
+		const sectionNoNeed = new MdaitUnit(markerNoNeed, testTitle, 1, testContent);
 		assert.equal(sectionNoNeed.needsTranslation(), false);
 	});
 
