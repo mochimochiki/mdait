@@ -210,38 +210,50 @@ function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 ) {
 	for (const pair of matchResult) {
-		if (pair.source) {
-			const newHash = calculateHash(pair.source.content);
-			if (!pair.source.marker) {
-				pair.source.marker = new MdaitMarker(newHash);
-			} else if (pair.source.marker.hash !== newHash) {
-				pair.source.marker.hash = newHash;
+		const source = pair.source;
+		const target = pair.target;
+
+		// sourceとtargetが存在 : 通常の同期処理
+		if (source && target) {
+			// source:hashを計算して付与
+			const sourceHash = calculateHash(source.content);
+			if (!source.marker) {
+				source.marker = new MdaitMarker(sourceHash);
+			} else if (source.marker.hash !== sourceHash) {
+				source.marker.hash = sourceHash;
 			}
-		}
-		if (pair.source && pair.target) {
-			// targetのfrom/hashも最新化
-			const fromHash = calculateHash(pair.source.content);
-			if (!pair.target.marker) {
-				pair.target.marker = new MdaitMarker(
-					calculateHash(pair.target.content),
-					fromHash,
-				);
+			// target:hashを計算して付与
+			const targetHash = calculateHash(target.content);
+			if (!target.marker) {
+				target.marker = new MdaitMarker(targetHash, sourceHash);
 			} else {
-				// hashはtargetの内容で、fromのみsourceの新しいhash
-				pair.target.marker.hash = calculateHash(pair.target.content);
-				pair.target.marker.from = fromHash;
+				target.marker.hash = targetHash;
+				// need:translate付与(ソース側の変更があった場合)
+				const oldFromHash = target.marker.from;
+				if (oldFromHash !== sourceHash) {
+					target.marker.from = sourceHash;
+					target.marker.need = "translate";
+				}
 			}
 		}
-		if (pair.source && !pair.target) {
-			// 新規挿入時のsourceのhashは既に上で最新化済み
+		// sourceのみ存在: 孤立sourceの処理
+		if (source && !target) {
+			// hashを計算して付与
+			const sourceHash = calculateHash(source.content);
+			if (!source.marker) {
+				source.marker = new MdaitMarker(sourceHash);
+			} else if (source.marker.hash !== sourceHash) {
+				source.marker.hash = sourceHash;
+			}
 		}
-		if (!pair.source && pair.target) {
-			// 孤立targetもhashはtarget内容で最新化
-			const hash = calculateHash(pair.target.content);
-			if (!pair.target.marker) {
-				pair.target.marker = new MdaitMarker(hash);
-			} else if (pair.target.marker.hash !== hash) {
-				pair.target.marker.hash = hash;
+		// targetのみ存在: 孤立targetの処理
+		if (!source && target) {
+			// hashを計算して付与
+			const hash = calculateHash(target.content);
+			if (!target.marker) {
+				target.marker = new MdaitMarker(hash);
+			} else if (target.marker.hash !== hash) {
+				target.marker.hash = hash;
 			}
 		}
 	}
