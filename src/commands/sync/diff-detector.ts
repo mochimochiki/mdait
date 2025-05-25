@@ -1,7 +1,7 @@
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
- * セクションの差分種別
+ * 差分種別
  */
 export enum DiffType {
 	/** 変更なし */
@@ -15,14 +15,14 @@ export enum DiffType {
 }
 
 /**
- * セクション差分情報
+ * ユニット差分情報
  */
-export interface SectionDiff {
+export interface UnitDiff {
 	/** 差分種別 */
 	type: DiffType;
-	/** ソースセクション (削除の場合はnull) */
+	/** ソースユニット (削除の場合はnull) */
 	source: MdaitUnit | null;
-	/** ターゲットセクション (新規の場合はnull) */
+	/** ターゲットユニット (新規の場合はnull) */
 	target: MdaitUnit | null;
 }
 
@@ -30,15 +30,15 @@ export interface SectionDiff {
  * 差分検出結果
  */
 export interface DiffResult {
-	/** セクション毎の差分情報 */
-	diffs: SectionDiff[];
-	/** 追加されたセクション数 */
+	/** ユニット毎の差分情報 */
+	diffs: UnitDiff[];
+	/** 追加されたユニット数 */
 	added: number;
-	/** 変更されたセクション数 */
+	/** 変更されたユニット数 */
 	modified: number;
-	/** 削除されたセクション数 */
+	/** 削除されたユニット数 */
 	deleted: number;
-	/** 変更なしのセクション数 */
+	/** 変更なしのユニット数 */
 	unchanged: number;
 }
 
@@ -47,38 +47,35 @@ export interface DiffResult {
  */
 export class DiffDetector {
 	/**
-	 * 同期前後のセクション配列から差分を検出
-	 * @param originalSections 元のセクション配列
-	 * @param syncedSections 同期後のセクション配列
+	 * 同期前後のユニット配列から差分を検出
+	 * @param originalUnits 元のユニット配列
+	 * @param syncedUnits 同期後のユニット配列
 	 */
-	detect(
-		originalSections: MdaitUnit[],
-		syncedSections: MdaitUnit[],
-	): DiffResult {
-		const diffs: SectionDiff[] = [];
+	detect(originalUnits: MdaitUnit[], syncedUnits: MdaitUnit[]): DiffResult {
+		const diffs: UnitDiff[] = [];
 		let added = 0;
 		let modified = 0;
 		let deleted = 0;
 		let unchanged = 0;
 
-		// 削除セクションの特定
-		// (syncedに無いoriginalのセクション)
+		// 削除ユニットの特定
+		// (syncedに無いoriginalのユニット)
 		const originalMap = new Map<string, MdaitUnit>();
-		for (const section of originalSections) {
+		for (const section of originalUnits) {
 			if (section.marker?.hash) {
 				originalMap.set(section.marker.hash, section);
 			}
 		}
 
-		// 追加・変更セクションの特定
+		// 追加・変更ユニットの特定
 		const syncedMap = new Map<string, MdaitUnit>();
-		for (const section of syncedSections) {
+		for (const section of syncedUnits) {
 			if (section.marker?.hash) {
 				syncedMap.set(section.marker.hash, section);
 			}
 		}
 
-		// 削除されたセクションを特定
+		// 削除されたユニットを特定
 		originalMap.forEach((section, hash) => {
 			if (!syncedMap.has(hash)) {
 				diffs.push({
@@ -90,12 +87,12 @@ export class DiffDetector {
 			}
 		});
 
-		// 追加・変更・変更なしのセクションを特定
+		// 追加・変更・変更なしのユニットを特定
 		syncedMap.forEach((section, hash) => {
 			const original = originalMap.get(hash);
 
 			if (!original) {
-				// 新規セクション
+				// 新規ユニット
 				diffs.push({
 					type: DiffType.ADDED,
 					source: section,
@@ -103,7 +100,7 @@ export class DiffDetector {
 				});
 				added++;
 			} else if (section.content !== original.content) {
-				// 変更セクション
+				// 変更ユニット
 				diffs.push({
 					type: DiffType.MODIFIED,
 					source: section,

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { markdownParser } from "../../../core/markdown/parser";
 
-suite("MarkdownItParser: 基本セクション分割", () => {
+suite("MarkdownItParser: 基本ユニット分割", () => {
 	test("単純な見出し2つ", () => {
 		const md = `
 # タイトル1
@@ -11,23 +11,23 @@ suite("MarkdownItParser: 基本セクション分割", () => {
 # タイトル2
 本文2`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 2);
-		assert.equal(sections[0].title, "タイトル1");
-		assert.equal(sections[1].title, "タイトル2");
-		assert.ok(sections[0].content.includes("タイトル1"));
-		assert.ok(sections[1].content.includes("タイトル2"));
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "タイトル1");
+		assert.equal(units[1].title, "タイトル2");
+		assert.ok(units[0].content.includes("タイトル1"));
+		assert.ok(units[1].content.includes("タイトル2"));
 	});
 	test("mdaitコメント付き", () => {
 		const md = `<!-- mdait abcd1234 from:efgh5678 need:translate -->
 # 見出し
 本文`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.equal(sections[0].marker.hash, "abcd1234");
-		assert.equal(sections[0].marker.from, "efgh5678");
-		assert.equal(sections[0].marker.need, "translate");
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "abcd1234");
+		assert.equal(units[0].marker.from, "efgh5678");
+		assert.equal(units[0].marker.need, "translate");
 	});
 
 	test("本文にリストやコードブロック", () => {
@@ -42,10 +42,10 @@ code
 block
 \`\`\``;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.ok(sections[0].content.includes("- item1"));
-		assert.ok(sections[0].content.includes("```"));
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.ok(units[0].content.includes("- item1"));
+		assert.ok(units[0].content.includes("```"));
 	});
 
 	test("ファイル先頭・末尾の見出し", () => {
@@ -55,10 +55,10 @@ body
 # last
 end`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 2);
-		assert.equal(sections[0].title, "first");
-		assert.equal(sections[1].title, "last");
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "first");
+		assert.equal(units[1].title, "last");
 	});
 
 	test("コードブロック内の#やmdaitコメントは無視", () => {
@@ -70,10 +70,10 @@ end`;
 \`\`\`
 text`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.ok(sections[0].content.includes("# not heading"));
-		assert.ok(sections[0].content.includes("<!-- mdait fake -->"));
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.ok(units[0].content.includes("# not heading"));
+		assert.ok(units[0].content.includes("<!-- mdait fake -->"));
 	});
 
 	test("コードブロック内のコメントと見出しは無視される", () => {
@@ -86,12 +86,12 @@ text`;
 		].join("\n");
 		const md = `# 外部見出し\n\n${codeBlock}\nテキスト`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.equal(sections[0].title, "外部見出し");
-		assert.ok(sections[0].content.includes("# コード内見出し"));
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].title, "外部見出し");
+		assert.ok(units[0].content.includes("# コード内見出し"));
 		assert.ok(
-			sections[0].content.includes(
+			units[0].content.includes(
 				"<!-- mdait fakehash from:fakesrc need:ignore -->",
 			),
 		);
@@ -111,13 +111,13 @@ text`;
 	test("8文字未満のmdaitコメントは無視される", () => {
 		const md = "<!-- mdait abcd from:efgh need:translate -->\n# 見出し\n本文";
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
+		const units = doc.units;
 		// mdaitHeaderはnullまたは空のhashになる（パース不可）
-		assert.equal(sections.length, 1);
+		assert.equal(units.length, 1);
 		assert.ok(
-			!sections[0].marker ||
-				!sections[0].marker.hash ||
-				sections[0].marker.hash.length !== 8,
+			!units[0].marker ||
+				!units[0].marker.hash ||
+				units[0].marker.hash.length !== 8,
 		);
 	});
 	test("複数行のmdaitコメント", () => {
@@ -129,11 +129,11 @@ need:translate -->
 
 本文`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.equal(sections[0].marker.hash, "abcd1234");
-		assert.equal(sections[0].marker.from, "efgh5678");
-		assert.equal(sections[0].marker.need, "translate");
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "abcd1234");
+		assert.equal(units[0].marker.from, "efgh5678");
+		assert.equal(units[0].marker.need, "translate");
 	});
 
 	test("複数レベルにわたるmdaitコメント付き見出し", () => {
@@ -148,16 +148,16 @@ need:translate -->
 
 本文2`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 2);
-		assert.equal(sections[0].title, "見出し1");
-		assert.equal(sections[0].marker.hash, "hash1234");
-		assert.equal(sections[0].marker.from, "src45678");
-		assert.equal(sections[0].marker.need, "tag1");
-		assert.equal(sections[1].title, "見出し2");
-		assert.equal(sections[1].marker.hash, "hash2345");
-		assert.equal(sections[1].marker.from, "src56789");
-		assert.equal(sections[1].marker.need, "tag2");
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "見出し1");
+		assert.equal(units[0].marker.hash, "hash1234");
+		assert.equal(units[0].marker.from, "src45678");
+		assert.equal(units[0].marker.need, "tag1");
+		assert.equal(units[1].title, "見出し2");
+		assert.equal(units[1].marker.hash, "hash2345");
+		assert.equal(units[1].marker.from, "src56789");
+		assert.equal(units[1].marker.need, "tag2");
 	});
 
 	test("TOMLフロントマターにmdaitコメントはつかない", () => {
@@ -169,9 +169,9 @@ need:translate -->
 		].join("\n");
 		const md = `${tomlFrontMatter}\n\n# 見出し\n本文`;
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.equal(sections[0].title, "見出し");
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].title, "見出し");
 		assert.ok(doc.frontMatterRaw?.includes("---"));
 		assert.ok(doc.frontMatterRaw?.includes("title: 'テスト'"));
 	});
@@ -187,11 +187,11 @@ need:translate -->
 			"本文B",
 		].join("\n");
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 2);
-		assert.equal(sections[0].marker.hash, "hashAAAA");
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].marker.hash, "hashAAAA");
 		// 直前のmdaitのみ有効
-		assert.equal(sections[1].marker.hash, "hashBBBB");
+		assert.equal(units[1].marker.hash, "hashBBBB");
 	});
 	test("複数行のmdaitコメントと複数見出し", () => {
 		const md = [
@@ -205,12 +205,12 @@ need:translate -->
 			"本文N",
 		].join("\n");
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 2);
-		assert.equal(sections[0].marker.hash, "hashMMMM");
-		assert.equal(sections[0].marker.from, "srcMMMM1");
-		assert.equal(sections[0].marker.need, "tagM");
-		assert.ok(!sections[1].marker.hash);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].marker.hash, "hashMMMM");
+		assert.equal(units[0].marker.from, "srcMMMM1");
+		assert.equal(units[0].marker.need, "tagM");
+		assert.ok(!units[1].marker.hash);
 	});
 
 	test("フロントマター直後のmdaitコメントと見出し", () => {
@@ -223,10 +223,10 @@ need:translate -->
 			"本文F",
 		].join("\n");
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 1);
-		assert.equal(sections[0].marker.hash, "hashFFF1");
-		assert.equal(sections[0].title, "見出しF");
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "hashFFF1");
+		assert.equal(units[0].title, "見出しF");
 		assert.ok(doc.frontMatterRaw?.includes("title: 'フロントマター'"));
 	});
 
@@ -249,14 +249,14 @@ need:translate -->
 			"本文C",
 		].join("\n");
 		const doc = markdownParser.parse(md);
-		const sections = doc.sections;
-		assert.equal(sections.length, 3);
+		const units = doc.units;
+		assert.equal(units.length, 3);
 		assert.ok(doc.frontMatterRaw?.includes("title: '多見出しテスト'"));
-		assert.equal(sections[0].title, "見出しA");
-		assert.equal(sections[0].marker.hash, "hashA123");
-		assert.equal(sections[1].title, "見出しB");
-		assert.ok(!sections[1].marker.hash);
-		assert.equal(sections[2].title, "見出しC");
-		assert.equal(sections[2].marker.hash, "hashB234");
+		assert.equal(units[0].title, "見出しA");
+		assert.equal(units[0].marker.hash, "hashA123");
+		assert.equal(units[1].title, "見出しB");
+		assert.ok(!units[1].marker.hash);
+		assert.equal(units[2].title, "見出しC");
+		assert.equal(units[2].marker.hash, "hashB234");
 	});
 });

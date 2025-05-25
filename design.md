@@ -126,7 +126,7 @@ mdaitマーカーがユニットの開始を示し、その管理対象となる
   ],
   // 除外パターン
   "mdait.ignoredPatterns": "**/node_modules/**",
-  // sync実行時にマーカーを自動挿入する見出しレベル
+  // sync実行時にマーカーを自動挿入する見出しレベル(このレベルまでの見出しの直前にマーカーを挿入)
   "mdait.sync.autoMarkerLevel": 2,
   // 自動削除設定
   "mdait.sync.autoDelete": true,

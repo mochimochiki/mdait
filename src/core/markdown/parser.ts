@@ -9,15 +9,15 @@ import { MdaitUnit } from "./mdait-unit";
  */
 export interface IMarkdownParser {
 	/**
-	 * Markdownテキストをセクションに分割してパースする
+	 * Markdownテキストをユニットに分割してパースする
 	 * @param markdown Markdownテキスト
-	 * @returns パースされたMarkdownセクションの配列
+	 * @returns パースされたMarkdownユニットの配列
 	 */
 	parse(markdown: string): Markdown;
 
 	/**
-	 * セクションをMarkdownテキストに変換
-	 * @param sections セクションの配列
+	 * ユニットをMarkdownテキストに変換
+	 * @param doc Markdownドキュメント
 	 * @returns Markdownテキスト
 	 */
 	stringify(doc: Markdown): string;
@@ -37,10 +37,10 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
-	 * Markdownテキストをセクションに分割してパースする
-	 * markdown-itを使用して解析し、トークンからセクションを構築
+	 * Markdownテキストをユニットに分割してパースする
+	 * markdown-itを使用して解析し、トークンからユニットを構築
 	 * @param markdown Markdownテキスト
-	 * @returns パースされたMarkdownセクションの配列
+	 * @returns パースされたMarkdownユニットの配列
 	 */
 	parse(markdown: string): Markdown {
 		const fm = matter(markdown);
@@ -51,7 +51,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		if (idx > 0) {
 			frontMatterRaw = markdown.substring(0, idx);
 		}
-		const sections: MdaitUnit[] = [];
+		const units: MdaitUnit[] = [];
 		const tokens = this.md.parse(content, {});
 		const lines = content.split(/\r?\n/);
 
@@ -71,12 +71,12 @@ export class MarkdownItParser implements IMarkdownParser {
 				(token.type === "inline" || token.type === "html_block") &&
 				token.content.includes("<!-- mdait")
 			) {
-				// mdaitコメントが現れた時点で、現在のセクションをここで区切る
+				// mdaitコメントが現れた時点で、現在のユニットをここで区切る
 				if (currentSection && currentSection.startLine !== null) {
 					const start = currentSection.startLine;
 					const end = token.map ? token.map[0] : lines.length;
 					const rawContent = lines.slice(start, end).join("\n");
-					sections.push(
+					units.push(
 						new MdaitUnit(
 							currentSection.marker,
 							currentSection.title,
@@ -93,13 +93,13 @@ export class MarkdownItParser implements IMarkdownParser {
 				continue;
 			}
 			if (token.type === "heading_open") {
-				// 前のセクションがあれば保存
+				// 前のユニットがあれば保存
 				if (currentSection && currentSection.startLine !== null) {
 					const start = currentSection.startLine;
-					// 次の見出しが出てくるまでを1セクションとする
+					// 次の見出しが出てくるまでを1ユニットとする
 					const end = token.map ? token.map[0] : lines.length;
 					const rawContent = lines.slice(start, end).join("\n");
-					sections.push(
+					units.push(
 						new MdaitUnit(
 							currentSection.marker,
 							currentSection.title,
@@ -108,7 +108,7 @@ export class MarkdownItParser implements IMarkdownParser {
 						),
 					);
 				}
-				// 新しいセクションを開始
+				// 新しいユニットを開始
 				currentSection = {
 					marker: mdaitMarker,
 					title: "",
@@ -130,12 +130,12 @@ export class MarkdownItParser implements IMarkdownParser {
 				}
 			}
 		}
-		// 最後のセクションを保存
+		// 最後のユニットを保存
 		if (currentSection && currentSection.startLine !== null) {
 			const start = currentSection.startLine;
 			const end = lines.length;
 			const rawContent = lines.slice(start, end).join("\n");
-			sections.push(
+			units.push(
 				new MdaitUnit(
 					currentSection.marker,
 					currentSection.title,
@@ -144,12 +144,12 @@ export class MarkdownItParser implements IMarkdownParser {
 				),
 			);
 		}
-		return { frontMatter, frontMatterRaw, sections };
+		return { frontMatter, frontMatterRaw, units: units };
 	}
 
 	/**
-	 * セクションをMarkdownテキストに変換
-	 * @param sections セクションの配列
+	 * ユニットをMarkdownテキストに変換
+	 * @param doc Markdownドキュメント
 	 * @returns Markdownテキスト
 	 */
 	stringify(doc: Markdown): string {
@@ -157,8 +157,8 @@ export class MarkdownItParser implements IMarkdownParser {
 		if (doc.frontMatterRaw && doc.frontMatterRaw.trim().length > 0) {
 			fm = `${doc.frontMatterRaw}`;
 		}
-		// セクション間は1つの改行で連結し、余分な改行増加を防ぐ
-		const body = doc.sections
+		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
+		const body = doc.units
 			.map((section) => section.toString().replace(/\n+$/g, ""))
 			.join("\n\n")
 			.replace(/\n{3,}/g, "\n\n");

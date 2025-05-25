@@ -19,7 +19,7 @@
       },
       {
         "command": "mdait.trans",
-        "title": "mdait: セクション翻訳を実行"
+        "title": "mdait: 翻訳を実行"
       }
     ],
     "configuration": {
@@ -59,7 +59,7 @@
         "mdait.sync.autoDelete": {
           "type": "boolean",
           "default": true,
-          "description": "sync時にソース側で削除されたセクションをターゲット側でも自動的に削除します。"
+          "description": "sync時にソース側で削除されたユニットをターゲット側でも自動的に削除します。"
         },
         "mdait.trans.provider": {
           "type": "string",

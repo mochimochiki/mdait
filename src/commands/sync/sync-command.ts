@@ -12,17 +12,16 @@ import { SectionMatcher } from "./section-matcher";
 
 /**
  * sync command
- * Markdownセクションの同期を行う
+ * Markdownユニットの同期を行う
  */
 export async function syncCommand(): Promise<void> {
 	try {
 		// 処理開始を通知
-		vscode.window.showInformationMessage("セクション同期処理を開始します...");
+		vscode.window.showInformationMessage("ユニット同期処理を開始します...");
 
 		// 設定を読み込む
 		const config = new Configuration();
 		await config.load();
-		console.log(`Loaded configuration: ${JSON.stringify(config)}`);
 
 		// 設定を検証
 		const validationError = config.validate();
@@ -67,12 +66,10 @@ export async function syncCommand(): Promise<void> {
 						// Markdownファイルの同期を実行
 						const diffResult = syncMarkdownFile(sourceFile, targetFile);
 
-						// ログ出力
-						console.log(`File: ${path.basename(sourceFile)}`);
-						console.log(`  Added: ${diffResult.added}`);
-						console.log(`  Modified: ${diffResult.modified}`);
-						console.log(`  Deleted: ${diffResult.deleted}`);
-						console.log(`  Unchanged: ${diffResult.unchanged}`);
+						// ログ出力（差分情報を一行で表示）
+						console.log(
+							`${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
+						);
 					} else {
 						// Markdown以外はそのままコピー
 						syncNonMarkdownFile(sourceFile, targetFile);
@@ -120,36 +117,35 @@ function syncMarkdownFile(sourceFile: string, targetFile: string) {
 		targetContent = fs.readFileSync(targetFile, "utf-8");
 	}
 
-	// Markdownのセクション分割
+	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent);
 	const target = targetContent
 		? markdownParser.parse(targetContent)
-		: { sections: [] };
-
+		: { units: [] };
 	// src, target に hash を付与（ない場合のみ）
-	ensureSectionHash(source.sections);
-	ensureSectionHash(target.sections);
+	ensureSectionHash(source.units);
+	ensureSectionHash(target.units);
 
-	// セクションの対応付け
-	const matchResult = sectionMatcher.match(source.sections, target.sections);
+	// ユニットの対応付け
+	const matchResult = sectionMatcher.match(source.units, target.units);
 
-	// セクションのハッシュを更新
+	// ユニットのハッシュを更新
 	updateSectionHashes(matchResult);
 
 	// 同期結果の生成
-	const syncedSections = sectionMatcher.createSyncedTargets(
+	const syncedUnits = sectionMatcher.createSyncedTargets(
 		matchResult,
 		true, // auto-delete (設定から取得するようにする予定)
 	);
 
 	// 差分検出
-	const diffResult = diffDetector.detect(target.sections, syncedSections);
+	const diffResult = diffDetector.detect(target.units, syncedUnits);
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
 		frontMatter: target.frontMatter,
 		frontMatterRaw: target.frontMatterRaw,
-		sections: syncedSections,
+		units: syncedUnits,
 	};
 
 	// 同期結果を文字列に変換
@@ -165,7 +161,7 @@ function syncMarkdownFile(sourceFile: string, targetFile: string) {
 	const updatedSourceContent = markdownParser.stringify({
 		frontMatter: source.frontMatter,
 		frontMatterRaw: source.frontMatterRaw,
-		sections: source.sections,
+		units: source.units,
 	});
 	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
 
@@ -190,11 +186,11 @@ function syncNonMarkdownFile(sourceFile: string, targetFile: string): void {
 }
 
 /**
- * セクションにmdaitヘッダーを付与する
- * @param sections セクションの配列
+ * ユニットにmdaitヘッダーを付与する
+ * @param units ユニットの配列
  */
-function ensureSectionHash(sections: MdaitUnit[]) {
-	for (const unit of sections) {
+function ensureSectionHash(units: MdaitUnit[]) {
+	for (const unit of units) {
 		if (!unit.marker || !unit.marker.hash) {
 			const hash = calculateHash(unit.content);
 			unit.marker = new MdaitMarker(hash);
@@ -203,8 +199,8 @@ function ensureSectionHash(sections: MdaitUnit[]) {
 }
 
 /**
- * セクションのハッシュを更新する
- * @param matchResult セクションのマッチ結果
+ * ユニットのハッシュを更新する
+ * @param matchResult ユニットのマッチ結果
  */
 function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],

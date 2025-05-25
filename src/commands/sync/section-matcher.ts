@@ -3,7 +3,7 @@ import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
- * セクション対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
+ * ユニット対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
  */
 export type SectionPair = {
 	source: MdaitUnit | null;
@@ -12,27 +12,27 @@ export type SectionPair = {
 export type MatchResult = SectionPair[];
 
 /**
- * セクション対応処理を行うクラス
+ * ユニット対応処理を行うクラス
  */
 export class SectionMatcher {
 	/**
-	 * ソースと対象のセクション対応付けを行う
-	 * @param sourceSections ソースのセクション配列
-	 * @param targetSections 対象のセクション配列
+	 * ソースと対象のユニット対応付けを行う
+	 * @param sourceUnits ソースのユニット配列
+	 * @param targetUnits 対象のユニット配列
 	 */
-	match(sourceSections: MdaitUnit[], targetSections: MdaitUnit[]): MatchResult {
+	match(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): MatchResult {
 		const result: SectionPair[] = [];
 		const matchedTargetIndexes = new Set<number>();
 		const matchedSourceIndexes = new Set<number>();
 
 		// 1. src一致優先
-		for (let sIdx = 0; sIdx < sourceSections.length; sIdx++) {
-			const source = sourceSections[sIdx];
+		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
+			const source = sourceUnits[sIdx];
 			const sourceHash = source.marker?.hash;
 			if (!sourceHash) continue;
 			let found = false;
-			for (let tIdx = 0; tIdx < targetSections.length; tIdx++) {
-				const target = targetSections[tIdx];
+			for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
+				const target = targetUnits[tIdx];
 				if (matchedTargetIndexes.has(tIdx)) continue;
 				const targetSrc = target.getSourceHash();
 				if (targetSrc && targetSrc === sourceHash) {
@@ -52,27 +52,27 @@ export class SectionMatcher {
 		// 2. 順序ベース推定（srcが付与されていないtargetのみ）
 		let sPtr = 0;
 		let tPtr = 0;
-		while (sPtr < sourceSections.length || tPtr < targetSections.length) {
+		while (sPtr < sourceUnits.length || tPtr < targetUnits.length) {
 			// 次のマッチ済みsource/targetのindex
-			while (sPtr < sourceSections.length && matchedSourceIndexes.has(sPtr))
+			while (sPtr < sourceUnits.length && matchedSourceIndexes.has(sPtr))
 				sPtr++;
-			while (tPtr < targetSections.length && matchedTargetIndexes.has(tPtr))
+			while (tPtr < targetUnits.length && matchedTargetIndexes.has(tPtr))
 				tPtr++;
 
-			if (sPtr >= sourceSections.length && tPtr >= targetSections.length) break;
+			if (sPtr >= sourceUnits.length && tPtr >= targetUnits.length) break;
 
 			// srcが付与されていないtargetのみを順序ベース対象
 			const tIsEligible =
-				tPtr < targetSections.length &&
+				tPtr < targetUnits.length &&
 				!matchedTargetIndexes.has(tPtr) &&
-				!targetSections[tPtr].getSourceHash();
+				!targetUnits[tPtr].getSourceHash();
 			const sIsEligible =
-				sPtr < sourceSections.length && !matchedSourceIndexes.has(sPtr);
+				sPtr < sourceUnits.length && !matchedSourceIndexes.has(sPtr);
 
 			if (sIsEligible && tIsEligible) {
 				result.push({
-					source: sourceSections[sPtr],
-					target: targetSections[tPtr],
+					source: sourceUnits[sPtr],
+					target: targetUnits[tPtr],
 				});
 				matchedSourceIndexes.add(sPtr);
 				matchedTargetIndexes.add(tPtr);
@@ -80,12 +80,12 @@ export class SectionMatcher {
 				tPtr++;
 			} else if (sIsEligible) {
 				// 新規source
-				result.push({ source: sourceSections[sPtr], target: null });
+				result.push({ source: sourceUnits[sPtr], target: null });
 				matchedSourceIndexes.add(sPtr);
 				sPtr++;
 			} else if (tIsEligible) {
 				// 孤立target
-				result.push({ source: null, target: targetSections[tPtr] });
+				result.push({ source: null, target: targetUnits[tPtr] });
 				matchedTargetIndexes.add(tPtr);
 				tPtr++;
 			} else {
@@ -96,9 +96,9 @@ export class SectionMatcher {
 		}
 
 		// 3. srcがあるのにマッチしなかったtarget（孤立）
-		for (let tIdx = 0; tIdx < targetSections.length; tIdx++) {
+		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
 			if (matchedTargetIndexes.has(tIdx)) continue;
-			const target = targetSections[tIdx];
+			const target = targetUnits[tIdx];
 			if (target.getSourceHash()) {
 				result.push({ source: null, target });
 				matchedTargetIndexes.add(tIdx);
@@ -109,9 +109,9 @@ export class SectionMatcher {
 	}
 
 	/**
-	 * 統一ペア配列からターゲットセクションの配列を生成
-	 * @param matchResult セクション対応の結果
-	 * @param autoDeleteOrphans 孤立セクションを自動削除するかどうか
+	 * 統一ペア配列からターゲットユニットの配列を生成
+	 * @param matchResult ユニット対応の結果
+	 * @param autoDeleteOrphans 孤立ユニットを自動削除するかどうか
 	 */
 	createSyncedTargets(
 		matchResult: MatchResult,

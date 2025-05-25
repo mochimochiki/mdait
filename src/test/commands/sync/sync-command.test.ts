@@ -79,7 +79,7 @@ suite("syncコマンドE2E", () => {
 		assert.ok(jaHeader && enHeader);
 		assert.strictEqual(enHeader[2], jaHeader[1]);
 
-		// 3. セクション分割が行われていること（複数ヘッダーが存在する）
+		// 3. ユニット分割が行われていること（複数ヘッダーが存在する）
 		const enHeaders = enText.match(/<!--\s*mdait [^\s]+/g) || [];
 		const jaHeaders = jaText.match(/<!--\s*mdait [^\s]+/g) || [];
 		assert.ok(enHeaders.length > 1);
@@ -134,7 +134,6 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("autoMarkerLevel設定に従って適切な見出しレベルにマーカーが挿入されること", async () => {
-		// 見出しレベル1のみを持つファイルを作成
 		const testContent = `# 見出し 1
 
 コンテンツ1
@@ -203,6 +202,7 @@ suite("syncコマンドE2E", () => {
 		// 2. 新規ユニットにneed:translateが付与されていること
 		assert.match(enText, /<!-- mdait [^\s]+ from:newfabc1 need:translate -->/);
 	});
+
 	test("from一致による対応付けが正しく機能すること", async () => {
 		// 既存のtest.mdファイルを使用
 		const tmpJaTest = join(tmpJaDir, "test.md");
@@ -222,6 +222,7 @@ suite("syncコマンドE2E", () => {
 		assert.ok(enSecondUnit);
 		assert.strictEqual(enSecondUnit[1], jaHash);
 	});
+
 	test("孤立ユニットがauto-delete設定に従って処理されること", async () => {
 		// test.mdファイルを使用
 		const tmpJaTest = join(tmpJaDir, "test.md");

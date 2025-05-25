@@ -8,5 +8,5 @@ export interface FrontMatter {
 export interface Markdown {
 	frontMatter?: FrontMatter;
 	frontMatterRaw?: string;
-	sections: MdaitUnit[];
+	units: MdaitUnit[];
 }

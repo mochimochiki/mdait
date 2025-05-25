@@ -108,15 +108,15 @@ suite("MdaitSection", () => {
 		assert.equal(header.need, null);
 	});
 
-	test("createEmptyTargetSection: 正しくターゲットセクションが作成される", () => {
-		// ソースセクションを用意
+	test("createEmptyTargetSection: 正しくターゲットユニットが作成される", () => {
+		// ソースユニットを用意
 		const header = new MdaitMarker(testHash);
 		const source = new MdaitUnit(header, testTitle, 2, testContent);
 
-		// 新しいターゲットセクションを作成
+		// 新しいターゲットユニットを作成
 		const target = MdaitUnit.createEmptyTargetUnit(source, testSourceHash);
 
-		// 生成されたセクションの検証
+		// 生成されたユニットの検証
 		assert.equal(target.title, source.title);
 		assert.equal(target.headingLevel, source.headingLevel);
 		assert.equal(target.content, source.content);

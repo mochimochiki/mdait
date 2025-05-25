@@ -2,15 +2,15 @@ import { calculateHash } from "../hash/hash-calculator";
 import { MdaitMarker } from "./mdait-marker";
 
 /**
- * Markdownセクションクラス
- * Markdownドキュメントのセクション（見出しから次の見出しまで）を表現する
+ * Markdownユニットクラス
+ * Markdownドキュメントのユニット（見出しから次の見出しまで）を表現する
  * @important このクラスはドメインオブジェクトです。変更時は理由を明示し、承認なしに編集しないでください。
  */
 export class MdaitUnit {
 	/**
 	 * コンストラクタ
-	 * @param marker mdaitMarker（セクションのメタデータ）
-	 * @param title セクションのタイトル（見出し）
+	 * @param marker mdaitMarker（ユニットのメタデータ）
+	 * @param title ユニットのタイトル（見出し）
 	 * @param headingLevel 見出しのレベル（1=h1, 2=h2, ...）
 	 * @param content 元のMarkdownコンテンツ（見出しと本文を含む原文）
 	 */
@@ -22,7 +22,7 @@ export class MdaitUnit {
 	) {}
 
 	/**
-	 * セクションをMarkdown形式の文字列として出力
+	 * ユニットをMarkdown形式の文字列として出力
 	 * 元の形式をそのまま保持するため、contentを返す
 	 */
 	toString(): string {
@@ -37,13 +37,13 @@ export class MdaitUnit {
 	}
 
 	/**
-	 * セクションが翻訳が必要かどうか
+	 * ユニットが翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
 		return this.marker ? this.marker.needsTranslation() : false;
 	}
 	/**
-	 * 翻訳元セクションのハッシュを取得
+	 * 翻訳元ユニットのハッシュを取得
 	 */
 	getSourceHash(): string | null {
 		return this.marker ? this.marker.from : null;
@@ -58,7 +58,7 @@ export class MdaitUnit {
 		}
 	}
 	/**
-	 * 空のターゲットセクションを作成する
+	 * 空のターゲットユニットを作成する
 	 * @param sourceUnit ソースユニット
 	 * @param sourceHash ソースハッシュ
 	 * @returns 空のターゲットユニット
@@ -67,11 +67,11 @@ export class MdaitUnit {
 		sourceUnit: MdaitUnit,
 		sourceHash: string,
 	): MdaitUnit {
-		// ソースセクションのハッシュを新しく計算
+		// ソースユニットのハッシュを新しく計算
 		const newHash = calculateHash(sourceUnit.content);
 		// 新しいヘッダーを作成（needタグ付き）
 		const newMarker = new MdaitMarker(newHash, sourceHash, "translate");
-		// 新しいセクションを作成して返す
+		// 新しいユニットを作成して返す
 		return new MdaitUnit(
 			newMarker,
 			sourceUnit.title,

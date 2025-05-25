@@ -6,7 +6,7 @@
 export class MdaitMarker {
 	/**
 	 * コンストラクタ
-	 * @param hash セクション本文のハッシュ
+	 * @param hash ユニット本文のハッシュ
 	 * @param from 翻訳元ユニットのハッシュ
 	 * @param need 翻訳の必要性を表すタグ
 	 */
@@ -55,8 +55,8 @@ export class MdaitMarker {
 	}
 	/**
 	 * 指定されたhashとfromでコメントを生成
-	 * @param hash セクション本文のハッシュ
-	 * @param from 翻訳元のセクションハッシュ
+	 * @param hash ユニット本文のハッシュ
+	 * @param from 翻訳元のユニットハッシュ
 	 * @returns 新しいMdaitCommentオブジェクト
 	 */
 	static createWithTranslateTag(hash: string, from: string): MdaitMarker {
