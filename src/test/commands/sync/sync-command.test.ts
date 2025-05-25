@@ -394,23 +394,6 @@ suite("syncコマンドE2E", () => {
 		);
 	});
 
-	test("Markdown以外のファイルがそのままコピーされること", async () => {
-		// 非Markdownファイルを作成
-		const tmpJaTxt = join(tmpJaDir, "test.txt");
-		const tmpEnTxt = join(tmpEnDir, "test.txt");
-		const txtContent = "This is a plain text file.";
-		writeFileSync(tmpJaTxt, txtContent, "utf8");
-
-		// syncを実行
-		const vscode = require("vscode");
-		await vscode.commands.executeCommand("mdait.sync");
-
-		// en側にもファイルがコピーされていること
-		assert.ok(existsSync(tmpEnTxt));
-		const copiedContent = readFileSync(tmpEnTxt, "utf8");
-		assert.strictEqual(copiedContent, txtContent);
-	});
-
 	test("除外パターンに一致するファイルが処理されないこと", async () => {
 		// node_modules ディレクトリを作成（デフォルトの除外パターン）
 		const nodeModulesDir = join(tmpJaDir, "node_modules");

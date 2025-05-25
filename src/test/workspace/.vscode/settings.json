@@ -6,6 +6,8 @@
       "targetDir": "content/en"
     }
   ],
+  // 除外パターン
+  "mdait.ignoredPatterns": "**/node_modules/**",
   // 自動削除設定
   "mdait.sync.autoDelete": true,
   // 翻訳プロバイダ
