@@ -1,7 +1,7 @@
 {
   "name": "mdait",
   "displayName": "mdait",
-  "description": "マークダウンおよびCSVファイルの翻訳拡張機能",
+  "description": "マークダウンファイルの翻訳拡張機能",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.99.0"

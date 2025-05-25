@@ -53,9 +53,7 @@ export async function transCommand(): Promise<void> {
 			for (const targetFile of files) {
 				try {
 					// ファイル読み込み
-					const content = fs.readFileSync(targetFile, "utf-8");
-
-					// ファイルタイプに応じて適切な翻訳処理を選択
+					const content = fs.readFileSync(targetFile, "utf-8"); // ファイルタイプに応じて適切な翻訳処理を選択
 					const extension = path.extname(targetFile).toLowerCase();
 					let translatedContent: string;
 
@@ -64,8 +62,6 @@ export async function transCommand(): Promise<void> {
 							content,
 							config,
 						);
-					} else if (extension === ".csv") {
-						translatedContent = await provider.translateCsv(content, config);
 					} else {
 						// その他のファイルタイプはそのまま
 						translatedContent = content;

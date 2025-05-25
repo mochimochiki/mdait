@@ -16,13 +16,6 @@ export interface TranslationProvider {
 	 * @param config 設定
 	 */
 	translateMarkdown(markdown: string, config: Configuration): Promise<string>;
-
-	/**
-	 * CSVを翻訳する
-	 * @param csv 翻訳対象のCSVテキスト
-	 * @param config 設定
-	 */
-	translateCsv(csv: string, config: Configuration): Promise<string>;
 }
 
 /**
@@ -61,7 +54,7 @@ export class DefaultTranslationProvider implements TranslationProvider {
 		markdown: string,
 		config: Configuration,
 	): Promise<string> {
-		if (!config.translation.markdown.skipCodeBlocks) {
+		if (!config.trans.markdown.skipCodeBlocks) {
 			// コードブロックをスキップしない場合はシンプルに全体翻訳
 			return this.translateText(markdown);
 		}
@@ -92,37 +85,5 @@ export class DefaultTranslationProvider implements TranslationProvider {
 		}
 
 		return result;
-	}
-
-	/**
-	 * CSVを翻訳する
-	 * @param csv 翻訳対象のCSVテキスト
-	 * @param config 設定
-	 */
-	public async translateCsv(
-		csv: string,
-		config: Configuration,
-	): Promise<string> {
-		const delimiter = config.translation.csv.delimiter;
-		const lines = csv.split("\n");
-		const translatedLines: string[] = [];
-
-		for (const line of lines) {
-			if (!line.trim()) {
-				translatedLines.push(line);
-				continue;
-			}
-
-			const columns = line.split(delimiter);
-			const translatedColumns = await Promise.all(
-				columns.map(async (column) => {
-					return await this.translateText(column);
-				}),
-			);
-
-			translatedLines.push(translatedColumns.join(delimiter));
-		}
-
-		return translatedLines.join("\n");
 	}
 }

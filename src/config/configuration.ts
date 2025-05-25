@@ -8,26 +8,23 @@ export class Configuration {
 	 * 翻訳ペア設定
 	 */
 	public transPairs: Array<{ sourceDir: string; targetDir: string }> = [];
-
 	/**
-	 * ファイル設定
+	 * 除外パターン
 	 */
-	public files = {
-		extensions: [".md", ".csv"],
-		includePattern: "**/*",
-		excludePattern: "**/node_modules/**",
-	};
-
+	public ignoredPatterns = "**/node_modules/**";
 	/**
+	 * sync設定
+	 */
+	public sync = {
+		autoMarkerLevel: 2,
+		autoDelete: true,
+	}; /**
 	 * 翻訳設定
 	 */
-	public translation = {
+	public trans = {
 		provider: "default",
 		markdown: {
 			skipCodeBlocks: true,
-		},
-		csv: {
-			delimiter: ",",
 		},
 	};
 
@@ -43,38 +40,30 @@ export class Configuration {
 				"transPairs",
 			) || [];
 
-		// ファイル設定の読み込み
-		const extensions = config.get<string[]>("files.extensions");
-		if (extensions) {
-			this.files.extensions = extensions;
+		// 除外パターンの読み込み
+		const ignoredPatterns = config.get<string>("ignoredPatterns");
+		if (ignoredPatterns) {
+			this.ignoredPatterns = ignoredPatterns;
 		}
 
-		const includePattern = config.get<string>("files.includePattern");
-		if (includePattern) {
-			this.files.includePattern = includePattern;
+		// sync設定の読み込み
+		const autoMarkerLevel = config.get<number>("sync.autoMarkerLevel");
+		if (autoMarkerLevel !== undefined) {
+			this.sync.autoMarkerLevel = autoMarkerLevel;
 		}
 
-		const excludePattern = config.get<string>("files.excludePattern");
-		if (excludePattern) {
-			this.files.excludePattern = excludePattern;
+		const autoDelete = config.get<boolean>("sync.autoDelete");
+		if (autoDelete !== undefined) {
+			this.sync.autoDelete = autoDelete;
 		}
-
 		// 翻訳設定の読み込み
-		const provider = config.get<string>("translation.provider");
+		const provider = config.get<string>("trans.provider");
 		if (provider) {
-			this.translation.provider = provider;
+			this.trans.provider = provider;
 		}
-
-		const skipCodeBlocks = config.get<boolean>(
-			"translation.markdown.skipCodeBlocks",
-		);
+		const skipCodeBlocks = config.get<boolean>("trans.markdown.skipCodeBlocks");
 		if (skipCodeBlocks !== undefined) {
-			this.translation.markdown.skipCodeBlocks = skipCodeBlocks;
-		}
-
-		const delimiter = config.get<string>("translation.csv.delimiter");
-		if (delimiter) {
-			this.translation.csv.delimiter = delimiter;
+			this.trans.markdown.skipCodeBlocks = skipCodeBlocks;
 		}
 	}
 
@@ -96,11 +85,6 @@ export class Configuration {
 			if (!pair.targetDir) {
 				return "翻訳ペアに翻訳先ディレクトリ(targetDir)が設定されていません。";
 			}
-		}
-
-		// ファイル拡張子が少なくとも1つ設定されているか
-		if (!this.files.extensions || this.files.extensions.length === 0) {
-			return "対象ファイルの拡張子が設定されていません。";
 		}
 
 		return null;

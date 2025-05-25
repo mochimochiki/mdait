@@ -64,13 +64,12 @@ export class FileExplorer {
 		if (!this.directoryExists(sourceDir)) {
 			throw new Error(`翻訳元ディレクトリが存在しません: ${sourceDir}`);
 		}
-
-		// ファイルの検索
+		// ファイルの検索（Markdownファイルのみを対象とする）
 		return await this.findFilesInDirectory(
 			sourceDir,
-			config.files.extensions,
-			config.files.includePattern,
-			config.files.excludePattern,
+			[".md"],
+			"**/*.md",
+			config.ignoredPatterns,
 		);
 	}
 
