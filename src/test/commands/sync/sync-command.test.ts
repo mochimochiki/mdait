@@ -88,49 +88,4 @@ suite("syncコマンドE2E", () => {
 		// コマンドの戻り値も検証（エラーでないこと）
 		assert.notStrictEqual(result, false);
 	});
-
-	// 	test("新規セクションが追加されること", () => {
-	// 		// source(md)にだけ存在するセクションを一時的に追加
-	// 		const newSection = `
-	// ## 新規セクション
-	// 新しい内容です。
-	// `;
-	// 		const srcText = readFileSync(tmpEn, "utf8");
-	// 		writeFileSync(tmpEn, srcText + newSection, "utf8");
-
-	// 		// syncコマンド実行（仮: コマンド名はmdait-syncとする）
-	// 		execSync(
-	// 			`node ../../../../dist/commands/sync/sync-command.js "${tmpEn}" "${tmpJa}"`,
-	// 			{ cwd: __dirname },
-	// 		);
-
-	// 		const jaText = readFileSync(tmpJa, "utf8");
-	// 		// 新規セクションタイトルが含まれ、need:translateが付与されていること
-	// 		assert.match(jaText, /新規セクション/);
-	// 		assert.match(jaText, /need:translate/);
-	// 	});
-
-	// 	test("src重複時に全てのtargetセクションが同期されること", () => {
-	// 		// target(md)に同じsrcを持つセクションを2つ用意
-	// 		const jaText = readFileSync(tmpJa, "utf8");
-	// 		const lines = jaText.split(/\r?\n/);
-	// 		// 1つ目のセクションのmdaitHeaderを探して複製
-	// 		const headerIdx = lines.findIndex((l) => l.includes("mdait"));
-	// 		const section = lines.slice(headerIdx, headerIdx + 4).join("\n");
-	// 		const newSection = `\n${section}\n`;
-	// 		writeFileSync(tmpJa, jaText + newSection, "utf8");
-
-	// 		// syncコマンド実行
-	// 		execSync(
-	// 			`node ../../../../dist/commands/sync/sync-command.js "${tmpEn}" "${tmpJa}"`,
-	// 			{ cwd: __dirname },
-	// 		);
-
-	// 		const jaTextAfter = readFileSync(tmpJa, "utf8");
-	//		// 同じfromを持つ2つのセクションが両方とも同期されていること（例: need:translateが両方消えている等）
-	// 		const matches = jaTextAfter.match(/mdait [^\s]+ from:[^\s]+/g) || [];
-	// 		assert.ok(matches.length >= 2);
-	// 	});
-
-	// 	// 他のケースも順次追加予定
 });
