@@ -54,10 +54,8 @@ export class SectionMatcher {
 		let tPtr = 0;
 		while (sPtr < sourceUnits.length || tPtr < targetUnits.length) {
 			// 次のマッチ済みsource/targetのindex
-			while (sPtr < sourceUnits.length && matchedSourceIndexes.has(sPtr))
-				sPtr++;
-			while (tPtr < targetUnits.length && matchedTargetIndexes.has(tPtr))
-				tPtr++;
+			while (sPtr < sourceUnits.length && matchedSourceIndexes.has(sPtr)) sPtr++;
+			while (tPtr < targetUnits.length && matchedTargetIndexes.has(tPtr)) tPtr++;
 
 			if (sPtr >= sourceUnits.length && tPtr >= targetUnits.length) break;
 
@@ -66,8 +64,7 @@ export class SectionMatcher {
 				tPtr < targetUnits.length &&
 				!matchedTargetIndexes.has(tPtr) &&
 				!targetUnits[tPtr].getSourceHash();
-			const sIsEligible =
-				sPtr < sourceUnits.length && !matchedSourceIndexes.has(sPtr);
+			const sIsEligible = sPtr < sourceUnits.length && !matchedSourceIndexes.has(sPtr);
 
 			if (sIsEligible && tIsEligible) {
 				result.push({
@@ -113,10 +110,7 @@ export class SectionMatcher {
 	 * @param matchResult ユニット対応の結果
 	 * @param autoDeleteOrphans 孤立ユニットを自動削除するかどうか
 	 */
-	createSyncedTargets(
-		matchResult: MatchResult,
-		autoDeleteOrphans = true,
-	): MdaitUnit[] {
+	createSyncedTargets(matchResult: MatchResult, autoDeleteOrphans = true): MdaitUnit[] {
 		const result: MdaitUnit[] = [];
 		for (const pair of matchResult) {
 			if (pair.source && pair.target) {
@@ -125,10 +119,7 @@ export class SectionMatcher {
 			} else if (pair.source && !pair.target) {
 				// 新規source
 				const sourceHash = calculateHash(pair.source.content);
-				const newTarget = MdaitUnit.createEmptyTargetUnit(
-					pair.source,
-					sourceHash,
-				);
+				const newTarget = MdaitUnit.createEmptyTargetUnit(pair.source, sourceHash);
 				result.push(newTarget);
 			} else if (!pair.source && pair.target) {
 				// 孤立target

@@ -90,11 +90,7 @@ text`;
 		assert.equal(units.length, 1);
 		assert.equal(units[0].title, "外部見出し");
 		assert.ok(units[0].content.includes("# コード内見出し"));
-		assert.ok(
-			units[0].content.includes(
-				"<!-- mdait fakehash from:fakesrc need:ignore -->",
-			),
-		);
+		assert.ok(units[0].content.includes("<!-- mdait fakehash from:fakesrc need:ignore -->"));
 	});
 	test("parse→stringifyでロスレス", () => {
 		const md = `
@@ -114,11 +110,7 @@ text`;
 		const units = doc.units;
 		// mdaitHeaderはnullまたは空のhashになる（パース不可）
 		assert.equal(units.length, 1);
-		assert.ok(
-			!units[0].marker ||
-				!units[0].marker.hash ||
-				units[0].marker.hash.length !== 8,
-		);
+		assert.ok(!units[0].marker || !units[0].marker.hash || units[0].marker.hash.length !== 8);
 	});
 	test("複数行のmdaitコメント", () => {
 		const md = `
@@ -161,12 +153,7 @@ need:translate -->
 	});
 
 	test("TOMLフロントマターにmdaitコメントはつかない", () => {
-		const tomlFrontMatter = [
-			"---",
-			"title: 'テスト'",
-			"lang: 'ja'",
-			"---",
-		].join("\n");
+		const tomlFrontMatter = ["---", "title: 'テスト'", "lang: 'ja'", "---"].join("\n");
 		const md = `${tomlFrontMatter}\n\n# 見出し\n本文`;
 		const doc = markdownParser.parse(md);
 		const units = doc.units;

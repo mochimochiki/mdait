@@ -48,8 +48,7 @@ export class MarkdownItParser implements IMarkdownParser {
 	parse(markdown: string, config?: Configuration): Markdown {
 		const defaultConfig = new Configuration();
 		// config
-		const autoMarkerLevel =
-			config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
+		const autoMarkerLevel = config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
 
 		const fm = matter(markdown);
 		const frontMatter = fm.data as FrontMatter;

@@ -63,20 +63,12 @@ export class MdaitUnit {
 	 * @param sourceHash ソースハッシュ
 	 * @returns 空のターゲットユニット
 	 */
-	static createEmptyTargetUnit(
-		sourceUnit: MdaitUnit,
-		sourceHash: string,
-	): MdaitUnit {
+	static createEmptyTargetUnit(sourceUnit: MdaitUnit, sourceHash: string): MdaitUnit {
 		// ソースユニットのハッシュを新しく計算
 		const newHash = calculateHash(sourceUnit.content);
 		// 新しいヘッダーを作成（needタグ付き）
 		const newMarker = new MdaitMarker(newHash, sourceHash, "translate");
 		// 新しいユニットを作成して返す
-		return new MdaitUnit(
-			newMarker,
-			sourceUnit.title,
-			sourceUnit.headingLevel,
-			sourceUnit.content,
-		);
+		return new MdaitUnit(newMarker, sourceUnit.title, sourceUnit.headingLevel, sourceUnit.content);
 	}
 }

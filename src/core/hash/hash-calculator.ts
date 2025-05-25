@@ -40,10 +40,7 @@ export class HashCalculator {
 			// 符号なし32ビット整数に変換し、16進数文字列に変換後、8桁になるよう0でパディング
 			hash = (crcValue >>> 0).toString(16).padStart(8, "0");
 		} else {
-			hash = crypto
-				.createHash(this.algorithm)
-				.update(processedText)
-				.digest("hex");
+			hash = crypto.createHash(this.algorithm).update(processedText).digest("hex");
 		}
 
 		return hash.substring(0, this.length);

@@ -50,10 +50,7 @@ export class DefaultTranslationProvider implements TranslationProvider {
 	 * @param markdown 翻訳対象のマークダウンテキスト
 	 * @param config 設定
 	 */
-	public async translateMarkdown(
-		markdown: string,
-		config: Configuration,
-	): Promise<string> {
+	public async translateMarkdown(markdown: string, config: Configuration): Promise<string> {
 		if (!config.trans.markdown.skipCodeBlocks) {
 			// コードブロックをスキップしない場合はシンプルに全体翻訳
 			return this.translateText(markdown);
@@ -75,8 +72,7 @@ export class DefaultTranslationProvider implements TranslationProvider {
 		});
 
 		// コードブロック以外の部分を翻訳
-		const translatedWithoutCodeBlocks =
-			await this.translateText(withoutCodeBlocks);
+		const translatedWithoutCodeBlocks = await this.translateText(withoutCodeBlocks);
 
 		// プレースホルダーをコードブロックに戻す
 		let result = translatedWithoutCodeBlocks;

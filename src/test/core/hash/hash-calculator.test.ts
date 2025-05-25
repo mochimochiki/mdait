@@ -1,8 +1,5 @@
 import * as assert from "node:assert";
-import {
-	HashCalculator,
-	calculateHash,
-} from "../../../core/hash/hash-calculator";
+import { HashCalculator, calculateHash } from "../../../core/hash/hash-calculator";
 
 suite("HashCalculator", () => {
 	test("テキストのハッシュが8文字で返されること", () => {

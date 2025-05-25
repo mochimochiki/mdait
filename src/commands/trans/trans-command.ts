@@ -58,10 +58,7 @@ export async function transCommand(): Promise<void> {
 					let translatedContent: string;
 
 					if (extension === ".md") {
-						translatedContent = await provider.translateMarkdown(
-							content,
-							config,
-						);
+						translatedContent = await provider.translateMarkdown(content, config);
 					} else {
 						// その他のファイルタイプはそのまま
 						translatedContent = content;
@@ -85,14 +82,10 @@ export async function transCommand(): Promise<void> {
 		}
 
 		// 完了通知
-		vscode.window.showInformationMessage(
-			`翻訳完了: ${successCount}個成功, ${errorCount}個失敗`,
-		);
+		vscode.window.showInformationMessage(`翻訳完了: ${successCount}個成功, ${errorCount}個失敗`);
 	} catch (error) {
 		// エラーハンドリング
-		vscode.window.showErrorMessage(
-			`翻訳処理中にエラーが発生しました: ${(error as Error).message}`,
-		);
+		vscode.window.showErrorMessage(`翻訳処理中にエラーが発生しました: ${(error as Error).message}`);
 		console.error(error);
 	}
 }
