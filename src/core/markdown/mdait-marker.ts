@@ -79,9 +79,17 @@ export class MdaitMarker {
 	}
 
 	/**
+	 * needフラグを設定する
+	 * @param need 設定するneedフラグ
+	 */
+	setNeed(need: string | null): void {
+		this.need = need;
+	}
+
+	/**
 	 * 翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
-		return this.need === "translate" || this.need === "review";
+		return this.need === "translate";
 	}
 }

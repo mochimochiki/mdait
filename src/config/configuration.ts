@@ -36,9 +36,7 @@ export class Configuration {
 
 		// 翻訳ペア設定の読み込み
 		this.transPairs =
-			config.get<Array<{ sourceDir: string; targetDir: string }>>(
-				"transPairs",
-			) || [];
+			config.get<Array<{ sourceDir: string; targetDir: string }>>("transPairs") || [];
 
 		// 除外パターンの読み込み
 		const ignoredPatterns = config.get<string>("ignoredPatterns");

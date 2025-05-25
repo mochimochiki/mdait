@@ -54,11 +54,7 @@ export async function syncCommand(): Promise<void> {
 			for (const sourceFile of files) {
 				try {
 					// 出力先パスを取得
-					const targetFile = fileExplorer.getTargetPath(
-						sourceFile,
-						pair.sourceDir,
-						pair.targetDir,
-					);
+					const targetFile = fileExplorer.getTargetPath(sourceFile, pair.sourceDir, pair.targetDir);
 
 					// ファイルタイプに応じて適切な同期処理を選択
 					const extension = path.extname(sourceFile).toLowerCase();
@@ -88,14 +84,10 @@ export async function syncCommand(): Promise<void> {
 		}
 
 		// 完了通知
-		vscode.window.showInformationMessage(
-			`同期完了: ${successCount}個成功, ${errorCount}個失敗`,
-		);
+		vscode.window.showInformationMessage(`同期完了: ${successCount}個成功, ${errorCount}個失敗`);
 	} catch (error) {
 		// エラーハンドリング
-		vscode.window.showErrorMessage(
-			`同期処理中にエラーが発生しました: ${(error as Error).message}`,
-		);
+		vscode.window.showErrorMessage(`同期処理中にエラーが発生しました: ${(error as Error).message}`);
 		console.error(error);
 	}
 }
@@ -107,11 +99,7 @@ export async function syncCommand(): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncMarkdownFile(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-) {
+function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration) {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
@@ -125,9 +113,7 @@ function syncMarkdownFile(
 
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config);
-	const target = targetContent
-		? markdownParser.parse(targetContent, config)
-		: { units: [] };
+	const target = targetContent ? markdownParser.parse(targetContent, config) : { units: [] };
 	// src, target に hash を付与（ない場合のみ）
 	ensureSectionHash(source.units);
 	ensureSectionHash(target.units);
@@ -136,7 +122,7 @@ function syncMarkdownFile(
 	const matchResult = sectionMatcher.match(source.units, target.units);
 
 	// ユニットのハッシュを更新
-	updateSectionHashes(matchResult);
+	updateSectionHashes(matchResult, config, sourceFile, targetFile);
 
 	// 同期結果の生成
 	const syncedUnits = sectionMatcher.createSyncedTargets(
@@ -193,6 +179,9 @@ function ensureSectionHash(units: MdaitUnit[]) {
  */
 function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
+	config: Configuration,
+	sourceFilePath: string,
+	targetFilePath: string,
 ) {
 	for (const pair of matchResult) {
 		const source = pair.source;
@@ -200,26 +189,47 @@ function updateSectionHashes(
 
 		// sourceとtargetが存在 : 通常の同期処理
 		if (source && target) {
-			// source:hashを計算して付与
 			const sourceHash = calculateHash(source.content);
-			if (!source.marker) {
-				source.marker = new MdaitMarker(sourceHash);
-			} else if (source.marker.hash !== sourceHash) {
-				source.marker.hash = sourceHash;
+			const targetHash = calculateHash(target.content);
+
+			const sourceMarker = source.marker ?? new MdaitMarker(sourceHash);
+			const targetMarker = target.marker ?? new MdaitMarker(targetHash, sourceMarker.hash);
+
+			const isSourceChanged = sourceMarker.hash !== sourceHash;
+			const isTargetChanged = targetMarker.hash !== targetHash;
+
+			// 双方向翻訳ペアで両方変更された場合、競合フラグを立てる
+			if (isSourceChanged && isTargetChanged) {
+				sourceMarker.setNeed("solve-conflict");
+				targetMarker.setNeed("solve-conflict");
+				// ハッシュは更新しない
+				source.marker = sourceMarker;
+				target.marker = targetMarker;
+				continue;
+			}
+
+			// source:hashを計算して付与
+			if (isSourceChanged) {
+				sourceMarker.hash = sourceHash;
 			}
 			// target:hashを計算して付与
-			const targetHash = calculateHash(target.content);
-			if (!target.marker) {
-				target.marker = new MdaitMarker(targetHash, sourceHash);
-			} else {
-				target.marker.hash = targetHash;
-				// need:translate付与(ソース側の変更があった場合)
-				const oldFromHash = target.marker.from;
-				if (oldFromHash !== sourceHash) {
-					target.marker.from = sourceHash;
-					target.marker.need = "translate";
-				}
+			if (isTargetChanged) {
+				targetMarker.hash = targetHash;
 			}
+
+			// ソースで変更があった場合、need:translate付与
+			const oldSourceHash = targetMarker.from;
+			if (oldSourceHash !== sourceMarker.hash) {
+				targetMarker.from = sourceMarker.hash;
+				targetMarker.setNeed("translate");
+				source.marker = sourceMarker;
+				target.marker = targetMarker;
+				continue;
+			}
+
+			source.marker = sourceMarker;
+			target.marker = targetMarker;
+			continue;
 		}
 		// sourceのみ存在: 孤立sourceの処理
 		if (source && !target) {
@@ -230,6 +240,7 @@ function updateSectionHashes(
 			} else if (source.marker.hash !== sourceHash) {
 				source.marker.hash = sourceHash;
 			}
+			continue;
 		}
 		// targetのみ存在: 孤立targetの処理
 		if (!source && target) {
