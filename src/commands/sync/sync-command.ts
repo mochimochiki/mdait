@@ -64,7 +64,7 @@ export async function syncCommand(): Promise<void> {
 					const extension = path.extname(sourceFile).toLowerCase();
 					if (extension === ".md") {
 						// Markdownファイルの同期を実行
-						const diffResult = syncMarkdownFile(sourceFile, targetFile);
+						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(
@@ -103,9 +103,14 @@ export async function syncCommand(): Promise<void> {
  * Markdownファイルの同期処理を行う
  * @param sourceFile ソースファイルのパス
  * @param targetFile ターゲットファイルのパス
+ * @param config 設定
  * @returns 差分検出結果
  */
-function syncMarkdownFile(sourceFile: string, targetFile: string) {
+function syncMarkdownFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+) {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
@@ -118,9 +123,9 @@ function syncMarkdownFile(sourceFile: string, targetFile: string) {
 	}
 
 	// Markdownのユニット分割
-	const source = markdownParser.parse(sourceContent);
+	const source = markdownParser.parse(sourceContent, config);
 	const target = targetContent
-		? markdownParser.parse(targetContent)
+		? markdownParser.parse(targetContent, config)
 		: { units: [] };
 	// src, target に hash を付与（ない場合のみ）
 	ensureSectionHash(source.units);

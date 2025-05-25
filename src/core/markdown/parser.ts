@@ -1,5 +1,6 @@
 import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
+import type { Configuration } from "../../config/configuration";
 import type { FrontMatter, Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
@@ -11,9 +12,10 @@ export interface IMarkdownParser {
 	/**
 	 * Markdownテキストをユニットに分割してパースする
 	 * @param markdown Markdownテキスト
+	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string): Markdown;
+	parse(markdown: string, config: Configuration): Markdown;
 
 	/**
 	 * ユニットをMarkdownテキストに変換
@@ -40,9 +42,10 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * Markdownテキストをユニットに分割してパースする
 	 * markdown-itを使用して解析し、トークンからユニットを構築
 	 * @param markdown Markdownテキスト
+	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string): Markdown {
+	parse(markdown: string, config: Configuration): Markdown {
 		const fm = matter(markdown);
 		const frontMatter = fm.data as FrontMatter;
 		const content = fm.content;
@@ -64,6 +67,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		} | null = null;
 		let inHeading = false;
 		let mdaitMarker = new MdaitMarker("");
+		const autoMarkerLevel = config.sync.autoMarkerLevel; // Corrected: Directly access the property
 
 		for (let i = 0; i < tokens.length; i++) {
 			const token = tokens[i];
@@ -93,6 +97,12 @@ export class MarkdownItParser implements IMarkdownParser {
 				continue;
 			}
 			if (token.type === "heading_open") {
+				const headingLevel = Number.parseInt(token.tag.substring(1), 10);
+				// 設定された見出しレベルより深い場合は、新しいユニットを開始しない
+				if (headingLevel > autoMarkerLevel && currentSection) {
+					continue;
+				}
+
 				// 前のユニットがあれば保存
 				if (currentSection && currentSection.startLine !== null) {
 					const start = currentSection.startLine;
@@ -112,7 +122,7 @@ export class MarkdownItParser implements IMarkdownParser {
 				currentSection = {
 					marker: mdaitMarker,
 					title: "",
-					level: Number.parseInt(token.tag.substring(1), 10),
+					level: headingLevel,
 					startLine: token.map ? token.map[0] : null,
 					endLine: null,
 				};
