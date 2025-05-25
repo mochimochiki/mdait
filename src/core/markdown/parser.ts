@@ -1,6 +1,6 @@
 import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
-import type { Configuration } from "../../config/configuration";
+import { Configuration } from "../../config/configuration";
 import type { FrontMatter, Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
@@ -15,7 +15,7 @@ export interface IMarkdownParser {
 	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string, config: Configuration): Markdown;
+	parse(markdown: string, config?: Configuration): Markdown;
 
 	/**
 	 * ユニットをMarkdownテキストに変換
@@ -45,7 +45,12 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string, config: Configuration): Markdown {
+	parse(markdown: string, config?: Configuration): Markdown {
+		const defaultConfig = new Configuration();
+		// config
+		const autoMarkerLevel =
+			config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
+
 		const fm = matter(markdown);
 		const frontMatter = fm.data as FrontMatter;
 		const content = fm.content;
@@ -67,7 +72,6 @@ export class MarkdownItParser implements IMarkdownParser {
 		} | null = null;
 		let inHeading = false;
 		let mdaitMarker = new MdaitMarker("");
-		const autoMarkerLevel = config.sync.autoMarkerLevel; // Corrected: Directly access the property
 
 		for (let i = 0; i < tokens.length; i++) {
 			const token = tokens[i];

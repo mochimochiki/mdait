@@ -122,6 +122,6 @@ suite("MdaitSection", () => {
 		assert.equal(target.content, source.content);
 		assert.ok(target.marker);
 		assert.equal(target.marker.from, testSourceHash);
-		assert.equal(target.marker.need, "need");
+		assert.equal(target.marker.need, "translate");
 	});
 });

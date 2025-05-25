@@ -181,8 +181,7 @@ suite("syncコマンドE2E", () => {
 		// ja側に新規ユニットを追加
 		let jaText = readFileSync(tmpJaTest, "utf8");
 		const newUnit = `
-<!-- mdait newfabc1 -->
-#### 新規見出し
+## 新規見出し
 
 これは新しく追加されたユニットです。
 `;
@@ -197,10 +196,10 @@ suite("syncコマンドE2E", () => {
 		const enText = readFileSync(tmpEnTest, "utf8");
 
 		// 1. en側に新規ユニットが挿入されていること
-		assert.ok(enText.includes("#### 新規見出し"));
+		assert.ok(enText.includes("## 新規見出し"));
 
 		// 2. 新規ユニットにneed:translateが付与されていること
-		assert.match(enText, /<!-- mdait [^\s]+ from:newfabc1 need:translate -->/);
+		assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
 	});
 
 	test("from一致による対応付けが正しく機能すること", async () => {
@@ -384,10 +383,15 @@ suite("syncコマンドE2E", () => {
 		const updatedJaText = readFileSync(tmpJaTest, "utf8");
 		const updatedEnText = readFileSync(tmpEnTest, "utf8");
 
-		// 少なくとも一方にneed系のタグが付与されていることを確認
-		const hasNeedTag =
-			updatedJaText.includes("need:") || updatedEnText.includes("need:");
-		assert.ok(hasNeedTag);
+		// 両方のファイルに "need:solve-conflict" タグが付与されていることを確認
+		assert.ok(
+			updatedJaText.includes("need:solve-conflict"),
+			"日本語ファイルに 'need:solve-conflict' が見つかりません",
+		);
+		assert.ok(
+			updatedEnText.includes("need:solve-conflict"),
+			"英語ファイルに 'need:solve-conflict' が見つかりません",
+		);
 	});
 
 	test("Markdown以外のファイルがそのままコピーされること", async () => {

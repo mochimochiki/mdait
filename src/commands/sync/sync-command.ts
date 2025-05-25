@@ -68,11 +68,12 @@ export async function syncCommand(): Promise<void> {
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(
-							`${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
+							`${path.basename(sourceFile)}: +${diffResult.added} ~${
+								diffResult.modified
+							} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
 					} else {
-						// Markdown以外はそのままコピー
-						syncNonMarkdownFile(sourceFile, targetFile);
+						// Markdown以外は無視
 					}
 
 					successCount++;
@@ -171,23 +172,6 @@ function syncMarkdownFile(
 	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
 
 	return diffResult;
-}
-
-/**
- * Markdown以外のファイルの同期処理を行う
- * @param sourceFile ソースファイルのパス
- * @param targetFile ターゲットファイルのパス
- */
-function syncNonMarkdownFile(sourceFile: string, targetFile: string): void {
-	// ファイル読み込み
-	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-
-	// ファイルエクスプローラーインスタンス生成
-	const fileExplorer = new FileExplorer();
-
-	// Markdown以外は現時点ではそのままコピー
-	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	fs.writeFileSync(targetFile, sourceContent, "utf-8");
 }
 
 /**
