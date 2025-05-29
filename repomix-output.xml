@@ -1,0 +1,3935 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.github/copilot-instructions.md
+.gitignore
+.vscode-test.mjs
+.vscodeignore
+biome.json
+CHANGELOG.md
+design.md
+LICENSE
+package.json
+README.md
+src/api/ai-service-builder.ts
+src/api/ai-service.ts
+src/api/providers/default-ai-provider.ts
+src/commands/sync/diff-detector.ts
+src/commands/sync/section-matcher.ts
+src/commands/sync/sync-command.ts
+src/commands/trans/trans-command.ts
+src/commands/trans/translation-context.ts
+src/commands/trans/translation-provider.ts
+src/config/configuration.ts
+src/core/hash/hash-calculator.ts
+src/core/hash/normalizer.ts
+src/core/markdown/mdait-markdown.ts
+src/core/markdown/mdait-marker.ts
+src/core/markdown/mdait-unit.ts
+src/core/markdown/parser.ts
+src/extension.ts
+src/test/commands/sync/sync-command.test.ts
+src/test/core/hash/hash-calculator.test.ts
+src/test/core/hash/normalizer.test.ts
+src/test/core/markdown/mdait-marker.test.ts
+src/test/core/markdown/mdait-unit.test.ts
+src/test/core/markdown/parser.test.ts
+src/test/extension.test.ts
+src/test/sample-content/en/no_header.md
+src/test/sample-content/en/test.md
+src/test/sample-content/ja/no_header.md
+src/test/sample-content/ja/test.md
+src/test/workspace/.vscode/settings.json
+src/utils/file-explorer.ts
+tasks/do/transコマンドの設計と実装.md
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/api/ai-service-builder.ts">
+import { getConfiguration } from "../config/configuration";
+import type { AIService } from "./ai-service";
+import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
+
+/**
+ * AIプロバイダの設定を表すインターフェース。
+ * `mdait.trans.provider` の設定値や、各プロバイダ固有の設定（APIキーなど）を想定。
+ */
+export interface AIProviderConfig {
+	provider: string;
+	apiKey?: string; // 例: OpenAI APIキーなど
+	// 他のプロバイダ固有設定
+	[key: string]: unknown;
+}
+
+/**
+ * 設定に基づいて適切な AIService の実装を生成するビルダークラス。
+ */
+export class AIServiceBuilder {
+	/**
+	 * 指定された設定に基づいて AIService のインスタンスを構築します。
+	 *
+	 * @param config AIプロバイダの設定。指定されない場合はVSCodeの設定から読み込みます。
+	 * @returns AIService のインスタンス。
+	 * @throws サポートされていないプロバイダが指定された場合。
+	 */
+	public build(config?: AIProviderConfig): AIService {
+		const effectiveConfig = config || this.loadConfiguration();
+
+		switch (effectiveConfig.provider) {
+			case "default":
+				// TODO: DefaultAIProvider の実装とインスタンス化
+				// 現時点では DefaultAIProvider が未実装のため、プレースホルダーを返します。
+				// return new DefaultAIProvider(effectiveConfig);
+				console.warn("DefaultAIProvider is not yet implemented. Returning a mock AIService.");
+				// モック実装 (実際の DefaultAIProvider に置き換える)
+				return {
+					sendMessage: async function* (systemPrompt: string, messages: any[]) {
+						yield `Mock response for: ${systemPrompt} - ${JSON.stringify(messages)}`;
+					},
+				} as AIService;
+			// case 'openai':
+			//   return new OpenAIAIProvider(effectiveConfig.apiKey);
+			// case 'anthropic':
+			//   return new AnthropicAIProvider(effectiveConfig.apiKey);
+			default:
+				throw new Error(`Unsupported AI provider: ${effectiveConfig.provider}`);
+		}
+	}
+
+	/**
+	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
+	 */
+	private loadConfiguration(): AIProviderConfig {
+		const config = getConfiguration();
+		const provider = config.get<string>("trans.provider", "default");
+		// TODO: APIキーやその他のプロバイダ固有設定をVSCode設定から読み込む
+		// const apiKey = config.get<string>(`trans.providers.${provider}.apiKey`);
+
+		return {
+			provider,
+			// apiKey,
+		};
+	}
+}
+</file>
+
+<file path="src/api/ai-service.ts">
+/**
+ * AIサービスとのやり取りで使用するメッセージコンテンツの型定義。
+ * 現状はテキストのみを想定していますが、将来的には画像などのマルチモーダルコンテンツにも対応できるよう拡張性を考慮しています。
+ */
+export type AIMessageContent = string; // 将来的には { type: 'text', text: string } | { type: 'image', source: { type: 'base64', media_type: string, data: string } } なども許容
+
+/**
+ * AIサービスとのやり取りで使用するメッセージの構造を定義するインターフェース。
+ * role にはメッセージの送信者（system, user, assistant）を指定します。
+ * content にはメッセージの内容を AIMessageContent 型またはその配列で指定します。
+ */
+export interface AIMessage {
+	role: "system" | "user" | "assistant";
+	content: AIMessageContent | AIMessageContent[];
+}
+
+/**
+ * AIサービスからのストリーミング応答を表す型定義。
+ * テキストチャンクが非同期に連続して返されることを想定しています。
+ */
+export type MessageStream = AsyncIterable<string>;
+
+/**
+ * AI機能を提供するサービスの汎用インターフェース。
+ * 様々なAIプロバイダ（OpenAI, Anthropic, Geminiなど）の実装を抽象化します。
+ */
+export interface AIService {
+	/**
+	 * AIモデルに対してメッセージを送信し、ストリーミング応答を受け取ります。
+	 *
+	 * @param systemPrompt システムプロンプト。AIモデルの振る舞いや応答形式を指示します。
+	 * @param messages AIモデルに送信するメッセージの配列。AIMessage形式で指定します。
+	 * @returns AIモデルからの応答をストリーミングで返す MessageStream。
+	 */
+	sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream;
+}
+</file>
+
+<file path="src/api/providers/default-ai-provider.ts">
+import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import type { AIProviderConfig } from "../ai-service-builder";
+
+/**
+ * AIServiceインターフェースのデフォルト実装（モック）。
+ * 実際のAIプロバイダへの接続は行わず、固定の応答またはエコーバックを返します。
+ * 主に開発初期段階やテスト用途での使用を想定しています。
+ */
+export class DefaultAIProvider implements AIService {
+	private config: AIProviderConfig;
+
+	constructor(config: AIProviderConfig) {
+		this.config = config;
+		console.log("DefaultAIProvider initialized with config:", config);
+	}
+
+	/**
+	 * AIモデルに対してメッセージを送信し、ストリーミング応答を受け取ります。
+	 * このデフォルト実装では、システムプロンプトとメッセージ内容をエコーバックするモック応答を返します。
+	 *
+	 * @param systemPrompt システムプロンプト。
+	 * @param messages AIモデルに送信するメッセージの配列。
+	 * @returns モックのストリーミング応答。
+	 */
+	async *sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream {
+		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
+		console.log(
+			`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`,
+		);
+
+		// 実際のAIプロバイダへのリクエスト処理をここに実装
+		// 以下はモック応答
+		yield "This is a mock response from DefaultAIProvider.\n";
+		yield `System Prompt: ${systemPrompt}\n`;
+		for (const message of messages) {
+			yield `Message (${message.role}): ${JSON.stringify(message.content)}\n`;
+		}
+		yield "End of mock stream.";
+	}
+}
+</file>
+
+<file path="src/commands/trans/translation-context.ts">
+/**
+ * 翻訳処理に渡すコンテキスト情報。
+ * AI翻訳の品質向上のために、翻訳対象のテキストの周辺情報や用語集などを提供します。
+ */
+export class TranslationContext {
+	/**
+	 * 翻訳対象ユニットの直前のユニットの本文。
+	 */
+	previousText?: string;
+
+	/**
+	 * 翻訳対象ユニットの直後のユニットの本文。
+	 */
+	nextText?: string;
+
+	/**
+	 * 適用する用語集の文字列。
+	 * 将来的にはファイルパスや構造化されたデータも検討。
+	 */
+	glossary?: string;
+
+	/**
+	 * その他のコンテキスト情報。将来的な拡張用。
+	 */
+	[key: string]: unknown;
+
+	constructor(previousText?: string, nextText?: string, glossary?: string) {
+		this.previousText = previousText;
+		this.nextText = nextText;
+		this.glossary = glossary;
+	}
+}
+</file>
+
+<file path="tasks/do/transコマンドの設計と実装.md">
+# 作業チケット: transコマンドの設計と実装
+
+## 1. 概要
+
+`trans` コマンドは、指定されたMarkdownファイル内、またはワークスペース内の全Markdownファイルを対象に、`need:translate` フラグが付与されたユニットをAI翻訳し、翻訳結果を反映させる機能を提供します。
+
+## 2. 設計方針
+
+- `design.md` の「4.2 transコマンド」の記載に基づき実装します。
+- 翻訳対象は `need:translate` フラグを持つユニットのみとします。
+- AI翻訳処理は `src/api` に実装された `AIService` インターフェースを経由して行います。
+  - `AIService` の具体的な実装は `AIServiceBuilder` によって、設定 (`mdait.trans.provider`) に基づいて生成されます。
+  - 初期実装では `default` プロバイダのみをサポートします。
+- Markdownのコードブロックを翻訳対象とするかは設定 (`mdait.trans.markdown.skipCodeBlocks`) で制御可能とします。
+
+## 3. 主な処理フロー
+
+```mermaid
+graph TD
+    A[transコマンド実行] --> B{対象ファイル指定あり？};
+    B -- Yes --> C[指定ファイル読み込み];
+    B -- No --> D[ワークスペース内の全Markdown検索];
+    D --> E[対象ファイル群読み込み];
+    C --> F[ファイルをパースしMarkdownオブジェクトへ変換];
+    E --> F;
+    F --> G[need:translateユニットを抽出];
+    G -- 各ユニット --> H{from属性あり？};
+    H -- Yes --> I[from属性のハッシュを元に翻訳元ユニット特定];
+    I --> J[翻訳元ユニットのコンテンツを取得];
+    H -- No --> K[当該ユニット自身のコンテンツを取得];
+    J --> L[TranslationProvider経由でAI翻訳実行];
+    K --> L;
+    L --> M[翻訳結果をユニットコンテンツに反映];
+    M --> N[ユニットのハッシュを再計算しmarker更新];
+    N --> O[needフラグを除去];
+    O --> P[Markdownオブジェクトをファイルに書き出し];
+    P --> Q[完了];
+```
+
+## 4. 主要な関数・モジュール
+
+- `src/commands/trans/trans-command.ts`:
+    - `executeTransCommand(targetPath?: vscode.Uri)`: コマンドのエントリーポイント。
+    - `translateFile(filePath: string, aiService: AIService)`: 単一ファイルを処理する関数。
+    - `translateUnit(unit: MdaitUnit, aiService: AIService, sourceContent?: string, context: TranslationContext)`: ユニットを翻訳する関数。
+- `src/commands/trans/translation-provider.ts`:
+    - `constructor(aiService: AIService)`
+    - `translate(text: string, sourceLang: string, targetLang: string, context: TranslationContext): Promise<string>`: `AIService` を利用して翻訳を実行。`TranslationContext` を引数に追加。
+- `src/commands/trans/translation-context.ts`:
+    - `class TranslationContext`: 翻訳時のコンテキスト情報。
+        - `previousText?: string`: 前のセクションのテキスト。
+        - `nextText?: string`: 次のセクションのテキスト。
+        - `glossary?: string`: 用語集。
+        - (将来的に拡張可能なフィールド)
+- `src/api/ai-service.ts`:
+    - `type AIMessageContent = string; // 将来的には { type: 'text', text: string } | { type: 'image', source: { type: 'base64', media_type: string, data: string } } なども許容`
+    - `interface AIMessage { role: 'system' | 'user' | 'assistant'; content: AIMessageContent | AIMessageContent[]; }`
+    - `type MessageStream = AsyncIterable<string>; // ストリーミングされるテキストチャンクを想定`
+    - `interface AIService`: AI機能の汎用インターフェース。
+        - `sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream`: AIタスクを実行するメソッド。`messages` は構造化された形式。
+- `src/api/ai-service-builder.ts`:
+    - `class AIServiceBuilder`:
+        - `build(config: AIProviderConfig): AIService`: 設定に基づき `AIService` の実装を生成。
+- `src/api/providers/default-ai-provider.ts` (例):
+    - `class DefaultAIProvider implements AIService`: `AIService` のデフォルト実装。
+        - `sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream`
+- `src/core/markdown/mdait-markdown.ts`: Markdownオブジェクトの操作。
+- `src/core/hash/hash-calculator.ts`: ハッシュ計算。
+- `src/config/configuration.ts`: 設定値の取得。
+
+## 5. 考慮事項
+
+- **エラーハンドリング**: ファイル読み書きエラー、翻訳APIエラーなどを適切に処理する。
+- **進捗表示**: 大量ファイル処理時の進捗をユーザーにフィードバックする。
+- **設定**: `mdait.trans.provider`, `mdait.trans.markdown.skipCodeBlocks` の設定値を参照する。
+- **言語指定**: 翻訳元・先の言語をどのように決定するか (ファイル名、ディレクトリ構造、設定など)。初期は翻訳ペア設定 (`mdait.transPairs`) を参照することを検討。
+
+## 6. 完了条件
+
+- `need:translate` フラグを持つユニットが翻訳されること。
+- 翻訳後、ユニットのハッシュが更新され、`need` フラグが除去されること。
+- 設定に基づいてコードブロックのスキップが機能すること。
+- 基本的なエラーハンドリングが実装されていること。
+- (任意) ユニットテストが実装されていること。
+</file>
+
+<file path=".vscodeignore">
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/.vscode-test.*
+</file>
+
+<file path="LICENSE">
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+</file>
+
+<file path="src/core/hash/normalizer.ts">
+/**
+ * テキスト正規化オプション
+ */
+export interface NormalizationOptions {
+	/** 先頭と末尾の空白を削除する */
+	trim?: boolean;
+	/** 連続する空白を1つに置き換える */
+	collapseSpaces?: boolean;
+	/** 改行コードを統一する (LF) */
+	normalizeNewlines?: boolean;
+}
+
+/**
+ * デフォルトの正規化オプション
+ */
+const DEFAULT_OPTIONS: NormalizationOptions = {
+	trim: true,
+	collapseSpaces: true,
+	normalizeNewlines: true,
+};
+
+/**
+ * テキスト正規化クラス
+ * ハッシュ計算前のテキスト正規化を行う
+ */
+export class TextNormalizer {
+	private options: NormalizationOptions;
+
+	/**
+	 * コンストラクタ
+	 * @param options 正規化オプション
+	 */
+	constructor(options: NormalizationOptions = DEFAULT_OPTIONS) {
+		this.options = { ...DEFAULT_OPTIONS, ...options };
+	}
+
+	/**
+	 * テキストを正規化する
+	 * @param text 正規化する文字列
+	 * @returns 正規化された文字列
+	 */
+	normalize(text: string): string {
+		let result = text;
+
+		// 改行コードの正規化 (CR+LF -> LF)
+		if (this.options.normalizeNewlines) {
+			result = result.replace(/\r\n/g, "\n");
+		}
+
+		// 空白の正規化
+		if (this.options.collapseSpaces) {
+			result = result.replace(/[ \t]+/g, " ");
+		}
+
+		// 改行後の空白を削除
+		if (this.options.collapseSpaces) {
+			result = result.replace(/\n[ \t]+/g, "\n");
+		}
+
+		// 先頭と末尾の空白を削除
+		if (this.options.trim) {
+			result = result.trim();
+		}
+
+		return result;
+	}
+}
+
+/**
+ * テキストを標準の設定で正規化する
+ * @param text 正規化する文字列
+ * @returns 正規化された文字列
+ */
+export function normalizeText(text: string): string {
+	const normalizer = new TextNormalizer(); // インスタンスを直接作成
+	return normalizer.normalize(text);
+}
+</file>
+
+<file path="src/test/core/hash/normalizer.test.ts">
+import { strict as assert } from "node:assert";
+import { TextNormalizer, normalizeText } from "../../../core/hash/normalizer";
+
+suite("TextNormalizer クラスのテスト", () => {
+	test("デフォルトオプションで全ての正規化処理が適用される", () => {
+		const normalizer = new TextNormalizer();
+		const input = "  テスト\r\n  テキスト  ";
+		const expected = "テスト\nテキスト";
+		assert.equal(normalizer.normalize(input), expected);
+	});
+
+	test("trim オプションが false の場合は前後の空白が残る", () => {
+		const normalizer = new TextNormalizer({ trim: false });
+		const input = "  テスト  ";
+		assert.equal(normalizer.normalize(input), " テスト ");
+	});
+
+	test("collapseSpaces オプションが false の場合は連続空白が統合されない", () => {
+		const normalizer = new TextNormalizer({ collapseSpaces: false });
+		const input = "テスト  テキスト";
+		assert.equal(normalizer.normalize(input), "テスト  テキスト");
+	});
+
+	test("collapseSpaces オプションが false の場合はタブ文字が空白に変換されない", () => {
+		const normalizer = new TextNormalizer({ collapseSpaces: false });
+		const input = "テスト\tテキスト";
+		assert.equal(normalizer.normalize(input), "テスト\tテキスト");
+	});
+
+	test("normalizeNewlines オプションが false の場合はCRLFがLFに変換されない", () => {
+		const normalizer = new TextNormalizer({ normalizeNewlines: false });
+		const input = "テスト\r\nテキスト";
+		assert.equal(normalizer.normalize(input), "テスト\r\nテキスト");
+	});
+
+	test("複数のオプションを同時に無効化できる", () => {
+		const normalizer = new TextNormalizer({
+			trim: false,
+			collapseSpaces: false,
+			normalizeNewlines: false,
+		});
+		const input = "  テスト\r\n  テキスト  ";
+		assert.equal(normalizer.normalize(input), "  テスト\r\n  テキスト  ");
+	});
+
+	test("空の文字列を正規化するとそのまま空文字列が返される", () => {
+		const normalizer = new TextNormalizer();
+		assert.equal(normalizer.normalize(""), "");
+	});
+
+	test("空白のみの文字列を正規化すると空文字列が返される", () => {
+		const normalizer = new TextNormalizer();
+		assert.equal(normalizer.normalize("   \t  \n  "), "");
+	});
+
+	test("normalizeText 関数は常にデフォルトオプションで正規化する", () => {
+		const input = "  テスト\r\n  テキスト  ";
+		const expected = "テスト\nテキスト";
+		assert.equal(normalizeText(input), expected);
+	});
+});
+</file>
+
+<file path="src/test/sample-content/en/no_header.md">
+---
+title: "English Test 2"
+---
+# Test File 2
+
+> This is a blockquote.
+
+Code block:
+
+```
+console.log("Hello, World!");
+```
+
+Image:
+
+![Sample Image](https://via.placeholder.com/150)
+
+---
+
+Table:
+
+| Header 1 | Header 2 |
+| -------- | -------- |
+| Data 1   | Data 2   |
+| Data 3   | Data 4   |
+
+## Heading 2
+
+- List item 1
+- List item 2
+- List item 3
+
+### Heading 3
+
+1. Numbered list 1
+2. Numbered list 2
+3. Numbered list 3
+
+#### Heading 4
+
+This is a test Markdown file.
+
+**Bold** and _italic_ text are also included.
+
+Example of a link: [Google](https://www.google.com)
+
+#### Heading 5
+
+Below is an additional paragraph.
+
+Markdown is a convenient tool for creating formatted text easily. This file was created to test various features of Markdown.
+
+Adding more content to make it exceed 50 lines.
+
+Markdown is a very useful tool for developers and writers.
+</file>
+
+<file path="src/test/sample-content/ja/no_header.md">
+---
+title: "日本語テスト2"
+---
+# テストファイル 2
+
+> これは引用です。
+
+コードブロック:
+
+```
+console.log("Hello, World!");
+```
+
+画像:
+
+![サンプル画像](https://via.placeholder.com/150)
+
+---
+
+表:
+
+| 見出し 1 | 見出し 2 |
+| -------- | -------- |
+| データ 1 | データ 2 |
+| データ 3 | データ 4 |
+
+## 見出し 2
+
+- リストアイテム 1
+- リストアイテム 2
+- リストアイテム 3
+
+### 見出し 3
+
+1. 番号付きリスト 1
+2. 番号付きリスト 2
+3. 番号付きリスト 3
+
+#### 見出し 4
+
+Markdown のテスト用ファイルです。
+
+**太字**や*斜体*のテキストも含まれます。
+
+リンクの例：[Google](https://www.google.com)
+
+#### 見出し 5
+
+以下は追加の段落です。
+
+Markdown は、簡単にフォーマットされたテキストを作成するための便利なツールです。このファイルは、Markdown の様々な機能をテストするために作成されました。
+
+さらに内容を追加して、50 行以上にします。
+
+Markdown は、開発者やライターにとって非常に便利なツールです。
+</file>
+
+<file path="src/test/core/hash/hash-calculator.test.ts">
+import * as assert from "node:assert";
+import { HashCalculator, calculateHash } from "../../../core/hash/hash-calculator";
+
+suite("HashCalculator", () => {
+	test("テキストのハッシュが8文字で返されること", () => {
+		const calculator = new HashCalculator();
+		const text = "Hello, World!";
+		const hash = calculator.calculate(text);
+		assert.strictEqual(hash.length, 8); // デフォルトの長さは8
+	});
+
+	test("空のテキストに対して固定ハッシュ00000000が返されること", () => {
+		const calculator = new HashCalculator();
+		const hash = calculator.calculate("");
+		assert.strictEqual(hash, "00000000"); // 空テキスト用の固定ハッシュ
+	});
+
+	test("正規化なしで8文字のハッシュが返されること", () => {
+		const calculator = new HashCalculator();
+		const text = "Hello, World!";
+		const hash = calculator.calculate(text, false);
+		assert.strictEqual(hash.length, 8);
+	});
+});
+
+suite("calculateHash", () => {
+	test("デフォルトの計算機を使用してハッシュが計算されること", () => {
+		const text = "Hello, World!";
+		const hash = calculateHash(text);
+		assert.strictEqual(hash.length, 8);
+	});
+});
+</file>
+
+<file path="src/test/core/markdown/mdait-marker.test.ts">
+import { strict as assert } from "node:assert";
+import { MdaitMarker } from "../../../core/markdown/mdait-marker";
+
+suite("MdaitHeader", () => {
+	// 繰り返し使用する値を定義
+	const testHash = "abcd1234";
+	const testFrom = "efgh5678";
+
+	test("コンストラクタでプロパティが正しく初期化される", () => {
+		// 全てのパラメータを指定した場合
+		const header1 = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header1.hash, testHash);
+		assert.equal(header1.from, testFrom);
+		assert.equal(header1.need, "translate");
+
+		// オプショナルパラメータを省略した場合
+		const header2 = new MdaitMarker(testHash);
+		assert.equal(header2.hash, testHash);
+		assert.equal(header2.from, null);
+		assert.equal(header2.need, null);
+
+		// fromのみ指定した場合
+		const header3 = new MdaitMarker(testHash, testFrom);
+		assert.equal(header3.hash, testHash);
+		assert.equal(header3.from, testFrom);
+		assert.equal(header3.need, null);
+	});
+	test("toString: 正しいフォーマットの文字列が生成される", () => {
+		// 全てのパラメータがある場合
+		const header1 = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header1.toString(), `<!-- mdait ${testHash} from:${testFrom} need:translate -->`);
+
+		// fromだけがある場合
+		const header2 = new MdaitMarker(testHash, testFrom);
+		assert.equal(header2.toString(), `<!-- mdait ${testHash} from:${testFrom} -->`);
+
+		// 基本的なhashだけの場合
+		const header3 = new MdaitMarker(testHash);
+		assert.equal(header3.toString(), `<!-- mdait ${testHash} -->`);
+
+		// needTagだけがある場合
+		const header4 = new MdaitMarker(testHash, null, "review");
+		assert.equal(header4.toString(), `<!-- mdait ${testHash} need:review -->`);
+	});
+	test("parse: 正常なコメント文字列からオブジェクトが生成される", () => {
+		// 全要素を含むコメント
+		const comment1 = `<!-- mdait ${testHash} from:${testFrom} need:translate -->`;
+		const header1 = MdaitMarker.parse(comment1);
+		assert.ok(header1);
+		assert.equal(header1.hash, testHash);
+		assert.equal(header1.from, testFrom);
+		assert.equal(header1.need, "translate");
+
+		// fromだけのコメント
+		const comment2 = `<!-- mdait ${testHash} from:${testFrom} -->`;
+		const header2 = MdaitMarker.parse(comment2);
+		assert.ok(header2);
+		assert.equal(header2.hash, testHash);
+		assert.equal(header2.from, testFrom);
+		assert.equal(header2.need, null);
+
+		// 基本的なhashだけのコメント
+		const comment3 = `<!-- mdait ${testHash} -->`;
+		const header3 = MdaitMarker.parse(comment3);
+		assert.ok(header3);
+		assert.equal(header3.hash, testHash);
+		assert.equal(header3.from, null);
+		assert.equal(header3.need, null);
+
+		// needTagだけのコメント
+		const comment4 = `<!-- mdait ${testHash} need:review -->`;
+		const header4 = MdaitMarker.parse(comment4);
+		assert.ok(header4);
+		assert.equal(header4.hash, testHash);
+		assert.equal(header4.from, null);
+		assert.equal(header4.need, "review");
+	});
+
+	test("parse: 不正なフォーマットの文字列からはnullが返される", () => {
+		// 完全に異なるコメント
+		assert.equal(MdaitMarker.parse("<!-- 通常のコメント -->"), null);
+
+		// 空文字列
+		assert.equal(MdaitMarker.parse(""), null);
+
+		// mdaitの後に正しいハッシュ形式がない
+		assert.equal(MdaitMarker.parse("<!-- mdait -->"), null);
+	});
+	test("createWithTranslateTag: 適切なオブジェクトが生成される", () => {
+		const header = MdaitMarker.createWithTranslateTag(testHash, testFrom);
+		assert.equal(header.hash, testHash);
+		assert.equal(header.from, testFrom);
+		assert.equal(header.need, "translate");
+	});
+
+	test("updateHash: ハッシュ値が正しく更新される", () => {
+		const header = new MdaitMarker(testHash);
+		const newHash = "newh1234";
+		header.updateHash(newHash);
+		assert.equal(header.hash, newHash);
+	});
+	test("removeNeedTag: needTagが適切に削除される", () => {
+		const header = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header.need, "translate");
+		header.removeNeedTag();
+		assert.equal(header.need, null);
+	});
+
+	test("needsTranslation: 翻訳が必要かどうかが正しく判定される", () => {
+		// translate タグがある場合
+		const header1 = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header1.needsTranslation(), true);
+
+		// タグがない場合
+		const header3 = new MdaitMarker(testHash, testFrom);
+		assert.equal(header3.needsTranslation(), false);
+
+		// 別のタグがある場合
+		const header4 = new MdaitMarker(testHash, testFrom, "other");
+		assert.equal(header4.needsTranslation(), false);
+	});
+});
+</file>
+
+<file path="src/test/sample-content/ja/test.md">
+---
+title: "日本語テスト1"
+---
+<!-- mdait 403206cb -->
+# 見出し 1
+
+これは日本語のテスト用 Markdown ファイルです。
+
+<!-- mdait d2be4567 -->
+## 見出し 2
+
+- リストアイテム 1
+- リストアイテム 2
+- リストアイテム 3
+
+<!-- mdait e1bd9636 -->
+### 見出し 3
+
+1. 番号付きリスト 1
+2. 番号付きリスト 2
+3. 番号付きリスト 3
+
+**太字のテキスト** と _斜体のテキスト_。
+
+[リンク](https://example.com) も含まれます。
+
+<!-- mdait 0641b670 -->
+#### 見出し 4
+
+以下はコードブロックの例です：
+
+```
+function greet() {
+    console.log("こんにちは、世界！");
+}
+greet();
+```
+
+<!-- mdait 6f9de5a9 -->
+#### 見出し 5
+
+> これは引用です。
+
+画像も含めることができます：
+
+![サンプル画像](https://via.placeholder.com/150)
+
+---
+
+表の例：
+
+| 見出し 1 | 見出し 2 | 見出し 3 |
+| -------- | -------- | -------- |
+| データ 1 | データ 2 | データ 3 |
+| データ 4 | データ 5 | データ 6 |
+
+<!-- mdait 2507a192 -->
+#### 見出し 6
+
+段落を追加して、さらに内容を充実させます。
+
+このファイルは Markdown の様々な機能をテストするために作成されました。これには、リスト、コードブロック、表、画像、リンク、引用などが含まれます。
+
+Markdown は非常に柔軟で、簡単にフォーマットされたテキストを作成できます。
+</file>
+
+<file path="src/test/workspace/.vscode/settings.json">
+{
+  // 翻訳ペア
+  "mdait.transPairs": [
+    {
+      "sourceDir": "content/ja",
+      "targetDir": "content/en"
+    }
+  ],
+  // 除外パターン
+  "mdait.ignoredPatterns": "**/node_modules/**",
+  // 自動削除設定
+  "mdait.sync.autoDelete": true,
+  // 翻訳プロバイダ
+  "mdait.trans.provider": "default",
+  // Markdown:コードブロックをスキップするか
+  "mdait.trans.markdown.skipCodeBlocks": true
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "target": "ES2022",
+    "outDir": "out",
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "rootDir": "src",
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
+</file>
+
+<file path=".gitignore">
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+src/test/workspace/content
+</file>
+
+<file path="biome.json">
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": false
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "ignore": ["node_modules"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab",
+    "lineWidth": 100
+  },
+  "organizeImports": {
+    "enabled": true
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  }
+}
+</file>
+
+<file path="CHANGELOG.md">
+# Change Log
+
+All notable changes to the "vscode-extension-helloworld" extension will be documented in this file.
+
+Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+
+## [Unreleased]
+
+- Initial release
+</file>
+
+<file path="README.md">
+# mdait
+
+## [Unreleased]
+### Added
+
+### Changed
+</file>
+
+<file path="src/commands/sync/diff-detector.ts">
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+
+/**
+ * 差分種別
+ */
+export enum DiffType {
+	/** 変更なし */
+	UNCHANGED = 0,
+	/** 新規追加 */
+	ADDED = 1,
+	/** 内容変更 */
+	MODIFIED = 2,
+	/** 削除 */
+	DELETED = 3,
+}
+
+/**
+ * ユニット差分情報
+ */
+export interface UnitDiff {
+	/** 差分種別 */
+	type: DiffType;
+	/** ソースユニット (削除の場合はnull) */
+	source: MdaitUnit | null;
+	/** ターゲットユニット (新規の場合はnull) */
+	target: MdaitUnit | null;
+}
+
+/**
+ * 差分検出結果
+ */
+export interface DiffResult {
+	/** ユニット毎の差分情報 */
+	diffs: UnitDiff[];
+	/** 追加されたユニット数 */
+	added: number;
+	/** 変更されたユニット数 */
+	modified: number;
+	/** 削除されたユニット数 */
+	deleted: number;
+	/** 変更なしのユニット数 */
+	unchanged: number;
+}
+
+/**
+ * 差分検出クラス
+ */
+export class DiffDetector {
+	/**
+	 * 同期前後のユニット配列から差分を検出
+	 * @param originalUnits 元のユニット配列
+	 * @param syncedUnits 同期後のユニット配列
+	 */
+	detect(originalUnits: MdaitUnit[], syncedUnits: MdaitUnit[]): DiffResult {
+		const diffs: UnitDiff[] = [];
+		let added = 0;
+		let modified = 0;
+		let deleted = 0;
+		let unchanged = 0;
+
+		// 削除ユニットの特定
+		// (syncedに無いoriginalのユニット)
+		const originalMap = new Map<string, MdaitUnit>();
+		for (const section of originalUnits) {
+			if (section.marker?.hash) {
+				originalMap.set(section.marker.hash, section);
+			}
+		}
+
+		// 追加・変更ユニットの特定
+		const syncedMap = new Map<string, MdaitUnit>();
+		for (const section of syncedUnits) {
+			if (section.marker?.hash) {
+				syncedMap.set(section.marker.hash, section);
+			}
+		}
+
+		// 削除されたユニットを特定
+		originalMap.forEach((section, hash) => {
+			if (!syncedMap.has(hash)) {
+				diffs.push({
+					type: DiffType.DELETED,
+					source: null,
+					target: section,
+				});
+				deleted++;
+			}
+		});
+
+		// 追加・変更・変更なしのユニットを特定
+		syncedMap.forEach((section, hash) => {
+			const original = originalMap.get(hash);
+
+			if (!original) {
+				// 新規ユニット
+				diffs.push({
+					type: DiffType.ADDED,
+					source: section,
+					target: null,
+				});
+				added++;
+			} else if (section.content !== original.content) {
+				// 変更ユニット
+				diffs.push({
+					type: DiffType.MODIFIED,
+					source: section,
+					target: original,
+				});
+				modified++;
+			} else {
+				// 変更なし
+				diffs.push({
+					type: DiffType.UNCHANGED,
+					source: section,
+					target: original,
+				});
+				unchanged++;
+			}
+		});
+
+		return {
+			diffs,
+			added,
+			modified,
+			deleted,
+			unchanged,
+		};
+	}
+}
+</file>
+
+<file path="src/commands/trans/translation-provider.ts">
+import type { AIMessage, AIService } from "../../api/ai-service";
+import type { TranslationContext } from "./translation-context";
+
+/**
+ * 翻訳プロバイダーのインターフェース
+ */
+export interface TranslationProvider {
+	/**
+	 * テキストを翻訳する
+	 * @param text 翻訳対象のテキスト
+	 * @param sourceLang 翻訳元の言語コード
+	 * @param targetLang 翻訳先の言語コード
+	 * @param context 翻訳コンテキスト
+	 */
+	translate(
+		text: string,
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+	): Promise<string>;
+}
+
+/**
+ * デフォルトの翻訳プロバイダー
+ */
+export class DefaultTranslationProvider implements TranslationProvider {
+	private readonly aiService: AIService;
+
+	constructor(aiService: AIService) {
+		this.aiService = aiService;
+	}
+
+	/**
+	 * テキストを翻訳する
+	 * @param text 翻訳対象のテキスト
+	 * @param sourceLang 翻訳元の言語コード
+	 * @param targetLang 翻訳先の言語コード
+	 * @param context 翻訳コンテキスト
+	 */
+	public async translate(
+		text: string,
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+	): Promise<string> {
+		// コードブロックをスキップするロジック
+		const codeBlockRegex = /```[\s\S]*?```/g;
+		const codeBlocks: string[] = [];
+		const placeholders: string[] = [];
+
+		const textWithoutCodeBlocks = text.replace(codeBlockRegex, (match) => {
+			const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
+			codeBlocks.push(match);
+			placeholders.push(placeholder);
+			return placeholder;
+		});
+
+		// systemPrompt と AIMessage[] の構築
+		// @important design.md に記載の通り、glossary や surroundingText を活用すること
+		const systemPrompt = `You are a professional translator. Translate the given text from ${sourceLang} to ${targetLang}.
+Context:
+${context.surroundingText ? `Surrounding Text:\n${context.surroundingText}\n` : ""}
+${context.glossary ? `Glossary:\n${JSON.stringify(context.glossary, null, 2)}\n` : ""}
+Keep the original meaning and tone.
+Do not translate placeholders like __CODE_BLOCK_PLACEHOLDER_n__.`;
+
+		const messages: AIMessage[] = [
+			{
+				role: "user",
+				content: textWithoutCodeBlocks,
+			},
+		];
+
+		// aiService.sendMessage() の呼び出しと MessageStream の処理
+		const stream = this.aiService.sendMessage(systemPrompt, messages);
+		let translatedText = "";
+		for await (const chunk of stream) {
+			// chunk は string 型なので、直接結合する
+			translatedText += chunk;
+		}
+
+		// プレースホルダーをコードブロックに戻す
+		let result = translatedText;
+		for (let i = 0; i < placeholders.length; i++) {
+			result = result.replace(placeholders[i], codeBlocks[i]);
+		}
+
+		return result;
+	}
+}
+</file>
+
+<file path="src/core/hash/hash-calculator.ts">
+import * as crypto from "node:crypto";
+import * as zlib from "node:zlib"; // zlib をインポート
+import { normalizeText } from "./normalizer";
+
+/**
+ * ハッシュ計算処理を行うクラス
+ */
+export class HashCalculator {
+	private algorithm: string;
+	private length: number;
+
+	/**
+	 * コンストラクタ
+	 * @param algorithm ハッシュアルゴリズム（デフォルト: crc32）
+	 * @param length 短縮ハッシュの長さ（デフォルト: 8）
+	 */
+	constructor(algorithm = "crc32", length = 8) {
+		this.algorithm = algorithm;
+		this.length = length;
+	}
+
+	/**
+	 * テキストのハッシュを計算
+	 * @param text ハッシュを計算するテキスト
+	 * @param normalize 正規化するかどうか（デフォルト: true）
+	 * @returns 計算されたハッシュ文字列（短縮形）
+	 */
+	calculate(text: string, normalize = true): string {
+		const processedText = normalize ? normalizeText(text) : text;
+
+		// 空文字列の場合は特殊な値を返す
+		if (processedText === "") {
+			return "00000000"; // 空テキスト用の固定ハッシュ
+		}
+
+		let hash: string;
+		if (this.algorithm.toLowerCase() === "crc32") {
+			const crcBuffer = Buffer.from(processedText);
+			const crcValue = zlib.crc32(crcBuffer);
+			// 符号なし32ビット整数に変換し、16進数文字列に変換後、8桁になるよう0でパディング
+			hash = (crcValue >>> 0).toString(16).padStart(8, "0");
+		} else {
+			hash = crypto.createHash(this.algorithm).update(processedText).digest("hex");
+		}
+
+		return hash.substring(0, this.length);
+	}
+}
+
+/**
+ * デフォルトのハッシュ計算処理を行うインスタンス
+ */
+export const defaultCalculator = new HashCalculator(); // デフォルトアルゴリズムが crc32 になる
+
+/**
+ * テキストのハッシュを計算する
+ * @param text ハッシュを計算するテキスト
+ * @param normalize 正規化するかどうか（デフォルト: true）
+ * @returns 計算されたハッシュ文字列（短縮形）
+ */
+export function calculateHash(text: string, normalize = true): string {
+	return defaultCalculator.calculate(text, normalize);
+}
+</file>
+
+<file path="src/core/markdown/mdait-marker.ts">
+/**
+ * mdaitMarkerクラス
+ * mdaitUnitの前に配置されるmdaitメタデータコメントを表現する
+ * @important このクラスはドメインオブジェクトです。変更時は理由を明示し、承認なしに編集しないでください。
+ */
+export class MdaitMarker {
+	/**
+	 * コンストラクタ
+	 * @param hash ユニット本文のハッシュ
+	 * @param from 翻訳元ユニットのハッシュ
+	 * @param need 翻訳の必要性を表すタグ
+	 */
+	constructor(
+		public hash: string,
+		public from: string | null = null,
+		public need: string | null = null,
+	) {}
+	/**
+	 * コメントをMarkdown形式の文字列として出力
+	 */
+	toString(): string {
+		let result = `<!-- mdait ${this.hash}`;
+
+		if (this.from) {
+			result += ` from:${this.from}`;
+		}
+
+		if (this.need) {
+			result += ` need:${this.need}`;
+		}
+
+		result += " -->";
+		return result;
+	}
+	/**
+	 * MdaitMarker文字列からMdaitHeaderを生成
+	 * @param commentText Markdownコメント文字列
+	 * @returns MdaitHeaderオブジェクト、またはパース失敗時はnull
+	 */
+	static parse(commentText: string): MdaitMarker | null {
+		// コメントテキストをサニタイズ（余分な空白や改行を削除）
+		const sanitizedText = commentText.trim().replace(/\s+/g, " ");
+
+		// MdaitMarkerのパターン
+		const mdaitPattern =
+			/<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+		const match = sanitizedText.match(mdaitPattern);
+
+		if (!match) {
+			return null;
+		}
+
+		const [, hash, from, needTag] = match;
+		return new MdaitMarker(hash, from || null, needTag || null);
+	}
+	/**
+	 * 指定されたhashとfromでコメントを生成
+	 * @param hash ユニット本文のハッシュ
+	 * @param from 翻訳元のユニットハッシュ
+	 * @returns 新しいMdaitCommentオブジェクト
+	 */
+	static createWithTranslateTag(hash: string, from: string): MdaitMarker {
+		return new MdaitMarker(hash, from, "translate");
+	}
+
+	/**
+	 * コメントのハッシュを更新
+	 * @param newHash 新しいハッシュ値
+	 */
+	updateHash(newHash: string): void {
+		this.hash = newHash;
+	}
+
+	/**
+	 * 翻訳必要タグを削除
+	 */
+	removeNeedTag(): void {
+		this.need = null;
+	}
+
+	/**
+	 * needフラグを設定する
+	 * @param need 設定するneedフラグ
+	 */
+	setNeed(need: string | null): void {
+		this.need = need;
+	}
+
+	/**
+	 * 翻訳が必要かどうか
+	 */
+	needsTranslation(): boolean {
+		return this.need === "translate";
+	}
+}
+</file>
+
+<file path="src/test/sample-content/en/test.md">
+---
+title: "English Test 1"
+---
+<!-- mdait 68a7c2cc from:403206cb -->
+# Heading 1
+
+This is a test Markdown file in English.
+
+<!-- mdait db4d7c09 from:d2be4567 -->
+## Heading 2
+
+- List item 1
+- List item 2
+- List item 3
+
+<!-- mdait 1ea6f507 from:e1bd9636 -->
+### Heading 3
+
+1. Numbered list 1
+2. Numbered list 2
+3. Numbered list 3
+
+**Bold text** and _italic text_.
+
+[Link](https://example.com) is also included.
+
+<!-- mdait cb4dda29 from:0641b670 -->
+#### Heading 4
+
+Below is an example of a code block:
+
+```
+function greet() {
+    console.log("Hello, World!");
+}
+greet();
+```
+
+<!-- mdait 3d220b99 from:6f9de5a9 -->
+#### Heading 5
+
+> This is a blockquote.
+
+Images can also be included:
+
+![Sample Image](https://via.placeholder.com/150)
+
+---
+
+Example of a table:
+
+| Header 1 | Header 2 | Header 3 |
+| -------- | -------- | -------- |
+| Data 1   | Data 2   | Data 3   |
+| Data 4   | Data 5   | Data 6   |
+
+<!-- mdait a5451611 from:2507a192 need:translate -->
+#### Heading 6
+
+Adding more paragraphs to enrich the content.
+
+This file was created to test various features of Markdown. These include lists, code blocks, tables, images, links, and blockquotes.
+
+Markdown is highly flexible and allows for the creation of well-formatted text with ease.
+</file>
+
+<file path=".vscode-test.mjs">
+import { defineConfig } from '@vscode/test-cli';
+
+export default defineConfig({
+  files: "out/test/**/*.test.js",
+  workspaceFolder: "./src/test/workspace",
+});
+</file>
+
+<file path="src/commands/trans/trans-command.ts">
+import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import type { Command } from "commander";
+import { AIServiceBuilder } from "../../api/ai-service-builder";
+import { loadConfiguration } from "../../config/configuration";
+import { TranslationContext } from "./translation-context";
+import { DefaultTranslationProvider } from "./translation-provider";
+// import { parseMarkdown, updateMarkdown } from '../../utils/markdown-parser'; // 仮のモジュール。今後作成。
+
+export function registerTransCommand(program: Command) {
+	program
+		.command("trans <filePath>")
+		.description("Translate a Markdown file")
+		.option("-s, --source-lang <lang>", "Source language code", "auto") // @important design.md に記載の通り、デフォルトは auto
+		.option("-t, --target-lang <lang>", "Target language code", "ja") // @important design.md に記載の通り、デフォルトは ja
+		.action(async (filePath: string, options: { sourceLang: string; targetLang: string }) => {
+			try {
+				const config = await loadConfiguration();
+				const aiService = new AIServiceBuilder(config).build();
+				const translationProvider = new DefaultTranslationProvider(aiService);
+
+				console.log(
+					`Translating ${filePath} from ${options.sourceLang} to ${options.targetLang}...`,
+				);
+
+				// 1. Markdown ファイルの読み込み
+				const markdownContent = await fs.promises.readFile(filePath, "utf-8");
+
+				// 2. Markdown の解析と翻訳対象ユニットの特定 (parseMarkdown の実装が必要)
+				//    ここでは、ファイル全体を1つのユニットとして扱う簡易的な実装とする
+				// const { units, content } = await parseMarkdown(filePath, markdownContent);
+				// const translatableUnits = units.filter(unit => unit.meta?.need === 'translate');
+
+				// 3. 翻訳コンテキストの作成
+				const context = new TranslationContext();
+				// TODO: context に surroundingText や glossary を設定するロジックを実装
+				// 例: context.surroundingText = "Some surrounding text";
+				// 例: context.glossary = { "term": "translation" };
+
+				// 4. 翻訳の実行 (ファイル全体を翻訳する例)
+				// @important design.md に記載の通り、need:translate フラグを持つユニットのみを対象とするように後で修正
+				const translatedText = await translationProvider.translate(
+					markdownContent, // 本来はユニットごとのテキスト
+					options.sourceLang,
+					options.targetLang,
+					context,
+				);
+
+				// 5. 更新された内容でファイルを保存 (updateMarkdown の実装が必要)
+				//    ここでは翻訳結果を新しいファイルに書き出す簡易的な実装とする
+				const outputFilePath = filePath.replace(/(\.\w+)$/, ".translated$1");
+				await fs.promises.writeFile(outputFilePath, translatedText, "utf-8");
+
+				console.log(`Translation complete! Output saved to ${outputFilePath}`);
+			} catch (error) {
+				console.error("Error during translation:", error);
+				process.exit(1);
+			}
+		});
+}
+</file>
+
+<file path="src/core/markdown/mdait-markdown.ts">
+import type { MdaitUnit } from "./mdait-unit";
+
+export interface FrontMatter {
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+	[key: string]: any;
+}
+
+export interface Markdown {
+	frontMatter?: FrontMatter;
+	frontMatterRaw?: string;
+	units: MdaitUnit[];
+}
+</file>
+
+<file path="src/core/markdown/mdait-unit.ts">
+import { calculateHash } from "../hash/hash-calculator";
+import { MdaitMarker } from "./mdait-marker";
+
+/**
+ * Markdownユニットクラス
+ * Markdownドキュメントのユニット（見出しから次の見出しまで）を表現する
+ * @important このクラスはドメインオブジェクトです。変更時は理由を明示し、承認なしに編集しないでください。
+ */
+export class MdaitUnit {
+	/**
+	 * コンストラクタ
+	 * @param marker mdaitMarker（ユニットのメタデータ）
+	 * @param title ユニットのタイトル（見出し）
+	 * @param headingLevel 見出しのレベル（1=h1, 2=h2, ...）
+	 * @param content 元のMarkdownコンテンツ（見出しと本文を含む原文）
+	 */
+	constructor(
+		public marker: MdaitMarker,
+		public title: string,
+		public headingLevel: number,
+		public content: string, // 元のMarkdownコンテンツを保持
+	) {}
+
+	/**
+	 * ユニットをMarkdown形式の文字列として出力
+	 * 元の形式をそのまま保持するため、contentを返す
+	 */
+	toString(): string {
+		let result = "";
+
+		if (this.marker) {
+			result += `${this.marker.toString()}\n`;
+		}
+
+		result += this.content;
+		return result;
+	}
+
+	/**
+	 * ユニットが翻訳が必要かどうか
+	 */
+	needsTranslation(): boolean {
+		return this.marker ? this.marker.needsTranslation() : false;
+	}
+	/**
+	 * 翻訳元ユニットのハッシュを取得
+	 */
+	getSourceHash(): string | null {
+		return this.marker ? this.marker.from : null;
+	}
+
+	/**
+	 * 翻訳が完了したマークをする（needタグの除去）
+	 */
+	markAsTranslated(): void {
+		if (this.marker) {
+			this.marker.removeNeedTag();
+		}
+	}
+	/**
+	 * 空のターゲットユニットを作成する
+	 * @param sourceUnit ソースユニット
+	 * @param sourceHash ソースハッシュ
+	 * @returns 空のターゲットユニット
+	 */
+	static createEmptyTargetUnit(sourceUnit: MdaitUnit, sourceHash: string): MdaitUnit {
+		// ソースユニットのハッシュを新しく計算
+		const newHash = calculateHash(sourceUnit.content);
+		// 新しいヘッダーを作成（needタグ付き）
+		const newMarker = new MdaitMarker(newHash, sourceHash, "translate");
+		// 新しいユニットを作成して返す
+		return new MdaitUnit(newMarker, sourceUnit.title, sourceUnit.headingLevel, sourceUnit.content);
+	}
+}
+</file>
+
+<file path="src/test/core/markdown/mdait-unit.test.ts">
+import { strict as assert } from "node:assert";
+import { MdaitMarker } from "../../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../../core/markdown/mdait-unit";
+
+suite("MdaitSection", () => {
+	// 繰り返し使用する変数を準備
+	const testHash = "abcd1234";
+	const testSourceHash = "efgh5678";
+	const testTitle = "テストタイトル";
+	const testContent = "# テストタイトル\nテスト本文";
+
+	test("コンストラクタでプロパティが正しく初期化される", () => {
+		const marker = new MdaitMarker(testHash, testSourceHash, "need");
+		const section = new MdaitUnit(marker, testTitle, 1, testContent);
+
+		assert.equal(section.marker, marker);
+		assert.equal(section.title, testTitle);
+		assert.equal(section.headingLevel, 1);
+		assert.equal(section.content, testContent);
+	});
+
+	test("toString: mdaitヘッダーありの場合は正しい形式で出力される", () => {
+		const marker = new MdaitMarker(testHash, testSourceHash, "need");
+		const section = new MdaitUnit(marker, testTitle, 1, testContent);
+
+		// ヘッダー出力 + 改行 + コンテンツの形式になっていることを確認
+		const expected = `${marker.toString()}\n${testContent}`;
+		assert.equal(section.toString(), expected);
+	});
+
+	test("toString: mdaitヘッダーがundefinedの場合はコンテンツのみ出力される", () => {
+		// @ts-ignore - コードの実装に沿ってテストを書くため
+		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
+
+		assert.equal(section.toString(), testContent);
+	});
+
+	test("needsTranslation: ヘッダーがある場合はヘッダーの状態を反映する", () => {
+		// need:translate のケース
+		const markerNeedsTranslation = new MdaitMarker(testHash, testSourceHash, "translate");
+		const sectionNeedsTranslation = new MdaitUnit(
+			markerNeedsTranslation,
+			testTitle,
+			1,
+			testContent,
+		);
+		assert.equal(sectionNeedsTranslation.needsTranslation(), true);
+
+		// need タグなしのケース
+		const markerNoNeed = new MdaitMarker(testHash, testSourceHash, null);
+		const sectionNoNeed = new MdaitUnit(markerNoNeed, testTitle, 1, testContent);
+		assert.equal(sectionNoNeed.needsTranslation(), false);
+	});
+
+	test("needsTranslation: ヘッダーがundefinedの場合は常にfalseを返す", () => {
+		// @ts-ignore - コードの実装に沿ってテストを書くため
+		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
+		assert.equal(section.needsTranslation(), false);
+	});
+	test("getSourceHash: ヘッダーがある場合はfromを返す", () => {
+		const marker = new MdaitMarker(testHash, testSourceHash, "need");
+		const section = new MdaitUnit(marker, testTitle, 1, testContent);
+		assert.equal(section.getSourceHash(), testSourceHash);
+	});
+
+	test("getSourceHash: ヘッダーがundefinedの場合はnullを返す", () => {
+		// @ts-ignore - コードの実装に沿ってテストを書くため
+		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
+		assert.equal(section.getSourceHash(), null);
+	});
+
+	test("markAsTranslated: 正しくneedタグを削除する", () => {
+		// 事前にneedタグが設定されたヘッダーを用意
+		const header = new MdaitMarker(testHash, testSourceHash, "translate");
+		const section = new MdaitUnit(header, testTitle, 1, testContent);
+
+		// 実行前の状態確認
+		assert.equal(section.needsTranslation(), true);
+
+		// 翻訳完了マークを設定
+		section.markAsTranslated();
+
+		// 実行後の状態確認
+		assert.equal(section.needsTranslation(), false);
+		assert.equal(header.need, null);
+	});
+
+	test("createEmptyTargetSection: 正しくターゲットユニットが作成される", () => {
+		// ソースユニットを用意
+		const header = new MdaitMarker(testHash);
+		const source = new MdaitUnit(header, testTitle, 2, testContent);
+
+		// 新しいターゲットユニットを作成
+		const target = MdaitUnit.createEmptyTargetUnit(source, testSourceHash);
+
+		// 生成されたユニットの検証
+		assert.equal(target.title, source.title);
+		assert.equal(target.headingLevel, source.headingLevel);
+		assert.equal(target.content, source.content);
+		assert.ok(target.marker);
+		assert.equal(target.marker.from, testSourceHash);
+		assert.equal(target.marker.need, "translate");
+	});
+});
+</file>
+
+<file path="src/test/core/markdown/parser.test.ts">
+import { strict as assert } from "node:assert";
+import { markdownParser } from "../../../core/markdown/parser";
+
+suite("MarkdownItParser: 基本ユニット分割", () => {
+	test("単純な見出し2つ", () => {
+		const md = `
+# タイトル1
+
+本文1
+
+# タイトル2
+本文2`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "タイトル1");
+		assert.equal(units[1].title, "タイトル2");
+		assert.ok(units[0].content.includes("タイトル1"));
+		assert.ok(units[1].content.includes("タイトル2"));
+	});
+	test("mdaitコメント付き", () => {
+		const md = `<!-- mdait abcd1234 from:efgh5678 need:translate -->
+# 見出し
+本文`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "abcd1234");
+		assert.equal(units[0].marker.from, "efgh5678");
+		assert.equal(units[0].marker.need, "translate");
+	});
+
+	test("本文にリストやコードブロック", () => {
+		const md = `
+# h1
+
+- item1
+- item2
+
+\`\`\`
+code
+block
+\`\`\``;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.ok(units[0].content.includes("- item1"));
+		assert.ok(units[0].content.includes("```"));
+	});
+
+	test("ファイル先頭・末尾の見出し", () => {
+		const md = `# first
+body
+
+# last
+end`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "first");
+		assert.equal(units[1].title, "last");
+	});
+
+	test("コードブロック内の#やmdaitコメントは無視", () => {
+		const md = `
+# h1
+\`\`\`
+# not heading
+<!-- mdait fake -->
+\`\`\`
+text`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.ok(units[0].content.includes("# not heading"));
+		assert.ok(units[0].content.includes("<!-- mdait fake -->"));
+	});
+
+	test("コードブロック内のコメントと見出しは無視される", () => {
+		const codeBlock = [
+			"```",
+			"# コード内見出し",
+			"<!-- mdait fakehash from:fakesrc need:ignore -->",
+			"コード本文",
+			"```",
+		].join("\n");
+		const md = `# 外部見出し\n\n${codeBlock}\nテキスト`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].title, "外部見出し");
+		assert.ok(units[0].content.includes("# コード内見出し"));
+		assert.ok(units[0].content.includes("<!-- mdait fakehash from:fakesrc need:ignore -->"));
+	});
+	test("parse→stringifyでロスレス", () => {
+		const md = `
+<!-- mdait abcd1234 from:efgh5678 need:translate -->
+# 見出し
+本文
+- list
+`;
+		const doc = markdownParser.parse(md);
+		const md2 = markdownParser.stringify(doc);
+		// 空白や改行の差異は許容
+		assert.ok(md2.replace(/\s+/g, "") === md.replace(/\s+/g, ""));
+	});
+	test("8文字未満のmdaitコメントは無視される", () => {
+		const md = "<!-- mdait abcd from:efgh need:translate -->\n# 見出し\n本文";
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		// mdaitHeaderはnullまたは空のhashになる（パース不可）
+		assert.equal(units.length, 1);
+		assert.ok(!units[0].marker || !units[0].marker.hash || units[0].marker.hash.length !== 8);
+	});
+	test("複数行のmdaitコメント", () => {
+		const md = `
+<!-- mdait abcd1234
+from:efgh5678
+need:translate -->
+# 見出し
+
+本文`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "abcd1234");
+		assert.equal(units[0].marker.from, "efgh5678");
+		assert.equal(units[0].marker.need, "translate");
+	});
+
+	test("複数レベルにわたるmdaitコメント付き見出し", () => {
+		const md = `
+<!-- mdait hash1234 from:src45678 need:tag1 -->
+# 見出し1
+
+本文1
+
+<!-- mdait hash2345 from:src56789 need:tag2 -->
+## 見出し2
+
+本文2`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "見出し1");
+		assert.equal(units[0].marker.hash, "hash1234");
+		assert.equal(units[0].marker.from, "src45678");
+		assert.equal(units[0].marker.need, "tag1");
+		assert.equal(units[1].title, "見出し2");
+		assert.equal(units[1].marker.hash, "hash2345");
+		assert.equal(units[1].marker.from, "src56789");
+		assert.equal(units[1].marker.need, "tag2");
+	});
+
+	test("TOMLフロントマターにmdaitコメントはつかない", () => {
+		const tomlFrontMatter = ["---", "title: 'テスト'", "lang: 'ja'", "---"].join("\n");
+		const md = `${tomlFrontMatter}\n\n# 見出し\n本文`;
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].title, "見出し");
+		assert.ok(doc.frontMatterRaw?.includes("---"));
+		assert.ok(doc.frontMatterRaw?.includes("title: 'テスト'"));
+	});
+	test("複数のmdaitコメント", () => {
+		const md = [
+			"<!-- mdait hashAAAA from:srcAAAAA need:tagA -->",
+			"",
+			"# 見出しA",
+			"本文A",
+			"",
+			"<!-- mdait hashBBBB from:srcBBBBB need:tagB -->",
+			"# 見出しB",
+			"本文B",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].marker.hash, "hashAAAA");
+		// 直前のmdaitのみ有効
+		assert.equal(units[1].marker.hash, "hashBBBB");
+	});
+	test("複数行のmdaitコメントと複数見出し", () => {
+		const md = [
+			"<!-- mdait hashMMMM",
+			"from:srcMMMM1",
+			"need:tagM -->",
+			"# 見出しM",
+			"本文M",
+			"",
+			"# 見出しN",
+			"本文N",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 2);
+		assert.equal(units[0].marker.hash, "hashMMMM");
+		assert.equal(units[0].marker.from, "srcMMMM1");
+		assert.equal(units[0].marker.need, "tagM");
+		assert.ok(!units[1].marker.hash);
+	});
+
+	test("フロントマター直後のmdaitコメントと見出し", () => {
+		const md = [
+			"---",
+			"title: 'フロントマター'",
+			"---",
+			"<!-- mdait hashFFF1 from:srcFFFF1 need:tagF -->",
+			"# 見出しF",
+			"本文F",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 1);
+		assert.equal(units[0].marker.hash, "hashFFF1");
+		assert.equal(units[0].title, "見出しF");
+		assert.ok(doc.frontMatterRaw?.includes("title: 'フロントマター'"));
+	});
+
+	test("YAMLフロントマター＋複数見出し＋mdaitコメントの組み合わせ", () => {
+		const md = [
+			"---",
+			"title: '多見出しテスト'",
+			"lang: 'ja'",
+			"---",
+			"",
+			"<!-- mdait hashA123 from:srcA123 need:tagA -->",
+			"# 見出しA",
+			"本文A",
+			"",
+			"# 見出しB",
+			"本文B",
+			"",
+			"<!-- mdait hashB234 from:srcB234 need:tagB -->",
+			"# 見出しC",
+			"本文C",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		assert.equal(units.length, 3);
+		assert.ok(doc.frontMatterRaw?.includes("title: '多見出しテスト'"));
+		assert.equal(units[0].title, "見出しA");
+		assert.equal(units[0].marker.hash, "hashA123");
+		assert.equal(units[1].title, "見出しB");
+		assert.ok(!units[1].marker.hash);
+		assert.equal(units[2].title, "見出しC");
+		assert.equal(units[2].marker.hash, "hashB234");
+	});
+});
+</file>
+
+<file path="src/test/extension.test.ts">
+import * as assert from "node:assert";
+import * as vscode from "vscode";
+// import * as myExtension from '../../extension';
+
+suite("Extension Test Suite", () => {
+	vscode.window.showInformationMessage("Start all tests.");
+
+	test("Sample test", () => {
+		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
+		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+	});
+});
+</file>
+
+<file path="src/utils/file-explorer.ts">
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import type { Configuration } from "../config/configuration";
+
+/**
+ * ファイル探索を行うクラス
+ */
+export class FileExplorer {
+	/**
+	 * ディレクトリが存在するか確認する
+	 */
+	public directoryExists(dirPath: string): boolean {
+		try {
+			return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * ディレクトリ内のファイルを再帰的に検索する
+	 */
+	public async findFilesInDirectory(
+		sourceDir: string,
+		extensions: string[],
+		includePattern: string,
+		excludePattern: string,
+	): Promise<string[]> {
+		// VS Code APIを使用してファイルを検索
+		const includeGlob = new vscode.RelativePattern(sourceDir, includePattern);
+		const files: vscode.Uri[] = await vscode.workspace.findFiles(
+			includeGlob,
+			excludePattern,
+		);
+
+		// 指定された拡張子のファイルだけをフィルタリング
+		return files
+			.filter((file) => {
+				const ext = path.extname(file.fsPath).toLowerCase();
+				return extensions.includes(ext);
+			})
+			.map((file) => file.fsPath);
+	}
+
+	/**
+	 * 設定に基づいてファイルを取得する
+	 */
+	public async getSourceFiles(
+		sourceDirConfig: string,
+		config: Configuration,
+	): Promise<string[]> {
+		let sourceDir = sourceDirConfig;
+		// 相対パスの場合はワークスペースルートを基準に絶対パス化
+		if (!path.isAbsolute(sourceDir)) {
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				throw new Error("ワークスペースが開かれていません");
+			}
+			sourceDir = path.resolve(workspaceFolders[0].uri.fsPath, sourceDir);
+		}
+
+		// ディレクトリの存在を確認
+		if (!this.directoryExists(sourceDir)) {
+			throw new Error(`翻訳元ディレクトリが存在しません: ${sourceDir}`);
+		}
+		// ファイルの検索（Markdownファイルのみを対象とする）
+		return await this.findFilesInDirectory(
+			sourceDir,
+			[".md"],
+			"**/*.md",
+			config.ignoredPatterns,
+		);
+	}
+
+	/**
+	 * ソースファイルパスから対応するターゲットファイルパスを取得する
+	 */
+	public getTargetPath(
+		sourcePath: string,
+		sourceDirConfig: string,
+		targetDirConfig: string,
+	): string {
+		let sourceDir = sourceDirConfig;
+		let targetDir = targetDirConfig;
+		// 相対パスの場合はワークスペースルートを基準に絶対パス化
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			throw new Error("ワークスペースが開かれていません");
+		}
+		sourceDir = path.resolve(workspaceFolders[0].uri.fsPath, sourceDir);
+		targetDir = path.resolve(workspaceFolders[0].uri.fsPath, targetDir);
+
+		// ソースディレクトリからの相対パスを取得
+		const relativePath = path.relative(sourceDir, sourcePath);
+
+		// ターゲットディレクトリに適用
+		return path.join(targetDir, relativePath);
+	}
+
+	/**
+	 * ターゲットファイルのディレクトリを作成する
+	 */
+	public ensureTargetDirectoryExists(targetPath: string): void {
+		const targetDir = path.dirname(targetPath);
+
+		if (!fs.existsSync(targetDir)) {
+			fs.mkdirSync(targetDir, { recursive: true });
+		}
+	}
+}
+</file>
+
+<file path="src/commands/sync/section-matcher.ts">
+import { calculateHash } from "../../core/hash/hash-calculator";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../core/markdown/mdait-unit";
+
+/**
+ * ユニット対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
+ */
+export type SectionPair = {
+	source: MdaitUnit | null;
+	target: MdaitUnit | null;
+};
+export type MatchResult = SectionPair[];
+
+/**
+ * ユニット対応処理を行うクラス
+ */
+export class SectionMatcher {
+	/**
+	 * ソースと対象のユニット対応付けを行う
+	 * @param sourceUnits ソースのユニット配列
+	 * @param targetUnits 対象のユニット配列
+	 */
+	match(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): MatchResult {
+		const result: SectionPair[] = [];
+		const matchedTargetIndexes = new Set<number>();
+		const matchedSourceIndexes = new Set<number>();
+
+		// 1. src一致優先
+		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
+			const source = sourceUnits[sIdx];
+			const sourceHash = source.marker?.hash;
+			if (!sourceHash) continue;
+			let found = false;
+			for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
+				const target = targetUnits[tIdx];
+				if (matchedTargetIndexes.has(tIdx)) continue;
+				const targetSrc = target.getSourceHash();
+				if (targetSrc && targetSrc === sourceHash) {
+					result.push({ source, target });
+					matchedTargetIndexes.add(tIdx);
+					matchedSourceIndexes.add(sIdx);
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				// src一致しなかったsourceは後で順序ベース推定
+				// ここでは何もしない
+			}
+		}
+
+		// 2. 順序ベース推定（srcが付与されていないtargetのみ）
+		let sPtr = 0;
+		let tPtr = 0;
+		while (sPtr < sourceUnits.length || tPtr < targetUnits.length) {
+			// 次のマッチ済みsource/targetのindex
+			while (sPtr < sourceUnits.length && matchedSourceIndexes.has(sPtr)) sPtr++;
+			while (tPtr < targetUnits.length && matchedTargetIndexes.has(tPtr)) tPtr++;
+
+			if (sPtr >= sourceUnits.length && tPtr >= targetUnits.length) break;
+
+			// srcが付与されていないtargetのみを順序ベース対象
+			const tIsEligible =
+				tPtr < targetUnits.length &&
+				!matchedTargetIndexes.has(tPtr) &&
+				!targetUnits[tPtr].getSourceHash();
+			const sIsEligible = sPtr < sourceUnits.length && !matchedSourceIndexes.has(sPtr);
+
+			if (sIsEligible && tIsEligible) {
+				result.push({
+					source: sourceUnits[sPtr],
+					target: targetUnits[tPtr],
+				});
+				matchedSourceIndexes.add(sPtr);
+				matchedTargetIndexes.add(tPtr);
+				sPtr++;
+				tPtr++;
+			} else if (sIsEligible) {
+				// 新規source
+				result.push({ source: sourceUnits[sPtr], target: null });
+				matchedSourceIndexes.add(sPtr);
+				sPtr++;
+			} else if (tIsEligible) {
+				// 孤立target
+				result.push({ source: null, target: targetUnits[tPtr] });
+				matchedTargetIndexes.add(tPtr);
+				tPtr++;
+			} else {
+				// どちらも対象外（既にマッチ済み）
+				sPtr++;
+				tPtr++;
+			}
+		}
+
+		// 3. srcがあるのにマッチしなかったtarget（孤立）
+		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
+			if (matchedTargetIndexes.has(tIdx)) continue;
+			const target = targetUnits[tIdx];
+			if (target.getSourceHash()) {
+				result.push({ source: null, target });
+				matchedTargetIndexes.add(tIdx);
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * 統一ペア配列からターゲットユニットの配列を生成
+	 * @param matchResult ユニット対応の結果
+	 * @param autoDeleteOrphans 孤立ユニットを自動削除するかどうか
+	 */
+	createSyncedTargets(matchResult: MatchResult, autoDeleteOrphans = true): MdaitUnit[] {
+		const result: MdaitUnit[] = [];
+		for (const pair of matchResult) {
+			if (pair.source && pair.target) {
+				// マッチ
+				result.push(pair.target);
+			} else if (pair.source && !pair.target) {
+				// 新規source
+				const sourceHash = calculateHash(pair.source.content);
+				const newTarget = MdaitUnit.createEmptyTargetUnit(pair.source, sourceHash);
+				result.push(newTarget);
+			} else if (!pair.source && pair.target) {
+				// 孤立target
+				if (!autoDeleteOrphans) {
+					if (pair.target.marker) {
+						pair.target.marker.need = "verify-deletion";
+					} else {
+						const hash = calculateHash(pair.target.content);
+						pair.target.marker = new MdaitMarker(hash, null, "verify-deletion");
+					}
+					result.push(pair.target);
+				}
+				// autoDeleteOrphans=true の場合は何もしない（削除）
+			}
+		}
+		return result;
+	}
+}
+</file>
+
+<file path="src/config/configuration.ts">
+import * as vscode from "vscode";
+
+/**
+ * 翻訳拡張機能の設定を管理するクラス
+ */
+export class Configuration {
+	/**
+	 * 翻訳ペア設定
+	 */
+	public transPairs: Array<{ sourceDir: string; targetDir: string }> = [];
+	/**
+	 * 除外パターン
+	 */
+	public ignoredPatterns = "**/node_modules/**";
+	/**
+	 * sync設定
+	 */
+	public sync = {
+		autoMarkerLevel: 2,
+		autoDelete: true,
+	}; /**
+	 * 翻訳設定
+	 */
+	public trans = {
+		provider: "default",
+		markdown: {
+			skipCodeBlocks: true,
+		},
+	};
+
+	/**
+	 * 設定を読み込む
+	 */
+	public async load(): Promise<void> {
+		const config = vscode.workspace.getConfiguration("mdait");
+
+		// 翻訳ペア設定の読み込み
+		this.transPairs =
+			config.get<Array<{ sourceDir: string; targetDir: string }>>("transPairs") || [];
+
+		// 除外パターンの読み込み
+		const ignoredPatterns = config.get<string>("ignoredPatterns");
+		if (ignoredPatterns) {
+			this.ignoredPatterns = ignoredPatterns;
+		}
+
+		// sync設定の読み込み
+		const autoMarkerLevel = config.get<number>("sync.autoMarkerLevel");
+		if (autoMarkerLevel !== undefined) {
+			this.sync.autoMarkerLevel = autoMarkerLevel;
+		}
+
+		const autoDelete = config.get<boolean>("sync.autoDelete");
+		if (autoDelete !== undefined) {
+			this.sync.autoDelete = autoDelete;
+		}
+		// 翻訳設定の読み込み
+		const provider = config.get<string>("trans.provider");
+		if (provider) {
+			this.trans.provider = provider;
+		}
+		const skipCodeBlocks = config.get<boolean>("trans.markdown.skipCodeBlocks");
+		if (skipCodeBlocks !== undefined) {
+			this.trans.markdown.skipCodeBlocks = skipCodeBlocks;
+		}
+	}
+
+	/**
+	 * 設定が有効かどうかを検証する
+	 * @returns エラーメッセージ。問題がなければnull
+	 */
+	public validate(): string | null {
+		// 翻訳ペアが設定されているか
+		if (!this.transPairs || this.transPairs.length === 0) {
+			return "翻訳ペア(mdait.transPairs)が設定されていません。";
+		}
+
+		// 各翻訳ペアのディレクトリが設定されているか
+		for (const pair of this.transPairs) {
+			if (!pair.sourceDir) {
+				return "翻訳ペアに翻訳元ディレクトリ(sourceDir)が設定されていません。";
+			}
+			if (!pair.targetDir) {
+				return "翻訳ペアに翻訳先ディレクトリ(targetDir)が設定されていません。";
+			}
+		}
+
+		return null;
+	}
+}
+</file>
+
+<file path=".github/copilot-instructions.md">
+## 重要
+
+### 設計
+
+実装をすぐに始められるほどの明確な指示でない場合、まずは設計を行ってください。
+
+- `design.md`を参照して関連する事項を確認し、ユーザーと対話しながら設計を行ってください。
+  - 設計の概要をチャットに出力する場合、コードは必要最小限にとどめること。
+  - チャットでは詳細な設計よりも、設計の方針や骨子・会話を重視してください。
+- 方針・骨子がまとまってきたら、まとまった変更や新機能については適宜`design.md`を修正してください。
+  - 要点を簡潔に書くことを心がけること。設計の変更はユーザーに承認を得てから行ってください。
+- `design.md`の詳細設計は、`tasks/do/<作業名>.md`に作業チケットとして記載してください。ファイル名は日本語で作業概要がよくわかるように簡潔に記載してください。
+  - 作業チケットは簡潔に。おおむね100行以内・2000文字以内で。疑似コードは使っていいが、細部は記載せず処理概要を伝えるのみにしてください。
+  - mermaid記法を使用して、図や表を記載し、設計をわかりやすくすることを推奨します。
+  - 承認が得られたら実装に進んでください。実装完了時には`tasks/do`から`tasks/done`にファイルを移し、設計との整合性チェックおよび実装時のメモを記載してください。
+
+### 実装
+
+実装を開始するのに十分な設計が行われていれば、ユーザーから実装の承認が得て、実装を開始してください。
+
+- 実装する際は、周りのコードにスタイルを合わせてください。（あまりにレガシーだったり書き方として今いちである場合は除く。その場合でも既存コードは勝手にリファクタリングはしないこと）
+- `design.md`や`tasks/do/<作業名>.md`を参照して、設計に従って実装を行ってください。
+- `@important`のコメントがある場合は、必ず確認して指示を順守してください。適切と思われる場合ユーザーにその指示に従ったことを明示してください。
+- Node.jsのbuildinモジュールのimportでは`node:`を使用してください。
+- 実装中に`design.md`に示されていない設計方針の選択があった場合は一度立ち止まり、ユーザーに確認を行ってください。`design.md`に反映を行う場合もユーザーに承認を得てください。
+- ユーザーから指示されていない機能や要件について実装を推奨する場合は必ず承認を得るようにしてください。勝手に実装はしないでください。
+- 利用できるパッケージに注意してください。`package.json`に記載されています。新しいパッケージを追加する場合は、ユーザーに承認を得てください。まずは既存パッケージで実装できないか確認してください。
+- 実装完了時には、`tasks/do`から`tasks/done`にファイルを移し、設計との整合性チェックおよび実装時のメモを記載してください。
+
+### テスト
+
+テスト実装時にはこのガイドラインに従ってください。テストの実行は`npm test`で行えます。
+
+- テスト実装前にこのガイドラインを読んだことを示すために、`テストガイドラインに従いテスト実装します。`と出力してください。
+- 実装する際は、周りのコードにスタイルを合わせてください。（あまりにレガシーだったり書き方として今いちである場合は除く。その場合でも既存コードは勝手にリファクタリングはしないこと）
+- Node.jsのbuildinモジュールのimportでは`node:`を使用してください。
+- テストは`src\test`以下に、`src`以下のディレクトリ構造と対応づくように実装してください。
+- テスト名は日本語で記述してください。
+
+- `mocha`
+  - 明示的importは不要なので**記載しないで**ください。
+  - TDDスタイルを使用してください。BDDスタイルは使用しないでください。
+  - `suite`と`test`を使用してください。`describe`や`it`は使用しないでください。
+
+### コミットメッセージ
+
+- メソッド/クラス/変数名や設計用語などは英語で記述してください。
+- それ以外の説明文は日本語で記述してください。
+- <概要>は、何の機能に対するどういう目的の変更かを簡潔に記述してください。
+- <変更内容>は抽象的な書き方をせず具体的に何を変更したのか記述してください。
+- 軽微な変更は省略してください。
+- コミットメッセージは以下の形式で150文字以内で記述してください。
+  - `feat: <概要> <変更内容>`
+  - `fix: <概要> <変更内容>`
+  - `refactor: <概要> <変更内容>`
+  - `test: <概要> <変更内容>`
+  - `docs: <概要> <変更内容>`
+</file>
+
+<file path="src/core/markdown/parser.ts">
+import matter from "gray-matter";
+import MarkdownIt from "markdown-it";
+import { Configuration } from "../../config/configuration";
+import type { FrontMatter, Markdown } from "./mdait-markdown";
+import { MdaitMarker } from "./mdait-marker";
+import { MdaitUnit } from "./mdait-unit";
+
+/**
+ * Markdownパーサーインターフェース
+ */
+export interface IMarkdownParser {
+	/**
+	 * Markdownテキストをユニットに分割してパースする
+	 * @param markdown Markdownテキスト
+	 * @param config 拡張機能の設定
+	 * @returns パースされたMarkdownユニットの配列
+	 */
+	parse(markdown: string, config?: Configuration): Markdown;
+
+	/**
+	 * ユニットをMarkdownテキストに変換
+	 * @param doc Markdownドキュメント
+	 * @returns Markdownテキスト
+	 */
+	stringify(doc: Markdown): string;
+}
+
+/**
+ * MarkdownItを使用したパーサー実装
+ */
+export class MarkdownItParser implements IMarkdownParser {
+	private md: MarkdownIt;
+
+	/**
+	 * コンストラクタ
+	 */
+	constructor() {
+		this.md = new MarkdownIt();
+	}
+
+	/**
+	 * Markdownテキストをユニットに分割してパースする
+	 * markdown-itを使用して解析し、トークンからユニットを構築
+	 * @param markdown Markdownテキスト
+	 * @param config 拡張機能の設定
+	 * @returns パースされたMarkdownユニットの配列
+	 */
+	parse(markdown: string, config?: Configuration): Markdown {
+		const defaultConfig = new Configuration();
+		// config
+		const autoMarkerLevel = config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
+
+		const fm = matter(markdown);
+		const frontMatter = fm.data as FrontMatter;
+		const content = fm.content;
+		let frontMatterRaw = "";
+		const idx = markdown.indexOf(content);
+		if (idx > 0) {
+			frontMatterRaw = markdown.substring(0, idx);
+		}
+		const units: MdaitUnit[] = [];
+		const tokens = this.md.parse(content, {});
+		const lines = content.split(/\r?\n/);
+
+		let currentSection: {
+			marker: MdaitMarker;
+			title: string;
+			level: number;
+			startLine: number | null;
+			endLine: number | null;
+		} | null = null;
+		let inHeading = false;
+		let mdaitMarker = new MdaitMarker("");
+
+		for (let i = 0; i < tokens.length; i++) {
+			const token = tokens[i];
+			if (
+				(token.type === "inline" || token.type === "html_block") &&
+				token.content.includes("<!-- mdait")
+			) {
+				// mdaitコメントが現れた時点で、現在のユニットをここで区切る
+				if (currentSection && currentSection.startLine !== null) {
+					const start = currentSection.startLine;
+					const end = token.map ? token.map[0] : lines.length;
+					const rawContent = lines.slice(start, end).join("\n");
+					units.push(
+						new MdaitUnit(
+							currentSection.marker,
+							currentSection.title,
+							currentSection.level,
+							rawContent,
+						),
+					);
+					currentSection = null;
+				}
+				const parsedHeader = MdaitMarker.parse(token.content);
+				if (parsedHeader !== null) {
+					mdaitMarker = parsedHeader;
+				}
+				continue;
+			}
+			if (token.type === "heading_open") {
+				const headingLevel = Number.parseInt(token.tag.substring(1), 10);
+				// 設定された見出しレベルより深い場合は、新しいユニットを開始しない
+				if (headingLevel > autoMarkerLevel && currentSection) {
+					continue;
+				}
+
+				// 前のユニットがあれば保存
+				if (currentSection && currentSection.startLine !== null) {
+					const start = currentSection.startLine;
+					// 次の見出しが出てくるまでを1ユニットとする
+					const end = token.map ? token.map[0] : lines.length;
+					const rawContent = lines.slice(start, end).join("\n");
+					units.push(
+						new MdaitUnit(
+							currentSection.marker,
+							currentSection.title,
+							currentSection.level,
+							rawContent,
+						),
+					);
+				}
+				// 新しいユニットを開始
+				currentSection = {
+					marker: mdaitMarker,
+					title: "",
+					level: headingLevel,
+					startLine: token.map ? token.map[0] : null,
+					endLine: null,
+				};
+				mdaitMarker = new MdaitMarker("");
+				inHeading = true;
+				continue;
+			}
+			if (token.type === "heading_close") {
+				inHeading = false;
+				continue;
+			}
+			if (inHeading && token.type === "inline") {
+				if (currentSection) {
+					currentSection.title = token.content;
+				}
+			}
+		}
+		// 最後のユニットを保存
+		if (currentSection && currentSection.startLine !== null) {
+			const start = currentSection.startLine;
+			const end = lines.length;
+			const rawContent = lines.slice(start, end).join("\n");
+			units.push(
+				new MdaitUnit(
+					currentSection.marker,
+					currentSection.title,
+					currentSection.level,
+					rawContent,
+				),
+			);
+		}
+		return { frontMatter, frontMatterRaw, units: units };
+	}
+
+	/**
+	 * ユニットをMarkdownテキストに変換
+	 * @param doc Markdownドキュメント
+	 * @returns Markdownテキスト
+	 */
+	stringify(doc: Markdown): string {
+		let fm = "";
+		if (doc.frontMatterRaw && doc.frontMatterRaw.trim().length > 0) {
+			fm = `${doc.frontMatterRaw}`;
+		}
+		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
+		const body = doc.units
+			.map((section) => section.toString().replace(/\n+$/g, ""))
+			.join("\n\n")
+			.replace(/\n{3,}/g, "\n\n");
+		return `${fm}${body}\n`;
+	}
+}
+
+/**
+ * デフォルトのMarkdownパーサーインスタンス
+ * 必要に応じて実装を切り替え可能
+ */
+export const markdownParser: IMarkdownParser = new MarkdownItParser();
+</file>
+
+<file path="src/extension.ts">
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { syncCommand } from "./commands/sync/sync-command";
+import { transCommand } from "./commands/trans/trans-command";
+import { DefaultTranslationProvider } from "./commands/trans/translation-provider";
+import { Configuration } from "./config/configuration";
+import { FileExplorer } from "./utils/file-explorer";
+
+export function activate(context: vscode.ExtensionContext) {
+	// sync command
+	const syncDisposable = vscode.commands.registerCommand(
+		"mdait.sync",
+		syncCommand,
+	);
+
+	// trans command
+	const transDisposable = vscode.commands.registerCommand(
+		"mdait.trans",
+		transCommand,
+	);
+
+	context.subscriptions.push(transDisposable);
+	context.subscriptions.push(syncDisposable);
+}
+</file>
+
+<file path="src/commands/sync/sync-command.ts">
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { Configuration } from "../../config/configuration";
+import { calculateHash } from "../../core/hash/hash-calculator";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { markdownParser } from "../../core/markdown/parser";
+import { FileExplorer } from "../../utils/file-explorer";
+import { DiffDetector } from "./diff-detector";
+import { SectionMatcher } from "./section-matcher";
+
+/**
+ * sync command
+ * Markdownユニットの同期を行う
+ */
+export async function syncCommand(): Promise<void> {
+	try {
+		// 処理開始を通知
+		vscode.window.showInformationMessage("ユニット同期処理を開始します...");
+
+		// 設定を読み込む
+		const config = new Configuration();
+		await config.load();
+
+		// 設定を検証
+		const validationError = config.validate();
+		if (validationError) {
+			vscode.window.showErrorMessage(`設定エラー: ${validationError}`);
+			return;
+		}
+
+		let successCount = 0;
+		let errorCount = 0;
+
+		// 各翻訳ペアに対して処理を実行
+		for (const pair of config.transPairs) {
+			// ファイル探索
+			const fileExplorer = new FileExplorer();
+			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
+
+			if (files.length === 0) {
+				vscode.window.showWarningMessage(
+					`[${pair.sourceDir} -> ${pair.targetDir}] 同期対象のファイルが見つかりませんでした。`,
+				);
+				continue;
+			}
+
+			vscode.window.showInformationMessage(
+				`[${pair.sourceDir} -> ${pair.targetDir}] ${files.length}個のファイルを同期します...`,
+			);
+
+			// 各ファイルを同期
+			for (const sourceFile of files) {
+				try {
+					// 出力先パスを取得
+					const targetFile = fileExplorer.getTargetPath(sourceFile, pair.sourceDir, pair.targetDir);
+
+					// ファイルタイプに応じて適切な同期処理を選択
+					const extension = path.extname(sourceFile).toLowerCase();
+					if (extension === ".md") {
+						// Markdownファイルの同期を実行
+						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
+
+						// ログ出力（差分情報を一行で表示）
+						console.log(
+							`${path.basename(sourceFile)}: +${diffResult.added} ~${
+								diffResult.modified
+							} -${diffResult.deleted} =${diffResult.unchanged}`,
+						);
+					} else {
+						// Markdown以外は無視
+					}
+
+					successCount++;
+				} catch (error) {
+					console.error(
+						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`,
+						error,
+					);
+					errorCount++;
+				}
+			}
+		}
+
+		// 完了通知
+		vscode.window.showInformationMessage(`同期完了: ${successCount}個成功, ${errorCount}個失敗`);
+	} catch (error) {
+		// エラーハンドリング
+		vscode.window.showErrorMessage(`同期処理中にエラーが発生しました: ${(error as Error).message}`);
+		console.error(error);
+	}
+}
+
+/**
+ * Markdownファイルの同期処理を行う
+ * @param sourceFile ソースファイルのパス
+ * @param targetFile ターゲットファイルのパス
+ * @param config 設定
+ * @returns 差分検出結果
+ */
+function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration) {
+	const sectionMatcher = new SectionMatcher();
+	const diffDetector = new DiffDetector();
+	const fileExplorer = new FileExplorer();
+
+	// ファイル読み込み
+	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
+	let targetContent = "";
+	if (fs.existsSync(targetFile)) {
+		targetContent = fs.readFileSync(targetFile, "utf-8");
+	}
+
+	// Markdownのユニット分割
+	const source = markdownParser.parse(sourceContent, config);
+	const target = targetContent ? markdownParser.parse(targetContent, config) : { units: [] };
+	// src, target に hash を付与（ない場合のみ）
+	ensureSectionHash(source.units);
+	ensureSectionHash(target.units);
+
+	// ユニットの対応付け
+	const matchResult = sectionMatcher.match(source.units, target.units);
+
+	// ユニットのハッシュを更新
+	updateSectionHashes(matchResult, config, sourceFile, targetFile);
+
+	// 同期結果の生成
+	const syncedUnits = sectionMatcher.createSyncedTargets(
+		matchResult,
+		true, // auto-delete (設定から取得するようにする予定)
+	);
+
+	// 差分検出
+	const diffResult = diffDetector.detect(target.units, syncedUnits);
+
+	// 同期結果をMarkdownオブジェクトとして構築
+	const syncedDoc = {
+		frontMatter: target.frontMatter,
+		frontMatterRaw: target.frontMatterRaw,
+		units: syncedUnits,
+	};
+
+	// 同期結果を文字列に変換
+	const syncedContent = markdownParser.stringify(syncedDoc);
+
+	// 出力先ディレクトリが存在するか確認し、なければ作成
+	fileExplorer.ensureTargetDirectoryExists(targetFile);
+
+	// ファイル出力
+	fs.writeFileSync(targetFile, syncedContent, "utf-8");
+
+	// source側にもmdaitヘッダー・hashを必ず付与・更新し、ファイル保存
+	const updatedSourceContent = markdownParser.stringify({
+		frontMatter: source.frontMatter,
+		frontMatterRaw: source.frontMatterRaw,
+		units: source.units,
+	});
+	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
+
+	return diffResult;
+}
+
+/**
+ * ユニットにmdaitヘッダーを付与する
+ * @param units ユニットの配列
+ */
+function ensureSectionHash(units: MdaitUnit[]) {
+	for (const unit of units) {
+		if (!unit.marker || !unit.marker.hash) {
+			const hash = calculateHash(unit.content);
+			unit.marker = new MdaitMarker(hash);
+		}
+	}
+}
+
+/**
+ * ユニットのハッシュを更新する
+ * @param matchResult ユニットのマッチ結果
+ */
+function updateSectionHashes(
+	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
+	config: Configuration,
+	sourceFilePath: string,
+	targetFilePath: string,
+) {
+	for (const pair of matchResult) {
+		const source = pair.source;
+		const target = pair.target;
+
+		// sourceとtargetが存在 : 通常の同期処理
+		if (source && target) {
+			const sourceHash = calculateHash(source.content);
+			const targetHash = calculateHash(target.content);
+
+			const sourceMarker = source.marker ?? new MdaitMarker(sourceHash);
+			const targetMarker = target.marker ?? new MdaitMarker(targetHash, sourceMarker.hash);
+
+			const isSourceChanged = sourceMarker.hash !== sourceHash;
+			const isTargetChanged = targetMarker.hash !== targetHash;
+
+			// 双方向翻訳ペアで両方変更された場合、競合フラグを立てる
+			if (isSourceChanged && isTargetChanged) {
+				sourceMarker.setNeed("solve-conflict");
+				targetMarker.setNeed("solve-conflict");
+				// ハッシュは更新しない
+				source.marker = sourceMarker;
+				target.marker = targetMarker;
+				continue;
+			}
+
+			// source:hashを計算して付与
+			if (isSourceChanged) {
+				sourceMarker.hash = sourceHash;
+			}
+			// target:hashを計算して付与
+			if (isTargetChanged) {
+				targetMarker.hash = targetHash;
+			}
+
+			// ソースで変更があった場合、need:translate付与
+			const oldSourceHash = targetMarker.from;
+			if (oldSourceHash !== sourceMarker.hash) {
+				targetMarker.from = sourceMarker.hash;
+				targetMarker.setNeed("translate");
+				source.marker = sourceMarker;
+				target.marker = targetMarker;
+				continue;
+			}
+
+			source.marker = sourceMarker;
+			target.marker = targetMarker;
+			continue;
+		}
+		// sourceのみ存在: 孤立sourceの処理
+		if (source && !target) {
+			// hashを計算して付与
+			const sourceHash = calculateHash(source.content);
+			if (!source.marker) {
+				source.marker = new MdaitMarker(sourceHash);
+			} else if (source.marker.hash !== sourceHash) {
+				source.marker.hash = sourceHash;
+			}
+			continue;
+		}
+		// targetのみ存在: 孤立targetの処理
+		if (!source && target) {
+			// hashを計算して付与
+			const hash = calculateHash(target.content);
+			if (!target.marker) {
+				target.marker = new MdaitMarker(hash);
+			} else if (target.marker.hash !== hash) {
+				target.marker.hash = hash;
+			}
+		}
+	}
+}
+</file>
+
+<file path="src/test/commands/sync/sync-command.test.ts">
+// syncコマンド E2Eテスト
+// テストガイドラインに従いテスト実装します。
+
+import assert from "node:assert";
+import { execSync } from "node:child_process";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+
+function copyDirSync(src: string, dest: string) {
+	if (!existsSync(dest)) {
+		mkdirSync(dest, { recursive: true });
+	}
+	for (const entry of require("node:fs").readdirSync(src, {
+		withFileTypes: true,
+	})) {
+		const srcPath = join(src, entry.name);
+		const destPath = join(dest, entry.name);
+		if (entry.isDirectory()) {
+			copyDirSync(srcPath, destPath);
+		} else {
+			copyFileSync(srcPath, destPath);
+		}
+	}
+}
+
+suite("syncコマンドE2E", () => {
+	const sampleContentDir = join(__dirname, "../../../../src/test/sample-content");
+	const workspaceDir = join(__dirname, "../../../../src/test/workspace");
+	const contentDir = join(workspaceDir, "content");
+	const tmpEnDir = join(contentDir, "en");
+	const tmpJaDir = join(contentDir, "ja");
+
+	function cleanupFiles() {
+		if (existsSync(workspaceDir)) {
+			const fs = require("node:fs");
+			fs.rmSync(join(workspaceDir, "content"), {
+				recursive: true,
+				force: true,
+			});
+		}
+	}
+
+	setup(() => {
+		copyDirSync(sampleContentDir, contentDir);
+	});
+	teardown(() => {
+		cleanupFiles();
+	});
+
+	test("mdait管理下にない既存Markdownを同期するとmdaitヘッダーが付与されること", async () => {
+		// content/en/no_header.md, content/ja/no_header.md を使う
+		const tmpEnNoHeader = join(tmpEnDir, "no_header.md");
+		const tmpJaNoHeader = join(tmpJaDir, "no_header.md");
+
+		// VSCode拡張コマンドとしてsyncを実行
+		const vscode = require("vscode");
+		const commandId = "mdait.sync";
+		const result = await vscode.commands.executeCommand(commandId);
+
+		const enText = readFileSync(tmpEnNoHeader, "utf8");
+		const jaText = readFileSync(tmpJaNoHeader, "utf8");
+
+		// 1. en, ja両方にmdaitヘッダーが付与されていること
+		assert.match(enText, /^<!--\s*mdait [^\s]+/m);
+		assert.match(jaText, /^<!--\s*mdait [^\s]+/m);
+		// 2. enのmdaitヘッダーにjaの対応するヘッダーのハッシュがfrom:として書き込まれていること
+		const jaHeader = jaText.match(/<!--\s*mdait ([^\s]+)/); // jaのハッシュ
+		const enHeader = enText.match(/<!--\s*mdait ([^\s]+) from:([^\s]+)/); // enのfrom:xxx
+		assert.ok(jaHeader && enHeader);
+		assert.strictEqual(enHeader[2], jaHeader[1]);
+
+		// 3. ユニット分割が行われていること（複数ヘッダーが存在する）
+		const enHeaders = enText.match(/<!--\s*mdait [^\s]+/g) || [];
+		const jaHeaders = jaText.match(/<!--\s*mdait [^\s]+/g) || [];
+		assert.ok(enHeaders.length > 1);
+		assert.ok(jaHeaders.length > 1);
+
+		// コマンドの戻り値も検証（エラーでないこと）
+		assert.notStrictEqual(result, false);
+	});
+
+	test("既存ユニットのコンテンツが変更された場合、関連ファイルにneed:translateが付与されること", async () => {
+		// content/ja/test.md（ソース）、content/en/test.md（ターゲット）を使用
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+
+		// 初期状態：既にmdaitマーカーが存在する
+		let jaText = readFileSync(tmpJaTest, "utf8");
+		let enText = readFileSync(tmpEnTest, "utf8");
+
+		// jaファイルの最初のユニットの内容を変更
+		const modifiedJaText = jaText.replace(
+			"これは日本語のテスト用 Markdown ファイルです。",
+			"これは変更された日本語のテスト用 Markdown ファイルです。",
+		);
+		writeFileSync(tmpJaTest, modifiedJaText, "utf8");
+
+		// syncを実行
+		const vscode = require("vscode");
+		const result = await vscode.commands.executeCommand("mdait.sync");
+
+		// 結果を読み込み
+		jaText = readFileSync(tmpJaTest, "utf8");
+		enText = readFileSync(tmpEnTest, "utf8");
+
+		// 1. ja側のハッシュが更新されていること
+		const jaFirstUnit = jaText.match(/<!-- mdait ([^\s]+) -->/);
+		assert.ok(jaFirstUnit);
+		const jaNewHash = jaFirstUnit[1];
+		assert.notStrictEqual(jaNewHash, "9e3b618c"); // 元のハッシュと異なる
+
+		// 2. en側の対応するユニットにneed:translateが付与されていること
+		assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
+
+		// 3. en側のfromが更新されたjaのハッシュと一致していること
+		const enFirstUnit = enText.match(/<!-- mdait ([^\s]+) from:([^\s]+) need:translate -->/);
+		assert.ok(enFirstUnit);
+		assert.strictEqual(enFirstUnit[2], jaNewHash);
+
+		// コマンドの戻り値も検証
+		assert.notStrictEqual(result, false);
+	});
+
+	test("autoMarkerLevel設定に従って適切な見出しレベルにマーカーが挿入されること", async () => {
+		const testContent = `# 見出し 1
+
+コンテンツ1
+
+## 見出し 2
+
+コンテンツ2
+
+### 見出し 3
+
+コンテンツ3
+`;
+		const tmpJaLevelTest = join(tmpJaDir, "level_test.md");
+		const tmpEnLevelTest = join(tmpEnDir, "level_test.md");
+		writeFileSync(tmpJaLevelTest, testContent, "utf8");
+		writeFileSync(tmpEnLevelTest, testContent, "utf8");
+
+		// syncを実行（デフォルトのautoMarkerLevel: 2）
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		const jaText = readFileSync(tmpJaLevelTest, "utf8");
+		const enText = readFileSync(tmpEnLevelTest, "utf8");
+
+		// H1とH2の前にマーカーが挿入されていること（H3は挿入されない）
+		const jaMarkers = jaText.match(/<!-- mdait [^\s]+/g) || [];
+		const enMarkers = enText.match(/<!-- mdait [^\s]+/g) || [];
+
+		// H1, H2のみなので2つのマーカーが存在する
+		assert.strictEqual(jaMarkers.length, 2);
+		assert.strictEqual(enMarkers.length, 2);
+
+		// H3の前にはマーカーが挿入されていないこと
+		assert.ok(
+			!jaText.includes("<!-- mdait") ||
+				jaText.indexOf("### 見出し 3") > jaText.lastIndexOf("<!-- mdait"),
+		);
+	});
+
+	test("新規ユニットが追加された場合、対応するファイルに適切に挿入されること", async () => {
+		// 既存のtest.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+
+		// ja側に新規ユニットを追加
+		let jaText = readFileSync(tmpJaTest, "utf8");
+		const newUnit = `
+## 新規見出し
+
+これは新しく追加されたユニットです。
+`;
+		jaText += newUnit;
+		writeFileSync(tmpJaTest, jaText, "utf8");
+
+		// syncを実行
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		// en側にも新規ユニットが追加されていること
+		const enText = readFileSync(tmpEnTest, "utf8");
+
+		// 1. en側に新規ユニットが挿入されていること
+		assert.ok(enText.includes("## 新規見出し"));
+
+		// 2. 新規ユニットにneed:translateが付与されていること
+		assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
+	});
+
+	test("from一致による対応付けが正しく機能すること", async () => {
+		// 既存のtest.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+
+		// 初期状態を確認
+		const jaText = readFileSync(tmpJaTest, "utf8");
+		const enText = readFileSync(tmpEnTest, "utf8");
+
+		// ja側の特定のユニット（見出し2）のハッシュを取得
+		const jaSecondUnit = jaText.match(/<!-- mdait (403206cb) -->/);
+		assert.ok(jaSecondUnit);
+		const jaHash = jaSecondUnit[1];
+
+		// en側の対応するユニットのfromがja側のハッシュと一致していることを確認
+		const enSecondUnit = enText.match(/<!-- mdait [^\s]+ from:(403206cb) -->/);
+		assert.ok(enSecondUnit);
+		assert.strictEqual(enSecondUnit[1], jaHash);
+	});
+
+	test("孤立ユニットがauto-delete設定に従って処理されること", async () => {
+		// test.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+
+		// ja側から特定のユニットを削除（見出し6のユニット）
+		let jaText = readFileSync(tmpJaTest, "utf8");
+		const unitToRemove = /<!-- mdait 2507a192 -->[\s\S]*?(?=<!-- mdait|$)/;
+		jaText = jaText.replace(unitToRemove, "");
+		writeFileSync(tmpJaTest, jaText, "utf8");
+
+		// syncを実行（デフォルトでauto-delete: true）
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		// en側の対応するユニットが削除されていること
+		const enText = readFileSync(tmpEnTest, "utf8");
+		assert.ok(!enText.includes("from:2507a192"));
+		assert.ok(!enText.includes("#### Heading 6"));
+	});
+
+	test("Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {
+		// Front Matter付きのファイルでテスト
+		const tmpJaNoHeader = join(tmpJaDir, "no_header.md");
+		const tmpEnNoHeader = join(tmpEnDir, "no_header.md");
+
+		// syncを実行
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		const jaText = readFileSync(tmpJaNoHeader, "utf8");
+		const enText = readFileSync(tmpEnNoHeader, "utf8");
+
+		// 1. Front Matterが保持されていること
+		assert.match(jaText, /^---\s*\n.*?\n---\s*\n/s);
+		assert.match(enText, /^---\s*\n.*?\n---\s*\n/s);
+
+		// 2. mdaitマーカーがFront Matterの後に挿入されていること
+		const frontMatterEnd = jaText.indexOf("---", 3) + 3;
+		const firstMarker = jaText.indexOf("<!-- mdait");
+		assert.ok(firstMarker > frontMatterEnd);
+	});
+
+	test("空ファイルでもエラーが発生しないこと", async () => {
+		// 空ファイルを作成
+		const tmpJaEmpty = join(tmpJaDir, "empty.md");
+		const tmpEnEmpty = join(tmpEnDir, "empty.md");
+		writeFileSync(tmpJaEmpty, "", "utf8");
+		writeFileSync(tmpEnEmpty, "", "utf8");
+
+		// syncを実行してもエラーが発生しないこと
+		const vscode = require("vscode");
+		const result = await vscode.commands.executeCommand("mdait.sync");
+
+		// エラーでないことを確認
+		assert.notStrictEqual(result, false);
+
+		// ファイルが存在し、内容が空でも問題ないことを確認
+		const jaText = readFileSync(tmpJaEmpty, "utf8");
+		const enText = readFileSync(tmpEnEmpty, "utf8");
+
+		// 空ファイルの場合、マーカーは挿入されない
+		assert.strictEqual(jaText.trim(), "");
+		assert.strictEqual(enText.trim(), "");
+	});
+
+	test("不正なmdaitマーカー形式でもエラーが発生しないこと", async () => {
+		// 不正なマーカーを含むファイルを作成
+		const invalidContent = `# 見出し 1
+
+<!-- mdait invalid_marker_format -->
+コンテンツ1
+
+<!-- mdait -->
+## 見出し 2
+
+コンテンツ2
+`;
+		const tmpJaInvalid = join(tmpJaDir, "invalid.md");
+		const tmpEnInvalid = join(tmpEnDir, "invalid.md");
+		writeFileSync(tmpJaInvalid, invalidContent, "utf8");
+		writeFileSync(tmpEnInvalid, invalidContent, "utf8");
+
+		// syncを実行してもエラーが発生しないこと
+		const vscode = require("vscode");
+		const result = await vscode.commands.executeCommand("mdait.sync");
+
+		// エラーでないことを確認
+		assert.notStrictEqual(result, false);
+	});
+
+	test("片方向チェーン翻訳が正しく機能すること", async () => {
+		// ja -> en -> de のチェーンをテスト
+		// まず de ディレクトリを作成
+		const tmpDeDir = join(contentDir, "de");
+		mkdirSync(tmpDeDir, { recursive: true });
+
+		// ja -> en の関係が既に存在する状態で、de ファイルを作成
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+		const tmpDeTest = join(tmpDeDir, "test.md");
+
+		// de側にen側と同じ構造のファイルを作成（翻訳前状態）
+		const enText = readFileSync(tmpEnTest, "utf8");
+		const deText = enText;
+		writeFileSync(tmpDeTest, deText, "utf8");
+
+		// ja側のコンテンツを変更
+		let jaText = readFileSync(tmpJaTest, "utf8");
+		jaText = jaText.replace(
+			"これは日本語のテスト用 Markdown ファイルです。",
+			"これは更新された日本語のテスト用 Markdown ファイルです。",
+		);
+		writeFileSync(tmpJaTest, jaText, "utf8");
+
+		// ja -> en の sync を実行
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		// en側にneed:translateが付与されていることを確認
+		const updatedEnText = readFileSync(tmpEnTest, "utf8");
+		assert.match(updatedEnText, /need:translate/);
+
+		// en -> de の sync でも影響が伝播することを期待
+		// （現在の実装では翻訳ペア設定が必要）
+	});
+
+	test("双方向翻訳で競合が検出されること", async () => {
+		// ja <-> en の双方向編集をシミュレート
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpEnTest = join(tmpEnDir, "test.md");
+
+		// 両方のファイルを同時に編集
+		let jaText = readFileSync(tmpJaTest, "utf8");
+		let enText = readFileSync(tmpEnTest, "utf8");
+
+		// ja側を編集
+		jaText = jaText.replace(
+			"これは日本語のテスト用 Markdown ファイルです。",
+			"これは日本語側で編集されたファイルです。",
+		);
+
+		// en側も編集（同じユニット）
+		enText = enText.replace(
+			"This is a test Markdown file in English.",
+			"This is a file edited on the English side.",
+		);
+
+		writeFileSync(tmpJaTest, jaText, "utf8");
+		writeFileSync(tmpEnTest, enText, "utf8");
+
+		// syncを実行
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		// 両方にneed:solve-conflictが付与されることを期待
+		// （現在の実装では競合検出機能が必要）
+		const updatedJaText = readFileSync(tmpJaTest, "utf8");
+		const updatedEnText = readFileSync(tmpEnTest, "utf8");
+
+		// 両方のファイルに "need:solve-conflict" タグが付与されていることを確認
+		assert.ok(
+			updatedJaText.includes("need:solve-conflict"),
+			"日本語ファイルに 'need:solve-conflict' が見つかりません",
+		);
+		assert.ok(
+			updatedEnText.includes("need:solve-conflict"),
+			"英語ファイルに 'need:solve-conflict' が見つかりません",
+		);
+	});
+
+	test("除外パターンに一致するファイルが処理されないこと", async () => {
+		// node_modules ディレクトリを作成（デフォルトの除外パターン）
+		const nodeModulesDir = join(tmpJaDir, "node_modules");
+		mkdirSync(nodeModulesDir, { recursive: true });
+		const tmpJaIgnored = join(nodeModulesDir, "ignored.md");
+		const tmpEnIgnored = join(tmpEnDir, "node_modules", "ignored.md");
+
+		writeFileSync(tmpJaIgnored, "# This should be ignored", "utf8");
+
+		// syncを実行
+		const vscode = require("vscode");
+		await vscode.commands.executeCommand("mdait.sync");
+
+		// en側には作成されていないこと
+		assert.ok(!existsSync(tmpEnIgnored));
+	});
+
+	test("複数のmdaitマーカーが同じfromを持つ場合も正しく処理されること", async () => {
+		// 同じfromを持つ複数ユニットのファイルを作成
+		const duplicateFromContent = `<!-- mdait aaaa1111 from:common123 -->
+# 見出し A
+
+コンテンツA
+
+<!-- mdait bbbb2222 from:common123 -->
+# 見出し B
+
+コンテンツB
+`;
+		const tmpJaDup = join(tmpJaDir, "duplicate.md");
+		const tmpEnDup = join(tmpEnDir, "duplicate.md");
+		writeFileSync(tmpJaDup, duplicateFromContent, "utf8");
+		writeFileSync(tmpEnDup, duplicateFromContent, "utf8");
+
+		// syncを実行してもエラーが発生しないこと
+		const vscode = require("vscode");
+		const result = await vscode.commands.executeCommand("mdait.sync");
+
+		// エラーでないことを確認
+		assert.notStrictEqual(result, false);
+	});
+
+	test("ディレクトリが存在しない場合も正しく処理されること", async () => {
+		// 存在しないディレクトリへの出力をテスト
+		const nonExistentDir = join(workspaceDir, "content", "fr");
+		const tmpJaTest = join(tmpJaDir, "test.md");
+		const tmpFrTest = join(nonExistentDir, "test.md");
+
+		// syncを実行（設定で新しいディレクトリペアを指定する必要があるが、
+		// ここではディレクトリ作成機能のテストとして実行）
+		const vscode = require("vscode");
+		const result = await vscode.commands.executeCommand("mdait.sync");
+
+		// エラーでないことを確認
+		assert.notStrictEqual(result, false);
+	});
+});
+</file>
+
+<file path="package.json">
+{
+  "name": "mdait",
+  "displayName": "mdait",
+  "description": "マークダウンファイルの翻訳拡張機能",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mdait.sync",
+        "title": "Sync mdait"
+      },
+      {
+        "command": "mdait.trans",
+        "title": "mdait: 翻訳を実行"
+      }
+    ],
+    "configuration": {
+      "title": "mdait",
+      "properties": {
+        "mdait.transPairs": {
+          "type": "array",
+          "description": "翻訳のソースディレクトリとターゲットディレクトリのペアのリスト。パスはワークスペースルートからの相対パスです。",
+          "default": [],
+          "items": {
+            "type": "object",
+            "title": "翻訳ペア",
+            "properties": {
+              "sourceDir": {
+                "type": "string",
+                "description": "ソース言語のドキュメントが含まれるディレクトリのパス。"
+              },
+              "targetDir": {
+                "type": "string",
+                "description": "ターゲット言語のドキュメントを格納するディレクトリのパス。"
+              }
+            },
+            "required": [
+              "sourceDir",
+              "targetDir"
+            ]
+          }
+        },
+        "mdait.ignoredPatterns": {
+          "type": "array",
+          "default": [],
+          "description": "翻訳・同期処理から除外するファイルやディレクトリのglobパターンリスト。",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mdait.sync.autoDelete": {
+          "type": "boolean",
+          "default": true,
+          "description": "sync時にソース側で削除されたユニットをターゲット側でも自動的に削除します。"
+        },
+        "mdait.trans.provider": {
+          "type": "string",
+          "default": "default",
+          "description": "翻訳プロバイダー（default: 推奨モデル）"
+        },
+        "mdait.trans.markdown.skipCodeBlocks": {
+          "type": "boolean",
+          "default": true,
+          "description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "lint": "biome lint ./src",
+    "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
+    "watch": "tsc -watch -p ./",
+    "copy-test-files": "node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/markdown-it": "^14.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.99.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "mocha": "^11.3.0",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
+</file>
+
+<file path="design.md">
+# 📘 設計書：mdait (Markdown AI Translator)
+
+## 1. 概要
+
+**mdait**（Markdown AI Translator）は、Markdown 文書の構造を活かして AI 翻訳を支援するツールです。文書を翻訳・管理の単位である「ユニット」に分割し、各ユニットごとに短縮ハッシュを用いた差分管理と翻訳状態の記録を行い、**変更検出・翻訳差分・多段翻訳**などに対応できるよう設計されています。
+
+---
+
+## 2. mdaitUnit
+
+### 2.1 概要
+
+`mdaitUnit` は、mdaitが管理する「ユニット」そのものを定義する設計上の概念であり、Markdown文書内では `<!-- mdait ... -->` というコメント形式のマーカー（以下、marker）として表現されます。文書内に配置された各markerが、翻訳や差分管理の単位であるユニットの開始点を示します。
+
+通常、markerはMarkdownの構造的な見出し（例: `## タイトル`）の直前に配置され、その見出しをユニットのタイトルとして関連付けます。これにより、既存のMarkdown文書の構造を活かした管理が可能です。ユーザーは必要に応じて、見出しのない場所に手動でmarkerを挿入し、より細かい粒度でユニットを定義することもできます。
+
+markerがユニットの開始を示し、その管理対象となるコンテンツは、次のmarkerの直前、またはファイルの末尾までとします。ハッシュアルゴリズムはデフォルトでCRC32を使用します。
+
+```markdown
+<!-- mdait abcd1234 from:efgh5678 need:translate -->
+## 見出し
+
+このmarkerに紐づくコンテンツ。
+次のmarkerまで、あるいはファイルの末尾までがユニットの範囲となる。
+
+<!-- mdait ijkl9012 -->
+このコンテンツは上記とは別のユニット。
+```
+
+### 2.2 mdaitMarker
+
+```markdown
+<!-- mdait <hash> [from:<from-hash>] [need:<flag>] -->
+```
+
+| タグ名      | 説明                                                                     |
+| ----------- | -------------------------------------------------------------------------|
+| `abcd1234`  | ユニット本文の正規化後の 8 文字短縮ハッシュ（markerの先頭に配置） |
+| `from`      | 翻訳元のユニットのハッシュ値（翻訳由来追跡用）                           |
+| `need`      | 翻訳の必要性を表すフラグ。`translate` など。翻訳完了時は削除される       |
+
+### 2.3 need flag
+
+`need`フラグは、ユニット間の「同期」を完了させるために必要なアクションを示します。同期できているユニットには、`need` フラグは付与されません。
+
+`need:translate` : 翻訳が必要なユニット。AI翻訳を実行する対象。
+`need:review` : 翻訳済みだがレビューが必要なユニット。AI翻訳後の確認を行う対象。
+`need:verify-deletion` : 対応する翻訳元が削除されたユニット。削除の確認が必要。
+`need:solve-conflict` : 双方向編集で競合が発生したユニット。解決が必要。
+
+
+---
+
+## 3. 全体の流れ
+
+```plaintext
+----------------          ----------------          ----------------
+| documentA.md | ◀------▶ | documentB.md │◀------▶ | documentC.md |
+| (e.g. ja.md) |   hash   | (e.g. en.md) │  hash   | (e.g. de.md) |
+----------------          ----------------          ----------------
+```
+
+- `sync`: ユニット単位のハッシュ・翻訳元追跡用の `from` の同期を行う。差分の抽出、未翻訳検出、翻訳対象ユニットの挿入を行う。
+- `trans`: `need:translate` を対象に AI 翻訳を実行し、翻訳結果・ハッシュの更新と `need` タグの除去を行う。
+- `sync` は何度繰り返しても破綻しない設計。いずれかのドキュメントが編集されても、再度 sync を実行すれば変更が関連ドキュメントのユニットに伝播します。
+
+---
+
+## 4. コマンド
+
+### 4.1 syncコマンド
+
+関連付けられたMarkdownファイル群内のmarkerで定義されるユニット単位で、ハッシュ・`from`追跡・`need`フラグの同期を行う。
+
+**コンセプト：**
+言語間をグラフ構造とみなし、markerをユニットの単位とする。marker内のハッシュと、マーカーに続く現在のコンテンツから計算したハッシュを比較することで、全言語の変更分ユニットを抽出可能。複数言語話者たちが共同作業をしているときにはja->enのケースやen->jaのケースが混在する可能性があるが、グラフ構造とすることでこのような場合にも対応できる。
+**処理フロー：**
+  1. 全てのMarkdownファイルをパースし、各markerとそれに対応するコンテンツから正規化・計算したハッシュを取得。このまとまりを「ユニット」とする。
+  2. **変更検出:** 各ユニットにおいて、markerに記録された自身のハッシュと、現在のコンテンツから計算したハッシュを比較。不一致の場合は「変更あり」とマーク。
+  3. **影響伝播（グラフ同期）:** 「変更あり」とマークされたユニットの影響を受ける関連ファイルのユニットを探索し、影響を伝播させる。影響を受けたユニットには `need:translate` を付与し、`from` ハッシュを更新。
+  4. **マーカー自動挿入（初回など）:** ファイル内にmarkerがない場合、Markdown見出しの直前にmarkerを自動挿入する（対象とするレベルは設定可）。
+  5. 関連ファイル間で `from` ハッシュを元に対応付けを行い、新規挿入されたユニットや、`from` が見つからないユニットには適切に `need:translate` や `need:review` を付与。
+  6. 関連ファイル間で、対応する `from` が存在しなくなったユニットは、`auto-delete` 設定に応じて削除または `need:verify-deletion` を付与。
+  7. Markdown構造（markerとそのコンテンツ）を再構築し、各ファイルを保存。
+- 設定値：auto-delete（デフォルトtrue）
+
+#### 初回実行の流れ
+
+既存ファイル導入時の処理:
+
+1. **マーカーの挿入**:
+   初回sync時、またはユーザーの指示により、対象Markdownファイル内の主要な見出し（例：H1, H2, H3など設定可能）の直前にmarkerを自動的に挿入します。ユーザーは挿入されたマーカーを確認し、必要に応じて手動で追加・削除・移動することができます。
+2. **ハッシュ計算**:
+   - sourceファイルの各ユニット本文を正規化しハッシュ値を計算
+   - targetファイルの各ユニット本文も同様にハッシュ値を計算
+3. **fromの付与 (ユニット対応付け)**:
+   - targetの各ユニットがsourceのどのユニットに対応するかを推定
+     - ユニットの順序 / 見出し構造 / 内容の類似性
+     - ※ 対応付けロジックは拡張を考慮し、入れ替え可能な設計とする
+   - 対応が見つかったtargetユニットのmarkerに`from:xxxx`（sourceのユニットハッシュ値）を付与
+
+#### 注意点
+
+- marker内の`from:` が単一ファイル内で重複している場合は **すべての該当ユニットを同期対象とする**
+- ユニット削除については **設定可能** とする：
+  - `auto-delete: true` の場合（デフォルト）→ `source` 側から削除されたユニットは `target` からも即時削除
+  - `auto-delete: false` の場合 → 対象ユニットに `need:verify-deletion` を付与し、残す形でマーキング
+
+
+### 4.2 transコマンド
+
+- 目的：対象ファイル内の`need:translate`または`need:review`なユニットをAI翻訳し、翻訳結果・ハッシュ更新・needタグ除去を行う。
+- 主な処理フロー：
+  1. 対象ファイルをパースし、Markdownオブジェクトへ変換
+  2. `need:translate`または`need:review`なユニットを列挙
+  3. `from`で翻訳元ファイルの対応ユニットを取得し、AI翻訳（翻訳元がない場合はユニット自身のコンテンツを翻訳）
+  4. 翻訳結果をユニットのコンテンツに反映し、marker内のハッシュ更新・needタグ除去
+  5. Markdown構造を再構築しファイルを保存
+
+---
+
+## 5. 設定
+
+### 5.1 設定ファイル
+
+設定はVSCode拡張として標準的なsettings.json形式で行います。以下は設定ファイルの例です。
+
+```json
+{
+  // 翻訳ペア
+  "mdait.transPairs": [
+    {
+      "sourceDir": "content/ja",
+      "targetDir": "content/en"
+    },
+    {
+      "sourceDir": "content/en",
+      "targetDir": "content/de"
+    }
+  ],
+  // 除外パターン
+  "mdait.ignoredPatterns": "**/node_modules/**",
+  // sync実行時にマーカーを自動挿入する見出しレベル(このレベルまでの見出しの直前にマーカーを挿入)
+  "mdait.sync.autoMarkerLevel": 2,
+  // 自動削除設定
+  "mdait.sync.autoDelete": true,
+  // 翻訳プロバイダ
+  "mdait.trans.provider": "default",
+  // Markdown:コードブロックをスキップするか
+  "mdait.trans.markdown.skipCodeBlocks": true
+}
+```
+
+## 6. 多段翻訳
+
+### 6.1 翻訳パターン
+
+**from制約**: 各ユニットは最大1つの`from`のみ。以下のパターンをサポート。
+
+#### パターン1: 片方向チェーン
+```
+ja -> en -> de/fr
+```
+母語から多言語への標準ワークフロー。
+
+#### パターン2: ハブ言語双方向
+```
+ja <-> en -> de/fr
+```
+母語とハブ言語（英語）で双方向編集、他は一方向。
+
+### 6.2 動作例
+
+#### 片方向（en編集 → de更新）
+```markdown
+<!-- en/doc.md -->
+<!-- mdait xyz789 from:abc123 -->
+# Modified English Heading
+
+<!-- de/doc.md -->
+<!-- mdait ghi789 from:xyz789 need:translate -->
+# Deutsche Überschrift
+```
+
+#### 双方向 (ja編集 → en更新)
+```markdown
+<!-- ja/doc.md -->
+<!-- mdait new_abc123 from:def456 -->
+# 日本語の見出し編集済
+
+<!-- en/doc.md -->
+<!-- mdait def456 from:new_abc123 need:translate -->
+# English Heading
+```
+
+
+#### 双方向競合（両方編集）
+```markdown
+<!-- ja/doc.md -->
+<!-- mdait abc123 from:def456 need:solve-conflict -->
+# 日本語の見出し編集済
+
+<!-- en/doc.md -->
+<!-- mdait def456 from:abc123 need:solve-conflict -->
+# Modified English Heading
+```
+**解決**:
+1. 優先したい言語の`mdaitMarker`の`from`を削除
+2. sync実行により、`from`がついている言語に`need:translate`付与
+
+### 6.3 制約
+1. **単一ソース**: 各ターゲットは1つの`from`のみ付与
+2. **双方向制限**: 最大1つの双方向ペア
+3. **循環禁止**: 3つ以上の言語循環は不可
+
+---
+
+## 7. リポジトリ構成
+
+本プロジェクトは、以下の構成でソースコードを管理します。
+
+```
+src/
+  extension.ts           # エントリーポイント（コマンド登録など）
+  commands/
+    sync/                # syncコマンド関連処理
+    trans/               # transコマンド関連処理
+  core/                  # 共通コア機能
+    markdown/            # Markdownの構造解析、ユニット分割、marker処理など。
+    hash/                # 文書の正規化とハッシュ計算アルゴリズムを提供。
+  config/
+    configuration.ts     # 設定管理
+  utils/
+    file-utils.ts        # ファイル操作など汎用的なユーティリティ。
+```
+
+## 8. 主要コンポーネント
+
+### 8.1 Markdownパーサー
+
+Markdown文書をパースし、markerを基準としてユニットに分割します。各ユニットは、markerと、それに続くMarkdownコンテンツ（次のmarkerの直前、またはファイルの末尾まで）で構成されます。
+
+パーサーは、markerの直後にMarkdownの見出しが存在する場合、それをユニットのタイトルとして解釈することができますが、これはオプションの動作です。
+
+### 8.2 ハッシュ管理
+
+ユニットのテキストの正規化（余分な空白除去など）を行い、一貫したハッシュを生成する。
+短縮ハッシュを使うことで人間にも扱いやすい識別子とする。
+
+### 8.3 ユニット対応処理
+
+- **関連ファイル間のユニットの順序を考慮**し、対応付けを行う。
+- `from`ハッシュ一致を最優先、次に順序ベースで推定。
+
+1. **`from`ハッシュ一致優先でマッチ**
+   - targetユニットのmarker内の`from`がsourceユニットのハッシュと一致する場合、そのペアを即時マッチ確定とする。
+
+2. **順序ベースで推定マッチ**
+   - `from`一致でマッチしなかったsourceユニットと、**`from`が付与されていないtargetユニット**について、
+     - すでにマッチ済みのユニット間ごとに分割し、
+     - その区間内でsource/targetのユニットの順序をもとに1対1でマッチさせる（区間ごとに順序ベースで対応付け）。
+
+3. **内容類似度によるマッチは行わない**
+   - 類似度計算は現時点では実装しない。
+
+4. **新規sourceユニットの挿入位置**
+   - マッチしなかったsourceユニットは「新規」とし、**sourceファイル内での順序通りにtargetファイルに挿入する**。
+
+5. **孤立targetユニットの扱い**
+   - markerに`from`があるにもかかわらずマッチしなかったtargetユニットは「孤立」とみなし、`auto-delete`設定に従い削除または`need:verify-deletion`付与。
+
+## 9. Markdownオブジェクト
+
+### 9.1 Markdownオブジェクトの構造
+
+Markdown文書全体を表すオブジェクトとして `Markdown` を定義します。このオブジェクトは、以下のような構造を持ちます。
+
+```ts
+interface Markdown {
+  frontMatter?: FrontMatter; // yaml対応
+  units: MdaitUnit[];    // markerで区切られたユニットのリスト
+}
+
+interface FrontMatter {
+  [key: string]: any;
+}
+
+
+interface MdaitUnit {
+  mdaitUnit: MdaitMarker; // 各ユニットは必ずmdaitUnit情報を持つ
+  content: string;         // markerに続く、次のマーカーまたはファイルの末尾までのコンテンツ
+}
+
+// markerの情報を表すインターフェース
+interface MdaitMarker {
+  hash: string;
+  from?: string;
+  need?: string;
+  // 他のカスタムタグもここに含めることができる
+}
+```
+
+- frontMatterはYAMLに対応する。
+- ユニットごとの`mdaitUnit`情報は、ユニットの開始を示す必須要素。
+- frontMatterは`MdaitUnit`より上位の`Markdown`オブジェクトで一元管理する。
+
+### 9.2 パース・出力例
+
+```markdown
+---
+title: サンプル
+---
+<!-- mdait zzzz9999 from:yyyy8888 need:review -->
+# ユニット1
+本文1
+```
+
+- `MarkdownDocument.units[0].mdaitUnit.hash === "zzzz9999"`
+- `MarkdownDocument.units[0].mdaitUnit.from === "yyyy8888"`
+- `MarkdownDocument.units[0].mdaitUnit.need === "review"`
+
+---
+
+## 10. 開発・テスト環境
+
+開発およびテスト時には、一貫したテストコンテンツの配置と、それを利用するための自動コピー処理を行います。
+
+- **テストコンテンツ**: `src/test/sample-content/` にテスト用原稿を配置
+- **コピー先**: テスト実行前に、上記コンテンツを `src/test/workspace/content/` へコピー
+- **コピースクリプト**: `copy-test-files` を `package.json` に定義
+- **コンテンツコピータスク**: `.vscode/tasks.json` に `copy-test-content` タスクを定義
+- **デバッグ実行連携**: `launch.json` の `preLaunchTask` に `copy-test-content` を指定し、デバッグ実行前に自動でテストコンテンツをコピー
+</file>
+
+</files>

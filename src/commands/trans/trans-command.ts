@@ -1,91 +1,139 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
+import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
+import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
-import { FileExplorer } from "../../utils/file-explorer";
+import { calculateHash } from "../../core/hash/hash-calculator";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { markdownParser } from "../../core/markdown/parser";
+import { TranslationContext } from "./translation-context";
 import { DefaultTranslationProvider } from "./translation-provider";
 
-/**
- * trans command
- * markdownの翻訳を実行する
- */
-export async function transCommand(): Promise<void> {
+export async function transCommand(uri?: vscode.Uri) {
 	try {
-		// 翻訳処理の開始を通知
-		vscode.window.showInformationMessage("翻訳処理を開始します...");
-
-		// 設定を読み込む
-		const config = new Configuration();
-		await config.load();
-
-		// 設定を検証
-		const validationError = config.validate();
-		if (validationError) {
-			vscode.window.showErrorMessage(`設定エラー: ${validationError}`);
+		// ファイルパスの取得
+		const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
+		if (!filePath) {
+			vscode.window.showErrorMessage("翻訳するファイルが選択されていません。");
 			return;
 		}
 
-		// 翻訳プロバイダーを初期化
-		const provider = new DefaultTranslationProvider();
+		// 言語設定の入力
+		const sourceLang = await vscode.window.showInputBox({
+			prompt: "翻訳元の言語コードを入力してください (例: en)",
+			value: "auto",
+		});
+		if (!sourceLang) return;
 
-		let successCount = 0;
-		let errorCount = 0;
+		const targetLang = await vscode.window.showInputBox({
+			prompt: "翻訳先の言語コードを入力してください (例: ja)",
+			value: "ja",
+		});
+		if (!targetLang) return;
 
-		// 各翻訳ペアに対して処理を実行
-		for (const pair of config.transPairs) {
-			// ファイル探索
-			const fileExplorer = new FileExplorer();
-			// transコマンドでは、翻訳対象ファイルはtargetDirから取得する
-			const files = await fileExplorer.getSourceFiles(pair.targetDir, config);
+		// 設定の読み込み
+		const config = new Configuration();
+		await config.load();
 
-			if (files.length === 0) {
-				vscode.window.showWarningMessage(
-					`[${pair.sourceDir} -> ${pair.targetDir}] 翻訳対象のファイルが見つかりませんでした。`,
-				);
-				continue;
-			}
+		// AIService と TranslationProvider の初期化
+		const aiService = await new AIServiceBuilder().build();
+		const translationProvider = new DefaultTranslationProvider(aiService);
 
-			vscode.window.showInformationMessage(
-				`[${pair.sourceDir} -> ${pair.targetDir}] ${files.length}個のファイルを翻訳します...`,
-			);
+		vscode.window.showInformationMessage(
+			`Translating ${filePath} from ${sourceLang} to ${targetLang}...`,
+		); // Markdown ファイルの読み込みとパース
+		const markdownContent = await fs.promises.readFile(filePath, "utf-8");
+		const markdown = markdownParser.parse(markdownContent, config);
 
-			// 各ファイルを翻訳
-			for (const targetFile of files) {
-				try {
-					// ファイル読み込み
-					const content = fs.readFileSync(targetFile, "utf-8"); // ファイルタイプに応じて適切な翻訳処理を選択
-					const extension = path.extname(targetFile).toLowerCase();
-					let translatedContent: string;
+		// need:translate フラグを持つユニットを抽出
+		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
 
-					if (extension === ".md") {
-						translatedContent = await provider.translateMarkdown(content, config);
-					} else {
-						// その他のファイルタイプはそのまま
-						translatedContent = content;
-					}
+		if (unitsToTranslate.length === 0) {
+			vscode.window.showInformationMessage("翻訳が必要なユニットが見つかりませんでした。");
+			return;
+		}
 
-					// 出力先ディレクトリが存在するか確認し、なければ作成
-					fileExplorer.ensureTargetDirectoryExists(targetFile);
+		vscode.window.showInformationMessage(
+			`${unitsToTranslate.length}個のユニットを翻訳します: ${filePath}`,
+		);
 
-					// ファイル出力 (transコマンドはtargetFileを上書きする)
-					fs.writeFileSync(targetFile, translatedContent, "utf-8");
+		// 各ユニットを翻訳
+		for (const unit of unitsToTranslate) {
+			await translateUnit(unit, translationProvider, sourceLang, targetLang, markdown);
+		}
 
-					successCount++;
-				} catch (error) {
-					console.error(
-						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル翻訳エラー: ${targetFile}`,
-						error,
-					);
-					errorCount++;
-				}
+		// 更新されたMarkdownを保存
+		const updatedContent = markdownParser.stringify(markdown);
+		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
+
+		vscode.window.showInformationMessage(
+			`翻訳完了: ${unitsToTranslate.length}個のユニットを翻訳しました`,
+		);
+	} catch (error) {
+		vscode.window.showErrorMessage(`Error during translation: ${error}`);
+	}
+}
+
+/**
+ * 単一ユニットの翻訳処理
+ * @param unit 翻訳対象のユニット
+ * @param translationProvider 翻訳プロバイダ
+ * @param sourceLang 翻訳元言語
+ * @param targetLang 翻訳先言語
+ * @param markdown Markdownドキュメント（翻訳元ユニット特定用）
+ */
+async function translateUnit(
+	unit: MdaitUnit,
+	translationProvider: DefaultTranslationProvider,
+	sourceLang: string,
+	targetLang: string,
+	markdown: Markdown,
+) {
+	try {
+		// 翻訳コンテキストの作成
+		const context = new TranslationContext();
+		// TODO: context に surroundingText や glossary を設定するロジックを実装
+
+		let sourceContent = unit.content;
+
+		// from属性がある場合は、翻訳元ユニットのコンテンツを取得
+		if (unit.marker?.from) {
+			const sourceUnit = findUnitByHash(markdown.units, unit.marker.from);
+			if (sourceUnit) {
+				sourceContent = sourceUnit.content;
 			}
 		}
 
-		// 完了通知
-		vscode.window.showInformationMessage(`翻訳完了: ${successCount}個成功, ${errorCount}個失敗`);
+		// 翻訳実行
+		const translatedContent = await translationProvider.translate(
+			sourceContent,
+			sourceLang,
+			targetLang,
+			context,
+		);
+		// ユニットのコンテンツを更新
+		unit.content = translatedContent;
+
+		// ハッシュを再計算してmarkerを更新
+		if (unit.marker) {
+			const newHash = calculateHash(unit.content);
+			unit.marker.hash = newHash;
+		}
+
+		// needフラグを除去
+		unit.markAsTranslated();
 	} catch (error) {
-		// エラーハンドリング
-		vscode.window.showErrorMessage(`翻訳処理中にエラーが発生しました: ${(error as Error).message}`);
-		console.error(error);
+		vscode.window.showErrorMessage(`ユニット翻訳エラー: ${error}`);
+		throw error;
 	}
+}
+
+/**
+ * ハッシュでユニットを検索
+ * @param units ユニット配列
+ * @param hash 検索対象のハッシュ
+ * @returns 見つかったユニット（なければnull）
+ */
+function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
+	return units.find((unit) => unit.marker?.hash === hash) || null;
 }

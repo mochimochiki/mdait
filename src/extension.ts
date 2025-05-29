@@ -9,17 +9,10 @@ import { FileExplorer } from "./utils/file-explorer";
 
 export function activate(context: vscode.ExtensionContext) {
 	// sync command
-	const syncDisposable = vscode.commands.registerCommand(
-		"mdait.sync",
-		syncCommand,
-	);
+	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
 
 	// trans command
-	const transDisposable = vscode.commands.registerCommand(
-		"mdait.trans",
-		transCommand,
-	);
+	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
-	context.subscriptions.push(transDisposable);
-	context.subscriptions.push(syncDisposable);
+	context.subscriptions.push(syncDisposable, transDisposable);
 }
