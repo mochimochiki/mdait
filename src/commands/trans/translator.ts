@@ -2,9 +2,9 @@ import type { AIMessage, AIService } from "../../api/ai-service";
 import type { TranslationContext } from "./translation-context";
 
 /**
- * 翻訳プロバイダーのインターフェース
+ * 翻訳サービスのインターフェース
  */
-export interface TranslationProvider {
+export interface Translator {
 	/**
 	 * テキストを翻訳する
 	 * @param text 翻訳対象のテキスト
@@ -21,9 +21,9 @@ export interface TranslationProvider {
 }
 
 /**
- * デフォルトの翻訳プロバイダー
+ * デフォルトの翻訳サービス
  */
-export class DefaultTranslationProvider implements TranslationProvider {
+export class DefaultTranslator implements Translator {
 	private readonly aiService: AIService;
 
 	constructor(aiService: AIService) {

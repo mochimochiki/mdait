@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 import { AIServiceBuilder } from "../../../api/ai-service-builder";
 import { TranslationContext } from "../../../commands/trans/translation-context";
-import { DefaultTranslationProvider } from "../../../commands/trans/translation-provider";
+import { DefaultTranslator } from "../../../commands/trans/translator";
 import { Configuration } from "../../../config/configuration";
 import { markdownParser } from "../../../core/markdown/parser";
 
@@ -241,10 +241,9 @@ suite("TransCommand", () => {
 		assert.ok(updatedContent.includes("Translated content"));
 		assert.ok(!updatedContent.includes("need:translate")); // needフラグが除去されていること
 	});
-
 	test("AIサービス統合テスト：翻訳プロバイダが正常に動作すること", async () => {
 		// モック翻訳プロバイダーの作成
-		class MockTranslationProvider {
+		class MockTranslator {
 			async translate(content: string, sourceLang: string, targetLang: string): Promise<string> {
 				// テスト用の簡易翻訳（日英変換）
 				if (sourceLang === "ja" && targetLang === "en") {
@@ -260,15 +259,14 @@ suite("TransCommand", () => {
 			"",
 			"これはコンテンツです。",
 		].join("\n");
-
 		const config = new Configuration();
 		await config.load();
 		const markdown = markdownParser.parse(testContent, config);
 		const unit = markdown.units[0];
-		const mockProvider = new MockTranslationProvider();
+		const mockTranslator = new MockTranslator();
 
 		// 翻訳実行
-		const translatedContent = await mockProvider.translate(unit.content, "ja", "en");
+		const translatedContent = await mockTranslator.translate(unit.content, "ja", "en");
 		unit.content = translatedContent;
 
 		// ハッシュ更新

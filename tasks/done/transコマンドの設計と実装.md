@@ -15,25 +15,42 @@
 ## 2. 主な処理フロー
 
 ```mermaid
-graph TD
-    A[transコマンド実行] --> B{対象ファイル指定あり？};
-    B -- Yes --> C[指定ファイル読み込み];
-    B -- No --> D[ワークスペース内の全Markdown検索];
-    D --> E[対象ファイル群読み込み];
-    C --> F[ファイルをパースしMarkdownオブジェクトへ変換];
-    E --> F;
-    F --> G[need:translateユニットを抽出];
-    G -- 各ユニット --> H{from属性あり？};
-    H -- Yes --> I[from属性のハッシュを元に翻訳元ユニット特定];
-    I --> J[翻訳元ユニットのコンテンツを取得];
-    H -- No --> K[当該ユニット自身のコンテンツを取得];
-    J --> L[TranslationProvider経由でAI翻訳実行];
-    K --> L;
-    L --> M[翻訳結果をユニットコンテンツに反映];
-    M --> N[ユニットのハッシュを再計算しmarker更新];
-    N --> O[needフラグを除去];
-    O --> P[Markdownオブジェクトをファイルに書き出し];
-    P --> Q[完了];
+sequenceDiagram
+    participant User
+    participant transCommand
+    participant markdownParser    participant translateUnit
+    participant AI as Translator
+    participant File
+
+    User->>transCommand: ファイル選択 + 言語設定
+    transCommand->>File: Markdownファイル読み込み
+    transCommand->>markdownParser: parse(content, config)
+    markdownParser->>transCommand: Markdownオブジェクト
+    
+    transCommand->>transCommand: need:translateユニット抽出
+    
+    loop 各翻訳対象ユニット
+        transCommand->>translateUnit: translateUnit()
+        
+        alt from属性あり
+            translateUnit->>translateUnit: findUnitByHash()
+            translateUnit->>translateUnit: 翻訳元コンテンツ取得
+        else from属性なし
+            translateUnit->>translateUnit: 自身のコンテンツ使用
+        end
+        
+        translateUnit->>AI: translate(content, sourceLang, targetLang)
+        AI->>translateUnit: 翻訳結果
+        
+        translateUnit->>translateUnit: コンテンツ更新
+        translateUnit->>translateUnit: ハッシュ再計算
+        translateUnit->>translateUnit: needフラグ除去
+    end
+    
+    transCommand->>markdownParser: stringify(markdown)
+    markdownParser->>transCommand: 更新済みMarkdownテキスト
+    transCommand->>File: ファイル保存
+    transCommand->>User: 翻訳完了通知
 ```
 
 ## 3. 主要関数・モジュール
@@ -45,9 +62,11 @@ graph TD
   - `translateUnit(unit: MdaitUnit, aiService: AIService, sourceContent?: string, context: TranslationContext)`: ユニット翻訳
 
 **翻訳処理層:**
-- `src/commands/trans/translation-provider.ts`
-  - `TranslationProvider`: AI翻訳の抽象化インターフェース
+- `src/commands/trans/translator.ts`
+  - `Translator`: AI翻訳の抽象化インターフェース
   - `translate(text: string, sourceLang: string, targetLang: string, context: TranslationContext): Promise<string>`
+- `src/commands/trans/translator-builder.ts`
+  - `TranslatorBuilder`: 翻訳サービスの構築を担当するビルダークラス
 - `src/commands/trans/translation-context.ts`
   - `TranslationContext`: 翻訳コンテキスト（前後のテキスト、用語集等）
 
@@ -71,7 +90,8 @@ graph TD
 - [x] `AIServiceBuilder`による設定ベースプロバイダ生成
 - [x] `DefaultAIProvider`実装（モック翻訳機能）
 - [x] `TranslationContext`クラス実装
-- [x] `TranslationProvider`インターフェースと実装
+- [x] `Translator`インターフェースと実装
+- [x] `TranslatorBuilder`による翻訳サービス構築の分離
 - [x] `trans-command.ts`でのVSCodeコマンド実装
 - [x] `extension.ts`での基本コマンド登録
 - [x] Markdownパーサーとの統合（`need:translate`ユニット特定）
@@ -96,9 +116,9 @@ graph TD
 - **設定読み込み**: `Configuration`クラスでVSCode設定を統合的に管理
 
 **実装工夫点:**
-- **コードブロックスキップ**: `TranslationProvider`内でプレースホルダー置換による翻訳除外処理
+- **コードブロックスキップ**: `Translator`内でプレースホルダー置換による翻訳除外処理
 - **モジュラー設計**: AI層、翻訳層、コマンド層の明確な分離
-- **設定ベースプロバイダ**: `AIServiceBuilder`による柔軟なプロバイダ切り替え
+- **設定ベースプロバイダ**: `TranslatorBuilder`による柔軟な翻訳サービス切り替え
 - **ユニット単位翻訳**: `markdownParser.parse()`によりファイル全体をユニットに分割、`unit.needsTranslation()`で翻訳対象を特定
 - **フロー統合**: ファイル読み込み→パース→翻訳対象抽出→翻訳→ハッシュ更新→ファイル保存の完全なフロー実装
 

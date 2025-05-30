@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
 import { transCommand } from "./commands/trans/trans-command";
-import { DefaultTranslationProvider } from "./commands/trans/translation-provider";
+import { DefaultTranslator } from "./commands/trans/translator";
 import { Configuration } from "./config/configuration";
 import { FileExplorer } from "./utils/file-explorer";
 

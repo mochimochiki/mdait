@@ -1,13 +1,13 @@
 import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { TranslationContext } from "./translation-context";
-import { DefaultTranslationProvider } from "./translation-provider";
+import type { Translator } from "./translator";
+import { TranslatorBuilder } from "./translator-builder";
 
 export async function transCommand(uri?: vscode.Uri) {
 	try {
@@ -33,11 +33,8 @@ export async function transCommand(uri?: vscode.Uri) {
 
 		// 設定の読み込み
 		const config = new Configuration();
-		await config.load();
-
-		// AIService と TranslationProvider の初期化
-		const aiService = await new AIServiceBuilder().build();
-		const translationProvider = new DefaultTranslationProvider(aiService);
+		await config.load();		// AIService と Translator の初期化
+		const translator = await new TranslatorBuilder().build();
 
 		vscode.window.showInformationMessage(
 			`Translating ${filePath} from ${sourceLang} to ${targetLang}...`,
@@ -56,10 +53,9 @@ export async function transCommand(uri?: vscode.Uri) {
 		vscode.window.showInformationMessage(
 			`${unitsToTranslate.length}個のユニットを翻訳します: ${filePath}`,
 		);
-
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
-			await translateUnit(unit, translationProvider, sourceLang, targetLang, markdown);
+			await translateUnit(unit, translator, sourceLang, targetLang, markdown);
 		}
 
 		// 更新されたMarkdownを保存
@@ -77,14 +73,14 @@ export async function transCommand(uri?: vscode.Uri) {
 /**
  * 単一ユニットの翻訳処理
  * @param unit 翻訳対象のユニット
- * @param translationProvider 翻訳プロバイダ
+ * @param translator 翻訳サービス
  * @param sourceLang 翻訳元言語
  * @param targetLang 翻訳先言語
  * @param markdown Markdownドキュメント（翻訳元ユニット特定用）
  */
 async function translateUnit(
 	unit: MdaitUnit,
-	translationProvider: DefaultTranslationProvider,
+	translator: Translator,
 	sourceLang: string,
 	targetLang: string,
 	markdown: Markdown,
@@ -103,9 +99,8 @@ async function translateUnit(
 				sourceContent = sourceUnit.content;
 			}
 		}
-
 		// 翻訳実行
-		const translatedContent = await translationProvider.translate(
+		const translatedContent = await translator.translate(
 			sourceContent,
 			sourceLang,
 			targetLang,

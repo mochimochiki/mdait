@@ -36,7 +36,8 @@ export class AIServiceBuilder {
 			default:
 				throw new Error(`Unsupported AI provider: ${effectiveConfig.provider}`);
 		}
-	}
+  }
+  
 	/**
 	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
 	 */
