@@ -12,7 +12,9 @@ export async function chatCommand(): Promise<void> {
 		await chatHandler.execute();
 	} catch (error) {
 		console.error("Chat command error:", error);
-		vscode.window.showErrorMessage(`チャット処理中にエラーが発生しました: ${error}`);
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("An error occurred during chat processing: {0}", (error as Error).message),
+		);
 	}
 }
 
@@ -45,16 +47,19 @@ export class ChatCommand {
 					content: userQuestion,
 				},
 			];
-
-			// システムプロンプト
-			const systemPrompt =
-				"あなたは親切で知識豊富なアシスタントです。ユーザーの質問に対して、正確で分かりやすい回答を日本語で提供してください。";
+      
+      // システムプロンプト
+			const systemPrompt = vscode.l10n.t(
+				"You are a helpful and knowledgeable assistant. Please provide accurate and easy-to-understand answers to user questions in Japanese.",
+			);
 
 			// AIサービスに問い合わせ、レスポンスを表示
 			await this.sendRequestAndDisplayResponse(aiService, systemPrompt, messages);
 		} catch (error) {
 			console.error("AI Service error:", error);
-			vscode.window.showErrorMessage(`AI サービスエラー: ${error}`);
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("AI service error: {0}", (error as Error).message),
+			);
 		}
 	}
 

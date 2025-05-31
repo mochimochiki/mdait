@@ -345,3 +345,35 @@ title: サンプル
 - **コピースクリプト**: `copy-test-files` を `package.json` に定義
 - **コンテンツコピータスク**: `.vscode/tasks.json` に `copy-test-content` タスクを定義
 - **デバッグ実行連携**: `launch.json` の `preLaunchTask` に `copy-test-content` を指定し、デバッグ実行前に自動でテストコンテンツをコピー
+
+---
+
+## 11. l10n（国際化）
+
+mdaitはVS Code公式の`vscode-l10n`ライブラリを使用して国際化に対応しています。
+
+### 11.1 翻訳対象
+- **静的コントリビューション**: コマンド名、設定項目、説明文（`package.nls.json`）
+- **動的メッセージ**: エラーメッセージ、通知、プロンプト（`l10n/bundle.l10n.json`）
+
+### 11.2 実装詳細
+- **翻訳API**: `vscode.l10n.t()`を使用
+- **翻訳ファイル**:
+  - 静的: `package.nls.json`（英語）、`package.nls.ja.json`（日本語）
+  - 動的: `l10n/bundle.l10n.json`（英語）、`l10n/bundle.l10n.ja.json`（日本語）
+- **要件**: VS Code 1.73.0以上
+
+### 11.4 言語切り替え
+VS Codeの言語設定（`locale`）に応じて自動的に切り替わります。日本語環境では日本語UI、その他の環境では英語UIが表示されます。
+
+### 11.5 翻訳手順
+
+```ts
+// vscode.l10n.t() を使用してマーク
+vscode.l10n.t("An error occurred during chat processing: {0}", (error as Error).message),
+```
+
+```bash
+# `l10n/bundle.l10n.json`を更新 -> l10n/bundle.l10n.xx.json にも翻訳を反映させる
+npm run l10n
+```

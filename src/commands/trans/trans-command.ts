@@ -14,44 +14,44 @@ export async function transCommand(uri?: vscode.Uri) {
 		// ファイルパスの取得
 		const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
 		if (!filePath) {
-			vscode.window.showErrorMessage("翻訳するファイルが選択されていません。");
+			vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 			return;
 		}
 
 		// 言語設定の入力
 		const sourceLang = await vscode.window.showInputBox({
-			prompt: "翻訳元の言語コードを入力してください (例: en)",
+			prompt: vscode.l10n.t("Enter source language code (e.g., en)"),
 			value: "auto",
 		});
 		if (!sourceLang) return;
 
 		const targetLang = await vscode.window.showInputBox({
-			prompt: "翻訳先の言語コードを入力してください (例: ja)",
+			prompt: vscode.l10n.t("Enter target language code (e.g., ja)"),
 			value: "ja",
 		});
 		if (!targetLang) return;
 
 		// 設定の読み込み
 		const config = new Configuration();
-		await config.load();		// AIService と Translator の初期化
+		await config.load(); // AIService と Translator の初期化
 		const translator = await new TranslatorBuilder().build();
-
 		vscode.window.showInformationMessage(
-			`Translating ${filePath} from ${sourceLang} to ${targetLang}...`,
+			vscode.l10n.t("Translating {0} from {1} to {2}...", filePath, sourceLang, targetLang),
 		); // Markdown ファイルの読み込みとパース
 		const markdownContent = await fs.promises.readFile(filePath, "utf-8");
 		const markdown = markdownParser.parse(markdownContent, config);
 
 		// need:translate フラグを持つユニットを抽出
 		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
-
 		if (unitsToTranslate.length === 0) {
-			vscode.window.showInformationMessage("翻訳が必要なユニットが見つかりませんでした。");
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("No units requiring translation were found."),
+			);
 			return;
 		}
 
 		vscode.window.showInformationMessage(
-			`${unitsToTranslate.length}個のユニットを翻訳します: ${filePath}`,
+			vscode.l10n.t("Translating {0} units: {1}", unitsToTranslate.length, filePath),
 		);
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
@@ -61,12 +61,13 @@ export async function transCommand(uri?: vscode.Uri) {
 		// 更新されたMarkdownを保存
 		const updatedContent = markdownParser.stringify(markdown);
 		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
-
 		vscode.window.showInformationMessage(
-			`翻訳完了: ${unitsToTranslate.length}個のユニットを翻訳しました`,
+			vscode.l10n.t("Translation completed: {0} units translated", unitsToTranslate.length),
 		);
 	} catch (error) {
-		vscode.window.showErrorMessage(`Error during translation: ${error}`);
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Error during translation: {0}", (error as Error).message),
+		);
 	}
 }
 
@@ -118,7 +119,9 @@ async function translateUnit(
 		// needフラグを除去
 		unit.markAsTranslated();
 	} catch (error) {
-		vscode.window.showErrorMessage(`ユニット翻訳エラー: ${error}`);
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Unit translation error: {0}", (error as Error).message),
+		);
 		throw error;
 	}
 }

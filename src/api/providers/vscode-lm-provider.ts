@@ -27,7 +27,9 @@ export class VSCodeLanguageModelProvider implements AIService {
 			const model = await this.selectLanguageModel();
 			if (!model) {
 				throw new Error(
-					"Language model is not available. Please ensure GitHub Copilot is enabled.",
+					vscode.l10n.t(
+						"Language model is not available. Please ensure GitHub Copilot is enabled.",
+					),
 				);
 			}
 
@@ -51,17 +53,24 @@ export class VSCodeLanguageModelProvider implements AIService {
 
 				// エラーの種類に応じた適切なメッセージを生成
 				if (error.cause instanceof Error && error.cause.message.includes("off_topic")) {
-					yield "申し訳ありませんが、その質問にはお答えできません。";
+					yield vscode.l10n.t("Sorry, I cannot answer that question.");
 				} else if (error.message.includes("consent")) {
-					throw new Error("GitHub Copilot の使用許可が必要です。設定を確認してください。");
+					throw new Error(
+						vscode.l10n.t("GitHub Copilot permission is required. Please check your settings."),
+					);
 				} else if (error.message.includes("quota")) {
-					throw new Error("API の使用制限に達しました。しばらく時間をおいてからお試しください。");
+					throw new Error(vscode.l10n.t("API usage limit reached. Please try again later."));
 				} else {
-					throw new Error(`言語モデルエラー: ${error.message}`);
+					throw new Error(vscode.l10n.t("Language model error: {0}", error.message));
 				}
 			} else {
 				console.error("Unexpected error:", error);
-				throw new Error(`予期しないエラーが発生しました: ${error}`);
+				// エラーが既にErrorインスタンスの場合は、そのまま再スローして元のメッセージを保持
+				if (error instanceof Error) {
+					throw error;
+				}
+				const errorMessage = String(error);
+				throw new Error(vscode.l10n.t("An unexpected error occurred: {0}", errorMessage));
 			}
 		}
 	}

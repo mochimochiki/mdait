@@ -72,20 +72,20 @@ export class Configuration {
 	/**
 	 * 設定が有効かどうかを検証する
 	 * @returns エラーメッセージ。問題がなければnull
-	 */
-	public validate(): string | null {
+	 */ 
+  public validate(): string | null {
 		// 翻訳ペアが設定されているか
 		if (!this.transPairs || this.transPairs.length === 0) {
-			return "翻訳ペア(mdait.transPairs)が設定されていません。";
+			return vscode.l10n.t("Translation pairs (mdait.transPairs) are not configured.");
 		}
 
 		// 各翻訳ペアのディレクトリが設定されているか
 		for (const pair of this.transPairs) {
 			if (!pair.sourceDir) {
-				return "翻訳ペアに翻訳元ディレクトリ(sourceDir)が設定されていません。";
+				return vscode.l10n.t("Source directory (sourceDir) is not set in translation pair.");
 			}
 			if (!pair.targetDir) {
-				return "翻訳ペアに翻訳先ディレクトリ(targetDir)が設定されていません。";
+				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
 			}
 		}
 

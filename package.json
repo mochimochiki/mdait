@@ -1,48 +1,50 @@
 {
   "name": "mdait",
   "displayName": "mdait",
-  "description": "マークダウンファイルの翻訳拡張機能",
+  "description": "%mdait.description%",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.99.0"
   },
+  "l10n": "./l10n",
   "categories": [
     "Other"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-  "contributes": {    "commands": [
+  "contributes": {
+    "commands": [
       {
         "command": "mdait.sync",
-        "title": "Sync mdait"
+        "title": "%mdait.sync.title%"
       },
       {
         "command": "mdait.trans",
-        "title": "mdait: 翻訳を実行"
+        "title": "%mdait.trans.title%"
       },
       {
         "command": "mdait.chat",
-        "title": "mdait: チャット"
+        "title": "%mdait.chat.title%"
       }
     ],
     "configuration": {
-      "title": "mdait",
+      "title": "%mdait.configuration.title%",
       "properties": {
         "mdait.transPairs": {
           "type": "array",
-          "description": "翻訳のソースディレクトリとターゲットディレクトリのペアのリスト。パスはワークスペースルートからの相対パスです。",
+          "description": "%mdait.transPairs.description%",
           "default": [],
           "items": {
             "type": "object",
-            "title": "翻訳ペア",
+            "title": "%mdait.transPairs.title%",
             "properties": {
               "sourceDir": {
                 "type": "string",
-                "description": "ソース言語のドキュメントが含まれるディレクトリのパス。"
+                "description": "%mdait.transPairs.sourceDir.description%"
               },
               "targetDir": {
                 "type": "string",
-                "description": "ターゲット言語のドキュメントを格納するディレクトリのパス。"
+                "description": "%mdait.transPairs.targetDir.description%"
               }
             },
             "required": [
@@ -54,7 +56,7 @@
         "mdait.ignoredPatterns": {
           "type": "array",
           "default": [],
-          "description": "翻訳・同期処理から除外するファイルやディレクトリのglobパターンリスト。",
+          "description": "%mdait.ignoredPatterns.description%",
           "items": {
             "type": "string"
           }
@@ -62,17 +64,17 @@
         "mdait.sync.autoDelete": {
           "type": "boolean",
           "default": true,
-          "description": "sync時にソース側で削除されたユニットをターゲット側でも自動的に削除します。"
+          "description": "%mdait.sync.autoDelete.description%"
         },
         "mdait.trans.provider": {
           "type": "string",
           "default": "default",
-          "description": "翻訳プロバイダー（default: 推奨モデル）"
+          "description": "%mdait.trans.provider.description%"
         },
         "mdait.trans.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,
-          "description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
+          "description": "%mdait.trans.markdown.skipCodeBlocks.description%"
         }
       }
     }
@@ -82,9 +84,12 @@
     "lint": "biome lint ./src",
     "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
     "watch": "tsc -watch -p ./",
-    "copy-test-files": "node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\""
+    "copy-test-files": "node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
+    "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
+    "l10n-validate": "npx @vscode/l10n-dev validate ./l10n"
   },
   "dependencies": {
+    "@vscode/l10n": "^0.0.18",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0"
   },
@@ -93,7 +98,8 @@
     "@types/markdown-it": "^14.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "@types/vscode": "^1.99.0",
+    "@types/vscode": "^1.73.0",
+    "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "mocha": "^11.3.0",

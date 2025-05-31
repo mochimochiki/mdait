@@ -17,7 +17,7 @@ import { SectionMatcher } from "./section-matcher";
 export async function syncCommand(): Promise<void> {
 	try {
 		// 処理開始を通知
-		vscode.window.showInformationMessage("ユニット同期処理を開始します...");
+		vscode.window.showInformationMessage(vscode.l10n.t("Starting unit synchronization process..."));
 
 		// 設定を読み込む
 		const config = new Configuration();
@@ -26,7 +26,7 @@ export async function syncCommand(): Promise<void> {
 		// 設定を検証
 		const validationError = config.validate();
 		if (validationError) {
-			vscode.window.showErrorMessage(`設定エラー: ${validationError}`);
+			vscode.window.showErrorMessage(vscode.l10n.t("Configuration error: {0}", validationError));
 			return;
 		}
 
@@ -38,16 +38,24 @@ export async function syncCommand(): Promise<void> {
 			// ファイル探索
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
-
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
-					`[${pair.sourceDir} -> ${pair.targetDir}] 同期対象のファイルが見つかりませんでした。`,
+					vscode.l10n.t(
+						"[{0} -> {1}] No files found for synchronization.",
+						pair.sourceDir,
+						pair.targetDir,
+					),
 				);
 				continue;
 			}
 
 			vscode.window.showInformationMessage(
-				`[${pair.sourceDir} -> ${pair.targetDir}] ${files.length}個のファイルを同期します...`,
+				vscode.l10n.t(
+					"[{0} -> {1}] Synchronizing {2} files...",
+					pair.sourceDir,
+					pair.targetDir,
+					files.length,
+				),
 			);
 
 			// 各ファイルを同期
@@ -82,12 +90,19 @@ export async function syncCommand(): Promise<void> {
 				}
 			}
 		}
-
 		// 完了通知
-		vscode.window.showInformationMessage(`同期完了: ${successCount}個成功, ${errorCount}個失敗`);
+		vscode.window.showInformationMessage(
+			vscode.l10n.t(
+				"Synchronization completed: {0} succeeded, {1} failed",
+				successCount,
+				errorCount,
+			),
+		);
 	} catch (error) {
 		// エラーハンドリング
-		vscode.window.showErrorMessage(`同期処理中にエラーが発生しました: ${(error as Error).message}`);
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
+		);
 		console.error(error);
 	}
 }

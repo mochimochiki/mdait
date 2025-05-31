@@ -29,10 +29,7 @@ export class FileExplorer {
 	): Promise<string[]> {
 		// VS Code APIを使用してファイルを検索
 		const includeGlob = new vscode.RelativePattern(sourceDir, includePattern);
-		const files: vscode.Uri[] = await vscode.workspace.findFiles(
-			includeGlob,
-			excludePattern,
-		);
+		const files: vscode.Uri[] = await vscode.workspace.findFiles(includeGlob, excludePattern);
 
 		// 指定された拡張子のファイルだけをフィルタリング
 		return files
@@ -46,31 +43,22 @@ export class FileExplorer {
 	/**
 	 * 設定に基づいてファイルを取得する
 	 */
-	public async getSourceFiles(
-		sourceDirConfig: string,
-		config: Configuration,
-	): Promise<string[]> {
-		let sourceDir = sourceDirConfig;
-		// 相対パスの場合はワークスペースルートを基準に絶対パス化
+	public async getSourceFiles(sourceDirConfig: string, config: Configuration): Promise<string[]> {
+		let sourceDir = sourceDirConfig; // 相対パスの場合はワークスペースルートを基準に絶対パス化
 		if (!path.isAbsolute(sourceDir)) {
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
-				throw new Error("ワークスペースが開かれていません");
+				throw new Error(vscode.l10n.t("Workspace is not opened"));
 			}
 			sourceDir = path.resolve(workspaceFolders[0].uri.fsPath, sourceDir);
 		}
 
 		// ディレクトリの存在を確認
 		if (!this.directoryExists(sourceDir)) {
-			throw new Error(`翻訳元ディレクトリが存在しません: ${sourceDir}`);
+			throw new Error(vscode.l10n.t("Source directory does not exist: {0}", sourceDir));
 		}
 		// ファイルの検索（Markdownファイルのみを対象とする）
-		return await this.findFilesInDirectory(
-			sourceDir,
-			[".md"],
-			"**/*.md",
-			config.ignoredPatterns,
-		);
+		return await this.findFilesInDirectory(sourceDir, [".md"], "**/*.md", config.ignoredPatterns);
 	}
 
 	/**
@@ -82,11 +70,10 @@ export class FileExplorer {
 		targetDirConfig: string,
 	): string {
 		let sourceDir = sourceDirConfig;
-		let targetDir = targetDirConfig;
-		// 相対パスの場合はワークスペースルートを基準に絶対パス化
+		let targetDir = targetDirConfig; // 相対パスの場合はワークスペースルートを基準に絶対パス化
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (!workspaceFolders || workspaceFolders.length === 0) {
-			throw new Error("ワークスペースが開かれていません");
+			throw new Error(vscode.l10n.t("Workspace is not opened"));
 		}
 		sourceDir = path.resolve(workspaceFolders[0].uri.fsPath, sourceDir);
 		targetDir = path.resolve(workspaceFolders[0].uri.fsPath, targetDir);
