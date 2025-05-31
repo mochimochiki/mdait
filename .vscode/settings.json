@@ -14,4 +14,12 @@
       "source.organizeImports.biome": "explicit"
     }
   },
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "説明文は日本語で記述し、クラス/メソッドなど英語の名前はそのままにしてください。"
+    },
+    {
+      "text": "Conventional Commitsのスタイルで記述してください"
+    }
+  ],
 }
