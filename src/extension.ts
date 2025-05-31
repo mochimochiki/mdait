@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { chatCommand } from "./commands/chat/chat-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { transCommand } from "./commands/trans/trans-command";
 import { DefaultTranslator } from "./commands/trans/translator";
@@ -14,5 +15,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
-	context.subscriptions.push(syncDisposable, transDisposable);
+	// chat command
+	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
+
+	context.subscriptions.push(syncDisposable, transDisposable, chatDisposable);
 }

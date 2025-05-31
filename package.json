@@ -11,8 +11,7 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
+  "contributes": {    "commands": [
       {
         "command": "mdait.sync",
         "title": "Sync mdait"
@@ -20,6 +19,10 @@
       {
         "command": "mdait.trans",
         "title": "mdait: 翻訳を実行"
+      },
+      {
+        "command": "mdait.chat",
+        "title": "mdait: チャット"
       }
     ],
     "configuration": {

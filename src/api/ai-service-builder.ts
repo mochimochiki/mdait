@@ -1,6 +1,7 @@
 import { Configuration } from "../config/configuration";
 import type { AIMessage, AIService } from "./ai-service";
 import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
+import { VSCodeLanguageModelProvider } from "./providers/vscode-lm-provider";
 
 /**
  * AIプロバイダの設定を表すインターフェース。
@@ -23,12 +24,13 @@ export class AIServiceBuilder {
 	 * @param config AIプロバイダの設定。指定されない場合はVSCodeの設定から読み込みます。
 	 * @returns AIService のインスタンス。
 	 * @throws サポートされていないプロバイダが指定された場合。
-	 */
-	public async build(config?: AIProviderConfig): Promise<AIService> {
+	 */ public async build(config?: AIProviderConfig): Promise<AIService> {
 		const effectiveConfig = config || (await this.loadConfiguration());
 		switch (effectiveConfig.provider) {
 			case "default":
 				return new DefaultAIProvider(effectiveConfig);
+			case "vscode-lm":
+				return new VSCodeLanguageModelProvider(effectiveConfig);
 			// case 'openai':
 			//   return new OpenAIAIProvider(effectiveConfig.apiKey);
 			// case 'anthropic':
@@ -36,8 +38,8 @@ export class AIServiceBuilder {
 			default:
 				throw new Error(`Unsupported AI provider: ${effectiveConfig.provider}`);
 		}
-  }
-  
+	}
+
 	/**
 	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
 	 */
