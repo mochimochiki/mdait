@@ -35,7 +35,7 @@ export class ChatCommand {
 			// AIサービスを構築（VSCode Language Modelプロバイダーを使用）
 			const aiServiceBuilder = new AIServiceBuilder();
 			const aiService = await aiServiceBuilder.build({
-				provider: "vscode-lm",
+				model: "vscode-lm",
 			});
 
 			// メッセージを準備

@@ -4,12 +4,12 @@ import { VSCodeLanguageModelProvider } from "../../../api/providers/vscode-lm-pr
 
 suite("VSCodeLanguageModelProvider Tests", () => {
 	test("VSCodeLanguageModelProviderのインスタンスが作成できること", () => {
-		const provider = new VSCodeLanguageModelProvider({ provider: "vscode-lm" });
+		const provider = new VSCodeLanguageModelProvider({ model: "vscode-lm" });
 		assert.ok(provider);
 	});
 
 	test("sendMessageメソッドが存在すること", () => {
-		const provider = new VSCodeLanguageModelProvider({ provider: "vscode-lm" });
+		const provider = new VSCodeLanguageModelProvider({ model: "vscode-lm" });
 		assert.ok(typeof provider.sendMessage === "function");
 	});
 

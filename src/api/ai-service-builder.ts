@@ -7,8 +7,8 @@ import { VSCodeLanguageModelProvider } from "./providers/vscode-lm-provider";
  * AIプロバイダの設定を表すインターフェース。
  * `mdait.trans.provider` の設定値や、各プロバイダ固有の設定（APIキーなど）を想定。
  */
-export interface AIProviderConfig {
-	provider: string;
+export interface AIServiceConfig {
+	model?: string; // 使用するモデル名。"gpt-4o"など
 	apiKey?: string; // 例: OpenAI APIキーなど
 	// 他のプロバイダ固有設定
 	[key: string]: unknown;
@@ -24,9 +24,9 @@ export class AIServiceBuilder {
 	 * @param config AIプロバイダの設定。指定されない場合はVSCodeの設定から読み込みます。
 	 * @returns AIService のインスタンス。
 	 * @throws サポートされていないプロバイダが指定された場合。
-	 */ public async build(config?: AIProviderConfig): Promise<AIService> {
+	 */ public async build(config?: AIServiceConfig): Promise<AIService> {
 		const effectiveConfig = config || (await this.loadConfiguration());
-		switch (effectiveConfig.provider) {
+		switch (effectiveConfig.model) {
 			case "default":
 				return new DefaultAIProvider(effectiveConfig);
 			case "vscode-lm":
@@ -36,14 +36,14 @@ export class AIServiceBuilder {
 			// case 'anthropic':
 			//   return new AnthropicAIProvider(effectiveConfig.apiKey);
 			default:
-				throw new Error(`Unsupported AI provider: ${effectiveConfig.provider}`);
+				throw new Error(`Unsupported AI provider: ${effectiveConfig.model}`);
 		}
 	}
 
 	/**
 	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
 	 */
-	private async loadConfiguration(): Promise<AIProviderConfig> {
+	private async loadConfiguration(): Promise<AIServiceConfig> {
 		const config = new Configuration();
 		await config.load();
 
@@ -52,7 +52,7 @@ export class AIServiceBuilder {
 		// const apiKey = config.get<string>(`trans.providers.${provider}.apiKey`);
 
 		return {
-			provider,
+			model: provider,
 			// apiKey,
 		};
 	}

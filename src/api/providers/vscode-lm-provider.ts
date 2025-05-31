@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
-import type { AIProviderConfig } from "../ai-service-builder";
+import type { AIServiceConfig } from "../ai-service-builder";
 
 /**
  * VS Code Language Model API を使用した AI プロバイダー実装
  * GitHub Copilot の言語モデルを利用してチャット機能を提供します
  */
 export class VSCodeLanguageModelProvider implements AIService {
-	private config: AIProviderConfig;
+	private config: AIServiceConfig;
 
-	constructor(config: AIProviderConfig) {
+	constructor(config: AIServiceConfig) {
 		this.config = config;
 		console.log("VSCodeLanguageModelProvider initialized with config:", config);
 	}
@@ -32,7 +32,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 			}
 
 			// VS Code Language Model API 用のプロンプトを作成
-			const prompt = this.createVSCodePrompt(systemPrompt, messages);
+			const prompt = this.createPrompt(systemPrompt, messages);
 
 			// リクエストを送信
 			const response = await model.sendRequest(
@@ -71,14 +71,24 @@ export class VSCodeLanguageModelProvider implements AIService {
 	 */
 	private async selectLanguageModel(): Promise<vscode.LanguageModelChat | undefined> {
 		try {
-			// gpt-4o を優先的に選択（推奨モデル）
-			const models = await vscode.lm.selectChatModels({
+			// 設定されたモデルがある場合はそれを優先
+			if (this.config.model) {
+				const models = await vscode.lm.selectChatModels({
+					vendor: "copilot",
+					family: this.config.model,
+				});
+				if (models.length > 0) {
+					return models[0];
+				}
+			}
+
+			// gpt-4o
+			const defaultModels = await vscode.lm.selectChatModels({
 				vendor: "copilot",
 				family: "gpt-4o",
 			});
-
-			if (models.length > 0) {
-				return models[0];
+			if (defaultModels.length > 0) {
+				return defaultModels[0];
 			}
 
 			// どのモデルも利用できない場合は、vendor のみで選択
@@ -96,15 +106,15 @@ export class VSCodeLanguageModelProvider implements AIService {
 	/**
 	 * VS Code Language Model API 用のプロンプトを作成
 	 */
-	private createVSCodePrompt(
+	private createPrompt(
 		systemPrompt: string,
 		messages: AIMessage[],
 	): vscode.LanguageModelChatMessage[] {
 		const vscodeMessages: vscode.LanguageModelChatMessage[] = [];
 
-		// システムプロンプトをユーザーメッセージとして追加（VS Code LM API はシステムメッセージをサポートしていないため）
+		// システムプロンプトをAssistantに追加（VS Code LM API はSystemをサポートしていないため）
 		if (systemPrompt) {
-			vscodeMessages.push(vscode.LanguageModelChatMessage.User(systemPrompt));
+			vscodeMessages.push(vscode.LanguageModelChatMessage.Assistant(systemPrompt));
 		}
 
 		// その他のメッセージを変換
@@ -116,7 +126,6 @@ export class VSCodeLanguageModelProvider implements AIService {
 			} else if (message.role === "assistant") {
 				vscodeMessages.push(vscode.LanguageModelChatMessage.Assistant(content));
 			}
-			// system メッセージは既に処理済みなのでスキップ
 		}
 
 		return vscodeMessages;

@@ -1,4 +1,4 @@
-import { AIServiceBuilder, type AIProviderConfig } from "../../api/ai-service-builder";
+import { AIServiceBuilder, type AIServiceConfig } from "../../api/ai-service-builder";
 import { DefaultTranslator, type Translator } from "./translator";
 
 /**
@@ -13,7 +13,7 @@ export class TranslatorBuilder {
 	 * @returns Translator のインスタンス。
 	 * @throws サポートされていないプロバイダが指定された場合。
 	 */
-	public async build(config?: AIProviderConfig): Promise<Translator> {
+	public async build(config?: AIServiceConfig): Promise<Translator> {
 		const aiService = await new AIServiceBuilder().build(config);
 		return new DefaultTranslator(aiService);
 	}
