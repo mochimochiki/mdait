@@ -117,6 +117,21 @@ markerがユニットの開始を示し、その管理対象となるコンテ�
   4. 翻訳結果をユニットのコンテンツに反映し、marker内のハッシュ更新・needタグ除去
   5. Markdown構造を再構築しファイルを保存
 
+### 4.2.3 AIサービス層
+
+AIサービス層は、具体的なAIプロバイダ（OpenAI、Anthropic、VSCode LM APIなど）とのやり取りを抽象化します。
+
+- **`AIServiceBuilder`**: 設定に基づいて適切な`AIService`プロバイダを構築・返却します。
+  - `mdait.trans.provider` 設定値を参照し、指定されたプロバイダをインスタンス化します。
+  - サポートされるプロバイダ:
+    - `default`: モック翻訳プロバイダ（初期実装）
+    - `vscode-lm`: VS Code Language Model API を利用するプロバイダ。
+    - (将来的に `ollama`, `openai` などを追加予定)
+  - 指定されたプロバイダが存在しない場合や利用不可能な場合は、`default`プロバイダにフォールバックします。
+- **各プロバイダ実装**: `src/api/providers/` 以下に配置。
+  - `DefaultAIProvider`: 固定の翻訳結果を返すモック。
+  - `VSCodeLMProvider`: `vscode.lm` APIを利用して翻訳を実行。
+
 ---
 
 ## 5. 設定

@@ -23,6 +23,7 @@ export class Configuration {
 	 */
 	public trans = {
 		provider: "default",
+		model: "gpt-4o",
 		markdown: {
 			skipCodeBlocks: true,
 		},
@@ -53,11 +54,14 @@ export class Configuration {
 		const autoDelete = config.get<boolean>("sync.autoDelete");
 		if (autoDelete !== undefined) {
 			this.sync.autoDelete = autoDelete;
-		}
-		// 翻訳設定の読み込み
+		} // 翻訳設定の読み込み
 		const provider = config.get<string>("trans.provider");
 		if (provider) {
 			this.trans.provider = provider;
+		}
+		const model = config.get<string>("trans.model");
+		if (model) {
+			this.trans.model = model;
 		}
 		const skipCodeBlocks = config.get<boolean>("trans.markdown.skipCodeBlocks");
 		if (skipCodeBlocks !== undefined) {
