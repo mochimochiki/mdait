@@ -35,6 +35,24 @@ suite("TranslatorBuilder", () => {
 		assert.ok(result.length > 0);
 	});
 
+	test("Ollamaプロバイダーが正常に構築されること", async () => {
+		const builder = new TranslatorBuilder();
+		const config = { provider: "ollama" };
+		const translator = await builder.build(config);
+
+		assert.ok(translator);
+		assert.strictEqual(typeof translator.translate, "function");
+	});
+
+	test("VSCodeLMプロバイダーが正常に構築されること", async () => {
+		const builder = new TranslatorBuilder();
+		const config = { provider: "vscode-lm" };
+		const translator = await builder.build(config);
+
+		assert.ok(translator);
+		assert.strictEqual(typeof translator.translate, "function");
+	});
+
 	test("サポートされていないプロバイダでエラーが発生すること", async () => {
 		const builder = new TranslatorBuilder();
 		const config = { provider: "unsupported-provider" };

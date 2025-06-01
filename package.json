@@ -75,6 +75,16 @@
           "type": "boolean",
           "default": true,
           "description": "%mdait.trans.markdown.skipCodeBlocks.description%"
+        },
+        "mdait.trans.ollama.endpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "%mdait.trans.ollama.endpoint.description%"
+        },
+        "mdait.trans.ollama.model": {
+          "type": "string",
+          "default": "llama2",
+          "description": "%mdait.trans.ollama.model.description%"
         }
       }
     }
@@ -91,7 +101,8 @@
   "dependencies": {
     "@vscode/l10n": "^0.0.18",
     "gray-matter": "^4.0.3",
-    "markdown-it": "^14.1.0"
+    "markdown-it": "^14.1.0",
+    "ollama": "^0.5.16"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

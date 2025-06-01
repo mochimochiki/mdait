@@ -18,7 +18,9 @@ export class Configuration {
 	public sync = {
 		autoMarkerLevel: 2,
 		autoDelete: true,
-	}; /**
+	};
+
+	/**
 	 * 翻訳設定
 	 */
 	public trans = {
@@ -26,6 +28,10 @@ export class Configuration {
 		model: "gpt-4o",
 		markdown: {
 			skipCodeBlocks: true,
+		},
+		ollama: {
+			endpoint: "http://localhost:11434",
+			model: "llama2",
 		},
 	};
 
@@ -67,13 +73,23 @@ export class Configuration {
 		if (skipCodeBlocks !== undefined) {
 			this.trans.markdown.skipCodeBlocks = skipCodeBlocks;
 		}
+
+		// Ollama設定の読み込み
+		const ollamaEndpoint = config.get<string>("trans.ollama.endpoint");
+		if (ollamaEndpoint) {
+			this.trans.ollama.endpoint = ollamaEndpoint;
+		}
+		const ollamaModel = config.get<string>("trans.ollama.model");
+		if (ollamaModel) {
+			this.trans.ollama.model = ollamaModel;
+		}
 	}
 
 	/**
 	 * 設定が有効かどうかを検証する
 	 * @returns エラーメッセージ。問題がなければnull
-	 */ 
-  public validate(): string | null {
+	 */
+	public validate(): string | null {
 		// 翻訳ペアが設定されているか
 		if (!this.transPairs || this.transPairs.length === 0) {
 			return vscode.l10n.t("Translation pairs (mdait.transPairs) are not configured.");
