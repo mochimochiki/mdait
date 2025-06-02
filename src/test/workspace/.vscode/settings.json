@@ -6,15 +6,22 @@
       "targetDir": "content/en"
     }
   ],
+  
   // 除外パターン
   "mdait.ignoredPatterns": "**/node_modules/**",
+  
   // 自動削除設定
   "mdait.sync.autoDelete": true,
+  
   // 翻訳プロバイダ(default/vscode-lm/ollama)
   "mdait.trans.provider": "default",
+  
   // Markdown:コードブロックをスキップするか
   "mdait.trans.markdown.skipCodeBlocks": true,
-  // ollama
+  
+  // ollama endpoint
   "mdait.trans.ollama.endpoint": "http://localhost:11434",
+  
+  // ollama model
   "mdait.trans.ollama.model": "gemma3:4b"
 }
