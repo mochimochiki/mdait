@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../api/ai-service";
 import { AIServiceBuilder } from "../../api/ai-service-builder";
+import { Configuration } from "../../config/configuration";
 
 /**
  * chat command
@@ -32,13 +33,12 @@ export class ChatCommand {
 		if (!userQuestion) {
 			return; // ユーザーがキャンセルした場合は終了
 		}
-
 		try {
 			// AIサービスを構築（VSCode Language Modelプロバイダーを使用）
+      const config = new Configuration();
+      await config.load();
 			const aiServiceBuilder = new AIServiceBuilder();
-			const aiService = await aiServiceBuilder.build({
-				model: "vscode-lm",
-			});
+			const aiService = await aiServiceBuilder.build(config.trans);
 
 			// メッセージを準備
 			const messages: AIMessage[] = [
