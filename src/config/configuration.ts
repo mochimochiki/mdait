@@ -1,6 +1,23 @@
 import * as vscode from "vscode";
 
 /**
+ * 翻訳設定の型定義
+ */
+export interface TransConfig {
+	provider: string;
+	model: string;
+	markdown: {
+		skipCodeBlocks: boolean;
+	};
+	ollama: {
+		endpoint: string;
+		model: string;
+	};
+	// プロバイダ固有設定の拡張用
+	[key: string]: unknown;
+}
+
+/**
  * 翻訳拡張機能の設定を管理するクラス
  */
 export class Configuration {
@@ -19,11 +36,10 @@ export class Configuration {
 		autoMarkerLevel: 2,
 		autoDelete: true,
 	};
-
 	/**
-	 * 翻訳設定
+	 * trans設定
 	 */
-	public trans = {
+	public trans: TransConfig = {
 		provider: "default",
 		model: "gpt-4o",
 		markdown: {

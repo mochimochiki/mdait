@@ -1,6 +1,6 @@
 import { Ollama } from "ollama";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
-import type { AIServiceConfig } from "../ai-service-builder";
+import type { TransConfig } from "../../config/configuration";
 
 /**
  * Ollama-js パッケージを使用した AI プロバイダー実装
@@ -10,10 +10,10 @@ export class OllamaProvider implements AIService {
 	private ollama: Ollama;
 	private model: string;
 
-	constructor(config: AIServiceConfig) {
+	constructor(config: TransConfig) {
 		// Ollama固有設定を優先、フォールバックとして汎用設定を使用
-		const endpoint = (config.endpoint as string) || "http://localhost:11434";
-		this.model = (config.ollamaModel as string) || (config.model as string) || "llama2";
+		const endpoint = (config.ollama?.endpoint as string) || "http://localhost:11434";
+		this.model = (config.ollama?.model as string) || (config.model as string) || "llama2";
 
 		// Ollama クライアントを初期化
 		this.ollama = new Ollama({ host: endpoint });
