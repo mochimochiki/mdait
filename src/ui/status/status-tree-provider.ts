@@ -1,7 +1,8 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
-import type { FileStatus, StatusItem, StatusType } from "./status-item";
+import type { FileStatus, StatusItem, StatusType, UnitStatus } from "./status-item";
 
 /**
  * ステータスツリービューのデータプロバイダ
@@ -46,7 +47,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			);
 		}
 	}
-
 	/**
 	 * ツリーアイテムを取得する
 	 */
@@ -59,9 +59,19 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
 
-		// ファイルタイプの場合はコンテキストメニュー用のcontextValueを設定
+		// タイプに応じてコンテキストメニュー用のcontextValueを設定
 		if (element.type === "file") {
 			treeItem.contextValue = "file";
+		} else if (element.type === "unit") {
+			treeItem.contextValue = "unit";
+			// ユニットの場合はコマンドを設定してクリック時にジャンプ
+			treeItem.command = {
+				command: "mdait.jumpToUnit",
+				title: "Jump to Unit",
+				arguments: [element.filePath, element.startLine],
+			};
+		} else if (element.type === "directory") {
+			treeItem.contextValue = "directory";
 		}
 
 		return treeItem;
@@ -72,21 +82,156 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	public getChildren(element?: StatusItem): Thenable<StatusItem[]> {
 		if (!element) {
-			// ルート要素の場合はファイル一覧を返す
-			return Promise.resolve(this.getFileItems());
+			// ルート要素の場合はディレクトリ一覧を返す
+			return Promise.resolve(this.getDirectoryItems());
 		}
 
-		// 現在の実装では子要素はサポートしない（後続チケットで実装）
+		if (element.type === "directory") {
+			// ディレクトリの場合はファイル一覧を返す
+			return Promise.resolve(this.getFileItems(element.directoryPath));
+		}
+
+		if (element.type === "file") {
+			// ファイルの場合は翻訳ユニット一覧を返す
+			return Promise.resolve(this.getUnitItems(element.filePath));
+		}
+
+		// ユニットタイプの場合は子要素なし
 		return Promise.resolve([]);
 	}
 
 	/**
-	 * ファイル一覧のStatusItemを作成する
+	 * ディレクトリ一覧のStatusItemを作成する
 	 */
-	private getFileItems(): StatusItem[] {
-		return this.fileStatuses.map((fileStatus) => this.createFileStatusItem(fileStatus));
+	private getDirectoryItems(): StatusItem[] {
+		const directoryMap = new Map<string, FileStatus[]>();
+		// ファイルをディレクトリごとにグループ化
+		for (const fileStatus of this.fileStatuses) {
+			const dirPath = path.dirname(fileStatus.filePath);
+			if (!directoryMap.has(dirPath)) {
+				directoryMap.set(dirPath, []);
+			}
+			const files = directoryMap.get(dirPath);
+			if (files) {
+				files.push(fileStatus);
+			}
+		}
+
+		// ディレクトリごとにStatusItemを作成
+		const directoryItems: StatusItem[] = [];
+		for (const [dirPath, files] of directoryMap) {
+			const dirName = path.basename(dirPath) || dirPath;
+			const totalUnits = files.reduce((sum, file) => sum + file.totalUnits, 0);
+			const translatedUnits = files.reduce((sum, file) => sum + file.translatedUnits, 0);
+
+			// ディレクトリの全体ステータスを決定
+			const status = this.determineDirectoryStatus(files);
+
+			directoryItems.push({
+				type: "directory",
+				label: `${dirName} (${translatedUnits}/${totalUnits})`,
+				directoryPath: dirPath,
+				status,
+				collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+				tooltip: vscode.l10n.t(
+					"Directory: {0} - {1}/{2} units translated",
+					dirName,
+					translatedUnits,
+					totalUnits,
+				),
+			});
+		}
+
+		return directoryItems;
 	}
 
+	/**
+	 * 指定ディレクトリのファイル一覧のStatusItemを作成する
+	 */
+	private getFileItems(directoryPath?: string): StatusItem[] {
+		if (!directoryPath) {
+			return this.fileStatuses.map((fileStatus) => this.createFileStatusItem(fileStatus));
+		}
+
+		return this.fileStatuses
+			.filter((fileStatus) => path.dirname(fileStatus.filePath) === directoryPath)
+			.map((fileStatus) => this.createFileStatusItem(fileStatus));
+	}
+
+	/**
+	 * 指定ファイルの翻訳ユニット一覧のStatusItemを作成する
+	 */
+	private getUnitItems(filePath?: string): StatusItem[] {
+		if (!filePath) {
+			return [];
+		}
+
+		const fileStatus = this.fileStatuses.find((fs) => fs.filePath === filePath);
+		if (!fileStatus || !fileStatus.units) {
+			return [];
+		}
+
+		return fileStatus.units.map((unit) => this.createUnitStatusItem(unit, filePath));
+	}
+
+	/**
+	 * UnitStatusからStatusItemを作成する
+	 */
+	private createUnitStatusItem(unitStatus: UnitStatus, filePath: string): StatusItem {
+		return {
+			type: "unit",
+			label: unitStatus.title || `Unit ${unitStatus.hash}`,
+			filePath,
+			unitHash: unitStatus.hash,
+			startLine: unitStatus.startLine,
+			endLine: unitStatus.endLine,
+			status: unitStatus.status,
+			collapsibleState: vscode.TreeItemCollapsibleState.None,
+			tooltip: this.createUnitTooltip(unitStatus),
+		};
+	}
+
+	/**
+	 * ディレクトリの全体ステータスを決定する
+	 */
+	private determineDirectoryStatus(files: FileStatus[]): StatusType {
+		if (files.length === 0) return "unknown";
+
+		const hasError = files.some((f) => f.status === "error");
+		if (hasError) return "error";
+
+		const totalUnits = files.reduce((sum, f) => sum + f.totalUnits, 0);
+		const translatedUnits = files.reduce((sum, f) => sum + f.translatedUnits, 0);
+
+		if (totalUnits === 0) return "unknown";
+		if (translatedUnits === totalUnits) return "translated";
+		return "needsTranslation";
+	}
+
+	/**
+	 * 翻訳ユニット用のツールチップを作成する
+	 */
+	private createUnitTooltip(unitStatus: UnitStatus): string {
+		let tooltip = `${unitStatus.title} (${unitStatus.hash})`;
+
+		if (unitStatus.needFlag) {
+			tooltip += ` - Need: ${unitStatus.needFlag}`;
+		}
+
+		if (unitStatus.fromHash) {
+			tooltip += ` - From: ${unitStatus.fromHash}`;
+		}
+
+		tooltip += ` - Lines: ${unitStatus.startLine + 1}-${unitStatus.endLine + 1}`;
+
+		return tooltip;
+	}
+	/**
+	 * ファイル一覧のStatusItemを作成する（廃止：getFileItems(directoryPath)に統合）
+	 */
+	private getOldFileItems(): StatusItem[] {
+		return this.fileStatuses.map((fileStatus) => this.createFileStatusItem(fileStatus));
+	}
 	/**
 	 * FileStatusからStatusItemを作成する
 	 */
@@ -98,7 +243,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			label,
 			filePath: fileStatus.filePath,
 			status: fileStatus.status,
-			collapsibleState: vscode.TreeItemCollapsibleState.None, // 基本実装では展開不可
+			collapsibleState:
+				fileStatus.units && fileStatus.units.length > 0
+					? vscode.TreeItemCollapsibleState.Collapsed
+					: vscode.TreeItemCollapsibleState.None,
 			tooltip: this.createFileTooltip(fileStatus),
 		};
 	}

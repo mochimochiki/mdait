@@ -4,7 +4,8 @@ import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
 import { MarkdownItParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
-import type { FileStatus, StatusType } from "./status-item";
+import type { FileStatus, StatusType, UnitStatus } from "./status-item";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
  * ファイルの翻訳状況を収集するクラス
@@ -90,7 +91,6 @@ export class StatusCollector {
 
 		return fileStatuses;
 	}
-
 	/**
 	 * 単一ファイルの翻訳状況を収集する
 	 */
@@ -102,12 +102,27 @@ export class StatusCollector {
 			const content = await fs.promises.readFile(filePath, "utf-8");
 
 			// Markdownをパース
-			const markdown = this.parser.parse(content); // ユニットの翻訳状況を分析
+			const markdown = this.parser.parse(content); 
+			
+			// ユニットの翻訳状況を分析
 			let translatedUnits = 0;
 			const totalUnits = markdown.units.length;
+			const units: UnitStatus[] = [];
 
 			for (const unit of markdown.units) {
-				if (!unit.marker.need) {
+				const unitStatus = this.determineUnitStatus(unit);
+				units.push({
+					hash: unit.marker?.hash || "",
+					title: unit.title,
+					headingLevel: unit.headingLevel,
+					status: unitStatus,
+					startLine: unit.startLine,
+					endLine: unit.endLine,
+					fromHash: unit.marker?.from || undefined,
+					needFlag: unit.marker?.need || undefined,
+				});
+
+				if (unitStatus === "translated") {
 					translatedUnits++;
 				}
 			}
@@ -122,6 +137,7 @@ export class StatusCollector {
 				translatedUnits,
 				totalUnits,
 				hasParseError: false,
+				units,
 			};
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -136,6 +152,26 @@ export class StatusCollector {
 				errorMessage: (error as Error).message,
 			};
 		}
+	}
+
+	/**
+	 * 個別ユニットの翻訳状態を決定する
+	 */
+	private determineUnitStatus(unit: MdaitUnit): StatusType {
+		if (!unit.marker) {
+			return "unknown";
+		}
+
+		if (unit.marker.need === "translate") {
+			return "needsTranslation";
+		}
+
+		if (unit.marker.need) {
+			// review, verify-deletion などその他のneedフラグ
+			return "needsTranslation";
+		}
+
+		return "translated";
 	}
 
 	/**

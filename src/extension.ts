@@ -25,20 +25,42 @@ export function activate(context: vscode.ExtensionContext) {
 		treeDataProvider: statusTreeProvider,
 		showCollapseAll: false,
 	});
-
 	// status.refresh command
 	const refreshStatusDisposable = vscode.commands.registerCommand("mdait.status.refresh", () => {
 		statusTreeProvider.refresh();
 	});
 
+	// jumpToUnit command
+	const jumpToUnitDisposable = vscode.commands.registerCommand(
+		"mdait.jumpToUnit",
+		async (filePath: string, line: number) => {
+			try {
+				const document = await vscode.workspace.openTextDocument(filePath);
+				const editor = await vscode.window.showTextDocument(document);
+
+				// 指定行にジャンプ（0ベースから1ベースに変換）
+				const position = new vscode.Position(line, 0);
+				editor.selection = new vscode.Selection(position, position);
+				editor.revealRange(
+					new vscode.Range(position, position),
+					vscode.TextEditorRevealType.InCenter,
+				);
+			} catch (error) {
+				vscode.window.showErrorMessage(
+					vscode.l10n.t("Failed to jump to unit: {0}", (error as Error).message),
+				);
+			}
+		},
+	);
+
 	// 初回データ読み込み
 	statusTreeProvider.refresh();
-
 	context.subscriptions.push(
 		syncDisposable,
 		transDisposable,
 		chatDisposable,
 		treeView,
 		refreshStatusDisposable,
+		jumpToUnitDisposable,
 	);
 }

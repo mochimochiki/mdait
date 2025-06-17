@@ -12,7 +12,7 @@ export interface StatusItem {
 	/**
 	 * アイテムのタイプ
 	 */
-	type: "file" | "unit";
+	type: "directory" | "file" | "unit";
 
 	/**
 	 * 表示ラベル
@@ -20,9 +20,29 @@ export interface StatusItem {
 	label: string;
 
 	/**
-	 * ファイルパス（ファイルタイプの場合）
+	 * ディレクトリパス（ディレクトリタイプの場合）
+	 */
+	directoryPath?: string;
+
+	/**
+	 * ファイルパス（ファイル・ユニットタイプの場合）
 	 */
 	filePath?: string;
+
+	/**
+	 * 翻訳単位のハッシュ（ユニットタイプの場合）
+	 */
+	unitHash?: string;
+
+	/**
+	 * 開始行番号（ユニットタイプの場合、0ベース）
+	 */
+	startLine?: number;
+
+	/**
+	 * 終了行番号（ユニットタイプの場合、0ベース）
+	 */
+	endLine?: number;
 
 	/**
 	 * 翻訳状態
@@ -88,4 +108,54 @@ export interface FileStatus {
 	 * エラーメッセージ
 	 */
 	errorMessage?: string;
+
+	/**
+	 * ファイル内の翻訳ユニット詳細情報
+	 */
+	units?: UnitStatus[];
+}
+
+/**
+ * 翻訳単位レベルのステータス情報
+ */
+export interface UnitStatus {
+	/**
+	 * 翻訳単位のハッシュ
+	 */
+	hash: string;
+
+	/**
+	 * 翻訳単位のタイトル（見出し）
+	 */
+	title: string;
+
+	/**
+	 * 見出しレベル
+	 */
+	headingLevel: number;
+
+	/**
+	 * 翻訳状態
+	 */
+	status: StatusType;
+
+	/**
+	 * 開始行番号（0ベース）
+	 */
+	startLine: number;
+
+	/**
+	 * 終了行番号（0ベース）
+	 */
+	endLine: number;
+
+	/**
+	 * 翻訳元ユニットのハッシュ
+	 */
+	fromHash?: string;
+
+	/**
+	 * needフラグ
+	 */
+	needFlag?: string;
 }

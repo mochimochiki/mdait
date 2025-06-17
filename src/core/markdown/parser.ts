@@ -54,9 +54,12 @@ export class MarkdownItParser implements IMarkdownParser {
 		const frontMatter = fm.data as FrontMatter;
 		const content = fm.content;
 		let frontMatterRaw = "";
+		let frontMatterLineOffset = 0;
 		const idx = markdown.indexOf(content);
 		if (idx > 0) {
 			frontMatterRaw = markdown.substring(0, idx);
+			// フロントマターの行数を計算
+			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
 		}
 		const units: MdaitUnit[] = [];
 		const tokens = this.md.parse(content, {});
@@ -89,6 +92,8 @@ export class MarkdownItParser implements IMarkdownParser {
 							currentSection.title,
 							currentSection.level,
 							rawContent,
+							start + frontMatterLineOffset,
+							end - 1 + frontMatterLineOffset,
 						),
 					);
 					currentSection = null;
@@ -118,6 +123,8 @@ export class MarkdownItParser implements IMarkdownParser {
 							currentSection.title,
 							currentSection.level,
 							rawContent,
+							start + frontMatterLineOffset,
+							end - 1 + frontMatterLineOffset,
 						),
 					);
 				}
@@ -154,6 +161,8 @@ export class MarkdownItParser implements IMarkdownParser {
 					currentSection.title,
 					currentSection.level,
 					rawContent,
+					start + frontMatterLineOffset,
+					end - 1 + frontMatterLineOffset,
 				),
 			);
 		}

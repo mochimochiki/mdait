@@ -13,12 +13,16 @@ export class MdaitUnit {
 	 * @param title ユニットのタイトル（見出し）
 	 * @param headingLevel 見出しのレベル（1=h1, 2=h2, ...）
 	 * @param content 元のMarkdownコンテンツ（見出しと本文を含む原文）
+	 * @param startLine 開始行番号（0ベース）
+	 * @param endLine 終了行番号（0ベース）
 	 */
 	constructor(
 		public marker: MdaitMarker,
 		public title: string,
 		public headingLevel: number,
 		public content: string, // 元のMarkdownコンテンツを保持
+		public startLine = 0,
+		public endLine = 0,
 	) {}
 
 	/**
@@ -69,6 +73,13 @@ export class MdaitUnit {
 		// 新しいヘッダーを作成（needタグ付き）
 		const newMarker = new MdaitMarker(newHash, sourceHash, "translate");
 		// 新しいユニットを作成して返す
-		return new MdaitUnit(newMarker, sourceUnit.title, sourceUnit.headingLevel, sourceUnit.content);
+		return new MdaitUnit(
+			newMarker,
+			sourceUnit.title,
+			sourceUnit.headingLevel,
+			sourceUnit.content,
+			sourceUnit.startLine,
+			sourceUnit.endLine,
+		);
 	}
 }
