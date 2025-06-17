@@ -27,5 +27,13 @@
   "GitHub Copilot permission is required. Please check your settings.": "GitHub Copilot permission is required. Please check your settings.",
   "API usage limit reached. Please try again later.": "API usage limit reached. Please try again later.",
   "Language model error: {0}": "Language model error: {0}",
-  "An unexpected error occurred: {0}": "An unexpected error occurred: {0}"
+  "An unexpected error occurred: {0}": "An unexpected error occurred: {0}",
+  "Error collecting file statuses: {0}": "Error collecting file statuses: {0}",
+  "Error refreshing status tree: {0}": "Error refreshing status tree: {0}",
+  "Parse error in {0}: {1}": "Parse error in {0}: {1}",
+  "{0}: {1}/{2} units translated": "{0}: {1}/{2} units translated",
+  "Translation completed": "Translation completed",
+  "Translation needed": "Translation needed",
+  "Error occurred": "Error occurred",
+  "Unknown status": "Unknown status"
 }

@@ -27,5 +27,13 @@
   "GitHub Copilot permission is required. Please check your settings.": "GitHub Copilotの使用許可が必要です。設定を確認してください。",
   "API usage limit reached. Please try again later.": "APIの使用制限に達しました。しばらく時間をおいてからお試しください。",
   "Language model error: {0}": "言語モデルエラー: {0}",
-  "An unexpected error occurred: {0}": "予期しないエラーが発生しました: {0}"
+  "An unexpected error occurred: {0}": "予期しないエラーが発生しました: {0}",
+  "Error collecting file statuses: {0}": "ファイル状況の収集中にエラーが発生しました: {0}",
+  "Error refreshing status tree: {0}": "ステータスツリーの更新中にエラーが発生しました: {0}",
+  "Parse error in {0}: {1}": "{0} のパースエラー: {1}",
+  "{0}: {1}/{2} units translated": "{0}: {1}/{2} ユニットが翻訳済み",
+  "Translation completed": "翻訳完了",
+  "Translation needed": "翻訳が必要",
+  "Error occurred": "エラーが発生しました",
+  "Unknown status": "不明な状態"
 }

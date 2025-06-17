@@ -25,8 +25,40 @@
       {
         "command": "mdait.chat",
         "title": "%mdait.chat.title%"
+      },
+      {
+        "command": "mdait.status.refresh",
+        "title": "%mdait.status.refresh.title%",
+        "icon": "$(refresh)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mdait",
+          "title": "%mdait.viewsContainer.title%",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "mdait": [
+        {
+          "id": "mdait.status",
+          "icon": "$(check)",
+          "name": "%mdait.status.view.title%"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "mdait.status.refresh",
+          "when": "view == mdait.status",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "%mdait.configuration.title%",
       "properties": {

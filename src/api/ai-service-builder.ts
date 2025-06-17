@@ -1,4 +1,4 @@
-import { Configuration, TransConfig } from "../config/configuration";
+import { Configuration, type TransConfig } from "../config/configuration";
 import type { AIMessage, AIService } from "./ai-service";
 import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
 import { OllamaProvider } from "./providers/ollama-provider";
@@ -32,11 +32,11 @@ export class AIServiceBuilder {
 				throw new Error(`Unsupported AI provider: ${effectiveConfig.provider}`);
 		}
 	}
-	
-  /**
+
+	/**
 	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
 	 */
-  private async loadConfiguration(): Promise<TransConfig> {
+	private async loadConfiguration(): Promise<TransConfig> {
 		const config = new Configuration();
 		await config.load();
 
