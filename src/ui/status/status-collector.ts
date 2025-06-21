@@ -2,10 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { MarkdownItParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { FileStatus, StatusType, UnitStatus } from "./status-item";
-import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /**
  * ファイルの翻訳状況を収集するクラス
@@ -18,26 +18,21 @@ export class StatusCollector {
 		this.fileExplorer = new FileExplorer();
 		this.parser = new MarkdownItParser();
 	}
-
 	/**
-	 * 設定に基づいて全ファイルの翻訳状況を収集する
+	 * 設定に基づいて全ファイルの翻訳状況を収集する（Targetディレクトリのみ）
 	 */
 	public async collectAllFileStatuses(config: Configuration): Promise<FileStatus[]> {
 		const fileStatuses: FileStatus[] = [];
 
 		try {
-			// 各翻訳ペアに対してファイル状況を収集
+			// 各翻訳ペアのTargetディレクトリに対してファイル状況を収集
 			for (const transPair of config.transPairs) {
-				const sourceStatuses = await this.collectFileStatusesInDirectory(
-					transPair.sourceDir,
-					config,
-				);
 				const targetStatuses = await this.collectFileStatusesInDirectory(
 					transPair.targetDir,
 					config,
 				);
 
-				fileStatuses.push(...sourceStatuses, ...targetStatuses);
+				fileStatuses.push(...targetStatuses);
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
@@ -102,8 +97,8 @@ export class StatusCollector {
 			const content = await fs.promises.readFile(filePath, "utf-8");
 
 			// Markdownをパース
-			const markdown = this.parser.parse(content); 
-			
+			const markdown = this.parser.parse(content);
+
 			// ユニットの翻訳状況を分析
 			let translatedUnits = 0;
 			const totalUnits = markdown.units.length;
