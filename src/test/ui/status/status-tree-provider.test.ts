@@ -16,7 +16,6 @@ suite("StatusTreeProvider Test Suite", () => {
 				targetDir: "src/test/sample-content/en",
 			},
 		];
-		config.ignoredPatterns = [];
 
 		// ファイル状況を収集
 		const fileStatuses = await collector.collectAllFileStatuses(config);
@@ -52,7 +51,6 @@ suite("StatusTreeProvider Test Suite", () => {
 				targetDir: "another-non-existent-directory",
 			},
 		];
-		config.ignoredPatterns = [];
 
 		// ファイル状況を収集
 		const fileStatuses = await collector.collectAllFileStatuses(config);
