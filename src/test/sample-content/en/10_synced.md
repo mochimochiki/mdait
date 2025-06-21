@@ -1,5 +1,5 @@
 ---
-title: "English Test 1"
+title: "Synced content"
 ---
 <!-- mdait 68a7c2cc from:403206cb -->
 # Heading 1
