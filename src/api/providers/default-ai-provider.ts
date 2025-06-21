@@ -1,5 +1,5 @@
-import type { AIMessage, AIService, MessageStream } from "../ai-service";
 import type { TransConfig } from "../../config/configuration";
+import type { AIMessage, AIService, MessageStream } from "../ai-service";
 
 /**
  * AIServiceインターフェースのデフォルト実装（モック）。
@@ -43,13 +43,32 @@ export class DefaultAIProvider implements AIService {
 			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
 	}
-
 	/**
 	 * 簡易的な翻訳モックを生成します。
 	 */
 	private generateMockTranslation(text: string, systemPrompt: string): string {
-		// 英語から日本語への簡易的な置き換え
-		if (systemPrompt.includes("to ja")) {
+		// systemPromptから言語ペアを抽出
+		const fromMatch = systemPrompt.match(/from (\w+)/);
+		const toMatch = systemPrompt.match(/to (\w+)/);
+		const sourceLang = fromMatch?.[1] || "auto";
+		const targetLang = toMatch?.[1] || "ja";
+
+		// 言語ペアに応じた翻訳パターン
+		if (sourceLang === "ja" && targetLang === "en") {
+			return `${text
+				.replace(/こんにちは/g, "Hello")
+				.replace(/世界/g, "World")
+				.replace(/ありがとう/g, "Thank you")
+				.replace(/おはよう/g, "Good morning")
+				.replace(/こんばんは/g, "Good evening")
+				.replace(/元気ですか/g, "How are you")
+				.replace(
+					/です/g,
+					"is",
+				)}\n\n[Mock translation by DefaultAIProvider: ${sourceLang} → ${targetLang}]`;
+		}
+
+		if ((sourceLang === "en" || sourceLang === "auto") && targetLang === "ja") {
 			return `${text
 				.replace(/Hello/gi, "こんにちは")
 				.replace(/World/gi, "世界")
@@ -59,11 +78,14 @@ export class DefaultAIProvider implements AIService {
 				.replace(/How are you/gi, "元気ですか")
 				.replace(/The/gi, "その")
 				.replace(/is/gi, "です")
-				.replace(/are/gi, "です")}\n\n[このテキストはDefaultAIProviderによるモック翻訳です]`;
+				.replace(
+					/are/gi,
+					"です",
+				)}\n\n[DefaultAIProviderによるモック翻訳: ${sourceLang} → ${targetLang}]`;
 		}
 
-		// その他の言語ペアの場合はプレフィックスを付けて返す
-		return `${text}\n\n[このテキストはDefaultAIProviderによるモック翻訳です]`;
+		// その他の言語ペアの場合
+		return `${text}\n\n[DefaultAIProviderによるモック翻訳: ${sourceLang} → ${targetLang}]`;
 	}
 
 	/**

@@ -12,7 +12,9 @@ suite("StatusTreeProvider Test Suite", () => {
 		// テスト用の設定を作成
 		config.transPairs = [
 			{
+				sourceLang: "ja",
 				sourceDir: "src/test/sample-content/ja",
+				targetLang: "en",
 				targetDir: "src/test/sample-content/en",
 			},
 		];
@@ -47,7 +49,9 @@ suite("StatusTreeProvider Test Suite", () => {
 		// 存在しないディレクトリを設定
 		config.transPairs = [
 			{
+				sourceLang: "ja",
 				sourceDir: "non-existent-directory",
+				targetLang: "en",
 				targetDir: "another-non-existent-directory",
 			},
 		];

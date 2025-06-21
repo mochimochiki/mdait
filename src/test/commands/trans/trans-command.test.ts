@@ -50,7 +50,7 @@ suite("transコマンドE2E", () => {
 
 	test("need:translateフラグ付きユニットが翻訳され、フラグとハッシュが正しく更新されること", async () => {
 		// テスト用にneed:translateフラグ付きファイルを準備
-		const testFile = join(tmpJaDir, "translate_test.md");
+		const testFile = join(tmpEnDir, "translate_test.md");
 		const testContent = [
 			"---",
 			"title: 'テスト翻訳'",

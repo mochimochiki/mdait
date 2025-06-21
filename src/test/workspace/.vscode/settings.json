@@ -2,7 +2,9 @@
   // 翻訳ペア
   "mdait.transPairs": [
     {
+      "sourceLang": "ja",
       "sourceDir": "content/ja",
+      "targetLang": "en",
       "targetDir": "content/en"
     }
   ],

@@ -12,33 +12,31 @@ import { TranslatorBuilder } from "./translator-builder";
 export async function transCommand(uri?: vscode.Uri) {
 	try {
 		// ファイルパスの取得
-		const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
-		if (!filePath) {
+		const targetFilePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
+		if (!targetFilePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 			return;
 		}
-
-		// 言語設定の入力
-		const sourceLang = await vscode.window.showInputBox({
-			prompt: vscode.l10n.t("Enter source language code (e.g., en)"),
-			value: "auto",
-		});
-		if (!sourceLang) return;
-
-		const targetLang = await vscode.window.showInputBox({
-			prompt: vscode.l10n.t("Enter target language code (e.g., ja)"),
-			value: "ja",
-		});
-		if (!targetLang) return;
-
 		// 設定の読み込み
 		const config = new Configuration();
-		await config.load(); // AIService と Translator の初期化
+		await config.load();
+
+		// 翻訳ペアから言語情報を取得
+		const transPair = config.getTransPairForTargetFile(targetFilePath);
+		if (!transPair) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
+			);
+			return;
+		}
+
+		const sourceLang = transPair.sourceLang;
+		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
 		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translating {0} from {1} to {2}...", filePath, sourceLang, targetLang),
+			vscode.l10n.t("Translating {0} from {1} to {2}...", targetFilePath, sourceLang, targetLang),
 		); // Markdown ファイルの読み込みとパース
-		const markdownContent = await fs.promises.readFile(filePath, "utf-8");
+		const markdownContent = await fs.promises.readFile(targetFilePath, "utf-8");
 		const markdown = markdownParser.parse(markdownContent, config);
 
 		// need:translate フラグを持つユニットを抽出
@@ -51,7 +49,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		}
 
 		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translating {0} units: {1}", unitsToTranslate.length, filePath),
+			vscode.l10n.t("Translating {0} units: {1}", unitsToTranslate.length, targetFilePath),
 		);
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
@@ -60,7 +58,7 @@ export async function transCommand(uri?: vscode.Uri) {
 
 		// 更新されたMarkdownを保存
 		const updatedContent = markdownParser.stringify(markdown);
-		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
+		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Translation completed: {0} units translated", unitsToTranslate.length),
 		);

@@ -18,13 +18,23 @@ export interface TransConfig {
 }
 
 /**
+ * 翻訳ペア設定の型定義
+ */
+export interface TransPair {
+	sourceDir: string;
+	targetDir: string;
+	sourceLang: string;
+	targetLang: string;
+}
+
+/**
  * 翻訳拡張機能の設定を管理するクラス
  */
 export class Configuration {
 	/**
 	 * 翻訳ペア設定
 	 */
-	public transPairs: Array<{ sourceDir: string; targetDir: string }> = [];
+	public transPairs: TransPair[] = [];
 	/**
 	 * 除外パターン
 	 */
@@ -56,10 +66,8 @@ export class Configuration {
 	 */
 	public async load(): Promise<void> {
 		const config = vscode.workspace.getConfiguration("mdait");
-
 		// 翻訳ペア設定の読み込み
-		this.transPairs =
-			config.get<Array<{ sourceDir: string; targetDir: string }>>("transPairs") || [];
+		this.transPairs = config.get<TransPair[]>("transPairs") || [];
 
 		// 除外パターンの読み込み
 		const ignoredPatterns = config.get<string>("ignoredPatterns");
@@ -118,6 +126,25 @@ export class Configuration {
 			}
 			if (!pair.targetDir) {
 				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * 指定されたファイルパスから対応する翻訳ペアを取得
+	 * @param targetFilePath ファイルパス
+	 * @returns 対応する翻訳ペア（見つからない場合はnull）
+	 */
+	public getTransPairForTargetFile(targetFilePath: string): TransPair | null {
+		const normalizedTargetPath = targetFilePath.replace(/\\/g, "/");
+
+		for (const pair of this.transPairs) {
+			const normalizedTargetDir = pair.targetDir.replace(/\\/g, "/");
+
+			if (normalizedTargetPath.includes(normalizedTargetDir)) {
+				return pair;
 			}
 		}
 
