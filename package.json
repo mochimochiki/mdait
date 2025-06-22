@@ -37,7 +37,7 @@
         {
           "id": "mdait",
           "title": "%mdait.viewsContainer.title%",
-          "icon": "$(book)"
+          "icon": "$(globe)"
         }
       ]
     },

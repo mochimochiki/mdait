@@ -1,5 +1,5 @@
 ---
-title: "Synced content"
+title: "test content"
 ---
 <!-- mdait 68a7c2cc from:403206cb -->
 # Heading 1
@@ -54,11 +54,11 @@ Example of a table:
 | Data 1   | Data 2   | Data 3   |
 | Data 4   | Data 5   | Data 6   |
 
-<!-- mdait a5451611 from:2507a192 need:translate -->
-#### Heading 6
+<!-- mdait dc5d14d1 from:dc5d14d1 need:translate -->
+#### 翻訳が必要な原稿
 
-Adding more paragraphs to enrich the content.
+段落を追加して、さらに内容を充実させます。
 
-This file was created to test various features of Markdown. These include lists, code blocks, tables, images, links, and blockquotes.
+このファイルは Markdown の様々な機能をテストするために作成されました。これには、リスト、コードブロック、表、画像、リンク、引用などが含まれます。
 
-Markdown is highly flexible and allows for the creation of well-formatted text with ease.
+Markdown は非常に柔軟で、簡単にフォーマットされたテキストを作成できます。
