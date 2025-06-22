@@ -226,12 +226,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		return tooltip;
 	}
-	/**
-	 * ファイル一覧のStatusItemを作成する（廃止：getFileItems(directoryPath)に統合）
-	 */
-	private getOldFileItems(): StatusItem[] {
-		return this.fileStatuses.map((fileStatus) => this.createFileStatusItem(fileStatus));
-	}
+
 	/**
 	 * FileStatusからStatusItemを作成する
 	 */
