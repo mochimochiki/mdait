@@ -25,9 +25,20 @@ export function activate(context: vscode.ExtensionContext) {
 		treeDataProvider: statusTreeProvider,
 		showCollapseAll: false,
 	});
+
 	// status.refresh command
-	const refreshStatusDisposable = vscode.commands.registerCommand("mdait.status.refresh", () => {
-		statusTreeProvider.refresh();
+	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", async () => {
+		try {
+			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
+			await syncCommand();
+			statusTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message),
+			);
+		} finally {
+			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
+		}
 	});
 
 	// jumpToUnit command
@@ -60,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
 		transDisposable,
 		chatDisposable,
 		treeView,
-		refreshStatusDisposable,
+		syncStatusDisposable,
 		jumpToUnitDisposable,
 	);
 }

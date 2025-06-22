@@ -27,9 +27,16 @@
         "title": "%mdait.chat.title%"
       },
       {
-        "command": "mdait.status.refresh",
-        "title": "%mdait.status.refresh.title%",
-        "icon": "$(refresh)"
+        "command": "mdait.status.sync",
+        "title": "%mdait.status.sync.title%",
+        "icon": "$(sync)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.status.sync.processing",
+        "title": "%mdait.status.sync.title%",
+        "icon": "$(sync~spin)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -53,8 +60,13 @@
     "menus": {
       "view/title": [
         {
-          "command": "mdait.status.refresh",
-          "when": "view == mdait.status",
+          "command": "mdait.status.sync",
+          "when": "view == mdait.status && !mdaitSyncProcessing",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.status.sync.processing",
+          "when": "view == mdait.status && mdaitSyncProcessing",
           "group": "navigation"
         }
       ]
