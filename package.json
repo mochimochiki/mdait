@@ -126,7 +126,7 @@
     "lint": "biome lint ./src",
     "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
     "watch": "tsc -watch -p ./",
-    "copy-test-files": "node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
+    "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
     "l10n-validate": "npx @vscode/l10n-dev validate ./l10n"
   },

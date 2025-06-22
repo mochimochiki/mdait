@@ -7,7 +7,7 @@ import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
-import { DiffDetector } from "./diff-detector";
+import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { SectionMatcher } from "./section-matcher";
 
 /**
@@ -109,29 +109,103 @@ export async function syncCommand(): Promise<void> {
 
 /**
  * Markdownファイルの同期処理を行う
+ * Targetファイルが存在する場合は更新、存在しない場合は新規作成を行う
  * @param sourceFile ソースファイルのパス
  * @param targetFile ターゲットファイルのパス
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration) {
+function syncMarkdownFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): DiffResult {
+	if (fs.existsSync(targetFile)) {
+		return syncExistingMarkdownFile(sourceFile, targetFile, config);
+	}
+	return createInitialTargetFile(sourceFile, targetFile, config);
+}
+
+/**
+ * 新規にターゲットファイルを作成する
+ * @param sourceFile ソースファイルのパス
+ * @param targetFile ターゲットファイルのパス
+ * @param config 設定
+ * @returns 差分検出結果
+ */
+function createInitialTargetFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): DiffResult {
+	const fileExplorer = new FileExplorer();
+
+	// 1. ソースファイル読み込み＆パース
+	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
+	const source = markdownParser.parse(sourceContent, config);
+
+	// 2. mdaitマーカーとハッシュを付与（source側はneed,fromなし）
+	ensureMdaitMarkerHash(source.units);
+
+	// 3. target用ユニットを生成（from:hash, need:translateを付与）
+	const targetUnits = source.units.map((srcUnit) => {
+		const hash = srcUnit.marker?.hash ?? calculateHash(srcUnit.content);
+		const tgtMarker = new MdaitMarker(hash, hash, "translate");
+		const tgtUnit = Object.create(Object.getPrototypeOf(srcUnit));
+		Object.assign(tgtUnit, srcUnit, { marker: tgtMarker });
+		return tgtUnit;
+	});
+	const targetDoc = {
+		frontMatter: source.frontMatter,
+		frontMatterRaw: source.frontMatterRaw,
+		units: targetUnits,
+	};
+
+	// 4. ターゲットファイルとして保存
+	const targetContent = markdownParser.stringify(targetDoc);
+	fileExplorer.ensureTargetDirectoryExists(targetFile);
+	fs.writeFileSync(targetFile, targetContent, "utf-8");
+
+	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
+	const updatedSourceContent = markdownParser.stringify(source);
+	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
+
+	// 6. DiffResultを返す
+	return {
+		diffs: source.units.map((u) => ({ type: DiffType.ADDED, source: u, target: null })),
+		added: source.units.length,
+		modified: 0,
+		deleted: 0,
+		unchanged: 0,
+	};
+}
+
+/**
+ * 既存のターゲットファイルを同期する
+ * @param sourceFile ソースファイルのパス
+ * @param targetFile ターゲットファイルのパス
+ * @param config 設定
+ * @returns 差分検出結果
+ */
+function syncExistingMarkdownFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): DiffResult {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
 
 	// ファイル読み込み
 	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-	let targetContent = "";
-	if (fs.existsSync(targetFile)) {
-		targetContent = fs.readFileSync(targetFile, "utf-8");
-	}
+	const targetContent = fs.readFileSync(targetFile, "utf-8");
 
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config);
-	const target = targetContent ? markdownParser.parse(targetContent, config) : { units: [] };
+	const target = markdownParser.parse(targetContent, config);
 	// src, target に hash を付与（ない場合のみ）
-	ensureSectionHash(source.units);
-	ensureSectionHash(target.units);
+	ensureMdaitMarkerHash(source.units);
+	ensureMdaitMarkerHash(target.units);
 
 	// ユニットの対応付け
 	const matchResult = sectionMatcher.match(source.units, target.units);
@@ -179,7 +253,7 @@ function syncMarkdownFile(sourceFile: string, targetFile: string, config: Config
  * ユニットにmdaitヘッダーを付与する
  * @param units ユニットの配列
  */
-function ensureSectionHash(units: MdaitUnit[]) {
+function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 	for (const unit of units) {
 		if (!unit.marker || !unit.marker.hash) {
 			const hash = calculateHash(unit.content);
