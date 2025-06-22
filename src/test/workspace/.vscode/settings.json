@@ -16,7 +16,7 @@
   "mdait.sync.autoDelete": true,
   
   // 翻訳プロバイダ(default/vscode-lm/ollama)
-  "mdait.trans.provider": "vscode-lm",
+  "mdait.trans.provider": "default",
   
   // Markdown:コードブロックをスキップするか
   "mdait.trans.markdown.skipCodeBlocks": true,

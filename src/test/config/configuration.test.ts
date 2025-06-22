@@ -23,7 +23,7 @@ suite("Configuration", () => {
 				},
 			];
 
-			const result = config.getTransPairForTargetFile("workspace/content/en/test.md");
+			const result = config.getTransPairForTargetFile("workspace/content/en/10_test.md");
 			assert.notEqual(result, null);
 			assert.equal(result?.targetDir, "content/en");
 			assert.equal(result?.targetLang, "en");
@@ -39,14 +39,14 @@ suite("Configuration", () => {
 				},
 			];
 
-			const result = config.getTransPairForTargetFile("workspace/other/test.md");
+			const result = config.getTransPairForTargetFile("workspace/other/10_test.md");
 			assert.equal(result, null);
 		});
 
 		test("翻訳ペアが空の場合nullを返す", () => {
 			config.transPairs = [];
 
-			const result = config.getTransPairForTargetFile("workspace/content/ja/test.md");
+			const result = config.getTransPairForTargetFile("workspace/content/ja/10_test.md");
 			assert.equal(result, null);
 		});
 	});

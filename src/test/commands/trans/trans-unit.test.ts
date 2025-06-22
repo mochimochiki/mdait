@@ -49,7 +49,7 @@ suite("TransCommand", () => {
 			"from属性付きで翻訳が必要なコンテンツです。",
 		].join("\n");
 
-		const testFile = join(tmpDir, "test.md");
+		const testFile = join(tmpDir, "10_test.md");
 		fs.writeFileSync(testFile, testContent, "utf-8");
 
 		// Markdownのパースとユニット抽出

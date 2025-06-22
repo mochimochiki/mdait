@@ -55,9 +55,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("mdait管理下にない既存Markdownを同期するとmdaitヘッダーが付与されること", async () => {
-		// content/en/no_header.md, content/ja/no_header.md を使う
-		const tmpEnNoHeader = join(tmpEnDir, "no_header.md");
-		const tmpJaNoHeader = join(tmpJaDir, "no_header.md");
+		// content/en/20_no_header.md, content/ja/20_no_header.md を使う
+		const tmpEnNoHeader = join(tmpEnDir, "20_no_header.md");
+		const tmpJaNoHeader = join(tmpJaDir, "20_no_header.md");
 
 		// VSCode拡張コマンドとしてsyncを実行
 		const vscode = require("vscode");
@@ -87,9 +87,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("既存ユニットのコンテンツが変更された場合、関連ファイルにneed:translateが付与されること", async () => {
-		// content/ja/test.md（ソース）、content/en/test.md（ターゲット）を使用
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
+		// content/ja/10_test.md（ソース）、content/en/10_test.md（ターゲット）を使用
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
 
 		// 初期状態：既にmdaitマーカーが存在する
 		let jaText = readFileSync(tmpJaTest, "utf8");
@@ -141,8 +141,8 @@ suite("syncコマンドE2E", () => {
 
 コンテンツ3
 `;
-		const tmpJaLevelTest = join(tmpJaDir, "level_test.md");
-		const tmpEnLevelTest = join(tmpEnDir, "level_test.md");
+		const tmpJaLevelTest = join(tmpJaDir, "level_10_test.md");
+		const tmpEnLevelTest = join(tmpEnDir, "level_10_test.md");
 		writeFileSync(tmpJaLevelTest, testContent, "utf8");
 		writeFileSync(tmpEnLevelTest, testContent, "utf8");
 
@@ -169,9 +169,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("新規ユニットが追加された場合、対応するファイルに適切に挿入されること", async () => {
-		// 既存のtest.mdファイルを使用
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
+		// 既存の10_test.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
 
 		// ja側に新規ユニットを追加
 		let jaText = readFileSync(tmpJaTest, "utf8");
@@ -198,9 +198,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("from一致による対応付けが正しく機能すること", async () => {
-		// 既存のtest.mdファイルを使用
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
+		// 既存の10_test.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
 
 		// 初期状態を確認
 		const jaText = readFileSync(tmpJaTest, "utf8");
@@ -218,9 +218,9 @@ suite("syncコマンドE2E", () => {
 	});
 
 	test("孤立ユニットがauto-delete設定に従って処理されること", async () => {
-		// test.mdファイルを使用
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
+		// 10_test.mdファイルを使用
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
 
 		// ja側から特定のユニットを削除（見出し6のユニット）
 		let jaText = readFileSync(tmpJaTest, "utf8");
@@ -240,8 +240,8 @@ suite("syncコマンドE2E", () => {
 
 	test("Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {
 		// Front Matter付きのファイルでテスト
-		const tmpJaNoHeader = join(tmpJaDir, "no_header.md");
-		const tmpEnNoHeader = join(tmpEnDir, "no_header.md");
+		const tmpJaNoHeader = join(tmpJaDir, "20_no_header.md");
+		const tmpEnNoHeader = join(tmpEnDir, "20_no_header.md");
 
 		// syncを実行
 		const vscode = require("vscode");
@@ -315,9 +315,9 @@ suite("syncコマンドE2E", () => {
 		mkdirSync(tmpDeDir, { recursive: true });
 
 		// ja -> en の関係が既に存在する状態で、de ファイルを作成
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
-		const tmpDeTest = join(tmpDeDir, "test.md");
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
+		const tmpDeTest = join(tmpDeDir, "10_test.md");
 
 		// de側にen側と同じ構造のファイルを作成（翻訳前状態）
 		const enText = readFileSync(tmpEnTest, "utf8");
@@ -346,8 +346,8 @@ suite("syncコマンドE2E", () => {
 
 	test("双方向翻訳で競合が検出されること", async () => {
 		// ja <-> en の双方向編集をシミュレート
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpEnTest = join(tmpEnDir, "test.md");
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpEnTest = join(tmpEnDir, "10_test.md");
 
 		// 両方のファイルを同時に編集
 		let jaText = readFileSync(tmpJaTest, "utf8");
@@ -433,8 +433,8 @@ suite("syncコマンドE2E", () => {
 	test("ディレクトリが存在しない場合も正しく処理されること", async () => {
 		// 存在しないディレクトリへの出力をテスト
 		const nonExistentDir = join(workspaceDir, "content", "fr");
-		const tmpJaTest = join(tmpJaDir, "test.md");
-		const tmpFrTest = join(nonExistentDir, "test.md");
+		const tmpJaTest = join(tmpJaDir, "10_test.md");
+		const tmpFrTest = join(nonExistentDir, "10_test.md");
 
 		// syncを実行（設定で新しいディレクトリペアを指定する必要があるが、
 		// ここではディレクトリ作成機能のテストとして実行）
