@@ -41,6 +41,8 @@ export class StatusCollector {
 			);
 		}
 
+		// fileNameで昇順ソート
+		fileStatuses.sort((a, b) => a.fileName.localeCompare(b.fileName));
 		return fileStatuses;
 	}
 
