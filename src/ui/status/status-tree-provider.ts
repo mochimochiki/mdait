@@ -62,6 +62,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// contextValueを設定（StatusItemから）
 		treeItem.contextValue = element.contextValue;
 
+		// ファイルの場合はコマンドを設定してクリック時にファイルを開く（先頭行）
+		if (element.type === "file") {
+			treeItem.command = {
+				command: "mdait.jumpToUnit",
+				title: "Open File",
+				arguments: [element.filePath, 0],
+			};
+		}
 		// ユニットの場合はコマンドを設定してクリック時にジャンプ
 		if (element.type === "unit") {
 			treeItem.command = {
