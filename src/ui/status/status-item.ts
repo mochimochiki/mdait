@@ -63,11 +63,15 @@ export interface StatusItem {
 	 * アイコンのテーマアイコン
 	 */
 	iconPath?: vscode.ThemeIcon;
-
 	/**
 	 * ツールチップテキスト
 	 */
 	tooltip?: string;
+
+	/**
+	 * VS Codeのコンテキストメニューやインラインアクション用の識別子
+	 */
+	contextValue?: string;
 }
 
 /**

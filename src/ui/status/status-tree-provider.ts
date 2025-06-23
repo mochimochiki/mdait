@@ -59,19 +59,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
 
-		// タイプに応じてコンテキストメニュー用のcontextValueを設定
-		if (element.type === "file") {
-			treeItem.contextValue = "file";
-		} else if (element.type === "unit") {
-			treeItem.contextValue = "unit";
-			// ユニットの場合はコマンドを設定してクリック時にジャンプ
+		// contextValueを設定（StatusItemから）
+		treeItem.contextValue = element.contextValue;
+
+		// ユニットの場合はコマンドを設定してクリック時にジャンプ
+		if (element.type === "unit") {
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Jump to Unit",
 				arguments: [element.filePath, element.startLine],
 			};
-		} else if (element.type === "directory") {
-			treeItem.contextValue = "directory";
 		}
 
 		return treeItem;
@@ -134,7 +131,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 			// ディレクトリの全体ステータスを決定
 			const status = this.determineDirectoryStatus(files);
-
 			directoryItems.push({
 				type: "directory",
 				label: `${dirName} (${translatedUnits}/${totalUnits})`,
@@ -147,6 +143,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					translatedUnits,
 					totalUnits,
 				),
+				contextValue: "mdaitDirectory",
 			});
 		}
 
@@ -216,6 +213,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					translatedUnits,
 					totalUnits,
 				),
+				contextValue: "mdaitDirectory",
 			});
 		}
 
@@ -256,6 +254,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			status: unitStatus.status,
 			collapsibleState: vscode.TreeItemCollapsibleState.None,
 			tooltip: this.createUnitTooltip(unitStatus),
+			contextValue: "mdaitUnit",
 		};
 	}
 
@@ -300,7 +299,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	private createFileStatusItem(fileStatus: FileStatus): StatusItem {
 		const label = this.createFileLabel(fileStatus);
-
 		return {
 			type: "file",
 			label,
@@ -311,6 +309,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					? vscode.TreeItemCollapsibleState.Collapsed
 					: vscode.TreeItemCollapsibleState.None,
 			tooltip: this.createFileTooltip(fileStatus),
+			contextValue: "mdaitFile",
 		};
 	}
 

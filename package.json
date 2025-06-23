@@ -37,6 +37,24 @@
         "title": "%mdait.status.sync.title%",
         "icon": "$(sync~spin)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.translate.directory",
+        "title": "%mdait.translate.directory.title%",
+        "icon": "$(play)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.translate.file",
+        "title": "%mdait.translate.file.title%",
+        "icon": "$(play)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.translate.unit",
+        "title": "%mdait.translate.unit.title%",
+        "icon": "$(play)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -68,6 +86,38 @@
           "command": "mdait.status.sync.processing",
           "when": "view == mdait.status && mdaitSyncProcessing",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mdait.translate.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectory",
+          "group": "translate"
+        },
+        {
+          "command": "mdait.translate.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectory",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.translate.file",
+          "when": "view == mdait.status && viewItem == mdaitFile",
+          "group": "translate"
+        },
+        {
+          "command": "mdait.translate.file",
+          "when": "view == mdait.status && viewItem == mdaitFile",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.translate.unit",
+          "when": "view == mdait.status && viewItem == mdaitUnit",
+          "group": "translate"
+        },
+        {
+          "command": "mdait.translate.unit",
+          "when": "view == mdait.status && viewItem == mdaitUnit",
+          "group": "inline"
         }
       ]
     },

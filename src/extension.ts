@@ -5,6 +5,7 @@ import { chatCommand } from "./commands/chat/chat-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { transCommand } from "./commands/trans/trans-command";
 import { DefaultTranslator } from "./commands/trans/translator";
+import { TranslateItemCommand } from "./commands/translate/translate-item-command";
 import { Configuration } from "./config/configuration";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { FileExplorer } from "./utils/file-explorer";
@@ -15,9 +16,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
-
 	// chat command
 	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
+	// 翻訳アイテムコマンド
+	const translateItemCommand = new TranslateItemCommand();
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
@@ -25,6 +27,20 @@ export function activate(context: vscode.ExtensionContext) {
 		treeDataProvider: statusTreeProvider,
 		showCollapseAll: false,
 	});
+
+	// TranslateItemCommandにStatusTreeProviderを設定
+	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
+
+	const translateDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.translate.directory",
+		(item) => translateItemCommand.translateDirectory(item),
+	);
+	const translateFileDisposable = vscode.commands.registerCommand("mdait.translate.file", (item) =>
+		translateItemCommand.translateFile(item),
+	);
+	const translateUnitDisposable = vscode.commands.registerCommand("mdait.translate.unit", (item) =>
+		translateItemCommand.translateUnit(item),
+	);
 
 	// status.refresh command
 	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", async () => {
@@ -63,13 +79,15 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		},
 	);
-
 	// 初回データ読み込み
 	statusTreeProvider.refresh();
 	context.subscriptions.push(
 		syncDisposable,
 		transDisposable,
 		chatDisposable,
+		translateDirectoryDisposable,
+		translateFileDisposable,
+		translateUnitDisposable,
 		treeView,
 		syncStatusDisposable,
 		jumpToUnitDisposable,
