@@ -83,7 +83,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	public getChildren(element?: StatusItem): Thenable<StatusItem[]> {
 		if (!element) {
 			// ルート要素の場合はディレクトリ一覧を返す
-			return Promise.resolve(this.getDirectoryItems());
+			return Promise.resolve(this.getRootDirectoryItems());
 		}
 
 		if (element.type === "directory") {
@@ -103,11 +103,19 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * ディレクトリ一覧のStatusItemを作成する
 	 */
-	private getDirectoryItems(): StatusItem[] {
+	private getRootDirectoryItems(): StatusItem[] {
 		const directoryMap = new Map<string, FileStatus[]>();
-		// ファイルをディレクトリごとにグループ化
+		// transPairs.targetDirの絶対パス一覧を作成
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const targetDirsAbs = this.configuration.transPairs.map((pair) =>
+			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
+		);
+		// ファイルをディレクトリごとにグループ化（targetDir一致のみ）
 		for (const fileStatus of this.fileStatuses) {
 			const dirPath = path.dirname(fileStatus.filePath);
+			if (!targetDirsAbs.includes(dirPath)) {
+				continue;
+			}
 			if (!directoryMap.has(dirPath)) {
 				directoryMap.set(dirPath, []);
 			}
@@ -146,16 +154,76 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
-	 * 指定ディレクトリのファイル一覧のStatusItemを作成する
+	 * 指定ディレクトリのファイル・サブディレクトリ一覧のStatusItemを作成する
 	 */
 	private getFileItems(directoryPath?: string): StatusItem[] {
-		if (!directoryPath) {
-			return this.fileStatuses.map((fileStatus) => this.createFileStatusItem(fileStatus));
+		const items: StatusItem[] = [];
+		const subDirSet = new Set<string>();
+
+		// 指定ディレクトリ配下のファイルを抽出
+		const filesInDir = this.fileStatuses.filter((fileStatus) => {
+			const dir = path.dirname(fileStatus.filePath);
+			// directoryPathが未指定の場合はルート直下
+			if (!directoryPath) {
+				// ルート直下のファイルのみ
+				const rel = path.relative("", dir);
+				return rel === "" || rel === "." || dir === "" || dir === ".";
+			}
+			// 指定ディレクトリ直下のファイル
+			return dir === directoryPath;
+		});
+
+		// ファイルStatusItemを追加
+		for (const fileStatus of filesInDir) {
+			items.push(this.createFileStatusItem(fileStatus));
 		}
 
-		return this.fileStatuses
-			.filter((fileStatus) => path.dirname(fileStatus.filePath) === directoryPath)
-			.map((fileStatus) => this.createFileStatusItem(fileStatus));
+		// サブディレクトリを抽出
+		for (const fileStatus of this.fileStatuses) {
+			const dir = path.dirname(fileStatus.filePath);
+			const parentDir = directoryPath ?? "";
+			// サブディレクトリかどうか判定
+			if (dir !== parentDir && dir.startsWith(parentDir)) {
+				// 直下のサブディレクトリ名を取得
+				const rel = path.relative(parentDir, dir);
+				const parts = rel.split(path.sep);
+				if (parts.length > 0 && parts[0] !== "" && parts[0] !== ".") {
+					const subDirPath = path.join(parentDir, parts[0]);
+					subDirSet.add(subDirPath);
+				}
+			}
+		}
+
+		// サブディレクトリStatusItemを追加
+		for (const subDirPath of subDirSet) {
+			const files = this.fileStatuses.filter((fs) =>
+				path.dirname(fs.filePath).startsWith(subDirPath),
+			);
+			const dirName = path.basename(subDirPath) || subDirPath;
+			const totalUnits = files.reduce((sum, file) => sum + file.totalUnits, 0);
+			const translatedUnits = files.reduce((sum, file) => sum + file.translatedUnits, 0);
+			const status = this.determineDirectoryStatus(files);
+
+			items.push({
+				type: "directory",
+				label: `${dirName} (${translatedUnits}/${totalUnits})`,
+				directoryPath: subDirPath,
+				status,
+				collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+				tooltip: vscode.l10n.t(
+					"Directory: {0} - {1}/{2} units translated",
+					dirName,
+					translatedUnits,
+					totalUnits,
+				),
+			});
+		}
+
+		// ディレクトリ→ファイルの順で表示
+		return [
+			...Array.from(items).filter((item) => item.type === "directory"),
+			...Array.from(items).filter((item) => item.type === "file"),
+		];
 	}
 
 	/**
