@@ -226,8 +226,8 @@ async function extractUnitsFromFile(
 	const content = await fs.promises.readFile(filePath, "utf-8");
 	const markdown = markdownParser.parse(content, config);
 
-	// 言語を翻訳ペア設定から推定（簡易版）
-	const lang = inferLanguageFromPath(filePath, config);
+	// 言語を翻訳ペア設定から取得
+	const lang = GetLanguageFromPath(filePath, config);
 
 	// インデックスファイルからの相対パスを計算
 	const relativePath = path.relative(workspaceRoot, filePath);
@@ -261,25 +261,18 @@ async function extractUnitsFromFile(
 }
 
 /**
- * ファイルパスから言語を推定（簡易版）
+ * ファイルパスから言語を取得
+ * sourceDir優先、なければtargetDirで判定
  */
-function inferLanguageFromPath(filePath: string, config: Configuration): string {
-	// 翻訳ペア設定を参照して言語を推定
-	for (const pair of config.transPairs) {
-		if (filePath.includes(pair.sourceDir)) {
-			return pair.sourceLang;
-		}
-		if (filePath.includes(pair.targetDir)) {
-			return pair.targetLang;
-		}
+function GetLanguageFromPath(filePath: string, config: Configuration): string {
+	const pairSource = config.getTransPairForSourceFile(filePath);
+	if (pairSource) {
+		return pairSource.sourceLang;
 	}
-
-	// フォールバック: ディレクトリ名から推定
-	const dirName = path.basename(path.dirname(filePath));
-	if (dirName === "ja" || dirName === "japanese") return "ja";
-	if (dirName === "en" || dirName === "english") return "en";
-	if (dirName === "de" || dirName === "german") return "de";
-
+	const pairTarget = config.getTransPairForTargetFile(filePath);
+	if (pairTarget) {
+		return pairTarget.targetLang;
+	}
 	return "unknown";
 }
 

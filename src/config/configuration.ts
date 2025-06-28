@@ -150,4 +150,23 @@ export class Configuration {
 
 		return null;
 	}
+
+	/**
+	 * 指定されたファイルパスから対応する翻訳ペア（sourceDir側）を取得
+	 * @param sourceFilePath ファイルパス
+	 * @returns 対応する翻訳ペア（見つからない場合はnull）
+	 */
+	public getTransPairForSourceFile(sourceFilePath: string): TransPair | null {
+		const normalizedSourcePath = sourceFilePath.replace(/\\/g, "/");
+
+		for (const pair of this.transPairs) {
+			const normalizedSourceDir = pair.sourceDir.replace(/\\/g, "/");
+
+			if (normalizedSourcePath.includes(normalizedSourceDir)) {
+				return pair;
+			}
+		}
+
+		return null;
+	}
 }
