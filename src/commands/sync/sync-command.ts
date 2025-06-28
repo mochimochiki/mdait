@@ -17,9 +17,6 @@ import { SectionMatcher } from "./section-matcher";
  */
 export async function syncCommand(): Promise<void> {
 	try {
-		// 処理開始を通知
-		vscode.window.showInformationMessage(vscode.l10n.t("Starting unit synchronization process..."));
-
 		// 設定を読み込む
 		const config = new Configuration();
 		await config.load();
@@ -49,15 +46,6 @@ export async function syncCommand(): Promise<void> {
 				);
 				continue;
 			}
-
-			vscode.window.showInformationMessage(
-				vscode.l10n.t(
-					"[{0} -> {1}] Synchronizing {2} files...",
-					pair.sourceDir,
-					pair.targetDir,
-					files.length,
-				),
-			);
 
 			// 各ファイルを同期
 			for (const sourceFile of files) {
@@ -106,7 +94,6 @@ export async function syncCommand(): Promise<void> {
 			if (workspaceRoot) {
 				const indexPath = await generateIndexFile(config, workspaceRoot);
 				console.log(`Index file generated: ${indexPath}`);
-				vscode.window.showInformationMessage(vscode.l10n.t("Index file updated successfully"));
 			}
 		} catch (indexError) {
 			console.warn("Failed to generate index file:", indexError);
