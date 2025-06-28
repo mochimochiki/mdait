@@ -379,3 +379,131 @@ vscode.l10n.t("An error occurred during chat processing: {0}", (error as Error).
 # `l10n/bundle.l10n.json`を更新 -> l10n/bundle.l10n.xx.json にも翻訳を反映させる
 npm run l10n
 ```
+
+---
+
+## 12. インデックスファイル設計
+
+### 12.1 概要
+
+mdaitインデックスファイル（`.mdait/index.json`）は、ワークスペース内の全てのMarkdownファイルのユニット情報を集約し、高速な検索とステータス管理を提供します。
+
+### 12.2 設計原則
+
+- **ハッシュ主キー**: ユニットハッシュをキーとした高速検索
+- **相対パス**: インデックスファイルからの相対パスで可搬性を確保
+- **増分更新**: ファイル単位での部分更新をサポート
+- **軽量構造**: 必要最小限のメタデータでファイルサイズを抑制
+
+### 12.3 ファイル構造
+
+```json
+{
+  "metadata": {
+    "version": "1.0.0"
+  },
+  "units": {
+    "hash1": [
+      {
+        "type": "md",
+        "lang": "ja",
+        "path": "content/ja/document.md",
+        "unitIndex": 0,
+        "from": null,
+        "title": "# 見出し 1",
+        "startLine": 4,
+        "endLine": 10,
+        "needFlag": null
+      }
+    ],
+    "hash2": [...]
+  }
+}
+```
+
+### 12.4 データ型定義
+
+```typescript
+interface IndexFile {
+  metadata: {
+    version: string;
+  };
+  units: UnitIndex;
+}
+
+interface UnitIndex {
+  [hash: string]: UnitIndexEntry[];
+}
+
+interface UnitIndexEntry {
+  type: "md";
+  lang: string;
+  path: string;           // インデックスファイルからの相対パス
+  unitIndex: number;      // ファイル内のユニット順序
+  from: string | null;    // 翻訳元ハッシュ
+  title: string;          // ユニットタイトル（先頭50文字）
+  startLine: number;      // 開始行番号
+  endLine: number;        // 終了行番号
+  needFlag: string | null; // need フラグ（translate等）
+}
+```
+
+### 12.5 生成・更新タイミング
+
+#### 12.5.1 生成タイミング
+- **sync コマンド実行後**: 全ファイル同期完了時に再生成
+- **手動生成**: 必要に応じてユーザーが明示的に実行可能
+
+#### 12.5.2 更新タイミング
+- **trans コマンド実行後**: 翻訳完了時に対象ファイルのエントリを更新
+- **ファイル編集後**: 将来的にファイル監視による自動更新も検討
+
+### 12.6 主要機能
+
+#### 12.6.1 高速検索
+```typescript
+// from ハッシュでの検索
+const sourceUnits = findUnitsByFromHash(indexFile, "abc123");
+
+// ファイル内の未翻訳ユニット取得
+const untranslatedUnits = getUntranslatedUnits(indexFile, filePath, workspaceRoot);
+```
+
+#### 12.6.2 ステータス管理
+- **翻訳状況の集計**: ファイル・プロジェクト全体の翻訳進捗
+- **ステータスツリー**: VS Code エクスプローラーでの階層表示
+- **高速な状態確認**: ファイルパースを省略した軽量チェック
+
+#### 12.6.3 部分更新
+```typescript
+// 特定ファイルのインデックス更新
+await updateIndexForFile(workspaceRoot, filePath, config);
+```
+
+### 12.7 利用箇所
+
+| コンポーネント | 利用目的 |
+|---------------|----------|
+| `syncCommand` | インデックス生成（同期完了後） |
+| `transCommand` | from ハッシュ検索、インデックス更新 |
+| `StatusCollector` | 高速なステータス収集 |
+| `StatusTreeProvider` | ステータスツリー表示 |
+
+### 12.8 パフォーマンス特性
+
+- **検索**: O(1) でのハッシュ検索
+- **ファイル更新**: 該当ファイルのエントリのみ更新
+- **メモリ効率**: 必要最小限の情報のみ格納
+- **ディスク容量**: JSON 形式での軽量ストレージ
+
+### 12.9 エラーハンドリング
+
+- **インデックス不在**: 従来方式へのフォールバック
+- **バージョン不一致**: インデックス無効化と再生成
+- **破損インデックス**: パースエラー時の安全な復旧
+
+### 12.10 将来拡張
+
+- **CSV ファイル対応**: type フィールドでの形式識別
+- **ファイル監視**: リアルタイム更新
+- **キャッシュ戦略**: メモリキャッシュによる更なる高速化
