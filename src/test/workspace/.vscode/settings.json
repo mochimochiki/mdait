@@ -24,6 +24,9 @@
   // Markdown:コードブロックをスキップするか
   "mdait.trans.markdown.skipCodeBlocks": true,
 
+  // vscode-lm model
+  "mdait.trans.model": "gpt-4.1",
+
   // ollama endpoint
   "mdait.trans.ollama.endpoint": "http://localhost:11434",
 
