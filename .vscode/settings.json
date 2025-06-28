@@ -16,7 +16,7 @@
   },
   "github.copilot.chat.commitMessageGeneration.instructions": [
     {
-      "text": "説明文は日本語で記述し、クラス/メソッドなど英語の名前はそのままにしてください。"
+      "text": "必ず日本語で記述してください"
     },
     {
       "text": "Conventional Commitsのスタイルで記述してください"
