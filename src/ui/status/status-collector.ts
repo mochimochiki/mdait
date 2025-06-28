@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
+import { loadIndexFile } from "../../core/index/index-manager";
+import type { IndexFile } from "../../core/index/index-types";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { MarkdownItParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
@@ -25,14 +27,25 @@ export class StatusCollector {
 		const fileStatuses: FileStatus[] = [];
 
 		try {
-			// 各翻訳ペアのTargetディレクトリに対してファイル状況を収集
-			for (const transPair of config.transPairs) {
-				const targetStatuses = await this.collectFileStatusesInDirectory(
-					transPair.targetDir,
-					config,
-				);
+			// インデックスファイルの読み込みを試行
+			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			let indexFile: IndexFile | null = null;
+			if (workspaceRoot) {
+				indexFile = await loadIndexFile(workspaceRoot);
+			}
 
-				fileStatuses.push(...targetStatuses);
+			if (indexFile) {
+				// インデックスファイルがある場合は高速な収集を行う
+				fileStatuses.push(...(await this.collectFileStatusesFromIndex(indexFile, config)));
+			} else {
+				// インデックスファイルがない場合は従来の方式でファイル収集
+				for (const transPair of config.transPairs) {
+					const targetStatuses = await this.collectFileStatusesInDirectory(
+						transPair.targetDir,
+						config,
+					);
+					fileStatuses.push(...targetStatuses);
+				}
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
@@ -184,5 +197,96 @@ export class StatusCollector {
 		}
 
 		return "needsTranslation";
+	}
+
+	/**
+	 * インデックスファイルから高速にファイル状況を収集する
+	 */
+	private async collectFileStatusesFromIndex(
+		indexFile: IndexFile,
+		config: Configuration,
+	): Promise<FileStatus[]> {
+		const fileMap = new Map<string, FileStatus>();
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+		if (!workspaceRoot) {
+			return [];
+		}
+
+		// インデックスから各ファイルの情報を集計
+		for (const hash in indexFile.units) {
+			const entries = indexFile.units[hash];
+			for (const entry of entries) {
+				// 相対パスから絶対パスを計算
+				const absolutePath = path.resolve(workspaceRoot, entry.path);
+
+				// targetディレクトリのファイルのみを対象とする
+				const isTargetFile = config.transPairs.some((pair) => {
+					const targetDirNormalized = path.resolve(workspaceRoot, pair.targetDir);
+					const fileDir = path.dirname(absolutePath);
+					return (
+						fileDir === targetDirNormalized || fileDir.startsWith(targetDirNormalized + path.sep)
+					);
+				});
+
+				if (!isTargetFile) {
+					continue;
+				}
+
+				let fileStatus = fileMap.get(absolutePath);
+				if (!fileStatus) {
+					fileStatus = {
+						filePath: absolutePath,
+						fileName: path.basename(absolutePath),
+						status: "translated",
+						translatedUnits: 0,
+						totalUnits: 0,
+						hasParseError: false,
+						units: [],
+					};
+					fileMap.set(absolutePath, fileStatus);
+				}
+
+				// ユニット情報を追加
+				const unitStatus: UnitStatus = {
+					hash,
+					title: entry.title,
+					headingLevel: this.extractHeadingLevel(entry.title),
+					startLine: entry.startLine,
+					endLine: entry.endLine,
+					status: entry.needFlag ? "needsTranslation" : "translated",
+					needFlag: entry.needFlag || undefined,
+					fromHash: entry.from || undefined,
+				};
+
+				fileStatus.units = fileStatus.units || [];
+				fileStatus.units.push(unitStatus);
+				fileStatus.totalUnits++;
+
+				if (!entry.needFlag) {
+					fileStatus.translatedUnits++;
+				}
+			}
+		}
+
+		// ファイル単位での状態を更新
+		const fileStatuses: FileStatus[] = [];
+		for (const fileStatus of fileMap.values()) {
+			fileStatus.status = this.determineFileStatus(
+				fileStatus.translatedUnits,
+				fileStatus.totalUnits,
+			);
+			fileStatuses.push(fileStatus);
+		}
+
+		return fileStatuses;
+	}
+
+	/**
+	 * タイトル文字列から見出しレベルを抽出する
+	 */
+	private extractHeadingLevel(title: string): number {
+		const match = title.match(/^(#{1,6})\s/);
+		return match ? match[1].length : 0;
 	}
 }

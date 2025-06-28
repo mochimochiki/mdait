@@ -4,3 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 src/test/workspace/content
+src/test/workspace/.mdait/index.json

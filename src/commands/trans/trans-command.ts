@@ -1,7 +1,9 @@
 import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { findUnitsByFromHash, loadIndexFile, updateIndexForFile } from "../../core/index/index-manager";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -59,6 +61,16 @@ export async function transCommand(uri?: vscode.Uri) {
 		// 更新されたMarkdownを保存
 		const updatedContent = markdownParser.stringify(markdown);
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
+
+		// インデックスファイルを更新（翻訳によりneedFlagが変更されたため）
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (workspaceRoot) {
+			const updateSuccess = await updateIndexForFile(workspaceRoot, targetFilePath, config);
+			if (!updateSuccess) {
+				console.warn("Failed to update index file after translation");
+			}
+		}
+
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Translation completed: {0} units translated", unitsToTranslate.length),
 		);
@@ -91,11 +103,37 @@ async function translateUnit(
 
 		let sourceContent = unit.content;
 
-		// from属性がある場合は、翻訳元ユニットのコンテンツを取得
+		// from属性がある場合は、インデックスファイルから翻訳元ユニットのコンテンツを取得
 		if (unit.marker?.from) {
-			const sourceUnit = findUnitByHash(markdown.units, unit.marker.from);
-			if (sourceUnit) {
-				sourceContent = sourceUnit.content;
+			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			if (workspaceRoot) {
+				const indexFile = await loadIndexFile(workspaceRoot);
+				if (indexFile) {
+					const sourceUnits = findUnitsByFromHash(indexFile, unit.marker.from);
+					if (sourceUnits.length > 0) {
+						// 最初に見つかった翻訳元ユニットを使用
+						const sourceUnit = sourceUnits[0];
+						try {
+							const sourceFilePath = path.resolve(workspaceRoot, sourceUnit.path);
+							const sourceFileContent = await fs.promises.readFile(sourceFilePath, "utf-8");
+							const sourceMarkdown = markdownParser.parse(sourceFileContent, new Configuration());
+							const sourceUnitData = sourceMarkdown.units[sourceUnit.unitIndex];
+							if (sourceUnitData) {
+								sourceContent = sourceUnitData.content;
+							}
+						} catch (error) {
+							console.warn(`Failed to read source unit from ${sourceUnit.path}:`, error);
+						}
+					} else {
+						console.warn(`Source unit not found for hash: ${unit.marker.from}`);
+					}
+				} else {
+					// インデックスファイルがない場合はフォールバック（従来の方式）
+					const sourceUnit = findUnitByHash(markdown.units, unit.marker.from);
+					if (sourceUnit) {
+						sourceContent = sourceUnit.content;
+					}
+				}
 			}
 		}
 		// 翻訳実行
