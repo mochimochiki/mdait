@@ -374,6 +374,52 @@ suite("syncコマンドE2E", () => {
 			assert.ok(!enText.includes("#### Heading 6"));
 		});
 
+		test("複合: 複数ユニットの追加と削除が同時に行われること", async () => {
+			const tmpJaTest = join(tmpJaDir, "10_test.md");
+			const tmpEnTest = join(tmpEnDir, "10_test.md");
+
+			let jaText = readFileSync(tmpJaTest, "utf8");
+
+			// 複数のユニットを削除 (Heading 4 と Heading 5)
+			const unitToRemove1 = /<!-- mdait 0641b670 -->[\s\S]*?(?=<!-- mdait|$)/; // Heading 4
+			const unitToRemove2 = /<!-- mdait 6f9de5a9 -->[\s\S]*?(?=<!-- mdait|$)/; // Heading 5
+			jaText = jaText.replace(
+				unitToRemove1,
+				"\n\n## 複合テスト用追加見出し0\n\nこれも複合テストで追加されたユニットです。\n\n",
+			);
+			jaText = jaText.replace(unitToRemove2, "");
+
+			// 複数のユニットを追加 (中間と末尾)
+			const insertIndex = jaText.indexOf("<!-- mdait 2507a192"); // Heading 6 の前
+			const newUnit1 = `\n\n## 複合テスト用追加見出し1\n\nこれは複合テストで追加されたユニットです。\n`;
+			jaText = jaText.slice(0, insertIndex) + newUnit1 + jaText.slice(insertIndex);
+
+			const newUnit2 = `\n## 複合テスト用追加見出し2\n\nこれも複合テストで追加されたユニットです。\n`;
+			jaText += newUnit2;
+
+			writeFileSync(tmpJaTest, jaText, "utf8");
+
+			// syncを実行
+			const vscode = require("vscode");
+			await vscode.commands.executeCommand("mdait.sync");
+
+			const enText = readFileSync(tmpEnTest, "utf8");
+
+			// 削除されたユニットがen側にもないことを確認
+			assert.ok(!enText.includes("from:0641b670"));
+			assert.ok(!enText.includes("#### Heading 4"));
+			assert.ok(!enText.includes("from:6f9de5a9"));
+			assert.ok(!enText.includes("##### Heading 5"));
+
+			// 追加されたユニットがen側に存在し、need:translateが付与されていることを確認
+			assert.ok(enText.includes("## 複合テスト用追加見出し0"));
+			assert.ok(enText.includes("## 複合テスト用追加見出し1"));
+			assert.ok(enText.includes("## 複合テスト用追加見出し2"));
+			const addedUnits = enText.match(/<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/g) || [];
+			// もともと1つ+3つ追加されているはず
+			assert.strictEqual(addedUnits.length, 4, "追加されたユニットの数が正しくありません");
+		});
+
 		test("競合: 双方向翻訳で競合が検出されること", async () => {
 			// ja <-> en の双方向編集をシミュレート
 			const tmpJaTest = join(tmpJaDir, "10_test.md");
