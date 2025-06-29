@@ -3,18 +3,18 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { StatusManager } from "../../core/status-manager";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { StatusCollector } from "../../ui/status/status-collector";
+import { StatusCollector } from "../../core/status/status-collector";
+import { StatusManager } from "../../core/status/status-manager";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 export async function transCommand(uri?: vscode.Uri) {
 	const statusManager = StatusManager.getInstance();
-	
+
 	try {
 		// ファイルパスの取得
 		const targetFilePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
@@ -54,25 +54,25 @@ export async function transCommand(uri?: vscode.Uri) {
 			if (unit.marker?.hash) {
 				statusManager.updateUnitStatus(unit.marker.hash, { isTranslating: true });
 			}
-			
+
 			try {
 				await translateUnit(unit, translator, sourceLang, targetLang, markdown);
-				
+
 				// 翻訳完了をStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(unit.marker.hash, { 
-						status: "translated", 
-						needFlag: undefined, 
-						isTranslating: false 
+					statusManager.updateUnitStatus(unit.marker.hash, {
+						status: "translated",
+						needFlag: undefined,
+						isTranslating: false,
 					});
 				}
 			} catch (error) {
 				// 翻訳エラーをStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(unit.marker.hash, { 
-						status: "error", 
+					statusManager.updateUnitStatus(unit.marker.hash, {
+						status: "error",
 						isTranslating: false,
-						errorMessage: (error as Error).message
+						errorMessage: (error as Error).message,
 					});
 				}
 				throw error;
@@ -111,7 +111,7 @@ async function translateUnit(
 	markdown: Markdown,
 ) {
 	const statusManager = StatusManager.getInstance();
-	
+
 	try {
 		// 翻訳コンテキストの作成
 		const context = new TranslationContext();
@@ -134,7 +134,9 @@ async function translateUnit(
 							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
 							const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
 							// unitHashでユニットを特定
-							const sourceUnitData = sourceMarkdown.units.find(u => u.marker?.hash === sourceUnit.unitHash);
+							const sourceUnitData = sourceMarkdown.units.find(
+								(u) => u.marker?.hash === sourceUnit.unitHash,
+							);
 							if (sourceUnitData) {
 								sourceContent = sourceUnitData.content;
 							}

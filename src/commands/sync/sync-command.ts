@@ -3,10 +3,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { StatusManager } from "../../core/status-manager";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { SectionMatcher } from "./section-matcher";
@@ -17,7 +17,7 @@ import { SectionMatcher } from "./section-matcher";
  */
 export async function syncCommand(): Promise<void> {
 	const statusManager = StatusManager.getInstance();
-	
+
 	try {
 		// 設定を読み込む
 		const config = new Configuration();

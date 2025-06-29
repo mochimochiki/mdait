@@ -1,22 +1,16 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { StatusManager } from "../../core/status-manager";
-import { StatusItemType } from "./status-item";
-import type { StatusItem, StatusType } from "./status-item";
-
-/**
- * StatusTreeProviderの最小限のインターフェース（StatusManagerとの連携用）
- */
-export interface IStatusTreeProvider {
-	setFileStatuses(statuses: StatusItem[]): void;
-	refreshFromStatusManager(): void;
-}
+import { StatusItemType } from "../../core/status/status-item";
+import type { StatusItem, StatusType } from "../../core/status/status-item";
+import { type IStatusTreeProvider, StatusManager } from "../../core/status/status-manager";
 
 /**
  * ステータスツリービューのデータプロバイダ
  */
-export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider {
+export class StatusTreeProvider
+	implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider
+{
 	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> =
 		new vscode.EventEmitter<StatusItem | undefined | null>();
 	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> =

@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { StatusTreeTranslationHandler } from "../../../commands/trans/status-tree-translation-handler";
-import { type StatusItem, StatusItemType } from "../../../ui/status/status-item";
+import { type StatusItem, StatusItemType } from "../../../core/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
 	let translateItemCommand: StatusTreeTranslationHandler;

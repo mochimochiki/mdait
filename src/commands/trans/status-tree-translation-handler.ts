@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { StatusItemType } from "../../ui/status/status-item";
-import type { StatusItem } from "../../ui/status/status-item";
+import { StatusItemType } from "../../core/status/status-item";
+import type { StatusItem } from "../../core/status/status-item";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { transCommand } from "./trans-command";
 

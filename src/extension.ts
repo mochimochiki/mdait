@@ -7,7 +7,7 @@ import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-trans
 import { transCommand } from "./commands/trans/trans-command";
 import { DefaultTranslator } from "./commands/trans/translator";
 import { Configuration } from "./config/configuration";
-import { StatusManager } from "./core/status-manager";
+import { StatusManager } from "./core/status/status-manager";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { FileExplorer } from "./utils/file-explorer";
 
@@ -30,13 +30,13 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
-	
+
 	// chat command
 	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
-	
+
 	// 翻訳アイテムコマンド
 	const translateItemCommand = new StatusTreeTranslationHandler();
-	
+
 	// StatusTreeTranslationHandlerにStatusTreeProviderを設定
 	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
 

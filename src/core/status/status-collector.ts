@@ -2,9 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
-import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import { MarkdownItParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
+import type { MdaitUnit } from "../markdown/mdait-unit";
+import { MarkdownItParser } from "../markdown/parser";
 import type { StatusItem, StatusType } from "./status-item";
 import { StatusItemType } from "./status-item";
 

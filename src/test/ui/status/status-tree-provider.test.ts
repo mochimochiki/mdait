@@ -2,7 +2,7 @@ import * as assert from "node:assert";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../../config/configuration";
-import { StatusManager } from "../../../core/status-manager";
+import { StatusManager } from "../../../core/status/status-manager";
 
 suite("StatusTreeProvider Test Suite", () => {
 	test("StatusManagerが正しくファイル状況を収集できる", async () => {

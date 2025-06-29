@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { type StatusItem, StatusItemType } from "../../../ui/status/status-item";
+import { type StatusItem, StatusItemType } from "../../../core/status/status-item";
 import { StatusTreeProvider } from "../../../ui/status/status-tree-provider";
 
 suite("StatusTreeProvider 進行中アイコン表示テスト", () => {

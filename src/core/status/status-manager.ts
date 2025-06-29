@@ -1,9 +1,16 @@
 import * as vscode from "vscode";
-import type { Configuration } from "../config/configuration";
-import type { StatusItem, StatusType } from "../ui/status/status-item";
-import { StatusItemType } from "../ui/status/status-item";
-import { StatusCollector } from "../ui/status/status-collector";
-import type { IStatusTreeProvider } from "../ui/status/status-tree-provider";
+import type { Configuration } from "../../config/configuration";
+import { StatusCollector } from "./status-collector";
+import type { StatusItem, StatusType } from "./status-item";
+import { StatusItemType } from "./status-item";
+
+/**
+ * StatusTreeProviderの最小限のインターフェース（StatusManagerとの連携用）
+ */
+export interface IStatusTreeProvider {
+	setFileStatuses(statuses: StatusItem[]): void;
+	refreshFromStatusManager(): void;
+}
 
 /**
  * StatusItemの一元管理を行うシングルトンクラス
@@ -49,7 +56,7 @@ export class StatusManager {
 		try {
 			this.statusItems = await this.statusCollector.rebuildStatusItemAll(config);
 			this.isInitialized = true;
-			
+
 			// StatusTreeProviderに全体更新を通知
 			if (this.statusTreeProvider) {
 				this.statusTreeProvider.setFileStatuses(this.statusItems);
@@ -57,7 +64,9 @@ export class StatusManager {
 			}
 
 			const endTime = performance.now();
-			console.log(`StatusManager: rebuildStatusItemAll() - 完了 (${Math.round(endTime - startTime)}ms)`);
+			console.log(
+				`StatusManager: rebuildStatusItemAll() - 完了 (${Math.round(endTime - startTime)}ms)`,
+			);
 			return this.statusItems;
 		} catch (error) {
 			console.error("StatusManager: rebuildStatusItemAll() - エラー", error);
@@ -75,7 +84,7 @@ export class StatusManager {
 			// 該当ファイルのStatusItemを更新
 			this.statusItems = await this.statusCollector.updateStatusItemOnFileChange(
 				filePath,
-				this.statusItems
+				this.statusItems,
 			);
 
 			// StatusTreeProviderに更新を通知
@@ -96,7 +105,7 @@ export class StatusManager {
 
 		try {
 			const updated = this.updateStatusItemInTree(this.statusItems, unitHash, updates);
-			
+
 			if (updated && this.statusTreeProvider) {
 				this.statusTreeProvider.setFileStatuses(this.statusItems);
 				this.statusTreeProvider.refreshFromStatusManager();
@@ -129,7 +138,7 @@ export class StatusManager {
 
 			// 既存のStatusItemを更新または追加
 			const existingIndex = this.statusItems.findIndex(
-				item => item.type === StatusItemType.File && item.filePath === filePath
+				(item) => item.type === StatusItemType.File && item.filePath === filePath,
 			);
 
 			if (existingIndex >= 0) {
@@ -144,7 +153,10 @@ export class StatusManager {
 				this.statusTreeProvider.refreshFromStatusManager();
 			}
 		} catch (updateError) {
-			console.error(`StatusManager: updateFileStatusWithError() - 更新エラー: ${filePath}`, updateError);
+			console.error(
+				`StatusManager: updateFileStatusWithError() - 更新エラー: ${filePath}`,
+				updateError,
+			);
 		}
 	}
 
@@ -215,17 +227,17 @@ export class StatusManager {
 
 	private findUnitsByFromHashInTree(items: StatusItem[], fromHash: string): StatusItem[] {
 		const results: StatusItem[] = [];
-		
+
 		for (const item of items) {
 			if (item.type === StatusItemType.Unit && item.fromHash === fromHash) {
 				results.push(item);
 			}
-			
+
 			if (item.children) {
 				results.push(...this.findUnitsByFromHashInTree(item.children, fromHash));
 			}
 		}
-		
+
 		return results;
 	}
 
@@ -234,7 +246,7 @@ export class StatusManager {
 			if (item.type === StatusItemType.Unit && item.unitHash === unitHash) {
 				return item;
 			}
-			
+
 			if (item.children) {
 				const found = this.findUnitByHashInTree(item.children, unitHash);
 				if (found) {
@@ -242,13 +254,13 @@ export class StatusManager {
 				}
 			}
 		}
-		
+
 		return undefined;
 	}
 
 	private getUntranslatedUnitsInTree(items: StatusItem[], filePath: string): StatusItem[] {
 		const results: StatusItem[] = [];
-		
+
 		for (const item of items) {
 			if (item.type === StatusItemType.File && item.filePath === filePath && item.children) {
 				for (const child of item.children) {
@@ -257,12 +269,12 @@ export class StatusManager {
 					}
 				}
 			}
-			
+
 			if (item.children) {
 				results.push(...this.getUntranslatedUnitsInTree(item.children, filePath));
 			}
 		}
-		
+
 		return results;
 	}
 
@@ -274,7 +286,7 @@ export class StatusManager {
 		let totalUnits = 0;
 		let translatedUnits = 0;
 		let errorUnits = 0;
-		
+
 		for (const item of items) {
 			if (item.type === StatusItemType.Unit) {
 				totalUnits++;
@@ -284,7 +296,7 @@ export class StatusManager {
 					errorUnits++;
 				}
 			}
-			
+
 			if (item.children) {
 				const childProgress = this.aggregateProgressInTree(item.children);
 				totalUnits += childProgress.totalUnits;
@@ -292,7 +304,7 @@ export class StatusManager {
 				errorUnits += childProgress.errorUnits;
 			}
 		}
-		
+
 		return { totalUnits, translatedUnits, errorUnits };
 	}
 
@@ -304,7 +316,7 @@ export class StatusManager {
 			) {
 				return item;
 			}
-			
+
 			if (item.children) {
 				const found = this.findItemByPathInTree(item.children, targetPath);
 				if (found) {
@@ -312,58 +324,58 @@ export class StatusManager {
 				}
 			}
 		}
-		
+
 		return undefined;
 	}
 
 	private getErrorItemsInTree(items: StatusItem[]): StatusItem[] {
 		const results: StatusItem[] = [];
-		
+
 		for (const item of items) {
 			if (item.status === "error" || item.hasParseError) {
 				results.push(item);
 			}
-			
+
 			if (item.children) {
 				results.push(...this.getErrorItemsInTree(item.children));
 			}
 		}
-		
+
 		return results;
 	}
 
 	private flattenStatusItemsInTree(items: StatusItem[], filterType?: StatusItemType): StatusItem[] {
 		const results: StatusItem[] = [];
-		
+
 		for (const item of items) {
 			if (!filterType || item.type === filterType) {
 				results.push(item);
 			}
-			
+
 			if (item.children) {
 				results.push(...this.flattenStatusItemsInTree(item.children, filterType));
 			}
 		}
-		
+
 		return results;
 	}
 
 	private updateStatusItemInTree(
 		items: StatusItem[],
 		targetHash: string,
-		updates: Partial<StatusItem>
+		updates: Partial<StatusItem>,
 	): boolean {
 		for (const item of items) {
 			if (item.type === StatusItemType.Unit && item.unitHash === targetHash) {
 				Object.assign(item, updates);
 				return true;
 			}
-			
+
 			if (item.children && this.updateStatusItemInTree(item.children, targetHash, updates)) {
 				return true;
 			}
 		}
-		
+
 		return false;
 	}
 }
