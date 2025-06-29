@@ -42,9 +42,7 @@
   "No Markdown files found in directory '{0}'": "No Markdown files found in directory '{0}'",
   "Directory translation completed: {0} files succeeded, {1} files failed": "Directory translation completed: {0} files succeeded, {1} files failed",
   "Error during directory translation: {0}": "Error during directory translation: {0}",
-  "File translation completed: {0}": "File translation completed: {0}",
   "Error during file translation: {0}": "Error during file translation: {0}",
   "Unit-specific translation is not yet implemented. Translating entire file instead.": "Unit-specific translation is not yet implemented. Translating entire file instead.",
-  "File translation completed (contains unit {0})": "File translation completed (contains unit {0})",
   "Error during unit translation: {0}": "Error during unit translation: {0}"
 }

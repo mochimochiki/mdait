@@ -99,9 +99,6 @@ export class StatusTreeTranslationHandler {
 		}
 		try {
 			await transCommand(vscode.Uri.file(item.filePath));
-			vscode.window.showInformationMessage(
-				vscode.l10n.t("File translation completed: {0}", item.filePath),
-			);
 
 			// ステータスツリーを更新
 			await this.refreshStatusTree();
@@ -131,9 +128,6 @@ export class StatusTreeTranslationHandler {
 		);
 		try {
 			await transCommand(vscode.Uri.file(item.filePath));
-			vscode.window.showInformationMessage(
-				vscode.l10n.t("File translation completed (contains unit {0})", item.unitHash),
-			);
 
 			// ステータスツリーを更新
 			await this.refreshStatusTree();
