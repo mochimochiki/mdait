@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { TranslateItemCommand } from "../../../commands/translate/translate-item-command";
+import { TranslateItemCommand } from "../../../commands/trans/translate-item-command";
 import type { StatusItem } from "../../../ui/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
