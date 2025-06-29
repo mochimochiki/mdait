@@ -12,7 +12,7 @@ export interface StatusItem {
 	/**
 	 * アイテムのタイプ
 	 */
-	type: "directory" | "file" | "unit";
+	type: StatusItemType;
 
 	/**
 	 * 表示ラベル
@@ -162,4 +162,10 @@ export interface UnitStatus {
 	 * needフラグ
 	 */
 	needFlag?: string;
+}
+
+export enum StatusItemType {
+	Directory = "directory",
+	File = "file",
+	Unit = "unit",
 }

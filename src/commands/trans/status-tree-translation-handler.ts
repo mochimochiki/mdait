@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { StatusItemType } from "../../ui/status/status-item";
 import type { StatusItem } from "../../ui/status/status-item";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { transCommand } from "./trans-command";
@@ -29,7 +30,7 @@ export class StatusTreeTranslationHandler {
 	 * ディレクトリ内の全ファイルを翻訳する
 	 */
 	public async translateDirectory(item: StatusItem): Promise<void> {
-		if (item.type !== "directory" || !item.directoryPath) {
+		if (item.type !== StatusItemType.Directory || !item.directoryPath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
 			return;
 		}
@@ -92,7 +93,7 @@ export class StatusTreeTranslationHandler {
 	 * 単一ファイルを翻訳する
 	 */
 	public async translateFile(item: StatusItem): Promise<void> {
-		if (item.type !== "file" || !item.filePath) {
+		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
 		}
@@ -116,7 +117,7 @@ export class StatusTreeTranslationHandler {
 	 * 単一ユニットを翻訳する
 	 */
 	public async translateUnit(item: StatusItem): Promise<void> {
-		if (item.type !== "unit" || !item.filePath || !item.unitHash) {
+		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
 		}

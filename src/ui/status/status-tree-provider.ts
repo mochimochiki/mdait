@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
+import { StatusItemType } from "./status-item";
 import type { FileStatus, StatusItem, StatusType, UnitStatus } from "./status-item";
 
 /**
@@ -62,8 +63,30 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// contextValueを設定（StatusItemから）
 		treeItem.contextValue = element.contextValue;
 
+		// idを設定
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (element.type === StatusItemType.Directory && element.directoryPath) {
+			if (workspaceFolder) {
+				treeItem.id = path.relative(workspaceFolder, element.directoryPath);
+			} else {
+				treeItem.id = element.directoryPath;
+			}
+		} else if (element.type === StatusItemType.File && element.filePath) {
+			if (workspaceFolder) {
+				treeItem.id = path.relative(workspaceFolder, element.filePath);
+			} else {
+				treeItem.id = element.filePath;
+			}
+		} else if (element.type === StatusItemType.Unit && element.filePath && element.unitHash) {
+			if (workspaceFolder) {
+				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#${element.unitHash}`;
+			} else {
+				treeItem.id = `${element.filePath}#${element.unitHash}`;
+			}
+		}
+
 		// ファイルの場合はコマンドを設定してクリック時にファイルを開く（先頭行）
-		if (element.type === "file") {
+		if (element.type === StatusItemType.File) {
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Open File",
@@ -71,7 +94,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			};
 		}
 		// ユニットの場合はコマンドを設定してクリック時にジャンプ
-		if (element.type === "unit") {
+		if (element.type === StatusItemType.Unit) {
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Jump to Unit",
@@ -91,12 +114,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return Promise.resolve(this.getRootDirectoryItems());
 		}
 
-		if (element.type === "directory") {
+		if (element.type === StatusItemType.Directory) {
 			// ディレクトリの場合はファイル一覧を返す
 			return Promise.resolve(this.getFileItems(element.directoryPath));
 		}
 
-		if (element.type === "file") {
+		if (element.type === StatusItemType.File) {
 			// ファイルの場合は翻訳ユニット一覧を返す
 			return Promise.resolve(this.getUnitItems(element.filePath));
 		}
@@ -140,7 +163,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			// ディレクトリの全体ステータスを決定
 			const status = this.determineDirectoryStatus(files);
 			directoryItems.push({
-				type: "directory",
+				type: StatusItemType.Directory,
 				label: `${dirName} (${translatedUnits}/${totalUnits})`,
 				directoryPath: dirPath,
 				status,
@@ -210,7 +233,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			const status = this.determineDirectoryStatus(files);
 
 			items.push({
-				type: "directory",
+				type: StatusItemType.Directory,
 				label: `${dirName} (${translatedUnits}/${totalUnits})`,
 				directoryPath: subDirPath,
 				status,
@@ -227,8 +250,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// ディレクトリ→ファイルの順で表示
 		return [
-			...Array.from(items).filter((item) => item.type === "directory"),
-			...Array.from(items).filter((item) => item.type === "file"),
+			...Array.from(items).filter((item) => item.type === StatusItemType.Directory),
+			...Array.from(items).filter((item) => item.type === StatusItemType.File),
 		];
 	}
 
@@ -253,7 +276,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	private createUnitStatusItem(unitStatus: UnitStatus, filePath: string): StatusItem {
 		return {
-			type: "unit",
+			type: StatusItemType.Unit,
 			label: unitStatus.title || `Unit ${unitStatus.hash}`,
 			filePath,
 			unitHash: unitStatus.hash,
@@ -308,7 +331,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private createFileStatusItem(fileStatus: FileStatus): StatusItem {
 		const label = this.createFileLabel(fileStatus);
 		return {
-			type: "file",
+			type: StatusItemType.File,
 			label,
 			filePath: fileStatus.filePath,
 			status: fileStatus.status,

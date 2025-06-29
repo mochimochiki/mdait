@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { StatusTreeTranslationHandler } from "../../../commands/trans/status-tree-translation-handler";
-import type { StatusItem } from "../../../ui/status/status-item";
+import { type StatusItem, StatusItemType } from "../../../ui/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
 	let translateItemCommand: StatusTreeTranslationHandler;
@@ -12,20 +12,20 @@ suite("翻訳アイテムコマンドテスト", () => {
 
 	test("ディレクトリアイテムの検証 - 正常なディレクトリアイテム", async () => {
 		const directoryItem: StatusItem = {
-			type: "directory",
+			type: StatusItemType.Directory,
 			label: "test-dir",
 			directoryPath: "/test/directory",
 			status: "needsTranslation",
 		};
 
 		// エラーが発生しないことを確認（実際の翻訳は行わない）
-		assert.strictEqual(directoryItem.type, "directory");
+		assert.strictEqual(directoryItem.type, StatusItemType.Directory);
 		assert.strictEqual(directoryItem.directoryPath, "/test/directory");
 	});
 
 	test("ファイルアイテムの検証 - 正常なファイルアイテム", async () => {
 		const fileItem: StatusItem = {
-			type: "file",
+			type: StatusItemType.File,
 			label: "test.md",
 			filePath: "/test/test.md",
 			status: "needsTranslation",
@@ -38,7 +38,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 
 	test("ユニットアイテムの検証 - 正常なユニットアイテム", async () => {
 		const unitItem: StatusItem = {
-			type: "unit",
+			type: StatusItemType.Unit,
 			label: "Test Unit",
 			filePath: "/test/test.md",
 			unitHash: "12345678",
@@ -55,7 +55,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 
 	test("無効なディレクトリアイテムの処理", async () => {
 		const invalidItem: StatusItem = {
-			type: "file", // ディレクトリではない
+			type: StatusItemType.File, // ディレクトリではない
 			label: "invalid",
 			status: "needsTranslation",
 		};
@@ -72,7 +72,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 
 	test("無効なファイルアイテムの処理", async () => {
 		const invalidItem: StatusItem = {
-			type: "file",
+			type: StatusItemType.File,
 			label: "invalid",
 			status: "needsTranslation",
 			// filePathが未定義
@@ -89,7 +89,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 
 	test("無効なユニットアイテムの処理", async () => {
 		const invalidItem: StatusItem = {
-			type: "unit",
+			type: StatusItemType.Unit,
 			label: "invalid",
 			status: "needsTranslation",
 			// filePath, unitHashが未定義
