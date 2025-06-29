@@ -1,13 +1,13 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { TranslateItemCommand } from "../../../commands/trans/translate-item-command";
+import { StatusTreeTranslationHandler } from "../../../commands/trans/status-tree-translation-handler";
 import type { StatusItem } from "../../../ui/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
-	let translateItemCommand: TranslateItemCommand;
+	let translateItemCommand: StatusTreeTranslationHandler;
 
 	setup(() => {
-		translateItemCommand = new TranslateItemCommand();
+		translateItemCommand = new StatusTreeTranslationHandler();
 	});
 
 	test("ディレクトリアイテムの検証 - 正常なディレクトリアイテム", async () => {

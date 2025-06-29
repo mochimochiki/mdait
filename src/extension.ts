@@ -3,8 +3,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { chatCommand } from "./commands/chat/chat-command";
 import { syncCommand } from "./commands/sync/sync-command";
+import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
-import { TranslateItemCommand } from "./commands/trans/translate-item-command";
 import { DefaultTranslator } from "./commands/trans/translator";
 import { Configuration } from "./config/configuration";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
@@ -19,7 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// chat command
 	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
 	// 翻訳アイテムコマンド
-	const translateItemCommand = new TranslateItemCommand();
+	const translateItemCommand = new StatusTreeTranslationHandler();
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
@@ -28,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: false,
 	});
 
-	// TranslateItemCommandにStatusTreeProviderを設定
+	// StatusTreeTranslationHandlerにStatusTreeProviderを設定
 	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
 
 	const translateDirectoryDisposable = vscode.commands.registerCommand(

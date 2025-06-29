@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
 import type { StatusItem } from "../../ui/status/status-item";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
-import { transCommand } from "../trans/trans-command";
+import { transCommand } from "./trans-command";
 
 /**
- * ステータスツリーアイテムの翻訳コマンド
+ * ステータスツリーアイテムの翻訳アクションハンドラ
  */
-export class TranslateItemCommand {
+export class StatusTreeTranslationHandler {
 	private statusTreeProvider?: StatusTreeProvider;
 
 	/**
