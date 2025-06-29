@@ -98,15 +98,21 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 		try {
+			item.isTranslating = true;
+			if (this.statusTreeProvider) {
+				this.statusTreeProvider.refresh(item);
+			}
 			await transCommand(vscode.Uri.file(item.filePath));
-
-			// ステータスツリーを更新
-			await this.refreshStatusTree();
 		} catch (error) {
 			console.error("Error during file translation:", error);
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Error during file translation: {0}", (error as Error).message),
 			);
+		} finally {
+			item.isTranslating = false;
+			if (this.statusTreeProvider) {
+				this.statusTreeProvider.refresh();
+			}
 		}
 	}
 
@@ -127,15 +133,21 @@ export class StatusTreeTranslationHandler {
 			),
 		);
 		try {
+			item.isTranslating = true;
+			if (this.statusTreeProvider) {
+				this.statusTreeProvider.refresh(item);
+			}
 			await transCommand(vscode.Uri.file(item.filePath));
-
-			// ステータスツリーを更新
-			await this.refreshStatusTree();
 		} catch (error) {
 			console.error("Error during unit translation:", error);
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Error during unit translation: {0}", (error as Error).message),
 			);
+		} finally {
+			item.isTranslating = false;
+			if (this.statusTreeProvider) {
+				this.statusTreeProvider.refresh(item);
+			}
 		}
 	}
 }

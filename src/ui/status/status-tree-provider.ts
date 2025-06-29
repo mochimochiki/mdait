@@ -30,22 +30,28 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 	/**
 	 * ツリーデータをリフレッシュする
+	 * @param item 更新したいStatusItem（省略時は全体）
 	 */
-	public async refresh(): Promise<void> {
+	public async refresh(item?: StatusItem): Promise<void> {
 		try {
-			// 設定を読み込み
-			await this.configuration.load();
-
-			// 設定が有効かチェック
-			const validationError = this.configuration.validate();
-			if (validationError) {
-				vscode.window.showWarningMessage(validationError);
-				this.fileStatuses = [];
+			if (!item) {
+				// 設定を読み込み
+				await this.configuration.load();
+				// 設定が有効かチェック
+				const validationError = this.configuration.validate();
+				if (validationError) {
+					vscode.window.showWarningMessage(validationError);
+					this.fileStatuses = [];
+				} else {
+					// ファイル状況を収集
+					this.fileStatuses = await this.statusCollector.collectAllFileStatuses(this.configuration);
+				}
+				// ツリービューを全体更新
+				this._onDidChangeTreeData.fire(undefined);
 			} else {
-				// ファイル状況を収集
-				this.fileStatuses = await this.statusCollector.collectAllFileStatuses(this.configuration);
-			} // ツリービューを更新
-			this._onDidChangeTreeData.fire(undefined);
+				// 指定ノードのみ更新
+				this._onDidChangeTreeData.fire(item);
+			}
 		} catch (error) {
 			console.error("Error refreshing status tree:", error);
 			vscode.window.showErrorMessage(
@@ -54,13 +60,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 	}
 	/**
-	 * ツリーアイテムを取得する
+	 * API: ツリーアイテムを取得する
+	 *
 	 */
 	public getTreeItem(element: StatusItem): vscode.TreeItem {
 		const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
 
-		// アイコンを設定
-		treeItem.iconPath = this.getStatusIcon(element.status);
+		// ステータスに応じたアイコンを設定
+		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating);
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
@@ -111,7 +118,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
-	 * 子要素を取得する
+	 * API: 子要素を取得する
+	 * ユーザーがツリービューを開くと、getChildrenメソッドが`element`なしで呼び出されます
 	 */
 	public async getChildren(element?: StatusItem): Promise<StatusItem[]> {
 		if (!this.isIndexInitialized && !this.isIndexing) {
@@ -418,7 +426,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * ステータスに応じたアイコンを取得する
 	 */
-	private getStatusIcon(status: StatusType): vscode.ThemeIcon {
+	private getStatusIcon(status: StatusType, isProgress?: boolean): vscode.ThemeIcon {
+		if (isProgress) {
+			return new vscode.ThemeIcon("sync~spin");
+		}
 		switch (status) {
 			case "translated":
 				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));

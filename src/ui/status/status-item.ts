@@ -49,12 +49,7 @@ export interface StatusItem {
 	 */
 	status: StatusType;
 
-	/**
-	 * 子アイテム（将来的にユニット詳細表示で使用）
-	 */
-	children?: StatusItem[];
-
-	/**
+  /**
 	 * VS Codeツリーアイテムの状態
 	 */
 	collapsibleState?: vscode.TreeItemCollapsibleState;
@@ -72,6 +67,11 @@ export interface StatusItem {
 	 * VS Codeのコンテキストメニューやインラインアクション用の識別子
 	 */
 	contextValue?: string;
+
+	/**
+	 * transコマンド進行中かどうか
+	 */
+	isTranslating?: boolean;
 }
 
 /**
