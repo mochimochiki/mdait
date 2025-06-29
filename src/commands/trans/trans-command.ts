@@ -3,7 +3,11 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { findUnitsByFromHash, loadIndexFile, updateIndexForFile } from "../../core/index/index-manager";
+import {
+	findUnitsByFromHash,
+	loadIndexFile,
+	updateIndexForFile,
+} from "../../core/index/index-manager";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -35,24 +39,16 @@ export async function transCommand(uri?: vscode.Uri) {
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translating {0} from {1} to {2}...", targetFilePath, sourceLang, targetLang),
-		); // Markdown ファイルの読み込みとパース
+		// Markdown ファイルの読み込みとパース
 		const markdownContent = await fs.promises.readFile(targetFilePath, "utf-8");
 		const markdown = markdownParser.parse(markdownContent, config);
 
 		// need:translate フラグを持つユニットを抽出
 		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
 		if (unitsToTranslate.length === 0) {
-			vscode.window.showInformationMessage(
-				vscode.l10n.t("No units requiring translation were found."),
-			);
 			return;
 		}
 
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translating {0} units: {1}", unitsToTranslate.length, targetFilePath),
-		);
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
 			await translateUnit(unit, translator, sourceLang, targetLang, markdown);
@@ -70,10 +66,6 @@ export async function transCommand(uri?: vscode.Uri) {
 				console.warn("Failed to update index file after translation");
 			}
 		}
-
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translation completed: {0} units translated", unitsToTranslate.length),
-		);
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("Error during translation: {0}", (error as Error).message),

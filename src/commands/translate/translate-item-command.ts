@@ -76,10 +76,6 @@ export class TranslateItemCommand {
 						failed,
 					),
 				);
-			} else {
-				vscode.window.showInformationMessage(
-					vscode.l10n.t("Directory translation completed: {0} files translated", successful),
-				);
 			}
 
 			// ステータスツリーを更新
