@@ -402,9 +402,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private getStatusIcon(status: StatusType): vscode.ThemeIcon {
 		switch (status) {
 			case "translated":
-				return new vscode.ThemeIcon("check", new vscode.ThemeColor("charts.green"));
+				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
 			case "needsTranslation":
-				return new vscode.ThemeIcon("clock", new vscode.ThemeColor("charts.yellow"));
+				return new vscode.ThemeIcon("circle");
 			case "error":
 				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
 			default:
