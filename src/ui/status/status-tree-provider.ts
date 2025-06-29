@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { generateIndexFile } from "../../core/index/index-manager";
 import { StatusCollector } from "./status-collector";
 import { StatusItemType } from "./status-item";
 import type { FileStatus, StatusItem, StatusType, UnitStatus } from "./status-item";
@@ -17,6 +18,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private readonly statusCollector: StatusCollector;
 	private readonly configuration: Configuration;
 	private fileStatuses: FileStatus[] = [];
+
+	// インデックス初期化済みフラグと排他制御
+	private isIndexInitialized = false;
+	private isIndexing = false;
 
 	constructor() {
 		this.statusCollector = new StatusCollector();
@@ -108,22 +113,36 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * 子要素を取得する
 	 */
-	public getChildren(element?: StatusItem): Thenable<StatusItem[]> {
+	public async getChildren(element?: StatusItem): Promise<StatusItem[]> {
+		if (!this.isIndexInitialized && !this.isIndexing) {
+			this.isIndexing = true;
+			try {
+				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+				if (workspaceFolder) {
+					await this.configuration.load();
+					await generateIndexFile(this.configuration, workspaceFolder);
+				}
+				this.isIndexInitialized = true;
+			} catch (e) {
+				console.warn("インデックス初期化に失敗", e);
+			} finally {
+				this.isIndexing = false;
+			}
+			// インデックス更新後に最新状態でリフレッシュ
+			await this.refresh();
+		}
 		if (!element) {
 			// ルート要素の場合はディレクトリ一覧を返す
 			return Promise.resolve(this.getRootDirectoryItems());
 		}
-
 		if (element.type === StatusItemType.Directory) {
 			// ディレクトリの場合はファイル一覧を返す
 			return Promise.resolve(this.getFileItems(element.directoryPath));
 		}
-
 		if (element.type === StatusItemType.File) {
 			// ファイルの場合は翻訳ユニット一覧を返す
 			return Promise.resolve(this.getUnitItems(element.filePath));
 		}
-
 		// ユニットタイプの場合は子要素なし
 		return Promise.resolve([]);
 	}

@@ -80,7 +80,6 @@ export function activate(context: vscode.ExtensionContext) {
 		},
 	);
 	// 初回データ読み込み
-	statusTreeProvider.refresh();
 	context.subscriptions.push(
 		syncDisposable,
 		transDisposable,

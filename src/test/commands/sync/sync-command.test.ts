@@ -56,9 +56,9 @@ suite("syncコマンドE2E", () => {
 
 	suite("基本", () => {
 		test("マーカー付与: 既存のMarkdownにmdaitマーカーが付与されること", async () => {
-			// content/en/20_no_header.md, content/ja/20_no_header.md を使う
-			const tmpEnNoHeader = join(tmpEnDir, "20_no_header.md");
-			const tmpJaNoHeader = join(tmpJaDir, "20_no_header.md");
+			// content/en/20_no_marker.md, content/ja/20_no_marker.md を使う
+			const tmpEnNoHeader = join(tmpEnDir, "20_no_marker.md");
+			const tmpJaNoHeader = join(tmpJaDir, "20_no_marker.md");
 
 			// VSCode拡張コマンドとしてsyncを実行
 			const vscode = require("vscode");
@@ -89,8 +89,8 @@ suite("syncコマンドE2E", () => {
 
 		test("from付与: マーカー付与後にfromでの対応付けができていること", async () => {
 			// 既存の10_test.mdファイルを使用
-			const tmpJaTest = join(tmpJaDir, "20_no_header.md");
-			const tmpEnTest = join(tmpEnDir, "20_no_header.md");
+			const tmpJaTest = join(tmpJaDir, "20_no_marker.md");
+			const tmpEnTest = join(tmpEnDir, "20_no_marker.md");
 
 			// syncコマンドを実行してマーカー・from付与を行う
 			const vscode = require("vscode");
@@ -162,8 +162,8 @@ suite("syncコマンドE2E", () => {
 
 		test("FrontMatter: Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {
 			// Front Matter付きのファイルでテスト
-			const tmpJaNoHeader = join(tmpJaDir, "20_no_header.md");
-			const tmpEnNoHeader = join(tmpEnDir, "20_no_header.md");
+			const tmpJaNoHeader = join(tmpJaDir, "20_no_marker.md");
+			const tmpEnNoHeader = join(tmpEnDir, "20_no_marker.md");
 
 			// syncを実行
 			const vscode = require("vscode");
