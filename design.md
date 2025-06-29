@@ -286,6 +286,23 @@ Markdown文書をパースし、markerを基準としてユニットに分割し
 5. **孤立targetユニットの扱い**
    - markerに`from`があるにもかかわらずマッチしなかったtargetユニットは「孤立」とみなし、`auto-delete`設定に従い削除または`need:verify-deletion`付与。
 
+## 8.4 ステータス情報の統合設計（StatusItem型）
+
+### 8.4.1 統合方針
+
+- 全ユニットのステータス情報のインデックスとして`StatusItem`を定義し、Markdown文書内のユニットの状態を一元的に管理する。
+- type（"directory"|"file"|"unit"）ごとに必要なフィールドを持たせ、不要なものはundefined/省略可とする。
+- children?: StatusItem[] でツリー構造を表現し、ディレクトリ・ファイル・ユニットを一元的に管理する。
+- UI用途のプロパティ（iconPath, collapsibleState等）はオプショナルで持たせる。
+- 進捗集計やエラー情報などもtype: "file"のStatusItemに持たせる。
+
+### 8.4.3 利用方針
+- すべてのステータス情報はStatusItem[]で管理し、用途ごとにtypeで分岐する。
+- 進捗集計やエラー情報もStatusItem（type: "file"）に集約。
+- ツリー表示や再帰処理もchildrenで一元的に扱う。
+
+---
+
 ## 9. Markdownオブジェクト
 
 ### 9.1 Markdownオブジェクトの構造

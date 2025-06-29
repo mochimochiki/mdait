@@ -20,7 +20,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await collector.collectAllFileStatuses(config);
+		const fileStatuses = await collector.collectAll(config);
 
 		// 結果の検証
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -57,7 +57,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await collector.collectAllFileStatuses(config);
+		const fileStatuses = await collector.collectAll(config);
 
 		// エラーにならずに空配列が返されることを確認
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");

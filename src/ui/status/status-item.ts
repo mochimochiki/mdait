@@ -1,12 +1,18 @@
 import type * as vscode from "vscode";
 
 /**
- * ツリービューアイテムの状態
+ * ステータス情報のタイプ
  */
 export type StatusType = "translated" | "needsTranslation" | "error" | "unknown";
 
+export enum StatusItemType {
+	Directory = "directory",
+	File = "file",
+	Unit = "unit",
+}
+
 /**
- * ツリービューアイテムのデータ構造
+ * ディレクトリ・ファイル・ユニットを一元管理する統合型
  */
 export interface StatusItem {
 	/**
@@ -20,152 +26,37 @@ export interface StatusItem {
 	label: string;
 
 	/**
-	 * ディレクトリパス（ディレクトリタイプの場合）
+	 * 翻訳状態
 	 */
+	status: StatusType;
+
+	// ディレクトリ用
 	directoryPath?: string;
 
-	/**
-	 * ファイルパス（ファイル・ユニットタイプの場合）
-	 */
+	// ファイル用
 	filePath?: string;
-
-	/**
-	 * 翻訳単位のハッシュ（ユニットタイプの場合）
-	 */
-	unitHash?: string;
-
-	/**
-	 * 開始行番号（ユニットタイプの場合、0ベース）
-	 */
-	startLine?: number;
-
-	/**
-	 * 終了行番号（ユニットタイプの場合、0ベース）
-	 */
-	endLine?: number;
-
-	/**
-	 * 翻訳状態
-	 */
-	status: StatusType;
-
-  /**
-	 * VS Codeツリーアイテムの状態
-	 */
-	collapsibleState?: vscode.TreeItemCollapsibleState;
-
-	/**
-	 * アイコンのテーマアイコン
-	 */
-	iconPath?: vscode.ThemeIcon;
-	/**
-	 * ツールチップテキスト
-	 */
-	tooltip?: string;
-
-	/**
-	 * VS Codeのコンテキストメニューやインラインアクション用の識別子
-	 */
-	contextValue?: string;
-
-	/**
-	 * transコマンド進行中かどうか
-	 */
-	isTranslating?: boolean;
-}
-
-/**
- * ファイルレベルのステータス統計
- */
-export interface FileStatus {
-	/**
-	 * ファイルパス
-	 */
-	filePath: string;
-
-	/**
-	 * ファイル名
-	 */
-	fileName: string;
-
-	/**
-	 * ファイル全体の状態
-	 */
-	status: StatusType;
-
-	/**
-	 * 翻訳済みユニット数
-	 */
-	translatedUnits: number;
-
-	/**
-	 * 全ユニット数
-	 */
-	totalUnits: number;
-
-	/**
-	 * パースエラーがあるかどうか
-	 */
-	hasParseError: boolean;
-
-	/**
-	 * エラーメッセージ
-	 */
+	fileName?: string;
+	translatedUnits?: number;
+	totalUnits?: number;
+	hasParseError?: boolean;
 	errorMessage?: string;
 
-	/**
-	 * ファイル内の翻訳ユニット詳細情報
-	 */
-	units?: UnitStatus[];
-}
-
-/**
- * 翻訳単位レベルのステータス情報
- */
-export interface UnitStatus {
-	/**
-	 * 翻訳単位のハッシュ
-	 */
-	hash: string;
-
-	/**
-	 * 翻訳単位のタイトル（見出し）
-	 */
-	title: string;
-
-	/**
-	 * 見出しレベル
-	 */
-	headingLevel: number;
-
-	/**
-	 * 翻訳状態
-	 */
-	status: StatusType;
-
-	/**
-	 * 開始行番号（0ベース）
-	 */
-	startLine: number;
-
-	/**
-	 * 終了行番号（0ベース）
-	 */
-	endLine: number;
-
-	/**
-	 * 翻訳元ユニットのハッシュ
-	 */
+	// ユニット用
+	unitHash?: string;
+	title?: string;
+	headingLevel?: number;
 	fromHash?: string;
-
-	/**
-	 * needフラグ
-	 */
 	needFlag?: string;
-}
+	startLine?: number;
+	endLine?: number;
 
-export enum StatusItemType {
-	Directory = "directory",
-	File = "file",
-	Unit = "unit",
+	// 共通（ツリー構造）
+	children?: StatusItem[];
+
+	// UI用
+	collapsibleState?: vscode.TreeItemCollapsibleState;
+	iconPath?: vscode.ThemeIcon;
+	tooltip?: string;
+	contextValue?: string;
+	isTranslating?: boolean;
 }

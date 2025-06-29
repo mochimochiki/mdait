@@ -4,7 +4,7 @@ import { Configuration } from "../../config/configuration";
 import { generateIndexFile } from "../../core/index/index-manager";
 import { StatusCollector } from "./status-collector";
 import { StatusItemType } from "./status-item";
-import type { FileStatus, StatusItem, StatusType, UnitStatus } from "./status-item";
+import type { StatusItem, StatusType } from "./status-item";
 
 /**
  * ステータスツリービューのデータプロバイダ
@@ -17,7 +17,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 	private readonly statusCollector: StatusCollector;
 	private readonly configuration: Configuration;
-	private fileStatuses: FileStatus[] = [];
+	private fileStatuses: StatusItem[] = [];
 
 	// インデックス初期化済みフラグと排他制御
 	private isIndexInitialized = false;
@@ -44,7 +44,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					this.fileStatuses = [];
 				} else {
 					// ファイル状況を収集
-					this.fileStatuses = await this.statusCollector.collectAllFileStatuses(this.configuration);
+					this.fileStatuses = await this.statusCollector.collectAll(this.configuration);
 				}
 				// ツリービューを全体更新
 				this._onDidChangeTreeData.fire(undefined);
@@ -59,6 +59,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			);
 		}
 	}
+
 	/**
 	 * API: ツリーアイテムを取得する
 	 *
@@ -145,7 +146,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 		if (element.type === StatusItemType.Directory) {
 			// ディレクトリの場合はファイル一覧を返す
-			return Promise.resolve(this.getFileItems(element.directoryPath));
+			return Promise.resolve(this.getStatusItemsRecursive(element.directoryPath));
 		}
 		if (element.type === StatusItemType.File) {
 			// ファイルの場合は翻訳ユニット一覧を返す
@@ -159,7 +160,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * ディレクトリ一覧のStatusItemを作成する
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
-		const directoryMap = new Map<string, FileStatus[]>();
+		const directoryMap = new Map<string, StatusItem[]>();
 		// transPairs.targetDirの絶対パス一覧を作成
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		const targetDirsAbs = this.configuration.transPairs.map((pair) =>
@@ -167,25 +168,22 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		);
 		// ファイルをディレクトリごとにグループ化（targetDir一致のみ）
 		for (const fileStatus of this.fileStatuses) {
-			const dirPath = path.dirname(fileStatus.filePath);
+			const dirPath = path.dirname(fileStatus.filePath ?? "");
 			if (!targetDirsAbs.includes(dirPath)) {
 				continue;
 			}
 			if (!directoryMap.has(dirPath)) {
 				directoryMap.set(dirPath, []);
 			}
-			const files = directoryMap.get(dirPath);
-			if (files) {
-				files.push(fileStatus);
-			}
+			directoryMap.get(dirPath)?.push(fileStatus);
 		}
 
 		// ディレクトリごとにStatusItemを作成
 		const directoryItems: StatusItem[] = [];
 		for (const [dirPath, files] of directoryMap) {
 			const dirName = path.basename(dirPath) || dirPath;
-			const totalUnits = files.reduce((sum, file) => sum + file.totalUnits, 0);
-			const translatedUnits = files.reduce((sum, file) => sum + file.translatedUnits, 0);
+			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
+			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 
 			// ディレクトリの全体ステータスを決定
 			const status = this.determineDirectoryStatus(files);
@@ -211,13 +209,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * 指定ディレクトリのファイル・サブディレクトリ一覧のStatusItemを作成する
 	 */
-	private getFileItems(directoryPath?: string): StatusItem[] {
+	private getStatusItemsRecursive(directoryPath?: string): StatusItem[] {
 		const items: StatusItem[] = [];
 		const subDirSet = new Set<string>();
 
 		// 指定ディレクトリ配下のファイルを抽出
 		const filesInDir = this.fileStatuses.filter((fileStatus) => {
-			const dir = path.dirname(fileStatus.filePath);
+			const dir = path.dirname(fileStatus.filePath ?? "");
 			// directoryPathが未指定の場合はルート直下
 			if (!directoryPath) {
 				// ルート直下のファイルのみ
@@ -230,12 +228,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// ファイルStatusItemを追加
 		for (const fileStatus of filesInDir) {
-			items.push(this.createFileStatusItem(fileStatus));
+			items.push(fileStatus);
 		}
 
 		// サブディレクトリを抽出
 		for (const fileStatus of this.fileStatuses) {
-			const dir = path.dirname(fileStatus.filePath);
+			const dir = path.dirname(fileStatus.filePath ?? "");
 			const parentDir = directoryPath ?? "";
 			// サブディレクトリかどうか判定
 			if (dir !== parentDir && dir.startsWith(parentDir)) {
@@ -252,11 +250,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// サブディレクトリStatusItemを追加
 		for (const subDirPath of subDirSet) {
 			const files = this.fileStatuses.filter((fs) =>
-				path.dirname(fs.filePath).startsWith(subDirPath),
+				path.dirname(fs.filePath ?? "").startsWith(subDirPath),
 			);
 			const dirName = path.basename(subDirPath) || subDirPath;
-			const totalUnits = files.reduce((sum, file) => sum + file.totalUnits, 0);
-			const translatedUnits = files.reduce((sum, file) => sum + file.translatedUnits, 0);
+			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
+			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 			const status = this.determineDirectoryStatus(files);
 
 			items.push({
@@ -291,116 +289,28 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		const fileStatus = this.fileStatuses.find((fs) => fs.filePath === filePath);
-		if (!fileStatus || !fileStatus.units) {
+		if (!fileStatus || !fileStatus.children) {
 			return [];
 		}
 
-		return fileStatus.units.map((unit) => this.createUnitStatusItem(unit, filePath));
-	}
-
-	/**
-	 * UnitStatusからStatusItemを作成する
-	 */
-	private createUnitStatusItem(unitStatus: UnitStatus, filePath: string): StatusItem {
-		return {
-			type: StatusItemType.Unit,
-			label: unitStatus.title || `Unit ${unitStatus.hash}`,
-			filePath,
-			unitHash: unitStatus.hash,
-			startLine: unitStatus.startLine,
-			endLine: unitStatus.endLine,
-			status: unitStatus.status,
-			collapsibleState: vscode.TreeItemCollapsibleState.None,
-			tooltip: this.createUnitTooltip(unitStatus),
-			contextValue: "mdaitUnit",
-		};
+		return fileStatus.children;
 	}
 
 	/**
 	 * ディレクトリの全体ステータスを決定する
 	 */
-	private determineDirectoryStatus(files: FileStatus[]): StatusType {
+	private determineDirectoryStatus(files: StatusItem[]): StatusType {
 		if (files.length === 0) return "unknown";
 
 		const hasError = files.some((f) => f.status === "error");
 		if (hasError) return "error";
 
-		const totalUnits = files.reduce((sum, f) => sum + f.totalUnits, 0);
-		const translatedUnits = files.reduce((sum, f) => sum + f.translatedUnits, 0);
+		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
+		const translatedUnits = files.reduce((sum, f) => sum + (f.translatedUnits ?? 0), 0);
 
 		if (totalUnits === 0) return "unknown";
 		if (translatedUnits === totalUnits) return "translated";
 		return "needsTranslation";
-	}
-
-	/**
-	 * 翻訳ユニット用のツールチップを作成する
-	 */
-	private createUnitTooltip(unitStatus: UnitStatus): string {
-		let tooltip = `${unitStatus.title} (${unitStatus.hash})`;
-
-		if (unitStatus.needFlag) {
-			tooltip += ` - Need: ${unitStatus.needFlag}`;
-		}
-
-		if (unitStatus.fromHash) {
-			tooltip += ` - From: ${unitStatus.fromHash}`;
-		}
-
-		tooltip += ` - Lines: ${unitStatus.startLine + 1}-${unitStatus.endLine + 1}`;
-
-		return tooltip;
-	}
-
-	/**
-	 * FileStatusからStatusItemを作成する
-	 */
-	private createFileStatusItem(fileStatus: FileStatus): StatusItem {
-		const label = this.createFileLabel(fileStatus);
-		return {
-			type: StatusItemType.File,
-			label,
-			filePath: fileStatus.filePath,
-			status: fileStatus.status,
-			collapsibleState:
-				fileStatus.units && fileStatus.units.length > 0
-					? vscode.TreeItemCollapsibleState.Collapsed
-					: vscode.TreeItemCollapsibleState.None,
-			tooltip: this.createFileTooltip(fileStatus),
-			contextValue: "mdaitFile",
-		};
-	}
-
-	/**
-	 * ファイル用のラベルを作成する
-	 */
-	private createFileLabel(fileStatus: FileStatus): string {
-		if (fileStatus.hasParseError) {
-			return `${fileStatus.fileName} ❌`;
-		}
-
-		// 基本実装では統計は表示しない（後続チケットで実装）
-		return fileStatus.fileName;
-	}
-
-	/**
-	 * ファイル用のツールチップを作成する
-	 */
-	private createFileTooltip(fileStatus: FileStatus): string {
-		if (fileStatus.hasParseError) {
-			return vscode.l10n.t(
-				"Parse error in {0}: {1}",
-				fileStatus.fileName,
-				fileStatus.errorMessage || "Unknown error",
-			);
-		}
-
-		return vscode.l10n.t(
-			"{0}: {1}/{2} units translated",
-			fileStatus.fileName,
-			fileStatus.translatedUnits,
-			fileStatus.totalUnits,
-		);
 	}
 
 	/**
