@@ -3,7 +3,6 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { generateIndexFile } from "../../core/index/index-manager";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -88,17 +87,16 @@ export async function syncCommand(): Promise<void> {
 			),
 		);
 
-		// インデックスファイルを生成
+		// インデックスファイル生成は廃止（StatusItemベースの管理に移行）
 		try {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const indexPath = await generateIndexFile(config, workspaceRoot);
-				console.log(`Index file generated: ${indexPath}`);
+				console.log("Sync completed - StatusItem based management");
 			}
 		} catch (indexError) {
-			console.warn("Failed to generate index file:", indexError);
+			console.warn("Failed to complete sync:", indexError);
 			vscode.window.showWarningMessage(
-				vscode.l10n.t("Index file generation failed: {0}", (indexError as Error).message),
+				vscode.l10n.t("Sync completion failed: {0}", (indexError as Error).message),
 			);
 		}
 	} catch (error) {

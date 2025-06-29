@@ -3,14 +3,11 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import {
-	findUnitsByFromHash,
-	loadIndexFile,
-	updateIndexForFile,
-} from "../../core/index/index-manager";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { StatusCollector } from "../../ui/status/status-collector";
+import { findUnitsByFromHash } from "../../ui/status/status-item-utils";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
@@ -58,14 +55,8 @@ export async function transCommand(uri?: vscode.Uri) {
 		const updatedContent = markdownParser.stringify(markdown);
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
 
-		// インデックスファイルを更新（翻訳によりneedFlagが変更されたため）
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (workspaceRoot) {
-			const updateSuccess = await updateIndexForFile(workspaceRoot, targetFilePath, config);
-			if (!updateSuccess) {
-				console.warn("Failed to update index file after translation");
-			}
-		}
+		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
+		console.log("Translation completed - StatusItem based management");
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("Error during translation: {0}", (error as Error).message),
@@ -95,36 +86,35 @@ async function translateUnit(
 
 		let sourceContent = unit.content;
 
-		// from属性がある場合は、インデックスファイルから翻訳元ユニットのコンテンツを取得
+		// from属性がある場合は、StatusItemベースで翻訳元ユニットのコンテンツを取得
 		if (unit.marker?.from) {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const indexFile = await loadIndexFile(workspaceRoot);
-				if (indexFile) {
-					const sourceUnits = findUnitsByFromHash(indexFile, unit.marker.from);
-					if (sourceUnits.length > 0) {
-						// 最初に見つかった翻訳元ユニットを使用
-						const sourceUnit = sourceUnits[0];
-						try {
-							const sourceFilePath = path.resolve(workspaceRoot, sourceUnit.path);
-							const sourceFileContent = await fs.promises.readFile(sourceFilePath, "utf-8");
-							const sourceMarkdown = markdownParser.parse(sourceFileContent, new Configuration());
-							const sourceUnitData = sourceMarkdown.units[sourceUnit.unitIndex];
+				const config = new Configuration();
+				await config.load();
+				
+				const statusCollector = new StatusCollector();
+				const statusItems = await statusCollector.collectAll(config);
+				
+				const sourceUnits = findUnitsByFromHash(statusItems, unit.marker.from);
+				if (sourceUnits.length > 0) {
+					// 最初に見つかった翻訳元ユニットを使用
+					const sourceUnit = sourceUnits[0];
+					try {
+						if (sourceUnit.filePath) {
+							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
+							const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
+							// unitHashでユニットを特定
+							const sourceUnitData = sourceMarkdown.units.find(u => u.marker?.hash === sourceUnit.unitHash);
 							if (sourceUnitData) {
 								sourceContent = sourceUnitData.content;
 							}
-						} catch (error) {
-							console.warn(`Failed to read source unit from ${sourceUnit.path}:`, error);
 						}
-					} else {
-						console.warn(`Source unit not found for hash: ${unit.marker.from}`);
+					} catch (error) {
+						console.warn(`Failed to read source unit from ${sourceUnit.filePath}:`, error);
 					}
 				} else {
-					// インデックスファイルがない場合はフォールバック（従来の方式）
-					const sourceUnit = findUnitByHash(markdown.units, unit.marker.from);
-					if (sourceUnit) {
-						sourceContent = sourceUnit.content;
-					}
+					console.warn(`Source unit not found for hash: ${unit.marker.from}`);
 				}
 			}
 		}

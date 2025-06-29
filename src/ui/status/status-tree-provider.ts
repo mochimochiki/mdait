@@ -1,7 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { generateIndexFile } from "../../core/index/index-manager";
 import { StatusCollector } from "./status-collector";
 import { StatusItemType } from "./status-item";
 import type { StatusItem, StatusType } from "./status-item";
@@ -19,9 +18,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private readonly configuration: Configuration;
 	private fileStatuses: StatusItem[] = [];
 
-	// インデックス初期化済みフラグと排他制御
-	private isIndexInitialized = false;
-	private isIndexing = false;
+	// ステータス初期化済みフラグと排他制御
+	private isStatusInitialized = false;
+	private isStatusLoading = false;
 
 	constructor() {
 		this.statusCollector = new StatusCollector();
@@ -123,22 +122,21 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * ユーザーがツリービューを開くと、getChildrenメソッドが`element`なしで呼び出されます
 	 */
 	public async getChildren(element?: StatusItem): Promise<StatusItem[]> {
-		if (!this.isIndexInitialized && !this.isIndexing) {
-			this.isIndexing = true;
+		if (!this.isStatusInitialized && !this.isStatusLoading) {
+			this.isStatusLoading = true;
 			try {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (workspaceFolder) {
 					await this.configuration.load();
-					await generateIndexFile(this.configuration, workspaceFolder);
+					// StatusItemベースでの状態収集
+					this.fileStatuses = await this.statusCollector.collectAll(this.configuration);
 				}
-				this.isIndexInitialized = true;
+				this.isStatusInitialized = true;
 			} catch (e) {
-				console.warn("インデックス初期化に失敗", e);
+				console.warn("ステータス初期化に失敗", e);
 			} finally {
-				this.isIndexing = false;
+				this.isStatusLoading = false;
 			}
-			// インデックス更新後に最新状態でリフレッシュ
-			await this.refresh();
 		}
 		if (!element) {
 			// ルート要素の場合はディレクトリ一覧を返す

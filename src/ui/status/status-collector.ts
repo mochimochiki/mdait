@@ -2,8 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
-import { loadIndexFile } from "../../core/index/index-manager";
-import type { IndexFile } from "../../core/index/index-types";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { MarkdownItParser } from "../../core/markdown/parser";
 import { FileExplorer } from "../../utils/file-explorer";
@@ -28,16 +26,11 @@ export class StatusCollector {
 		const statusItems: StatusItem[] = [];
 
 		try {
-			// インデックスファイルの読み込みを試行
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			let indexFile: IndexFile | null = null;
-			if (workspaceRoot) {
-				indexFile = await loadIndexFile(workspaceRoot);
-			}
-
-			if (indexFile) {
-				// インデックスファイルがある場合は高速な収集を行う
-				statusItems.push(...(await this.collectAllFromIndex(indexFile, config)));
+			// 対象ディレクトリから直接ファイル情報を収集
+			for (const transPair of config.transPairs) {
+				const targetDir = transPair.targetDir;
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
+				statusItems.push(...targetDirItems);
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
@@ -161,96 +154,59 @@ export class StatusCollector {
 	}
 
 	/**
-	 * インデックスファイルから高速にファイル状況を収集する
+	 * ディレクトリから直接ファイル状況を収集する
 	 */
-	private async collectAllFromIndex(
-		indexFile: IndexFile,
+	private async collectAllFromDirectory(
+		targetDir: string,
 		config: Configuration,
 	): Promise<StatusItem[]> {
-		const fileMap = new Map<string, StatusItem>();
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
 		if (!workspaceRoot) {
 			return [];
 		}
 
-		// インデックスから各ファイルの情報を集計
-		for (const hash in indexFile.units) {
-			const entries = indexFile.units[hash];
-			for (const entry of entries) {
-				// 相対パスから絶対パスを計算
-				const absolutePath = path.resolve(workspaceRoot, entry.path);
+		const absoluteTargetDir = path.resolve(workspaceRoot, targetDir);
+		
+		try {
+			// ディレクトリが存在するかチェック
+			if (!fs.existsSync(absoluteTargetDir)) {
+				return [];
+			}
 
-				// targetディレクトリのファイルのみを対象とする
-				const isTargetFile = config.transPairs.some((pair) => {
-					const targetDirNormalized = path.resolve(workspaceRoot, pair.targetDir);
-					const fileDir = path.dirname(absolutePath);
-					return (
-						fileDir === targetDirNormalized || fileDir.startsWith(targetDirNormalized + path.sep)
-					);
-				});
-
-				if (!isTargetFile) {
-					continue;
-				}
-
-				let fileStatus = fileMap.get(absolutePath);
-				if (!fileStatus) {
-					fileStatus = {
+			// ディレクトリ内のMarkdownファイルを再帰的に検索
+			const workspaceUri = vscode.Uri.file(workspaceRoot);
+			const pattern = new vscode.RelativePattern(absoluteTargetDir, "**/*.md");
+			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
+			const mdFiles = files.map(f => f.fsPath);
+			
+			// 各ファイルの状況を収集
+			const fileStatuses: StatusItem[] = [];
+			for (const filePath of mdFiles) {
+				try {
+					const fileStatus = await this.collectFile(filePath);
+					fileStatuses.push(fileStatus);
+				} catch (error) {
+					console.error(`Error processing file ${filePath}:`, error);
+					// エラーファイルも含める
+					fileStatuses.push({
 						type: StatusItemType.File,
-						label: path.basename(absolutePath),
-						status: "translated",
-						filePath: absolutePath,
-						fileName: path.basename(absolutePath),
-						translatedUnits: 0,
-						totalUnits: 0,
-						hasParseError: false,
-						children: [],
+						label: path.basename(filePath),
+						status: "error",
+						filePath,
+						fileName: path.basename(filePath),
+						hasParseError: true,
+						errorMessage: (error as Error).message,
 						contextValue: "mdaitFile",
 						collapsibleState: vscode.TreeItemCollapsibleState.None,
-					};
-					fileMap.set(absolutePath, fileStatus);
+					});
 				}
-
-				// ユニット情報を追加
-				const unitStatus: StatusItem = {
-					type: StatusItemType.Unit,
-					label: entry.title,
-					status: entry.needFlag ? "needsTranslation" : "translated",
-					unitHash: hash,
-					title: entry.title,
-					headingLevel: this.extractHeadingLevel(entry.title),
-					startLine: entry.startLine,
-					endLine: entry.endLine,
-					needFlag: entry.needFlag || undefined,
-					fromHash: entry.from || undefined,
-					contextValue: "mdaitUnit",
-				};
-        if (fileStatus) {
-          fileStatus.children = fileStatus.children || [];
-          fileStatus.children.push(unitStatus);
-          fileStatus.totalUnits = (fileStatus.totalUnits ?? 0) + 1;
-          if (!entry.needFlag) {
-            fileStatus.translatedUnits = (fileStatus.translatedUnits ?? 0) + 1;
-          }
-        }
 			}
-		}
 
-		// ファイル単位での状態を更新
-		const fileStatuses: StatusItem[] = [];
-		for (const fileStatus of fileMap.values()) {
-			fileStatus.status = this.determineFileStatus(
-				fileStatus.translatedUnits ?? 0,
-				fileStatus.totalUnits ?? 0,
-			);
-			fileStatus.collapsibleState = (fileStatus.children && fileStatus.children.length > 0)
-				? vscode.TreeItemCollapsibleState.Collapsed
-				: vscode.TreeItemCollapsibleState.None;
-			fileStatuses.push(fileStatus);
+			return fileStatuses;
+		} catch (error) {
+			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);
+			return [];
 		}
-
-		return fileStatuses;
 	}
 
 	/**

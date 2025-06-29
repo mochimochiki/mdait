@@ -399,132 +399,90 @@ npm run l10n
 
 ---
 
-## 12. インデックスファイル設計
+## 12. ステータス情報一元化設計（StatusItem型中心）
 
 ### 12.1 概要
 
-mdaitインデックスファイル（`.mdait/index.json`）は、ワークスペース内の全てのMarkdownファイルのユニット情報を集約し、高速な検索とステータス管理を提供します。
+これまでのインデックスファイル（.mdait/index.json）による管理を廃止し、全てのユニット・ファイル・ディレクトリの状態をStatusItem型で一元的に管理する。
+
+- StatusItemはtype（"directory"|"file"|"unit"）ごとに必要な情報を持ち、childrenでツリー構造を表現
+- fromHash等によるユニット検索や、ファイル単位の再パースもStatusItem配列・ツリーを走査することで実現
+- UI（ツリー表示）や進捗集計、エラー管理もStatusItemに集約
+- 永続化は行わず、必要に応じてシリアライズで対応可能
 
 ### 12.2 設計原則
 
-- **ハッシュ主キー**: ユニットハッシュをキーとした高速検索
-- **相対パス**: インデックスファイルからの相対パスで可搬性を確保
-- **増分更新**: ファイル単位での部分更新をサポート
-- **軽量構造**: 必要最小限のメタデータでファイルサイズを抑制
+- **一元管理**: すべての状態情報はStatusItem[]で管理し、用途ごとにtypeで分岐
+- **検索性**: fromHashやunitHashでの検索はStatusItemツリーを再帰的に走査して実現
+- **拡張性**: 必要な情報はStatusItemに随時追加可能
+- **パフォーマンス**: メモリ上での管理とし、ファイルI/Oを最小化
 
-### 12.3 ファイル構造
-
-```json
-{
-  "metadata": {
-    "version": "1.0.0"
-  },
-  "units": {
-    "hash1": [
-      {
-        "type": "md",
-        "lang": "ja",
-        "path": "content/ja/document.md",
-        "unitIndex": 0,
-        "from": null,
-        "title": "# 見出し 1",
-        "startLine": 4,
-        "endLine": 10,
-        "needFlag": null
-      }
-    ],
-    "hash2": [...]
-  }
-}
-```
-
-### 12.4 データ型定義
+### 12.3 StatusItem型の例
 
 ```typescript
-interface IndexFile {
-  metadata: {
-    version: string;
-  };
-  units: UnitIndex;
+export type StatusType = "translated" | "needsTranslation" | "error" | "unknown";
+export enum StatusItemType {
+  Directory = "directory",
+  File = "file",
+  Unit = "unit",
 }
-
-interface UnitIndex {
-  [hash: string]: UnitIndexEntry[];
-}
-
-interface UnitIndexEntry {
-  type: "md";
-  lang: string;
-  path: string;           // インデックスファイルからの相対パス
-  unitIndex: number;      // ファイル内のユニット順序
-  from: string | null;    // 翻訳元ハッシュ
-  title: string;          // ユニットタイトル（先頭50文字）
-  startLine: number;      // 開始行番号
-  endLine: number;        // 終了行番号
-  needFlag: string | null; // need フラグ（translate等）
+export interface StatusItem {
+  type: StatusItemType;
+  label: string;
+  status: StatusType;
+  directoryPath?: string;
+  filePath?: string;
+  fileName?: string;
+  translatedUnits?: number;
+  totalUnits?: number;
+  hasParseError?: boolean;
+  errorMessage?: string;
+  unitHash?: string;
+  title?: string;
+  headingLevel?: number;
+  fromHash?: string;
+  needFlag?: string;
+  startLine?: number;
+  endLine?: number;
+  children?: StatusItem[];
+  collapsibleState?: vscode.TreeItemCollapsibleState;
+  iconPath?: vscode.ThemeIcon;
+  tooltip?: string;
+  contextValue?: string;
+  isTranslating?: boolean;
 }
 ```
 
-### 12.5 生成・更新タイミング
+### 12.4 主要機能
 
-#### 12.5.1 生成タイミング
-- **sync コマンド実行後**: 全ファイル同期完了時に再生成
-- **手動生成**: 必要に応じてユーザーが明示的に実行可能
+- **ユニット検索**: fromHashやunitHashでStatusItemツリーを再帰検索
+- **進捗集計**: ファイル・ディレクトリ単位でStatusItemを集計
+- **エラー管理**: hasParseError, errorMessage等でエラー状態を一元管理
+- **UI連携**: children, collapsibleState, iconPath等でツリー表示に最適化
 
-#### 12.5.2 更新タイミング
-- **trans コマンド実行後**: 翻訳完了時に対象ファイルのエントリを更新
-- **ファイル編集後**: 将来的にファイル監視による自動更新も検討
-
-**ステータスツリーのインデックス更新タイミング**
-
-refresh()のたびにインデックス更新は行わず、getChildren()の初回呼び出し時のみ非同期でインデックス更新を行う。2回目以降はスキップし、必要に応じて明示的なリフレッシュで手動更新も可能とする。排他制御を行い多重実行を防ぐ。
-
-### 12.6 主要機能
-
-#### 12.6.1 高速検索
-```typescript
-// from ハッシュでの検索
-const sourceUnits = findUnitsByFromHash(indexFile, "abc123");
-
-// ファイル内の未翻訳ユニット取得
-const untranslatedUnits = getUntranslatedUnits(indexFile, filePath, workspaceRoot);
-```
-
-#### 12.6.2 ステータス管理
-- **翻訳状況の集計**: ファイル・プロジェクト全体の翻訳進捗
-- **ステータスツリー**: VS Code エクスプローラーでの階層表示
-- **高速な状態確認**: ファイルパースを省略した軽量チェック
-
-#### 12.6.3 部分更新
-```typescript
-// 特定ファイルのインデックス更新
-await updateIndexForFile(workspaceRoot, filePath, config);
-```
-
-### 12.7 利用箇所
+### 12.5 利用箇所
 
 | コンポーネント | 利用目的 |
 |---------------|----------|
-| `syncCommand` | インデックス生成（同期完了後） |
-| `transCommand` | from ハッシュ検索、インデックス更新 |
-| `StatusCollector` | 高速なステータス収集 |
+| `syncCommand` | ユニット・ファイル状態の同期 |
+| `transCommand` | 翻訳対象ユニットの抽出・状態更新 |
+| `StatusCollector` | ステータス情報の収集・集計 |
 | `StatusTreeProvider` | ステータスツリー表示 |
 
-### 12.8 パフォーマンス特性
+### 12.6 パフォーマンス特性
 
-- **検索**: O(1) でのハッシュ検索
-- **ファイル更新**: 該当ファイルのエントリのみ更新
-- **メモリ効率**: 必要最小限の情報のみ格納
-- **ディスク容量**: JSON 形式での軽量ストレージ
+- **検索**: fromHash等での再帰検索（O(n)）
+- **集計**: childrenを再帰的に集計
+- **メモリ効率**: 必要な情報のみ保持
+- **ファイルI/O削減**: 永続化を行わず、都度生成
 
-### 12.9 エラーハンドリング
+### 12.7 エラーハンドリング
 
-- **インデックス不在**: 従来方式へのフォールバック
-- **バージョン不一致**: インデックス無効化と再生成
-- **破損インデックス**: パースエラー時の安全な復旧
+- **パースエラー**: hasParseError, errorMessageでStatusItemに記録
+- **不整合検出**: childrenやfromHashの不整合もStatusItemで管理
 
-### 12.10 将来拡張
+### 12.8 将来拡張
 
-- **CSV ファイル対応**: type フィールドでの形式識別
-- **ファイル監視**: リアルタイム更新
-- **キャッシュ戦略**: メモリキャッシュによる更なる高速化
+- **永続化**: 必要に応じてStatusItem配列をシリアライズ
+- **キャッシュ**: メモリキャッシュによる高速化
+- **他形式対応**: type拡張でCSV等も管理可能
