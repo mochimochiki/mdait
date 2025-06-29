@@ -7,19 +7,13 @@ import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-trans
 import { transCommand } from "./commands/trans/trans-command";
 import { DefaultTranslator } from "./commands/trans/translator";
 import { Configuration } from "./config/configuration";
+import { StatusManager } from "./core/status-manager";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { FileExplorer } from "./utils/file-explorer";
 
 export function activate(context: vscode.ExtensionContext) {
-	// sync command
-	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
-
-	// trans command
-	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
-	// chat command
-	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
-	// 翻訳アイテムコマンド
-	const translateItemCommand = new StatusTreeTranslationHandler();
+	// StatusManagerの初期化
+	const statusManager = StatusManager.getInstance();
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
@@ -28,6 +22,21 @@ export function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: false,
 	});
 
+	// StatusManagerにStatusTreeProviderを設定
+	statusManager.setStatusTreeProvider(statusTreeProvider);
+
+	// sync command
+	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
+
+	// trans command
+	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
+	
+	// chat command
+	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
+	
+	// 翻訳アイテムコマンド
+	const translateItemCommand = new StatusTreeTranslationHandler();
+	
 	// StatusTreeTranslationHandlerにStatusTreeProviderを設定
 	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
 
@@ -47,7 +56,10 @@ export function activate(context: vscode.ExtensionContext) {
 		try {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
 			await syncCommand();
-			statusTreeProvider.refresh();
+			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
+			const config = new Configuration();
+			await config.load();
+			await statusManager.rebuildStatusItemAll(config);
 		} catch (error) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message),
@@ -79,6 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		},
 	);
+
 	// 初回データ読み込み
 	context.subscriptions.push(
 		syncDisposable,

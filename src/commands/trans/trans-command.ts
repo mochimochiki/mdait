@@ -3,16 +3,18 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { StatusManager } from "../../core/status-manager";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusCollector } from "../../ui/status/status-collector";
-import { findUnitsByFromHash } from "../../ui/status/status-item-utils";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 export async function transCommand(uri?: vscode.Uri) {
+	const statusManager = StatusManager.getInstance();
+	
 	try {
 		// ファイルパスの取得
 		const targetFilePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
@@ -48,12 +50,41 @@ export async function transCommand(uri?: vscode.Uri) {
 
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
-			await translateUnit(unit, translator, sourceLang, targetLang, markdown);
+			// 翻訳開始をStatusManagerに通知
+			if (unit.marker?.hash) {
+				statusManager.updateUnitStatus(unit.marker.hash, { isTranslating: true });
+			}
+			
+			try {
+				await translateUnit(unit, translator, sourceLang, targetLang, markdown);
+				
+				// 翻訳完了をStatusManagerに通知
+				if (unit.marker?.hash) {
+					statusManager.updateUnitStatus(unit.marker.hash, { 
+						status: "translated", 
+						needFlag: undefined, 
+						isTranslating: false 
+					});
+				}
+			} catch (error) {
+				// 翻訳エラーをStatusManagerに通知
+				if (unit.marker?.hash) {
+					statusManager.updateUnitStatus(unit.marker.hash, { 
+						status: "error", 
+						isTranslating: false,
+						errorMessage: (error as Error).message
+					});
+				}
+				throw error;
+			}
 		}
 
 		// 更新されたMarkdownを保存
 		const updatedContent = markdownParser.stringify(markdown);
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
+
+		// ファイル全体の状態をStatusManagerで更新
+		await statusManager.updateFileStatus(targetFilePath);
 
 		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
 		console.log("Translation completed - StatusItem based management");
@@ -79,6 +110,8 @@ async function translateUnit(
 	targetLang: string,
 	markdown: Markdown,
 ) {
+	const statusManager = StatusManager.getInstance();
+	
 	try {
 		// 翻訳コンテキストの作成
 		const context = new TranslationContext();
@@ -86,22 +119,18 @@ async function translateUnit(
 
 		let sourceContent = unit.content;
 
-		// from属性がある場合は、StatusItemベースで翻訳元ユニットのコンテンツを取得
+		// from属性がある場合は、StatusManagerベースで翻訳元ユニットのコンテンツを取得
 		if (unit.marker?.from) {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const config = new Configuration();
-				await config.load();
-				
-				const statusCollector = new StatusCollector();
-				const statusItems = await statusCollector.collectAll(config);
-				
-				const sourceUnits = findUnitsByFromHash(statusItems, unit.marker.from);
+				const sourceUnits = statusManager.findUnitsByFromHash(unit.marker.from);
 				if (sourceUnits.length > 0) {
 					// 最初に見つかった翻訳元ユニットを使用
 					const sourceUnit = sourceUnits[0];
 					try {
 						if (sourceUnit.filePath) {
+							const config = new Configuration();
+							await config.load();
 							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
 							const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
 							// unitHashでユニットを特定

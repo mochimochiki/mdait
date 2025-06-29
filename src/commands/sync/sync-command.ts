@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { StatusManager } from "../../core/status-manager";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -15,6 +16,8 @@ import { SectionMatcher } from "./section-matcher";
  * Markdownユニットの同期を行う
  */
 export async function syncCommand(): Promise<void> {
+	const statusManager = StatusManager.getInstance();
+	
 	try {
 		// 設定を読み込む
 		const config = new Configuration();
@@ -58,6 +61,10 @@ export async function syncCommand(): Promise<void> {
 						// Markdownファイルの同期を実行
 						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
 
+						// StatusManagerでファイル状態をリアルタイム更新
+						await statusManager.updateFileStatus(sourceFile);
+						await statusManager.updateFileStatus(targetFile);
+
 						// ログ出力（差分情報を一行で表示）
 						console.log(
 							`${path.basename(sourceFile)}: +${diffResult.added} ~${
@@ -74,6 +81,8 @@ export async function syncCommand(): Promise<void> {
 						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`,
 						error,
 					);
+					// エラー時もStatusManagerに通知
+					await statusManager.updateFileStatusWithError(sourceFile, error as Error);
 					errorCount++;
 				}
 			}

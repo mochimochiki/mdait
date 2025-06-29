@@ -1,20 +1,28 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { StatusCollector } from "./status-collector";
+import { StatusManager } from "../../core/status-manager";
 import { StatusItemType } from "./status-item";
 import type { StatusItem, StatusType } from "./status-item";
 
 /**
+ * StatusTreeProviderの最小限のインターフェース（StatusManagerとの連携用）
+ */
+export interface IStatusTreeProvider {
+	setFileStatuses(statuses: StatusItem[]): void;
+	refreshFromStatusManager(): void;
+}
+
+/**
  * ステータスツリービューのデータプロバイダ
  */
-export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
+export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider {
 	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> =
 		new vscode.EventEmitter<StatusItem | undefined | null>();
 	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> =
 		this._onDidChangeTreeData.event;
 
-	private readonly statusCollector: StatusCollector;
+	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
 	private fileStatuses: StatusItem[] = [];
 
@@ -23,7 +31,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private isStatusLoading = false;
 
 	constructor() {
-		this.statusCollector = new StatusCollector();
+		this.statusManager = StatusManager.getInstance();
 		this.configuration = new Configuration();
 	}
 
@@ -42,8 +50,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					vscode.window.showWarningMessage(validationError);
 					this.fileStatuses = [];
 				} else {
-					// ファイル状況を収集
-					this.fileStatuses = await this.statusCollector.collectAll(this.configuration);
+					// StatusManagerから最新のStatusItemを取得
+					if (this.statusManager.isStatusInitialized()) {
+						this.fileStatuses = this.statusManager.getStatusItems();
+					} else {
+						// 初期化されていない場合は全体再構築
+						this.fileStatuses = await this.statusManager.rebuildStatusItemAll(this.configuration);
+					}
 				}
 				// ツリービューを全体更新
 				this._onDidChangeTreeData.fire(undefined);
@@ -128,8 +141,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (workspaceFolder) {
 					await this.configuration.load();
-					// StatusItemベースでの状態収集
-					this.fileStatuses = await this.statusCollector.collectAll(this.configuration);
+					// StatusManagerから最新のStatusItemを取得
+					if (this.statusManager.isStatusInitialized()) {
+						this.fileStatuses = this.statusManager.getStatusItems();
+					} else {
+						// 初期化されていない場合は全体再構築
+						this.fileStatuses = await this.statusManager.rebuildStatusItemAll(this.configuration);
+					}
 				}
 				this.isStatusInitialized = true;
 			} catch (e) {
@@ -348,5 +366,21 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			default:
 				return new vscode.ThemeIcon("question", new vscode.ThemeColor("charts.gray"));
 		}
+	}
+
+	/**
+	 * StatusManagerからStatusItemを設定
+	 * StatusManagerによる一元管理のため
+	 */
+	public setFileStatuses(fileStatuses: StatusItem[]): void {
+		this.fileStatuses = fileStatuses;
+		this.isStatusInitialized = true;
+	}
+
+	/**
+	 * StatusManagerからの更新通知を受けてツリーを更新
+	 */
+	public refreshFromStatusManager(): void {
+		this._onDidChangeTreeData.fire(undefined);
 	}
 }

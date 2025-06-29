@@ -19,30 +19,6 @@ export class StatusCollector {
 		this.fileExplorer = new FileExplorer();
 		this.parser = new MarkdownItParser();
 	}
-	/**
-	 * 設定に基づいて全ファイルの翻訳状況を収集する（Targetディレクトリのみ）
-	 */
-	public async collectAll(config: Configuration): Promise<StatusItem[]> {
-		const statusItems: StatusItem[] = [];
-
-		try {
-			// 対象ディレクトリから直接ファイル情報を収集
-			for (const transPair of config.transPairs) {
-				const targetDir = transPair.targetDir;
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
-				statusItems.push(...targetDirItems);
-			}
-		} catch (error) {
-			console.error("Error collecting file statuses:", error);
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message),
-			);
-		}
-
-		// fileNameで昇順ソート
-		statusItems.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
-		return statusItems;
-	}
 
 	/**
 	 * 単一ファイルの翻訳状況を収集する
@@ -96,7 +72,10 @@ export class StatusCollector {
 				hasParseError: false,
 				children,
 				contextValue: "mdaitFile",
-				collapsibleState: children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+				collapsibleState:
+					children.length > 0
+						? vscode.TreeItemCollapsibleState.Collapsed
+						: vscode.TreeItemCollapsibleState.None,
 			};
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -166,7 +145,7 @@ export class StatusCollector {
 		}
 
 		const absoluteTargetDir = path.resolve(workspaceRoot, targetDir);
-		
+
 		try {
 			// ディレクトリが存在するかチェック
 			if (!fs.existsSync(absoluteTargetDir)) {
@@ -177,8 +156,8 @@ export class StatusCollector {
 			const workspaceUri = vscode.Uri.file(workspaceRoot);
 			const pattern = new vscode.RelativePattern(absoluteTargetDir, "**/*.md");
 			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
-			const mdFiles = files.map(f => f.fsPath);
-			
+			const mdFiles = files.map((f) => f.fsPath);
+
 			// 各ファイルの状況を収集
 			const fileStatuses: StatusItem[] = [];
 			for (const filePath of mdFiles) {
@@ -215,5 +194,68 @@ export class StatusCollector {
 	private extractHeadingLevel(title: string): number {
 		const match = title.match(/^(#{1,6})\s/);
 		return match ? match[1].length : 0;
+	}
+
+	/**
+	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築する
+	 * パフォーマンス負荷が高いため、通常は差分更新を使用することを推奨
+	 * 初回実行時や、保険的な再構築が必要な場合のみ使用
+	 */
+	public async rebuildStatusItemAll(config: Configuration): Promise<StatusItem[]> {
+		const statusItems: StatusItem[] = [];
+
+		try {
+			// 対象ディレクトリから直接ファイル情報を収集
+			for (const transPair of config.transPairs) {
+				const targetDir = transPair.targetDir;
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
+				statusItems.push(...targetDirItems);
+			}
+		} catch (error) {
+			console.error("Error collecting file statuses:", error);
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message),
+			);
+		}
+
+		// fileNameで昇順ソート
+		statusItems.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
+		return statusItems;
+	}
+
+	/**
+	 * ファイル監視イベント時に該当ファイルのStatusItemのみ更新
+	 * 通常はコマンド経由で更新済みなので何もしないことが多い
+	 */
+	public async updateStatusItemOnFileChange(
+		filePath: string,
+		existingStatusItems: StatusItem[],
+	): Promise<StatusItem[]> {
+		console.log(`StatusCollector: updateStatusItemOnFileChange() - ${path.basename(filePath)}`);
+
+		try {
+			// 該当ファイルのStatusItemを検索
+			const fileName = path.basename(filePath);
+			const existingItemIndex = existingStatusItems.findIndex(
+				(item) => item.type === StatusItemType.File && item.fileName === fileName,
+			);
+
+			if (existingItemIndex === -1) {
+				// 新規ファイルの場合、新しいStatusItemを作成して追加
+				const newFileStatus = await this.collectFile(filePath);
+				return [...existingStatusItems, newFileStatus];
+			}
+
+			// 既存ファイルの場合、そのStatusItemのみ更新
+			const updatedFileStatus = await this.collectFile(filePath);
+			const updatedStatusItems = [...existingStatusItems];
+			updatedStatusItems[existingItemIndex] = updatedFileStatus;
+
+			return updatedStatusItems;
+		} catch (error) {
+			console.error(`StatusCollector: updateStatusItemOnFileChange() - エラー: ${filePath}`, error);
+			// エラーの場合は既存のStatusItemをそのまま返す
+			return existingStatusItems;
+		}
 	}
 }
