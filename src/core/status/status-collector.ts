@@ -52,6 +52,8 @@ export class StatusCollector {
 					startLine: unit.startLine,
 					endLine: unit.endLine,
 					contextValue: "mdaitUnit",
+					filePath,
+					fileName,
 				});
 				if (unitStatus === "translated") {
 					translatedUnits++;
