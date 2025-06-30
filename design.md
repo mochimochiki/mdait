@@ -32,9 +32,30 @@ mdaitは階層化されたモジュール構成を採用し、各層が明確な
 ## 中核概念
 
 ### mdaitUnit
-翻訳・管理の基本単位。Markdown内の`<!-- mdait hash [from:hash] [need:flag] -->`マーカーで表現され、文書構造を保持しながら差分管理を実現します。
+**mdaitUnit**は翻訳・管理の基本単位であり、mdaitシステムの中核となる概念です。Markdown文書をユニット単位に分割し、各ユニットに状態情報を付与することで、精密な差分管理と翻訳追跡を実現します。
 
-**詳細：** [src/core/design.md](src/core/design.md) の mdaitUnit概念
+#### マーカー構造
+ユニットはMarkdown内に`<!-- mdait hash [from:hash] [need:flag] -->`形式のHTMLコメントマーカーとして埋め込まれます：
+
+- **hash**: ユニット内容の正規化後8文字短縮ハッシュ（CRC32）
+- **from**: 翻訳元ユニットのハッシュ値（翻訳追跡用、オプショナル）
+- **need**: 必要なアクション指示（オプショナル）
+
+#### needフラグの重要性
+needフラグはユニットの状態とプロジェクトワークフローを管理する重要な仕組みです：
+
+- **translate**: AI翻訳が必要な新規・更新ユニット
+- **review**: 人手レビューが推奨されるユニット
+- **verify-deletion**: 削除対象ユニットの確認が必要
+- **solve-conflict**: マージ競合の解決が必要
+
+#### 実用例
+```markdown
+<!-- mdait 3f7c8a1b from:2d5e9c4f need:translate -->
+This paragraph needs translation from the source document.
+```
+
+**詳細実装：** [src/core/design.md](src/core/design.md) の mdaitUnit概念
 
 ### 全体フロー
 
@@ -46,11 +67,21 @@ mdaitは階層化されたモジュール構成を採用し、各層が明確な
 ```
 
 **主要コマンド：**
-- **sync**: ユニット間のハッシュ・from追跡・needフラグ同期
-- **trans**: need:translateユニットのAI翻訳実行
-- **chat**: 対話型AIサポート
 
-**詳細：** [src/commands/design.md](src/commands/design.md)
+#### sync - ユニット同期
+関連Markdownファイル群間でmdaitUnitの対応関係を確立し、差分検出とneedフラグ付与を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`を自動付与し、翻訳ワークフローを開始します。
+- **機能**: ハッシュ比較による差分検出、from追跡による翻訳チェーン管理
+- **詳細**: [src/commands/design.md](src/commands/design.md) - syncコマンド
+
+#### trans - AI翻訳実行  
+`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行します。
+- **機能**: 翻訳対象の自動識別、AIプロバイダー連携、翻訳結果の統合
+- **詳細**: [src/commands/design.md](src/commands/design.md) - transコマンド
+
+#### chat - 対話型AIサポート
+プロジェクト文脈を考慮した対話型AI支援機能を提供し、翻訳品質向上やプロジェクト管理タスクをサポートします。
+- **機能**: コンテキスト考慮の対話、翻訳アドバイス、プロジェクト状況分析  
+- **詳細**: [src/commands/design.md](src/commands/design.md) - chatコマンド
 
 ## モジュール間の依存関係
 
@@ -135,12 +166,7 @@ npm run test     # テスト実行
 npm run watch    # 開発時の自動ビルド
 ```
 
-## 今後の拡張予定
 
-- **多段翻訳**: 複数の中間言語を経由した翻訳チェーン
-- **AIプロバイダー拡張**: 新しいAIサービスとの連携
-- **高度なコンフリクト解決**: 双方向編集での自動マージ機能
-- **パフォーマンス最適化**: 大規模文書での処理効率化
 
 ---
 
