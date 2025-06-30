@@ -78,11 +78,6 @@ This paragraph needs translation from the source document.
 - **機能**: 翻訳対象の自動識別、AIプロバイダー連携、翻訳結果の統合
 - **詳細**: [src/commands/design.md](src/commands/design.md) - transコマンド
 
-#### chat - 対話型AIサポート
-プロジェクト文脈を考慮した対話型AI支援機能を提供し、翻訳品質向上やプロジェクト管理タスクをサポートします。
-- **機能**: コンテキスト考慮の対話、翻訳アドバイス、プロジェクト状況分析  
-- **詳細**: [src/commands/design.md](src/commands/design.md) - chatコマンド
-
 ## モジュール間の依存関係
 
 ### データフロー

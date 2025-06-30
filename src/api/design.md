@@ -12,6 +12,7 @@
 **対応プロバイダー：**
 - **default**: デフォルトプロバイダー（OpenAI等）
 - **ollama**: ローカルOllamaインスタンス
+- **vscode-lm**: VSCode Language Model API
 - *将来拡張*: その他のクラウドサービス
 
 ### プロバイダー管理
