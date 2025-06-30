@@ -1,57 +1,63 @@
 # 📘 設計書：mdait (Markdown AI Translator)
 
-## 1. 概要
+## 概要
 
-**mdait**（Markdown AI Translator）は、Markdown 文書の構造を活かして AI 翻訳を支援するツールです。文書を翻訳・管理の単位である「ユニット」に分割し、各ユニットごとに短縮ハッシュを用いた差分管理と翻訳状態の記録を行い、**変更検出・翻訳差分・多段翻訳**などに対応できるよう設計されています。
+**mdait**（Markdown AI Translator）は、Markdown文書の構造を活かしてAI翻訳を支援するVS Code拡張機能です。文書を「ユニット」に分割し、ハッシュベースの差分管理と翻訳状態追跡により、**変更検出・翻訳差分・多段翻訳**に対応する設計となっています。
 
----
+## アーキテクチャ概要
 
-## 2. mdaitUnit
+mdaitは階層化されたモジュール構成を採用し、各層が明確な責務を持って連携します：
 
-### 2.1 概要
-
-`mdaitUnit` は、mdaitが管理する「ユニット」そのものを定義する設計上の概念であり、Markdown文書内では `<!-- mdait ... -->` というコメント形式のマーカー（以下、marker）として表現されます。文書内に配置された各markerが、翻訳や差分管理の単位であるユニットの開始点を示します。
-
-通常、markerはMarkdownの構造的な見出し（例: `## タイトル`）の直前に配置され、その見出しをユニットのタイトルとして関連付けます。これにより、既存のMarkdown文書の構造を活かした管理が可能です。ユーザーは必要に応じて、見出しのない場所に手動でmarkerを挿入し、より細かい粒度でユニットを定義することもできます。
-
-markerがユニットの開始を示し、その管理対象となるコンテンツは、次のmarkerの直前、またはファイルの末尾までとします。ハッシュアルゴリズムはデフォルトでCRC32を使用します。
-
-```markdown
-<!-- mdait abcd1234 from:efgh5678 need:translate -->
-## 見出し
-
-このmarkerに紐づくコンテンツ。
-次のmarkerまで、あるいはファイルの末尾までがユニットの範囲となる。
-
-<!-- mdait ijkl9012 -->
-このコンテンツは上記とは別のユニット。
+```
+┌─────────────────────────────────────────┐
+│                UI層                      │ ← VS Code統合、ステータス表示
+├─────────────────────────────────────────┤
+│              Commands層                  │ ← sync/trans/chatコマンド実行
+├─────────────────────────────────────────┤  
+│                Core層                    │ ← mdaitUnit、ハッシュ、ステータス管理
+├─────────────────────────────────────────┤
+│      Config層    │    API層    │Utils層  │ ← 設定管理、外部連携、汎用機能
+└─────────────────────────────────────────┘
 ```
 
-### 2.2 mdaitMarker
+**各層の詳細設計：**
+- **[src/ui/design.md](src/ui/design.md)** - UI層設計
+- **[src/commands/design.md](src/commands/design.md)** - Commands層設計  
+- **[src/core/design.md](src/core/design.md)** - Core層設計
+- **[src/config/design.md](src/config/design.md)** - Config層設計
+- **[src/api/design.md](src/api/design.md)** - API層設計
+- **[src/utils/design.md](src/utils/design.md)** - Utils層設計
+- **[src/test/design.md](src/test/design.md)** - テスト設計
 
+## 中核概念
+
+### mdaitUnit
+**mdaitUnit**は翻訳・管理の基本単位であり、mdaitシステムの中核となる概念です。Markdown文書をユニット単位に分割し、各ユニットに状態情報を付与することで、精密な差分管理と翻訳追跡を実現します。
+
+#### マーカー構造
+ユニットはMarkdown内に`<!-- mdait hash [from:hash] [need:flag] -->`形式のHTMLコメントマーカーとして埋め込まれます：
+
+- **hash**: ユニット内容の正規化後8文字短縮ハッシュ（CRC32）
+- **from**: 翻訳元ユニットのハッシュ値（翻訳追跡用、オプショナル）
+- **need**: 必要なアクション指示（オプショナル）
+
+#### needフラグの重要性
+needフラグはユニットの状態とプロジェクトワークフローを管理する重要な仕組みです：
+
+- **translate**: AI翻訳が必要な新規・更新ユニット
+- **review**: 人手レビューが推奨されるユニット
+- **verify-deletion**: 削除対象ユニットの確認が必要
+- **solve-conflict**: マージ競合の解決が必要
+
+#### 実用例
 ```markdown
-<!-- mdait <hash> [from:<from-hash>] [need:<flag>] -->
+<!-- mdait 3f7c8a1b from:2d5e9c4f need:translate -->
+This paragraph needs translation from the source document.
 ```
 
-| タグ名      | 説明                                                                     |
-| ----------- | -------------------------------------------------------------------------|
-| `abcd1234`  | ユニット本文の正規化後の 8 文字短縮ハッシュ（markerの先頭に配置） |
-| `from`      | 翻訳元のユニットのハッシュ値（翻訳由来追跡用）                           |
-| `need`      | 翻訳の必要性を表すフラグ。`translate` など。翻訳完了時は削除される       |
+**詳細実装：** [src/core/design.md](src/core/design.md) の mdaitUnit概念
 
-### 2.3 need flag
-
-`need`フラグは、ユニット間の「同期」を完了させるために必要なアクションを示します。同期できているユニットには、`need` フラグは付与されません。
-
-`need:translate` : 翻訳が必要なユニット。AI翻訳を実行する対象。
-`need:review` : 翻訳済みだがレビューが必要なユニット。AI翻訳後の確認を行う対象。
-`need:verify-deletion` : 対応する翻訳元が削除されたユニット。削除の確認が必要。
-`need:solve-conflict` : 双方向編集で競合が発生したユニット。解決が必要。
-
-
----
-
-## 3. 全体の流れ
+### 全体フロー
 
 ```plaintext
 ----------------          ----------------          ----------------
@@ -60,429 +66,103 @@ markerがユニットの開始を示し、その管理対象となるコンテ�
 ----------------          ----------------          ----------------
 ```
 
-- `sync`: ユニット単位のハッシュ・翻訳元追跡用の `from` の同期を行う。差分の抽出、未翻訳検出、翻訳対象ユニットの挿入を行う。
-- `trans`: `need:translate` を対象に AI 翻訳を実行し、翻訳結果・ハッシュの更新と `need` タグの除去を行う。
-- `sync` は何度繰り返しても破綻しない設計。いずれかのドキュメントが編集されても、再度 sync を実行すれば変更が関連ドキュメントのユニットに伝播します。
+**主要コマンド：**
 
----
+#### sync - ユニット同期
+関連Markdownファイル群間でmdaitUnitの対応関係を確立し、差分検出とneedフラグ付与を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`を自動付与し、翻訳ワークフローを開始します。
+- **機能**: ハッシュ比較による差分検出、from追跡による翻訳チェーン管理
+- **詳細**: [src/commands/design.md](src/commands/design.md) - syncコマンド
 
-## 4. コマンド
+#### trans - AI翻訳実行  
+`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行します。
+- **機能**: 翻訳対象の自動識別、AIプロバイダー連携、翻訳結果の統合
+- **詳細**: [src/commands/design.md](src/commands/design.md) - transコマンド
 
-### 4.1 syncコマンド
+## モジュール間の依存関係
 
-関連付けられたMarkdownファイル群内のmarkerで定義されるユニット単位で、ハッシュ・`from`追跡・`need`フラグの同期を行う。
+### データフロー
+1. **Config層** → 各層への設定提供
+2. **Core層** → Commands層への基盤機能提供  
+3. **Commands層** → UI層への処理結果通知
+4. **API層** → Commands層への外部サービス連携
+5. **Utils層** → 全層への汎用機能提供
 
-**コンセプト：**
-言語間をグラフ構造とみなし、markerをユニットの単位とする。marker内のハッシュと、マーカーに続く現在のコンテンツから計算したハッシュを比較することで、全言語の変更分ユニットを抽出可能。複数言語話者たちが共同作業をしているときにはja->enのケースやen->jaのケースが混在する可能性があるが、グラフ構造とすることでこのような場合にも対応できる。
-**処理フロー：**
-  1. 全てのMarkdownファイルをパースし、各markerとそれに対応するコンテンツから正規化・計算したハッシュを取得。このまとまりを「ユニット」とする。
-  2. **変更検出:** 各ユニットにおいて、markerに記録された自身のハッシュと、現在のコンテンツから計算したハッシュを比較。不一致の場合は「変更あり」とマーク。
-  3. **影響伝播（グラフ同期）:** 「変更あり」とマークされたユニットの影響を受ける関連ファイルのユニットを探索し、影響を伝播させる。影響を受けたユニットには `need:translate` を付与し、`from` ハッシュを更新。
-  4. **マーカー自動挿入（初回など）:** ファイル内にmarkerがない場合、Markdown見出しの直前にmarkerを自動挿入する（対象とするレベルは設定可）。
-  5. 関連ファイル間で `from` ハッシュを元に対応付けを行い、新規挿入されたユニットや、`from` が見つからないユニットには適切に `need:translate` や `need:review` を付与。
-  6. 関連ファイル間で、対応する `from` が存在しなくなったユニットは、`auto-delete` 設定に応じて削除または `need:verify-deletion` を付与。
-  7. Markdown構造（markerとそのコンテンツ）を再構築し、各ファイルを保存。
-- 設定値：auto-delete（デフォルトtrue）
+### 状態管理
+全ユニットの状態は[src/core/design.md](src/core/design.md)のStatusItem構造で一元管理され、[src/ui/design.md](src/ui/design.md)でツリー表示されます。
 
-#### 初回実行の流れ
-
-既存ファイル導入時の処理:
-
-1. **マーカーの挿入**:
-   初回sync時、またはユーザーの指示により、対象Markdownファイル内の主要な見出し（例：H1, H2, H3など設定可能）の直前にmarkerを自動的に挿入します。ユーザーは挿入されたマーカーを確認し、必要に応じて手動で追加・削除・移動することができます。
-2. **ハッシュ計算**:
-   - sourceファイルの各ユニット本文を正規化しハッシュ値を計算
-   - targetファイルの各ユニット本文も同様にハッシュ値を計算
-3. **fromの付与 (ユニット対応付け)**:
-   - targetの各ユニットがsourceのどのユニットに対応するかを推定
-     - ユニットの順序 / 見出し構造 / 内容の類似性
-     - ※ 対応付けロジックは拡張を考慮し、入れ替え可能な設計とする
-   - 対応が見つかったtargetユニットのmarkerに`from:xxxx`（sourceのユニットハッシュ値）を付与
-
-#### 注意点
-
-- marker内の`from:` が単一ファイル内で重複している場合は **すべての該当ユニットを同期対象とする**
-- ユニット削除については **設定可能** とする：
-  - `auto-delete: true` の場合（デフォルト）→ `source` 側から削除されたユニットは `target` からも即時削除
-  - `auto-delete: false` の場合 → 対象ユニットに `need:verify-deletion` を付与し、残す形でマーキング
-
-**ファイル・ディレクトリの削除はしない**
-syncにおいては、「ユニット（Markdown内のmdaitマーカー単位）」の削除・追加・同期のみを行い、**ファイル自体やディレクトリ自体の自動削除は一切行いません**。全ユニットが削除された場合でも、空ファイルや空ディレクトリは残ります。ファイルやディレクトリの削除はユーザーの明示的な操作に委ねます。
-
-### 4.2 transコマンド
-
-- 目的：対象ファイル内の`need:translate`または`need:review`なユニットをAI翻訳し、翻訳結果・ハッシュ更新・needタグ除去を行う。
-- 主な処理フロー：
-  1. 対象ファイルをパースし、Markdownオブジェクトへ変換
-  2. `need:translate`または`need:review`なユニットを列挙
-  3. `from`で翻訳元ファイルの対応ユニットを取得し、AI翻訳（翻訳元がない場合はユニット自身のコンテンツを翻訳）
-  4. 翻訳結果をユニットのコンテンツに反映し、marker内のハッシュ更新・needタグ除去
-  5. Markdown構造を再構築しファイルを保存
-
-### 4.2.3 AIサービス層
-
-AIサービス層は、具体的なAIプロバイダ（OpenAI、Anthropic、VSCode LM APIなど）とのやり取りを抽象化します。
-
-- **`AIServiceBuilder`**: 設定に基づいて適切な`AIService`プロバイダを構築・返却します。
-  - `mdait.trans.provider` 設定値を参照し、指定されたプロバイダをインスタンス化します。
-  - サポートされるプロバイダ:
-    - `default`: モック翻訳プロバイダ（初期実装）
-    - `vscode-lm`: VS Code Language Model API を利用するプロバイダ。
-    - (将来的に `ollama`, `openai` などを追加予定)
-  - 指定されたプロバイダが存在しない場合や利用不可能な場合は、`default`プロバイダにフォールバックします。
-- **各プロバイダ実装**: `src/api/providers/` 以下に配置。
-  - `DefaultAIProvider`: 固定の翻訳結果を返すモック。
-  - `VSCodeLMProvider`: `vscode.lm` APIを利用して翻訳を実行。
-
----
-
-## 5. 設定
-
-### 5.1 設定ファイル
-
-設定はVSCode拡張として標準的なsettings.json形式で行います。以下は設定ファイルの例です。
-
-```json
-{
-  // 翻訳ペア
-  "mdait.transPairs": [
-    {
-      "sourceDir": "content/ja",
-      "targetDir": "content/en"
-    },
-    {
-      "sourceDir": "content/en",
-      "targetDir": "content/de"
-    }
-  ],
-  // 除外パターン
-  "mdait.ignoredPatterns": "**/node_modules/**",
-  // sync実行時にマーカーを自動挿入する見出しレベル(このレベルまでの見出しの直前にマーカーを挿入)
-  "mdait.sync.autoMarkerLevel": 2,
-  // 自動削除設定
-  "mdait.sync.autoDelete": true,
-  // 翻訳プロバイダ
-  "mdait.trans.provider": "default",
-  // Markdown:コードブロックをスキップするか
-  "mdait.trans.markdown.skipCodeBlocks": true
-}
-```
-
-## 6. 多段翻訳
-
-### 6.1 翻訳パターン
-
-**from制約**: 各ユニットは最大1つの`from`のみ。以下のパターンをサポート。
-
-#### パターン1: 片方向チェーン
-```
-ja -> en -> de/fr
-```
-母語から多言語への標準ワークフロー。
-
-#### パターン2: ハブ言語双方向
-```
-ja <-> en -> de/fr
-```
-母語とハブ言語（英語）で双方向編集、他は一方向。
-
-### 6.2 動作例
-
-#### 片方向（en編集 → de更新）
-```markdown
-<!-- en/doc.md -->
-<!-- mdait xyz789 from:abc123 -->
-# Modified English Heading
-
-<!-- de/doc.md -->
-<!-- mdait ghi789 from:xyz789 need:translate -->
-# Deutsche Überschrift
-```
-
-#### 双方向 (ja編集 → en更新)
-```markdown
-<!-- ja/doc.md -->
-<!-- mdait new_abc123 from:def456 -->
-# 日本語の見出し編集済
-
-<!-- en/doc.md -->
-<!-- mdait def456 from:new_abc123 need:translate -->
-# English Heading
-```
-
-
-#### 双方向競合（両方編集）
-```markdown
-<!-- ja/doc.md -->
-<!-- mdait abc123 from:def456 need:solve-conflict -->
-# 日本語の見出し編集済
-
-<!-- en/doc.md -->
-<!-- mdait def456 from:abc123 need:solve-conflict -->
-# Modified English Heading
-```
-**解決**:
-1. 優先したい言語の`mdaitMarker`の`from`を削除
-2. sync実行により、`from`がついている言語に`need:translate`付与
-
-### 6.3 制約
-1. **単一ソース**: 各ターゲットは1つの`from`のみ付与
-2. **双方向制限**: 最大1つの双方向ペア
-3. **循環禁止**: 3つ以上の言語循環は不可
-
----
-
-## 7. リポジトリ構成
-
-本プロジェクトは、以下の構成でソースコードを管理します。
+## リポジトリ構成
 
 ```
 src/
   extension.ts           # エントリーポイント（コマンド登録など）
-  commands/
-    sync/                # syncコマンド関連処理
-    trans/               # transコマンド関連処理
+  commands/              # syncコマンド、transコマンド、chatコマンド関連処理
+    ├── sync/
+    ├── trans/
+    ├── chat/
+    └── design.md
   core/                  # 共通コア機能
-    markdown/            # Markdownの構造解析、ユニット分割、marker処理など。
-    hash/                # 文書の正規化とハッシュ計算アルゴリズムを提供。
-  config/
-    configuration.ts     # 設定管理
-  utils/
-    file-utils.ts        # ファイル操作など汎用的なユーティリティ。
+    ├── markdown/        # Markdownの構造解析、ユニット分割、marker処理など
+    ├── hash/            # 文書の正規化とハッシュ計算アルゴリズム
+    ├── status/          # ステータス情報管理
+    └── design.md
+  config/                # 設定管理
+    ├── configuration.ts
+    └── design.md
+  utils/                 # 汎用ユーティリティ
+    ├── file-explorer.ts
+    └── design.md
+  api/                   # 外部サービス連携
+    └── design.md
+  ui/                    # UI コンポーネント
+    └── design.md
+  test/                  # テスト関連
+    ├── sample-content/  # テスト用コンテンツ
+    ├── workspace/       # テスト作業ディレクトリ
+    └── design.md
 ```
 
-## 8. 主要コンポーネント
+**参照実装：** 各ディレクトリ内のソースコード
 
-### 8.1 Markdownパーサー
+## 設計原則
 
-Markdown文書をパースし、markerを基準としてユニットに分割します。各ユニットは、markerと、それに続くMarkdownコンテンツ（次のmarkerの直前、またはファイルの末尾まで）で構成されます。
+### 全体方針
+- **モジュラー設計**: 各層の独立性と明確な責務分離
+- **VS Code統合**: VS Codeエコシステムとの完全な統合
+- **型安全性**: TypeScriptによる堅牢な型システム活用
+- **拡張性**: 新機能・新プロバイダーの追加容易性
 
-パーサーは、markerの直後にMarkdownの見出しが存在する場合、それをユニットのタイトルとして解釈することができますが、これはオプションの動作です。
+### 品質保証
+- **冪等性**: sync処理の何度実行しても安全な設計
+- **エラー回復**: 各処理段階での適切なエラーハンドリング
+- **パフォーマンス**: メモリ効率とファイルI/O最小化
+- **テスタビリティ**: [src/test/design.md](src/test/design.md)による包括的テスト
 
-### 8.2 ハッシュ管理
+## 国際化（l10n）
 
-ユニットのテキストの正規化（余分な空白除去など）を行い、一貫したハッシュを生成する。
-短縮ハッシュを使うことで人間にも扱いやすい識別子とする。
+VS Codeの標準l10nシステムを活用し、日本語・英語の完全サポートを提供します。
 
-### 8.3 ユニット対応処理
+**言語リソース：** `/l10n` ディレクトリ
+**UI統合詳細：** [src/ui/design.md](src/ui/design.md)
 
-- **関連ファイル間のユニットの順序を考慮**し、対応付けを行う。
-- `from`ハッシュ一致を最優先、次に順序ベースで推定。
+## 開発・デバッグ環境
 
-1. **`from`ハッシュ一致優先でマッチ**
-   - targetユニットのmarker内の`from`がsourceユニットのハッシュと一致する場合、そのペアを即時マッチ確定とする。
+### テスト環境
+- **サンプルコンテンツ**: `src/test/sample-content/` のテスト用原稿
+- **自動コピー**: テスト実行前の `src/test/workspace/content/` への自動展開
+- **VS Code Test**: 拡張機能環境での統合テスト
 
-2. **順序ベースで推定マッチ**
-   - `from`一致でマッチしなかったsourceユニットと、**`from`が付与されていないtargetユニット**について、
-     - すでにマッチ済みのユニット間ごとに分割し、
-     - その区間内でsource/targetのユニットの順序をもとに1対1でマッチさせる（区間ごとに順序ベースで対応付け）。
+**詳細：** [src/test/design.md](src/test/design.md)
 
-3. **内容類似度によるマッチは行わない**
-   - 類似度計算は現時点では実装しない。
-
-4. **新規sourceユニットの挿入位置**
-   - マッチしなかったsourceユニットは「新規」とし、**sourceファイル内での順序通りにtargetファイルに挿入する**。
-
-5. **孤立targetユニットの扱い**
-   - markerに`from`があるにもかかわらずマッチしなかったtargetユニットは「孤立」とみなし、`auto-delete`設定に従い削除または`need:verify-deletion`付与。
-
-## 8.4 ステータス情報の統合設計（StatusItem型）
-
-### 8.4.1 統合方針
-
-- 全ユニットのステータス情報のインデックスとして`StatusItem`を定義し、Markdown文書内のユニットの状態を一元的に管理する。
-- type（"directory"|"file"|"unit"）ごとに必要なフィールドを持たせ、不要なものはundefined/省略可とする。
-- children?: StatusItem[] でツリー構造を表現し、ディレクトリ・ファイル・ユニットを一元的に管理する。
-- UI用途のプロパティ（iconPath, collapsibleState等）はオプショナルで持たせる。
-- 進捗集計やエラー情報などもtype: "file"のStatusItemに持たせる。
-
-### 8.4.3 利用方針
-- すべてのステータス情報はStatusItem[]で管理し、用途ごとにtypeで分岐する。
-- 進捗集計やエラー情報もStatusItem（type: "file"）に集約。
-- ツリー表示や再帰処理もchildrenで一元的に扱う。
-
----
-
-## 9. Markdownオブジェクト
-
-### 9.1 Markdownオブジェクトの構造
-
-Markdown文書全体を表すオブジェクトとして `Markdown` を定義します。このオブジェクトは、以下のような構造を持ちます。
-
-```ts
-interface Markdown {
-  frontMatter?: FrontMatter; // yaml対応
-  units: MdaitUnit[];    // markerで区切られたユニットのリスト
-}
-
-interface FrontMatter {
-  [key: string]: any;
-}
-
-
-interface MdaitUnit {
-  mdaitUnit: MdaitMarker; // 各ユニットは必ずmdaitUnit情報を持つ
-  content: string;         // markerに続く、次のマーカーまたはファイルの末尾までのコンテンツ
-}
-
-// markerの情報を表すインターフェース
-interface MdaitMarker {
-  hash: string;
-  from?: string;
-  need?: string;
-  // 他のカスタムタグもここに含めることができる
-}
-```
-
-- frontMatterはYAMLに対応する。
-- ユニットごとの`mdaitUnit`情報は、ユニットの開始を示す必須要素。
-- frontMatterは`MdaitUnit`より上位の`Markdown`オブジェクトで一元管理する。
-
-### 9.2 パース・出力例
-
-```markdown
----
-title: サンプル
----
-<!-- mdait zzzz9999 from:yyyy8888 need:review -->
-# ユニット1
-本文1
-```
-
-- `MarkdownDocument.units[0].mdaitUnit.hash === "zzzz9999"`
-- `MarkdownDocument.units[0].mdaitUnit.from === "yyyy8888"`
-- `MarkdownDocument.units[0].mdaitUnit.need === "review"`
-
----
-
-## 10. 開発・テスト環境
-
-開発およびテスト時には、一貫したテストコンテンツの配置と、それを利用するための自動コピー処理を行います。
-
-- **テストコンテンツ**: `src/test/sample-content/` にテスト用原稿を配置
-- **コピー先**: テスト実行前に、上記コンテンツを `src/test/workspace/content/` へコピー
-- **コピースクリプト**: `copy-test-files` を `package.json` に定義
-- **コンテンツコピータスク**: `.vscode/tasks.json` に `copy-test-content` タスクを定義
-- **デバッグ実行連携**: `launch.json` の `preLaunchTask` に `copy-test-content` を指定し、デバッグ実行前に自動でテストコンテンツをコピー
-
----
-
-## 11. l10n（国際化）
-
-mdaitはVS Code公式の`vscode-l10n`ライブラリを使用して国際化に対応しています。
-
-### 11.1 翻訳対象
-- **静的コントリビューション**: コマンド名、設定項目、説明文（`package.nls.json`）
-- **動的メッセージ**: エラーメッセージ、通知、プロンプト（`l10n/bundle.l10n.json`）
-
-### 11.2 実装詳細
-- **翻訳API**: `vscode.l10n.t()`を使用
-- **翻訳ファイル**:
-  - 静的: `package.nls.json`（英語）、`package.nls.ja.json`（日本語）
-  - 動的: `l10n/bundle.l10n.json`（英語）、`l10n/bundle.l10n.ja.json`（日本語）
-- **要件**: VS Code 1.73.0以上
-
-### 11.4 言語切り替え
-VS Codeの言語設定（`locale`）に応じて自動的に切り替わります。日本語環境では日本語UI、その他の環境では英語UIが表示されます。
-
-### 11.5 翻訳手順
-
-```ts
-// vscode.l10n.t() を使用してマーク
-vscode.l10n.t("An error occurred during chat processing: {0}", (error as Error).message),
-```
-
+### ビルド・実行
 ```bash
-# `l10n/bundle.l10n.json`を更新 -> l10n/bundle.l10n.xx.json にも翻訳を反映させる
-npm run l10n
+npm run compile  # TypeScriptコンパイル
+npm run lint     # コード品質チェック  
+npm run test     # テスト実行
+npm run watch    # 開発時の自動ビルド
 ```
+
+
 
 ---
 
-## 12. ステータス情報一元化設計（StatusItem型中心）
-
-### 12.1 概要
-
-これまでのインデックスファイル（.mdait/index.json）による管理を廃止し、全てのユニット・ファイル・ディレクトリの状態をStatusItem型で一元的に管理する。
-
-- StatusItemはtype（"directory"|"file"|"unit"）ごとに必要な情報を持ち、childrenでツリー構造を表現
-- fromHash等によるユニット検索や、ファイル単位の再パースもStatusItem配列・ツリーを走査することで実現
-- UI（ツリー表示）や進捗集計、エラー管理もStatusItemに集約
-- 永続化は行わず、必要に応じてシリアライズで対応可能
-
-### 12.2 設計原則
-
-- **一元管理**: すべての状態情報はStatusItem[]で管理し、用途ごとにtypeで分岐
-- **検索性**: fromHashやunitHashでの検索はStatusItemツリーを再帰的に走査して実現
-- **拡張性**: 必要な情報はStatusItemに随時追加可能
-- **パフォーマンス**: メモリ上での管理とし、ファイルI/Oを最小化
-
-### 12.3 StatusItem型の例
-
-```typescript
-export type StatusType = "translated" | "needsTranslation" | "error" | "unknown";
-export enum StatusItemType {
-  Directory = "directory",
-  File = "file",
-  Unit = "unit",
-}
-export interface StatusItem {
-  type: StatusItemType;
-  label: string;
-  status: StatusType;
-  directoryPath?: string;
-  filePath?: string;
-  fileName?: string;
-  translatedUnits?: number;
-  totalUnits?: number;
-  hasParseError?: boolean;
-  errorMessage?: string;
-  unitHash?: string;
-  title?: string;
-  headingLevel?: number;
-  fromHash?: string;
-  needFlag?: string;
-  startLine?: number;
-  endLine?: number;
-  children?: StatusItem[];
-  collapsibleState?: vscode.TreeItemCollapsibleState;
-  iconPath?: vscode.ThemeIcon;
-  tooltip?: string;
-  contextValue?: string;
-  isTranslating?: boolean;
-}
-```
-
-### 12.4 主要機能
-
-- **ユニット検索**: fromHashやunitHashでStatusItemツリーを再帰検索
-- **進捗集計**: ファイル・ディレクトリ単位でStatusItemを集計
-- **エラー管理**: hasParseError, errorMessage等でエラー状態を一元管理
-- **UI連携**: children, collapsibleState, iconPath等でツリー表示に最適化
-
-### 12.5 利用箇所
-
-| コンポーネント | 利用目的 |
-|---------------|----------|
-| `syncCommand` | ユニット・ファイル状態の同期 |
-| `transCommand` | 翻訳対象ユニットの抽出・状態更新 |
-| `StatusCollector` | ステータス情報の収集・集計 |
-| `StatusTreeProvider` | ステータスツリー表示 |
-
-### 12.6 パフォーマンス特性
-
-- **検索**: fromHash等での再帰検索（O(n)）
-- **集計**: childrenを再帰的に集計
-- **メモリ効率**: 必要な情報のみ保持
-- **ファイルI/O削減**: 永続化を行わず、都度生成
-
-### 12.7 エラーハンドリング
-
-- **パースエラー**: hasParseError, errorMessageでStatusItemに記録
-- **不整合検出**: childrenやfromHashの不整合もStatusItemで管理
-
-### 12.8 将来拡張
-
-- **永続化**: 必要に応じてStatusItem配列をシリアライズ
-- **キャッシュ**: メモリキャッシュによる高速化
-- **他形式対応**: type拡張でCSV等も管理可能
+各層の詳細な設計については、対応する design.md ファイルを参照してください。このドキュメントは全体のアーキテクチャと層間連携の道標として機能します。
