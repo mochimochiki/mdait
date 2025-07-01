@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
-import { transCommand } from "./trans-command";
+import { transCommand, transUnitCommand } from "./trans-command";
 
 /**
  * ステータスツリーアイテムの翻訳アクションハンドラ
@@ -125,19 +125,12 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 
-		// 現在のtransCommandはファイル単位での翻訳のため、
-		// ユニット単位の翻訳については将来実装する
-		vscode.window.showInformationMessage(
-			vscode.l10n.t(
-				"Unit-specific translation is not yet implemented. Translating entire file instead.",
-			),
-		);
 		try {
 			item.isTranslating = true;
 			if (this.statusTreeProvider) {
 				this.statusTreeProvider.refresh(item);
 			}
-			await transCommand(vscode.Uri.file(item.filePath));
+			await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			console.error("Error during unit translation:", error);
 			vscode.window.showErrorMessage(

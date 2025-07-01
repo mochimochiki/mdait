@@ -176,6 +176,92 @@ async function translateUnit(
 }
 
 /**
+ * 単一ユニットの翻訳を実行する
+ * @param filePath 対象ファイルのパス
+ * @param unitHash 翻訳対象のユニットハッシュ
+ */
+export async function transUnitCommand(filePath: string, unitHash: string) {
+	const statusManager = StatusManager.getInstance();
+
+	try {
+		// 設定の読み込み
+		const config = new Configuration();
+		await config.load();
+
+		// 翻訳ペアから言語情報を取得
+		const transPair = config.getTransPairForTargetFile(filePath);
+		if (!transPair) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("No translation pair found for file: {0}", filePath),
+			);
+			return;
+		}
+
+		const sourceLang = transPair.sourceLang;
+		const targetLang = transPair.targetLang;
+		const translator = await new TranslatorBuilder().build();
+
+		// Markdown ファイルの読み込みとパース
+		const markdownContent = await fs.promises.readFile(filePath, "utf-8");
+		const markdown = markdownParser.parse(markdownContent, config);
+
+		// 指定されたハッシュのユニットを検索
+		const targetUnit = findUnitByHash(markdown.units, unitHash);
+		if (!targetUnit) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, filePath),
+			);
+			return;
+		}
+
+		// ユニットが翻訳必要かチェック
+		if (!targetUnit.needsTranslation()) {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("Unit {0} does not need translation", unitHash),
+			);
+			return;
+		}
+
+		// 翻訳開始をStatusManagerに通知
+		statusManager.updateUnitStatus(unitHash, { isTranslating: true });
+
+		try {
+			await translateUnit(targetUnit, translator, sourceLang, targetLang, markdown);
+
+			// 翻訳完了をStatusManagerに通知
+			statusManager.updateUnitStatus(unitHash, {
+				status: "translated",
+				needFlag: undefined,
+				isTranslating: false,
+			});
+		} catch (error) {
+			// 翻訳エラーをStatusManagerに通知
+			statusManager.updateUnitStatus(unitHash, {
+				status: "error",
+				isTranslating: false,
+				errorMessage: (error as Error).message,
+			});
+			throw error;
+		}
+
+		// 更新されたMarkdownを保存
+		const updatedContent = markdownParser.stringify(markdown);
+		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
+
+		// ファイル全体の状態をStatusManagerで更新
+		await statusManager.updateFileStatus(filePath);
+
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Unit translation completed: {0}", unitHash),
+		);
+	} catch (error) {
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Error during unit translation: {0}", (error as Error).message),
+		);
+	}
+}
+
+/**
  * ハッシュでユニットを検索
  * @param units ユニット配列
  * @param hash 検索対象のハッシュ
