@@ -20,7 +20,9 @@ suite("TransUnitCommand", () => {
 		// StatusManagerをリセット
 		const statusManager = StatusManager.getInstance();
 		// プライベートメンバーをリセットするためのハック（テスト用）
+		// biome-ignore lint/suspicious/noExplicitAny: テスト用のプライベートメンバーアクセス
 		(statusManager as any).statusItems = [];
+		// biome-ignore lint/suspicious/noExplicitAny: テスト用のプライベートメンバーアクセス
 		(statusManager as any).isInitialized = false;
 	});
 
