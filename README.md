@@ -1,5 +1,6 @@
 # mdait - Markdown AI Translator
 
+[![CI](https://github.com/mochimochiki/mdait/actions/workflows/ci.yml/badge.svg)](https://github.com/mochimochiki/mdait/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **mdait** (Markdown AI Translator) is a powerful VS Code extension that provides AI-powered translation capabilities for Markdown documents. It intelligently manages translation workflows through unit-based processing, hash-based change detection, and comprehensive translation state tracking.
