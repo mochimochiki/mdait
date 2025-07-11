@@ -2,7 +2,6 @@
   "mdait.description": "Markdown AI Translator - AI-powered translation tool for Markdown files",
   "mdait.sync.title": "mdait: Sync",
   "mdait.trans.title": "mdait: Translate",
-  "mdait.chat.title": "mdait: Chat",
   "mdait.status.sync.title": "Sync",
   "mdait.translate.directory.title": "Translate Directory",
   "mdait.translate.file.title": "Translate File",

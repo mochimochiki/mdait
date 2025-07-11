@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { chatCommand } from "./commands/chat/chat-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
@@ -30,9 +29,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
-
-	// chat command
-	const chatDisposable = vscode.commands.registerCommand("mdait.chat", chatCommand);
 
 	// 翻訳アイテムコマンド
 	const translateItemCommand = new StatusTreeTranslationHandler();
@@ -96,7 +92,6 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		syncDisposable,
 		transDisposable,
-		chatDisposable,
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,

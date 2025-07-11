@@ -23,10 +23,6 @@
         "title": "%mdait.trans.title%"
       },
       {
-        "command": "mdait.chat",
-        "title": "%mdait.chat.title%"
-      },
-      {
         "command": "mdait.status.sync",
         "title": "%mdait.status.sync.title%",
         "icon": "$(sync)",

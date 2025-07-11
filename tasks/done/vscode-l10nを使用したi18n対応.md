@@ -32,8 +32,6 @@ flowchart TD
 - `src/config/configuration.ts`: バリデーションメッセージ
 - `src/commands/sync/sync-command.ts`: 通知メッセージ
 - `src/commands/trans/trans-command.ts`: エラーメッセージ
-- `src/commands/chat/chat-command.ts`: プロンプト、エラーメッセージ
-- `src/api/providers/vscode-lm-provider.ts`: エラーメッセージ
 
 ### 新規作成ファイル
 - `package.nls.json`: 英語（デフォルト）翻訳
@@ -74,8 +72,6 @@ flowchart TD
   - `src/config/configuration.ts`: 設定バリデーションメッセージ
   - `src/commands/sync/sync-command.ts`: 同期処理通知メッセージ
   - `src/commands/trans/trans-command.ts`: 翻訳処理プロンプト・通知メッセージ
-  - `src/commands/chat/chat-command.ts`: チャット処理プロンプト・エラーメッセージ
-  - `src/api/providers/vscode-lm-provider.ts`: 言語モデルエラーメッセージ
 - **翻訳ファイル**: `l10n/bundle.l10n.json`（英語）と`l10n/bundle.l10n.ja.json`（日本語）を作成
 
 ### テスト観点
