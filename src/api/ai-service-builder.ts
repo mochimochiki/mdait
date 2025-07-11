@@ -2,6 +2,7 @@ import { Configuration, type TransConfig } from "../config/configuration";
 import type { AIMessage, AIService } from "./ai-service";
 import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
 import { OllamaProvider } from "./providers/ollama-provider";
+import { VSCodeLanguageModelProvider } from "./providers/vscode-lm-provider";
 
 /**
  * 設定に基づいて適切な AIService の実装を生成するビルダークラス。
@@ -19,6 +20,8 @@ export class AIServiceBuilder {
 		switch (effectiveConfig.provider) {
 			case "default":
 				return new DefaultAIProvider(effectiveConfig);
+			case "vscode-lm":
+				return new VSCodeLanguageModelProvider(effectiveConfig);
 			case "ollama":
 				return new OllamaProvider(effectiveConfig);
 			// case 'openai':
