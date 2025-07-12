@@ -38,7 +38,7 @@ flowchart TD
 - `src/ui/status/status-tree-provider.ts`: TreeDataProviderの実装
 - `src/ui/status/status-item.ts`: ツリーアイテムのデータ構造
 - `src/ui/status/status-collector.ts`: ファイル翻訳状況の収集ロジック
-- `src/test/ui/status/status-tree-provider.test.ts`: ツリープロバイダのテスト
+- `src/test-gui/ui/status/status-tree-provider.test.ts`: ツリープロバイダのテスト
 
 ### 修正ファイル
 - `package.json`: views、viewsContainers設定を追加
