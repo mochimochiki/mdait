@@ -3,8 +3,13 @@
   "displayName": "mdait",
   "description": "%mdait.description%",
   "version": "0.0.1",
+  "publisher": "mochimochiki",
   "engines": {
     "vscode": "^1.99.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mochimochiki/mdait.git"
   },
   "l10n": "./l10n",
   "categories": [
