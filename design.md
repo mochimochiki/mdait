@@ -12,7 +12,7 @@ mdaitは階層化されたモジュール構成を採用し、各層が明確な
 ┌─────────────────────────────────────────┐
 │                UI層                      │ ← VS Code統合、ステータス表示
 ├─────────────────────────────────────────┤
-│              Commands層                  │ ← sync/trans/chatコマンド実行
+│              Commands層                  │ ← sync/transコマンド実行
 ├─────────────────────────────────────────┤  
 │                Core層                    │ ← mdaitUnit、ハッシュ、ステータス管理
 ├─────────────────────────────────────────┤
@@ -95,10 +95,9 @@ This paragraph needs translation from the source document.
 ```
 src/
   extension.ts           # エントリーポイント（コマンド登録など）
-  commands/              # syncコマンド、transコマンド、chatコマンド関連処理
+  commands/              # syncコマンド、transコマンド関連処理
     ├── sync/
     ├── trans/
-    ├── chat/
     └── design.md
   core/                  # 共通コア機能
     ├── markdown/        # Markdownの構造解析、ユニット分割、marker処理など
