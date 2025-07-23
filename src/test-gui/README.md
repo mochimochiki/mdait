@@ -1,33 +1,33 @@
-# GUI Test Separation
+# GUIテスト分離
 
-## Overview
+## 概要
 
-GUI tests have been separated from regular tests to avoid running them in CI environments where VS Code GUI components may not be available.
+GUIテストは通常のテストから分離され、VS CodeのGUIコンポーネントが利用できないCI環境での実行を回避しています。
 
-## Structure
+## ディレクトリ構造
 
 ```
 src/
-├── test/          # Regular unit tests (run in CI)
+├── test/          # 通常のユニットテスト（CIで実行）
 │   ├── commands/
 │   ├── core/
 │   ├── config/
 │   └── ...
-└── test-gui/      # GUI tests (excluded from CI)
-    └── ui/        # VS Code UI component tests
+└── test-gui/      # GUIテスト（CIから除外）
+    └── ui/        # VS Code UIコンポーネントテスト
         └── status/
 ```
 
-## Scripts
+## スクリプト
 
-- `npm test` - Runs regular tests (excluding GUI tests)
-- `npm run test:gui` - Runs GUI tests only
+- `npm test` - 通常のテストを実行（GUIテストを除外）
+- `npm run test:gui` - GUIテストのみを実行
 
-## CI Configuration
+## CI設定
 
-The CI pipeline runs `npm test` which excludes GUI tests, ensuring that tests requiring VS Code UI components don't break the CI build.
+CIパイプラインは`npm test`を実行し、GUIテストを除外することで、VS Code UIコンポーネントが必要なテストがCIビルドを破綻させることを防いでいます。
 
-## Configuration Files
+## 設定ファイル
 
-- `.vscode-test.mjs` - Configuration for regular tests
-- `.vscode-test-gui.mjs` - Configuration for GUI tests
+- `.vscode-test.mjs` - 通常のテスト用設定
+- `.vscode-test-gui.mjs` - GUIテスト用設定
