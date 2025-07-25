@@ -187,7 +187,9 @@
   "scripts": {
     "compile": "tsc -p ./",
     "lint": "biome lint ./src",
-    "test": "rimraf out/test && npm run compile && npm run lint && vscode-test",
+    "test": "npm run test:unit",
+    "test:unit": "npm run compile && npm run lint && mocha --ui tdd out/test/core/hash/*.test.js out/test/core/markdown/mdait-unit.test.js out/test/core/markdown/mdait-marker.test.js",
+    "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test",
     "test:gui": "rimraf out/test-gui && npm run compile && npm run lint && vscode-test --config .vscode-test-gui.mjs",
     "watch": "tsc -watch -p ./",
     "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
