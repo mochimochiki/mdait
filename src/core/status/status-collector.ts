@@ -140,6 +140,7 @@ export class StatusCollector {
 	private async collectAllFromDirectory(
 		targetDir: string,
 		config: Configuration,
+		isSourceDir = false,
 	): Promise<StatusItem[]> {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
@@ -165,6 +166,18 @@ export class StatusCollector {
 			for (const filePath of mdFiles) {
 				try {
 					const fileStatus = await this.collectFile(filePath);
+
+					// sourceディレクトリの場合はステータスを'source'に変更
+					if (isSourceDir) {
+						fileStatus.status = "source";
+						// 子ユニットのステータスも'source'に変更
+						if (fileStatus.children) {
+							for (const child of fileStatus.children) {
+								child.status = "source";
+							}
+						}
+					}
+
 					fileStatuses.push(fileStatus);
 				} catch (error) {
 					console.error(`Error processing file ${filePath}:`, error);
@@ -199,6 +212,35 @@ export class StatusCollector {
 	}
 
 	/**
+	 * 翻訳ペア設定から重複のないディレクトリリストを取得する
+	 * targetディレクトリは翻訳対象として、sourceディレクトリはsource扱いとして分類
+	 */
+	private getUniqueDirectories(config: Configuration): {
+		targetDirs: string[];
+		sourceDirs: string[];
+	} {
+		const allTargetDirs = new Set<string>();
+		const allSourceDirs = new Set<string>();
+
+		// 全てのtargetディレクトリを収集
+		for (const transPair of config.transPairs) {
+			allTargetDirs.add(transPair.targetDir);
+		}
+
+		// sourceディレクトリを収集（targetに含まれていないもののみ）
+		for (const transPair of config.transPairs) {
+			if (!allTargetDirs.has(transPair.sourceDir)) {
+				allSourceDirs.add(transPair.sourceDir);
+			}
+		}
+
+		return {
+			targetDirs: Array.from(allTargetDirs),
+			sourceDirs: Array.from(allSourceDirs),
+		};
+	}
+
+	/**
 	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築する
 	 * パフォーマンス負荷が高いため、通常は差分更新を使用することを推奨
 	 * 初回実行時や、保険的な再構築が必要な場合のみ使用
@@ -207,10 +249,18 @@ export class StatusCollector {
 		const statusItems: StatusItem[] = [];
 
 		try {
-			// 対象ディレクトリから直接ファイル情報を収集
-			for (const transPair of config.transPairs) {
-				const targetDir = transPair.targetDir;
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
+			// 重複のないディレクトリリストを取得
+			const { targetDirs, sourceDirs } = this.getUniqueDirectories(config);
+
+			// sourceディレクトリからsource情報を収集
+			for (const sourceDir of sourceDirs) {
+				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config, true);
+				statusItems.push(...sourceDirItems);
+			}
+
+			// targetディレクトリから翻訳状況を収集
+			for (const targetDir of targetDirs) {
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, config, false);
 				statusItems.push(...targetDirItems);
 			}
 		} catch (error) {
@@ -236,10 +286,9 @@ export class StatusCollector {
 		console.log(`StatusCollector: updateStatusItemOnFileChange() - ${path.basename(filePath)}`);
 
 		try {
-			// 該当ファイルのStatusItemを検索
-			const fileName = path.basename(filePath);
+			// 該当ファイルのStatusItemを検索（filePathで完全一致）
 			const existingItemIndex = existingStatusItems.findIndex(
-				(item) => item.type === StatusItemType.File && item.fileName === fileName,
+				(item) => item.type === StatusItemType.File && item.filePath === filePath,
 			);
 
 			if (existingItemIndex === -1) {

@@ -3,7 +3,7 @@ import type * as vscode from "vscode";
 /**
  * ステータス情報のタイプ
  */
-export type StatusType = "translated" | "needsTranslation" | "error" | "unknown";
+export type StatusType = "translated" | "needsTranslation" | "error" | "unknown" | "source";
 
 export enum StatusItemType {
 	Directory = "directory",

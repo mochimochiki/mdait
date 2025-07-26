@@ -171,15 +171,16 @@ export class StatusTreeProvider
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
 		const directoryMap = new Map<string, StatusItem[]>();
-		// transPairs.targetDirの絶対パス一覧を作成
+		// transPairs.targetDirとsourceDirの絶対パス一覧を作成
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const targetDirsAbs = this.configuration.transPairs.map((pair) =>
+		const allDirsAbs = this.configuration.transPairs.flatMap((pair) => [
+			workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
 			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
-		);
-		// ファイルをディレクトリごとにグループ化（targetDir一致のみ）
+		]);
+		// ファイルをディレクトリごとにグループ化（sourceDir/targetDir一致のみ）
 		for (const fileStatus of this.fileStatuses) {
 			const dirPath = path.dirname(fileStatus.filePath ?? "");
-			if (!targetDirsAbs.includes(dirPath)) {
+			if (!allDirsAbs.includes(dirPath)) {
 				continue;
 			}
 			if (!directoryMap.has(dirPath)) {
@@ -197,18 +198,26 @@ export class StatusTreeProvider
 
 			// ディレクトリの全体ステータスを決定
 			const status = this.determineDirectoryStatus(files);
+
+			// sourceディレクトリの場合は翻訳ユニット数を表示しない
+			const label = status === "source" ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
+			const tooltip =
+				status === "source"
+					? vscode.l10n.t("Source directory: {0}", dirName)
+					: vscode.l10n.t(
+							"Directory: {0} - {1}/{2} units translated",
+							dirName,
+							translatedUnits,
+							totalUnits,
+						);
+
 			directoryItems.push({
 				type: StatusItemType.Directory,
-				label: `${dirName} (${translatedUnits}/${totalUnits})`,
+				label,
 				directoryPath: dirPath,
 				status,
 				collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
-				tooltip: vscode.l10n.t(
-					"Directory: {0} - {1}/{2} units translated",
-					dirName,
-					translatedUnits,
-					totalUnits,
-				),
+				tooltip,
 				contextValue: "mdaitDirectory",
 			});
 		}
@@ -267,18 +276,25 @@ export class StatusTreeProvider
 			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 			const status = this.determineDirectoryStatus(files);
 
+			// sourceディレクトリの場合は翻訳ユニット数を表示しない
+			const label = status === "source" ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
+			const tooltip =
+				status === "source"
+					? vscode.l10n.t("Source directory: {0}", dirName)
+					: vscode.l10n.t(
+							"Directory: {0} - {1}/{2} units translated",
+							dirName,
+							translatedUnits,
+							totalUnits,
+						);
+
 			items.push({
 				type: StatusItemType.Directory,
-				label: `${dirName} (${translatedUnits}/${totalUnits})`,
+				label,
 				directoryPath: subDirPath,
 				status,
 				collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-				tooltip: vscode.l10n.t(
-					"Directory: {0} - {1}/{2} units translated",
-					dirName,
-					translatedUnits,
-					totalUnits,
-				),
+				tooltip,
 				contextValue: "mdaitDirectory",
 			});
 		}
@@ -315,6 +331,9 @@ export class StatusTreeProvider
 		const hasError = files.some((f) => f.status === "error");
 		if (hasError) return "error";
 
+		const allSource = files.every((f) => f.status === "source");
+		if (allSource) return "source";
+
 		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
 		const translatedUnits = files.reduce((sum, f) => sum + (f.translatedUnits ?? 0), 0);
 
@@ -336,6 +355,8 @@ export class StatusTreeProvider
 				return vscode.l10n.t("Translation completed");
 			case "needsTranslation":
 				return vscode.l10n.t("Translation needed");
+			case "source":
+				return vscode.l10n.t("Source document");
 			case "error":
 				return vscode.l10n.t("Error occurred");
 			default:
@@ -355,6 +376,8 @@ export class StatusTreeProvider
 				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
 			case "needsTranslation":
 				return new vscode.ThemeIcon("circle");
+			case "source":
+				return new vscode.ThemeIcon("symbol-constant", new vscode.ThemeColor("charts.blue"));
 			case "error":
 				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
 			default:

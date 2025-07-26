@@ -25,6 +25,8 @@
   "{0}: {1}/{2} units translated": "{0}: {1}/{2} units translated",
   "Translation completed": "Translation completed",
   "Translation needed": "Translation needed",
+  "Source document": "Source document",
+  "Source directory: {0}": "Source directory: {0}",
   "Error occurred": "Error occurred",
   "Unknown status": "Unknown status",
   "Run translation": "Run translation",  "Translate directory": "Translate directory",
