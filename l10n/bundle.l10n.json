@@ -43,5 +43,9 @@
   "Error during directory translation: {0}": "Error during directory translation: {0}",
   "Error during file translation: {0}": "Error during file translation: {0}",
   "Unit-specific translation is not yet implemented. Translating entire file instead.": "Unit-specific translation is not yet implemented. Translating entire file instead.",
-  "Error during unit translation: {0}": "Error during unit translation: {0}"
+  "Error during unit translation: {0}": "Error during unit translation: {0}",
+  "This unit does not have a source reference.": "This unit does not have a source reference.",
+  "Source unit not found for hash: {0}": "Source unit not found for hash: {0}",
+  "Source unit file path or line number not available.": "Source unit file path or line number not available.",
+  "Failed to jump to source: {0}": "Failed to jump to source: {0}"
 }

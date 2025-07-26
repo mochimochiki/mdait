@@ -56,6 +56,12 @@
         "title": "%mdait.translate.unit.title%",
         "icon": "$(play)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.jumpToSource",
+        "title": "%mdait.jumpToSource.title%",
+        "icon": "$(link-external)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -93,30 +99,25 @@
         {
           "command": "mdait.translate.directory",
           "when": "view == mdait.status && viewItem == mdaitDirectory",
-          "group": "translate"
-        },
-        {
-          "command": "mdait.translate.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectory",
           "group": "inline"
         },
         {
           "command": "mdait.translate.file",
           "when": "view == mdait.status && viewItem == mdaitFile",
-          "group": "translate"
+          "group": "inline"
         },
         {
-          "command": "mdait.translate.file",
+          "command": "mdait.jumpToSource",
           "when": "view == mdait.status && viewItem == mdaitFile",
           "group": "inline"
         },
         {
           "command": "mdait.translate.unit",
           "when": "view == mdait.status && viewItem == mdaitUnit",
-          "group": "translate"
+          "group": "inline"
         },
         {
-          "command": "mdait.translate.unit",
+          "command": "mdait.jumpToSource",
           "when": "view == mdait.status && viewItem == mdaitUnit",
           "group": "inline"
         }
