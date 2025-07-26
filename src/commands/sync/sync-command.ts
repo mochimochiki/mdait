@@ -52,8 +52,12 @@ export async function syncCommand(): Promise<void> {
 			// 各ファイルを同期
 			for (const sourceFile of files) {
 				try {
-					// 出力先パスを取得
-					const targetFile = fileExplorer.getTargetPath(sourceFile, pair.sourceDir, pair.targetDir);
+					// 出力先パスを取得（新しい統合されたFileExplorerを使用）
+					const targetFile = fileExplorer.getTargetPathFromConfig(sourceFile, config);
+					if (!targetFile) {
+						console.warn(`Target path could not be determined for: ${sourceFile}`);
+						continue;
+					}
 
 					// ファイルタイプに応じて適切な同期処理を選択
 					const extension = path.extname(sourceFile).toLowerCase();
@@ -62,8 +66,8 @@ export async function syncCommand(): Promise<void> {
 						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
 
 						// StatusManagerでファイル状態をリアルタイム更新
-						await statusManager.updateFileStatus(sourceFile);
-						await statusManager.updateFileStatus(targetFile);
+						await statusManager.updateFileStatus(sourceFile, config);
+						await statusManager.updateFileStatus(targetFile, config);
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(

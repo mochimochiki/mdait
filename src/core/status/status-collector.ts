@@ -23,7 +23,7 @@ export class StatusCollector {
 	/**
 	 * 単一ファイルの翻訳状況を収集する
 	 */
-	public async collectFile(filePath: string): Promise<StatusItem> {
+	public async retrieveFileStatus(filePath: string, config: Configuration): Promise<StatusItem> {
 		const fileName = path.basename(filePath);
 
 		try {
@@ -33,13 +33,15 @@ export class StatusCollector {
 			// Markdownをパース
 			const markdown = this.parser.parse(content);
 
-			// ユニットの翻訳状況を分析
+			// ソースファイルかどうかを判定
+			const isSource = this.fileExplorer.isSourceFile(filePath, config); // ユニットの翻訳状況を分析
 			let translatedUnits = 0;
 			const totalUnits = markdown.units.length;
 			const children: StatusItem[] = [];
 
 			for (const unit of markdown.units) {
-				const unitStatus = this.determineUnitStatus(unit);
+				// ソースファイルの場合は常に'source'ステータス
+				const unitStatus = isSource ? "source" : this.determineUnitStatus(unit);
 				children.push({
 					type: StatusItemType.Unit,
 					label: unit.title,
@@ -61,7 +63,8 @@ export class StatusCollector {
 			}
 
 			// ファイル全体の状態を決定
-			const status = this.determineFileStatus(translatedUnits, totalUnits);
+			// ソースファイルの場合は常に'source'ステータス
+			const status = isSource ? "source" : this.determineFileStatus(translatedUnits, totalUnits);
 
 			return {
 				type: StatusItemType.File,
@@ -140,7 +143,6 @@ export class StatusCollector {
 	private async collectAllFromDirectory(
 		targetDir: string,
 		config: Configuration,
-		isSourceDir = false,
 	): Promise<StatusItem[]> {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
@@ -165,19 +167,7 @@ export class StatusCollector {
 			const fileStatuses: StatusItem[] = [];
 			for (const filePath of mdFiles) {
 				try {
-					const fileStatus = await this.collectFile(filePath);
-
-					// sourceディレクトリの場合はステータスを'source'に変更
-					if (isSourceDir) {
-						fileStatus.status = "source";
-						// 子ユニットのステータスも'source'に変更
-						if (fileStatus.children) {
-							for (const child of fileStatus.children) {
-								child.status = "source";
-							}
-						}
-					}
-
+					const fileStatus = await this.retrieveFileStatus(filePath, config);
 					fileStatuses.push(fileStatus);
 				} catch (error) {
 					console.error(`Error processing file ${filePath}:`, error);
@@ -212,35 +202,6 @@ export class StatusCollector {
 	}
 
 	/**
-	 * 翻訳ペア設定から重複のないディレクトリリストを取得する
-	 * targetディレクトリは翻訳対象として、sourceディレクトリはsource扱いとして分類
-	 */
-	private getUniqueDirectories(config: Configuration): {
-		targetDirs: string[];
-		sourceDirs: string[];
-	} {
-		const allTargetDirs = new Set<string>();
-		const allSourceDirs = new Set<string>();
-
-		// 全てのtargetディレクトリを収集
-		for (const transPair of config.transPairs) {
-			allTargetDirs.add(transPair.targetDir);
-		}
-
-		// sourceディレクトリを収集（targetに含まれていないもののみ）
-		for (const transPair of config.transPairs) {
-			if (!allTargetDirs.has(transPair.sourceDir)) {
-				allSourceDirs.add(transPair.sourceDir);
-			}
-		}
-
-		return {
-			targetDirs: Array.from(allTargetDirs),
-			sourceDirs: Array.from(allSourceDirs),
-		};
-	}
-
-	/**
 	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築する
 	 * パフォーマンス負荷が高いため、通常は差分更新を使用することを推奨
 	 * 初回実行時や、保険的な再構築が必要な場合のみ使用
@@ -250,17 +211,17 @@ export class StatusCollector {
 
 		try {
 			// 重複のないディレクトリリストを取得
-			const { targetDirs, sourceDirs } = this.getUniqueDirectories(config);
+			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(config);
 
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
-				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config, true);
+				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config);
 				statusItems.push(...sourceDirItems);
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, config, false);
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
 				statusItems.push(...targetDirItems);
 			}
 		} catch (error) {
@@ -276,14 +237,30 @@ export class StatusCollector {
 	}
 
 	/**
-	 * ファイル監視イベント時に該当ファイルのStatusItemのみ更新
-	 * 通常はコマンド経由で更新済みなので何もしないことが多い
+	 * 指定ファイルのStatusItemを再パース・再構築して新しい配列を返す
+	 *
+	 * ファイル監視やユーザー操作により特定のファイルが変更された場合に、
+	 * 全体を再構築せずに該当ファイルのみを再パース・再構築することで
+	 * パフォーマンスを向上させる。
+	 *
+	 * @param filePath 再構築対象のファイルパス
+	 * @param existingStatusItems 既存のStatusItem配列
+	 * @param config 設定情報（ソースファイル判定に使用）
+	 * @returns 指定ファイルが再構築（または追加）された新しいStatusItem配列
+	 *
+	 * 処理内容:
+	 * - 新規ファイル: 配列に新しいStatusItemを追加
+	 * - 既存ファイル: 該当StatusItemのみを再パース・置換
+	 * - エラー発生: 既存配列をそのまま返す（安全な fallback）
+	 *
+	 * 注意: このメソッドはimmutableな操作で、元の配列は変更せず新しい配列を返します
 	 */
-	public async updateStatusItemOnFileChange(
+	public async retrieveUpdatedStatus(
 		filePath: string,
 		existingStatusItems: StatusItem[],
+		config: Configuration,
 	): Promise<StatusItem[]> {
-		console.log(`StatusCollector: updateStatusItemOnFileChange() - ${path.basename(filePath)}`);
+		console.log(`StatusCollector: rebuildSingleFileStatus() - ${path.basename(filePath)}`);
 
 		try {
 			// 該当ファイルのStatusItemを検索（filePathで完全一致）
@@ -292,20 +269,20 @@ export class StatusCollector {
 			);
 
 			if (existingItemIndex === -1) {
-				// 新規ファイルの場合、新しいStatusItemを作成して追加
-				const newFileStatus = await this.collectFile(filePath);
+				// 新規ファイル: 新しいStatusItemを作成して配列に追加
+				const newFileStatus = await this.retrieveFileStatus(filePath, config);
 				return [...existingStatusItems, newFileStatus];
 			}
 
-			// 既存ファイルの場合、そのStatusItemのみ更新
-			const updatedFileStatus = await this.collectFile(filePath);
+			// 既存ファイル: 該当StatusItemのみを再パース・更新
+			const updatedFileStatus = await this.retrieveFileStatus(filePath, config);
 			const updatedStatusItems = [...existingStatusItems];
 			updatedStatusItems[existingItemIndex] = updatedFileStatus;
 
 			return updatedStatusItems;
 		} catch (error) {
-			console.error(`StatusCollector: updateStatusItemOnFileChange() - エラー: ${filePath}`, error);
-			// エラーの場合は既存のStatusItemをそのまま返す
+			console.error(`StatusCollector: rebuildSingleFileStatus() - エラー: ${filePath}`, error);
+			// エラー時は既存配列をそのまま返す（安全な fallback）
 			return existingStatusItems;
 		}
 	}

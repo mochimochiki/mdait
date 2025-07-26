@@ -77,14 +77,15 @@ export class StatusManager {
 	/**
 	 * ファイル単位でStatusItemを更新（syncコマンド用）
 	 */
-	public async updateFileStatus(filePath: string): Promise<void> {
+	public async updateFileStatus(filePath: string, config: Configuration): Promise<void> {
 		console.log(`StatusManager: updateFileStatus() - ${filePath}`);
 
 		try {
-			// 該当ファイルのStatusItemを更新
-			this.statusItems = await this.statusCollector.updateStatusItemOnFileChange(
+			// 該当ファイルのStatusItemを再構築
+			this.statusItems = await this.statusCollector.retrieveUpdatedStatus(
 				filePath,
 				this.statusItems,
+				config,
 			);
 
 			// StatusTreeProviderに更新を通知

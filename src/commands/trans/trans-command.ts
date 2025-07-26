@@ -8,6 +8,7 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusCollector } from "../../core/status/status-collector";
 import { StatusManager } from "../../core/status/status-manager";
+import { FileExplorer } from "../../utils/file-explorer";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
@@ -26,15 +27,19 @@ export async function transCommand(uri?: vscode.Uri) {
 		const config = new Configuration();
 		await config.load();
 
+		// ファイル探索クラスを初期化
+		const fileExplorer = new FileExplorer();
+
 		// 翻訳ペアから言語情報を取得
-		const transPair = config.getTransPairForTargetFile(targetFilePath);
-		if (!transPair) {
+		const classification = fileExplorer.classifyFile(targetFilePath, config);
+		if (classification.type !== "target" || !classification.transPair) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
 			);
 			return;
 		}
 
+		const transPair = classification.transPair;
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
@@ -84,7 +89,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(targetFilePath);
+		await statusManager.updateFileStatus(targetFilePath, config);
 
 		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
 		console.log("Translation completed - StatusItem based management");
@@ -188,14 +193,19 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		const config = new Configuration();
 		await config.load();
 
+		// ファイル探索クラスを初期化
+		const fileExplorer = new FileExplorer();
+
 		// 翻訳ペアから言語情報を取得
-		const transPair = config.getTransPairForTargetFile(filePath);
-		if (!transPair) {
+		const classification = fileExplorer.classifyFile(filePath, config);
+		if (classification.type !== "target" || !classification.transPair) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("No translation pair found for file: {0}", filePath),
 			);
 			return;
 		}
+
+		const transPair = classification.transPair;
 
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
@@ -249,7 +259,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(filePath);
+		await statusManager.updateFileStatus(filePath, config);
 
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Unit translation completed: {0}", unitHash),
