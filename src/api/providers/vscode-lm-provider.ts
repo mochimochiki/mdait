@@ -26,22 +26,14 @@ export class VSCodeLanguageModelProvider implements AIService {
 			// 言語モデルを選択
 			const model = await this.selectLanguageModel();
 			if (!model) {
-				throw new Error(
-					vscode.l10n.t(
-						"Language model is not available. Please ensure GitHub Copilot is enabled.",
-					),
-				);
+				throw new Error(vscode.l10n.t("Language model is not available. Please ensure GitHub Copilot is enabled."));
 			}
 
 			// VS Code Language Model API 用のプロンプトを作成
 			const prompt = this.createPrompt(systemPrompt, messages);
 
 			// リクエストを送信
-			const response = await model.sendRequest(
-				prompt,
-				{},
-				new vscode.CancellationTokenSource().token,
-			);
+			const response = await model.sendRequest(prompt, {}, new vscode.CancellationTokenSource().token);
 
 			// ストリーミングレスポンスを処理
 			for await (const fragment of response.text) {
@@ -55,9 +47,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 				if (error.cause instanceof Error && error.cause.message.includes("off_topic")) {
 					yield vscode.l10n.t("Sorry, I cannot answer that question.");
 				} else if (error.message.includes("consent")) {
-					throw new Error(
-						vscode.l10n.t("GitHub Copilot permission is required. Please check your settings."),
-					);
+					throw new Error(vscode.l10n.t("GitHub Copilot permission is required. Please check your settings."));
 				} else if (error.message.includes("quota")) {
 					throw new Error(vscode.l10n.t("API usage limit reached. Please try again later."));
 				} else {
@@ -115,10 +105,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 	/**
 	 * VS Code Language Model API 用のプロンプトを作成
 	 */
-	private createPrompt(
-		systemPrompt: string,
-		messages: AIMessage[],
-	): vscode.LanguageModelChatMessage[] {
+	private createPrompt(systemPrompt: string, messages: AIMessage[]): vscode.LanguageModelChatMessage[] {
 		const vscodeMessages: vscode.LanguageModelChatMessage[] = [];
 
 		// システムプロンプトをAssistantに追加（VS Code LM API はSystemをサポートしていないため）

@@ -62,11 +62,11 @@ export class TextNormalizer {
 			result = result.trim();
 		}
 
-    // 3つ以上の連続する改行はすべて2つの改行に置き換え（フォーマッターなどによる影響を抑えるため）
-    result = result.replace(/\n{3,}/g, "\n\n");
+		// 3つ以上の連続する改行はすべて2つの改行に置き換え（フォーマッターなどによる影響を抑えるため）
+		result = result.replace(/\n{3,}/g, "\n\n");
 
-    // 末尾の改行はすべて無視
-    result = result.replace(/\n+$/g, "");
+		// 末尾の改行はすべて無視
+		result = result.replace(/\n+$/g, "");
 
 		return result;
 	}

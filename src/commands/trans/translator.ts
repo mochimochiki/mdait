@@ -12,12 +12,7 @@ export interface Translator {
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
 	 */
-	translate(
-		text: string,
-		sourceLang: string,
-		targetLang: string,
-		context: TranslationContext,
-	): Promise<string>;
+	translate(text: string, sourceLang: string, targetLang: string, context: TranslationContext): Promise<string>;
 }
 
 /**

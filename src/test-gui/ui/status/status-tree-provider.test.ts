@@ -34,10 +34,7 @@ suite("StatusTreeProvider Test Suite", () => {
 				["translated", "needsTranslation", "error", "unknown"].includes(firstFile.status),
 				"statusは有効な値である必要があります",
 			);
-			assert.ok(
-				typeof firstFile.translatedUnits === "number",
-				"translatedUnitsは数値である必要があります",
-			);
+			assert.ok(typeof firstFile.translatedUnits === "number", "translatedUnitsは数値である必要があります");
 			assert.ok(typeof firstFile.totalUnits === "number", "totalUnitsは数値である必要があります");
 		}
 	});
@@ -61,11 +58,7 @@ suite("StatusTreeProvider Test Suite", () => {
 
 		// エラーにならずに空配列が返されることを確認
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
-		assert.strictEqual(
-			fileStatuses.length,
-			0,
-			"存在しないディレクトリの場合は空配列が返される必要があります",
-		);
+		assert.strictEqual(fileStatuses.length, 0, "存在しないディレクトリの場合は空配列が返される必要があります");
 	});
 
 	test("StatusManagerがシングルトンパターンで動作する", () => {
@@ -95,11 +88,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		await statusManager.buildAllStatusItem(config);
 		const afterRebuild = statusManager.isInitialized();
 
-		assert.strictEqual(
-			afterRebuild,
-			true,
-			"rebuildStatusItemAll実行後は初期化済みになる必要があります",
-		);
+		assert.strictEqual(afterRebuild, true, "rebuildStatusItemAll実行後は初期化済みになる必要があります");
 	});
 
 	test("StatusManagerのfindUnitsByFromHashが正しく動作する", async () => {
@@ -120,11 +109,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		// 存在しないハッシュでの検索
 		const notFoundUnits = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
 		assert.ok(Array.isArray(notFoundUnits), "配列が返される必要があります");
-		assert.strictEqual(
-			notFoundUnits.length,
-			0,
-			"存在しないハッシュの場合は空配列が返される必要があります",
-		);
+		assert.strictEqual(notFoundUnits.length, 0, "存在しないハッシュの場合は空配列が返される必要があります");
 	});
 
 	test("StatusManagerの進捗集計機能が正しく動作する", async () => {
@@ -145,10 +130,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		const progress = statusManager.aggregateProgress();
 
 		assert.ok(typeof progress.totalUnits === "number", "totalUnitsは数値である必要があります");
-		assert.ok(
-			typeof progress.translatedUnits === "number",
-			"translatedUnitsは数値である必要があります",
-		);
+		assert.ok(typeof progress.translatedUnits === "number", "translatedUnitsは数値である必要があります");
 		assert.ok(typeof progress.errorUnits === "number", "errorUnitsは数値である必要があります");
 		assert.ok(progress.totalUnits >= 0, "totalUnitsは0以上である必要があります");
 		assert.ok(progress.translatedUnits >= 0, "translatedUnitsは0以上である必要があります");

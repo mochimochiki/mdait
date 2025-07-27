@@ -168,10 +168,7 @@ export class FileExplorer {
 		const normalizedTargetDir = this.normalizePath(transPair.targetDir);
 
 		// ソースディレクトリからの相対パスを取得
-		const relativePath = this.getRelativePathFromDirectory(
-			classification.normalizedPath,
-			normalizedSourceDir,
-		);
+		const relativePath = this.getRelativePathFromDirectory(classification.normalizedPath, normalizedSourceDir);
 
 		if (!relativePath) {
 			return null;
@@ -197,10 +194,7 @@ export class FileExplorer {
 		const normalizedTargetDir = this.normalizePath(transPair.targetDir);
 
 		// ターゲットディレクトリからの相対パスを取得
-		const relativePath = this.getRelativePathFromDirectory(
-			classification.normalizedPath,
-			normalizedTargetDir,
-		);
+		const relativePath = this.getRelativePathFromDirectory(classification.normalizedPath, normalizedTargetDir);
 
 		if (!relativePath) {
 			return null;

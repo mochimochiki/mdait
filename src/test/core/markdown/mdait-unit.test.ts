@@ -38,12 +38,7 @@ suite("MdaitSection", () => {
 	test("needsTranslation: ヘッダーがある場合はヘッダーの状態を反映する", () => {
 		// need:translate のケース
 		const markerNeedsTranslation = new MdaitMarker(testHash, testSourceHash, "translate");
-		const sectionNeedsTranslation = new MdaitUnit(
-			markerNeedsTranslation,
-			testTitle,
-			1,
-			testContent,
-		);
+		const sectionNeedsTranslation = new MdaitUnit(markerNeedsTranslation, testTitle, 1, testContent);
 		assert.equal(sectionNeedsTranslation.needsTranslation(), true);
 
 		// need タグなしのケース

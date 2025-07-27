@@ -12,6 +12,9 @@ import { StatusItemType } from "./status-item";
  * ファイルの翻訳状況を収集するクラス
  */
 export class StatusCollector {
+	/**
+	 * ファイルシステム操作とMarkdownパースを行うためのユーティリティ
+	 */
 	private readonly fileExplorer: FileExplorer;
 	private readonly parser: MarkdownItParser;
 
@@ -78,9 +81,7 @@ export class StatusCollector {
 				children,
 				contextValue: "mdaitFile",
 				collapsibleState:
-					children.length > 0
-						? vscode.TreeItemCollapsibleState.Collapsed
-						: vscode.TreeItemCollapsibleState.None,
+					children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
 			};
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -140,10 +141,7 @@ export class StatusCollector {
 	/**
 	 * ディレクトリから直接ファイル状況を収集する
 	 */
-	private async collectAllFromDirectory(
-		targetDir: string,
-		config: Configuration,
-	): Promise<StatusItem[]> {
+	private async collectAllFromDirectory(targetDir: string, config: Configuration): Promise<StatusItem[]> {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return [];
@@ -226,9 +224,7 @@ export class StatusCollector {
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));
 		}
 
 		// fileNameで昇順ソート

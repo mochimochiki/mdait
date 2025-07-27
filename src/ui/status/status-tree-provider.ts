@@ -8,13 +8,11 @@ import { type IStatusTreeProvider, StatusManager } from "../../core/status/statu
 /**
  * ステータスツリービューのデータプロバイダ
  */
-export class StatusTreeProvider
-	implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider
-{
-	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> =
-		new vscode.EventEmitter<StatusItem | undefined | null>();
-	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> =
-		this._onDidChangeTreeData.event;
+export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider {
+	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> = new vscode.EventEmitter<
+		StatusItem | undefined | null
+	>();
+	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> = this._onDidChangeTreeData.event;
 
 	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
@@ -60,9 +58,7 @@ export class StatusTreeProvider
 			}
 		} catch (error) {
 			console.error("Error refreshing status tree:", error);
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error refreshing status tree: {0}", (error as Error).message),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("Error refreshing status tree: {0}", (error as Error).message));
 		}
 	}
 
@@ -204,12 +200,7 @@ export class StatusTreeProvider
 			const tooltip =
 				status === "source"
 					? vscode.l10n.t("Source directory: {0}", dirName)
-					: vscode.l10n.t(
-							"Directory: {0} - {1}/{2} units translated",
-							dirName,
-							translatedUnits,
-							totalUnits,
-						);
+					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
 
 			directoryItems.push({
 				type: StatusItemType.Directory,
@@ -268,9 +259,7 @@ export class StatusTreeProvider
 
 		// サブディレクトリStatusItemを追加
 		for (const subDirPath of subDirSet) {
-			const files = this.statusItemTree.filter((fs) =>
-				path.dirname(fs.filePath ?? "").startsWith(subDirPath),
-			);
+			const files = this.statusItemTree.filter((fs) => path.dirname(fs.filePath ?? "").startsWith(subDirPath));
 			const dirName = path.basename(subDirPath) || subDirPath;
 			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
 			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
@@ -281,12 +270,7 @@ export class StatusTreeProvider
 			const tooltip =
 				status === "source"
 					? vscode.l10n.t("Source directory: {0}", dirName)
-					: vscode.l10n.t(
-							"Directory: {0} - {1}/{2} units translated",
-							dirName,
-							translatedUnits,
-							totalUnits,
-						);
+					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
 
 			items.push({
 				type: StatusItemType.Directory,

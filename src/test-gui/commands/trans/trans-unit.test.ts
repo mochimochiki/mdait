@@ -253,12 +253,7 @@ suite("TransCommand", () => {
 			}
 		}
 
-		const testContent = [
-			"<!-- mdait abc12345 need:translate -->",
-			"# 見出し",
-			"",
-			"これはコンテンツです。",
-		].join("\n");
+		const testContent = ["<!-- mdait abc12345 need:translate -->", "# 見出し", "", "これはコンテンツです。"].join("\n");
 		const config = new Configuration();
 		await config.load();
 		const markdown = markdownParser.parse(testContent, config);

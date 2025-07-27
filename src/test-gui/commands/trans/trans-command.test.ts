@@ -120,9 +120,7 @@ suite("transコマンドE2E", () => {
 			assert.ok(!updatedContent.includes("<!-- mdait def67890"));
 
 			// 5. 新しいマーカーが存在し、翻訳内容が反映されていること
-			const translatedUnitMatch = updatedContent.match(
-				/<!-- mdait ([a-z0-9]+) -->\s*## [^\n]*\s*\s*[^<]+/,
-			);
+			const translatedUnitMatch = updatedContent.match(/<!-- mdait ([a-z0-9]+) -->\s*## [^\n]*\s*\s*[^<]+/);
 			assert.ok(translatedUnitMatch);
 
 			// 翻訳されたユニットのハッシュが元のハッシュと異なることを確認

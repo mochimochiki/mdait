@@ -23,9 +23,7 @@ export class DefaultAIProvider implements AIService {
 	 */
 	async *sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream {
 		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
-		console.log(
-			`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`,
-		);
+		console.log(`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`);
 
 		// 翻訳対象のテキストを取得
 		const userMessage = messages.find((msg) => msg.role === "user");
@@ -62,10 +60,7 @@ export class DefaultAIProvider implements AIService {
 				.replace(/おはよう/g, "Good morning")
 				.replace(/こんばんは/g, "Good evening")
 				.replace(/元気ですか/g, "How are you")
-				.replace(
-					/です/g,
-					"is",
-				)}\n\n[Mock translation by DefaultAIProvider: ${sourceLang} → ${targetLang}]`;
+				.replace(/です/g, "is")}\n\n[Mock translation by DefaultAIProvider: ${sourceLang} → ${targetLang}]`;
 		}
 
 		if ((sourceLang === "en" || sourceLang === "auto") && targetLang === "ja") {
@@ -78,10 +73,7 @@ export class DefaultAIProvider implements AIService {
 				.replace(/How are you/gi, "元気ですか")
 				.replace(/The/gi, "その")
 				.replace(/is/gi, "です")
-				.replace(
-					/are/gi,
-					"です",
-				)}\n\n[DefaultAIProviderによるモック翻訳: ${sourceLang} → ${targetLang}]`;
+				.replace(/are/gi, "です")}\n\n[DefaultAIProviderによるモック翻訳: ${sourceLang} → ${targetLang}]`;
 		}
 
 		// その他の言語ペアの場合

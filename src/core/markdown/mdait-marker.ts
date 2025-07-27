@@ -42,8 +42,7 @@ export class MdaitMarker {
 		const sanitizedText = commentText.trim().replace(/\s+/g, " ");
 
 		// MdaitMarkerのパターン
-		const mdaitPattern =
-			/<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+		const mdaitPattern = /<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
 		const match = sanitizedText.match(mdaitPattern);
 
 		if (!match) {

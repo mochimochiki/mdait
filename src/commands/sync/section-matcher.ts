@@ -76,8 +76,7 @@ export class SectionMatcher {
 				while (tPtr < tEnd && matchedTargetIndexes.has(tPtr)) tPtr++;
 				if (sPtr >= sEnd && tPtr >= tEnd) break;
 				const sIsEligible = sPtr < sEnd && !matchedSourceIndexes.has(sPtr);
-				const tIsEligible =
-					tPtr < tEnd && !matchedTargetIndexes.has(tPtr) && !targetUnits[tPtr].getSourceHash();
+				const tIsEligible = tPtr < tEnd && !matchedTargetIndexes.has(tPtr) && !targetUnits[tPtr].getSourceHash();
 				if (sIsEligible && tIsEligible) {
 					result.push({ source: sourceUnits[sPtr], target: targetUnits[tPtr] });
 					matchedSourceIndexes.add(sPtr);

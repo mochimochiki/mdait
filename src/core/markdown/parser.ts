@@ -77,10 +77,7 @@ export class MarkdownItParser implements IMarkdownParser {
 
 		for (let i = 0; i < tokens.length; i++) {
 			const token = tokens[i];
-			if (
-				(token.type === "inline" || token.type === "html_block") &&
-				token.content.includes("<!-- mdait")
-			) {
+			if ((token.type === "inline" || token.type === "html_block") && token.content.includes("<!-- mdait")) {
 				// mdaitコメントが現れた時点で、現在のユニットをここで区切る
 				if (currentSection && currentSection.startLine !== null) {
 					const start = currentSection.startLine;
@@ -180,9 +177,7 @@ export class MarkdownItParser implements IMarkdownParser {
 			fm = `${doc.frontMatterRaw}`;
 		}
 		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
-		const body = doc.units
-			.map((section) => section.toString().replace(/\n+$/g, ""))
-			.join("\n\n");
+		const body = doc.units.map((section) => section.toString().replace(/\n+$/g, "")).join("\n\n");
 		return `${fm}${body}\n`;
 	}
 }

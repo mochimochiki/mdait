@@ -40,11 +40,7 @@ export async function syncCommand(): Promise<void> {
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
-					vscode.l10n.t(
-						"[{0} -> {1}] No files found for synchronization.",
-						pair.sourceDir,
-						pair.targetDir,
-					),
+					vscode.l10n.t("[{0} -> {1}] No files found for synchronization.", pair.sourceDir, pair.targetDir),
 				);
 				continue;
 			}
@@ -71,9 +67,7 @@ export async function syncCommand(): Promise<void> {
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(
-							`${path.basename(sourceFile)}: +${diffResult.added} ~${
-								diffResult.modified
-							} -${diffResult.deleted} =${diffResult.unchanged}`,
+							`${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
 					} else {
 						// Markdown以外は無視
@@ -81,10 +75,7 @@ export async function syncCommand(): Promise<void> {
 
 					successCount++;
 				} catch (error) {
-					console.error(
-						`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`,
-						error,
-					);
+					console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
 					// エラー時もStatusManagerに通知
 					await statusManager.updateFileStatusWithError(sourceFile, error as Error);
 					errorCount++;
@@ -93,11 +84,7 @@ export async function syncCommand(): Promise<void> {
 		}
 		// 完了通知
 		vscode.window.showInformationMessage(
-			vscode.l10n.t(
-				"Synchronization completed: {0} succeeded, {1} failed",
-				successCount,
-				errorCount,
-			),
+			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 		);
 
 		// インデックスファイル生成は廃止（StatusItemベースの管理に移行）
@@ -108,9 +95,7 @@ export async function syncCommand(): Promise<void> {
 			}
 		} catch (indexError) {
 			console.warn("Failed to complete sync:", indexError);
-			vscode.window.showWarningMessage(
-				vscode.l10n.t("Sync completion failed: {0}", (indexError as Error).message),
-			);
+			vscode.window.showWarningMessage(vscode.l10n.t("Sync completion failed: {0}", (indexError as Error).message));
 		}
 	} catch (error) {
 		// エラーハンドリング
@@ -129,11 +114,7 @@ export async function syncCommand(): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncMarkdownFile(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-): DiffResult {
+function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
 	if (fs.existsSync(targetFile)) {
 		return syncExistingMarkdownFile(sourceFile, targetFile, config);
 	}
@@ -147,11 +128,7 @@ function syncMarkdownFile(
  * @param config 設定
  * @returns 差分検出結果
  */
-function createInitialTargetFile(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-): DiffResult {
+function createInitialTargetFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
 	const fileExplorer = new FileExplorer();
 
 	// 1. ソースファイル読み込み＆パース
@@ -201,11 +178,7 @@ function createInitialTargetFile(
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncExistingMarkdownFile(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-): DiffResult {
+function syncExistingMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();

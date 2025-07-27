@@ -33,9 +33,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		// 翻訳ペアから言語情報を取得
 		const classification = fileExplorer.classifyFile(targetFilePath, config);
 		if (classification.type !== "target" || !classification.transPair) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
 			return;
 		}
 
@@ -102,9 +100,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
 		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Error during translation: {0}", (error as Error).message),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
 	}
 }
 
@@ -147,9 +143,7 @@ async function translateUnit(
 							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
 							const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
 							// unitHashでユニットを特定
-							const sourceUnitData = sourceMarkdown.units.find(
-								(u) => u.marker?.hash === sourceUnit.unitHash,
-							);
+							const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
 							if (sourceUnitData) {
 								sourceContent = sourceUnitData.content;
 							}
@@ -163,12 +157,7 @@ async function translateUnit(
 			}
 		}
 		// 翻訳実行
-		const translatedContent = await translator.translate(
-			sourceContent,
-			sourceLang,
-			targetLang,
-			context,
-		);
+		const translatedContent = await translator.translate(sourceContent, sourceLang, targetLang, context);
 		// ユニットのコンテンツを更新
 		unit.content = translatedContent;
 
@@ -181,9 +170,7 @@ async function translateUnit(
 		// needフラグを除去
 		unit.markAsTranslated();
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Unit translation error: {0}", (error as Error).message),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("Unit translation error: {0}", (error as Error).message));
 		throw error;
 	}
 }
@@ -207,9 +194,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		// 翻訳ペアから言語情報を取得
 		const classification = fileExplorer.classifyFile(filePath, config);
 		if (classification.type !== "target" || !classification.transPair) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("No translation pair found for file: {0}", filePath),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", filePath));
 			return;
 		}
 
@@ -226,17 +211,13 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		// 指定されたハッシュのユニットを検索
 		const targetUnit = findUnitByHash(markdown.units, unitHash);
 		if (!targetUnit) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, filePath),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, filePath));
 			return;
 		}
 
 		// ユニットが翻訳必要かチェック
 		if (!targetUnit.needsTranslation()) {
-			vscode.window.showInformationMessage(
-				vscode.l10n.t("Unit {0} does not need translation", unitHash),
-			);
+			vscode.window.showInformationMessage(vscode.l10n.t("Unit {0} does not need translation", unitHash));
 			return;
 		}
 
@@ -277,13 +258,9 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.updateFileStatus(filePath, config);
 
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Unit translation completed: {0}", unitHash),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Error during unit translation: {0}", (error as Error).message),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
 	}
 }
 

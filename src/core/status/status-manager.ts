@@ -79,9 +79,7 @@ export class StatusManager {
 			}
 
 			const endTime = performance.now();
-			console.log(
-				`StatusManager: rebuildStatusItemAll() - 完了 (${Math.round(endTime - startTime)}ms)`,
-			);
+			console.log(`StatusManager: rebuildStatusItemAll() - 完了 (${Math.round(endTime - startTime)}ms)`);
 			return this.statusItemTree;
 		} catch (error) {
 			console.error("StatusManager: rebuildStatusItemAll() - エラー", error);
@@ -98,11 +96,7 @@ export class StatusManager {
 
 		try {
 			// 該当ファイルのStatusItemを再構築
-			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(
-				filePath,
-				this.statusItemTree,
-				config,
-			);
+			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(filePath, this.statusItemTree, config);
 
 			// StatusTreeProviderに効率的な更新を通知
 			if (this.statusTreeProvider) {
@@ -132,9 +126,7 @@ export class StatusManager {
 	 * @param filePath 対象ファイルパス（指定時は該当ファイル内のユニットのみ更新）
 	 */
 	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath?: string): void {
-		console.log(
-			`StatusManager: updateUnitStatus() - ${unitHash}${filePath ? ` in ${filePath}` : ""}`,
-		);
+		console.log(`StatusManager: updateUnitStatus() - ${unitHash}${filePath ? ` in ${filePath}` : ""}`);
 
 		try {
 			const updated = this.updateStatusItemInTree(this.statusItemTree, unitHash, updates, filePath);
@@ -192,10 +184,7 @@ export class StatusManager {
 				this.statusTreeProvider.refreshFromStatusManager();
 			}
 		} catch (updateError) {
-			console.error(
-				`StatusManager: updateFileStatusWithError() - 更新エラー: ${filePath}`,
-				updateError,
-			);
+			console.error(`StatusManager: updateFileStatusWithError() - 更新エラー: ${filePath}`, updateError);
 		}
 	}
 

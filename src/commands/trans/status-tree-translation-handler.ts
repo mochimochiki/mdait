@@ -71,11 +71,7 @@ export class StatusTreeTranslationHandler {
 
 			if (failed > 0) {
 				vscode.window.showWarningMessage(
-					vscode.l10n.t(
-						"Directory translation completed: {0} files succeeded, {1} files failed",
-						successful,
-						failed,
-					),
+					vscode.l10n.t("Directory translation completed: {0} files succeeded, {1} files failed", successful, failed),
 				);
 			}
 
@@ -105,9 +101,7 @@ export class StatusTreeTranslationHandler {
 			await transCommand(vscode.Uri.file(item.filePath));
 		} catch (error) {
 			console.error("Error during file translation:", error);
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error during file translation: {0}", (error as Error).message),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("Error during file translation: {0}", (error as Error).message));
 		} finally {
 			item.isTranslating = false;
 			if (this.statusTreeProvider) {
@@ -133,9 +127,7 @@ export class StatusTreeTranslationHandler {
 			await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			console.error("Error during unit translation:", error);
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error during unit translation: {0}", (error as Error).message),
-			);
+			vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
 		} finally {
 			item.isTranslating = false;
 			if (this.statusTreeProvider) {

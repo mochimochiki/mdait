@@ -3,14 +3,7 @@
 
 import assert from "node:assert";
 import { execSync } from "node:child_process";
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	unlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 function copyDirSync(src: string, dest: string) {
@@ -101,22 +94,15 @@ suite("syncコマンドE2E", () => {
 			const enText = readFileSync(tmpEnTest, "utf8");
 
 			// ja側の全mdaitマーカーのハッシュを取得
-			const jaHashes = Array.from(jaText.matchAll(/<!-- mdait ([a-f0-9]{8}) -->/g)).map(
-				(m) => m[1],
-			);
+			const jaHashes = Array.from(jaText.matchAll(/<!-- mdait ([a-f0-9]{8}) -->/g)).map((m) => m[1]);
 			assert.ok(jaHashes.length > 0);
 
 			// en側の全mdaitマーカーのfrom:ハッシュを取得
-			const enFromHashes = Array.from(enText.matchAll(/<!-- mdait [^\s]+ from:([a-f0-9]{8})/g)).map(
-				(m) => m[1],
-			);
+			const enFromHashes = Array.from(enText.matchAll(/<!-- mdait [^\s]+ from:([a-f0-9]{8})/g)).map((m) => m[1]);
 
 			// ja側の各ハッシュがen側のfrom:にすべて含まれていることを確認
 			for (const jaHash of jaHashes) {
-				assert.ok(
-					enFromHashes.includes(jaHash),
-					`en側のfrom:にjaのハッシュ${jaHash}が含まれていません`,
-				);
+				assert.ok(enFromHashes.includes(jaHash), `en側のfrom:にjaのハッシュ${jaHash}が含まれていません`);
 			}
 		});
 
@@ -154,10 +140,7 @@ suite("syncコマンドE2E", () => {
 			assert.strictEqual(enMarkers.length, 2);
 
 			// H3の前にはマーカーが挿入されていないこと
-			assert.ok(
-				!jaText.includes("<!-- mdait") ||
-					jaText.indexOf("### 見出し 3") > jaText.lastIndexOf("<!-- mdait"),
-			);
+			assert.ok(!jaText.includes("<!-- mdait") || jaText.indexOf("### 見出し 3") > jaText.lastIndexOf("<!-- mdait"));
 		});
 
 		test("FrontMatter: Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {
@@ -436,10 +419,7 @@ suite("syncコマンドE2E", () => {
 			);
 
 			// en側も編集（同じユニット）
-			enText = enText.replace(
-				"This is a test Markdown file in English.",
-				"This is a file edited on the English side.",
-			);
+			enText = enText.replace("This is a test Markdown file in English.", "This is a file edited on the English side.");
 
 			writeFileSync(tmpJaTest, jaText, "utf8");
 			writeFileSync(tmpEnTest, enText, "utf8");
@@ -458,10 +438,7 @@ suite("syncコマンドE2E", () => {
 				updatedJaText.includes("need:solve-conflict"),
 				"日本語ファイルに 'need:solve-conflict' が見つかりません",
 			);
-			assert.ok(
-				updatedEnText.includes("need:solve-conflict"),
-				"英語ファイルに 'need:solve-conflict' が見つかりません",
-			);
+			assert.ok(updatedEnText.includes("need:solve-conflict"), "英語ファイルに 'need:solve-conflict' が見つかりません");
 		});
 	});
 
