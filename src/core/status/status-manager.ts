@@ -72,7 +72,7 @@ export class StatusManager {
 	 * パフォーマンス負荷が高いため、初回実行時や保険的な再構築が必要な場合のみ使用
 	 */
 	public async buildAllStatusItem(): Promise<StatusItem[]> {
-		console.log("StatusManager: rebuildStatusItemAll() - 全ファイルパースを開始（重い処理）");
+		console.log("StatusManager: buildAllStatusItem() - Parse all files");
 		const startTime = performance.now();
 
 		try {
@@ -86,10 +86,10 @@ export class StatusManager {
 			}
 
 			const endTime = performance.now();
-			console.log(`StatusManager: rebuildStatusItemAll() - 完了 (${Math.round(endTime - startTime)}ms)`);
+			console.log(`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`);
 			return this.statusItemTree;
 		} catch (error) {
-			console.error("StatusManager: rebuildStatusItemAll() - エラー", error);
+			console.error("StatusManager: buildAllStatusItem() - error", error);
 			throw error;
 		}
 	}
@@ -110,7 +110,6 @@ export class StatusManager {
 			// StatusTreeProviderに効率的な更新を通知
 			if (this.statusTreeProvider) {
 				if (item) {
-					console.log(`StatusManager: updateFileStatus() - Update: ${filePath}`);
 					this.statusTreeProvider.updateFileStatus(filePath, item);
 				}
 			}
@@ -134,7 +133,7 @@ export class StatusManager {
 				}
 			}
 		} catch (error) {
-			console.error(`StatusManager: applyFileStatus() - エラー: ${filePath}`, error);
+			console.error(`StatusManager: applyFileStatus() - error: ${filePath}`, error);
 		}
 	}
 
@@ -152,7 +151,7 @@ export class StatusManager {
 				}
 			}
 		} catch (error) {
-			console.error(`StatusManager: updateUnitStatus() - エラー: ${unitHash}`, error);
+			console.error(`StatusManager: updateUnitStatus() - error: ${unitHash}`, error);
 		}
 	}
 
@@ -194,7 +193,7 @@ export class StatusManager {
 				this.statusTreeProvider.refreshFromStatusManager();
 			}
 		} catch (updateError) {
-			console.error(`StatusManager: updateFileStatusWithError() - 更新エラー: ${filePath}`, updateError);
+			console.error(`StatusManager: updateFileStatusWithError() - error: ${filePath}`, updateError);
 		}
 	}
 

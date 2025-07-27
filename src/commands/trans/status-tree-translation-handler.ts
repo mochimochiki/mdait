@@ -47,10 +47,13 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 
+		const statusManager = StatusManager.getInstance();
+		let files: vscode.Uri[] = [];
+
 		try {
 			// ディレクトリ配下のMarkdownファイルを取得
 			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
-			const files = await vscode.workspace.findFiles(pattern);
+			files = await vscode.workspace.findFiles(pattern);
 
 			if (files.length === 0) {
 				vscode.window.showInformationMessage(
@@ -58,6 +61,9 @@ export class StatusTreeTranslationHandler {
 				);
 				return;
 			}
+
+			// 各ファイルのステータスを更新
+			await Promise.all(files.map((file) => statusManager.changeFileStatus(file.fsPath, { isTranslating: true })));
 
 			// 各ファイルに対して翻訳を実行
 			const results = await Promise.allSettled(
@@ -75,14 +81,18 @@ export class StatusTreeTranslationHandler {
 					vscode.l10n.t("Directory translation completed: {0} files succeeded, {1} files failed", successful, failed),
 				);
 			}
-
-			// ステータスツリーを更新
-			await this.refreshStatusTree();
 		} catch (error) {
 			console.error("Error during directory translation:", error);
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Error during directory translation: {0}", (error as Error).message),
 			);
+		} finally {
+			// 各ファイルのステータスを更新
+			if (files.length > 0) {
+				await Promise.all(files.map((file) => statusManager.changeFileStatus(file.fsPath, { isTranslating: false })));
+			}
+			// ステータスツリーを更新
+			await this.refreshStatusTree();
 		}
 	}
 
