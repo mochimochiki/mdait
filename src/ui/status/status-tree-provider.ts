@@ -192,6 +192,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			// ディレクトリの全体ステータスを決定
 			const status = this.determineDirectoryStatus(files);
 
+			// ディレクトリのisTranslatingフラグを決定（配下ファイルのいずれかがisTranslating: trueなら親もtrue）
+			const isTranslating = files.some((file) => file.isTranslating === true);
+
 			// sourceディレクトリの場合は翻訳ユニット数を表示しない
 			const label = status === Status.Source ? `${dirName} (source)` : `${dirName} (${translatedUnits}/${totalUnits})`;
 			const tooltip =
@@ -204,6 +207,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 				label,
 				directoryPath: dirPath,
 				status,
+				isTranslating,
 				collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
 				tooltip,
 				contextValue: "mdaitDirectory",
@@ -262,6 +266,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 			const status = this.determineDirectoryStatus(files);
 
+			// サブディレクトリのisTranslatingフラグを決定
+			const isTranslating = files.some((file) => file.isTranslating === true);
+
 			// sourceディレクトリの場合は翻訳ユニット数を表示しない
 			const label = status === Status.Source ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
 			const tooltip =
@@ -274,6 +281,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 				label,
 				directoryPath: subDirPath,
 				status,
+				isTranslating,
 				collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
 				tooltip,
 				contextValue: "mdaitDirectory",
@@ -402,6 +410,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 */
 	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void {
 		let updatedUnit: StatusItem | undefined;
+		let parentFile: StatusItem | undefined;
 
 		// ファイル内のユニットを検索・更新
 		for (const fileItem of this.statusItemTree) {
@@ -417,6 +426,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 							// ユニットを部分更新
 							Object.assign(unit, updates);
 							updatedUnit = unit;
+							parentFile = fileItem;
 
 							// ファイルパス制約がある場合は最初の一致のみ更新
 							if (filePath) {
@@ -426,6 +436,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 					}
 				}
 			}
+		}
+
+		// 親ファイルの状態を再集計・更新
+		if (parentFile && updatedUnit) {
+			this.updateParentStatus(parentFile);
 		}
 
 		// 更新されたユニットのツリー表示を更新
@@ -438,6 +453,68 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * StatusManagerからの更新通知を受けてツリーを更新
 	 */
 	public refreshFromStatusManager(): void {
+		this._onDidChangeTreeData.fire(undefined);
+	}
+
+	/**
+	 * 親StatusItem（ファイル→ディレクトリ）の状態を再集計・更新
+	 */
+	private updateParentStatus(fileItem: StatusItem): void {
+		if (fileItem.type !== StatusItemType.File || !fileItem.children) {
+			return;
+		}
+
+		// ファイルのisTranslatingとstatusを子ユニットから集計
+		const hasTranslatingUnit = fileItem.children.some((unit) => unit.isTranslating === true);
+		const hasErrorUnit = fileItem.children.some((unit) => unit.status === Status.Error);
+		const translatedCount = fileItem.children.filter((unit) => unit.status === Status.Translated).length;
+		const totalCount = fileItem.children.length;
+
+		// ファイルの状態を更新
+		const oldIsTranslating = fileItem.isTranslating;
+		const oldStatus = fileItem.status;
+
+		fileItem.isTranslating = hasTranslatingUnit;
+
+		if (hasErrorUnit) {
+			fileItem.status = Status.Error;
+		} else if (translatedCount === totalCount && totalCount > 0) {
+			fileItem.status = Status.Translated;
+		} else if (translatedCount > 0) {
+			fileItem.status = Status.NeedsTranslation;
+		} else {
+			fileItem.status = Status.NeedsTranslation;
+		}
+
+		// ファイルの状態が変わった場合、親ディレクトリも更新
+		if (oldIsTranslating !== fileItem.isTranslating || oldStatus !== fileItem.status) {
+			this.updateDirectoryStatus(fileItem.filePath);
+			// ファイルの表示を更新
+			this._onDidChangeTreeData.fire(fileItem);
+		}
+	}
+
+	/**
+	 * ディレクトリの状態を再集計・更新
+	 */
+	private updateDirectoryStatus(filePath?: string): void {
+		if (!filePath) return;
+
+		const directoryPath = path.dirname(filePath);
+
+		// 該当ディレクトリ配下のファイルを取得
+		const filesInDir = this.statusItemTree.filter(
+			(item) => item.type === StatusItemType.File && item.filePath && path.dirname(item.filePath) === directoryPath,
+		);
+
+		if (filesInDir.length === 0) return;
+
+		// ディレクトリの状態を集計
+		const hasTranslatingFile = filesInDir.some((file) => file.isTranslating === true);
+		const directoryStatus = this.determineDirectoryStatus(filesInDir);
+
+		// getRootDirectoryItemsやgetStatusItemsRecursiveで生成されるディレクトリアイテムを更新
+		// 直接更新せず、該当ディレクトリの再描画を促す
 		this._onDidChangeTreeData.fire(undefined);
 	}
 }

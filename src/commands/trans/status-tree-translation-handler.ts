@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
+import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { transCommand, transUnitCommand } from "./trans-command";
 
@@ -93,20 +94,19 @@ export class StatusTreeTranslationHandler {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
 		}
+
+		const statusManager = StatusManager.getInstance();
+
 		try {
-			item.isTranslating = true;
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.refresh(item);
-			}
+			// StatusManagerを通じてisTranslatingを設定
+			await statusManager.changeFileStatus(item.filePath, { isTranslating: true });
 			await transCommand(vscode.Uri.file(item.filePath));
 		} catch (error) {
 			console.error("Error during file translation:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during file translation: {0}", (error as Error).message));
 		} finally {
-			item.isTranslating = false;
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.refresh(item);
-			}
+			// StatusManagerを通じてisTranslatingを解除
+			await statusManager.changeFileStatus(item.filePath, { isTranslating: false });
 		}
 	}
 
@@ -119,20 +119,18 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 
+		const statusManager = StatusManager.getInstance();
+
 		try {
-			item.isTranslating = true;
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.refresh(item);
-			}
+			// StatusManagerを通じてisTranslatingを設定（これにより親ファイル・ディレクトリも自動更新される）
+			statusManager.changeUnitStatus(item.unitHash, { isTranslating: true }, item.filePath);
 			await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			console.error("Error during unit translation:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
 		} finally {
-			item.isTranslating = false;
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.refresh(item);
-			}
+			// StatusManagerを通じてisTranslatingを解除（これにより親ファイル・ディレクトリも自動更新される）
+			statusManager.changeUnitStatus(item.unitHash, { isTranslating: false }, item.filePath);
 		}
 	}
 }
