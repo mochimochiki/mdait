@@ -61,7 +61,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 	/**
 	 * API: ツリーアイテムを取得する
-	 *
+	 * elementはgetChildrenから渡されるStatusItemのため、インスタンスが入れ替わっていると古い状態になっている可能性がある
+	 * 各StatusItem更新ではAssignを使用しているため、最新の状態を反映する
 	 */
 	public getTreeItem(element: StatusItem): vscode.TreeItem {
 		const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
@@ -192,7 +193,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			const status = this.determineDirectoryStatus(files);
 
 			// sourceディレクトリの場合は翻訳ユニット数を表示しない
-			const label = status === Status.Source ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
+			const label = status === Status.Source ? `${dirName} (source)` : `${dirName} (${translatedUnits}/${totalUnits})`;
 			const tooltip =
 				status === Status.Source
 					? vscode.l10n.t("Source directory: {0}", dirName)
@@ -399,7 +400,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * 特定ユニットのStatusItemを部分更新
 	 * パフォーマンス改善とUI競合回避のため
 	 */
-	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath?: string): void {
+	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void {
 		let updatedUnit: StatusItem | undefined;
 
 		// ファイル内のユニットを検索・更新

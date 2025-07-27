@@ -15,9 +15,20 @@ export class StatusCollector {
 	 * ファイルシステム操作とMarkdownパースを行うためのユーティリティ
 	 */
 	private readonly fileExplorer: FileExplorer;
+
+	/**
+	 * Markdownのパースを行うためのパーサー
+	 */
 	private readonly parser: MarkdownItParser;
+
+	/**
+	 * 設定情報を取得するためのConfigurationインスタンス
+	 */
 	private readonly config: Configuration;
 
+	/**
+	 * Constructor
+	 */
 	constructor() {
 		this.fileExplorer = new FileExplorer();
 		this.parser = new MarkdownItParser();
@@ -25,9 +36,11 @@ export class StatusCollector {
 	}
 
 	/**
+	 * buildAllStatusItem
 	 * [重い処理]
 	 * 対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
 	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
+	 * @return Promise<StatusItem[]> - 全ステータスツリー
 	 */
 	public async buildAllStatusItem(): Promise<StatusItem[]> {
 		const statusItemTree: StatusItem[] = [];
@@ -58,53 +71,9 @@ export class StatusCollector {
 	}
 
 	/**
-	 * 指定ファイルのStatusItemを再パース・再構築して新しい配列を返す
-	 *
-	 * ファイル監視やユーザー操作により特定のファイルが変更された場合に、
-	 * 全体を再構築せずに該当ファイルのみを再パース・再構築することで
-	 * パフォーマンスを向上させる。
-	 *
-	 * @param filePath 再構築対象のファイルパス
-	 * @param existingStatusItems 既存のStatusItem配列
-	 * @returns 指定ファイルが再構築（または追加）された新しいStatusItem配列
-	 *
-	 * 処理内容:
-	 * - 新規ファイル: 配列に新しいStatusItemを追加
-	 * - 既存ファイル: 該当StatusItemのみを再パース・置換
-	 * - エラー発生: 既存配列をそのまま返す（安全な fallback）
-	 *
-	 * 注意: このメソッドはimmutableな操作で、元の配列は変更せず新しい配列を返します
-	 */
-	public async retrieveUpdatedStatus(filePath: string, existingStatusItems: StatusItem[]): Promise<StatusItem[]> {
-		console.log(`StatusCollector: retrieveUpdatedStatus() - ${path.basename(filePath)}`);
-
-		try {
-			// 該当ファイルのStatusItemを検索（filePathで完全一致）
-			const existingItemIndex = existingStatusItems.findIndex(
-				(item) => item.type === StatusItemType.File && item.filePath === filePath,
-			);
-
-			if (existingItemIndex === -1) {
-				// 新規ファイル: 新しいStatusItemを作成して配列に追加
-				const newFileStatus = await this.collectFileStatus(filePath);
-				return [...existingStatusItems, newFileStatus];
-			}
-
-			// 既存ファイル: 該当StatusItemのみを再パース・更新
-			const updatedFileStatus = await this.collectFileStatus(filePath);
-			const updatedStatusItems = [...existingStatusItems];
-			updatedStatusItems[existingItemIndex] = updatedFileStatus;
-
-			return updatedStatusItems;
-		} catch (error) {
-			console.error(`StatusCollector: retrieveUpdatedStatus() - エラー: ${filePath}`, error);
-			// エラー時は既存配列をそのまま返す（安全な fallback）
-			return existingStatusItems;
-		}
-	}
-
-	/**
 	 * 単一ファイルの翻訳状況を実際のファイルの状態に基づいて取得する
+	 * @param filePath - 対象ファイルのパス
+	 * @return StatusItem - ファイルのステータス
 	 */
 	public async collectFileStatus(filePath: string): Promise<StatusItem> {
 		const fileName = path.basename(filePath);

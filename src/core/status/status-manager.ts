@@ -10,8 +10,8 @@ import { StatusItemType } from "./status-item";
 export interface IStatusTreeProvider {
 	setFileStatuses(statuses: StatusItem[]): void;
 	refreshFromStatusManager(): void;
-	updateFileStatus?(filePath: string, fileStatusItem: StatusItem): void;
-	updateUnitStatus?(unitHash: string, updates: Partial<StatusItem>, filePath?: string): void;
+	updateFileStatus(filePath: string, fileStatusItem: StatusItem): void;
+	updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void;
 }
 
 /**
@@ -38,8 +38,7 @@ export class StatusManager {
 	private initialized = false;
 
 	/**
-	 * コンストラクタはプライベートにしてシングルトンを実現
-	 * StatusCollectorの初期化もここで行う
+	 * Constructor (private)
 	 */
 	private constructor() {
 		this.statusCollector = new StatusCollector();
@@ -47,6 +46,7 @@ export class StatusManager {
 	}
 
 	/**
+	 * getInstance
 	 * StatusManagerのシングルトンインスタンスを取得
 	 */
 	public static getInstance(): StatusManager {
@@ -57,6 +57,7 @@ export class StatusManager {
 	}
 
 	/**
+	 * setStatusTreeProvider
 	 * StatusTreeProviderを登録
 	 * extension.ts起動時に呼び出される
 	 */
@@ -65,7 +66,9 @@ export class StatusManager {
 	}
 
 	/**
-	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築
+	 * buildAllStatusItem
+	 * [重い処理]
+	 * 全ファイルをパースしてStatusItemツリーを再構築
 	 * パフォーマンス負荷が高いため、初回実行時や保険的な再構築が必要な場合のみ使用
 	 */
 	public async buildAllStatusItem(): Promise<StatusItem[]> {
@@ -92,56 +95,60 @@ export class StatusManager {
 	}
 
 	/**
-	 * 指定ファイルのステータスを更新
+	 * updateFileStatus
+	 * 指定ファイルのステータスを再構築し、StatusTreeProviderに更新を通知
 	 */
-	public async updateFileStatus(filePath: string): Promise<void> {
-		console.log(`StatusManager: updateFileStatus() - ${filePath}`);
-
+	public async refreshFileStatus(filePath: string): Promise<void> {
 		try {
 			// 該当ファイルのStatusItemを再構築
-			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(filePath, this.statusItemTree);
+			const item = this.getStatusItem(filePath);
+			// Assignを使うことでStatusItemのインスタンス自体は保持しつつ、最新の状態に更新(代入してしまうとgetTreeItemで古い状態が返る可能性があるため)
+			if (item) {
+				Object.assign(item, await this.statusCollector.collectFileStatus(filePath));
+			}
 
 			// StatusTreeProviderに効率的な更新を通知
 			if (this.statusTreeProvider) {
-				// 部分更新機能がある場合は部分更新を使用
-				if (this.statusTreeProvider.updateFileStatus) {
-					const updatedFileItem = this.getStatusItem(filePath);
-					if (updatedFileItem) {
-						this.statusTreeProvider.updateFileStatus(filePath, updatedFileItem);
-						return;
-					}
+				if (item) {
+					console.log(`StatusManager: updateFileStatus() - Update: ${filePath}`);
+					this.statusTreeProvider.updateFileStatus(filePath, item);
 				}
-
-				// フォールバック：全体更新
-				this.statusTreeProvider.setFileStatuses(this.statusItemTree);
-				this.statusTreeProvider.refreshFromStatusManager();
 			}
 		} catch (error) {
-			console.error(`StatusManager: updateFileStatus() - エラー: ${filePath}`, error);
+			console.error(`StatusManager: updateFileStatus() - Error: ${filePath}`, error);
 		}
 	}
 
 	/**
-	 * ユニット単位でStatusItemを更新（transコマンド用）
-	 *
-	 * @param unitHash 更新対象ユニットのハッシュ値
-	 * @param updates 更新する項目（部分更新）
-	 * @param filePath 対象ファイルパス（指定時は該当ファイル内のユニットのみ更新）
+	 * changeFileStatus
+	 * 指定ファイルのステータスを変更
 	 */
-	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath?: string): void {
-		console.log(`StatusManager: updateUnitStatus() - ${unitHash}${filePath ? ` in ${filePath}` : ""}`);
-
+	public async changeFileStatus(filePath: string, modifications: Partial<StatusItem>): Promise<void> {
 		try {
-			const updated = this.updateStatusItemInTree(this.statusItemTree, unitHash, updates, filePath);
+			const item = this.getStatusItem(filePath);
 
-			if (updated && this.statusTreeProvider) {
-				// 部分更新機能がある場合は部分更新を使用
-				if (this.statusTreeProvider.updateUnitStatus && filePath) {
-					this.statusTreeProvider.updateUnitStatus(unitHash, updates, filePath);
-				} else {
-					// フォールバック：全体更新
-					this.statusTreeProvider.setFileStatuses(this.statusItemTree);
-					this.statusTreeProvider.refreshFromStatusManager();
+			if (item) {
+				Object.assign(item, modifications); // 更新項目を適用
+				if (this.statusTreeProvider) {
+					this.statusTreeProvider.updateFileStatus(filePath, item);
+				}
+			}
+		} catch (error) {
+			console.error(`StatusManager: applyFileStatus() - エラー: ${filePath}`, error);
+		}
+	}
+
+	/**
+	 * changeUnitStatus
+	 * ユニットのステータスをmodificationsの値に変更
+	 */
+	public changeUnitStatus(unitHash: string, modifications: Partial<StatusItem>, filePath: string): void {
+		try {
+			const item = this.getUnitStatusItem(unitHash, filePath);
+			if (item) {
+				Object.assign(item, modifications); // 更新項目を適用
+				if (this.statusTreeProvider) {
+					this.statusTreeProvider.updateUnitStatus(unitHash, modifications, filePath);
 				}
 			}
 		} catch (error) {
@@ -201,15 +208,15 @@ export class StatusManager {
 	/**
 	 * 指定ハッシュのユニットをStatusItemツリーから取得
 	 */
-	public getUnitStatusItem(hash: string): StatusItem | undefined {
-		return this.findUnitByHashInTree(this.statusItemTree, hash);
+	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
+		return this.findFirstUnitByHash(this.statusItemTree, hash, path);
 	}
 
 	/**
 	 * 指定fromHashに対応するユニットをStatusItemツリーから取得
 	 */
-	public getUnitStatusItemByFromHash(fromHash: string): StatusItem[] {
-		return this.findUnitsByFromHashInTree(this.statusItemTree, fromHash);
+	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
+		return this.findFirstUnitByFromHash(this.statusItemTree, fromHash, path);
 	}
 
 	/**
@@ -246,36 +253,62 @@ export class StatusManager {
 
 	// ========== 内部ユーティリティメソッド ==========
 
+	/**
+	 * 初期化処理
+	 * StatusCollectorの初期化と設定情報の読み込みを行う
+	 */
 	private async initialize() {
-		// 設定を取得
 		this.config = Configuration.getInstance();
 		this.initialized = true;
 	}
 
-	private findUnitsByFromHashInTree(items: StatusItem[], fromHash: string): StatusItem[] {
-		const results: StatusItem[] = [];
-
-		for (const item of items) {
-			if (item.type === StatusItemType.Unit && item.fromHash === fromHash) {
-				results.push(item);
-			}
-
-			if (item.children) {
-				results.push(...this.findUnitsByFromHashInTree(item.children, fromHash));
+	/**
+	 * StatusItemツリー内でfromHashが一致するユニットを再帰的に検索
+	 * path指定時はそのパス内のユニットのみを対象とする
+	 */
+	private findFirstUnitByFromHash(items: StatusItem[], fromHash: string, path?: string): StatusItem | undefined {
+		if (path) {
+			const item = this.getStatusItemInTree(items, path);
+			if (item && item.type === StatusItemType.File && item.children) {
+				return this.findFirstUnitByFromHash(item.children, fromHash);
 			}
 		}
 
-		return results;
+		for (const item of items) {
+			if (item.type === StatusItemType.Unit && item.fromHash === fromHash) {
+				return item;
+			}
+
+			if (item.children) {
+				const found = this.findFirstUnitByFromHash(item.children, fromHash, path);
+				if (found) {
+					return found;
+				}
+			}
+		}
+
+		return undefined;
 	}
 
-	private findUnitByHashInTree(items: StatusItem[], unitHash: string): StatusItem | undefined {
+	/**
+	 * StatusItemツリー内でhashが一致するユニットを再帰的に検索
+	 * path指定時はそのパス内のユニットのみを対象とする
+	 */
+	private findFirstUnitByHash(items: StatusItem[], unitHash: string, path?: string): StatusItem | undefined {
+		if (path) {
+			const item = this.getStatusItemInTree(items, path);
+			if (item && item.type === StatusItemType.File && item.children) {
+				return this.findFirstUnitByHash(item.children, unitHash);
+			}
+		}
+
 		for (const item of items) {
 			if (item.type === StatusItemType.Unit && item.unitHash === unitHash) {
 				return item;
 			}
 
 			if (item.children) {
-				const found = this.findUnitByHashInTree(item.children, unitHash);
+				const found = this.findFirstUnitByHash(item.children, unitHash, path);
 				if (found) {
 					return found;
 				}
@@ -353,74 +386,5 @@ export class StatusManager {
 		}
 
 		return undefined;
-	}
-
-	/**
-	 * StatusItemツリー内で指定ハッシュと一致するユニットを再帰的に検索・更新
-	 *
-	 * ファイルパスが指定された場合は、該当ファイル内のユニットのみを更新し、
-	 * 同一ハッシュでも他ファイルのユニットは更新しない（適切な翻訳管理）
-	 *
-	 * @param items 検索対象のStatusItemツリー
-	 * @param targetHash 更新対象ユニットのハッシュ値
-	 * @param updates 更新する項目（部分更新）
-	 * @param targetFilePath 対象ファイルパス（指定時は該当ファイル内のみ更新）
-	 * @param currentFilePath 現在処理中のファイルパス（内部処理用）
-	 * @returns 1つでも更新があった場合true、なければfalse
-	 *
-	 * @example
-	 * // 特定ファイル内のユニットのみ翻訳完了として更新
-	 * updateStatusItemInTree(statusItems, "3f7c8a1b", {
-	 *   status: Status.Translated,
-	 *   needFlag: undefined
-	 * }, "/path/to/file.md");
-	 */
-	private updateStatusItemInTree(
-		items: StatusItem[],
-		targetHash: string,
-		updates: Partial<StatusItem>,
-		targetFilePath?: string,
-		currentFilePath?: string,
-	): boolean {
-		let updated = false;
-
-		for (const item of items) {
-			let contextFilePath = currentFilePath;
-
-			// ファイルアイテムの場合、コンテキストを更新
-			if (item.type === StatusItemType.File) {
-				contextFilePath = item.filePath;
-
-				// ファイルパス制約がある場合、対象ファイル以外はスキップ
-				if (targetFilePath && item.filePath !== targetFilePath) {
-					continue;
-				}
-			}
-
-			// ユニットタイプで、かつハッシュが一致する場合に更新
-			if (item.type === StatusItemType.Unit && item.unitHash === targetHash) {
-				// ファイルパス制約がある場合は、現在のファイルコンテキストをチェック
-				if (targetFilePath && contextFilePath !== targetFilePath) {
-					continue; // 対象ファイル外のユニットはスキップ
-				}
-
-				Object.assign(item, updates);
-				updated = true;
-			}
-
-			// 子要素が存在する場合は再帰的に検索・更新
-			if (item.children) {
-				const childUpdated = this.updateStatusItemInTree(
-					item.children,
-					targetHash,
-					updates,
-					targetFilePath,
-					contextFilePath,
-				);
-				updated = updated || childUpdated; // 論理OR演算で更新フラグを集約
-			}
-		}
-
-		return updated;
 	}
 }

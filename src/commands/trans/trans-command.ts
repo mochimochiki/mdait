@@ -63,11 +63,14 @@ export async function transCommand(uri?: vscode.Uri) {
 			return;
 		}
 
+		// ファイルステータスをInProgressに
+		await statusManager.changeFileStatus(targetFilePath, { isTranslating: true });
+
 		// 各ユニットを翻訳
 		for (const unit of unitsToTranslate) {
 			// 翻訳開始をStatusManagerに通知
 			if (unit.marker?.hash) {
-				statusManager.updateUnitStatus(unit.marker.hash, { isTranslating: true }, targetFilePath);
+				statusManager.changeUnitStatus(unit.marker.hash, { isTranslating: true }, targetFilePath);
 			}
 
 			try {
@@ -75,7 +78,7 @@ export async function transCommand(uri?: vscode.Uri) {
 
 				// 翻訳完了をStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(
+					statusManager.changeUnitStatus(
 						unit.marker.hash,
 						{
 							status: Status.Translated,
@@ -88,7 +91,7 @@ export async function transCommand(uri?: vscode.Uri) {
 			} catch (error) {
 				// 翻訳エラーをStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(
+					statusManager.changeUnitStatus(
 						unit.marker.hash,
 						{
 							status: Status.Error,
@@ -107,9 +110,8 @@ export async function transCommand(uri?: vscode.Uri) {
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(targetFilePath);
+		await statusManager.refreshFileStatus(targetFilePath);
 
-		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
 		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
 	} catch (error) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
@@ -145,10 +147,8 @@ async function translateUnit(
 		if (unit.marker?.from) {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const sourceUnits = statusManager.getUnitStatusItemByFromHash(unit.marker.from);
-				if (sourceUnits.length > 0) {
-					// 最初に見つかった翻訳元ユニットを使用
-					const sourceUnit = sourceUnits[0];
+				const sourceUnit = statusManager.getUnitStatusItemByFromHash(unit.marker.from);
+				if (sourceUnit) {
 					try {
 						if (sourceUnit.filePath) {
 							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
@@ -230,24 +230,25 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		}
 
 		// 翻訳開始をStatusManagerに通知
-		statusManager.updateUnitStatus(unitHash, { isTranslating: true }, filePath);
+		statusManager.changeUnitStatus(unitHash, { isTranslating: true }, filePath);
 
 		try {
 			await translateUnit(targetUnit, translator, sourceLang, targetLang, markdown);
 
 			// 翻訳完了をStatusManagerに通知
-			statusManager.updateUnitStatus(
+			statusManager.changeUnitStatus(
 				unitHash,
 				{
 					status: Status.Translated,
 					needFlag: undefined,
 					isTranslating: false,
+					unitHash: targetUnit.marker.hash,
 				},
 				filePath,
 			);
 		} catch (error) {
 			// 翻訳エラーをStatusManagerに通知
-			statusManager.updateUnitStatus(
+			statusManager.changeUnitStatus(
 				unitHash,
 				{
 					status: Status.Error,
@@ -264,7 +265,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(filePath);
+		await statusManager.refreshFileStatus(filePath);
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
 	} catch (error) {

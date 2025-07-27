@@ -61,8 +61,8 @@ export async function syncCommand(): Promise<void> {
 						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
 
 						// StatusManagerでファイル状態をリアルタイム更新
-						await statusManager.updateFileStatus(sourceFile);
-						await statusManager.updateFileStatus(targetFile);
+						await statusManager.refreshFileStatus(sourceFile);
+						await statusManager.refreshFileStatus(targetFile);
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(

@@ -112,9 +112,8 @@ suite("StatusTreeProvider Test Suite", () => {
 		await statusManager.buildAllStatusItem();
 
 		// 存在しないハッシュでの検索
-		const notFoundUnits = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
-		assert.ok(Array.isArray(notFoundUnits), "配列が返される必要があります");
-		assert.strictEqual(notFoundUnits.length, 0, "存在しないハッシュの場合は空配列が返される必要があります");
+		const notFoundUnit = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
+		assert.ok(notFoundUnit === undefined, "undefinedが返される必要があります");
 	});
 
 	test("StatusManagerの進捗集計機能が正しく動作する", async () => {
