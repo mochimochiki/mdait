@@ -99,11 +99,7 @@ export class StatusManager {
 
 		try {
 			// 該当ファイルのStatusItemを再構築
-			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(
-				filePath,
-				this.statusItemTree,
-				this.config,
-			);
+			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(filePath, this.statusItemTree);
 
 			// StatusTreeProviderに効率的な更新を通知
 			if (this.statusTreeProvider) {

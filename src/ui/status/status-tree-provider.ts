@@ -128,6 +128,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			this.isStatusLoading = true;
 			try {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+				await this.configuration.load();
 				if (workspaceFolder) {
 					// StatusManagerから最新のStatusItemを取得
 					if (this.statusManager.isInitialized()) {

@@ -24,11 +24,11 @@ export class StatusCollector {
 
 	/**
 	 * [重い処理]
-	 * 設定ファイル（config）に基づき、対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
+	 * 対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
 	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
 	 */
 	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
-		const statusItems: StatusItem[] = [];
+		const statusItemTree: StatusItem[] = [];
 
 		try {
 			// 重複のないディレクトリリストを取得
@@ -37,13 +37,13 @@ export class StatusCollector {
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
 				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config);
-				statusItems.push(...sourceDirItems);
+				statusItemTree.push(...sourceDirItems);
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
 				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
-				statusItems.push(...targetDirItems);
+				statusItemTree.push(...targetDirItems);
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
@@ -51,8 +51,8 @@ export class StatusCollector {
 		}
 
 		// fileNameで昇順ソート
-		statusItems.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
-		return statusItems;
+		statusItemTree.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
+		return statusItemTree;
 	}
 
 	/**
@@ -64,7 +64,6 @@ export class StatusCollector {
 	 *
 	 * @param filePath 再構築対象のファイルパス
 	 * @param existingStatusItems 既存のStatusItem配列
-	 * @param config 設定情報（ソースファイル判定に使用）
 	 * @returns 指定ファイルが再構築（または追加）された新しいStatusItem配列
 	 *
 	 * 処理内容:
@@ -74,11 +73,7 @@ export class StatusCollector {
 	 *
 	 * 注意: このメソッドはimmutableな操作で、元の配列は変更せず新しい配列を返します
 	 */
-	public async retrieveUpdatedStatus(
-		filePath: string,
-		existingStatusItems: StatusItem[],
-		config: Configuration,
-	): Promise<StatusItem[]> {
+	public async retrieveUpdatedStatus(filePath: string, existingStatusItems: StatusItem[]): Promise<StatusItem[]> {
 		console.log(`StatusCollector: retrieveUpdatedStatus() - ${path.basename(filePath)}`);
 
 		try {
@@ -89,12 +84,12 @@ export class StatusCollector {
 
 			if (existingItemIndex === -1) {
 				// 新規ファイル: 新しいStatusItemを作成して配列に追加
-				const newFileStatus = await this.retrieveFileStatus(filePath, config);
+				const newFileStatus = await this.collectFileStatus(filePath);
 				return [...existingStatusItems, newFileStatus];
 			}
 
 			// 既存ファイル: 該当StatusItemのみを再パース・更新
-			const updatedFileStatus = await this.retrieveFileStatus(filePath, config);
+			const updatedFileStatus = await this.collectFileStatus(filePath);
 			const updatedStatusItems = [...existingStatusItems];
 			updatedStatusItems[existingItemIndex] = updatedFileStatus;
 
@@ -107,9 +102,9 @@ export class StatusCollector {
 	}
 
 	/**
-	 * 単一ファイルの翻訳状況を収集する
+	 * 単一ファイルの翻訳状況を実際のファイルの状態に基づいて取得する
 	 */
-	public async retrieveFileStatus(filePath: string, config: Configuration): Promise<StatusItem> {
+	public async collectFileStatus(filePath: string): Promise<StatusItem> {
 		const fileName = path.basename(filePath);
 
 		try {
@@ -182,6 +177,8 @@ export class StatusCollector {
 			};
 		}
 	}
+
+	// ========== 内部ユーティリティメソッド ==========
 
 	/**
 	 * 個別ユニットの翻訳状態を決定する
@@ -265,7 +262,7 @@ export class StatusCollector {
 			const fileStatuses: StatusItem[] = [];
 			for (const filePath of mdFiles) {
 				try {
-					const fileStatus = await this.retrieveFileStatus(filePath, config);
+					const fileStatus = await this.collectFileStatus(filePath);
 					fileStatuses.push(fileStatus);
 				} catch (error) {
 					console.error(`Error processing file ${filePath}:`, error);
