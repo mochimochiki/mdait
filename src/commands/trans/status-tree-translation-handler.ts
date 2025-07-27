@@ -105,7 +105,7 @@ export class StatusTreeTranslationHandler {
 		} finally {
 			item.isTranslating = false;
 			if (this.statusTreeProvider) {
-				this.statusTreeProvider.refresh();
+				this.statusTreeProvider.refresh(item);
 			}
 		}
 	}
