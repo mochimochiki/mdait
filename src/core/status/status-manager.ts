@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
-import type { StatusItem, StatusType } from "./status-item";
+import type { Status, StatusItem } from "./status-item";
 import { StatusItemType } from "./status-item";
 
 /**

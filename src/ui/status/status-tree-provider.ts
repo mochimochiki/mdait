@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { StatusItemType } from "../../core/status/status-item";
-import type { StatusItem, StatusType } from "../../core/status/status-item";
+import type { Status, StatusItem } from "../../core/status/status-item";
 import { type IStatusTreeProvider, StatusManager } from "../../core/status/status-manager";
 
 /**
@@ -309,7 +309,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	/**
 	 * ディレクトリの全体ステータスを決定する
 	 */
-	private determineDirectoryStatus(files: StatusItem[]): StatusType {
+	private determineDirectoryStatus(files: StatusItem[]): Status {
 		if (files.length === 0) return "unknown";
 
 		const hasError = files.some((f) => f.status === "error");
@@ -351,7 +351,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	/**
 	 * ステータスに応じたアイコンを取得する
 	 */
-	private getStatusIcon(status: StatusType, isProgress?: boolean): vscode.ThemeIcon {
+	private getStatusIcon(status: Status, isProgress?: boolean): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
 		}

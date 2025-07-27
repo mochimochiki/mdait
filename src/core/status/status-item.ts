@@ -1,10 +1,13 @@
 import type * as vscode from "vscode";
 
 /**
- * ステータス情報のタイプ
+ * ステータス
  */
-export type StatusType = "translated" | "needsTranslation" | "error" | "unknown" | "source";
+export type Status = "translated" | "needsTranslation" | "error" | "unknown" | "source";
 
+/**
+ * ディレクトリ、ファイル、ユニットを区別する
+ */
 export enum StatusItemType {
 	Directory = "directory",
 	File = "file",
@@ -28,7 +31,7 @@ export interface StatusItem {
 	/**
 	 * 翻訳状態
 	 */
-	status: StatusType;
+	status: Status;
 
 	// ディレクトリ用
 	directoryPath?: string;

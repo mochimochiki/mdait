@@ -5,7 +5,7 @@ import type { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
-import type { StatusItem, StatusType } from "./status-item";
+import type { Status, StatusItem } from "./status-item";
 import { StatusItemType } from "./status-item";
 
 /**
@@ -106,7 +106,7 @@ export class StatusCollector {
 	/**
 	 * 個別ユニットの翻訳状態を決定する
 	 */
-	private determineUnitStatus(unit: MdaitUnit): StatusType {
+	private determineUnitStatus(unit: MdaitUnit): Status {
 		if (!unit.marker) {
 			return "unknown";
 		}
@@ -126,7 +126,7 @@ export class StatusCollector {
 	/**
 	 * ファイルの全体的な翻訳状態を決定する
 	 */
-	private determineFileStatus(translatedUnits: number, totalUnits: number): StatusType {
+	private determineFileStatus(translatedUnits: number, totalUnits: number): Status {
 		if (totalUnits === 0) {
 			return "unknown";
 		}
