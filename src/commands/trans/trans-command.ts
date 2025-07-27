@@ -57,7 +57,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		for (const unit of unitsToTranslate) {
 			// 翻訳開始をStatusManagerに通知
 			if (unit.marker?.hash) {
-				statusManager.updateUnitStatus(unit.marker.hash, { isTranslating: true });
+				statusManager.updateUnitStatus(unit.marker.hash, { isTranslating: true }, targetFilePath);
 			}
 
 			try {
@@ -65,20 +65,28 @@ export async function transCommand(uri?: vscode.Uri) {
 
 				// 翻訳完了をStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(unit.marker.hash, {
-						status: "translated",
-						needFlag: undefined,
-						isTranslating: false,
-					});
+					statusManager.updateUnitStatus(
+						unit.marker.hash,
+						{
+							status: "translated",
+							needFlag: undefined,
+							isTranslating: false,
+						},
+						targetFilePath,
+					);
 				}
 			} catch (error) {
 				// 翻訳エラーをStatusManagerに通知
 				if (unit.marker?.hash) {
-					statusManager.updateUnitStatus(unit.marker.hash, {
-						status: "error",
-						isTranslating: false,
-						errorMessage: (error as Error).message,
-					});
+					statusManager.updateUnitStatus(
+						unit.marker.hash,
+						{
+							status: "error",
+							isTranslating: false,
+							errorMessage: (error as Error).message,
+						},
+						targetFilePath,
+					);
 				}
 				throw error;
 			}
@@ -92,7 +100,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		await statusManager.updateFileStatus(targetFilePath, config);
 
 		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
-		console.log("Translation completed - StatusItem based management");
+		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("Error during translation: {0}", (error as Error).message),
@@ -128,7 +136,7 @@ async function translateUnit(
 		if (unit.marker?.from) {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const sourceUnits = statusManager.findUnitsByFromHash(unit.marker.from);
+				const sourceUnits = statusManager.getUnitStatusItemByFromHash(unit.marker.from);
 				if (sourceUnits.length > 0) {
 					// 最初に見つかった翻訳元ユニットを使用
 					const sourceUnit = sourceUnits[0];
@@ -233,24 +241,32 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		}
 
 		// 翻訳開始をStatusManagerに通知
-		statusManager.updateUnitStatus(unitHash, { isTranslating: true });
+		statusManager.updateUnitStatus(unitHash, { isTranslating: true }, filePath);
 
 		try {
 			await translateUnit(targetUnit, translator, sourceLang, targetLang, markdown);
 
 			// 翻訳完了をStatusManagerに通知
-			statusManager.updateUnitStatus(unitHash, {
-				status: "translated",
-				needFlag: undefined,
-				isTranslating: false,
-			});
+			statusManager.updateUnitStatus(
+				unitHash,
+				{
+					status: "translated",
+					needFlag: undefined,
+					isTranslating: false,
+				},
+				filePath,
+			);
 		} catch (error) {
 			// 翻訳エラーをStatusManagerに通知
-			statusManager.updateUnitStatus(unitHash, {
-				status: "error",
-				isTranslating: false,
-				errorMessage: (error as Error).message,
-			});
+			statusManager.updateUnitStatus(
+				unitHash,
+				{
+					status: "error",
+					isTranslating: false,
+					errorMessage: (error as Error).message,
+				},
+				filePath,
+			);
 			throw error;
 		}
 

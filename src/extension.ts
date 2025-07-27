@@ -56,7 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
 			const config = new Configuration();
 			await config.load();
-			await statusManager.rebuildStatusItemAll(config);
+			await statusManager.buildAllStatusItem(config);
 		} catch (error) {
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message),
@@ -115,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 
 				// StatusManagerからfromHashに対応するユニットを検索
-				const sourceUnit = statusManager.findUnitByHash(unitItem.fromHash);
+				const sourceUnit = statusManager.getUnitStatusItem(unitItem.fromHash);
 				if (!sourceUnit) {
 					vscode.window.showWarningMessage(
 						vscode.l10n.t("Source unit not found for hash: {0}", unitItem.fromHash),

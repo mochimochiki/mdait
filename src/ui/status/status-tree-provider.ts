@@ -18,7 +18,7 @@ export class StatusTreeProvider
 
 	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
-	private fileStatuses: StatusItem[] = [];
+	private statusItemTree: StatusItem[] = [];
 
 	// ステータス初期化済みフラグと排他制御
 	private isStatusInitialized = false;
@@ -42,14 +42,14 @@ export class StatusTreeProvider
 				const validationError = this.configuration.validate();
 				if (validationError) {
 					vscode.window.showWarningMessage(validationError);
-					this.fileStatuses = [];
+					this.statusItemTree = [];
 				} else {
 					// StatusManagerから最新のStatusItemを取得
-					if (this.statusManager.isStatusInitialized()) {
-						this.fileStatuses = this.statusManager.getStatusItems();
+					if (this.statusManager.isInitialized()) {
+						this.statusItemTree = this.statusManager.getStatusItemTree();
 					} else {
 						// 初期化されていない場合は全体再構築
-						this.fileStatuses = await this.statusManager.rebuildStatusItemAll(this.configuration);
+						this.statusItemTree = await this.statusManager.buildAllStatusItem(this.configuration);
 					}
 				}
 				// ツリービューを全体更新
@@ -136,11 +136,11 @@ export class StatusTreeProvider
 				if (workspaceFolder) {
 					await this.configuration.load();
 					// StatusManagerから最新のStatusItemを取得
-					if (this.statusManager.isStatusInitialized()) {
-						this.fileStatuses = this.statusManager.getStatusItems();
+					if (this.statusManager.isInitialized()) {
+						this.statusItemTree = this.statusManager.getStatusItemTree();
 					} else {
 						// 初期化されていない場合は全体再構築
-						this.fileStatuses = await this.statusManager.rebuildStatusItemAll(this.configuration);
+						this.statusItemTree = await this.statusManager.buildAllStatusItem(this.configuration);
 					}
 				}
 				this.isStatusInitialized = true;
@@ -178,7 +178,7 @@ export class StatusTreeProvider
 			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
 		]);
 		// ファイルをディレクトリごとにグループ化（sourceDir/targetDir一致のみ）
-		for (const fileStatus of this.fileStatuses) {
+		for (const fileStatus of this.statusItemTree) {
 			const dirPath = path.dirname(fileStatus.filePath ?? "");
 			if (!allDirsAbs.includes(dirPath)) {
 				continue;
@@ -233,7 +233,7 @@ export class StatusTreeProvider
 		const subDirSet = new Set<string>();
 
 		// 指定ディレクトリ配下のファイルを抽出
-		const filesInDir = this.fileStatuses.filter((fileStatus) => {
+		const filesInDir = this.statusItemTree.filter((fileStatus) => {
 			const dir = path.dirname(fileStatus.filePath ?? "");
 			// directoryPathが未指定の場合はルート直下
 			if (!directoryPath) {
@@ -251,7 +251,7 @@ export class StatusTreeProvider
 		}
 
 		// サブディレクトリを抽出
-		for (const fileStatus of this.fileStatuses) {
+		for (const fileStatus of this.statusItemTree) {
 			const dir = path.dirname(fileStatus.filePath ?? "");
 			const parentDir = directoryPath ?? "";
 			// サブディレクトリかどうか判定
@@ -268,7 +268,7 @@ export class StatusTreeProvider
 
 		// サブディレクトリStatusItemを追加
 		for (const subDirPath of subDirSet) {
-			const files = this.fileStatuses.filter((fs) =>
+			const files = this.statusItemTree.filter((fs) =>
 				path.dirname(fs.filePath ?? "").startsWith(subDirPath),
 			);
 			const dirName = path.basename(subDirPath) || subDirPath;
@@ -314,7 +314,7 @@ export class StatusTreeProvider
 			return [];
 		}
 
-		const fileStatus = this.fileStatuses.find((fs) => fs.filePath === filePath);
+		const fileStatus = this.statusItemTree.find((fs) => fs.filePath === filePath);
 		if (!fileStatus || !fileStatus.children) {
 			return [];
 		}
@@ -390,8 +390,67 @@ export class StatusTreeProvider
 	 * StatusManagerによる一元管理のため
 	 */
 	public setFileStatuses(fileStatuses: StatusItem[]): void {
-		this.fileStatuses = fileStatuses;
+		this.statusItemTree = fileStatuses;
 		this.isStatusInitialized = true;
+	}
+
+	/**
+	 * 特定ファイルのStatusItemを部分更新
+	 * パフォーマンス改善とUI競合回避のため
+	 */
+	public updateFileStatus(filePath: string, updatedFileItem: StatusItem): void {
+		const existingIndex = this.statusItemTree.findIndex(
+			(item) => item.type === StatusItemType.File && item.filePath === filePath,
+		);
+
+		if (existingIndex >= 0) {
+			// 既存ファイルアイテムを更新
+			this.statusItemTree[existingIndex] = updatedFileItem;
+		} else {
+			// 新規ファイルアイテムを追加
+			this.statusItemTree.push(updatedFileItem);
+		}
+
+		// 該当ファイルアイテムのみツリー更新
+		this._onDidChangeTreeData.fire(updatedFileItem);
+	}
+
+	/**
+	 * 特定ユニットのStatusItemを部分更新
+	 * パフォーマンス改善とUI競合回避のため
+	 */
+	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath?: string): void {
+		let updatedUnit: StatusItem | undefined;
+
+		// ファイル内のユニットを検索・更新
+		for (const fileItem of this.statusItemTree) {
+			if (fileItem.type === StatusItemType.File) {
+				// ファイルパス制約がある場合はチェック
+				if (filePath && fileItem.filePath !== filePath) {
+					continue;
+				}
+
+				if (fileItem.children) {
+					for (const unit of fileItem.children) {
+						if (unit.type === StatusItemType.Unit && unit.unitHash === unitHash) {
+							// ユニットを部分更新
+							Object.assign(unit, updates);
+							updatedUnit = unit;
+
+							// ファイルパス制約がある場合は最初の一致のみ更新
+							if (filePath) {
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 更新されたユニットのツリー表示を更新
+		if (updatedUnit) {
+			this._onDidChangeTreeData.fire(updatedUnit);
+		}
 	}
 
 	/**

@@ -206,7 +206,7 @@ export class StatusCollector {
 	 * パフォーマンス負荷が高いため、通常は差分更新を使用することを推奨
 	 * 初回実行時や、保険的な再構築が必要な場合のみ使用
 	 */
-	public async rebuildStatusItemAll(config: Configuration): Promise<StatusItem[]> {
+	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
 		const statusItems: StatusItem[] = [];
 
 		try {
@@ -260,7 +260,7 @@ export class StatusCollector {
 		existingStatusItems: StatusItem[],
 		config: Configuration,
 	): Promise<StatusItem[]> {
-		console.log(`StatusCollector: rebuildSingleFileStatus() - ${path.basename(filePath)}`);
+		console.log(`StatusCollector: retrieveUpdatedStatus() - ${path.basename(filePath)}`);
 
 		try {
 			// 該当ファイルのStatusItemを検索（filePathで完全一致）
@@ -281,7 +281,7 @@ export class StatusCollector {
 
 			return updatedStatusItems;
 		} catch (error) {
-			console.error(`StatusCollector: rebuildSingleFileStatus() - エラー: ${filePath}`, error);
+			console.error(`StatusCollector: retrieveUpdatedStatus() - エラー: ${filePath}`, error);
 			// エラー時は既存配列をそのまま返す（安全な fallback）
 			return existingStatusItems;
 		}

@@ -20,7 +20,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.rebuildStatusItemAll(config);
+		const fileStatuses = await statusManager.buildAllStatusItem(config);
 
 		// 結果の検証
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -57,7 +57,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.rebuildStatusItemAll(config);
+		const fileStatuses = await statusManager.buildAllStatusItem(config);
 
 		// エラーにならずに空配列が返されることを確認
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -79,7 +79,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		const statusManager = StatusManager.getInstance();
 
 		// 初期状態では未初期化
-		const initialState = statusManager.isStatusInitialized();
+		const initialState = statusManager.isInitialized();
 
 		const config = new Configuration();
 		config.transPairs = [
@@ -92,8 +92,8 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// rebuildStatusItemAll実行後は初期化済み
-		await statusManager.rebuildStatusItemAll(config);
-		const afterRebuild = statusManager.isStatusInitialized();
+		await statusManager.buildAllStatusItem(config);
+		const afterRebuild = statusManager.isInitialized();
 
 		assert.strictEqual(
 			afterRebuild,
@@ -115,10 +115,10 @@ suite("StatusTreeProvider Test Suite", () => {
 			},
 		];
 
-		await statusManager.rebuildStatusItemAll(config);
+		await statusManager.buildAllStatusItem(config);
 
 		// 存在しないハッシュでの検索
-		const notFoundUnits = statusManager.findUnitsByFromHash("non-existent-hash");
+		const notFoundUnits = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
 		assert.ok(Array.isArray(notFoundUnits), "配列が返される必要があります");
 		assert.strictEqual(
 			notFoundUnits.length,
@@ -140,7 +140,7 @@ suite("StatusTreeProvider Test Suite", () => {
 			},
 		];
 
-		await statusManager.rebuildStatusItemAll(config);
+		await statusManager.buildAllStatusItem(config);
 
 		const progress = statusManager.aggregateProgress();
 
