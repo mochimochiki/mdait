@@ -74,7 +74,7 @@ export class StatusManager {
 
 		try {
 			this.initialize();
-			this.statusItemTree = await this.statusCollector.buildAllStatusItem(this.config);
+			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
 
 			// StatusTreeProviderに全体更新を通知
 			if (this.statusTreeProvider) {

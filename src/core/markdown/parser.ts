@@ -1,6 +1,6 @@
 import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
-import { Configuration } from "../../config/configuration";
+import type { Configuration } from "../../config/configuration";
 import type { FrontMatter, Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
@@ -45,10 +45,9 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string, config?: Configuration): Markdown {
-		const defaultConfig = Configuration.getInstance();
+	parse(markdown: string, config: Configuration): Markdown {
 		// config
-		const autoMarkerLevel = config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
+		const autoMarkerLevel = config?.sync.autoMarkerLevel;
 
 		const fm = matter(markdown);
 		const frontMatter = fm.data as FrontMatter;

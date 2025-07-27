@@ -29,6 +29,7 @@ import { TranslatorBuilder } from "./translator-builder";
  */
 export async function transCommand(uri?: vscode.Uri) {
 	const statusManager = StatusManager.getInstance();
+	const config = Configuration.getInstance();
 
 	try {
 		// ファイルパスの取得
@@ -37,8 +38,6 @@ export async function transCommand(uri?: vscode.Uri) {
 			vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 			return;
 		}
-		// 設定の取得
-		const config = Configuration.getInstance();
 
 		// ファイル探索クラスを初期化
 		const fileExplorer = new FileExplorer();
@@ -133,6 +132,7 @@ async function translateUnit(
 	markdown: Markdown,
 ) {
 	const statusManager = StatusManager.getInstance();
+	const config = Configuration.getInstance();
 
 	try {
 		// 翻訳コンテキストの作成
@@ -151,7 +151,6 @@ async function translateUnit(
 					const sourceUnit = sourceUnits[0];
 					try {
 						if (sourceUnit.filePath) {
-							const config = Configuration.getInstance();
 							const sourceFileContent = await fs.promises.readFile(sourceUnit.filePath, "utf-8");
 							const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
 							// unitHashでユニットを特定
@@ -194,11 +193,9 @@ async function translateUnit(
  */
 export async function transUnitCommand(filePath: string, unitHash: string) {
 	const statusManager = StatusManager.getInstance();
+	const config = Configuration.getInstance();
 
 	try {
-		// 設定の取得
-		const config = Configuration.getInstance();
-
 		// ファイル探索クラスを初期化
 		const fileExplorer = new FileExplorer();
 

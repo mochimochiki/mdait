@@ -78,9 +78,18 @@ export class Configuration {
 	public static getInstance(): Configuration {
 		if (!Configuration.instance) {
 			Configuration.instance = new Configuration();
-			Configuration.initialize();
+			Configuration.instance.initialize();
 		}
 		return Configuration.instance;
+	}
+
+	/**
+	 * 初期化処理（設定のロードと監視の開始）
+	 */
+	public async initialize(): Promise<Configuration> {
+		const instance = Configuration.getInstance();
+		await instance.load();
+		return instance;
 	}
 
 	/**
@@ -105,15 +114,6 @@ export class Configuration {
 				});
 			}
 		});
-	}
-
-	/**
-	 * 初期化処理（設定のロードと監視の開始）
-	 */
-	private static async initialize(): Promise<Configuration> {
-		const instance = Configuration.getInstance();
-		await instance.load();
-		return instance;
 	}
 
 	/**

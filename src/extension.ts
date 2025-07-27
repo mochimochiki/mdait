@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
+import { Configuration } from "./config/configuration";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
@@ -9,6 +10,7 @@ import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 export function activate(context: vscode.ExtensionContext) {
 	// StatusManagerの初期化
 	const statusManager = StatusManager.getInstance();
+	const config = Configuration.getInstance();
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();

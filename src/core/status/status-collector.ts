@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { Configuration } from "../../config/configuration";
+import { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
@@ -16,10 +16,12 @@ export class StatusCollector {
 	 */
 	private readonly fileExplorer: FileExplorer;
 	private readonly parser: MarkdownItParser;
+	private readonly config: Configuration;
 
 	constructor() {
 		this.fileExplorer = new FileExplorer();
 		this.parser = new MarkdownItParser();
+		this.config = Configuration.getInstance();
 	}
 
 	/**
@@ -27,22 +29,22 @@ export class StatusCollector {
 	 * 対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
 	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
 	 */
-	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
+	public async buildAllStatusItem(): Promise<StatusItem[]> {
 		const statusItemTree: StatusItem[] = [];
 
 		try {
 			// 重複のないディレクトリリストを取得
-			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(config);
+			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(this.config);
 
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
-				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config);
+				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
 				statusItemTree.push(...sourceDirItems);
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
 				statusItemTree.push(...targetDirItems);
 			}
 		} catch (error) {
@@ -112,7 +114,7 @@ export class StatusCollector {
 			const content = await fs.promises.readFile(filePath, "utf-8");
 
 			// Markdownをパース
-			const markdown = this.parser.parse(content);
+			const markdown = this.parser.parse(content, this.config);
 
 			// ユニットの翻訳状況を分析
 			let translatedUnits = 0;
