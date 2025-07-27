@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { StatusTreeTranslationHandler } from "../../../commands/trans/status-tree-translation-handler";
-import { type StatusItem, StatusItemType } from "../../../core/status/status-item";
+import { Status, type StatusItem, StatusItemType } from "../../../core/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
 	let translateItemCommand: StatusTreeTranslationHandler;
@@ -15,7 +15,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 			type: StatusItemType.Directory,
 			label: "test-dir",
 			directoryPath: "/test/directory",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 		};
 
 		// エラーが発生しないことを確認（実際の翻訳は行わない）
@@ -28,7 +28,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 			type: StatusItemType.File,
 			label: "test.md",
 			filePath: "/test/test.md",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 		};
 
 		// エラーが発生しないことを確認（実際の翻訳は行わない）
@@ -44,7 +44,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 			unitHash: "12345678",
 			startLine: 5,
 			endLine: 10,
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 		};
 
 		// エラーが発生しないことを確認（実際の翻訳は行わない）
@@ -57,7 +57,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 		const invalidItem: StatusItem = {
 			type: StatusItemType.File, // ディレクトリではない
 			label: "invalid",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 		};
 
 		// 無効なアイテムでもエラーが適切に処理されることを確認
@@ -74,7 +74,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 		const invalidItem: StatusItem = {
 			type: StatusItemType.File,
 			label: "invalid",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 			// filePathが未定義
 		};
 
@@ -91,7 +91,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 		const invalidItem: StatusItem = {
 			type: StatusItemType.Unit,
 			label: "invalid",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 			// filePath, unitHashが未定義
 		};
 

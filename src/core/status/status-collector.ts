@@ -5,8 +5,7 @@ import type { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
-import type { Status, StatusItem } from "./status-item";
-import { StatusItemType } from "./status-item";
+import { Status, type StatusItem, StatusItemType } from "./status-item";
 
 /**
  * ファイルの翻訳状況を収集するクラス
@@ -44,7 +43,7 @@ export class StatusCollector {
 
 			for (const unit of markdown.units) {
 				// ソースファイルの場合は常に'source'ステータス
-				const unitStatus = isSource ? "source" : this.determineUnitStatus(unit);
+				const unitStatus = isSource ? Status.Source : this.determineUnitStatus(unit);
 				children.push({
 					type: StatusItemType.Unit,
 					label: unit.title,
@@ -60,14 +59,14 @@ export class StatusCollector {
 					filePath,
 					fileName,
 				});
-				if (unitStatus === "translated") {
+				if (unitStatus === Status.Translated) {
 					translatedUnits++;
 				}
 			}
 
 			// ファイル全体の状態を決定
 			// ソースファイルの場合は常に'source'ステータス
-			const status = isSource ? "source" : this.determineFileStatus(translatedUnits, totalUnits);
+			const status = isSource ? Status.Source : this.determineFileStatus(translatedUnits, totalUnits);
 
 			return {
 				type: StatusItemType.File,
@@ -89,7 +88,7 @@ export class StatusCollector {
 			return {
 				type: StatusItemType.File,
 				label: fileName,
-				status: "error",
+				status: Status.Error,
 				filePath,
 				fileName,
 				translatedUnits: 0,
@@ -108,19 +107,19 @@ export class StatusCollector {
 	 */
 	private determineUnitStatus(unit: MdaitUnit): Status {
 		if (!unit.marker) {
-			return "unknown";
+			return Status.Unknown;
 		}
 
 		if (unit.marker.need === "translate") {
-			return "needsTranslation";
+			return Status.NeedsTranslation;
 		}
 
 		if (unit.marker.need) {
 			// review, verify-deletion などその他のneedフラグ
-			return "needsTranslation";
+			return Status.NeedsTranslation;
 		}
 
-		return "translated";
+		return Status.Translated;
 	}
 
 	/**
@@ -128,14 +127,14 @@ export class StatusCollector {
 	 */
 	private determineFileStatus(translatedUnits: number, totalUnits: number): Status {
 		if (totalUnits === 0) {
-			return "unknown";
+			return Status.Unknown;
 		}
 
 		if (translatedUnits === totalUnits) {
-			return "translated";
+			return Status.Translated;
 		}
 
-		return "needsTranslation";
+		return Status.NeedsTranslation;
 	}
 
 	/**
@@ -173,7 +172,7 @@ export class StatusCollector {
 					fileStatuses.push({
 						type: StatusItemType.File,
 						label: path.basename(filePath),
-						status: "error",
+						status: Status.Error,
 						filePath,
 						fileName: path.basename(filePath),
 						hasParseError: true,

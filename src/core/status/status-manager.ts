@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
-import type { Status, StatusItem } from "./status-item";
+import { Status, type StatusItem } from "./status-item";
 import { StatusItemType } from "./status-item";
 
 /**
@@ -158,7 +158,7 @@ export class StatusManager {
 			const errorStatusItem: StatusItem = {
 				type: StatusItemType.File,
 				label: fileName,
-				status: "error",
+				status: Status.Error,
 				filePath,
 				fileName,
 				hasParseError: true,

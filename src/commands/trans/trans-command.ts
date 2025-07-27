@@ -7,6 +7,7 @@ import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusCollector } from "../../core/status/status-collector";
+import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { TranslationContext } from "./translation-context";
@@ -66,7 +67,7 @@ export async function transCommand(uri?: vscode.Uri) {
 					statusManager.updateUnitStatus(
 						unit.marker.hash,
 						{
-							status: "translated",
+							status: Status.Translated,
 							needFlag: undefined,
 							isTranslating: false,
 						},
@@ -79,7 +80,7 @@ export async function transCommand(uri?: vscode.Uri) {
 					statusManager.updateUnitStatus(
 						unit.marker.hash,
 						{
-							status: "error",
+							status: Status.Error,
 							isTranslating: false,
 							errorMessage: (error as Error).message,
 						},
@@ -231,7 +232,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 			statusManager.updateUnitStatus(
 				unitHash,
 				{
-					status: "translated",
+					status: Status.Translated,
 					needFlag: undefined,
 					isTranslating: false,
 				},
@@ -242,7 +243,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 			statusManager.updateUnitStatus(
 				unitHash,
 				{
-					status: "error",
+					status: Status.Error,
 					isTranslating: false,
 					errorMessage: (error as Error).message,
 				},

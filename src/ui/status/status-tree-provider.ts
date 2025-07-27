@@ -1,8 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { StatusItemType } from "../../core/status/status-item";
-import type { Status, StatusItem } from "../../core/status/status-item";
+import { Status, type StatusItem, StatusItemType } from "../../core/status/status-item";
 import { type IStatusTreeProvider, StatusManager } from "../../core/status/status-manager";
 
 /**
@@ -196,9 +195,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			const status = this.determineDirectoryStatus(files);
 
 			// sourceディレクトリの場合は翻訳ユニット数を表示しない
-			const label = status === "source" ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
+			const label = status === Status.Source ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
 			const tooltip =
-				status === "source"
+				status === Status.Source
 					? vscode.l10n.t("Source directory: {0}", dirName)
 					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
 
@@ -266,9 +265,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			const status = this.determineDirectoryStatus(files);
 
 			// sourceディレクトリの場合は翻訳ユニット数を表示しない
-			const label = status === "source" ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
+			const label = status === Status.Source ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
 			const tooltip =
-				status === "source"
+				status === Status.Source
 					? vscode.l10n.t("Source directory: {0}", dirName)
 					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
 
@@ -310,20 +309,20 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * ディレクトリの全体ステータスを決定する
 	 */
 	private determineDirectoryStatus(files: StatusItem[]): Status {
-		if (files.length === 0) return "unknown";
+		if (files.length === 0) return Status.Unknown;
 
-		const hasError = files.some((f) => f.status === "error");
-		if (hasError) return "error";
+		const hasError = files.some((f) => f.status === Status.Error);
+		if (hasError) return Status.Error;
 
-		const allSource = files.every((f) => f.status === "source");
-		if (allSource) return "source";
+		const allSource = files.every((f) => f.status === Status.Source);
+		if (allSource) return Status.Source;
 
 		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
 		const translatedUnits = files.reduce((sum, f) => sum + (f.translatedUnits ?? 0), 0);
 
-		if (totalUnits === 0) return "unknown";
-		if (translatedUnits === totalUnits) return "translated";
-		return "needsTranslation";
+		if (totalUnits === 0) return Status.Unknown;
+		if (translatedUnits === totalUnits) return Status.Translated;
+		return Status.NeedsTranslation;
 	}
 
 	/**
@@ -335,13 +334,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		}
 
 		switch (element.status) {
-			case "translated":
+			case Status.Translated:
 				return vscode.l10n.t("Translation completed");
-			case "needsTranslation":
+			case Status.NeedsTranslation:
 				return vscode.l10n.t("Translation needed");
-			case "source":
+			case Status.Source:
 				return vscode.l10n.t("Source document");
-			case "error":
+			case Status.Error:
 				return vscode.l10n.t("Error occurred");
 			default:
 				return vscode.l10n.t("Unknown status");
@@ -356,13 +355,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			return new vscode.ThemeIcon("sync~spin");
 		}
 		switch (status) {
-			case "translated":
+			case Status.Translated:
 				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
-			case "needsTranslation":
+			case Status.NeedsTranslation:
 				return new vscode.ThemeIcon("circle");
-			case "source":
+			case Status.Source:
 				return new vscode.ThemeIcon("symbol-constant", new vscode.ThemeColor("charts.blue"));
-			case "error":
+			case Status.Error:
 				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
 			default:
 				return new vscode.ThemeIcon("question", new vscode.ThemeColor("charts.gray"));

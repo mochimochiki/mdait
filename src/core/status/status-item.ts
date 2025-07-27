@@ -3,7 +3,13 @@ import type * as vscode from "vscode";
 /**
  * ステータス
  */
-export type Status = "translated" | "needsTranslation" | "error" | "unknown" | "source";
+export enum Status {
+	Translated = "translated",
+	NeedsTranslation = "needsTranslation",
+	Error = "error",
+	Unknown = "unknown",
+	Source = "source",
+}
 
 /**
  * ディレクトリ、ファイル、ユニットを区別する

@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { type StatusItem, StatusItemType } from "../../../core/status/status-item";
+import { Status, type StatusItem, StatusItemType } from "../../../core/status/status-item";
 import { StatusTreeProvider } from "../../../ui/status/status-tree-provider";
 
 suite("StatusTreeProvider 進行中アイコン表示テスト", () => {
@@ -10,7 +10,7 @@ suite("StatusTreeProvider 進行中アイコン表示テスト", () => {
 			type: StatusItemType.File,
 			label: "test.md",
 			filePath: "test.md",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 			isTranslating: true,
 		};
 		const treeItem = provider.getTreeItem(item);
@@ -27,7 +27,7 @@ suite("StatusTreeProvider 進行中アイコン表示テスト", () => {
 			type: StatusItemType.File,
 			label: "test.md",
 			filePath: "test.md",
-			status: "needsTranslation",
+			status: Status.NeedsTranslation,
 			isTranslating: false,
 		};
 		const treeItem = provider.getTreeItem(item);
