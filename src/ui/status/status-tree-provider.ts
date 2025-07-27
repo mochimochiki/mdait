@@ -46,7 +46,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 						this.statusItemTree = this.statusManager.getStatusItemTree();
 					} else {
 						// 初期化されていない場合は全体再構築
-						this.statusItemTree = await this.statusManager.buildAllStatusItem(this.configuration);
+						this.statusItemTree = await this.statusManager.buildAllStatusItem();
 					}
 				}
 				// ツリービューを全体更新
@@ -129,13 +129,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			try {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (workspaceFolder) {
-					await this.configuration.load();
 					// StatusManagerから最新のStatusItemを取得
 					if (this.statusManager.isInitialized()) {
 						this.statusItemTree = this.statusManager.getStatusItemTree();
 					} else {
 						// 初期化されていない場合は全体再構築
-						this.statusItemTree = await this.statusManager.buildAllStatusItem(this.configuration);
+						this.statusItemTree = await this.statusManager.buildAllStatusItem();
 					}
 				}
 				this.isStatusInitialized = true;

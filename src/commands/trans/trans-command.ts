@@ -1,3 +1,12 @@
+/**
+ * @file trans-command.ts
+ * @description
+ *   VSCode拡張機能用のMarkdown翻訳コマンドを提供するモジュール。
+ *   - ファイル全体またはユニット単位での翻訳処理を実装。
+ *   - 翻訳対象ファイルの検出、翻訳ペアの判定、翻訳サービスの呼び出し、状態管理(StatusManager)との連携を行う。
+ *   - Markdownユニットのパース・更新・保存、翻訳進捗やエラーの通知も含む。
+ * @module commands/trans/trans-command
+ */
 import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -14,6 +23,10 @@ import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
+/**
+ * Markdownファイルの翻訳コマンドを実行する
+ * @param uri 翻訳対象ファイルのURI（ファイルパス）
+ */
 export async function transCommand(uri?: vscode.Uri) {
 	const statusManager = StatusManager.getInstance();
 
@@ -96,7 +109,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		await fs.promises.writeFile(targetFilePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(targetFilePath, config);
+		await statusManager.updateFileStatus(targetFilePath);
 
 		// インデックスファイル更新は廃止（StatusItemベースの管理に移行）
 		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
@@ -257,7 +270,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		await fs.promises.writeFile(filePath, updatedContent, "utf-8");
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.updateFileStatus(filePath, config);
+		await statusManager.updateFileStatus(filePath);
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
 	} catch (error) {

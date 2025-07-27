@@ -21,6 +21,7 @@ export enum StatusItemType {
 }
 
 /**
+ * mdaitで管理するステータス項目1つを表す。
  * ディレクトリ・ファイル・ユニットを一元管理する統合型
  */
 export interface StatusItem {
@@ -35,7 +36,7 @@ export interface StatusItem {
 	label: string;
 
 	/**
-	 * 翻訳状態
+	 * ステータス
 	 */
 	status: Status;
 

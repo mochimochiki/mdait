@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../../config/configuration";
+import { Status } from "../../../core/status/status-item";
 import { StatusManager } from "../../../core/status/status-manager";
 
 suite("StatusTreeProvider Test Suite", () => {
@@ -20,7 +21,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.buildAllStatusItem(config);
+		const fileStatuses = await statusManager.buildAllStatusItem();
 
 		// 結果の検証
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -31,7 +32,7 @@ suite("StatusTreeProvider Test Suite", () => {
 			assert.ok(firstFile.filePath, "filePathが設定されている必要があります");
 			assert.ok(firstFile.fileName, "fileNameが設定されている必要があります");
 			assert.ok(
-				["translated", "needsTranslation", "error", "unknown"].includes(firstFile.status),
+				[Status.Translated, Status.NeedsTranslation, Status.Error, Status.Unknown].includes(firstFile.status),
 				"statusは有効な値である必要があります",
 			);
 			assert.ok(typeof firstFile.translatedUnits === "number", "translatedUnitsは数値である必要があります");
@@ -54,7 +55,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.buildAllStatusItem(config);
+		const fileStatuses = await statusManager.buildAllStatusItem();
 
 		// エラーにならずに空配列が返されることを確認
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -85,7 +86,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// rebuildStatusItemAll実行後は初期化済み
-		await statusManager.buildAllStatusItem(config);
+		await statusManager.buildAllStatusItem();
 		const afterRebuild = statusManager.isInitialized();
 
 		assert.strictEqual(afterRebuild, true, "rebuildStatusItemAll実行後は初期化済みになる必要があります");
@@ -104,7 +105,7 @@ suite("StatusTreeProvider Test Suite", () => {
 			},
 		];
 
-		await statusManager.buildAllStatusItem(config);
+		await statusManager.buildAllStatusItem();
 
 		// 存在しないハッシュでの検索
 		const notFoundUnits = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
@@ -125,7 +126,7 @@ suite("StatusTreeProvider Test Suite", () => {
 			},
 		];
 
-		await statusManager.buildAllStatusItem(config);
+		await statusManager.buildAllStatusItem();
 
 		const progress = statusManager.aggregateProgress();
 

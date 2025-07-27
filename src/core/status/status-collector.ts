@@ -23,6 +23,90 @@ export class StatusCollector {
 	}
 
 	/**
+	 * [重い処理]
+	 * 設定ファイル（config）に基づき、対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
+	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
+	 */
+	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
+		const statusItems: StatusItem[] = [];
+
+		try {
+			// 重複のないディレクトリリストを取得
+			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(config);
+
+			// sourceディレクトリからsource情報を収集
+			for (const sourceDir of sourceDirs) {
+				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config);
+				statusItems.push(...sourceDirItems);
+			}
+
+			// targetディレクトリから翻訳状況を収集
+			for (const targetDir of targetDirs) {
+				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
+				statusItems.push(...targetDirItems);
+			}
+		} catch (error) {
+			console.error("Error collecting file statuses:", error);
+			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));
+		}
+
+		// fileNameで昇順ソート
+		statusItems.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
+		return statusItems;
+	}
+
+	/**
+	 * 指定ファイルのStatusItemを再パース・再構築して新しい配列を返す
+	 *
+	 * ファイル監視やユーザー操作により特定のファイルが変更された場合に、
+	 * 全体を再構築せずに該当ファイルのみを再パース・再構築することで
+	 * パフォーマンスを向上させる。
+	 *
+	 * @param filePath 再構築対象のファイルパス
+	 * @param existingStatusItems 既存のStatusItem配列
+	 * @param config 設定情報（ソースファイル判定に使用）
+	 * @returns 指定ファイルが再構築（または追加）された新しいStatusItem配列
+	 *
+	 * 処理内容:
+	 * - 新規ファイル: 配列に新しいStatusItemを追加
+	 * - 既存ファイル: 該当StatusItemのみを再パース・置換
+	 * - エラー発生: 既存配列をそのまま返す（安全な fallback）
+	 *
+	 * 注意: このメソッドはimmutableな操作で、元の配列は変更せず新しい配列を返します
+	 */
+	public async retrieveUpdatedStatus(
+		filePath: string,
+		existingStatusItems: StatusItem[],
+		config: Configuration,
+	): Promise<StatusItem[]> {
+		console.log(`StatusCollector: retrieveUpdatedStatus() - ${path.basename(filePath)}`);
+
+		try {
+			// 該当ファイルのStatusItemを検索（filePathで完全一致）
+			const existingItemIndex = existingStatusItems.findIndex(
+				(item) => item.type === StatusItemType.File && item.filePath === filePath,
+			);
+
+			if (existingItemIndex === -1) {
+				// 新規ファイル: 新しいStatusItemを作成して配列に追加
+				const newFileStatus = await this.retrieveFileStatus(filePath, config);
+				return [...existingStatusItems, newFileStatus];
+			}
+
+			// 既存ファイル: 該当StatusItemのみを再パース・更新
+			const updatedFileStatus = await this.retrieveFileStatus(filePath, config);
+			const updatedStatusItems = [...existingStatusItems];
+			updatedStatusItems[existingItemIndex] = updatedFileStatus;
+
+			return updatedStatusItems;
+		} catch (error) {
+			console.error(`StatusCollector: retrieveUpdatedStatus() - エラー: ${filePath}`, error);
+			// エラー時は既存配列をそのまま返す（安全な fallback）
+			return existingStatusItems;
+		}
+	}
+
+	/**
 	 * 単一ファイルの翻訳状況を収集する
 	 */
 	public async retrieveFileStatus(filePath: string, config: Configuration): Promise<StatusItem> {
@@ -204,98 +288,6 @@ export class StatusCollector {
 		} catch (error) {
 			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);
 			return [];
-		}
-	}
-
-	/**
-	 * タイトル文字列から見出しレベルを抽出する
-	 */
-	private extractHeadingLevel(title: string): number {
-		const match = title.match(/^(#{1,6})\s/);
-		return match ? match[1].length : 0;
-	}
-
-	/**
-	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築する
-	 * パフォーマンス負荷が高いため、通常は差分更新を使用することを推奨
-	 * 初回実行時や、保険的な再構築が必要な場合のみ使用
-	 */
-	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
-		const statusItems: StatusItem[] = [];
-
-		try {
-			// 重複のないディレクトリリストを取得
-			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(config);
-
-			// sourceディレクトリからsource情報を収集
-			for (const sourceDir of sourceDirs) {
-				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, config);
-				statusItems.push(...sourceDirItems);
-			}
-
-			// targetディレクトリから翻訳状況を収集
-			for (const targetDir of targetDirs) {
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, config);
-				statusItems.push(...targetDirItems);
-			}
-		} catch (error) {
-			console.error("Error collecting file statuses:", error);
-			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));
-		}
-
-		// fileNameで昇順ソート
-		statusItems.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
-		return statusItems;
-	}
-
-	/**
-	 * 指定ファイルのStatusItemを再パース・再構築して新しい配列を返す
-	 *
-	 * ファイル監視やユーザー操作により特定のファイルが変更された場合に、
-	 * 全体を再構築せずに該当ファイルのみを再パース・再構築することで
-	 * パフォーマンスを向上させる。
-	 *
-	 * @param filePath 再構築対象のファイルパス
-	 * @param existingStatusItems 既存のStatusItem配列
-	 * @param config 設定情報（ソースファイル判定に使用）
-	 * @returns 指定ファイルが再構築（または追加）された新しいStatusItem配列
-	 *
-	 * 処理内容:
-	 * - 新規ファイル: 配列に新しいStatusItemを追加
-	 * - 既存ファイル: 該当StatusItemのみを再パース・置換
-	 * - エラー発生: 既存配列をそのまま返す（安全な fallback）
-	 *
-	 * 注意: このメソッドはimmutableな操作で、元の配列は変更せず新しい配列を返します
-	 */
-	public async retrieveUpdatedStatus(
-		filePath: string,
-		existingStatusItems: StatusItem[],
-		config: Configuration,
-	): Promise<StatusItem[]> {
-		console.log(`StatusCollector: retrieveUpdatedStatus() - ${path.basename(filePath)}`);
-
-		try {
-			// 該当ファイルのStatusItemを検索（filePathで完全一致）
-			const existingItemIndex = existingStatusItems.findIndex(
-				(item) => item.type === StatusItemType.File && item.filePath === filePath,
-			);
-
-			if (existingItemIndex === -1) {
-				// 新規ファイル: 新しいStatusItemを作成して配列に追加
-				const newFileStatus = await this.retrieveFileStatus(filePath, config);
-				return [...existingStatusItems, newFileStatus];
-			}
-
-			// 既存ファイル: 該当StatusItemのみを再パース・更新
-			const updatedFileStatus = await this.retrieveFileStatus(filePath, config);
-			const updatedStatusItems = [...existingStatusItems];
-			updatedStatusItems[existingItemIndex] = updatedFileStatus;
-
-			return updatedStatusItems;
-		} catch (error) {
-			console.error(`StatusCollector: retrieveUpdatedStatus() - エラー: ${filePath}`, error);
-			// エラー時は既存配列をそのまま返す（安全な fallback）
-			return existingStatusItems;
 		}
 	}
 }

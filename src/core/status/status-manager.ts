@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { Configuration } from "../../config/configuration";
+import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
 import { Status, type StatusItem } from "./status-item";
 import { StatusItemType } from "./status-item";
@@ -31,6 +31,9 @@ export class StatusManager {
 	// StatusCollectorインスタンス（ファイル状況の収集・更新を担当）
 	private statusCollector: StatusCollector;
 
+	// 設定情報
+	private config: Configuration;
+
 	// 初期化済みフラグ
 	private initialized = false;
 
@@ -40,6 +43,7 @@ export class StatusManager {
 	 */
 	private constructor() {
 		this.statusCollector = new StatusCollector();
+		this.config = new Configuration();
 	}
 
 	/**
@@ -64,13 +68,13 @@ export class StatusManager {
 	 * 【重い処理】全ファイルをパースしてStatusItemツリーを再構築
 	 * パフォーマンス負荷が高いため、初回実行時や保険的な再構築が必要な場合のみ使用
 	 */
-	public async buildAllStatusItem(config: Configuration): Promise<StatusItem[]> {
+	public async buildAllStatusItem(): Promise<StatusItem[]> {
 		console.log("StatusManager: rebuildStatusItemAll() - 全ファイルパースを開始（重い処理）");
 		const startTime = performance.now();
 
 		try {
-			this.statusItemTree = await this.statusCollector.buildAllStatusItem(config);
-			this.initialized = true;
+			this.initialize();
+			this.statusItemTree = await this.statusCollector.buildAllStatusItem(this.config);
 
 			// StatusTreeProviderに全体更新を通知
 			if (this.statusTreeProvider) {
@@ -88,15 +92,18 @@ export class StatusManager {
 	}
 
 	/**
-	 * ファイル単位でStatusItemを更新
-	 * （syncコマンドで利用）
+	 * 指定ファイルのステータスを更新
 	 */
-	public async updateFileStatus(filePath: string, config: Configuration): Promise<void> {
+	public async updateFileStatus(filePath: string): Promise<void> {
 		console.log(`StatusManager: updateFileStatus() - ${filePath}`);
 
 		try {
 			// 該当ファイルのStatusItemを再構築
-			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(filePath, this.statusItemTree, config);
+			this.statusItemTree = await this.statusCollector.retrieveUpdatedStatus(
+				filePath,
+				this.statusItemTree,
+				this.config,
+			);
 
 			// StatusTreeProviderに効率的な更新を通知
 			if (this.statusTreeProvider) {
@@ -243,6 +250,13 @@ export class StatusManager {
 
 	// ========== 内部ユーティリティメソッド ==========
 
+	private async initialize() {
+		// 設定を読み込む
+		this.config = new Configuration();
+		await this.config.load();
+		this.initialized = true;
+	}
+
 	private findUnitsByFromHashInTree(items: StatusItem[], fromHash: string): StatusItem[] {
 		const results: StatusItem[] = [];
 
@@ -308,9 +322,9 @@ export class StatusManager {
 		for (const item of items) {
 			if (item.type === StatusItemType.Unit) {
 				totalUnits++;
-				if (item.status === "translated") {
+				if (item.status === Status.Translated) {
 					translatedUnits++;
-				} else if (item.status === "error") {
+				} else if (item.status === Status.Error) {
 					errorUnits++;
 				}
 			}
@@ -362,7 +376,7 @@ export class StatusManager {
 	 * @example
 	 * // 特定ファイル内のユニットのみ翻訳完了として更新
 	 * updateStatusItemInTree(statusItems, "3f7c8a1b", {
-	 *   status: "translated",
+	 *   status: Status.Translated,
 	 *   needFlag: undefined
 	 * }, "/path/to/file.md");
 	 */
