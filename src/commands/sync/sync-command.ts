@@ -19,9 +19,8 @@ export async function syncCommand(): Promise<void> {
 	const statusManager = StatusManager.getInstance();
 
 	try {
-		// 設定を読み込む
-		const config = new Configuration();
-		await config.load();
+		// 設定を取得
+		const config = Configuration.getInstance();
 
 		// 設定を検証
 		const validationError = config.validate();

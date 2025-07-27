@@ -9,7 +9,14 @@ suite("Configuration", () => {
 	let config: Configuration;
 
 	setup(() => {
-		config = new Configuration();
+		// テスト前にシングルトンインスタンスをリセット
+		Configuration.dispose();
+		config = Configuration.getInstance();
+	});
+
+	teardown(() => {
+		// テスト後にシングルトンインスタンスをリセット
+		Configuration.dispose();
 	});
 
 	suite("getTransPairForFile", () => {

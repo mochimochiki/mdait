@@ -12,6 +12,9 @@ suite("TransCommand", () => {
 	let tmpDir: string;
 
 	setup(async () => {
+		// シングルトンインスタンスをリセット
+		Configuration.dispose();
+
 		// テストディレクトリの作成
 		tmpDir = join(__dirname, "..", "..", "workspace", "trans-test");
 		if (fs.existsSync(tmpDir)) {
@@ -21,6 +24,9 @@ suite("TransCommand", () => {
 	});
 
 	teardown(() => {
+		// シングルトンインスタンスをリセット
+		Configuration.dispose();
+
 		// テストディレクトリのクリーンアップ
 		if (fs.existsSync(tmpDir)) {
 			fs.rmSync(tmpDir, { recursive: true });
@@ -53,8 +59,7 @@ suite("TransCommand", () => {
 		fs.writeFileSync(testFile, testContent, "utf-8");
 
 		// Markdownのパースとユニット抽出
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
@@ -83,8 +88,7 @@ suite("TransCommand", () => {
 			"これは翻訳されるべき日本語コンテンツです。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを取得
@@ -109,8 +113,7 @@ suite("TransCommand", () => {
 			"これは翻訳対象のコンテンツです。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを取得
@@ -152,8 +155,7 @@ suite("TransCommand", () => {
 			"こちらも翻訳不要です。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
@@ -187,8 +189,7 @@ suite("TransCommand", () => {
 			"4番目のコンテンツ。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
@@ -216,8 +217,7 @@ suite("TransCommand", () => {
 			"翻訳前のコンテンツです。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳処理のシミュレート
@@ -254,8 +254,7 @@ suite("TransCommand", () => {
 		}
 
 		const testContent = ["<!-- mdait abc12345 need:translate -->", "# 見出し", "", "これはコンテンツです。"].join("\n");
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 		const unit = markdown.units[0];
 		const mockTranslator = new MockTranslator();
@@ -286,8 +285,7 @@ suite("TransCommand", () => {
 			"参照先が存在しない場合のテスト。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを取得
@@ -312,8 +310,7 @@ suite("TransCommand", () => {
 			.flat()
 			.join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを抽出
@@ -334,8 +331,7 @@ suite("TransCommand", () => {
 	test("空ファイル処理：空のMarkdownファイルが正しく処理されること", async () => {
 		const testContent = "";
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを抽出
@@ -359,8 +355,7 @@ suite("TransCommand", () => {
 			"これは翻訳対象のコンテンツです。",
 		].join("\n");
 
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳処理のシミュレート

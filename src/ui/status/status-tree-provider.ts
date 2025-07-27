@@ -23,7 +23,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
-		this.configuration = new Configuration();
+		this.configuration = Configuration.getInstance();
 	}
 
 	/**
@@ -33,8 +33,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	public async refresh(item?: StatusItem): Promise<void> {
 		try {
 			if (!item) {
-				// 設定を読み込み
-				await this.configuration.load();
 				// 設定が有効かチェック
 				const validationError = this.configuration.validate();
 				if (validationError) {
@@ -128,7 +126,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			this.isStatusLoading = true;
 			try {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-				await this.configuration.load();
 				if (workspaceFolder) {
 					// StatusManagerから最新のStatusItemを取得
 					if (this.statusManager.isInitialized()) {

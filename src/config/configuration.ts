@@ -28,9 +28,12 @@ export interface TransPair {
 }
 
 /**
- * 翻訳拡張機能の設定を管理するクラス
+ * 翻訳拡張機能の設定を管理するクラス（シングルトンパターン）
  */
 export class Configuration {
+	private static instance: Configuration | undefined;
+	private configurationChangeListener: vscode.Disposable | undefined;
+
 	/**
 	 * 翻訳ペア設定
 	 */
@@ -62,9 +65,61 @@ export class Configuration {
 	};
 
 	/**
+	 * プライベートコンストラクタ（シングルトンパターン）
+	 */
+	private constructor() {
+		this.setupConfigurationWatcher();
+	}
+
+	/**
+	 * Configurationのシングルトンインスタンスを取得する
+	 * @returns Configurationインスタンス
+	 */
+	public static getInstance(): Configuration {
+		if (!Configuration.instance) {
+			Configuration.instance = new Configuration();
+			Configuration.initialize();
+		}
+		return Configuration.instance;
+	}
+
+	/**
+	 * シングルトンインスタンスを破棄する（主にテスト用）
+	 */
+	public static dispose(): void {
+		if (Configuration.instance?.configurationChangeListener) {
+			Configuration.instance.configurationChangeListener.dispose();
+		}
+		Configuration.instance = undefined;
+	}
+
+	/**
+	 * 設定変更の監視を設定する
+	 */
+	private setupConfigurationWatcher(): void {
+		this.configurationChangeListener = vscode.workspace.onDidChangeConfiguration((event) => {
+			// mdait関連の設定が変更された場合のみリロード
+			if (event.affectsConfiguration("mdait")) {
+				this.load().catch((error) => {
+					console.error("Failed to reload configuration:", error);
+				});
+			}
+		});
+	}
+
+	/**
+	 * 初期化処理（設定のロードと監視の開始）
+	 */
+	private static async initialize(): Promise<Configuration> {
+		const instance = Configuration.getInstance();
+		await instance.load();
+		return instance;
+	}
+
+	/**
 	 * 設定を読み込む
 	 */
-	public async load(): Promise<void> {
+	private async load(): Promise<void> {
 		const config = vscode.workspace.getConfiguration("mdait");
 		// 翻訳ペア設定の読み込み
 		this.transPairs = config.get<TransPair[]>("transPairs") || [];

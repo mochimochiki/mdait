@@ -37,8 +37,7 @@ export class AIServiceBuilder {
 	 * VSCodeの設定からAIプロバイダ設定を読み込みます。
 	 */
 	private async loadConfiguration(): Promise<TransConfig> {
-		const config = new Configuration();
-		await config.load();
+		const config = Configuration.getInstance();
 
 		return config.trans;
 	}

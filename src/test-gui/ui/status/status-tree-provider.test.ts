@@ -8,7 +8,8 @@ import { StatusManager } from "../../../core/status/status-manager";
 suite("StatusTreeProvider Test Suite", () => {
 	test("StatusManagerが正しくファイル状況を収集できる", async () => {
 		const statusManager = StatusManager.getInstance();
-		const config = new Configuration();
+		Configuration.dispose();
+		const config = Configuration.getInstance();
 
 		// テスト用の設定を作成
 		config.transPairs = [
@@ -42,7 +43,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 	test("StatusManagerが存在しないディレクトリを適切に処理する", async () => {
 		const statusManager = StatusManager.getInstance();
-		const config = new Configuration();
+		Configuration.dispose();
+		const config = Configuration.getInstance();
 
 		// 存在しないディレクトリを設定
 		config.transPairs = [
@@ -75,7 +77,8 @@ suite("StatusTreeProvider Test Suite", () => {
 		// 初期状態では未初期化
 		const initialState = statusManager.isInitialized();
 
-		const config = new Configuration();
+		Configuration.dispose();
+		const config = Configuration.getInstance();
 		config.transPairs = [
 			{
 				sourceLang: "ja",
@@ -94,7 +97,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 	test("StatusManagerのfindUnitsByFromHashが正しく動作する", async () => {
 		const statusManager = StatusManager.getInstance();
-		const config = new Configuration();
+		Configuration.dispose();
+		const config = Configuration.getInstance();
 
 		config.transPairs = [
 			{
@@ -115,7 +119,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 	test("StatusManagerの進捗集計機能が正しく動作する", async () => {
 		const statusManager = StatusManager.getInstance();
-		const config = new Configuration();
+		Configuration.dispose();
+		const config = Configuration.getInstance();
 
 		config.transPairs = [
 			{

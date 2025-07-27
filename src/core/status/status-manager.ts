@@ -43,7 +43,7 @@ export class StatusManager {
 	 */
 	private constructor() {
 		this.statusCollector = new StatusCollector();
-		this.config = new Configuration();
+		this.config = Configuration.getInstance();
 	}
 
 	/**
@@ -247,9 +247,8 @@ export class StatusManager {
 	// ========== 内部ユーティリティメソッド ==========
 
 	private async initialize() {
-		// 設定を読み込む
-		this.config = new Configuration();
-		await this.config.load();
+		// 設定を取得
+		this.config = Configuration.getInstance();
 		this.initialized = true;
 	}
 

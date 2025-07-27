@@ -46,7 +46,7 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @returns パースされたMarkdownユニットの配列
 	 */
 	parse(markdown: string, config?: Configuration): Markdown {
-		const defaultConfig = new Configuration();
+		const defaultConfig = Configuration.getInstance();
 		// config
 		const autoMarkerLevel = config?.sync.autoMarkerLevel ?? defaultConfig.sync.autoMarkerLevel;
 
