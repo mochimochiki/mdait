@@ -22,8 +22,8 @@ export class StatusManager {
 	// Singletonインスタンス
 	private static instance: StatusManager;
 
-	// 現在のStatusItemツリー
-	private statusItemTree: StatusItem[] = [];
+	// Statusツリー内のファイルステータス一覧
+	private treeFileStatusList: StatusItem[] = [];
 
 	// UIのStatusTreeProvider
 	private statusTreeProvider?: IStatusTreeProvider;
@@ -77,17 +77,17 @@ export class StatusManager {
 
 		try {
 			this.initialize();
-			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
+			this.treeFileStatusList = await this.statusCollector.buildAllStatusItem();
 
 			// StatusTreeProviderに全体更新を通知
 			if (this.statusTreeProvider) {
-				this.statusTreeProvider.setFileStatuses(this.statusItemTree);
+				this.statusTreeProvider.setFileStatuses(this.treeFileStatusList);
 				this.statusTreeProvider.refreshFromStatusManager();
 			}
 
 			const endTime = performance.now();
 			console.log(`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`);
-			return this.statusItemTree;
+			return this.treeFileStatusList;
 		} catch (error) {
 			console.error("StatusManager: buildAllStatusItem() - error", error);
 			throw error;
@@ -177,19 +177,19 @@ export class StatusManager {
 			};
 
 			// 既存のStatusItemを更新または追加
-			const existingIndex = this.statusItemTree.findIndex(
+			const existingIndex = this.treeFileStatusList.findIndex(
 				(item) => item.type === StatusItemType.File && item.filePath === filePath,
 			);
 
 			if (existingIndex >= 0) {
-				this.statusItemTree[existingIndex] = errorStatusItem;
+				this.treeFileStatusList[existingIndex] = errorStatusItem;
 			} else {
-				this.statusItemTree.push(errorStatusItem);
+				this.treeFileStatusList.push(errorStatusItem);
 			}
 
 			// StatusTreeProviderに更新を通知
 			if (this.statusTreeProvider) {
-				this.statusTreeProvider.setFileStatuses(this.statusItemTree);
+				this.statusTreeProvider.setFileStatuses(this.treeFileStatusList);
 				this.statusTreeProvider.refreshFromStatusManager();
 			}
 		} catch (updateError) {
@@ -201,35 +201,35 @@ export class StatusManager {
 	 * 指定ファイル/ディレクトリパスのStatusItemを取得
 	 */
 	public getStatusItem(path: string): StatusItem | undefined {
-		return this.getStatusItemInTree(this.statusItemTree, path);
+		return this.getStatusItemInTree(this.treeFileStatusList, path);
 	}
 
 	/**
 	 * 指定ハッシュのユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
-		return this.findFirstUnitByHash(this.statusItemTree, hash, path);
+		return this.findFirstUnitByHash(this.treeFileStatusList, hash, path);
 	}
 
 	/**
 	 * 指定fromHashに対応するユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
-		return this.findFirstUnitByFromHash(this.statusItemTree, fromHash, path);
+		return this.findFirstUnitByFromHash(this.treeFileStatusList, fromHash, path);
 	}
 
 	/**
 	 * 指定ファイルパス内の未翻訳ユニット（needFlag付き）を取得
 	 */
 	public getUntranslatedUnits(filePath: string): StatusItem[] {
-		return this.getUntranslatedUnitsInTree(this.statusItemTree, filePath);
+		return this.getUntranslatedUnitsInTree(this.treeFileStatusList, filePath);
 	}
 
 	/**
 	 * StatusItemツリーを取得
 	 */
-	public getStatusItemTree(): StatusItem[] {
-		return this.statusItemTree;
+	public getTreeFileStatusList(): StatusItem[] {
+		return this.treeFileStatusList;
 	}
 
 	/**
@@ -240,7 +240,7 @@ export class StatusManager {
 		translatedUnits: number;
 		errorUnits: number;
 	} {
-		return this.aggregateProgressInTree(this.statusItemTree);
+		return this.aggregateProgressInTree(this.treeFileStatusList);
 	}
 
 	/**

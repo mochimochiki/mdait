@@ -15,7 +15,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
-	private statusItemTree: StatusItem[] = [];
+	private treeFileStatusList: StatusItem[] = [];
 
 	// ステータス初期化済みフラグと排他制御
 	private isStatusInitialized = false;
@@ -30,29 +30,24 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * ツリーデータをリフレッシュする
 	 * @param item 更新したいStatusItem（省略時は全体）
 	 */
-	public async refresh(item?: StatusItem): Promise<void> {
+	public async refreshTree(): Promise<void> {
 		try {
-			if (!item) {
-				// 設定が有効かチェック
-				const validationError = this.configuration.validate();
-				if (validationError) {
-					vscode.window.showWarningMessage(validationError);
-					this.statusItemTree = [];
-				} else {
-					// StatusManagerから最新のStatusItemを取得
-					if (this.statusManager.isInitialized()) {
-						this.statusItemTree = this.statusManager.getStatusItemTree();
-					} else {
-						// 初期化されていない場合は全体再構築
-						this.statusItemTree = await this.statusManager.buildAllStatusItem();
-					}
-				}
-				// ツリービューを全体更新
-				this._onDidChangeTreeData.fire(undefined);
+			// 設定が有効かチェック
+			const validationError = this.configuration.validate();
+			if (validationError) {
+				vscode.window.showWarningMessage(validationError);
+				this.treeFileStatusList = [];
 			} else {
-				// 指定ノードのみ更新
-				this._onDidChangeTreeData.fire(item);
+				// StatusManagerから最新のStatusItemを取得
+				if (this.statusManager.isInitialized()) {
+					this.treeFileStatusList = this.statusManager.getTreeFileStatusList();
+				} else {
+					// 初期化されていない場合は全体再構築
+					this.treeFileStatusList = await this.statusManager.buildAllStatusItem();
+				}
 			}
+			// ツリービューを全体更新
+			this._onDidChangeTreeData.fire(undefined);
 		} catch (error) {
 			console.error("Error refreshing status tree:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error refreshing status tree: {0}", (error as Error).message));
@@ -130,10 +125,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 				if (workspaceFolder) {
 					// StatusManagerから最新のStatusItemを取得
 					if (this.statusManager.isInitialized()) {
-						this.statusItemTree = this.statusManager.getStatusItemTree();
+						this.treeFileStatusList = this.statusManager.getTreeFileStatusList();
 					} else {
 						// 初期化されていない場合は全体再構築
-						this.statusItemTree = await this.statusManager.buildAllStatusItem();
+						this.treeFileStatusList = await this.statusManager.buildAllStatusItem();
 					}
 				}
 				this.isStatusInitialized = true;
@@ -171,7 +166,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
 		]);
 		// ファイルをディレクトリごとにグループ化（sourceDir/targetDir一致のみ）
-		for (const fileStatus of this.statusItemTree) {
+		for (const fileStatus of this.treeFileStatusList) {
 			const dirPath = path.dirname(fileStatus.filePath ?? "");
 			if (!allDirsAbs.includes(dirPath)) {
 				continue;
@@ -225,7 +220,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		const subDirSet = new Set<string>();
 
 		// 指定ディレクトリ配下のファイルを抽出
-		const filesInDir = this.statusItemTree.filter((fileStatus) => {
+		const filesInDir = this.treeFileStatusList.filter((fileStatus) => {
 			const dir = path.dirname(fileStatus.filePath ?? "");
 			// directoryPathが未指定の場合はルート直下
 			if (!directoryPath) {
@@ -243,7 +238,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		}
 
 		// サブディレクトリを抽出
-		for (const fileStatus of this.statusItemTree) {
+		for (const fileStatus of this.treeFileStatusList) {
 			const dir = path.dirname(fileStatus.filePath ?? "");
 			const parentDir = directoryPath ?? "";
 			// サブディレクトリかどうか判定
@@ -260,7 +255,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 		// サブディレクトリStatusItemを追加
 		for (const subDirPath of subDirSet) {
-			const files = this.statusItemTree.filter((fs) => path.dirname(fs.filePath ?? "").startsWith(subDirPath));
+			const files = this.treeFileStatusList.filter((fs) => path.dirname(fs.filePath ?? "").startsWith(subDirPath));
 			const dirName = path.basename(subDirPath) || subDirPath;
 			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
 			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
@@ -303,7 +298,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			return [];
 		}
 
-		const fileStatus = this.statusItemTree.find((fs) => fs.filePath === filePath);
+		const fileStatus = this.treeFileStatusList.find((fs) => fs.filePath === filePath);
 		if (!fileStatus || !fileStatus.children) {
 			return [];
 		}
@@ -379,7 +374,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * StatusManagerによる一元管理のため
 	 */
 	public setFileStatuses(fileStatuses: StatusItem[]): void {
-		this.statusItemTree = fileStatuses;
+		this.treeFileStatusList = fileStatuses;
 		this.isStatusInitialized = true;
 	}
 
@@ -388,16 +383,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * パフォーマンス改善とUI競合回避のため
 	 */
 	public updateFileStatus(filePath: string, updatedFileItem: StatusItem): void {
-		const existingIndex = this.statusItemTree.findIndex(
+		const existingIndex = this.treeFileStatusList.findIndex(
 			(item) => item.type === StatusItemType.File && item.filePath === filePath,
 		);
 
 		if (existingIndex >= 0) {
 			// 既存ファイルアイテムを更新
-			this.statusItemTree[existingIndex] = updatedFileItem;
+			this.treeFileStatusList[existingIndex] = updatedFileItem;
 		} else {
 			// 新規ファイルアイテムを追加
-			this.statusItemTree.push(updatedFileItem);
+			this.treeFileStatusList.push(updatedFileItem);
 		}
 
 		// 該当ファイルアイテムのみツリー更新
@@ -413,7 +408,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		let parentFile: StatusItem | undefined;
 
 		// ファイル内のユニットを検索・更新
-		for (const fileItem of this.statusItemTree) {
+		for (const fileItem of this.treeFileStatusList) {
 			if (fileItem.type === StatusItemType.File) {
 				// ファイルパス制約がある場合はチェック
 				if (filePath && fileItem.filePath !== filePath) {
@@ -503,7 +498,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		const directoryPath = path.dirname(filePath);
 
 		// 該当ディレクトリ配下のファイルを取得
-		const filesInDir = this.statusItemTree.filter(
+		const filesInDir = this.treeFileStatusList.filter(
 			(item) => item.type === StatusItemType.File && item.filePath && path.dirname(item.filePath) === directoryPath,
 		);
 

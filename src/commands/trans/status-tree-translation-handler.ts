@@ -23,7 +23,7 @@ export class StatusTreeTranslationHandler {
 	 */
 	private async refreshStatusTree(): Promise<void> {
 		if (this.statusTreeProvider) {
-			await this.statusTreeProvider.refresh();
+			await this.statusTreeProvider.refreshTree();
 		}
 	}
 
