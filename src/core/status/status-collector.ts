@@ -49,22 +49,21 @@ export class StatusCollector {
 		try {
 			// 重複のないディレクトリリストを取得
 			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(this.config);
+			const files: StatusItem[] = [];
 
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
 				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
-				for (const item of sourceDirItems) {
-					statusItemTree.addOrUpdateFile(item);
-				}
+				files.push(...sourceDirItems);
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
 				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
-				for (const item of targetDirItems) {
-					statusItemTree.addOrUpdateFile(item);
-				}
+				files.push(...targetDirItems);
 			}
+
+			statusItemTree.build(files);
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));

@@ -75,19 +75,6 @@ export async function transCommand(uri?: vscode.Uri) {
 
 			try {
 				await translateUnit(unit, translator, sourceLang, targetLang, markdown);
-
-				// 翻訳完了をStatusManagerに通知
-				if (unit.marker?.hash) {
-					statusManager.changeUnitStatus(
-						unit.marker.hash,
-						{
-							status: Status.Translated,
-							needFlag: undefined,
-							isTranslating: false,
-						},
-						targetFilePath,
-					);
-				}
 			} catch (error) {
 				// 翻訳エラーをStatusManagerに通知
 				if (unit.marker?.hash) {

@@ -17,7 +17,7 @@ classDiagram
         +getUnit(filePath, unitHash)
         +updateFile(filePath, StatusItem)
         +updateUnit(filePath, unitHash, Partial<StatusItem>)
-        +listFilesInDirectory(dirPath)
+        +getFilesInDirectory(dirPath)
         +listUnitsInFile(filePath)
     }
     StatusManager --> StatusItemTree
@@ -27,7 +27,7 @@ classDiagram
 ## 3. 主要関数・モジュール
 
 - StatusItemTree: 状態管理用ツリーコレクション（Map/ツリー構造）
-  - getFile, getDirectory, getUnit, updateFile, updateUnit, listFilesInDirectory, listUnitsInFile
+  - getFile, getDirectory, getUnit, updateFile, updateUnit, getFilesInDirectory, listUnitsInFile
 - StatusManager: ツリーコレクションの生成・管理・API提供
 - StatusTreeProvider: UI表示・イベント処理
 

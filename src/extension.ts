@@ -19,9 +19,6 @@ export function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: false,
 	});
 
-	// StatusManagerにStatusTreeProviderを設定
-	statusManager.setStatusTreeProvider(statusTreeProvider);
-
 	// sync command
 	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
 
@@ -133,4 +130,9 @@ export function activate(context: vscode.ExtensionContext) {
 		jumpToUnitDisposable,
 		jumpToSourceDisposable,
 	);
+
+	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる
+	context.subscriptions.push({
+		dispose: () => statusManager.dispose(),
+	});
 }

@@ -2,31 +2,23 @@ import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
 import { Status, type StatusItem } from "./status-item";
-import { StatusItemType } from "./status-item";
+import type { StatusItemType } from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
-
-/**
- * StatusTreeProviderの最小限のインターフェース（StatusManagerとの連携用）
- */
-export interface IStatusTreeProvider {
-	statusTreeChanged(): void;
-	updateFileStatus(filePath: string, fileStatusItem: StatusItem): void;
-	updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void;
-}
 
 /**
  * statusItemTreeに全StatusItemをツリーとして保持し、状態管理を行います。
  * 全コマンド・UIから同一インスタンスにアクセスし、ステータスの管理およびUIの更新を担当します。
  */
 export class StatusManager {
+	// Event
+	private readonly _onStatusTreeChanged = new vscode.EventEmitter<StatusItem | undefined>();
+	public readonly onStatusTreeChanged: vscode.Event<StatusItem | undefined> = this._onStatusTreeChanged.event;
+
 	// Singletonインスタンス
 	private static instance: StatusManager;
 
 	// StatusItemTree（ファーストクラスコレクション）
-	private statusItemTree: StatusItemTree = new StatusItemTree();
-
-	// UIのStatusTreeProvider
-	private statusTreeProvider?: IStatusTreeProvider;
+	private statusItemTree: StatusItemTree;
 
 	// StatusCollectorインスタンス（ファイル状況の収集・更新を担当）
 	private statusCollector: StatusCollector;
@@ -43,6 +35,7 @@ export class StatusManager {
 	private constructor() {
 		this.statusCollector = new StatusCollector();
 		this.config = Configuration.getInstance();
+		this.statusItemTree = new StatusItemTree();
 	}
 
 	/**
@@ -54,15 +47,6 @@ export class StatusManager {
 			StatusManager.instance = new StatusManager();
 		}
 		return StatusManager.instance;
-	}
-
-	/**
-	 * setStatusTreeProvider
-	 * StatusTreeProviderを登録
-	 * extension.ts起動時に呼び出される
-	 */
-	public setStatusTreeProvider(provider: IStatusTreeProvider): void {
-		this.statusTreeProvider = provider;
 	}
 
 	/**
@@ -78,12 +62,18 @@ export class StatusManager {
 		try {
 			this.initialize();
 			// StatusCollectorから直接StatusItemTreeを取得
-			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
-
-			// StatusTreeProviderに全体更新を通知
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.statusTreeChanged();
+			if (this.statusItemTree) {
+				// 既存のツリーをクリア
+				this.statusItemTree.clear();
+				this.statusItemTree.dispose();
 			}
+			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
+			this.statusItemTree.onTreeChanged((item) => {
+				this._onStatusTreeChanged.fire(item);
+			});
+
+			// イベントを発火（ツリー全体更新を通知、undefinedはツリー全体更新の意味）
+			this._onStatusTreeChanged.fire(undefined);
 
 			const endTime = performance.now();
 			console.log(`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`);
@@ -96,23 +86,14 @@ export class StatusManager {
 
 	/**
 	 * updateFileStatus
-	 * 指定ファイルのステータスを再構築し、StatusTreeProviderに更新を通知
+	 * 指定ファイルのステータスを再構築し、イベント通知
 	 */
 	public async refreshFileStatus(filePath: string): Promise<void> {
 		try {
-			// 該当ファイルのStatusItemを再構築
-			const item = this.getStatusItem(filePath);
-			// Assignを使うことでStatusItemのインスタンス自体は保持しつつ、最新の状態に更新(代入してしまうとgetTreeItemで古い状態が返る可能性があるため)
-			if (item) {
-				Object.assign(item, await this.statusCollector.collectFileStatus(filePath));
-			}
+			const newStatus = await this.statusCollector.collectFileStatus(filePath);
 
-			// StatusTreeProviderに効率的な更新を通知
-			if (this.statusTreeProvider) {
-				if (item) {
-					this.statusTreeProvider.updateFileStatus(filePath, item);
-				}
-			}
+			// 該当ファイルのStatusItemを再構築
+			this.statusItemTree.addOrUpdateFile(newStatus);
 		} catch (error) {
 			console.error(`StatusManager: updateFileStatus() - Error: ${filePath}`, error);
 		}
@@ -124,14 +105,7 @@ export class StatusManager {
 	 */
 	public async changeFileStatus(filePath: string, modifications: Partial<StatusItem>): Promise<void> {
 		try {
-			const item = this.getStatusItem(filePath);
-
-			if (item) {
-				Object.assign(item, modifications); // 更新項目を適用
-				if (this.statusTreeProvider) {
-					this.statusTreeProvider.updateFileStatus(filePath, item);
-				}
-			}
+			this.statusItemTree.updateFilePartial(filePath, modifications);
 		} catch (error) {
 			console.error(`StatusManager: applyFileStatus() - error: ${filePath}`, error);
 		}
@@ -146,9 +120,8 @@ export class StatusManager {
 			const item = this.getUnitStatusItem(unitHash, filePath);
 			if (item) {
 				Object.assign(item, modifications); // 更新項目を適用
-				if (this.statusTreeProvider) {
-					this.statusTreeProvider.updateUnitStatus(unitHash, modifications, filePath);
-				}
+				// イベントを発火（該当ユニットの更新を通知）
+				this._onStatusTreeChanged.fire(item);
 			}
 		} catch (error) {
 			console.error(`StatusManager: updateUnitStatus() - error: ${unitHash}`, error);
@@ -164,20 +137,13 @@ export class StatusManager {
 	}
 
 	/**
-	 * 指定ファイル/ディレクトリパスのStatusItemを取得
-	 */
-	public getStatusItem(path: string): StatusItem | undefined {
-		return this.statusItemTree.findByPath(path);
-	}
-
-	/**
 	 * 指定ハッシュのユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
 		if (!path) {
-			return this.statusItemTree.findFirstUnitByFromHashWithoutPath(hash);
+			return this.statusItemTree.getUnitByFromHashFirstWithoutPath(hash);
 		}
-		return this.statusItemTree.findUnitByHash(hash, path);
+		return this.statusItemTree.getUnit(hash, path);
 	}
 
 	/**
@@ -185,23 +151,23 @@ export class StatusManager {
 	 */
 	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
 		if (!path) {
-			return this.statusItemTree.findFirstUnitByFromHashWithoutPath(fromHash);
+			return this.statusItemTree.getUnitByFromHashFirstWithoutPath(fromHash);
 		}
-		return this.statusItemTree.findUnitByFromHash(fromHash, path);
+		return this.statusItemTree.getUnitByFromHash(fromHash, path);
 	}
 
 	/**
 	 * 指定ファイルパス内の未翻訳ユニット（needFlag付き）を取得
 	 */
 	public getUntranslatedUnits(filePath: string): StatusItem[] {
-		return this.statusItemTree.getUntranslatedUnitsInFile(filePath);
+		return this.statusItemTree.getUnitsUntranslatedInFile(filePath);
 	}
 
 	/**
 	 * StatusItemツリーを取得
 	 */
 	public getTreeFileStatusList(): StatusItem[] {
-		return this.statusItemTree.getAllFiles();
+		return this.statusItemTree.getFilesAll();
 	}
 
 	/**
@@ -227,6 +193,19 @@ export class StatusManager {
 	 */
 	public getStatusItemTree(): StatusItemTree {
 		return this.statusItemTree;
+	}
+
+	/**
+	 * リソースのクリーンアップ
+	 * 拡張機能の無効化時に呼び出される
+	 */
+	public dispose(): void {
+		this.statusItemTree.dispose();
+		this._onStatusTreeChanged.dispose();
+
+		// Singletonインスタンスをリセット（開発時のリロードに対応）
+		// biome-ignore lint/suspicious/noExplicitAny: Singletonリセットのため必要
+		StatusManager.instance = undefined as any;
 	}
 
 	// ========== 内部ユーティリティメソッド ==========

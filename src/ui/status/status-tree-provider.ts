@@ -2,12 +2,12 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { Status, type StatusItem, StatusItemType } from "../../core/status/status-item";
-import { type IStatusTreeProvider, StatusManager } from "../../core/status/status-manager";
+import { StatusManager } from "../../core/status/status-manager";
 
 /**
  * ステータスツリービューのデータプロバイダ
  */
-export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, IStatusTreeProvider {
+export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> = new vscode.EventEmitter<
 		StatusItem | undefined | null
 	>();
@@ -27,11 +27,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
 		this.configuration = Configuration.getInstance();
+
+		// Eventリスナーを登録
+		this.statusManager.onStatusTreeChanged((updatedItem) => {
+			if (updatedItem) {
+				// 該当ファイルアイテムのみツリー更新
+				this._onDidChangeTreeData.fire(updatedItem);
+			}
+		});
 	}
 
 	/**
 	 * ツリーデータをリフレッシュする
-	 * @param item 更新したいStatusItem（省略時は全体）
 	 */
 	public async refreshTree(): Promise<void> {
 		try {
@@ -191,27 +198,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 		}
 
 		// StatusItemTreeから翻訳ユニットを取得
-		return this.statusItemTree.getFileUnits(filePath);
-	}
-
-	/**
-	 * ディレクトリの全体ステータスを決定する
-	 */
-	private determineDirectoryStatus(files: StatusItem[]): Status {
-		if (files.length === 0) return Status.Unknown;
-
-		const hasError = files.some((f) => f.status === Status.Error);
-		if (hasError) return Status.Error;
-
-		const allSource = files.every((f) => f.status === Status.Source);
-		if (allSource) return Status.Source;
-
-		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
-		const translatedUnits = files.reduce((sum, f) => sum + (f.translatedUnits ?? 0), 0);
-
-		if (totalUnits === 0) return Status.Unknown;
-		if (translatedUnits === totalUnits) return Status.Translated;
-		return Status.NeedsTranslation;
+		return this.statusItemTree.getUnitsInFile(filePath);
 	}
 
 	/**
@@ -255,110 +242,5 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			default:
 				return new vscode.ThemeIcon("question", new vscode.ThemeColor("charts.gray"));
 		}
-	}
-
-	/**
-	 * 特定ファイルのStatusItemを部分更新
-	 * パフォーマンス改善とUI競合回避のため
-	 */
-	public updateFileStatus(filePath: string, updatedFileItem: StatusItem): void {
-		// StatusItemTreeを直接更新
-		this.statusItemTree.addOrUpdateFile(updatedFileItem);
-
-		// 該当ファイルアイテムのみツリー更新
-		this._onDidChangeTreeData.fire(updatedFileItem);
-	}
-
-	/**
-	 * 特定ユニットのStatusItemを部分更新
-	 * パフォーマンス改善とUI競合回避のため
-	 */
-	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void {
-		// StatusItemTreeからユニットを検索
-		const unit = this.statusItemTree.findUnitByHash(unitHash, filePath);
-		if (!unit) {
-			return;
-		}
-
-		// ユニットを部分更新
-		Object.assign(unit, updates);
-
-		// 親ファイルを検索
-		const parentFile = filePath ? this.statusItemTree.getFileItem(filePath) : null;
-
-		// 親ファイルの状態を再集計・更新
-		if (parentFile) {
-			this.updateParentStatus(parentFile);
-		}
-
-		// 更新されたユニットのツリー表示を更新
-		this._onDidChangeTreeData.fire(unit);
-	}
-
-	/**
-	 * StatusManagerからの更新通知を受けてツリーを更新
-	 */
-	public statusTreeChanged(): void {
-		this._onDidChangeTreeData.fire(undefined);
-	}
-
-	/**
-	 * 親StatusItem（ファイル→ディレクトリ）の状態を再集計・更新
-	 */
-	private updateParentStatus(fileItem: StatusItem): void {
-		if (fileItem.type !== StatusItemType.File || !fileItem.children) {
-			return;
-		}
-
-		// ファイルのisTranslatingとstatusを子ユニットから集計
-		const hasTranslatingUnit = fileItem.children.some((unit) => unit.isTranslating === true);
-		const hasErrorUnit = fileItem.children.some((unit) => unit.status === Status.Error);
-		const translatedCount = fileItem.children.filter((unit) => unit.status === Status.Translated).length;
-		const totalCount = fileItem.children.length;
-
-		// ファイルの状態を更新
-		const oldIsTranslating = fileItem.isTranslating;
-		const oldStatus = fileItem.status;
-
-		fileItem.isTranslating = hasTranslatingUnit;
-
-		if (hasErrorUnit) {
-			fileItem.status = Status.Error;
-		} else if (translatedCount === totalCount && totalCount > 0) {
-			fileItem.status = Status.Translated;
-		} else if (translatedCount > 0) {
-			fileItem.status = Status.NeedsTranslation;
-		} else {
-			fileItem.status = Status.NeedsTranslation;
-		}
-
-		// ファイルの状態が変わった場合、親ディレクトリも更新
-		if (oldIsTranslating !== fileItem.isTranslating || oldStatus !== fileItem.status) {
-			this.updateDirectoryStatus(fileItem.filePath);
-			// ファイルの表示を更新
-			this._onDidChangeTreeData.fire(fileItem);
-		}
-	}
-
-	/**
-	 * ディレクトリの状態を再集計・更新
-	 */
-	private updateDirectoryStatus(filePath?: string): void {
-		if (!filePath) return;
-
-		const directoryPath = path.dirname(filePath);
-
-		// StatusItemTreeから該当ディレクトリ配下のファイルを取得
-		const filesInDir = this.statusItemTree.getDirectoryFiles(directoryPath);
-
-		if (filesInDir.length === 0) return;
-
-		// ディレクトリの状態を集計
-		const hasTranslatingFile = filesInDir.some((file) => file.isTranslating === true);
-		const directoryStatus = this.determineDirectoryStatus(filesInDir);
-
-		// getRootDirectoryItemsやgetStatusItemsRecursiveで生成されるディレクトリアイテムを更新
-		// 直接更新せず、該当ディレクトリの再描画を促す
-		this._onDidChangeTreeData.fire(undefined);
 	}
 }
