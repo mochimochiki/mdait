@@ -22,7 +22,8 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.buildAllStatusItem();
+		await statusManager.buildAllStatusItem();
+		const fileStatuses = statusManager.getTreeFileStatusList();
 
 		// 結果の検証
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -57,10 +58,10 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		const fileStatuses = await statusManager.buildAllStatusItem();
+		await statusManager.buildAllStatusItem();
+		const fileStatuses = statusManager.getTreeFileStatusList();
 
 		// エラーにならずに空配列が返されることを確認
-		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
 		assert.strictEqual(fileStatuses.length, 0, "存在しないディレクトリの場合は空配列が返される必要があります");
 	});
 
