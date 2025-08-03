@@ -174,6 +174,9 @@ export class StatusManager {
 	 * 指定ハッシュのユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
+		if (!path) {
+			return this.statusItemTree.findFirstUnitByFromHashWithoutPath(hash);
+		}
 		return this.statusItemTree.findUnitByHash(hash, path);
 	}
 
@@ -181,6 +184,9 @@ export class StatusManager {
 	 * 指定fromHashに対応するユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
+		if (!path) {
+			return this.statusItemTree.findFirstUnitByFromHashWithoutPath(fromHash);
+		}
 		return this.statusItemTree.findUnitByFromHash(fromHash, path);
 	}
 

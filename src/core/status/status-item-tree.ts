@@ -7,29 +7,29 @@ import { Status, type StatusItem, StatusItemType } from "./status-item";
  * ディレクトリ・ファイル・ユニットの階層構造を効率的に管理する
  */
 export class StatusItemTree {
-	private readonly fileMap = new Map<string, StatusItem>();
-	private readonly directoryMap = new Map<string, StatusItem[]>();
-	private readonly unitMap = new Map<string, StatusItem>();
+	private readonly fileItemMap = new Map<string, StatusItem>(); // ファイルパスをキーとする
+	private readonly directoryItemMap = new Map<string, StatusItem[]>(); // ディレクトリパスをキーとする
+	private readonly unitItemMapWithPath = new Map<string, StatusItem>(); // ファイルパス+ユニットハッシュをキーとする
 
 	/**
 	 * ファイルStatusItemを取得
 	 */
 	public getFile(filePath: string): StatusItem | undefined {
-		return this.fileMap.get(filePath);
+		return this.fileItemMap.get(filePath);
 	}
 
 	/**
 	 * 指定ディレクトリ内のファイル一覧を取得
 	 */
 	public listFilesInDirectory(dirPath: string): StatusItem[] {
-		return this.directoryMap.get(dirPath) || [];
+		return this.directoryItemMap.get(dirPath) || [];
 	}
 
 	/**
 	 * 指定ファイル内のユニット一覧を取得
 	 */
 	public listUnitsInFile(filePath: string): StatusItem[] {
-		const fileItem = this.fileMap.get(filePath);
+		const fileItem = this.fileItemMap.get(filePath);
 		return fileItem?.children || [];
 	}
 
@@ -38,7 +38,7 @@ export class StatusItemTree {
 	 */
 	public getUnit(filePath: string, unitHash: string): StatusItem | undefined {
 		const key = `${filePath}#${unitHash}`;
-		return this.unitMap.get(key);
+		return this.unitItemMapWithPath.get(key);
 	}
 
 	/**
@@ -46,17 +46,17 @@ export class StatusItemTree {
 	 */
 	public updateUnit(filePath: string, unitHash: string, updates: Partial<StatusItem>): StatusItem | undefined {
 		const key = `${filePath}#${unitHash}`;
-		const unit = this.unitMap.get(key);
+		const unit = this.unitItemMapWithPath.get(key);
 		if (!unit) {
 			return undefined;
 		}
 
 		// ユニットを更新
 		Object.assign(unit, updates);
-		this.unitMap.set(key, unit);
+		this.unitItemMapWithPath.set(key, unit);
 
 		// 親ファイルの子要素も更新
-		const fileItem = this.fileMap.get(filePath);
+		const fileItem = this.fileItemMap.get(filePath);
 		if (fileItem?.children) {
 			const unitIndex = fileItem.children.findIndex((child) => child.unitHash === unitHash);
 			if (unitIndex >= 0) {
@@ -71,7 +71,7 @@ export class StatusItemTree {
 	 * 指定ディレクトリのStatusItemを生成
 	 */
 	public getDirectory(dirPath: string): StatusItem | undefined {
-		const files = this.directoryMap.get(dirPath);
+		const files = this.directoryItemMap.get(dirPath);
 		if (!files || files.length === 0) {
 			return undefined;
 		}
@@ -103,7 +103,7 @@ export class StatusItemTree {
 	 * 指定ディレクトリ内のファイル一覧を取得
 	 */
 	public getDirectoryFiles(directoryPath: string): StatusItem[] {
-		return Array.from(this.fileMap.values()).filter(
+		return Array.from(this.fileItemMap.values()).filter(
 			(file) => file.filePath && path.dirname(file.filePath) === directoryPath,
 		);
 	}
@@ -112,7 +112,7 @@ export class StatusItemTree {
 	 * 指定ファイルパスのファイルアイテムを取得
 	 */
 	public getFileItem(filePath: string): StatusItem | undefined {
-		return this.fileMap.get(filePath);
+		return this.fileItemMap.get(filePath);
 	}
 
 	/**
@@ -120,16 +120,20 @@ export class StatusItemTree {
 	 */
 	public addOrUpdateFile(fileItem: StatusItem): void {
 		if (fileItem.type === StatusItemType.File && fileItem.filePath) {
-			this.fileMap.set(fileItem.filePath, fileItem);
+			this.fileItemMap.set(fileItem.filePath, fileItem);
 
-			// 子ユニットも登録
+			// 子ユニットも登録（ファイルパス + ハッシュで一意性確保）
 			if (fileItem.children) {
 				for (const unit of fileItem.children) {
 					if (unit.unitHash) {
-						this.unitMap.set(unit.unitHash, unit);
+						const key = `${fileItem.filePath}#${unit.unitHash}`;
+						this.unitItemMapWithPath.set(key, unit);
 					}
 				}
 			}
+
+			// ディレクトリマップを更新
+			this.updateDirectoryMapForFile(fileItem);
 		}
 	}
 
@@ -137,7 +141,7 @@ export class StatusItemTree {
 	 * 指定ファイルの翻訳ユニット一覧を取得
 	 */
 	public getFileUnits(filePath: string): StatusItem[] {
-		const fileItem = this.fileMap.get(filePath);
+		const fileItem = this.fileItemMap.get(filePath);
 		return fileItem?.children ?? [];
 	}
 
@@ -145,30 +149,30 @@ export class StatusItemTree {
 	 * 全ファイルStatusItemを取得（既存API互換性用）
 	 */
 	public getAllFiles(): StatusItem[] {
-		return Array.from(this.fileMap.values());
+		return Array.from(this.fileItemMap.values());
 	}
 
 	/**
 	 * 全ディレクトリパス一覧を取得
 	 */
 	public getAllDirectoryPaths(): string[] {
-		return Array.from(this.directoryMap.keys());
+		return Array.from(this.directoryItemMap.keys());
 	}
 
 	/**
 	 * ツリーを初期化（全データクリア）
 	 */
 	public clear(): void {
-		this.fileMap.clear();
-		this.directoryMap.clear();
-		this.unitMap.clear();
+		this.fileItemMap.clear();
+		this.directoryItemMap.clear();
+		this.unitItemMapWithPath.clear();
 	}
 
 	/**
 	 * 指定ディレクトリ配下の直下ファイルのみを取得（サブディレクトリは除く）
 	 */
 	public getDirectFilesInDirectory(dirPath: string): StatusItem[] {
-		const files = this.directoryMap.get(dirPath) || [];
+		const files = this.directoryItemMap.get(dirPath) || [];
 		return files.filter((file) => {
 			if (!file.filePath) return false;
 			return path.dirname(file.filePath) === dirPath;
@@ -181,7 +185,7 @@ export class StatusItemTree {
 	public getSubDirectoryPaths(parentDir: string): string[] {
 		const subDirs = new Set<string>();
 
-		for (const dirPath of this.directoryMap.keys()) {
+		for (const dirPath of this.directoryItemMap.keys()) {
 			if (dirPath !== parentDir && dirPath.startsWith(parentDir)) {
 				const rel = path.relative(parentDir, dirPath);
 				const parts = rel.split(path.sep);
@@ -201,7 +205,7 @@ export class StatusItemTree {
 	public getAllFilesInDirectoryRecursive(dirPath: string): StatusItem[] {
 		const result: StatusItem[] = [];
 
-		for (const file of this.fileMap.values()) {
+		for (const file of this.fileItemMap.values()) {
 			if (file.filePath && path.dirname(file.filePath).startsWith(dirPath)) {
 				result.push(file);
 			}
@@ -215,7 +219,7 @@ export class StatusItemTree {
 	 */
 	public findByPath(targetPath: string): StatusItem | undefined {
 		// ファイルから検索
-		const file = this.fileMap.get(targetPath);
+		const file = this.fileItemMap.get(targetPath);
 		if (file) return file;
 
 		// ディレクトリとして検索
@@ -225,15 +229,22 @@ export class StatusItemTree {
 	/**
 	 * 指定ハッシュのユニットを検索（ファイルパス指定可能）
 	 */
-	public findUnitByHash(unitHash: string, filePath?: string): StatusItem | undefined {
-		if (filePath) {
-			// 特定ファイル内から検索
-			const key = `${filePath}#${unitHash}`;
-			return this.unitMap.get(key);
+	public findUnitByHash(unitHash: string, filePath: string): StatusItem | undefined {
+		// 特定ファイル内から検索
+		const key = `${filePath}#${unitHash}`;
+		if (this.unitItemMapWithPath.has(key)) {
+			return this.unitItemMapWithPath.get(key);
 		}
+		return undefined;
+	}
 
-		// 全ファイルから検索
-		for (const [key, unit] of this.unitMap) {
+	/**
+	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
+	 * 全ファイルから検索するため、どのファイルか不定であることに注意
+	 */
+	public findFirstUnitByHashWithoutPath(unitHash: string): StatusItem | undefined {
+		// 全ファイルから検索（ハッシュのみでスキャン）
+		for (const [key, unit] of this.unitItemMapWithPath) {
 			if (unit.unitHash === unitHash) {
 				return unit;
 			}
@@ -243,25 +254,30 @@ export class StatusItemTree {
 	}
 
 	/**
-	 * 指定fromHashのユニットを検索（ファイルパス指定可能）
+	 * 指定fromHashのユニットを検索（ファイルパス指定）
 	 */
-	public findUnitByFromHash(fromHash: string, filePath?: string): StatusItem | undefined {
-		if (filePath) {
-			// 特定ファイル内から検索
-			const fileItem = this.fileMap.get(filePath);
-			if (fileItem?.children) {
-				return fileItem.children.find((unit) => unit.fromHash === fromHash);
-			}
+	public findUnitByFromHash(fromHash: string, filePath: string): StatusItem | undefined {
+		// 特定ファイル内から検索
+		const fileItem = this.fileItemMap.get(filePath);
+		if (fileItem?.children) {
+			return fileItem.children.find((unit) => unit.fromHash === fromHash);
 		}
 
+		return undefined;
+	}
+
+	/**
+	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
+	 * 全ファイルから検索するため、どのファイルか不定であることに注意
+	 */
+	public findFirstUnitByFromHashWithoutPath(fromHash: string): StatusItem | undefined {
 		// 全ファイルから検索
-		for (const file of this.fileMap.values()) {
+		for (const file of this.fileItemMap.values()) {
 			if (file.children) {
 				const found = file.children.find((unit) => unit.fromHash === fromHash);
 				if (found) return found;
 			}
 		}
-
 		return undefined;
 	}
 
@@ -269,7 +285,7 @@ export class StatusItemTree {
 	 * 指定ファイル内の未翻訳ユニット（needFlag付き）を取得
 	 */
 	public getUntranslatedUnitsInFile(filePath: string): StatusItem[] {
-		const fileItem = this.fileMap.get(filePath);
+		const fileItem = this.fileItemMap.get(filePath);
 		if (!fileItem?.children) return [];
 
 		return fileItem.children.filter((unit) => unit.type === StatusItemType.Unit && unit.needFlag);
@@ -287,7 +303,7 @@ export class StatusItemTree {
 		let translatedUnits = 0;
 		let errorUnits = 0;
 
-		for (const unit of this.unitMap.values()) {
+		for (const unit of this.unitItemMapWithPath.values()) {
 			if (unit.type === StatusItemType.Unit) {
 				totalUnits++;
 				if (unit.status === Status.Translated) {
@@ -347,7 +363,7 @@ export class StatusItemTree {
 		const directoryItems: StatusItem[] = [];
 
 		// transPairsで指定されたディレクトリのみを対象
-		const rootDirs = transPairDirs.filter((dir) => this.directoryMap.has(dir));
+		const rootDirs = transPairDirs.filter((dir) => this.directoryItemMap.has(dir));
 
 		for (const dirPath of rootDirs) {
 			const directoryItem = this.getDirectory(dirPath);
@@ -401,6 +417,11 @@ export class StatusItemTree {
 	 * StatusTreeProviderのgetRootDirectoryItemsで使用するディレクトリマップを構築
 	 */
 	public buildDirectoryMapForProvider(transPairDirs: string[]): Map<string, StatusItem[]> {
+		// ディレクトリマップが空の場合は構築する
+		if (this.directoryItemMap.size === 0 && this.fileItemMap.size > 0) {
+			this.buildDirectoryMap();
+		}
+
 		const directoryMap = new Map<string, StatusItem[]>();
 
 		// transPairsで指定されたディレクトリのみを対象
@@ -432,5 +453,46 @@ export class StatusItemTree {
 		if (totalUnits === 0) return Status.Unknown;
 		if (translatedUnits === totalUnits) return Status.Translated;
 		return Status.NeedsTranslation;
+	}
+
+	/**
+	 * ディレクトリマップを構築（ファイルの配置に基づいて）
+	 */
+	public buildDirectoryMap(): void {
+		this.directoryItemMap.clear();
+
+		for (const file of this.fileItemMap.values()) {
+			if (file.filePath) {
+				const dirPath = path.dirname(file.filePath);
+
+				// ディレクトリマップに追加
+				const existingFiles = this.directoryItemMap.get(dirPath);
+				if (existingFiles) {
+					existingFiles.push(file);
+				} else {
+					this.directoryItemMap.set(dirPath, [file]);
+				}
+			}
+		}
+	}
+
+	/**
+	 * 特定のファイルに対してディレクトリマップを更新
+	 */
+	private updateDirectoryMapForFile(fileItem: StatusItem): void {
+		if (!fileItem.filePath) return;
+
+		const dirPath = path.dirname(fileItem.filePath);
+		const existingFiles = this.directoryItemMap.get(dirPath);
+
+		if (existingFiles) {
+			// 既存のファイルリストから同じファイルを削除してから追加
+			const filteredFiles = existingFiles.filter((f) => f.filePath !== fileItem.filePath);
+			filteredFiles.push(fileItem);
+			this.directoryItemMap.set(dirPath, filteredFiles);
+		} else {
+			// 新しいディレクトリエントリを作成
+			this.directoryItemMap.set(dirPath, [fileItem]);
+		}
 	}
 }

@@ -275,7 +275,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 */
 	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void {
 		// StatusItemTreeからユニットを検索
-		const unit = this.statusItemTree.findUnitByHash(unitHash);
+		const unit = this.statusItemTree.findUnitByHash(unitHash, filePath);
 		if (!unit) {
 			return;
 		}
