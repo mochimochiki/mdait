@@ -76,7 +76,7 @@ export async function syncCommand(): Promise<void> {
 				} catch (error) {
 					console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
 					// エラー時もStatusManagerに通知
-					await statusManager.updateFileStatusWithError(sourceFile, error as Error);
+					await statusManager.changeFileStatusWithError(sourceFile, error as Error);
 					errorCount++;
 				}
 			}

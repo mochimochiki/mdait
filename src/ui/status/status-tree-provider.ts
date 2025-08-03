@@ -15,7 +15,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
-	private treeFileStatusList: StatusItem[] = [];
+	// StatusItemTreeへの直接アクセス用
+	private get statusItemTree() {
+		return this.statusManager.getStatusItemTree();
+	}
 
 	// ステータス初期化済みフラグと排他制御
 	private isStatusInitialized = false;
@@ -36,16 +39,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			const validationError = this.configuration.validate();
 			if (validationError) {
 				vscode.window.showWarningMessage(validationError);
-				this.treeFileStatusList = [];
+				// エラー時はツリーをクリア
+				this.statusItemTree.clear();
 			} else {
 				// StatusManagerから最新のStatusItemを取得
-				if (this.statusManager.isInitialized()) {
-					this.treeFileStatusList = this.statusManager.getTreeFileStatusList();
-				} else {
+				if (!this.statusManager.isInitialized()) {
 					// 初期化されていない場合は全体再構築
-					this.treeFileStatusList = await this.statusManager.buildAllStatusItem();
+					await this.statusManager.buildAllStatusItem();
 				}
 			}
+
 			// ツリービューを全体更新
 			this._onDidChangeTreeData.fire(undefined);
 		} catch (error) {
@@ -123,12 +126,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			try {
 				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (workspaceFolder) {
-					// StatusManagerから最新のStatusItemを取得
-					if (this.statusManager.isInitialized()) {
-						this.treeFileStatusList = this.statusManager.getTreeFileStatusList();
-					} else {
+					// StatusManagerから最新のStatusItemを取得・ツリーに反映
+					if (!this.statusManager.isInitialized()) {
 						// 初期化されていない場合は全体再構築
-						this.treeFileStatusList = await this.statusManager.buildAllStatusItem();
+						await this.statusManager.buildAllStatusItem();
 					}
 				}
 				this.isStatusInitialized = true;
@@ -158,136 +159,27 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * ディレクトリ一覧のStatusItemを作成する
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
-		const directoryMap = new Map<string, StatusItem[]>();
 		// transPairs.targetDirとsourceDirの絶対パス一覧を作成
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		const allDirsAbs = this.configuration.transPairs.flatMap((pair) => [
 			workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
 			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
 		]);
-		// ファイルをディレクトリごとにグループ化（sourceDir/targetDir一致のみ）
-		for (const fileStatus of this.treeFileStatusList) {
-			const dirPath = path.dirname(fileStatus.filePath ?? "");
-			if (!allDirsAbs.includes(dirPath)) {
-				continue;
-			}
-			if (!directoryMap.has(dirPath)) {
-				directoryMap.set(dirPath, []);
-			}
-			directoryMap.get(dirPath)?.push(fileStatus);
-		}
 
-		// ディレクトリごとにStatusItemを作成
-		const directoryItems: StatusItem[] = [];
-		for (const [dirPath, files] of directoryMap) {
-			const dirName = path.basename(dirPath) || dirPath;
-			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
-
-			// ディレクトリの全体ステータスを決定
-			const status = this.determineDirectoryStatus(files);
-
-			// ディレクトリのisTranslatingフラグを決定（配下ファイルのいずれかがisTranslating: trueなら親もtrue）
-			const isTranslating = files.some((file) => file.isTranslating === true);
-
-			// sourceディレクトリの場合は翻訳ユニット数を表示しない
-			const label = status === Status.Source ? `${dirName} (source)` : `${dirName} (${translatedUnits}/${totalUnits})`;
-			const tooltip =
-				status === Status.Source
-					? vscode.l10n.t("Source directory: {0}", dirName)
-					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
-
-			directoryItems.push({
-				type: StatusItemType.Directory,
-				label,
-				directoryPath: dirPath,
-				status,
-				isTranslating,
-				collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
-				tooltip,
-				contextValue: "mdaitDirectory",
-			});
-		}
-
-		return directoryItems;
+		// StatusItemTreeからルートディレクトリアイテムを取得
+		return this.statusItemTree.getRootDirectoryItems(allDirsAbs);
 	}
 
 	/**
 	 * 指定ディレクトリのファイル・サブディレクトリ一覧のStatusItemを作成する
 	 */
 	private getStatusItemsRecursive(directoryPath?: string): StatusItem[] {
-		const items: StatusItem[] = [];
-		const subDirSet = new Set<string>();
-
-		// 指定ディレクトリ配下のファイルを抽出
-		const filesInDir = this.treeFileStatusList.filter((fileStatus) => {
-			const dir = path.dirname(fileStatus.filePath ?? "");
-			// directoryPathが未指定の場合はルート直下
-			if (!directoryPath) {
-				// ルート直下のファイルのみ
-				const rel = path.relative("", dir);
-				return rel === "" || rel === "." || dir === "" || dir === ".";
-			}
-			// 指定ディレクトリ直下のファイル
-			return dir === directoryPath;
-		});
-
-		// ファイルStatusItemを追加
-		for (const fileStatus of filesInDir) {
-			items.push(fileStatus);
+		if (!directoryPath) {
+			return [];
 		}
 
-		// サブディレクトリを抽出
-		for (const fileStatus of this.treeFileStatusList) {
-			const dir = path.dirname(fileStatus.filePath ?? "");
-			const parentDir = directoryPath ?? "";
-			// サブディレクトリかどうか判定
-			if (dir !== parentDir && dir.startsWith(parentDir)) {
-				// 直下のサブディレクトリ名を取得
-				const rel = path.relative(parentDir, dir);
-				const parts = rel.split(path.sep);
-				if (parts.length > 0 && parts[0] !== "" && parts[0] !== ".") {
-					const subDirPath = path.join(parentDir, parts[0]);
-					subDirSet.add(subDirPath);
-				}
-			}
-		}
-
-		// サブディレクトリStatusItemを追加
-		for (const subDirPath of subDirSet) {
-			const files = this.treeFileStatusList.filter((fs) => path.dirname(fs.filePath ?? "").startsWith(subDirPath));
-			const dirName = path.basename(subDirPath) || subDirPath;
-			const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-			const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
-			const status = this.determineDirectoryStatus(files);
-
-			// サブディレクトリのisTranslatingフラグを決定
-			const isTranslating = files.some((file) => file.isTranslating === true);
-
-			// sourceディレクトリの場合は翻訳ユニット数を表示しない
-			const label = status === Status.Source ? dirName : `${dirName} (${translatedUnits}/${totalUnits})`;
-			const tooltip =
-				status === Status.Source
-					? vscode.l10n.t("Source directory: {0}", dirName)
-					: vscode.l10n.t("Directory: {0} - {1}/{2} units translated", dirName, translatedUnits, totalUnits);
-
-			items.push({
-				type: StatusItemType.Directory,
-				label,
-				directoryPath: subDirPath,
-				status,
-				isTranslating,
-				collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-				tooltip,
-				contextValue: "mdaitDirectory",
-			});
-		}
-
-		// ディレクトリ→ファイルの順で表示
-		return [
-			...Array.from(items).filter((item) => item.type === StatusItemType.Directory),
-			...Array.from(items).filter((item) => item.type === StatusItemType.File),
-		];
+		// StatusItemTreeから子要素を取得
+		return this.statusItemTree.getDirectoryChildren(directoryPath);
 	}
 
 	/**
@@ -298,12 +190,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 			return [];
 		}
 
-		const fileStatus = this.treeFileStatusList.find((fs) => fs.filePath === filePath);
-		if (!fileStatus || !fileStatus.children) {
-			return [];
-		}
-
-		return fileStatus.children;
+		// StatusItemTreeから翻訳ユニットを取得
+		return this.statusItemTree.getFileUnits(filePath);
 	}
 
 	/**
@@ -370,30 +258,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	}
 
 	/**
-	 * StatusManagerからStatusItemを設定
-	 * StatusManagerによる一元管理のため
-	 */
-	public setFileStatuses(fileStatuses: StatusItem[]): void {
-		this.treeFileStatusList = fileStatuses;
-		this.isStatusInitialized = true;
-	}
-
-	/**
 	 * 特定ファイルのStatusItemを部分更新
 	 * パフォーマンス改善とUI競合回避のため
 	 */
 	public updateFileStatus(filePath: string, updatedFileItem: StatusItem): void {
-		const existingIndex = this.treeFileStatusList.findIndex(
-			(item) => item.type === StatusItemType.File && item.filePath === filePath,
-		);
-
-		if (existingIndex >= 0) {
-			// 既存ファイルアイテムを更新
-			this.treeFileStatusList[existingIndex] = updatedFileItem;
-		} else {
-			// 新規ファイルアイテムを追加
-			this.treeFileStatusList.push(updatedFileItem);
-		}
+		// StatusItemTreeを直接更新
+		this.statusItemTree.addOrUpdateFile(updatedFileItem);
 
 		// 該当ファイルアイテムのみツリー更新
 		this._onDidChangeTreeData.fire(updatedFileItem);
@@ -404,50 +274,31 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 	 * パフォーマンス改善とUI競合回避のため
 	 */
 	public updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void {
-		let updatedUnit: StatusItem | undefined;
-		let parentFile: StatusItem | undefined;
-
-		// ファイル内のユニットを検索・更新
-		for (const fileItem of this.treeFileStatusList) {
-			if (fileItem.type === StatusItemType.File) {
-				// ファイルパス制約がある場合はチェック
-				if (filePath && fileItem.filePath !== filePath) {
-					continue;
-				}
-
-				if (fileItem.children) {
-					for (const unit of fileItem.children) {
-						if (unit.type === StatusItemType.Unit && unit.unitHash === unitHash) {
-							// ユニットを部分更新
-							Object.assign(unit, updates);
-							updatedUnit = unit;
-							parentFile = fileItem;
-
-							// ファイルパス制約がある場合は最初の一致のみ更新
-							if (filePath) {
-								break;
-							}
-						}
-					}
-				}
-			}
+		// StatusItemTreeからユニットを検索
+		const unit = this.statusItemTree.findUnitByHash(unitHash);
+		if (!unit) {
+			return;
 		}
 
+		// ユニットを部分更新
+		Object.assign(unit, updates);
+
+		// 親ファイルを検索
+		const parentFile = filePath ? this.statusItemTree.getFileItem(filePath) : null;
+
 		// 親ファイルの状態を再集計・更新
-		if (parentFile && updatedUnit) {
+		if (parentFile) {
 			this.updateParentStatus(parentFile);
 		}
 
 		// 更新されたユニットのツリー表示を更新
-		if (updatedUnit) {
-			this._onDidChangeTreeData.fire(updatedUnit);
-		}
+		this._onDidChangeTreeData.fire(unit);
 	}
 
 	/**
 	 * StatusManagerからの更新通知を受けてツリーを更新
 	 */
-	public refreshFromStatusManager(): void {
+	public statusTreeChanged(): void {
 		this._onDidChangeTreeData.fire(undefined);
 	}
 
@@ -497,10 +348,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, 
 
 		const directoryPath = path.dirname(filePath);
 
-		// 該当ディレクトリ配下のファイルを取得
-		const filesInDir = this.treeFileStatusList.filter(
-			(item) => item.type === StatusItemType.File && item.filePath && path.dirname(item.filePath) === directoryPath,
-		);
+		// StatusItemTreeから該当ディレクトリ配下のファイルを取得
+		const filesInDir = this.statusItemTree.getDirectoryFiles(directoryPath);
 
 		if (filesInDir.length === 0) return;
 

@@ -3,13 +3,13 @@ import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
 import { Status, type StatusItem } from "./status-item";
 import { StatusItemType } from "./status-item";
+import { StatusItemTree } from "./status-item-tree";
 
 /**
  * StatusTreeProviderの最小限のインターフェース（StatusManagerとの連携用）
  */
 export interface IStatusTreeProvider {
-	setFileStatuses(statuses: StatusItem[]): void;
-	refreshFromStatusManager(): void;
+	statusTreeChanged(): void;
 	updateFileStatus(filePath: string, fileStatusItem: StatusItem): void;
 	updateUnitStatus(unitHash: string, updates: Partial<StatusItem>, filePath: string): void;
 }
@@ -22,8 +22,8 @@ export class StatusManager {
 	// Singletonインスタンス
 	private static instance: StatusManager;
 
-	// Statusツリー内のファイルステータス一覧
-	private treeFileStatusList: StatusItem[] = [];
+	// StatusItemTree（ファーストクラスコレクション）
+	private statusItemTree: StatusItemTree = new StatusItemTree();
 
 	// UIのStatusTreeProvider
 	private statusTreeProvider?: IStatusTreeProvider;
@@ -71,23 +71,23 @@ export class StatusManager {
 	 * 全ファイルをパースしてStatusItemツリーを再構築
 	 * パフォーマンス負荷が高いため、初回実行時や保険的な再構築が必要な場合のみ使用
 	 */
-	public async buildAllStatusItem(): Promise<StatusItem[]> {
+	public async buildAllStatusItem(): Promise<void> {
 		console.log("StatusManager: buildAllStatusItem() - Parse all files");
 		const startTime = performance.now();
 
 		try {
 			this.initialize();
-			this.treeFileStatusList = await this.statusCollector.buildAllStatusItem();
+			// StatusCollectorから直接StatusItemTreeを取得
+			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
 
 			// StatusTreeProviderに全体更新を通知
 			if (this.statusTreeProvider) {
-				this.statusTreeProvider.setFileStatuses(this.treeFileStatusList);
-				this.statusTreeProvider.refreshFromStatusManager();
+				this.statusTreeProvider.statusTreeChanged();
 			}
 
 			const endTime = performance.now();
 			console.log(`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`);
-			return this.treeFileStatusList;
+			return;
 		} catch (error) {
 			console.error("StatusManager: buildAllStatusItem() - error", error);
 			throw error;
@@ -158,78 +158,44 @@ export class StatusManager {
 	/**
 	 * エラー発生時のStatusItem更新
 	 */
-	public async updateFileStatusWithError(filePath: string, error: Error): Promise<void> {
-		console.log(`StatusManager: updateFileStatusWithError() - ${filePath}`);
-
-		try {
-			// エラー状態のStatusItemを作成
-			const fileName = filePath.split(/[/\\]/).pop() || "";
-			const errorStatusItem: StatusItem = {
-				type: StatusItemType.File,
-				label: fileName,
-				status: Status.Error,
-				filePath,
-				fileName,
-				hasParseError: true,
-				errorMessage: error.message,
-				contextValue: "mdaitFile",
-				collapsibleState: vscode.TreeItemCollapsibleState.None,
-			};
-
-			// 既存のStatusItemを更新または追加
-			const existingIndex = this.treeFileStatusList.findIndex(
-				(item) => item.type === StatusItemType.File && item.filePath === filePath,
-			);
-
-			if (existingIndex >= 0) {
-				this.treeFileStatusList[existingIndex] = errorStatusItem;
-			} else {
-				this.treeFileStatusList.push(errorStatusItem);
-			}
-
-			// StatusTreeProviderに更新を通知
-			if (this.statusTreeProvider) {
-				this.statusTreeProvider.setFileStatuses(this.treeFileStatusList);
-				this.statusTreeProvider.refreshFromStatusManager();
-			}
-		} catch (updateError) {
-			console.error(`StatusManager: updateFileStatusWithError() - error: ${filePath}`, updateError);
-		}
+	public async changeFileStatusWithError(filePath: string, error: Error): Promise<void> {
+		console.log(`StatusManager: changeFileStatusWithError() - ${filePath}`);
+		await this.changeFileStatus(filePath, { errorMessage: error.message });
 	}
 
 	/**
 	 * 指定ファイル/ディレクトリパスのStatusItemを取得
 	 */
 	public getStatusItem(path: string): StatusItem | undefined {
-		return this.getStatusItemInTree(this.treeFileStatusList, path);
+		return this.statusItemTree.findByPath(path);
 	}
 
 	/**
 	 * 指定ハッシュのユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
-		return this.findFirstUnitByHash(this.treeFileStatusList, hash, path);
+		return this.statusItemTree.findUnitByHash(hash, path);
 	}
 
 	/**
 	 * 指定fromHashに対応するユニットをStatusItemツリーから取得
 	 */
 	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
-		return this.findFirstUnitByFromHash(this.treeFileStatusList, fromHash, path);
+		return this.statusItemTree.findUnitByFromHash(fromHash, path);
 	}
 
 	/**
 	 * 指定ファイルパス内の未翻訳ユニット（needFlag付き）を取得
 	 */
 	public getUntranslatedUnits(filePath: string): StatusItem[] {
-		return this.getUntranslatedUnitsInTree(this.treeFileStatusList, filePath);
+		return this.statusItemTree.getUntranslatedUnitsInFile(filePath);
 	}
 
 	/**
 	 * StatusItemツリーを取得
 	 */
 	public getTreeFileStatusList(): StatusItem[] {
-		return this.treeFileStatusList;
+		return this.statusItemTree.getAllFiles();
 	}
 
 	/**
@@ -240,7 +206,7 @@ export class StatusManager {
 		translatedUnits: number;
 		errorUnits: number;
 	} {
-		return this.aggregateProgressInTree(this.treeFileStatusList);
+		return this.statusItemTree.aggregateProgress();
 	}
 
 	/**
@@ -248,6 +214,13 @@ export class StatusManager {
 	 */
 	public isInitialized(): boolean {
 		return this.initialized;
+	}
+
+	/**
+	 * StatusItemTree インスタンスを取得（StatusTreeProviderでの活用のため）
+	 */
+	public getStatusItemTree(): StatusItemTree {
+		return this.statusItemTree;
 	}
 
 	// ========== 内部ユーティリティメソッド ==========
@@ -259,131 +232,5 @@ export class StatusManager {
 	private async initialize() {
 		this.config = Configuration.getInstance();
 		this.initialized = true;
-	}
-
-	/**
-	 * StatusItemツリー内でfromHashが一致するユニットを再帰的に検索
-	 * path指定時はそのパス内のユニットのみを対象とする
-	 */
-	private findFirstUnitByFromHash(items: StatusItem[], fromHash: string, path?: string): StatusItem | undefined {
-		if (path) {
-			const item = this.getStatusItemInTree(items, path);
-			if (item && item.type === StatusItemType.File && item.children) {
-				return this.findFirstUnitByFromHash(item.children, fromHash);
-			}
-		}
-
-		for (const item of items) {
-			if (item.type === StatusItemType.Unit && item.fromHash === fromHash) {
-				return item;
-			}
-
-			if (item.children) {
-				const found = this.findFirstUnitByFromHash(item.children, fromHash, path);
-				if (found) {
-					return found;
-				}
-			}
-		}
-
-		return undefined;
-	}
-
-	/**
-	 * StatusItemツリー内でhashが一致するユニットを再帰的に検索
-	 * path指定時はそのパス内のユニットのみを対象とする
-	 */
-	private findFirstUnitByHash(items: StatusItem[], unitHash: string, path?: string): StatusItem | undefined {
-		if (path) {
-			const item = this.getStatusItemInTree(items, path);
-			if (item && item.type === StatusItemType.File && item.children) {
-				return this.findFirstUnitByHash(item.children, unitHash);
-			}
-		}
-
-		for (const item of items) {
-			if (item.type === StatusItemType.Unit && item.unitHash === unitHash) {
-				return item;
-			}
-
-			if (item.children) {
-				const found = this.findFirstUnitByHash(item.children, unitHash, path);
-				if (found) {
-					return found;
-				}
-			}
-		}
-
-		return undefined;
-	}
-
-	private getUntranslatedUnitsInTree(items: StatusItem[], filePath: string): StatusItem[] {
-		const results: StatusItem[] = [];
-
-		for (const item of items) {
-			if (item.type === StatusItemType.File && item.filePath === filePath && item.children) {
-				for (const child of item.children) {
-					if (child.type === StatusItemType.Unit && child.needFlag) {
-						results.push(child);
-					}
-				}
-			}
-
-			if (item.children) {
-				results.push(...this.getUntranslatedUnitsInTree(item.children, filePath));
-			}
-		}
-
-		return results;
-	}
-
-	private aggregateProgressInTree(items: StatusItem[]): {
-		totalUnits: number;
-		translatedUnits: number;
-		errorUnits: number;
-	} {
-		let totalUnits = 0;
-		let translatedUnits = 0;
-		let errorUnits = 0;
-
-		for (const item of items) {
-			if (item.type === StatusItemType.Unit) {
-				totalUnits++;
-				if (item.status === Status.Translated) {
-					translatedUnits++;
-				} else if (item.status === Status.Error) {
-					errorUnits++;
-				}
-			}
-
-			if (item.children) {
-				const childProgress = this.aggregateProgressInTree(item.children);
-				totalUnits += childProgress.totalUnits;
-				translatedUnits += childProgress.translatedUnits;
-				errorUnits += childProgress.errorUnits;
-			}
-		}
-
-		return { totalUnits, translatedUnits, errorUnits };
-	}
-
-	private getStatusItemInTree(tree: StatusItem[], path: string): StatusItem | undefined {
-		for (const item of tree) {
-			if (
-				(item.type === StatusItemType.Directory && item.directoryPath === path) ||
-				(item.type === StatusItemType.File && item.filePath === path)
-			) {
-				return item;
-			}
-
-			if (item.children) {
-				const found = this.getStatusItemInTree(item.children, path);
-				if (found) {
-					return found;
-				}
-			}
-		}
-
-		return undefined;
 	}
 }

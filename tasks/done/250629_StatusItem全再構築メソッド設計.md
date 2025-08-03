@@ -31,7 +31,7 @@ flowchart TD
   - `rebuildStatusItemAll()`: 全ファイルをパースしStatusItemツリーを再構築（重い処理）
   - `updateFileStatus()`: ファイル単位でStatusItemを更新（sync用）
   - `updateUnitStatus()`: ユニット単位でStatusItemを更新（trans用）
-  - `updateFileStatusWithError()`: エラー発生時のStatusItem更新
+  - `changeFileStatusWithError()`: エラー発生時のStatusItem更新
   - `findUnitsByFromHash()`, `findUnitByHash()` など：status-item-utilsから移管
 - `StatusCollector`: 実際のファイルパース処理（StatusManagerから呼び出し）
 - `StatusTreeProvider`: UI表示（StatusManagerから更新通知を受ける）
@@ -49,7 +49,7 @@ flowchart TD
 - [x] rebuildStatusItemAllメソッド実装（重い処理であることを明示）
 - [x] updateFileStatusメソッド実装（syncコマンド用ファイル単位更新）
 - [x] updateUnitStatusメソッド実装（transコマンド用ユニット単位更新）
-- [x] updateFileStatusWithErrorメソッド実装（エラー時更新）
+- [x] changeFileStatusWithErrorメソッド実装（エラー時更新）
 - [x] status-item-utilsの機能をStatusManagerに移管
 - [x] StatusTreeProviderとの連携実装
 - [x] sync/transコマンドからのStatusManager呼び出し実装

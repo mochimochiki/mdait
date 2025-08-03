@@ -6,6 +6,7 @@ import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
 import { Status, type StatusItem, StatusItemType } from "./status-item";
+import { StatusItemTree } from "./status-item-tree";
 
 /**
  * ファイルの翻訳状況を収集するクラス
@@ -38,12 +39,12 @@ export class StatusCollector {
 	/**
 	 * buildAllStatusItem
 	 * [重い処理]
-	 * 対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItem の配列を構築します。
+	 * 対象となる全てのディレクトリをスキャンし、全ファイルのステータス情報を収集して StatusItemTree を構築します。
 	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
-	 * @return Promise<StatusItem[]> - 全ステータスツリー
+	 * @return Promise<StatusItemTree> - 全ステータスツリー
 	 */
-	public async buildAllStatusItem(): Promise<StatusItem[]> {
-		const statusItemTree: StatusItem[] = [];
+	public async buildAllStatusItem(): Promise<StatusItemTree> {
+		const statusItemTree = new StatusItemTree();
 
 		try {
 			// 重複のないディレクトリリストを取得
@@ -52,21 +53,23 @@ export class StatusCollector {
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
 				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
-				statusItemTree.push(...sourceDirItems);
+				for (const item of sourceDirItems) {
+					statusItemTree.addOrUpdateFile(item);
+				}
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
 				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
-				statusItemTree.push(...targetDirItems);
+				for (const item of targetDirItems) {
+					statusItemTree.addOrUpdateFile(item);
+				}
 			}
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));
 		}
 
-		// fileNameで昇順ソート
-		statusItemTree.sort((a, b) => (a.fileName ?? "").localeCompare(b.fileName ?? ""));
 		return statusItemTree;
 	}
 
