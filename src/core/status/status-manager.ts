@@ -117,12 +117,7 @@ export class StatusManager {
 	 */
 	public changeUnitStatus(unitHash: string, modifications: Partial<StatusItem>, filePath: string): void {
 		try {
-			const item = this.getUnitStatusItem(unitHash, filePath);
-			if (item) {
-				Object.assign(item, modifications); // 更新項目を適用
-				// イベントを発火（該当ユニットの更新を通知）
-				this._onStatusTreeChanged.fire(item);
-			}
+			this.statusItemTree.updateUnit(filePath, unitHash, modifications);
 		} catch (error) {
 			console.error(`StatusManager: updateUnitStatus() - error: ${unitHash}`, error);
 		}
