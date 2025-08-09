@@ -30,7 +30,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// Eventリスナーを登録
 		this.statusManager.onStatusTreeChanged((updatedItem) => {
-			if (updatedItem) {
+			if (updatedItem !== null) {
 				// 該当ファイルアイテムのみツリー更新
 				this._onDidChangeTreeData.fire(updatedItem);
 			}
