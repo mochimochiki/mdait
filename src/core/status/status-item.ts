@@ -9,6 +9,7 @@ export enum Status {
 	Error = "error",
 	Unknown = "unknown",
 	Source = "source",
+	Empty = "empty",
 }
 
 /**

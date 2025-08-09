@@ -92,6 +92,23 @@ export class StatusCollector {
 			const totalUnits = markdown.units.length;
 			const children: StatusItem[] = [];
 
+			// totalUnitsが0の場合は空のステータスを返す
+			if (totalUnits === 0) {
+				return {
+					type: StatusItemType.File,
+					label: fileName,
+					status: Status.Empty,
+					filePath,
+					fileName,
+					translatedUnits: 0,
+					totalUnits: 0,
+					hasParseError: false,
+					children: [],
+					contextValue: "mdaitFile",
+					collapsibleState: vscode.TreeItemCollapsibleState.None,
+				};
+			}
+
 			for (const unit of markdown.units) {
 				const unitStatus = this.determineUnitStatus(unit);
 				children.push({

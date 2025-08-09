@@ -281,7 +281,6 @@ export class StatusItemTree {
 			} else {
 				this.fileItemMap.set(fileItem.filePath, fileItem);
 			}
-			this._onTreeChanged.fire(fileItem);
 
 			// 子ユニットも登録（ファイルパス + ハッシュで一意性確保）
 			if (fileItem.children) {
@@ -295,7 +294,6 @@ export class StatusItemTree {
 						} else {
 							this.unitItemMapWithPath.set(key, unit);
 						}
-						this._onTreeChanged.fire(unit);
 					}
 				}
 			}
@@ -313,7 +311,6 @@ export class StatusItemTree {
 
 		// 既存のファイルStatusItemを更新
 		Object.assign(existingItem, updates);
-		this._onTreeChanged.fire(existingItem);
 
 		// ディレクトリ更新
 		this.addOrUpdateDirectory(existingItem);
@@ -332,7 +329,6 @@ export class StatusItemTree {
 
 		// ユニットを更新
 		Object.assign(unit, updates);
-		this._onTreeChanged.fire(unit);
 
 		// 親ファイルの子要素も更新
 		const fileItem = this.fileItemMap.get(filePath);
@@ -416,7 +412,7 @@ export class StatusItemTree {
 		const isTranslating = files.some((file) => file.isTranslating === true);
 
 		// sourceディレクトリの場合は翻訳ユニット数を表示しない
-		const label = status === Status.Source ? `${dirName} (source)` : `${dirName} (${translatedUnits}/${totalUnits})`;
+		const label = status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
 
 		return {
 			type: StatusItemType.Directory,
@@ -462,7 +458,7 @@ export class StatusItemTree {
 		const hasError = files.some((f) => f.status === Status.Error);
 		if (hasError) return Status.Error;
 
-		const allSource = files.every((f) => f.status === Status.Source);
+		const allSource = files.every((f) => f.status === Status.Source || f.status === Status.Empty);
 		if (allSource) return Status.Source;
 
 		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
