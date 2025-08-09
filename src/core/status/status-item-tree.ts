@@ -1,6 +1,8 @@
 import { on } from "node:events";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { Configuration } from "../../config/configuration";
+import { FileExplorer } from "../../utils/file-explorer";
 import { Status, type StatusItem, StatusItemType } from "./status-item";
 
 /**
@@ -352,49 +354,104 @@ export class StatusItemTree {
 		if (!fileItem.filePath) return;
 
 		const dirPath = path.dirname(fileItem.filePath);
-		let directoryItem = this.directoryItemMap.get(dirPath);
-
+		const stopRoot = this.getStopRoot(dirPath);
+		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (directoryItem) {
-			// 既存のディレクトリStatusItemを更新
-			if (!directoryItem.children) {
-				directoryItem.children = [];
-			}
-
+			directoryItem.children = directoryItem.children || [];
 			const index = directoryItem.children.findIndex((f) => f.filePath === fileItem.filePath);
 			if (index >= 0) {
 				Object.assign(directoryItem.children[index], fileItem);
 			} else {
 				directoryItem.children.push(fileItem);
 			}
+		}
 
-			directoryItem.collapsibleState =
-				directoryItem.children && directoryItem.children.length > 0
-					? vscode.TreeItemCollapsibleState.Collapsed
-					: vscode.TreeItemCollapsibleState.None;
+		// 子の更新や集計はすべてこちらで面倒を見る
+		this.updateDirectoryAggregatesUpward(dirPath, stopRoot);
+	}
 
-			directoryItem.status = this.determineMergedStatus(directoryItem.children);
-
-			// ディレクトリのisTranslatingフラグを決定
-			directoryItem.isTranslating = directoryItem.children.some((file) => file.isTranslating === true);
-
-			// ディレクトリのラベルを更新
-			const totalUnits = directoryItem.children.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-			const translatedUnits = directoryItem.children.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
-			const dirName = path.basename(directoryItem.directoryPath || "") || directoryItem.directoryPath || "";
-			directoryItem.label =
-				directoryItem.status === Status.Source
-					? `${dirName} (source)`
-					: `${dirName} (${translatedUnits}/${totalUnits})`;
-
-			directoryItem.totalUnits = totalUnits;
-			directoryItem.translatedUnits = translatedUnits;
-			this._onTreeChanged.fire(directoryItem);
-		} else {
-			// 新しいディレクトリStatusItemを作成
-			directoryItem = this.createDirectoryStatusItem(dirPath, [fileItem]);
+	/**
+	 * 指定ディレクトリから親方向へ集計を再帰更新する（最上位でイベント発火）
+	 */
+	private updateDirectoryAggregatesUpward(dirPath: string, stopRoot?: string): void {
+		const effectiveStopRoot = stopRoot ?? this.getStopRoot(dirPath);
+		let directoryItem = this.directoryItemMap.get(dirPath);
+		if (!directoryItem) {
+			// 直下ファイルを fileItemMap から収集して作成
+			const directFiles = Array.from(this.fileItemMap.values()).filter(
+				(f) => f.filePath && path.dirname(f.filePath) === dirPath,
+			);
+			directoryItem = this.createDirectoryStatusItem(dirPath, directFiles);
 			this.directoryItemMap.set(dirPath, directoryItem);
+		}
+
+		// 集計の更新（共通処理）
+		this.recalcDirectoryAggregate(dirPath, directoryItem);
+
+		// 親があれば継続。なければここでイベント発火。
+		const parentDir = path.dirname(dirPath);
+		if (dirPath !== effectiveStopRoot) {
+			this.updateDirectoryAggregatesUpward(parentDir, effectiveStopRoot);
+		} else {
 			this._onTreeChanged.fire(directoryItem);
 		}
+	}
+
+	/**
+	 * 再帰の停止ルートを判定する（transPairs ルート優先。なければワークスペースフォルダ。最後の手段はドライブルート）
+	 */
+	private getStopRoot(dirPath: string): string {
+		const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const config = Configuration.getInstance();
+		try {
+			const explorer = new FileExplorer();
+			const classification = explorer.classifyFile(dirPath, config);
+			const rootRel =
+				classification.type === "source"
+					? classification.transPair?.sourceDir
+					: classification.type === "target"
+						? classification.transPair?.targetDir
+						: undefined;
+			if (rootRel) {
+				const abs = path.isAbsolute(rootRel) ? rootRel : wsFolder ? path.resolve(wsFolder, rootRel) : rootRel;
+				return path.resolve(abs);
+			}
+		} catch {
+			// FileExplorer 初期化不可などは無視してフォールバック
+		}
+		// フォールバック：ワークスペース、なければドライブルート
+		if (wsFolder) return path.resolve(wsFolder);
+		return path.parse(path.resolve(dirPath)).root;
+	}
+
+	/**
+	 * ディレクトリの集計・表示情報を更新（共通処理）
+	 */
+	private recalcDirectoryAggregate(dirPath: string, directoryItem: StatusItem): void {
+		// 直下ファイルまたはサブディレクトリがある場合は折りたたみ可能
+		{
+			const hasFiles = !!directoryItem.children && directoryItem.children.length > 0;
+			const hasSubDirs = this.getSubDirectoryPaths(dirPath).length > 0;
+			directoryItem.collapsibleState =
+				hasFiles || hasSubDirs ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+		}
+
+		// 再帰的に配下すべてのファイルから集計
+		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
+		directoryItem.status = this.determineMergedStatus(allFiles);
+
+		// ディレクトリのisTranslatingフラグを決定（再帰）
+		directoryItem.isTranslating = allFiles.some((file) => file.isTranslating === true);
+
+		// ディレクトリのラベル/集計値を更新（再帰）
+		const totalUnits = allFiles.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
+		const translatedUnits = allFiles.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
+		const dirName = path.basename(directoryItem.directoryPath || "") || directoryItem.directoryPath || "";
+		directoryItem.label =
+			directoryItem.status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
+
+		directoryItem.totalUnits = totalUnits;
+		directoryItem.translatedUnits = translatedUnits;
 	}
 
 	/**
@@ -402,14 +459,17 @@ export class StatusItemTree {
 	 */
 	private createDirectoryStatusItem(dirPath: string, files: StatusItem[]): StatusItem {
 		const dirName = path.basename(dirPath) || dirPath;
-		const totalUnits = files.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-		const translatedUnits = files.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 
-		// ディレクトリの全体ステータスを決定
-		const status = this.determineMergedStatus(files);
+		// 再帰的に配下すべてのファイルから集計
+		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
+		const totalUnits = allFiles.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
+		const translatedUnits = allFiles.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
 
-		// ディレクトリのisTranslatingフラグを決定
-		const isTranslating = files.some((file) => file.isTranslating === true);
+		// ディレクトリの全体ステータスを決定（再帰）
+		const status = this.determineMergedStatus(allFiles);
+
+		// ディレクトリのisTranslatingフラグを決定（再帰）
+		const isTranslating = allFiles.some((file) => file.isTranslating === true);
 
 		// sourceディレクトリの場合は翻訳ユニット数を表示しない
 		const label = status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
@@ -421,11 +481,16 @@ export class StatusItemTree {
 			status,
 			isTranslating,
 			contextValue: "mdaitDirectory",
-			children: [...files], // ファイルのコピーを保持
+			children: [...files], // 直下ファイルのコピーを保持
 			totalUnits,
 			translatedUnits,
-			collapsibleState:
-				files.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+			collapsibleState: (() => {
+				const hasFiles = files.length > 0;
+				const hasSubDirs = this.getSubDirectoryPaths(dirPath).length > 0;
+				return hasFiles || hasSubDirs
+					? vscode.TreeItemCollapsibleState.Collapsed
+					: vscode.TreeItemCollapsibleState.None;
+			})(),
 		};
 	}
 

@@ -68,9 +68,6 @@ export class StatusManager {
 				this.statusItemTree.dispose();
 			}
 			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
-			this.statusItemTree.onTreeChanged((item) => {
-				this._onStatusTreeChanged.fire(item);
-			});
 
 			// イベントを発火（ツリー全体更新を通知、undefinedはツリー全体更新の意味）
 			this._onStatusTreeChanged.fire(undefined);
