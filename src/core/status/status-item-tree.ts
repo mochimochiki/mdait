@@ -261,9 +261,14 @@ export class StatusItemTree {
 	public build(files: StatusItem[]): void {
 		this.clear();
 
+		console.log("=>build");
+		const startTime = performance.now();
 		for (const file of files) {
 			this.addOrUpdateFile(file);
 		}
+
+		const endTime = performance.now();
+		console.log(`<=build (${Math.round(endTime - startTime)}ms)`);
 	}
 
 	/**
