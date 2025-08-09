@@ -210,6 +210,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				return new vscode.ThemeIcon("circle");
 			case Status.Source:
 				return new vscode.ThemeIcon("symbol-constant", new vscode.ThemeColor("charts.blue"));
+			case Status.Empty:
+				return new vscode.ThemeIcon("symbol-variable", new vscode.ThemeColor("charts.yellow"));
 			case Status.Error:
 				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
 			default:
