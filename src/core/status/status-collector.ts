@@ -234,6 +234,7 @@ export class StatusCollector {
 			return [];
 		}
 
+		const startTime = performance.now();
 		const absoluteTargetDir = path.resolve(workspaceRoot, targetDir);
 
 		try {
@@ -248,29 +249,31 @@ export class StatusCollector {
 			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 			const mdFiles = files.map((f) => f.fsPath);
 
-			// 各ファイルの状況を収集
-			const fileStatuses: StatusItem[] = [];
-			for (const filePath of mdFiles) {
-				try {
-					const fileStatus = await this.collectFileStatus(filePath);
-					fileStatuses.push(fileStatus);
-				} catch (error) {
-					console.error(`Error processing file ${filePath}:`, error);
-					// エラーファイルも含める
-					fileStatuses.push({
-						type: StatusItemType.File,
-						label: path.basename(filePath),
-						status: Status.Error,
-						filePath,
-						fileName: path.basename(filePath),
-						hasParseError: true,
-						errorMessage: (error as Error).message,
-						contextValue: "mdaitFile",
-						collapsibleState: vscode.TreeItemCollapsibleState.None,
-					});
-				}
-			}
+			// 各ファイルの状況を並列に収集
+			const fileStatuses: StatusItem[] = await Promise.all(
+				mdFiles.map(async (filePath) => {
+					try {
+						return await this.collectFileStatus(filePath);
+					} catch (error) {
+						console.error(`Error processing file ${filePath}:`, error);
+						// エラーファイルも含める
+						return {
+							type: StatusItemType.File,
+							label: path.basename(filePath),
+							status: Status.Error,
+							filePath,
+							fileName: path.basename(filePath),
+							hasParseError: true,
+							errorMessage: (error as Error).message,
+							contextValue: "mdaitFile",
+							collapsibleState: vscode.TreeItemCollapsibleState.None,
+						};
+					}
+				}),
+			);
 
+			const checkPoint = performance.now();
+			console.log(`collectAllFromDirectory: dir:${targetDir} ${Math.round(checkPoint - startTime)}ms`);
 			return fileStatuses;
 		} catch (error) {
 			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);
