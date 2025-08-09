@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
@@ -44,42 +45,45 @@ export async function syncCommand(): Promise<void> {
 				continue;
 			}
 
-			// 各ファイルを同期
-			for (const sourceFile of files) {
-				try {
-					// 出力先パスを取得（新しい統合されたFileExplorerを使用）
-					const targetFile = fileExplorer.getTargetPathFromConfig(sourceFile, config);
-					if (!targetFile) {
-						console.warn(`Target path could not be determined for: ${sourceFile}`);
-						continue;
-					}
+			// 各ファイルを同期（Markdownのみを非同期並列実行、同時実行数を制限）
+			const mdFiles = files.filter((f) => path.extname(f).toLowerCase() === ".md");
 
-					// ファイルタイプに応じて適切な同期処理を選択
-					const extension = path.extname(sourceFile).toLowerCase();
-					if (extension === ".md") {
+			const concurrency = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
+			let index = 0;
+
+			const worker = async () => {
+				while (true) {
+					const i = index++;
+					if (i >= mdFiles.length) break;
+					const sourceFile = mdFiles[i];
+					try {
+						// 出力先パスを取得（新しい統合されたFileExplorerを使用）
+						const targetFile = fileExplorer.getTargetPathFromConfig(sourceFile, config);
+						if (!targetFile) {
+							console.warn(`Target path could not be determined for: ${sourceFile}`);
+							continue;
+						}
+
 						// Markdownファイルの同期を実行
 						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
 
-						// StatusManagerでファイル状態をリアルタイム更新
-						await statusManager.refreshFileStatus(sourceFile);
-						await statusManager.refreshFileStatus(targetFile);
-
 						// ログ出力（差分情報を一行で表示）
 						console.log(
-							`${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
+							`[${pair.sourceDir} -> ${pair.targetDir}] ${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
-					} else {
-						// Markdown以外は無視
-					}
 
-					successCount++;
-				} catch (error) {
-					console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
-					// エラー時もStatusManagerに通知
-					await statusManager.changeFileStatusWithError(sourceFile, error as Error);
-					errorCount++;
+						successCount++;
+					} catch (error) {
+						console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
+						// エラー時もStatusManagerに通知
+						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
+						errorCount++;
+					}
 				}
-			}
+			};
+
+			const workers = Array.from({ length: Math.min(concurrency, mdFiles.length) }, () => worker());
+			await Promise.all(workers);
 		}
 		// 完了通知
 		vscode.window.showInformationMessage(

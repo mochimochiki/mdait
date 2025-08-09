@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
@@ -238,26 +239,36 @@ export class StatusCollector {
 		const absoluteTargetDir = path.resolve(workspaceRoot, targetDir);
 
 		try {
-			// ディレクトリが存在するかチェック
-			if (!fs.existsSync(absoluteTargetDir)) {
+			// ディレクトリが存在するかチェック（非同期I/O）
+			const stat = await fs.promises.stat(absoluteTargetDir).catch(() => null as fs.Stats | null);
+			if (!stat || !stat.isDirectory()) {
 				return [];
 			}
 
 			// ディレクトリ内のMarkdownファイルを再帰的に検索
-			const workspaceUri = vscode.Uri.file(workspaceRoot);
-			const pattern = new vscode.RelativePattern(absoluteTargetDir, "**/*.md");
-			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
+			const includePattern = new vscode.RelativePattern(absoluteTargetDir, "**/*.md");
+			const excludePattern = config.ignoredPatterns
+				? (new vscode.RelativePattern(absoluteTargetDir, config.ignoredPatterns) as vscode.GlobPattern)
+				: undefined;
+			const files = await vscode.workspace.findFiles(includePattern, excludePattern);
 			const mdFiles = files.map((f) => f.fsPath);
 
-			// 各ファイルの状況を並列に収集
-			const fileStatuses: StatusItem[] = await Promise.all(
-				mdFiles.map(async (filePath) => {
+			// 各ファイルの状況を並列に収集（同時実行数を制限）
+			const concurrency = Math.max(1, Math.min(os.cpus()?.length ?? 4, 16));
+			const results: StatusItem[] = new Array(mdFiles.length);
+			let index = 0;
+
+			const worker = async () => {
+				while (true) {
+					const i = index++;
+					if (i >= mdFiles.length) break;
+					const filePath = mdFiles[i];
 					try {
-						return await this.collectFileStatus(filePath);
+						results[i] = await this.collectFileStatus(filePath);
 					} catch (error) {
 						console.error(`Error processing file ${filePath}:`, error);
 						// エラーファイルも含める
-						return {
+						results[i] = {
 							type: StatusItemType.File,
 							label: path.basename(filePath),
 							status: Status.Error,
@@ -269,12 +280,15 @@ export class StatusCollector {
 							collapsibleState: vscode.TreeItemCollapsibleState.None,
 						};
 					}
-				}),
-			);
+				}
+			};
+
+			const workers = Array.from({ length: Math.min(concurrency, mdFiles.length) }, () => worker());
+			await Promise.all(workers);
 
 			const checkPoint = performance.now();
 			console.log(`collectAllFromDirectory: dir:${targetDir} ${Math.round(checkPoint - startTime)}ms`);
-			return fileStatuses;
+			return results;
 		} catch (error) {
 			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);
 			return [];
