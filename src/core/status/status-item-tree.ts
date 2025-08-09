@@ -174,19 +174,7 @@ export class StatusItemTree {
 	 * ルートディレクトリ一覧を取得（設定されたtransPairsに基づく）
 	 */
 	public getRootDirectoryItems(transPairDirs: string[]): StatusItem[] {
-		const directoryItems: StatusItem[] = [];
-
-		// transPairsで指定されたディレクトリのみを対象
-		const rootDirs = transPairDirs.filter((dir) => this.directoryItemMap.has(dir));
-
-		for (const dirPath of rootDirs) {
-			const directoryItem = this.getDirectory(dirPath);
-			if (directoryItem) {
-				directoryItems.push(directoryItem);
-			}
-		}
-
-		return directoryItems;
+		return transPairDirs.map((dirPath) => this.getDirectory(dirPath)).filter((item): item is StatusItem => !!item);
 	}
 
 	// ========== 集計 ==========
