@@ -269,6 +269,9 @@ export class StatusItemTree {
 	 */
 	public addOrUpdateFile(fileItem: StatusItem): void {
 		fileItem.isTranslating = false; // 翻訳中フラグをリセット
+		if (fileItem.children) {
+			fileItem.isTranslating = fileItem.children.some((file) => file.isTranslating === true);
+		}
 		if (fileItem.type === StatusItemType.File && fileItem.filePath) {
 			const existingItem = this.fileItemMap.get(fileItem.filePath);
 			if (existingItem) {
@@ -297,8 +300,8 @@ export class StatusItemTree {
 				}
 			}
 
-			// ディレクトリマップを更新
-			this.addOrUpdateDirectoryFromFile(fileItem);
+			// ディレクトリ更新
+			this.addOrUpdateDirectory(fileItem);
 		}
 	}
 
@@ -312,6 +315,8 @@ export class StatusItemTree {
 		Object.assign(existingItem, updates);
 		this._onTreeChanged.fire(existingItem);
 
+		// ディレクトリ更新
+		this.addOrUpdateDirectory(existingItem);
 		return existingItem;
 	}
 
@@ -335,7 +340,7 @@ export class StatusItemTree {
 			const unitIndex = fileItem.children.findIndex((child) => child.unitHash === unitHash);
 			if (unitIndex >= 0) {
 				Object.assign(fileItem.children[unitIndex], unit);
-				this._onTreeChanged.fire(fileItem);
+				this.addOrUpdateFile(fileItem);
 			}
 		}
 
@@ -347,7 +352,7 @@ export class StatusItemTree {
 	/**
 	 * 特定のファイルに対してディレクトリマップを更新
 	 */
-	private addOrUpdateDirectoryFromFile(fileItem: StatusItem): void {
+	private addOrUpdateDirectory(fileItem: StatusItem): void {
 		if (!fileItem.filePath) return;
 
 		const dirPath = path.dirname(fileItem.filePath);
