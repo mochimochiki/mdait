@@ -19,15 +19,6 @@ export class StatusTreeTranslationHandler {
 	}
 
 	/**
-	 * ステータスツリーを更新する
-	 */
-	private async refreshStatusTree(): Promise<void> {
-		if (this.statusTreeProvider) {
-			await this.statusTreeProvider.refreshTree();
-		}
-	}
-
-	/**
 	 * ディレクトリ内の全ファイルを翻訳する
 	 */
 	public async translateDirectory(item: StatusItem): Promise<void> {
@@ -91,8 +82,6 @@ export class StatusTreeTranslationHandler {
 			if (files.length > 0) {
 				await Promise.all(files.map((file) => statusManager.changeFileStatus(file.fsPath, { isTranslating: false })));
 			}
-			// ステータスツリーを更新
-			await this.refreshStatusTree();
 		}
 	}
 

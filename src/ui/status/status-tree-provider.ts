@@ -38,33 +38,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
-	 * ツリーデータをリフレッシュする
-	 */
-	public async refreshTree(): Promise<void> {
-		try {
-			// 設定が有効かチェック
-			const validationError = this.configuration.validate();
-			if (validationError) {
-				vscode.window.showWarningMessage(validationError);
-				// エラー時はツリーをクリア
-				this.statusItemTree.clear();
-			} else {
-				// StatusManagerから最新のStatusItemを取得
-				if (!this.statusManager.isInitialized()) {
-					// 初期化されていない場合は全体再構築
-					await this.statusManager.buildAllStatusItem();
-				}
-			}
-
-			// ツリービューを全体更新
-			this._onDidChangeTreeData.fire(undefined);
-		} catch (error) {
-			console.error("Error refreshing status tree:", error);
-			vscode.window.showErrorMessage(vscode.l10n.t("Error refreshing status tree: {0}", (error as Error).message));
-		}
-	}
-
-	/**
 	 * API: ツリーアイテムを取得する
 	 * elementはgetChildrenから渡されるStatusItemのため、インスタンスが入れ替わっていると古い状態になっている可能性がある
 	 * 各StatusItem更新ではAssignを使用しているため、最新の状態を反映する
