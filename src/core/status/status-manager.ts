@@ -136,7 +136,8 @@ export class StatusManager {
 	 */
 	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
 		if (!path) {
-			return this.statusItemTree.getUnitByFromHashFirstWithoutPath(hash);
+			// hash はユニット自身の unitHash を指すため、fromHash ではなく unitHash で全体検索する
+			return this.statusItemTree.getUnitFirstWithoutPath(hash);
 		}
 		return this.statusItemTree.getUnit(hash, path);
 	}
