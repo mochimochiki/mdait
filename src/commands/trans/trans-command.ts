@@ -53,6 +53,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
+
 		// Markdown ファイルの読み込みとパース
 		const markdownContent = await fs.promises.readFile(targetFilePath, "utf-8");
 		const markdown = markdownParser.parse(markdownContent, config);
@@ -74,7 +75,20 @@ export async function transCommand(uri?: vscode.Uri) {
 			}
 
 			try {
+				const oldHash = unit.marker.hash;
 				await translateUnit(unit, translator, sourceLang, targetLang, markdown);
+
+				// 翻訳完了をStatusManagerに通知
+				statusManager.changeUnitStatus(
+					oldHash,
+					{
+						status: Status.Translated,
+						needFlag: undefined,
+						isTranslating: false,
+						unitHash: unit.marker.hash,
+					},
+					targetFilePath,
+				);
 			} catch (error) {
 				// 翻訳エラーをStatusManagerに通知
 				if (unit.marker?.hash) {
