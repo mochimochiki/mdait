@@ -329,15 +329,42 @@ function computeRangeByOldMarker(
  * ユニットごとに旧マーカーから範囲を特定し、新しいマーカー＋本文で安全に置換する
  */
 async function replaceUnitByOldMarker(file: vscode.Uri, unit: MdaitUnit, oldMarkerText: string): Promise<void> {
-	const doc = await vscode.workspace.openTextDocument(file);
-	const text = doc.getText();
-	const range = computeRangeByOldMarker(doc, text, unit, oldMarkerText);
-	if (!range) {
-		console.warn("mdait marker not found. Skipped unit replacement for:", unit.title);
+	// 開いているか判定（開いている場合はエディタ上で編集、開いていなければサイレントに書き換え）
+	const isOpen =
+		vscode.window.visibleTextEditors.some((e) => e.document.uri.fsPath === file.fsPath) ||
+		vscode.workspace.textDocuments.some((d) => d.uri.fsPath === file.fsPath);
+	const replacement = `${unit.marker.toString()}\n${unit.content}\n`;
+
+	// ファイル未表示: 文字列でオフセット計算し、fs.writeFileでサイレント更新
+	const document = await vscode.workspace.fs.readFile(file);
+	const decoder = new TextDecoder("utf-8");
+	const content = decoder.decode(document);
+	const offsets = computeOffsetsByOldMarker(content, oldMarkerText);
+	if (!offsets) {
+		console.warn("mdait marker not found (fs path). Skipped unit replacement for:", unit.title);
 		return;
 	}
-	const edit = new vscode.WorkspaceEdit();
-	const newText = `${unit.marker.toString()}\n${unit.content}\n`;
-	edit.replace(file, range, newText);
-	await vscode.workspace.applyEdit(edit);
+	const updated = content.slice(0, offsets.start) + replacement + content.slice(offsets.end);
+	const encoder = new TextEncoder();
+	await vscode.workspace.fs.writeFile(file, encoder.encode(updated));
+}
+
+/**
+ * 旧マーカーのハッシュに基づき、置換対象の文字オフセット範囲を返す（TextDocument不要のサイレント更新用）
+ */
+function computeOffsetsByOldMarker(text: string, oldMarkerText: string): { start: number; end: number } | null {
+	const hashMatch = oldMarkerText.match(/<!--\s*mdait\s+([a-zA-Z0-9]+)/);
+	if (!hashMatch) return null;
+	const oldHash = hashMatch[1];
+	const markerRe = new RegExp(`<!--\\s*mdait\\s+${oldHash}[^>]*-->`, "g");
+	const match = [...text.matchAll(markerRe)][0];
+	if (!match || match.index == null) return null;
+
+	const startIdx = match.index;
+	const markerLen = match[0].length;
+	const after = text.slice(startIdx + markerLen);
+	const anyMarkerRe = /<!--\s*mdait\s+[a-zA-Z0-9]+[^>]*-->/g;
+	const nextMatch = [...after.matchAll(anyMarkerRe)][0];
+	const endIdx = nextMatch ? startIdx + markerLen + (nextMatch.index ?? 0) : text.length;
+	return { start: startIdx, end: endIdx };
 }

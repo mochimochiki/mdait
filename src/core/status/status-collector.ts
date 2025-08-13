@@ -84,8 +84,9 @@ export class StatusCollector {
 		try {
 			// ファイルを読み込み (workspaceEditを利用)
 			const uri = vscode.Uri.file(filePath);
-			const document = await vscode.workspace.openTextDocument(uri);
-			const content = document.getText();
+			const document = await vscode.workspace.fs.readFile(uri);
+			const decoder = new TextDecoder("utf-8");
+			const content = decoder.decode(document);
 
 			// Markdownをパース
 			const markdown = this.parser.parse(content, this.config);

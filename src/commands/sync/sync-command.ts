@@ -65,7 +65,7 @@ export async function syncCommand(): Promise<void> {
 						}
 
 						// Markdownファイルの同期を実行
-						const diffResult = syncMarkdownFile(sourceFile, targetFile, config);
+						const diffResult = await syncMarkdownFile(sourceFile, targetFile, config);
 
 						// ログ出力（差分情報を一行で表示）
 						console.log(
@@ -117,11 +117,11 @@ export async function syncCommand(): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
+async function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
 	if (fs.existsSync(targetFile)) {
 		return syncExistingMarkdownFile(sourceFile, targetFile, config);
 	}
-	return createInitialTargetFile(sourceFile, targetFile, config);
+	return await createInitialTargetFile(sourceFile, targetFile, config);
 }
 
 /**
@@ -131,11 +131,17 @@ function syncMarkdownFile(sourceFile: string, targetFile: string, config: Config
  * @param config 設定
  * @returns 差分検出結果
  */
-function createInitialTargetFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
+async function createInitialTargetFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): Promise<DiffResult> {
 	const fileExplorer = new FileExplorer();
 
 	// 1. ソースファイル読み込み＆パース
-	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
+	const document = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
+	const decoder = new TextDecoder("utf-8");
+	const sourceContent = decoder.decode(document);
 	const source = markdownParser.parse(sourceContent, config);
 
 	// 2. mdaitマーカーとハッシュを付与（source側はneed,fromなし）
@@ -156,13 +162,14 @@ function createInitialTargetFile(sourceFile: string, targetFile: string, config:
 	};
 
 	// 4. ターゲットファイルとして保存
+	const encoder = new TextEncoder();
 	const targetContent = markdownParser.stringify(targetDoc);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	fs.writeFileSync(targetFile, targetContent, "utf-8");
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
 
 	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
 	const updatedSourceContent = markdownParser.stringify(source);
-	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 6. DiffResultを返す
 	return {
@@ -181,14 +188,21 @@ function createInitialTargetFile(sourceFile: string, targetFile: string, config:
  * @param config 設定
  * @returns 差分検出結果
  */
-function syncExistingMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): DiffResult {
+async function syncExistingMarkdownFile(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): Promise<DiffResult> {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
 
 	// ファイル読み込み
-	const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-	const targetContent = fs.readFileSync(targetFile, "utf-8");
+	const decoder = new TextDecoder("utf-8");
+	const sourceDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
+	const targetDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile));
+	const sourceContent = decoder.decode(sourceDoc);
+	const targetContent = decoder.decode(targetDoc);
 
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config);
@@ -226,7 +240,8 @@ function syncExistingMarkdownFile(sourceFile: string, targetFile: string, config
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
 
 	// ファイル出力
-	fs.writeFileSync(targetFile, syncedContent, "utf-8");
+	const encoder = new TextEncoder();
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
 
 	// source側にもmdaitヘッダー・hashを必ず付与・更新し、ファイル保存
 	const updatedSourceContent = markdownParser.stringify({
@@ -234,7 +249,8 @@ function syncExistingMarkdownFile(sourceFile: string, targetFile: string, config
 		frontMatterRaw: source.frontMatterRaw,
 		units: source.units,
 	});
-	fs.writeFileSync(sourceFile, updatedSourceContent, "utf-8");
+
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	return diffResult;
 }
