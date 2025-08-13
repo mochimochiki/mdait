@@ -55,12 +55,16 @@ export class StatusCollector {
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
 				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
+				// sort
+				sourceDirItems.sort((a, b) => (a.filePath ?? "").localeCompare(b.filePath ?? ""));
 				files.push(...sourceDirItems);
 			}
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
 				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
+				// sort
+				targetDirItems.sort((a, b) => (a.filePath ?? "").localeCompare(b.filePath ?? ""));
 				files.push(...targetDirItems);
 			}
 
