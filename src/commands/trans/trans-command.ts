@@ -299,33 +299,6 @@ function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
 }
 
 /**
- * 旧マーカー文字列を手掛かりに、ユニット範囲（マーカー位置〜ユニット末尾行）を計算する
- */
-function computeRangeByOldMarker(
-	doc: vscode.TextDocument,
-	text: string,
-	unit: MdaitUnit,
-	oldMarkerText: string,
-): vscode.Range | null {
-	// 旧マーカーのハッシュを抽出して、そのハッシュを持つ mdait マーカーを検索
-	const hashMatch = oldMarkerText.match(/<!--\s*mdait\s+([a-zA-Z0-9]+)/);
-	if (!hashMatch) return null;
-	const oldHash = hashMatch[1];
-	const markerRe = new RegExp(`<!--\\s*mdait\\s+${oldHash}[^>]*-->`, "g");
-	const match = [...text.matchAll(markerRe)][0];
-	if (!match || match.index == null) return null;
-
-	const startIdx = match.index;
-	const markerLen = match[0].length;
-	const after = text.slice(startIdx + markerLen);
-	const anyMarkerRe = /<!--\s*mdait\s+[a-zA-Z0-9]+[^>]*-->/g;
-	const nextMatch = [...after.matchAll(anyMarkerRe)][0];
-	const endIdx = nextMatch ? startIdx + markerLen + (nextMatch.index ?? 0) : text.length;
-
-	return new vscode.Range(doc.positionAt(startIdx), doc.positionAt(endIdx));
-}
-
-/**
  * ユニットごとに旧マーカーから範囲を特定し、新しいマーカー＋本文で安全に置換する
  */
 async function replaceUnitByOldMarker(file: vscode.Uri, unit: MdaitUnit, oldMarkerText: string): Promise<void> {
