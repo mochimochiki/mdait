@@ -6,6 +6,7 @@ import { Configuration } from "./config/configuration";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
+import { SelectionState } from "./core/status/selection-state";
 
 export function activate(context: vscode.ExtensionContext) {
 	// StatusManagerの初期化
@@ -17,6 +18,25 @@ export function activate(context: vscode.ExtensionContext) {
 	const treeView = vscode.window.createTreeView("mdait.status", {
 		treeDataProvider: statusTreeProvider,
 		showCollapseAll: false,
+	});
+
+	// SelectionState 初期化（前回復元→先頭フォールバック）
+	const selectionState = SelectionState.getInstance();
+	selectionState.initialize(context).then(() => {
+		// 初期化後に transPairs と整合
+		selectionState.reconcileWith(config.transPairs);
+	});
+
+	// 選択変更時はツリー更新
+	selectionState.onChanged(() => {
+		statusTreeProvider.refresh();
+	});
+
+	// 設定変更で transPairs が変わった場合の補正
+	vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration("mdait")) {
+			selectionState.reconcileWith(config.transPairs);
+		}
 	});
 
 	// sync command
@@ -118,9 +138,36 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// 対象言語選択コマンド（QuickPick: 複数選択、空は確定不可）
+	const selectTargetsDisposable = vscode.commands.registerCommand("mdait.status.selectTargets", async () => {
+		const pick = vscode.window.createQuickPick<{ label: string; description?: string; key: string }>();
+		pick.canSelectMany = true;
+		const items = SelectionState.getInstance()
+			.getSelectableTargets()
+			.map((t) => ({ label: t.label, description: t.description, key: t.key }));
+		pick.items = items;
+		// 既存選択を反映
+		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());
+		pick.selectedItems = items.filter((i) => selectedKeys.includes(i.key));
+
+		// 空禁止: accept を抑止（代替メッセージはタイトルに表示）
+		pick.onDidAccept(() => {
+			const keys = pick.selectedItems.map((i) => i.key);
+			if (keys.length === 0) {
+				pick.title = vscode.l10n.t("Select at least one target.");
+				return; // stay open
+			}
+			SelectionState.getInstance().updateSelection(keys);
+			pick.hide();
+		});
+		pick.onDidHide(() => pick.dispose());
+		pick.show();
+	});
+
 	// 初回データ読み込み
 	context.subscriptions.push(
 		syncDisposable,
+		selectTargetsDisposable,
 		transDisposable,
 		translateDirectoryDisposable,
 		translateFileDisposable,

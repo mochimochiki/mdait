@@ -2,6 +2,7 @@
   "mdait.description": "マークダウンファイルの翻訳拡張機能",
   "mdait.sync.title": "mdait: 同期",
   "mdait.trans.title": "mdait: 翻訳を実行",
+  "mdait.status.selectTargets.title": "対象言語を選択",
   "mdait.status.sync.title": "同期",
   "mdait.translate.directory.title": "ディレクトリを翻訳",
   "mdait.translate.file.title": "ファイルを翻訳",

@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { SelectionState } from "../../core/status/selection-state";
 import { Status, type StatusItem, StatusItemType } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 
@@ -35,6 +36,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				this._onDidChangeTreeData.fire(updatedItem);
 			}
 		});
+	}
+
+	/**
+	 * 外部から手動更新したい場合に使用
+	 */
+	public refresh(): void {
+		this._onDidChangeTreeData.fire(undefined);
 	}
 
 	/**
@@ -139,9 +147,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * ディレクトリ一覧のStatusItemを作成する
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
-		// transPairs.targetDirとsourceDirの絶対パス一覧を作成
+		// 選択中の target のみに絞ってディレクトリ一覧を作成
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const allDirsAbs = this.configuration.transPairs.flatMap((pair) => [
+		const pairs = SelectionState.getInstance().filterTransPairs(this.configuration.transPairs);
+		const allDirsAbs = pairs.flatMap((pair) => [
 			workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
 			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
 		]);

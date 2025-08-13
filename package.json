@@ -24,6 +24,12 @@
         "title": "%mdait.sync.title%"
       },
       {
+        "command": "mdait.status.selectTargets",
+        "title": "%mdait.status.selectTargets.title%",
+        "icon": "$(filter)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.trans",
         "title": "%mdait.trans.title%"
       },
@@ -84,6 +90,11 @@
     },
     "menus": {
       "view/title": [
+        {
+          "command": "mdait.status.selectTargets",
+          "when": "view == mdait.status",
+          "group": "navigation@-1"
+        },
         {
           "command": "mdait.status.sync",
           "when": "view == mdait.status && !mdaitSyncProcessing",

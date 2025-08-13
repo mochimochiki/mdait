@@ -11,6 +11,7 @@ import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { SectionMatcher } from "./section-matcher";
+import { SelectionState } from "../../core/status/selection-state";
 
 /**
  * sync command
@@ -33,8 +34,9 @@ export async function syncCommand(): Promise<void> {
 		let successCount = 0;
 		let errorCount = 0;
 
-		// 各翻訳ペアに対して処理を実行
-		for (const pair of config.transPairs) {
+		// 対象選択された翻訳ペアのみ処理
+		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
+		for (const pair of pairs) {
 			// ファイル探索
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
