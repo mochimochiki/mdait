@@ -164,6 +164,26 @@ suite("syncコマンドE2E", () => {
 			const firstMarker = jaText.indexOf("<!-- mdait");
 			assert.ok(firstMarker > frontMatterEnd);
 		});
+
+		test("FrontMatter上書き: sourceのmdait.sync.autoMarkerLevel=3でH3までユニット化される", async () => {
+			const content = `---\nmdait.sync.autoMarkerLevel: 3\n---\n# H1\n\n本文1\n\n## H2\n\n本文2\n\n### H3\n\n本文3\n`;
+			const jaPath = join(tmpJaDir, "level_frontmatter_source_only.md");
+			const enPath = join(tmpEnDir, "level_frontmatter_source_only.md");
+			writeFileSync(jaPath, content, "utf8");
+			// targetは存在しない状態から開始（初回作成パスを通す）
+			if (existsSync(enPath)) unlinkSync(enPath);
+
+			const vscode = require("vscode");
+			await vscode.commands.executeCommand("mdait.sync");
+
+			const jaText = readFileSync(jaPath, "utf8");
+			const enText = readFileSync(enPath, "utf8");
+			const jaMarkers = jaText.match(/<!-- mdait [^\s]+/g) || [];
+			const enMarkers = enText.match(/<!-- mdait [^\s]+/g) || [];
+			// H1,H2,H3の3ユニットが生成される想定
+			assert.strictEqual(jaMarkers.length, 3);
+			assert.strictEqual(enMarkers.length, 3);
+		});
 	});
 
 	suite("編集", () => {

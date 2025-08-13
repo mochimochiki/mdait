@@ -12,7 +12,7 @@
 	// 除外パターン
 	"mdait.ignoredPatterns": "**/node_modules/**",
 
-	// マーカーを自動挿入する見出しレベル
+	// マーカーを自動挿入する見出しレベル. FrontMatterで上書き可能(yamlのみ)
 	"mdait.sync.autoMarkerLevel": 2,
 
 	// 自動削除設定

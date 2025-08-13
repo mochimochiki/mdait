@@ -46,9 +46,6 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @returns パースされたMarkdownユニットの配列
 	 */
 	parse(markdown: string, config: Configuration): Markdown {
-		// config
-		const autoMarkerLevel = config?.sync.autoMarkerLevel;
-
 		const fm = matter(markdown);
 		const frontMatter = fm.data as FrontMatter;
 		const content = fm.content;
@@ -60,6 +57,10 @@ export class MarkdownItParser implements IMarkdownParser {
 			// フロントマターの行数を計算
 			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
 		}
+
+		const fileLevel = frontMatter?.["mdait.sync.autoMarkerLevel"];
+		const autoMarkerLevel = fileLevel ?? config?.sync?.autoMarkerLevel ?? 2;
+
 		const units: MdaitUnit[] = [];
 		const tokens = this.md.parse(content, {});
 		const lines = content.split(/\r?\n/);
@@ -146,8 +147,8 @@ export class MarkdownItParser implements IMarkdownParser {
 				}
 			}
 		}
-		// 最後のユニットを保存
 		if (currentSection && currentSection.startLine !== null) {
+			// 最後のユニットを保存
 			const start = currentSection.startLine;
 			const end = lines.length;
 			const rawContent = lines.slice(start, end).join("\n");
