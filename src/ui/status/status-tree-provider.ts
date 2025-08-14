@@ -150,13 +150,17 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// 選択中の target のみに絞ってディレクトリ一覧を作成
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		const pairs = SelectionState.getInstance().filterTransPairs(this.configuration.transPairs);
-		const allDirsAbs = pairs.flatMap((pair) => [
-			workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
-			workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
-		]);
+		const dirsAbs = Array.from(
+			new Set(
+				pairs.flatMap((pair) => [
+					workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
+					workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
+				]),
+			),
+		);
 
 		// StatusItemTreeからルートディレクトリアイテムを取得
-		return this.statusItemTree.getRootDirectoryItems(allDirsAbs);
+		return this.statusItemTree.getRootDirectoryItems(dirsAbs);
 	}
 
 	/**
