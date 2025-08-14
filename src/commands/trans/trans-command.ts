@@ -47,15 +47,12 @@ export async function transCommand(uri?: vscode.Uri) {
 
 		// ファイル探索クラスを初期化
 		const fileExplorer = new FileExplorer();
-
-		// 翻訳ペアから言語情報を取得
-		const classification = fileExplorer.classifyFile(targetFilePath, config);
-		if (classification.type !== "target" || !classification.transPair) {
+		const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
+		if (!transPair) {
 			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
 			return;
 		}
 
-		const transPair = classification.transPair;
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
@@ -158,7 +155,7 @@ async function translateUnit(
 		if (unit.marker?.from) {
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
-				const sourceUnit = statusManager.getUnitStatusItemByFromHash(unit.marker.from);
+				const sourceUnit = statusManager.getUnitStatusItem(unit.marker.from);
 				if (sourceUnit) {
 					try {
 						if (sourceUnit.filePath) {
@@ -201,32 +198,28 @@ async function translateUnit(
 
 /**
  * 単一ユニットの翻訳を実行する
- * @param filePath 対象ファイルのパス
+ * @param targetPath 対象ファイルのパス
  * @param unitHash 翻訳対象のユニットハッシュ
  */
-export async function transUnitCommand(filePath: string, unitHash: string) {
+export async function transUnitCommand(targetPath: string, unitHash: string) {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
 	try {
 		// ファイル探索クラスを初期化
 		const fileExplorer = new FileExplorer();
-
-		// 翻訳ペアから言語情報を取得
-		const classification = fileExplorer.classifyFile(filePath, config);
-		if (classification.type !== "target" || !classification.transPair) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", filePath));
+		const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
+		if (!transPair) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetPath));
 			return;
 		}
-
-		const transPair = classification.transPair;
 
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
 
 		// Markdown ファイルの読み込みとパース
-		const uri = vscode.Uri.file(filePath);
+		const uri = vscode.Uri.file(targetPath);
 		const document = await vscode.workspace.openTextDocument(uri, { encoding: "utf-8" });
 		const content = document.getText();
 		const markdown = markdownParser.parse(content, config);
@@ -234,7 +227,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		// 指定されたハッシュのユニットを検索
 		const targetUnit = findUnitByHash(markdown.units, unitHash);
 		if (!targetUnit) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, filePath));
+			vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, targetPath));
 			return;
 		}
 
@@ -245,7 +238,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 		}
 
 		// 翻訳開始をStatusManagerに通知
-		statusManager.changeUnitStatus(unitHash, { isTranslating: true }, filePath);
+		statusManager.changeUnitStatus(unitHash, { isTranslating: true }, targetPath);
 
 		// 旧マーカー文字列を保持（置換範囲の起点に使う）
 		const oldMarkerText = targetUnit.marker.toString();
@@ -261,7 +254,7 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 					isTranslating: false,
 					unitHash: targetUnit.marker.hash,
 				},
-				filePath,
+				targetPath,
 			);
 		} catch (error) {
 			// 翻訳エラーをStatusManagerに通知
@@ -272,16 +265,16 @@ export async function transUnitCommand(filePath: string, unitHash: string) {
 					isTranslating: false,
 					errorMessage: (error as Error).message,
 				},
-				filePath,
+				targetPath,
 			);
 			throw error;
 		}
 
 		// 更新されたMarkdownをユニット単位で保存（競合回避）- 1ユニット
-		await replaceUnitByOldMarker(vscode.Uri.file(filePath), targetUnit, oldMarkerText);
+		await replaceUnitByOldMarker(vscode.Uri.file(targetPath), targetUnit, oldMarkerText);
 
 		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.refreshFileStatus(filePath);
+		await statusManager.refreshFileStatus(targetPath);
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
 	} catch (error) {

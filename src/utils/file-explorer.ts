@@ -4,18 +4,6 @@ import * as vscode from "vscode";
 import type { Configuration, TransPair } from "../config/configuration";
 
 /**
- * ファイルの種別（ソース・ターゲット）を判定する結果
- */
-export interface FileClassification {
-	/** ファイルの種別 */
-	type: "source" | "target" | "unknown";
-	/** 対応する翻訳ペア設定 */
-	transPair: TransPair | null;
-	/** 正規化されたファイルパス */
-	normalizedPath: string;
-}
-
-/**
  * ファイル探索とファイル種別解決を統合的に行うクラス
  *
  * このクラスは以下の責務を持つ：
@@ -35,61 +23,52 @@ export class FileExplorer {
 		}
 		this.workspaceRoot = workspaceFolders[0].uri.fsPath;
 	}
+
 	/**
-	 * ファイルパスを分析してソース/ターゲット種別を判定
-	 *
-	 * @param filePath 判定対象のファイルパス（絶対パスまたは相対パス）
-	 * @param config 翻訳設定
-	 * @returns ファイル分類結果
+	 * ターゲットファイルから対応する翻訳ペアを取得
 	 */
-	public classifyFile(filePath: string, config: Configuration): FileClassification {
+	public getTransPairFromTarget(filePath: string, config: Configuration): TransPair | null {
 		const normalizedPath = this.normalizePath(filePath);
 
-		// ソースファイル判定
-		for (const transPair of config.transPairs) {
-			const normalizedSourceDir = this.normalizePath(transPair.sourceDir);
-
-			if (this.isPathInDirectory(normalizedPath, normalizedSourceDir)) {
-				return {
-					type: "source",
-					transPair,
-					normalizedPath,
-				};
-			}
-		}
-
-		// ターゲットファイル判定
 		for (const transPair of config.transPairs) {
 			const normalizedTargetDir = this.normalizePath(transPair.targetDir);
 
 			if (this.isPathInDirectory(normalizedPath, normalizedTargetDir)) {
-				return {
-					type: "target",
-					transPair,
-					normalizedPath,
-				};
+				return transPair;
 			}
 		}
 
-		return {
-			type: "unknown",
-			transPair: null,
-			normalizedPath,
-		};
+		return null;
 	}
 
 	/**
 	 * ファイルがソースファイルかどうかを判定
 	 */
 	public isSourceFile(filePath: string, config: Configuration): boolean {
-		return this.classifyFile(filePath, config).type === "source";
+		const normalizedPath = this.normalizePath(filePath);
+		for (const transPair of config.transPairs) {
+			const normalizedSourceDir = this.normalizePath(transPair.sourceDir);
+
+			if (this.isPathInDirectory(normalizedPath, normalizedSourceDir)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
 	 * ファイルがターゲットファイルかどうかを判定
 	 */
 	public isTargetFile(filePath: string, config: Configuration): boolean {
-		return this.classifyFile(filePath, config).type === "target";
+		const normalizedPath = this.normalizePath(filePath);
+		for (const transPair of config.transPairs) {
+			const normalizedTargetDir = this.normalizePath(transPair.targetDir);
+
+			if (this.isPathInDirectory(normalizedPath, normalizedTargetDir)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -156,19 +135,10 @@ export class FileExplorer {
 	/**
 	 * ソースファイルパスから対応するターゲットファイルパスを生成（設定ベース）
 	 */
-	public getTargetPathFromConfig(sourceFilePath: string, config: Configuration): string | null {
-		const classification = this.classifyFile(sourceFilePath, config);
-
-		if (classification.type !== "source" || !classification.transPair) {
-			return null;
-		}
-
-		const transPair = classification.transPair;
-		const normalizedSourceDir = this.normalizePath(transPair.sourceDir);
-		const normalizedTargetDir = this.normalizePath(transPair.targetDir);
-
-		// ソースディレクトリからの相対パスを取得
-		const relativePath = this.getRelativePathFromDirectory(classification.normalizedPath, normalizedSourceDir);
+	public getTargetPath(sourceFilePath: string, pair: TransPair): string | null {
+		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
+		const normalizedTargetDir = this.normalizePath(pair.targetDir);
+		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(sourceFilePath), normalizedSourceDir);
 
 		if (!relativePath) {
 			return null;
@@ -182,19 +152,10 @@ export class FileExplorer {
 	/**
 	 * ターゲットファイルパスから対応するソースファイルパスを生成（設定ベース）
 	 */
-	public getSourcePathFromConfig(targetFilePath: string, config: Configuration): string | null {
-		const classification = this.classifyFile(targetFilePath, config);
-
-		if (classification.type !== "target" || !classification.transPair) {
-			return null;
-		}
-
-		const transPair = classification.transPair;
-		const normalizedSourceDir = this.normalizePath(transPair.sourceDir);
-		const normalizedTargetDir = this.normalizePath(transPair.targetDir);
-
-		// ターゲットディレクトリからの相対パスを取得
-		const relativePath = this.getRelativePathFromDirectory(classification.normalizedPath, normalizedTargetDir);
+	public getSourcePath(targetFilePath: string, pair: TransPair): string | null {
+		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
+		const normalizedTargetDir = this.normalizePath(pair.targetDir);
+		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(targetFilePath), normalizedTargetDir);
 
 		if (!relativePath) {
 			return null;
@@ -233,12 +194,10 @@ export class FileExplorer {
 		};
 	}
 
-	// ========== 内部ユーティリティメソッド ==========
-
 	/**
 	 * パスを正規化（スラッシュ統一、ワークスペース相対パス化）
 	 */
-	private normalizePath(inputPath: string): string {
+	public normalizePath(inputPath: string): string {
 		let normalizedPath = inputPath.replace(/\\/g, "/");
 
 		// 絶対パスの場合はワークスペース相対パスに変換
@@ -251,6 +210,8 @@ export class FileExplorer {
 
 		return normalizedPath;
 	}
+
+	// ========== 内部ユーティリティメソッド ==========
 
 	/**
 	 * 正規化されたパスを元の形式に戻す（絶対パス化）

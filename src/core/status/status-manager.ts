@@ -55,7 +55,7 @@ export class StatusManager {
 	 * 全ファイルをパースしてStatusItemツリーを再構築
 	 * パフォーマンス負荷が高いため、初回実行時や保険的な再構築が必要な場合のみ使用
 	 */
-	public async buildAllStatusItem(): Promise<void> {
+	public async buildStatusItemTree(): Promise<void> {
 		console.log("StatusManager: buildAllStatusItem() - Parse all files");
 		const startTime = performance.now();
 
@@ -67,7 +67,7 @@ export class StatusManager {
 				this.statusItemTree.clear();
 				this.statusItemTree.dispose();
 			}
-			this.statusItemTree = await this.statusCollector.buildAllStatusItem();
+			this.statusItemTree = await this.statusCollector.buildStatusItemTree();
 			this.statusItemTree.onTreeChanged((item) => {
 				this._onStatusTreeChanged.fire(item);
 			});
@@ -140,16 +140,6 @@ export class StatusManager {
 			return this.statusItemTree.getUnitFirstWithoutPath(hash);
 		}
 		return this.statusItemTree.getUnit(hash, path);
-	}
-
-	/**
-	 * 指定fromHashに対応するユニットをStatusItemツリーから取得
-	 */
-	public getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined {
-		if (!path) {
-			return this.statusItemTree.getUnitByFromHashFirstWithoutPath(fromHash);
-		}
-		return this.statusItemTree.getUnitByFromHash(fromHash, path);
 	}
 
 	/**

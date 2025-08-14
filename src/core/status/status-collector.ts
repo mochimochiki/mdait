@@ -44,7 +44,7 @@ export class StatusCollector {
 	 * 主にアプリケーションの初回起動時や、全体的な再同期が必要な場合に使用される高コストな処理です。
 	 * @return Promise<StatusItemTree> - 全ステータスツリー
 	 */
-	public async buildAllStatusItem(): Promise<StatusItemTree> {
+	public async buildStatusItemTree(): Promise<StatusItemTree> {
 		const statusItemTree = new StatusItemTree();
 
 		try {
@@ -68,7 +68,8 @@ export class StatusCollector {
 				files.push(...targetDirItems);
 			}
 
-			statusItemTree.build(files);
+			const allDirs = [...sourceDirs, ...targetDirs];
+			statusItemTree.buildTree(files, allDirs);
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));

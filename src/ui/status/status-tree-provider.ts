@@ -117,7 +117,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					// StatusManagerから最新のStatusItemを取得・ツリーに反映
 					if (!this.statusManager.isInitialized()) {
 						// 初期化されていない場合は全体再構築
-						await this.statusManager.buildAllStatusItem();
+						await this.statusManager.buildStatusItemTree();
 					}
 				}
 				this.isStatusInitialized = true;

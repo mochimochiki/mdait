@@ -1,8 +1,5 @@
-import { on } from "node:events";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
-import { FileExplorer } from "../../utils/file-explorer";
 import { Status, type StatusItem, StatusItemType } from "./status-item";
 
 /**
@@ -19,6 +16,7 @@ export class StatusItemTree {
 	private readonly fileItemMap = new Map<string, StatusItem>(); // ファイルパスをキーとする
 	private readonly directoryItemMap = new Map<string, StatusItem>(); // ディレクトリパスをキーとする
 	private readonly unitItemMapWithPath = new Map<string, StatusItem>(); // ファイルパス+ユニットハッシュをキーとする
+	private rootDirectories: string[] = [];
 
 	// ========== 取得 ==========
 
@@ -96,34 +94,6 @@ export class StatusItemTree {
 			}
 		}
 
-		return undefined;
-	}
-
-	/**
-	 * 指定fromHashのユニットを検索（ファイルパス指定）
-	 */
-	public getUnitByFromHash(fromHash: string, filePath: string): StatusItem | undefined {
-		// 特定ファイル内から検索
-		const fileItem = this.fileItemMap.get(filePath);
-		if (fileItem?.children) {
-			return fileItem.children.find((unit) => unit.fromHash === fromHash);
-		}
-
-		return undefined;
-	}
-
-	/**
-	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
-	 * 全ファイルから検索するため、どのファイルか不定であることに注意
-	 */
-	public getUnitByFromHashFirstWithoutPath(fromHash: string): StatusItem | undefined {
-		// 全ファイルから検索
-		for (const file of this.fileItemMap.values()) {
-			if (file.children) {
-				const found = file.children.find((unit) => unit.fromHash === fromHash);
-				if (found) return found;
-			}
-		}
 		return undefined;
 	}
 
@@ -247,6 +217,7 @@ export class StatusItemTree {
 		this.fileItemMap.clear();
 		this.directoryItemMap.clear();
 		this.unitItemMapWithPath.clear();
+		this.rootDirectories = [];
 	}
 
 	public dispose(): void {
@@ -258,8 +229,9 @@ export class StatusItemTree {
 	 * ツリーを構築
 	 * @param files - StatusItemの配列
 	 */
-	public build(files: StatusItem[]): void {
+	public buildTree(files: StatusItem[], rootDirs: string[]): void {
 		this.clear();
+		this.rootDirectories = rootDirs;
 
 		console.log("=>build");
 		const startTime = performance.now();
@@ -359,7 +331,7 @@ export class StatusItemTree {
 		if (!fileItem.filePath) return;
 
 		const dirPath = path.dirname(fileItem.filePath);
-		const stopRoot = this.getStopRoot(dirPath);
+		const stopRoot = this.getRootDir(dirPath);
 		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (directoryItem) {
 			directoryItem.children = directoryItem.children || [];
@@ -379,7 +351,7 @@ export class StatusItemTree {
 	 * 指定ディレクトリから親方向へ集計を再帰更新する（最上位でイベント発火）
 	 */
 	private updateDirectoryAggregatesUpward(dirPath: string, stopRoot?: string): void {
-		const effectiveStopRoot = stopRoot ?? this.getStopRoot(dirPath);
+		const effectiveStopRoot = stopRoot ?? this.getRootDir(dirPath);
 		let directoryItem = this.directoryItemMap.get(dirPath);
 		if (!directoryItem) {
 			// 直下ファイルを fileItemMap から収集して作成
@@ -403,23 +375,19 @@ export class StatusItemTree {
 	}
 
 	/**
-	 * 再帰の停止ルートを判定する（transPairs ルート優先。なければワークスペースフォルダ。最後の手段はドライブルート）
+	 * 再帰の停止ルートを判定する
 	 */
-	private getStopRoot(dirPath: string): string {
+	private getRootDir(dirPath: string): string {
 		const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const config = Configuration.getInstance();
 		try {
-			const explorer = new FileExplorer();
-			const classification = explorer.classifyFile(dirPath, config);
-			const rootRel =
-				classification.type === "source"
-					? classification.transPair?.sourceDir
-					: classification.type === "target"
-						? classification.transPair?.targetDir
-						: undefined;
-			if (rootRel) {
-				const abs = path.isAbsolute(rootRel) ? rootRel : wsFolder ? path.resolve(wsFolder, rootRel) : rootRel;
-				return path.resolve(abs);
+			// rootDirectoriesのいずれかの子孫か（ディレクトリ階層で比較）
+			for (const rootDir of this.rootDirectories) {
+				const absoluteRootDir = wsFolder ? path.resolve(wsFolder, rootDir) : rootDir;
+				const absoluteDirPath = path.resolve(dirPath);
+				// ディレクトリ階層で比較
+				if (absoluteDirPath === absoluteRootDir || absoluteDirPath.startsWith(absoluteRootDir + path.sep)) {
+					return absoluteRootDir;
+				}
 			}
 		} catch {
 			// FileExplorer 初期化不可などは無視してフォールバック

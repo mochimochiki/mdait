@@ -7,11 +7,11 @@ import { calculateHash } from "../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { SectionMatcher } from "./section-matcher";
-import { SelectionState } from "../../core/status/selection-state";
 
 /**
  * sync command
@@ -60,7 +60,7 @@ export async function syncCommand(): Promise<void> {
 					const sourceFile = mdFiles[i];
 					try {
 						// 出力先パスを取得（新しい統合されたFileExplorerを使用）
-						const targetFile = fileExplorer.getTargetPathFromConfig(sourceFile, config);
+						const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
 						if (!targetFile) {
 							console.warn(`Target path could not be determined for: ${sourceFile}`);
 							continue;

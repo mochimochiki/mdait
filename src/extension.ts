@@ -3,10 +3,10 @@ import { syncCommand } from "./commands/sync/sync-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
 import { Configuration } from "./config/configuration";
+import { SelectionState } from "./core/status/selection-state";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
-import { SelectionState } from "./core/status/selection-state";
 
 export function activate(context: vscode.ExtensionContext) {
 	// StatusManagerの初期化
@@ -67,7 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
 			await syncCommand();
 			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
-			await statusManager.buildAllStatusItem();
+			await statusManager.buildStatusItemTree();
 		} catch (error) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
 		} finally {

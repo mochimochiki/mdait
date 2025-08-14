@@ -22,7 +22,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		await statusManager.buildAllStatusItem();
+		await statusManager.buildStatusItemTree();
 		const fileStatuses = statusManager.getTreeFileStatusList();
 
 		// 結果の検証
@@ -58,7 +58,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// ファイル状況を収集
-		await statusManager.buildAllStatusItem();
+		await statusManager.buildStatusItemTree();
 		const fileStatuses = statusManager.getTreeFileStatusList();
 
 		// エラーにならずに空配列が返されることを確認
@@ -90,31 +90,10 @@ suite("StatusTreeProvider Test Suite", () => {
 		];
 
 		// rebuildStatusItemAll実行後は初期化済み
-		await statusManager.buildAllStatusItem();
+		await statusManager.buildStatusItemTree();
 		const afterRebuild = statusManager.isInitialized();
 
 		assert.strictEqual(afterRebuild, true, "rebuildStatusItemAll実行後は初期化済みになる必要があります");
-	});
-
-	test("StatusManagerのfindUnitsByFromHashが正しく動作する", async () => {
-		const statusManager = StatusManager.getInstance();
-		Configuration.dispose();
-		const config = Configuration.getInstance();
-
-		config.transPairs = [
-			{
-				sourceLang: "ja",
-				sourceDir: "src/test/sample-content/ja",
-				targetLang: "en",
-				targetDir: "src/test/sample-content/en",
-			},
-		];
-
-		await statusManager.buildAllStatusItem();
-
-		// 存在しないハッシュでの検索
-		const notFoundUnit = statusManager.getUnitStatusItemByFromHash("non-existent-hash");
-		assert.ok(notFoundUnit === undefined, "undefinedが返される必要があります");
 	});
 
 	test("StatusManagerの進捗集計機能が正しく動作する", async () => {
@@ -131,7 +110,7 @@ suite("StatusTreeProvider Test Suite", () => {
 			},
 		];
 
-		await statusManager.buildAllStatusItem();
+		await statusManager.buildStatusItemTree();
 
 		const progress = statusManager.aggregateProgress();
 
