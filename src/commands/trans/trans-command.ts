@@ -82,7 +82,7 @@ export async function transCommand(uri?: vscode.Uri) {
 			const oldMarkerText = unit.marker?.toString() ?? "";
 
 			try {
-				await translateUnit(unit, translator, sourceLang, targetLang, markdown);
+				await translateUnit(unit, translator, sourceLang, targetLang);
 
 				// 翻訳完了をStatusManagerに通知
 				if (oldHash) {
@@ -113,8 +113,8 @@ export async function transCommand(uri?: vscode.Uri) {
 				throw error;
 			}
 
-			// 更新されたMarkdownをユニット単位で保存（競合回避）- 1ユニットずつ適用
-			await replaceUnitByOldMarker(uri, unit, oldMarkerText);
+			// 翻訳済みユニットをファイルに保存
+			await saveTranslatedUnit(uri, unit, oldMarkerText);
 		}
 
 		// ファイル全体の状態をStatusManagerで更新
@@ -132,15 +132,8 @@ export async function transCommand(uri?: vscode.Uri) {
  * @param translator 翻訳サービス
  * @param sourceLang 翻訳元言語
  * @param targetLang 翻訳先言語
- * @param markdown Markdownドキュメント（翻訳元ユニット特定用）
  */
-async function translateUnit(
-	unit: MdaitUnit,
-	translator: Translator,
-	sourceLang: string,
-	targetLang: string,
-	markdown: Markdown,
-) {
+async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang: string, targetLang: string) {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
@@ -206,25 +199,23 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 	const config = Configuration.getInstance();
 
 	try {
-		// ファイル探索クラスを初期化
+		// 各種初期化
 		const fileExplorer = new FileExplorer();
 		const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
 		if (!transPair) {
 			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetPath));
 			return;
 		}
-
 		const sourceLang = transPair.sourceLang;
 		const targetLang = transPair.targetLang;
 		const translator = await new TranslatorBuilder().build();
 
-		// Markdown ファイルの読み込みとパース
+		// 翻訳対象ユニットの読込
 		const uri = vscode.Uri.file(targetPath);
 		const document = await vscode.workspace.openTextDocument(uri, { encoding: "utf-8" });
 		const content = document.getText();
 		const markdown = markdownParser.parse(content, config);
 
-		// 指定されたハッシュのユニットを検索
 		const targetUnit = findUnitByHash(markdown.units, unitHash);
 		if (!targetUnit) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, targetPath));
@@ -237,15 +228,16 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 			return;
 		}
 
-		// 翻訳開始をStatusManagerに通知
+		// ステータス: 翻訳中
 		statusManager.changeUnitStatus(unitHash, { isTranslating: true }, targetPath);
 
-		// 旧マーカー文字列を保持（置換範囲の起点に使う）
 		const oldMarkerText = targetUnit.marker.toString();
-		try {
-			await translateUnit(targetUnit, translator, sourceLang, targetLang, markdown);
 
-			// 翻訳完了をStatusManagerに通知
+		try {
+			// 翻訳実行
+			await translateUnit(targetUnit, translator, sourceLang, targetLang);
+
+			// ステータス: 翻訳完了
 			statusManager.changeUnitStatus(
 				unitHash,
 				{
@@ -257,7 +249,7 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 				targetPath,
 			);
 		} catch (error) {
-			// 翻訳エラーをStatusManagerに通知
+			// ステータス: エラー
 			statusManager.changeUnitStatus(
 				unitHash,
 				{
@@ -270,8 +262,8 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 			throw error;
 		}
 
-		// 更新されたMarkdownをユニット単位で保存（競合回避）- 1ユニット
-		await replaceUnitByOldMarker(vscode.Uri.file(targetPath), targetUnit, oldMarkerText);
+		// 翻訳済みユニットをファイルに保存
+		await saveTranslatedUnit(vscode.Uri.file(targetPath), targetUnit, oldMarkerText);
 
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.refreshFileStatus(targetPath);
@@ -293,20 +285,15 @@ function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
 }
 
 /**
- * ユニットごとに旧マーカーから範囲を特定し、新しいマーカー＋本文で安全に置換する
+ * 翻訳済みユニットをファイルに保存する
  */
-async function replaceUnitByOldMarker(file: vscode.Uri, unit: MdaitUnit, oldMarkerText: string): Promise<void> {
-	// 開いているか判定（開いている場合はエディタ上で編集、開いていなければサイレントに書き換え）
-	const isOpen =
-		vscode.window.visibleTextEditors.some((e) => e.document.uri.fsPath === file.fsPath) ||
-		vscode.workspace.textDocuments.some((d) => d.uri.fsPath === file.fsPath);
-	const replacement = `${unit.marker.toString()}\n${unit.content}\n`;
-
-	// ファイル未表示: 文字列でオフセット計算し、fs.writeFileでサイレント更新
+async function saveTranslatedUnit(file: vscode.Uri, unit: MdaitUnit, markerText: string): Promise<void> {
+	const replacement = unit.toString();
+	// 文字列でオフセット計算し、fs.writeFileでサイレント更新
 	const document = await vscode.workspace.fs.readFile(file);
 	const decoder = new TextDecoder("utf-8");
 	const content = decoder.decode(document);
-	const offsets = computeOffsetsByOldMarker(content, oldMarkerText);
+	const offsets = computeOffsetsByOldMarker(content, markerText);
 	if (!offsets) {
 		console.warn("mdait marker not found (fs path). Skipped unit replacement for:", unit.title);
 		return;

@@ -37,6 +37,7 @@ export class MdaitUnit {
 		}
 
 		result += this.content;
+		result += `\n`;
 		return result;
 	}
 
