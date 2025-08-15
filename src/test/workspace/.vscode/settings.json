@@ -6,6 +6,12 @@
 			"sourceDir": "content/ja",
 			"targetLang": "en",
 			"targetDir": "content/en"
+		},
+		{
+			"sourceLang": "ja",
+			"sourceDir": "content/ja",
+			"targetLang": "de",
+			"targetDir": "content/de"
 		}
 	],
 
