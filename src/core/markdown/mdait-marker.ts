@@ -15,6 +15,12 @@ export class MdaitMarker {
 		public from: string | null = null,
 		public need: string | null = null,
 	) {}
+
+	/**
+	 * MdaitMarkerの正規表現パターン
+	 */
+	static readonly MARKER_REGEX = /<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+
 	/**
 	 * コメントをMarkdown形式の文字列として出力
 	 */
@@ -32,34 +38,21 @@ export class MdaitMarker {
 		result += " -->";
 		return result;
 	}
+
 	/**
 	 * MdaitMarker文字列からMdaitHeaderを生成
-	 * @param commentText Markdownコメント文字列
+	 * @param markerText Markdownコメント文字列
 	 * @returns MdaitHeaderオブジェクト、またはパース失敗時はnull
 	 */
-	static parse(commentText: string): MdaitMarker | null {
+	static parse(markerText: string): MdaitMarker | null {
 		// コメントテキストをサニタイズ（余分な空白や改行を削除）
-		const sanitizedText = commentText.trim().replace(/\s+/g, " ");
-
-		// MdaitMarkerのパターン
-		const mdaitPattern = /<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
-		const match = sanitizedText.match(mdaitPattern);
-
+		const sanitizedText = markerText.trim().replace(/\s+/g, " ");
+		const match = sanitizedText.match(MdaitMarker.MARKER_REGEX);
 		if (!match) {
 			return null;
 		}
-
 		const [, hash, from, needTag] = match;
 		return new MdaitMarker(hash, from || null, needTag || null);
-	}
-	/**
-	 * 指定されたhashとfromでコメントを生成
-	 * @param hash ユニット本文のハッシュ
-	 * @param from 翻訳元のユニットハッシュ
-	 * @returns 新しいMdaitCommentオブジェクト
-	 */
-	static createWithTranslateTag(hash: string, from: string): MdaitMarker {
-		return new MdaitMarker(hash, from, "translate");
 	}
 
 	/**

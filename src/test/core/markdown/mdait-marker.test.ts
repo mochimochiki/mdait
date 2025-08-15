@@ -86,12 +86,6 @@ suite("MdaitHeader", () => {
 		// mdaitの後に正しいハッシュ形式がない
 		assert.equal(MdaitMarker.parse("<!-- mdait -->"), null);
 	});
-	test("createWithTranslateTag: 適切なオブジェクトが生成される", () => {
-		const header = MdaitMarker.createWithTranslateTag(testHash, testFrom);
-		assert.equal(header.hash, testHash);
-		assert.equal(header.from, testFrom);
-		assert.equal(header.need, "translate");
-	});
 
 	test("updateHash: ハッシュ値が正しく更新される", () => {
 		const header = new MdaitMarker(testHash);

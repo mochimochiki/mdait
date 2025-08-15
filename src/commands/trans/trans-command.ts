@@ -13,6 +13,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { SelectionState } from "../../core/status/selection-state";
@@ -114,7 +115,7 @@ export async function transCommand(uri?: vscode.Uri) {
 			}
 
 			// 翻訳済みユニットをファイルに保存
-			await saveTranslatedUnit(uri, unit, oldMarkerText);
+			await updateAndSaveUnit(uri, oldMarkerText, unit);
 		}
 
 		// ファイル全体の状態をStatusManagerで更新
@@ -263,7 +264,7 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 		}
 
 		// 翻訳済みユニットをファイルに保存
-		await saveTranslatedUnit(vscode.Uri.file(targetPath), targetUnit, oldMarkerText);
+		await updateAndSaveUnit(vscode.Uri.file(targetPath), oldMarkerText, targetUnit);
 
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.refreshFileStatus(targetPath);
@@ -285,15 +286,15 @@ function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
 }
 
 /**
- * 翻訳済みユニットをファイルに保存する
+ * 指定ファイルのユニットを更新し、保存する
  */
-async function saveTranslatedUnit(file: vscode.Uri, unit: MdaitUnit, markerText: string): Promise<void> {
+async function updateAndSaveUnit(file: vscode.Uri, markerText: string, unit: MdaitUnit): Promise<void> {
 	const replacement = unit.toString();
 	// 文字列でオフセット計算し、fs.writeFileでサイレント更新
 	const document = await vscode.workspace.fs.readFile(file);
 	const decoder = new TextDecoder("utf-8");
 	const content = decoder.decode(document);
-	const offsets = computeOffsetsByOldMarker(content, markerText);
+	const offsets = getUnitPosition(content, markerText);
 	if (!offsets) {
 		console.warn("mdait marker not found (fs path). Skipped unit replacement for:", unit.title);
 		return;
@@ -304,21 +305,13 @@ async function saveTranslatedUnit(file: vscode.Uri, unit: MdaitUnit, markerText:
 }
 
 /**
- * 旧マーカーのハッシュに基づき、置換対象の文字オフセット範囲を返す（TextDocument不要のサイレント更新用）
+ * マーカーに基づき、文字範囲を返す
  */
-function computeOffsetsByOldMarker(text: string, oldMarkerText: string): { start: number; end: number } | null {
-	const hashMatch = oldMarkerText.match(/<!--\s*mdait\s+([a-zA-Z0-9]+)/);
-	if (!hashMatch) return null;
-	const oldHash = hashMatch[1];
-	const markerRe = new RegExp(`<!--\\s*mdait\\s+${oldHash}[^>]*-->`, "g");
-	const match = [...text.matchAll(markerRe)][0];
-	if (!match || match.index == null) return null;
-
-	const startIdx = match.index;
-	const markerLen = match[0].length;
+function getUnitPosition(text: string, markerText: string): { start: number; end: number } | null {
+	const startIdx = text.indexOf(markerText);
+	const markerLen = markerText.length;
 	const after = text.slice(startIdx + markerLen);
-	const anyMarkerRe = /<!--\s*mdait\s+[a-zA-Z0-9]+[^>]*-->/g;
-	const nextMatch = [...after.matchAll(anyMarkerRe)][0];
+	const nextMatch = after.match(MdaitMarker.MARKER_REGEX);
 	const endIdx = nextMatch ? startIdx + markerLen + (nextMatch.index ?? 0) : text.length;
 	return { start: startIdx, end: endIdx };
 }
