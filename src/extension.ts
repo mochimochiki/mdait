@@ -6,6 +6,8 @@ import { Configuration } from "./config/configuration";
 import { SelectionState } from "./core/status/selection-state";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
+import { codeLensTranslateCommand } from "./ui/codelens/codelens-command";
+import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -44,6 +46,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
+
+	// CodeLens翻訳コマンド
+	const codeLensTranslateDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.translate",
+		codeLensTranslateCommand,
+	);
+
+	// CodeLensProvider登録
+	const codeLensProvider = new MdaitCodeLensProvider();
+	const codeLensDisposable = vscode.languages.registerCodeLensProvider(
+		{ scheme: "file", language: "markdown" },
+		codeLensProvider,
+	);
 
 	// 翻訳アイテムコマンド
 	const translateItemCommand = new StatusTreeTranslationHandler();
@@ -169,6 +184,8 @@ export function activate(context: vscode.ExtensionContext) {
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,
+		codeLensTranslateDisposable,
+		codeLensDisposable,
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
