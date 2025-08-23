@@ -30,6 +30,7 @@
   "Error occurred": "エラーが発生しました",
   "Unknown status": "不明な状態",
   "$(play) Translate": "$(play) 翻訳",
+  "$(symbol-reference) Source": "$(symbol-reference) 原文",
   "Run translation": "翻訳を実行",  "Translate directory": "ディレクトリを翻訳",
   "Translate file": "ファイルを翻訳",
   "Translate unit": "ユニットを翻訳",

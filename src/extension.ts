@@ -6,7 +6,7 @@ import { Configuration } from "./config/configuration";
 import { SelectionState } from "./core/status/selection-state";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
-import { codeLensTranslateCommand } from "./ui/codelens/codelens-command";
+import { codeLensJumpToSourceCommand, codeLensTranslateCommand } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 
@@ -51,6 +51,12 @@ export function activate(context: vscode.ExtensionContext) {
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.translate",
 		codeLensTranslateCommand,
+	);
+
+	// CodeLensソースジャンプコマンド
+	const codeLensJumpToSourceDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.jumpToSource",
+		codeLensJumpToSourceCommand,
 	);
 
 	// CodeLensProvider登録
@@ -108,51 +114,6 @@ export function activate(context: vscode.ExtensionContext) {
 		},
 	);
 
-	// jumpToSource command
-	const jumpToSourceDisposable = vscode.commands.registerCommand("mdait.jumpToSource", async (item) => {
-		let unitItem: StatusItem = item;
-		try {
-			// ファイル単位の場合: item.type === "file" などで判定（typeプロパティがある前提）
-			if (item?.type === "file" && item.filePath) {
-				// childrenがなければエラー
-				if (!Array.isArray(item.children) || item.children.length === 0) {
-					vscode.window.showWarningMessage(vscode.l10n.t("No units found in this file."));
-					return;
-				}
-				// childrenがあれば1つ目のユニットを新しい変数に格納
-				unitItem = item.children[0];
-			}
-
-			// ユニット単位の場合
-			if (!unitItem?.fromHash) {
-				vscode.window.showWarningMessage(vscode.l10n.t("This unit does not have a source reference."));
-				return;
-			}
-
-			// StatusManagerからfromHashに対応するユニットを検索
-			const sourceUnit = statusManager.getUnitStatusItem(unitItem.fromHash);
-			if (!sourceUnit) {
-				vscode.window.showWarningMessage(vscode.l10n.t("Source unit not found for hash: {0}", unitItem.fromHash));
-				return;
-			}
-
-			if (!sourceUnit.filePath || sourceUnit.startLine === undefined) {
-				vscode.window.showWarningMessage(vscode.l10n.t("Source unit file path or line number not available."));
-				return;
-			}
-
-			// ソースユニットのファイルを開いて該当行にジャンプ
-			const document = await vscode.workspace.openTextDocument(sourceUnit.filePath);
-			const editor = await vscode.window.showTextDocument(document);
-
-			const position = new vscode.Position(sourceUnit.startLine, 0);
-			editor.selection = new vscode.Selection(position, position);
-			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
-		} catch (error) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Failed to jump to source: {0}", (error as Error).message));
-		}
-	});
-
 	// 対象言語選択コマンド（QuickPick: 複数選択、空は確定不可）
 	const selectTargetsDisposable = vscode.commands.registerCommand("mdait.status.selectTargets", async () => {
 		const pick = vscode.window.createQuickPick<{ label: string; description?: string; key: string }>();
@@ -185,6 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
 		selectTargetsDisposable,
 		transDisposable,
 		codeLensTranslateDisposable,
+		codeLensJumpToSourceDisposable,
 		codeLensDisposable,
 		translateDirectoryDisposable,
 		translateFileDisposable,
@@ -192,7 +154,6 @@ export function activate(context: vscode.ExtensionContext) {
 		treeView,
 		syncStatusDisposable,
 		jumpToUnitDisposable,
-		jumpToSourceDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる

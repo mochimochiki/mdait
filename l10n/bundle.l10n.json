@@ -14,6 +14,7 @@
   "Error occurred": "Error occurred",
   "Unknown status": "Unknown status",
   "$(play) Translate": "$(play) Translate",
+  "$(symbol-reference) Source": "$(symbol-reference) Source",
   "No active editor found.": "No active editor found.",
   "Could not extract unit hash from marker.": "Could not extract unit hash from marker.",
   "Translation completed for unit: {0}": "Translation completed for unit: {0}",

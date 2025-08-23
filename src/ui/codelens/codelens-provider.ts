@@ -50,13 +50,28 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			const marker = MdaitMarker.parse(line.text);
 
 			if (marker) {
-				// need:translateフラグがある場合のみCodeLensを表示
-				if (marker.need === "translate") {
-					const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
-					const codeLens = new vscode.CodeLens(range);
+				const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
 
-					// コマンドを設定（resolveCodeLensで設定される）
-					codeLenses.push(codeLens);
+				// fromハッシュがある場合はソースへ移動ボタン
+				if (marker.from) {
+					codeLenses.push(
+						new vscode.CodeLens(range, {
+							title: vscode.l10n.t("$(symbol-reference) Source"),
+							command: "mdait.codelens.jumpToSource",
+							arguments: [range],
+						}),
+					);
+				}
+
+				// need:translateフラグがある場合は翻訳ボタン
+				if (marker.need === "translate") {
+					codeLenses.push(
+						new vscode.CodeLens(range, {
+							title: vscode.l10n.t("$(play) Translate"),
+							command: "mdait.codelens.translate",
+							arguments: [range],
+						}),
+					);
 				}
 			}
 		}
@@ -74,17 +89,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		codeLens: vscode.CodeLens,
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<vscode.CodeLens> {
-		if (token.isCancellationRequested) {
-			return codeLens;
-		}
-
-		// コマンドを設定
-		codeLens.command = {
-			title: vscode.l10n.t("$(play) Translate"),
-			command: "mdait.codelens.translate",
-			arguments: [codeLens.range],
-		};
-
+		// 既にprovideで設定済みなのでそのまま返す
 		return codeLens;
 	}
 }

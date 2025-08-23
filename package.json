@@ -62,12 +62,6 @@
         "title": "%mdait.translate.unit.title%",
         "icon": "$(play)",
         "category": "mdait"
-      },
-      {
-        "command": "mdait.jumpToSource",
-        "title": "%mdait.jumpToSource.title%",
-        "icon": "$(symbol-reference)",
-        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -118,17 +112,7 @@
           "group": "inline"
         },
         {
-          "command": "mdait.jumpToSource",
-          "when": "view == mdait.status && viewItem == mdaitFile",
-          "group": "inline"
-        },
-        {
           "command": "mdait.translate.unit",
-          "when": "view == mdait.status && viewItem == mdaitUnit",
-          "group": "inline"
-        },
-        {
-          "command": "mdait.jumpToSource",
           "when": "view == mdait.status && viewItem == mdaitUnit",
           "group": "inline"
         }
