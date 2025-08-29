@@ -25,7 +25,7 @@ export class SectionMatcher {
 		const matchedTargetIndexes = new Set<number>();
 		const matchedSourceIndexes = new Set<number>();
 
-		// 1. src一致優先
+		// 1. targetのfromとsourceのhashが一致する組をマッチ済みペアとして対応付け
 		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
 			const source = sourceUnits[sIdx];
 			const sourceHash = source.marker?.hash;
@@ -63,41 +63,45 @@ export class SectionMatcher {
 		matchedPairs.push({ s: sourceUnits.length, t: targetUnits.length }); // 末尾区間用
 
 		for (let k = 0; k < matchedPairs.length; k++) {
-			const sStart = lastMatchedSource + 1;
-			const sEnd = matchedPairs[k].s;
-			const tStart = lastMatchedTarget + 1;
-			const tEnd = matchedPairs[k].t;
+			const s_Start = lastMatchedSource + 1;
+			const s_End = matchedPairs[k].s;
+			const t_Start = lastMatchedTarget + 1;
+			const t_End = matchedPairs[k].t;
 
 			// 区間内の未マッチsource/targetを順序ベースで対応付け
-			let sPtr = sStart;
-			let tPtr = tStart;
-			while (sPtr < sEnd || tPtr < tEnd) {
-				while (sPtr < sEnd && matchedSourceIndexes.has(sPtr)) sPtr++;
-				while (tPtr < tEnd && matchedTargetIndexes.has(tPtr)) tPtr++;
-				if (sPtr >= sEnd && tPtr >= tEnd) break;
-				const sIsEligible = sPtr < sEnd && !matchedSourceIndexes.has(sPtr);
-				const tIsEligible = tPtr < tEnd && !matchedTargetIndexes.has(tPtr) && !targetUnits[tPtr].getSourceHash();
-				if (sIsEligible && tIsEligible) {
-					result.push({ source: sourceUnits[sPtr], target: targetUnits[tPtr] });
-					matchedSourceIndexes.add(sPtr);
-					matchedTargetIndexes.add(tPtr);
-					sPtr++;
-					tPtr++;
-				} else if (sIsEligible) {
-					result.push({ source: sourceUnits[sPtr], target: null });
-					matchedSourceIndexes.add(sPtr);
-					sPtr++;
-				} else if (tIsEligible) {
-					result.push({ source: null, target: targetUnits[tPtr] });
-					matchedTargetIndexes.add(tPtr);
-					tPtr++;
+			let s_index = s_Start;
+			let t_index = t_Start;
+			while (s_index < s_End || t_index < t_End) {
+				while (s_index < s_End && matchedSourceIndexes.has(s_index)) s_index++;
+				while (t_index < t_End && matchedTargetIndexes.has(t_index)) t_index++;
+				if (s_index >= s_End && t_index >= t_End) break;
+				const s_IsUnMatched = s_index < s_End && !matchedSourceIndexes.has(s_index);
+				const t_IsUnMatched =
+					t_index < t_End && !matchedTargetIndexes.has(t_index) && !targetUnits[t_index].getSourceHash();
+				if (s_IsUnMatched && t_IsUnMatched) {
+					// 両方未マッチの場合はペアとして対応付け（あまり起きないはず）
+					result.push({ source: sourceUnits[s_index], target: targetUnits[t_index] });
+					matchedSourceIndexes.add(s_index);
+					matchedTargetIndexes.add(t_index);
+					s_index++;
+					t_index++;
+				} else if (s_IsUnMatched) {
+					// sourceに対応するtargetがない→新規追加
+					result.push({ source: sourceUnits[s_index], target: null });
+					matchedSourceIndexes.add(s_index);
+					s_index++;
+				} else if (t_IsUnMatched) {
+					// targetに対応するsourceがない→削除（候補）
+					result.push({ source: null, target: targetUnits[t_index] });
+					matchedTargetIndexes.add(t_index);
+					t_index++;
 				} else {
-					sPtr++;
-					tPtr++;
+					s_index++;
+					t_index++;
 				}
 			}
-			lastMatchedSource = sEnd;
-			lastMatchedTarget = tEnd;
+			lastMatchedSource = s_End;
+			lastMatchedTarget = t_End;
 		}
 
 		// 3. srcがあるのにマッチしなかったtarget（孤立）
