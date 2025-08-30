@@ -124,7 +124,7 @@ sequenceDiagram
 - **フロー統合**: ファイル読み込み→パース→翻訳対象抽出→翻訳→ハッシュ更新→ファイル保存の完全なフロー実装
 
 ### 残課題
-- **`TranslationContext`**: `surroundingText`、`glossary`設定ロジック未実装（現在は空のコンテキスト）
+- **`TranslationContext`**: `surroundingText`、`terms`設定ロジック未実装（現在は空のコンテキスト）
 - **実AIプロバイダ**: OpenAI、Anthropic等の実際のAPI接続
 - **エラー分類**: 詳細なエラーハンドリングと分類処理
 - **複数ファイル対応**: ワークスペース全体翻訳のためのファイル検索・バッチ処理

@@ -141,7 +141,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 	try {
 		// 翻訳コンテキストの作成
 		const context = new TranslationContext();
-		// TODO: context に surroundingText や glossary を設定するロジックを実装
+		// TODO: context に surroundingText や terms を設定するロジックを実装
 
 		let sourceContent = unit.content;
 

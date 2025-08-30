@@ -51,11 +51,11 @@ export class DefaultTranslator implements Translator {
 		});
 
 		// systemPrompt と AIMessage[] の構築
-		// @important design.md に記載の通り、glossary や surroundingText を活用すること
+		// @important design.md に記載の通り、terms や surroundingText を活用すること
 		const systemPrompt = `You are a professional translator. Translate the given text from ${sourceLang} to ${targetLang}.
 Context:
 ${context.surroundingText ? `Surrounding Text:\n${context.surroundingText}\n` : ""}
-${context.glossary ? `Glossary:\n${JSON.stringify(context.glossary, null, 2)}\n` : ""}
+${context.terms ? `terms:\n${JSON.stringify(context.terms, null, 2)}\n` : ""}
 Keep the original meaning and tone.
 Do not translate placeholders like __CODE_BLOCK_PLACEHOLDER_n__.`;
 

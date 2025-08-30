@@ -17,16 +17,16 @@ export class TranslationContext {
 	 * 適用する用語集の文字列。
 	 * 将来的にはファイルパスや構造化されたデータも検討。
 	 */
-	glossary?: string;
+	terms?: string;
 
 	/**
 	 * その他のコンテキスト情報。将来的な拡張用。
 	 */
 	[key: string]: unknown;
 
-	constructor(previousText?: string, nextText?: string, glossary?: string) {
+	constructor(previousText?: string, nextText?: string, terms?: string) {
 		this.previousText = previousText;
 		this.nextText = nextText;
-		this.glossary = glossary;
+		this.terms = terms;
 	}
 }
