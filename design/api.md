@@ -19,7 +19,7 @@
 設定に基づく動的なプロバイダー選択と初期化を行います。
 
 **機能：**
-- [../config/design.md](../config/design.md)の設定に基づくプロバイダー選択
+- [config.md](config.md)の設定に基づくプロバイダー選択
 - 各プロバイダー固有の初期化処理
 - エラーハンドリングとフォールバック
 
@@ -38,6 +38,6 @@
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../commands/design.md](../commands/design.md) - API利用するコマンド実装
-- [../config/design.md](../config/design.md) - プロバイダー設定管理
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [commands.md](commands.md) - API利用するコマンド実装
+- [config.md](config.md) - プロバイダー設定管理

@@ -11,7 +11,7 @@ mdaitの動作に必要な各種設定の管理を担当する層です。VSCode
 全設定の中央管理を行うシングルトンクラスです。アプリ起動時に`Configuration.initialize()`で初期化し、`getInstance()`で取得します。
 
 **管理する設定項目：**
-主要な設定カテゴリを管理します。詳細な設定項目については[settings.json](../../.vscode/settings.json)を参照してください。
+主要な設定カテゴリを管理します。詳細な設定項目については[settings.json](../.vscode/settings.json)を参照してください。
 
 - **翻訳ペア設定** (`transPairs`): 翻訳対象ディレクトリと言語ペアの定義
 - **除外パターン** (`ignoredPatterns`): 処理対象外とするパターン
@@ -23,7 +23,7 @@ mdaitの動作に必要な各種設定の管理を担当する層です。VSCode
 - 設定変更時は自動で再ロードし、今後は`onConfigurationChanged`イベントで他コンポーネントへ通知予定
 - テスト分離のため`dispose()`でシングルトン破棄可能
 
-**参照実装：** `./configuration.ts`
+**参照実装：** `../src/config/configuration.ts`
 
 ## 設計原則
 
@@ -47,6 +47,6 @@ mdaitの動作に必要な各種設定の管理を担当する層です。VSCode
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../commands/design.md](../commands/design.md) - 設定を利用するコマンド実装
-- [../api/design.md](../api/design.md) - 翻訳プロバイダー設定の利用
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [commands.md](commands.md) - 設定を利用するコマンド実装
+- [api.md](api.md) - 翻訳プロバイダー設定の利用

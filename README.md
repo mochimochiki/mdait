@@ -149,7 +149,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 📚 Documentation
 
-- [Design Documentation](design.md) - Comprehensive architecture and design details
+- [Design Documentation](design/design.md) - Comprehensive architecture and design details
 - [Task Documentation](tasks/) - Development task tracking and implementation notes
 
 ## 🌐 Internationalization

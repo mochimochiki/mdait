@@ -14,7 +14,7 @@
 - パターンマッチングによるフィルタリング
 - Markdownファイルの特定と分類
 
-**参照実装：** `./file-explorer.ts`
+**参照実装：** `../src/utils/file-explorer.ts`
 
 ## 設計原則
 
@@ -38,5 +38,5 @@
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../commands/design.md](../commands/design.md) - ユーティリティを利用するコマンド
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [commands.md](commands.md) - ユーティリティを利用するコマンド

@@ -15,7 +15,7 @@ mdaitの中核となる概念と処理ロジックを提供する層です。Mar
 - **from**: 翻訳元ユニットのハッシュ値（翻訳追跡用）
 - **need**: 必要なアクション（translate、review、verify-deletion、solve-conflict）
 
-**参照実装：** `./markdown/` ディレクトリ
+**参照実装：** `../src/core/markdown/` ディレクトリ
 
 ### ハッシュ管理
 文書の正規化とハッシュ計算を提供します。
@@ -25,7 +25,7 @@ mdaitの中核となる概念と処理ロジックを提供する層です。Mar
 - CRC32によるハッシュ計算
 - ユニット単位でのハッシュ管理
 
-**参照実装：** `./hash/` ディレクトリ
+**参照実装：** `../src/core/hash/` ディレクトリ
 
 ### ステータス管理
 全ユニットの状態を`StatusItem`型で一元管理します。
@@ -36,7 +36,7 @@ mdaitの中核となる概念と処理ロジックを提供する層です。Mar
 - fromHash、unitHashでの検索機能
 - 進捗集計とエラー情報の統合
 
-**参照実装：** `./status/` ディレクトリ
+**参照実装：** `../src/core/status/` ディレクトリ
 
 ## Markdownオブジェクト構造
 
@@ -58,11 +58,11 @@ interface MdaitMarker {
 }
 ```
 
-**参照実装：** `./markdown/` ディレクトリの型定義
+**参照実装：** `../src/core/markdown/` ディレクトリの型定義
 
 ## sync時のSectionMatcherによるユニット対応付け
 
-本節は、[src/commands/sync/section-matcher.ts](../commands/sync/section-matcher.ts)による同期時のセクション対応付け処理について解説します。
+本節は、[src/commands/sync/section-matcher.ts](../src/commands/sync/section-matcher.ts)による同期時のセクション対応付け処理について解説します。
 
 ### 対応付けの流れ（SectionMatcher.match）
 
@@ -112,6 +112,6 @@ source+target のペアでは双方の本文ハッシュを再計算します。
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../commands/design.md](../commands/design.md) - コマンド実装
-- [../config/design.md](../config/design.md) - 設定管理
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [commands.md](commands.md) - コマンド実装
+- [config.md](config.md) - 設定管理

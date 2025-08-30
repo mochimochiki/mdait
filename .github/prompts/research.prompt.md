@@ -19,7 +19,7 @@ your task is to investigate the repository and provide a clear explanation using
 # 🔍 Investigation Targets (in order of priority)
 
 1. **Design documents (especially feature and domain-level)**
-   - Prioritize any `design.md` or `*.design.md` in each directory
+   - Prioritize any `design/design.md` or `design/*.md`
 2. **Project overview**
    - `README.md`, or documents under `docs/`
 3. **Task history and decision records**

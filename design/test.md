@@ -24,7 +24,7 @@ src/test/             # 通常のテスト（CI実行対象）
 │   └── markdown/     # Markdown処理系テスト
 ├── sample-content/   # テスト用サンプルファイル
 ├── workspace/        # テスト実行時の作業ディレクトリ
-└── design.md         # テスト層設計書
+
 
 src/test-gui/         # E2E・拡張機能統合テスト（CI実行対象外）
 ├── commands/         # コマンドE2Eテスト
@@ -91,11 +91,11 @@ VS Code拡張機能としてのテスト環境を提供します。
 ## 関連モジュールとの連携
 
 各層のテストが対応する実装層と密接に連携：
-- [../commands/design.md](../commands/design.md) - コマンド層のテスト設計
-- [../core/design.md](../core/design.md) - コア機能のテスト設計
-- [../config/design.md](../config/design.md) - 設定管理のテスト設計
+- [commands.md](commands.md) - コマンド層のテスト設計
+- [core.md](core.md) - コア機能のテスト設計
+- [config.md](config.md) - 設定管理のテスト設計
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャとテスト位置づけ
+- [ルート設計書](design.md) - 全体アーキテクチャとテスト位置づけ
 - `package.json` - テスト実行スクリプトと依存関係

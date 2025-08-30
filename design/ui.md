@@ -15,7 +15,7 @@ mdaitのステータス情報をVS Codeのツリービューとして表示し�
 - 進捗情報と統計の表示
 - コンテキストメニューによる操作
 
-**データソース：** [../core/design.md](../core/design.md)のStatusItem構造
+**データソース：** [core.md](core.md)のStatusItem構造
 
 ### コマンドインターフェース
 ユーザーが実行可能なコマンドのUI統合を提供します。
@@ -35,7 +35,7 @@ mdaitのステータス情報をVS Codeのツリービューとして表示し�
 
 ## StatusItemとUI表示の連携
 
-[../core/design.md](../core/design.md)で定義されたStatusItem構造を以下のようにUI表示に変換：
+[core.md](core.md)で定義されたStatusItem構造を以下のようにUI表示に変換：
 
 - **type: "directory"** → フォルダーアイコンと展開/折りたたみ機能
 - **type: "file"** → ファイルアイコンと進捗表示
@@ -58,6 +58,6 @@ mdaitのステータス情報をVS Codeのツリービューとして表示し�
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../core/design.md](../core/design.md) - StatusItem構造とステータス管理
-- [../commands/design.md](../commands/design.md) - UI連携するコマンド実装
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [core.md](core.md) - StatusItem構造とステータス管理
+- [commands.md](commands.md) - UI連携するコマンド実装

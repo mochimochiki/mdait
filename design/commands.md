@@ -15,7 +15,7 @@ mdaitの主要コマンド（sync、trans）の実装と実行フローを管理
 - 何度実行しても破綻しない冪等性の保証
  - 自動マーカー付与の見出しレベルは  Front Matter 上書きが可能
 
-**参照実装：** `./sync/` ディレクトリ
+**参照実装：** `../src/commands/sync/` ディレクトリ
 
 ### transコマンド
 `need:translate`が付与されたユニットに対してAI翻訳を実行します。
@@ -25,13 +25,13 @@ mdaitの主要コマンド（sync、trans）の実装と実行フローを管理
 - AI翻訳の実行と結果の統合
 - ハッシュの更新と`need`タグの除去
 
-**参照実装：** `./trans/` ディレクトリ
+**参照実装：** `../src/commands/trans/` ディレクトリ
 
 ## 設計原則
 
 - **コマンドの独立性**: 各コマンドは独立して実行可能
-- **コア機能の活用**: [../core/design.md](../core/design.md)で定義された機能を組み合わせて実装
-- **設定の統合**: [../config/design.md](../config/design.md)の設定管理を利用
+- **コア機能の活用**: [core.md](core.md)で定義された機能を組み合わせて実装
+- **設定の統合**: [config.md](config.md)の設定管理を利用
 - **エラーハンドリング**: 各処理段階でのエラー検出と適切な通知
 
 ## 関連モジュールとの連携
@@ -43,6 +43,6 @@ mdaitの主要コマンド（sync、trans）の実装と実行フローを管理
 
 ## 参考
 
-- [ルート設計書](../../design.md) - 全体アーキテクチャ
-- [../core/design.md](../core/design.md) - コア機能詳細
-- [../config/design.md](../config/design.md) - 設定管理
+- [ルート設計書](design.md) - 全体アーキテクチャ
+- [core.md](core.md) - コア機能詳細
+- [config.md](config.md) - 設定管理
