@@ -22,7 +22,8 @@ export interface TermDetector {
 	 * @param lang 言語コード
 	 * @returns 検出された用語エントリのリスト
 	 */
-	detectTerms(unit: MdaitUnit, lang: string): Promise<readonly TermEntry[]>;
+	// existingTerms: repository に既に存在するエントリのリスト。LLM に渡して参照情報として利用できるようにする。
+	detectTerms(unit: MdaitUnit, lang: string, existingTerms?: readonly TermEntry[]): Promise<readonly TermEntry[]>;
 }
 
 /**
@@ -41,8 +42,23 @@ export class AITermDetector implements TermDetector {
 	 * MdaitUnitから用語検出
 	 * シンプルな実装で、ユニットのcontentから用語を検出
 	 */
-	async detectTerms(unit: MdaitUnit, lang: string): Promise<readonly TermEntry[]> {
+	async detectTerms(
+		unit: MdaitUnit,
+		lang: string,
+		existingTerms?: readonly TermEntry[],
+	): Promise<readonly TermEntry[]> {
 		const content = unit.content;
+		let existingInfo = "";
+		if (existingTerms && existingTerms.length > 0) {
+			const termsList = existingTerms
+				.filter((e) => e.languages[lang])
+				.map((e) => e.languages[lang].term)
+				.slice(0, 50); // 長すぎないように制限
+			if (termsList.length > 0) {
+				existingInfo = `The following terms are already present in the terminology repository for this language:\n- ${termsList.join("\n- ")}\n\n`;
+			}
+		}
+
 		const systemPrompt = `You are a terminology extraction expert. Extract important technical terms, concepts, and specialized vocabulary from the given text.
 
 Instructions:
@@ -55,7 +71,7 @@ Return JSON array with this structure:
 [
   {
     "term": "extracted term",
-    "context": "explanation of the term's meaning and usage context"
+    "context": "explanation of the term's meaning and usage context. Always return in the LANGUAGE: ${lang}."
   }
 ]`;
 

@@ -94,23 +94,22 @@ export async function detectTerm(
 	// 用語検出サービスを初期化
 	const termDetector = await createTermDetector();
 
-	// 用語集リポジトリを初期化
+	// 用語集リポジトリを初期化（既存ファイルがあれば読み込み、なければ作成）
 	const termsPath = config.getTermsFilePath();
 	let termsRepository: TermsRepository;
-
 	try {
+		termsRepository = await TermsRepository.load(termsPath);
+	} catch {
 		termsRepository = await TermsRepository.create(termsPath, config.transPairs);
-	} catch (error) {
-		// ファイルが存在する場合は読み込み、ない場合は新規作成
-		try {
-			termsRepository = await TermsRepository.create(termsPath, config.transPairs);
-		} catch (createError) {
-			throw new Error(`Failed to initialize terms repository: ${createError}`);
-		}
 	}
 
 	// 既存用語を読み込み
 	const existingTerms = await termsRepository.getAllEntries();
+
+	// primaryLang を決定（設定値があればそれを優先し、なければ sourceLang を使用）
+	const configuredPrimary = config.getTermsPrimaryLang() || "";
+	const primaryLang = configuredPrimary.trim() || sourceLang;
+
 	const existingTermTexts = new Set(
 		existingTerms
 			.filter((entry) => entry.languages[sourceLang])
@@ -129,7 +128,7 @@ export async function detectTerm(
 		});
 
 		try {
-			const detectedTerms = await termDetector.detectTerms(unit, sourceLang);
+			const detectedTerms = await termDetector.detectTerms(unit, sourceLang, existingTerms);
 
 			// 既存用語との重複を除去
 			const newTerms = detectedTerms.filter((term) => {
@@ -159,7 +158,7 @@ export async function detectTerm(
 			message: vscode.l10n.t("Saving detected terms..."),
 		});
 
-		await termsRepository.Merge(allDetectedTerms, []);
+		await termsRepository.Merge(allDetectedTerms, config.transPairs);
 		await termsRepository.save();
 
 		console.log(`用語検出完了: ${allDetectedTerms.length}個の新しい用語を追加しました`);

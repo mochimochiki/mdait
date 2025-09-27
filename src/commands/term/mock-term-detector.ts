@@ -6,7 +6,11 @@ import { TermEntry } from "./term-entry";
  * モック用語検出実装（AI利用不可時のフォールバック）
  */
 export class MockTermDetector implements TermDetector {
-	async detectTerms(unit: MdaitUnit, sourceLang: string): Promise<readonly TermEntry[]> {
+	async detectTerms(
+		unit: MdaitUnit,
+		sourceLang: string,
+		existingTerms?: readonly TermEntry[],
+	): Promise<readonly TermEntry[]> {
 		// ユニットからテキストを抽出
 		const lines = unit.content.split("\n");
 		const contentWithoutHeading = lines.slice(1).join("\n").trim();
@@ -18,15 +22,25 @@ export class MockTermDetector implements TermDetector {
 		// 用語候補を抽出
 		const candidateTerms = this.extractCandidateTerms(contentWithoutHeading);
 
-		// TermEntryオブジェクトに変換
-		const termEntries: TermEntry[] = candidateTerms.map((term) =>
-			TermEntry.create(unit.title || "Untitled Section", {
-				[sourceLang]: {
-					term: term,
-					variants: [],
-				},
-			}),
-		);
+		// 既存用語があればそれらを除外
+		const existingSet = new Set<string>();
+		if (existingTerms) {
+			for (const e of existingTerms) {
+				const t = e.languages[sourceLang]?.term;
+				if (t) existingSet.add(t.toLowerCase());
+			}
+		}
+
+		const termEntries: TermEntry[] = candidateTerms
+			.filter((t) => !existingSet.has(t.toLowerCase()))
+			.map((term) =>
+				TermEntry.create(unit.title || "Untitled Section", {
+					[sourceLang]: {
+						term: term,
+						variants: [],
+					},
+				}),
+			);
 
 		return termEntries;
 	}
