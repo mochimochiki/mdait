@@ -24,26 +24,8 @@
         "title": "%mdait.sync.title%"
       },
       {
-        "command": "mdait.status.selectTargets",
-        "title": "%mdait.status.selectTargets.title%",
-        "icon": "$(filter)",
-        "category": "mdait"
-      },
-      {
         "command": "mdait.trans",
         "title": "%mdait.trans.title%"
-      },
-      {
-        "command": "mdait.status.sync",
-        "title": "%mdait.status.sync.title%",
-        "icon": "$(sync)",
-        "category": "mdait"
-      },
-      {
-        "command": "mdait.status.sync.processing",
-        "title": "%mdait.status.sync.title%",
-        "icon": "$(sync~spin)",
-        "category": "mdait"
       },
       {
         "command": "mdait.translate.directory",
@@ -61,6 +43,42 @@
         "command": "mdait.translate.unit",
         "title": "%mdait.translate.unit.title%",
         "icon": "$(play)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.term.detect",
+        "title": "%mdait.term.detect.title%",
+        "icon": "$(book)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.term.detect.directory",
+        "title": "%mdait.term.detect.directory.title%",
+        "icon": "$(book)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.term.detect.file",
+        "title": "%mdait.term.detect.file.title%",
+        "icon": "$(book)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.status.selectTargets",
+        "title": "%mdait.status.selectTargets.title%",
+        "icon": "$(filter)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.status.sync",
+        "title": "%mdait.status.sync.title%",
+        "icon": "$(sync)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.status.sync.processing",
+        "title": "%mdait.status.sync.title%",
+        "icon": "$(sync~spin)",
         "category": "mdait"
       }
     ],
@@ -103,18 +121,28 @@
       "view/item/context": [
         {
           "command": "mdait.translate.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
           "group": "inline"
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && viewItem == mdaitFile",
+          "when": "view == mdait.status && viewItem == mdaitFileTarget",
           "group": "inline"
         },
         {
           "command": "mdait.translate.unit",
-          "when": "view == mdait.status && viewItem == mdaitUnit",
+          "when": "view == mdait.status && viewItem == mdaitUnitTarget",
           "group": "inline"
+        },
+        {
+          "command": "mdait.term.detect.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectorySource",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdait.term.detect.file",
+          "when": "view == mdait.status && viewItem == mdaitFileSource",
+          "group": "inline@1"
         }
       ]
     },
@@ -157,25 +185,40 @@
           "default": true,
           "description": "%mdait.sync.autoDelete.description%"
         },
-        "mdait.trans.provider": {
+        "mdait.ai.provider": {
           "type": "string",
           "default": "default",
-          "description": "%mdait.trans.provider.description%"
+          "description": "%mdait.ai.provider.description%"
+        },
+        "mdait.ai.model": {
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "%mdait.ai.model.description%"
+        },
+        "mdait.ai.ollama.endpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "%mdait.ai.ollama.endpoint.description%"
+        },
+        "mdait.ai.ollama.model": {
+          "type": "string",
+          "default": "llama2",
+          "description": "%mdait.ai.ollama.model.description%"
         },
         "mdait.trans.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,
           "description": "%mdait.trans.markdown.skipCodeBlocks.description%"
         },
-        "mdait.trans.ollama.endpoint": {
+        "mdait.terms.filename": {
           "type": "string",
-          "default": "http://localhost:11434",
-          "description": "%mdait.trans.ollama.endpoint.description%"
+          "default": "terms.csv",
+          "description": "%mdait.terms.filename.description%"
         },
-        "mdait.trans.ollama.model": {
+        "mdait.terms.primaryLang": {
           "type": "string",
-          "default": "llama2",
-          "description": "%mdait.trans.ollama.model.description%"
+          "default": "",
+          "description": "%mdait.terms.primaryLang.description%"
         }
       }
     }
@@ -193,12 +236,15 @@
   },
   "dependencies": {
     "@vscode/l10n": "^0.0.18",
+    "csv-parse": "^5.5.6",
+    "csv-stringify": "^6.5.2",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
     "ollama": "^0.5.16"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",

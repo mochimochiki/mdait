@@ -113,7 +113,7 @@ export class StatusCollector {
 					totalUnits: 0,
 					hasParseError: false,
 					children: [],
-					contextValue: "mdaitFile",
+					contextValue: "mdaitFileTarget",
 					collapsibleState: vscode.TreeItemCollapsibleState.None,
 				};
 			}
@@ -131,7 +131,7 @@ export class StatusCollector {
 					needFlag: unit.marker?.need || undefined,
 					startLine: unit.startLine,
 					endLine: unit.endLine,
-					contextValue: "mdaitUnit",
+					contextValue: unitStatus === Status.Source ? "mdaitUnitSource" : "mdaitUnitTarget",
 					filePath,
 					fileName,
 				});
@@ -153,7 +153,7 @@ export class StatusCollector {
 				totalUnits,
 				hasParseError: false,
 				children,
-				contextValue: "mdaitFile",
+				contextValue: status === Status.Source ? "mdaitFileSource" : "mdaitFileTarget",
 				collapsibleState:
 					children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
 			};
@@ -171,7 +171,7 @@ export class StatusCollector {
 				hasParseError: true,
 				errorMessage: (error as Error).message,
 				children: [],
-				contextValue: "mdaitFile",
+				contextValue: "mdaitFileTarget",
 				collapsibleState: vscode.TreeItemCollapsibleState.None,
 			};
 		}
@@ -284,7 +284,7 @@ export class StatusCollector {
 							fileName: path.basename(filePath),
 							hasParseError: true,
 							errorMessage: (error as Error).message,
-							contextValue: "mdaitFile",
+							contextValue: "mdaitFileTarget",
 							collapsibleState: vscode.TreeItemCollapsibleState.None,
 						};
 					}

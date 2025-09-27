@@ -7,6 +7,9 @@
   "mdait.translate.directory.title": "ディレクトリを翻訳",
   "mdait.translate.file.title": "ファイルを翻訳",
   "mdait.translate.unit.title": "ユニットを翻訳",
+  "mdait.term.detect.title": "用語検出",
+  "mdait.term.detect.directory.title": "用語検出（ディレクトリ）",
+  "mdait.term.detect.file.title": "用語検出（ファイル）",
   "mdait.viewsContainer.title": "mdait",
   "mdait.status.view.title": "翻訳状況",
   "mdait.configuration.title": "mdait",
@@ -16,8 +19,9 @@
   "mdait.transPairs.targetDir.description": "ターゲット言語のドキュメントを格納するディレクトリのパス。",
   "mdait.ignoredPatterns.description": "翻訳・同期処理から除外するファイルやディレクトリのglobパターンリスト。",
   "mdait.sync.autoDelete.description": "sync時にソース側で削除されたユニットをターゲット側でも自動的に削除します。",
-  "mdait.trans.provider.description": "翻訳プロバイダー（default: 推奨モデル）",
-  "mdait.trans.markdown.skipCodeBlocks.description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか",
-  "mdait.trans.ollama.endpoint.description": "OllamaサーバーのエンドポイントURL",
-  "mdait.trans.ollama.model.description": "翻訳に使用するOllamaモデル名"
+  "mdait.ai.provider.description": "翻訳・用語処理用AIプロバイダー（default: 推奨モデル）",
+  "mdait.ai.model.description": "使用するAIモデル名",
+  "mdait.ai.ollama.endpoint.description": "OllamaサーバーのエンドポイントURL",
+  "mdait.ai.ollama.model.description": "使用するOllamaモデル名",
+  "mdait.trans.markdown.skipCodeBlocks.description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
 }

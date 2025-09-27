@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
+import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
-import type { TransConfig } from "../../config/configuration";
 
 /**
  * VS Code Language Model API を使用した AI プロバイダー実装
  * GitHub Copilot の言語モデルを利用してチャット機能を提供します
  */
 export class VSCodeLanguageModelProvider implements AIService {
-	private config: TransConfig;
+	private config: AIConfig;
 
-	constructor(config: TransConfig) {
+	constructor(config: AIConfig) {
 		this.config = config;
 		console.log("VSCodeLanguageModelProvider initialized with config:", config);
 	}

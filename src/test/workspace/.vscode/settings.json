@@ -1,41 +1,63 @@
 {
-	// 翻訳ペア
-	"mdait.transPairs": [
-		{
-			"sourceLang": "ja",
-			"sourceDir": "content/ja",
-			"targetLang": "en",
-			"targetDir": "content/en"
-		},
-		{
-			"sourceLang": "ja",
-			"sourceDir": "content/ja",
-			"targetLang": "de",
-			"targetDir": "content/de"
-		}
-	],
+  // 翻訳ペア
+  "mdait.transPairs": [
+    {
+      "sourceLang": "ja",
+      "sourceDir": "content/ja",
+      "targetLang": "en",
+      "targetDir": "content/en"
+    },
+    {
+      "sourceLang": "en",
+      "sourceDir": "content/en",
+      "targetLang": "de",
+      "targetDir": "content/de"
+    }
+  ],
 
-	// 除外パターン
-	"mdait.ignoredPatterns": "**/node_modules/**",
+  // -----------------------------------------------
+  // General
+  // -----------------------------------------------
+  // 除外パターン
+  "mdait.ignoredPatterns": "**/node_modules/**",
 
-	// マーカーを自動挿入する見出しレベル. FrontMatterで上書き可能(yamlのみ)
-	"mdait.sync.autoMarkerLevel": 2,
+  // -----------------------------------------------
+  // AI
+  // -----------------------------------------------
+  // AIプロバイダ(default/vscode-lm/ollama)
+  "mdait.ai.provider": "vscode-lm",
 
-	// 自動削除設定
-	"mdait.sync.autoDelete": true,
+  // AI model
+  "mdait.ai.model": "gpt-4.1",
 
-	// 翻訳プロバイダ(default/vscode-lm/ollama)
-	"mdait.trans.provider": "default",
+  // ollama endpoint
+  "mdait.ai.ollama.endpoint": "http://localhost:11434",
 
-	// Markdown:コードブロックをスキップするか
-	"mdait.trans.markdown.skipCodeBlocks": true,
+  // ollama model
+  "mdait.ai.ollama.model": "gemma3:4b",
 
-	// vscode-lm model
-	"mdait.trans.model": "gpt-4.1",
+  // -----------------------------------------------
+  // Sync
+  // -----------------------------------------------
+  // マーカーを自動挿入する見出しレベル. FrontMatterで上書き可能(yamlのみ)
+  "mdait.sync.autoMarkerLevel": 2,
 
-	// ollama endpoint
-	"mdait.trans.ollama.endpoint": "http://localhost:11434",
+  // 自動削除設定
+  "mdait.sync.autoDelete": true,
 
-	// ollama model
-	"mdait.trans.ollama.model": "gemma3:4b"
+  // -----------------------------------------------
+  // trans
+  // -----------------------------------------------
+  // Markdown:コードブロックをスキップするか
+  "mdait.trans.markdown.skipCodeBlocks": true,
+
+  // -----------------------------------------------
+  // term
+  // -----------------------------------------------
+  // 用語集ファイル名(default: terms.csv)
+  "mdait.terms.filename": "terms.csv",
+
+  // 用語管理の基準言語(default: en)
+  //"mdait.terms.primaryLang": "en"
+
 }

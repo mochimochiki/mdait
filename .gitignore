@@ -5,3 +5,4 @@ node_modules
 *.vsix
 src/test/workspace/content
 src/test/workspace/.mdait/index.json
+src/test/workspace/.mdait/terms.csv

@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
+import { detectTermCommand } from "./commands/term/command-detect";
+import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
 import { Configuration } from "./config/configuration";
@@ -47,6 +49,34 @@ export function activate(context: vscode.ExtensionContext) {
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
+	// Trans handler
+	const translateItemCommand = new StatusTreeTranslationHandler();
+	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
+
+	const translateDirectoryDisposable = vscode.commands.registerCommand("mdait.translate.directory", (item) =>
+		translateItemCommand.translateDirectory(item),
+	);
+	const translateFileDisposable = vscode.commands.registerCommand("mdait.translate.file", (item) =>
+		translateItemCommand.translateFile(item),
+	);
+	const translateUnitDisposable = vscode.commands.registerCommand("mdait.translate.unit", (item) =>
+		translateItemCommand.translateUnit(item),
+	);
+
+	// term.detect command
+	const termDetectDisposable = vscode.commands.registerCommand("mdait.term.detect", detectTermCommand);
+
+	// Term handler
+	const termHandler = new StatusTreeTermHandler();
+	termHandler.setStatusTreeProvider(statusTreeProvider);
+
+	const termDirectoryDisposable = vscode.commands.registerCommand("mdait.term.detect.directory", (item) =>
+		termHandler.termDetectDirectory(item as StatusItem),
+	);
+	const termFileDisposable = vscode.commands.registerCommand("mdait.term.detect.file", (item) =>
+		termHandler.termDetectFile(item as StatusItem),
+	);
+
 	// CodeLens翻訳コマンド
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.translate",
@@ -64,22 +94,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const codeLensDisposable = vscode.languages.registerCodeLensProvider(
 		{ scheme: "file", language: "markdown" },
 		codeLensProvider,
-	);
-
-	// 翻訳アイテムコマンド
-	const translateItemCommand = new StatusTreeTranslationHandler();
-
-	// StatusTreeTranslationHandlerにStatusTreeProviderを設定
-	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
-
-	const translateDirectoryDisposable = vscode.commands.registerCommand("mdait.translate.directory", (item) =>
-		translateItemCommand.translateDirectory(item),
-	);
-	const translateFileDisposable = vscode.commands.registerCommand("mdait.translate.file", (item) =>
-		translateItemCommand.translateFile(item),
-	);
-	const translateUnitDisposable = vscode.commands.registerCommand("mdait.translate.unit", (item) =>
-		translateItemCommand.translateUnit(item),
 	);
 
 	// status.refresh command
@@ -145,6 +159,9 @@ export function activate(context: vscode.ExtensionContext) {
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,
+		termDetectDisposable,
+		termDirectoryDisposable,
+		termFileDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensDisposable,

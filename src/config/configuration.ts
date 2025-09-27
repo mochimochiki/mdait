@@ -1,19 +1,27 @@
 import * as vscode from "vscode";
 
 /**
- * 翻訳設定の型定義
+ * AI設定の型定義
  */
-export interface TransConfig {
+export interface AIConfig {
 	provider: string;
 	model: string;
-	markdown: {
-		skipCodeBlocks: boolean;
-	};
 	ollama: {
 		endpoint: string;
 		model: string;
 	};
 	// プロバイダ固有設定の拡張用
+	[key: string]: unknown;
+}
+
+/**
+ * 翻訳設定の型定義
+ */
+export interface TransConfig {
+	markdown: {
+		skipCodeBlocks: boolean;
+	};
+	// 翻訳固有設定の拡張用
 	[key: string]: unknown;
 }
 
@@ -50,18 +58,30 @@ export class Configuration {
 		autoDelete: true,
 	};
 	/**
-	 * trans設定
+	 * AI設定
 	 */
-	public trans: TransConfig = {
+	public ai: AIConfig = {
 		provider: "default",
 		model: "gpt-4o",
-		markdown: {
-			skipCodeBlocks: true,
-		},
 		ollama: {
 			endpoint: "http://localhost:11434",
 			model: "llama2",
 		},
+	};
+	/**
+	 * trans設定
+	 */
+	public trans: TransConfig = {
+		markdown: {
+			skipCodeBlocks: true,
+		},
+	};
+	/**
+	 * 用語集設定
+	 */
+	public terms = {
+		filename: "terms.csv", // デフォルトはCSV形式
+		primaryLang: "", // 用語管理の基準言語
 	};
 
 	/**
@@ -139,28 +159,42 @@ export class Configuration {
 		const autoDelete = config.get<boolean>("sync.autoDelete");
 		if (autoDelete !== undefined) {
 			this.sync.autoDelete = autoDelete;
-		} // 翻訳設定の読み込み
-		const provider = config.get<string>("trans.provider");
-		if (provider) {
-			this.trans.provider = provider;
 		}
-		const model = config.get<string>("trans.model");
-		if (model) {
-			this.trans.model = model;
+
+		// AI設定の読み込み
+		const aiProvider = config.get<string>("ai.provider");
+		if (aiProvider) {
+			this.ai.provider = aiProvider;
 		}
+		const aiModel = config.get<string>("ai.model");
+		if (aiModel) {
+			this.ai.model = aiModel;
+		}
+
+		// Ollama設定の読み込み
+		const ollamaEndpoint = config.get<string>("ai.ollama.endpoint");
+		if (ollamaEndpoint) {
+			this.ai.ollama.endpoint = ollamaEndpoint;
+		}
+		const ollamaModel = config.get<string>("ai.ollama.model");
+		if (ollamaModel) {
+			this.ai.ollama.model = ollamaModel;
+		}
+
+		// 翻訳設定の読み込み
 		const skipCodeBlocks = config.get<boolean>("trans.markdown.skipCodeBlocks");
 		if (skipCodeBlocks !== undefined) {
 			this.trans.markdown.skipCodeBlocks = skipCodeBlocks;
 		}
 
-		// Ollama設定の読み込み
-		const ollamaEndpoint = config.get<string>("trans.ollama.endpoint");
-		if (ollamaEndpoint) {
-			this.trans.ollama.endpoint = ollamaEndpoint;
+		// 用語集設定の読み込み
+		const termsFilename = config.get<string>("terms.filename");
+		if (termsFilename) {
+			this.terms.filename = termsFilename;
 		}
-		const ollamaModel = config.get<string>("trans.ollama.model");
-		if (ollamaModel) {
-			this.trans.ollama.model = ollamaModel;
+		const termsprimaryLang = config.get<string>("terms.primaryLang");
+		if (termsprimaryLang) {
+			this.terms.primaryLang = termsprimaryLang;
 		}
 	}
 
@@ -223,5 +257,37 @@ export class Configuration {
 		}
 
 		return null;
+	}
+
+	/**
+	 * 用語集ファイルのパスを取得
+	 * @returns 用語集ファイルの絶対パス
+	 */
+	public getTermsFilePath(): string {
+		// ワークスペースルートを取得
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			throw new Error("Workspace not found");
+		}
+
+		const path = require("node:path");
+		return path.join(workspaceRoot, ".mdait", this.terms.filename);
+	}
+
+	/**
+	 * 用語集ファイル名から形式を判定
+	 * @returns 'csv' | 'yaml'
+	 */
+	public getTermsFileFormat(): "csv" | "yaml" {
+		const ext = this.terms.filename.toLowerCase().split(".").pop();
+		return ext === "yaml" || ext === "yml" ? "yaml" : "csv";
+	}
+
+	/**
+	 * 用語集の基準言語を取得
+	 * @returns 基準言語コード
+	 */
+	public getTermsPrimaryLang(): string {
+		return this.terms.primaryLang;
 	}
 }

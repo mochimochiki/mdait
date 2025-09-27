@@ -1,4 +1,4 @@
-import type { TransConfig } from "../../config/configuration";
+import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
 
 /**
@@ -7,9 +7,9 @@ import type { AIMessage, AIService, MessageStream } from "../ai-service";
  * 主に開発初期段階やテスト用途での使用を想定しています。
  */
 export class DefaultAIProvider implements AIService {
-	private config: TransConfig;
+	private config: AIConfig;
 
-	constructor(config: TransConfig) {
+	constructor(config: AIConfig) {
 		this.config = config;
 		console.log("DefaultAIProvider initialized with config:", config);
 	}

@@ -453,7 +453,7 @@ export class StatusItemTree {
 			directoryPath: dirPath,
 			status,
 			isTranslating,
-			contextValue: "mdaitDirectory",
+			contextValue: status === Status.Source ? "mdaitDirectorySource" : "mdaitDirectoryTarget",
 			children: [...files], // 直下ファイルのコピーを保持
 			totalUnits,
 			translatedUnits,
