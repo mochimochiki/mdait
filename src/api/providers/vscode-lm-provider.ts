@@ -19,9 +19,14 @@ export class VSCodeLanguageModelProvider implements AIService {
 	 *
 	 * @param systemPrompt システムプロンプト
 	 * @param messages ユーザーメッセージの配列
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns ストリーミング応答
 	 */
-	async *sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream {
+	async *sendMessage(
+		systemPrompt: string,
+		messages: AIMessage[],
+		cancellationToken?: vscode.CancellationToken,
+	): MessageStream {
 		try {
 			// 言語モデルを選択
 			const model = await this.selectLanguageModel();
@@ -32,8 +37,9 @@ export class VSCodeLanguageModelProvider implements AIService {
 			// VS Code Language Model API 用のプロンプトを作成
 			const prompt = this.createPrompt(systemPrompt, messages);
 
-			// リクエストを送信
-			const response = await model.sendRequest(prompt, {}, new vscode.CancellationTokenSource().token);
+			// リクエストを送信（cancellationTokenがあればそれを使用、なければ新規作成）
+			const token = cancellationToken || new vscode.CancellationTokenSource().token;
+			const response = await model.sendRequest(prompt, {}, token);
 
 			// ストリーミングレスポンスを処理
 			for await (const fragment of response.text) {

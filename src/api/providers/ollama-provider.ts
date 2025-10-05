@@ -1,4 +1,5 @@
 import { Ollama } from "ollama";
+import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
 
@@ -23,9 +24,14 @@ export class OllamaProvider implements AIService {
 	 *
 	 * @param systemPrompt システムプロンプト
 	 * @param messages メッセージ履歴
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns ストリーミング応答のAsyncGenerator
 	 */
-	async *sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream {
+	async *sendMessage(
+		systemPrompt: string,
+		messages: AIMessage[],
+		cancellationToken?: vscode.CancellationToken,
+	): MessageStream {
 		try {
 			// ユーザーメッセージを取得
 			const userMessage = messages.find((msg) => msg.role === "user");
@@ -44,6 +50,14 @@ export class OllamaProvider implements AIService {
 					top_p: 0.9,
 				},
 			});
+
+			// CancellationTokenと連携してAbortableAsyncIteratorを中断
+			if (cancellationToken) {
+				cancellationToken.onCancellationRequested(() => {
+					stream.abort();
+					console.log("Ollama request was cancelled");
+				});
+			}
 
 			// ストリーミングレスポンスを処理
 			for await (const chunk of stream) {

@@ -62,10 +62,10 @@ export async function detectTermCommand(uri?: vscode.Uri): Promise<void> {
 			{
 				location: vscode.ProgressLocation.Notification,
 				title: vscode.l10n.t("Detecting terms..."),
-				cancellable: false,
+				cancellable: true,
 			},
-			async (progress) => {
-				await detectTerm(units, sourceLang, config, progress);
+			async (progress, token) => {
+				await detectTerm(units, sourceLang, config, progress, token);
 			},
 		);
 
@@ -90,6 +90,7 @@ export async function detectTerm(
 	sourceLang: string,
 	config: Configuration,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	cancellationToken?: vscode.CancellationToken,
 ): Promise<void> {
 	// 用語検出サービスを初期化
 	const termDetector = await createTermDetector();
@@ -122,13 +123,19 @@ export async function detectTerm(
 
 	// 各ユニットに対して用語検出を実行
 	for (const unit of units) {
+		// キャンセルチェック
+		if (cancellationToken?.isCancellationRequested) {
+			console.log("Term detection was cancelled by user");
+			break;
+		}
+
 		progress.report({
 			message: vscode.l10n.t("Processing section {0} of {1}", processedCount + 1, totalUnits),
 			increment: 100 / totalUnits,
 		});
 
 		try {
-			const detectedTerms = await termDetector.detectTerms(unit, sourceLang, existingTerms);
+			const detectedTerms = await termDetector.detectTerms(unit, sourceLang, existingTerms, cancellationToken);
 
 			// 既存用語との重複を除去
 			const newTerms = detectedTerms.filter((term) => {

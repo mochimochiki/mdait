@@ -1,3 +1,5 @@
+import type * as vscode from "vscode";
+
 /**
  * AIサービスとのやり取りで使用するメッセージコンテンツの型定義。
  * 現状はテキストのみを想定していますが、将来的には画像などのマルチモーダルコンテンツにも対応できるよう拡張性を考慮しています。
@@ -30,7 +32,8 @@ export interface AIService {
 	 *
 	 * @param systemPrompt システムプロンプト。AIモデルの振る舞いや応答形式を指示します。
 	 * @param messages AIモデルに送信するメッセージの配列。AIMessage形式で指定します。
+	 * @param cancellationToken キャンセル処理用トークン。ユーザーによる処理中断をサポートします。
 	 * @returns AIモデルからの応答をストリーミングで返す MessageStream。
 	 */
-	sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream;
+	sendMessage(systemPrompt: string, messages: AIMessage[], cancellationToken?: vscode.CancellationToken): MessageStream;
 }

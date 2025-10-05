@@ -1,3 +1,4 @@
+import type * as vscode from "vscode";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { TermDetector } from "./term-detector";
 import { TermEntry } from "./term-entry";
@@ -10,7 +11,13 @@ export class MockTermDetector implements TermDetector {
 		unit: MdaitUnit,
 		sourceLang: string,
 		existingTerms?: readonly TermEntry[],
+		cancellationToken?: vscode.CancellationToken,
 	): Promise<readonly TermEntry[]> {
+		// キャンセルチェック
+		if (cancellationToken?.isCancellationRequested) {
+			return [];
+		}
+
 		// ユニットからテキストを抽出
 		const lines = unit.content.split("\n");
 		const contentWithoutHeading = lines.slice(1).join("\n").trim();

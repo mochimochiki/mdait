@@ -4,6 +4,7 @@
  * 原文から重要用語を検出し、context情報と共に用語候補リストを生成
  */
 
+import type * as vscode from "vscode";
 import type { AIService } from "../../api/ai-service";
 import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
@@ -20,10 +21,16 @@ export interface TermDetector {
 	 *
 	 * @param unit 検出対象のユニット
 	 * @param lang 言語コード
+	 * @param existingTerms repository に既に存在するエントリのリスト。LLM に渡して参照情報として利用できるようにする。
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns 検出された用語エントリのリスト
 	 */
-	// existingTerms: repository に既に存在するエントリのリスト。LLM に渡して参照情報として利用できるようにする。
-	detectTerms(unit: MdaitUnit, lang: string, existingTerms?: readonly TermEntry[]): Promise<readonly TermEntry[]>;
+	detectTerms(
+		unit: MdaitUnit,
+		lang: string,
+		existingTerms?: readonly TermEntry[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<readonly TermEntry[]>;
 }
 
 /**
@@ -46,6 +53,7 @@ export class AITermDetector implements TermDetector {
 		unit: MdaitUnit,
 		lang: string,
 		existingTerms?: readonly TermEntry[],
+		cancellationToken?: vscode.CancellationToken,
 	): Promise<readonly TermEntry[]> {
 		const content = unit.content;
 		let existingInfo = "";
@@ -84,9 +92,18 @@ Return the JSON array of extracted terms:`;
 
 		// ストリーミング応答を文字列に結合
 		let response = "";
-		const messageStream = this.aiService.sendMessage(systemPrompt, [{ role: "user", content: userPrompt }]);
+		const messageStream = this.aiService.sendMessage(
+			systemPrompt,
+			[{ role: "user", content: userPrompt }],
+			cancellationToken,
+		);
 
 		for await (const chunk of messageStream) {
+			// キャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				console.log("Term detection was cancelled");
+				return [];
+			}
 			response += chunk;
 		}
 

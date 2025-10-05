@@ -240,7 +240,7 @@
     "csv-stringify": "^6.5.2",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
-    "ollama": "^0.5.16"
+    "ollama": "^0.6.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

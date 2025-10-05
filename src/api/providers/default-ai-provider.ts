@@ -1,3 +1,4 @@
+import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
 
@@ -19,9 +20,14 @@ export class DefaultAIProvider implements AIService {
 	 *
 	 * @param systemPrompt システムプロンプト。
 	 * @param messages AIモデルに送信するメッセージの配列。
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns モックのストリーミング応答。
 	 */
-	async *sendMessage(systemPrompt: string, messages: AIMessage[]): MessageStream {
+	async *sendMessage(
+		systemPrompt: string,
+		messages: AIMessage[],
+		cancellationToken?: vscode.CancellationToken,
+	): MessageStream {
 		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
 		console.log(`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`);
 
@@ -36,6 +42,11 @@ export class DefaultAIProvider implements AIService {
 		// ストリーミング形式で少しずつ応答を返す
 		const chunks = this.splitIntoChunks(mockTranslatedText, 10);
 		for (const chunk of chunks) {
+			// キャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				console.log("DefaultAIProvider request was cancelled");
+				break;
+			}
 			yield chunk;
 			// 少し待機してストリーミングをシミュレート
 			await new Promise((resolve) => setTimeout(resolve, 50));
