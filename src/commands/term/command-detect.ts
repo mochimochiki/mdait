@@ -20,8 +20,20 @@ import { TermsRepositoryCSV } from "./terms-repository-csv";
  * 指定されたファイルから重要用語を検出し、用語集に追加
  *
  * @param uri 対象ファイルのURI
+ * @param options オプション設定
+ * @param options.showProgress 進捗通知を表示するか（デフォルト: true）
+ * @param options.showCompletionMessage 完了メッセージを表示するか（デフォルト: true）
+ * @param options.cancellationToken 親からのキャンセルトークン（進捗通知なしの場合に使用）
  */
-export async function detectTermCommand(uri?: vscode.Uri): Promise<void> {
+export async function detectTermCommand(
+	uri?: vscode.Uri,
+	options?: {
+		showProgress?: boolean;
+		showCompletionMessage?: boolean;
+		cancellationToken?: vscode.CancellationToken;
+	},
+): Promise<void> {
+	const { showProgress = true, showCompletionMessage = true, cancellationToken } = options || {};
 	const config = Configuration.getInstance();
 
 	if (!uri) {
@@ -58,22 +70,38 @@ export async function detectTermCommand(uri?: vscode.Uri): Promise<void> {
 		}
 
 		// 用語検出処理を実行
-		await vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.Notification,
-				title: vscode.l10n.t("Detecting terms..."),
-				cancellable: true,
-			},
-			async (progress, token) => {
-				await detectTerm(units, sourceLang, config, progress, token);
-			},
-		);
+		if (showProgress) {
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Detecting terms..."),
+					cancellable: true,
+				},
+				async (progress, token) => {
+					await detectTerm(units, sourceLang, config, progress, token);
+				},
+			);
+		} else {
+			// 進捗通知なしで実行（親のプログレスとキャンセルトークンを使用）
+			await detectTerm(
+				units,
+				sourceLang,
+				config,
+				{ report: () => {} } as vscode.Progress<{
+					message?: string;
+					increment?: number;
+				}>,
+				cancellationToken,
+			);
+		}
 
 		// StatusManagerのファイル状態を更新
 		const statusManager = StatusManager.getInstance();
 		await statusManager.refreshFileStatus(sourceFilePath);
 
-		vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+		if (showCompletionMessage) {
+			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+		}
 	} catch (error) {
 		console.error("用語検出エラー:", error);
 		vscode.window.showErrorMessage(

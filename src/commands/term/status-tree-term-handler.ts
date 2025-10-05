@@ -110,7 +110,12 @@ export class StatusTreeTermHandler {
 							// チャンク内並行処理
 							const chunkPromises = chunk.map(async (file) => {
 								try {
-									await detectTermCommand(file);
+									// ディレクトリ処理時は個別ファイルの進捗通知を表示しない
+									await detectTermCommand(file, {
+										showProgress: false,
+										showCompletionMessage: false,
+										cancellationToken: token,
+									});
 									successful++;
 									return true;
 								} catch (error) {
