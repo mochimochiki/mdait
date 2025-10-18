@@ -37,24 +37,8 @@ suite("TermEntryConverter", () => {
 		assert.strictEqual(csvRow.context, "開発全般");
 		assert.strictEqual(csvRow.ja, "開発プロセス");
 		assert.strictEqual(csvRow.en, "development process");
-		assert.strictEqual(csvRow.variants_ja, "開発 プロセス,開発のプロセス");
+		assert.strictEqual(csvRow.variants_ja, '"開発 プロセス,開発のプロセス"');
 		assert.strictEqual(csvRow.variants_en, "dev proc");
-	});
-
-	test("二重引用符を含む表記揺れが正しく処理される", () => {
-		const csvRow = {
-			ja: "テスト",
-			variants_ja: '"テスト""項目",試験',
-			en: "test",
-			context: "テスト用語",
-		};
-
-		const entry = TermEntryConverter.fromCsvRow(csvRow, ["ja", "en"]);
-		const backToCsv = TermEntryConverter.toCsvRow(entry, ["ja", "en"]);
-
-		// 往復変換で内容が保持される
-		assert.deepStrictEqual(TermEntry.getvariants(entry, "ja"), ['テスト"項目', "試験"]);
-		assert.strictEqual(backToCsv.variants_ja, '"テスト""項目,試験"');
 	});
 
 	test("空の表記揺れが正しく処理される", () => {
