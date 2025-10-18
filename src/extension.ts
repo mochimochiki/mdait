@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const statusTreeProvider = new StatusTreeProvider();
 	const treeView = vscode.window.createTreeView("mdait.status", {
 		treeDataProvider: statusTreeProvider,
-		showCollapseAll: false,
+		showCollapseAll: true,
 	});
 
 	// SelectionState 初期化（前回復元→先頭フォールバック）
