@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
 import { detectTermCommand } from "./commands/term/command-detect";
+import { expandTermCommand } from "./commands/term/command-expand";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
@@ -65,6 +66,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// term.detect command
 	const termDetectDisposable = vscode.commands.registerCommand("mdait.term.detect", detectTermCommand);
+
+	// term.expand command
+	const termExpandDisposable = vscode.commands.registerCommand("mdait.term.expand", (item) =>
+		expandTermCommand(item as StatusItem),
+	);
 
 	// Term handler
 	const termHandler = new StatusTreeTermHandler();
@@ -160,6 +166,7 @@ export function activate(context: vscode.ExtensionContext) {
 		selectTargetsDisposable,
 		transDisposable,
 		termDetectDisposable,
+		termExpandDisposable,
 		termDirectoryDisposable,
 		termFileDisposable,
 		codeLensTranslateDisposable,

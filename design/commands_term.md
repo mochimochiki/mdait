@@ -11,7 +11,17 @@ AI翻訳の前処理・支援データとして用語集を活用し、表記ゆ
 
 ### 2.1 フォーマット
 
-UTF-8（BOM あり/なしどちらも読込対応）。生成時は BOM ありで出力。ヘッダー行は必須。列の順序は任意。CSV のパース/生成は`csv-parse`を使用する。
+| ja    | en          | variants_ja | variants_en | context  |
+| ----- | ----------- | ----------- | ----------- | -------- |
+| 開発プロセス | development process | "開発 プロセス,開発のプロセス" | "dev proc" | 開発全般 |
+| アカウント | account | "Account,アカウント情報" | "acc" | ユーザー識別情報 |
+
+**列順序**
+1. Primary（指定がある場合）
+2. ソース言語（順序ごと、primary以外）
+3. ターゲット言語（順序ごと）
+4. `context` 列（必須）
+5. `variants_<lang>` 列（任意、各言語ごと）
 
 **必須列**
 - transPairs の sourceLang/targetLang に一致する言語コード列（例: `ja`, `en` など、複数ペアに対応可能）
@@ -20,12 +30,9 @@ UTF-8（BOM あり/なしどちらも読込対応）。生成時は BOM あり�
 **任意列**
 `variants_<lang>` 列（例: `variants_ja`, `variants_en`）。値内のカンマと衝突しないよう、当該列のセルは二重引用必須。
 
-**例**
+**備考**
+UTF-8（BOM あり/なしどちらも読込対応）。生成時は BOM ありで出力。ヘッダー行は必須。CSV のパース/生成は`csv-parse`を使用する。
 
-| ja    | variants_ja | en          |  variants_en | context  |
-| ----- | ----------- | -------- | -------------------- | ------------- |
-| 開発プロセス |  "開発 プロセス,開発のプロセス" | development process | "dev proc" |開発全般 |
-| アカウント| "Account,アカウント情報" | account     |  "acc" |ユーザー識別情報 |
 
 ### 2.2 各列の意味
 
