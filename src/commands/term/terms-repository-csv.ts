@@ -157,7 +157,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 		return this.allLanguages[0] || "";
 	}
 
-	// 内部: 列順序（primary → context → source → target → variants → unknown）に必要な情報を返す
+	// 内部: 列順序（primary → source → target → context → variants → unknown）に必要な情報を返す
 	private getOrderedLangs(): { sourceOrder: string[]; targetOrder: string[]; primary: string } {
 		const config = Configuration.getInstance();
 		const primary = this.getEffectivePrimaryLang();
@@ -226,7 +226,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 		this.updateSourceLanguages(config.transPairs);
 		const { sourceOrder, targetOrder, primary } = this.getOrderedLangs();
 
-		// CSVヘッダーを生成（primary → context → source → target → variants（sourceのみ）→ unknown）
+		// CSVヘッダーを生成（primary → source順序 → target順序 → context → variants（sourceのみ）→ unknown）
 		const headers = generateOrderedCsvHeaders(primary, sourceOrder, targetOrder, this.preservedHeaders);
 
 		// TermEntryをCSV行に変換しつつ未知列を温存
@@ -350,7 +350,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 /**
  * CSVヘッダーを生成
- * 形式: [言語1, (sourceのみ) variants_言語1, 言語2, ..., context] + preservedHeaders
+ * 形式: [primary, source順序ごと, target順序ごと, context, variants] + preservedHeaders
  */
 function generateOrderedCsvHeaders(
 	primaryLang: string,
@@ -361,14 +361,13 @@ function generateOrderedCsvHeaders(
 	const headers: string[] = [];
 	const placedLangs = new Set<string>();
 
-	// primary → context
+	// primary
 	if (primaryLang) {
 		headers.push(primaryLang);
 		placedLangs.add(primaryLang);
 	}
-	headers.push("context");
 
-	// 残りのsource（primary以外）→ target
+	// 残りのsource（primary以外）
 	for (const lang of sourceOrder) {
 		if (lang && !placedLangs.has(lang)) {
 			if (lang !== primaryLang) {
@@ -377,12 +376,17 @@ function generateOrderedCsvHeaders(
 			}
 		}
 	}
+
+	// target
 	for (const lang of targetOrder) {
 		if (lang && !placedLangs.has(lang)) {
 			headers.push(lang);
 			placedLangs.add(lang);
 		}
 	}
+
+	// context
+	headers.push("context");
 
 	// variants（sourceのみ）
 	for (const lang of sourceOrder) {

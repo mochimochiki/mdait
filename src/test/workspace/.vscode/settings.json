@@ -58,6 +58,6 @@
   "mdait.terms.filename": "terms.csv",
 
   // 用語管理の基準言語(default: en)
-  //"mdait.terms.primaryLang": "en"
+  "mdait.terms.primaryLang": "en"
 
 }
