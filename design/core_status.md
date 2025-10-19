@@ -163,16 +163,11 @@ changeUnitStatus(unitHash: string, modifications: Partial<StatusItem>, filePath:
 #### 検索・取得
 ```typescript
 getStatusItem(path: string): StatusItem | undefined
-getUnitStatusItem(hash: string, path?: string): StatusItem | undefined
-getUnitStatusItemByFromHash(fromHash: string, path?: string): StatusItem | undefined
-getUntranslatedUnits(filePath: string): StatusItem[]
 ```
 
 #### ツリーアクセス
 ```typescript
-getStatusItemTree(): StatusItemTree
-getTreeFileStatusList(): StatusItem[]
-aggregateProgress(): {totalUnits: number, translatedUnits: number, errorUnits: number}
+getStatusItemTree(): StatusItemTree  // StatusItemTreeを直接取得し、そのメソッドを使用
 ```
 
 **設計パターン:**

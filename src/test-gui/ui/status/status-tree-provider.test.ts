@@ -23,7 +23,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 		// ファイル状況を収集
 		await statusManager.buildStatusItemTree();
-		const fileStatuses = statusManager.getTreeFileStatusList();
+		const tree = statusManager.getStatusItemTree();
+		const fileStatuses = tree.getFilesAll();
 
 		// 結果の検証
 		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
@@ -59,7 +60,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 		// ファイル状況を収集
 		await statusManager.buildStatusItemTree();
-		const fileStatuses = statusManager.getTreeFileStatusList();
+		const tree = statusManager.getStatusItemTree();
+		const fileStatuses = tree.getFilesAll();
 
 		// エラーにならずに空配列が返されることを確認
 		assert.strictEqual(fileStatuses.length, 0, "存在しないディレクトリの場合は空配列が返される必要があります");
@@ -112,7 +114,8 @@ suite("StatusTreeProvider Test Suite", () => {
 
 		await statusManager.buildStatusItemTree();
 
-		const progress = statusManager.aggregateProgress();
+		const tree = statusManager.getStatusItemTree();
+		const progress = tree.aggregateProgress();
 
 		assert.ok(typeof progress.totalUnits === "number", "totalUnitsは数値である必要があります");
 		assert.ok(typeof progress.translatedUnits === "number", "translatedUnitsは数値である必要があります");

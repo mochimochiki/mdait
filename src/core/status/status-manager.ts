@@ -132,42 +132,6 @@ export class StatusManager {
 	}
 
 	/**
-	 * 指定ハッシュのユニットをStatusItemツリーから取得
-	 */
-	public getUnitStatusItem(hash: string, path?: string): StatusItem | undefined {
-		if (!path) {
-			// hash はユニット自身の unitHash を指すため、fromHash ではなく unitHash で全体検索する
-			return this.statusItemTree.getUnitFirstWithoutPath(hash);
-		}
-		return this.statusItemTree.getUnit(hash, path);
-	}
-
-	/**
-	 * 指定ファイルパス内の未翻訳ユニット（needFlag付き）を取得
-	 */
-	public getUntranslatedUnits(filePath: string): StatusItem[] {
-		return this.statusItemTree.getUnitsUntranslatedInFile(filePath);
-	}
-
-	/**
-	 * StatusItemツリーを取得
-	 */
-	public getTreeFileStatusList(): StatusItem[] {
-		return this.statusItemTree.getFilesAll();
-	}
-
-	/**
-	 * StatusItemツリーから進捗情報を集計
-	 */
-	public aggregateProgress(): {
-		totalUnits: number;
-		translatedUnits: number;
-		errorUnits: number;
-	} {
-		return this.statusItemTree.aggregateProgress();
-	}
-
-	/**
 	 * 初期化済みか
 	 */
 	public isInitialized(): boolean {
