@@ -6,3 +6,5 @@ node_modules
 src/test/workspace/content
 src/test/workspace/.mdait/index.json
 src/test/workspace/.mdait/terms.csv
+src/test/workspace/.mdait/logs/*
+src/test/workspace/.mdait/logs/ai-stats.log
