@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
 import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
+import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
@@ -72,6 +73,9 @@ export function activate(context: vscode.ExtensionContext) {
 		expandTermCommand(item as StatusItem),
 	);
 
+	// term.open command
+	const termOpenDisposable = vscode.commands.registerCommand("mdait.term.open", openTermCommand);
+
 	// Term handler
 	const termHandler = new StatusTreeTermHandler();
 	termHandler.setStatusTreeProvider(statusTreeProvider);
@@ -115,6 +119,9 @@ export function activate(context: vscode.ExtensionContext) {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
 		}
 	});
+
+	// status.openTerm command
+	const openTermStatusDisposable = vscode.commands.registerCommand("mdait.status.openTerm", openTermCommand);
 
 	// jumpToUnit command
 	const jumpToUnitDisposable = vscode.commands.registerCommand(
@@ -167,6 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
 		transDisposable,
 		termDetectDisposable,
 		termExpandDisposable,
+		termOpenDisposable,
 		termDirectoryDisposable,
 		termFileDisposable,
 		codeLensTranslateDisposable,
@@ -177,6 +185,7 @@ export function activate(context: vscode.ExtensionContext) {
 		translateUnitDisposable,
 		treeView,
 		syncStatusDisposable,
+		openTermStatusDisposable,
 		jumpToUnitDisposable,
 	);
 

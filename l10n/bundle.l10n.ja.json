@@ -1,6 +1,8 @@
 {
   "Workspace is not opened": "ワークスペースが開かれていません",
   "Source directory does not exist: {0}": "ソースディレクトリが存在しません: {0}",
+  "Glossary file does not exist: {0}": "用語集ファイルが存在しません: {0}",
+  "Failed to open glossary file: {0}": "用語集ファイルを開けませんでした: {0}",
   "Translation pairs (mdait.transPairs) are not configured.": "翻訳ペア (mdait.transPairs) が設定されていません。",
   "Source directory (sourceDir) is not set in translation pair.": "翻訳ペアでソースディレクトリ (sourceDir) が設定されていません。",
   "Target directory (targetDir) is not set in translation pair.": "翻訳ペアでターゲットディレクトリ (targetDir) が設定されていません。",

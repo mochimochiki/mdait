@@ -1,6 +1,8 @@
 {
   "Failed to sync and refresh: {0}": "Failed to sync and refresh: {0}",
   "Failed to jump to unit: {0}": "Failed to jump to unit: {0}",
+  "Glossary file does not exist: {0}": "Glossary file does not exist: {0}",
+  "Failed to open glossary file: {0}": "Failed to open glossary file: {0}",
   "No units found in this file.": "No units found in this file.",
   "This unit does not have a source reference.": "This unit does not have a source reference.",
   "Source unit not found for hash: {0}": "Source unit not found for hash: {0}",

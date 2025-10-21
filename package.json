@@ -86,6 +86,12 @@
         "title": "%mdait.status.sync.title%",
         "icon": "$(sync~spin)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.status.openTerm",
+        "title": "%mdait.status.openTerm.title%",
+        "icon": "$(repo)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -121,6 +127,11 @@
         {
           "command": "mdait.status.sync.processing",
           "when": "view == mdait.status && mdaitSyncProcessing",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.status.openTerm",
+          "when": "view == mdait.status",
           "group": "navigation"
         }
       ],

@@ -4,6 +4,7 @@
   "mdait.trans.title": "mdait: 翻訳を実行",
   "mdait.status.selectTargets.title": "対象言語を選択",
   "mdait.status.sync.title": "同期",
+  "mdait.status.openTerm.title": "用語集を開く",
   "mdait.translate.directory.title": "✨ ディレクトリを翻訳",
   "mdait.translate.file.title": "✨ ファイルを翻訳",
   "mdait.translate.unit.title": "✨ ユニットを翻訳",
