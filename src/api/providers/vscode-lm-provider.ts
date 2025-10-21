@@ -96,7 +96,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
 			await logger.log({
-				timestamp: new Date().toISOString(),
+				timestamp: new Date().toLocaleString("sv-SE"),
 				provider: "vscode-lm",
 				model: modelFamily,
 				inputChars,

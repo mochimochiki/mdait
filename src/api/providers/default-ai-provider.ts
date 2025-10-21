@@ -67,7 +67,7 @@ export class DefaultAIProvider implements AIService {
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
 			await logger.log({
-				timestamp: new Date().toISOString(),
+				timestamp: new Date().toLocaleString("sv-SE"),
 				provider: "default",
 				model: this.config.model || "mock",
 				inputChars,
