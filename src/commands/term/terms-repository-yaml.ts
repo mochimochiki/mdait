@@ -102,13 +102,16 @@ export class YamlTermsRepository implements TermsRepository {
 		const mergedEntries: TermEntry[] = [...this.entries];
 
 		for (const candidate of candidates) {
-			// 既存エントリと重複チェック（primaryLangで判定）
+			// 空のエントリはスキップ
+			if (TermEntryUtils.isEmpty(candidate)) continue;
+
+			// 既存エントリとの同一性チェック（contextと言語で判定）
 			const duplicateIndex = mergedEntries.findIndex((existing) =>
-				TermEntryUtils.isDuplicate(existing, candidate, primaryLang),
+				TermEntryUtils.isSameEntry(existing, candidate, primaryLang),
 			);
 
 			if (duplicateIndex >= 0) {
-				// 重複する場合は既存エントリをマージで更新
+				// 同一エントリが見つかった場合はマージで更新
 				mergedEntries[duplicateIndex] = TermEntryUtils.merge(mergedEntries[duplicateIndex], candidate);
 			} else {
 				// 新規エントリとして追加

@@ -84,8 +84,8 @@ export async function codeLensJumpToSourceCommand(range: vscode.Range): Promise<
 		// 優先パスでユニットを検索し、見つからなければ全体検索
 		const tree = statusManager.getStatusItemTree();
 		const sourceUnit = preferredSourcePath
-			? (tree.getUnit(marker.from, preferredSourcePath) ?? tree.getUnitFirstWithoutPath(marker.from))
-			: tree.getUnitFirstWithoutPath(marker.from);
+			? (tree.getUnit(marker.from, preferredSourcePath) ?? tree.getUnitByHash(marker.from))
+			: tree.getUnitByHash(marker.from);
 		if (!sourceUnit || !sourceUnit.filePath) {
 			vscode.window.showWarningMessage(vscode.l10n.t("Source unit not found for hash: {0}", marker.from));
 			return;
