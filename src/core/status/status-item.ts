@@ -13,12 +13,13 @@ export enum Status {
 }
 
 /**
- * ディレクトリ、ファイル、ユニットを区別する
+ * ディレクトリ、ファイル、ユニット、用語集ファイルを区別する
  */
 export enum StatusItemType {
 	Directory = "directory",
 	File = "file",
 	Unit = "unit",
+	TermsFile = "termsFile",
 }
 
 /**

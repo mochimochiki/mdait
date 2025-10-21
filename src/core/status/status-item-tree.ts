@@ -258,7 +258,7 @@ export class StatusItemTree {
 		if (fileItem.children) {
 			fileItem.isTranslating = fileItem.children.some((file) => file.isTranslating === true);
 		}
-		if (fileItem.type === StatusItemType.File && fileItem.filePath) {
+		if ((fileItem.type === StatusItemType.File || fileItem.type === StatusItemType.TermsFile) && fileItem.filePath) {
 			const existingItem = this.fileItemMap.get(fileItem.filePath);
 			if (existingItem) {
 				// 既存のファイルStatusItemを更新

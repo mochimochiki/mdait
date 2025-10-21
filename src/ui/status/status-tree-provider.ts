@@ -54,7 +54,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
 
 		// ステータスに応じたアイコンを設定
-		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating);
+		if (element.type === StatusItemType.TermsFile) {
+			treeItem.iconPath = new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.purple"));
+		} else {
+			treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating);
+		}
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
@@ -70,7 +74,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			} else {
 				treeItem.id = element.directoryPath;
 			}
-		} else if (element.type === StatusItemType.File && element.filePath) {
+		} else if ((element.type === StatusItemType.File || element.type === StatusItemType.TermsFile) && element.filePath) {
 			if (workspaceFolder) {
 				treeItem.id = path.relative(workspaceFolder, element.filePath);
 			} else {
@@ -90,6 +94,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				command: "mdait.jumpToUnit",
 				title: "Open File",
 				arguments: [element.filePath, 0],
+			};
+		}
+		// 用語集ファイルの場合はコマンドを設定してクリック時にファイルを開く
+		if (element.type === StatusItemType.TermsFile) {
+			treeItem.command = {
+				command: "vscode.open",
+				title: "Open Terms File",
+				arguments: [vscode.Uri.file(element.filePath || "")],
 			};
 		}
 		// ユニットの場合はコマンドを設定してクリック時にジャンプ

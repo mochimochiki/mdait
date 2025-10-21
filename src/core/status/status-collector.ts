@@ -68,6 +68,12 @@ export class StatusCollector {
 				files.push(...targetDirItems);
 			}
 
+			// .mdaitディレクトリから用語集ファイルを収集
+			const termsFile = await this.collectTermsFile();
+			if (termsFile) {
+				files.push(termsFile);
+			}
+
 			const allDirs = [...sourceDirs, ...targetDirs];
 			statusItemTree.buildTree(files, allDirs);
 		} catch (error) {
@@ -300,6 +306,36 @@ export class StatusCollector {
 		} catch (error) {
 			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);
 			return [];
+		}
+	}
+
+	/**
+	 * 用語集ファイルの情報を収集する
+	 */
+	private async collectTermsFile(): Promise<StatusItem | null> {
+		try {
+			const termsFilePath = this.config.getTermsFilePath();
+			
+			// ファイルの存在確認
+			const stat = await fs.promises.stat(termsFilePath).catch(() => null as fs.Stats | null);
+			if (!stat || !stat.isFile()) {
+				return null;
+			}
+
+			const fileName = path.basename(termsFilePath);
+			return {
+				type: StatusItemType.TermsFile,
+				label: fileName,
+				status: Status.Source,
+				filePath: termsFilePath,
+				fileName,
+				contextValue: "mdaitTermsFile",
+				collapsibleState: vscode.TreeItemCollapsibleState.None,
+				tooltip: vscode.l10n.t("Glossary file"),
+			};
+		} catch (error) {
+			console.error("Error collecting terms file:", error);
+			return null;
 		}
 	}
 }
