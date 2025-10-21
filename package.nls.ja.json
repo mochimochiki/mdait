@@ -24,5 +24,8 @@
   "mdait.ai.model.description": "使用するAIモデル名",
   "mdait.ai.ollama.endpoint.description": "OllamaサーバーのエンドポイントURL",
   "mdait.ai.ollama.model.description": "使用するOllamaモデル名",
-  "mdait.trans.markdown.skipCodeBlocks.description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか"
+  "mdait.ai.debug.enableStatsLogging.description": "デバッグ用にAI通信統計を .mdait/logs/ai-stats.log に記録します",
+  "mdait.trans.markdown.skipCodeBlocks.description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか",
+  "mdait.terms.filename.description": "用語集ファイル名（.csv、.yaml形式に対応）",
+  "mdait.terms.primaryLang.description": "用語集管理の基準言語コード"
 }

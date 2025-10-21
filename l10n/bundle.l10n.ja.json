@@ -76,5 +76,6 @@
   "Detect terms for all files in directory '{0}'?": "ディレクトリ '{0}' 内のすべてのファイルで用語検出を実行しますか？",
   "Detecting terms for directory": "ディレクトリの用語検出中",
   "Detecting terms for file": "ファイルの用語検出中",
-  "Error during file term detection: {0}": "ファイルの用語検出中にエラーが発生しました: {0}"
+  "Error during file term detection: {0}": "ファイルの用語検出中にエラーが発生しました: {0}",
+  "mdait.ai.debug.enableStatsLogging.description": "デバッグ用にAI通信統計を .mdait/logs/ai-stats.log に記録します"
 }

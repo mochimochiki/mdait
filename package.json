@@ -216,6 +216,11 @@
           "default": "llama2",
           "description": "%mdait.ai.ollama.model.description%"
         },
+        "mdait.ai.debug.enableStatsLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "%mdait.ai.debug.enableStatsLogging.description%"
+        },
         "mdait.trans.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,

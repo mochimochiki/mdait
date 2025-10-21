@@ -10,6 +10,9 @@ export interface AIConfig {
 		endpoint: string;
 		model: string;
 	};
+	debug?: {
+		enableStatsLogging: boolean;
+	};
 	// プロバイダ固有設定の拡張用
 	[key: string]: unknown;
 }
@@ -179,6 +182,15 @@ export class Configuration {
 		const ollamaModel = config.get<string>("ai.ollama.model");
 		if (ollamaModel) {
 			this.ai.ollama.model = ollamaModel;
+		}
+
+		// AIデバッグ設定の読み込み
+		const enableStatsLogging = config.get<boolean>("ai.debug.enableStatsLogging");
+		if (enableStatsLogging !== undefined) {
+			if (!this.ai.debug) {
+				this.ai.debug = { enableStatsLogging: false };
+			}
+			this.ai.debug.enableStatsLogging = enableStatsLogging;
 		}
 
 		// 翻訳設定の読み込み

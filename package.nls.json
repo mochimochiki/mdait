@@ -24,5 +24,8 @@
   "mdait.ai.model.description": "AI model name to use",
   "mdait.ai.ollama.endpoint.description": "Ollama server endpoint URL",
   "mdait.ai.ollama.model.description": "Ollama model name to use",
-  "mdait.trans.markdown.skipCodeBlocks.description": "Whether to exclude code blocks from translation targets when translating markdown"
+  "mdait.ai.debug.enableStatsLogging.description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes",
+  "mdait.trans.markdown.skipCodeBlocks.description": "Whether to exclude code blocks from translation targets when translating markdown",
+  "mdait.terms.filename.description": "Glossary file name (supports .csv and .yaml formats)",
+  "mdait.terms.primaryLang.description": "Primary language code for glossary management"
 }

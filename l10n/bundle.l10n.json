@@ -78,5 +78,6 @@
   "Detect terms for all files in directory '{0}'?": "Detect terms for all files in directory '{0}'?",
   "Detecting terms for directory": "Detecting terms for directory",
   "Detecting terms for file": "Detecting terms for file",
-  "Error during file term detection: {0}": "Error during file term detection: {0}"
+  "Error during file term detection: {0}": "Error during file term detection: {0}",
+  "mdait.ai.debug.enableStatsLogging.description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes"
 }

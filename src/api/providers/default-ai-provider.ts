@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
  * AIServiceインターフェースのデフォルト実装（モック）。
@@ -28,6 +29,11 @@ export class DefaultAIProvider implements AIService {
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
 	): MessageStream {
+		const startTime = Date.now();
+		let outputChars = 0;
+		const status: "success" | "error" = "success";
+		const errorMessage: string | undefined = undefined;
+
 		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
 		console.log(`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`);
 
@@ -35,21 +41,41 @@ export class DefaultAIProvider implements AIService {
 		const userMessage = messages.find((msg) => msg.role === "user");
 		const textToTranslate = (userMessage?.content as string) || "";
 
+		// 入力文字数の計測
+		const inputChars = systemPrompt.length + textToTranslate.length;
+
 		// 簡易的な翻訳モック処理
 		// 実際のAIプロバイダーでは、ここでAPIリクエストを行います
 		const mockTranslatedText = this.generateMockTranslation(textToTranslate, systemPrompt);
 
-		// ストリーミング形式で少しずつ応答を返す
-		const chunks = this.splitIntoChunks(mockTranslatedText, 10);
-		for (const chunk of chunks) {
-			// キャンセルチェック
-			if (cancellationToken?.isCancellationRequested) {
-				console.log("DefaultAIProvider request was cancelled");
-				break;
+		try {
+			// ストリーミング形式で少しずつ応答を返す
+			const chunks = this.splitIntoChunks(mockTranslatedText, 10);
+			for (const chunk of chunks) {
+				// キャンセルチェック
+				if (cancellationToken?.isCancellationRequested) {
+					console.log("DefaultAIProvider request was cancelled");
+					break;
+				}
+				outputChars += chunk.length;
+				yield chunk;
+				// 少し待機してストリーミングをシミュレート
+				await new Promise((resolve) => setTimeout(resolve, 50));
 			}
-			yield chunk;
-			// 少し待機してストリーミングをシミュレート
-			await new Promise((resolve) => setTimeout(resolve, 50));
+		} finally {
+			// 統計情報をログに記録
+			const durationMs = Date.now() - startTime;
+			const logger = AIStatsLogger.getInstance();
+			await logger.log({
+				timestamp: new Date().toISOString(),
+				provider: "default",
+				model: this.config.model || "mock",
+				inputChars,
+				outputChars,
+				durationMs,
+				status,
+				errorMessage,
+			});
 		}
 	}
 	/**

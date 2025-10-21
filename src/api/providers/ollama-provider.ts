@@ -2,6 +2,7 @@ import { Ollama } from "ollama";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
  * Ollama-js パッケージを使用した AI プロバイダー実装
@@ -32,14 +33,20 @@ export class OllamaProvider implements AIService {
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
 	): MessageStream {
+		const startTime = Date.now();
+		let outputChars = 0;
+		let status: "success" | "error" = "success";
+		let errorMessage: string | undefined;
+
+		// ユーザーメッセージを取得
+		const userMessage = messages.find((msg) => msg.role === "user");
+		const userContent = (userMessage?.content as string) || "";
+
+		// システムプロンプトとユーザーメッセージを結合
+		const prompt = systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
+		const inputChars = prompt.length;
+
 		try {
-			// ユーザーメッセージを取得
-			const userMessage = messages.find((msg) => msg.role === "user");
-			const userContent = (userMessage?.content as string) || "";
-
-			// システムプロンプトとユーザーメッセージを結合
-			const prompt = systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
-
 			// Ollama-js パッケージを使用してストリーミング生成
 			const stream = await this.ollama.generate({
 				model: this.model,
@@ -62,6 +69,7 @@ export class OllamaProvider implements AIService {
 			// ストリーミングレスポンスを処理
 			for await (const chunk of stream) {
 				if (chunk.response) {
+					outputChars += chunk.response.length;
 					yield chunk.response;
 				}
 				if (chunk.done) {
@@ -69,7 +77,23 @@ export class OllamaProvider implements AIService {
 				}
 			}
 		} catch (error) {
+			status = "error";
+			errorMessage = (error as Error).message;
 			throw new Error(`Ollama provider error: ${(error as Error).message}`);
+		} finally {
+			// 統計情報をログに記録
+			const durationMs = Date.now() - startTime;
+			const logger = AIStatsLogger.getInstance();
+			await logger.log({
+				timestamp: new Date().toISOString(),
+				provider: "ollama",
+				model: this.model,
+				inputChars,
+				outputChars,
+				durationMs,
+				status,
+				errorMessage,
+			});
 		}
 	}
 }

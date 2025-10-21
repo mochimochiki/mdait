@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
  * VS Code Language Model API を使用した AI プロバイダー実装
@@ -27,12 +28,27 @@ export class VSCodeLanguageModelProvider implements AIService {
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
 	): MessageStream {
+		const startTime = Date.now();
+		let outputChars = 0;
+		let modelFamily = "gpt-4o"; // デフォルト
+		let status: "success" | "error" = "success";
+		let errorMessage: string | undefined;
+
+		// 入力文字数の計測
+		const inputChars =
+			systemPrompt.length +
+			messages.reduce((sum, msg) => {
+				const content = Array.isArray(msg.content) ? msg.content.join("") : msg.content;
+				return sum + content.length;
+			}, 0);
+
 		try {
 			// 言語モデルを選択
 			const model = await this.selectLanguageModel();
 			if (!model) {
 				throw new Error(vscode.l10n.t("Language model is not available. Please ensure GitHub Copilot is enabled."));
 			}
+			modelFamily = model.family;
 
 			// VS Code Language Model API 用のプロンプトを作成
 			const prompt = this.createPrompt(systemPrompt, messages);
@@ -43,31 +59,52 @@ export class VSCodeLanguageModelProvider implements AIService {
 
 			// ストリーミングレスポンスを処理
 			for await (const fragment of response.text) {
+				outputChars += fragment.length;
 				yield fragment;
 			}
 		} catch (error) {
+			status = "error";
 			if (error instanceof vscode.LanguageModelError) {
 				console.log("Language model error:", error.message, error.code, error.cause);
 
 				// エラーの種類に応じた適切なメッセージを生成
 				if (error.cause instanceof Error && error.cause.message.includes("off_topic")) {
+					errorMessage = "off_topic";
 					yield vscode.l10n.t("Sorry, I cannot answer that question.");
 				} else if (error.message.includes("consent")) {
+					errorMessage = error.message;
 					throw new Error(vscode.l10n.t("GitHub Copilot permission is required. Please check your settings."));
 				} else if (error.message.includes("quota")) {
+					errorMessage = error.message;
 					throw new Error(vscode.l10n.t("API usage limit reached. Please try again later."));
 				} else {
+					errorMessage = error.message;
 					throw new Error(vscode.l10n.t("Language model error: {0}", error.message));
 				}
 			} else {
 				console.error("Unexpected error:", error);
+				errorMessage = error instanceof Error ? error.message : String(error);
 				// エラーが既にErrorインスタンスの場合は、そのまま再スローして元のメッセージを保持
 				if (error instanceof Error) {
 					throw error;
 				}
-				const errorMessage = String(error);
-				throw new Error(vscode.l10n.t("An unexpected error occurred: {0}", errorMessage));
+				const errorMsg = String(error);
+				throw new Error(vscode.l10n.t("An unexpected error occurred: {0}", errorMsg));
 			}
+		} finally {
+			// 統計情報をログに記録
+			const durationMs = Date.now() - startTime;
+			const logger = AIStatsLogger.getInstance();
+			await logger.log({
+				timestamp: new Date().toISOString(),
+				provider: "vscode-lm",
+				model: modelFamily,
+				inputChars,
+				outputChars,
+				durationMs,
+				status,
+				errorMessage,
+			});
 		}
 	}
 
