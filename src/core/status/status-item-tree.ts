@@ -35,6 +35,13 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * 全ソースファイルStatusItemを取得
+	 */
+	public getSourceFilesAll(): StatusItem[] {
+		return Array.from(this.fileItemMap.values()).filter((file) => file.status === Status.Source);
+	}
+
+	/**
 	 * 指定ディレクトリ配下の全ファイル（サブディレクトリ含む）を取得
 	 */
 	public getFilesInDirectoryRecursive(dirPath: string): StatusItem[] {
@@ -86,7 +93,7 @@ export class StatusItemTree {
 	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
 	 * 全ファイルから検索するため、どのファイルか不定であることに注意
 	 */
-	public getUnitFirstWithoutPath(unitHash: string): StatusItem | undefined {
+	public getUnitByHash(unitHash: string): StatusItem | undefined {
 		// 全ファイルから検索（ハッシュのみでスキャン）
 		for (const [key, unit] of this.unitItemMapWithPath) {
 			if (unit.unitHash === unitHash) {

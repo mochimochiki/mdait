@@ -22,7 +22,7 @@ export interface TermsRepository {
 	getAllEntries(): Promise<readonly TermEntry[]>;
 
 	/**
-	 * 用語エントリをバッチでマージ
+	 * 用語エントリをマージ
 	 * 重複除去と既存データとの統合を行う
 	 *
 	 * @param candidates 新しい候補エントリ

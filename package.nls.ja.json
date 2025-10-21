@@ -10,7 +10,7 @@
   "mdait.term.detect.title": "✨ 用語検出",
   "mdait.term.detect.directory.title": "✨ ディレクトリから用語検出",
   "mdait.term.detect.file.title": "✨ ファイルから用語検出",
-  "mdait.term.expand.title": "✨ この言語へ用語展開",
+  "mdait.term.expand.title": "✨ 検出済み用語をこの言語へ展開",
   "mdait.viewsContainer.title": "mdait",
   "mdait.status.view.title": "翻訳状況",
   "mdait.configuration.title": "mdait",
