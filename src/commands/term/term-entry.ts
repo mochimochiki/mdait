@@ -75,6 +75,7 @@ export namespace TermEntry {
 	/**
 	 * 基準言語での重複検知
 	 * primaryLangの用語が一致する場合に重複とみなす
+	 * @deprecated 用語集のマージ処理ではisSameEntryを使用してください
 	 */
 	export function isDuplicate(entry1: TermEntry, entry2: TermEntry, primaryLang: string): boolean {
 		// 基準言語の用語を比較
@@ -88,6 +89,51 @@ export namespace TermEntry {
 
 		// 基準言語の用語が完全一致する場合に重複
 		return term1.trim() === term2.trim();
+	}
+
+	/**
+	 * 2つのエントリが同一エントリかを判定
+	 * contextが一致し、かつ共通の言語で用語が一致する場合に同一とみなす
+	 *
+	 * @param entry1 エントリ1
+	 * @param entry2 エントリ2
+	 * @param primaryLang 優先的にチェックする言語（オプション）
+	 * @returns 同一エントリの場合true
+	 */
+	export function isSameEntry(entry1: TermEntry, entry2: TermEntry, primaryLang?: string): boolean {
+		// contextが異なる場合は別エントリ
+		const ctx1 = entry1.context.trim();
+		const ctx2 = entry2.context.trim();
+		if (ctx1 !== ctx2) {
+			return false;
+		}
+
+		// primaryLangが指定されていて、両方に存在する場合はそれで判定
+		if (primaryLang) {
+			const term1 = getTerm(entry1, primaryLang);
+			const term2 = getTerm(entry2, primaryLang);
+			if (term1 && term2) {
+				return term1.trim() === term2.trim();
+			}
+		}
+
+		// 共通の言語が1つ以上あり、その用語が一致するか確認
+		const langs1 = getLanguages(entry1);
+		const langs2 = getLanguages(entry2);
+
+		for (const lang of langs1) {
+			if (langs2.includes(lang)) {
+				const term1 = getTerm(entry1, lang);
+				const term2 = getTerm(entry2, lang);
+				if (term1 && term2 && term1.trim() === term2.trim()) {
+					return true;
+				}
+			}
+		}
+
+		// 共通の言語がない場合、contextのみで判定（同じcontextなら同一と仮定）
+		// これはcontextが十分にユニークであることを前提とする
+		return true;
 	}
 
 	/**

@@ -29,6 +29,8 @@ export class TermsRepositoryCSV implements TermsRepository {
 	private preservedPerKey: Map<string, Record<string, string>> = new Map();
 	// source言語セット（variants列の自動付与対象）
 	private sourceLanguages: Set<string> = new Set();
+	// 既存CSVから読み込んだ元の列順序（既存ファイル編集時に列順序を保持するため）
+	private originalColumnOrder: string[] | null = null;
 
 	private constructor(public readonly path: string) {}
 
@@ -106,22 +108,16 @@ export class TermsRepositoryCSV implements TermsRepository {
 			// 空のエントリはスキップ
 			if (TermEntryUtils.isEmpty(candidate)) continue;
 
-			// 既存エントリとの重複チェック（primaryLangで判定）
+			// 既存エントリとの同一性チェック（contextと言語で判定）
 			const duplicateIndex = mergedEntries.findIndex((existing) =>
-				TermEntryUtils.isDuplicate(existing, candidate, primaryLang),
+				TermEntryUtils.isSameEntry(existing, candidate, primaryLang),
 			);
 
 			if (duplicateIndex >= 0) {
-				// 重複の場合は既存を保持（設計通り）
-				continue;
-			}
-
-			// 候補同士の重複チェック
-			const hasDuplicateInCandidates = mergedEntries
-				.slice(this.entries.length)
-				.some((other) => TermEntryUtils.isDuplicate(other, candidate, primaryLang));
-
-			if (!hasDuplicateInCandidates) {
+				// 同一エントリが見つかった場合はマージで更新
+				mergedEntries[duplicateIndex] = TermEntryUtils.merge(mergedEntries[duplicateIndex], candidate);
+			} else {
+				// 新規エントリとして追加
 				mergedEntries.push(candidate);
 			}
 		}
@@ -212,6 +208,82 @@ export class TermsRepositoryCSV implements TermsRepository {
 	}
 
 	/**
+	 * 既存の列順序に新しい列をマージ
+	 * 既存の列順序を保持しつつ、新しい列を適切な位置に挿入
+	 */
+	private mergeColumnsIntoExistingOrder(
+		originalOrder: readonly string[],
+		primary: string,
+		sourceOrder: readonly string[],
+		targetOrder: readonly string[],
+	): string[] {
+		const result: string[] = [...originalOrder];
+		const existingCols = new Set(originalOrder);
+
+		// contextの位置を見つける
+		const contextIndex = result.indexOf("context");
+
+		// 新しい言語列を検出して追加
+		const newLanguageCols: string[] = [];
+		for (const lang of [...sourceOrder, ...targetOrder]) {
+			if (!existingCols.has(lang)) {
+				newLanguageCols.push(lang);
+				existingCols.add(lang);
+			}
+		}
+
+		// 新しいvariants列を検出して追加（sourceのみ）
+		const newVariantCols: string[] = [];
+		for (const lang of sourceOrder) {
+			const variantCol = `variants_${lang}`;
+			if (!existingCols.has(variantCol)) {
+				newVariantCols.push(variantCol);
+				existingCols.add(variantCol);
+			}
+		}
+
+		// 挿入位置を決定
+		if (contextIndex >= 0) {
+			// contextが存在する場合、その直前に言語列、直後にvariants列を挿入
+
+			// まず既存のvariants列の位置を特定（contextより後ろにあるはず）
+			let firstVariantIndex = -1;
+			for (let i = contextIndex + 1; i < result.length; i++) {
+				if (result[i].startsWith("variants_")) {
+					firstVariantIndex = i;
+					break;
+				}
+			}
+
+			// 言語列をcontextの直前に挿入
+			if (newLanguageCols.length > 0) {
+				result.splice(contextIndex, 0, ...newLanguageCols);
+			}
+
+			// variants列を挿入
+			// 既存のvariants列がある場合はその前に、ない場合はcontextの直後に
+			if (newVariantCols.length > 0) {
+				const newContextIndex = result.indexOf("context");
+				if (firstVariantIndex >= 0) {
+					// 既存のvariants列の直前に挿入
+					const updatedFirstVariantIndex = firstVariantIndex + newLanguageCols.length;
+					result.splice(updatedFirstVariantIndex, 0, ...newVariantCols);
+				} else {
+					// contextの直後に挿入
+					result.splice(newContextIndex + 1, 0, ...newVariantCols);
+				}
+			}
+		} else {
+			// contextが存在しない場合は末尾に追加
+			result.push(...newLanguageCols, ...newVariantCols);
+		}
+
+		// 未知列（preservedHeaders）は元の位置にあるのでそのまま
+
+		return result;
+	}
+
+	/**
 	 * CSVファイルに保存
 	 */
 	async save(): Promise<void> {
@@ -226,8 +298,11 @@ export class TermsRepositoryCSV implements TermsRepository {
 		this.updateSourceLanguages(config.transPairs);
 		const { sourceOrder, targetOrder, primary } = this.getOrderedLangs();
 
-		// CSVヘッダーを生成（primary → source順序 → target順序 → context → variants（sourceのみ）→ unknown）
-		const headers = generateOrderedCsvHeaders(primary, sourceOrder, targetOrder, this.preservedHeaders);
+		// CSVヘッダーを生成
+		// 既存ファイルから読み込んだ場合は元の列順序を保持し、新しい列のみ追加
+		const headers = this.originalColumnOrder
+			? this.mergeColumnsIntoExistingOrder(this.originalColumnOrder, primary, sourceOrder, targetOrder)
+			: generateOrderedCsvHeaders(primary, sourceOrder, targetOrder, this.preservedHeaders);
 
 		// TermEntryをCSV行に変換しつつ未知列を温存
 		const rows = this.entries.map((entry) => {
@@ -293,6 +368,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 			this.allLanguages = [];
 			this.preservedHeaders = [];
 			this.preservedPerKey.clear();
+			this.originalColumnOrder = null;
 			return;
 		}
 
@@ -313,11 +389,15 @@ export class TermsRepositoryCSV implements TermsRepository {
 			this.allLanguages = [];
 			this.preservedHeaders = [];
 			this.preservedPerKey.clear();
+			this.originalColumnOrder = null;
 			return;
 		}
 
 		// ヘッダーから言語リストを抽出
 		const headers = Object.keys(records[0]);
+		// 元の列順序を保存
+		this.originalColumnOrder = [...headers];
+
 		this.allLanguages = TermEntryConverter.extractLanguagesFromHeaders(headers);
 		// 最新設定からsource言語セットを更新
 		const config = Configuration.getInstance();

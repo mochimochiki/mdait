@@ -150,7 +150,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (workspaceRoot) {
 				const tree = statusManager.getStatusItemTree();
-				const sourceUnit = tree.getUnitFirstWithoutPath(unit.marker.from);
+				const sourceUnit = tree.getUnitByHash(unit.marker.from);
 				if (sourceUnit) {
 					try {
 						if (sourceUnit.filePath) {
