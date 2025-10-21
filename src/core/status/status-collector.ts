@@ -74,7 +74,11 @@ export class StatusCollector {
 				files.push(termsFile);
 			}
 
+			// .mdaitディレクトリをルートディレクトリに追加（用語集ファイルが存在する場合のみ）
 			const allDirs = [...sourceDirs, ...targetDirs];
+			if (termsFile) {
+				allDirs.push(".mdait");
+			}
 			statusItemTree.buildTree(files, allDirs);
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
