@@ -25,7 +25,7 @@
   // AI
   // -----------------------------------------------
   // AIプロバイダ(default/vscode-lm/ollama)
-  "mdait.ai.provider": "vscode-lm",
+  "mdait.ai.provider": "default",
 
   // AI model
   "mdait.ai.model": "gpt-4.1",
