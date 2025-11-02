@@ -8,25 +8,27 @@ import * as vscode from "vscode";
 
 import { Configuration } from "../../config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import { markdownParser } from "../../core/markdown/parser";
-import { StatusManager } from "../../core/status/status-manager";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
 import { TermsRepository } from "./terms-repository";
-import { TermsRepositoryCSV } from "./terms-repository-csv";
+
+/** バッチ分割の文字数閾値 */
+const MAX_BATCH_CHARS = 8000;
 
 /**
  * 用語検出コマンド（mdait.term.detect）
- * 指定されたファイルから重要用語を検出し、用語集に追加
+ * MDaitUnit配列から重要用語を検出し、用語集に追加
  *
- * @param uri 対象ファイルのURI
+ * @param units 対象のMDaitUnit配列
+ * @param sourceLang ソース言語コード
  * @param options オプション設定
  * @param options.showProgress 進捗通知を表示するか（デフォルト: true）
  * @param options.showCompletionMessage 完了メッセージを表示するか（デフォルト: true）
  * @param options.cancellationToken 親からのキャンセルトークン（進捗通知なしの場合に使用）
  */
 export async function detectTermCommand(
-	uri?: vscode.Uri,
+	units: readonly MdaitUnit[],
+	sourceLang: string,
 	options?: {
 		showProgress?: boolean;
 		showCompletionMessage?: boolean;
@@ -34,41 +36,13 @@ export async function detectTermCommand(
 	},
 ): Promise<void> {
 	const { showProgress = true, showCompletionMessage = true, cancellationToken } = options || {};
-	const config = Configuration.getInstance();
 
-	if (!uri) {
-		vscode.window.showErrorMessage(vscode.l10n.t("No file or item selected for term detection."));
+	if (units.length === 0) {
+		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 		return;
 	}
 
 	try {
-		// 対象（source）ファイルの特定
-		const sourceFilePath = uri.fsPath || vscode.window.activeTextEditor?.document.fileName;
-		if (!sourceFilePath) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No file selected for term detection."));
-			return;
-		}
-
-		// ソース言語の特定
-		const transPair = config.getTransPairForSourceFile(sourceFilePath);
-		if (!transPair) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Unable to determine source language for term detection."));
-			return;
-		}
-		const sourceLang = transPair.sourceLang;
-
-		// Markdown ファイルの読み込みとパース
-		const document = await vscode.workspace.openTextDocument(uri);
-		const content = document.getText();
-		const markdown = markdownParser.parse(content, config);
-
-		// 用語検出入力データを収集
-		const units = markdown.units;
-		if (units.length === 0) {
-			vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
-			return;
-		}
-
 		// 用語検出処理を実行
 		if (showProgress) {
 			await vscode.window.withProgress(
@@ -78,15 +52,14 @@ export async function detectTermCommand(
 					cancellable: true,
 				},
 				async (progress, token) => {
-					await detectTerm(units, sourceLang, config, progress, token);
+					await detectTermBatch(units, sourceLang, progress, token);
 				},
 			);
 		} else {
 			// 進捗通知なしで実行（親のプログレスとキャンセルトークンを使用）
-			await detectTerm(
+			await detectTermBatch(
 				units,
 				sourceLang,
-				config,
 				{ report: () => {} } as vscode.Progress<{
 					message?: string;
 					increment?: number;
@@ -94,10 +67,6 @@ export async function detectTermCommand(
 				cancellationToken,
 			);
 		}
-
-		// StatusManagerのファイル状態を更新
-		const statusManager = StatusManager.getInstance();
-		await statusManager.refreshFileStatus(sourceFilePath);
 
 		if (showCompletionMessage) {
 			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
@@ -111,15 +80,17 @@ export async function detectTermCommand(
 }
 
 /**
- * 用語検出処理を実行
+ * バッチ用語検出処理を実行
+ * expand同様のバッチ処理アーキテクチャ
  */
-export async function detectTerm(
+async function detectTermBatch(
 	units: readonly MdaitUnit[],
 	sourceLang: string,
-	config: Configuration,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 ): Promise<void> {
+	const config = Configuration.getInstance();
+
 	// 用語検出サービスを初期化
 	const termDetector = await createTermDetector();
 
@@ -133,37 +104,36 @@ export async function detectTerm(
 	}
 
 	// 既存用語を読み込み
-	const existingTerms = await termsRepository.getAllEntries();
-
-	// primaryLang を決定（設定値があればそれを優先し、なければ sourceLang を使用）
-	const configuredPrimary = config.getTermsPrimaryLang() || "";
-	const primaryLang = configuredPrimary.trim() || sourceLang;
-
+	let existingTerms = await termsRepository.getAllEntries();
 	const existingTermTexts = new Set(
 		existingTerms
 			.filter((entry) => entry.languages[sourceLang])
 			.map((entry) => entry.languages[sourceLang].term.toLowerCase()),
 	);
 
-	const totalUnits = units.length;
-	let processedCount = 0;
+	progress.report({ message: vscode.l10n.t("Preparing batches..."), increment: 0 });
+
+	// Phase 1: バッチ分割
+	const batches = createBatches(units);
+	const totalBatches = batches.length;
+	let processedBatches = 0;
 	const allDetectedTerms: TermEntry[] = [];
 
-	// 各ユニットに対して用語検出を実行
-	for (const unit of units) {
-		// キャンセルチェック
+	// Phase 2: バッチごとに用語検出
+	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
 			console.log("Term detection was cancelled by user");
 			break;
 		}
 
 		progress.report({
-			message: vscode.l10n.t("Processing section {0} of {1}", processedCount + 1, totalUnits),
-			increment: 100 / totalUnits,
+			message: vscode.l10n.t("Processing batch {0} of {1}", processedBatches + 1, totalBatches),
+			increment: 100 / totalBatches,
 		});
 
 		try {
-			const detectedTerms = await termDetector.detectTerms(unit, sourceLang, existingTerms, cancellationToken);
+			// バッチ全体を1回のAI呼び出しで処理
+			const detectedTerms = await termDetector.detectTermsBatch(batch, sourceLang, existingTerms, cancellationToken);
 
 			// 既存用語との重複を除去
 			const newTerms = detectedTerms.filter((term) => {
@@ -173,21 +143,26 @@ export async function detectTerm(
 
 			allDetectedTerms.push(...newTerms);
 
-			// 重複チェック用に新しい用語を追加
+			// 重複チェック用に新しい用語を追加（次のバッチ検出で文脈として活用）
 			for (const term of newTerms) {
 				const termText = term.languages[sourceLang]?.term.toLowerCase();
 				if (termText) {
 					existingTermTexts.add(termText);
 				}
 			}
+
+			// existingTerms配列も更新（AI呼び出し時の文脈として使用）
+			if (newTerms.length > 0) {
+				existingTerms = [...existingTerms, ...newTerms];
+			}
 		} catch (error) {
-			console.warn(`用語検出スキップ (${unit.title || "Untitled"}):`, error);
+			console.warn(`Batch term detection failed:`, error);
 		}
 
-		processedCount++;
+		processedBatches++;
 	}
 
-	// 検出された用語を用語集に追加
+	// Phase 3: 検出された用語を用語集に追加
 	if (allDetectedTerms.length > 0) {
 		progress.report({
 			message: vscode.l10n.t("Saving detected terms..."),
@@ -200,4 +175,34 @@ export async function detectTerm(
 	} else {
 		console.log("新しい用語は検出されませんでした");
 	}
+}
+
+/**
+ * Unit配列をバッチに分割（文字数閾値ベース）
+ */
+function createBatches(units: readonly MdaitUnit[]): MdaitUnit[][] {
+	const batches: MdaitUnit[][] = [];
+	let currentBatch: MdaitUnit[] = [];
+	let currentChars = 0;
+
+	for (const unit of units) {
+		const unitChars = unit.content.length;
+
+		// 閾値を超える場合は新しいバッチを開始
+		if (currentChars + unitChars > MAX_BATCH_CHARS && currentBatch.length > 0) {
+			batches.push(currentBatch);
+			currentBatch = [];
+			currentChars = 0;
+		}
+
+		currentBatch.push(unit);
+		currentChars += unitChars;
+	}
+
+	// 最後のバッチを追加
+	if (currentBatch.length > 0) {
+		batches.push(currentBatch);
+	}
+
+	return batches;
 }

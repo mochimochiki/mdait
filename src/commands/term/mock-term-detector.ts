@@ -52,6 +52,27 @@ export class MockTermDetector implements TermDetector {
 		return termEntries;
 	}
 
+	async detectTermsBatch(
+		units: readonly MdaitUnit[],
+		sourceLang: string,
+		existingTerms?: readonly TermEntry[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<readonly TermEntry[]> {
+		// キャンセルチェック
+		if (cancellationToken?.isCancellationRequested) {
+			return [];
+		}
+
+		// 各ユニットから検出して統合
+		const allTerms: TermEntry[] = [];
+		for (const unit of units) {
+			const terms = await this.detectTerms(unit, sourceLang, existingTerms, cancellationToken);
+			allTerms.push(...terms);
+		}
+
+		return allTerms;
+	}
+
 	private extractCandidateTerms(text: string): string[] {
 		// 簡単なパターンで専門用語らしきものを抽出
 		const candidates: string[] = [];
