@@ -1,53 +1,46 @@
-
 # 設定管理層設計
 
-## 概要
+## 役割
 
-mdaitの動作に必要な各種設定の管理を担当する層です。VSCodeの設定システムと連携し、翻訳ペア、プロバイダー設定、同期オプションなどを一元管理します。
+- VS Code設定からmdaitの挙動を決定する値を収集し、各層へ一貫した形で提供する。
+- 設定変更を監視して再ロードし、長時間動作でも最新値を保証する。
 
-## 主要機能
+## Configurationクラスの骨子
 
-### Configuration クラス
-全設定の中央管理を行うシングルトンクラスです。アプリ起動時に`Configuration.initialize()`で初期化し、`getInstance()`で取得します。
+- シングルトンとして`initialize()`でロード、`getInstance()`で提供。
+- 管理する主なカテゴリ
+	- `transPairs`: 翻訳対象ディレクトリと言語ペア
+	- `sync`: 自動マーカー付与、不要ユニット削除などの挙動
+	- `ai`/`trans`: 利用するプロバイダー、モデル、プロンプト調整
+	- `ignoredPatterns`: 処理除外パス
+- 実装: `src/config/configuration.ts`
 
-**管理する設定項目：**
-主要な設定カテゴリを管理します。詳細な設定項目については[settings.json](../.vscode/settings.json)を参照してください。
+## ロードシーケンス
 
-- **翻訳ペア設定** (`transPairs`): 翻訳対象ディレクトリと言語ペアの定義
-- **除外パターン** (`ignoredPatterns`): 処理対象外とするパターン
-- **sync設定** (`sync`): 同期動作の詳細設定
-- **AI設定** (`ai`): AI関連の共通設定（プロバイダー、モデル、Ollama等）
-- **trans設定** (`trans`): 翻訳固有の設定（Markdown処理オプション等）
+```mermaid
+sequenceDiagram
+		participant VS as VS Code
+		participant Cfg as Configuration
+		participant Caller as Commands/Core/API
 
-**初期化・イベント設計:**
-- `initialize()`で設定ロードと監視を行い、アプリ起動時の一貫性を保証
-- 設定変更時は自動で再ロードし、今後は`onConfigurationChanged`イベントで他コンポーネントへ通知予定
-- テスト分離のため`dispose()`でシングルトン破棄可能
+		VS->>Cfg: initialize(context)
+		Cfg->>Cfg: 設定読み込み+型チェック
+		Cfg->>VS: 設定変更イベント登録
+		Caller->>Cfg: getInstance()
+		Cfg-->>Caller: 設定スナップショット
+		VS->>Cfg: onDidChangeConfiguration
+		Cfg->>Cfg: 値リロード
+		Cfg-->>Caller: watchers通知
+```
 
-**参照実装：** `../src/config/configuration.ts`
+## 考慮事項
 
-## 設計原則
+- 設定値は不変オブジェクトとして呼び出し側に渡し、副作用を避ける。
+- 単体テストでは`dispose()`でシングルトンを明示的に破棄し、設定の独立性を保つ。
+- 非同期設定（プロバイダー資格情報など）が増える場合はPromiseベースのアクセサを追加する余地を残す。
 
-- **VSCode統合**: VSCodeの設定システムと完全に統合
-- **型安全性**: TypeScriptによる設定値の型保証
-- **デフォルト値**: 合理的なデフォルト設定の提供
-- **拡張性**: 新しいプロバイダーや設定項目の追加に対応
+## 関連
 
-## 設定の読み込みフロー
-
-1. VSCodeワークスペース設定から値を取得
-2. デフォルト値との統合
-3. 型安全性の確保
-4. 各コンポーネントへの設定提供
-
-## 関連モジュールとの連携
-
-- **commands層**: 各コマンドが設定値を参照して動作制御
-- **core層**: ハッシュ計算やステータス管理で設定値を利用
-- **api層**: AI翻訳プロバイダーの初期化に設定を供給
-
-## 参考
-
-- [ルート設計書](design.md) - 全体アーキテクチャ
-- [commands.md](commands.md) - 設定を利用するコマンド実装
-- [api.md](api.md) - 翻訳プロバイダー設定の利用
+- コマンド挙動: [commands.md](commands.md)
+- プロバイダー構築: [api.md](api.md)
+- テスト設定: [test.md](test.md)

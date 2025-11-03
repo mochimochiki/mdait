@@ -1,63 +1,40 @@
 # UI層設計
 
-## 概要
+## 役割
 
-VS Code拡張機能のユーザーインターフェース要素を担当する層です。ステータス表示、コマンド実行、ユーザーとの対話など、視覚的なフィードバックとインタラクション機能を提供します。
+- VS Code上でmdaitの状態とアクションを可視化し、ユーザーにシームレスな操作体験を提供する。
+- コマンドの呼び出しと進捗表示を担い、Core/Commands層からの通知を受け取りリアルタイムに反映する。
 
 ## 主要コンポーネント
 
-### ステータスツリープロバイダー
-mdaitのステータス情報をVS Codeのツリービューとして表示します。
+- **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。部分更新イベントに対応して最小限のDOM更新を行う。
+- **Command Entry Points**: コマンドパレット、ツリービューのコンテキストメニュー、コード上のCodeLensからコマンド層を呼び出す。対象ファイルや言語を引数として構築する。
+- **Progress Reporter**: sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理する。
 
-**表示内容：**
-- ディレクトリ・ファイル・ユニット階層の表示
-- 翻訳ステータス（need:translate、need:reviewなど）の視覚化
-- 進捗情報と統計の表示
-- コンテキストメニューによる操作
+## 更新シーケンス
 
-**データソース：** [core.md](core.md)のStatusItem構造
+```mermaid
+sequenceDiagram
+	participant User as User
+	participant UI as StatusTreeProvider
+	participant Cmd as Command層
+	participant Core as StatusManager
 
-### コマンドインターフェース
-ユーザーが実行可能なコマンドのUI統合を提供します。
+	User->>UI: コマンド起動
+	UI->>Cmd: 引数を渡して実行
+	Cmd->>Core: ステータス更新要求
+	Core-->>UI: changeイベント通知
+	UI-->>User: ツリー/バッジ更新
+```
 
-**提供機能：**
-- コマンドパレットからの実行
-- ツリービューのコンテキストメニュー
-- ツールバーボタンとアイコン
-- 進行状況の表示
+## 視覚表現の原則
 
-## 設計原則
+- needフラグ別に色とアイコンを固定し、どの画面でも同じ記号で意味が伝わるようにする。
+- 進捗表示はファイル単位で「翻訳済み/要翻訳/エラー」の数値を表示し、折りたたみ表示でも情報が埋もれないよう簡潔にする。
+- l10nシステム(`/l10n`配下)で文言を管理し、日本語/英語を等価に提供する。
 
-- **VS Code統合**: VS Codeの標準UIパターンに準拠
-- **リアルタイム更新**: ステータス変更の即座な反映
-- **操作性**: 直感的で効率的なユーザー操作
-- **視覚的フィードバック**: 処理状況の明確な表示
+## 関連
 
-## StatusItemとUI表示の連携
-
-[core.md](core.md)で定義されたStatusItem構造を以下のようにUI表示に変換：
-
-- **type: "directory"** → フォルダーアイコンと展開/折りたたみ機能
-- **type: "file"** → ファイルアイコンと進捗表示
-- **type: "unit"** → ユニットアイコンとneedフラグの視覚化
-
-## 国際化対応
-
-**多言語対応：**
-- l10nシステムの活用
-- 日本語・英語の完全サポート
-- メッセージとラベルの外部化
-
-**参照：** `/l10n` ディレクトリの言語リソース
-
-## 関連モジュールとの連携
-
-- **commands層**: コマンド実行時のUI操作とフィードバック
-- **core層**: StatusItem構造の表示とステータス監視
-- **config層**: UI設定とユーザー設定の反映
-
-## 参考
-
-- [ルート設計書](design.md) - 全体アーキテクチャ
-- [core.md](core.md) - StatusItem構造とステータス管理
-- [commands.md](commands.md) - UI連携するコマンド実装
+- 進捗判定: [core.md](core.md)
+- コマンド挙動: [commands.md](commands.md)
+- テスト観点: [test.md](test.md)（GUIテスト方針を含む）

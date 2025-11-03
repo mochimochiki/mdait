@@ -1,43 +1,43 @@
 # API層設計
 
-## 概要
+## 役割
 
-外部サービス（AI翻訳プロバイダー等）との連携を担当する層です。異なるプロバイダーに対する統一インターフェースを提供し、設定に応じた適切なサービスインスタンスを生成・管理します。
+- 外部AIサービスとの通信を抽象化し、コマンド層からは統一された`AIService`インターフェースとして見えるようにする。
+- 設定されたプロバイダーに応じて適切なクライアントを構築し、エラー時のフォールバックを制御する。
 
-## 主要機能
+## 主要コンポーネント
 
-### AIサービス統合
-複数のAI翻訳プロバイダーに対する統一インターフェースを提供します。
+- **AIService**: `send(messages, options)`などのメソッドを定義した共通インターフェース。
+- **AIServiceBuilder**: [config.md](config.md)の設定を参照し、`default`/`ollama`/`vscode-lm`などの実装を選択。開発用モックもここで生成する。
+- **StatsLogger**: 呼び出し回数やトークン使用量を収集し、今後の最適化に備える。
 
-**対応プロバイダー：**
-- **default**: デフォルトプロバイダー（OpenAI等）
-- **ollama**: ローカルOllamaインスタンス
-- **vscode-lm**: VSCode Language Model API
-- *将来拡張*: その他のクラウドサービス
+## 呼び出しシーケンス
 
-### プロバイダー管理
-設定に基づく動的なプロバイダー選択と初期化を行います。
+```mermaid
+sequenceDiagram
+	participant Cmd as Command層
+	participant Builder as AIServiceBuilder
+	participant Service as AIService
+	participant Provider as 外部モデル
 
-**機能：**
-- [config.md](config.md)の設定に基づくプロバイダー選択
-- 各プロバイダー固有の初期化処理
-- エラーハンドリングとフォールバック
+	Cmd->>Builder: build(options)
+	Builder->>Service: 実装インスタンス返却
+	loop 各バッチ
+		Cmd->>Service: send(messages)
+		Service->>Provider: API呼び出し
+		Provider-->>Service: 応答
+		Service-->>Cmd: 正規化済み結果
+	end
+```
 
-## 設計原則
+## 考慮事項
 
-- **プロバイダー抽象化**: 共通インターフェースによる実装の隠蔽
-- **設定連携**: 設定管理層との密接な連携
-- **拡張性**: 新しいプロバイダーの追加容易性
-- **エラー回復**: 接続失敗時の適切な処理
+- すべての実装はレート制限とキャンセルに対応し、必要に応じてリトライ戦略を注入できる構造にする。
+- 入出力データはユニット単位で正規化し、APIドライバごとの差異（例: ストリーミング、バッチサイズ）をビルダー側で吸収する。
+- 将来的なメトリクス出力のため、StatsLoggerは非同期でも処理をブロックしない。
 
-## 関連モジュールとの連携
+## 関連
 
-- **commands層**: transコマンドでの翻訳実行時に利用
-- **config層**: プロバイダー設定の取得と適用
-- **core層**: 翻訳結果の統合処理
-
-## 参考
-
-- [ルート設計書](design.md) - 全体アーキテクチャ
-- [commands.md](commands.md) - API利用するコマンド実装
-- [config.md](config.md) - プロバイダー設定管理
+- 設定: [config.md](config.md)
+- コマンド利用例: [commands.md](commands.md)
+- テストダブル: `src/api/` 配下のモック実装

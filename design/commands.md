@@ -1,48 +1,116 @@
 # コマンド層設計
 
-## 概要
+## 役割
 
-mdaitの主要コマンド（sync、trans）の実装と実行フローを管理する層です。各コマンドはcoreモジュールの機能を組み合わせて、ユーザーの要求に応じた処理を実行します。
+- ユーザー起点の操作をmdaitのワークフローに変換し、Core層の機能を組み合わせて実行する。
+- 設定値やUIの入力に応じて必要なデータを収集し、処理結果をステータス更新やファイル書き込みとして反映する。
 
-## 主要コマンド
+## コマンド別要点
+
+### sync（ユニット同期）
+- Markdown間のユニット対応付けを確立し、`hash`・`from`・`need`を再計算。
+- 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御。
+- [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証。
+
+### trans（AI翻訳）
+- `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。
+- 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去。
+- キャンセルやリトライに備え、進捗をUIへ逐次通知する。
+
+### term（用語集）
+- `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
+- `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
+
+## 主要シーケンス
 
 ### syncコマンド
-関連付けられたMarkdownファイル群内でユニット単位の同期を行います。
 
-**処理概要：**
-- ユニット間のハッシュ・`from`追跡・`need`フラグの同期
-- 差分の抽出、未翻訳検出、翻訳対象ユニットの挿入
-- 何度実行しても破綻しない冪等性の保証
- - 自動マーカー付与の見出しレベルは  Front Matter 上書きが可能
+```mermaid
+sequenceDiagram
+	participant UX as UI/Command
+	participant Cmd as SyncCommand
+	participant Core as SectionMatcher
+	participant Status as StatusManager
 
-**参照実装：** `../src/commands/sync/` ディレクトリ
+	UX->>Cmd: 対象ファイル選択
+	Cmd->>Core: ユニット対応付け要求
+	Core-->>Cmd: 差分結果
+	Cmd->>Cmd: need/hash 更新・新規ユニット生成
+	Cmd->>Status: ステータス再計算
+	Status-->>UX: ツリー更新
+```
 
 ### transコマンド
-`need:translate`が付与されたユニットに対してAI翻訳を実行します。
 
-**処理概要：**
-- 翻訳対象ユニットの特定とバッチ処理
-- AI翻訳の実行と結果の統合
-- ハッシュの更新と`need`タグの除去
+```mermaid
+sequenceDiagram
+	participant UX as UI/Command
+	participant Cmd as TransCommand
+	participant Status as StatusManager
+	participant Builder as AIServiceBuilder
+	participant AI as AIService
 
-**参照実装：** `../src/commands/trans/` ディレクトリ
+	UX->>Cmd: 翻訳対象を実行
+	Cmd->>Status: need:translateユニット収集
+	Cmd->>Builder: プロバイダー構築
+	Builder-->>Cmd: AIService
+	loop 各バッチ
+		Cmd->>AI: ユニット本文と設定送信
+		AI-->>Cmd: 翻訳結果
+		Cmd->>Status: ユニット内容とneed更新
+	end
+	Status-->>UX: 進捗/完了通知
+```
 
-## 設計原則
+### term.detectコマンド
 
-- **コマンドの独立性**: 各コマンドは独立して実行可能
-- **コア機能の活用**: [core.md](core.md)で定義された機能を組み合わせて実装
-- **設定の統合**: [config.md](config.md)の設定管理を利用
-- **エラーハンドリング**: 各処理段階でのエラー検出と適切な通知
+```mermaid
+sequenceDiagram
+	participant UX as UI/Command
+	participant Cmd as TermDetectCommand
+	participant Repo as TermsRepository
+	participant AI as AIService
 
-## 関連モジュールとの連携
+	UX->>Cmd: 対象ファイル指定
+	Cmd->>Repo: 既存terms.csv読み込み
+	Cmd->>Cmd: ユニットバッチ生成
+	loop 各バッチ
+		Cmd->>AI: 原文ユニットと既存用語送信
+		AI-->>Cmd: 新規用語候補
+		Cmd->>Cmd: 重複除外・統合
+	end
+	Cmd->>Repo: 用語集マージ・保存
+	Repo-->>UX: 更新結果通知
+```
 
-- **core層**: Markdownパーサー、ハッシュ管理、ステータス管理を利用
-- **config層**: 翻訳ペア設定、プロバイダー設定を参照
-- **ui層**: ステータス表示とユーザーインタラクションを連携
-- **utils層**: ファイル操作等の汎用機能を利用
+### term.expandコマンド
 
-## 参考
+```mermaid
+sequenceDiagram
+	participant UX as UI/Command
+	participant Cmd as TermExpandCommand
+	participant Repo as TermsRepository
+	participant AI as AIService
 
-- [ルート設計書](design.md) - 全体アーキテクチャ
-- [core.md](core.md) - コア機能詳細
-- [config.md](config.md) - 設定管理
+	UX->>Cmd: 対象言語指定
+	Cmd->>Repo: 未解決用語取得
+	Cmd->>Cmd: Unitペア抽出・バッチ化
+	loop 各バッチ
+		Cmd->>AI: 原文+訳文と用語リスト送信
+		AI-->>Cmd: 用語訳ペア
+	end
+	Cmd->>Repo: CSV更新
+	Repo-->>UX: 保存完了通知
+```
+
+## 考慮事項
+
+- すべてのコマンドは`CancellationToken`対応と冪等性確保を優先する。
+- 設定は[config.md](config.md)で定義されたシングルトン経由で最新値を取得する。
+- 翻訳や用語抽出など外部呼び出しは[api.md](api.md)のビルダーで動的にプロバイダー切り替えを行う。
+
+## 参照
+
+- 実装コード: `src/commands/` 以下
+- UI連携: [ui.md](ui.md)
+- テスト観点: [test.md](test.md)

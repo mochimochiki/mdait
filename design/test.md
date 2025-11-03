@@ -1,101 +1,40 @@
 # テスト層設計
 
-## 概要
+## 役割
 
-mdaitシステムの品質保証を担当する層です。単体テスト、統合テスト、サンプルコンテンツを用いた動作検証を提供し、継続的な品質維持を支援します。
+- コアロジックの信頼性とVS Code統合の動作確認を両立させ、継続的なリリースを支える。
+- サンプルコンテンツを使ったリグレッションチェックで翻訳差分を再現性高く検証する。
 
-## テスト構成
+## テストカテゴリ
 
-### テストコンテンツ管理
-一貫したテストデータによる検証環境を提供します。
+- **単体テスト (`src/test/`)**: `suite`/`test`のTDDスタイル。Coreの正規化やSectionMatcherなど副作用のない処理を対象。CIで常時実行。
+- **GUI/統合テスト (`src/test-gui/`)**: VS Code Test Runnerを使用し、コマンドやステータスツリーのE2Eを検証。手動実行（`npm run test:vscode`）。
+- **サンプルワークスペース**: `copy-test-files`スクリプトで`sample-content`から`workspace/content`へ同期し、テスト前の初期状態を保証。
 
-**構成：**
-- **sample-content/**: テスト用の原稿ファイル
-- **workspace/**: テスト実行時の作業ディレクトリ
-- **copy-test-files**: テストコンテンツの自動コピー機能
+## 実行シーケンス
 
-### テストディレクトリ構造
-srcディレクトリ構造に対応したテスト配置を採用します。E2E・拡張機能統合テストはtest-gui配下に分離し、CIから除外されます。
+```mermaid
+sequenceDiagram
+	participant Dev as Developer/CI
+	participant Task as copy-test-content
+	participant Test as npm test / npm run test:vscode
+	participant VS as VS Code Test Host
 
-```
-src/test/             # 通常のテスト（CI実行対象）
-├── core/             # コア機能テスト
-│   ├── hash/         # ハッシュ系ユーティリティテスト
-│   └── markdown/     # Markdown処理系テスト
-├── sample-content/   # テスト用サンプルファイル
-├── workspace/        # テスト実行時の作業ディレクトリ
-
-
-src/test-gui/         # E2E・拡張機能統合テスト（CI実行対象外）
-├── commands/         # コマンドE2Eテスト
-├── trans/            # 翻訳コマンドE2Eテスト
-├── config/           # 設定画面E2Eテスト
-├── core/             # コア機能E2Eテスト
-├── ui/               # UI層テスト
-│   └── status/       # ステータスツリーUIテスト
-└── extension/        # 拡張機能全体E2Eテスト
+	Dev->>Task: npm run copy-test-files
+	Task-->>Dev: ワークスペース同期済み
+	Dev->>Test: テストスクリプト起動
+	Test->>VS: 拡張機能ロード
+	VS-->>Dev: 結果レポート
 ```
 
-> ※ test-gui配下には、UIテストだけでなくコマンドや拡張機能全体のE2E・統合テストも含まれます。
+## 観点とプラクティス
 
-## テスト方針
+- テスト名は日本語で期待値を明示する。
+- VS Code依存のテストは`this.timeout()`を調整し、環境差によるタイムアウトを防ぐ。
+- 大規模入力の回帰は`sample-content`を更新してカバレッジを確保する。
 
-### 使用フレームワーク
-- **mocha**: テストフレームワーク（TDDスタイル）
-- **suite/test**: BDDスタイルではなくTDDスタイルを採用
-- **日本語テスト名**: 可読性向上のため日本語でテスト名を記述
+## 参照
 
-### テスト観点
-
-**単体テスト：**
-- 各モジュールの独立した動作検証
-- エラーケースとエッジケースの網羅
-- 型安全性の確認
-
-**統合テスト：**
-- モジュール間連携の検証
-- エンドツーエンドのワークフロー確認
-- サンプルコンテンツを用いた実際的なテスト
-
-## テスト実行環境
-
-### テスト分離
-GUIテストは通常のテストから分離され、CI実行時には除外されます。
-
-**実行コマンド：**
-- `npm test`: 通常のテスト（CI実行対象）
-- `npm run test:gui`: GUIテスト（手動実行）
-
-### 自動コピーシステム
-テスト実行前にsample-contentをworkspace/contentへ自動コピーし、一貫したテスト環境を提供します。
-
-**制御：**
-- `package.json`の`copy-test-files`スクリプト
-- `.vscode/tasks.json`の`copy-test-content`タスク
-
-### VS Code Test環境
-VS Code拡張機能としてのテスト環境を提供します。
-
-**機能：**
-- VS Code API のモック・スタブ
-- 拡張機能コンテキストでの実行
-- ワークスペース環境の模擬
-
-## 設計原則
-
-- **継続的品質**: CI/CDでの自動実行
-- **実用的検証**: 実際の使用パターンに基づくテスト
-- **保守性**: テストコードの可読性と保守容易性
-- **包括性**: 機能カバレッジの最大化
-
-## 関連モジュールとの連携
-
-各層のテストが対応する実装層と密接に連携：
-- [commands.md](commands.md) - コマンド層のテスト設計
-- [core.md](core.md) - コア機能のテスト設計
-- [config.md](config.md) - 設定管理のテスト設計
-
-## 参考
-
-- [ルート設計書](design.md) - 全体アーキテクチャとテスト位置づけ
-- `package.json` - テスト実行スクリプトと依存関係
+- スクリプト: `package.json`
+- コマンド挙動: [commands.md](commands.md)
+- UI検証: [ui.md](ui.md)

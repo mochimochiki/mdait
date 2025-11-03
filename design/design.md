@@ -10,25 +10,34 @@ mdaitは階層化されたモジュール構成を採用し、各層が明確な
 
 ```
 ┌─────────────────────────────────────────┐
-│                UI層                      │ ← VS Code統合、ステータス表示
+│                [UI層](ui.md)                                                     │ ← VS Code統合、ステータス表示
 ├─────────────────────────────────────────┤
-│              Commands層                  │ ← sync/transコマンド実行
+│              [Commands層](commands.md)                                           │ ← sync/transコマンド実行
 ├─────────────────────────────────────────┤
-│                Core層                    │ ← mdaitUnit、ハッシュ、ステータス管理
+│                [Core層](core.md)                                                 │ ← mdaitUnit、ハッシュ、ステータス管理
 ├─────────────────────────────────────────┤
-│      Config層    │    API層    │Utils層  │ ← 設定管理、外部連携、汎用機能
+│      [Config層](config.md)    │    [API層](api.md)    │[Utils層](utils.md)     │ ← 設定管理、外部連携、汎用機能
 └─────────────────────────────────────────┘
 ```
 
-**各層の詳細設計：**
-- **[ui.md](ui.md)** - UI層設計
-- **[commands.md](commands.md)** - Commands層設計  
-- **[core.md](core.md)** - Core層設計
-- **[config.md](config.md)** - Config層設計
-- **[api.md](api.md)** - API層設計
-- **[utils.md](utils.md)** - Utils層設計
-- **[test.md](test.md)** - テスト設計
-- **[commands_term.md](commands_term.md)** - term（用語集）コマンド設計
+## リポジトリ構成
+
+```
+src/
+  extension.ts           # エントリーポイント
+  commands/              # sync,transなど各種コマンド処理
+  core/                  # コア機能
+    ├── markdown/        # Markdownの構造解析、ユニット分割、marker処理など
+    ├── hash/            # 文書の正規化とハッシュ計算アルゴリズム
+    └── status/          # ステータス情報管理
+  config/                # 設定管理
+  utils/                 # 汎用ユーティリティ
+  api/                   # 外部サービス連携
+  ui/                    # UI コンポーネント
+  test/                  # テスト関連
+    └── workspace/       # テスト作業ディレクトリ
+design/                  # 設計ドキュメント
+```
 
 ## 中核概念
 
@@ -91,57 +100,6 @@ This paragraph needs translation from the source document.
 ### 状態管理
 全ユニットの状態は[core.md](core.md)のStatusItem構造で一元管理され、[ui.md](ui.md)でツリー表示されます。
 
-## リポジトリ構成
-
-```
-src/
-  extension.ts           # エントリーポイント（コマンド登録など）
-  commands/              # syncコマンド、transコマンド関連処理
-    ├── sync/
-    └── trans/
-  core/                  # 共通コア機能
-    ├── markdown/        # Markdownの構造解析、ユニット分割、marker処理など
-    ├── hash/            # 文書の正規化とハッシュ計算アルゴリズム
-    └── status/          # ステータス情報管理
-  config/                # 設定管理
-    └── configuration.ts
-  utils/                 # 汎用ユーティリティ
-    └── file-explorer.ts
-  api/                   # 外部サービス連携
-  ui/                    # UI コンポーネント
-  test/                  # テスト関連
-    ├── sample-content/  # テスト用コンテンツ
-    └── workspace/       # テスト作業ディレクトリ
-
-design/                  # 設計ドキュメント（集約）
-  ├── design.md          # ルート（本ドキュメント）
-  ├── core.md            # Core層設計
-  ├── commands.md        # Commands層設計
-  ├── config.md          # Config層設計
-  ├── api.md             # API層設計
-  ├── ui.md              # UI層設計
-  ├── utils.md           # Utils層設計
-  ├── test.md            # テスト層設計
-  └── test_gui.md        # GUIテスト設計
-```
-
-**参照実装：** 各ディレクトリ内のソースコード
-
-## 設計原則
-
-### 全体方針
-- **モジュラー設計**: 各層の独立性と明確な責務分離
-- **VS Code統合**: VS Codeエコシステムとの完全な統合
-- **型安全性**: TypeScriptによる堅牢な型システム活用
-- **拡張性**: 新機能・新プロバイダーの追加容易性
-
-### 品質保証
-- **冪等性**: sync処理の何度実行しても安全な設計
-- **エラー回復**: 各処理段階での適切なエラーハンドリング
-- **パフォーマンス**: メモリ効率とファイルI/O最小化
-- **テスタビリティ**: [test.md](test.md)による包括的テスト
-- **キャンセル対応**: 長時間処理（AI翻訳・用語検出等）は`CancellationToken`による中断を全面サポート
-
 ## 国際化（l10n）
 
 VS Codeの標準l10nシステムを活用し、日本語・英語の完全サポートを提供します。
@@ -166,8 +124,17 @@ npm run test     # テスト実行
 npm run watch    # 開発時の自動ビルド
 ```
 
+## 設計原則
 
+### 全体方針
+- **モジュラー設計**: 各層の独立性と明確な責務分離
+- **VS Code統合**: VS Codeエコシステムとの完全な統合
+- **型安全性**: TypeScriptによる堅牢な型システム活用
+- **拡張性**: 新機能・新プロバイダーの追加容易性
 
----
-
-各層の詳細な設計については、design/ 配下の対応する *.md を参照してください。本ドキュメントは全体のアーキテクチャと層間連携の道標として機能します。
+### 品質保証
+- **冪等性**: sync処理の何度実行しても安全な設計
+- **エラー回復**: 各処理段階での適切なエラーハンドリング
+- **パフォーマンス**: メモリ効率とファイルI/O最小化
+- **テスタビリティ**: [test.md](test.md)による包括的テスト
+- **キャンセル対応**: 長時間処理（AI翻訳・用語検出等）は`CancellationToken`による中断を全面サポート
