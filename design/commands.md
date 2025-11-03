@@ -16,6 +16,7 @@
 - `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。
 - 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去。
 - キャンセルやリトライに備え、進捗をUIへ逐次通知する。
+- **用語集連携**: `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る（キャッシュはmtime比較で管理）。
 
 ### term（用語集）
 - `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
@@ -54,7 +55,7 @@ sequenceDiagram
 	Cmd->>Status: need:translateユニット収集
 	Cmd->>Builder: プロバイダー構築
 	Builder-->>Cmd: AIService
-	loop 各バッチ
+	loop 各ユニット
 		Cmd->>AI: ユニット本文と設定送信
 		AI-->>Cmd: 翻訳結果
 		Cmd->>Status: ユニット内容とneed更新

@@ -55,7 +55,7 @@ export class DefaultTranslator implements Translator {
 		const systemPrompt = `You are a professional translator. Translate the given text from ${sourceLang} to ${targetLang}.
 Context:
 ${context.surroundingText ? `Surrounding Text:\n${context.surroundingText}\n` : ""}
-${context.terms ? `terms:\n${JSON.stringify(context.terms, null, 2)}\n` : ""}
+${context.terms ? `Terminology:\n${context.terms}\n` : ""}
 Keep the original meaning and tone.
 Do not translate placeholders like __CODE_BLOCK_PLACEHOLDER_n__.`;
 

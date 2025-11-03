@@ -21,6 +21,8 @@ import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
+import { extractRelevantTerms, termsToJson } from "./term-extractor";
+import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
@@ -139,9 +141,29 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 	const config = Configuration.getInstance();
 
 	try {
+		// 用語集の取得（設定が有効な場合のみ）
+		const config = Configuration.getInstance();
+		let termsJson: string | undefined;
+
+		try {
+			const termsFilePath = config.getTermsFilePath();
+			const cacheManager = TermsCacheManager.getInstance();
+			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
+			if (allTerms.length > 0) {
+				const relevantTerms = extractRelevantTerms(unit.content, allTerms, sourceLang, targetLang);
+				if (relevantTerms.length > 0) {
+					termsJson = termsToJson(relevantTerms);
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to load terms for translation:", error);
+		}
+
 		// 翻訳コンテキストの作成
-		const context = new TranslationContext();
-		// TODO: context に surroundingText や terms を設定するロジックを実装
+		// TODO: context に surroundingText を設定するロジックを実装
+		const previousText = ""; // 仮の実装
+		const nextText = ""; // 仮の実装
+		const context = new TranslationContext(previousText, nextText, termsJson);
 
 		let sourceContent = unit.content;
 
