@@ -11,6 +11,7 @@
 - Markdown間のユニット対応付けを確立し、`hash`・`from`・`need`を再計算。
 - 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御。
 - [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証。
+- 同期完了後はソース/ターゲット両ファイルのステータスを`StatusManager.refreshFileStatus`で再計算し、ツリー表示を即時追従させる。
 
 ### trans（AI翻訳）
 - `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。

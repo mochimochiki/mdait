@@ -74,6 +74,9 @@ export async function syncCommand(): Promise<void> {
 							`[${pair.sourceDir} -> ${pair.targetDir}] ${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
 
+						await statusManager.refreshFileStatus(sourceFile);
+						await statusManager.refreshFileStatus(targetFile);
+
 						successCount++;
 					} catch (error) {
 						console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);

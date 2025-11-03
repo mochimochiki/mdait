@@ -27,6 +27,8 @@ sequenceDiagram
 	UI-->>User: ツリー/バッジ更新
 ```
 
+- ドキュメント保存時は`workspace.onDidSaveTextDocument`で対象ファイルを検知し、`StatusManager.refreshFileStatus`を呼び出して手動編集とツリー表示を同期させる。
+
 ## 視覚表現の原則
 
 - needフラグ別に色とアイコンを固定し、どの画面でも同じ記号で意味が伝わるようにする。

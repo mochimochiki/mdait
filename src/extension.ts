@@ -13,6 +13,7 @@ import { StatusManager } from "./core/status/status-manager";
 import { codeLensJumpToSourceCommand, codeLensTranslateCommand } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
+import { FileExplorer } from "./utils/file-explorer";
 
 export function activate(context: vscode.ExtensionContext) {
 	// StatusManagerの初期化
@@ -167,6 +168,40 @@ export function activate(context: vscode.ExtensionContext) {
 		pick.show();
 	});
 
+	// ドキュメント保存時のステータス更新
+	const saveDisposable = vscode.workspace.onDidSaveTextDocument(async (document) => {
+		try {
+			if (document.uri.scheme !== "file") {
+				return;
+			}
+			const filePath = document.uri.fsPath;
+			if (!filePath.toLowerCase().endsWith(".md")) {
+				return;
+			}
+			let shouldRefresh = false;
+			try {
+				const fileExplorer = new FileExplorer();
+				shouldRefresh = fileExplorer.isSourceFile(filePath, config) || fileExplorer.isTargetFile(filePath, config);
+			} catch (error) {
+				console.warn("mdait: failed to initialize FileExplorer on save", error);
+			}
+			if (!shouldRefresh) {
+				const tree = statusManager.getStatusItemTree();
+				shouldRefresh = !!tree.getFile(filePath);
+			}
+			if (!shouldRefresh) {
+				return;
+			}
+			if (!statusManager.isInitialized()) {
+				await statusManager.buildStatusItemTree();
+				return;
+			}
+			await statusManager.refreshFileStatus(filePath);
+		} catch (error) {
+			console.warn("mdait: failed to refresh status on save", error);
+		}
+	});
+
 	// 初回データ読み込み
 	context.subscriptions.push(
 		syncDisposable,
@@ -183,6 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
+		saveDisposable,
 		treeView,
 		syncStatusDisposable,
 		openTermStatusDisposable,
