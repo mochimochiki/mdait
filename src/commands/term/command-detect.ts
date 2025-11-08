@@ -44,6 +44,7 @@ export async function detectTermCommand(
 
 	try {
 		// 用語検出処理を実行
+		let tokenUsed: vscode.CancellationToken | undefined;
 		if (showProgress) {
 			await vscode.window.withProgress(
 				{
@@ -52,11 +53,13 @@ export async function detectTermCommand(
 					cancellable: true,
 				},
 				async (progress, token) => {
+					tokenUsed = token;
 					await detectTermBatch(units, sourceLang, progress, token);
 				},
 			);
 		} else {
 			// 進捗通知なしで実行（親のプログレスとキャンセルトークンを使用）
+			tokenUsed = cancellationToken;
 			await detectTermBatch(
 				units,
 				sourceLang,
@@ -68,7 +71,8 @@ export async function detectTermCommand(
 			);
 		}
 
-		if (showCompletionMessage) {
+		// キャンセルトークンの状態を直接確認
+		if (showCompletionMessage && !tokenUsed?.isCancellationRequested) {
 			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
 		}
 	} catch (error) {
@@ -123,7 +127,7 @@ async function detectTermBatch(
 	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
 			console.log("Term detection was cancelled by user");
-			break;
+			return; // キャンセルされた
 		}
 
 		progress.report({
