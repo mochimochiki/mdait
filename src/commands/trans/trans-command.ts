@@ -200,15 +200,52 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 				}
 			}
 		}
-		// 翻訳実行
-		const translatedContent = await translator.translate(sourceContent, sourceLang, targetLang, context);
+		// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
+		const translationResult = await translator.translate(sourceContent, sourceLang, targetLang, context);
+
 		// ユニットのコンテンツを更新
-		unit.content = translatedContent;
+		unit.content = translationResult.translatedText;
 
 		// ハッシュを再計算してmarkerを更新
 		if (unit.marker) {
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
+
+			// 適用された用語を追跡（原文と訳文の両方に出現する用語）
+			const appliedTerms = relevantTerms
+				.filter((term) => {
+					// 原文に用語の原語が含まれ、訳文に用語の訳語が含まれているかチェック
+					const sourceIncludes = sourceContent.toLowerCase().includes(term.term.toLowerCase());
+					const targetIncludes = translationResult.translatedText
+						.toLowerCase()
+						.includes(term.translation.toLowerCase());
+					return sourceIncludes && targetIncludes;
+				})
+				.map((term) => ({
+					source: term.term,
+					target: term.translation,
+					context: term.context,
+				}));
+
+			// AIからの用語候補をTermCandidateフォーマットに変換
+			const aiTermCandidates =
+				translationResult.termSuggestions?.map((suggestion) => ({
+					source: suggestion.source,
+					target: suggestion.target,
+					context: suggestion.reason || "Suggested by AI",
+					sourceLang,
+					targetLang,
+				})) || [];
+
+			// AIの候補を優先し、重複を除去
+			const termCandidatesMap = new Map<string, (typeof aiTermCandidates)[0]>();
+			for (const candidate of aiTermCandidates) {
+				const key = candidate.source.toLowerCase();
+				if (!termCandidatesMap.has(key)) {
+					termCandidatesMap.set(key, candidate);
+				}
+			}
+			const termCandidates = Array.from(termCandidatesMap.values());
 
 			// 翻訳サマリを保存
 			const duration = (Date.now() - startTime) / 1000; // 秒単位
@@ -216,9 +253,11 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 				unitHash: newHash,
 				stats: {
 					duration,
+					tokens: translationResult.stats?.estimatedTokens,
 				},
-				termCandidates: relevantTerms.length > 0 ? [] : undefined, // TODO: AI提案の用語候補を実装
-				warnings: undefined, // TODO: 翻訳時の警告を実装
+				appliedTerms: appliedTerms.length > 0 ? appliedTerms : undefined,
+				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
+				warnings: translationResult.warnings,
 			});
 		}
 

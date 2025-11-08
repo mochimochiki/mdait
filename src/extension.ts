@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { syncCommand } from "./commands/sync/sync-command";
+import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
@@ -79,6 +80,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// term.open command
 	const termOpenDisposable = vscode.commands.registerCommand("mdait.term.open", openTermCommand);
+
+	// term.addToGlossary command
+	const addToGlossaryDisposable = vscode.commands.registerCommand("mdait.addToGlossary", addToGlossaryCommand);
 
 	// Term handler
 	const termHandler = new StatusTreeTermHandler();
@@ -247,6 +251,7 @@ export function activate(context: vscode.ExtensionContext) {
 		termDetectDisposable,
 		termExpandDisposable,
 		termOpenDisposable,
+		addToGlossaryDisposable,
 		termDirectoryDisposable,
 		termFileDisposable,
 		codeLensTranslateDisposable,

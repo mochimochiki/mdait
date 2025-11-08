@@ -8,6 +8,34 @@
  */
 
 /**
+ * 適用された用語情報
+ */
+export interface AppliedTerm {
+	/** 原語 */
+	source: string;
+	/** 訳語 */
+	target: string;
+	/** コンテキスト情報 */
+	context?: string;
+}
+
+/**
+ * 用語追加候補情報
+ */
+export interface TermCandidate {
+	/** 原語 */
+	source: string;
+	/** 訳語 */
+	target: string;
+	/** コンテキスト情報 */
+	context: string;
+	/** 原語の言語コード */
+	sourceLang: string;
+	/** 訳語の言語コード */
+	targetLang: string;
+}
+
+/**
  * 翻訳サマリ情報のインターフェース
  */
 export interface TranslationSummary {
@@ -22,13 +50,11 @@ export interface TranslationSummary {
 		tokens?: number;
 	};
 
+	/** 翻訳時に適用された用語のリスト */
+	appliedTerms?: AppliedTerm[];
+
 	/** 用語集への追加候補 */
-	termCandidates?: Array<{
-		/** 用語 */
-		term: string;
-		/** 用語が出現したコンテキスト */
-		context: string;
-	}>;
+	termCandidates?: TermCandidate[];
 
 	/** 注意事項や警告メッセージ */
 	warnings?: string[];

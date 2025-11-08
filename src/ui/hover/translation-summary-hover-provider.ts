@@ -73,7 +73,7 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		md.supportHtml = true; // HTML埋め込みを有効化
 
 		// ヘッダー
-		md.appendMarkdown(`### 📊 ${vscode.l10n.t("Translation Completed")}\n\n`);
+		md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
 
 		// 統計情報
 		md.appendMarkdown(`**${vscode.l10n.t("Statistics")}:**\n`);
@@ -85,13 +85,31 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		}
 		md.appendMarkdown("\n");
 
-		// 用語候補
+		// 適用された用語
+		if (summary.appliedTerms && summary.appliedTerms.length > 0) {
+			md.appendMarkdown(`**📓 ${vscode.l10n.t("Applied Terms")}:**\n`);
+			for (const term of summary.appliedTerms) {
+				md.appendMarkdown(`- ${term.source} → ${term.target}\n`);
+			}
+			md.appendMarkdown("\n");
+		}
+
+		// 用語追加候補
 		if (summary.termCandidates && summary.termCandidates.length > 0) {
 			md.appendMarkdown(`**💡 ${vscode.l10n.t("Term Candidates")}:**\n`);
 			for (const candidate of summary.termCandidates) {
-				const args = encodeURIComponent(JSON.stringify({ term: candidate.term, context: candidate.context }));
+				const args = encodeURIComponent(
+					JSON.stringify({
+						source: candidate.source,
+						target: candidate.target,
+						context: candidate.context,
+						sourceLang: candidate.sourceLang,
+						targetLang: candidate.targetLang,
+					}),
+				);
 				const commandUri = `command:mdait.addToGlossary?${args}`;
-				md.appendMarkdown(`- "${candidate.term}" → [${vscode.l10n.t("Add to glossary")}](${commandUri})\n`);
+				const displayText = candidate.target ? `${candidate.source} → ${candidate.target}` : candidate.source;
+				md.appendMarkdown(`- ${displayText} [${vscode.l10n.t("Add to glossary")}](${commandUri})\n`);
 			}
 			md.appendMarkdown("\n");
 		}

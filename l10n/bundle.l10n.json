@@ -97,7 +97,17 @@
   "Duration": "Duration",
   "seconds": "s",
   "Tokens": "Tokens",
+  "Applied Terms": "Applied Terms",
   "Term Candidates": "Term Candidates",
   "Add to glossary": "Add to glossary",
-  "Warnings": "Warnings"
+  "Warnings": "Warnings",
+  "Enter source term": "Enter source term",
+  "e.g., Configuration": "e.g., Configuration",
+  "Enter target term": "Enter target term",
+  "e.g., 設定": "e.g., 設定",
+  "Enter context (optional)": "Enter context (optional)",
+  "e.g., Application settings": "e.g., Application settings",
+  "Unsupported glossary file format. Use .yaml or .csv": "Unsupported glossary file format. Use .yaml or .csv",
+  "Term added to glossary: \"{0}\" → \"{1}\"": "Term added to glossary: \"{0}\" → \"{1}\"",
+  "Failed to add term to glossary: {0}": "Failed to add term to glossary: {0}"
 }

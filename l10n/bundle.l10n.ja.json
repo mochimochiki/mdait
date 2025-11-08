@@ -95,8 +95,18 @@
   "Duration": "処理時間",
   "seconds": "秒",
   "Tokens": "トークン",
-  "Term Candidates": "用語候補",
+  "Applied Terms": "適用された用語",
+  "Term Candidates": "用語追加候補",
   "Add to glossary": "用語集に追加",
-  "Warnings": "注意事項"
+  "Warnings": "注意事項",
+  "Enter source term": "原語を入力",
+  "e.g., Configuration": "例: Configuration",
+  "Enter target term": "訳語を入力",
+  "e.g., 設定": "例: 設定",
+  "Enter context (optional)": "コンテキストを入力 (任意)",
+  "e.g., Application settings": "例: アプリケーション設定",
+  "Unsupported glossary file format. Use .yaml or .csv": "サポートされていない用語集ファイル形式です。.yaml または .csv を使用してください",
+  "Term added to glossary: \"{0}\" → \"{1}\"": "用語集に追加しました: \"{0}\" → \"{1}\"",
+  "Failed to add term to glossary: {0}": "用語集への追加に失敗しました: {0}"
 }
 
