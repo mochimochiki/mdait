@@ -24,7 +24,7 @@ suite("MdaitSection", () => {
 		const section = new MdaitUnit(marker, testTitle, 1, testContent);
 
 		// ヘッダー出力 + 改行 + コンテンツの形式になっていることを確認
-		const expected = `${marker.toString()}\n${testContent}\n`;
+		const expected = `${marker.toString()}\n${testContent}`;
 		assert.equal(section.toString(), expected);
 	});
 
@@ -32,7 +32,7 @@ suite("MdaitSection", () => {
 		// @ts-ignore - コードの実装に沿ってテストを書くため
 		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
 
-		assert.equal(section.toString(), `${testContent}\n`);
+		assert.equal(section.toString(), testContent);
 	});
 
 	test("needsTranslation: ヘッダーがある場合はヘッダーの状態を反映する", () => {

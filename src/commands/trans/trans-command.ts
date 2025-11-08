@@ -378,19 +378,33 @@ async function updateAndSaveUnit(file: vscode.Uri, markerText: string, unit: Mda
 		console.warn("mdait marker not found (fs path). Skipped unit replacement for:", unit.title);
 		return;
 	}
-	const updated = content.slice(0, offsets.start) + replacement + content.slice(offsets.end);
+	// 元のユニットの末尾改行を保持
+	const updated = content.slice(0, offsets.start) + replacement + offsets.trailingNewlines + content.slice(offsets.end);
 	const encoder = new TextEncoder();
 	await vscode.workspace.fs.writeFile(file, encoder.encode(updated));
 }
 
 /**
  * マーカーに基づき、文字範囲を返す
+ * 元の改行を保持するため、範囲に含まれる末尾の改行情報も返す
  */
-function getUnitPosition(text: string, markerText: string): { start: number; end: number } | null {
+function getUnitPosition(
+	text: string,
+	markerText: string,
+): { start: number; end: number; trailingNewlines: string } | null {
 	const startIdx = text.indexOf(markerText);
+	if (startIdx === -1) {
+		return null;
+	}
 	const markerLen = markerText.length;
 	const after = text.slice(startIdx + markerLen);
 	const nextMatch = after.match(MdaitMarker.MARKER_REGEX);
 	const endIdx = nextMatch ? startIdx + markerLen + (nextMatch.index ?? 0) : text.length;
-	return { start: startIdx, end: endIdx };
+
+	// 末尾の改行を検出（次のマーカーまたはファイル末尾までの改行を保持）
+	const unitContent = text.slice(startIdx, endIdx);
+	const trailingNewlinesMatch = unitContent.match(/(\r?\n)+$/);
+	const trailingNewlines = trailingNewlinesMatch ? trailingNewlinesMatch[0] : "";
+
+	return { start: startIdx, end: endIdx, trailingNewlines };
 }
