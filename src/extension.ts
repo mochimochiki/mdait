@@ -12,6 +12,9 @@ import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import { codeLensJumpToSourceCommand, codeLensTranslateCommand } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
+import { SummaryDecorator } from "./ui/hover/summary-decorator";
+import { SummaryManager } from "./ui/hover/summary-manager";
+import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { FileExplorer } from "./utils/file-explorer";
 
@@ -105,6 +108,40 @@ export function activate(context: vscode.ExtensionContext) {
 	const codeLensDisposable = vscode.languages.registerCodeLensProvider(
 		{ scheme: "file", language: "markdown" },
 		codeLensProvider,
+	);
+
+	// HoverProvider登録
+	const summaryManager = SummaryManager.getInstance();
+	const hoverProvider = new TranslationSummaryHoverProvider(summaryManager);
+	const hoverDisposable = vscode.languages.registerHoverProvider(
+		{ scheme: "file", language: "markdown" },
+		hoverProvider,
+	);
+
+	// SummaryDecorator登録
+	const summaryDecorator = new SummaryDecorator(summaryManager);
+
+	// アクティブエディタ変更時にDecorationを更新
+	vscode.window.onDidChangeActiveTextEditor(
+		(editor) => {
+			if (editor?.document.languageId === "markdown") {
+				summaryDecorator.updateDecorations(editor);
+			}
+		},
+		null,
+		context.subscriptions,
+	);
+
+	// ドキュメント変更時にDecorationを更新（保存時など）
+	vscode.workspace.onDidChangeTextDocument(
+		(event) => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor && event.document === editor.document && editor.document.languageId === "markdown") {
+				summaryDecorator.updateDecorations(editor);
+			}
+		},
+		null,
+		context.subscriptions,
 	);
 
 	// status.refresh command
@@ -215,6 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensDisposable,
+		hoverDisposable,
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
@@ -228,5 +266,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる
 	context.subscriptions.push({
 		dispose: () => statusManager.dispose(),
+	});
+
+	context.subscriptions.push({
+		dispose: () => summaryDecorator.dispose(),
 	});
 }

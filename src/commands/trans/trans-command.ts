@@ -20,8 +20,9 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { SummaryManager } from "../../ui/hover/summary-manager";
 import { FileExplorer } from "../../utils/file-explorer";
-import { extractRelevantTerms, termsToJson } from "./term-extractor";
+import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
@@ -138,21 +139,26 @@ export async function transCommand(uri?: vscode.Uri) {
  */
 async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang: string, targetLang: string) {
 	const statusManager = StatusManager.getInstance();
+	const summaryManager = SummaryManager.getInstance();
 	const config = Configuration.getInstance();
+
+	const startTime = Date.now();
 
 	try {
 		// 用語集の取得（設定が有効な場合のみ）
 		const config = Configuration.getInstance();
 		let termsJson: string | undefined;
+		const relevantTerms: TranslationTerm[] = [];
 
 		try {
 			const termsFilePath = config.getTermsFilePath();
 			const cacheManager = TermsCacheManager.getInstance();
 			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
 			if (allTerms.length > 0) {
-				const relevantTerms = extractRelevantTerms(unit.content, allTerms, sourceLang, targetLang);
-				if (relevantTerms.length > 0) {
-					termsJson = termsToJson(relevantTerms);
+				const extractedTerms = extractRelevantTerms(unit.content, allTerms, sourceLang, targetLang);
+				relevantTerms.push(...extractedTerms);
+				if (extractedTerms.length > 0) {
+					termsJson = termsToJson(extractedTerms);
 				}
 			}
 		} catch (error) {
@@ -203,6 +209,17 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 		if (unit.marker) {
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
+
+			// 翻訳サマリを保存
+			const duration = (Date.now() - startTime) / 1000; // 秒単位
+			summaryManager.saveSummary(newHash, {
+				unitHash: newHash,
+				stats: {
+					duration,
+				},
+				termCandidates: relevantTerms.length > 0 ? [] : undefined, // TODO: AI提案の用語候補を実装
+				warnings: undefined, // TODO: 翻訳時の警告を実装
+			});
 		}
 
 		// needフラグを除去

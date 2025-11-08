@@ -91,5 +91,13 @@
   "Detecting terms for directory": "Detecting terms for directory",
   "Detecting terms for file": "Detecting terms for file",
   "Error during file term detection: {0}": "Error during file term detection: {0}",
-  "mdait.ai.debug.enableStatsLogging.description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes"
+  "mdait.ai.debug.enableStatsLogging.description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes",
+  "Translation Completed": "Translation Completed",
+  "Statistics": "Statistics",
+  "Duration": "Duration",
+  "seconds": "s",
+  "Tokens": "Tokens",
+  "Term Candidates": "Term Candidates",
+  "Add to glossary": "Add to glossary",
+  "Warnings": "Warnings"
 }

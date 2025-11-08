@@ -89,5 +89,14 @@
   "Detecting terms for directory": "ディレクトリの用語検出中",
   "Detecting terms for file": "ファイルの用語検出中",
   "Error during file term detection: {0}": "ファイルの用語検出中にエラーが発生しました: {0}",
-  "mdait.ai.debug.enableStatsLogging.description": "デバッグ用にAI通信統計を .mdait/logs/ai-stats.log に記録します"
+  "mdait.ai.debug.enableStatsLogging.description": "デバッグ用にAI通信統計を .mdait/logs/ai-stats.log に記録します",
+  "Translation Completed": "翻訳完了",
+  "Statistics": "統計",
+  "Duration": "処理時間",
+  "seconds": "秒",
+  "Tokens": "トークン",
+  "Term Candidates": "用語候補",
+  "Add to glossary": "用語集に追加",
+  "Warnings": "注意事項"
 }
+

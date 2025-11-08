@@ -10,8 +10,13 @@
 - **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。部分更新イベントに対応して最小限のDOM更新を行う。
 - **Command Entry Points**: コマンドパレット、ツリービューのコンテキストメニュー、コード上のCodeLensからコマンド層を呼び出す。対象ファイルや言語を引数として構築する。
 - **Progress Reporter**: sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理する。
+- **TranslationSummaryHoverProvider**: mdaitマーカー行にホバーしたときに翻訳サマリ(処理時間・トークン数・用語候補・警告)を表示する。`SummaryManager`からユニットハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示。
+- **SummaryDecorator**: 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供する。CodeLensと同じ色・フォントスタイルで統一し、詳細はHoverで確認可能。
+- **SummaryManager**: 翻訳実行時に生成されたサマリデータ(`TranslationSummary`)をメモリ上でMap管理するシングルトン。永続化は不要で、VS Code再起動時にクリアされる。翻訳完了時に`trans-command`から呼び出され、Hover/Decorator表示時に参照される。
 
 ## 更新シーケンス
+
+### ステータス更新フロー
 
 ```mermaid
 sequenceDiagram
@@ -28,6 +33,29 @@ sequenceDiagram
 ```
 
 - ドキュメント保存時は`workspace.onDidSaveTextDocument`で対象ファイルを検知し、`StatusManager.refreshFileStatus`を呼び出して手動編集とツリー表示を同期させる。
+
+### 翻訳サマリ表示フロー
+
+```mermaid
+sequenceDiagram
+	participant User
+	participant TransCmd as TransCommand
+	participant SummaryMgr as SummaryManager
+	participant Decorator as SummaryDecorator
+	participant Hover as HoverProvider
+
+	User->>TransCmd: 翻訳実行
+	TransCmd->>TransCmd: 翻訳処理・時間計測
+	TransCmd->>SummaryMgr: saveSummary(unitHash, summary)
+	TransCmd-->>Decorator: エディタ更新イベント
+	Decorator->>Decorator: マーカー行にインライン表示
+	User->>Hover: マーカー行にホバー
+	Hover->>SummaryMgr: getSummary(unitHash)
+	SummaryMgr-->>Hover: TranslationSummary
+	Hover-->>User: 統計・用語候補・警告を表示
+```
+
+- 翻訳完了後、`SummaryManager`にサマリを保存し、`SummaryDecorator`がマーカー行末尾に簡潔な統計を表示。詳細情報は`HoverProvider`でオンデマンド提供。
 
 ## 視覚表現の原則
 
