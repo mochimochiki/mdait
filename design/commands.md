@@ -8,24 +8,13 @@
 ## コマンド別要点
 
 ### sync（ユニット同期）
+
 - Markdown間のユニット対応付けを確立し、`hash`・`from`・`need`を再計算。
 - 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御。
 - [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証。
 - 同期完了後はソース/ターゲット両ファイルのステータスを`StatusManager.refreshFileStatus`で再計算し、ツリー表示を即時追従させる。
 
-### trans（AI翻訳）
-- `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。
-- 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去。
-- キャンセルやリトライに備え、進捗をUIへ逐次通知する。
-- **用語集連携**: `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る（キャッシュはmtime比較で管理）。
-
-### term（用語集）
-- `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
-- `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
-
-## 主要シーケンス
-
-### syncコマンド
+**シーケンス:**
 
 ```mermaid
 sequenceDiagram
@@ -42,7 +31,19 @@ sequenceDiagram
 	Status-->>UX: ツリー更新
 ```
 
-### transコマンド
+### trans（AI翻訳）
+
+- `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。
+- 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去。
+- キャンセルやリトライに備え、進捗をUIへ逐次通知する。
+- **用語集連携**: `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る（キャッシュはmtime比較で管理）。
+- **並列実行制御**:
+  - ディレクトリ翻訳: ファイルを順次処理（キャンセル即応性とレート制限対策を重視）
+  - ファイル翻訳: ユニットを順次処理（AI APIレート制限対策）
+  - 現状は順次実行を採用し、キャンセル操作への即応性とAI APIのレート制限回避を優先
+  - 将来的な拡張: 設定可能な並列数制限（セマフォ方式）の導入を検討（例: `mdait.trans.concurrency`で同時翻訳数を指定）
+
+**シーケンス:**
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +65,13 @@ sequenceDiagram
 	Status-->>UX: 進捗/完了通知
 ```
 
-### term.detectコマンド
+### term（用語集）
+
+- `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
+- `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
+- **並列実行制御**: ディレクトリ処理時はファイルを順次処理（trans翻訳と同様の理由）。バッチサイズはAI APIの入力トークン制限に応じて調整。
+
+**term.detectシーケンス:**
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +92,7 @@ sequenceDiagram
 	Repo-->>UX: 更新結果通知
 ```
 
-### term.expandコマンド
+**term.expandシーケンス:**
 
 ```mermaid
 sequenceDiagram
