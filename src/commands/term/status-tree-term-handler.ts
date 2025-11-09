@@ -13,7 +13,7 @@ import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { FileExplorer } from "../../utils/file-explorer";
-import { detectTermCommand } from "./command-detect";
+import { detectTermBatchInternal } from "./command-detect";
 
 /**
  * ステータスツリーアイテムの用語検出アクションハンドラ
@@ -95,39 +95,50 @@ export class StatusTreeTermHandler {
 			const lockedPaths = eligible.map((u) => u.fsPath);
 			await Promise.all(lockedPaths.map((p) => statusManager.changeFileStatus(p, { isTranslating: true })));
 
-			try {
-				// 全ファイルからUnitを収集
-				const allUnits: MdaitUnit[] = [];
-				for (const file of eligible) {
+			// withProgressで進捗表示とキャンセル機能を統合管理
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Detecting terms..."),
+					cancellable: true,
+				},
+				async (progress, token) => {
 					try {
-						const document = await vscode.workspace.openTextDocument(file);
-						const content = document.getText();
-						const markdown = markdownParser.parse(content, config);
-						allUnits.push(...markdown.units);
-					} catch (error) {
-						console.error(`Failed to parse file: ${file.fsPath}`, error);
+						// 全ファイルからUnitを収集
+						const allUnits: MdaitUnit[] = [];
+						for (const file of eligible) {
+							try {
+								const document = await vscode.workspace.openTextDocument(file);
+								const content = document.getText();
+								const markdown = markdownParser.parse(content, config);
+								allUnits.push(...markdown.units);
+							} catch (error) {
+								console.error(`Failed to parse file: ${file.fsPath}`, error);
+							}
+						}
+
+						if (allUnits.length === 0) {
+							vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
+							return;
+						}
+
+						// バッチ処理実行（内部実装を直接呼び出し）
+						await detectTermBatchInternal(allUnits, sourceLang, progress, token);
+
+						if (!token.isCancellationRequested) {
+							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+						}
+
+						// StatusManagerの更新
+						for (const path of lockedPaths) {
+							await statusManager.refreshFileStatus(path);
+						}
+					} finally {
+						// isTranslating を解除
+						await Promise.all(lockedPaths.map((p) => statusManager.changeFileStatus(p, { isTranslating: false })));
 					}
-				}
-
-				if (allUnits.length === 0) {
-					vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
-					return;
-				}
-
-				// バッチ処理実行
-				await detectTermCommand(allUnits, sourceLang, {
-					showProgress: true,
-					showCompletionMessage: true,
-				});
-
-				// StatusManagerの更新
-				for (const path of lockedPaths) {
-					await statusManager.refreshFileStatus(path);
-				}
-			} finally {
-				// isTranslating を解除
-				await Promise.all(lockedPaths.map((p) => statusManager.changeFileStatus(p, { isTranslating: false })));
-			}
+				},
+			);
 		} catch (error) {
 			// 想定外エラー（ログ出力＋ユーザー通知）
 			console.error("Error during directory term detection:", error);
@@ -191,21 +202,33 @@ export class StatusTreeTermHandler {
 				return;
 			}
 
-			// バッチ処理実行
-			await detectTermCommand(markdown.units, sourceLang, {
-				showProgress: true,
-				showCompletionMessage: true,
-			});
+			// withProgressで進捗表示とキャンセル機能を提供
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Detecting terms for file"),
+					cancellable: true,
+				},
+				async (progress, token) => {
+					try {
+						// バッチ処理実行（内部実装を直接呼び出し）
+						await detectTermBatchInternal(markdown.units, sourceLang, progress, token);
 
-			// StatusManagerの更新
-			await StatusManager.getInstance().refreshFileStatus(sourceFilePath);
+						if (!token.isCancellationRequested) {
+							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+							// StatusManagerの更新
+							await StatusManager.getInstance().refreshFileStatus(sourceFilePath);
+						}
+					} finally {
+						// isTranslating を解除
+						await StatusManager.getInstance().changeFileStatus(sourceFilePath, { isTranslating: false });
+					}
+				},
+			);
 		} catch (error) {
 			// 想定外エラー（ログ出力＋ユーザー通知）
 			console.error("Error during file term detection:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during file term detection: {0}", (error as Error).message));
-		} finally {
-			// isTranslating を解除
-			await StatusManager.getInstance().changeFileStatus(sourceFilePath, { isTranslating: false });
 		}
 	}
 }

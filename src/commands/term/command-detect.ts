@@ -16,78 +16,47 @@ import { TermsRepository } from "./terms-repository";
 const MAX_BATCH_CHARS = 8000;
 
 /**
- * 用語検出コマンド（mdait.term.detect）
+ * 用語検出コマンド（パブリックAPI）
  * MDaitUnit配列から重要用語を検出し、用語集に追加
  *
  * @param units 対象のMDaitUnit配列
  * @param sourceLang ソース言語コード
- * @param options オプション設定
- * @param options.showProgress 進捗通知を表示するか（デフォルト: true）
- * @param options.showCompletionMessage 完了メッセージを表示するか（デフォルト: true）
- * @param options.cancellationToken 親からのキャンセルトークン（進捗通知なしの場合に使用）
  */
-export async function detectTermCommand(
-	units: readonly MdaitUnit[],
-	sourceLang: string,
-	options?: {
-		showProgress?: boolean;
-		showCompletionMessage?: boolean;
-		cancellationToken?: vscode.CancellationToken;
-	},
-): Promise<void> {
-	const { showProgress = true, showCompletionMessage = true, cancellationToken } = options || {};
-
+export async function detectTermCommand(units: readonly MdaitUnit[], sourceLang: string): Promise<void> {
 	if (units.length === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 		return;
 	}
 
-	try {
-		// 用語検出処理を実行
-		let tokenUsed: vscode.CancellationToken | undefined;
-		if (showProgress) {
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t("Detecting terms..."),
-					cancellable: true,
-				},
-				async (progress, token) => {
-					tokenUsed = token;
-					await detectTermBatch(units, sourceLang, progress, token);
-				},
-			);
-		} else {
-			// 進捗通知なしで実行（親のプログレスとキャンセルトークンを使用）
-			tokenUsed = cancellationToken;
-			await detectTermBatch(
-				units,
-				sourceLang,
-				{ report: () => {} } as vscode.Progress<{
-					message?: string;
-					increment?: number;
-				}>,
-				cancellationToken,
-			);
-		}
+	// withProgressで進捗表示とキャンセル機能を提供
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: vscode.l10n.t("Detecting terms..."),
+			cancellable: true,
+		},
+		async (progress, token) => {
+			try {
+				await detectTermBatchInternal(units, sourceLang, progress, token);
 
-		// キャンセルトークンの状態を直接確認
-		if (showCompletionMessage && !tokenUsed?.isCancellationRequested) {
-			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
-		}
-	} catch (error) {
-		console.error("用語検出エラー:", error);
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
-		);
-	}
+				if (!token.isCancellationRequested) {
+					vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+				}
+			} catch (error) {
+				console.error("用語検出エラー:", error);
+				vscode.window.showErrorMessage(
+					vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
+				);
+			}
+		},
+	);
 }
 
 /**
- * バッチ用語検出処理を実行
+ * バッチ用語検出処理（内部実装）
  * expand同様のバッチ処理アーキテクチャ
  */
-async function detectTermBatch(
+export async function detectTermBatchInternal(
 	units: readonly MdaitUnit[],
 	sourceLang: string,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,

@@ -304,6 +304,23 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * DirectoryItemを部分更新
+	 */
+	public updateDirectoryPartial(directoryPath: string, updates: Partial<StatusItem>): StatusItem | undefined {
+		const existingItem = this.directoryItemMap.get(directoryPath);
+		if (!existingItem) {
+			return undefined;
+		}
+
+		// 既存のディレクトリStatusItemを更新
+		Object.assign(existingItem, updates);
+
+		// イベント通知
+		this._onTreeChanged.fire(existingItem);
+		return existingItem;
+	}
+
+	/**
 	 * UnitItemを部分更新
 	 */
 	public updateUnit(filePath: string, unitHash: string, updates: Partial<StatusItem>): StatusItem | undefined {

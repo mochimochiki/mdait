@@ -29,54 +29,100 @@ import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 /**
- * Markdownファイルの翻訳コマンドを実行する
+ * Markdownファイルの翻訳コマンド（パブリックAPI）
  * @param uri 翻訳対象ファイルのURI（ファイルパス）
  */
 export async function transCommand(uri?: vscode.Uri) {
-	const statusManager = StatusManager.getInstance();
-	const config = Configuration.getInstance();
-
 	if (!uri) {
 		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
 	}
 
+	const targetFilePath = uri.fsPath || vscode.window.activeTextEditor?.document.fileName;
+	if (!targetFilePath) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
+		return;
+	}
+
+	// withProgressで進捗表示とキャンセル機能を提供
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
+			cancellable: true,
+		},
+		async (progress, token) => {
+			try {
+				await transCommandInternal(uri, progress, token);
+			} catch (error) {
+				vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
+			}
+		},
+	);
+}
+
+/**
+ * Markdownファイルの翻訳処理（内部実装）
+ * @param uri 翻訳対象ファイルのURI
+ * @param progress 進捗報告用オブジェクト
+ * @param token キャンセルトークン
+ */
+export async function transCommandInternal(
+	uri: vscode.Uri,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<void> {
+	const statusManager = StatusManager.getInstance();
+	const config = Configuration.getInstance();
+	const targetFilePath = uri.fsPath;
+
+	// ファイル探索クラスを初期化
+	const fileExplorer = new FileExplorer();
+	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
+	if (!transPair) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
+		return;
+	}
+
+	const sourceLang = transPair.sourceLang;
+	const targetLang = transPair.targetLang;
+	const translator = await new TranslatorBuilder().build();
+
+	// Markdown ファイルの読み込みとパース
+	const document = await vscode.workspace.openTextDocument(uri);
+	const content = document.getText();
+	const markdown = markdownParser.parse(content, config);
+
+	// need:translate フラグを持つユニットを抽出
+	const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+	if (unitsToTranslate.length === 0) {
+		return;
+	}
+
+	// ファイルステータスをInProgressに
+	await statusManager.changeFileStatus(targetFilePath, { isTranslating: true });
+
 	try {
-		// ファイルパスの取得
-		const targetFilePath = uri?.fsPath || vscode.window.activeTextEditor?.document.fileName;
-		if (!targetFilePath) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
-			return;
-		}
-
-		// ファイル探索クラスを初期化
-		const fileExplorer = new FileExplorer();
-		const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
-		if (!transPair) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
-			return;
-		}
-
-		const sourceLang = transPair.sourceLang;
-		const targetLang = transPair.targetLang;
-		const translator = await new TranslatorBuilder().build();
-
-		// Markdown ファイルの読み込みとパース
-		const document = await vscode.workspace.openTextDocument(uri);
-		const content = document.getText();
-		const markdown = markdownParser.parse(content, config);
-
-		// need:translate フラグを持つユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
-		if (unitsToTranslate.length === 0) {
-			return;
-		}
-
-		// ファイルステータスをInProgressに
-		await statusManager.changeFileStatus(targetFilePath, { isTranslating: true });
-
 		// 各ユニットを翻訳し、置換用に旧マーカー文字列を保持しつつ保存
-		for (const unit of unitsToTranslate) {
+		for (let i = 0; i < unitsToTranslate.length; i++) {
+			// キャンセルチェック
+			if (token.isCancellationRequested) {
+				console.log(`Translation cancelled for ${targetFilePath}`);
+				await statusManager.changeFileStatus(targetFilePath, { isTranslating: false });
+				vscode.window.showInformationMessage(
+					vscode.l10n.t("Translation cancelled for: {0}", path.basename(targetFilePath)),
+				);
+				return;
+			}
+
+			const unit = unitsToTranslate[i];
+
+			// 進捗報告
+			progress.report({
+				message: vscode.l10n.t("{0}/{1} units", i + 1, unitsToTranslate.length),
+				increment: 100 / unitsToTranslate.length,
+			});
+
 			// 翻訳開始をStatusManagerに通知
 			if (unit.marker?.hash) {
 				statusManager.changeUnitStatus(unit.marker.hash, { isTranslating: true }, targetFilePath);
@@ -125,8 +171,9 @@ export async function transCommand(uri?: vscode.Uri) {
 		await statusManager.refreshFileStatus(targetFilePath);
 
 		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
-	} catch (error) {
-		vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
+	} finally {
+		// isTranslatingフラグをクリア
+		await statusManager.changeFileStatus(targetFilePath, { isTranslating: false });
 	}
 }
 
@@ -270,77 +317,103 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 }
 
 /**
- * 単一ユニットの翻訳を実行する
+ * 単一ユニットの翻訳を実行する（パブリックAPI）
  * @param targetPath 対象ファイルのパス
  * @param unitHash 翻訳対象のユニットハッシュ
  */
 export async function transUnitCommand(targetPath: string, unitHash: string) {
+	// withProgressで進捗表示とキャンセル機能を提供
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: vscode.l10n.t("Translating unit {0}", unitHash.substring(0, 8)),
+			cancellable: true,
+		},
+		async (progress, token) => {
+			try {
+				await transUnitCommandInternal(targetPath, unitHash, progress, token);
+			} catch (error) {
+				vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
+			}
+		},
+	);
+}
+
+/**
+ * 単一ユニットの翻訳処理（内部実装）
+ * @param targetPath 対象ファイルのパス
+ * @param unitHash 翻訳対象のユニットハッシュ
+ * @param progress 進捗報告用オブジェクト
+ * @param token キャンセルトークン
+ */
+export async function transUnitCommandInternal(
+	targetPath: string,
+	unitHash: string,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<void> {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
+	// 各種初期化
+	const fileExplorer = new FileExplorer();
+	const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
+	if (!transPair) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetPath));
+		return;
+	}
+	const sourceLang = transPair.sourceLang;
+	const targetLang = transPair.targetLang;
+	const translator = await new TranslatorBuilder().build();
+
+	// 翻訳対象ユニットの読込
+	const uri = vscode.Uri.file(targetPath);
+	const document = await vscode.workspace.openTextDocument(uri, { encoding: "utf-8" });
+	const content = document.getText();
+	const markdown = markdownParser.parse(content, config);
+
+	const targetUnit = findUnitByHash(markdown.units, unitHash);
+	if (!targetUnit) {
+		vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, targetPath));
+		return;
+	}
+
+	// ユニットが翻訳必要かチェック
+	if (!targetUnit.needsTranslation()) {
+		vscode.window.showInformationMessage(vscode.l10n.t("Unit {0} does not need translation", unitHash));
+		return;
+	}
+
+	// ステータス: 翻訳中
+	statusManager.changeUnitStatus(unitHash, { isTranslating: true }, targetPath);
+
 	try {
-		// 各種初期化
-		const fileExplorer = new FileExplorer();
-		const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
-		if (!transPair) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetPath));
+		// キャンセルチェック
+		if (token.isCancellationRequested) {
+			console.log(`Translation cancelled for ${targetPath}`);
+			await statusManager.changeUnitStatus(unitHash, { isTranslating: false }, targetPath);
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("Translation cancelled for unit: {0}", unitHash.substring(0, 8)),
+			);
 			return;
 		}
-		const sourceLang = transPair.sourceLang;
-		const targetLang = transPair.targetLang;
-		const translator = await new TranslatorBuilder().build();
-
-		// 翻訳対象ユニットの読込
-		const uri = vscode.Uri.file(targetPath);
-		const document = await vscode.workspace.openTextDocument(uri, { encoding: "utf-8" });
-		const content = document.getText();
-		const markdown = markdownParser.parse(content, config);
-
-		const targetUnit = findUnitByHash(markdown.units, unitHash);
-		if (!targetUnit) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Unit with hash {0} not found in file {1}", unitHash, targetPath));
-			return;
-		}
-
-		// ユニットが翻訳必要かチェック
-		if (!targetUnit.needsTranslation()) {
-			vscode.window.showInformationMessage(vscode.l10n.t("Unit {0} does not need translation", unitHash));
-			return;
-		}
-
-		// ステータス: 翻訳中
-		statusManager.changeUnitStatus(unitHash, { isTranslating: true }, targetPath);
 
 		const oldMarkerText = targetUnit.marker.toString();
 
-		try {
-			// 翻訳実行
-			await translateUnit(targetUnit, translator, sourceLang, targetLang);
+		// 翻訳実行
+		await translateUnit(targetUnit, translator, sourceLang, targetLang);
 
-			// ステータス: 翻訳完了
-			statusManager.changeUnitStatus(
-				unitHash,
-				{
-					status: Status.Translated,
-					needFlag: undefined,
-					isTranslating: false,
-					unitHash: targetUnit.marker.hash,
-				},
-				targetPath,
-			);
-		} catch (error) {
-			// ステータス: エラー
-			statusManager.changeUnitStatus(
-				unitHash,
-				{
-					status: Status.Error,
-					isTranslating: false,
-					errorMessage: (error as Error).message,
-				},
-				targetPath,
-			);
-			throw error;
-		}
+		// ステータス: 翻訳完了
+		statusManager.changeUnitStatus(
+			unitHash,
+			{
+				status: Status.Translated,
+				needFlag: undefined,
+				isTranslating: false,
+				unitHash: targetUnit.marker.hash,
+			},
+			targetPath,
+		);
 
 		// 翻訳済みユニットをファイルに保存
 		await updateAndSaveUnit(vscode.Uri.file(targetPath), oldMarkerText, targetUnit);
@@ -350,7 +423,20 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
 	} catch (error) {
-		vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
+		// ステータス: エラー
+		statusManager.changeUnitStatus(
+			unitHash,
+			{
+				status: Status.Error,
+				isTranslating: false,
+				errorMessage: (error as Error).message,
+			},
+			targetPath,
+		);
+		throw error;
+	} finally {
+		// isTranslatingフラグをクリア
+		statusManager.changeUnitStatus(unitHash, { isTranslating: false }, targetPath);
 	}
 }
 

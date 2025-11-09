@@ -112,6 +112,18 @@ export class StatusManager {
 	}
 
 	/**
+	 * changeDirectoryStatus
+	 * 指定ディレクトリのステータスを変更
+	 */
+	public async changeDirectoryStatus(directoryPath: string, modifications: Partial<StatusItem>): Promise<void> {
+		try {
+			this.statusItemTree.updateDirectoryPartial(directoryPath, modifications);
+		} catch (error) {
+			console.error(`StatusManager: changeDirectoryStatus() - error: ${directoryPath}`, error);
+		}
+	}
+
+	/**
 	 * changeUnitStatus
 	 * ユニットのステータスをmodificationsの値に変更
 	 */

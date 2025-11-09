@@ -14,29 +14,19 @@ import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
-import { createTermExpander, type TermExpansionContext } from "./term-expander";
+import { type TermExpansionContext, createTermExpander } from "./term-expander";
 import { TermsRepository } from "./terms-repository";
 
 /** バッチ分割の文字数閾値 */
 const MAX_BATCH_CHARS = 8000;
 
 /**
- * 用語展開コマンド（mdait.term.expand）
+ * 用語展開コマンド（パブリックAPI）
  * 検出済み用語を指定されたターゲット言語に展開
  *
  * @param item ステータスツリーアイテム（ターゲット言語のルートディレクトリ）
- * @param options オプション設定
- * @param options.showProgress 進捗通知を表示するか（デフォルト: true）
- * @param options.showCompletionMessage 完了メッセージを表示するか（デフォルト: true）
  */
-export async function expandTermCommand(
-	item?: StatusItem,
-	options?: {
-		showProgress?: boolean;
-		showCompletionMessage?: boolean;
-	},
-): Promise<void> {
-	const { showProgress = true, showCompletionMessage = true } = options || {};
+export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	const config = Configuration.getInstance();
 
 	if (!item) {
@@ -44,55 +34,51 @@ export async function expandTermCommand(
 		return;
 	}
 
-	try {
-		// ターゲットディレクトリの情報を取得
-		if (item.type !== "directory" || !item.directoryPath) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
-			return;
-		}
-
-		const targetDir = item.directoryPath;
-		const transPair = config.getTransPairForTargetFile(targetDir);
-
-		if (!transPair) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for target: {0}", targetDir));
-			return;
-		}
-
-		// 実際の展開処理を実行
-		if (showProgress) {
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t("Expanding terms ({0} → {1})", transPair.sourceLang, transPair.targetLang),
-					cancellable: true,
-				},
-				async (progress, token) => {
-					await expandTerms(transPair, progress, token);
-				},
-			);
-		} else {
-			await expandTerms(transPair);
-		}
-
-		if (showCompletionMessage) {
-			vscode.window.showInformationMessage(
-				vscode.l10n.t("Term expansion completed ({0} → {1})", transPair.sourceLang, transPair.targetLang),
-			);
-		}
-	} catch (error) {
-		const message = error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");
-		vscode.window.showErrorMessage(vscode.l10n.t("Error during term expansion: {0}", message));
+	// ターゲットディレクトリの情報を取得
+	if (item.type !== "directory" || !item.directoryPath) {
+		vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
+		return;
 	}
+
+	const targetDir = item.directoryPath;
+	const transPair = config.getTransPairForTargetFile(targetDir);
+
+	if (!transPair) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for target: {0}", targetDir));
+		return;
+	}
+
+	// withProgressで進捗表示とキャンセル機能を提供
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: vscode.l10n.t("Expanding terms ({0} → {1})", transPair.sourceLang, transPair.targetLang),
+			cancellable: true,
+		},
+		async (progress, token) => {
+			try {
+				await expandTermsInternal(transPair, progress, token);
+
+				if (!token.isCancellationRequested) {
+					vscode.window.showInformationMessage(
+						vscode.l10n.t("Term expansion completed ({0} → {1})", transPair.sourceLang, transPair.targetLang),
+					);
+				}
+			} catch (error) {
+				const message = error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");
+				vscode.window.showErrorMessage(vscode.l10n.t("Error during term expansion: {0}", message));
+			}
+		},
+	);
 }
 
 /**
- * 用語展開処理の実行
+ * 用語展開処理（内部実装）
  */
-async function expandTerms(
+export async function expandTermsInternal(
 	transPair: TransPair,
-	progress?: vscode.Progress<{ message?: string; increment?: number }>,
-	cancellationToken?: vscode.CancellationToken,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	cancellationToken: vscode.CancellationToken,
 ): Promise<void> {
 	const config = Configuration.getInstance();
 	const { sourceDir, targetDir, sourceLang, targetLang } = transPair;
@@ -122,12 +108,12 @@ async function expandTerms(
 		return;
 	}
 
-	progress?.report({ message: vscode.l10n.t("Scanning source files..."), increment: 0 });
+	progress.report({ message: vscode.l10n.t("Scanning source files..."), increment: 0 });
 
 	// Phase 0: 用語を含むファイルの事前フィルタリング
 	const filesToProcess = await phase0_FilterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
 
-	if (cancellationToken?.isCancellationRequested) {
+	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
@@ -140,14 +126,14 @@ async function expandTerms(
 		cancellationToken,
 	);
 
-	if (cancellationToken?.isCancellationRequested) {
+	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
 	// Phase 2: グローバルバッチ分割と一括抽出
 	const phase2Results = await phase2_ExtractFromBatches(transPair, contexts, progress, cancellationToken);
 
-	if (cancellationToken?.isCancellationRequested) {
+	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
@@ -186,11 +172,11 @@ async function expandTerms(
 		.filter((entry) => entry.languages[targetLang]);
 
 	// マージして保存
-	progress?.report({ message: vscode.l10n.t("Saving terms...") });
+	progress.report({ message: vscode.l10n.t("Saving terms...") });
 	await termsRepository.Merge(updatedTerms, config.transPairs);
 	await termsRepository.save();
 
-	progress?.report({ increment: 20 });
+	progress.report({ increment: 20 });
 }
 
 /**
@@ -283,7 +269,11 @@ async function phase1_CollectExpansionContexts(
 	}
 
 	progress?.report({
-		message: vscode.l10n.t("Phase 1 completed: {0} contexts collected, {1} unique terms", contexts.length, collectedTerms.size),
+		message: vscode.l10n.t(
+			"Phase 1 completed: {0} contexts collected, {1} unique terms",
+			contexts.length,
+			collectedTerms.size,
+		),
 		increment: 10,
 	});
 

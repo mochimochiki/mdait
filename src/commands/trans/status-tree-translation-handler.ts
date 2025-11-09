@@ -3,7 +3,7 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
-import { transCommand, transUnitCommand } from "./trans-command";
+import { transCommand, transCommandInternal, transUnitCommand, transUnitCommandInternal } from "./trans-command";
 
 /**
  * ステータスツリーアイテムの翻訳アクションハンドラ
@@ -27,8 +27,10 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 
+		const directoryPath = item.directoryPath; // 型安全性のためローカル変数に保存
+
 		const confirmation = await vscode.window.showInformationMessage(
-			vscode.l10n.t("Translate all files in directory '{0}'?", item.directoryPath),
+			vscode.l10n.t("Translate all files in directory '{0}'?", directoryPath),
 			{ modal: true },
 			vscode.l10n.t("Yes"),
 			vscode.l10n.t("No"),
@@ -39,49 +41,87 @@ export class StatusTreeTranslationHandler {
 		}
 
 		const statusManager = StatusManager.getInstance();
-		let files: vscode.Uri[] = [];
 
 		try {
 			// ディレクトリ配下のMarkdownファイルを取得
-			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
-			files = await vscode.workspace.findFiles(pattern);
+			const pattern = new vscode.RelativePattern(directoryPath, "**/*.md");
+			const files = await vscode.workspace.findFiles(pattern);
 
 			if (files.length === 0) {
 				vscode.window.showInformationMessage(
-					vscode.l10n.t("No Markdown files found in directory '{0}'", item.directoryPath),
+					vscode.l10n.t("No Markdown files found in directory '{0}'", directoryPath),
 				);
 				return;
 			}
 
-			// 各ファイルのステータスを更新
-			await Promise.all(files.map((file) => statusManager.changeFileStatus(file.fsPath, { isTranslating: true })));
+			// withProgressで進捗表示とキャンセル機能を統合管理
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Translating directory '{0}'", directoryPath),
+					cancellable: true,
+				},
+				async (progress, token) => {
+					// ディレクトリの翻訳状態を設定
+					await statusManager.changeDirectoryStatus(directoryPath, { isTranslating: true });
 
-			// 各ファイルに対して翻訳を実行
-			const results = await Promise.allSettled(
-				files.map(async (file) => {
-					return transCommand(file);
-				}),
+					try {
+						// 各ファイルに対して翻訳を順次実行（キャンセルチェック付き）
+						let successful = 0;
+						let failed = 0;
+
+						for (let i = 0; i < files.length; i++) {
+							// ディレクトリのキャンセルチェック
+							if (token.isCancellationRequested) {
+								console.log(`Directory translation cancelled, skipping remaining files`);
+								vscode.window.showInformationMessage(
+									vscode.l10n.t(
+										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
+										successful,
+										failed,
+										files.length - successful - failed,
+									),
+								);
+								break; // finallyでクリーンアップされる
+							}
+
+							const file = files[i]; // 進捗報告
+							progress.report({
+								message: vscode.l10n.t("{0}/{1} files", i + 1, files.length),
+								increment: 100 / files.length,
+							});
+
+							try {
+								// 内部実装を直接呼び出し（二重のwithProgressを回避）
+								await transCommandInternal(file, progress, token);
+								successful++;
+							} catch (error) {
+								console.error(`Error translating file ${file.fsPath}:`, error);
+								failed++;
+							}
+						}
+
+						// 結果を通知
+						if (failed > 0) {
+							vscode.window.showWarningMessage(
+								vscode.l10n.t(
+									"Directory translation completed: {0} files succeeded, {1} files failed",
+									successful,
+									failed,
+								),
+							);
+						}
+					} finally {
+						// ディレクトリの翻訳状態をクリア
+						await statusManager.changeDirectoryStatus(directoryPath, { isTranslating: false });
+					}
+				},
 			);
-
-			// 結果を集計
-			const successful = results.filter((r) => r.status === "fulfilled").length;
-			const failed = results.filter((r) => r.status === "rejected").length;
-
-			if (failed > 0) {
-				vscode.window.showWarningMessage(
-					vscode.l10n.t("Directory translation completed: {0} files succeeded, {1} files failed", successful, failed),
-				);
-			}
 		} catch (error) {
 			console.error("Error during directory translation:", error);
 			vscode.window.showErrorMessage(
 				vscode.l10n.t("Error during directory translation: {0}", (error as Error).message),
 			);
-		} finally {
-			// 各ファイルのステータスを更新
-			if (files.length > 0) {
-				await Promise.all(files.map((file) => statusManager.changeFileStatus(file.fsPath, { isTranslating: false })));
-			}
 		}
 	}
 
@@ -95,21 +135,34 @@ export class StatusTreeTranslationHandler {
 		}
 
 		const statusManager = StatusManager.getInstance();
+		const filePath = item.filePath; // 型安全性のためローカル変数に保存
 
 		try {
 			// StatusManagerを通じてisTranslatingを設定
-			await statusManager.changeFileStatus(item.filePath, { isTranslating: true });
-			await transCommand(vscode.Uri.file(item.filePath));
+			await statusManager.changeFileStatus(filePath, { isTranslating: true });
+
+			// withProgressで進捗表示とキャンセル機能を提供
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Translating {0}", vscode.Uri.file(filePath).fsPath.split(/[\\/]/).pop() || filePath),
+					cancellable: true,
+				},
+				async (progress, token) => {
+					try {
+						// 内部実装を直接呼び出し（二重のwithProgressを回避）
+						await transCommandInternal(vscode.Uri.file(filePath), progress, token);
+					} finally {
+						// StatusManagerを通じてisTranslatingを解除
+						await statusManager.changeFileStatus(filePath, { isTranslating: false });
+					}
+				},
+			);
 		} catch (error) {
 			console.error("Error during file translation:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during file translation: {0}", (error as Error).message));
-		} finally {
-			// StatusManagerを通じてisTranslatingを解除
-			await statusManager.changeFileStatus(item.filePath, { isTranslating: false });
 		}
-	}
-
-	/**
+	} /**
 	 * 単一ユニットを翻訳する
 	 */
 	public async translateUnit(item: StatusItem): Promise<void> {

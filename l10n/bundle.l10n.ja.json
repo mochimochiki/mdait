@@ -45,6 +45,7 @@
   "No": "いいえ",
   "No Markdown files found in directory '{0}'": "ディレクトリ '{0}' にMarkdownファイルが見つかりませんでした",
   "Directory translation completed: {0} files succeeded, {1} files failed": "ディレクトリ翻訳完了: {0} ファイル成功、{1} ファイル失敗",
+  "Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped": "ディレクトリ翻訳キャンセル: {0} ファイル成功、{1} ファイル失敗、{2} ファイルスキップ",
   "Directory term detection completed: {0} files succeeded, {1} files failed": "ディレクトリ用語検出完了: {0} ファイル成功、{1} ファイル失敗",
   "Error during directory translation: {0}": "ディレクトリ翻訳中にエラーが発生しました: {0}",
   "Error during directory term detection: {0}": "ディレクトリ用語検出中にエラーが発生しました: {0}",

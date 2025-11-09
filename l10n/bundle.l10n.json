@@ -40,6 +40,7 @@
   "No": "No",
   "No Markdown files found in directory '{0}'": "No Markdown files found in directory '{0}'",
   "Directory translation completed: {0} files succeeded, {1} files failed": "Directory translation completed: {0} files succeeded, {1} files failed",
+  "Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped": "Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
   "Error during directory translation: {0}": "Error during directory translation: {0}",
   "Directory term detection completed: {0} files succeeded, {1} files failed": "Directory term detection completed: {0} files succeeded, {1} files failed",
   "Error during directory term detection: {0}": "Error during directory term detection: {0}",
