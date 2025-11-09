@@ -33,6 +33,7 @@ export class DefaultAIProvider implements AIService {
 		let outputChars = 0;
 		const status: "success" | "error" = "success";
 		const errorMessage: string | undefined = undefined;
+		let responseContent = ""; // 詳細ログ用に応答を蓄積
 
 		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
 		console.log(`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`);
@@ -58,6 +59,7 @@ export class DefaultAIProvider implements AIService {
 					break;
 				}
 				outputChars += chunk.length;
+				responseContent += chunk;
 				yield chunk;
 				// 少し待機してストリーミングをシミュレート
 				await new Promise((resolve) => setTimeout(resolve, 50));
@@ -66,13 +68,32 @@ export class DefaultAIProvider implements AIService {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
+			const timestamp = new Date().toLocaleString("sv-SE");
+
 			await logger.log({
-				timestamp: new Date().toLocaleString("sv-SE"),
+				timestamp,
 				provider: "default",
 				model: this.config.model || "mock",
 				inputChars,
 				outputChars,
 				durationMs,
+				status,
+				errorMessage,
+			});
+
+			// 詳細ログを記録（プロンプトと応答）
+			await logger.logDetailed({
+				timestamp,
+				provider: "default",
+				model: this.config.model || "mock",
+				request: {
+					systemPrompt,
+					messages,
+				},
+				response: {
+					content: responseContent,
+					durationMs,
+				},
 				status,
 				errorMessage,
 			});

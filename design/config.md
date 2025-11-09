@@ -1,19 +1,9 @@
 # 設定管理層設計
 
-## 役割
-
-- VS Code設定からmdaitの挙動を決定する値を収集し、各層へ一貫した形で提供する。
-- 設定変更を監視して再ロードし、長時間動作でも最新値を保証する。
-
 ## Configurationクラスの骨子
 
 - シングルトンとして`initialize()`でロード、`getInstance()`で提供。
-- 管理する主なカテゴリ
-	- `transPairs`: 翻訳対象ディレクトリと言語ペア
-	- `sync`: 自動マーカー付与、不要ユニット削除などの挙動
-	- `ai`/`trans`: 利用するプロバイダー、モデル、プロンプト調整
-	- `ignoredPatterns`: 処理除外パス
-- 実装: `src/config/configuration.ts`
+- 実装: [src/config/configuration.ts](../src/config/configuration.ts)
 
 ## ロードシーケンス
 

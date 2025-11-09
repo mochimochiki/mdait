@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../config/configuration";
+import type { AIMessage } from "./ai-service";
 
 /**
  * AI通信統計レコードの型定義
@@ -18,12 +19,32 @@ export interface AIStatsRecord {
 }
 
 /**
+ * AI通信詳細レコードの型定義
+ */
+export interface AIDetailedRecord {
+	timestamp: string;
+	provider: string;
+	model: string;
+	request: {
+		systemPrompt: string;
+		messages: AIMessage[];
+	};
+	response: {
+		content: string;
+		durationMs: number;
+	};
+	status: "success" | "error";
+	errorMessage?: string;
+}
+
+/**
  * AI通信統計をログファイルに記録するクラス
  * デバッグ時の分析を容易にするため、1回のAI通信を1行のTSVレコードとして記録します。
  */
 export class AIStatsLogger {
 	private static instance: AIStatsLogger | undefined;
 	private logFilePath: string | undefined;
+	private detailedLogFilePath: string | undefined;
 
 	private constructor() {}
 
@@ -122,6 +143,69 @@ export class AIStatsLogger {
 			record.status,
 			errorMsg,
 		].join("\t");
+	}
+
+	/**
+	 * 詳細情報（プロンプトと応答）をログファイルに記録
+	 * 設定で有効化されている場合のみ実行されます
+	 *
+	 * @param record 記録する詳細情報
+	 */
+	public async logDetailed(record: AIDetailedRecord): Promise<void> {
+		try {
+			// 設定確認
+			const config = Configuration.getInstance();
+			const enableLogging = config.ai.debug?.logPromptAndResponse;
+
+			if (!enableLogging) {
+				return; // ログ機能が無効の場合は何もしない
+			}
+
+			// ログファイルパスの初期化
+			if (!this.detailedLogFilePath) {
+				await this.initializeDetailedLogFile();
+			}
+
+			if (!this.detailedLogFilePath) {
+				console.warn("AI detailed log file path is not initialized");
+				return;
+			}
+
+			// JSON Lines形式でレコードをフォーマット
+			const jsonLine = JSON.stringify(record);
+
+			// ファイルに非同期で追記（ベストエフォート）
+			await fs.appendFile(this.detailedLogFilePath, `${jsonLine}\n`, "utf-8");
+		} catch (error) {
+			// ログ記録の失敗は本処理に影響させない
+			console.warn("Failed to write AI detailed log:", error);
+		}
+	}
+
+	/**
+	 * 詳細ログファイルとディレクトリを初期化
+	 */
+	private async initializeDetailedLogFile(): Promise<void> {
+		try {
+			// ワークスペースルートを取得
+			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			if (!workspaceRoot) {
+				console.warn("Workspace not found for AI detailed logging");
+				return;
+			}
+
+			// ログディレクトリのパス
+			const logDir = path.join(workspaceRoot, ".mdait", "logs");
+			this.detailedLogFilePath = path.join(logDir, "ai-detailed.log");
+
+			// ディレクトリが存在しない場合は作成
+			await fs.mkdir(logDir, { recursive: true });
+
+			// ファイルが存在しない場合でもヘッダーは不要（JSON Lines形式のため）
+		} catch (error) {
+			console.error("Failed to initialize AI detailed log file:", error);
+			this.detailedLogFilePath = undefined;
+		}
 	}
 
 	/**

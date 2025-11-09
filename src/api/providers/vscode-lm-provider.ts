@@ -33,6 +33,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 		let modelFamily = "gpt-4o"; // デフォルト
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
+		let responseContent = ""; // 詳細ログ用に応答を蓄積
 
 		// 入力文字数の計測
 		const inputChars =
@@ -60,6 +61,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 			// ストリーミングレスポンスを処理
 			for await (const fragment of response.text) {
 				outputChars += fragment.length;
+				responseContent += fragment;
 				yield fragment;
 			}
 		} catch (error) {
@@ -95,13 +97,32 @@ export class VSCodeLanguageModelProvider implements AIService {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
+			const timestamp = new Date().toLocaleString("sv-SE");
+
 			await logger.log({
-				timestamp: new Date().toLocaleString("sv-SE"),
+				timestamp,
 				provider: "vscode-lm",
 				model: modelFamily,
 				inputChars,
 				outputChars,
 				durationMs,
+				status,
+				errorMessage,
+			});
+
+			// 詳細ログを記録（プロンプトと応答）
+			await logger.logDetailed({
+				timestamp,
+				provider: "vscode-lm",
+				model: modelFamily,
+				request: {
+					systemPrompt,
+					messages,
+				},
+				response: {
+					content: responseContent,
+					durationMs,
+				},
 				status,
 				errorMessage,
 			});

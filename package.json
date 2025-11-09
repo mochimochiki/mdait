@@ -232,6 +232,11 @@
           "default": false,
           "description": "%mdait.ai.debug.enableStatsLogging.description%"
         },
+        "mdait.ai.debug.logPromptAndResponse": {
+          "type": "boolean",
+          "default": false,
+          "description": "%mdait.ai.debug.logPromptAndResponse.description%"
+        },
         "mdait.trans.markdown.skipCodeBlocks": {
           "type": "boolean",
           "default": true,

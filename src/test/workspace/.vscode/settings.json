@@ -36,8 +36,9 @@
   // ollama model
   "mdait.ai.ollama.model": "gemma3:4b",
 
-  // AI communication statistics logging
+  // AI communication logging
   "mdait.ai.debug.enableStatsLogging": true,
+  "mdait.ai.debug.logPromptAndResponse": false,
 
   // -----------------------------------------------
   // Sync

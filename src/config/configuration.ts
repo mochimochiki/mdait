@@ -12,6 +12,7 @@ export interface AIConfig {
 	};
 	debug?: {
 		enableStatsLogging: boolean;
+		logPromptAndResponse: boolean;
 	};
 	// プロバイダ固有設定の拡張用
 	[key: string]: unknown;
@@ -186,11 +187,21 @@ export class Configuration {
 
 		// AIデバッグ設定の読み込み
 		const enableStatsLogging = config.get<boolean>("ai.debug.enableStatsLogging");
-		if (enableStatsLogging !== undefined) {
+		const logPromptAndResponse = config.get<boolean>("ai.debug.logPromptAndResponse");
+		if (enableStatsLogging !== undefined || logPromptAndResponse !== undefined) {
 			if (!this.ai.debug) {
-				this.ai.debug = { enableStatsLogging: false };
+				this.ai.debug = {
+					enableStatsLogging: enableStatsLogging ?? false,
+					logPromptAndResponse: logPromptAndResponse ?? false,
+				};
+			} else {
+				if (enableStatsLogging !== undefined) {
+					this.ai.debug.enableStatsLogging = enableStatsLogging;
+				}
+				if (logPromptAndResponse !== undefined) {
+					this.ai.debug.logPromptAndResponse = logPromptAndResponse;
+				}
 			}
-			this.ai.debug.enableStatsLogging = enableStatsLogging;
 		}
 
 		// 翻訳設定の読み込み

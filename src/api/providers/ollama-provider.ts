@@ -37,6 +37,7 @@ export class OllamaProvider implements AIService {
 		let outputChars = 0;
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
+		let responseContent = ""; // 詳細ログ用に応答を蓄積
 
 		// ユーザーメッセージを取得
 		const userMessage = messages.find((msg) => msg.role === "user");
@@ -70,6 +71,7 @@ export class OllamaProvider implements AIService {
 			for await (const chunk of stream) {
 				if (chunk.response) {
 					outputChars += chunk.response.length;
+					responseContent += chunk.response;
 					yield chunk.response;
 				}
 				if (chunk.done) {
@@ -84,13 +86,32 @@ export class OllamaProvider implements AIService {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
+			const timestamp = new Date().toLocaleString("sv-SE");
+
 			await logger.log({
-				timestamp: new Date().toLocaleString("sv-SE"),
+				timestamp,
 				provider: "ollama",
 				model: this.model,
 				inputChars,
 				outputChars,
 				durationMs,
+				status,
+				errorMessage,
+			});
+
+			// 詳細ログを記録（プロンプトと応答）
+			await logger.logDetailed({
+				timestamp,
+				provider: "ollama",
+				model: this.model,
+				request: {
+					systemPrompt,
+					messages,
+				},
+				response: {
+					content: responseContent,
+					durationMs,
+				},
 				status,
 				errorMessage,
 			});
