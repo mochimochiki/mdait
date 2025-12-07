@@ -130,22 +130,22 @@
       "view/title": [
         {
           "command": "mdait.status.selectTargets",
-          "when": "view == mdait.status",
+          "when": "view == mdait.status && mdaitConfigured",
           "group": "navigation@-1"
         },
         {
           "command": "mdait.status.sync",
-          "when": "view == mdait.status && !mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.sync.processing",
-          "when": "view == mdait.status && mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.openTerm",
-          "when": "view == mdait.status",
+          "when": "view == mdait.status && mdaitConfigured",
           "group": "navigation"
         }
       ],
