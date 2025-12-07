@@ -109,6 +109,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * ユーザーがツリービューを開くと、getChildrenメソッドが`element`なしで呼び出されます
 	 */
 	public async getChildren(element?: StatusItem): Promise<StatusItem[]> {
+		// 設定の検証（必須設定がない場合は空配列を返す）
+		const validationError = this.configuration.validate();
+		if (validationError) {
+			// 設定が未構成の場合は空を返し、ウェルカムビューを表示させる
+			return [];
+		}
+
 		if (!this.isStatusInitialized && !this.isStatusLoading) {
 			this.isStatusLoading = true;
 			try {
