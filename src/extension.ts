@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { createSettingsCommand } from "./commands/setup/create-settings-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -49,6 +50,12 @@ export function activate(context: vscode.ExtensionContext) {
 			selectionState.reconcileWith(config.transPairs);
 		}
 	});
+
+	// setup.createSettings command
+	const createSettingsDisposable = vscode.commands.registerCommand(
+		"mdait.setup.createSettings",
+		createSettingsCommand,
+	);
 
 	// sync command
 	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
@@ -245,6 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 初回データ読み込み
 	context.subscriptions.push(
+		createSettingsDisposable,
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,

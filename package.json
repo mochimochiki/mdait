@@ -92,6 +92,12 @@
         "title": "%mdait.status.openTerm.title%",
         "icon": "$(repo)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.setup.createSettings",
+        "title": "%mdait.setup.createSettings.title%",
+        "icon": "$(gear)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -108,10 +114,18 @@
         {
           "id": "mdait.status",
           "icon": "$(check)",
-          "name": "%mdait.status.view.title%"
+          "name": "%mdait.status.view.title%",
+          "when": "workspaceFolderCount != 0"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "mdait.status",
+        "contents": "%mdait.welcome.noSettings.message%\n[$(gear) %mdait.setup.createSettings.title%](command:mdait.setup.createSettings)",
+        "when": "workspaceFolderCount != 0"
+      }
+    ],
     "menus": {
       "view/title": [
         {
