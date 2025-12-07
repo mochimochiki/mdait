@@ -35,23 +35,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
-	// 設定の検証とコンテキスト設定
-	const updateConfigurationContext = () => {
-		const validationError = config.validate();
-		const isConfigured = validationError === null;
-		vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
-	};
-
-	// 初期チェック
-	updateConfigurationContext();
-
-	// 設定変更時も再チェック
-	vscode.workspace.onDidChangeConfiguration((e) => {
-		if (e.affectsConfiguration("mdait")) {
-			updateConfigurationContext();
-		}
-	});
-
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
 	const treeView = vscode.window.createTreeView("mdait.status", {
@@ -71,16 +54,28 @@ export async function activate(context: vscode.ExtensionContext) {
 		statusTreeProvider.refresh();
 	});
 
-	// 設定変更で transPairs が変わった場合の補正
-	config.onConfigurationChanged(() => {
-		selectionState.reconcileWith(config.transPairs);
+	// 設定の検証とコンテキスト設定
+	const updateConfigurationContext = () => {
+		const validationError = config.validate();
+		const isConfigured = validationError === null;
+		vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+		// 設定が変更された場合はツリーを更新（未設定→設定済み、または設定済み→未設定の切り替え時）
+		statusTreeProvider.refresh();
+	};
+
+	// 初期チェック
+	updateConfigurationContext();
+
+	// 設定変更時の処理を統合
+	vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration("mdait")) {
+			updateConfigurationContext();
+			selectionState.reconcileWith(config.transPairs);
+		}
 	});
 
 	// setup.createSettings command
-	const createSettingsDisposable = vscode.commands.registerCommand(
-		"mdait.setup.createSettings",
-		createSettingsCommand,
-	);
+	const createSettingsDisposable = vscode.commands.registerCommand("mdait.setup.createSettings", createSettingsCommand);
 
 	// sync command
 	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
