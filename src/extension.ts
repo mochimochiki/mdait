@@ -35,6 +35,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
+	// 設定の検証とコンテキスト設定
+	const updateConfigurationContext = () => {
+		const validationError = config.validate();
+		const isConfigured = validationError === null;
+		vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+	};
+
+	// 初期チェック
+	updateConfigurationContext();
+
+	// 設定変更時も再チェック
+	vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration("mdait")) {
+			updateConfigurationContext();
+		}
+	});
+
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
 	const treeView = vscode.window.createTreeView("mdait.status", {
