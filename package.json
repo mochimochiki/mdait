@@ -123,7 +123,7 @@
       {
         "view": "mdait.status",
         "contents": "%mdait.welcome.noSettings.message%\n[$(gear) %mdait.setup.createSettings.title%](command:mdait.setup.createSettings)",
-        "when": "workspaceFolderCount != 0"
+        "when": "workspaceFolderCount != 0 && !mdaitConfigured"
       }
     ],
     "menus": {
