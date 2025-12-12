@@ -53,6 +53,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		statusTreeProvider.refresh();
 	});
 
+	// 設定変更で transPairs が変わった場合の補正
+	config.onConfigurationChanged(() => {
+		selectionState.reconcileWith(config.transPairs);
+	});
+
 	// sync command
 	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
 

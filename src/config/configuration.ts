@@ -82,6 +82,7 @@ export class Configuration {
 	private static instance: Configuration | undefined;
 	private configurationWatcher: fs.FSWatcher | undefined;
 	private configFilePath: string | undefined;
+	private changeCallbacks: Array<() => void> = [];
 
 	/**
 	 * 翻訳ペア設定
@@ -193,6 +194,26 @@ export class Configuration {
 	}
 
 	/**
+	 * 設定変更時のコールバックを登録
+	 */
+	public onConfigurationChanged(callback: () => void): void {
+		this.changeCallbacks.push(callback);
+	}
+
+	/**
+	 * 設定変更を通知
+	 */
+	private notifyConfigurationChanged(): void {
+		for (const callback of this.changeCallbacks) {
+			try {
+				callback();
+			} catch (error) {
+				console.error("Error in configuration change callback:", error);
+			}
+		}
+	}
+
+	/**
 	 * 設定を読み込む
 	 */
 	private async load(): Promise<void> {
@@ -289,8 +310,13 @@ export class Configuration {
 				}
 			}
 
-			// 設定ファイルの監視を開始
-			this.setupConfigurationWatcher();
+			// 設定ファイルの監視を開始（初回のみ）
+			if (!this.configurationWatcher) {
+				this.setupConfigurationWatcher();
+			}
+
+			// 設定変更を通知
+			this.notifyConfigurationChanged();
 		} catch (error) {
 			throw new Error(`Failed to load configuration: ${error}`);
 		}
@@ -368,7 +394,6 @@ export class Configuration {
 			throw new Error("Workspace not found");
 		}
 
-		const path = require("node:path");
 		return path.join(workspaceRoot, ".mdait", this.terms.filename);
 	}
 
