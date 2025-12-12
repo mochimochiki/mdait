@@ -137,7 +137,6 @@ export class Configuration {
 	public static getInstance(): Configuration {
 		if (!Configuration.instance) {
 			Configuration.instance = new Configuration();
-			Configuration.instance.initialize();
 		}
 		return Configuration.instance;
 	}
@@ -146,9 +145,8 @@ export class Configuration {
 	 * 初期化処理（設定のロードと監視の開始）
 	 */
 	public async initialize(): Promise<Configuration> {
-		const instance = Configuration.getInstance();
-		await instance.load();
-		return instance;
+		await this.load();
+		return this;
 	}
 
 	/**
