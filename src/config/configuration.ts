@@ -1,4 +1,7 @@
 import * as vscode from "vscode";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as yaml from "js-yaml";
 
 /**
  * AI設定の型定義
@@ -40,11 +43,45 @@ export interface TransPair {
 }
 
 /**
+ * mdait.yamlファイルの型定義
+ */
+interface MdaitConfig {
+	transPairs?: TransPair[];
+	ignoredPatterns?: string | string[];
+	sync?: {
+		autoMarkerLevel?: number;
+		autoDelete?: boolean;
+	};
+	ai?: {
+		provider?: string;
+		model?: string;
+		ollama?: {
+			endpoint?: string;
+			model?: string;
+		};
+		debug?: {
+			enableStatsLogging?: boolean;
+			logPromptAndResponse?: boolean;
+		};
+	};
+	trans?: {
+		markdown?: {
+			skipCodeBlocks?: boolean;
+		};
+	};
+	terms?: {
+		filename?: string;
+		primaryLang?: string;
+	};
+}
+
+/**
  * 翻訳拡張機能の設定を管理するクラス（シングルトンパターン）
  */
 export class Configuration {
 	private static instance: Configuration | undefined;
-	private configurationChangeListener: vscode.Disposable | undefined;
+	private configurationWatcher: fs.FSWatcher | undefined;
+	private configFilePath: string | undefined;
 
 	/**
 	 * 翻訳ペア設定
@@ -91,9 +128,7 @@ export class Configuration {
 	/**
 	 * プライベートコンストラクタ（シングルトンパターン）
 	 */
-	private constructor() {
-		this.setupConfigurationWatcher();
-	}
+	private constructor() {}
 
 	/**
 	 * Configurationのシングルトンインスタンスを取得する
@@ -120,104 +155,146 @@ export class Configuration {
 	 * シングルトンインスタンスを破棄する（主にテスト用）
 	 */
 	public static dispose(): void {
-		if (Configuration.instance?.configurationChangeListener) {
-			Configuration.instance.configurationChangeListener.dispose();
+		if (Configuration.instance?.configurationWatcher) {
+			Configuration.instance.configurationWatcher.close();
 		}
 		Configuration.instance = undefined;
+	}
+
+	/**
+	 * 設定ファイルのパスを取得
+	 */
+	private getConfigFilePath(): string | undefined {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			return undefined;
+		}
+		return path.join(workspaceRoot, "mdait.yaml");
 	}
 
 	/**
 	 * 設定変更の監視を設定する
 	 */
 	private setupConfigurationWatcher(): void {
-		this.configurationChangeListener = vscode.workspace.onDidChangeConfiguration((event) => {
-			// mdait関連の設定が変更された場合のみリロード
-			if (event.affectsConfiguration("mdait")) {
-				this.load().catch((error) => {
-					console.error("Failed to reload configuration:", error);
-				});
-			}
-		});
+		if (!this.configFilePath) {
+			return;
+		}
+
+		// 設定ファイルの変更を監視
+		try {
+			this.configurationWatcher = fs.watch(this.configFilePath, (eventType) => {
+				if (eventType === "change") {
+					this.load().catch((error) => {
+						console.error("Failed to reload configuration:", error);
+					});
+				}
+			});
+		} catch (error) {
+			console.error("Failed to setup configuration watcher:", error);
+		}
 	}
 
 	/**
 	 * 設定を読み込む
 	 */
 	private async load(): Promise<void> {
-		const config = vscode.workspace.getConfiguration("mdait");
-		// 翻訳ペア設定の読み込み
-		this.transPairs = config.get<TransPair[]>("transPairs") || [];
-
-		// 除外パターンの読み込み
-		const ignoredPatterns = config.get<string>("ignoredPatterns");
-		if (ignoredPatterns) {
-			this.ignoredPatterns = ignoredPatterns;
+		// 設定ファイルのパスを取得
+		this.configFilePath = this.getConfigFilePath();
+		if (!this.configFilePath) {
+			throw new Error("Workspace folder not found");
 		}
 
-		// sync設定の読み込み
-		const autoMarkerLevel = config.get<number>("sync.autoMarkerLevel");
-		if (autoMarkerLevel !== undefined) {
-			this.sync.autoMarkerLevel = autoMarkerLevel;
+		// 設定ファイルが存在しない場合はエラー
+		if (!fs.existsSync(this.configFilePath)) {
+			throw new Error(`Configuration file not found: ${this.configFilePath}`);
 		}
 
-		const autoDelete = config.get<boolean>("sync.autoDelete");
-		if (autoDelete !== undefined) {
-			this.sync.autoDelete = autoDelete;
-		}
+		try {
+			// YAMLファイルを読み込む
+			const fileContent = fs.readFileSync(this.configFilePath, "utf8");
+			const config = yaml.load(fileContent) as MdaitConfig;
 
-		// AI設定の読み込み
-		const aiProvider = config.get<string>("ai.provider");
-		if (aiProvider) {
-			this.ai.provider = aiProvider;
-		}
-		const aiModel = config.get<string>("ai.model");
-		if (aiModel) {
-			this.ai.model = aiModel;
-		}
+			if (!config || typeof config !== "object") {
+				throw new Error("Invalid configuration file format");
+			}
 
-		// Ollama設定の読み込み
-		const ollamaEndpoint = config.get<string>("ai.ollama.endpoint");
-		if (ollamaEndpoint) {
-			this.ai.ollama.endpoint = ollamaEndpoint;
-		}
-		const ollamaModel = config.get<string>("ai.ollama.model");
-		if (ollamaModel) {
-			this.ai.ollama.model = ollamaModel;
-		}
+			// 翻訳ペア設定の読み込み
+			if (config.transPairs) {
+				this.transPairs = config.transPairs;
+			}
 
-		// AIデバッグ設定の読み込み
-		const enableStatsLogging = config.get<boolean>("ai.debug.enableStatsLogging");
-		const logPromptAndResponse = config.get<boolean>("ai.debug.logPromptAndResponse");
-		if (enableStatsLogging !== undefined || logPromptAndResponse !== undefined) {
-			if (!this.ai.debug) {
-				this.ai.debug = {
-					enableStatsLogging: enableStatsLogging ?? false,
-					logPromptAndResponse: logPromptAndResponse ?? false,
-				};
-			} else {
-				if (enableStatsLogging !== undefined) {
-					this.ai.debug.enableStatsLogging = enableStatsLogging;
-				}
-				if (logPromptAndResponse !== undefined) {
-					this.ai.debug.logPromptAndResponse = logPromptAndResponse;
+			// 除外パターンの読み込み
+			if (config.ignoredPatterns) {
+				if (Array.isArray(config.ignoredPatterns)) {
+					this.ignoredPatterns = config.ignoredPatterns.join(",");
+				} else {
+					this.ignoredPatterns = config.ignoredPatterns;
 				}
 			}
-		}
 
-		// 翻訳設定の読み込み
-		const skipCodeBlocks = config.get<boolean>("trans.markdown.skipCodeBlocks");
-		if (skipCodeBlocks !== undefined) {
-			this.trans.markdown.skipCodeBlocks = skipCodeBlocks;
-		}
+			// sync設定の読み込み
+			if (config.sync) {
+				if (config.sync.autoMarkerLevel !== undefined) {
+					this.sync.autoMarkerLevel = config.sync.autoMarkerLevel;
+				}
+				if (config.sync.autoDelete !== undefined) {
+					this.sync.autoDelete = config.sync.autoDelete;
+				}
+			}
 
-		// 用語集設定の読み込み
-		const termsFilename = config.get<string>("terms.filename");
-		if (termsFilename) {
-			this.terms.filename = termsFilename;
-		}
-		const termsprimaryLang = config.get<string>("terms.primaryLang");
-		if (termsprimaryLang) {
-			this.terms.primaryLang = termsprimaryLang;
+			// AI設定の読み込み
+			if (config.ai) {
+				if (config.ai.provider) {
+					this.ai.provider = config.ai.provider;
+				}
+				if (config.ai.model) {
+					this.ai.model = config.ai.model;
+				}
+				if (config.ai.ollama) {
+					if (config.ai.ollama.endpoint) {
+						this.ai.ollama.endpoint = config.ai.ollama.endpoint;
+					}
+					if (config.ai.ollama.model) {
+						this.ai.ollama.model = config.ai.ollama.model;
+					}
+				}
+				if (config.ai.debug) {
+					if (!this.ai.debug) {
+						this.ai.debug = {
+							enableStatsLogging: false,
+							logPromptAndResponse: false,
+						};
+					}
+					if (config.ai.debug.enableStatsLogging !== undefined) {
+						this.ai.debug.enableStatsLogging = config.ai.debug.enableStatsLogging;
+					}
+					if (config.ai.debug.logPromptAndResponse !== undefined) {
+						this.ai.debug.logPromptAndResponse = config.ai.debug.logPromptAndResponse;
+					}
+				}
+			}
+
+			// 翻訳設定の読み込み
+			if (config.trans?.markdown) {
+				if (config.trans.markdown.skipCodeBlocks !== undefined) {
+					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
+				}
+			}
+
+			// 用語集設定の読み込み
+			if (config.terms) {
+				if (config.terms.filename) {
+					this.terms.filename = config.terms.filename;
+				}
+				if (config.terms.primaryLang) {
+					this.terms.primaryLang = config.terms.primaryLang;
+				}
+			}
+
+			// 設定ファイルの監視を開始
+			this.setupConfigurationWatcher();
+		} catch (error) {
+			throw new Error(`Failed to load configuration: ${error}`);
 		}
 	}
 

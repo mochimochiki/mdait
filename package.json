@@ -167,92 +167,6 @@
           "group": "inline@2"
         }
       ]
-    },
-    "configuration": {
-      "title": "%mdait.configuration.title%",
-      "properties": {
-        "mdait.transPairs": {
-          "type": "array",
-          "description": "%mdait.transPairs.description%",
-          "default": [],
-          "items": {
-            "type": "object",
-            "title": "%mdait.transPairs.title%",
-            "properties": {
-              "sourceDir": {
-                "type": "string",
-                "description": "%mdait.transPairs.sourceDir.description%"
-              },
-              "targetDir": {
-                "type": "string",
-                "description": "%mdait.transPairs.targetDir.description%"
-              }
-            },
-            "required": [
-              "sourceDir",
-              "targetDir"
-            ]
-          }
-        },
-        "mdait.ignoredPatterns": {
-          "type": "array",
-          "default": [],
-          "description": "%mdait.ignoredPatterns.description%",
-          "items": {
-            "type": "string"
-          }
-        },
-        "mdait.sync.autoDelete": {
-          "type": "boolean",
-          "default": true,
-          "description": "%mdait.sync.autoDelete.description%"
-        },
-        "mdait.ai.provider": {
-          "type": "string",
-          "default": "default",
-          "description": "%mdait.ai.provider.description%"
-        },
-        "mdait.ai.model": {
-          "type": "string",
-          "default": "gpt-4o",
-          "description": "%mdait.ai.model.description%"
-        },
-        "mdait.ai.ollama.endpoint": {
-          "type": "string",
-          "default": "http://localhost:11434",
-          "description": "%mdait.ai.ollama.endpoint.description%"
-        },
-        "mdait.ai.ollama.model": {
-          "type": "string",
-          "default": "llama2",
-          "description": "%mdait.ai.ollama.model.description%"
-        },
-        "mdait.ai.debug.enableStatsLogging": {
-          "type": "boolean",
-          "default": false,
-          "description": "%mdait.ai.debug.enableStatsLogging.description%"
-        },
-        "mdait.ai.debug.logPromptAndResponse": {
-          "type": "boolean",
-          "default": false,
-          "description": "%mdait.ai.debug.logPromptAndResponse.description%"
-        },
-        "mdait.trans.markdown.skipCodeBlocks": {
-          "type": "boolean",
-          "default": true,
-          "description": "%mdait.trans.markdown.skipCodeBlocks.description%"
-        },
-        "mdait.terms.filename": {
-          "type": "string",
-          "default": "terms.csv",
-          "description": "%mdait.terms.filename.description%"
-        },
-        "mdait.terms.primaryLang": {
-          "type": "string",
-          "default": "",
-          "description": "%mdait.terms.primaryLang.description%"
-        }
-      }
     }
   },
   "scripts": {
@@ -271,6 +185,7 @@
     "csv-parse": "^5.5.6",
     "csv-stringify": "^6.5.2",
     "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
     "markdown-it": "^14.1.0",
     "ollama": "^0.6.0"
   },
