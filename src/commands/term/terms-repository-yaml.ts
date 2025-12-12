@@ -1,12 +1,12 @@
 /**
  * @file terms-repository-yaml.ts
  * @description YAML形式の用語集リポジトリ実装
- * js-yamlを使用してYAML形式の用語集ファイルを扱う
+ * yamlパッケージを使用してYAML形式の用語集ファイルを扱う
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as yaml from "js-yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import type { TransPair } from "../../config/configuration";
 import { Configuration } from "../../config/configuration";
@@ -140,11 +140,10 @@ export class YamlTermsRepository implements TermsRepository {
 		};
 
 		// YAMLとしてシリアライズ
-		const yamlContent = yaml.dump(yamlData, {
+		const yamlContent = stringifyYaml(yamlData, {
 			indent: 2,
-			lineWidth: -1,
-			noRefs: true,
-			sortKeys: false,
+			lineWidth: 0,
+			sortMapEntries: false,
 		});
 
 		// ファイルに書き込み（UTF-8、BOM無し）
@@ -193,7 +192,7 @@ export class YamlTermsRepository implements TermsRepository {
 			const content = fs.readFileSync(this.path, { encoding: "utf8" });
 
 			// YAMLをパース
-			const yamlData = yaml.load(content) as YamlTermsFile;
+			const yamlData = parseYaml(content) as YamlTermsFile;
 
 			if (!yamlData || typeof yamlData !== "object") {
 				throw new Error("Invalid YAML structure");

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as yaml from "js-yaml";
+import { parse as parseYaml } from "yaml";
 
 /**
  * AI設定の型定義
@@ -231,7 +231,7 @@ export class Configuration {
 		try {
 			// YAMLファイルを読み込む
 			const fileContent = fs.readFileSync(this.configFilePath, "utf8");
-			const config = yaml.load(fileContent) as MdaitConfig;
+			const config = parseYaml(fileContent) as MdaitConfig;
 
 			if (!config || typeof config !== "object") {
 				throw new Error("Invalid configuration file format");
