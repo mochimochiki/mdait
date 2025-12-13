@@ -1,0 +1,50 @@
+# mdait configuration file
+
+# 翻訳ペア
+transPairs:
+  - sourceLang: ja
+    sourceDir: content/ja
+    targetLang: en
+    targetDir: content/en
+  - sourceLang: en
+    sourceDir: content/en
+    targetLang: de
+    targetDir: content/de
+
+# 除外パターン
+ignoredPatterns: "**/node_modules/**"
+
+# Sync設定
+sync:
+  # マーカーを自動挿入する見出しレベル. FrontMatterで上書き可能(yamlのみ)
+  autoMarkerLevel: 2
+  # 自動削除設定
+  autoDelete: true
+
+# AI設定
+ai:
+  # AIプロバイダ(default/vscode-lm/ollama)
+  provider: vscode-lm
+  # AI model
+  model: gpt-4.1
+  # Ollama設定
+  ollama:
+    endpoint: http://localhost:11434
+    model: gemma3:4b
+  # デバッグ設定
+  debug:
+    enableStatsLogging: true
+    logPromptAndResponse: false
+
+# 翻訳設定
+trans:
+  markdown:
+    # コードブロックをスキップするか
+    skipCodeBlocks: true
+
+# 用語集設定
+terms:
+  # 用語集ファイル名
+  filename: terms.csv
+  # 用語管理の基準言語
+  primaryLang: en

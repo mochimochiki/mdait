@@ -1,0 +1,53 @@
+# mdait configuration file
+# Copy this file to mdait.yaml and configure your translation settings
+
+# Translation pairs configuration
+# Define source and target directories for translation
+transPairs:
+  - sourceLang: ja
+    sourceDir: docs/ja
+    targetLang: en
+    targetDir: docs/en
+  # You can define multiple translation pairs
+  # - sourceLang: en
+  #   sourceDir: docs/en
+  #   targetLang: de
+  #   targetDir: docs/de
+
+# Exclude patterns for file scanning
+ignoredPatterns: "**/node_modules/**"
+
+# Sync settings
+sync:
+  # Auto-insert markers at heading level (can be overridden in frontmatter)
+  autoMarkerLevel: 2
+  # Auto-delete orphaned translation units
+  autoDelete: true
+
+# AI provider configuration
+ai:
+  # AI provider: default (VS Code LM), vscode-lm, or ollama
+  provider: default
+  # Model name for the default provider
+  model: gpt-4o
+  # Ollama settings (if using ollama provider)
+  ollama:
+    endpoint: http://localhost:11434
+    model: llama2
+  # Debug settings for AI communication
+  debug:
+    enableStatsLogging: false
+    logPromptAndResponse: false
+
+# Translation settings
+trans:
+  markdown:
+    # Skip code blocks during translation
+    skipCodeBlocks: true
+
+# Glossary/terminology settings
+terms:
+  # Glossary filename (csv or yaml)
+  filename: terms.csv
+  # Primary language for term management
+  primaryLang: en
