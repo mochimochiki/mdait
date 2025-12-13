@@ -10,6 +10,8 @@
 ### mdaitUnit
 - Markdown本文と`<!-- mdait hash from need -->`マーカーをペアで保持する翻訳単位。
 - `hash`: CRC32ベースの短縮値、`from`: 翻訳元ユニット、`need`: ワークフロー指示（translate/review/...）。
+- **ユニット境界**: 指定レベル以下の見出し、または見出しがない場所のmdaitMarkerが境界となる。
+- **マーカーと見出しの関係**: マーカーの直後（空行なし）に見出しがある場合、その見出しがマーカーの示すユニットのタイトルである。
 - 実装: `src/core/markdown/`
 
 ### Hash & Normalizer

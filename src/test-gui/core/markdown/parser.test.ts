@@ -175,10 +175,10 @@ need:translate -->
 		].join("\n");
 		const doc = markdownParser.parse(md);
 		const units = doc.units;
-		assert.equal(units.length, 2);
+		assert.equal(units.length, 3);
 		assert.equal(units[0].marker.hash, "hashAAAA");
-		// 直前のmdaitのみ有効
-		assert.equal(units[1].marker.hash, "hashBBBB");
+		// 2番目のユニットは見出し
+		assert.equal(units[2].marker.hash, "hashBBBB");
 	});
 	test("複数行のmdaitコメントと複数見出し", () => {
 		const md = [
@@ -245,5 +245,77 @@ need:translate -->
 		assert.ok(!units[1].marker.hash);
 		assert.equal(units[2].title, "見出しC");
 		assert.equal(units[2].marker.hash, "hashB234");
+	});
+
+	test("見出しがない場所にmdaitマーカーをつけた場合", () => {
+		const md = [
+			"# 見出し1",
+			"本文1",
+			"",
+			"<!-- mdait hashXXXX from:srcXXXXX need:translate -->",
+			"見出しなしの本文",
+			"複数行にわたる",
+			"テキストブロック",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		// 見出し1のユニットと、見出しなしのユニットの2つができるべき
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "見出し1");
+		assert.ok(units[0].content.includes("本文1"));
+		// 2番目のユニットは見出しなしでマーカーを持つべき
+		assert.equal(units[1].title, "");
+		assert.equal(units[1].marker.hash, "hashXXXX");
+		assert.equal(units[1].marker.from, "srcXXXXX");
+		assert.equal(units[1].marker.need, "translate");
+		assert.ok(units[1].content.includes("見出しなしの本文"));
+		assert.ok(units[1].content.includes("テキストブロック"));
+	});
+
+	test("見出しがない場所のmdaitマーカー: ファイル先頭", () => {
+		const md = [
+			"<!-- mdait hashYYYY from:srcYYYYY need:review -->",
+			"ファイル先頭の本文",
+			"見出しなし",
+			"",
+			"# 見出し1",
+			"本文1",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		// 見出しなしのユニットと見出し1のユニットの2つができるべき
+		assert.equal(units.length, 2);
+		assert.equal(units[0].title, "");
+		assert.equal(units[0].marker.hash, "hashYYYY");
+		assert.equal(units[0].marker.from, "srcYYYYY");
+		assert.equal(units[0].marker.need, "review");
+		assert.ok(units[0].content.includes("ファイル先頭の本文"));
+		assert.equal(units[1].title, "見出し1");
+		assert.ok(units[1].content.includes("本文1"));
+	});
+
+	test("見出しがない場所のmdaitマーカー: 複数連続", () => {
+		const md = [
+			"<!-- mdait hashZZZ1 from:srcZZZ11 need:translate -->",
+			"最初のブロック",
+			"",
+			"<!-- mdait hashZZZ2 from:srcZZZ22 need:review -->",
+			"2番目のブロック",
+			"",
+			"# 見出し1",
+			"本文1",
+		].join("\n");
+		const doc = markdownParser.parse(md);
+		const units = doc.units;
+		// 見出しなしのユニット2つと見出し1のユニットの計3つができるべき
+		assert.equal(units.length, 3);
+		assert.equal(units[0].title, "");
+		assert.equal(units[0].marker.hash, "hashZZZ1");
+		assert.ok(units[0].content.includes("最初のブロック"));
+		assert.equal(units[1].title, "");
+		assert.equal(units[1].marker.hash, "hashZZZ2");
+		assert.ok(units[1].content.includes("2番目のブロック"));
+		assert.equal(units[2].title, "見出し1");
+		assert.ok(units[2].content.includes("本文1"));
 	});
 });
