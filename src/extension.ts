@@ -19,7 +19,17 @@ import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { FileExplorer } from "./utils/file-explorer";
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+	// Configuration の初期化
+	try {
+		await Configuration.getInstance().initialize();
+	} catch (error) {
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Failed to load mdait.yaml configuration: {0}", (error as Error).message),
+		);
+		return;
+	}
+
 	// StatusManagerの初期化
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
@@ -44,10 +54,8 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// 設定変更で transPairs が変わった場合の補正
-	vscode.workspace.onDidChangeConfiguration((e) => {
-		if (e.affectsConfiguration("mdait")) {
-			selectionState.reconcileWith(config.transPairs);
-		}
+	config.onConfigurationChanged(() => {
+		selectionState.reconcileWith(config.transPairs);
 	});
 
 	// sync command
