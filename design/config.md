@@ -67,7 +67,8 @@ sequenceDiagram
   "trans": {
     "markdown": {
       "skipCodeBlocks": true
-    }
+    },
+    "contextSize": 1
   },
   "terms": {
     "filename": "terms.csv",

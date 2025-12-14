@@ -27,6 +27,8 @@ export interface TransConfig {
 	markdown: {
 		skipCodeBlocks: boolean;
 	};
+	/** 翻訳時に参照する前後のユニット数（コンテキストウィンドウサイズ） */
+	contextSize: number;
 	// 翻訳固有設定の拡張用
 	[key: string]: unknown;
 }
@@ -67,6 +69,7 @@ interface MdaitConfig {
 		markdown?: {
 			skipCodeBlocks?: boolean;
 		};
+		contextSize?: number;
 	};
 	terms?: {
 		filename?: string;
@@ -116,6 +119,7 @@ export class Configuration {
 		markdown: {
 			skipCodeBlocks: true,
 		},
+		contextSize: 1,
 	};
 	/**
 	 * 用語集設定
@@ -313,6 +317,9 @@ export class Configuration {
 				if (config.trans.markdown.skipCodeBlocks !== undefined) {
 					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
 				}
+			}
+			if (config.trans?.contextSize !== undefined) {
+				this.trans.contextSize = config.trans.contextSize;
 			}
 
 			// 用語集設定の読み込み

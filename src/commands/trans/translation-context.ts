@@ -4,14 +4,14 @@
  */
 export class TranslationContext {
 	/**
-	 * 翻訳対象ユニットの直前のユニットの本文。
+	 * 翻訳対象ユニットの直前のユニットの本文配列。
 	 */
-	previousText?: string;
+	previousTexts: string[] = [];
 
 	/**
-	 * 翻訳対象ユニットの直後のユニットの本文。
+	 * 翻訳対象ユニットの直後のユニットの本文配列。
 	 */
-	nextText?: string;
+	nextTexts: string[] = [];
 
 	/**
 	 * 適用する用語集の文字列。
@@ -20,13 +20,34 @@ export class TranslationContext {
 	terms?: string;
 
 	/**
+	 * 周辺テキストを結合した文字列を取得
+	 * @returns 前後のユニットを結合した文字列（存在する場合）
+	 */
+	get surroundingText(): string | undefined {
+		const parts: string[] = [];
+		
+		if (this.previousTexts.length > 0) {
+			parts.push("Previous context:", ...this.previousTexts);
+		}
+		
+		if (this.nextTexts.length > 0) {
+			if (parts.length > 0) {
+				parts.push(""); // 空行で区切る
+			}
+			parts.push("Following context:", ...this.nextTexts);
+		}
+		
+		return parts.length > 0 ? parts.join("\n") : undefined;
+	}
+
+	/**
 	 * その他のコンテキスト情報。将来的な拡張用。
 	 */
 	[key: string]: unknown;
 
-	constructor(previousText?: string, nextText?: string, terms?: string) {
-		this.previousText = previousText;
-		this.nextText = nextText;
+	constructor(previousTexts: string[] = [], nextTexts: string[] = [], terms?: string) {
+		this.previousTexts = previousTexts;
+		this.nextTexts = nextTexts;
 		this.terms = terms;
 	}
 }

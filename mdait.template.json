@@ -11,6 +11,9 @@
     "provider": "default",
     "model": "gpt-4.1"
   },
+  "trans": {
+    "contextSize": 1
+  },
   "sync": {
     "autoMarkerLevel": 3
   }

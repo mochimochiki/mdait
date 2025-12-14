@@ -213,10 +213,51 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 		}
 
 		// 翻訳コンテキストの作成
-		// TODO: context に surroundingText を設定するロジックを実装
-		const previousText = ""; // 仮の実装
-		const nextText = ""; // 仮の実装
-		const context = new TranslationContext(previousText, nextText, termsJson);
+		// 周辺ユニットの取得
+		const contextSize = config.trans.contextSize || 1;
+		const previousTexts: string[] = [];
+		const nextTexts: string[] = [];
+		
+		if (contextSize > 0 && unit.marker?.hash) {
+			// StatusManagerから現在のユニットのファイルパスを取得
+			try {
+				const tree = statusManager.getStatusItemTree();
+				const currentStatusUnit = tree.getUnitByHash(unit.marker.hash);
+				
+				if (currentStatusUnit?.filePath) {
+					const currentUri = vscode.Uri.file(currentStatusUnit.filePath);
+					const currentDoc = await vscode.workspace.openTextDocument(currentUri);
+					const currentFileContent = currentDoc.getText();
+					const currentMarkdown = markdownParser.parse(currentFileContent, config);
+					
+					const currentIndex = currentMarkdown.units.findIndex(
+						(u) => u.marker?.hash === unit.marker.hash
+					);
+					
+					if (currentIndex !== -1) {
+						// 前方のユニットを取得
+						for (let i = 1; i <= contextSize; i++) {
+							const prevIndex = currentIndex - i;
+							if (prevIndex >= 0) {
+								previousTexts.unshift(currentMarkdown.units[prevIndex].content);
+							}
+						}
+						
+						// 後方のユニットを取得
+						for (let i = 1; i <= contextSize; i++) {
+							const nextIndex = currentIndex + i;
+							if (nextIndex < currentMarkdown.units.length) {
+								nextTexts.push(currentMarkdown.units[nextIndex].content);
+							}
+						}
+					}
+				}
+			} catch (error) {
+				console.warn("Failed to get surrounding units for context:", error);
+			}
+		}
+		
+		const context = new TranslationContext(previousTexts, nextTexts, termsJson);
 
 		let sourceContent = unit.content;
 
