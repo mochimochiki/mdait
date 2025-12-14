@@ -5,6 +5,8 @@
  */
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { TermEntry } from "./term-entry";
+import { TermsRepository } from "./terms-repository";
 
 /**
  * 用語追加コマンドの引数インターフェース
@@ -66,92 +68,38 @@ export async function addToGlossaryCommand(args?: AddToGlossaryArgs): Promise<vo
 			};
 		}
 
-		// ファイルが存在するか確認
-		let fileExists = true;
+		// 用語集リポジトリを読み込みまたは作成
+		let termsRepository: TermsRepository;
 		try {
-			await vscode.workspace.fs.stat(vscode.Uri.file(termFilePath));
+			termsRepository = await TermsRepository.load(termFilePath);
 		} catch {
-			fileExists = false;
+			// 用語集ファイルが存在しない場合は新規作成
+			termsRepository = await TermsRepository.create(termFilePath, config.transPairs);
 		}
 
-		// ファイルを開く（存在しない場合は作成）
-		let document: vscode.TextDocument;
-		if (fileExists) {
-			document = await vscode.workspace.openTextDocument(termFilePath);
-		} else {
-			// 新規作成
-			const uri = vscode.Uri.file(termFilePath);
-			await vscode.workspace.fs.writeFile(uri, Buffer.from(""));
-			document = await vscode.workspace.openTextDocument(uri);
-		}
-
-		const editor = await vscode.window.showTextDocument(document);
-
-		// ファイル形式を判定（拡張子から）
-		const isYaml = termFilePath.endsWith(".yaml") || termFilePath.endsWith(".yml");
-		const isCsv = termFilePath.endsWith(".csv");
-
-		// 用語を追加する文字列を生成
-		let newEntry: string;
-		if (isYaml) {
-			newEntry = generateYamlEntry(termArgs);
-		} else if (isCsv) {
-			newEntry = generateCsvEntry(termArgs);
-		} else {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Unsupported glossary file format. Use .yaml or .csv"),
-			);
-			return;
-		}
-
-		// ファイルの最後に追加
-		const lastLine = document.lineCount - 1;
-		const lastLineText = document.lineAt(lastLine).text;
-		const needsNewline = lastLineText.trim() !== "";
-
-		await editor.edit((editBuilder) => {
-			const position = new vscode.Position(document.lineCount, 0);
-			const textToInsert = needsNewline ? `\n${newEntry}` : newEntry;
-			editBuilder.insert(position, textToInsert);
+		// 新しい用語エントリを作成
+		const newEntry = TermEntry.create(termArgs.context || termArgs.source, {
+			[termArgs.sourceLang]: {
+				term: termArgs.source,
+				variants: [],
+			},
+			[termArgs.targetLang]: {
+				term: termArgs.target,
+				variants: [],
+			},
 		});
 
+		// 用語集にマージ（重複チェック込み）
+		await termsRepository.Merge([newEntry], config.transPairs);
+
 		// 保存
-		await document.save();
+		await termsRepository.save();
 
 		vscode.window.showInformationMessage(
 			vscode.l10n.t('Term added to glossary: "{0}" → "{1}"', termArgs.source, termArgs.target),
 		);
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Failed to add term to glossary: {0}", (error as Error).message),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to add term to glossary: {0}", (error as Error).message));
 		console.error("Failed to add term to glossary:", error);
 	}
-}
-
-/**
- * YAML形式の用語エントリを生成
- */
-function generateYamlEntry(args: AddToGlossaryArgs): string {
-	const lines: string[] = [];
-	lines.push(`- context: "${args.context || args.source}"`);
-	lines.push("  languages:");
-	lines.push(`    ${args.sourceLang}:`);
-	lines.push(`      term: "${args.source}"`);
-	lines.push("      variants: []");
-	lines.push(`    ${args.targetLang}:`);
-	lines.push(`      term: "${args.target}"`);
-	lines.push("      variants: []");
-	return `${lines.join("\n")}\n`;
-}
-
-/**
- * CSV形式の用語エントリを生成
- */
-function generateCsvEntry(args: AddToGlossaryArgs): string {
-	// CSV形式: context,en.term,en.variants,ja.term,ja.variants
-	const context = args.context || args.source;
-	const enTerm = args.sourceLang === "en" ? args.source : "";
-	const jaTerm = args.targetLang === "ja" ? args.target : "";
-	return `"${context}","${enTerm}","","${jaTerm}",""\n`;
 }
