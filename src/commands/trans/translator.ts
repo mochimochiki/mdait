@@ -9,7 +9,9 @@ export interface TermSuggestion {
 	source: string;
 	/** 訳語 */
 	target: string;
-	/** 理由や説明 */
+	/** 用語が使用されている実際の文脈（原文からの引用） */
+	context: string;
+	/** 用語集に追加すべき理由（オプショナル） */
 	reason?: string;
 }
 
@@ -89,30 +91,59 @@ export class DefaultTranslator implements Translator {
 
 		// systemPrompt と AIMessage[] の構築
 		// @important design.md に記載の通り、terms や surroundingText を活用すること
-		const systemPrompt = `You are a professional translator. Translate the given text from ${sourceLang} to ${targetLang}.
+		const systemPrompt = `You are a professional translator specializing in Markdown documents.
+
+Your task is to translate the given text from ${sourceLang} to ${targetLang}.
+
+CRITICAL RULE (HIGHEST PRIORITY):
+- You MUST preserve the original Markdown structure EXACTLY.
+- Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
 
 Context:
-${context.surroundingText ? `Surrounding Text:\n${context.surroundingText}\n` : ""}
-${context.terms ? `Terminology:\n${context.terms}\n` : ""}
+${context.surroundingText ? `Surrounding Text (for reference only, do NOT translate unless included in the target text):\n${context.surroundingText}\n` : ""}
+${context.terms ? `Terminology (preferred translations):\n${context.terms}\n` : ""}
 
-Instructions:
-1. Translate the text accurately, keeping the original meaning and tone.
-2. Do not translate placeholders like __CODE_BLOCK_PLACEHOLDER_n__.
-3. After the translation, identify technical terms, proper nouns, or domain-specific terminology that appear in the original text but are NOT in the provided terminology list.
-4. Return your response in the following JSON format:
+Markdown Preservation Rules:
+1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
+  - Headings: #, ##, ###, ####
+  - Lists: -, *, +, 1., 2., etc.
+  - All other Markdown syntaxes
+2. Keep line breaks, blank lines, and indentation exactly as in the original text.
+3. Only translate the human-readable text content inside the Markdown structure.
+4. Do NOT translate placeholders such as __CODE_BLOCK_PLACEHOLDER_n__.
+5. If a line contains both Markdown syntax and text, translate ONLY the text portion and leave all symbols untouched.
+6. If you are unsure whether something is Markdown syntax, assume it IS and do NOT modify it.
+
+Translation Instructions:
+1. Translate accurately while preserving meaning, tone, and technical correctness.
+2. Follow the provided terminology list strictly when applicable.
+3. After translation, identify technical terms, proper nouns, or domain-specific terms that:
+  - Appear in the ORIGINAL text
+  - Are NOT included in the provided terminology list
+
+Self-Check (MANDATORY before responding):
+- Verify that the number of lines is unchanged.
+- Verify that all Markdown symbols remain in the same positions.
+- Verify that no Markdown elements were removed or altered.
+
+Response Format:
+Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "translation": "your translated text here",
+  "translation": "the translated text with Markdown structure perfectly preserved",
   "termSuggestions": [
     {
-      "source": "original term",
-      "target": "translated term",
-      "reason": "why this should be added to glossary"
+      "source": "original term in ${sourceLang}",
+      "target": "translated term in ${targetLang}",
+      "context": "an actual sentence or phrase quoted directly from the ORIGINAL text including the source term (LANGUAGE: ${sourceLang})",
+      "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ]
 }
 
-Important: Return ONLY valid JSON. Do not include any markdown code blocks or explanations outside the JSON structure.`;
+Important Notes:
+- The \"context\" field MUST quote the original text verbatim.
+- Return ONLY valid JSON. Any extra text invalidates the response.`;
 
 		const messages: AIMessage[] = [
 			{
@@ -141,11 +172,7 @@ Important: Return ONLY valid JSON. Do not include any markdown code blocks or ex
 	 * @param placeholders プレースホルダーのリスト
 	 * @returns パースされた翻訳結果
 	 */
-	private parseAIResponse(
-		rawResponse: string,
-		codeBlocks: string[],
-		placeholders: string[],
-	): TranslationResult {
+	private parseAIResponse(rawResponse: string, codeBlocks: string[], placeholders: string[]): TranslationResult {
 		try {
 			// マークダウンのコードブロックを除去（```json ... ``` のような形式に対応）
 			const jsonMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);

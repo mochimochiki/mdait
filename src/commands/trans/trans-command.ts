@@ -279,7 +279,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 				translationResult.termSuggestions?.map((suggestion) => ({
 					source: suggestion.source,
 					target: suggestion.target,
-					context: suggestion.reason || "Suggested by AI",
+					context: suggestion.context,
 					sourceLang,
 					targetLang,
 				})) || [];
