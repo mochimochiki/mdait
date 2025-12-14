@@ -13,5 +13,8 @@
   },
   "sync": {
     "autoMarkerLevel": 3
+  },
+  "terms": {
+    "primaryLang": "en"
   }
 }

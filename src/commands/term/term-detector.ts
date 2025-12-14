@@ -101,11 +101,15 @@ Extract a term **if it meets at least one of the following conditions:**
 4. **Distinctness** – It denotes a named concept, method, parameter, feature, or entity (not just descriptive language). 
 5. **Referential use** – The term could plausibly appear in documentation, UI labels, manuals, or academic writing. 
 
+---
+
 ### Output rules: 
 
-- Return a deduplicated JSON array of objects: 
-- "term": extracted term - "context": concise Japanese explanation of its meaning and usage 
-- Do not include already-registered terms. 
+- Return a deduplicated JSON array of objects, each with the following structure:
+  - "term": extracted term
+  - "context": an actual sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})
+    - ONLY if no usable sentence exists, Provide a concise explanation of the term’s meaning or usage.
+- Do not include already-registered terms.
 - Keep explanations brief and accurate.
 Instructions:
 - Analyze the entire text carefully before extracting.
@@ -115,23 +119,11 @@ Instructions:
   - Terms already present in the existing terminology list.
   - Duplicated or contextually trivial mentions.
 
-### Scaling rule:
-- If the text is short (< 500 characters): extract up to 5 terms.
-- If the text is medium (500–2,000 characters): extract up to 15 terms.
-- If the text is long (> 2,000 characters): extract up to 30 terms, grouping similar ones if appropriate.
-
-### Output rules:
-- Each extracted term must have a concise **Japanese explanation (context)** explaining its meaning or usage within the text.
-- Return a **deduplicated JSON array** of objects, each with:
-  - "term": the extracted term
-  - "context": its explanation (in the LANGUAGE: ${lang})
-- Do not include terms already in the terminology repository below.
-
 ${existingInfo}Return JSON array with this structure:
 [
   {
     "term": "extracted term",
-    "context": "explanation of the term's meaning and usage context. Always return in the LANGUAGE: ${lang}."
+    "context": "an actual sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})"
   }
 ]`;
 
