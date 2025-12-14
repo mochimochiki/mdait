@@ -5,6 +5,44 @@
 - ユーザー起点の操作をmdaitのワークフローに変換し、Core層の機能を組み合わせて実行する。
 - 設定値やUIの入力に応じて必要なデータを収集し、処理結果をステータス更新やファイル書き込みとして反映する。
 
+## オンボーディングコマンド
+
+### setup.createConfig（設定ファイル作成）
+
+- 拡張機能にバンドルされた`mdait.template.json`をワークスペースルートに`mdait.json`としてコピー
+- テンプレートファイルは拡張機能のルートに配置され、`ExtensionContext.extensionPath`を通じてアクセス
+- ファイル作成後、VS Codeエディタで開いてユーザーに編集を促す
+- JSON Schemaによる補完と検証が自動的に機能
+- 保存時に`Configuration`が自動リロードし、`mdaitConfigured`コンテキスト変数を更新
+- 既に`mdait.json`が存在する場合は警告メッセージを表示して上書きを防止
+- テンプレートファイルが見つからない場合はエラーメッセージを表示（拡張機能の再インストールを促す）
+
+**シーケンス:**
+
+```mermaid
+sequenceDiagram
+	participant User
+	participant Cmd as SetupCommand
+	participant FS as File System
+	participant Cfg as Configuration
+	participant UI as VS Code
+
+	User->>Cmd: mdait.setup.createConfig
+	Cmd->>FS: mdait.jsonの存在チェック
+	alt 既存ファイルあり
+		Cmd-->>User: 警告メッセージ表示
+	else ファイルなし
+		Cmd->>FS: 拡張機能バンドルのmdait.template.jsonを読み込み
+		Cmd->>FS: ワークスペースルートにmdait.jsonを作成
+		Cmd->>UI: mdait.jsonをエディタで開く(JSON Schema有効)
+		User->>FS: 設定を編集して保存
+		FS->>Cfg: ファイル変更イベント
+		Cfg->>Cfg: リロード＆バリデーション
+		Cfg->>UI: mdaitConfiguredコンテキスト更新
+		UI-->>User: Welcome View非表示、ツリー表示
+	end
+```
+
 ## コマンド別要点
 
 ### sync（ユニット同期）

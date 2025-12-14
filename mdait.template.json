@@ -1,0 +1,27 @@
+{
+  "transPairs": [
+    {
+      "sourceLang": "ja",
+      "sourceDir": "docs/ja",
+      "targetLang": "en",
+      "targetDir": "docs/en"
+    }
+  ],
+  "ai": {
+    "provider": "default",
+    "model": "gpt-4.1"
+  },
+  "sync": {
+    "autoMarkerLevel": 3,
+    "autoDelete": true
+  },
+  "trans": {
+    "markdown": {
+      "skipCodeBlocks": true
+    }
+  },
+  "terms": {
+    "filename": "terms.csv",
+    "primaryLang": "en"
+  }
+}

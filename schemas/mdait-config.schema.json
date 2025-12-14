@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mochimochiki/mdait/schemas/mdait-config.schema.json",
+  "title": "mdait Configuration",
+  "description": "Configuration file for mdait (Markdown AI Translator)",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE support"
+    },
+    "transPairs": {
+      "type": "array",
+      "description": "Translation pairs configuration. Define source and target directories for translation.",
+      "items": {
+        "type": "object",
+        "required": ["sourceLang", "sourceDir", "targetLang", "targetDir"],
+        "properties": {
+          "sourceLang": {
+            "type": "string",
+            "description": "Source language code (e.g., 'ja', 'en')",
+            "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+            "examples": ["ja", "en", "de", "fr", "zh-CN"]
+          },
+          "sourceDir": {
+            "type": "string",
+            "description": "Path to the directory containing source language documents (relative to workspace root)",
+            "examples": ["docs/ja", "content/en"]
+          },
+          "targetLang": {
+            "type": "string",
+            "description": "Target language code (e.g., 'en', 'ja')",
+            "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+            "examples": ["ja", "en", "de", "fr", "zh-CN"]
+          },
+          "targetDir": {
+            "type": "string",
+            "description": "Path to the directory to store target language documents (relative to workspace root)",
+            "examples": ["docs/en", "content/ja"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "ignoredPatterns": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Glob pattern for files and directories to exclude from translation and sync processing"
+        },
+        {
+          "type": "array",
+          "description": "List of glob patterns for files and directories to exclude",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "default": "**/node_modules/**",
+      "examples": ["**/node_modules/**", ["**/node_modules/**", "**/.git/**", "**/dist/**"]]
+    },
+    "sync": {
+      "type": "object",
+      "description": "Synchronization settings",
+      "properties": {
+        "autoMarkerLevel": {
+          "type": "integer",
+          "description": "Heading level at which to automatically insert mdait markers (1-6, or 0 to disable). Can be overridden in frontmatter.",
+          "minimum": 0,
+          "maximum": 6,
+          "default": 2
+        },
+        "autoDelete": {
+          "type": "boolean",
+          "description": "Automatically delete units on target side when deleted on source side during sync",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ai": {
+      "type": "object",
+      "description": "AI provider configuration for translation and term processing",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "AI provider to use for translation",
+          "enum": ["default", "vscode-lm", "ollama"],
+          "default": "default"
+        },
+        "model": {
+          "type": "string",
+          "description": "AI model name to use with the selected provider",
+          "default": "gpt-4o",
+          "examples": ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "claude-3-5-sonnet"]
+        },
+        "ollama": {
+          "type": "object",
+          "description": "Ollama-specific settings (when provider is 'ollama')",
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "description": "Ollama server endpoint URL",
+              "format": "uri",
+              "default": "http://localhost:11434",
+              "examples": ["http://localhost:11434", "http://ollama-server:11434"]
+            },
+            "model": {
+              "type": "string",
+              "description": "Ollama model name to use",
+              "default": "llama2",
+              "examples": ["llama2", "llama3", "mistral", "codellama"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "debug": {
+          "type": "object",
+          "description": "Debug settings for AI communication",
+          "properties": {
+            "enableStatsLogging": {
+              "type": "boolean",
+              "description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes",
+              "default": false
+            },
+            "logPromptAndResponse": {
+              "type": "boolean",
+              "description": "Enable detailed AI logging including prompts and responses to .mdait/logs/ai-detailed.log (warning: may contain sensitive data)",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "trans": {
+      "type": "object",
+      "description": "Translation settings",
+      "properties": {
+        "markdown": {
+          "type": "object",
+          "description": "Markdown-specific translation settings",
+          "properties": {
+            "skipCodeBlocks": {
+              "type": "boolean",
+              "description": "Whether to exclude code blocks from translation targets when translating markdown",
+              "default": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "terms": {
+      "type": "object",
+      "description": "Glossary/terminology settings",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Glossary filename (supports .csv and .yaml formats)",
+          "default": "terms.csv",
+          "pattern": "^[^/\\\\]+\\.(csv|ya?ml)$",
+          "examples": ["terms.csv", "glossary.yaml", "terminology.yml"]
+        },
+        "primaryLang": {
+          "type": "string",
+          "description": "Primary language code for glossary management",
+          "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+          "examples": ["en", "ja", "de"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["transPairs"],
+  "additionalProperties": false
+}

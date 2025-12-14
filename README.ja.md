@@ -22,15 +22,21 @@
 
 ### 1. 翻訳ペアの設定
 
-ワークスペースルートに`mdait.yaml`ファイルを作成し、翻訳ディレクトリを設定してください：
+ワークスペースルートに`mdait.json`ファイルを作成し、翻訳ディレクトリを設定してください：
 
-```yaml
-# mdait.yaml
-transPairs:
-  - sourceDir: docs/ja
-    targetDir: docs/en
-    sourceLang: ja
-    targetLang: en
+```json
+// mdait.json
+{
+  "$schema": "./schemas/mdait-config.schema.json",
+  "transPairs": [
+    {
+      "sourceDir": "docs/ja",
+      "targetDir": "docs/en",
+      "sourceLang": "ja",
+      "targetLang": "en"
+    }
+  ]
+}
 ```
 
 ### 2. ドキュメントの初期化
@@ -51,35 +57,49 @@ transPairs:
 ## ⚙️ 設定
 
 ### 翻訳ペア
-```yaml
-# mdait.yaml
-transPairs:
-  - sourceDir: content/ja    # ソース言語ディレクトリ
-    targetDir: content/en    # ターゲット言語ディレクトリ
-    sourceLang: ja
-    targetLang: en
+```json
+// mdait.json
+{
+  "transPairs": [
+    {
+      "sourceDir": "content/ja",
+      "targetDir": "content/en",
+      "sourceLang": "ja",
+      "targetLang": "en"
+    }
+  ]
+}
 ```
 
 ### AIプロバイダー設定
-```yaml
-# mdait.yaml
-ai:
-  provider: default              # VS Code LM APIを使用
-  model: gpt-4o
-  ollama:
-    endpoint: http://localhost:11434  # OllamaサーバーURL
-    model: gemma3                     # Ollamaモデル名
+```json
+// mdait.json
+{
+  "ai": {
+    "provider": "default",
+    "model": "gpt-4o",
+    "ollama": {
+      "endpoint": "http://localhost:11434",
+      "model": "gemma3"
+    }
+  }
+}
 ```
 
 ### 処理オプション
-```yaml
-# mdait.yaml
-ignoredPatterns: "**/node_modules/**,**/.git/**"  # 除外パターン
-sync:
-  autoDelete: true                  # 孤立ユニットの自動削除
-trans:
-  markdown:
-    skipCodeBlocks: true            # 翻訳時のコードブロック除外
+```json
+// mdait.json
+{
+  "ignoredPatterns": ["**/node_modules/**", "**/.git/**"],
+  "sync": {
+    "autoDelete": true
+  },
+  "trans": {
+    "markdown": {
+      "skipCodeBlocks": true
+    }
+  }
+}
 ```
 
 ## 🔧 AIプロバイダーセットアップ
@@ -91,12 +111,16 @@ mdaitはVS Codeの内蔵言語モデル機能を使用します。実際のモ�
 1. [Ollama](https://ollama.ai/)をインストール
 2. Ollamaサーバーを起動：`ollama serve`
 3. モデルをプル：`ollama pull gemma3`
-4. `mdait.yaml`でOllamaプロバイダーを設定：
-   ```yaml
-   ai:
-     provider: ollama
-     ollama:
-       model: gemma3
+4. `mdait.json`でOllamaプロバイダーを設定：
+   ```json
+   {
+     "ai": {
+       "provider": "ollama",
+       "ollama": {
+         "model": "gemma3"
+       }
+     }
+   }
    ```
 
 ## 🛠️ 開発

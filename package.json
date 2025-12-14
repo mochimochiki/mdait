@@ -92,6 +92,12 @@
         "title": "%mdait.status.openTerm.title%",
         "icon": "$(repo)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.setup.createConfig",
+        "title": "%mdait.setup.createConfig.title%",
+        "icon": "$(gear)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -112,26 +118,33 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "mdait.status",
+        "contents": "%mdait.welcome.message%",
+        "when": "workspaceFolderCount != 0 && !mdaitConfigured"
+      }
+    ],
     "menus": {
       "view/title": [
         {
           "command": "mdait.status.selectTargets",
-          "when": "view == mdait.status",
+          "when": "view == mdait.status && mdaitConfigured",
           "group": "navigation@-1"
         },
         {
           "command": "mdait.status.sync",
-          "when": "view == mdait.status && !mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.sync.processing",
-          "when": "view == mdait.status && mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.openTerm",
-          "when": "view == mdait.status",
+          "when": "view == mdait.status && mdaitConfigured",
           "group": "navigation"
         }
       ],
@@ -167,7 +180,13 @@
           "group": "inline@2"
         }
       ]
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "mdait.json",
+        "url": "./schemas/mdait-config.schema.json"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",

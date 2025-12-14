@@ -1,4 +1,11 @@
 {
+  "No workspace folder is open.": "No workspace folder is open.",
+  "mdait.json already exists. Do you want to open it?": "mdait.json already exists. Do you want to open it?",
+  "Open": "Open",
+  "Cancel": "Cancel",
+  "Template file not found in extension. Please reinstall the extension.": "Template file not found in extension. Please reinstall the extension.",
+  "Created mdait.json. Please configure your translation settings.": "Created mdait.json. Please configure your translation settings.",
+  "Failed to create mdait.json: {0}": "Failed to create mdait.json: {0}",
   "Failed to sync and refresh: {0}": "Failed to sync and refresh: {0}",
   "Failed to jump to unit: {0}": "Failed to jump to unit: {0}",
   "Glossary file does not exist: {0}": "Glossary file does not exist: {0}",

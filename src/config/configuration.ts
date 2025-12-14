@@ -1,7 +1,6 @@
-import * as vscode from "vscode";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { parse as parseYaml } from "yaml";
+import * as vscode from "vscode";
 
 /**
  * AI設定の型定義
@@ -96,7 +95,7 @@ export class Configuration {
 	 * sync設定
 	 */
 	public sync = {
-		autoMarkerLevel: 2,
+		autoMarkerLevel: 3,
 		autoDelete: true,
 	};
 	/**
@@ -168,7 +167,23 @@ export class Configuration {
 		if (!workspaceRoot) {
 			return undefined;
 		}
-		return path.join(workspaceRoot, "mdait.yaml");
+		return path.join(workspaceRoot, "mdait.json");
+	}
+
+	/**
+	 * mdait.jsonが存在し、設定が有効かどうかをチェックする
+	 * @returns true: 設定済み、false: 未設定または無効
+	 */
+	public isConfigured(): boolean {
+		const configPath = this.getConfigFilePath();
+		if (!configPath) {
+			return false;
+		}
+		if (!fs.existsSync(configPath)) {
+			return false;
+		}
+		// transPairsが有効に設定されているか
+		return this.transPairs.length > 0;
 	}
 
 	/**
@@ -229,9 +244,9 @@ export class Configuration {
 		}
 
 		try {
-			// YAMLファイルを読み込む
+			// JSONファイルを読み込む
 			const fileContent = fs.readFileSync(this.configFilePath, "utf8");
-			const config = parseYaml(fileContent) as MdaitConfig;
+			const config = JSON.parse(fileContent) as MdaitConfig;
 
 			if (!config || typeof config !== "object") {
 				throw new Error("Invalid configuration file format");

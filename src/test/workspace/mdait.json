@@ -1,0 +1,36 @@
+{
+  "transPairs": [
+    {
+      "sourceLang": "ja",
+      "sourceDir": "docs/ja",
+      "targetLang": "en",
+      "targetDir": "docs/en"
+    }
+  ],
+  "ignoredPatterns": "**/node_modules/**",
+  "sync": {
+    "autoMarkerLevel": 3,
+    "autoDelete": true
+  },
+  "ai": {
+    "provider": "default",
+    "model": "gpt-4.1",
+    "ollama": {
+      "endpoint": "http://localhost:11434",
+      "model": "llama2"
+    },
+    "debug": {
+      "enableStatsLogging": false,
+      "logPromptAndResponse": false
+    }
+  },
+  "trans": {
+    "markdown": {
+      "skipCodeBlocks": true
+    }
+  },
+  "terms": {
+    "filename": "terms.csv",
+    "primaryLang": "en"
+  }
+}

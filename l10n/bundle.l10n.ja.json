@@ -1,4 +1,11 @@
 {
+  "No workspace folder is open.": "ワークスペースフォルダが開かれていません。",
+  "mdait.json already exists. Do you want to open it?": "mdait.jsonは既に存在します。開きますか？",
+  "Open": "開く",
+  "Cancel": "キャンセル",
+  "Template file not found in extension. Please reinstall the extension.": "拡張機能のテンプレートファイルが見つかりません。拡張機能を再インストールしてください。",
+  "Created mdait.json. Please configure your translation settings.": "mdait.jsonを作成しました。翻訳設定を構成してください。",
+  "Failed to create mdait.json: {0}": "mdait.jsonの作成に失敗しました: {0}",
   "Workspace is not opened": "ワークスペースが開かれていません",
   "Source directory does not exist: {0}": "ソースディレクトリが存在しません: {0}",
   "Glossary file does not exist: {0}": "用語集ファイルが存在しません: {0}",

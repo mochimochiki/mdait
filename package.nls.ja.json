@@ -5,6 +5,8 @@
   "mdait.status.selectTargets.title": "対象言語を選択",
   "mdait.status.sync.title": "同期",
   "mdait.status.openTerm.title": "用語集を開く",
+  "mdait.setup.createConfig.title": "設定ファイルを作成",
+  "mdait.welcome.message": "mdaitはまだ設定されていません。\n\n設定ファイルを作成して開始してください。\n\n[$(gear) mdait.jsonを作成](command:mdait.setup.createConfig)",
   "mdait.translate.directory.title": "✨ ディレクトリを翻訳",
   "mdait.translate.file.title": "✨ ファイルを翻訳",
   "mdait.translate.unit.title": "✨ ユニットを翻訳",

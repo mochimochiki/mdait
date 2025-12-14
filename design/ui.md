@@ -7,7 +7,8 @@
 
 ## 主要コンポーネント
 
-- **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。部分更新イベントに対応して最小限のDOM更新を行う。
+- **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。部分更新イベントに対応して最小限のDOM更新を行う。`Configuration.isConfigured()`がfalseの場合は空配列を返し、リソース消費を抑制する。
+- **Welcome View**: `mdait.yaml`未設定時に表示される初期設定ガイド。`viewsWelcome`でギアアイコンCTAを表示し、`mdait.setup.createConfig`コマンドにリンク。`mdaitConfigured`コンテキスト変数で表示を制御。
 - **Command Entry Points**: コマンドパレット、ツリービューのコンテキストメニュー、コード上のCodeLensからコマンド層を呼び出す。対象ファイルや言語を引数として構築する。
 - **Progress Reporter**: sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理する。
 - **TranslationSummaryHoverProvider**: mdaitマーカー行にホバーしたときに翻訳サマリ(処理時間・トークン数・用語候補・警告)を表示する。`SummaryManager`からユニットハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示。
@@ -62,6 +63,11 @@ sequenceDiagram
 - needフラグ別に色とアイコンを固定し、どの画面でも同じ記号で意味が伝わるようにする。
 - 進捗表示はファイル単位で「翻訳済み/要翻訳/エラー」の数値を表示し、折りたたみ表示でも情報が埋もれないよう簡潔にする。
 - l10nシステム(`/l10n`配下)で文言を管理し、日本語/英語を等価に提供する。
+
+## コンテキスト変数
+
+- **mdaitConfigured**: `Configuration.isConfigured()`の結果に基づき、設定完了状態を示す。`true`の場合はツールバーボタン（sync/filter/glossary）を表示し、`false`の場合はWelcome Viewを表示。
+- activation時と設定変更(`Configuration.onConfigurationChanged`)時に更新され、UI全体の表示状態を制御。
 
 ## 関連
 

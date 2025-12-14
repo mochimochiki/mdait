@@ -7,5 +7,3 @@ src/test/workspace/content
 src/test/workspace/.mdait/index.json
 src/test/workspace/.mdait/terms.csv
 src/test/workspace/.mdait/logs/*
-# User-specific configuration (keep mdait.yaml.example versioned)
-/mdait.yaml

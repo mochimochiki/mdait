@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -21,18 +22,22 @@ import { FileExplorer } from "./utils/file-explorer";
 
 export async function activate(context: vscode.ExtensionContext) {
 	// Configuration の初期化
+	const config = Configuration.getInstance();
+	let configInitialized = false;
+
 	try {
-		await Configuration.getInstance().initialize();
+		await config.initialize();
+		configInitialized = true;
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Failed to load mdait.yaml configuration: {0}", (error as Error).message),
-		);
-		return;
+		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
+		console.log("mdait: Configuration not loaded:", (error as Error).message);
 	}
+
+	// mdaitConfiguredコンテキスト変数を初期化
+	await updateConfiguredContext(config);
 
 	// StatusManagerの初期化
 	const statusManager = StatusManager.getInstance();
-	const config = Configuration.getInstance();
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
@@ -53,10 +58,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		statusTreeProvider.refresh();
 	});
 
-	// 設定変更で transPairs が変わった場合の補正
+	// 設定変更で transPairs が変わった場合の補正とコンテキスト変数更新
 	config.onConfigurationChanged(() => {
 		selectionState.reconcileWith(config.transPairs);
+		updateConfiguredContext(config);
+		statusTreeProvider.refresh();
 	});
+
+	// setup.createConfig command
+	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>
+		createConfigCommand(context),
+	);
 
 	// sync command
 	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
@@ -253,6 +265,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// 初回データ読み込み
 	context.subscriptions.push(
+		createConfigDisposable,
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,
@@ -284,4 +297,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push({
 		dispose: () => summaryDecorator.dispose(),
 	});
+}
+
+/**
+ * mdaitConfiguredコンテキスト変数を更新する
+ */
+async function updateConfiguredContext(config: Configuration): Promise<void> {
+	const isConfigured = config.isConfigured();
+	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
 }

@@ -23,15 +23,21 @@
 
 ### 1. Configure Translation Pairs
 
-Create a `mdait.yaml` file in the workspace root and configure your translation directories:
+Create a `mdait.json` file in the workspace root and configure your translation directories:
 
-```yaml
-# mdait.yaml
-transPairs:
-  - sourceDir: docs/ja
-    targetDir: docs/en
-    sourceLang: ja
-    targetLang: en
+```json
+// mdait.json
+{
+  "$schema": "./schemas/mdait-config.schema.json",
+  "transPairs": [
+    {
+      "sourceDir": "docs/ja",
+      "targetDir": "docs/en",
+      "sourceLang": "ja",
+      "targetLang": "en"
+    }
+  ]
+}
 ```
 
 ### 2. Initialize Your Documents
@@ -52,35 +58,49 @@ transPairs:
 ## ⚙️ Configuration
 
 ### Translation Pairs
-```yaml
-# mdait.yaml
-transPairs:
-  - sourceDir: content/ja    # Source language directory
-    targetDir: content/en    # Target language directory
-    sourceLang: ja
-    targetLang: en
+```json
+// mdait.json
+{
+  "transPairs": [
+    {
+      "sourceDir": "content/ja",
+      "targetDir": "content/en",
+      "sourceLang": "ja",
+      "targetLang": "en"
+    }
+  ]
+}
 ```
 
 ### AI Provider Settings
-```yaml
-# mdait.yaml
-ai:
-  provider: default              # Use VS Code LM API
-  model: gpt-4o
-  ollama:
-    endpoint: http://localhost:11434  # Ollama server URL
-    model: gemma3                     # Ollama model name
+```json
+// mdait.json
+{
+  "ai": {
+    "provider": "default",
+    "model": "gpt-4o",
+    "ollama": {
+      "endpoint": "http://localhost:11434",
+      "model": "gemma3"
+    }
+  }
+}
 ```
 
 ### Processing Options
-```yaml
-# mdait.yaml
-ignoredPatterns: "**/node_modules/**,**/.git/**"  # Exclude patterns
-sync:
-  autoDelete: true                  # Auto-delete orphaned units
-trans:
-  markdown:
-    skipCodeBlocks: true            # Skip code blocks in translation
+```json
+// mdait.json
+{
+  "ignoredPatterns": ["**/node_modules/**", "**/.git/**"],
+  "sync": {
+    "autoDelete": true
+  },
+  "trans": {
+    "markdown": {
+      "skipCodeBlocks": true
+    }
+  }
+}
 ```
 
 ## 🔧 AI Provider Setup
@@ -92,12 +112,16 @@ mdait uses VS Code's built-in language model capabilities. Note that actual mode
 1. Install [Ollama](https://ollama.ai/)
 2. Start Ollama server: `ollama serve`
 3. Pull a model: `ollama pull gemma3`
-4. Configure mdait to use Ollama in `mdait.yaml`:
-   ```yaml
-   ai:
-     provider: ollama
-     ollama:
-       model: gemma3
+4. Configure mdait to use Ollama in `mdait.json`:
+   ```json
+   {
+     "ai": {
+       "provider": "ollama",
+       "ollama": {
+         "model": "gemma3"
+       }
+     }
+   }
    ```
 
 ## 🛠️ Development
