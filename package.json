@@ -82,6 +82,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.status.sync.initial",
+        "title": "%mdait.status.sync.initial.title%",
+        "icon": "$(sync)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.status.sync.processing",
         "title": "%mdait.status.sync.title%",
         "icon": "$(sync~spin)",
@@ -129,22 +135,27 @@
       "view/title": [
         {
           "command": "mdait.status.selectTargets",
-          "when": "view == mdait.status && mdaitConfigured",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "navigation@-1"
         },
         {
+          "command": "mdait.status.sync.initial",
+          "when": "view == mdait.status && mdaitConfigured && !mdaitHasStatus",
+          "group": "navigation"
+        },
+        {
           "command": "mdait.status.sync",
-          "when": "view == mdait.status && mdaitConfigured && !mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.sync.processing",
-          "when": "view == mdait.status && mdaitConfigured && mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && mdaitSyncProcessing",
           "group": "navigation"
         },
         {
           "command": "mdait.status.openTerm",
-          "when": "view == mdait.status && mdaitConfigured",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "navigation"
         }
       ],

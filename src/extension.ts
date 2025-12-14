@@ -39,6 +39,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// StatusManagerの初期化
 	const statusManager = StatusManager.getInstance();
 
+	// mdaitHasStatusコンテキスト変数を初期化
+	await updateHasStatusContext(statusManager);
+
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
 	const treeView = vscode.window.createTreeView("mdait.status", {
@@ -62,7 +65,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	config.onConfigurationChanged(() => {
 		selectionState.reconcileWith(config.transPairs);
 		updateConfiguredContext(config);
+		updateHasStatusContext(statusManager);
 		statusTreeProvider.refresh();
+	});
+
+	// ステータスツリー変更時にmdaitHasStatusを更新
+	statusManager.onStatusTreeChanged(() => {
+		updateHasStatusContext(statusManager);
 	});
 
 	// setup.createConfig command
@@ -168,7 +177,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		context.subscriptions,
 	);
 
-	// status.refresh command
+	// status.sync.initial command（初回同期）
+	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", async () => {
+		try {
+			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
+			await syncCommand();
+			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
+			await statusManager.buildStatusItemTree();
+		} catch (error) {
+			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
+		} finally {
+			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
+		}
+	});
+
+	// status.sync command（通常同期）
 	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", async () => {
 		try {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
@@ -236,6 +259,18 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			const filePath = document.uri.fsPath;
+
+			// mdait.jsonの保存を検知して設定を再読み込み
+			if (filePath.toLowerCase().endsWith("mdait.json")) {
+				try {
+					await config.initialize();
+					console.log("mdait: Configuration reloaded after mdait.json save");
+				} catch (error) {
+					console.error("mdait: Failed to reload configuration:", error);
+				}
+				return;
+			}
+
 			if (!filePath.toLowerCase().endsWith(".md")) {
 				return;
 			}
@@ -284,6 +319,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateUnitDisposable,
 		saveDisposable,
 		treeView,
+		syncStatusInitialDisposable,
 		syncStatusDisposable,
 		openTermStatusDisposable,
 		jumpToUnitDisposable,
@@ -305,4 +341,12 @@ export async function activate(context: vscode.ExtensionContext) {
 async function updateConfiguredContext(config: Configuration): Promise<void> {
 	const isConfigured = config.isConfigured();
 	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+}
+
+/**
+ * mdaitHasStatusコンテキスト変数を更新する
+ */
+async function updateHasStatusContext(statusManager: StatusManager): Promise<void> {
+	const hasStatus = !statusManager.getStatusItemTree().isEmpty();
+	await vscode.commands.executeCommand("setContext", "mdaitHasStatus", hasStatus);
 }

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { Configuration } from "../../config/configuration";
 
 /**
  * mdait.json設定ファイルのテンプレートを作成するコマンド
@@ -51,6 +52,17 @@ export async function createConfigCommand(context: vscode.ExtensionContext): Pro
 		// 作成したファイルをエディタで開く
 		const document = await vscode.workspace.openTextDocument(configPath);
 		await vscode.window.showTextDocument(document);
+
+		// Configurationインスタンスを再初期化して設定を読み込む
+		try {
+			await Configuration.getInstance().initialize();
+		} catch (error) {
+			// 初期化に失敗してもエラーは表示しない（ユーザーがまだ編集中の可能性があるため）
+			console.log("mdait: Configuration initialization deferred:", (error as Error).message);
+		}
+
+		// コンテキスト変数を更新（設定ファイルが作成されたことを通知）
+		await vscode.commands.executeCommand("setContext", "mdaitConfigured", true);
 
 		// 成功メッセージを表示
 		vscode.window.showInformationMessage(

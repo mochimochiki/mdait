@@ -21,6 +21,14 @@ export class StatusItemTree {
 	// ========== 取得 ==========
 
 	/**
+	 * ステータスツリーが空かどうかを判定
+	 * @returns true: ファイルが1つも登録されていない、false: 1つ以上登録されている
+	 */
+	public isEmpty(): boolean {
+		return this.fileItemMap.size === 0;
+	}
+
+	/**
 	 * ファイルStatusItemを取得
 	 */
 	public getFile(filePath: string): StatusItem | undefined {

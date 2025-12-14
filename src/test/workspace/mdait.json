@@ -2,35 +2,16 @@
   "transPairs": [
     {
       "sourceLang": "ja",
-      "sourceDir": "docs/ja",
+      "sourceDir": "content/ja",
       "targetLang": "en",
-      "targetDir": "docs/en"
+      "targetDir": "content/en"
     }
   ],
-  "ignoredPatterns": "**/node_modules/**",
-  "sync": {
-    "autoMarkerLevel": 3,
-    "autoDelete": true
-  },
   "ai": {
-    "provider": "default",
-    "model": "gpt-4.1",
-    "ollama": {
-      "endpoint": "http://localhost:11434",
-      "model": "llama2"
-    },
-    "debug": {
-      "enableStatsLogging": false,
-      "logPromptAndResponse": false
-    }
+    "provider": "vscode-lm",
+    "model": "gpt-4.1"
   },
-  "trans": {
-    "markdown": {
-      "skipCodeBlocks": true
-    }
-  },
-  "terms": {
-    "filename": "terms.csv",
-    "primaryLang": "en"
+  "sync": {
+    "autoMarkerLevel": 3
   }
 }

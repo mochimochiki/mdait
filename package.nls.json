@@ -4,6 +4,7 @@
   "mdait.trans.title": "mdait: Translate",
   "mdait.status.selectTargets.title": "Select Targets",
   "mdait.status.sync.title": "Sync",
+  "mdait.status.sync.initial.title": "Initial Sync",
   "mdait.status.openTerm.title": "Open Glossary",
   "mdait.setup.createConfig.title": "Create Configuration File",
   "mdait.welcome.message": "mdait is not configured yet.\n\nCreate a configuration file to get started.\n\n[$(gear) Create mdait.json](command:mdait.setup.createConfig)",
