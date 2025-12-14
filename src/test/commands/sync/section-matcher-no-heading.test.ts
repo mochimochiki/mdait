@@ -26,4 +26,21 @@ suite("SectionMatcher（見出し無しユニット）", () => {
 		assert.ok(matched[0].target);
 		assert.strictEqual(matched[0].target?.getSourceHash(), sourceHash);
 	});
+
+	test("ハッシュが空のマーカーを持つユニットでもマッチング可能であること", () => {
+		// 手動で<!-- mdait -->を追加した場合（ハッシュが空）
+		const sourceContent = "手動で追加した本文\n";
+		const sourceUnits = [new MdaitUnit(new MdaitMarker(""), "", 0, sourceContent, 0, 0)];
+
+		// target側は未作成
+		const targetUnits: MdaitUnit[] = [];
+
+		const matcher = new SectionMatcher();
+		const matched = matcher.match(sourceUnits, targetUnits);
+
+		// 新規ユニットとして扱われる
+		assert.strictEqual(matched.length, 1);
+		assert.ok(matched[0].source);
+		assert.strictEqual(matched[0].target, null);
+	});
 });

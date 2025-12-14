@@ -89,15 +89,16 @@ export class MarkdownItParser implements IMarkdownParser {
 	/**
 	 * 第1パス: 境界トークンを収集
 	 * mdaitMarkerと指定レベル以上の見出しを境界として抽出する
-	 * マーカーの直後に見出しがある場合は、マーカーを見出しに統合する
+	 * マーカーの直後に見出しがある場合は、レベルに関係なくマーカーを見出しに統合する
 	 * @param tokens markdown-itのトークン配列
-	 * @param mdaitMarkerLevel 検知する見出しレベル
+	 * @param mdaitMarkerLevel 検知する見出しレベル（境界として扱うレベル）
 	 * @returns ソート済みの境界配列
 	 */
 	private collectBoundaries(tokens: MarkdownIt.Token[], mdaitMarkerLevel: number): UnitBoundary[] {
 		const boundaries: UnitBoundary[] = [];
 		const markers: Map<number, MdaitMarker> = new Map(); // 行番号 -> マーカー
 		const headings: Map<number, { level: number; title: string }> = new Map(); // 行番号 -> 見出し
+		const allHeadings: Map<number, { level: number; title: string }> = new Map(); // 全ての見出し（レベル制限なし）
 
 		let inHeading = false;
 		let currentHeadingLevel = 0;
@@ -125,8 +126,7 @@ export class MarkdownItParser implements IMarkdownParser {
 			// 見出し開始検出
 			if (token.type === "heading_open") {
 				const headingLevel = Number.parseInt(token.tag.substring(1), 10);
-				// 指定レベル以下の見出しのみ境界として扱う
-				if (headingLevel <= mdaitMarkerLevel && token.map) {
+				if (token.map) {
 					inHeading = true;
 					currentHeadingLevel = headingLevel;
 					currentHeadingLine = token.map[0];
@@ -143,10 +143,16 @@ export class MarkdownItParser implements IMarkdownParser {
 
 			// 見出し終了検出
 			if (token.type === "heading_close" && inHeading) {
-				headings.set(currentHeadingLine, {
+				const headingInfo = {
 					level: currentHeadingLevel,
 					title: currentHeadingTitle,
-				});
+				};
+				// 全ての見出しを記録
+				allHeadings.set(currentHeadingLine, headingInfo);
+				// 指定レベル以下の見出しのみ境界として記録
+				if (currentHeadingLevel <= mdaitMarkerLevel) {
+					headings.set(currentHeadingLine, headingInfo);
+				}
 				inHeading = false;
 			}
 		}
@@ -159,14 +165,18 @@ export class MarkdownItParser implements IMarkdownParser {
 			// マーカーの終了行を取得（markdown-itのMapは[start, nextStart]形式なので-1不要）
 			const markerNextLine = markerEndLines.get(markerLine) ?? markerLine + 1;
 
-			// マーカーの直後（空行なし）に見出しがあるか確認
+			// マーカーの直後に見出しがあるか確認（レベルに関係なく全ての見出しをチェック）
 			let foundHeading: { line: number; heading: { level: number; title: string } } | null = null;
 
 			// マーカーの次の行のみチェック（空行を挟まない場合のみ統合）
 			const checkLine = markerNextLine;
-			const heading = headings.get(checkLine);
+			const heading = allHeadings.get(checkLine);
 			if (heading) {
 				foundHeading = { line: checkLine, heading };
+				// 境界として扱うべき見出しの場合は記録
+				if (headings.has(checkLine)) {
+					processedHeadings.add(checkLine);
+				}
 			}
 
 			if (foundHeading) {
@@ -176,7 +186,6 @@ export class MarkdownItParser implements IMarkdownParser {
 					marker: marker,
 					heading: foundHeading.heading,
 				});
-				processedHeadings.add(foundHeading.line);
 			} else {
 				// マーカーのみ（見出しが後続しない）
 				boundaries.push({
@@ -231,11 +240,12 @@ export class MarkdownItParser implements IMarkdownParser {
 
 			// マーカーと見出し情報を取得（既にcollectBoundariesで統合済み）
 			const marker = boundary.marker ?? new MdaitMarker("");
-			const title = boundary.heading?.title ?? "";
+			let title = boundary.heading?.title ?? "";
 			const level = boundary.heading?.level ?? 0;
 
 			// contentからmdaitマーカーを除去（toString時に再度追加されるため）
-			if (marker.hash) {
+			// マーカーが存在する場合（ハッシュの有無に関わらず）
+			if (boundary.marker) {
 				// マーカーの行を除去（最初の行がマーカーの場合）
 				const contentLines = rawContent.split("\n");
 				if (contentLines[0].includes("<!-- mdait")) {
@@ -245,6 +255,20 @@ export class MarkdownItParser implements IMarkdownParser {
 						contentLines.shift();
 					}
 					rawContent = contentLines.join("\n");
+				}
+			}
+
+			// タイトルが空の場合、次の行からテキストを抽出してタイトルとする
+			if (!title && rawContent) {
+				const contentLines = rawContent.split("\n");
+				// 空行をスキップして最初の非空行を探す
+				for (const line of contentLines) {
+					const trimmedLine = line.trim();
+					if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
+						// 最大50文字までをタイトルとして使用
+						title = trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
+						break;
+					}
 				}
 			}
 

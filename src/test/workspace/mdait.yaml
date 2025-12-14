@@ -24,7 +24,7 @@ sync:
 # AI設定
 ai:
   # AIプロバイダ(default/vscode-lm/ollama)
-  provider: vscode-lm
+  provider: default
   # AI model
   model: gpt-4.1
   # Ollama設定

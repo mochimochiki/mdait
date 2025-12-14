@@ -18,14 +18,20 @@ export class MdaitMarker {
 
 	/**
 	 * MdaitMarkerの正規表現パターン
+	 * ハッシュは省略可能（<!-- mdait --> のみも許容）
 	 */
-	static readonly MARKER_REGEX = /<!-- mdait ([a-zA-Z0-9]+)(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+	static readonly MARKER_REGEX = /<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
 
 	/**
 	 * コメントをMarkdown形式の文字列として出力
 	 */
 	toString(): string {
-		let result = `<!-- mdait ${this.hash}`;
+		let result = "<!-- mdait";
+
+		// ハッシュがある場合のみ出力
+		if (this.hash) {
+			result += ` ${this.hash}`;
+		}
 
 		if (this.from) {
 			result += ` from:${this.from}`;
@@ -52,7 +58,8 @@ export class MdaitMarker {
 			return null;
 		}
 		const [, hash, from, needTag] = match;
-		return new MdaitMarker(hash, from || null, needTag || null);
+		// ハッシュが省略された場合は空文字列とする
+		return new MdaitMarker(hash || "", from || null, needTag || null);
 	}
 
 	/**

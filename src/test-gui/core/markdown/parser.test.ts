@@ -263,8 +263,8 @@ need:translate -->
 		assert.equal(units.length, 2);
 		assert.equal(units[0].title, "見出し1");
 		assert.ok(units[0].content.includes("本文1"));
-		// 2番目のユニットは見出しなしでマーカーを持つべき
-		assert.equal(units[1].title, "");
+		// 2番目のユニットは見出しなしでマーカーを持つべき（次の行からタイトルを抽出）
+		assert.equal(units[1].title, "見出しなしの本文");
 		assert.equal(units[1].marker.hash, "hashXXXX");
 		assert.equal(units[1].marker.from, "srcXXXXX");
 		assert.equal(units[1].marker.need, "translate");
@@ -285,7 +285,7 @@ need:translate -->
 		const units = doc.units;
 		// 見出しなしのユニットと見出し1のユニットの2つができるべき
 		assert.equal(units.length, 2);
-		assert.equal(units[0].title, "");
+		assert.equal(units[0].title, "ファイル先頭の本文");
 		assert.equal(units[0].marker.hash, "hashYYYY");
 		assert.equal(units[0].marker.from, "srcYYYYY");
 		assert.equal(units[0].marker.need, "review");
@@ -309,10 +309,10 @@ need:translate -->
 		const units = doc.units;
 		// 見出しなしのユニット2つと見出し1のユニットの計3つができるべき
 		assert.equal(units.length, 3);
-		assert.equal(units[0].title, "");
+		assert.equal(units[0].title, "最初のブロック");
 		assert.equal(units[0].marker.hash, "hashZZZ1");
 		assert.ok(units[0].content.includes("最初のブロック"));
-		assert.equal(units[1].title, "");
+		assert.equal(units[1].title, "2番目のブロック");
 		assert.equal(units[1].marker.hash, "hashZZZ2");
 		assert.ok(units[1].content.includes("2番目のブロック"));
 		assert.equal(units[2].title, "見出し1");

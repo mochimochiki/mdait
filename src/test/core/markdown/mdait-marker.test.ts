@@ -41,6 +41,10 @@ suite("MdaitHeader", () => {
 		// needTagだけがある場合
 		const header4 = new MdaitMarker(testHash, null, "review");
 		assert.equal(header4.toString(), `<!-- mdait ${testHash} need:review -->`);
+
+		// ハッシュが空文字列の場合
+		const header5 = new MdaitMarker("");
+		assert.equal(header5.toString(), "<!-- mdait -->");
 	});
 	test("parse: 正常なコメント文字列からオブジェクトが生成される", () => {
 		// 全要素を含むコメント
@@ -76,6 +80,16 @@ suite("MdaitHeader", () => {
 		assert.equal(header4.need, "review");
 	});
 
+	test("parse: ハッシュが省略されたマーカーは空文字列のハッシュを持つ", () => {
+		// ハッシュが省略された場合
+		const comment = "<!-- mdait -->";
+		const header = MdaitMarker.parse(comment);
+		assert.ok(header);
+		assert.equal(header.hash, "");
+		assert.equal(header.from, null);
+		assert.equal(header.need, null);
+	});
+
 	test("parse: 不正なフォーマットの文字列からはnullが返される", () => {
 		// 完全に異なるコメント
 		assert.equal(MdaitMarker.parse("<!-- 通常のコメント -->"), null);
@@ -83,8 +97,8 @@ suite("MdaitHeader", () => {
 		// 空文字列
 		assert.equal(MdaitMarker.parse(""), null);
 
-		// mdaitの後に正しいハッシュ形式がない
-		assert.equal(MdaitMarker.parse("<!-- mdait -->"), null);
+		// mdait以外の単語
+		assert.equal(MdaitMarker.parse("<!-- other -->"), null);
 	});
 
 	test("updateHash: ハッシュ値が正しく更新される", () => {

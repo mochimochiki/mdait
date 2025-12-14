@@ -79,4 +79,92 @@ suite("MarkdownParser（見出し無しマーカー）", () => {
 		assert.match(parsed.units[2].content, /見出し無し本文B/);
 		assert.match(parsed.units[3].content, /## 見出し1/);
 	});
+
+	test("ハッシュが省略されたマーカーでも境界としてパースされること", () => {
+		const md = `# 見出し0
+
+本文0
+
+<!-- mdait -->
+
+手動で追加したユニット
+
+## 見出し1
+
+本文1
+`;
+
+		const parsed = markdownParser.parse(md, testConfig);
+
+		// 見出し0 / 手動追加ユニット / 見出し1 の3ユニット
+		assert.strictEqual(parsed.units.length, 3);
+		assert.match(parsed.units[0].content, /# 見出し0/);
+		// ハッシュは空文字列
+		assert.strictEqual(parsed.units[1].marker.hash, "");
+		assert.match(parsed.units[1].content, /手動で追加したユニット/);
+		assert.match(parsed.units[2].content, /## 見出し1/);
+	});
+
+	test("ハッシュ省略マーカーの後に見出しがある場合でも正しく統合されること", () => {
+		const md = `# 見出し0
+
+本文0
+
+<!-- mdait -->
+## 手動で追加した見出し
+
+本文A
+
+## 見出し1
+
+本文1
+`;
+
+		const parsed = markdownParser.parse(md, testConfig);
+
+		// 見出し0 / 手動追加見出し / 見出し1 の3ユニット
+		assert.strictEqual(parsed.units.length, 3);
+		assert.match(parsed.units[0].content, /# 見出し0/);
+		// マーカーと見出しが統合される
+		assert.strictEqual(parsed.units[1].marker.hash, "");
+		assert.strictEqual(parsed.units[1].title, "手動で追加した見出し");
+		assert.match(parsed.units[1].content, /## 手動で追加した見出し/);
+		assert.match(parsed.units[2].content, /## 見出し1/);
+	});
+
+	test("複数のハッシュ省略マーカーが連続する場合でも正しくパースされること", () => {
+		const md = `# 見出し0
+
+本文0
+
+<!-- mdait -->
+
+ユニットA
+
+<!-- mdait -->
+
+ユニットB
+
+<!-- mdait -->
+
+ユニットC
+
+## 見出し1
+
+本文1
+`;
+
+		const parsed = markdownParser.parse(md, testConfig);
+
+		// 見出し0 / ユニットA / ユニットB / ユニットC / 見出し1 の5ユニット
+		assert.strictEqual(parsed.units.length, 5);
+		assert.match(parsed.units[0].content, /# 見出し0/);
+		assert.strictEqual(parsed.units[1].marker.hash, "");
+		assert.match(parsed.units[1].content, /ユニットA/);
+		assert.strictEqual(parsed.units[2].marker.hash, "");
+		assert.match(parsed.units[2].content, /ユニットB/);
+		assert.strictEqual(parsed.units[3].marker.hash, "");
+		assert.match(parsed.units[3].content, /ユニットC/);
+		assert.match(parsed.units[4].content, /## 見出し1/);
+	});
 });
