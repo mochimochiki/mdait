@@ -248,7 +248,7 @@ async function syncExistingMarkdownFile(
 	const encoder = new TextEncoder();
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
 
-	// source側にもmdaitヘッダー・hashを必ず付与・更新し、ファイル保存
+	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
 	const updatedSourceContent = markdownParser.stringify({
 		frontMatter: source.frontMatter,
 		frontMatterRaw: source.frontMatterRaw,
@@ -261,7 +261,7 @@ async function syncExistingMarkdownFile(
 }
 
 /**
- * ユニットにmdaitヘッダーを付与する
+ * ユニットにmdaitマーカーを付与する
  * @param units ユニットの配列
  */
 function ensureMdaitMarkerHash(units: MdaitUnit[]) {

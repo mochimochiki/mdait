@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 
-suite("MdaitHeader", () => {
+suite("MdaitMarker", () => {
 	// 繰り返し使用する値を定義
 	const testHash = "abcd1234";
 	const testFrom = "efgh5678";

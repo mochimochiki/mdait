@@ -108,7 +108,7 @@ text`;
 		const md = "<!-- mdait abcd from:efgh need:translate -->\n# 見出し\n本文";
 		const doc = markdownParser.parse(md);
 		const units = doc.units;
-		// mdaitHeaderはnullまたは空のhashになる（パース不可）
+		// mdaitMarkerはnullまたは空のhashになる（パース不可）
 		assert.equal(units.length, 1);
 		assert.ok(!units[0].marker || !units[0].marker.hash || units[0].marker.hash.length !== 8);
 	});

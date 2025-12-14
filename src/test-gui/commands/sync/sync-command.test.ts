@@ -61,16 +61,16 @@ suite("syncコマンドE2E", () => {
 			const enText = readFileSync(tmpEnNoHeader, "utf8");
 			const jaText = readFileSync(tmpJaNoHeader, "utf8");
 
-			// 1. en, ja両方にmdaitヘッダーが付与されていること
+			// 1. en, ja両方にmdaitマーカーが付与されていること
 			assert.match(enText, /^<!--\s*mdait [^\s]+/m);
 			assert.match(jaText, /^<!--\s*mdait [^\s]+/m);
-			// 2. enのmdaitヘッダーにjaの対応するヘッダーのハッシュがfrom:として書き込まれていること
+			// 2. enのmdaitマーカーにjaの対応するマーカーのハッシュがfrom:として書き込まれていること
 			const jaHeader = jaText.match(/<!--\s*mdait ([^\s]+)/); // jaのハッシュ
 			const enHeader = enText.match(/<!--\s*mdait ([^\s]+) from:([^\s]+)/); // enのfrom:xxx
 			assert.ok(jaHeader && enHeader);
 			assert.strictEqual(enHeader[2], jaHeader[1]);
 
-			// 3. ユニット分割が行われていること（複数ヘッダーが存在する）
+			// 3. ユニット分割が行われていること（複数マーカーが存在する）
 			const enHeaders = enText.match(/<!--\s*mdait [^\s]+/g) || [];
 			const jaHeaders = jaText.match(/<!--\s*mdait [^\s]+/g) || [];
 			assert.ok(enHeaders.length > 1);

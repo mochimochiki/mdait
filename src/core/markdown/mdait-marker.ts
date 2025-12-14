@@ -46,9 +46,9 @@ export class MdaitMarker {
 	}
 
 	/**
-	 * MdaitMarker文字列からMdaitHeaderを生成
+	 * MdaitMarker文字列からMdaitMarkerを生成
 	 * @param markerText Markdownコメント文字列
-	 * @returns MdaitHeaderオブジェクト、またはパース失敗時はnull
+	 * @returns MdaitMarkerオブジェクト、またはパース失敗時はnull
 	 */
 	static parse(markerText: string): MdaitMarker | null {
 		// コメントテキストをサニタイズ（余分な空白や改行を削除）

@@ -19,23 +19,23 @@ suite("MdaitSection", () => {
 		assert.equal(section.content, testContent);
 	});
 
-	test("toString: mdaitヘッダーありの場合は正しい形式で出力される", () => {
+	test("toString: mdaitマーカーありの場合は正しい形式で出力される", () => {
 		const marker = new MdaitMarker(testHash, testSourceHash, "need");
 		const section = new MdaitUnit(marker, testTitle, 1, testContent);
 
-		// ヘッダー出力 + 改行 + コンテンツの形式になっていることを確認
+		// マーカー出力 + 改行 + コンテンツの形式になっていることを確認
 		const expected = `${marker.toString()}\n${testContent}`;
 		assert.equal(section.toString(), expected);
 	});
 
-	test("toString: mdaitヘッダーがundefinedの場合はコンテンツのみ出力される", () => {
+	test("toString: mdaitマーカーがundefinedの場合はコンテンツのみ出力される", () => {
 		// @ts-ignore - コードの実装に沿ってテストを書くため
 		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
 
 		assert.equal(section.toString(), testContent);
 	});
 
-	test("needsTranslation: ヘッダーがある場合はヘッダーの状態を反映する", () => {
+	test("needsTranslation: マーカーがある場合はマーカーの状態を反映する", () => {
 		// need:translate のケース
 		const markerNeedsTranslation = new MdaitMarker(testHash, testSourceHash, "translate");
 		const sectionNeedsTranslation = new MdaitUnit(markerNeedsTranslation, testTitle, 1, testContent);
@@ -47,25 +47,25 @@ suite("MdaitSection", () => {
 		assert.equal(sectionNoNeed.needsTranslation(), false);
 	});
 
-	test("needsTranslation: ヘッダーがundefinedの場合は常にfalseを返す", () => {
+	test("needsTranslation: マーカーがundefinedの場合は常にfalseを返す", () => {
 		// @ts-ignore - コードの実装に沿ってテストを書くため
 		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
 		assert.equal(section.needsTranslation(), false);
 	});
-	test("getSourceHash: ヘッダーがある場合はfromを返す", () => {
+	test("getSourceHash: マーカーがある場合はfromを返す", () => {
 		const marker = new MdaitMarker(testHash, testSourceHash, "need");
 		const section = new MdaitUnit(marker, testTitle, 1, testContent);
 		assert.equal(section.getSourceHash(), testSourceHash);
 	});
 
-	test("getSourceHash: ヘッダーがundefinedの場合はnullを返す", () => {
+	test("getSourceHash: マーカーがundefinedの場合はnullを返す", () => {
 		// @ts-ignore - コードの実装に沿ってテストを書くため
 		const section = new MdaitUnit(undefined, testTitle, 1, testContent);
 		assert.equal(section.getSourceHash(), null);
 	});
 
 	test("markAsTranslated: 正しくneedタグを削除する", () => {
-		// 事前にneedタグが設定されたヘッダーを用意
+		// 事前にneedタグが設定されたマーカーを用意
 		const header = new MdaitMarker(testHash, testSourceHash, "translate");
 		const section = new MdaitUnit(header, testTitle, 1, testContent);
 
