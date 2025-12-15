@@ -3,6 +3,7 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { transCommand, transCommandInternal, transUnitCommand, transUnitCommandInternal } from "./trans-command";
 
 /**
@@ -38,6 +39,13 @@ export class StatusTreeTranslationHandler {
 
 		if (confirmation !== vscode.l10n.t("Yes")) {
 			return;
+		}
+
+		// AI初回利用チェック
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return; // ユーザーがキャンセルした場合
 		}
 
 		const statusManager = StatusManager.getInstance();
@@ -132,6 +140,13 @@ export class StatusTreeTranslationHandler {
 		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
+		}
+
+		// AI初回利用チェック
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return; // ユーザーがキャンセルした場合
 		}
 
 		const statusManager = StatusManager.getInstance();

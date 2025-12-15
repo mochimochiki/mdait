@@ -12,6 +12,7 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { detectTermBatchInternal } from "./command-detect";
 
@@ -49,6 +50,13 @@ export class StatusTreeTermHandler {
 
 		if (confirmation !== vscode.l10n.t("Yes")) {
 			return;
+		}
+
+		// AI初回利用チェック
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return; // ユーザーがキャンセルした場合
 		}
 
 		// 設定とファイル探索ユーティリティ
@@ -156,6 +164,13 @@ export class StatusTreeTermHandler {
 		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
+		}
+
+		// AI初回利用チェック
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return; // ユーザーがキャンセルした場合
 		}
 
 		// 設定とファイル探索ユーティリティ
