@@ -115,6 +115,8 @@
   "e.g., Application settings": "例: アプリケーション設定",
   "Unsupported glossary file format. Use .yaml or .csv": "サポートされていない用語集ファイル形式です。.yaml または .csv を使用してください",
   "Term added to glossary: \"{0}\" → \"{1}\"": "用語集に追加しました: \"{0}\" → \"{1}\"",
-  "Failed to add term to glossary: {0}": "用語集への追加に失敗しました: {0}"
+  "Failed to add term to glossary: {0}": "用語集への追加に失敗しました: {0}",
+  "This command uses AI to process your content.\n\nAI Usage:\n• Translation: AI translates your Markdown documents\n• Term Detection: AI identifies important terms from your content\n• Term Expansion: AI translates detected terms to other languages\n\nStatistics logging is enabled by default to help you monitor AI usage.\nYou can disable it in mdait.json (ai.debug.enableStatsLogging).\n\nDo you want to proceed?": "このコマンドはAIを使用してコンテンツを処理します。\n\nAIの用途:\n• 翻訳: AIがMarkdownドキュメントを翻訳します\n• 用語検出: AIがコンテンツから重要な用語を識別します\n• 用語展開: AIが検出された用語を他の言語に翻訳します\n\n統計ログはデフォルトで有効になっており、AI使用状況の監視に役立ちます。\nmdait.json (ai.debug.enableStatsLogging) で無効にできます。\n\n続行しますか？",
+  "Proceed": "続行"
 }
 

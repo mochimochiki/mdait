@@ -122,7 +122,7 @@
             "enableStatsLogging": {
               "type": "boolean",
               "description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes",
-              "default": false
+              "default": true
             },
             "logPromptAndResponse": {
               "type": "boolean",

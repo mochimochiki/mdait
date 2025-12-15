@@ -8,6 +8,7 @@ import * as vscode from "vscode";
 
 import { Configuration } from "../../config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
 import { TermsRepository } from "./terms-repository";
@@ -26,6 +27,13 @@ export async function detectTermCommand(units: readonly MdaitUnit[], sourceLang:
 	if (units.length === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 		return;
+	}
+
+	// AI初回利用チェック
+	const aiOnboarding = AIOnboarding.getInstance();
+	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+	if (!shouldProceed) {
+		return; // ユーザーがキャンセルした場合
 	}
 
 	// withProgressで進捗表示とキャンセル機能を提供

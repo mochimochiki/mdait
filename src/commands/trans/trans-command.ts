@@ -21,6 +21,7 @@ import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { SummaryManager } from "../../ui/hover/summary-manager";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
@@ -42,6 +43,13 @@ export async function transCommand(uri?: vscode.Uri) {
 	if (!targetFilePath) {
 		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
+	}
+
+	// AI初回利用チェック
+	const aiOnboarding = AIOnboarding.getInstance();
+	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+	if (!shouldProceed) {
+		return; // ユーザーがキャンセルした場合
 	}
 
 	// withProgressで進捗表示とキャンセル機能を提供
@@ -363,6 +371,13 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
  * @param unitHash 翻訳対象のユニットハッシュ
  */
 export async function transUnitCommand(targetPath: string, unitHash: string) {
+	// AI初回利用チェック
+	const aiOnboarding = AIOnboarding.getInstance();
+	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+	if (!shouldProceed) {
+		return; // ユーザーがキャンセルした場合
+	}
+
 	// withProgressで進捗表示とキャンセル機能を提供
 	await vscode.window.withProgress(
 		{
