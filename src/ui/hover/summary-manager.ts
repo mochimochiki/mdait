@@ -58,6 +58,9 @@ export interface TranslationSummary {
 
 	/** 注意事項や警告メッセージ */
 	warnings?: string[];
+
+	/** レビュー推奨理由（need:reviewが設定された理由） */
+	reviewReasons?: string[];
 }
 
 /**

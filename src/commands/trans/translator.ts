@@ -102,6 +102,7 @@ CRITICAL RULE (HIGHEST PRIORITY):
 Context:
 ${context.surroundingText ? `Surrounding Text (for reference only, do NOT translate unless included in the target text):\n${context.surroundingText}\n` : ""}
 ${context.terms ? `Terminology (preferred translations):\n${context.terms}\n` : ""}
+${context.previousTranslation ? `Previous Translation (for reference - the source text was revised):\n${context.previousTranslation}\n\nIMPORTANT: The source text has been revised. Please refer to the previous translation and:\n- Keep sentences/phrases that don't need to be changed (respect the existing translation)\n- Only modify the parts that need to be updated based on the source text changes\n- Maintain consistency with the unchanged parts of the previous translation\n` : ""}
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
