@@ -11,6 +11,7 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
@@ -46,6 +47,13 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	if (!transPair) {
 		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for target: {0}", targetDir));
 		return;
+	}
+
+	// AI初回利用チェック
+	const aiOnboarding = AIOnboarding.getInstance();
+	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+	if (!shouldProceed) {
+		return; // ユーザーがキャンセルした場合
 	}
 
 	// withProgressで進捗表示とキャンセル機能を提供

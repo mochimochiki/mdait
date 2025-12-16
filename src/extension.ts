@@ -18,6 +18,7 @@ import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
 import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
+import { AIOnboarding } from "./utils/ai-onboarding";
 import { FileExplorer } from "./utils/file-explorer";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -32,6 +33,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
 		console.log("mdait: Configuration not loaded:", (error as Error).message);
 	}
+
+	// AIOnboarding の初期化
+	const aiOnboarding = AIOnboarding.getInstance();
+	aiOnboarding.initialize(context);
 
 	// mdaitConfiguredコンテキスト変数を初期化
 	await updateConfiguredContext(config);

@@ -111,6 +111,10 @@ export class Configuration {
 			endpoint: "http://localhost:11434",
 			model: "llama2",
 		},
+		debug: {
+			enableStatsLogging: true,
+			logPromptAndResponse: false,
+		},
 	};
 	/**
 	 * trans設定
@@ -299,7 +303,7 @@ export class Configuration {
 				if (config.ai.debug) {
 					if (!this.ai.debug) {
 						this.ai.debug = {
-							enableStatsLogging: false,
+							enableStatsLogging: true,
 							logPromptAndResponse: false,
 						};
 					}
