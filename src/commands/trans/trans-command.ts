@@ -27,7 +27,6 @@ import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
-import { PreviousTranslationFinder } from "./previous-translation-finder";
 import { TranslationChecker } from "./translation-checker";
 
 /**
@@ -216,15 +215,10 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 		}
 
 		// 前回の訳文を取得（原文が改訂された場合）
-		let previousTranslation: string | undefined;
-		try {
-			const finder = new PreviousTranslationFinder();
-			previousTranslation = await finder.getPreviousTranslation(unit, targetFilePath, config);
-			if (previousTranslation) {
-				console.log(`Found previous translation for unit ${unit.marker?.hash}`);
-			}
-		} catch (error) {
-			console.warn("Failed to get previous translation:", error);
+		// unit.contentには翻訳前の状態（＝前回の訳文）が含まれている
+		const previousTranslation = unit.marker?.from ? unit.content : undefined;
+		if (previousTranslation) {
+			console.log(`Using previous translation as reference for unit ${unit.marker?.hash}`);
 		}
 
 		// 翻訳コンテキストの作成
