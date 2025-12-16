@@ -20,6 +20,12 @@ export class TranslationContext {
 	terms?: string;
 
 	/**
+	 * 前回の訳文（原文が改訂された場合に参照）。
+	 * 変更不要な部分は既訳を尊重し、変更が必要な箇所のみを変更するための参考情報。
+	 */
+	previousTranslation?: string;
+
+	/**
 	 * 周辺テキストを結合した文字列を取得
 	 * @returns 前後のユニットを結合した文字列（存在する場合）
 	 */
@@ -45,9 +51,10 @@ export class TranslationContext {
 	 */
 	[key: string]: unknown;
 
-	constructor(previousTexts: string[] = [], nextTexts: string[] = [], terms?: string) {
+	constructor(previousTexts: string[] = [], nextTexts: string[] = [], terms?: string, previousTranslation?: string) {
 		this.previousTexts = previousTexts;
 		this.nextTexts = nextTexts;
 		this.terms = terms;
+		this.previousTranslation = previousTranslation;
 	}
 }

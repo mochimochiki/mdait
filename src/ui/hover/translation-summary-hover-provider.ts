@@ -55,8 +55,8 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			return null;
 		}
 
-		// MarkdownStringを生成
-		const markdown = this.buildMarkdownString(summary);
+		// MarkdownStringを生成（needフラグも考慮）
+		const markdown = this.buildMarkdownString(summary, marker.need);
 
 		// Hoverオブジェクトを返す
 		return new vscode.Hover(markdown);
@@ -65,15 +65,20 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 	/**
 	 * サマリ情報からMarkdownStringを生成
 	 * @param summary 翻訳サマリ情報
+	 * @param needFlag ユニットのneedフラグ
 	 * @returns MarkdownString
 	 */
-	private buildMarkdownString(summary: TranslationSummary): vscode.MarkdownString {
+	private buildMarkdownString(summary: TranslationSummary, needFlag?: string | null): vscode.MarkdownString {
 		const md = new vscode.MarkdownString();
 		md.isTrusted = true; // commandリンクを有効化
 		md.supportHtml = true; // HTML埋め込みを有効化
 
-		// ヘッダー
-		md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
+		// ヘッダー（need:reviewの場合は「要確認」と表示）
+		if (needFlag === "review") {
+			md.appendMarkdown(`### ⚠️ ${vscode.l10n.t("Needs Review")}\n\n`);
+		} else {
+			md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
+		}
 
 		// 統計情報
 		md.appendMarkdown(`**${vscode.l10n.t("Statistics")}:**\n`);
@@ -110,6 +115,15 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 				const commandUri = `command:mdait.addToGlossary?${args}`;
 				const displayText = candidate.target ? `${candidate.source} → ${candidate.target}` : candidate.source;
 				md.appendMarkdown(`- ${displayText} [${vscode.l10n.t("Add to glossary")}](${commandUri})\n`);
+			}
+			md.appendMarkdown("\n");
+		}
+
+		// レビュー推奨理由
+		if (summary.reviewReasons && summary.reviewReasons.length > 0) {
+			md.appendMarkdown(`**🔍 ${vscode.l10n.t("Review Reasons")}:**\n`);
+			for (const reason of summary.reviewReasons) {
+				md.appendMarkdown(`- ${reason}\n`);
 			}
 			md.appendMarkdown("\n");
 		}
