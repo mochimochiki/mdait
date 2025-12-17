@@ -230,6 +230,36 @@ export class MarkdownItParser implements IMarkdownParser {
 
 		const units: MdaitUnit[] = [];
 
+		// 最初の境界より前にコンテンツがある場合、それを独立したユニットとして扱う
+		const firstBoundaryLine = boundaries[0].line;
+		if (firstBoundaryLine > 0) {
+			const precedingContent = lines.slice(0, firstBoundaryLine).join("\n");
+			// 空白のみでない場合はユニットとして追加
+			if (precedingContent.trim().length > 0) {
+				let title = "";
+				const contentLines = precedingContent.split("\n");
+				// 空行をスキップして最初の非空行を探す
+				for (const line of contentLines) {
+					const trimmedLine = line.trim();
+					if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
+						// 最大50文字までをタイトルとして使用
+						title = trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
+						break;
+					}
+				}
+				units.push(
+					new MdaitUnit(
+						new MdaitMarker(""), // 空のマーカー
+						title,
+						0, // レベルなし
+						precedingContent,
+						frontMatterLineOffset,
+						firstBoundaryLine - 1 + frontMatterLineOffset,
+					),
+				);
+			}
+		}
+
 		for (let i = 0; i < boundaries.length; i++) {
 			const boundary = boundaries[i];
 			const startLine = boundary.line;
