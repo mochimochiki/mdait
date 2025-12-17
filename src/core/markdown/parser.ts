@@ -64,11 +64,20 @@ export class MarkdownItParser implements IMarkdownParser {
 		const content = fm.content;
 		let frontMatterRaw = "";
 		let frontMatterLineOffset = 0;
-		const idx = markdown.indexOf(content);
-		if (idx > 0) {
-			frontMatterRaw = markdown.substring(0, idx);
-			// フロントマターの行数を計算
+		
+		// フロントマターが存在する場合、frontMatterRawを取得
+		// content が空の場合（フロントマターのみ）も正しく処理する
+		if (content.length === 0 && markdown.trim().length > 0) {
+			// フロントマターのみの場合、markdown全体がfrontMatterRaw
+			frontMatterRaw = markdown;
 			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
+		} else {
+			const idx = markdown.indexOf(content);
+			if (idx > 0) {
+				frontMatterRaw = markdown.substring(0, idx);
+				// フロントマターの行数を計算
+				frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
+			}
 		}
 
 		const fontMaterAutoMarkerLevel = frontMatter?.["mdait.sync.autoMarkerLevel"];
