@@ -212,6 +212,24 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
+	 * コンテンツからタイトルを抽出する
+	 * @param content コンテンツ文字列
+	 * @returns 抽出されたタイトル（最大50文字）
+	 */
+	private extractTitleFromContent(content: string): string {
+		const contentLines = content.split("\n");
+		// 空行をスキップして最初の非空行を探す
+		for (const line of contentLines) {
+			const trimmedLine = line.trim();
+			if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
+				// 最大50文字までをタイトルとして使用
+				return trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
+			}
+		}
+		return "";
+	}
+
+	/**
 	 * 第2パス: 境界からユニットを構築
 	 * 境界間のコンテンツを抽出し、MdaitUnitを生成する
 	 * @param boundaries 境界配列
@@ -236,20 +254,11 @@ export class MarkdownItParser implements IMarkdownParser {
 			const precedingContent = lines.slice(0, firstBoundaryLine).join("\n");
 			// 空白のみでない場合はユニットとして追加
 			if (precedingContent.trim().length > 0) {
-				let title = "";
-				const contentLines = precedingContent.split("\n");
-				// 空行をスキップして最初の非空行を探す
-				for (const line of contentLines) {
-					const trimmedLine = line.trim();
-					if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
-						// 最大50文字までをタイトルとして使用
-						title = trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
-						break;
-					}
-				}
+				const title = this.extractTitleFromContent(precedingContent);
 				units.push(
 					new MdaitUnit(
-						new MdaitMarker(""), // 空のマーカー
+						// 空のマーカーを作成（sync時にensureMdaitMarkerHashでハッシュが付与される）
+						new MdaitMarker(""),
 						title,
 						0, // レベルなし
 						precedingContent,
@@ -288,18 +297,9 @@ export class MarkdownItParser implements IMarkdownParser {
 				}
 			}
 
-			// タイトルが空の場合、次の行からテキストを抽出してタイトルとする
+			// タイトルが空の場合、コンテンツからタイトルを抽出
 			if (!title && rawContent) {
-				const contentLines = rawContent.split("\n");
-				// 空行をスキップして最初の非空行を探す
-				for (const line of contentLines) {
-					const trimmedLine = line.trim();
-					if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
-						// 最大50文字までをタイトルとして使用
-						title = trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
-						break;
-					}
-				}
+				title = this.extractTitleFromContent(rawContent);
 			}
 
 			units.push(

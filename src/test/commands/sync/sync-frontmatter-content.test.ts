@@ -57,26 +57,27 @@ title: Test Document
 見出し1の本文
 `;
 
-		// ターゲットファイル（既に翻訳済み）
+		const source = markdownParser.parse(sourceMd, testConfig);
+		ensureMdaitMarkerHash(source.units);
+
+		// 翻訳済みのターゲットファイルを構築（sourceのハッシュを使用）
+		const unit1Hash = source.units[0].marker.hash;
+		const unit2Hash = source.units[1].marker.hash;
 		const targetMd = `---
 title: Test Document
 ---
 
-<!-- mdait ${calculateHash("\nフロントマター直後の本文です。\n")} from:${calculateHash("\nフロントマター直後の本文です。\n")} -->
+<!-- mdait ${unit1Hash} from:${unit1Hash} -->
 
 Content right after frontmatter.
 
-<!-- mdait ${calculateHash("## 見出し1\n\n見出し1の本文\n")} from:${calculateHash("## 見出し1\n\n見出し1の本文\n")} -->
+<!-- mdait ${unit2Hash} from:${unit2Hash} -->
 ## Heading 1
 
 Content of heading 1
 `;
 
-		const source = markdownParser.parse(sourceMd, testConfig);
 		const target = markdownParser.parse(targetMd, testConfig);
-		
-		// sync-command.tsと同様にハッシュを付与
-		ensureMdaitMarkerHash(source.units);
 		ensureMdaitMarkerHash(target.units);
 
 		const matcher = new SectionMatcher();
@@ -101,6 +102,11 @@ title: Test Document
 見出し1の本文
 `;
 
+		// 元のソースをパースしてハッシュを取得
+		const originalSource = markdownParser.parse(originalSourceMd, testConfig);
+		ensureMdaitMarkerHash(originalSource.units);
+		const headingHash = originalSource.units[0].marker.hash;
+
 		// 更新後のソース（本文を追加）
 		const updatedSourceMd = `---
 title: Test Document
@@ -118,7 +124,7 @@ title: Test Document
 title: Test Document
 ---
 
-<!-- mdait ${calculateHash("## 見出し1\n\n見出し1の本文\n")} from:${calculateHash("## 見出し1\n\n見出し1の本文\n")} -->
+<!-- mdait ${headingHash} from:${headingHash} -->
 ## Heading 1
 
 Content of heading 1
@@ -127,7 +133,6 @@ Content of heading 1
 		const updatedSource = markdownParser.parse(updatedSourceMd, testConfig);
 		const target = markdownParser.parse(targetMd, testConfig);
 		
-		// sync-command.tsと同様にハッシュを付与
 		ensureMdaitMarkerHash(updatedSource.units);
 		ensureMdaitMarkerHash(target.units);
 
