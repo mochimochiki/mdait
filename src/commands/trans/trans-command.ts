@@ -28,6 +28,7 @@ import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
+import { TranslationChecker } from "./translation-checker";
 
 /**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
@@ -140,7 +141,7 @@ export async function transCommandInternal(
 			const oldMarkerText = unit.marker?.toString() ?? "";
 
 			try {
-				await translateUnit(unit, translator, sourceLang, targetLang);
+				await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath);
 
 				// 翻訳完了をStatusManagerに通知
 				if (oldHash) {
@@ -191,8 +192,9 @@ export async function transCommandInternal(
  * @param translator 翻訳サービス
  * @param sourceLang 翻訳元言語
  * @param targetLang 翻訳先言語
+ * @param targetFilePath ターゲットファイルのパス
  */
-async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang: string, targetLang: string) {
+async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang: string, targetLang: string, targetFilePath: string) {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
 	const config = Configuration.getInstance();
@@ -218,6 +220,13 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 			}
 		} catch (error) {
 			console.warn("Failed to load terms for translation:", error);
+		}
+
+		// 前回の訳文を取得（原文が改訂された場合）
+		// unit.contentには翻訳前の状態（＝前回の訳文）が含まれている
+		const previousTranslation = unit.marker?.from ? unit.content : undefined;
+		if (previousTranslation) {
+			console.log(`Using previous translation as reference for unit ${unit.marker?.hash}`);
 		}
 
 		// 翻訳コンテキストの作成
@@ -265,7 +274,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 			}
 		}
 		
-		const context = new TranslationContext(previousTexts, nextTexts, termsJson);
+		const context = new TranslationContext(previousTexts, nextTexts, termsJson, previousTranslation);
 
 		let sourceContent = unit.content;
 
@@ -343,8 +352,22 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 			}
 			const termCandidates = Array.from(termCandidatesMap.values());
 
+			// 翻訳品質チェック
+			const checker = new TranslationChecker();
+			const checkResult = checker.checkTranslationQuality(sourceContent, translationResult.translatedText);
+			
+			// 確認推奨箇所がある場合はneed:reviewを設定
+			if (checkResult.needsReview) {
+				unit.marker.setNeed("review");
+				console.log(`Setting need:review for unit ${newHash} due to quality concerns`);
+			} else {
+				// 問題がない場合はneedフラグを削除
+				unit.marker.removeNeedTag();
+			}
+
 			// 翻訳サマリを保存
 			const duration = (Date.now() - startTime) / 1000; // 秒単位
+			const reviewReasons = checkResult.reasons.map((r) => r.message);
 			summaryManager.saveSummary(newHash, {
 				unitHash: newHash,
 				stats: {
@@ -354,11 +377,9 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 				appliedTerms: appliedTerms.length > 0 ? appliedTerms : undefined,
 				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
 				warnings: translationResult.warnings,
+				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
 			});
 		}
-
-		// needフラグを除去
-		unit.markAsTranslated();
 	} catch (error) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Unit translation error: {0}", (error as Error).message));
 		throw error;
@@ -457,7 +478,7 @@ export async function transUnitCommandInternal(
 		const oldMarkerText = targetUnit.marker.toString();
 
 		// 翻訳実行
-		await translateUnit(targetUnit, translator, sourceLang, targetLang);
+		await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath);
 
 		// ステータス: 翻訳完了
 		statusManager.changeUnitStatus(

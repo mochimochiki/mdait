@@ -64,11 +64,20 @@ export class MarkdownItParser implements IMarkdownParser {
 		const content = fm.content;
 		let frontMatterRaw = "";
 		let frontMatterLineOffset = 0;
-		const idx = markdown.indexOf(content);
-		if (idx > 0) {
-			frontMatterRaw = markdown.substring(0, idx);
-			// フロントマターの行数を計算
+		
+		// フロントマターが存在する場合、frontMatterRawを取得
+		// content が空の場合（フロントマターのみ）も正しく処理する
+		if (content.length === 0 && markdown.trim().length > 0) {
+			// フロントマターのみの場合、markdown全体がfrontMatterRaw
+			frontMatterRaw = markdown;
 			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
+		} else {
+			const idx = markdown.indexOf(content);
+			if (idx > 0) {
+				frontMatterRaw = markdown.substring(0, idx);
+				// フロントマターの行数を計算
+				frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
+			}
 		}
 
 		const fontMaterAutoMarkerLevel = frontMatter?.["mdait.sync.autoMarkerLevel"];
@@ -212,6 +221,24 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
+	 * コンテンツからタイトルを抽出する
+	 * @param content コンテンツ文字列
+	 * @returns 抽出されたタイトル（最大50文字）
+	 */
+	private extractTitleFromContent(content: string): string {
+		const contentLines = content.split("\n");
+		// 空行をスキップして最初の非空行を探す
+		for (const line of contentLines) {
+			const trimmedLine = line.trim();
+			if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
+				// 最大50文字までをタイトルとして使用
+				return trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
+			}
+		}
+		return "";
+	}
+
+	/**
 	 * 第2パス: 境界からユニットを構築
 	 * 境界間のコンテンツを抽出し、MdaitUnitを生成する
 	 * @param boundaries 境界配列
@@ -229,6 +256,27 @@ export class MarkdownItParser implements IMarkdownParser {
 		}
 
 		const units: MdaitUnit[] = [];
+
+		// 最初の境界より前にコンテンツがある場合、それを独立したユニットとして扱う
+		const firstBoundaryLine = boundaries[0].line;
+		if (firstBoundaryLine > 0) {
+			const precedingContent = lines.slice(0, firstBoundaryLine).join("\n");
+			// 空白のみでない場合はユニットとして追加
+			if (precedingContent.trim().length > 0) {
+				const title = this.extractTitleFromContent(precedingContent);
+				units.push(
+					new MdaitUnit(
+						// 空のマーカーを作成（sync時にensureMdaitMarkerHashでハッシュが付与される）
+						new MdaitMarker(""),
+						title,
+						0, // レベルなし
+						precedingContent,
+						frontMatterLineOffset,
+						firstBoundaryLine - 1 + frontMatterLineOffset,
+					),
+				);
+			}
+		}
 
 		for (let i = 0; i < boundaries.length; i++) {
 			const boundary = boundaries[i];
@@ -258,18 +306,9 @@ export class MarkdownItParser implements IMarkdownParser {
 				}
 			}
 
-			// タイトルが空の場合、次の行からテキストを抽出してタイトルとする
+			// タイトルが空の場合、コンテンツからタイトルを抽出
 			if (!title && rawContent) {
-				const contentLines = rawContent.split("\n");
-				// 空行をスキップして最初の非空行を探す
-				for (const line of contentLines) {
-					const trimmedLine = line.trim();
-					if (trimmedLine && !trimmedLine.startsWith("<!--") && !trimmedLine.startsWith("#")) {
-						// 最大50文字までをタイトルとして使用
-						title = trimmedLine.length > 50 ? `${trimmedLine.substring(0, 50)}...` : trimmedLine;
-						break;
-					}
-				}
+				title = this.extractTitleFromContent(rawContent);
 			}
 
 			units.push(
