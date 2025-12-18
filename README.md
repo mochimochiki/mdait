@@ -3,8 +3,6 @@
 mdait is a VS Code extension designed for the **continuous multilingual operation of Markdown documents**.
 Rather than performing one-off translations, it tracks changes based on document structure and continuously applies AI translation **only to the parts that require re-translation**, while preserving terminology and context.
 
----
-
 ## Use Cases
 
 * Internal documents managed in multiple languages  
@@ -20,8 +18,6 @@ In these environments, the following issues commonly arise:
 * Even when a glossary exists, there is no reliable mechanism to consistently apply and maintain it during actual translation work  
 
 mdait is a tool designed to solve these **“translation operations” challenges**.
-
----
 
 ## Key Features
 
@@ -46,7 +42,6 @@ mdait splits Markdown documents into appropriate units based on document structu
 In multilingual documents, consistency in terminology and phrasing directly affects quality.  
 mdait treats translation not as isolated sentences or files, but as part of the overall document flow and terminology system.
 
----
 
 ## Quick Start
 
@@ -78,8 +73,6 @@ mdait treats translation not as isolated sentences or files, but as part of the 
 }
 ```
 
----
-
 ## mdait Markers
 
 The information required by mdait for management (mdait markers) is embedded into Markdown files as HTML comments via 🔄 (Sync).
@@ -98,15 +91,11 @@ These markers are the **only data mdait uses to manage translation information**
 * By manually adding or removing the `need:translate` marker, you can explicitly mark specific units as requiring re-translation or as already translated.
 * You can also manually add markers to source documents. This is useful when you want to manage translation at a finer granularity than heading levels allow.
 
----
-
 ## AI Usage and Data Handling
 
 * mdait uses LLMs to perform tasks such as translation and terminology detection. Commands that use AI are indicated with `✨[AI]` in their tooltips.
 * Supports VS Code Language Model API (vscode-lm), Ollama, and more.
 * No other background analysis or undisclosed communication is performed.
-
----
 
 ## License
 
