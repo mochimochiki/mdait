@@ -165,7 +165,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		);
 
 		// StatusItemTreeからルートディレクトリアイテムを取得
-		return this.statusItemTree.getRootDirectoryItems(dirsAbs);
+		const items = this.statusItemTree.getRootDirectoryItems(dirsAbs);
+		// Status.Emptyのアイテムを除外
+		return items.filter((item) => item.status !== Status.Empty);
 	}
 
 	/**
@@ -177,7 +179,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		// StatusItemTreeから子要素を取得
-		return this.statusItemTree.getDirectoryChildren(directoryPath);
+		const items = this.statusItemTree.getDirectoryChildren(directoryPath);
+		// Status.Emptyのアイテムを除外
+		return items.filter((item) => item.status !== Status.Empty);
 	}
 
 	/**
@@ -189,7 +193,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		// StatusItemTreeから翻訳ユニットを取得
-		return this.statusItemTree.getUnitsInFile(filePath);
+		const items = this.statusItemTree.getUnitsInFile(filePath);
+		// Status.Emptyのアイテムを除外
+		return items.filter((item) => item.status !== Status.Empty);
 	}
 
 	/**
@@ -207,6 +213,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				return vscode.l10n.t("Translation needed");
 			case Status.Source:
 				return vscode.l10n.t("Source document");
+			case Status.Empty:
+				return vscode.l10n.t("Empty content");
 			case Status.Error:
 				return vscode.l10n.t("Error occurred");
 			default:
