@@ -107,8 +107,11 @@ Extract a term **if it meets at least one of the following conditions:**
 
 - Return a deduplicated JSON array of objects, each with the following structure:
   - "term": extracted term
-  - "context": an actual sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})
-    - ONLY if no usable sentence exists, Provide a concise explanation of the term’s meaning or usage.
+  - "context": a single-line sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})
+- **CRITICAL VALIDATION**: 
+  - "context" string MUST NOT have line breaks
+  - Before adding any entry to the output, verify that the exact "term" string appears in the "context" string. If the term is not present in the context, DO NOT include that entry.
+- Be careful not to confuse similar terms. Extract only terms that actually appear in the source text.
 - Do not include already-registered terms.
 - Keep explanations brief and accurate.
 Instructions:
@@ -123,7 +126,7 @@ ${existingInfo}Return JSON array with this structure:
 [
   {
     "term": "extracted term",
-    "context": "an actual sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})"
+    "context": "a single-line sentence or phrase including the term (no line breaks)"
   }
 ]`;
 
