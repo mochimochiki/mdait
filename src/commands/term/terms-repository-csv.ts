@@ -115,7 +115,18 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 			if (duplicateIndex >= 0) {
 				// 同一エントリが見つかった場合はマージで更新
-				mergedEntries[duplicateIndex] = TermEntryUtils.merge(mergedEntries[duplicateIndex], candidate);
+				// primaryLangを持つ方をベースとしてマージ（context等の優先のため）
+				const existing = mergedEntries[duplicateIndex];
+				const existingHasPrimary = TermEntryUtils.hasLanguage(existing, primaryLang);
+				const candidateHasPrimary = TermEntryUtils.hasLanguage(candidate, primaryLang);
+
+				if (candidateHasPrimary && !existingHasPrimary) {
+					// 候補のみprimaryLangを持つ場合：候補をベースに既存をマージ
+					mergedEntries[duplicateIndex] = TermEntryUtils.merge(candidate, existing);
+				} else {
+					// それ以外（両方持つ、既存のみ持つ、両方持たない）：既存をベース
+					mergedEntries[duplicateIndex] = TermEntryUtils.merge(existing, candidate);
+				}
 			} else {
 				// 新規エントリとして追加
 				mergedEntries.push(candidate);

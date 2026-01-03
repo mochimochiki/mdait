@@ -99,21 +99,24 @@ export namespace TermEntry {
 	 * @param entry2 エントリ2
 	 * @param primaryLang 優先的にチェックする言語（オプション）
 	 * @returns 同一エントリの場合true
+	 *
+	 * **重複判定ロジック:**
+	 * 1. primaryLangが両方に存在し、かつ異なる場合は別エントリ（明示的に異なる用語と判断）
+	 * 2. それ以外で共通言語に同じ用語がある場合は同一エントリ（重複）
+	 * 3. 共通言語がない場合はcontextのみで同一判定
 	 */
 	export function isSameEntry(entry1: TermEntry, entry2: TermEntry, primaryLang?: string): boolean {
-		// contextが異なる場合は別エントリ
-		const ctx1 = entry1.context.trim();
-		const ctx2 = entry2.context.trim();
-		if (ctx1 !== ctx2) {
-			return false;
-		}
-
-		// primaryLangが指定されていて、両方に存在する場合はそれで判定
+		// primaryLangが指定されていて、両方に存在する場合
 		if (primaryLang) {
 			const term1 = getTerm(entry1, primaryLang);
 			const term2 = getTerm(entry2, primaryLang);
 			if (term1 && term2) {
-				return term1.trim() === term2.trim();
+				// primaryLangが両方とも埋まっていて異なる場合は別エントリとみなす
+				if (term1.trim() !== term2.trim()) {
+					return false;
+				}
+				// primaryLangで一致する場合は同一エントリ
+				return true;
 			}
 		}
 
@@ -133,14 +136,20 @@ export namespace TermEntry {
 
 		// 共通の言語がない場合、contextのみで判定（同じcontextなら同一と仮定）
 		// これはcontextが十分にユニークであることを前提とする
+		// contextが異なる場合は別エントリ
+		const ctx1 = entry1.context.trim();
+		const ctx2 = entry2.context.trim();
+		if (ctx1 !== ctx2) {
+			return false;
+		}
 		return true;
 	}
 
 	/**
-	 * エントリをマージ（entry2の内容でentry1を上書き）
+	 * エントリをマージ
 	 */
 	export function merge(entry1: TermEntry, entry2: TermEntry): TermEntry {
-		return create(entry2.context || entry1.context, {
+		return create(entry1.context || entry2.context, {
 			...entry1.languages,
 			...entry2.languages,
 		});
