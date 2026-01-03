@@ -8,6 +8,7 @@ import type * as vscode from "vscode";
 import type { AIService } from "../../api/ai-service";
 import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { PromptIds, PromptProvider } from "../../prompts";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
@@ -59,18 +60,6 @@ export class AITermDetector implements TermDetector {
 			return [];
 		}
 
-		// 既存用語情報の準備
-		let existingInfo = "";
-		if (existingTerms && existingTerms.length > 0) {
-			const termsList = existingTerms
-				.filter((e) => e.languages[lang])
-				.map((e) => e.languages[lang].term)
-				.slice(0, 50); // 長すぎないように制限
-			if (termsList.length > 0) {
-				existingInfo = `The following terms are already present in the terminology repository for this language:\n- ${termsList.join("\n- ")}\n\n`;
-			}
-		}
-
 		// 複数ユニットの内容を結合
 		const combinedContent = units
 			.map((unit, idx) => {
@@ -79,56 +68,23 @@ export class AITermDetector implements TermDetector {
 			})
 			.join("\n\n");
 
-		const systemPrompt = `You are a terminology extraction expert. Your task is to identify and describe important terms from the given text.
-Instructions: 
-- Read the entire text carefully.
-- Extract **all important technical terms, product names, UI elements, or domain-specific concepts** that would benefit from consistent translation or terminology management. 
-- **Do not omit clearly identifiable terms even if it exceeds the reference count range.** 
-- Avoid generic words, verbs, or adjectives. 
+		// 既存用語情報の準備
+		let existingTermsList = "";
+		if (existingTerms && existingTerms.length > 0) {
+			const termsList = existingTerms
+				.filter((e) => e.languages[lang])
+				.map((e) => e.languages[lang].term)
+				.slice(0, 50);
+			if (termsList.length > 0) {
+				existingTermsList = `- ${termsList.join("\n- ")}`;
+			}
+		}
 
-### Adaptive scaling rule: Use the following as guidelines, not strict limits: 
-- Short text (< 500 characters): usually 3–10 terms 
-- Medium text (500–2,000 characters): usually 10–20 terms 
-- Long text (> 2,000 characters): usually 20–40 terms 
-→ However, if more valid terms are clearly present, include them all. 
-
-### Term identification criteria: 
-
-Extract a term **if it meets at least one of the following conditions:** 
-1. **Domain specificity** – Used primarily in a technical, scientific, or professional field.
-2. **Terminological stability** – The meaning should stay consistent across translations or contexts. 
-3. **Reference utility** – A reader would benefit from a consistent translation or note. 
-4. **Distinctness** – It denotes a named concept, method, parameter, feature, or entity (not just descriptive language). 
-5. **Referential use** – The term could plausibly appear in documentation, UI labels, manuals, or academic writing. 
-
----
-
-### Output rules: 
-
-- Return a deduplicated JSON array of objects, each with the following structure:
-  - "term": extracted term
-  - "context": a single-line sentence or phrase quoted directly from the text including the term itself (LANGUAGE: ${lang})
-- **CRITICAL VALIDATION**: 
-  - "context" string MUST NOT have line breaks
-  - Before adding any entry to the output, verify that the exact "term" string appears in the "context" string. If the term is not present in the context, DO NOT include that entry.
-- Be careful not to confuse similar terms. Extract only terms that actually appear in the source text.
-- Do not include already-registered terms.
-- Keep explanations brief and accurate.
-Instructions:
-- Analyze the entire text carefully before extracting.
-- Extract **important technical terms, product names, UI elements, domain-specific concepts, or proper nouns** that are likely to require consistent translation or usage.
-- Avoid extracting:
-  - Common words, generic verbs, or adjectives.
-  - Terms already present in the existing terminology list.
-  - Duplicated or contextually trivial mentions.
-
-${existingInfo}Return JSON array with this structure:
-[
-  {
-    "term": "extracted term",
-    "context": "a single-line sentence or phrase including the term (no line breaks)"
-  }
-]`;
+		const promptProvider = PromptProvider.getInstance();
+		const systemPrompt = promptProvider.getPrompt(PromptIds.TERM_DETECT, {
+			lang,
+			existingTerms: existingTermsList,
+		});
 
 		const userPrompt = `Extract important terms from this text:
 

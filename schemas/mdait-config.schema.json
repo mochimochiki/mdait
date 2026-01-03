@@ -181,6 +181,33 @@
         }
       },
       "additionalProperties": false
+    },
+    "prompts": {
+      "type": "object",
+      "description": "Custom prompt overrides. Specify file paths (relative to workspace root) for each prompt ID.",
+      "properties": {
+        "trans.translate": {
+          "type": "string",
+          "description": "Path to custom Markdown translation prompt file",
+          "examples": [".mdait/prompts/translate.txt"]
+        },
+        "term.detect": {
+          "type": "string",
+          "description": "Path to custom term detection prompt file",
+          "examples": [".mdait/prompts/term-detect.txt"]
+        },
+        "term.extractFromTranslations": {
+          "type": "string",
+          "description": "Path to custom term extraction from translations prompt file",
+          "examples": [".mdait/prompts/term-extract.txt"]
+        },
+        "term.translateTerms": {
+          "type": "string",
+          "description": "Path to custom term translation prompt file",
+          "examples": [".mdait/prompts/term-translate.txt"]
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["transPairs"],

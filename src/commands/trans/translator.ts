@@ -1,4 +1,5 @@
 import type { AIMessage, AIService } from "../../api/ai-service";
+import { PromptIds, PromptProvider } from "../../prompts";
 import type { TranslationContext } from "./translation-context";
 
 /**
@@ -91,60 +92,14 @@ export class DefaultTranslator implements Translator {
 
 		// systemPrompt と AIMessage[] の構築
 		// @important design.md に記載の通り、terms や surroundingText を活用すること
-		const systemPrompt = `You are a professional translator specializing in Markdown documents.
-
-Your task is to translate the given text from ${sourceLang} to ${targetLang}.
-
-CRITICAL RULE (HIGHEST PRIORITY):
-- You MUST preserve the original Markdown structure EXACTLY.
-- Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
-
-Context:
-${context.surroundingText ? `Surrounding Text (for reference only, do NOT translate unless included in the target text):\n${context.surroundingText}\n` : ""}
-${context.terms ? `Terminology (preferred translations):\n${context.terms}\n` : ""}
-${context.previousTranslation ? `Previous Translation (for reference - the source text was revised):\n${context.previousTranslation}\n\nIMPORTANT: The source text has been revised. Please refer to the previous translation and:\n- Keep sentences/phrases that don't need to be changed (respect the existing translation)\n- Only modify the parts that need to be updated based on the source text changes\n- Maintain consistency with the unchanged parts of the previous translation\n` : ""}
-
-Markdown Preservation Rules:
-1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
-  - Headings: #, ##, ###, ####
-  - Lists: -, *, +, 1., 2., etc.
-  - All other Markdown syntaxes
-2. Keep line breaks, blank lines, and indentation exactly as in the original text.
-3. Only translate the human-readable text content inside the Markdown structure.
-4. Do NOT translate placeholders such as __CODE_BLOCK_PLACEHOLDER_n__.
-5. If a line contains both Markdown syntax and text, translate ONLY the text portion and leave all symbols untouched.
-6. If you are unsure whether something is Markdown syntax, assume it IS and do NOT modify it.
-
-Translation Instructions:
-1. Translate accurately while preserving meaning, tone, and technical correctness.
-2. Follow the provided terminology list strictly when applicable.
-3. After translation, identify technical terms, proper nouns, or domain-specific terms that:
-  - Appear in the ORIGINAL text
-  - Are NOT included in the provided terminology list
-
-Self-Check (MANDATORY before responding):
-- Verify that the number of lines is unchanged.
-- Verify that all Markdown symbols remain in the same positions.
-- Verify that no Markdown elements were removed or altered.
-
-Response Format:
-Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
-
-{
-  "translation": "the translated text with Markdown structure perfectly preserved",
-  "termSuggestions": [
-    {
-      "source": "original term in ${sourceLang}",
-      "target": "translated term in ${targetLang}",
-      "context": "an actual sentence or phrase quoted directly from the ORIGINAL text including the source term (LANGUAGE: ${sourceLang})",
-      "reason": "(optional) brief explanation why this term should be added to glossary"
-    }
-  ]
-}
-
-Important Notes:
-- The \"context\" field MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.`;
+		const promptProvider = PromptProvider.getInstance();
+		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_TRANSLATE, {
+			sourceLang,
+			targetLang,
+			surroundingText: context.surroundingText,
+			terms: context.terms,
+			previousTranslation: context.previousTranslation,
+		});
 
 		const messages: AIMessage[] = [
 			{

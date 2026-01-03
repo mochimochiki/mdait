@@ -75,6 +75,12 @@ interface MdaitConfig {
 		filename?: string;
 		primaryLang?: string;
 	};
+	prompts?: {
+		"trans.translate"?: string;
+		"term.detect"?: string;
+		"term.extractFromTranslations"?: string;
+		"term.translateTerms"?: string;
+	};
 }
 
 /**
@@ -132,6 +138,10 @@ export class Configuration {
 		filename: "terms.csv", // デフォルトはCSV形式
 		primaryLang: "", // 用語管理の基準言語
 	};
+	/**
+	 * プロンプト設定（カスタムプロンプトファイルパス）
+	 */
+	public prompts: Record<string, string> = {};
 
 	/**
 	 * プライベートコンストラクタ（シングルトンパターン）
@@ -333,6 +343,16 @@ export class Configuration {
 				}
 				if (config.terms.primaryLang) {
 					this.terms.primaryLang = config.terms.primaryLang;
+				}
+			}
+
+			// プロンプト設定の読み込み
+			if (config.prompts) {
+				this.prompts = {};
+				for (const [key, value] of Object.entries(config.prompts)) {
+					if (typeof value === "string") {
+						this.prompts[key] = value;
+					}
 				}
 			}
 

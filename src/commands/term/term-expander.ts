@@ -8,6 +8,7 @@ import type * as vscode from "vscode";
 import type { AIService } from "../../api/ai-service";
 import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { PromptIds, PromptProvider } from "../../prompts";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 
@@ -105,21 +106,11 @@ export class AITermExpander implements TermExpander {
 			return new Map();
 		}
 
-		const systemPrompt = `You are a terminology extraction expert. Extract term correspondences from the given source-target translation pairs.
-
-Instructions:
-- Extract how the specified source language terms are translated in the target language
-- Focus on consistent translation patterns across multiple pairs
-- Only return terms that appear in both source and target texts
-- Preserve the exact terminology used in the translations
-
-Return JSON object mapping source terms to target terms:
-{
-  "source term 1": "target term 1",
-  "source term 2": "target term 2"
-}
-
-If a term is not found or has no clear translation, omit it from the result.`;
+		const promptProvider = PromptProvider.getInstance();
+		const systemPrompt = promptProvider.getPrompt(PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS, {
+			sourceLang,
+			targetLang,
+		});
 
 		const userPrompt = this.buildExtractionPrompt(translationPairs, termList, sourceLang, targetLang);
 
@@ -157,20 +148,12 @@ If a term is not found or has no clear translation, omit it from the result.`;
 			return new Map();
 		}
 
-		// AIプロンプトを構築
-		const systemPrompt = `You are a professional translator specializing in technical terminology.
-
-Instructions:
-- Translate the given terms from ${sourceLang} to ${targetLang}
-- Consider the provided context for each term
-- Maintain consistency with technical documentation standards
-- Preserve proper nouns and product names when appropriate
-
-Return JSON object mapping source terms to translated terms:
-{
-  "source term 1": "translated term 1",
-  "source term 2": "translated term 2"
-}`;
+		// AIプロンプトを取得
+		const promptProvider = PromptProvider.getInstance();
+		const systemPrompt = promptProvider.getPrompt(PromptIds.TERM_TRANSLATE_TERMS, {
+			sourceLang,
+			targetLang,
+		});
 
 		const userPrompt = this.buildTranslationPrompt(termsToTranslate, sourceLang, targetLang);
 
