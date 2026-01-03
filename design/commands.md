@@ -16,6 +16,9 @@
 - 既に`mdait.json`が存在する場合は警告メッセージを表示して上書きを防止
 - テンプレートファイルが見つからない場合はエラーメッセージを表示（拡張機能の再インストールを促す）
 
+**主要コンポーネント:**
+- [src/commands/setup/setup-command.ts](../src/commands/setup/setup-command.ts): `createConfigCommand()` - テンプレートファイルのコピーとエディタで開く処理を実行
+
 **シーケンス:**
 
 ```mermaid
@@ -42,6 +45,7 @@ sequenceDiagram
 	end
 ```
 
+
 ---
 
 ## sync（ユニット同期）
@@ -50,6 +54,10 @@ sequenceDiagram
 - 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御。
 - [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証。
 - 同期完了後はソース/ターゲット両ファイルのステータスを`StatusManager.refreshFileStatus`で再計算し、ツリー表示を即時追従させる。
+
+**主要コンポーネント:**
+- [src/commands/sync/sync-command.ts](../src/commands/sync/sync-command.ts): `syncCommand()`, `syncMarkdownFile()` - ファイル対応付けと差分適用
+- [src/commands/sync/section-matcher.ts](../src/commands/sync/section-matcher.ts): `SectionMatcher.matchSections()` - ユニット間の対応関係を検出
 
 **シーケンス:**
 
@@ -85,6 +93,10 @@ sequenceDiagram
   - 将来的な拡張: 設定可能な並列数制限(セマフォ方式)の導入を検討(例: `mdait.trans.concurrency`で同時翻訳数を指定)
 - **キャンセル管理**: VSCode標準の`withProgress`パターンで実装。通知バーの×ボタンから即座にキャンセル可能。進捗表示はファイル翻訳="X/Y units"、ディレクトリ翻訳="X/Y files"形式。
 
+**主要コンポーネント:**
+- [src/commands/trans/trans-command.ts](../src/commands/trans/trans-command.ts): `transCommand()`, `transUnitCommand()` - 翻訳対象の選択と翻訳実行
+- [src/commands/trans/term-extractor.ts](../src/commands/trans/term-extractor.ts): `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出
+
 **シーケンス:**
 
 ```mermaid
@@ -114,6 +126,12 @@ sequenceDiagram
 - `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
 - `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
 - **並列実行制御**: ディレクトリ処理時はファイルを順次処理（trans翻訳と同様の理由）。バッチサイズはAI APIの入力トークン制限に応じて調整。
+
+**主要コンポーネント:**
+- [src/commands/term/command-detect.ts](../src/commands/term/command-detect.ts): `detectTermCommand()` - 用語検出のエントリーポイント
+- [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detect()` - AI APIを使用した用語抽出処理
+- [src/commands/term/command-expand.ts](../src/commands/term/command-expand.ts): `expandTermCommand()` - 用語展開のエントリーポイント
+- [src/commands/term/term-expander.ts](../src/commands/term/term-expander.ts): `TermExpander.expand()` - 原文/訳文ペアから用語訳を推定
 
 **term.detectシーケンス:**
 
