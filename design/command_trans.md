@@ -42,6 +42,8 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
 ### 主要コンポーネント
 
 - [src/commands/trans/trans-command.ts](../src/commands/trans/trans-command.ts): `transCommand()`, `transUnitCommand()` - 翻訳対象の選択と翻訳実行
+  - [transFile_CoreProc()](../src/commands/trans/trans-command.ts#L88): ファイル単位の翻訳処理中核ロジック
+  - [transUnit_CoreProc()](../src/commands/trans/trans-command.ts#L457): ユニット単位の翻訳処理中核ロジック
 - [src/commands/trans/term-extractor.ts](../src/commands/trans/term-extractor.ts): `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出
 - [src/commands/trans/translation-checker.ts](../src/commands/trans/translation-checker.ts): `TranslationChecker.checkTranslationQuality()` - 翻訳品質チェック
 - [src/commands/trans/translator.ts](../src/commands/trans/translator.ts): `Translator` - 翻訳サービスインターフェース

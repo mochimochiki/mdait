@@ -18,6 +18,8 @@ sync（ユニット同期）コマンドは、ソースとターゲットのMark
 ### 主要コンポーネント
 
 - [src/commands/sync/sync-command.ts](../src/commands/sync/sync-command.ts): `syncCommand()`, `syncMarkdownFile()` - ファイル対応付けと差分適用
+  - [syncNew_CoreProc()](../src/commands/sync/sync-command.ts#L120): 新規ターゲットファイル作成時の同期処理中核ロジック
+  - [sync_CoreProc()](../src/commands/sync/sync-command.ts#L188): 既存ターゲットファイル同期処理中核ロジック
 - [src/commands/sync/section-matcher.ts](../src/commands/sync/section-matcher.ts): `SectionMatcher.matchSections()` - ユニット間の対応関係を検出
 - [src/commands/sync/diff-detector.ts](../src/commands/sync/diff-detector.ts): `DiffDetector.detect()` - 差分検出
 

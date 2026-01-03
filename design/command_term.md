@@ -23,6 +23,7 @@ term（用語集）コマンドは、翻訳品質向上のための用語管理�
 
 #### 主要コンポーネント
 - [src/commands/term/command-detect.ts](../src/commands/term/command-detect.ts): `detectTermCommand()` - 用語検出のエントリーポイント
+  - [detectTerm_CoreProc()](../src/commands/term/command-detect.ts#L88): 用語検出処理中核ロジック
 - [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detectTerms()` - AI APIを使用した用語抽出処理
 - [src/commands/term/unit-pair.ts](../src/commands/term/unit-pair.ts): `UnitPair` - ソース・ターゲットのユニットペア型定義
 - [src/commands/term/unit-pair-collector.ts](../src/commands/term/unit-pair-collector.ts): `UnitPairCollector` - ペア収集ユーティリティ
@@ -97,6 +98,7 @@ sequenceDiagram
 
 #### 主要コンポーネント
 - [src/commands/term/command-expand.ts](../src/commands/term/command-expand.ts): `expandTermCommand()` - 用語展開のエントリーポイント
+  - [expandTerm_CoreProc()](../src/commands/term/command-expand.ts#L98): 用語展開処理中核ロジック
 - [src/commands/term/term-expander.ts](../src/commands/term/term-expander.ts): `TermExpander.expand()` - 原文/訳文ペアから用語訳を推定
 - [src/commands/term/status-tree-term-handler.ts](../src/commands/term/status-tree-term-handler.ts): ステータスツリーからの用語展開アクションハンドラ
 
