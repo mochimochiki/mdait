@@ -164,17 +164,8 @@ export async function expandTermsInternal(
 		return;
 	}
 
-	// Phase 2で解決できなかった用語を抽出
-	const unresolvedTerms = termsToExpand.filter((entry) => {
-		const sourceTerm = entry.languages[sourceLang].term;
-		return !phase2Results.has(sourceTerm);
-	});
-
-	// Phase 3: 未解決用語をAI翻訳
-	const phase3Results = await phase3_TranslateUnresolvedTerms(unresolvedTerms, transPair, progress, cancellationToken);
-
 	// 用語集を更新
-	const allResults = new Map([...phase2Results, ...phase3Results]);
+	const allResults = phase2Results;
 
 	if (allResults.size === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No terms could be expanded"));
@@ -370,47 +361,6 @@ async function phase2_ExtractFromBatches(
 	progress?.report({
 		message: vscode.l10n.t("Phase 2 completed: {0} terms resolved", results.size),
 		increment: 50,
-	});
-
-	return results;
-}
-
-/**
- * Phase 3: 未解決用語をAI翻訳
- */
-async function phase3_TranslateUnresolvedTerms(
-	unresolvedTerms: readonly TermEntry[],
-	transPair: TransPair,
-	progress?: vscode.Progress<{ message?: string; increment?: number }>,
-	cancellationToken?: vscode.CancellationToken,
-): Promise<Map<string, string>> {
-	const results = new Map<string, string>();
-	const { sourceLang, targetLang } = transPair;
-
-	if (unresolvedTerms.length === 0) {
-		progress?.report({
-			message: vscode.l10n.t("Phase 3 completed: {0} terms translated", 0),
-			increment: 20,
-		});
-		return results;
-	}
-
-	if (cancellationToken?.isCancellationRequested) {
-		return results;
-	}
-
-	progress?.report({ message: vscode.l10n.t("Phase 3: Translating remaining terms...") });
-
-	const termExpander = await createTermExpander();
-	const translated = await termExpander.translateTerms(unresolvedTerms, sourceLang, targetLang, cancellationToken);
-
-	for (const [source, target] of translated) {
-		results.set(source, target);
-	}
-
-	progress?.report({
-		message: vscode.l10n.t("Phase 3 completed: {0} terms translated", results.size),
-		increment: 20,
 	});
 
 	return results;

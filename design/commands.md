@@ -126,7 +126,7 @@ sequenceDiagram
 - `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
   - `mdait.term.detect.directory`: ソースディレクトリ配下の全ファイルを対象に用語検出
   - `mdait.term.detect.file`: 単一ソースファイルを対象に用語検出
-- `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
+- `mdait.term.expand`: 既存の翻訳から用語訳を抽出し`terms.csv`へ反映。原文/訳文ペアから用語訳を推定して展開。
   - `mdait.term.expand.directory`: ターゲットディレクトリ配下のファイルに対応するソースのみを対象に展開
   - `mdait.term.expand.file`: 単一ターゲットファイルに対応するソースのみを対象に展開
 - **並列実行制御**: ディレクトリ処理時はファイルを順次処理（trans翻訳と同様の理由）。バッチサイズはAI APIの入力トークン制限に応じて調整。
@@ -166,14 +166,14 @@ sequenceDiagram
 	participant UX as UI/Command
 	participant Cmd as TermExpandCommand
 	participant Repo as TermsRepository
-	participant AI as AIService
+	participant Expander as TermExpander
 
 	UX->>Cmd: 対象言語指定
-	Cmd->>Repo: 未解決用語取得
+	Cmd->>Repo: 未展開用語取得
 	Cmd->>Cmd: Unitペア抽出・バッチ化
 	loop 各バッチ
-		Cmd->>AI: 原文+訳文と用語リスト送信
-		AI-->>Cmd: 用語訳ペア
+		Cmd->>Expander: 原文+訳文と用語リスト送信
+		Expander-->>Cmd: 用語訳ペア
 	end
 	Cmd->>Repo: CSV更新
 	Repo-->>UX: 保存完了通知
