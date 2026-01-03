@@ -95,7 +95,7 @@ suite("transコマンドE2E", () => {
 		// AIOnboardingをモック化して初回利用ダイアログをスキップ
 		const { AIOnboarding } = await import("../../../utils/ai-onboarding.js");
 		const originalCheckAndShowFirstUseDialog = AIOnboarding.prototype.checkAndShowFirstUseDialog;
-		AIOnboarding.prototype.checkAndShowFirstUseDialog = async function () {
+		AIOnboarding.prototype.checkAndShowFirstUseDialog = async () => {
 			// テスト時は常に承認されたものとして扱う
 			return true;
 		};

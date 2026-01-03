@@ -2,12 +2,40 @@ import type * as vscode from "vscode";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { TermDetector } from "./term-detector";
 import { TermEntry } from "./term-entry";
+import type { UnitPair } from "./unit-pair";
 
 /**
  * モック用語検出実装（AI利用不可時のフォールバック）
  */
 export class MockTermDetector implements TermDetector {
+	/**
+	 * UnitPairから用語を検出（統合メソッド）
+	 */
 	async detectTerms(
+		pairs: readonly UnitPair[],
+		sourceLang: string,
+		targetLang: string,
+		primaryLang: string,
+		existingTerms?: readonly TermEntry[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<readonly TermEntry[]> {
+		if (cancellationToken?.isCancellationRequested) {
+			return [];
+		}
+
+		const allTerms: TermEntry[] = [];
+		for (const pair of pairs) {
+			const terms = await this.detectFromUnit(pair.source, sourceLang, existingTerms, cancellationToken);
+			allTerms.push(...terms);
+		}
+
+		return allTerms;
+	}
+
+	/**
+	 * 単一ユニットから用語を検出（内部メソッド）
+	 */
+	private async detectFromUnit(
 		unit: MdaitUnit,
 		sourceLang: string,
 		existingTerms?: readonly TermEntry[],
@@ -50,27 +78,6 @@ export class MockTermDetector implements TermDetector {
 			);
 
 		return termEntries;
-	}
-
-	async detectTermsBatch(
-		units: readonly MdaitUnit[],
-		sourceLang: string,
-		existingTerms?: readonly TermEntry[],
-		cancellationToken?: vscode.CancellationToken,
-	): Promise<readonly TermEntry[]> {
-		// キャンセルチェック
-		if (cancellationToken?.isCancellationRequested) {
-			return [];
-		}
-
-		// 各ユニットから検出して統合
-		const allTerms: TermEntry[] = [];
-		for (const unit of units) {
-			const terms = await this.detectTerms(unit, sourceLang, existingTerms, cancellationToken);
-			allTerms.push(...terms);
-		}
-
-		return allTerms;
 	}
 
 	private extractCandidateTerms(text: string): string[] {

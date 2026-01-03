@@ -6,8 +6,6 @@
 
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import { markdownParser } from "../../core/markdown/parser";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
@@ -16,6 +14,7 @@ import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { detectTerm_CoreProc } from "./command-detect";
 import { expandTerm_CoreProc } from "./command-expand";
+import { UnitPairCollector } from "./unit-pair-collector";
 
 /**
  * ステータスツリーアイテムの用語検出アクションハンドラ
@@ -98,7 +97,6 @@ export class StatusTreeTermHandler {
 				vscode.window.showErrorMessage(vscode.l10n.t("Unable to determine source language for term detection."));
 				return;
 			}
-			const sourceLang = transPair.sourceLang;
 
 			// isTranslating を設定（スピナー表示）
 			const lockedPaths = eligible.map((u) => u.fsPath);
@@ -113,26 +111,19 @@ export class StatusTreeTermHandler {
 				},
 				async (progress, token) => {
 					try {
-						// 全ファイルからUnitを収集
-						const allUnits: MdaitUnit[] = [];
-						for (const file of eligible) {
-							try {
-								const document = await vscode.workspace.openTextDocument(file);
-								const content = document.getText();
-								const markdown = markdownParser.parse(content, config);
-								allUnits.push(...markdown.units);
-							} catch (error) {
-								console.error(`Failed to parse file: ${file.fsPath}`, error);
-							}
-						}
+						// UnitPairCollectorでソース・ターゲットペアを収集
+						progress.report({ message: vscode.l10n.t("Collecting unit pairs..."), increment: 0 });
+						const collector = new UnitPairCollector();
+						const sourceFilePaths = eligible.map((u) => u.fsPath);
+						const collectionResult = await collector.collectFromFiles(sourceFilePaths, transPair, token);
 
-						if (allUnits.length === 0) {
+						if (collectionResult.pairs.length === 0) {
 							vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 							return;
 						}
 
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTerm_CoreProc(allUnits, sourceLang, progress, token);
+						await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
 
 						if (!token.isCancellationRequested) {
 							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
@@ -194,7 +185,6 @@ export class StatusTreeTermHandler {
 				vscode.window.showErrorMessage(vscode.l10n.t("Unable to determine source language for term detection."));
 				return;
 			}
-			const sourceLang = transPair.sourceLang;
 
 			// 多重実行のブロック
 			const existing = StatusManager.getInstance().getStatusItemTree().getFile(sourceFilePath);
@@ -208,16 +198,6 @@ export class StatusTreeTermHandler {
 			// isTranslating を設定
 			await StatusManager.getInstance().changeFileStatus(sourceFilePath, { isTranslating: true });
 
-			// ファイルをパースしてUnit配列を取得
-			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(sourceFilePath));
-			const content = document.getText();
-			const markdown = markdownParser.parse(content, config);
-
-			if (markdown.units.length === 0) {
-				vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
-				return;
-			}
-
 			// withProgressで進捗表示とキャンセル機能を提供
 			await vscode.window.withProgress(
 				{
@@ -227,8 +207,13 @@ export class StatusTreeTermHandler {
 				},
 				async (progress, token) => {
 					try {
+						// UnitPairCollectorでソース・ターゲットペアを収集
+						progress.report({ message: vscode.l10n.t("Collecting unit pairs..."), increment: 0 });
+						const collector = new UnitPairCollector();
+						const collectionResult = await collector.collectFromFiles([sourceFilePath], transPair, token);
+
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTerm_CoreProc(markdown.units, sourceLang, progress, token);
+						await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
 
 						if (!token.isCancellationRequested) {
 							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));

@@ -11,7 +11,9 @@ term（用語集）コマンドは、翻訳品質向上のための用語管理�
 ### term.detect（用語検出）
 
 #### 機能概要
-- 原文ユニットをバッチ化し、AIで用語候補を抽出
+- 原文ユニットと対訳ユニット（存在する場合）をペアとして収集し、AIで用語候補を抽出
+- 対訳がある場合は両言語から用語を同時抽出（TERM_DETECT_PAIRSプロンプト）、ない場合はソース単独で処理（TERM_DETECT_SOURCE_ONLYプロンプト）
+- contextLangはprimaryLangがsourceLang/targetLangに含まれる場合はその値、含まれなければsourceLang
 - 既存用語集とマージして保存
 - ディレクトリ/ファイル単位での検出をサポート
 
@@ -21,8 +23,18 @@ term（用語集）コマンドは、翻訳品質向上のための用語管理�
 
 #### 主要コンポーネント
 - [src/commands/term/command-detect.ts](../src/commands/term/command-detect.ts): `detectTermCommand()` - 用語検出のエントリーポイント
-- [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detect()` - AI APIを使用した用語抽出処理
+- [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detectTerms()` - AI APIを使用した用語抽出処理
+- [src/commands/term/unit-pair.ts](../src/commands/term/unit-pair.ts): `UnitPair` - ソース・ターゲットのユニットペア型定義
+- [src/commands/term/unit-pair-collector.ts](../src/commands/term/unit-pair-collector.ts): `UnitPairCollector` - ペア収集ユーティリティ
 - [src/commands/term/status-tree-term-handler.ts](../src/commands/term/status-tree-term-handler.ts): ステータスツリーからの用語検出アクションハンドラ
+
+#### UnitPairデータモデル
+```typescript
+interface UnitPair {
+  source: MdaitUnit;      // ソースユニット（必須）
+  target?: MdaitUnit;     // ターゲットユニット（対訳なしの場合はundefined）
+}
+```
 
 #### シーケンス図
 
@@ -30,29 +42,45 @@ term（用語集）コマンドは、翻訳品質向上のための用語管理�
 sequenceDiagram
 	participant UX as UI/Command
 	participant Cmd as TermDetectCommand
+	participant Collector as UnitPairCollector
 	participant Repo as TermsRepository
-	participant AI as AIService
+	participant AI as AITermDetector
 
-	UX->>Cmd: 対象ファイル指定
-	Cmd->>Repo: 既存terms.csv読み込み
-	Cmd->>Cmd: ユニットバッチ生成
-	loop 各バッチ
-		Cmd->>AI: 原文ユニットと既存用語送信
-		AI-->>Cmd: 新規用語候補
-		Cmd->>Cmd: 重複除外・統合
+	rect rgb(230, 245, 255)
+		Note over Cmd,Collector: Phase 1: ユニットペア収集
+		UX->>Cmd: detectTermCommand(units, transPair)
+		Cmd->>Collector: collectFromUnits(units)
+		Collector-->>Cmd: UnitPair[]
 	end
-	Cmd->>Repo: 用語集マージ・保存
-	Repo-->>UX: 更新結果通知
+
+	rect rgb(255, 245, 230)
+		Note over Cmd,AI: Phase 2: 統合用語抽出
+		Cmd->>Repo: 既存terms読み込み
+		loop 各バッチ（キャンセルチェック付き）
+			Cmd->>AI: detectTerms(pairBatch, sourceLang, targetLang, primaryLang)
+			Note right of AI: 対訳あり/なしで別プロンプト使用<br/>contextLangはprimaryLangから決定
+			AI-->>Cmd: TermEntry[] (用語 + context)
+		end
+	end
+
+	rect rgb(245, 255, 230)
+		Note over Cmd,Repo: Phase 3: 用語集マージ・保存
+		Cmd->>Repo: Merge(detectedTerms)
+		Repo-->>UX: 完了通知
+	end
 ```
 
 #### 処理フロー
-1. **初期化**: AI初回利用チェック、用語集リポジトリの読み込み
-2. **バッチ分割**: ユニットを文字数閾値（8000文字）でバッチに分割
-3. **バッチ処理**:
+1. **ペア収集**: UnitPairCollectorでソース・ターゲットのペアを収集
+2. **初期化**: AI初回利用チェック、用語集リポジトリの読み込み
+3. **バッチ分割**: ユニットペアを文字数閾値（8000文字）でバッチに分割
+4. **バッチ処理**:
+   - 対訳あり/なしで別プロンプトを使用
    - 既存用語をコンテキストとしてAIに送信
-   - AI APIで新規用語候補を抽出
+   - AI APIで新規用語候補を抽出（対訳ありは両言語から）
+   - contextLangはprimaryLangがsrc/tgtに含まれる場合はその値、含まれなければsourceLang
    - 重複チェックと統合
-4. **用語集保存**: 検出された用語を用語集にマージして保存
+5. **用語集保存**: 検出された用語を用語集にマージして保存
 
 ---
 

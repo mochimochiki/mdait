@@ -14,8 +14,10 @@
 export const PromptIds = {
 	/** Markdown翻訳用プロンプト */
 	TRANS_TRANSLATE: "trans.translate",
-	/** テキストからの用語検出 */
-	TERM_DETECT: "term.detect",
+	/** 対訳ペアからの用語検出 */
+	TERM_DETECT_PAIRS: "term.detectPairs",
+	/** ソース単独からの用語検出 */
+	TERM_DETECT_SOURCE_ONLY: "term.detectSourceOnly",
 	/** 対訳ペアからの用語抽出 */
 	TERM_EXTRACT_FROM_TRANSLATIONS: "term.extractFromTranslations",
 	/** 用語のAI翻訳 */
@@ -123,78 +125,135 @@ Important Notes:
 - Return ONLY valid JSON. Any extra text invalidates the response.`;
 
 /**
- * term.detect - 用語検出プロンプト
+ * term.detectPairs - 対訳ペアからの用語検出プロンプト
  *
  * @description
- * テキストから技術用語、製品名、UI要素などの重要な用語を抽出します。
- * テキスト長に応じた適応的スケーリングで用語数を調整します。
+ * ソース・ターゲット対訳ペアから両言語の用語を同時に抽出します。
+ * contextは指定された言語（contextLang）から抽出します。
  *
  * @input
- * - {{lang}}: 対象言語コード (例: "ja")
+ * - {{sourceLang}}: ソース言語コード (例: "ja")
+ * - {{targetLang}}: ターゲット言語コード (例: "en")
+ * - {{contextLang}}: context抽出元の言語コード (例: "en")
  * - {{existingTerms}}: 既存用語リスト（重複除外用、オプショナル）
+ * - {{pairs}}: 対訳ペアのテキスト
  *
  * @output
  * ```json
  * [
- *   {"term": "用語", "context": "用語を含む実際の文"}
+ *   {
+ *     "sourceTerm": "ソース言語の用語",
+ *     "targetTerm": "ターゲット言語の用語",
+ *     "context": "用語を含む文（contextLangから抽出）"
+ *   }
  * ]
  * ```
  */
-export const DEFAULT_TERM_DETECT = `You are a terminology extraction expert. Your task is to identify and describe important terms from the given text.
-Instructions: 
-- Read the entire text carefully.
-- Extract **all important technical terms, product names, UI elements, or domain-specific concepts** that would benefit from consistent translation or terminology management. 
-- **Do not omit clearly identifiable terms even if it exceeds the reference count range.** 
-- Avoid generic words, verbs, or adjectives. 
+export const DEFAULT_TERM_DETECT_PAIRS = `You are a terminology extraction expert. Your task is to identify important terms from source-target translation pairs.
 
-### Adaptive scaling rule: Use the following as guidelines, not strict limits: 
-- Short text (< 500 characters): usually 3–10 terms 
-- Medium text (500–2,000 characters): usually 10–20 terms 
-- Long text (> 2,000 characters): usually 20–40 terms 
-→ However, if more valid terms are clearly present, include them all. 
+### Language Configuration
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+- Context language: {{contextLang}}
 
-### Term identification criteria: 
-
-Extract a term **if it meets at least one of the following conditions:** 
+### Term Identification Criteria
+Extract a term if it meets at least one of the following conditions:
 1. **Domain specificity** – Used primarily in a technical, scientific, or professional field.
-2. **Terminological stability** – The meaning should stay consistent across translations or contexts. 
-3. **Reference utility** – A reader would benefit from a consistent translation or note. 
-4. **Distinctness** – It denotes a named concept, method, parameter, feature, or entity (not just descriptive language). 
-5. **Referential use** – The term could plausibly appear in documentation, UI labels, manuals, or academic writing. 
+2. **Terminological stability** – The meaning should stay consistent across translations or contexts.
+3. **Reference utility** – A reader would benefit from a consistent translation or note.
+4. **Distinctness** – It denotes a named concept, method, parameter, feature, or entity.
+5. **Referential use** – The term could plausibly appear in documentation, UI labels, manuals, or academic writing.
 
----
-
-### Output rules: 
-
-- Return a deduplicated JSON array of objects, each with the following structure:
-  - "term": extracted term
-  - "context": a single-line sentence or phrase quoted directly from the text including the term itself (LANGUAGE: {{lang}})
-- **CRITICAL VALIDATION**: 
-  - "context" string MUST NOT have line breaks
-  - Before adding any entry to the output, verify that the exact "term" string appears in the "context" string. If the term is not present in the context, DO NOT include that entry.
-- Be careful not to confuse similar terms. Extract only terms that actually appear in the source text.
-- Do not include already-registered terms.
-- Keep explanations brief and accurate.
-Instructions:
-- Analyze the entire text carefully before extracting.
-- Extract **important technical terms, product names, UI elements, domain-specific concepts, or proper nouns** that are likely to require consistent translation or usage.
-- Avoid extracting:
-  - Common words, generic verbs, or adjectives.
-  - Terms already present in the existing terminology list.
-  - Duplicated or contextually trivial mentions.
+### Avoid Extracting
+- Common words, generic verbs, or adjectives
+- Terms already in the existing terminology list
+- Duplicated or contextually trivial mentions
 
 {{#existingTerms}}
-The following terms are already present in the terminology repository for this language:
+### Existing Terms (skip these)
 {{existingTerms}}
-
 {{/existingTerms}}
-Return JSON array with this structure:
+
+### Translation Pairs
+Extract terms from BOTH source and target texts. Match corresponding terms between languages.
+{{pairs}}
+
+### Output Format
+Return a JSON array with this structure:
 [
   {
-    "term": "extracted term",
-    "context": "a single-line sentence or phrase including the term (no line breaks)"
+    "sourceTerm": "term in {{sourceLang}}",
+    "targetTerm": "term in {{targetLang}}",
+    "context": "sentence containing the term from {{contextLang}} text"
   }
-]`;
+]
+
+**CRITICAL VALIDATION**:
+- "context" MUST be a single line (no line breaks)
+- "context" MUST be extracted from the {{contextLang}} text
+- Verify the term actually appears in the context before including
+- Extract BOTH sourceTerm and targetTerm for each term`;
+
+/**
+ * term.detectSourceOnly - ソース単独からの用語検出プロンプト
+ *
+ * @description
+ * ソーステキストのみから用語を抽出します（対訳なし）。
+ * contextはソース言語から抽出します。
+ *
+ * @input
+ * - {{sourceLang}}: ソース言語コード (例: "ja")
+ * - {{existingTerms}}: 既存用語リスト（重複除外用、オプショナル）
+ * - {{sourceText}}: ソーステキスト
+ *
+ * @output
+ * ```json
+ * [
+ *   {
+ *     "sourceTerm": "ソース言語の用語",
+ *     "context": "用語を含む文"
+ *   }
+ * ]
+ * ```
+ */
+export const DEFAULT_TERM_DETECT_SOURCE_ONLY = `You are a terminology extraction expert. Your task is to identify important terms from the given source text.
+
+### Language Configuration
+- Source language: {{sourceLang}}
+
+### Term Identification Criteria
+Extract a term if it meets at least one of the following conditions:
+1. **Domain specificity** – Used primarily in a technical, scientific, or professional field.
+2. **Terminological stability** – The meaning should stay consistent across translations or contexts.
+3. **Reference utility** – A reader would benefit from a consistent translation or note.
+4. **Distinctness** – It denotes a named concept, method, parameter, feature, or entity.
+5. **Referential use** – The term could plausibly appear in documentation, UI labels, manuals, or academic writing.
+
+### Avoid Extracting
+- Common words, generic verbs, or adjectives
+- Terms already in the existing terminology list
+- Duplicated or contextually trivial mentions
+
+{{#existingTerms}}
+### Existing Terms (skip these)
+{{existingTerms}}
+{{/existingTerms}}
+
+### Source Text
+{{sourceText}}
+
+### Output Format
+Return a JSON array with this structure:
+[
+  {
+    "sourceTerm": "term in {{sourceLang}}",
+    "context": "sentence containing the term"
+  }
+]
+
+**CRITICAL VALIDATION**:
+- "context" MUST be a single line (no line breaks)
+- Verify the term actually appears in the context before including`;
 
 /**
  * term.extractFromTranslations - 対訳ペアからの用語抽出プロンプト
@@ -269,7 +328,8 @@ Return JSON object mapping source terms to translated terms:
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
-	[PromptIds.TERM_DETECT]: DEFAULT_TERM_DETECT,
+	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,
+	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
 	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 };
