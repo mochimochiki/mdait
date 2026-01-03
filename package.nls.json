@@ -15,6 +15,8 @@
   "mdait.term.detect.directory.title": "✨ [AI] Detect Terms for Directory",
   "mdait.term.detect.file.title": "✨ [AI] Detect Terms for File",
   "mdait.term.expand.title": "✨ [AI] Expand Terms",
+  "mdait.term.expand.directory.title": "✨ [AI] Expand Terms for Directory",
+  "mdait.term.expand.file.title": "✨ [AI] Expand Terms for File",
   "mdait.viewsContainer.title": "mdait",
   "mdait.status.view.title": "Translation Status",
   "mdait.configuration.title": "mdait",

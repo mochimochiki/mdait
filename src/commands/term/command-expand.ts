@@ -82,11 +82,16 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 
 /**
  * 用語展開処理（内部実装）
+ * @param transPair 翻訳ペア設定
+ * @param progress 進捗表示
+ * @param cancellationToken キャンセルトークン
+ * @param sourceFileFilter 対象ソースファイルのパス配列（省略時は全ファイル）
  */
 export async function expandTermsInternal(
 	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken: vscode.CancellationToken,
+	sourceFileFilter?: readonly string[],
 ): Promise<void> {
 	const config = Configuration.getInstance();
 	const { sourceDir, targetDir, sourceLang, targetLang } = transPair;
@@ -119,7 +124,21 @@ export async function expandTermsInternal(
 	progress.report({ message: vscode.l10n.t("Scanning source files..."), increment: 0 });
 
 	// Phase 0: 用語を含むファイルの事前フィルタリング
-	const filesToProcess = await phase0_FilterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
+	// sourceFileFilterが指定されている場合は、そのファイルのみを対象とする
+	let filesToProcess: Set<string>;
+	if (sourceFileFilter && sourceFileFilter.length > 0) {
+		// フィルタリング指定がある場合は、その中から用語を含むファイルを抽出
+		const filteredFiles = await phase0_FilterFilesContainingTermsFromList(
+			sourceFileFilter,
+			termsToExpand,
+			sourceLang,
+			cancellationToken,
+		);
+		filesToProcess = filteredFiles;
+	} else {
+		// フィルタリング指定がない場合は全ファイルを対象
+		filesToProcess = await phase0_FilterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
+	}
 
 	if (cancellationToken.isCancellationRequested) {
 		return;
@@ -438,59 +457,84 @@ async function phase0_FilterFilesContainingTerms(
 	const statusManager = StatusManager.getInstance();
 	const tree = statusManager.getStatusItemTree();
 	const allSourceFiles = tree.getSourceFilesAll();
+	const filePaths = allSourceFiles.map((f) => f.filePath).filter((p): p is string => p !== undefined);
 
 	// 用語リストを構築
 	const termList = terms
 		.filter((entry) => entry.languages[transPair.sourceLang])
 		.map((entry) => entry.languages[transPair.sourceLang].term);
 
+	return filterFilesContainingTerms(filePaths, termList, cancellationToken);
+}
+
+/**
+ * Phase 0: 指定されたファイルリストから用語を含むファイルをフィルタリング
+ * sourceFileFilterが指定された場合に使用
+ */
+async function phase0_FilterFilesContainingTermsFromList(
+	sourceFiles: readonly string[],
+	terms: readonly TermEntry[],
+	sourceLang: string,
+	cancellationToken?: vscode.CancellationToken,
+): Promise<Set<string>> {
+	// 用語リストを構築
+	const termList = terms
+		.filter((entry) => entry.languages[sourceLang])
+		.map((entry) => entry.languages[sourceLang].term);
+
+	return filterFilesContainingTerms(sourceFiles, termList, cancellationToken);
+}
+
+/**
+ * 共通フィルタリングロジック: ファイルリストから指定された用語を含むファイルを抽出
+ */
+async function filterFilesContainingTerms(
+	filePaths: readonly string[],
+	termList: readonly string[],
+	cancellationToken?: vscode.CancellationToken,
+): Promise<Set<string>> {
 	if (termList.length === 0) {
 		return new Set();
 	}
 
-	// フィルタ済みファイルを収集
-	const filePaths = new Set<string>();
+	const filteredPaths = new Set<string>();
 
 	try {
 		// バッチサイズを定義（並列処理の単位）
 		const BATCH_SIZE = 20;
 
 		// バッチごとに並列処理
-		for (let i = 0; i < allSourceFiles.length; i += BATCH_SIZE) {
+		for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
 			if (cancellationToken?.isCancellationRequested) {
 				break;
 			}
 
-			const batch = allSourceFiles.slice(i, i + BATCH_SIZE);
+			const batch = filePaths.slice(i, i + BATCH_SIZE);
 
 			await Promise.all(
-				batch.map(async (sourceFile) => {
-					if (!sourceFile.filePath) {
-						return;
-					}
-
+				batch.map(async (filePath) => {
 					try {
-						const doc = await vscode.workspace.openTextDocument(sourceFile.filePath);
+						const doc = await vscode.workspace.openTextDocument(filePath);
 						const content = doc.getText();
 
 						// いずれかの用語が含まれているか確認
 						if (termList.some((term) => content.includes(term))) {
-							filePaths.add(sourceFile.filePath);
+							filteredPaths.add(filePath);
 						}
 					} catch (error) {
 						// ファイル読み込みエラーはスキップ
-						console.error(`Failed to read file: ${sourceFile.filePath}`, error);
+						console.error(`Failed to read file: ${filePath}`, error);
 					}
 				}),
 			);
 		}
 	} catch (error) {
-		console.error("Phase 0 filtering failed, processing all files:", error);
+		console.error("File filtering failed, processing all files:", error);
 		// フィルタリング失敗時は全ファイルを対象
-		return new Set(allSourceFiles.map((f) => f.filePath).filter((p): p is string => p !== undefined));
+		return new Set(filePaths);
 	}
 
-	return filePaths;
+	return filteredPaths;
 }
 
 /**

@@ -70,6 +70,18 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.term.expand.directory",
+        "title": "%mdait.term.expand.directory.title%",
+        "icon": "$(repo-clone)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.term.expand.file",
+        "title": "%mdait.term.expand.file.title%",
+        "icon": "$(repo-clone)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.status.selectTargets",
         "title": "%mdait.status.selectTargets.title%",
         "icon": "$(filter)",
@@ -186,8 +198,13 @@
           "group": "inline@1"
         },
         {
-          "command": "mdait.term.expand",
+          "command": "mdait.term.expand.directory",
           "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "group": "inline@2"
+        },
+        {
+          "command": "mdait.term.expand.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTarget",
           "group": "inline@2"
         }
       ]

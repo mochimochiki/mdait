@@ -124,7 +124,11 @@ sequenceDiagram
 ## term（用語集）
 
 - `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
+  - `mdait.term.detect.directory`: ソースディレクトリ配下の全ファイルを対象に用語検出
+  - `mdait.term.detect.file`: 単一ソースファイルを対象に用語検出
 - `mdait.term.expand`: 原文用語ユニットを抽出し、原文/訳文ペアから用語訳を推定。未解決語はAI翻訳で補完し`terms.csv`へ反映。
+  - `mdait.term.expand.directory`: ターゲットディレクトリ配下のファイルに対応するソースのみを対象に展開
+  - `mdait.term.expand.file`: 単一ターゲットファイルに対応するソースのみを対象に展開
 - **並列実行制御**: ディレクトリ処理時はファイルを順次処理（trans翻訳と同様の理由）。バッチサイズはAI APIの入力トークン制限に応じて調整。
 
 **主要コンポーネント:**
@@ -132,6 +136,7 @@ sequenceDiagram
 - [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detect()` - AI APIを使用した用語抽出処理
 - [src/commands/term/command-expand.ts](../src/commands/term/command-expand.ts): `expandTermCommand()` - 用語展開のエントリーポイント
 - [src/commands/term/term-expander.ts](../src/commands/term/term-expander.ts): `TermExpander.expand()` - 原文/訳文ペアから用語訳を推定
+- [src/commands/term/status-tree-term-handler.ts](../src/commands/term/status-tree-term-handler.ts): ステータスツリーからの用語検出/展開アクションハンドラ
 
 **term.detectシーケンス:**
 

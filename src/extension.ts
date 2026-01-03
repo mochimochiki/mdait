@@ -129,6 +129,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		termHandler.termDetectFile(item as StatusItem),
 	);
 
+	// term.expand.directory/file commands
+	const termExpandDirectoryDisposable = vscode.commands.registerCommand("mdait.term.expand.directory", (item) =>
+		termHandler.termExpandDirectory(item as StatusItem),
+	);
+	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
+		termHandler.termExpandFile(item as StatusItem),
+	);
+
 	// CodeLens翻訳コマンド
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.translate",
@@ -315,6 +323,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		addToGlossaryDisposable,
 		termDirectoryDisposable,
 		termFileDisposable,
+		termExpandDirectoryDisposable,
+		termExpandFileDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensDisposable,
