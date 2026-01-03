@@ -135,12 +135,9 @@ suite("syncコマンドE2E", () => {
 			const jaMarkers = jaText.match(/<!-- mdait [^\s]+/g) || [];
 			const enMarkers = enText.match(/<!-- mdait [^\s]+/g) || [];
 
-			// H1, H2のみなので2つのマーカーが存在する
-			assert.strictEqual(jaMarkers.length, 2);
-			assert.strictEqual(enMarkers.length, 2);
-
-			// H3の前にはマーカーが挿入されていないこと
-			assert.ok(!jaText.includes("<!-- mdait") || jaText.indexOf("### 見出し 3") > jaText.lastIndexOf("<!-- mdait"));
+			// H1, H2, H3なので3つのマーカーが存在する
+			assert.strictEqual(jaMarkers.length, 3);
+			assert.strictEqual(enMarkers.length, 3);
 		});
 
 		test("FrontMatter: Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {

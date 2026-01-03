@@ -78,6 +78,28 @@ suite("transコマンドE2E", () => {
 
 		// Uri オブジェクトを作成してファイル指定
 		const fileUri = vscode.Uri.file(testFile);
+
+		// AIServiceBuilderをモック化して、mdait.jsonの設定に関わらずdefaultプロバイダを使用
+		const { AIServiceBuilder } = await import("../../../api/ai-service-builder.js");
+		const originalBuild = AIServiceBuilder.prototype.build;
+		AIServiceBuilder.prototype.build = async function (config) {
+			// 明示的にdefaultプロバイダを指定
+			const testConfig = {
+				provider: "default",
+				model: "test-mock",
+				ollama: { endpoint: "", model: "" },
+			};
+			return originalBuild.call(this, testConfig);
+		};
+
+		// AIOnboardingをモック化して初回利用ダイアログをスキップ
+		const { AIOnboarding } = await import("../../../utils/ai-onboarding.js");
+		const originalCheckAndShowFirstUseDialog = AIOnboarding.prototype.checkAndShowFirstUseDialog;
+		AIOnboarding.prototype.checkAndShowFirstUseDialog = async function () {
+			// テスト時は常に承認されたものとして扱う
+			return true;
+		};
+
 		// InputBoxのモック（言語設定の入力をシミュレート）
 		const originalShowInputBox = vscode.window.showInputBox;
 		let inputCallCount = 0;
@@ -130,7 +152,9 @@ suite("transコマンドE2E", () => {
 			// コマンドが正常に完了したことを確認
 			// 結果が false の厳密チェックは削除（ファイル内容による検証で十分とする）
 		} finally {
-			// InputBoxモックを復元
+			// モックを復元
+			AIServiceBuilder.prototype.build = originalBuild;
+			AIOnboarding.prototype.checkAndShowFirstUseDialog = originalCheckAndShowFirstUseDialog;
 			vscode.window.showInputBox = originalShowInputBox;
 		}
 	});
