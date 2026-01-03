@@ -39,7 +39,9 @@
   "Error occurred": "エラーが発生しました",
   "Unknown status": "不明な状態",
   "$(play) Translate": "$(play) 翻訳",
+  "Tooltip: Translate this unit using AI": "✨️[AI] ユニットを翻訳",
   "$(symbol-reference) Source": "$(symbol-reference) 原文",
+  "Tooltip: Jump to original source unit": "原文を表示",
   "Run translation": "翻訳を実行",  "Translate directory": "ディレクトリを翻訳",
   "Translate file": "ファイルを翻訳",
   "Translate unit": "ユニットを翻訳",
@@ -116,7 +118,7 @@
   "Unsupported glossary file format. Use .yaml or .csv": "サポートされていない用語集ファイル形式です。.yaml または .csv を使用してください",
   "Term added to glossary: \"{0}\" → \"{1}\"": "用語集に追加しました: \"{0}\" → \"{1}\"",
   "Failed to add term to glossary: {0}": "用語集への追加に失敗しました: {0}",
-  "This command uses AI to process your content.\n\nAI Usage:\n• Translation: AI translates your Markdown documents\n• Term Detection: AI identifies important terms from your content\n• Term Expansion: AI translates detected terms to other languages\n\nStatistics logging is enabled by default to help you monitor AI usage.\nYou can disable it in mdait.json (ai.debug.enableStatsLogging).\n\nDo you want to proceed?": "mdait では、一部のコマンドで AI を使って翻訳や用語管理を行います。\nこのメッセージは、AI を利用するコマンドを初めて実行したときのみ表示されます。\n\n✨️ [AI] と表示されているコマンドは、AI を利用する機能を含んでいます。\n\nAI がサポートする主な内容:\n• Markdown ドキュメントの翻訳\n• 文書内の重要な用語の検出\n• 用語の多言語展開\n\n通信とプライバシーについて\n• AI の処理には、mdait.json で指定された AI サービスを使用します\n• AI の利用に関する統計情報は、ローカルの\n  .mdait/ai-stats.log に記録されます\n\n統計ログについて\n• 統計ログはローカルファイルとしてのみ保存されます\n• 記録されるのは、タイムスタンプや送受信文字数などの統計情報です\n• 翻訳内容やプロンプト本文が記録されることはありません\n• mdait.json の\n  (ai.debug.enableStatsLogging) で無効にできます\n\nこのまま続行しますか？",
+  "AI_Usage_Confirmation": "✨️[AI] と表示されているコマンドはAIを利用します。\n\n  • mdait.json で指定された AI サービスを使用します\n  • AI利用に関する統計情報は、 .mdait/ai-stats.log に記録されます。\n\n続行しますか？",
   "Proceed": "続行"
 }
 

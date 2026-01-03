@@ -53,20 +53,12 @@ export class AIOnboarding {
 
 		// 初回利用の場合、説明ダイアログを表示
 		const message = vscode.l10n.t(
-			"This command uses AI to process your content.\n\n" +
-				"AI Usage:\n" +
-				"• Translation: AI translates your Markdown documents\n" +
-				"• Term Detection: AI identifies important terms from your content\n" +
-				"• Term Expansion: AI translates detected terms to other languages\n\n" +
-				"Statistics logging is enabled by default to help you monitor AI usage.\n" +
-				"You can disable it in mdait.json (ai.debug.enableStatsLogging).\n\n" +
-				"Do you want to proceed?",
+			"AI_Usage_Confirmation",
 		);
 
 		const proceedButton = vscode.l10n.t("Proceed");
-		const cancelButton = vscode.l10n.t("Cancel");
 
-		const result = await vscode.window.showInformationMessage(message, { modal: true }, proceedButton, cancelButton);
+		const result = await vscode.window.showInformationMessage(message, { modal: true }, proceedButton);
 
 		if (result === proceedButton) {
 			// ユーザーが承認した場合、フラグを保存

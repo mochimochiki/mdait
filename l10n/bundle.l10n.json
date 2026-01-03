@@ -20,7 +20,9 @@
   "Add to glossary": "Add to glossary",
   "Warnings": "Warnings",
   "$(symbol-reference) Source": "$(symbol-reference) Source",
+  "Tooltip: Jump to original source unit": "Jump to original source unit",
   "$(play) Translate": "$(play) Translate",
+  "Tooltip: Translate this unit using AI": "Translate this unit using AI",
   "No active editor found.": "No active editor found.",
   "Could not extract unit hash from marker.": "Could not extract unit hash from marker.",
   "Translation completed for unit: {0}": "Translation completed for unit: {0}",
@@ -118,6 +120,5 @@
   "API usage limit reached. Please try again later.": "API usage limit reached. Please try again later.",
   "Language model error: {0}": "Language model error: {0}",
   "An unexpected error occurred: {0}": "An unexpected error occurred: {0}",
-  "This command uses AI to process your content.\n\nAI Usage:\n• Translation: AI translates your Markdown documents\n• Term Detection: AI identifies important terms from your content\n• Term Expansion: AI translates detected terms to other languages\n\nStatistics logging is enabled by default to help you monitor AI usage.\nYou can disable it in mdait.json (ai.debug.enableStatsLogging).\n\nDo you want to proceed?": "This command uses AI to process your content.\n\nAI Usage:\n• Translation: AI translates your Markdown documents\n• Term Detection: AI identifies important terms from your content\n• Term Expansion: AI translates detected terms to other languages\n\nStatistics logging is enabled by default to help you monitor AI usage.\nYou can disable it in mdait.json (ai.debug.enableStatsLogging).\n\nDo you want to proceed?",
-  "Proceed": "Proceed"
+  "AI_Usage_Confirmation": "✨️[AI] Commands with this mark use AI.\n\n  • Uses the AI service specified in mdait.json\n  • AI usage statistics will be logged to .mdait/ai-stats.log\n\nDo you want to proceed?"
 }

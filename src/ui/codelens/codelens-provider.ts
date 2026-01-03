@@ -57,6 +57,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					codeLenses.push(
 						new vscode.CodeLens(range, {
 							title: vscode.l10n.t("$(symbol-reference) Source"),
+							tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
 							command: "mdait.codelens.jumpToSource",
 							arguments: [range],
 						}),
@@ -68,6 +69,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					codeLenses.push(
 						new vscode.CodeLens(range, {
 							title: vscode.l10n.t("$(play) Translate"),
+							tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
 							command: "mdait.codelens.translate",
 							arguments: [range],
 						}),
