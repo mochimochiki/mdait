@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { StatusCollector } from "./status-collector";
-import { Status, type StatusItem } from "./status-item";
+import {
+	Status,
+	type StatusItem,
+	type FileStatusItem,
+	type DirectoryStatusItem,
+	type UnitStatusItem,
+} from "./status-item";
 import type { StatusItemType } from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
 
@@ -103,7 +109,7 @@ export class StatusManager {
 	 * changeFileStatus
 	 * 指定ファイルのステータスを変更
 	 */
-	public async changeFileStatus(filePath: string, modifications: Partial<StatusItem>): Promise<void> {
+	public async changeFileStatus(filePath: string, modifications: Partial<FileStatusItem>): Promise<void> {
 		try {
 			this.statusItemTree.updateFilePartial(filePath, modifications);
 		} catch (error) {
@@ -115,7 +121,10 @@ export class StatusManager {
 	 * changeDirectoryStatus
 	 * 指定ディレクトリのステータスを変更
 	 */
-	public async changeDirectoryStatus(directoryPath: string, modifications: Partial<StatusItem>): Promise<void> {
+	public async changeDirectoryStatus(
+		directoryPath: string,
+		modifications: Partial<DirectoryStatusItem>,
+	): Promise<void> {
 		try {
 			this.statusItemTree.updateDirectoryPartial(directoryPath, modifications);
 		} catch (error) {
@@ -127,7 +136,7 @@ export class StatusManager {
 	 * changeUnitStatus
 	 * ユニットのステータスをmodificationsの値に変更
 	 */
-	public changeUnitStatus(unitHash: string, modifications: Partial<StatusItem>, filePath: string): void {
+	public changeUnitStatus(unitHash: string, modifications: Partial<UnitStatusItem>, filePath: string): void {
 		try {
 			this.statusItemTree.updateUnit(filePath, unitHash, modifications);
 		} catch (error) {

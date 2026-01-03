@@ -1,6 +1,15 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Status, type StatusItem, StatusItemType } from "./status-item";
+import {
+	Status,
+	type StatusItem,
+	StatusItemType,
+	type DirectoryStatusItem,
+	type FileStatusItem,
+	type UnitStatusItem,
+	isFileStatusItem,
+	isDirectoryStatusItem,
+} from "./status-item";
 
 /**
  * StatusItemのファーストクラスコレクション
@@ -13,9 +22,9 @@ export class StatusItemTree {
 	public readonly onTreeChanged: vscode.Event<StatusItem | undefined> = this._onTreeChanged.event;
 
 	// ========== member ==========
-	private readonly fileItemMap = new Map<string, StatusItem>(); // ファイルパスをキーとする
-	private readonly directoryItemMap = new Map<string, StatusItem>(); // ディレクトリパスをキーとする
-	private readonly unitItemMapWithPath = new Map<string, StatusItem>(); // ファイルパス+ユニットハッシュをキーとする
+	private readonly fileItemMap = new Map<string, FileStatusItem>(); // ファイルパスをキーとする
+	private readonly directoryItemMap = new Map<string, DirectoryStatusItem>(); // ディレクトリパスをキーとする
+	private readonly unitItemMapWithPath = new Map<string, UnitStatusItem>(); // ファイルパス+ユニットハッシュをキーとする
 	private rootDirectories: string[] = [];
 
 	// ========== 取得 ==========
@@ -31,32 +40,32 @@ export class StatusItemTree {
 	/**
 	 * ファイルStatusItemを取得
 	 */
-	public getFile(filePath: string): StatusItem | undefined {
+	public getFile(filePath: string): FileStatusItem | undefined {
 		return this.fileItemMap.get(filePath);
 	}
 
 	/**
 	 * 全ファイルStatusItemを取得（既存API互換性用）
 	 */
-	public getFilesAll(): StatusItem[] {
+	public getFilesAll(): FileStatusItem[] {
 		return Array.from(this.fileItemMap.values());
 	}
 
 	/**
 	 * 全ソースファイルStatusItemを取得
 	 */
-	public getSourceFilesAll(): StatusItem[] {
+	public getSourceFilesAll(): FileStatusItem[] {
 		return Array.from(this.fileItemMap.values()).filter((file) => file.status === Status.Source);
 	}
 
 	/**
 	 * 指定ディレクトリ配下の全ファイル（サブディレクトリ含む）を取得
 	 */
-	public getFilesInDirectoryRecursive(dirPath: string): StatusItem[] {
-		const result: StatusItem[] = [];
+	public getFilesInDirectoryRecursive(dirPath: string): FileStatusItem[] {
+		const result: FileStatusItem[] = [];
 
 		for (const file of this.fileItemMap.values()) {
-			if (file.filePath && path.dirname(file.filePath).startsWith(dirPath)) {
+			if (path.dirname(file.filePath).startsWith(dirPath)) {
 				result.push(file);
 			}
 		}
@@ -67,12 +76,12 @@ export class StatusItemTree {
 	/**
 	 * 指定ディレクトリ配下の直下ファイルのみを取得（サブディレクトリは除く）
 	 */
-	private getFilesInDirectoryDirect(dirPath: string): StatusItem[] {
+	private getFilesInDirectoryDirect(dirPath: string): FileStatusItem[] {
 		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (!directoryItem?.children) return [];
 
-		return directoryItem.children.filter((file) => {
-			if (!file.filePath) return false;
+		return directoryItem.children.filter((file): file is FileStatusItem => {
+			if (!isFileStatusItem(file)) return false;
 			return path.dirname(file.filePath) === dirPath;
 		});
 	}
@@ -80,7 +89,7 @@ export class StatusItemTree {
 	/**
 	 * 指定ハッシュのユニットを取得
 	 */
-	public getUnit(unitHash: string, filePath: string): StatusItem | undefined {
+	public getUnit(unitHash: string, filePath: string): UnitStatusItem | undefined {
 		// 特定ファイル内から検索
 		const key = `${filePath}#${unitHash}`;
 		if (this.unitItemMapWithPath.has(key)) {
@@ -92,7 +101,7 @@ export class StatusItemTree {
 	/**
 	 * 指定ファイルの翻訳ユニット一覧を取得
 	 */
-	public getUnitsInFile(filePath: string): StatusItem[] {
+	public getUnitsInFile(filePath: string): UnitStatusItem[] {
 		const fileItem = this.fileItemMap.get(filePath);
 		return fileItem?.children ?? [];
 	}
@@ -101,7 +110,7 @@ export class StatusItemTree {
 	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
 	 * 全ファイルから検索するため、どのファイルか不定であることに注意
 	 */
-	public getUnitByHash(unitHash: string): StatusItem | undefined {
+	public getUnitByHash(unitHash: string): UnitStatusItem | undefined {
 		// 全ファイルから検索（ハッシュのみでスキャン）
 		for (const [key, unit] of this.unitItemMapWithPath) {
 			if (unit.unitHash === unitHash) {
@@ -115,17 +124,17 @@ export class StatusItemTree {
 	/**
 	 * 指定ファイル内の未翻訳ユニット（needFlag付き）を取得
 	 */
-	public getUnitsUntranslatedInFile(filePath: string): StatusItem[] {
+	public getUnitsUntranslatedInFile(filePath: string): UnitStatusItem[] {
 		const fileItem = this.fileItemMap.get(filePath);
 		if (!fileItem?.children) return [];
 
-		return fileItem.children.filter((unit) => unit.type === StatusItemType.Unit && unit.needFlag);
+		return fileItem.children.filter((unit) => unit.needFlag);
 	}
 
 	/**
 	 * 指定ディレクトリのStatusItemを取得
 	 */
-	public getDirectory(dirPath: string): StatusItem | undefined {
+	public getDirectory(dirPath: string): DirectoryStatusItem | undefined {
 		// 既存のディレクトリStatusItemを返す
 		return this.directoryItemMap.get(dirPath);
 	}
@@ -160,8 +169,10 @@ export class StatusItemTree {
 	/**
 	 * ルートディレクトリ一覧を取得（設定されたtransPairsに基づく）
 	 */
-	public getRootDirectoryItems(transPairDirs: string[]): StatusItem[] {
-		return transPairDirs.map((dirPath) => this.getDirectory(dirPath)).filter((item): item is StatusItem => !!item);
+	public getRootDirectoryItems(transPairDirs: string[]): DirectoryStatusItem[] {
+		return transPairDirs
+			.map((dirPath) => this.getDirectory(dirPath))
+			.filter((item): item is DirectoryStatusItem => !!item);
 	}
 
 	// ========== 集計 ==========
@@ -179,13 +190,11 @@ export class StatusItemTree {
 		let errorUnits = 0;
 
 		for (const unit of this.unitItemMapWithPath.values()) {
-			if (unit.type === StatusItemType.Unit) {
-				totalUnits++;
-				if (unit.status === Status.Translated) {
-					translatedUnits++;
-				} else if (unit.status === Status.Error) {
-					errorUnits++;
-				}
+			totalUnits++;
+			if (unit.status === Status.Translated) {
+				translatedUnits++;
+			} else if (unit.status === Status.Error) {
+				errorUnits++;
 			}
 		}
 
@@ -208,13 +217,11 @@ export class StatusItemTree {
 		for (const file of files) {
 			if (file.children) {
 				for (const unit of file.children) {
-					if (unit.type === StatusItemType.Unit) {
-						totalUnits++;
-						if (unit.status === Status.Translated) {
-							translatedUnits++;
-						} else if (unit.status === Status.Error) {
-							errorUnits++;
-						}
+					totalUnits++;
+					if (unit.status === Status.Translated) {
+						translatedUnits++;
+					} else if (unit.status === Status.Error) {
+						errorUnits++;
 					}
 				}
 			}
@@ -242,9 +249,9 @@ export class StatusItemTree {
 
 	/**
 	 * ツリーを構築
-	 * @param files - StatusItemの配列
+	 * @param files - FileStatusItemの配列
 	 */
-	public buildTree(files: StatusItem[], rootDirs: string[]): void {
+	public buildTree(files: FileStatusItem[], rootDirs: string[]): void {
 		this.clear();
 		this.rootDirectories = rootDirs;
 
@@ -261,43 +268,40 @@ export class StatusItemTree {
 	/**
 	 * FileItemを更新
 	 */
-	public addOrUpdateFile(fileItem: StatusItem): void {
+	public addOrUpdateFile(fileItem: FileStatusItem): void {
 		fileItem.isTranslating = false; // 翻訳中フラグをリセット
 		if (fileItem.children) {
-			fileItem.isTranslating = fileItem.children.some((file) => file.isTranslating === true);
+			fileItem.isTranslating = fileItem.children.some((unit) => unit.isTranslating === true);
 		}
-		if (fileItem.type === StatusItemType.File && fileItem.filePath) {
-			const existingItem = this.fileItemMap.get(fileItem.filePath);
-			if (existingItem) {
-				// 既存のファイルStatusItemを更新
-				// Assignを使うことでStatusItemのインスタンス自体は保持しつつ、最新の状態に更新(代入してしまうとgetTreeItemで古い状態が返る可能性があるため)
-				Object.assign(existingItem, fileItem);
-			} else {
-				this.fileItemMap.set(fileItem.filePath, fileItem);
-			}
 
-			// 子ユニットも登録（ファイルパス + ハッシュで一意性確保）
-			if (fileItem.children) {
-				for (const unit of fileItem.children) {
-					if (unit.unitHash) {
-						const key = `${fileItem.filePath}#${unit.unitHash}`;
-						// 既存のユニットを更新
-						const existingUnit = this.unitItemMapWithPath.get(key);
-						if (existingUnit) {
-							Object.assign(existingUnit, unit);
-						} else {
-							this.unitItemMapWithPath.set(key, unit);
-						}
-					}
+		const existingItem = this.fileItemMap.get(fileItem.filePath);
+		if (existingItem) {
+			// 既存のファイルStatusItemを更新
+			// Assignを使うことでStatusItemのインスタンス自体は保持しつつ、最新の状態に更新(代入してしまうとgetTreeItemで古い状態が返る可能性があるため)
+			Object.assign(existingItem, fileItem);
+		} else {
+			this.fileItemMap.set(fileItem.filePath, fileItem);
+		}
+
+		// 子ユニットも登録（ファイルパス + ハッシュで一意性確保）
+		if (fileItem.children) {
+			for (const unit of fileItem.children) {
+				const key = `${fileItem.filePath}#${unit.unitHash}`;
+				// 既存のユニットを更新
+				const existingUnit = this.unitItemMapWithPath.get(key);
+				if (existingUnit) {
+					Object.assign(existingUnit, unit);
+				} else {
+					this.unitItemMapWithPath.set(key, unit);
 				}
 			}
-
-			// ディレクトリ更新
-			this.addOrUpdateDirectory(fileItem);
 		}
+
+		// ディレクトリ更新
+		this.addOrUpdateDirectory(fileItem);
 	}
 
-	public updateFilePartial(filePath: string, updates: Partial<StatusItem>): StatusItem | undefined {
+	public updateFilePartial(filePath: string, updates: Partial<FileStatusItem>): FileStatusItem | undefined {
 		const existingItem = this.fileItemMap.get(filePath);
 		if (!existingItem) {
 			return undefined;
@@ -314,7 +318,10 @@ export class StatusItemTree {
 	/**
 	 * DirectoryItemを部分更新
 	 */
-	public updateDirectoryPartial(directoryPath: string, updates: Partial<StatusItem>): StatusItem | undefined {
+	public updateDirectoryPartial(
+		directoryPath: string,
+		updates: Partial<DirectoryStatusItem>,
+	): DirectoryStatusItem | undefined {
 		const existingItem = this.directoryItemMap.get(directoryPath);
 		if (!existingItem) {
 			return undefined;
@@ -331,7 +338,7 @@ export class StatusItemTree {
 	/**
 	 * UnitItemを部分更新
 	 */
-	public updateUnit(filePath: string, unitHash: string, updates: Partial<StatusItem>): StatusItem | undefined {
+	public updateUnit(filePath: string, unitHash: string, updates: Partial<UnitStatusItem>): UnitStatusItem | undefined {
 		const key = `${filePath}#${unitHash}`;
 		const unit = this.unitItemMapWithPath.get(key);
 		if (!unit) {
@@ -359,15 +366,15 @@ export class StatusItemTree {
 	/**
 	 * 特定のファイルに対してディレクトリマップを更新
 	 */
-	private addOrUpdateDirectory(fileItem: StatusItem): void {
-		if (!fileItem.filePath) return;
-
+	private addOrUpdateDirectory(fileItem: FileStatusItem): void {
 		const dirPath = path.dirname(fileItem.filePath);
 		const stopRoot = this.getRootDir(dirPath);
 		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (directoryItem) {
 			directoryItem.children = directoryItem.children || [];
-			const index = directoryItem.children.findIndex((f) => f.filePath === fileItem.filePath);
+			const index = directoryItem.children.findIndex(
+				(f) => isFileStatusItem(f) && f.filePath === fileItem.filePath,
+			);
 			if (index >= 0) {
 				Object.assign(directoryItem.children[index], fileItem);
 			} else {
@@ -388,7 +395,7 @@ export class StatusItemTree {
 		if (!directoryItem) {
 			// 直下ファイルを fileItemMap から収集して作成
 			const directFiles = Array.from(this.fileItemMap.values()).filter(
-				(f) => f.filePath && path.dirname(f.filePath) === dirPath,
+				(f) => path.dirname(f.filePath) === dirPath,
 			);
 			directoryItem = this.createDirectoryStatusItem(dirPath, directFiles);
 			this.directoryItemMap.set(dirPath, directoryItem);
@@ -432,7 +439,7 @@ export class StatusItemTree {
 	/**
 	 * ディレクトリの集計・表示情報を更新（共通処理）
 	 */
-	private recalcDirectoryAggregate(dirPath: string, directoryItem: StatusItem): void {
+	private recalcDirectoryAggregate(dirPath: string, directoryItem: DirectoryStatusItem): void {
 		// 直下ファイルまたはサブディレクトリがある場合は折りたたみ可能
 		{
 			const hasFiles = !!directoryItem.children && directoryItem.children.length > 0;
@@ -449,9 +456,9 @@ export class StatusItemTree {
 		directoryItem.isTranslating = allFiles.some((file) => file.isTranslating === true);
 
 		// ディレクトリのラベル/集計値を更新（再帰）
-		const totalUnits = allFiles.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-		const translatedUnits = allFiles.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
-		const dirName = path.basename(directoryItem.directoryPath || "") || directoryItem.directoryPath || "";
+		const totalUnits = allFiles.reduce((sum, file) => sum + file.totalUnits, 0);
+		const translatedUnits = allFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
+		const dirName = path.basename(directoryItem.directoryPath) || directoryItem.directoryPath;
 		directoryItem.label =
 			directoryItem.status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
 
@@ -462,13 +469,13 @@ export class StatusItemTree {
 	/**
 	 * ディレクトリStatusItemを作成
 	 */
-	private createDirectoryStatusItem(dirPath: string, files: StatusItem[]): StatusItem {
+	private createDirectoryStatusItem(dirPath: string, files: FileStatusItem[]): DirectoryStatusItem {
 		const dirName = path.basename(dirPath) || dirPath;
 
 		// 再帰的に配下すべてのファイルから集計
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
-		const totalUnits = allFiles.reduce((sum, file) => sum + (file.totalUnits ?? 0), 0);
-		const translatedUnits = allFiles.reduce((sum, file) => sum + (file.translatedUnits ?? 0), 0);
+		const totalUnits = allFiles.reduce((sum, file) => sum + file.totalUnits, 0);
+		const translatedUnits = allFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
 
 		// ディレクトリの全体ステータスを決定（再帰）
 		const status = this.determineMergedStatus(allFiles);
@@ -522,7 +529,7 @@ export class StatusItemTree {
 	/**
 	 * 複数アイテムをマージした全体ステータスを決定する
 	 */
-	private determineMergedStatus(files: StatusItem[]): Status {
+	private determineMergedStatus(files: FileStatusItem[]): Status {
 		if (files.length === 0) return Status.Unknown;
 
 		const hasError = files.some((f) => f.status === Status.Error);
@@ -531,8 +538,8 @@ export class StatusItemTree {
 		const allSource = files.every((f) => f.status === Status.Source || f.status === Status.Empty);
 		if (allSource) return Status.Source;
 
-		const totalUnits = files.reduce((sum, f) => sum + (f.totalUnits ?? 0), 0);
-		const translatedUnits = files.reduce((sum, f) => sum + (f.translatedUnits ?? 0), 0);
+		const totalUnits = files.reduce((sum, f) => sum + f.totalUnits, 0);
+		const translatedUnits = files.reduce((sum, f) => sum + f.translatedUnits, 0);
 
 		if (totalUnits === 0) return Status.Unknown;
 		if (translatedUnits === totalUnits) return Status.Translated;

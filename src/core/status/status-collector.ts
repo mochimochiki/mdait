@@ -6,7 +6,12 @@ import { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
-import { Status, type StatusItem, StatusItemType } from "./status-item";
+import {
+	Status,
+	type FileStatusItem,
+	type UnitStatusItem,
+	StatusItemType,
+} from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
 
 /**
@@ -50,13 +55,13 @@ export class StatusCollector {
 		try {
 			// 重複のないディレクトリリストを取得
 			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(this.config);
-			const files: StatusItem[] = [];
+			const files: FileStatusItem[] = [];
 
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
 				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
 				// sort
-				sourceDirItems.sort((a, b) => (a.filePath ?? "").localeCompare(b.filePath ?? ""));
+				sourceDirItems.sort((a, b) => a.filePath.localeCompare(b.filePath));
 				files.push(...sourceDirItems);
 			}
 
@@ -64,7 +69,7 @@ export class StatusCollector {
 			for (const targetDir of targetDirs) {
 				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
 				// sort
-				targetDirItems.sort((a, b) => (a.filePath ?? "").localeCompare(b.filePath ?? ""));
+				targetDirItems.sort((a, b) => a.filePath.localeCompare(b.filePath));
 				files.push(...targetDirItems);
 			}
 
@@ -81,9 +86,9 @@ export class StatusCollector {
 	/**
 	 * 単一ファイルの翻訳状況を実際のファイルの状態に基づいて取得する
 	 * @param filePath - 対象ファイルのパス
-	 * @return StatusItem - ファイルのステータス
+	 * @return FileStatusItem - ファイルのステータス
 	 */
-	public async collectFileStatus(filePath: string): Promise<StatusItem> {
+	public async collectFileStatus(filePath: string): Promise<FileStatusItem> {
 		const fileName = path.basename(filePath);
 
 		try {
@@ -99,7 +104,7 @@ export class StatusCollector {
 			// ユニットの翻訳状況を分析
 			let translatedUnits = 0;
 			const totalUnits = markdown.units.length;
-			const children: StatusItem[] = [];
+			const children: UnitStatusItem[] = [];
 
 			// totalUnitsが0の場合は空のステータスを返す
 			if (totalUnits === 0) {
@@ -207,7 +212,7 @@ export class StatusCollector {
 	/**
 	 * ファイルの全体的な翻訳状態を決定する
 	 */
-	private determineFileStatus(translatedUnits: number, totalUnits: number, units: StatusItem[]): Status {
+	private determineFileStatus(translatedUnits: number, totalUnits: number, units: UnitStatusItem[]): Status {
 		if (totalUnits === 0) {
 			return Status.Unknown;
 		}
@@ -237,7 +242,7 @@ export class StatusCollector {
 	/**
 	 * ディレクトリから直接ファイル状況を収集する
 	 */
-	private async collectAllFromDirectory(targetDir: string, config: Configuration): Promise<StatusItem[]> {
+	private async collectAllFromDirectory(targetDir: string, config: Configuration): Promise<FileStatusItem[]> {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return [];
@@ -263,7 +268,7 @@ export class StatusCollector {
 
 			// 各ファイルの状況を並列に収集（同時実行数を制限）
 			const concurrency = Math.max(1, Math.min(os.cpus()?.length ?? 4, 16));
-			const results: StatusItem[] = new Array(mdFiles.length);
+			const results: FileStatusItem[] = new Array(mdFiles.length);
 			let index = 0;
 
 			const worker = async () => {
@@ -282,6 +287,8 @@ export class StatusCollector {
 							status: Status.Error,
 							filePath,
 							fileName: path.basename(filePath),
+							translatedUnits: 0,
+							totalUnits: 0,
 							hasParseError: true,
 							errorMessage: (error as Error).message,
 							contextValue: "mdaitFileTarget",

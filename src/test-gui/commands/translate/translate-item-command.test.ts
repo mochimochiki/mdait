@@ -1,7 +1,14 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { StatusTreeTranslationHandler } from "../../../commands/trans/status-tree-translation-handler";
-import { Status, type StatusItem, StatusItemType } from "../../../core/status/status-item";
+import {
+	Status,
+	type StatusItem,
+	type FileStatusItem,
+	type UnitStatusItem,
+	type DirectoryStatusItem,
+	StatusItemType,
+} from "../../../core/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {
 	let translateItemCommand: StatusTreeTranslationHandler;
@@ -11,7 +18,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("ディレクトリアイテムの検証 - 正常なディレクトリアイテム", async () => {
-		const directoryItem: StatusItem = {
+		const directoryItem: DirectoryStatusItem = {
 			type: StatusItemType.Directory,
 			label: "test-dir",
 			directoryPath: "/test/directory",
@@ -24,10 +31,13 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("ファイルアイテムの検証 - 正常なファイルアイテム", async () => {
-		const fileItem: StatusItem = {
+		const fileItem: FileStatusItem = {
 			type: StatusItemType.File,
 			label: "test.md",
 			filePath: "/test/test.md",
+			fileName: "test.md",
+			translatedUnits: 0,
+			totalUnits: 1,
 			status: Status.NeedsTranslation,
 		};
 
@@ -37,7 +47,7 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("ユニットアイテムの検証 - 正常なユニットアイテム", async () => {
-		const unitItem: StatusItem = {
+		const unitItem: UnitStatusItem = {
 			type: StatusItemType.Unit,
 			label: "Test Unit",
 			filePath: "/test/test.md",
@@ -54,16 +64,22 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("無効なディレクトリアイテムの処理", async () => {
-		const invalidItem: StatusItem = {
-			type: StatusItemType.File, // ディレクトリではない
+		// Discriminated Union型では無効なアイテムを作成できなくなったため、
+		// テスト目的でFileStatusItemを渡してディレクトリ翻訳を呼び出す
+		const invalidItem: FileStatusItem = {
+			type: StatusItemType.File,
 			label: "invalid",
+			filePath: "/test/invalid.md",
+			fileName: "invalid.md",
+			translatedUnits: 0,
+			totalUnits: 0,
 			status: Status.NeedsTranslation,
 		};
 
 		// 無効なアイテムでもエラーが適切に処理されることを確認
 		// （実際にはvscode.window.showErrorMessageが呼ばれる）
 		try {
-			await translateItemCommand.translateDirectory(invalidItem);
+			await translateItemCommand.translateDirectory(invalidItem as StatusItem);
 			// エラーメッセージが表示されるが例外は投げられない
 		} catch (error) {
 			assert.fail("例外が投げられるべきではありません");
@@ -71,16 +87,17 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("無効なファイルアイテムの処理", async () => {
-		const invalidItem: StatusItem = {
-			type: StatusItemType.File,
+		// Discriminated Union型ではfilePathは必須のため、DirectoryStatusItemを渡してテスト
+		const invalidItem: DirectoryStatusItem = {
+			type: StatusItemType.Directory,
 			label: "invalid",
+			directoryPath: "/test/invalid",
 			status: Status.NeedsTranslation,
-			// filePathが未定義
 		};
 
 		// 無効なアイテムでもエラーが適切に処理されることを確認
 		try {
-			await translateItemCommand.translateFile(invalidItem);
+			await translateItemCommand.translateFile(invalidItem as StatusItem);
 			// エラーメッセージが表示されるが例外は投げられない
 		} catch (error) {
 			assert.fail("例外が投げられるべきではありません");
@@ -88,16 +105,17 @@ suite("翻訳アイテムコマンドテスト", () => {
 	});
 
 	test("無効なユニットアイテムの処理", async () => {
-		const invalidItem: StatusItem = {
-			type: StatusItemType.Unit,
+		// Discriminated Union型ではfilePath, unitHashは必須のため、DirectoryStatusItemを渡してテスト
+		const invalidItem: DirectoryStatusItem = {
+			type: StatusItemType.Directory,
 			label: "invalid",
+			directoryPath: "/test/invalid",
 			status: Status.NeedsTranslation,
-			// filePath, unitHashが未定義
 		};
 
 		// 無効なアイテムでもエラーが適切に処理されることを確認
 		try {
-			await translateItemCommand.translateUnit(invalidItem);
+			await translateItemCommand.translateUnit(invalidItem as StatusItem);
 			// エラーメッセージが表示されるが例外は投げられない
 		} catch (error) {
 			assert.fail("例外が投げられるべきではありません");
