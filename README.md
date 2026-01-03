@@ -1,57 +1,61 @@
 # mdait — Markdown AI Translator
 
-mdait is a VS Code extension designed for the **continuous multilingual operation of Markdown documents**.
-Rather than performing one-off translations, it tracks changes based on document structure and continuously applies AI translation **only to the parts that require re-translation**, while preserving terminology and context.
+mdait is a VS Code extension for **continuous multilingual management** of Markdown documents. Rather than one-time translation, it tracks changes based on document structure and enables continuous AI translation of "only the parts that need re-translation" while maintaining terminology and context.
+
+---
 
 ## Use Cases
 
-* Internal documents managed in multiple languages  
-* OSS documentation provided in English plus local languages  
-* Technical documents that continue to be updated after release  
+* Internal documentation managed in multiple languages
+* OSS documentation providing English + local languages
+* Technical documents that are continuously updated after release
 
-In these environments, the following issues commonly arise:
+In these environments, the following challenges often arise:
 
-* It is unclear which parts need to be re-translated when a document is updated  
-* Managing translation status—such as translated vs. untranslated, or up-to-date vs. outdated—tends to become complex  
-* File-level chat-based AI translation can lead to inconsistent wording and low reproducibility in ongoing operations  
-* Traditional sentence-level machine translation often fails to consider surrounding context or overall document structure, making it difficult to maintain stable quality  
-* Even when a glossary exists, there is no reliable mechanism to consistently apply and maintain it during actual translation work  
+* When documents are updated, it's unclear which parts need re-translation
+* Chat AI translation can have issues with inconsistent results and difficulty reproducing the same translation, causing problems in daily use
+* Traditional sentence-based machine translation often doesn't fully consider surrounding context and overall document structure, making it hard to maintain consistent quality
+* Even when glossaries are prepared, there's no easy way to make sure they're used consistently in actual translation work
 
-mdait is a tool designed to solve these **“translation operations” challenges**.
+mdait is a tool designed to **solve these 'translation operations' challenges.**
+
+---
 
 ## Key Features
 
-mdait splits Markdown documents into appropriate units based on document structure, tracks and visualizes the state of each unit, and enables AI translation and terminology extraction with a clear understanding of what needs to be translated.
+mdait divides Markdown documents based on document structure, tracks and visualizes the status of each part, enabling you to proceed with AI translation and term extraction while clearly identifying translation targets.
 
-### Unit-Based Synchronization
+### Unit-based Synchronization
 
-* Automatically splits Markdown into units at a specified heading level  
-* Associates source and translated units using a per-unit content hash (CRC32), detects source changes, and flags units that require re-translation  
+* Automatic division of Markdown into units based on specified heading levels
+* For each unit, a content hash (CRC32) is used to map translations to originals, detect source changes, and flag units that need translation
 
 ### Translation Flow Visualization
 
-* Displays translation status for each unit in the sidebar  
-* Supports translation at the directory, file, and unit levels  
-* Assists review work with a comparison view against the source text  
+* Display translation status for each unit in the sidebar
+* Translation at directory, file, and unit levels
+* Support for review work through comparison view with source text
 
 ### AI Translation with Consistency
 
-* **Context-aware AI translation** using glossary data and surrounding context of the target unit  
-* **Suggestions for glossary additions after translation**, with one-click updates to the glossary  
+* **Context-aware AI translation** using glossary and surrounding context of target units
+* **Glossary addition suggestions** after translation with one-click glossary updates
 
-In multilingual documents, consistency in terminology and phrasing directly affects quality.  
-mdait treats translation not as isolated sentences or files, but as part of the overall document flow and terminology system.
+In multilingual documentation, consistency in terminology and phrasing directly affects quality.
+mdait is designed to handle translations not as separate sentences or files, but as part of the entire document flow and terminology system.
 
+---
 
 ## Quick Start
 
-1. Create `mdait.json` in your workspace  
-2. Configure source and target directories  
-3. Run 🔄 (Sync) from the mdait view  
-4. Start translation with the ▶️ (Translate) button  
-5. Hover over `Translation complete` to review the result summary and glossary addition candidates  
+1. Open the mdait view by clicking the 🌐 (globe) icon in the activity bar
+2. Create mdait.json with the `Create mdait.json` button and configure source/target languages and directories in `transPairs`
+3. Execute 🔄 (Sync) from the mdait view
+4. Open a .md file in the target language and start unit translation by clicking the ▶️ (Translate) button on the mdait marker attached to headings
+5. Mouse over `Translation completed` to view the result summary and glossary addition suggestions
+6. Click the `Source` button to compare with the source and review
 
-### Example Configuration
+### Configuration Example
 
 ```json
 {
@@ -73,29 +77,36 @@ mdait treats translation not as isolated sentences or files, but as part of the 
 }
 ```
 
+---
+
 ## mdait Markers
 
-The information required by mdait for management (mdait markers) is embedded into Markdown files as HTML comments via 🔄 (Sync).
+The information mdait needs for management (mdait markers) is embedded in Markdown files as HTML comments by 🔄 (Sync).
 
 ```
 <!-- mdait {content-hash} from:{source-hash} need:{action} -->
 ```
 
-* `content-hash`: The content hash of the unit. It changes if even a single character is modified.
-* `source-hash`: The content hash of the corresponding source unit. It is used to link translations to their source. If the source is updated, the `source-hash` in the translated unit will no longer match the source unit’s `content-hash`, and the unit will be marked as requiring re-translation.
-* `need`: The required action (e.g., `translate`). Indicates whether translation is needed.
+`content-hash`: Content hash of the unit. Changes whenever the content changes even by one character. mdait uses this hash to detect unit correspondence and changes.
+`source-hash`: Content hash of the corresponding source unit. Maps to the source text. When the source is modified, the translation unit's `source-hash` and source unit's `content-hash` become mismatched, indicating re-translation is needed.
+`need`: Required action. When translation is needed, it's `need:translate`; when translated, the item itself is omitted.
 
-These markers are the **only data mdait uses to manage translation information**. No external files are generated. This enables highly flexible operation.
+This marker is the only data mdait uses to manage translation information. No external files are generated for management information. It's also independent of version control systems like git. This enables flexible operations:
 
-* You can manually edit translations after translation. The `from:` marker is preserved, so the linkage to the source text remains intact.
-* By manually adding or removing the `need:translate` marker, you can explicitly mark specific units as requiring re-translation or as already translated.
-* You can also manually add markers to source documents. This is useful when you want to manage translation at a finer granularity than heading levels allow.
+- You can freely modify translations after translation. Since `from:{source-hash}` is maintained, the connection to the source is preserved even after modification.
+- You can manually add/remove `need:translate` to mark specific units for re-translation or mark them as already translated.
+- You can also manually add `<!-- mdait -->` to the source text. This is useful, for example, when you want to manage translation at a more detailed level than heading levels. After adding markers, execute 🔄 (Sync) and mdait will automatically calculate hashes and start managing them.
+
+---
 
 ## AI Usage and Data Handling
 
-* mdait uses LLMs to perform tasks such as translation and terminology detection. Commands that use AI are indicated with `✨[AI]` in their tooltips.
+* mdait uses LLMs to perform operations such as translation and term detection. Commands that use AI display `✨[AI]` in their tooltips.
+* Even without using AI, you can use mdait as a tool to solve 'translation operations' challenges through features like unit-based synchronization and translation status visualization.
 * Supports VS Code Language Model API (vscode-lm), Ollama, and more.
-* No other background analysis or undisclosed communication is performed.
+* No background analysis or undisclosed communications are performed.
+
+---
 
 ## License
 
