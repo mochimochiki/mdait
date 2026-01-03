@@ -36,6 +36,8 @@ sequenceDiagram
 
 ## mdait.jsonフォーマット
 
+[schemas/mdait-config.schema.json](../schemas/mdait-config.schema.json)で定義された形式に従う。主なフィールドは以下の通り:
+
 ```json
 {
   "$schema": "./schemas/mdait-config.schema.json",
@@ -77,12 +79,6 @@ sequenceDiagram
 }
 ```
 
-`$schema`フィールドによりVS Code上で以下が機能:
-- プロパティの補完
-- 型の検証
-- ホバーヘルプ表示
-- フォーマット例の提示
-
 ## バリデーション
 
 - `validate()`メソッドは以下をチェック（設定ファイルロード後に使用）:
@@ -91,17 +87,3 @@ sequenceDiagram
 - `isConfigured()`メソッドは設定ファイルの存在とtransPairsの有無を簡易チェック
 - `isConfigured()`がfalseの場合、`StatusTreeProvider`が空配列を返しリソース消費を抑制
 - `mdaitConfigured`コンテキスト変数を更新し、ツールバーボタンとWelcome Viewの表示を切り替え
-
-## 考慮事項
-
-- 設定値は不変オブジェクトとして呼び出し側に渡し、副作用を避ける。
-- 単体テストでは`dispose()`でシングルトンを明示的に破棄し、設定の独立性を保つ。
-- 非同期設定（プロバイダー資格情報など）が増える場合はPromiseベースのアクセサを追加する余地を残す。
-- `mdait.json`が存在しない場合は`isConfigured()`がfalseを返し、オンボーディングフローに誘導する。
-- JSON形式により外部依存なし・ネイティブサポートを実現、YAML形式は廃止。
-
-## 関連
-
-- コマンド挙動: [commands.md](commands.md)
-- プロバイダー構築: [api.md](api.md)
-- テスト設定: [test.md](test.md)
