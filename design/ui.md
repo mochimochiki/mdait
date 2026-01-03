@@ -68,9 +68,3 @@ sequenceDiagram
 
 - **mdaitConfigured**: `Configuration.isConfigured()`の結果に基づき、設定完了状態を示す。`true`の場合はツールバーボタン（sync/filter/glossary）を表示し、`false`の場合はWelcome Viewを表示。
 - activation時と設定変更(`Configuration.onConfigurationChanged`)時に更新され、UI全体の表示状態を制御。
-
-## 関連
-
-- 進捗判定: [core.md](core.md)
-- コマンド挙動: [commands.md](commands.md)
-- テスト観点: [test.md](test.md)（GUIテスト方針を含む）

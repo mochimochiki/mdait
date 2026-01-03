@@ -81,12 +81,12 @@ This paragraph needs translation from the source document.
 #### sync - ユニット同期
 関連Markdownファイル群間でmdaitUnitの対応関係を確立し、差分検出とneedフラグ付与を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`を自動付与し、翻訳ワークフローを開始します。
 - **機能**: ハッシュ比較による差分検出、from追跡による翻訳チェーン管理
-- **詳細**: [commands.md](commands.md) - syncコマンド
+- **詳細**: [command_sync.md](command_sync.md)
 
 #### trans - AI翻訳実行  
 `need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行します。
 - **機能**: 翻訳対象の自動識別、AIプロバイダー連携、翻訳結果の統合
-- **詳細**: [commands.md](commands.md) - transコマンド
+- **詳細**: [command_trans.md](command_trans.md)
 
 ## モジュール間の依存関係
 

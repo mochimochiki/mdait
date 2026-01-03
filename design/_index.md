@@ -9,9 +9,17 @@
 - **内容**: システム概要、階層構造、mdaitUnit の仕組み、マーカー構造、ユニット境界の定義
 
 ### コマンドの動作を知りたい
-**[commands.md](commands.md) - コマンド層設計**
-- **読むべき時**: sync/trans/term などのコマンドの仕様を確認したい、処理フローを理解したい
-- **内容**: setup/sync/trans/term、コマンド実行シーケンス図
+
+各コマンドの詳細な設計書を参照してください：
+
+- **[command_setup.md](command_setup.md) - setupコマンド設計**
+  - 初期設定、mdait.json作成の仕組み
+- **[command_sync.md](command_sync.md) - syncコマンド設計**
+  - ユニット同期、差分検出、ハッシュ更新の仕組み
+- **[command_trans.md](command_trans.md) - transコマンド設計**
+  - 翻訳実行、用語集連携、品質チェック、キャンセル管理
+- **[command_term.md](command_term.md) - termコマンド設計**
+  - 用語検出、用語展開、バッチ処理
 
 ### コア機能の実装を理解したい
 **[core.md](core.md) - コア機能層設計**
