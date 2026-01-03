@@ -45,7 +45,7 @@ export async function detectTermCommand(units: readonly MdaitUnit[], sourceLang:
 		},
 		async (progress, token) => {
 			try {
-				await detectTermBatchInternal(units, sourceLang, progress, token);
+				await detectTerm_CoreProc(units, sourceLang, progress, token);
 
 				if (!token.isCancellationRequested) {
 					vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
@@ -61,10 +61,20 @@ export async function detectTermCommand(units: readonly MdaitUnit[], sourceLang:
 }
 
 /**
- * バッチ用語検出処理（内部実装）
+ * バッチ用語検出処理（中核プロセス）
+ *
+ * **処理フロー**:
+ * 1. 用語集リポジトリ初期化と既存用語読み込み
+ * 2. ユニットをバッチに分割（8000文字閾値）
+ * 3. 各バッチを順次処理
+ *    - AI APIで新規用語候補を抽出
+ *    - 既存用語との重複除外
+ *    - 検出用語を累積
+ * 4. 検出された用語を用語集にマージして保存
+ *
  * expand同様のバッチ処理アーキテクチャ
  */
-export async function detectTermBatchInternal(
+export async function detectTerm_CoreProc(
 	units: readonly MdaitUnit[],
 	sourceLang: string,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,

@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 
 /**
- * mdait.json設定ファイルのテンプレートを作成するコマンド
+ * mdait.json設定ファイルのテンプレートを作成するコマンド（中核プロセス）
  * @param context VS Code ExtensionContext (拡張機能のパスを取得するため)
  */
 export async function createConfigCommand(context: vscode.ExtensionContext): Promise<void> {

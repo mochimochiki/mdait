@@ -32,7 +32,7 @@ export interface TranslationCheckResult {
 export class TranslationChecker {
 	/**
 	 * 翻訳結果の品質をチェック
-	 * 
+	 *
 	 * @param sourceText 原文
 	 * @param translatedText 訳文
 	 * @returns チェック結果
@@ -43,7 +43,7 @@ export class TranslationChecker {
 		// 数値の抽出と比較
 		const sourceNumbers = this.extractNumbers(sourceText);
 		const translatedNumbers = this.extractNumbers(translatedText);
-		
+
 		if (!this.arraysEqual(sourceNumbers, translatedNumbers)) {
 			reasons.push({
 				category: "number_mismatch",
@@ -54,7 +54,7 @@ export class TranslationChecker {
 		// リスト項目数の比較
 		const sourceListItems = this.countListItems(sourceText);
 		const translatedListItems = this.countListItems(translatedText);
-		
+
 		if (sourceListItems !== translatedListItems) {
 			reasons.push({
 				category: "list_count_mismatch",
@@ -65,7 +65,7 @@ export class TranslationChecker {
 		// コードブロック数の比較
 		const sourceCodeBlocks = this.countCodeBlocks(sourceText);
 		const translatedCodeBlocks = this.countCodeBlocks(translatedText);
-		
+
 		if (sourceCodeBlocks !== translatedCodeBlocks) {
 			reasons.push({
 				category: "code_block_mismatch",

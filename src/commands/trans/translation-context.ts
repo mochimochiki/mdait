@@ -31,18 +31,18 @@ export class TranslationContext {
 	 */
 	get surroundingText(): string | undefined {
 		const parts: string[] = [];
-		
+
 		if (this.previousTexts.length > 0) {
 			parts.push("Previous context:", ...this.previousTexts);
 		}
-		
+
 		if (this.nextTexts.length > 0) {
 			if (parts.length > 0) {
 				parts.push(""); // 空行で区切る
 			}
 			parts.push("Following context:", ...this.nextTexts);
 		}
-		
+
 		return parts.length > 0 ? parts.join("\n") : undefined;
 	}
 

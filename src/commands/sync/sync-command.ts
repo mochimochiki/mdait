@@ -18,26 +18,23 @@ import { SectionMatcher } from "./section-matcher";
  * Markdownユニットの同期を行う
  */
 export async function syncCommand(): Promise<void> {
-	const statusManager = StatusManager.getInstance();
-
 	try {
-		// 設定を取得
+    // 準備
+    const statusManager = StatusManager.getInstance();
 		const config = Configuration.getInstance();
-
-		// 設定を検証
 		const validationError = config.validate();
 		if (validationError) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Configuration error: {0}", validationError));
 			return;
 		}
-
 		let successCount = 0;
 		let errorCount = 0;
 
-		// 対象選択された翻訳ペアのみ処理
+		// TransPairごとに処理
 		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 		for (const pair of pairs) {
-			// ファイル探索
+
+      // Source Markdownファイル一覧を取得
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
 			if (files.length === 0) {
@@ -46,67 +43,57 @@ export async function syncCommand(): Promise<void> {
 				);
 				continue;
 			}
+			const sourceMdFiles = files.filter((f) => path.extname(f).toLowerCase() === ".md");
 
-			// 各ファイルを同期（Markdownのみを非同期並列実行、同時実行数を制限）
-			const mdFiles = files.filter((f) => path.extname(f).toLowerCase() === ".md");
-
-			const concurrency = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
+      // CPUコア数に基づく並列処理制限
+			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
 			let index = 0;
 
+      // ワーカー関数（並列実行処理）
 			const worker = async () => {
 				while (true) {
 					const i = index++;
-					if (i >= mdFiles.length) break;
-					const sourceFile = mdFiles[i];
+					if (i >= sourceMdFiles.length) break;
+					const sourceFile = sourceMdFiles[i];
 					try {
-						// 出力先パスを取得（新しい統合されたFileExplorerを使用）
+						// TargetPathを決定
 						const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
 						if (!targetFile) {
 							console.warn(`Target path could not be determined for: ${sourceFile}`);
 							continue;
 						}
 
-						// Markdownファイルの同期を実行
-						const diffResult = await syncMarkdownFile(sourceFile, targetFile, config);
+						// 同期を実行（中核プロセス）
+						let diffResult = null;
+            if (fs.existsSync(targetFile)) {
+              diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+            } else {
+              diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
+            }
 
-						// ログ出力（差分情報を一行で表示）
+            // 結果をStatusManagerに反映
 						console.log(
 							`[${pair.sourceDir} -> ${pair.targetDir}] ${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
-
 						await statusManager.refreshFileStatus(sourceFile);
 						await statusManager.refreshFileStatus(targetFile);
-
 						successCount++;
 					} catch (error) {
 						console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
-						// エラー時もStatusManagerに通知
 						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
 						errorCount++;
 					}
 				}
 			};
 
-			const workers = Array.from({ length: Math.min(concurrency, mdFiles.length) }, () => worker());
+      // ワーカー起動と完了待機
+			const workers = Array.from({ length: Math.min(parallelCpuLimit, sourceMdFiles.length) }, () => worker());
 			await Promise.all(workers);
 		}
-		// 完了通知
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 		);
-
-		// インデックスファイル生成は廃止（StatusItemベースの管理に移行）
-		try {
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			if (workspaceRoot) {
-				console.log("Sync completed - StatusItem based management");
-			}
-		} catch (indexError) {
-			console.warn("Failed to complete sync:", indexError);
-			vscode.window.showWarningMessage(vscode.l10n.t("Sync completion failed: {0}", (indexError as Error).message));
-		}
 	} catch (error) {
-		// エラーハンドリング
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
@@ -115,28 +102,22 @@ export async function syncCommand(): Promise<void> {
 }
 
 /**
- * Markdownファイルの同期処理を行う
- * Targetファイルが存在する場合は更新、存在しない場合は新規作成を行う
+ * 新規にターゲットファイルを作成する（中核プロセス）
+ *
+ * 処理フロー:
+ * 1. ソースファイル読み込みパース
+ * 2. mdaitマーカーとハッシュを付与（source側はneed,fromなし）
+ * 3. target用ユニットを生成（from:hash, need:translateを付与）
+ * 4. ターゲットファイルとして保存
+ * 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
+ * 6. DiffResultを返す
+ *
  * @param sourceFile ソースファイルのパス
  * @param targetFile ターゲットファイルのパス
  * @param config 設定
  * @returns 差分検出結果
  */
-async function syncMarkdownFile(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
-	if (fs.existsSync(targetFile)) {
-		return syncExistingMarkdownFile(sourceFile, targetFile, config);
-	}
-	return await createInitialTargetFile(sourceFile, targetFile, config);
-}
-
-/**
- * 新規にターゲットファイルを作成する
- * @param sourceFile ソースファイルのパス
- * @param targetFile ターゲットファイルのパス
- * @param config 設定
- * @returns 差分検出結果
- */
-async function createInitialTargetFile(
+async function syncNew_CoreProc(
 	sourceFile: string,
 	targetFile: string,
 	config: Configuration,
@@ -187,13 +168,24 @@ async function createInitialTargetFile(
 }
 
 /**
- * 既存のターゲットファイルを同期する
+ * 既存のターゲットファイルを同期する（中核プロセス）
+ *
+ * 処理フロー:
+ * 1. ソースターゲットファイル読み込みパース
+ * 2. mdaitマーカーとハッシュを付与（ない場合のみ）
+ * 3. ユニットの対応付け（SectionMatcher）
+ * 4. ユニットのハッシュ更新とneedフラグ設定
+ * 5. 同期結果の生成（追加更新削除の反映）
+ * 6. 差分検出
+ * 7. ターゲットファイルに保存
+ * 8. ソースファイルにもマーカー付きで保存
+ *
  * @param sourceFile ソースファイルのパス
  * @param targetFile ターゲットファイルのパス
  * @param config 設定
  * @returns 差分検出結果
  */
-async function syncExistingMarkdownFile(
+async function sync_CoreProc(
 	sourceFile: string,
 	targetFile: string,
 	config: Configuration,

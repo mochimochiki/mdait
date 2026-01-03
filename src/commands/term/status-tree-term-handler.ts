@@ -14,8 +14,8 @@ import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
-import { detectTermBatchInternal } from "./command-detect";
-import { expandTermsInternal } from "./command-expand";
+import { detectTerm_CoreProc } from "./command-detect";
+import { expandTerm_CoreProc } from "./command-expand";
 
 /**
  * ステータスツリーアイテムの用語検出アクションハンドラ
@@ -132,7 +132,7 @@ export class StatusTreeTermHandler {
 						}
 
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTermBatchInternal(allUnits, sourceLang, progress, token);
+						await detectTerm_CoreProc(allUnits, sourceLang, progress, token);
 
 						if (!token.isCancellationRequested) {
 							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
@@ -228,7 +228,7 @@ export class StatusTreeTermHandler {
 				async (progress, token) => {
 					try {
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTermBatchInternal(markdown.units, sourceLang, progress, token);
+						await detectTerm_CoreProc(markdown.units, sourceLang, progress, token);
 
 						if (!token.isCancellationRequested) {
 							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
@@ -328,7 +328,7 @@ export class StatusTreeTermHandler {
 				},
 				async (progress, token) => {
 					try {
-						await expandTermsInternal(transPair, progress, token, sourceFiles);
+						await expandTerm_CoreProc(transPair, progress, token, sourceFiles);
 
 						if (!token.isCancellationRequested) {
 							vscode.window.showInformationMessage(
@@ -336,7 +336,8 @@ export class StatusTreeTermHandler {
 							);
 						}
 					} catch (error) {
-						const message = error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");
+						const message =
+							error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");
 						vscode.window.showErrorMessage(vscode.l10n.t("Error during term expansion: {0}", message));
 					}
 				},
@@ -397,7 +398,7 @@ export class StatusTreeTermHandler {
 			},
 			async (progress, token) => {
 				try {
-					await expandTermsInternal(transPair, progress, token, [sourceFilePath]);
+					await expandTerm_CoreProc(transPair, progress, token, [sourceFilePath]);
 
 					if (!token.isCancellationRequested) {
 						vscode.window.showInformationMessage(

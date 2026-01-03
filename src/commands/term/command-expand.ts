@@ -65,7 +65,7 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 		},
 		async (progress, token) => {
 			try {
-				await expandTermsInternal(transPair, progress, token);
+				await expandTerm_CoreProc(transPair, progress, token);
 
 				if (!token.isCancellationRequested) {
 					vscode.window.showInformationMessage(
@@ -81,13 +81,21 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 }
 
 /**
- * 用語展開処理（内部実装）
+ * 用語展開処理（中核プロセス）
+ *
+ * **処理フロー**:
+ * 1. 用語集リポジトリ読み込みと未展開用語抽出
+ * 2. 用語を含むファイルの事前フィルタリング
+ * 3. 用語展開コンテキストの収集（ユニットペアと関連用語の紐付け）
+ * 4. グローバルバッチ分割と一括抽出（AI API呼び出し）
+ * 5. 用語集更新とマージ・保存
+ *
  * @param transPair 翻訳ペア設定
  * @param progress 進捗表示
  * @param cancellationToken キャンセルトークン
  * @param sourceFileFilter 対象ソースファイルのパス配列（省略時は全ファイル）
  */
-export async function expandTermsInternal(
+export async function expandTerm_CoreProc(
 	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken: vscode.CancellationToken,
@@ -96,24 +104,20 @@ export async function expandTermsInternal(
 	const config = Configuration.getInstance();
 	const { sourceDir, targetDir, sourceLang, targetLang } = transPair;
 
-	// 用語集リポジトリを読み込み
+	// termsRepositoryの読み込み
 	const termsPath = config.getTermsFilePath();
 	let termsRepository: TermsRepository;
 	try {
 		termsRepository = await TermsRepository.load(termsPath);
 	} catch {
-		// 用語集が存在しない場合はエラー
 		throw new Error(vscode.l10n.t("Terms file not found. Please run term detection first."));
 	}
 
-	// 既存用語を取得
+	// 全用語を取得し未展開用語を抽出
 	const allTerms = await termsRepository.getAllEntries();
-
-	// 未展開の用語を抽出（sourceLangは存在するがtargetLangが存在しない）
 	const termsToExpand = allTerms.filter((entry) => {
 		return entry.languages[sourceLang] && !entry.languages[targetLang];
 	});
-
 	if (termsToExpand.length === 0) {
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("All terms are already expanded for {0} → {1}", sourceLang, targetLang),
@@ -121,14 +125,12 @@ export async function expandTermsInternal(
 		return;
 	}
 
+	// 用語を含むファイルの事前フィルタリング
 	progress.report({ message: vscode.l10n.t("Scanning source files..."), increment: 0 });
-
-	// Phase 0: 用語を含むファイルの事前フィルタリング
-	// sourceFileFilterが指定されている場合は、そのファイルのみを対象とする
 	let filesToProcess: Set<string>;
 	if (sourceFileFilter && sourceFileFilter.length > 0) {
 		// フィルタリング指定がある場合は、その中から用語を含むファイルを抽出
-		const filteredFiles = await phase0_FilterFilesContainingTermsFromList(
+		const filteredFiles = await filterFilesContainingTermsFromList(
 			sourceFileFilter,
 			termsToExpand,
 			sourceLang,
@@ -137,35 +139,32 @@ export async function expandTermsInternal(
 		filesToProcess = filteredFiles;
 	} else {
 		// フィルタリング指定がない場合は全ファイルを対象
-		filesToProcess = await phase0_FilterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
+		filesToProcess = await filterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
 	}
-
 	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
-	// Phase 1: 用語展開コンテキストの収集
-	const contexts = await phase1_CollectExpansionContexts(
+	// 用語展開コンテキストの収集
+	const contexts = await collectExpansionContexts(
 		transPair,
 		termsToExpand,
 		filesToProcess,
 		progress,
 		cancellationToken,
 	);
-
 	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
-	// Phase 2: グローバルバッチ分割と一括抽出
-	const phase2Results = await phase2_ExtractFromBatches(transPair, contexts, progress, cancellationToken);
-
+	// グローバルバッチ分割と一括抽出
+	const extractResults = await extractFromBatches(transPair, contexts, progress, cancellationToken);
 	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
 
 	// 用語集を更新
-	const allResults = phase2Results;
+	const allResults = extractResults;
 
 	if (allResults.size === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No terms could be expanded"));
@@ -198,10 +197,10 @@ export async function expandTermsInternal(
 }
 
 /**
- * Phase 1: 用語展開コンテキストの収集
+ * 用語展開コンテキストの収集
  * 全ファイルをパースしてUnitペアと関連用語を紐付ける
  */
-async function phase1_CollectExpansionContexts(
+async function collectExpansionContexts(
 	transPair: TransPair,
 	termsToExpand: readonly TermEntry[],
 	filesToProcess: Set<string>,
@@ -301,7 +300,7 @@ async function phase1_CollectExpansionContexts(
 /**
  * Phase 2: グローバルバッチ分割と一括抽出
  */
-async function phase2_ExtractFromBatches(
+async function extractFromBatches(
 	transPair: TransPair,
 	contexts: TermExpansionContext[],
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
@@ -396,9 +395,9 @@ function splitIntoBatches(contexts: TermExpansionContext[]): TermExpansionContex
 }
 
 /**
- * Phase 0: 用語を含むファイルの事前フィルタリング
+ * 用語を含むファイルの事前フィルタリング
  */
-async function phase0_FilterFilesContainingTerms(
+async function filterFilesContainingTerms(
 	transPair: TransPair,
 	terms: readonly TermEntry[],
 	cancellationToken?: vscode.CancellationToken,
@@ -414,14 +413,14 @@ async function phase0_FilterFilesContainingTerms(
 		.filter((entry) => entry.languages[transPair.sourceLang])
 		.map((entry) => entry.languages[transPair.sourceLang].term);
 
-	return filterFilesContainingTerms(filePaths, termList, cancellationToken);
+	return filterFilesContainingTermsCore(filePaths, termList, cancellationToken);
 }
 
 /**
  * Phase 0: 指定されたファイルリストから用語を含むファイルをフィルタリング
  * sourceFileFilterが指定された場合に使用
  */
-async function phase0_FilterFilesContainingTermsFromList(
+async function filterFilesContainingTermsFromList(
 	sourceFiles: readonly string[],
 	terms: readonly TermEntry[],
 	sourceLang: string,
@@ -432,13 +431,13 @@ async function phase0_FilterFilesContainingTermsFromList(
 		.filter((entry) => entry.languages[sourceLang])
 		.map((entry) => entry.languages[sourceLang].term);
 
-	return filterFilesContainingTerms(sourceFiles, termList, cancellationToken);
+	return filterFilesContainingTermsCore(sourceFiles, termList, cancellationToken);
 }
 
 /**
  * 共通フィルタリングロジック: ファイルリストから指定された用語を含むファイルを抽出
  */
-async function filterFilesContainingTerms(
+async function filterFilesContainingTermsCore(
 	filePaths: readonly string[],
 	termList: readonly string[],
 	cancellationToken?: vscode.CancellationToken,

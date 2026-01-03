@@ -25,10 +25,10 @@ import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
+import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
 import type { Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
-import { TranslationChecker } from "./translation-checker";
 
 /**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
@@ -62,7 +62,7 @@ export async function transCommand(uri?: vscode.Uri) {
 		},
 		async (progress, token) => {
 			try {
-				await transCommandInternal(uri, progress, token);
+				await transFile_CoreProc(uri, progress, token);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
 			}
@@ -71,12 +71,21 @@ export async function transCommand(uri?: vscode.Uri) {
 }
 
 /**
- * Markdownファイルの翻訳処理（内部実装）
+ * Markdownファイルの翻訳処理（中核プロセス）
+ *
+ * **処理フロー**:
+ * 1. 翻訳ペア取得とTranslatorビルド
+ * 2. Markdownファイル読み込み＆パース
+ * 3. need:translateフラグを持つユニットを抽出
+ * 4. 各ユニットを順次翻訳（キャンセルチェック付き）
+ * 5. 翻訳結果をファイルに保存
+ * 6. StatusManagerでファイルステータス更新
+ *
  * @param uri 翻訳対象ファイルのURI
  * @param progress 進捗報告用オブジェクト
  * @param token キャンセルトークン
  */
-export async function transCommandInternal(
+export async function transFile_CoreProc(
 	uri: vscode.Uri,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
@@ -187,14 +196,31 @@ export async function transCommandInternal(
 }
 
 /**
- * 単一ユニットの翻訳処理
+ * 単一ユニットの翻訳処理（中核プロセス）
+ *
+ * **処理フロー**:
+ * 1. 用語集から関連用語を抽出
+ * 2. 前回訳文を取得（改訂時）
+ * 3. 翻訳コンテキスト構築（周辺ユニット）
+ * 4. ソースコンテンツ取得（from属性がある場合）
+ * 5. AI翻訳実行
+ * 6. ユニットコンテンツ更新とハッシュ再計算
+ * 7. 翻訳品質チェック＆need:review設定
+ * 8. 翻訳サマリ保存
+ *
  * @param unit 翻訳対象のユニット
  * @param translator 翻訳サービス
  * @param sourceLang 翻訳元言語
  * @param targetLang 翻訳先言語
  * @param targetFilePath ターゲットファイルのパス
  */
-async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang: string, targetLang: string, targetFilePath: string) {
+async function translateUnit(
+	unit: MdaitUnit,
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	targetFilePath: string,
+) {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
 	const config = Configuration.getInstance();
@@ -234,23 +260,21 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 		const contextSize = config.trans.contextSize || 1;
 		const previousTexts: string[] = [];
 		const nextTexts: string[] = [];
-		
+
 		if (contextSize > 0 && unit.marker?.hash) {
 			// StatusManagerから現在のユニットのファイルパスを取得
 			try {
 				const tree = statusManager.getStatusItemTree();
 				const currentStatusUnit = tree.getUnitByHash(unit.marker.hash);
-				
+
 				if (currentStatusUnit?.filePath) {
 					const currentUri = vscode.Uri.file(currentStatusUnit.filePath);
 					const currentDoc = await vscode.workspace.openTextDocument(currentUri);
 					const currentFileContent = currentDoc.getText();
 					const currentMarkdown = markdownParser.parse(currentFileContent, config);
-					
-					const currentIndex = currentMarkdown.units.findIndex(
-						(u) => u.marker?.hash === unit.marker.hash
-					);
-					
+
+					const currentIndex = currentMarkdown.units.findIndex((u) => u.marker?.hash === unit.marker.hash);
+
 					if (currentIndex !== -1) {
 						// 前方のユニットを取得
 						for (let i = 1; i <= contextSize; i++) {
@@ -259,7 +283,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 								previousTexts.unshift(currentMarkdown.units[prevIndex].content);
 							}
 						}
-						
+
 						// 後方のユニットを取得
 						for (let i = 1; i <= contextSize; i++) {
 							const nextIndex = currentIndex + i;
@@ -273,7 +297,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 				console.warn("Failed to get surrounding units for context:", error);
 			}
 		}
-		
+
 		const context = new TranslationContext(previousTexts, nextTexts, termsJson, previousTranslation);
 
 		let sourceContent = unit.content;
@@ -355,7 +379,7 @@ async function translateUnit(unit: MdaitUnit, translator: Translator, sourceLang
 			// 翻訳品質チェック
 			const checker = new TranslationChecker();
 			const checkResult = checker.checkTranslationQuality(sourceContent, translationResult.translatedText);
-			
+
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
 				unit.marker.setNeed("review");
@@ -408,7 +432,7 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 		},
 		async (progress, token) => {
 			try {
-				await transUnitCommandInternal(targetPath, unitHash, progress, token);
+				await transUnit_CoreProc(targetPath, unitHash, progress, token);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
 			}
@@ -417,13 +441,20 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 }
 
 /**
- * 単一ユニットの翻訳処理（内部実装）
+ * 単一ユニットの翻訳処理（中核プロセス）
+ *
+ * 処理フロー:
+ * 1. 翻訳ペア取得とTranslatorビルド
+ * 2. 対象ユニットの読み込みと検証
+ * 3. 翻訳実行
+ * 4. ファイル保存とStatusManager更新
+ *
  * @param targetPath 対象ファイルのパス
  * @param unitHash 翻訳対象のユニットハッシュ
  * @param progress 進捗報告用オブジェクト
  * @param token キャンセルトークン
  */
-export async function transUnitCommandInternal(
+export async function transUnit_CoreProc(
 	targetPath: string,
 	unitHash: string,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
@@ -477,7 +508,7 @@ export async function transUnitCommandInternal(
 
 		const oldMarkerText = targetUnit.marker.toString();
 
-		// 翻訳実行
+		// 翻訳実行（中核プロセス）
 		await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath);
 
 		// ステータス: 翻訳完了

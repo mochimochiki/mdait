@@ -4,7 +4,7 @@ import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { AIOnboarding } from "../../utils/ai-onboarding";
-import { transCommand, transCommandInternal, transUnitCommand, transUnitCommandInternal } from "./trans-command";
+import { transFile_CoreProc, transUnitCommand } from "./trans-command";
 
 /**
  * ステータスツリーアイテムの翻訳アクションハンドラ
@@ -101,7 +101,7 @@ export class StatusTreeTranslationHandler {
 
 							try {
 								// 内部実装を直接呼び出し（二重のwithProgressを回避）
-								await transCommandInternal(file, progress, token);
+								await transFile_CoreProc(file, progress, token);
 								successful++;
 							} catch (error) {
 								console.error(`Error translating file ${file.fsPath}:`, error);
@@ -166,7 +166,7 @@ export class StatusTreeTranslationHandler {
 				async (progress, token) => {
 					try {
 						// 内部実装を直接呼び出し（二重のwithProgressを回避）
-						await transCommandInternal(vscode.Uri.file(filePath), progress, token);
+						await transFile_CoreProc(vscode.Uri.file(filePath), progress, token);
 					} finally {
 						// StatusManagerを通じてisTranslatingを解除
 						await statusManager.changeFileStatus(filePath, { isTranslating: false });
