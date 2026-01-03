@@ -239,6 +239,19 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
+	 * 本文から始まるユニットの先頭にある空行を除去
+	 * @param content コンテンツ文字列
+	 * @returns 先頭空行を除去したコンテンツ
+	 */
+	private trimLeadingEmptyLines(content: string): string {
+		const contentLines = content.split("\n");
+		while (contentLines.length > 0 && contentLines[0].trim() === "") {
+			contentLines.shift();
+		}
+		return contentLines.join("\n");
+	}
+
+	/**
 	 * 第2パス: 境界からユニットを構築
 	 * 境界間のコンテンツを抽出し、MdaitUnitを生成する
 	 * @param boundaries 境界配列
@@ -261,16 +274,17 @@ export class MarkdownItParser implements IMarkdownParser {
 		const firstBoundaryLine = boundaries[0].line;
 		if (firstBoundaryLine > 0) {
 			const precedingContent = lines.slice(0, firstBoundaryLine).join("\n");
+			const normalizedPrecedingContent = this.trimLeadingEmptyLines(precedingContent);
 			// 空白のみでない場合はユニットとして追加
 			if (precedingContent.trim().length > 0) {
-				const title = this.extractTitleFromContent(precedingContent);
+				const title = this.extractTitleFromContent(normalizedPrecedingContent);
 				units.push(
 					new MdaitUnit(
 						// 空のマーカーを作成（sync時にensureMdaitMarkerHashでハッシュが付与される）
 						new MdaitMarker(""),
 						title,
 						0, // レベルなし
-						precedingContent,
+						normalizedPrecedingContent,
 						frontMatterLineOffset,
 						firstBoundaryLine - 1 + frontMatterLineOffset,
 					),
@@ -304,6 +318,11 @@ export class MarkdownItParser implements IMarkdownParser {
 					}
 					rawContent = contentLines.join("\n");
 				}
+			}
+
+			// 本文から始まるユニットでは先頭空行を除去して、マーカー直下に空行を残さない
+			if (level === 0) {
+				rawContent = this.trimLeadingEmptyLines(rawContent);
 			}
 
 			// タイトルが空の場合、コンテンツからタイトルを抽出

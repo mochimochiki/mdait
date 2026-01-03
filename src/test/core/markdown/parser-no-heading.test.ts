@@ -167,4 +167,59 @@ suite("MarkdownParser（見出し無しマーカー）", () => {
 		assert.match(parsed.units[3].content, /ユニットC/);
 		assert.match(parsed.units[4].content, /## 見出し1/);
 	});
+
+	test("本文から始まるユニットの先頭空行が除去されること", () => {
+		const md = `---
+title: first-empty-marker-test
+---
+
+<!-- mdait 153aab38 -->
+
+本文が最初
+
+<!-- mdait a48035d4 -->
+## テストファイル
+
+> これは引用です。
+`;
+
+		const parsed = markdownParser.parse(md, testConfig);
+
+		assert.strictEqual(parsed.units.length, 2);
+		assert.strictEqual(parsed.units[0].marker.hash, "153aab38");
+		assert.strictEqual(parsed.units[0].content.split("\n")[0], "本文が最初");
+
+		const stringified = markdownParser.stringify(parsed);
+		assert.match(stringified, /<!-- mdait 153aab38 -->\n本文が最初/);
+	});
+
+	test("先頭に複数空行があっても除去されること", () => {
+		const md = `---
+title: first-empty-marker-test
+---
+
+<!-- mdait 99999999 -->
+
+
+
+本文が最初
+
+次の行
+
+<!-- mdait aaaaaaaa -->
+## 見出し
+`;
+
+		const parsed = markdownParser.parse(md, testConfig);
+
+		assert.strictEqual(parsed.units.length, 2);
+		assert.strictEqual(parsed.units[0].marker.hash, "99999999");
+		const contentLines = parsed.units[0].content.split("\n");
+		assert.strictEqual(contentLines[0], "本文が最初");
+		assert.strictEqual(contentLines[1], "");
+		assert.strictEqual(contentLines[2], "次の行");
+
+		const stringified = markdownParser.stringify(parsed);
+		assert.match(stringified, /<!-- mdait 99999999 -->\n本文が最初\n\n次の行/);
+	});
 });
