@@ -12,7 +12,11 @@ import { Configuration } from "./config/configuration";
 import { SelectionState } from "./core/status/selection-state";
 import type { StatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
-import { codeLensJumpToSourceCommand, codeLensTranslateCommand } from "./ui/codelens/codelens-command";
+import {
+	codeLensClearNeedCommand,
+	codeLensJumpToSourceCommand,
+	codeLensTranslateCommand,
+} from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
@@ -147,6 +151,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensJumpToSourceDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.jumpToSource",
 		codeLensJumpToSourceCommand,
+	);
+
+	// CodeLens need削除コマンド
+	const codeLensClearNeedDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.clearNeed",
+		codeLensClearNeedCommand,
 	);
 
 	// CodeLensProvider登録
@@ -327,6 +337,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		termExpandFileDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
+		codeLensClearNeedDisposable,
 		codeLensDisposable,
 		hoverDisposable,
 		translateDirectoryDisposable,

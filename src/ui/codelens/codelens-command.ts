@@ -51,6 +51,51 @@ export async function codeLensTranslateCommand(range: vscode.Range): Promise<voi
 }
 
 /**
+ * CodeLensからneedマーカーをクリアするコマンド
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensClearNeedCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+
+		const document = activeEditor.document;
+		const lineText = document.lineAt(range.start.line).text;
+
+		// マーカーをパースしてneedを削除
+		const marker = MdaitMarker.parse(lineText);
+		if (!marker || !marker.need) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
+			return;
+		}
+
+		// needをnullに設定して文字列化
+		marker.need = null;
+		const newLineText = marker.toString();
+
+		// 行全体を置換
+		await activeEditor.edit((editBuilder) => {
+			const lineRange = new vscode.Range(
+				range.start.line,
+				0,
+				range.start.line,
+				document.lineAt(range.start.line).text.length,
+			);
+			editBuilder.replace(lineRange, newLineText);
+		});
+
+		// ドキュメントを保存
+		await document.save();
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/**
  * CodeLensからソースユニットへジャンプするコマンド
  * @param range CodeLensが表示されている行の範囲
  */

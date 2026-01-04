@@ -75,6 +75,19 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 						}),
 					);
 				}
+
+				// needマーカーがある場合は完了ボタン
+				if (marker.need) {
+					const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
+					codeLenses.push(
+						new vscode.CodeLens(range, {
+							title,
+							tooltip,
+							command: "mdait.codelens.clearNeed",
+							arguments: [range],
+						}),
+					);
+				}
 			}
 		}
 
@@ -93,5 +106,42 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	): vscode.ProviderResult<vscode.CodeLens> {
 		// 既にprovideで設定済みなのでそのまま返す
 		return codeLens;
+	}
+
+	/**
+	 * needマーカーの種類に応じた完了ボタンのラベルとツールチップを取得
+	 * @param need needマーカーの値
+	 * @returns ボタンのtitleとtooltip
+	 */
+	private getCompletionButtonLabel(need: string): { title: string; tooltip: string } {
+		if (need === "translate") {
+			return {
+				title: vscode.l10n.t("$(check) Mark as Translated"),
+				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually translated"),
+			};
+		}
+		if (need.startsWith("revise@")) {
+			return {
+				title: vscode.l10n.t("$(check) Mark as Revised"),
+				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually revised"),
+			};
+		}
+		if (need === "review") {
+			return {
+				title: vscode.l10n.t("$(check) Mark as Reviewed"),
+				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
+			};
+		}
+		if (need === "solve-conflict") {
+			return {
+				title: vscode.l10n.t("$(check) Mark as Conflict Resolved"),
+				tooltip: vscode.l10n.t("Tooltip: Mark this unit's conflict as resolved"),
+			};
+		}
+		// デフォルト
+		return {
+			title: vscode.l10n.t("$(check) Mark as Completed"),
+			tooltip: vscode.l10n.t("Tooltip: Mark this unit as completed"),
+		};
 	}
 }
