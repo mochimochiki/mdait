@@ -6,12 +6,7 @@ import { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
-import {
-	Status,
-	type FileStatusItem,
-	type UnitStatusItem,
-	StatusItemType,
-} from "./status-item";
+import { type FileStatusItem, Status, StatusItemType, type UnitStatusItem } from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
 
 /**
@@ -197,7 +192,8 @@ export class StatusCollector {
 			return Status.Unknown;
 		}
 
-		if (unit.marker.need === "translate") {
+		// needsTranslation()メソッドで翻訳の必要性を判定
+		if (unit.marker.needsTranslation()) {
 			return Status.NeedsTranslation;
 		}
 

@@ -64,8 +64,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					);
 				}
 
-				// need:translateフラグがある場合は翻訳ボタン
-				if (marker.need === "translate") {
+				// 翻訳が必要な場合は翻訳ボタン
+				if (marker.needsTranslation()) {
 					codeLenses.push(
 						new vscode.CodeLens(range, {
 							title: vscode.l10n.t("$(play) Translate"),
