@@ -7,6 +7,7 @@ import { calculateHash } from "../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { SnapshotManager } from "../../core/snapshot/snapshot-manager";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
@@ -19,8 +20,8 @@ import { SectionMatcher } from "./section-matcher";
  */
 export async function syncCommand(): Promise<void> {
 	try {
-    // 準備
-    const statusManager = StatusManager.getInstance();
+		// 準備
+		const statusManager = StatusManager.getInstance();
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
 		if (validationError) {
@@ -33,8 +34,7 @@ export async function syncCommand(): Promise<void> {
 		// TransPairごとに処理
 		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 		for (const pair of pairs) {
-
-      // Source Markdownファイル一覧を取得
+			// Source Markdownファイル一覧を取得
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
 			if (files.length === 0) {
@@ -45,11 +45,11 @@ export async function syncCommand(): Promise<void> {
 			}
 			const sourceMdFiles = files.filter((f) => path.extname(f).toLowerCase() === ".md");
 
-      // CPUコア数に基づく並列処理制限
+			// CPUコア数に基づく並列処理制限
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
 			let index = 0;
 
-      // ワーカー関数（並列実行処理）
+			// ワーカー関数（並列実行処理）
 			const worker = async () => {
 				while (true) {
 					const i = index++;
@@ -65,13 +65,13 @@ export async function syncCommand(): Promise<void> {
 
 						// 同期を実行（中核プロセス）
 						let diffResult = null;
-            if (fs.existsSync(targetFile)) {
-              diffResult = await sync_CoreProc(sourceFile, targetFile, config);
-            } else {
-              diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
-            }
+						if (fs.existsSync(targetFile)) {
+							diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+						} else {
+							diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
+						}
 
-            // 結果をStatusManagerに反映
+						// 結果をStatusManagerに反映
 						console.log(
 							`[${pair.sourceDir} -> ${pair.targetDir}] ${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
 						);
@@ -86,10 +86,18 @@ export async function syncCommand(): Promise<void> {
 				}
 			};
 
-      // ワーカー起動と完了待機
+			// ワーカー起動と完了待機
 			const workers = Array.from({ length: Math.min(parallelCpuLimit, sourceMdFiles.length) }, () => worker());
 			await Promise.all(workers);
+
+			// スナップショットバッファをフラッシュ
+			const snapshotManager = SnapshotManager.getInstance();
+			await snapshotManager.flushBuffer();
 		}
+
+		// 全ファイル処理完了後、GC処理
+		await runSnapshotGC(statusManager);
+
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 		);
@@ -117,11 +125,7 @@ export async function syncCommand(): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
-async function syncNew_CoreProc(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-): Promise<DiffResult> {
+async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
 	const fileExplorer = new FileExplorer();
 
 	// 1. ソースファイル読み込み＆パース
@@ -152,6 +156,14 @@ async function syncNew_CoreProc(
 	const targetContent = markdownParser.stringify(targetDoc);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
+
+	// 4.5. スナップショット保存（初回sync時も保存）
+	const snapshotManager = SnapshotManager.getInstance();
+	for (const srcUnit of source.units) {
+		if (srcUnit.marker?.hash) {
+			snapshotManager.saveSnapshot(srcUnit.marker.hash, srcUnit.content);
+		}
+	}
 
 	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
 	const updatedSourceContent = markdownParser.stringify(source);
@@ -185,11 +197,7 @@ async function syncNew_CoreProc(
  * @param config 設定
  * @returns 差分検出結果
  */
-async function sync_CoreProc(
-	sourceFile: string,
-	targetFile: string,
-	config: Configuration,
-): Promise<DiffResult> {
+async function sync_CoreProc(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
@@ -213,6 +221,14 @@ async function sync_CoreProc(
 
 	// ユニットのハッシュを更新
 	updateSectionHashes(matchResult, config, sourceFile, targetFile);
+
+	// sourceのスナップショット保存
+	const snapshotManager = SnapshotManager.getInstance();
+	for (const srcUnit of source.units) {
+		if (srcUnit.marker?.hash) {
+			snapshotManager.saveSnapshot(srcUnit.marker.hash, srcUnit.content);
+		}
+	}
 
 	// 同期結果の生成
 	const syncedUnits = sectionMatcher.createSyncedTargets(
@@ -309,11 +325,16 @@ function updateSectionHashes(
 				targetMarker.hash = targetHash;
 			}
 
-			// ソースで変更があった場合、need:translate付与
+			// ソースで変更があった場合、need:revise@{oldhash}付与
 			const oldSourceHash = targetMarker.from;
 			if (oldSourceHash !== sourceMarker.hash) {
 				targetMarker.from = sourceMarker.hash;
-				targetMarker.setNeed("translate");
+				// 旧ハッシュがあればrevise形式、なければtranslate
+				if (oldSourceHash) {
+					targetMarker.setReviseNeed(oldSourceHash);
+				} else {
+					targetMarker.setNeed("translate");
+				}
 				source.marker = sourceMarker;
 				target.marker = targetMarker;
 				continue;
@@ -345,4 +366,41 @@ function updateSectionHashes(
 			}
 		}
 	}
+}
+
+/**
+ * スナップショットのGC処理
+ * StatusItemTreeから全ユニットのハッシュを収集し、不要なスナップショットを削除
+ * @param statusManager StatusManagerインスタンス
+ */
+async function runSnapshotGC(statusManager: StatusManager): Promise<void> {
+	const snapshotManager = SnapshotManager.getInstance();
+
+	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
+	if (snapshotManager.getSnapshotFileSize() < 5 * 1024 * 1024) {
+		return;
+	}
+
+	// 全StatusItemから使用中のhashを収集
+	const activeHashes = new Set<string>();
+	const tree = statusManager.getStatusItemTree();
+	const files = tree.getFilesAll();
+
+	for (const file of files) {
+		for (const unit of file.children ?? []) {
+			if (unit.unitHash) {
+				activeHashes.add(unit.unitHash);
+			}
+			if (unit.fromHash) {
+				activeHashes.add(unit.fromHash);
+			}
+			// need:revise@{oldhash}形式からoldhashを抽出
+			const oldhash = MdaitMarker.extractOldHashFromNeed(unit.needFlag);
+			if (oldhash) {
+				activeHashes.add(oldhash);
+			}
+		}
+	}
+
+	await snapshotManager.garbageCollect(activeHashes);
 }

@@ -126,5 +126,61 @@ suite("MdaitMarker", () => {
 		// 別のタグがある場合
 		const header4 = new MdaitMarker(testHash, testFrom, "other");
 		assert.equal(header4.needsTranslation(), false);
+
+		// revise@{hash}形式の場合もtrueを返す
+		const header5 = new MdaitMarker(testHash, testFrom, "revise@abc12345");
+		assert.equal(header5.needsTranslation(), true);
+	});
+
+	test("needsRevision: revise@{hash}形式を正しく判定する", () => {
+		// revise形式
+		const header1 = new MdaitMarker(testHash, testFrom, "revise@abc12345");
+		assert.equal(header1.needsRevision(), true);
+
+		// translate形式
+		const header2 = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header2.needsRevision(), false);
+
+		// needなし
+		const header3 = new MdaitMarker(testHash, testFrom);
+		assert.equal(header3.needsRevision(), false);
+	});
+
+	test("getOldHashFromNeed: revise@{hash}からoldhashを抽出する", () => {
+		// revise形式
+		const header1 = new MdaitMarker(testHash, testFrom, "revise@abc12345");
+		assert.equal(header1.getOldHashFromNeed(), "abc12345");
+
+		// translate形式
+		const header2 = new MdaitMarker(testHash, testFrom, "translate");
+		assert.equal(header2.getOldHashFromNeed(), null);
+
+		// needなし
+		const header3 = new MdaitMarker(testHash, testFrom);
+		assert.equal(header3.getOldHashFromNeed(), null);
+	});
+
+	test("setReviseNeed: need:revise@{oldhash}形式を設定する", () => {
+		const header = new MdaitMarker(testHash, testFrom, "translate");
+		header.setReviseNeed("abc12345");
+		assert.equal(header.need, "revise@abc12345");
+		assert.equal(header.needsRevision(), true);
+		assert.equal(header.getOldHashFromNeed(), "abc12345");
+	});
+
+	test("parse: revise@{hash}形式を正しくパースする", () => {
+		const comment = `<!-- mdait ${testHash} from:${testFrom} need:revise@abc12345 -->`;
+		const header = MdaitMarker.parse(comment);
+		assert.ok(header);
+		assert.equal(header.hash, testHash);
+		assert.equal(header.from, testFrom);
+		assert.equal(header.need, "revise@abc12345");
+		assert.equal(header.needsRevision(), true);
+		assert.equal(header.getOldHashFromNeed(), "abc12345");
+	});
+
+	test("toString: revise@{hash}形式を正しく文字列化する", () => {
+		const header = new MdaitMarker(testHash, testFrom, "revise@abc12345");
+		assert.equal(header.toString(), `<!-- mdait ${testHash} from:${testFrom} need:revise@abc12345 -->`);
 	});
 });

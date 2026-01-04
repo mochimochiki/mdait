@@ -15,7 +15,6 @@ export class TranslationContext {
 
 	/**
 	 * 適用する用語集の文字列。
-	 * 将来的にはファイルパスや構造化されたデータも検討。
 	 */
 	terms?: string;
 
@@ -24,6 +23,12 @@ export class TranslationContext {
 	 * 変更不要な部分は既訳を尊重し、変更が必要な箇所のみを変更するための参考情報。
 	 */
 	previousTranslation?: string;
+
+	/**
+	 * 原文の変更差分（unified diff形式）。
+	 * 原文が改訂された場合に、変更箇所を明示するために使用。
+	 */
+	sourceDiff?: string;
 
 	/**
 	 * 周辺テキストを結合した文字列を取得
@@ -51,10 +56,17 @@ export class TranslationContext {
 	 */
 	[key: string]: unknown;
 
-	constructor(previousTexts: string[] = [], nextTexts: string[] = [], terms?: string, previousTranslation?: string) {
+	constructor(
+		previousTexts: string[] = [],
+		nextTexts: string[] = [],
+		terms?: string,
+		previousTranslation?: string,
+		sourceDiff?: string,
+	) {
 		this.previousTexts = previousTexts;
 		this.nextTexts = nextTexts;
 		this.terms = terms;
 		this.previousTranslation = previousTranslation;
+		this.sourceDiff = sourceDiff;
 	}
 }

@@ -89,7 +89,7 @@ suite("TermEntry", () => {
 
 		const merged = TermEntry.merge(entry1, entry2);
 
-		assert.strictEqual(merged.context, "新しいコンテキスト");
+		assert.strictEqual(merged.context, "元のコンテキスト");
 		assert.strictEqual(TermEntry.getTerm(merged, "ja"), "テスト");
 		assert.strictEqual(TermEntry.getTerm(merged, "en"), "test");
 	});

@@ -342,10 +342,10 @@ suite("syncコマンドE2E", () => {
 			assert.notStrictEqual(jaNewHash, "9e3b618c"); // 元のハッシュと異なる
 
 			// 2. en側の対応するユニットにneed:translateが付与されていること
-			assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
+			assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:revise@[^\s]+ -->/);
 
 			// 3. en側のfromが更新されたjaのハッシュと一致していること
-			const enFirstUnit = enText.match(/<!-- mdait ([^\s]+) from:([^\s]+) need:translate -->/);
+			const enFirstUnit = enText.match(/<!-- mdait ([^\s]+) from:([^\s]+) need:revise@[^\s]+ -->/);
 			assert.ok(enFirstUnit);
 			assert.strictEqual(enFirstUnit[2], jaNewHash);
 

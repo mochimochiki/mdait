@@ -231,6 +231,7 @@
     "@vscode/l10n": "^0.0.18",
     "csv-parse": "^5.5.6",
     "csv-stringify": "^6.5.2",
+    "diff": "^8.0.2",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
     "ollama": "^0.6.0",
@@ -238,6 +239,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@types/diff": "^7.0.2",
     "@types/markdown-it": "^14.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",

@@ -11,11 +11,13 @@ import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールの
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { SnapshotManager } from "../../core/snapshot/snapshot-manager";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
@@ -329,6 +331,24 @@ async function translateUnit(
 				}
 			}
 		}
+
+		// revise@{oldhash}形式の場合、スナップショットからdiffを生成（ソースコンテンツ取得後）
+		if (unit.marker?.needsRevision()) {
+			const oldhash = unit.marker.getOldHashFromNeed();
+			if (oldhash) {
+				try {
+					const snapshotManager = SnapshotManager.getInstance();
+					const oldContent = await snapshotManager.loadSnapshot(oldhash);
+					if (oldContent && hasDiff(oldContent, sourceContent)) {
+						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
+						console.log(`Generated diff for revision from ${oldhash}`);
+					}
+				} catch (error) {
+					console.warn(`Failed to generate diff for oldhash ${oldhash}:`, error);
+				}
+			}
+		}
+
 		// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
 		const translationResult = await translator.translate(sourceContent, sourceLang, targetLang, context);
 

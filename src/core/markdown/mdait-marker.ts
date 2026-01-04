@@ -19,8 +19,10 @@ export class MdaitMarker {
 	/**
 	 * MdaitMarkerの正規表現パターン
 	 * ハッシュは省略可能（<!-- mdait --> のみも許容）
+	 * needフィールドは revise@{hash} 形式もサポート
 	 */
-	static readonly MARKER_REGEX = /<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:(\w+))?\s*-->/;
+	static readonly MARKER_REGEX =
+		/<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:([\w@]+))?\s*-->/;
 
 	/**
 	 * コメントをMarkdown形式の文字列として出力
@@ -89,6 +91,44 @@ export class MdaitMarker {
 	 * 翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
-		return this.need === "translate";
+		return this.need === "translate" || this.needsRevision();
+	}
+
+	/**
+	 * 改訂が必要かどうか（revise@{hash}形式）
+	 */
+	needsRevision(): boolean {
+		return this.need?.startsWith("revise@") ?? false;
+	}
+
+	/**
+	 * revise@{hash}形式からoldhashを抽出
+	 * @returns oldhash、revise形式でない場合はnull
+	 */
+	getOldHashFromNeed(): string | null {
+		if (!this.need?.startsWith("revise@")) {
+			return null;
+		}
+		return this.need.substring(7); // "revise@".length = 7
+	}
+
+	/**
+	 * need:revise@{oldhash}形式を設定
+	 * @param oldhash 旧ハッシュ値
+	 */
+	setReviseNeed(oldhash: string): void {
+		this.need = `revise@${oldhash}`;
+	}
+
+	/**
+	 * need文字列からoldhashを抽出する静的メソッド
+	 * @param need need文字列
+	 * @returns oldhash、revise形式でない場合はnull
+	 */
+	static extractOldHashFromNeed(need: string | null | undefined): string | null {
+		if (!need?.startsWith("revise@")) {
+			return null;
+		}
+		return need.substring(7); // "revise@".length = 7
 	}
 }

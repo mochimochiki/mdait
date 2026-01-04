@@ -71,6 +71,7 @@ Terminology:
 - `{{surroundingText}}`: 周辺テキスト（オプショナル）
 - `{{terms}}`: 用語集（オプショナル）
 - `{{previousTranslation}}`: 前回翻訳（オプショナル）
+- `{{sourceDiff}}`: 原文の変更差分（unified diff形式、オプショナル）
 
 **Input**:
 - 翻訳対象テキスト（コードブロック除去済み）

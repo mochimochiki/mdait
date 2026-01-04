@@ -39,6 +39,7 @@ export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
  * - {{surroundingText}}: 周辺テキスト（コンテキスト用、オプショナル）
  * - {{terms}}: 用語集（訳語指定用、オプショナル）
  * - {{previousTranslation}}: 前回翻訳（改訂時参照用、オプショナル）
+ * - {{sourceDiff}}: 原文の変更差分（unified diff形式、オプショナル）
  *
  * @output
  * ```json
@@ -81,6 +82,18 @@ IMPORTANT: The source text has been revised. Please refer to the previous transl
 - Only modify the parts that need to be updated based on the source text changes
 - Maintain consistency with the unchanged parts of the previous translation
 {{/previousTranslation}}
+{{#sourceDiff}}
+Source Text Changes (unified diff format):
+\`\`\`diff
+{{sourceDiff}}
+\`\`\`
+
+IMPORTANT: The diff above shows exactly what changed in the source text.
+- Lines starting with "-" were removed from the original
+- Lines starting with "+" were added in the revision
+- Focus your translation updates on the changed portions
+- Unchanged lines should generally keep the same translation
+{{/sourceDiff}}
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:

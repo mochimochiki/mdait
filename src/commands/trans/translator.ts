@@ -99,6 +99,7 @@ export class DefaultTranslator implements Translator {
 			surroundingText: context.surroundingText,
 			terms: context.terms,
 			previousTranslation: context.previousTranslation,
+			sourceDiff: context.sourceDiff,
 		});
 
 		const messages: AIMessage[] = [
