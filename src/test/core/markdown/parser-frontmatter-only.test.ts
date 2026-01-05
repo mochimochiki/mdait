@@ -112,4 +112,41 @@ tags:
 		const reparsed = markdownParser.parse(stringified, testConfig);
 		assert.strictEqual(reparsed.units.length, 0);
 	});
+
+	test("フロントマターのみのファイルがparse→stringify→parse→stringifyサイクルで破損しないこと（BUG修正）", () => {
+		// このテストはstringifyが末尾に改行を追加することで発生するバグを検出する
+		const original = `---
+_build:
+  list: false
+---
+`;
+
+		// 第1サイクル: parse → stringify
+		const parsed1 = markdownParser.parse(original, testConfig);
+		assert.strictEqual(parsed1.units.length, 0);
+		assert.ok(parsed1.frontMatter);
+		assert.strictEqual(parsed1.frontMatter._build?.list, false);
+		
+		const stringified1 = markdownParser.stringify(parsed1);
+		
+		// 第2サイクル: parse → stringify（ここでバグが発生）
+		const parsed2 = markdownParser.parse(stringified1, testConfig);
+		assert.strictEqual(parsed2.units.length, 0, "2回目のparse後もunitsは空であること");
+		
+		// frontMatterRawが"---"だけになってしまうバグを検出
+		assert.ok(parsed2.frontMatterRaw, "frontMatterRawが存在すること");
+		assert.notStrictEqual(parsed2.frontMatterRaw.trim(), "---", "frontMatterRawが'---'だけになっていないこと");
+		assert.match(parsed2.frontMatterRaw, /_build:/, "frontMatterRawにフロントマターの内容が含まれること");
+		
+		// frontMatterの内容も保持されていること
+		assert.ok(parsed2.frontMatter, "frontMatterが存在すること");
+		assert.strictEqual(parsed2.frontMatter._build?.list, false, "frontMatterの内容が保持されていること");
+		
+		const stringified2 = markdownParser.stringify(parsed2);
+		
+		// stringified2が"---\n"だけになっていないことを確認
+		assert.notStrictEqual(stringified2.trim(), "---", "stringifyの結果が'---'だけになっていないこと");
+		assert.match(stringified2, /_build:/, "stringifyの結果にフロントマターの内容が含まれること");
+		assert.match(stringified2, /list: false/, "stringifyの結果にフロントマターの内容が含まれること");
+	});
 });
