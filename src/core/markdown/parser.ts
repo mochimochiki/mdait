@@ -66,8 +66,9 @@ export class MarkdownItParser implements IMarkdownParser {
 		let frontMatterLineOffset = 0;
 		
 		// フロントマターが存在する場合、frontMatterRawを取得
-		// content が空の場合（フロントマターのみ）も正しく処理する
-		if (content.length === 0 && markdown.trim().length > 0) {
+		// content が空または空白のみの場合（フロントマターのみ）も正しく処理する
+		// 注: stringifyが末尾に改行を追加するため、再パース時にcontentが"\n"になる場合がある
+		if (content.trim().length === 0 && markdown.trim().length > 0) {
 			// フロントマターのみの場合、markdown全体がfrontMatterRaw
 			frontMatterRaw = markdown;
 			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
