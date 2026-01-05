@@ -134,6 +134,18 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	const sourceContent = decoder.decode(document);
 	const source = markdownParser.parse(sourceContent, config);
 
+	// フロントマターのみのファイルは処理しない（書き換え不要）
+	if (source.units.length === 0) {
+		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: 0,
+		};
+	}
+
 	// 2. mdaitマーカーとハッシュを付与（source側はneed,fromなし）
 	ensureMdaitMarkerHash(source.units);
 
@@ -212,6 +224,19 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config);
 	const target = markdownParser.parse(targetContent, config);
+	
+	// フロントマターのみのファイルは処理しない（書き換え不要）
+	if (source.units.length === 0 && target.units.length === 0) {
+		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: 0,
+		};
+	}
+	
 	// src, target に hash を付与（ない場合のみ）
 	ensureMdaitMarkerHash(source.units);
 	ensureMdaitMarkerHash(target.units);
