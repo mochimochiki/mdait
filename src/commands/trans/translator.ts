@@ -1,4 +1,5 @@
 import type { AIMessage, AIService } from "../../api/ai-service";
+import { Configuration } from "../../config/configuration";
 import { PromptIds, PromptProvider } from "../../prompts";
 import type { TranslationContext } from "./translation-context";
 
@@ -10,7 +11,7 @@ export interface TermSuggestion {
 	source: string;
 	/** 訳語 */
 	target: string;
-	/** 用語が使用されている実際の文脈（原文からの引用） */
+	/** 用語が使用されている実際の文脈（contextLang言語からの引用） */
 	context: string;
 	/** 用語集に追加すべき理由（オプショナル） */
 	reason?: string;
@@ -90,12 +91,19 @@ export class DefaultTranslator implements Translator {
 			return placeholder;
 		});
 
+		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
+		const config = Configuration.getInstance();
+		const primaryLang = config.getTermsPrimaryLang();
+		const contextLang =
+			primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+
 		// systemPrompt と AIMessage[] の構築
 		// @important design.md に記載の通り、terms や surroundingText を活用すること
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_TRANSLATE, {
 			sourceLang,
 			targetLang,
+			contextLang,
 			surroundingText: context.surroundingText,
 			terms: context.terms,
 			previousTranslation: context.previousTranslation,

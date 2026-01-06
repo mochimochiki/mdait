@@ -19,6 +19,7 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
 #### 用語集連携
 - `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る
 - キャッシュはmtime比較で管理し、効率的な用語読み込みを実現
+- 翻訳後の用語提案（termSuggestions）のcontext言語はprimaryLangを優先（primaryLangがsourceLang/targetLangに含まれる場合はその値、含まれなければsourceLang）
 
 #### 前回訳文参照
 - 原文改訂時（`from`フィールドで旧ソースハッシュを追跡可能）、前回の訳文を翻訳プロンプトに含めて参照させる
