@@ -128,7 +128,7 @@ Return ONLY valid JSON in the following format. Do NOT include markdown code blo
     {
       "source": "original term in {{sourceLang}}",
       "target": "translated term in {{targetLang}}",
-      "context": "an actual sentence or phrase quoted directly from the ORIGINAL text including the source term (LANGUAGE: {{contextLang}})",
+      "context": "an actual sentence or phrase quoted directly from the text including the term (LANGUAGE: {{contextLang}})",
       "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ]
