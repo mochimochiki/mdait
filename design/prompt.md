@@ -68,6 +68,7 @@ Terminology:
 **変数**:
 - `{{sourceLang}}`: 翻訳元言語コード
 - `{{targetLang}}`: 翻訳先言語コード
+- `{{contextLang}}`: context抽出元の言語コード（primaryLangがsourceLang/targetLangに含まれる場合はその値、含まれなければsourceLang）
 - `{{surroundingText}}`: 周辺テキスト（オプショナル）
 - `{{terms}}`: 用語集（オプショナル）
 - `{{previousTranslation}}`: 前回翻訳（オプショナル）
@@ -85,7 +86,7 @@ Terminology:
     {
       "source": "元の用語",
       "target": "訳語",
-      "context": "用語を含む原文からの引用文",
+      "context": "用語を含むcontextLang言語からの引用文",
       "reason": "(オプショナル) 追加理由"
     }
   ]

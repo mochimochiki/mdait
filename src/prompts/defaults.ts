@@ -36,6 +36,7 @@ export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
  * @input
  * - {{sourceLang}}: 翻訳元言語コード (例: "ja")
  * - {{targetLang}}: 翻訳先言語コード (例: "en")
+ * - {{contextLang}}: context抽出元の言語コード (例: "en")
  * - {{surroundingText}}: 周辺テキスト（コンテキスト用、オプショナル）
  * - {{terms}}: 用語集（訳語指定用、オプショナル）
  * - {{previousTranslation}}: 前回翻訳（改訂時参照用、オプショナル）
@@ -49,7 +50,7 @@ export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
  *     {
  *       "source": "元の用語",
  *       "target": "訳語",
- *       "context": "用語を含む原文からの引用文",
+ *       "context": "用語を含むcontextLang言語からの引用文",
  *       "reason": "(オプショナル) 追加理由"
  *     }
  *   ]
@@ -127,7 +128,7 @@ Return ONLY valid JSON in the following format. Do NOT include markdown code blo
     {
       "source": "original term in {{sourceLang}}",
       "target": "translated term in {{targetLang}}",
-      "context": "an actual sentence or phrase quoted directly from the ORIGINAL text including the source term (LANGUAGE: {{sourceLang}})",
+      "context": "an actual sentence or phrase quoted directly from the text including the term (LANGUAGE: {{contextLang}})",
       "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ]
