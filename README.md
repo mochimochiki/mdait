@@ -108,6 +108,28 @@ This marker is the only data mdait uses to manage translation information. No ex
 
 ---
 
+## Prompt Instructions
+
+You can add domain-specific context to AI prompts by placing a Markdown file at `.mdait/mdait-instruction.md`. The content will be appended to prompts.
+
+**Example:**
+
+```markdown
+---
+prompts: ["trans.translate"]
+---
+
+# Domain Knowledge
+
+This project documents a financial API.
+- Settlement: 決済 (transaction finalization)
+- Clearing: クリアリング (transaction reconciliation)
+```
+
+Omit the `prompts` field in frontmatter to apply to all prompts. See `design/prompt.md` for details.
+
+---
+
 ## License
 
 Apache License 2.0

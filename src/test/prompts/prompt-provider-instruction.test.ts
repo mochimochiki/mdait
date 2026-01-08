@@ -158,6 +158,27 @@ prompts: ["trans.translate", "term.translateTerms"]
 		assert.ok(detectPrompt.includes("全プロンプト共通の指示です"));
 	});
 
+	test("フロントマター自体が省略された場合、全プロンプトに適用される", () => {
+		const instructionContent = `全プロンプト共通の指示です（フロントマターなし）。`;
+
+		fs.writeFileSync(instructionFilePath, instructionContent, "utf8");
+
+		const provider = PromptProvider.getInstance();
+
+		// すべてのプロンプトに適用されることを確認
+		const translatePrompt = provider.getPrompt(PromptIds.TRANS_TRANSLATE, {
+			sourceLang: "ja",
+			targetLang: "en",
+			contextLang: "ja",
+		});
+		assert.ok(translatePrompt.includes("全プロンプト共通の指示です（フロントマターなし）"));
+
+		const detectPrompt = provider.getPrompt(PromptIds.TERM_DETECT_SOURCE_ONLY, {
+			lang: "ja",
+		});
+		assert.ok(detectPrompt.includes("全プロンプト共通の指示です（フロントマターなし）"));
+	});
+
 	test("インストラクションの内容がキャッシュされる", () => {
 		const instructionContent = `---
 ---
