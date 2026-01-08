@@ -131,13 +131,18 @@ suite("syncコマンドE2E", () => {
 			const jaText = readFileSync(tmpJaLevelTest, "utf8");
 			const enText = readFileSync(tmpEnLevelTest, "utf8");
 
-			// H1とH2の前にマーカーが挿入されていること（H3は挿入されない）
+			// H1とH2の前にマーカーが挿入されていること（H3はautoMarkerLevel > 2なので挿入されない）
 			const jaMarkers = jaText.match(/<!-- mdait [^\s]+/g) || [];
 			const enMarkers = enText.match(/<!-- mdait [^\s]+/g) || [];
 
-			// H1, H2, H3なので3つのマーカーが存在する
-			assert.strictEqual(jaMarkers.length, 3);
-			assert.strictEqual(enMarkers.length, 3);
+			// H1とH2間にコンテンツがあるので両方にマーカーが付与され、計2つ
+			assert.strictEqual(jaMarkers.length, 2);
+			assert.strictEqual(enMarkers.length, 2);
+			
+			// H1の前にマーカーがあることを確認
+			const h1Index = jaText.indexOf("# 見出し 1");
+			const firstMarkerIndex = jaText.indexOf("<!-- mdait");
+			assert.ok(firstMarkerIndex < h1Index);
 		});
 
 		test("FrontMatter: Front Matter が存在するファイルでも正しくマーカーが挿入されること", async () => {

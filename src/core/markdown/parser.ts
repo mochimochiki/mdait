@@ -100,6 +100,7 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * 第1パス: 境界トークンを収集
 	 * mdaitMarkerと指定レベル以上の見出しを境界として抽出する
 	 * マーカーの直後に見出しがある場合は、レベルに関係なくマーカーを見出しに統合する
+	 * 連続する見出しがある場合は、上位レベル（数値が小さい方）のみを境界として扱う
 	 * @param tokens markdown-itのトークン配列
 	 * @param mdaitMarkerLevel 検知する見出しレベル（境界として扱うレベル）
 	 * @returns ソート済みの境界配列
@@ -186,6 +187,21 @@ export class MarkdownItParser implements IMarkdownParser {
 				// 境界として扱うべき見出しの場合は記録
 				if (headings.has(checkLine)) {
 					processedHeadings.add(checkLine);
+					
+					// マーカーに続く連続した見出しもすべて処理済みとしてマークする
+					// これにより、マーカー付き見出しの後に続く見出しが独立した境界として扱われるのを防ぐ
+					const headingsArray = Array.from(headings.entries()).sort((a, b) => a[0] - b[0]);
+					for (const [nextLine, nextHeading] of headingsArray) {
+						if (nextLine <= checkLine) continue;
+						
+						// 直前の見出しとの間にコンテンツがあるかチェック
+						const prevLine = Array.from(processedHeadings).filter(l => l < nextLine).pop() ?? checkLine;
+						if (!this.hasContentBetween(prevLine, nextLine, tokens)) {
+							processedHeadings.add(nextLine);
+						} else {
+							break;
+						}
+					}
 				}
 			}
 
@@ -205,20 +221,114 @@ export class MarkdownItParser implements IMarkdownParser {
 			}
 		}
 
-		// 処理されていない見出しを追加
+		// 処理されていない見出しを収集（連続見出しフィルタリング前）
+		const headingCandidates: { line: number; heading: { level: number; title: string } }[] = [];
 		for (const [line, heading] of headings) {
 			if (!processedHeadings.has(line)) {
-				boundaries.push({
-					line: line,
-					heading: heading,
-				});
+				headingCandidates.push({ line, heading });
 			}
+		}
+		// 行番号でソート
+		headingCandidates.sort((a, b) => a.line - b.line);
+
+		// 連続見出しのフィルタリング
+		const filteredHeadings: { line: number; heading: { level: number; title: string } }[] = [];
+		for (let i = 0; i < headingCandidates.length; i++) {
+			const current = headingCandidates[i];
+			
+			// 連続する見出しの範囲を特定
+			const consecutiveHeadings = [current];
+			let j = i + 1;
+			while (j < headingCandidates.length) {
+				const next = headingCandidates[j];
+				// 現在の見出しグループの最後の行と次の見出しの間にコンテンツがあるかチェック
+				const lastInGroup = consecutiveHeadings[consecutiveHeadings.length - 1];
+				if (!this.hasContentBetween(lastInGroup.line, next.line, tokens)) {
+					consecutiveHeadings.push(next);
+					j++;
+				} else {
+					break;
+				}
+			}
+
+			// 連続する見出しの中で最も上位レベル（数値が小さい）のものを選択
+			if (consecutiveHeadings.length > 1) {
+				// 最小レベルを持つ見出しを選択（最初に現れるもの）
+				const topLevel = Math.min(...consecutiveHeadings.map(h => h.heading.level));
+				const topHeading = consecutiveHeadings.find(h => h.heading.level === topLevel);
+				if (topHeading) {
+					// 最も上位レベルの見出しを選択するが、行番号は最初の見出しのものを使う
+					// これにより、連続した見出しの最初の位置が境界となる
+					filteredHeadings.push({
+						line: consecutiveHeadings[0].line,
+						heading: topHeading.heading,
+					});
+				}
+				// 処理した見出しをスキップ
+				i = j - 1;
+			} else {
+				// 独立した見出しはそのまま追加
+				filteredHeadings.push(current);
+			}
+		}
+
+		// フィルタリングされた見出しを境界に追加
+		for (const { line, heading } of filteredHeadings) {
+			boundaries.push({
+				line: line,
+				heading: heading,
+			});
 		}
 
 		// 行番号でソート
 		boundaries.sort((a, b) => a.line - b.line);
 
 		return boundaries;
+	}
+
+	/**
+	 * 指定された行範囲にコンテンツが存在するかチェック
+	 * @param startLine 開始行（この行自体は含まない）
+	 * @param endLine 終了行（この行自体は含まない）
+	 * @param tokens トークン配列
+	 * @returns コンテンツが存在する場合true
+	 */
+	private hasContentBetween(startLine: number, endLine: number, tokens: MarkdownIt.Token[]): boolean {
+		for (const token of tokens) {
+			if (!token.map) continue;
+
+			const tokenStart = token.map[0];
+			const tokenEnd = token.map[1];
+
+			// トークンが範囲内にあるかチェック（startLineより大きく、endLine未満）
+			if (tokenStart > startLine && tokenStart < endLine) {
+				// 見出しトークンは除外（見出し自体はコンテンツとしてカウントしない）
+				if (token.type === "heading_open" || token.type === "heading_close") {
+					continue;
+				}
+
+				// inline（見出しの中身）も除外
+				if (token.type === "inline") {
+					// 見出しのinlineは除外
+					continue;
+				}
+
+				// 実質的なコンテンツがある場合
+				if (
+					token.type === "paragraph_open" ||
+					token.type === "code_block" ||
+					token.type === "fence" ||
+					token.type === "blockquote_open" ||
+					token.type === "list_item_open" ||
+					token.type === "hr" ||
+					token.type === "table_open"
+				) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
