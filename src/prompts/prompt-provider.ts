@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import matter from "gray-matter";
 import { Configuration } from "../config/configuration";
 import { DEFAULT_PROMPTS, type PromptId } from "./defaults";
 
@@ -16,12 +17,31 @@ import { DEFAULT_PROMPTS, type PromptId } from "./defaults";
 export type PromptVariables = Record<string, string | undefined>;
 
 /**
+ * インストラクションファイルのフロントマター
+ */
+interface InstructionFrontMatter {
+	/** 適用するプロンプトIDのリスト（省略時は全プロンプトに適用） */
+	prompts?: string[];
+}
+
+/**
+ * インストラクション情報
+ */
+interface InstructionInfo {
+	/** インストラクションの内容 */
+	content: string;
+	/** 適用するプロンプトIDのリスト（undefinedは全プロンプトに適用） */
+	targetPrompts?: string[];
+}
+
+/**
  * プロンプト提供サービス
  * 外部ファイルからのカスタムプロンプト読み込みと変数置換を担当
  */
 export class PromptProvider {
 	private static instance: PromptProvider | undefined;
 	private readonly promptCache = new Map<string, string>();
+	private instructionCache: InstructionInfo | null | undefined = undefined;
 
 	private constructor() {}
 
@@ -48,11 +68,13 @@ export class PromptProvider {
 	 */
 	public clearCache(): void {
 		this.promptCache.clear();
+		this.instructionCache = undefined;
 	}
 
 	/**
 	 * プロンプトを取得
 	 * カスタムプロンプトが設定されていればそれを使用、なければデフォルトを使用
+	 * インストラクションファイルが存在する場合は追加
 	 *
 	 * @param promptId プロンプトID
 	 * @param variables 変数置換用のマッピング
@@ -60,7 +82,13 @@ export class PromptProvider {
 	 */
 	public getPrompt(promptId: PromptId, variables: PromptVariables = {}): string {
 		// プロンプトテンプレートを取得
-		const template = this.getPromptTemplate(promptId);
+		let template = this.getPromptTemplate(promptId);
+
+		// インストラクションを追加
+		const instruction = this.getInstruction(promptId);
+		if (instruction) {
+			template = `${template}\n\n${instruction}`;
+		}
 
 		// 変数を置換して返す
 		return this.replaceVariables(template, variables);
@@ -144,6 +172,76 @@ export class PromptProvider {
 		}
 
 		return fs.readFileSync(filePath, "utf8");
+	}
+
+	/**
+	 * インストラクションファイルのパスを取得
+	 *
+	 * @returns インストラクションファイルの絶対パス（ワークスペースがない場合はundefined）
+	 */
+	private getInstructionFilePath(): string | undefined {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			return undefined;
+		}
+
+		return path.join(workspaceRoot, ".mdait", "mdait-instruction.md");
+	}
+
+	/**
+	 * インストラクションファイルを読み込む
+	 *
+	 * @returns インストラクション情報（ファイルが存在しない場合はnull）
+	 */
+	private loadInstruction(): InstructionInfo | null {
+		const filePath = this.getInstructionFilePath();
+		if (!filePath || !fs.existsSync(filePath)) {
+			return null;
+		}
+
+		try {
+			const fileContent = fs.readFileSync(filePath, "utf8");
+			const parsed = matter(fileContent);
+			const frontMatter = parsed.data as InstructionFrontMatter;
+
+			return {
+				content: parsed.content.trim(),
+				targetPrompts: frontMatter.prompts,
+			};
+		} catch (error) {
+			console.warn("Failed to load instruction file:", error);
+			return null;
+		}
+	}
+
+	/**
+	 * 指定されたプロンプトIDに対するインストラクションを取得
+	 *
+	 * @param promptId プロンプトID
+	 * @returns インストラクション文字列（該当しない場合はundefined）
+	 */
+	private getInstruction(promptId: PromptId): string | undefined {
+		// キャッシュをチェック（undefinedはまだ読み込んでいない状態）
+		if (this.instructionCache === undefined) {
+			this.instructionCache = this.loadInstruction();
+		}
+
+		// インストラクションが存在しない場合
+		if (this.instructionCache === null) {
+			return undefined;
+		}
+
+		// 対象プロンプトIDが指定されていない場合は全プロンプトに適用
+		if (!this.instructionCache.targetPrompts) {
+			return this.instructionCache.content;
+		}
+
+		// 指定されたプロンプトIDリストに含まれている場合のみ適用
+		if (this.instructionCache.targetPrompts.includes(promptId)) {
+			return this.instructionCache.content;
+		}
+
+		return undefined;
 	}
 
 	/**
