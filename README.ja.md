@@ -109,6 +109,28 @@ mdaitが管理のために必要とする情報(mdaitマーカー)は、🔄(Syn
 
 ---
 
+## プロンプト追加指示
+
+`.mdait/mdait-instruction.md`にMarkdownファイルを配置することで、AIプロンプトにドメイン固有の背景知識を追加できます。内容はプロンプトに追記されます。
+
+**例:**
+
+```markdown
+---
+prompts: ["trans.translate"]
+---
+
+# 背景知識
+
+このプロジェクトは金融APIのドキュメントです。
+- Settlement: 決済（取引の最終確定）
+- Clearing: クリアリング（取引の照合・計算）
+```
+
+フロントマターの`prompts`フィールドを省略すると全プロンプトに適用されます。詳細は`design/prompt.md`を参照してください。
+
+---
+
 ## ライセンス
 
 Apache License 2.0
