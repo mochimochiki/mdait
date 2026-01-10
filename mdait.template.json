@@ -8,13 +8,16 @@
     }
   ],
   "ai": {
-    "provider": "default",
-    "model": "gpt-4.1"
+    "provider": "vscode-lm",
+    "model": "gpt-5 mini"
   },
   "trans": {
     "contextSize": 1
   },
   "sync": {
     "autoMarkerLevel": 3
+  },
+  "terms": {
+    "primaryLang": "en"
   }
 }
