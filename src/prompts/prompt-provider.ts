@@ -6,8 +6,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as vscode from "vscode";
 import matter from "gray-matter";
+import * as vscode from "vscode";
 import { Configuration } from "../config/configuration";
 import { DEFAULT_PROMPTS, type PromptId } from "./defaults";
 
@@ -185,7 +185,7 @@ export class PromptProvider {
 			return undefined;
 		}
 
-		return path.join(workspaceRoot, ".mdait", "mdait-instruction.md");
+		return path.join(workspaceRoot, ".mdait", "mdait-instructions.md");
 	}
 
 	/**

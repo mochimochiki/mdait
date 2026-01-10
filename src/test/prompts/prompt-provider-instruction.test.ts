@@ -18,7 +18,7 @@ suite("PromptProvider インストラクション機能のテスト", () => {
 		}
 		workspaceRoot = folders[0].uri.fsPath;
 		mdaitDir = path.join(workspaceRoot, ".mdait");
-		instructionFilePath = path.join(mdaitDir, "mdait-instruction.md");
+		instructionFilePath = path.join(mdaitDir, "mdait-instructions.md");
 
 		// .mdaitディレクトリを作成
 		if (!fs.existsSync(mdaitDir)) {

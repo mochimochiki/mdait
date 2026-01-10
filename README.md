@@ -110,7 +110,7 @@ This marker is the only data mdait uses to manage translation information. No ex
 
 ## Prompt Instructions
 
-You can add domain-specific context to AI prompts by placing a Markdown file at `.mdait/mdait-instruction.md`. The content will be appended to prompts.
+You can add domain-specific context to AI prompts by placing a Markdown file at `.mdait/mdait-instructions.md`. The content will be appended to prompts.
 
 **Example:**
 

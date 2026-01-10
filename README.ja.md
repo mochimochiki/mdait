@@ -111,7 +111,7 @@ mdaitが管理のために必要とする情報(mdaitマーカー)は、🔄(Syn
 
 ## プロンプト追加指示
 
-`.mdait/mdait-instruction.md`にMarkdownファイルを配置することで、AIプロンプトにドメイン固有の背景知識を追加できます。内容はプロンプトに追記されます。
+`.mdait/mdait-instructions.md`にMarkdownファイルを配置することで、AIプロンプトにドメイン固有の背景知識を追加できます。内容はプロンプトに追記されます。
 
 **例:**
 

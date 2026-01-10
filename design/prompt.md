@@ -38,7 +38,7 @@ Terminology:
 
 ### 追加指示（Instruction）
 
-プロンプトに追加の指示を与えることができます。`.mdait/mdait-instruction.md`にフロントマター付きのMarkdownを配置することで、プロンプトに追加情報を挿入できます。
+プロンプトに追加の指示を与えることができます。`.mdait/mdait-instructions.md`にフロントマター付きのMarkdownを配置することで、プロンプトに追加情報を挿入できます。
 
 #### ファイル形式
 
