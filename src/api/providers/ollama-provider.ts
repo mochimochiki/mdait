@@ -1,7 +1,7 @@
 import { Ollama } from "ollama";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
-import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
@@ -21,23 +21,23 @@ export class OllamaProvider implements AIService {
 		this.ollama = new Ollama({ host: endpoint });
 	}
 	/**
-	 * Ollamaサーバーに対してメッセージを送信し、ストリーミング応答を受け取ります。
+	 * Ollamaサーバーに対してメッセージを送信し、応答を受け取ります。
 	 *
 	 * @param systemPrompt システムプロンプト
 	 * @param messages メッセージ履歴
 	 * @param cancellationToken キャンセル処理用トークン
-	 * @returns ストリーミング応答のAsyncGenerator
+	 * @returns 完全な応答テキスト
 	 */
-	async *sendMessage(
+	async sendMessage(
 		systemPrompt: string,
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
-	): MessageStream {
+	): Promise<string> {
 		const startTime = Date.now();
 		let outputChars = 0;
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
-		let responseContent = ""; // 詳細ログ用に応答を蓄積
+		let responseContent = "";
 
 		// ユーザーメッセージを取得
 		const userMessage = messages.find((msg) => msg.role === "user");
@@ -47,9 +47,22 @@ export class OllamaProvider implements AIService {
 		const prompt = systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
 		const inputChars = prompt.length;
 
+		// キャンセル処理の設定
+		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
+			this.ollama.abort();
+			console.log("Ollama request was cancelled (abort())");
+		});
+
 		try {
+			// 開始前のキャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				status = "error";
+				errorMessage = "Operation cancelled before start";
+				throw new Error("Operation cancelled");
+			}
+
 			// Ollama-js パッケージを使用してストリーミング生成
-			const stream = await this.ollama.generate({
+			const response = await this.ollama.generate({
 				model: this.model,
 				prompt: prompt,
 				stream: true,
@@ -59,30 +72,37 @@ export class OllamaProvider implements AIService {
 				},
 			});
 
-			// CancellationTokenと連携してAbortableAsyncIteratorを中断
-			if (cancellationToken) {
-				cancellationToken.onCancellationRequested(() => {
-					stream.abort();
-					console.log("Ollama request was cancelled");
-				});
-			}
-
-			// ストリーミングレスポンスを処理
-			for await (const chunk of stream) {
-				if (chunk.response) {
-					outputChars += chunk.response.length;
-					responseContent += chunk.response;
-					yield chunk.response;
+			// ストリーミングレスポンスを受信して結合
+			for await (const part of response) {
+				if (part.response) {
+					responseContent += part.response;
 				}
-				if (chunk.done) {
+				// done フラグで終了判定
+				if (part.done) {
 					break;
 				}
 			}
+
+			outputChars = responseContent.length;
+
+			// 応答後のキャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				status = "error";
+				errorMessage = "Operation cancelled after completion";
+				throw new Error("Operation cancelled");
+			}
+
+			return responseContent;
 		} catch (error) {
-			status = "error";
-			errorMessage = (error as Error).message;
+			// キャンセル以外のエラーの場合のみ status を上書き
+			if (status !== "error" || !errorMessage) {
+				status = "error";
+				errorMessage = (error as Error).message;
+			}
 			throw new Error(`Ollama provider error: ${(error as Error).message}`);
 		} finally {
+			// キャンセルリスナーのクリーンアップ
+			cancelSubscription?.dispose();
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();

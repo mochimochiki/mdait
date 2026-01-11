@@ -115,12 +115,11 @@ export class AITermExpander implements TermExpander {
 		const userPrompt = this.buildExtractionPrompt(translationPairs, termList, sourceLang, targetLang);
 
 		try {
-			const stream = this.aiService.sendMessage(systemPrompt, [{ role: "user", content: userPrompt }]);
-			let response = "";
-			for await (const chunk of stream) {
-				response += chunk;
-			}
-
+			const response = await this.aiService.sendMessage(
+				systemPrompt,
+				[{ role: "user", content: userPrompt }],
+				cancellationToken,
+			);
 			return this.parseExtractionResponse(response);
 		} catch (error) {
 			console.error("Phase 2 batch extraction failed:", error);
@@ -158,12 +157,11 @@ export class AITermExpander implements TermExpander {
 		const userPrompt = this.buildTranslationPrompt(termsToTranslate, sourceLang, targetLang);
 
 		try {
-			const stream = this.aiService.sendMessage(systemPrompt, [{ role: "user", content: userPrompt }]);
-			let response = "";
-			for await (const chunk of stream) {
-				response += chunk;
-			}
-
+			const response = await this.aiService.sendMessage(
+				systemPrompt,
+				[{ role: "user", content: userPrompt }],
+				cancellationToken,
+			);
 			return this.parseTranslationResponse(response);
 		} catch (error) {
 			console.error("Phase 2 translation failed:", error);

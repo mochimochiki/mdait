@@ -244,12 +244,19 @@ suite("TransCommand", () => {
 	test("AIサービス統合テスト：翻訳プロバイダが正常に動作すること", async () => {
 		// モック翻訳プロバイダーの作成
 		class MockTranslator {
-			async translate(content: string, sourceLang: string, targetLang: string): Promise<string> {
+			async translate(
+				content: string,
+				sourceLang: string,
+				targetLang: string,
+				_context?: unknown,
+				_cancellationToken?: unknown,
+			): Promise<{ translatedText: string }> {
 				// テスト用の簡易翻訳（日英変換）
 				if (sourceLang === "ja" && targetLang === "en") {
-					return content.replace("見出し", "Heading").replace("コンテンツ", "Content");
+					const translated = content.replace("見出し", "Heading").replace("コンテンツ", "Content");
+					return { translatedText: translated };
 				}
-				return `[${targetLang}] ${content}`;
+				return { translatedText: `[${targetLang}] ${content}` };
 			}
 		}
 
@@ -260,8 +267,8 @@ suite("TransCommand", () => {
 		const mockTranslator = new MockTranslator();
 
 		// 翻訳実行
-		const translatedContent = await mockTranslator.translate(unit.content, "ja", "en");
-		unit.content = translatedContent;
+		const result = await mockTranslator.translate(unit.content, "ja", "en");
+		unit.content = result.translatedText;
 
 		// ハッシュ更新
 		if (unit.marker) {

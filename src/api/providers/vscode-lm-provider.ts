@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
-import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
@@ -16,24 +16,24 @@ export class VSCodeLanguageModelProvider implements AIService {
 	}
 
 	/**
-	 * VS Code Language Model API を使用してメッセージを送信し、ストリーミング応答を受け取ります
+	 * VS Code Language Model API を使用してメッセージを送信し、応答を受け取ります
 	 *
 	 * @param systemPrompt システムプロンプト
 	 * @param messages ユーザーメッセージの配列
 	 * @param cancellationToken キャンセル処理用トークン
-	 * @returns ストリーミング応答
+	 * @returns 完全な応答テキスト
 	 */
-	async *sendMessage(
+	async sendMessage(
 		systemPrompt: string,
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
-	): MessageStream {
+	): Promise<string> {
 		const startTime = Date.now();
 		let outputChars = 0;
 		let modelFamily = "gpt-4o"; // デフォルト
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
-		let responseContent = ""; // 詳細ログ用に応答を蓄積
+		let responseContent = "";
 
 		// 入力文字数の計測
 		const inputChars =
@@ -58,12 +58,13 @@ export class VSCodeLanguageModelProvider implements AIService {
 			const token = cancellationToken || new vscode.CancellationTokenSource().token;
 			const response = await model.sendRequest(prompt, {}, token);
 
-			// ストリーミングレスポンスを処理
+			// ストリーミングレスポンスを内部でバッファリング
 			for await (const fragment of response.text) {
 				outputChars += fragment.length;
 				responseContent += fragment;
-				yield fragment;
 			}
+
+			return responseContent;
 		} catch (error) {
 			status = "error";
 			if (error instanceof vscode.LanguageModelError) {
@@ -72,27 +73,27 @@ export class VSCodeLanguageModelProvider implements AIService {
 				// エラーの種類に応じた適切なメッセージを生成
 				if (error.cause instanceof Error && error.cause.message.includes("off_topic")) {
 					errorMessage = "off_topic";
-					yield vscode.l10n.t("Sorry, I cannot answer that question.");
-				} else if (error.message.includes("consent")) {
+					return vscode.l10n.t("Sorry, I cannot answer that question.");
+				}
+				if (error.message.includes("consent")) {
 					errorMessage = error.message;
 					throw new Error(vscode.l10n.t("GitHub Copilot permission is required. Please check your settings."));
-				} else if (error.message.includes("quota")) {
+				}
+				if (error.message.includes("quota")) {
 					errorMessage = error.message;
 					throw new Error(vscode.l10n.t("API usage limit reached. Please try again later."));
-				} else {
-					errorMessage = error.message;
-					throw new Error(vscode.l10n.t("Language model error: {0}", error.message));
 				}
-			} else {
-				console.error("Unexpected error:", error);
-				errorMessage = error instanceof Error ? error.message : String(error);
-				// エラーが既にErrorインスタンスの場合は、そのまま再スローして元のメッセージを保持
-				if (error instanceof Error) {
-					throw error;
-				}
-				const errorMsg = String(error);
-				throw new Error(vscode.l10n.t("An unexpected error occurred: {0}", errorMsg));
+				errorMessage = error.message;
+				throw new Error(vscode.l10n.t("Language model error: {0}", error.message));
 			}
+			console.error("Unexpected error:", error);
+			errorMessage = error instanceof Error ? error.message : String(error);
+			// エラーが既にErrorインスタンスの場合は、そのまま再スローして元のメッセージを保持
+			if (error instanceof Error) {
+				throw error;
+			}
+			const errorMsg = String(error);
+			throw new Error(vscode.l10n.t("An unexpected error occurred: {0}", errorMsg));
 		} finally {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;

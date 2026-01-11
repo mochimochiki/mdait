@@ -152,7 +152,7 @@ export async function transFile_CoreProc(
 			const oldMarkerText = unit.marker?.toString() ?? "";
 
 			try {
-				await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath);
+				await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath, token);
 
 				// 翻訳完了をStatusManagerに通知
 				if (oldHash) {
@@ -215,6 +215,7 @@ export async function transFile_CoreProc(
  * @param sourceLang 翻訳元言語
  * @param targetLang 翻訳先言語
  * @param targetFilePath ターゲットファイルのパス
+ * @param cancellationToken キャンセルトークン
  */
 async function translateUnit(
 	unit: MdaitUnit,
@@ -222,6 +223,7 @@ async function translateUnit(
 	sourceLang: string,
 	targetLang: string,
 	targetFilePath: string,
+	cancellationToken?: vscode.CancellationToken,
 ) {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
@@ -350,7 +352,13 @@ async function translateUnit(
 		}
 
 		// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-		const translationResult = await translator.translate(sourceContent, sourceLang, targetLang, context);
+		const translationResult = await translator.translate(
+			sourceContent,
+			sourceLang,
+			targetLang,
+			context,
+			cancellationToken,
+		);
 
 		// ユニットのコンテンツを更新
 		unit.content = translationResult.translatedText;
@@ -529,7 +537,7 @@ export async function transUnit_CoreProc(
 		const oldMarkerText = targetUnit.marker.toString();
 
 		// 翻訳実行（中核プロセス）
-		await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath);
+		await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath, token);
 
 		// ステータス: 翻訳完了
 		statusManager.changeUnitStatus(

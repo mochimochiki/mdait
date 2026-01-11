@@ -1,6 +1,6 @@
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
-import type { AIMessage, AIService, MessageStream } from "../ai-service";
+import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
@@ -16,24 +16,22 @@ export class DefaultAIProvider implements AIService {
 		console.log("DefaultAIProvider initialized with config:", config);
 	}
 	/**
-	 * AIモデルに対してメッセージを送信し、ストリーミング応答を受け取ります。
+	 * AIモデルに対してメッセージを送信し、応答を受け取ります。
 	 * このデフォルト実装では、簡易的な翻訳モック応答を返します。
 	 *
 	 * @param systemPrompt システムプロンプト。
 	 * @param messages AIモデルに送信するメッセージの配列。
-	 * @param cancellationToken キャンセル処理用トークン
-	 * @returns モックのストリーミング応答。
+	 * @param _cancellationToken キャンセル処理用トークン（未使用）
+	 * @returns モックの応答テキスト。
 	 */
-	async *sendMessage(
+	async sendMessage(
 		systemPrompt: string,
 		messages: AIMessage[],
-		cancellationToken?: vscode.CancellationToken,
-	): MessageStream {
+		_cancellationToken?: vscode.CancellationToken,
+	): Promise<string> {
 		const startTime = Date.now();
-		let outputChars = 0;
 		const status: "success" | "error" = "success";
 		const errorMessage: string | undefined = undefined;
-		let responseContent = ""; // 詳細ログ用に応答を蓄積
 
 		console.log(`DefaultAIProvider.sendMessage called with systemPrompt: ${systemPrompt}`);
 		console.log(`DefaultAIProvider.sendMessage called with messages: ${JSON.stringify(messages, null, 2)}`);
@@ -47,57 +45,43 @@ export class DefaultAIProvider implements AIService {
 
 		// 簡易的な翻訳モック処理
 		// 実際のAIプロバイダーでは、ここでAPIリクエストを行います
-		const mockTranslatedText = this.generateMockTranslation(textToTranslate, systemPrompt);
+		const responseContent = this.generateMockTranslation(textToTranslate, systemPrompt);
+		const outputChars = responseContent.length;
 
-		try {
-			// ストリーミング形式で少しずつ応答を返す
-			const chunks = this.splitIntoChunks(mockTranslatedText, 10);
-			for (const chunk of chunks) {
-				// キャンセルチェック
-				if (cancellationToken?.isCancellationRequested) {
-					console.log("DefaultAIProvider request was cancelled");
-					break;
-				}
-				outputChars += chunk.length;
-				responseContent += chunk;
-				yield chunk;
-				// 少し待機してストリーミングをシミュレート
-				await new Promise((resolve) => setTimeout(resolve, 50));
-			}
-		} finally {
-			// 統計情報をログに記録
-			const durationMs = Date.now() - startTime;
-			const logger = AIStatsLogger.getInstance();
-			const timestamp = new Date().toLocaleString("sv-SE");
+		// 統計情報をログに記録
+		const durationMs = Date.now() - startTime;
+		const logger = AIStatsLogger.getInstance();
+		const timestamp = new Date().toLocaleString("sv-SE");
 
-			await logger.log({
-				timestamp,
-				provider: "default",
-				model: this.config.model || "mock",
-				inputChars,
-				outputChars,
+		await logger.log({
+			timestamp,
+			provider: "default",
+			model: this.config.model || "mock",
+			inputChars,
+			outputChars,
+			durationMs,
+			status,
+			errorMessage,
+		});
+
+		// 詳細ログを記録（プロンプトと応答）
+		await logger.logDetailed({
+			timestamp,
+			provider: "default",
+			model: this.config.model || "mock",
+			request: {
+				systemPrompt,
+				messages,
+			},
+			response: {
+				content: responseContent,
 				durationMs,
-				status,
-				errorMessage,
-			});
+			},
+			status,
+			errorMessage,
+		});
 
-			// 詳細ログを記録（プロンプトと応答）
-			await logger.logDetailed({
-				timestamp,
-				provider: "default",
-				model: this.config.model || "mock",
-				request: {
-					systemPrompt,
-					messages,
-				},
-				response: {
-					content: responseContent,
-					durationMs,
-				},
-				status,
-				errorMessage,
-			});
-		}
+		return responseContent;
 	}
 	/**
 	 * 簡易的な翻訳モックを生成します。
@@ -136,16 +120,5 @@ export class DefaultAIProvider implements AIService {
 
 		// その他の言語ペアの場合
 		return `${text}\n\n[DefaultAIProviderによるモック翻訳: ${sourceLang} → ${targetLang}]`;
-	}
-
-	/**
-	 * テキストを指定された文字数で分割します。
-	 */
-	private splitIntoChunks(text: string, chunkSize: number): string[] {
-		const chunks: string[] = [];
-		for (let i = 0; i < text.length; i += chunkSize) {
-			chunks.push(text.slice(i, i + chunkSize));
-		}
-		return chunks;
 	}
 }

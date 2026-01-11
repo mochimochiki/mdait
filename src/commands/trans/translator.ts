@@ -1,3 +1,4 @@
+import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../api/ai-service";
 import { Configuration } from "../../config/configuration";
 import { PromptIds, PromptProvider } from "../../prompts";
@@ -45,6 +46,7 @@ export interface Translator {
 	 * @param sourceLang 翻訳元の言語コード
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns 翻訳結果（翻訳テキストと追加メタデータ）
 	 */
 	translate(
@@ -52,6 +54,7 @@ export interface Translator {
 		sourceLang: string,
 		targetLang: string,
 		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
 	): Promise<TranslationResult>;
 }
 
@@ -71,13 +74,15 @@ export class DefaultTranslator implements Translator {
 	 * @param sourceLang 翻訳元の言語コード
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
+	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns 翻訳結果（翻訳テキストと追加メタデータ）
 	 */
-	public async translate(
+	async translate(
 		text: string,
 		sourceLang: string,
 		targetLang: string,
 		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
 	): Promise<TranslationResult> {
 		// コードブロックをスキップするロジック
 		const codeBlockRegex = /```[\s\S]*?```/g;
@@ -94,8 +99,7 @@ export class DefaultTranslator implements Translator {
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const config = Configuration.getInstance();
 		const primaryLang = config.getTermsPrimaryLang();
-		const contextLang =
-			primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		// systemPrompt と AIMessage[] の構築
 		// @important design.md に記載の通り、terms や surroundingText を活用すること
@@ -117,13 +121,8 @@ export class DefaultTranslator implements Translator {
 			},
 		];
 
-		// aiService.sendMessage() の呼び出しと MessageStream の処理
-		const stream = this.aiService.sendMessage(systemPrompt, messages);
-		let rawResponse = "";
-		for await (const chunk of stream) {
-			// chunk は string 型なので、直接結合する
-			rawResponse += chunk;
-		}
+		// aiService.sendMessage() の呼び出し
+		const rawResponse = await this.aiService.sendMessage(systemPrompt, messages, cancellationToken);
 
 		// JSON応答をパース
 		const result = this.parseAIResponse(rawResponse, codeBlocks, placeholders);

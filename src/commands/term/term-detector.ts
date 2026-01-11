@@ -176,19 +176,15 @@ Return JSON array only, no commentary.`;
 		userPrompt: string,
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<string> {
-		let response = "";
-		const messageStream = this.aiService.sendMessage(
+		const response = await this.aiService.sendMessage(
 			systemPrompt,
 			[{ role: "user", content: userPrompt }],
 			cancellationToken,
 		);
 
-		for await (const chunk of messageStream) {
-			if (cancellationToken?.isCancellationRequested) {
-				console.log("Term detection was cancelled");
-				return "";
-			}
-			response += chunk;
+		if (cancellationToken?.isCancellationRequested) {
+			console.log("Term detection was cancelled");
+			return "";
 		}
 
 		return response;

@@ -17,23 +17,21 @@ export interface AIMessage {
 }
 
 /**
- * AIサービスからのストリーミング応答を表す型定義。
- * テキストチャンクが非同期に連続して返されることを想定しています。
- */
-export type MessageStream = AsyncIterable<string>;
-
-/**
  * AI機能を提供するサービスの汎用インターフェース。
  * 様々なAIプロバイダ（OpenAI, Anthropic, Geminiなど）の実装を抽象化します。
  */
 export interface AIService {
 	/**
-	 * AIモデルに対してメッセージを送信し、ストリーミング応答を受け取ります。
+	 * AIモデルに対してメッセージを送信し、応答を受け取ります。
 	 *
 	 * @param systemPrompt システムプロンプト。AIモデルの振る舞いや応答形式を指示します。
 	 * @param messages AIモデルに送信するメッセージの配列。AIMessage形式で指定します。
 	 * @param cancellationToken キャンセル処理用トークン。ユーザーによる処理中断をサポートします。
-	 * @returns AIモデルからの応答をストリーミングで返す MessageStream。
+	 * @returns AIモデルからの応答テキスト。
 	 */
-	sendMessage(systemPrompt: string, messages: AIMessage[], cancellationToken?: vscode.CancellationToken): MessageStream;
+	sendMessage(
+		systemPrompt: string,
+		messages: AIMessage[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<string>;
 }
