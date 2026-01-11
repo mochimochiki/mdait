@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { decodeSnapshot, encodeSnapshot } from "./snapshot-encoder";
 
 /**
@@ -71,17 +72,14 @@ export class SnapshotManager {
 			return;
 		}
 
-		const filePath = this.getSnapshotFilePath();
-		if (!filePath) {
+		// .mdaitディレクトリを初期化（.gitignoreも自動生成）
+		const mdaitDir = await ensureMdaitDir();
+		if (!mdaitDir) {
 			console.warn("Workspace not found, cannot flush snapshots");
 			return;
 		}
 
-		// ディレクトリがなければ作成
-		const dirPath = path.dirname(filePath);
-		if (!fs.existsSync(dirPath)) {
-			fs.mkdirSync(dirPath, { recursive: true });
-		}
+		const filePath = path.join(mdaitDir, "snapshot");
 
 		// 既存のスナップショットを読み込み
 		const existingSnapshots = await this.loadAllSnapshots();

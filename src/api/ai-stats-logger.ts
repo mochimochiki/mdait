@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../config/configuration";
+import { ensureMdaitDir } from "../utils/mdait-dir";
 import type { AIMessage } from "./ai-service";
 
 /**
@@ -100,18 +101,18 @@ export class AIStatsLogger {
 	 */
 	private async initializeLogFile(): Promise<void> {
 		try {
-			// ワークスペースルートを取得
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			if (!workspaceRoot) {
+			// .mdaitディレクトリを初期化（.gitignoreも自動生成）
+			const mdaitDir = await ensureMdaitDir();
+			if (!mdaitDir) {
 				console.warn("Workspace not found for AI stats logging");
 				return;
 			}
 
 			// ログディレクトリのパス
-			const logDir = path.join(workspaceRoot, ".mdait", "logs");
+			const logDir = path.join(mdaitDir, "logs");
 			this.logFilePath = path.join(logDir, "ai-stats.log");
 
-			// ディレクトリが存在しない場合は作成
+			// ログディレクトリが存在しない場合は作成
 			await fs.mkdir(logDir, { recursive: true });
 
 			// ファイルが存在しない場合はヘッダー行を書き込み
@@ -187,18 +188,18 @@ export class AIStatsLogger {
 	 */
 	private async initializeDetailedLogFile(): Promise<void> {
 		try {
-			// ワークスペースルートを取得
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			if (!workspaceRoot) {
+			// .mdaitディレクトリを初期化（.gitignoreも自動生成）
+			const mdaitDir = await ensureMdaitDir();
+			if (!mdaitDir) {
 				console.warn("Workspace not found for AI detailed logging");
 				return;
 			}
 
 			// ログディレクトリのパス
-			const logDir = path.join(workspaceRoot, ".mdait", "logs");
+			const logDir = path.join(mdaitDir, "logs");
 			this.detailedLogFilePath = path.join(logDir, "ai-detailed.log");
 
-			// ディレクトリが存在しない場合は作成
+			// ログディレクトリが存在しない場合は作成
 			await fs.mkdir(logDir, { recursive: true });
 
 			// ファイルが存在しない場合でもヘッダーは不要（JSON Lines形式のため）
