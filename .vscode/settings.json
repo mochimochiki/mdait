@@ -22,4 +22,7 @@
       "text": "Conventional Commitsのスタイルで記述してください"
     }
   ],
+  "chat.tools.terminal.autoApprove": {
+    "git checkout": true
+  },
 }
