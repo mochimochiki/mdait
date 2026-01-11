@@ -15,6 +15,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
       
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -24,7 +26,16 @@ jobs:
         
     - name: Install dependencies
       run: npm ci
-      
+
+    - name: Set extension version from tag
+      shell: bash
+      run: |
+        set -euo pipefail
+        TAG="${GITHUB_REF_NAME}"      # 例: v0.3.2
+        VER="${TAG#v}"                # 例: 0.3.2
+        node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${VER}'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+        cat package.json | head -n 30
+
     - name: Compile TypeScript
       run: npm run compile
       
