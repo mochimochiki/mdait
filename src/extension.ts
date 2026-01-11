@@ -182,6 +182,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		(editor) => {
 			if (editor?.document.languageId === "markdown") {
 				summaryDecorator.updateDecorations(editor);
+
+				const filePath = editor.document.uri.fsPath;
+				statusTreeProvider.revealActiveFile(filePath, treeView);
 			}
 		},
 		null,

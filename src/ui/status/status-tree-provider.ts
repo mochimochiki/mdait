@@ -46,6 +46,42 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
+	 * アクティブなファイルに対応するツリーアイテムを展開・選択する
+	 * @param filePath ファイルの絶対パス
+	 * @param treeView TreeViewインスタンス
+	 */
+	public async revealActiveFile(filePath: string, treeView: vscode.TreeView<StatusItem>): Promise<void> {
+		// 設定が完了していない、またはステータスが初期化されていない場合は何もしない
+		if (!this.configuration.isConfigured() || !this.isStatusInitialized) {
+			return;
+		}
+
+		// ビューが見えていない場合は何もしない
+		if (!treeView.visible) {
+			return;
+		}
+
+		try {
+			// StatusItemTreeからファイルアイテムを取得
+			const fileItem = this.statusItemTree.getFile(filePath);
+			if (!fileItem) {
+				// mdait管理対象外のファイル
+				return;
+			}
+
+			// TreeViewでアイテムを選択
+			// expandを指定しないことで、親階層のみ展開され、ファイルアイテム自身は展開されない
+			await treeView.reveal(fileItem, {
+				select: true,
+				focus: false,
+			});
+		} catch (error) {
+			// エラーが発生しても処理を中断しない（ログのみ出力）
+			console.debug("Failed to reveal file in status tree:", error);
+		}
+	}
+
+	/**
 	 * API: ツリーアイテムを取得する
 	 * elementはgetChildrenから渡されるStatusItemのため、インスタンスが入れ替わっていると古い状態になっている可能性がある
 	 * 各StatusItem更新ではAssignを使用しているため、最新の状態を反映する
@@ -102,6 +138,35 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		return treeItem;
+	}
+
+	/**
+	 * API: 親要素を取得する
+	 * TreeView.reveal()を使用するために必要
+	 */
+	public getParent(element: StatusItem): StatusItem | undefined {
+		// Unitの場合、親はFile
+		if (element.type === StatusItemType.Unit && element.filePath) {
+			return this.statusItemTree.getFile(element.filePath);
+		}
+
+		// Fileの場合、親はDirectory
+		if (element.type === StatusItemType.File && element.filePath) {
+			const dirPath = path.dirname(element.filePath);
+			return this.statusItemTree.getDirectory(dirPath);
+		}
+
+		// Directoryの場合、親は親Directory（ルートの場合はundefined）
+		if (element.type === StatusItemType.Directory && element.directoryPath) {
+			const parentPath = path.dirname(element.directoryPath);
+			// ルートディレクトリの場合はundefinedを返す
+			if (parentPath === element.directoryPath) {
+				return undefined;
+			}
+			return this.statusItemTree.getDirectory(parentPath);
+		}
+
+		return undefined;
 	}
 
 	/**
