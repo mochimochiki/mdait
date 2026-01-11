@@ -235,6 +235,7 @@
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
     "ollama": "^0.6.0",
+    "openai": "^4.78.1",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

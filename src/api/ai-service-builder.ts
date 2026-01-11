@@ -2,6 +2,7 @@ import { type AIConfig, Configuration } from "../config/configuration";
 import type { AIMessage, AIService } from "./ai-service";
 import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
 import { OllamaProvider } from "./providers/ollama-provider";
+import { OpenAIProvider } from "./providers/openai-provider";
 import { VSCodeLanguageModelProvider } from "./providers/vscode-lm-provider";
 
 /**
@@ -24,8 +25,8 @@ export class AIServiceBuilder {
 				return new VSCodeLanguageModelProvider(effectiveConfig);
 			case "ollama":
 				return new OllamaProvider(effectiveConfig);
-			// case 'openai':
-			//   return new OpenAIAIProvider(effectiveConfig.apiKey);
+			case "openai":
+				return new OpenAIProvider(effectiveConfig);
 			// case 'anthropic':
 			//   return new AnthropicAIProvider(effectiveConfig.apiKey);
 			default:

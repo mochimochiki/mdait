@@ -12,6 +12,12 @@ export interface AIConfig {
 		endpoint: string;
 		model: string;
 	};
+	openai?: {
+		apiKey?: string;
+		baseURL?: string;
+		maxTokens?: number;
+		timeoutSec?: number;
+	};
 	debug?: {
 		enableStatsLogging: boolean;
 		logPromptAndResponse: boolean;
@@ -59,6 +65,12 @@ interface MdaitConfig {
 		ollama?: {
 			endpoint?: string;
 			model?: string;
+		};
+		openai?: {
+			apiKey?: string;
+			baseURL?: string;
+			maxTokens?: number;
+			timeoutSec?: number;
 		};
 		debug?: {
 			enableStatsLogging?: boolean;
@@ -310,6 +322,23 @@ export class Configuration {
 						this.ai.ollama.model = config.ai.ollama.model;
 					}
 				}
+				if (config.ai.openai) {
+					if (!this.ai.openai) {
+						this.ai.openai = {};
+					}
+					if (config.ai.openai.apiKey) {
+						this.ai.openai.apiKey = this.expandEnvironmentVariables(config.ai.openai.apiKey);
+					}
+					if (config.ai.openai.baseURL) {
+						this.ai.openai.baseURL = config.ai.openai.baseURL;
+					}
+					if (config.ai.openai.maxTokens !== undefined) {
+						this.ai.openai.maxTokens = config.ai.openai.maxTokens;
+					}
+					if (config.ai.openai.timeoutSec !== undefined) {
+						this.ai.openai.timeoutSec = config.ai.openai.timeoutSec;
+					}
+				}
 				if (config.ai.debug) {
 					if (!this.ai.debug) {
 						this.ai.debug = {
@@ -450,6 +479,18 @@ export class Configuration {
 	public getTermsFileFormat(): "csv" | "yaml" {
 		const ext = this.terms.filename.toLowerCase().split(".").pop();
 		return ext === "yaml" || ext === "yml" ? "yaml" : "csv";
+	}
+
+	/**
+	 * 環境変数を展開する
+	 * ${env:VARIABLE_NAME} 形式の文字列を環境変数の値に置き換えます
+	 * @param value 展開する文字列
+	 * @returns 展開後の文字列
+	 */
+	private expandEnvironmentVariables(value: string): string {
+		return value.replace(/\$\{env:([^}]+)\}/g, (_, envVarName) => {
+			return process.env[envVarName] || "";
+		});
 	}
 
 	/**

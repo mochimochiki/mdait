@@ -86,14 +86,14 @@
         "provider": {
           "type": "string",
           "description": "AI provider to use for translation",
-          "enum": ["default", "vscode-lm", "ollama"],
+          "enum": ["default", "vscode-lm", "ollama", "openai"],
           "default": "default"
         },
         "model": {
           "type": "string",
           "description": "AI model name to use with the selected provider",
-          "default": "gpt-4o",
-          "examples": ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "claude-3-5-sonnet"]
+          "default": "gpt-5 mini",
+          "examples": ["gpt-5 mini", "gpt-4.1"]
         },
         "ollama": {
           "type": "object",
@@ -111,6 +111,37 @@
               "description": "Ollama model name to use",
               "default": "llama2",
               "examples": ["llama2", "llama3", "mistral", "codellama"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "openai": {
+          "type": "object",
+          "description": "OpenAI-specific settings (when provider is 'openai')",
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "description": "OpenAI API key. Can use ${env:VARIABLE_NAME} syntax to reference environment variables.",
+              "examples": ["${env:OPENAI_API_KEY}", "sk-..."]
+            },
+            "baseURL": {
+              "type": "string",
+              "description": "OpenAI API base URL (optional, defaults to https://api.openai.com/v1)",
+              "format": "uri",
+              "default": "https://api.openai.com/v1",
+              "examples": ["https://api.openai.com/v1", "https://your-proxy.com/v1"]
+            },
+            "maxTokens": {
+              "type": "integer",
+              "description": "Maximum number of tokens to generate in the response.",
+              "minimum": 1,
+              "default": 2048
+            },
+            "timeoutSec": {
+              "type": "integer",
+              "description": "Request timeout in seconds.",
+              "minimum": 1,
+              "default": 120
             }
           },
           "additionalProperties": false
