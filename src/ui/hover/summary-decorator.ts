@@ -68,8 +68,8 @@ export class SummaryDecorator {
 				continue;
 			}
 
-			// サマリの概要テキストを生成
-			const summaryText = this.buildSummaryText(summary.stats.duration, summary.stats.tokens);
+			// サマリの概要テキストを生成（needフラグも考慮）
+			const summaryText = this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need);
 
 			// Decorationを追加
 			const range = new vscode.Range(lineIndex, line.text.length, lineIndex, line.text.length);
@@ -91,10 +91,15 @@ export class SummaryDecorator {
 	 * サマリの概要テキストを生成
 	 * @param duration 処理時間（秒）
 	 * @param tokens トークン数（オプション）
+	 * @param needFlag needフラグ
 	 * @returns 概要テキスト
 	 */
-	private buildSummaryText(duration: number, tokens?: number): string {
-		const parts: string[] = [`${vscode.l10n.t("Translation completed")} :`];
+	private buildSummaryText(duration: number, tokens?: number, needFlag?: string | null): string {
+		// need:reviewの場合は「要レビュー」を表示
+		const status = needFlag === "review" 
+			? vscode.l10n.t("Needs Review") 
+			: vscode.l10n.t("Translation completed");
+		const parts: string[] = [`${status} :`];
 
 		// 処理時間
 		parts.push(`${duration.toFixed(1)}${vscode.l10n.t("seconds")}`);

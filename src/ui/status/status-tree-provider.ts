@@ -90,7 +90,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
 
 		// ステータスに応じたアイコンを設定
-		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating);
+		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating, element);
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
@@ -271,6 +271,19 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return element.tooltip;
 		}
 
+		// ユニットのneedFlagを優先して表示
+		if (element.type === StatusItemType.Unit && element.needFlag) {
+			if (element.needFlag === "review") {
+				return vscode.l10n.t("Review required");
+			}
+			if (element.needFlag.startsWith("revise@")) {
+				return vscode.l10n.t("Translation needed");
+			}
+			if (element.needFlag === "solve-conflict") {
+				return vscode.l10n.t("Conflict resolution needed");
+			}
+		}
+
 		switch (element.status) {
 			case Status.Translated:
 				return vscode.l10n.t("Translation completed");
@@ -290,10 +303,21 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * ステータスに応じたアイコンを取得する
 	 */
-	private getStatusIcon(status: Status, isProgress?: boolean): vscode.ThemeIcon {
+	private getStatusIcon(status: Status, isProgress?: boolean, element?: StatusItem): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
 		}
+
+		// ユニットのneedFlagを優先してアイコンを決定
+		if (element?.type === StatusItemType.Unit && element.needFlag) {
+			if (element.needFlag === "review") {
+				return new vscode.ThemeIcon("alert", new vscode.ThemeColor("charts.yellow"));
+			}
+			if (element.needFlag === "solve-conflict") {
+				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
+			}
+		}
+
 		switch (status) {
 			case Status.Translated:
 				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));

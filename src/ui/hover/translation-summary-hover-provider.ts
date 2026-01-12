@@ -75,7 +75,7 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 
 		// ヘッダー（need:reviewの場合は「要確認」と表示）
 		if (needFlag === "review") {
-			md.appendMarkdown(`### ⚠️ ${vscode.l10n.t("Needs Review")}\n\n`);
+			md.appendMarkdown(`### ${vscode.l10n.t("Needs Review")}\n\n`);
 		} else {
 			md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
 		}
@@ -89,6 +89,23 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown(`- ${vscode.l10n.t("Tokens")}: ${summary.stats.tokens.toLocaleString()}\n`);
 		}
 		md.appendMarkdown("\n");
+
+		// 警告
+		if (summary.warnings && summary.warnings.length > 0) {
+			md.appendMarkdown(`**⚠️ ${vscode.l10n.t("Warnings")}:**\n`);
+			for (const warning of summary.warnings) {
+				md.appendMarkdown(`- ${warning}\n`);
+			}
+		}
+
+		// レビュー推奨理由
+		if (summary.reviewReasons && summary.reviewReasons.length > 0) {
+			md.appendMarkdown(`**🔍 ${vscode.l10n.t("Review Reasons")}:**\n`);
+			for (const reason of summary.reviewReasons) {
+				md.appendMarkdown(`- ${reason}\n`);
+			}
+			md.appendMarkdown("\n");
+		}
 
 		// 適用された用語
 		if (summary.appliedTerms && summary.appliedTerms.length > 0) {
@@ -117,23 +134,6 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 				md.appendMarkdown(`- ${displayText} [${vscode.l10n.t("Add to glossary")}](${commandUri})\n`);
 			}
 			md.appendMarkdown("\n");
-		}
-
-		// レビュー推奨理由
-		if (summary.reviewReasons && summary.reviewReasons.length > 0) {
-			md.appendMarkdown(`**🔍 ${vscode.l10n.t("Review Reasons")}:**\n`);
-			for (const reason of summary.reviewReasons) {
-				md.appendMarkdown(`- ${reason}\n`);
-			}
-			md.appendMarkdown("\n");
-		}
-
-		// 注意事項
-		if (summary.warnings && summary.warnings.length > 0) {
-			md.appendMarkdown(`**⚠️ ${vscode.l10n.t("Warnings")}:**\n`);
-			for (const warning of summary.warnings) {
-				md.appendMarkdown(`- ${warning}\n`);
-			}
 		}
 
 		return md;

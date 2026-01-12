@@ -8,9 +8,13 @@
     }
   ],
   "ai": {
-    "provider": "vscode-lm",
+    "provider": "ollama",
     "model": "gpt-4.1",
-    "debug": {"logPromptAndResponse": true}
+    "debug": {"logPromptAndResponse": true},
+    "ollama": {
+      "endpoint": "http://localhost:11434",
+      "model": "gemma3:4b"
+    }
   },
   "sync": {
     "autoMarkerLevel": 3
