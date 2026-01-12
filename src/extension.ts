@@ -6,6 +6,7 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand } from "./commands/trans/trans-command";
 import { Configuration } from "./config/configuration";
@@ -139,6 +140,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
 		termHandler.termExpandFile(item as StatusItem),
+	);
+
+	// Translate Selection command
+	const translateSelectionDisposable = vscode.commands.registerCommand(
+		"mdait.translateSelection",
+		translateSelectionCommand,
 	);
 
 	// CodeLens翻訳コマンド
@@ -346,6 +353,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
+		translateSelectionDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

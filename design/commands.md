@@ -181,6 +181,11 @@ sequenceDiagram
 
 ---
 
+## trans-selection（オンデマンド翻訳）
+
+- エディタ選択範囲を一時的に翻訳する軽量機能（mdaitステータスに影響しない）。詳細は [design/command_trans-selection.md](design/command_trans-selection.md) を参照。
+---
+
 ## 考慮事項
 
 - すべてのコマンドはVSCode標準の`withProgress`パターンで`CancellationToken`対応と冪等性確保を優先する。

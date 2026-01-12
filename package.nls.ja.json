@@ -7,6 +7,7 @@
   "mdait.status.sync.initial.title": "初回同期",
   "mdait.status.openTerm.title": "用語集を開く",
   "mdait.setup.createConfig.title": "設定ファイルを作成",
+  "mdait.translateSelection.title": "✨ [AI] 選択範囲を翻訳",
   "mdait.welcome.message": "mdaitはまだ設定されていません。\n\n設定ファイルを作成して開始してください。\n\n[$(gear) mdait.jsonを作成](command:mdait.setup.createConfig)",
   "mdait.translate.directory.title": "✨ [AI] ディレクトリを翻訳",
   "mdait.translate.file.title": "✨ [AI] ファイルを翻訳",

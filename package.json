@@ -116,6 +116,11 @@
         "title": "%mdait.setup.createConfig.title%",
         "icon": "$(gear)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.translateSelection",
+        "title": "%mdait.translateSelection.title%",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -144,6 +149,13 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "mdait.translateSelection",
+          "when": "editorHasSelection && mdaitConfigured",
+          "group": "mdait@1"
+        }
+      ],
       "view/title": [
         {
           "command": "mdait.status.selectTargets",

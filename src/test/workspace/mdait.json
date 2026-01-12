@@ -8,8 +8,8 @@
     }
   ],
   "ai": {
-    "provider": "ollama",
-    "model": "gpt-4.1",
+    "provider": "vscode-lm",
+    "model": "gpt-5 mini",
     "debug": {"logPromptAndResponse": true},
     "ollama": {
       "endpoint": "http://localhost:11434",
