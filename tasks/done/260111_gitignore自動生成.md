@@ -45,7 +45,6 @@ sequenceDiagram
 
 ## 4. 実装計画と進捗
 
-- [x] ブランチ作成
 - [x] utils/mdait-dir.ts に初期化関数を実装
 - [x] ai-stats-logger.ts に初期化関数を統合
 - [x] snapshot-manager.ts に初期化関数を統合
