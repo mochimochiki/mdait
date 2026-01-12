@@ -308,16 +308,36 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return new vscode.ThemeIcon("sync~spin");
 		}
 
-		// ユニットのneedFlagを優先してアイコンを決定
-		if (element?.type === StatusItemType.Unit && element.needFlag) {
-			if (element.needFlag === "review") {
-				return new vscode.ThemeIcon("alert", new vscode.ThemeColor("charts.yellow"));
+		// ユニット階層の場合はcircle-smallアイコンを使用
+		if (element?.type === StatusItemType.Unit) {
+			// needFlagを優先してアイコンを決定
+			if (element.needFlag) {
+				if (element.needFlag === "review") {
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.yellow"));
+				}
+				if (element.needFlag === "solve-conflict") {
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.red"));
+				}
 			}
-			if (element.needFlag === "solve-conflict") {
-				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
+
+			// ステータスに応じてアイコンを決定
+			switch (status) {
+				case Status.Translated:
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.green"));
+				case Status.NeedsTranslation:
+					return new vscode.ThemeIcon("circle-small");
+				case Status.Source:
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.blue"));
+				case Status.Empty:
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.yellow"));
+				case Status.Error:
+					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.red"));
+				default:
+					return new vscode.ThemeIcon("circle-small", new vscode.ThemeColor("charts.gray"));
 			}
 		}
 
+		// ファイル・ディレクトリ階層は従来のアイコンを使用
 		switch (status) {
 			case Status.Translated:
 				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
