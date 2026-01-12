@@ -4,7 +4,7 @@
 import { strict as assert } from "node:assert";
 import { markdownParser } from "../../../core/markdown/parser";
 
-const testConfig = { sync: { autoMarkerLevel: 2 } } as unknown as import("../../../config/configuration").Configuration;
+const testConfig = { sync: { level: 2 } } as unknown as import("../../../config/configuration").Configuration;
 
 suite("MarkdownParser（フロントマター後の本文）", () => {
 	test("フロントマター直後が本文の場合、その本文がユニットとして保持されること", () => {
@@ -25,11 +25,11 @@ title: Test Document
 
 		// フロントマター後の本文 + 見出し1 の2ユニットになるべき
 		assert.strictEqual(parsed.units.length, 2);
-		
+
 		// 最初のユニットにフロントマター直後の本文が含まれること
 		assert.match(parsed.units[0].content, /これはフロントマター直後の本文です/);
 		assert.match(parsed.units[0].content, /この内容は最初のユニットに含まれるべきです/);
-		
+
 		// 2番目のユニットは見出し1
 		assert.match(parsed.units[1].content, /## 見出し1/);
 		assert.match(parsed.units[1].content, /見出し1の本文/);
@@ -55,12 +55,12 @@ title: Test Document
 
 		// マーカー付きの本文 + 見出し1 の2ユニットになるべき
 		assert.strictEqual(parsed.units.length, 2);
-		
+
 		// 最初のユニットにマーカー直後の本文が含まれること
 		assert.strictEqual(parsed.units[0].marker.hash, "abc123");
 		assert.match(parsed.units[0].content, /マーカー直後の本文です/);
 		assert.match(parsed.units[0].content, /この内容も保持されるべきです/);
-		
+
 		// 2番目のユニットは見出し1
 		assert.match(parsed.units[1].content, /## 見出し1/);
 	});
@@ -79,11 +79,11 @@ title: Test Document
 
 		// 冒頭の本文 + 見出し1 の2ユニットになるべき
 		assert.strictEqual(parsed.units.length, 2);
-		
+
 		// 最初のユニットに冒頭の本文が含まれること
 		assert.match(parsed.units[0].content, /冒頭の本文です/);
 		assert.match(parsed.units[0].content, /この内容は最初のユニットとして扱われるべきです/);
-		
+
 		// 2番目のユニットは見出し1
 		assert.match(parsed.units[1].content, /## 見出し1/);
 	});
@@ -102,11 +102,11 @@ title: Test Document
 
 		// マーカー付きの本文 + 見出し1 の2ユニットになるべき
 		assert.strictEqual(parsed.units.length, 2);
-		
+
 		// 最初のユニットにマーカー直後の本文が含まれること
 		assert.strictEqual(parsed.units[0].marker.hash, "xyz789");
 		assert.match(parsed.units[0].content, /冒頭マーカー後の本文です/);
-		
+
 		// 2番目のユニットは見出し1
 		assert.match(parsed.units[1].content, /## 見出し1/);
 	});

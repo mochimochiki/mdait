@@ -72,7 +72,7 @@ mdait は、翻訳を個々の文やファイルとしてではなく、文書�
     "model": "gpt-4.1"
   },
   "sync": {
-    "autoMarkerLevel": 3
+    "level": 3
   }
 }
 

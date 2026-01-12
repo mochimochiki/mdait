@@ -4,7 +4,7 @@
 import { strict as assert } from "node:assert";
 import { markdownParser } from "../../../core/markdown/parser";
 
-const testConfig = { sync: { autoMarkerLevel: 2 } } as unknown as import("../../../config/configuration").Configuration;
+const testConfig = { sync: { level: 2 } } as unknown as import("../../../config/configuration").Configuration;
 
 suite("MarkdownParser（見出し無しマーカー）", () => {
 	test("見出し無し位置のmdaitマーカーが先頭ユニットとしてパースされること", () => {

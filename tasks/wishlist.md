@@ -18,13 +18,6 @@
 - mdと違いhtmlコメントは使えないためファイル単位で扱う必要がある
 - mdaitマーカーはどこに持つのか？検討する必要がある
 
-
-### frontmatterのサポート
-
-mdait.xxxx という形式でfrontmatter(yaml)に情報を持たせることをサポートする。
-- level : これまでautoMarkerLevelとしていたが、levelという名称にシンプル化し、frontmatterでも指定できるようにする
-- frontmatter指定がある場合そちらが優先されるようにする
-
 ### frontmatterの翻訳サポート
 
 frontmatter内の値も翻訳できるようにする。

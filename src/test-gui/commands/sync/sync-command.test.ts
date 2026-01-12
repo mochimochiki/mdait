@@ -106,7 +106,7 @@ suite("syncコマンドE2E", () => {
 			}
 		});
 
-		test("autoMarkerLevel: autoMarkerLevel設定に従って適切な見出しレベルにマーカーが挿入されること", async () => {
+		test("level: level設定に従って適切な見出しレベルにマーカーが挿入されること", async () => {
 			const testContent = `# 見出し 1
 
 コンテンツ1
@@ -124,7 +124,7 @@ suite("syncコマンドE2E", () => {
 			writeFileSync(tmpJaLevelTest, testContent, "utf8");
 			writeFileSync(tmpEnLevelTest, testContent, "utf8");
 
-			// syncを実行（デフォルトのautoMarkerLevel: 2）
+			// syncを実行（デフォルトのlevel: 2）
 			const vscode = require("vscode");
 			await vscode.commands.executeCommand("mdait.sync");
 
@@ -162,8 +162,8 @@ suite("syncコマンドE2E", () => {
 			assert.ok(firstMarker > frontMatterEnd);
 		});
 
-		test("FrontMatter上書き: sourceのmdait.sync.autoMarkerLevel=3でH3までユニット化される", async () => {
-			const content = `---\nmdait.sync.autoMarkerLevel: 3\n---\n# H1\n\n本文1\n\n## H2\n\n本文2\n\n### H3\n\n本文3\n`;
+		test("FrontMatter上書き: sourceのmdait.sync.level=3でH3までユニット化される", async () => {
+			const content = `---\nmdait.sync.level: 3\n---\n# H1\n\n本文1\n\n## H2\n\n本文2\n\n### H3\n\n本文3\n`;
 			const jaPath = join(tmpJaDir, "level_frontmatter_source_only.md");
 			const enPath = join(tmpEnDir, "level_frontmatter_source_only.md");
 			writeFileSync(jaPath, content, "utf8");

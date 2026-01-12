@@ -64,7 +64,7 @@
       "type": "object",
       "description": "Synchronization settings",
       "properties": {
-        "autoMarkerLevel": {
+        "level": {
           "type": "integer",
           "description": "Heading level at which to automatically insert mdait markers (1-6, or 0 to disable). Can be overridden in frontmatter.",
           "minimum": 0,

@@ -64,7 +64,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		const content = fm.content;
 		let frontMatterRaw = "";
 		let frontMatterLineOffset = 0;
-		
+
 		// フロントマターが存在する場合、frontMatterRawを取得
 		// content が空または空白のみの場合（フロントマターのみ）も正しく処理する
 		// 注: stringifyが末尾に改行を追加するため、再パース時にcontentが"\n"になる場合がある
@@ -81,8 +81,8 @@ export class MarkdownItParser implements IMarkdownParser {
 			}
 		}
 
-		const fontMaterAutoMarkerLevel = frontMatter?.["mdait.sync.autoMarkerLevel"];
-		const mdaitMarkerLevel = fontMaterAutoMarkerLevel ?? config?.sync?.autoMarkerLevel ?? 2;
+		const fontMaterlevel = frontMatter?.["mdait.sync.level"];
+		const mdaitMarkerLevel = fontMaterlevel ?? config?.sync?.level ?? 2;
 
 		const parsedMdTokens = this.md.parse(content, {});
 		const lines = content.split(/\r?\n/);

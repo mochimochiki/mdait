@@ -15,7 +15,7 @@
     "contextSize": 1
   },
   "sync": {
-    "autoMarkerLevel": 3
+    "level": 3
   },
   "terms": {
     "primaryLang": "en"

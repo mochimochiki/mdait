@@ -51,7 +51,7 @@ sequenceDiagram
   ],
   "ignoredPatterns": ["**/node_modules/**"],
   "sync": {
-    "autoMarkerLevel": ,
+    "level": ,
     "autoDelete": true
   },
   "ai": {

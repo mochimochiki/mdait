@@ -56,7 +56,7 @@ interface MdaitConfig {
 	transPairs?: TransPair[];
 	ignoredPatterns?: string | string[];
 	sync?: {
-		autoMarkerLevel?: number;
+		level?: number;
 		autoDelete?: boolean;
 	};
 	ai?: {
@@ -116,7 +116,7 @@ export class Configuration {
 	 * sync設定
 	 */
 	public sync = {
-		autoMarkerLevel: 3,
+		level: 3,
 		autoDelete: true,
 	};
 	/**
@@ -298,8 +298,8 @@ export class Configuration {
 
 			// sync設定の読み込み
 			if (config.sync) {
-				if (config.sync.autoMarkerLevel !== undefined) {
-					this.sync.autoMarkerLevel = config.sync.autoMarkerLevel;
+				if (config.sync.level !== undefined) {
+					this.sync.level = config.sync.level;
 				}
 				if (config.sync.autoDelete !== undefined) {
 					this.sync.autoDelete = config.sync.autoDelete;

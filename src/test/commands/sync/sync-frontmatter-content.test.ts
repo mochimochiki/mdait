@@ -2,11 +2,11 @@
 // syncコマンド実行時にフロントマター直後の本文が保持されることを確認するテスト
 
 import { strict as assert } from "node:assert";
-import { markdownParser } from "../../../core/markdown/parser";
 import { SectionMatcher } from "../../../commands/sync/section-matcher";
 import { calculateHash } from "../../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../../core/markdown/mdait-unit";
+import { markdownParser } from "../../../core/markdown/parser";
 
 // sync-command.tsのensureMdaitMarkerHashと同じ処理
 function ensureMdaitMarkerHash(units: MdaitUnit[]) {
@@ -18,7 +18,7 @@ function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 	}
 }
 
-const testConfig = { sync: { autoMarkerLevel: 2 } } as unknown as import("../../../config/configuration").Configuration;
+const testConfig = { sync: { level: 2 } } as unknown as import("../../../config/configuration").Configuration;
 
 suite("Sync処理（フロントマター後の本文）", () => {
 	test("初回sync時にフロントマター直後の本文が保持されること", () => {
@@ -37,7 +37,7 @@ title: Test Document
 `;
 
 		const source = markdownParser.parse(sourceMd, testConfig);
-		
+
 		// 初回syncなのでtargetは存在しない想定
 		assert.strictEqual(source.units.length, 2);
 		assert.match(source.units[0].content, /これはフロントマター直後の本文です/);
@@ -132,7 +132,7 @@ Content of heading 1
 
 		const updatedSource = markdownParser.parse(updatedSourceMd, testConfig);
 		const target = markdownParser.parse(targetMd, testConfig);
-		
+
 		ensureMdaitMarkerHash(updatedSource.units);
 		ensureMdaitMarkerHash(target.units);
 
@@ -141,12 +141,12 @@ Content of heading 1
 
 		// 新規ユニット + 既存ユニット = 2つのペア
 		assert.strictEqual(matchResult.length, 2);
-		
+
 		// 最初のペアは新規追加（sourceのみ）
 		assert.ok(matchResult[0].source);
 		assert.strictEqual(matchResult[0].target, null);
 		assert.match(matchResult[0].source.content, /新しく追加された本文です/);
-		
+
 		// 2番目のペアは既存マッチ
 		assert.ok(matchResult[1].source);
 		assert.ok(matchResult[1].target);

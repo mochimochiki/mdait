@@ -72,7 +72,7 @@ mdait is designed to handle translations not as separate sentences or files, but
     "model": "gpt-4.1"
   },
   "sync": {
-    "autoMarkerLevel": 3
+    "level": 3
   }
 }
 ```
