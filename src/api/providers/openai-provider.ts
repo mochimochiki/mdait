@@ -1,47 +1,51 @@
-import OpenAI from "openai";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
 /**
- * OpenAI Responses APIを使用したAIプロバイダー実装。
- * 公式のopenai SDKを使用して応答を受け取ります。
+ * OpenAI Chat Completions API 非ストリーミングレスポンスの型
+ */
+interface OpenAIChatCompletionResponse {
+	choices?: Array<{
+		message?: {
+			role: string;
+			content: string;
+		};
+		finish_reason?: string | null;
+	}>;
+}
+
+/**
+ * OpenAI Chat Completions APIを使用したAIプロバイダー実装。
+ * fetchを使用して直接HTTPリクエストを送信します。
  */
 export class OpenAIProvider implements AIService {
-	private client: OpenAI;
+	private apiKey: string;
+	private baseURL: string;
 	private model: string;
 	private maxOutputTokens: number;
 	private timeoutMs: number;
 
 	constructor(config: AIConfig) {
 		// OpenAI固有設定を取得
-		const apiKey = (config.openai?.apiKey as string) || process.env.OPENAI_API_KEY;
-		const baseURL = config.openai?.baseURL as string | undefined;
+		this.apiKey = (config.openai?.apiKey as string) || process.env.OPENAI_API_KEY || "";
+		this.baseURL = (config.openai?.baseURL as string) || "https://api.openai.com/v1";
 		this.model = (config.model as string) || "gpt-5-mini";
 		this.maxOutputTokens = (config.openai?.maxTokens as number) ?? 2048;
 		const timeoutSec = (config.openai?.timeoutSec as number) ?? 120;
 		this.timeoutMs = timeoutSec * 1000;
 
-		if (!apiKey) {
-			throw new Error(
-				"OpenAI API key is not configured. Set openai.apiKey in mdait.json or OPENAI_API_KEY environment variable.",
-			);
+		if (!this.apiKey) {
+			throw new Error("OpenAI API key is not configured. Set openai.apiKey in OPENAI_API_KEY environment variable.");
 		}
-
-		// OpenAI クライアントを初期化
-		this.client = new OpenAI({
-			apiKey,
-			baseURL,
-			timeout: this.timeoutMs,
-		});
 	}
 
 	/**
-	 * OpenAI Responses APIに対してメッセージを送信し、応答を受け取ります。
+	 * OpenAI Chat Completions APIに対してメッセージを送信し、応答を受け取ります。
 	 *
-	 * @param systemPrompt システムプロンプト（instructionsとして使用）
-	 * @param messages メッセージ履歴（inputとして使用）
+	 * @param systemPrompt システムプロンプト（system roleのメッセージとして使用）
+	 * @param messages メッセージ履歴
 	 * @param cancellationToken キャンセル処理用トークン
 	 * @returns 完全な応答テキスト
 	 */
@@ -52,66 +56,79 @@ export class OpenAIProvider implements AIService {
 	): Promise<string> {
 		const startTime = Date.now();
 		let outputChars = 0;
+		let inputChars = 0;
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
 		let responseContent = "";
 
+		// OpenAI Chat API の messages 配列に変換
+		const openaiMessages: { role: string; content: string }[] = [];
+
+		if (systemPrompt && systemPrompt.trim().length > 0) {
+			openaiMessages.push({
+				role: "system",
+				content: systemPrompt,
+			});
+			inputChars += systemPrompt.length;
+		}
+
+		for (const msg of messages) {
+			const content = typeof msg.content === "string" ? msg.content : msg.content.join("");
+			inputChars += content.length;
+
+			openaiMessages.push({
+				role: msg.role,
+				content,
+			});
+		}
+
+		const url = this.baseURL.replace(/\/$/, "") + "/chat/completions";
+
 		// AbortControllerを使用してキャンセル処理を実装
-		const abortController = new AbortController();
+		const controller = new AbortController();
 		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
-			abortController.abort();
+			controller.abort();
+			console.log("OpenAIProvider request was cancelled");
 		});
 
-		// Responses API形式にメッセージを変換（system役割は除外）
-		const input = messages.map((msg) => ({
-			role: msg.role as "user" | "assistant",
-			content: typeof msg.content === "string" ? msg.content : msg.content.join("\n"),
-		}));
-
-		// 入力文字数の計測
-		const inputChars = (systemPrompt?.length ?? 0) + input.reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
-
 		try {
-			// OpenAI Responses APIを非ストリーミングモードで呼び出し
-			const response = await this.client.responses.create(
-				{
+			const response = await fetch(url, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+				body: JSON.stringify({
 					model: this.model,
-					instructions: systemPrompt,
-					input,
+					messages: openaiMessages,
 					stream: false,
-					temperature: 0.7,
-					reasoning: { effort: "low" },
-					max_output_tokens: this.maxOutputTokens,
-					store: false,
-				},
-				{
-					signal: abortController.signal,
-				},
-			);
+					max_tokens: this.maxOutputTokens,
+				}),
+				signal: controller.signal,
+			});
 
-			// 応答からテキストを抽出
-			for (const item of response.output) {
-				if (item.type === "message" && item.content) {
-					for (const content of item.content) {
-						if (content.type === "output_text") {
-							responseContent += content.text;
-						}
-					}
-				}
+			if (!response.ok) {
+				const text = await response.text().catch(() => "");
+				status = "error";
+				errorMessage = text || `HTTP error ${response.status} ${response.statusText}`;
+				throw new Error(`OpenAI API error: ${errorMessage}`);
 			}
-			outputChars = responseContent.length;
+
+			// 非ストリーミング応答の処理
+			const data = (await response.json()) as OpenAIChatCompletionResponse;
+			const content = data.choices?.[0]?.message?.content ?? "";
+
+			responseContent = content;
+			outputChars = content.length;
 
 			return responseContent;
 		} catch (error) {
 			status = "error";
 
 			// エラーの種類に応じた詳細メッセージを生成
-			const unknownErr = error as { name?: string; status?: number; type?: string; message?: string };
-			if (unknownErr?.name === "AbortError" || abortController.signal.aborted) {
+			const unknownErr = error as { name?: string; message?: string };
+			if (unknownErr?.name === "AbortError" || controller.signal.aborted) {
 				errorMessage = "Request aborted";
-			} else if (unknownErr?.status || unknownErr?.type) {
-				const details = `Status: ${unknownErr.status ?? "?"}, Type: ${unknownErr.type ?? "?"}`;
-				errorMessage = `${unknownErr.message ?? String(error)} (${details})`;
 			} else {
 				errorMessage = (error as Error)?.message ?? String(error);
 			}

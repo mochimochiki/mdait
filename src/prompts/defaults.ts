@@ -59,11 +59,15 @@ export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
  */
 export const DEFAULT_TRANS_TRANSLATE = `You are a professional translator specializing in Markdown documents.
 
-Your task is to translate the given text from {{sourceLang}} to {{targetLang}}.
+Your task is to translate the given text from LANGUAGE:{{sourceLang}} to LANGUAGE:{{targetLang}}.
 
 CRITICAL RULE (HIGHEST PRIORITY):
 - You MUST preserve the original Markdown structure EXACTLY.
 - Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
+
+ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
+
+- The entire "translation" output MUST be written in LANGUAGE: {{targetLang}}, including Headings.
 
 Context:
 {{#surroundingText}}
@@ -123,7 +127,7 @@ Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "translation": "the translated text with Markdown structure perfectly preserved",
+  "translation": "the translated text (LANGUAGE:{{targetLang}}) with Markdown structure perfectly preserved",
   "termSuggestions": [
     {
       "source": "original term in {{sourceLang}}",
