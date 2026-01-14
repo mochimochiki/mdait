@@ -159,7 +159,6 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	});
 	const targetDoc = {
 		frontMatter: source.frontMatter,
-		frontMatterRaw: source.frontMatterRaw,
 		units: targetUnits,
 	};
 
@@ -267,7 +266,6 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
 		frontMatter: target.frontMatter,
-		frontMatterRaw: target.frontMatterRaw,
 		units: syncedUnits,
 	};
 
@@ -284,7 +282,6 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
 	const updatedSourceContent = markdownParser.stringify({
 		frontMatter: source.frontMatter,
-		frontMatterRaw: source.frontMatterRaw,
 		units: source.units,
 	});
 

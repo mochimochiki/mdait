@@ -159,8 +159,8 @@ need:translate -->
 		const units = doc.units;
 		assert.equal(units.length, 1);
 		assert.equal(units[0].title, "見出し");
-		assert.ok(doc.frontMatterRaw?.includes("---"));
-		assert.ok(doc.frontMatterRaw?.includes("title: 'テスト'"));
+		assert.ok(doc.frontMatter?.raw.includes("---"));
+		assert.ok(doc.frontMatter?.raw.includes("title: 'テスト'"));
 	});
 	test("複数のmdaitコメント", () => {
 		const md = [
@@ -214,7 +214,7 @@ need:translate -->
 		assert.equal(units.length, 1);
 		assert.equal(units[0].marker.hash, "hashFFF1");
 		assert.equal(units[0].title, "見出しF");
-		assert.ok(doc.frontMatterRaw?.includes("title: 'フロントマター'"));
+		assert.ok(doc.frontMatter?.raw.includes("title: 'フロントマター'"));
 	});
 
 	test("YAMLフロントマター＋複数見出し＋mdaitコメントの組み合わせ", () => {
@@ -238,7 +238,7 @@ need:translate -->
 		const doc = markdownParser.parse(md);
 		const units = doc.units;
 		assert.equal(units.length, 3);
-		assert.ok(doc.frontMatterRaw?.includes("title: '多見出しテスト'"));
+		assert.ok(doc.frontMatter?.raw.includes("title: '多見出しテスト'"));
 		assert.equal(units[0].title, "見出しA");
 		assert.equal(units[0].marker.hash, "hashA123");
 		assert.equal(units[1].title, "見出しB");

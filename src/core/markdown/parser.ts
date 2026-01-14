@@ -1,7 +1,7 @@
-import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
 import type { Configuration } from "../../config/configuration";
-import type { FrontMatter, Markdown } from "./mdait-markdown";
+import { FrontMatter } from "./front-matter";
+import type { Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
 
@@ -59,29 +59,9 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @returns パースされたMarkdownユニットの配列
 	 */
 	parse(markdown: string, config: Configuration): Markdown {
-		const fm = matter(markdown);
-		const frontMatter = fm.data as FrontMatter;
-		const content = fm.content;
-		let frontMatterRaw = "";
-		let frontMatterLineOffset = 0;
+		const { frontMatter, content, frontMatterLineOffset } = FrontMatter.parse(markdown);
 
-		// フロントマターが存在する場合、frontMatterRawを取得
-		// content が空または空白のみの場合（フロントマターのみ）も正しく処理する
-		// 注: stringifyが末尾に改行を追加するため、再パース時にcontentが"\n"になる場合がある
-		if (content.trim().length === 0 && markdown.trim().length > 0) {
-			// フロントマターのみの場合、markdown全体がfrontMatterRaw
-			frontMatterRaw = markdown;
-			frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
-		} else {
-			const idx = markdown.indexOf(content);
-			if (idx > 0) {
-				frontMatterRaw = markdown.substring(0, idx);
-				// フロントマターの行数を計算
-				frontMatterLineOffset = frontMatterRaw.split(/\r?\n/).length - 1;
-			}
-		}
-
-		const fontMaterlevel = frontMatter?.["mdait.sync.level"];
+		const fontMaterlevel = frontMatter?.get("mdait.sync.level");
 		const mdaitMarkerLevel = fontMaterlevel ?? config?.sync?.level ?? 2;
 
 		const parsedMdTokens = this.md.parse(content, {});
@@ -93,7 +73,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		// 第2パス: 境界からユニットを構築
 		const units = this.buildUnitsFromBoundaries(boundaries, lines, frontMatterLineOffset);
 
-		return { frontMatter, frontMatterRaw, units: units };
+		return { frontMatter, units: units };
 	}
 
 	/**
@@ -353,8 +333,8 @@ export class MarkdownItParser implements IMarkdownParser {
 	 */
 	stringify(doc: Markdown): string {
 		let fm = "";
-		if (doc.frontMatterRaw && doc.frontMatterRaw.trim().length > 0) {
-			fm = `${doc.frontMatterRaw}`;
+		if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
+			fm = `${doc.frontMatter.raw}`;
 		}
 		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
 		const body = doc.units.map((section) => section.toString().replace(/\n+$/g, "")).join("\n\n");

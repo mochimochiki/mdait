@@ -18,12 +18,12 @@ _build:
 
 		// フロントマターが正しく解析されること
 		assert.ok(parsed.frontMatter);
-		assert.strictEqual(parsed.frontMatter._build?.list, false);
+		assert.strictEqual(parsed.frontMatter.get("_build")?.list, false);
 
 		// frontMatterRawも保持されること
-		assert.ok(parsed.frontMatterRaw);
-		assert.match(parsed.frontMatterRaw, /---/);
-		assert.match(parsed.frontMatterRaw, /_build:/);
+		assert.ok(parsed.frontMatter.raw);
+		assert.match(parsed.frontMatter.raw, /---/);
+		assert.match(parsed.frontMatter.raw, /_build:/);
 
 		// ユニットは空であること（本文がないため）
 		assert.strictEqual(parsed.units.length, 0);
@@ -47,7 +47,7 @@ _build:
 		// 再度パースして元のデータと一致すること
 		const reparsed = markdownParser.parse(stringified, testConfig);
 		assert.ok(reparsed.frontMatter);
-		assert.strictEqual(reparsed.frontMatter._build?.list, false);
+		assert.strictEqual(reparsed.frontMatter.get("_build")?.list, false);
 		assert.strictEqual(reparsed.units.length, 0);
 	});
 
@@ -62,7 +62,7 @@ _build:
 
 		// フロントマターが正しく解析されること
 		assert.ok(parsed.frontMatter);
-		assert.strictEqual(parsed.frontMatter._build?.list, false);
+		assert.strictEqual(parsed.frontMatter.get("_build")?.list, false);
 
 		// ユニットは空であること
 		assert.strictEqual(parsed.units.length, 0);
@@ -85,9 +85,9 @@ tags:
 
 		// フロントマターの内容が保持されること
 		assert.ok(parsed2.frontMatter);
-		assert.strictEqual(parsed2.frontMatter.title, "Test Document");
-		assert.strictEqual(parsed2.frontMatter._build?.list, false);
-		assert.deepStrictEqual(parsed2.frontMatter.tags, ["test", "frontmatter"]);
+		assert.strictEqual(parsed2.frontMatter.get("title"), "Test Document");
+		assert.strictEqual(parsed2.frontMatter.get("_build")?.list, false);
+		assert.deepStrictEqual(parsed2.frontMatter.get("tags"), ["test", "frontmatter"]);
 
 		// ユニットは空であること
 		assert.strictEqual(parsed2.units.length, 0);
@@ -102,7 +102,7 @@ tags:
 
 		// frontMatterはオブジェクトとして存在すること（空でも）
 		assert.ok(parsed.frontMatter);
-		assert.strictEqual(Object.keys(parsed.frontMatter).length, 0);
+		assert.strictEqual(parsed.frontMatter.keys().length, 0);
 
 		// ユニットは空であること
 		assert.strictEqual(parsed.units.length, 0);
@@ -125,7 +125,7 @@ _build:
 		const parsed1 = markdownParser.parse(original, testConfig);
 		assert.strictEqual(parsed1.units.length, 0);
 		assert.ok(parsed1.frontMatter);
-		assert.strictEqual(parsed1.frontMatter._build?.list, false);
+		assert.strictEqual(parsed1.frontMatter.get("_build")?.list, false);
 
 		const stringified1 = markdownParser.stringify(parsed1);
 
@@ -134,13 +134,13 @@ _build:
 		assert.strictEqual(parsed2.units.length, 0, "2回目のparse後もunitsは空であること");
 
 		// frontMatterRawが"---"だけになってしまうバグを検出
-		assert.ok(parsed2.frontMatterRaw, "frontMatterRawが存在すること");
-		assert.notStrictEqual(parsed2.frontMatterRaw.trim(), "---", "frontMatterRawが'---'だけになっていないこと");
-		assert.match(parsed2.frontMatterRaw, /_build:/, "frontMatterRawにフロントマターの内容が含まれること");
+		assert.ok(parsed2.frontMatter?.raw, "frontMatterRawが存在すること");
+		assert.notStrictEqual(parsed2.frontMatter.raw.trim(), "---", "frontMatterRawが'---'だけになっていないこと");
+		assert.match(parsed2.frontMatter.raw, /_build:/, "frontMatterRawにフロントマターの内容が含まれること");
 
 		// frontMatterの内容も保持されていること
 		assert.ok(parsed2.frontMatter, "frontMatterが存在すること");
-		assert.strictEqual(parsed2.frontMatter._build?.list, false, "frontMatterの内容が保持されていること");
+		assert.strictEqual(parsed2.frontMatter.get("_build")?.list, false, "frontMatterの内容が保持されていること");
 
 		const stringified2 = markdownParser.stringify(parsed2);
 
