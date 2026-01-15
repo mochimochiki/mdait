@@ -82,7 +82,7 @@ export class OpenAIProvider implements AIService {
 			});
 		}
 
-		const url = this.baseURL.replace(/\/$/, "") + "/chat/completions";
+		const url = `${this.baseURL.replace(/\/$/, "")}/chat/completions`;
 
 		// AbortControllerを使用してキャンセル処理を実装
 		const controller = new AbortController();
