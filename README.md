@@ -71,11 +71,17 @@ mdait is designed to handle translations not as separate sentences or files, but
     "provider": "vscode-lm",
     "model": "gpt-4.1"
   },
+  "trans": {
+    "contextSize": 1,
+    "retryLimit": 1
+  },
   "sync": {
     "level": 3
   }
 }
 ```
+
+`trans.retryLimit` sets the maximum number of retries for translation failures (limited to 1-5, values 6+ are capped at 5).
 
 ---
 

@@ -71,12 +71,18 @@ mdait は、翻訳を個々の文やファイルとしてではなく、文書�
     "provider": "vscode-lm",
     "model": "gpt-4.1"
   },
+  "trans": {
+    "contextSize": 1,
+    "retryLimit": 1
+  },
   "sync": {
     "level": 3
   }
 }
 
 ```
+
+`trans.retryLimit` は翻訳失敗時のリトライ上限を設定します（1〜5に制限され、6以上は5回で打ち止め）。
 
 ---
 
