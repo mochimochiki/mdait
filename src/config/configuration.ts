@@ -35,6 +35,8 @@ export interface TransConfig {
 	};
 	/** 翻訳時に参照する前後のユニット数（コンテキストウィンドウサイズ） */
 	contextSize: number;
+	/** 翻訳失敗時のリトライ上限 */
+	retryLimit: number;
 	// 翻訳固有設定の拡張用
 	[key: string]: unknown;
 }
@@ -82,6 +84,7 @@ interface MdaitConfig {
 			skipCodeBlocks?: boolean;
 		};
 		contextSize?: number;
+		retryLimit?: number;
 	};
 	terms?: {
 		filename?: string;
@@ -142,6 +145,7 @@ export class Configuration {
 			skipCodeBlocks: true,
 		},
 		contextSize: 1,
+		retryLimit: 1,
 	};
 	/**
 	 * 用語集設定
@@ -363,6 +367,13 @@ export class Configuration {
 			}
 			if (config.trans?.contextSize !== undefined) {
 				this.trans.contextSize = config.trans.contextSize;
+			}
+			if (config.trans?.retryLimit !== undefined) {
+				const normalizedRetryLimit = Math.min(
+					5,
+					Math.max(1, config.trans.retryLimit),
+				);
+				this.trans.retryLimit = normalizedRetryLimit;
 			}
 
 			// 用語集設定の読み込み
