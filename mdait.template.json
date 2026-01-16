@@ -12,7 +12,8 @@
     "model": "gpt-5 mini"
   },
   "trans": {
-    "contextSize": 1
+    "contextSize": 1,
+    "qualityRetryLimit": 1
   },
   "sync": {
     "level": 3

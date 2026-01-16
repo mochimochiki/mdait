@@ -31,6 +31,18 @@ export class TranslationContext {
 	sourceDiff?: string;
 
 	/**
+	 * 翻訳品質チェックからのフィードバック。
+	 * 再翻訳時に、前回の問題点を明示するために使用。
+	 */
+	qualityFeedback?: string;
+
+	/**
+	 * 品質チェックで問題があった前回の訳文。
+	 * 再翻訳時に修正対象として参照するために使用。
+	 */
+	failedTranslation?: string;
+
+	/**
 	 * 周辺テキストを結合した文字列を取得
 	 * @returns 前後のユニットを結合した文字列（存在する場合）
 	 */
@@ -62,11 +74,15 @@ export class TranslationContext {
 		terms?: string,
 		previousTranslation?: string,
 		sourceDiff?: string,
+		qualityFeedback?: string,
+		failedTranslation?: string,
 	) {
 		this.previousTexts = previousTexts;
 		this.nextTexts = nextTexts;
 		this.terms = terms;
 		this.previousTranslation = previousTranslation;
 		this.sourceDiff = sourceDiff;
+		this.qualityFeedback = qualityFeedback;
+		this.failedTranslation = failedTranslation;
 	}
 }

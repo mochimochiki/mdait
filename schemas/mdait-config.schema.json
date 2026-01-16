@@ -189,6 +189,14 @@
           "maximum": 5,
           "default": 1,
           "examples": [0, 1, 2, 3]
+        },
+        "qualityRetryLimit": {
+          "type": "integer",
+          "description": "Maximum number of retries when translation quality checks detect Markdown structure issues.",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1,
+          "examples": [0, 1, 2]
         }
       },
       "additionalProperties": false

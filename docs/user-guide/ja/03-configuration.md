@@ -153,7 +153,8 @@ AIプロバイダーとモデルの設定を行います。
     "markdown": {
       "skipCodeBlocks": true
     },
-    "contextSize": 1
+    "contextSize": 1,
+    "qualityRetryLimit": 1
   }
 }
 ```
@@ -164,6 +165,7 @@ AIプロバイダーとモデルの設定を行います。
 |-----------|-----|----------|------|
 | markdown.skipCodeBlocks | boolean | true | コードブロック内の翻訳をスキップするかどうか |
 | contextSize | number | 1 | 翻訳時に参照する前後のユニット数（0-3） |
+| qualityRetryLimit | number | 1 | 翻訳品質チェックで問題が見つかった場合に再翻訳を試行する最大回数 |
 
 ### contextSizeについて
 

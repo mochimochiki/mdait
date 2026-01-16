@@ -112,6 +112,8 @@ export class DefaultTranslator implements Translator {
 			terms: context.terms,
 			previousTranslation: context.previousTranslation,
 			sourceDiff: context.sourceDiff,
+			qualityFeedback: context.qualityFeedback,
+			failedTranslation: context.failedTranslation,
 		});
 
 		const messages: AIMessage[] = [

@@ -99,6 +99,16 @@ IMPORTANT: The diff above shows exactly what changed in the source text.
 - Focus your translation updates on the changed portions
 - Unchanged lines should generally keep the same translation
 {{/sourceDiff}}
+{{#qualityFeedback}}
+Quality Feedback (previous translation had issues):
+{{qualityFeedback}}
+
+IMPORTANT: The previous translation had problems. Review the feedback above and correct the specific issues.
+{{/qualityFeedback}}
+{{#failedTranslation}}
+Previous Failed Translation (for reference only - do NOT reuse mistakes):
+{{failedTranslation}}
+{{/failedTranslation}}
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:

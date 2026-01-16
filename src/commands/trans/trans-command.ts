@@ -27,9 +27,9 @@ import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
-import { TranslationChecker } from "./translation-checker";
+import { TranslationChecker, type ReviewReason } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
-import type { Translator } from "./translator";
+import type { Translator, TranslationResult } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 /**
@@ -352,13 +352,30 @@ async function translateUnit(
 		}
 
 		// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-		const translationResult = await translator.translate(
-			sourceContent,
-			sourceLang,
-			targetLang,
-			context,
-			cancellationToken,
-		);
+		const checker = new TranslationChecker();
+		const maxQualityRetries = Math.max(0, config.trans.qualityRetryLimit ?? 0);
+		let translationResult!: TranslationResult;
+		let checkResult!: ReturnType<TranslationChecker["checkTranslationQuality"]>;
+		let retryCount = 0;
+
+		while (true) {
+			translationResult = await translator.translate(
+				sourceContent,
+				sourceLang,
+				targetLang,
+				context,
+				cancellationToken,
+			);
+
+			checkResult = checker.checkTranslationQuality(sourceContent, translationResult.translatedText);
+			if (!checkResult.needsReview || retryCount >= maxQualityRetries) {
+				break;
+			}
+
+			context.qualityFeedback = buildQualityFeedback(checkResult.reasons);
+			context.failedTranslation = translationResult.translatedText;
+			retryCount += 1;
+		}
 
 		// ユニットのコンテンツを更新
 		unit.content = translationResult.translatedText;
@@ -404,10 +421,6 @@ async function translateUnit(
 			}
 			const termCandidates = Array.from(termCandidatesMap.values());
 
-			// 翻訳品質チェック
-			const checker = new TranslationChecker();
-			const checkResult = checker.checkTranslationQuality(sourceContent, translationResult.translatedText);
-
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
 				unit.marker.setNeed("review");
@@ -436,6 +449,10 @@ async function translateUnit(
 		vscode.window.showErrorMessage(vscode.l10n.t("Unit translation error: {0}", (error as Error).message));
 		throw error;
 	}
+}
+
+function buildQualityFeedback(reasons: ReviewReason[]): string {
+	return reasons.map((reason, index) => `${index + 1}. [${reason.category}] ${reason.message}`).join("\n");
 }
 
 /**
