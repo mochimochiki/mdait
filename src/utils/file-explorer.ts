@@ -122,6 +122,23 @@ export class FileExplorer {
 	}
 
 	/**
+	 * ディレクトリ内の全Markdownファイルを取得する
+	 */
+	public async getAllMarkdownFiles(directory: string, config: Configuration): Promise<string[]> {
+		let targetDir = directory;
+		if (!path.isAbsolute(targetDir)) {
+			targetDir = path.resolve(this.workspaceRoot, targetDir);
+		}
+
+		// ディレクトリの存在を確認
+		if (!this.directoryExists(targetDir)) {
+			throw new Error(vscode.l10n.t("Directory does not exist: {0}", targetDir));
+		}
+		// ファイルの検索（Markdownファイルのみを対象とする）
+		return await this.findFilesInDirectory(targetDir, [".md"], "**/*.md", config.ignoredPatterns);
+	}
+
+	/**
 	 * ターゲットファイルのディレクトリを作成する
 	 */
 	public ensureTargetDirectoryExists(targetPath: string): void {
