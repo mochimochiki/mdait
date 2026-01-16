@@ -123,6 +123,9 @@ export class FileExplorer {
 
 	/**
 	 * ディレクトリ内の全Markdownファイルを取得する
+	 * @param directory ディレクトリパス（相対パスまたは絶対パス）
+	 * @param config 設定オブジェクト
+	 * @returns Markdownファイルの絶対パスの配列
 	 */
 	public async getAllMarkdownFiles(directory: string, config: Configuration): Promise<string[]> {
 		let targetDir = directory;
