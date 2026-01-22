@@ -160,6 +160,23 @@ export async function codeLensJumpToSourceCommand(range: vscode.Range): Promise<
 			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 		}
 
+		// ターゲットユニット（左側）と原文ユニット（右側）の両方をハイライト
+		const targetStartLine = range.start.line;
+		const targetEndLine = findUnitEndLine(document, targetStartLine);
+		const sourceStartLine = sourceUnit.startLine ?? 0;
+		const sourceEndLine = sourceUnit.endLine ?? 0;
+
+		highlightUnit(activeEditor, targetStartLine, targetEndLine, "target");
+		highlightUnit(editor, sourceStartLine, sourceEndLine, "source");
+
+		// ハイライト範囲を保存
+		_highlightInfo = {
+			leftEditor: activeEditor,
+			rightEditor: editor,
+			leftRange: new vscode.Range(targetStartLine, 0, targetEndLine, Number.MAX_SAFE_INTEGER),
+			rightRange: new vscode.Range(sourceStartLine, 0, sourceEndLine, Number.MAX_SAFE_INTEGER),
+		};
+
 		// 左→右の継続スクロール同期を開始
 		startOneWayScrollSync(activeEditor, editor, clickedPos.line, jumpLine);
 	} catch (error) {
@@ -170,6 +187,88 @@ export async function codeLensJumpToSourceCommand(range: vscode.Range): Promise<
 
 // 左右エディタのスクロール同期（左→右の一方向）に使用するディスポーザブル
 let _scrollSyncDisposable: vscode.Disposable | undefined;
+
+// 左側（ターゲット）ハイライト用のデコレーションタイプ
+let _targetHighlightDecorationType: vscode.TextEditorDecorationType | undefined;
+// 右側（原文）ハイライト用のデコレーションタイプ
+let _sourceHighlightDecorationType: vscode.TextEditorDecorationType | undefined;
+
+// ハイライト範囲とエディタの情報を保持
+let _highlightInfo:
+	| {
+			leftEditor: vscode.TextEditor;
+			rightEditor: vscode.TextEditor;
+			leftRange: vscode.Range;
+			rightRange: vscode.Range;
+	  }
+	| undefined;
+
+/**
+ * ユニットの終了行を見つける（次のマーカーまたはファイル末尾）
+ * @param document 対象ドキュメント
+ * @param startLine ユニットの開始行
+ * @returns ユニットの終了行
+ */
+function findUnitEndLine(document: vscode.TextDocument, startLine: number): number {
+	// 次の行から次のマーカーを探す
+	for (let i = startLine + 1; i < document.lineCount; i++) {
+		const lineText = document.lineAt(i).text;
+		if (MdaitMarker.parse(lineText)) {
+			return i - 1; // マーカーの前の行がユニットの終了
+		}
+	}
+	return document.lineCount - 1; // ファイル末尾まで
+}
+
+/**
+ * ユニットをハイライトする
+ * @param editor ハイライトを適用するエディタ
+ * @param startLine ユニットの開始行
+ * @param endLine ユニットの終了行
+ * @param side 'target'（左側）または'source'（右側）
+ */
+function highlightUnit(editor: vscode.TextEditor, startLine: number, endLine: number, side: "target" | "source"): void {
+	const decorationType = side === "target" ? _targetHighlightDecorationType : _sourceHighlightDecorationType;
+
+	// 既存のデコレーションを破棄
+	if (side === "target") {
+		_targetHighlightDecorationType?.dispose();
+	} else {
+		_sourceHighlightDecorationType?.dispose();
+	}
+
+	// ハイライト用のデコレーションタイプを作成（マイルドな色）
+	const newDecorationType = vscode.window.createTextEditorDecorationType({
+		backgroundColor: new vscode.ThemeColor("editor.findMatchHighlightBackground"),
+		isWholeLine: true,
+	});
+
+	if (side === "target") {
+		_targetHighlightDecorationType = newDecorationType;
+	} else {
+		_sourceHighlightDecorationType = newDecorationType;
+	}
+
+	// ユニット全体の範囲を作成
+	const range = new vscode.Range(
+		new vscode.Position(startLine, 0),
+		new vscode.Position(endLine, Number.MAX_SAFE_INTEGER),
+	);
+
+	// ハイライトを適用
+	editor.setDecorations(newDecorationType, [range]);
+}
+
+/**
+ * すべてのハイライトを解除する
+ */
+function clearAllHighlights(): void {
+	_targetHighlightDecorationType?.dispose();
+	_targetHighlightDecorationType = undefined;
+	_sourceHighlightDecorationType?.dispose();
+	_sourceHighlightDecorationType = undefined;
+	_highlightInfo = undefined;
+}
 
 /**
  * 左エディタのスクロールに右エディタを追従させる一方向同期を開始する
@@ -220,6 +319,7 @@ function startOneWayScrollSync(
 		if (e.textEditor !== right) return;
 		if (updating) return; // 自動追従中は無視
 		if (!rightActive) return; // 右がアクティブでなければ解除しない
+		clearAllHighlights(); // ハイライト解除
 		_scrollSyncDisposable?.dispose();
 		_scrollSyncDisposable = undefined;
 	});
@@ -228,8 +328,35 @@ function startOneWayScrollSync(
 	const visibleEditorsSub = vscode.window.onDidChangeVisibleTextEditors(() => {
 		const vis = vscode.window.visibleTextEditors;
 		if (!vis.includes(left) || !vis.includes(right)) {
+			clearAllHighlights(); // ハイライト解除
 			_scrollSyncDisposable?.dispose();
 			_scrollSyncDisposable = undefined;
+		}
+	});
+
+	// カーソル位置が変わった時、ハイライト範囲外に移動したら解除
+	const selectionChangeSub = vscode.window.onDidChangeTextEditorSelection((e) => {
+		if (!_highlightInfo) return;
+
+		const { leftEditor, rightEditor, leftRange, rightRange } = _highlightInfo;
+
+		// 左側または右側のエディタでカーソルが移動した場合
+		if (e.textEditor === leftEditor || e.textEditor === rightEditor) {
+			const selection = e.selections[0];
+			if (!selection) return;
+
+			const cursorLine = selection.active.line;
+			const isInLeftRange =
+				e.textEditor === leftEditor && cursorLine >= leftRange.start.line && cursorLine <= leftRange.end.line;
+			const isInRightRange =
+				e.textEditor === rightEditor && cursorLine >= rightRange.start.line && cursorLine <= rightRange.end.line;
+
+			// ハイライト範囲外に移動した場合
+			if (!isInLeftRange && !isInRightRange) {
+				clearAllHighlights();
+				_scrollSyncDisposable?.dispose();
+				_scrollSyncDisposable = undefined;
+			}
 		}
 	});
 
@@ -238,5 +365,6 @@ function startOneWayScrollSync(
 		rightVisibleRangeSub,
 		activeEditorSub,
 		visibleEditorsSub,
+		selectionChangeSub,
 	);
 }
