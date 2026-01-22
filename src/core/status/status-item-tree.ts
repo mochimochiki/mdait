@@ -1,14 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
+	type DirectoryStatusItem,
+	type FileStatusItem,
 	Status,
 	type StatusItem,
 	StatusItemType,
-	type DirectoryStatusItem,
-	type FileStatusItem,
 	type UnitStatusItem,
-	isFileStatusItem,
 	isDirectoryStatusItem,
+	isFileStatusItem,
 } from "./status-item";
 
 /**
@@ -214,21 +214,17 @@ export class StatusItemTree {
 		errorUnits: number;
 	} {
 		const files = this.getFilesInDirectoryRecursive(dirPath);
+		const targetFiles = this.getTargetFiles(files);
 		let totalUnits = 0;
 		let translatedUnits = 0;
 		let errorUnits = 0;
 
-		for (const file of files) {
+		for (const file of targetFiles) {
+			totalUnits += file.totalUnits;
+			translatedUnits += file.translatedUnits;
 			if (file.children) {
 				for (const unit of file.children) {
-					// ソースユニット（Status.Source）はカウントしない
-					if (unit.status === Status.Source) {
-						continue;
-					}
-					totalUnits++;
-					if (unit.status === Status.Translated) {
-						translatedUnits++;
-					} else if (unit.status === Status.Error) {
+					if (unit.status === Status.Error) {
 						errorUnits++;
 					}
 				}
@@ -372,6 +368,13 @@ export class StatusItemTree {
 	// ========== Private methods ==========
 
 	/**
+	 * ソースファイルを除外したターゲットファイルのみ取得
+	 */
+	private getTargetFiles(files: FileStatusItem[]): FileStatusItem[] {
+		return files.filter((file) => file.status !== Status.Source);
+	}
+
+	/**
 	 * 特定のファイルに対してディレクトリマップを更新
 	 */
 	private addOrUpdateDirectory(fileItem: FileStatusItem): void {
@@ -380,9 +383,7 @@ export class StatusItemTree {
 		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (directoryItem) {
 			directoryItem.children = directoryItem.children || [];
-			const index = directoryItem.children.findIndex(
-				(f) => isFileStatusItem(f) && f.filePath === fileItem.filePath,
-			);
+			const index = directoryItem.children.findIndex((f) => isFileStatusItem(f) && f.filePath === fileItem.filePath);
 			if (index >= 0) {
 				Object.assign(directoryItem.children[index], fileItem);
 			} else {
@@ -402,9 +403,7 @@ export class StatusItemTree {
 		let directoryItem = this.directoryItemMap.get(dirPath);
 		if (!directoryItem) {
 			// 直下ファイルを fileItemMap から収集して作成
-			const directFiles = Array.from(this.fileItemMap.values()).filter(
-				(f) => path.dirname(f.filePath) === dirPath,
-			);
+			const directFiles = Array.from(this.fileItemMap.values()).filter((f) => path.dirname(f.filePath) === dirPath);
 			directoryItem = this.createDirectoryStatusItem(dirPath, directFiles);
 			this.directoryItemMap.set(dirPath, directoryItem);
 		}
@@ -463,9 +462,10 @@ export class StatusItemTree {
 		// ディレクトリのisTranslatingフラグを決定（再帰）
 		directoryItem.isTranslating = allFiles.some((file) => file.isTranslating === true);
 
-		// ディレクトリのラベル/集計値を更新（再帰）
-		const totalUnits = allFiles.reduce((sum, file) => sum + file.totalUnits, 0);
-		const translatedUnits = allFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
+		// ディレクトリのラベル/集計値を更新（ターゲットファイルのみ）
+		const targetFiles = this.getTargetFiles(allFiles);
+		const totalUnits = targetFiles.reduce((sum, file) => sum + file.totalUnits, 0);
+		const translatedUnits = targetFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
 		const dirName = path.basename(directoryItem.directoryPath) || directoryItem.directoryPath;
 		directoryItem.label =
 			directoryItem.status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
@@ -480,10 +480,11 @@ export class StatusItemTree {
 	private createDirectoryStatusItem(dirPath: string, files: FileStatusItem[]): DirectoryStatusItem {
 		const dirName = path.basename(dirPath) || dirPath;
 
-		// 再帰的に配下すべてのファイルから集計
+		// 再帰的に配下すべてのファイルから集計（ターゲットファイルのみ）
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
-		const totalUnits = allFiles.reduce((sum, file) => sum + file.totalUnits, 0);
-		const translatedUnits = allFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
+		const targetFiles = this.getTargetFiles(allFiles);
+		const totalUnits = targetFiles.reduce((sum, file) => sum + file.totalUnits, 0);
+		const translatedUnits = targetFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
 
 		// ディレクトリの全体ステータスを決定（再帰）
 		const status = this.determineMergedStatus(allFiles);
