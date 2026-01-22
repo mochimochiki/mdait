@@ -11,7 +11,7 @@ import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールの
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
+import { applyUnifiedPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
@@ -29,7 +29,7 @@ import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
-import type { Translator } from "./translator";
+import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 /**
@@ -351,17 +351,52 @@ async function translateUnit(
 			}
 		}
 
-		// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-		const translationResult = await translator.translate(
-			sourceContent,
-			sourceLang,
-			targetLang,
-			context,
-			cancellationToken,
-		);
+		let translationResult: TranslationResult | null = null;
+
+		if (unit.marker?.needsRevision() && previousTranslation && context.sourceDiff) {
+			try {
+				const patchResult = await translator.translateRevisionPatch(
+					sourceContent,
+					sourceLang,
+					targetLang,
+					context,
+					cancellationToken,
+				);
+
+				const patched = applyUnifiedPatch(previousTranslation, patchResult.targetPatch);
+				if (patched) {
+					translationResult = {
+						translatedText: patched,
+						termSuggestions: patchResult.termSuggestions,
+						warnings: patchResult.warnings,
+						stats: patchResult.stats,
+					};
+				} else {
+					console.warn(`Patch apply failed for unit ${unit.marker?.hash}, fallback to full translation`);
+				}
+			} catch (error) {
+				console.warn(`Patch translation failed for unit ${unit.marker?.hash}, fallback to full translation`, error);
+			}
+		}
+
+		if (!translationResult) {
+			// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
+			translationResult = await translator.translate(
+				sourceContent,
+				sourceLang,
+				targetLang,
+				context,
+				cancellationToken,
+			);
+		}
+
+		const resolvedResult = translationResult;
+		if (!resolvedResult) {
+			throw new Error("Translation result is empty");
+		}
 
 		// ユニットのコンテンツを更新
-		unit.content = translationResult.translatedText;
+		unit.content = resolvedResult.translatedText;
 
 		// ハッシュを再計算してmarkerを更新
 		if (unit.marker) {
@@ -369,11 +404,11 @@ async function translateUnit(
 			unit.marker.hash = newHash;
 
 			// 適用された用語を追跡（原文と訳文の両方に出現する用語）
-			const appliedTerms = relevantTerms
+				const appliedTerms = relevantTerms
 				.filter((term) => {
 					// 原文に用語の原語が含まれ、訳文に用語の訳語が含まれているかチェック
 					const sourceIncludes = sourceContent.toLowerCase().includes(term.term.toLowerCase());
-					const targetIncludes = translationResult.translatedText
+						const targetIncludes = resolvedResult.translatedText
 						.toLowerCase()
 						.includes(term.translation.toLowerCase());
 					return sourceIncludes && targetIncludes;
@@ -385,8 +420,8 @@ async function translateUnit(
 				}));
 
 			// AIからの用語候補をTermCandidateフォーマットに変換
-			const aiTermCandidates =
-				translationResult.termSuggestions?.map((suggestion) => ({
+				const aiTermCandidates =
+					resolvedResult.termSuggestions?.map((suggestion) => ({
 					source: suggestion.source,
 					target: suggestion.target,
 					context: suggestion.context,
@@ -406,7 +441,7 @@ async function translateUnit(
 
 			// 翻訳品質チェック
 			const checker = new TranslationChecker();
-			const checkResult = checker.checkTranslationQuality(sourceContent, translationResult.translatedText);
+				const checkResult = checker.checkTranslationQuality(sourceContent, resolvedResult.translatedText);
 
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
@@ -424,11 +459,11 @@ async function translateUnit(
 				unitHash: newHash,
 				stats: {
 					duration,
-					tokens: translationResult.stats?.estimatedTokens,
+							tokens: resolvedResult.stats?.estimatedTokens,
 				},
 				appliedTerms: appliedTerms.length > 0 ? appliedTerms : undefined,
 				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
-				warnings: translationResult.warnings,
+						warnings: resolvedResult.warnings,
 				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
 			});
 		}

@@ -14,6 +14,8 @@
 export const PromptIds = {
 	/** Markdown翻訳用プロンプト */
 	TRANS_TRANSLATE: "trans.translate",
+  /** 改訂パッチ翻訳用プロンプト */
+  TRANS_REVISE_PATCH: "trans.revisePatch",
 	/** 対訳ペアからの用語検出 */
 	TERM_DETECT_PAIRS: "term.detectPairs",
 	/** ソース単独からの用語検出 */
@@ -136,6 +138,98 @@ Return ONLY valid JSON in the following format. Do NOT include markdown code blo
       "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ]
+}
+
+Important Notes:
+- The "context" field MUST quote the original text verbatim.
+- Return ONLY valid JSON. Any extra text invalidates the response.`;
+
+/**
+ * trans.revisePatch - 改訂パッチ翻訳プロンプト
+ *
+ * @description
+ * 原文差分がある場合、前回訳文に対する差分パッチのみを返却します。
+ *
+ * @input
+ * - {{sourceLang}}: 翻訳元言語コード (例: "ja")
+ * - {{targetLang}}: 翻訳先言語コード (例: "en")
+ * - {{contextLang}}: context抽出元の言語コード (例: "en")
+ * - {{surroundingText}}: 周辺テキスト（オプショナル）
+ * - {{terms}}: 用語集（訳語指定用、オプショナル）
+ * - {{previousTranslation}}: 前回翻訳（必須）
+ * - {{sourceDiff}}: 原文の変更差分（unified diff形式、必須）
+ *
+ * @output
+ * ```json
+ * {
+ *   "targetPatch": "unified diff for previous translation",
+ *   "termSuggestions": [
+ *     {
+ *       "source": "元の用語",
+ *       "target": "訳語",
+ *       "context": "用語を含むcontextLang言語からの引用文",
+ *       "reason": "(オプショナル) 追加理由"
+ *     }
+ *   ],
+ *   "warnings": ["(optional) patch risk or ambiguity"]
+ * }
+ * ```
+ */
+export const DEFAULT_TRANS_REVISE_PATCH = `You are a professional translator specializing in Markdown documents.
+
+Your task is to update the previous translation by returning ONLY a unified diff patch.
+
+CRITICAL RULE (HIGHEST PRIORITY):
+- You MUST preserve the original Markdown structure EXACTLY.
+- Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
+
+ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
+- All updated text MUST be written in LANGUAGE: {{targetLang}}.
+
+Context:
+{{#surroundingText}}
+Surrounding Text (for reference only, do NOT translate unless included in the target text):
+{{surroundingText}}
+{{/surroundingText}}
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
+
+Previous Translation (target to patch):
+{{previousTranslation}}
+
+Source Text Changes (unified diff format):
+\`\`\`diff
+{{sourceDiff}}
+\`\`\`
+
+Instructions:
+1. Produce a unified diff patch that transforms the PREVIOUS TRANSLATION into the UPDATED TRANSLATION.
+2. Only change the parts required by the source diff. Keep unchanged parts intact.
+3. Use file name "content" in the diff headers (--- content / +++ content).
+4. Do NOT output the full translated text. Output ONLY the patch.
+5. Do NOT alter Markdown syntax, line breaks, or indentation.
+
+Self-Check (MANDATORY before responding):
+- The patch applies cleanly to the previous translation.
+- Unchanged lines remain identical.
+- Markdown structure is preserved.
+
+Response Format:
+Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+
+{
+  "targetPatch": "unified diff patch against previous translation",
+  "termSuggestions": [
+    {
+      "source": "original term in {{sourceLang}}",
+      "target": "translated term in {{targetLang}}",
+      "context": "an actual sentence or phrase quoted directly from the text including the term (LANGUAGE: {{contextLang}})",
+      "reason": "(optional) brief explanation why this term should be added to glossary"
+    }
+  ],
+  "warnings": ["(optional) patch risk or ambiguity"]
 }
 
 Important Notes:
@@ -346,6 +440,7 @@ Return JSON object mapping source terms to translated terms:
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
+  [PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
 	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
 	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,

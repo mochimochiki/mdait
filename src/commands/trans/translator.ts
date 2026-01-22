@@ -37,6 +37,23 @@ export interface TranslationResult {
 }
 
 /**
+ * 改訂パッチ翻訳結果
+ */
+export interface RevisionPatchResult {
+	/** 前回訳文に対するunified diffパッチ */
+	targetPatch: string;
+	/** AIが提案する用語候補のリスト */
+	termSuggestions?: TermSuggestion[];
+	/** 警告メッセージ */
+	warnings?: string[];
+	/** 統計情報（将来の拡張用） */
+	stats?: {
+		/** 推定使用トークン数 */
+		estimatedTokens?: number;
+	};
+}
+
+/**
  * 翻訳サービスのインターフェース
  */
 export interface Translator {
@@ -56,6 +73,23 @@ export interface Translator {
 		context: TranslationContext,
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<TranslationResult>;
+
+	/**
+	 * 改訂時のパッチ翻訳を実行する
+	 * @param text 翻訳対象のテキスト
+	 * @param sourceLang 翻訳元の言語コード
+	 * @param targetLang 翻訳先の言語コード
+	 * @param context 翻訳コンテキスト
+	 * @param cancellationToken キャンセル処理用トークン
+	 * @returns 改訂パッチ翻訳結果
+	 */
+	translateRevisionPatch(
+		text: string,
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<RevisionPatchResult>;
 }
 
 /**
@@ -130,6 +164,55 @@ export class DefaultTranslator implements Translator {
 	}
 
 	/**
+	 * 改訂パッチ翻訳を実行する
+	 */
+	async translateRevisionPatch(
+		text: string,
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<RevisionPatchResult> {
+		// コードブロックをスキップするロジック
+		const codeBlockRegex = /```[\s\S]*?```/g;
+		const codeBlocks: string[] = [];
+		const placeholders: string[] = [];
+
+		const textWithoutCodeBlocks = text.replace(codeBlockRegex, (match) => {
+			const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
+			codeBlocks.push(match);
+			placeholders.push(placeholder);
+			return placeholder;
+		});
+
+		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
+		const config = Configuration.getInstance();
+		const primaryLang = config.getTermsPrimaryLang();
+		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+
+		const promptProvider = PromptProvider.getInstance();
+		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_REVISE_PATCH, {
+			sourceLang,
+			targetLang,
+			contextLang,
+			surroundingText: context.surroundingText,
+			terms: context.terms,
+			previousTranslation: context.previousTranslation,
+			sourceDiff: context.sourceDiff,
+		});
+
+		const messages: AIMessage[] = [
+			{
+				role: "user",
+				content: textWithoutCodeBlocks,
+			},
+		];
+
+		const rawResponse = await this.aiService.sendMessage(systemPrompt, messages, cancellationToken);
+		return this.parseRevisionPatchResponse(rawResponse, codeBlocks, placeholders);
+	}
+
+	/**
 	 * AIの応答をパースしてTranslationResultを生成
 	 * @param rawResponse AIからの生の応答
 	 * @param codeBlocks 保存されたコードブロック
@@ -166,6 +249,46 @@ export class DefaultTranslator implements Translator {
 
 			return {
 				translatedText,
+				termSuggestions: [],
+				warnings: ["AI response format was unexpected"],
+			};
+		}
+	}
+
+	/**
+	 * 改訂パッチ翻訳の応答をパース
+	 */
+	private parseRevisionPatchResponse(
+		rawResponse: string,
+		codeBlocks: string[],
+		placeholders: string[],
+	): RevisionPatchResult {
+		try {
+			const jsonMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+			const jsonString = jsonMatch ? jsonMatch[1] : rawResponse;
+
+			const parsed = JSON.parse(jsonString.trim());
+			let targetPatch = parsed.targetPatch || "";
+
+			for (let i = 0; i < placeholders.length; i++) {
+				targetPatch = targetPatch.replaceAll(placeholders[i], codeBlocks[i]);
+			}
+
+			return {
+				targetPatch,
+				termSuggestions: parsed.termSuggestions || [],
+				warnings: parsed.warnings,
+			};
+		} catch (error) {
+			console.warn("Failed to parse AI response as JSON for revision patch:", error);
+
+			let fallbackPatch = rawResponse;
+			for (let i = 0; i < placeholders.length; i++) {
+				fallbackPatch = fallbackPatch.replaceAll(placeholders[i], codeBlocks[i]);
+			}
+
+			return {
+				targetPatch: fallbackPatch,
 				termSuggestions: [],
 				warnings: ["AI response format was unexpected"],
 			};
