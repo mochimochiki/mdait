@@ -190,6 +190,10 @@ export class StatusItemTree {
 		let errorUnits = 0;
 
 		for (const unit of this.unitItemMapWithPath.values()) {
+			// ソースユニット（fromHashを持たないユニット）はカウントしない
+			if (unit.status === Status.Source) {
+				continue;
+			}
 			totalUnits++;
 			if (unit.status === Status.Translated) {
 				translatedUnits++;
@@ -217,6 +221,10 @@ export class StatusItemTree {
 		for (const file of files) {
 			if (file.children) {
 				for (const unit of file.children) {
+					// ソースユニット（fromHashを持たないユニット）はカウントしない
+					if (unit.status === Status.Source) {
+						continue;
+					}
 					totalUnits++;
 					if (unit.status === Status.Translated) {
 						translatedUnits++;
