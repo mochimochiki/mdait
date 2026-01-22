@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { createConfigCommand } from "./commands/setup/setup-command";
-import { syncCommand } from "./commands/sync/sync-command";
+import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
@@ -307,27 +307,33 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (!filePath.toLowerCase().endsWith(".md")) {
 				return;
 			}
-			let shouldRefresh = false;
+
+			// 設定が有効かチェック
+			if (!configInitialized) {
+				return;
+			}
+
+			let shouldSync = false;
 			try {
 				const fileExplorer = new FileExplorer();
-				shouldRefresh = fileExplorer.isSourceFile(filePath, config) || fileExplorer.isTargetFile(filePath, config);
+				shouldSync = fileExplorer.isSourceFile(filePath, config) || fileExplorer.isTargetFile(filePath, config);
 			} catch (error) {
 				console.warn("mdait: failed to initialize FileExplorer on save", error);
 			}
-			if (!shouldRefresh) {
+
+			if (!shouldSync) {
 				const tree = statusManager.getStatusItemTree();
-				shouldRefresh = !!tree.getFile(filePath);
+				shouldSync = !!tree.getFile(filePath);
 			}
-			if (!shouldRefresh) {
+
+			if (!shouldSync) {
 				return;
 			}
-			if (!statusManager.isInitialized()) {
-				await statusManager.buildStatusItemTree();
-				return;
-			}
-			await statusManager.refreshFileStatus(filePath);
+
+			// ファイル保存時に自動的に同期を実行
+			await syncSingleFile(filePath);
 		} catch (error) {
-			console.warn("mdait: failed to refresh status on save", error);
+			console.warn("mdait: failed to sync file on save", error);
 		}
 	});
 
