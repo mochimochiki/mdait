@@ -87,7 +87,7 @@ export async function finalizeDirectoryCommand(directory: string): Promise<void>
 				title: vscode.l10n.t("Finalizing directory..."),
 				cancellable: false,
 			},
-			async (progress) => {
+			async (progress: vscode.Progress<{ message?: string; increment?: number }>) => {
 				let totalMarkers = 0;
 				let processedFiles = 0;
 
