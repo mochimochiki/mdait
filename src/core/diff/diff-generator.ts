@@ -1,4 +1,4 @@
-import { createPatch } from "diff";
+import { applyPatch, createPatch } from "diff";
 
 /**
  * unified diff形式で差分を生成
@@ -34,4 +34,26 @@ export function stripDiffHeader(diff: string): string {
  */
 export function hasDiff(oldContent: string, newContent: string): boolean {
 	return oldContent !== newContent;
+}
+
+/**
+ * unified diffパッチを適用
+ * @param baseContent パッチ適用対象の元テキスト
+ * @param patch unified diff形式のパッチ
+ * @param fileName パッチヘッダが不足する場合に補完するファイル名
+ * @returns 適用後のテキスト（失敗時はnull）
+ */
+export function applyUnifiedPatch(baseContent: string, patch: string, fileName = "content"): string | null {
+	const trimmedPatch = patch.trim();
+	if (!trimmedPatch) {
+		return null;
+	}
+
+	const hasHeader = trimmedPatch.includes("---") && trimmedPatch.includes("+++");
+	const normalizedPatch = hasHeader
+		? trimmedPatch
+		: `--- ${fileName}\n+++ ${fileName}\n${trimmedPatch}`;
+
+	const applied = applyPatch(baseContent, normalizedPatch);
+	return typeof applied === "string" ? applied : null;
 }

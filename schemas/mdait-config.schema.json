@@ -230,6 +230,11 @@
           "description": "Path to custom Markdown translation prompt file",
           "examples": [".mdait/prompts/translate.txt"]
         },
+        "trans.revisePatch": {
+          "type": "string",
+          "description": "Path to custom revision patch translation prompt file",
+          "examples": [".mdait/prompts/revise-patch.txt"]
+        },
         "term.detect": {
           "type": "string",
           "description": "Path to custom term detection prompt file",
