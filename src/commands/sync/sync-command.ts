@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { TransPair } from "../../config/configuration";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
@@ -114,6 +115,84 @@ export async function syncCommand(): Promise<void> {
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
 		console.error(error);
+	}
+}
+
+/**
+ * 単一ファイルの同期を行う
+ * ファイル保存時に呼び出され、そのファイルと関連するペアファイルのみを同期する
+ * 
+ * @param filePath 保存されたファイルのパス
+ */
+export async function syncSingleFile(filePath: string): Promise<void> {
+	try {
+		const config = Configuration.getInstance();
+		const validationError = config.validate();
+		if (validationError) {
+			console.warn("mdait: Configuration error during file save sync:", validationError);
+			return;
+		}
+
+		const fileExplorer = new FileExplorer();
+		const statusManager = StatusManager.getInstance();
+		const snapshotManager = SnapshotManager.getInstance();
+
+		// ファイルがソースかターゲットかを判定し、対応するペアを見つける
+		let sourceFile: string | null = null;
+		let targetFile: string | null = null;
+		let matchedPair: TransPair | null = null;
+
+		// 選択された TransPair のみを処理対象とする
+		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
+
+		for (const pair of pairs) {
+			if (fileExplorer.isSourceFile(filePath, config)) {
+				// 保存されたファイルがソースの場合
+				const tgtPath = fileExplorer.getTargetPath(filePath, pair);
+				if (tgtPath) {
+					sourceFile = filePath;
+					targetFile = tgtPath;
+					matchedPair = pair;
+					break;
+				}
+			} else if (fileExplorer.isTargetFile(filePath, config)) {
+				// 保存されたファイルがターゲットの場合
+				const srcPath = fileExplorer.getSourcePath(filePath, pair);
+				if (srcPath && fs.existsSync(srcPath)) {
+					sourceFile = srcPath;
+					targetFile = filePath;
+					matchedPair = pair;
+					break;
+				}
+			}
+		}
+
+		// ペアが見つからない場合は何もしない
+		if (!sourceFile || !targetFile || !matchedPair) {
+			return;
+		}
+
+		// 同期処理を実行
+		let diffResult: DiffResult;
+		if (fs.existsSync(targetFile)) {
+			diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+		} else {
+			diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
+		}
+
+		// スナップショットバッファをフラッシュ
+		await snapshotManager.flushBuffer();
+
+		// ステータスを更新
+		await statusManager.refreshFileStatus(sourceFile);
+		await statusManager.refreshFileStatus(targetFile);
+
+		console.log(
+			`mdait: File sync completed - ${path.basename(filePath)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
+		);
+	} catch (error) {
+		console.error("mdait: Error during single file sync:", error);
+		// エラーは表示せず、ログに記録のみ（ユーザー体験を妨げない）
 	}
 }
 
