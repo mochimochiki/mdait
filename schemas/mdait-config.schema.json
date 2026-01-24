@@ -182,6 +182,21 @@
           },
           "additionalProperties": false
         },
+        "frontmatter": {
+          "type": "object",
+          "description": "Frontmatter translation settings",
+          "properties": {
+            "keys": {
+              "type": "array",
+              "description": "Frontmatter keys to translate. Empty array disables frontmatter translation.",
+              "items": {
+                "type": "string"
+              },
+              "default": ["title", "description"]
+            }
+          },
+          "additionalProperties": false
+        },
         "contextSize": {
           "type": "integer",
           "description": "Number of surrounding units (before and after) to include as context for AI translation. Higher values provide more context but increase token usage. Set to 0 to disable context.",

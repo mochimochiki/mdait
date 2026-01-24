@@ -70,6 +70,9 @@ sequenceDiagram
     "markdown": {
       "skipCodeBlocks": true
     },
+    "frontmatter": {
+      "keys": ["title", "description"]
+    },
     "contextSize": 1
   },
   "terms": {
