@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { StatusTreeFinalizeHandler } from "./commands/finalize/status-tree-finalize-handler";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -140,6 +141,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
 		termHandler.termExpandFile(item as StatusItem),
+	);
+
+	// Finalize handler
+	const finalizeHandler = new StatusTreeFinalizeHandler();
+	const finalizeDirectoryDisposable = vscode.commands.registerCommand("mdait.finalize.directory", (item) =>
+		finalizeHandler.handleFinalizeDirectory(item as StatusItem),
+	);
+	const finalizeFileDisposable = vscode.commands.registerCommand("mdait.finalize.file", (item) =>
+		finalizeHandler.handleFinalizeFile(item as StatusItem),
 	);
 
 	// Translate Selection command
@@ -345,6 +355,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		termFileDisposable,
 		termExpandDirectoryDisposable,
 		termExpandFileDisposable,
+		finalizeDirectoryDisposable,
+		finalizeFileDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensClearNeedDisposable,

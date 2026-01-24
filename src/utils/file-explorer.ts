@@ -106,19 +106,47 @@ export class FileExplorer {
 
 	/**
 	 * 設定に基づいてファイルを取得する
+	 * @param sourceDirConfig ソースディレクトリのパス（相対パスまたは絶対パス）
+	 * @param config 設定オブジェクト
+	 * @returns Markdownファイルの絶対パスの配列
 	 */
 	public async getSourceFiles(sourceDirConfig: string, config: Configuration): Promise<string[]> {
-		let sourceDir = sourceDirConfig;
-		if (!path.isAbsolute(sourceDir)) {
-			sourceDir = path.resolve(this.workspaceRoot, sourceDir);
+		return this.getMarkdownFilesFromDirectory(sourceDirConfig, config, "Source directory does not exist: {0}");
+	}
+
+	/**
+	 * ディレクトリ内の全Markdownファイルを取得する
+	 * @param directory ディレクトリパス（相対パスまたは絶対パス）
+	 * @param config 設定オブジェクト
+	 * @returns Markdownファイルの絶対パスの配列
+	 */
+	public async getAllMarkdownFiles(directory: string, config: Configuration): Promise<string[]> {
+		return this.getMarkdownFilesFromDirectory(directory, config, "Directory does not exist: {0}");
+	}
+
+	/**
+	 * ディレクトリ内の全Markdownファイルを取得する（内部実装）
+	 * @param directory ディレクトリパス（相対パスまたは絶対パス）
+	 * @param config 設定オブジェクト
+	 * @param errorMessage エラーメッセージテンプレート
+	 * @returns Markdownファイルの絶対パスの配列
+	 */
+	private async getMarkdownFilesFromDirectory(
+		directory: string,
+		config: Configuration,
+		errorMessage: string,
+	): Promise<string[]> {
+		let targetDir = directory;
+		if (!path.isAbsolute(targetDir)) {
+			targetDir = path.resolve(this.workspaceRoot, targetDir);
 		}
 
 		// ディレクトリの存在を確認
-		if (!this.directoryExists(sourceDir)) {
-			throw new Error(vscode.l10n.t("Source directory does not exist: {0}", sourceDir));
+		if (!this.directoryExists(targetDir)) {
+			throw new Error(vscode.l10n.t(errorMessage, targetDir));
 		}
 		// ファイルの検索（Markdownファイルのみを対象とする）
-		return await this.findFilesInDirectory(sourceDir, [".md"], "**/*.md", config.ignoredPatterns);
+		return await this.findFilesInDirectory(targetDir, [".md"], "**/*.md", config.ignoredPatterns);
 	}
 
 	/**
