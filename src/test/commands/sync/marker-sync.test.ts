@@ -4,8 +4,8 @@
  */
 
 import { strict as assert } from "node:assert";
-import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "../../../commands/sync/marker-sync";
+import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 
 suite("marker-sync", () => {
 	suite("syncSourceMarker", () => {

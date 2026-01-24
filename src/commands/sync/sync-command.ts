@@ -18,8 +18,8 @@ import { SnapshotManager } from "../../core/snapshot/snapshot-manager";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
-import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
+import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 
 /**

@@ -56,7 +56,11 @@ Translated content
 
 		// frontmatter項目が存在すること
 		assert.ok(fileStatus.frontmatter, "frontmatter項目が存在すること");
-		assert.strictEqual(fileStatus.frontmatter?.status, Status.NeedsTranslation, "frontmatterがNeedsTranslationであること");
+		assert.strictEqual(
+			fileStatus.frontmatter?.status,
+			Status.NeedsTranslation,
+			"frontmatterがNeedsTranslationであること",
+		);
 	});
 
 	test("frontmatterが翻訳済みで本文も翻訳済みの場合、ファイルステータスがTranslatedとなること", async () => {

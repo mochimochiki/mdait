@@ -5,7 +5,11 @@ import { strict as assert } from "node:assert";
 import { syncFrontmatterMarkers } from "../../../commands/sync/sync-command";
 import type { Configuration } from "../../../config/configuration";
 import { FrontMatter } from "../../../core/markdown/front-matter";
-import { calculateFrontmatterHash, parseFrontmatterMarker, setFrontmatterMarker } from "../../../core/markdown/frontmatter-translation";
+import {
+	calculateFrontmatterHash,
+	parseFrontmatterMarker,
+	setFrontmatterMarker,
+} from "../../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 import { markdownParser } from "../../../core/markdown/parser";
 
@@ -98,7 +102,10 @@ suite("Sync処理（frontmatterマーカー付与）", () => {
 		assert.strictEqual(targetMarker.from, newSourceHash, `targetのfromが新sourceHashに更新されていること`);
 
 		// needにrevise@oldhashが設定されているはず
-		assert.ok(targetMarker.need, `targetにneedフラグが設定されていること (from: ${targetMarker.from}, hash: ${targetMarker.hash}, need: ${targetMarker.need})`);
+		assert.ok(
+			targetMarker.need,
+			`targetにneedフラグが設定されていること (from: ${targetMarker.from}, hash: ${targetMarker.hash}, need: ${targetMarker.need})`,
+		);
 		assert.ok(targetMarker.need.startsWith("revise@"), `needがrevise@形式であること (actual: ${targetMarker.need})`);
 	});
 
