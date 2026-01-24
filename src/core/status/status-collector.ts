@@ -290,6 +290,11 @@ export class StatusCollector {
 		// childrenは既にUnitStatusItem[]なのでそのまま使用
 		const units = children;
 
+		// 0. frontmatterのみでSourceの場合はファイルもSource
+		if (units.length === 0 && frontmatterItem?.status === Status.Source) {
+			return Status.Source;
+		}
+
 		// 1. すべてのユニットが `Source` でfrontmatterもSourceまたはなしなら、ファイルは `Source`
 		const allUnitsSource = units.length > 0 && units.every((u) => u.status === Status.Source);
 		const frontmatterIsSourceOrNone = !frontmatterItem || frontmatterItem.status === Status.Source;
