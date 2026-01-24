@@ -144,6 +144,9 @@
   "No need marker found to clear.": "削除するneedマーカーが見つかりません。",
   "Failed to clear need marker: {0}": "needマーカーの削除に失敗しました: {0}",
   "AI_Usage_Confirmation": "✨️[AI] と表示されているコマンドはAIを利用します。\n\n  • mdait.json で指定された AI サービスを使用します\n  • AI利用に関する統計情報は、 .mdait/ai-stats.log に記録されます。\n\n続行しますか？",
-  "Proceed": "続行"
+  "Proceed": "続行",
+  "No frontmatter keys configured for translation.": "翻訳対象のFrontmatterキーが設定されていません。",
+  "Source file not found: {0}": "ソースファイルが見つかりません: {0}",
+  "Empty content": "空のコンテンツ"
 }
 

@@ -3,10 +3,13 @@
  * @description
  *   Markdownファイル内のmdaitマーカーに対してCodeLensを表示するプロバイダー。
  *   - mdaitマーカー行を検出し、翻訳が必要なユニットに「翻訳」ボタンを表示する
+ *   - frontmatter内のmdait.frontマーカーにもCodeLensを表示する
  *   - VS CodeのCodeLens機能を利用して、テスト実行ボタンのような直感的なUIを提供
  * @module ui/codelens/codelens-provider
  */
 import * as vscode from "vscode";
+import { FrontMatter } from "../../core/markdown/front-matter";
+import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 
 /**
@@ -40,6 +43,30 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 		const codeLenses: vscode.CodeLens[] = [];
 
+		// FrontMatterクラスを使って正確なfrontmatter範囲を取得
+		const content = document.getText();
+		const { frontMatter } = FrontMatter.parse(content);
+
+		// frontmatter内のmdait.frontマーカーを検出（FrontMatterクラスの範囲情報を利用）
+		if (frontMatter && !frontMatter.isEmpty()) {
+			const marker = parseFrontmatterMarker(frontMatter);
+			if (marker) {
+				// frontmatter範囲内でmdait.frontマーカーの行を探す
+				for (let lineIndex = frontMatter.startLine; lineIndex <= frontMatter.endLine; lineIndex++) {
+					if (token.isCancellationRequested) {
+						return [];
+					}
+
+					const line = document.lineAt(lineIndex);
+					if (line.text.includes(`${FRONTMATTER_MARKER_KEY}:`)) {
+						const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, lineIndex, document);
+						codeLenses.push(...frontmatterCodeLenses);
+						break; // mdait.frontは1ファイルに1つのみ
+					}
+				}
+			}
+		}
+
 		// 各行をスキャンしてmdaitマーカーを検出
 		for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
 			if (token.isCancellationRequested) {
@@ -47,48 +74,107 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			}
 
 			const line = document.lineAt(lineIndex);
+
+			// 通常のmdaitマーカーを検出
 			const marker = MdaitMarker.parse(line.text);
 
 			if (marker) {
 				const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
-
-				// fromハッシュがある場合はソースへ移動ボタン
-				if (marker.from) {
-					codeLenses.push(
-						new vscode.CodeLens(range, {
-							title: vscode.l10n.t("$(symbol-reference) Source"),
-							tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
-							command: "mdait.codelens.jumpToSource",
-							arguments: [range],
-						}),
-					);
-				}
-
-				// 翻訳が必要な場合は翻訳ボタン
-				if (marker.needsTranslation()) {
-					codeLenses.push(
-						new vscode.CodeLens(range, {
-							title: vscode.l10n.t("$(play) Translate"),
-							tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
-							command: "mdait.codelens.translate",
-							arguments: [range],
-						}),
-					);
-				}
-
-				// needマーカーがある場合は完了ボタン
-				if (marker.need) {
-					const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
-					codeLenses.push(
-						new vscode.CodeLens(range, {
-							title,
-							tooltip,
-							command: "mdait.codelens.clearNeed",
-							arguments: [range],
-						}),
-					);
-				}
+				const unitCodeLenses = this.createCodeLensesForMarker(
+					marker,
+					range,
+					"mdait.codelens.jumpToSource",
+					"mdait.codelens.translate",
+					"mdait.codelens.clearNeed",
+					[range],
+				);
+				codeLenses.push(...unitCodeLenses);
 			}
+		}
+
+		return codeLenses;
+	}
+
+	/**
+	 * パース済みのfrontmatterマーカーからCodeLensを作成
+	 * @param marker パース済みのfrontmatterマーカー
+	 * @param lineIndex 行番号
+	 * @param document ドキュメント
+	 * @returns CodeLensの配列
+	 */
+	private createFrontmatterCodeLenses(
+		marker: MdaitMarker,
+		lineIndex: number,
+		document: vscode.TextDocument,
+	): vscode.CodeLens[] {
+		const line = document.lineAt(lineIndex);
+		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
+
+		return this.createCodeLensesForMarker(
+			marker,
+			range,
+			"mdait.codelens.jumpToSourceFrontmatter",
+			"mdait.translate.frontmatter",
+			"mdait.codelens.clearFrontmatterNeed",
+			[document.uri],
+		);
+	}
+
+	/**
+	 * マーカーからCodeLensを作成する共通ロジック
+	 * @param marker mdaitマーカー
+	 * @param range CodeLensの範囲
+	 * @param jumpCommand ソースへジャンプするコマンド
+	 * @param translateCommand 翻訳コマンド
+	 * @param clearNeedCommand needクリアコマンド
+	 * @param translateArgs 翻訳コマンドの引数
+	 * @returns CodeLensの配列
+	 */
+	private createCodeLensesForMarker(
+		marker: MdaitMarker,
+		range: vscode.Range,
+		jumpCommand: string,
+		translateCommand: string,
+		clearNeedCommand: string,
+		translateArgs: (vscode.Range | vscode.Uri)[],
+	): vscode.CodeLens[] {
+		const codeLenses: vscode.CodeLens[] = [];
+
+		// fromハッシュがある場合はソースへ移動ボタン
+		if (marker.from) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(symbol-reference) Source"),
+					tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
+					command: jumpCommand,
+					arguments: [range],
+				}),
+			);
+		}
+
+		// 翻訳が必要な場合は翻訳ボタン
+		if (marker.needsTranslation()) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(play) Translate"),
+					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+					command: translateCommand,
+					arguments: translateArgs,
+				}),
+			);
+		}
+
+		// needマーカーがある場合は完了ボタン
+		if (marker.need) {
+			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title,
+					tooltip,
+					command: clearNeedCommand,
+					arguments: [range],
+				}),
+			);
 		}
 
 		return codeLenses;

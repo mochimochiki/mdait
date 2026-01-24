@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { SelectionState } from "../../core/status/selection-state";
-import { Status, type StatusItem, StatusItemType } from "../../core/status/status-item";
+import { Status, type StatusItem, StatusItemType, isFrontmatterStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 
 /**
@@ -118,6 +118,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			} else {
 				treeItem.id = `${element.filePath}#${element.unitHash}`;
 			}
+		} else if (element.type === StatusItemType.Frontmatter && element.filePath) {
+			if (workspaceFolder) {
+				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#frontmatter`;
+			} else {
+				treeItem.id = `${element.filePath}#frontmatter`;
+			}
 		}
 
 		// ファイルの場合はコマンドを設定してクリック時にファイルを開く（先頭行）
@@ -136,6 +142,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				arguments: [element.filePath, element.startLine],
 			};
 		}
+		// frontmatterの場合はコマンドを設定してクリック時にファイル先頭にジャンプ
+		if (element.type === StatusItemType.Frontmatter) {
+			treeItem.command = {
+				command: "mdait.jumpToUnit",
+				title: "Jump to Frontmatter",
+				arguments: [element.filePath, 0],
+			};
+		}
 
 		return treeItem;
 	}
@@ -147,6 +161,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	public getParent(element: StatusItem): StatusItem | undefined {
 		// Unitの場合、親はFile
 		if (element.type === StatusItemType.Unit && element.filePath) {
+			return this.statusItemTree.getFile(element.filePath);
+		}
+
+		// Frontmatterの場合、親はFile
+		if (element.type === StatusItemType.Frontmatter && element.filePath) {
 			return this.statusItemTree.getFile(element.filePath);
 		}
 
@@ -206,10 +225,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return Promise.resolve(this.getStatusItemsRecursive(element.directoryPath));
 		}
 		if (element.type === StatusItemType.File) {
-			// ファイルの場合は翻訳ユニット一覧を返す
-			return Promise.resolve(this.getUnitItems(element.filePath));
+			// ファイルの場合はfrontmatter + 翻訳ユニット一覧を返す
+			return Promise.resolve(this.getFileChildren(element));
 		}
-		// ユニットタイプの場合は子要素なし
+		// ユニットタイプ・Frontmatterタイプの場合は子要素なし
 		return Promise.resolve([]);
 	}
 
@@ -250,17 +269,25 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
-	 * 指定ファイルの翻訳ユニット一覧のStatusItemを作成する
+	 * 指定ファイルの子要素（frontmatter + ユニット）を返す
 	 */
-	private getUnitItems(filePath?: string): StatusItem[] {
-		if (!filePath) {
-			return [];
+	private getFileChildren(fileItem: import("../../core/status/status-item").FileStatusItem): StatusItem[] {
+		const children: StatusItem[] = [];
+
+		// frontmatter項目があれば先頭に追加
+		if (fileItem.frontmatter) {
+			children.push(fileItem.frontmatter);
 		}
 
-		// StatusItemTreeから翻訳ユニットを取得
-		const items = this.statusItemTree.getUnitsInFile(filePath);
-		// Status.Emptyのアイテムを除外
-		return items.filter((item) => item.status !== Status.Empty);
+		// ユニット一覧を追加（Status.Emptyを除外）
+		const units = this.statusItemTree.getUnitsInFile(fileItem.filePath);
+		for (const unit of units) {
+			if (unit.status !== Status.Empty) {
+				children.push(unit);
+			}
+		}
+
+		return children;
 	}
 
 	/**
@@ -306,6 +333,20 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private getStatusIcon(status: Status, isProgress?: boolean, element?: StatusItem): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
+		}
+
+		// Frontmatter階層の場合はbookアイコンを使用
+		if (element?.type === StatusItemType.Frontmatter) {
+			switch (status) {
+				case Status.Translated:
+					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.green"));
+				case Status.NeedsTranslation:
+					return new vscode.ThemeIcon("book");
+				case Status.Source:
+					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.blue"));
+				default:
+					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.gray"));
+			}
 		}
 
 		// ユニット階層の場合はcircle-smallアイコンを使用

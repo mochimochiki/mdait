@@ -97,14 +97,123 @@ sequenceDiagram
   - ファイル全体のステータス計算時にfrontmatter状態も考慮
 - [x] StatusItemTree/StatusManagerでfrontmatter項目を適切に処理
 
-### フェーズ6: UI/CodeLens対応（新規）
+### フェーズ6: UI/CodeLens対応
 
-- **[ ] StatusTreeProviderでfrontmatter項目を表示**
-  - アイコン、ラベル、コンテキストメニュー
-- **[ ] CodeLensProviderでfrontmatter領域（0行目付近）にアクションを追加**
-  - 翻訳ボタンの表示
-- **[ ] frontmatter専用翻訳コマンド追加**
-  - transUnitCommandと同様だが、frontmatterのみを対象
+**実装状況**: ✅ 完了
+
+**概要**:
+frontmatter翻訳機能のユーザー動線を改善し、UIから直接操作できるようにする。現在、StatusCollectorではfrontmatter状態を収集しているが、UI層での表示と操作が未実装。
+
+**実装方針**:
+
+#### 6.1 StatusTreeProviderでのfrontmatter項目表示
+
+**調査結果**:
+- [src/ui/status/status-tree-provider.ts](src/ui/status/status-tree-provider.ts)でStatusItemをTreeItemに変換
+- 現在、`StatusItemType.Unit`と`StatusItemType.File`のみを処理
+- `StatusItemType.Frontmatter`への対応が必要
+
+**実装内容**:
+```typescript
+// getTreeItem内でFrontmatter項目を処理
+case StatusItemType.Frontmatter:
+  const frontmatterItem = element as FrontmatterStatusItem;
+  const treeItem = new vscode.TreeItem(frontmatterItem.label);
+  treeItem.iconPath = new vscode.ThemeIcon("book"); // または適切なアイコン
+  treeItem.contextValue = frontmatterItem.contextValue;
+  treeItem.tooltip = this.buildFrontmatterTooltip(frontmatterItem);
+  return treeItem;
+```
+
+**コンテキストメニュー**:
+- package.jsonの`menus.view/item/context`に追加
+- `mdaitFrontmatterTarget && needsTranslation`の条件で「Translate Frontmatter」を表示
+
+#### 6.2 CodeLensProviderでのfrontmatter領域アクション
+
+**調査結果**:
+- [src/ui/codelens/codelens-provider.ts](src/ui/codelens/codelens-provider.ts)で各ユニットにCodeLensを配置
+- `provideCodeLenses`メソッドでmarkdown.unitsを処理
+- frontmatter領域（0行目付近）への対応が必要
+
+**実装内容**:
+```typescript
+// provideCodeLenses内でfrontmatterをチェック
+if (markdown.frontMatter) {
+  const marker = parseFrontmatterMarker(markdown.frontMatter);
+  if (marker && marker.needsTranslation()) {
+    // frontmatter領域のCodeLens（0行目または最初の---の行）
+    const range = new vscode.Range(0, 0, 0, 0);
+    codeLenses.push(new vscode.CodeLens(range, {
+      title: "$(sync) Translate Frontmatter",
+      command: "mdait.translateFrontmatter",
+      arguments: [document.uri.fsPath]
+    }));
+  }
+}
+```
+
+**注意点**:
+- frontmatterの正確な行範囲を取得する必要がある
+- FrontMatterクラスに`startLine`, `endLine`プロパティの追加を検討
+
+#### 6.3 frontmatter専用翻訳コマンド
+
+**調査結果**:
+- [src/commands/trans/trans-command.ts](src/commands/trans/trans-command.ts)の`translateFrontmatterIfNeeded`が既に実装済み
+- この関数をコマンドとして直接呼び出し可能にする
+
+**実装内容**:
+```typescript
+/**
+ * frontmatter専用の翻訳コマンド
+ * StatusTreeまたはCodeLensから呼び出される
+ */
+export async function translateFrontmatterCommand(filePath: string): Promise<void> {
+  try {
+    const content = await fs.promises.readFile(filePath, "utf-8");
+    const config = Configuration.getInstance();
+    const markdown = parser.parse(content, config);
+    
+    // frontmatter翻訳を実行
+    const translated = await translateFrontmatterIfNeeded(markdown, config);
+    
+    if (translated) {
+      await fs.promises.writeFile(filePath, markdown.toString(), "utf-8");
+      vscode.window.showInformationMessage("Frontmatter translated successfully");
+      // StatusTreeを更新
+      await StatusManager.getInstance().refresh();
+    } else {
+      vscode.window.showInformationMessage("Frontmatter does not need translation");
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to translate frontmatter: ${error.message}`);
+  }
+}
+```
+
+**package.json登録**:
+```json
+{
+  "command": "mdait.translateFrontmatter",
+  "title": "Translate Frontmatter",
+  "category": "Mdait"
+}
+```
+
+#### 6.4 実装タスク
+
+- [x] StatusTreeProviderにFrontmatter項目の表示機能を追加
+- [x] FrontMatterクラスにstartLine/endLineプロパティを追加（CodeLens用）
+- [x] CodeLensProviderにfrontmatter領域のアクションを追加
+- [x] translateFrontmatterCommandを実装しpackage.jsonに登録
+- [x] コンテキストメニューの設定を追加
+- [ ] GUIテストで動作確認
+
+**優先度**: 低
+- 理由: 機能自体は実装済みで、transコマンドからも利用可能
+- ユーザビリティ向上のための追加作業
+- 他の高優先度機能が完了後に実施
 
 ### フェーズ7: テスト（新規）
 

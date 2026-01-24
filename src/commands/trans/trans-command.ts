@@ -411,13 +411,7 @@ async function translateUnit(
 
 		if (!translationResult) {
 			// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-			translationResult = await translator.translate(
-				sourceContent,
-				sourceLang,
-				targetLang,
-				context,
-				cancellationToken,
-			);
+			translationResult = await translator.translate(sourceContent, sourceLang, targetLang, context, cancellationToken);
 		}
 
 		const resolvedResult = translationResult;
@@ -434,13 +428,11 @@ async function translateUnit(
 			unit.marker.hash = newHash;
 
 			// 適用された用語を追跡（原文と訳文の両方に出現する用語）
-				const appliedTerms = relevantTerms
+			const appliedTerms = relevantTerms
 				.filter((term) => {
 					// 原文に用語の原語が含まれ、訳文に用語の訳語が含まれているかチェック
 					const sourceIncludes = sourceContent.toLowerCase().includes(term.term.toLowerCase());
-						const targetIncludes = resolvedResult.translatedText
-						.toLowerCase()
-						.includes(term.translation.toLowerCase());
+					const targetIncludes = resolvedResult.translatedText.toLowerCase().includes(term.translation.toLowerCase());
 					return sourceIncludes && targetIncludes;
 				})
 				.map((term) => ({
@@ -450,8 +442,8 @@ async function translateUnit(
 				}));
 
 			// AIからの用語候補をTermCandidateフォーマットに変換
-				const aiTermCandidates =
-					resolvedResult.termSuggestions?.map((suggestion) => ({
+			const aiTermCandidates =
+				resolvedResult.termSuggestions?.map((suggestion) => ({
 					source: suggestion.source,
 					target: suggestion.target,
 					context: suggestion.context,
@@ -471,7 +463,7 @@ async function translateUnit(
 
 			// 翻訳品質チェック
 			const checker = new TranslationChecker();
-				const checkResult = checker.checkTranslationQuality(sourceContent, resolvedResult.translatedText);
+			const checkResult = checker.checkTranslationQuality(sourceContent, resolvedResult.translatedText);
 
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
@@ -489,11 +481,11 @@ async function translateUnit(
 				unitHash: newHash,
 				stats: {
 					duration,
-							tokens: resolvedResult.stats?.estimatedTokens,
+					tokens: resolvedResult.stats?.estimatedTokens,
 				},
 				appliedTerms: appliedTerms.length > 0 ? appliedTerms : undefined,
 				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
-						warnings: resolvedResult.warnings,
+				warnings: resolvedResult.warnings,
 				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
 			});
 		}
@@ -764,4 +756,119 @@ function getUnitPosition(
 	const trailingNewlines = trailingNewlinesMatch ? trailingNewlinesMatch[0] : "";
 
 	return { start: startIdx, end: endIdx, trailingNewlines };
+}
+
+/**
+ * frontmatter専用の翻訳コマンド（パブリックAPI）
+ * StatusTreeまたはCodeLensから呼び出される
+ * @param uri 翻訳対象ファイルのURI
+ */
+export async function translateFrontmatterCommand(uri?: vscode.Uri) {
+	if (!uri) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
+		return;
+	}
+
+	const targetFilePath = uri.fsPath;
+	if (!targetFilePath) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
+		return;
+	}
+
+	// AI初回利用チェック
+	const aiOnboarding = AIOnboarding.getInstance();
+	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+	if (!shouldProceed) {
+		return;
+	}
+
+	// withProgressで進捗表示とキャンセル機能を提供
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
+			cancellable: true,
+		},
+		async (progress, token) => {
+			try {
+				await translateFrontmatter_CoreProc(uri, progress, token);
+			} catch (error) {
+				vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", (error as Error).message));
+			}
+		},
+	);
+}
+
+/**
+ * frontmatter翻訳処理（中核プロセス）
+ *
+ * @param uri 翻訳対象ファイルのURI
+ * @param progress 進捗報告用オブジェクト
+ * @param token キャンセルトークン
+ */
+async function translateFrontmatter_CoreProc(
+	uri: vscode.Uri,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<void> {
+	const targetFilePath = uri.fsPath;
+	const config = Configuration.getInstance();
+	const statusManager = StatusManager.getInstance();
+
+	// ファイル探索クラスを初期化
+	const fileExplorer = new FileExplorer();
+	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
+	if (!transPair) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
+		return;
+	}
+
+	// ソースファイルパスを取得
+	const sourceFilePath = fileExplorer.getSourcePath(targetFilePath, transPair);
+
+	// frontmatterの翻訳キーを取得
+	const frontmatterKeys = getFrontmatterTranslationKeys(config);
+	if (frontmatterKeys.length === 0) {
+		vscode.window.showInformationMessage(vscode.l10n.t("No frontmatter keys configured for translation."));
+		return;
+	}
+
+	// Translatorをビルド
+	const translator = await new TranslatorBuilder().build();
+	if (!translator) {
+		return;
+	}
+
+	// Markdownファイルを読み込み＆パース
+	const decoder = new TextDecoder("utf-8");
+	const targetDoc = await vscode.workspace.fs.readFile(uri);
+	const targetContent = decoder.decode(targetDoc);
+	const markdown = markdownParser.parse(targetContent, config);
+
+	// frontmatter翻訳を実行
+	const translated = await translateFrontmatterIfNeeded(
+		markdown,
+		sourceFilePath,
+		frontmatterKeys,
+		translator,
+		transPair.sourceLang,
+		transPair.targetLang,
+		token,
+	);
+
+	if (token.isCancellationRequested) {
+		return;
+	}
+
+	if (translated) {
+		// 翻訳結果をファイルに保存
+		const updatedContent = markdownParser.stringify(markdown);
+		const encoder = new TextEncoder();
+		await vscode.workspace.fs.writeFile(uri, encoder.encode(updatedContent));
+
+		// StatusManagerでファイルステータス更新
+		await statusManager.refreshFileStatus(targetFilePath);
+
+		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
+	}
 }

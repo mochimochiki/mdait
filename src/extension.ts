@@ -8,14 +8,16 @@ import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
-import { transCommand } from "./commands/trans/trans-command";
+import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
 import { Configuration } from "./config/configuration";
 import { SelectionState } from "./core/status/selection-state";
-import type { StatusItem } from "./core/status/status-item";
+import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import {
+	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
 	codeLensJumpToSourceCommand,
+	codeLensJumpToSourceFrontmatterCommand,
 	codeLensTranslateCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
@@ -164,6 +166,31 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensClearNeedDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.clearNeed",
 		codeLensClearNeedCommand,
+	);
+
+	// Frontmatter翻訳コマンド（StatusTree/CodeLensから呼び出し）
+	const translateFrontmatterDisposable = vscode.commands.registerCommand(
+		"mdait.translate.frontmatter",
+		(arg?: vscode.Uri | StatusItem) => {
+			// StatusTreeから呼び出された場合、itemからuriを取得
+			if (arg && isFrontmatterStatusItem(arg as StatusItem)) {
+				const item = arg as { filePath: string };
+				return translateFrontmatterCommand(vscode.Uri.file(item.filePath));
+			}
+			return translateFrontmatterCommand(arg as vscode.Uri | undefined);
+		},
+	);
+
+	// CodeLens Frontmatter need削除コマンド
+	const codeLensClearFrontmatterNeedDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.clearFrontmatterNeed",
+		codeLensClearFrontmatterNeedCommand,
+	);
+
+	// CodeLens ソースFrontmatterジャンプコマンド
+	const codeLensJumpToSourceFrontmatterDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.jumpToSourceFrontmatter",
+		codeLensJumpToSourceFrontmatterCommand,
 	);
 
 	// CodeLensProvider登録
@@ -354,6 +381,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateFileDisposable,
 		translateUnitDisposable,
 		translateSelectionDisposable,
+		translateFrontmatterDisposable,
+		codeLensClearFrontmatterNeedDisposable,
+		codeLensJumpToSourceFrontmatterDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,
