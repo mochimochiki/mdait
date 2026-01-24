@@ -1,9 +1,9 @@
 ---
-agent: agent
+name: code-review
 description: 中長期的に保守が必要なソフトウェアの設計や実装内容に基づいて、エキスパートアーキテクトとしてレビューを行うためのプロンプトです。
-model: GPT-5.2-Codex
 argument-hint: レビュー観点や具体的な依頼内容を伝えてください。
-name: エキスパートエンジニアによる設計・実装レビュー
+agent: agent
+model: GPT-5.2-Codex
 tools: ['read', 'edit/createFile', 'edit/editFiles', 'search', 'gitkraken/*', 'oraios/serena/*', 'todo']
 ---
 
