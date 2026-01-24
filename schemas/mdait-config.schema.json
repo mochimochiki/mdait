@@ -75,6 +75,11 @@
           "type": "boolean",
           "description": "Automatically delete units on target side when deleted on source side during sync",
           "default": true
+        },
+        "autoSyncOnSave": {
+          "type": "boolean",
+          "description": "Automatically sync files when saved (only files with mdait markers)",
+          "default": true
         }
       },
       "additionalProperties": false

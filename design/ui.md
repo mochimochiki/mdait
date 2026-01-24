@@ -33,7 +33,7 @@ sequenceDiagram
 	UI-->>User: ツリー/バッジ更新
 ```
 
-- ドキュメント保存時は`workspace.onDidSaveTextDocument`で対象ファイルを検知し、`StatusManager.refreshFileStatus`を呼び出して手動編集とツリー表示を同期させる。
+- ドキュメント保存時は`workspace.onDidSaveTextDocument`で対象ファイルを検知する。`sync.autoSyncOnSave`が`true`（デフォルト）で、mdaitマーカー（ユニットまたはフロントマター）が存在する場合のみ、`syncSingleFile`を呼び出して自動同期を実行する。まだ一度もsyncしていないファイル（マーカーが存在しないファイル）は自動同期の対象外とする。
 
 ### 翻訳サマリ表示フロー
 

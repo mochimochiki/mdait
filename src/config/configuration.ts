@@ -63,6 +63,7 @@ interface MdaitConfig {
 	sync?: {
 		level?: number;
 		autoDelete?: boolean;
+		autoSyncOnSave?: boolean;
 	};
 	ai?: {
 		provider?: string;
@@ -128,6 +129,7 @@ export class Configuration {
 	public sync = {
 		level: 3,
 		autoDelete: true,
+		autoSyncOnSave: true,
 	};
 	/**
 	 * AI設定
@@ -318,6 +320,9 @@ export class Configuration {
 				if (config.sync.autoDelete !== undefined) {
 					this.sync.autoDelete = config.sync.autoDelete;
 				}
+				if (config.sync.autoSyncOnSave !== undefined) {
+					this.sync.autoSyncOnSave = config.sync.autoSyncOnSave;
+				}
 			}
 
 			// AI設定の読み込み
@@ -386,10 +391,7 @@ export class Configuration {
 				this.trans.contextSize = config.trans.contextSize;
 			}
 			if (config.trans?.retryLimit !== undefined) {
-				const normalizedRetryLimit = Math.min(
-					5,
-					Math.max(1, config.trans.retryLimit),
-				);
+				const normalizedRetryLimit = Math.min(5, Math.max(1, config.trans.retryLimit));
 				this.trans.retryLimit = normalizedRetryLimit;
 			}
 

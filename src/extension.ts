@@ -10,6 +10,8 @@ import { translateSelectionCommand } from "./commands/trans-selection/trans-sele
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
 import { Configuration } from "./config/configuration";
+import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
+import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
@@ -339,6 +341,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (!configInitialized) {
 				return;
 			}
+			if (!config.sync.autoSyncOnSave) {
+				return;
+			}
 
 			let shouldSync = false;
 			try {
@@ -354,6 +359,29 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 
 			if (!shouldSync) {
+				return;
+			}
+
+			// mdaitマーカーが存在するかチェック（まだ一度もsyncしていないファイルは除外）
+			try {
+				const fileDocument = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+				const decoder = new TextDecoder("utf-8");
+				const content = decoder.decode(fileDocument);
+				const parsed = markdownParser.parse(content, config);
+
+				// ユニットにマーカーが存在するか確認
+				const hasUnitMarker = parsed.units.some((unit) => unit.marker.hash !== null);
+
+				// フロントマターにマーカーが存在するか確認
+				const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;
+
+				// いずれのマーカーも存在しない場合は除外
+				if (!hasUnitMarker && !hasFrontmatterMarker) {
+					console.debug(`mdait: Skipping file save sync (no mdait markers): ${filePath}`);
+					return;
+				}
+			} catch (error) {
+				console.warn("mdait: failed to check mdait markers on save", error);
 				return;
 			}
 

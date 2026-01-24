@@ -52,7 +52,8 @@ sequenceDiagram
   "ignoredPatterns": ["**/node_modules/**"],
   "sync": {
     "level": ,
-    "autoDelete": true
+    "autoDelete": true,
+    "autoSyncOnSave": true
   },
   "ai": {
     "provider": "default",

@@ -24,7 +24,8 @@
     }
   },
   "sync": {
-    "level": 3
+    "level": 3,
+    "autoSyncOnSave": false
   },
   "terms": {
     "primaryLang": "en"
