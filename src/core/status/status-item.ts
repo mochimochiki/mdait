@@ -13,12 +13,13 @@ export enum Status {
 }
 
 /**
- * ディレクトリ、ファイル、ユニットを区別する
+ * ディレクトリ、ファイル、ユニット、Frontmatterを区別する
  */
 export enum StatusItemType {
 	Directory = "directory",
 	File = "file",
 	Unit = "unit",
+	Frontmatter = "frontmatter",
 }
 
 /**
@@ -67,6 +68,7 @@ export interface FileStatusItem extends BaseStatusItem {
 	hasParseError?: boolean;
 	errorMessage?: string;
 	children?: UnitStatusItem[];
+	frontmatter?: FrontmatterStatusItem;
 }
 
 /**
@@ -87,10 +89,21 @@ export interface UnitStatusItem extends BaseStatusItem {
 }
 
 /**
- * mdaitで管理するステータス項目1つを表す。
- * ディレクトリ・ファイル・ユニットを一元管理する統合型（Discriminated Union）
+ * Frontmatter用ステータス項目
  */
-export type StatusItem = DirectoryStatusItem | FileStatusItem | UnitStatusItem;
+export interface FrontmatterStatusItem extends BaseStatusItem {
+	type: StatusItemType.Frontmatter;
+	filePath: string; // 親ファイルパス（必須）
+	fileName: string;
+	fromHash?: string;
+	needFlag?: string;
+}
+
+/**
+ * mdaitで管理するステータス項目1つを表す。
+ * ディレクトリ・ファイル・ユニット・Frontmatterを一元管理する統合型（Discriminated Union）
+ */
+export type StatusItem = DirectoryStatusItem | FileStatusItem | UnitStatusItem | FrontmatterStatusItem;
 
 // ========== 型ガードヘルパー関数 ==========
 
@@ -113,4 +126,20 @@ export function isFileStatusItem(item: StatusItem): item is FileStatusItem {
  */
 export function isUnitStatusItem(item: StatusItem): item is UnitStatusItem {
 	return item.type === StatusItemType.Unit;
+}
+
+/**
+ * FrontmatterStatusItemかどうかを判定する型ガード
+ */
+export function isFrontmatterStatusItem(item: StatusItem): item is FrontmatterStatusItem {
+	return item.type === StatusItemType.Frontmatter;
+}
+
+/**
+ * FileStatusItemからUnit子要素のみを取得する
+ * @param fileItem ファイルステータス項目
+ * @returns ユニットステータス項目の配列
+ */
+export function getUnitsFromFile(fileItem: FileStatusItem): UnitStatusItem[] {
+	return fileItem.children ?? [];
 }

@@ -4,9 +4,16 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { FileExplorer } from "../../utils/file-explorer";
+import { getFrontmatterTranslationKeys, parseFrontmatterMarker } from "../markdown/frontmatter-translation";
 import type { MdaitUnit } from "../markdown/mdait-unit";
 import { MarkdownItParser } from "../markdown/parser";
-import { type FileStatusItem, Status, StatusItemType, type UnitStatusItem } from "./status-item";
+import {
+	type FileStatusItem,
+	type FrontmatterStatusItem,
+	Status,
+	StatusItemType,
+	type UnitStatusItem,
+} from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
 
 /**
@@ -101,8 +108,12 @@ export class StatusCollector {
 			let totalUnits = 0; // ターゲットユニット数（ソース除外）
 			const children: UnitStatusItem[] = [];
 
-			// markdown.units.lengthが0の場合は空のステータスを返す
-			if (markdown.units.length === 0) {
+			// frontmatterの状態を収集（独立プロパティとして保持）
+			const frontmatterKeys = getFrontmatterTranslationKeys(this.config);
+			const frontmatterItem = this.collectFrontmatterStatus(markdown.frontMatter, frontmatterKeys, filePath, fileName);
+
+			// markdown.units.lengthが0でfrontmatter項目もない場合は空のステータスを返す
+			if (markdown.units.length === 0 && !frontmatterItem) {
 				return {
 					type: StatusItemType.File,
 					label: fileName,
@@ -113,6 +124,7 @@ export class StatusCollector {
 					totalUnits: 0,
 					hasParseError: false,
 					children: [],
+					frontmatter: undefined,
 					contextValue: "mdaitFileTarget",
 					collapsibleState: vscode.TreeItemCollapsibleState.None,
 				};
@@ -144,8 +156,8 @@ export class StatusCollector {
 				}
 			}
 
-			// ファイル全体の状態を決定
-			const status = this.determineFileStatus(translatedUnits, totalUnits, children);
+			// ファイル全体の状態を決定（frontmatter状態も考慮）
+			const status = this.determineFileStatus(translatedUnits, totalUnits, children, frontmatterItem);
 
 			// ソースファイルは全ユニット数、ターゲットファイルはターゲットユニット数を表示
 			const displayTotalUnits = status === Status.Source ? children.length : totalUnits;
@@ -160,9 +172,12 @@ export class StatusCollector {
 				totalUnits: displayTotalUnits,
 				hasParseError: false,
 				children,
+				frontmatter: frontmatterItem ?? undefined,
 				contextValue: status === Status.Source ? "mdaitFileSource" : "mdaitFileTarget",
 				collapsibleState:
-					children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+					children.length > 0 || frontmatterItem
+						? vscode.TreeItemCollapsibleState.Collapsed
+						: vscode.TreeItemCollapsibleState.None,
 			};
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -178,6 +193,7 @@ export class StatusCollector {
 				hasParseError: true,
 				errorMessage: (error as Error).message,
 				children: [],
+				frontmatter: undefined,
 				contextValue: "mdaitFileTarget",
 				collapsibleState: vscode.TreeItemCollapsibleState.None,
 			};
@@ -213,33 +229,105 @@ export class StatusCollector {
 	}
 
 	/**
-	 * ファイルの全体的な翻訳状態を決定する
+	 * frontmatterの翻訳状態を収集する
 	 */
-	private determineFileStatus(translatedUnits: number, totalUnits: number, units: UnitStatusItem[]): Status {
-		// 1. すべてのユニットが `Source` なら、ファイルは `Source`（ソースファイル）
-		const allSource = units.length > 0 && units.every((u) => u.status === Status.Source);
-		if (allSource) {
+	private collectFrontmatterStatus(
+		frontMatter: import("../markdown/front-matter").FrontMatter | undefined,
+		keys: string[],
+		filePath: string,
+		fileName: string,
+	): FrontmatterStatusItem | null {
+		// 翻訳対象のキーがない場合はfrontmatter項目を作成しない
+		if (keys.length === 0 || !frontMatter) {
+			return null;
+		}
+
+		// mdait.frontマーカーを確認
+		const marker = parseFrontmatterMarker(frontMatter);
+		if (!marker) {
+			// マーカーがない場合はfrontmatter項目を作成しない
+			return null;
+		}
+
+		// from が存在しない場合はソース側
+		const isSource = !marker.from;
+
+		// ステータスを決定
+		let status: Status;
+		if (isSource) {
+			status = Status.Source;
+		} else if (marker.needsTranslation() || marker.need) {
+			status = Status.NeedsTranslation;
+		} else {
+			status = Status.Translated;
+		}
+
+		return {
+			type: StatusItemType.Frontmatter,
+			label: "Frontmatter",
+			status,
+			filePath,
+			fileName,
+			fromHash: marker.from ?? undefined,
+			needFlag: marker.need ?? undefined,
+			contextValue: isSource ? "mdaitFrontmatterSource" : "mdaitFrontmatterTarget",
+		};
+	}
+
+	/**
+	 * ファイルの全体的な翻訳状態を決定する
+	 * @param translatedUnits 翻訳済みユニット数
+	 * @param totalUnits 合計ターゲットユニット数
+	 * @param children 子要素（ユニット）
+	 * @param frontmatterItem frontmatter項目（存在する場合）
+	 */
+	private determineFileStatus(
+		translatedUnits: number,
+		totalUnits: number,
+		children: UnitStatusItem[],
+		frontmatterItem: FrontmatterStatusItem | null | undefined,
+	): Status {
+		// childrenは既にUnitStatusItem[]なのでそのまま使用
+		const units = children;
+
+		// 1. すべてのユニットが `Source` でfrontmatterもSourceまたはなしなら、ファイルは `Source`
+		const allUnitsSource = units.length > 0 && units.every((u) => u.status === Status.Source);
+		const frontmatterIsSourceOrNone = !frontmatterItem || frontmatterItem.status === Status.Source;
+		if (allUnitsSource && frontmatterIsSourceOrNone) {
 			return Status.Source;
 		}
 
-		// 2. ターゲットユニットがない場合（ユニットが空、または上記以外で0）
-		if (totalUnits === 0) {
+		// 2. ターゲットユニットがなく、frontmatter項目もない場合
+		if (totalUnits === 0 && !frontmatterItem) {
 			return Status.Unknown;
 		}
 
-		// 3. `NeedsTranslation` のユニットが1つでもあれば、ファイルは `NeedsTranslation`
+		// 3. frontmatterが `NeedsTranslation` なら、ファイルは `NeedsTranslation`
+		if (frontmatterItem && frontmatterItem.status === Status.NeedsTranslation) {
+			return Status.NeedsTranslation;
+		}
+
+		// 4. `NeedsTranslation` のユニットが1つでもあれば、ファイルは `NeedsTranslation`
 		const hasNeedsTranslation = units.some((u) => u.status === Status.NeedsTranslation);
 		if (hasNeedsTranslation) {
 			return Status.NeedsTranslation;
 		}
 
-		// 4. すべてのユニットが `Translated` または `Source` なら、ファイルは `Translated`
+		// 5. すべてのユニットが `Translated` または `Source` で、frontmatterも `Translated` または Sourceなら、ファイルは `Translated`
 		const isFullyTranslatedOrSource = units.every((u) => u.status === Status.Translated || u.status === Status.Source);
-		if (isFullyTranslatedOrSource) {
-			return Status.Translated;
+		const frontmatterIsTranslatedOrSource =
+			!frontmatterItem || frontmatterItem.status === Status.Translated || frontmatterItem.status === Status.Source;
+		if (isFullyTranslatedOrSource && frontmatterIsTranslatedOrSource) {
+			// frontmatter-onlyファイルでfrontmatterがTranslatedの場合も考慮
+			if (units.length === 0 && frontmatterItem?.status === Status.Translated) {
+				return Status.Translated;
+			}
+			if (units.length > 0) {
+				return Status.Translated;
+			}
 		}
 
-		// 5. それ以外のケース（`Unknown` などが混ざっている）は `NeedsTranslation` と見なす
+		// 6. それ以外のケースは `NeedsTranslation` と見なす
 		return Status.NeedsTranslation;
 	}
 

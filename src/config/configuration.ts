@@ -33,6 +33,9 @@ export interface TransConfig {
 	markdown: {
 		skipCodeBlocks: boolean;
 	};
+	frontmatter: {
+		keys: string[];
+	};
 	/** 翻訳時に参照する前後のユニット数（コンテキストウィンドウサイズ） */
 	contextSize: number;
 	/** 翻訳失敗時のリトライ上限 */
@@ -82,6 +85,9 @@ interface MdaitConfig {
 	trans?: {
 		markdown?: {
 			skipCodeBlocks?: boolean;
+		};
+		frontmatter?: {
+			keys?: string[];
 		};
 		contextSize?: number;
 		retryLimit?: number;
@@ -144,6 +150,9 @@ export class Configuration {
 	public trans: TransConfig = {
 		markdown: {
 			skipCodeBlocks: true,
+		},
+		frontmatter: {
+			keys: ["title", "description"],
 		},
 		contextSize: 1,
 		retryLimit: 1,
@@ -364,6 +373,13 @@ export class Configuration {
 			if (config.trans?.markdown) {
 				if (config.trans.markdown.skipCodeBlocks !== undefined) {
 					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
+				}
+			}
+			if (config.trans?.frontmatter?.keys !== undefined) {
+				if (Array.isArray(config.trans.frontmatter.keys)) {
+					this.trans.frontmatter.keys = config.trans.frontmatter.keys.filter(
+						(key): key is string => typeof key === "string" && key.trim().length > 0,
+					);
 				}
 			}
 			if (config.trans?.contextSize !== undefined) {

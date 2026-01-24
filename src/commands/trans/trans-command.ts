@@ -13,6 +13,14 @@ import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { applyUnifiedPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { FrontMatter } from "../../core/markdown/front-matter";
+import {
+	calculateFrontmatterHash,
+	getFrontmatterTranslationKeys,
+	getFrontmatterTranslationValues,
+	parseFrontmatterMarker,
+	setFrontmatterMarker,
+} from "../../core/markdown/frontmatter-translation";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
@@ -112,10 +120,13 @@ export async function transFile_CoreProc(
 	const document = await vscode.workspace.openTextDocument(uri);
 	const content = document.getText();
 	const markdown = markdownParser.parse(content, config);
+	const frontmatterKeys = getFrontmatterTranslationKeys(config);
+	const frontmatterMarker = parseFrontmatterMarker(markdown.frontMatter);
+	const needsFrontmatterTranslation = frontmatterKeys.length > 0 && (frontmatterMarker?.needsTranslation() ?? false);
 
 	// need:translate フラグを持つユニットを抽出
 	const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
-	if (unitsToTranslate.length === 0) {
+	if (!needsFrontmatterTranslation && unitsToTranslate.length === 0) {
 		return;
 	}
 
@@ -123,6 +134,25 @@ export async function transFile_CoreProc(
 	await statusManager.changeFileStatus(targetFilePath, { isTranslating: true });
 
 	try {
+		// frontmatterの翻訳（必要な場合のみ）
+		if (needsFrontmatterTranslation) {
+			const sourceFilePath = fileExplorer.getSourcePath(targetFilePath, transPair);
+			const updated = await translateFrontmatterIfNeeded(
+				markdown,
+				sourceFilePath,
+				frontmatterKeys,
+				translator,
+				sourceLang,
+				targetLang,
+				token,
+			);
+			if (updated) {
+				const encoder = new TextEncoder();
+				const updatedContent = markdownParser.stringify(markdown);
+				await vscode.workspace.fs.writeFile(uri, encoder.encode(updatedContent));
+			}
+		}
+
 		// 各ユニットを翻訳し、置換用に旧マーカー文字列を保持しつつ保存
 		for (let i = 0; i < unitsToTranslate.length; i++) {
 			// キャンセルチェック
@@ -471,6 +501,76 @@ async function translateUnit(
 		vscode.window.showErrorMessage(vscode.l10n.t("Unit translation error: {0}", (error as Error).message));
 		throw error;
 	}
+}
+
+async function translateFrontmatterIfNeeded(
+	markdown: Markdown,
+	sourceFilePath: string | null,
+	keys: string[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	cancellationToken?: vscode.CancellationToken,
+): Promise<boolean> {
+	const targetFrontMatter = markdown.frontMatter ?? FrontMatter.empty();
+	const marker = parseFrontmatterMarker(targetFrontMatter);
+
+	if (!marker || !marker.needsTranslation()) {
+		return false;
+	}
+
+	if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
+		console.warn(`Source file not found for frontmatter translation: ${sourceFilePath}`);
+		return false;
+	}
+
+	const decoder = new TextDecoder("utf-8");
+	const sourceDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFilePath));
+	const sourceContent = decoder.decode(sourceDoc);
+	const sourceMarkdown = markdownParser.parse(sourceContent, Configuration.getInstance());
+	const sourceFrontMatter = sourceMarkdown.frontMatter;
+
+	const sourceValues = getFrontmatterTranslationValues(sourceFrontMatter, keys);
+	if (Object.keys(sourceValues).length === 0) {
+		marker.removeNeedTag();
+		setFrontmatterMarker(targetFrontMatter, marker);
+		markdown.frontMatter = targetFrontMatter;
+		return true;
+	}
+
+	const isRevision = marker.needsRevision();
+	for (const key of keys) {
+		const sourceValue = sourceValues[key];
+		if (sourceValue === undefined) {
+			continue;
+		}
+		if (cancellationToken?.isCancellationRequested) {
+			return false;
+		}
+
+		const previousTranslation = isRevision ? targetFrontMatter.get(key) : undefined;
+		const context = new TranslationContext(
+			[],
+			[],
+			undefined,
+			typeof previousTranslation === "string" ? previousTranslation : undefined,
+		);
+		const result = await translator.translate(sourceValue, sourceLang, targetLang, context, cancellationToken);
+		targetFrontMatter.set(key, result.translatedText);
+	}
+
+	const sourceHash = calculateFrontmatterHash(sourceFrontMatter, keys, { allowEmpty: false }) ?? marker.from;
+	const targetHash = calculateFrontmatterHash(targetFrontMatter, keys, { allowEmpty: true }) ?? marker.hash;
+	if (sourceHash) {
+		marker.from = sourceHash;
+	}
+	if (targetHash) {
+		marker.hash = targetHash;
+	}
+	marker.removeNeedTag();
+	setFrontmatterMarker(targetFrontMatter, marker);
+	markdown.frontMatter = targetFrontMatter;
+	return true;
 }
 
 /**

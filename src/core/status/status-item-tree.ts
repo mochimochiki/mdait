@@ -7,8 +7,10 @@ import {
 	type StatusItem,
 	StatusItemType,
 	type UnitStatusItem,
+	getUnitsFromFile,
 	isDirectoryStatusItem,
 	isFileStatusItem,
+	isUnitStatusItem,
 } from "./status-item";
 
 /**
@@ -103,7 +105,8 @@ export class StatusItemTree {
 	 */
 	public getUnitsInFile(filePath: string): UnitStatusItem[] {
 		const fileItem = this.fileItemMap.get(filePath);
-		return fileItem?.children ?? [];
+		if (!fileItem) return [];
+		return getUnitsFromFile(fileItem);
 	}
 
 	/**
@@ -126,9 +129,8 @@ export class StatusItemTree {
 	 */
 	public getUnitsUntranslatedInFile(filePath: string): UnitStatusItem[] {
 		const fileItem = this.fileItemMap.get(filePath);
-		if (!fileItem?.children) return [];
-
-		return fileItem.children.filter((unit) => unit.needFlag);
+		if (!fileItem) return [];
+		return getUnitsFromFile(fileItem).filter((unit) => unit.needFlag);
 	}
 
 	/**
@@ -276,6 +278,10 @@ export class StatusItemTree {
 		fileItem.isTranslating = false; // 翻訳中フラグをリセット
 		if (fileItem.children) {
 			fileItem.isTranslating = fileItem.children.some((unit) => unit.isTranslating === true);
+		}
+		// frontmatterの翻訳中フラグも考慮
+		if (fileItem.frontmatter?.isTranslating) {
+			fileItem.isTranslating = true;
 		}
 
 		const existingItem = this.fileItemMap.get(fileItem.filePath);

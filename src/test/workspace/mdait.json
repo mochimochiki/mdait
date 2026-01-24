@@ -10,10 +10,17 @@
   "ai": {
     "provider": "vscode-lm",
     "model": "gpt-5 mini",
-    "debug": {"logPromptAndResponse": true},
+    "debug": { "logPromptAndResponse": true },
     "ollama": {
       "endpoint": "http://localhost:11434",
       "model": "gemma3:4b"
+    }
+  },
+  "trans": {
+    "contextSize": 1,
+    "retryLimit": 1,
+    "frontmatter": {
+      "keys": ["title", "description"]
     }
   },
   "sync": {
