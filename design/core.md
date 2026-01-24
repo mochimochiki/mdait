@@ -39,8 +39,10 @@
 ### FrontMatter翻訳
 - frontmatter内の指定キー値を翻訳対象として扱う機能群。
 - **mdait.frontマーカー**: frontmatter内に`mdait.front: "hash from:xxx need:translate"`形式でメタデータを保持。
+- **階層構造**: `mdait`名前空間の下に配置（例: `mdait: { front: "...", sync: { level: 3 } }`）
 - **ハッシュ計算**: 設定されたkeys順に値を連結してハッシュ化（キー名・順序は差分対象外）。
 - **翻訳状態管理**: 本文ユニットと分離した専用フローでsync/transを実行。
+- **ドット記法アクセス**: `FrontMatter`クラスで`"mdait.sync.level"`のようなドット記法による階層アクセスをサポート。
 - 実装: `src/core/markdown/frontmatter-translation.ts`
 
 ## ステータス更新シーケンス

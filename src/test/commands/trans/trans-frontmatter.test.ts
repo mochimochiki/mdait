@@ -48,7 +48,8 @@ Translated content
 		const targetMd = `---
 title: Translated Document
 description: This is translated
-mdait.front: abc123 from:def456
+mdait:
+  front: abc123 from:def456
 ---
 
 ## Heading 1
@@ -69,7 +70,8 @@ Translated content
 		const targetMd = `---
 title: Test Document
 description: This is a test
-mdait.front: abc123 from:def456 need:revise@oldhash
+mdait:
+  front: abc123 from:def456 need:revise@oldhash
 ---
 
 ## Heading 1

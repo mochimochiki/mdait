@@ -92,7 +92,7 @@ suite("Frontmatter同期ロジック（コアロジック）", () => {
 
 		// mdait.frontの値が引用符で囲われているか確認
 		const lines = raw.split("\n");
-		const mdaitLine = lines.find((line) => line.trim().startsWith("mdait.front:"));
+		const mdaitLine = lines.find((line) => line.trim().startsWith("front:"));
 		assert.ok(mdaitLine, "mdait.front行が存在すること");
 
 		// 引用符で囲われているかチェック（YAMLの仕様上、スペースを含む値は引用符が必要）

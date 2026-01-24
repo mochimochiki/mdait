@@ -163,7 +163,7 @@ suite("syncコマンドE2E", () => {
 		});
 
 		test("FrontMatter上書き: sourceのmdait.sync.level=3でH3までユニット化される", async () => {
-			const content = `---\nmdait.sync.level: 3\n---\n# H1\n\n本文1\n\n## H2\n\n本文2\n\n### H3\n\n本文3\n`;
+			const content = `---\nmdait:\n  sync:\n    level: 3\n---\n# H1\n\n本文1\n\n## H2\n\n本文2\n\n### H3\n\n本文3\n`;
 			const jaPath = join(tmpJaDir, "level_frontmatter_source_only.md");
 			const enPath = join(tmpEnDir, "level_frontmatter_source_only.md");
 			writeFileSync(jaPath, content, "utf8");

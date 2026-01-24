@@ -402,7 +402,15 @@ export async function codeLensClearFrontmatterNeedCommand(range: vscode.Range): 
 		}
 
 		marker.removeNeedTag();
-		markdown.frontMatter.set(FRONTMATTER_MARKER_KEY, marker.toString().replace(/^<!--\s*mdait\s*|\s*-->$/g, ""));
+		// コメント形式ではなく、マーカーの内容のみを構築して格納
+		let markerContent = marker.hash;
+		if (marker.from) {
+			markerContent += ` from:${marker.from}`;
+		}
+		if (marker.need) {
+			markerContent += ` need:${marker.need}`;
+		}
+		markdown.frontMatter.set(FRONTMATTER_MARKER_KEY, markerContent);
 
 		// ファイルを保存
 		const updatedContent = markdownParser.stringify(markdown);

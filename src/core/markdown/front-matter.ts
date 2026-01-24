@@ -15,8 +15,6 @@ export type FrontMatterData = {
 export class FrontMatter {
 	private _data: FrontMatterData;
 	private _raw: string;
-	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
-	private _pendingChanges: Map<string, { type: "set" | "delete"; value?: any }>;
 
 	/**
 	 * フロントマターの開始行番号（0ベース、通常0）
@@ -38,7 +36,6 @@ export class FrontMatter {
 	private constructor(data: FrontMatterData, raw: string, startLine = 0, endLine = 0) {
 		this._data = data;
 		this._raw = raw;
-		this._pendingChanges = new Map();
 		this.startLine = startLine;
 		this.endLine = endLine;
 	}
@@ -132,25 +129,67 @@ export class FrontMatter {
 	}
 
 	/**
-	 * 指定したキーの値を取得
-	 * @param key キー名
-	 * @returns 値（存在しない場合はundefined）
+	 * Get the value of the specified key
+	 * Supports dot path like "mdait.sync.level"
+	 * @param key Key name or dot path
+	 * @returns Value (undefined if not exists)
 	 */
 	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
 	get<T = any>(key: string): T | undefined {
-		return this._data[key];
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			return undefined;
+		}
+
+		// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+		let current: any = this._data;
+		for (const k of keys) {
+			if (current === null || current === undefined || typeof current !== "object") {
+				return undefined;
+			}
+			current = current[k];
+		}
+
+		return current as T;
 	}
 
 	/**
-	 * 指定したキーの値を設定
-	 * 内部でrawも自動更新される
-	 * @param key キー名
-	 * @param value 設定する値
+	 * Set the value of the specified key
+	 * Supports dot path like "mdait.sync.level"
+	 * Creates nested objects as needed
+	 * @param key Key name or dot path
+	 * @param value Value to set
+	 * @throws Error if key path is invalid or conflicts with existing non-object value
 	 */
 	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
 	set(key: string, value: any): void {
-		this._data[key] = value;
-		this._pendingChanges.set(key, { type: "set", value });
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			throw new Error("Invalid key: empty key path");
+		}
+
+		if (keys.length === 1) {
+			this._data[key] = value;
+		} else {
+			// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+			let current: any = this._data;
+			for (let i = 0; i < keys.length - 1; i++) {
+				const k = keys[i];
+				const existing = current[k];
+
+				// Check if existing value conflicts with nested path
+				if (k in current) {
+					if (typeof existing !== "object" || existing === null || Array.isArray(existing)) {
+						throw new Error(`Cannot set nested property: "${k}" already exists as non-object value`);
+					}
+				} else {
+					current[k] = {};
+				}
+				current = current[k];
+			}
+			current[keys[keys.length - 1]] = value;
+		}
+
 		this._updateRaw();
 	}
 
@@ -161,19 +200,75 @@ export class FrontMatter {
 	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
 	setMultiple(updates: Record<string, any>): void {
 		for (const [key, value] of Object.entries(updates)) {
-			this._data[key] = value;
-			this._pendingChanges.set(key, { type: "set", value });
+			const keys = key.split(".").filter((k) => k.length > 0);
+			if (keys.length === 0) {
+				continue;
+			}
+
+			if (keys.length === 1) {
+				this._data[key] = value;
+			} else {
+				// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+				let current: any = this._data;
+				for (let i = 0; i < keys.length - 1; i++) {
+					const k = keys[i];
+					if (!(k in current) || typeof current[k] !== "object" || current[k] === null) {
+						current[k] = {};
+					}
+					current = current[k];
+				}
+				current[keys[keys.length - 1]] = value;
+			}
 		}
 		this._updateRaw();
 	}
 
 	/**
-	 * 指定したキーを削除
-	 * @param key キー名
+	 * Delete the specified key
+	 * Supports dot path like "mdait.sync.level"
+	 * Automatically cleans up empty parent objects
+	 * @param key Key name or dot path
 	 */
 	delete(key: string): void {
-		delete this._data[key];
-		this._pendingChanges.set(key, { type: "delete" });
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			return;
+		}
+
+		if (keys.length === 1) {
+			delete this._data[key];
+		} else {
+			// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+			const path: any[] = [this._data];
+			// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+			let current: any = this._data;
+
+			// Navigate to the target, remembering each level
+			for (let i = 0; i < keys.length - 1; i++) {
+				if (!(keys[i] in current) || typeof current[keys[i]] !== "object") {
+					return; // Path doesn't exist
+				}
+				current = current[keys[i]];
+				path.push(current);
+			}
+
+			// Delete the final key
+			delete current[keys[keys.length - 1]];
+
+			// Clean up empty parent objects recursively
+			for (let i = keys.length - 2; i >= 0; i--) {
+				const parent = path[i];
+				const childKey = keys[i];
+				const child = parent[childKey];
+
+				if (typeof child === "object" && child !== null && !Array.isArray(child) && Object.keys(child).length === 0) {
+					delete parent[childKey];
+				} else {
+					break; // Stop if we encounter non-empty object
+				}
+			}
+		}
+
 		this._updateRaw();
 	}
 
@@ -186,12 +281,30 @@ export class FrontMatter {
 	}
 
 	/**
-	 * 指定したキーが存在するか確認
-	 * @param key キー名
-	 * @returns 存在する場合はtrue
+	 * Check if the specified key exists
+	 * Supports dot path like "mdait.sync.level"
+	 * @param key Key name or dot path
+	 * @returns true if exists
 	 */
 	has(key: string): boolean {
-		return key in this._data;
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			return false;
+		}
+
+		// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+		let current: any = this._data;
+		for (const k of keys) {
+			if (current === null || current === undefined || typeof current !== "object") {
+				return false;
+			}
+			if (!(k in current)) {
+				return false;
+			}
+			current = current[k];
+		}
+
+		return true;
 	}
 
 	/**
@@ -203,231 +316,16 @@ export class FrontMatter {
 	}
 
 	/**
-	 * 内部でdataの変更をrawに反映
-	 * 変更されたキーの値部分のみを置換し、元の形式を最大限保持する
+	 * Update raw string from data changes
+	 * Always regenerates the entire frontmatter using gray-matter
 	 */
 	private _updateRaw(): void {
 		if (Object.keys(this._data).length === 0) {
 			this._raw = "";
-			this._pendingChanges.clear();
 			return;
 		}
 
-		// 初回または元のrawがない場合は、新規生成
-		if (!this._raw || this._raw.trim().length === 0) {
-			this._raw = matter.stringify("", this._data).trim();
-			this._pendingChanges.clear();
-			return;
-		}
-
-		// 変更がない場合は何もしない
-		if (this._pendingChanges.size === 0) {
-			return;
-		}
-
-		// gray-matterで現在のrawをパースして、元の構造を理解
-		const parsed = matter(this._raw);
-		const originalData = parsed.data as FrontMatterData;
-
-		let updatedRaw = this._raw;
-
-		// 各変更について処理
-		for (const [key, change] of this._pendingChanges) {
-			if (change.type === "delete") {
-				// キーの削除：該当行を削除
-				updatedRaw = this._deleteKeyFromRaw(updatedRaw, key, originalData);
-			} else if (change.type === "set") {
-				// キーの設定：該当行の値を置換、または新規追加
-				if (key in originalData) {
-					// 既存キーの値を更新
-					updatedRaw = this._replaceValueInRaw(updatedRaw, key, change.value, originalData);
-				} else {
-					// 新規キーを追加
-					updatedRaw = this._addKeyToRaw(updatedRaw, key, change.value);
-				}
-			}
-		}
-
-		this._raw = updatedRaw;
-		this._pendingChanges.clear();
-	}
-
-	/**
-	 * raw文字列から指定キーの行を削除
-	 */
-	private _deleteKeyFromRaw(raw: string, key: string, originalData: FrontMatterData): string {
-		// キーがもともと存在しない場合は何もしない
-		if (!(key in originalData)) {
-			return raw;
-		}
-
-		// キーに対応する行を検索して削除
-		// gray-matterの出力形式に基づいて検索
-		const keyPattern = `${key}:`;
-		const lines = raw.split("\n");
-		const updatedLines: string[] = [];
-		let skipUntilIndentLevel: number | null = null;
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-
-			// スキップ中の場合、インデントをチェック
-			if (skipUntilIndentLevel !== null) {
-				const indentMatch = line.match(/^(\s*)/);
-				const indent = indentMatch ? indentMatch[1].length : 0;
-				const trimmed = line.trim();
-
-				// 終了デリミタまたはインデントが同じかそれ以下なら、スキップ終了
-				if (trimmed === "---" || (trimmed.length > 0 && indent <= skipUntilIndentLevel)) {
-					skipUntilIndentLevel = null;
-					updatedLines.push(line);
-				}
-				// スキップ中なので行を追加しない
-				continue;
-			}
-
-			// キーに一致する行を検索
-			const trimmed = line.trim();
-			if (trimmed.startsWith(keyPattern)) {
-				// この行のインデントレベルを記憶
-				const indentMatch = line.match(/^(\s*)/);
-				const indent = indentMatch ? indentMatch[1].length : 0;
-
-				// オブジェクトや配列の場合、複数行をスキップ
-				const valueMatch = line.match(/:\s*(.*)$/);
-				if (valueMatch && valueMatch[1].trim().length === 0) {
-					// 値が空 = 次の行から複数行の値が続く
-					skipUntilIndentLevel = indent;
-				}
-				// この行を追加しない（削除）
-				continue;
-			}
-
-			updatedLines.push(line);
-		}
-
-		return updatedLines.join("\n");
-	}
-
-	/**
-	 * raw文字列内の指定キーの値を置換
-	 */
-	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
-	private _replaceValueInRaw(raw: string, key: string, newValue: any, originalData: FrontMatterData): string {
-		const keyPattern = `${key}:`;
-		const lines = raw.split("\n");
-		const updatedLines: string[] = [];
-		let replaced = false;
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			const trimmed = line.trim();
-
-			// キーに一致する行を検索
-			if (!replaced && trimmed.startsWith(keyPattern)) {
-				// この行のインデント、スペーシング、コメントを保持
-				const match = line.match(/^(\s*)([^:]+):(\s*)(.*)$/);
-				if (match) {
-					const indent = match[1];
-					const spacingAfterColon = match[3];
-					const restOfLine = match[4];
-
-					// 元の値と引用符スタイルを検出
-					let quoteStyle: "single" | "double" | "none" = "none";
-					const trimmedValue = restOfLine.trim();
-					if (trimmedValue.match(/^'/)) {
-						quoteStyle = "single";
-					} else if (trimmedValue.match(/^"/)) {
-						quoteStyle = "double";
-					}
-
-					// 行末コメントを保持
-					const commentMatch = restOfLine.match(/^([^#]*?)(#.*)$/);
-					let comment = "";
-					if (commentMatch?.[2]) {
-						comment = ` ${commentMatch[2]}`;
-					}
-
-					// オブジェクトや配列の場合は複数行を扱う必要があるため、
-					// 簡単な値（文字列、数値、真偽値）のみ置換
-					if (typeof newValue === "object" && newValue !== null) {
-						// 複雑な値は置換しない（元の行を保持）
-						updatedLines.push(line);
-					} else {
-						// 新しい値をフォーマット
-						const formattedValue = this._toYamlValue(newValue, quoteStyle);
-						updatedLines.push(`${indent}${key}:${spacingAfterColon}${formattedValue}${comment}`);
-					}
-
-					replaced = true;
-					continue;
-				}
-			}
-
-			updatedLines.push(line);
-		}
-
-		return updatedLines.join("\n");
-	}
-
-	/**
-	 * raw文字列に新しいキーを追加
-	 */
-	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
-	private _addKeyToRaw(raw: string, key: string, value: any): string {
-		const lines = raw.split("\n");
-		const updatedLines: string[] = [];
-		let added = false;
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			const trimmed = line.trim();
-
-			// 終了デリミタの前に新しいキーを追加
-			if (!added && trimmed === "---" && i > 0) {
-				const yamlValue = this._toYamlValue(value);
-				updatedLines.push(`${key}: ${yamlValue}`);
-				added = true;
-			}
-
-			updatedLines.push(line);
-		}
-
-		return updatedLines.join("\n");
-	}
-
-	/**
-	 * 値を簡易YAML形式に変換
-	 * @param value 変換する値
-	 * @param quoteStyle 引用符のスタイル（元の形式を保持する場合に指定）
-	 */
-	// biome-ignore lint/suspicious/noExplicitAny: フロントマターの値は任意の型を持つ
-	private _toYamlValue(value: any, quoteStyle: "single" | "double" | "none" = "none"): string {
-		if (value === null || value === undefined) {
-			return "";
-		}
-		if (typeof value === "string") {
-			// 引用符スタイルを適用
-			if (quoteStyle === "single") {
-				return `'${value.replace(/'/g, "''")}'`;
-			}
-			if (quoteStyle === "double") {
-				return `"${value.replace(/"/g, '\\"')}"`;
-			}
-			// 特殊文字を含む場合は引用符で囲む
-			if (value.includes(":") || value.includes("#") || value.includes("\n")) {
-				return `"${value.replace(/"/g, '\\"')}"`;
-			}
-			return value;
-		}
-		if (typeof value === "number" || typeof value === "boolean") {
-			return String(value);
-		}
-		if (Array.isArray(value) || typeof value === "object") {
-			// 複雑な構造はJSON文字列として扱う（完全なYAML対応は複雑すぎる）
-			return JSON.stringify(value);
-		}
-		return String(value);
+		this._raw = matter.stringify("", this._data).trim();
 	}
 
 	/**

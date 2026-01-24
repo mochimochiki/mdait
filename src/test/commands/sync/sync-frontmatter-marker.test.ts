@@ -113,7 +113,8 @@ suite("Sync処理（frontmatterマーカー付与）", () => {
 		const targetMd = `---
 title: Test Document
 description: This is a test
-mdait.front: abc123 from:def456 need:translate
+mdait:
+  front: abc123 from:def456 need:translate
 ---
 
 ## Heading 1

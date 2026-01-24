@@ -95,20 +95,44 @@ sequenceDiagram
 
 Markdown文書の先頭にあるfrontmatterセクションで、YAML形式でメタデータを記述する。
 
+### mdait名前空間
+
+mdaitの内部設定は`mdait`名前空間の下に階層的に配置する。
+
+```yaml
+mdait:
+  sync:
+    level: 2
+  front: abc123de from:def456gh need:translate
+```
+
 ### mdait.sync.level
 
 **用途**: ユニット境界として検知する見出しレベルの指定
-**形式**: `mdait.sync.level: 2`
+**形式**: ネスト構造で指定
 **概要**:
 - mdait.json の sync.level 設定をドキュメント単位で上書き
 - パース時に[MarkdownItParser](../src/core/markdown/parser.ts)が frontmatter から読み込み、グローバル設定より優先
 - 特定ドキュメントのみ異なる粒度でユニット分割したい場合に活用
 
+**例**:
+```yaml
+mdait:
+  sync:
+    level: 3
+```
+
 ### mdait.front
 
 **用途**: Frontmatterの翻訳状態管理（本体の<!-- mdait ... -->マーカーに相当）
-**形式**: `mdait.front: abc123de from:def456gh need:translate`
+**形式**: ネスト構造で`mdait.front`キーに値を指定
 **概要**:
 - Frontmatter全体のハッシュ値、翻訳元ハッシュ、必要アクションを追跡
 - 本体のMarkdown内のmarkerとは異なり、frontmatter独自のメタデータとして使用
 - syncコマンド実行時にハッシュが更新され、transコマンドで翻訳対象判定に利用
+
+**例**:
+```yaml
+mdait:
+  front: abc123de from:def456gh need:translate
+```

@@ -334,7 +334,7 @@ export class MarkdownItParser implements IMarkdownParser {
 	stringify(doc: Markdown): string {
 		let fm = "";
 		if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
-			fm = `${doc.frontMatter.raw}`;
+			fm = `${doc.frontMatter.raw}\n`;
 		}
 		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
 		const body = doc.units.map((section) => section.toString().replace(/\n+$/g, "")).join("\n\n");

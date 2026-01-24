@@ -48,22 +48,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		const { frontMatter } = FrontMatter.parse(content);
 
 		// frontmatter内のmdait.frontマーカーを検出（FrontMatterクラスの範囲情報を利用）
-		if (frontMatter && !frontMatter.isEmpty()) {
+		if (frontMatter && !frontMatter.isEmpty() && frontMatter.has(FRONTMATTER_MARKER_KEY)) {
 			const marker = parseFrontmatterMarker(frontMatter);
 			if (marker) {
-				// frontmatter範囲内でmdait.frontマーカーの行を探す
-				for (let lineIndex = frontMatter.startLine; lineIndex <= frontMatter.endLine; lineIndex++) {
-					if (token.isCancellationRequested) {
-						return [];
-					}
-
-					const line = document.lineAt(lineIndex);
-					if (line.text.includes(`${FRONTMATTER_MARKER_KEY}:`)) {
-						const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, lineIndex, document);
-						codeLenses.push(...frontmatterCodeLenses);
-						break; // mdait.frontは1ファイルに1つのみ
-					}
-				}
+				// frontmatterの開始行（最初の---の行）にCodeLensを表示
+				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, frontMatter.startLine, document);
+				codeLenses.push(...frontmatterCodeLenses);
 			}
 		}
 

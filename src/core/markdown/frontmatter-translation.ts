@@ -7,7 +7,8 @@ export const FRONTMATTER_MARKER_KEY = "mdait.front";
 
 export function getFrontmatterTranslationKeys(config: Configuration): string[] {
 	const keys = config.trans.frontmatter?.keys ?? [];
-	return keys.filter((key) => key && key !== FRONTMATTER_MARKER_KEY);
+	// "mdait"および"mdait.front"を除外
+	return keys.filter((key) => key && key !== FRONTMATTER_MARKER_KEY && key !== "mdait");
 }
 
 export function getFrontmatterTranslationValues(
