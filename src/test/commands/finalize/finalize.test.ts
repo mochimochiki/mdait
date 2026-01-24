@@ -52,7 +52,7 @@ Another content here.`;
 		for (const unit of markdown.units) {
 			resultLines.push(unit.content);
 		}
-		const result = resultLines.join("\n\n").trimEnd() + "\n";
+		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
 
 		// 結果を確認
 		assert.ok(!result.includes("<!-- mdait"), "mdaitマーカーが含まれていないこと");
@@ -87,7 +87,7 @@ Content here.`;
 		for (const unit of markdown.units) {
 			resultLines.push(unit.content);
 		}
-		const result = resultLines.join("\n\n").trimEnd() + "\n";
+		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
 
 		// 結果を確認
 		assert.ok(result.includes("---"), "FrontMatterの区切りが保持されていること");
@@ -112,7 +112,7 @@ Simple content without markers.`;
 		for (const unit of markdown.units) {
 			resultLines.push(unit.content);
 		}
-		const result = resultLines.join("\n\n").trimEnd() + "\n";
+		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
 
 		// 結果を確認
 		assert.ok(result.includes("## Simple Heading"), "見出しが保持されていること");

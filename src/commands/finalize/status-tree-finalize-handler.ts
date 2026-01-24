@@ -1,4 +1,3 @@
-import * as path from "node:path";
 import * as vscode from "vscode";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusItemType } from "../../core/status/status-item";

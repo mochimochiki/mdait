@@ -47,7 +47,7 @@ Content 2.`;
 		for (const unit of markdown.units) {
 			resultLines.push(unit.content);
 		}
-		const finalized = resultLines.join("\n\n").trimEnd() + "\n";
+		const finalized = `${resultLines.join("\n\n").trimEnd()}\n`;
 
 		// 検証: マーカーが削除されている
 		assert.ok(!finalized.includes("<!-- mdait"), "全てのmdaitマーカーが削除されている");
@@ -76,7 +76,7 @@ This is content.`;
 		for (const unit of markdown.units) {
 			resultLines.push(unit.content);
 		}
-		const finalized = resultLines.join("\n\n").trimEnd() + "\n";
+		const finalized = `${resultLines.join("\n\n").trimEnd()}\n`;
 
 		// finalize後のファイルを再度パース（マーカーなしとして）
 		const reparsed = markdownParser.parse(finalized, config);

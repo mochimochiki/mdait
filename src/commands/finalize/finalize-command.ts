@@ -38,7 +38,7 @@ async function removeMarkersFromFile(filePath: string): Promise<number> {
 	}
 
 	// ファイルに書き込み
-	const result = resultLines.join("\n\n").trimEnd() + "\n";
+	const result = `${resultLines.join("\n\n").trimEnd()}\n`;
 	fs.writeFileSync(filePath, result, "utf-8");
 
 	return markerCount;
