@@ -34,11 +34,21 @@ async function removeMarkersFromFile(filePath: string): Promise<number> {
 			markerCount++;
 		}
 		// コンテンツのみを追加（マーカーは含めない）
-		resultLines.push(unit.content);
+		// コンテンツの末尾の改行を除去してから追加（パーサーのstringifyと同様）
+		resultLines.push(unit.content.replace(/\n+$/g, ""));
 	}
 
 	// ファイルに書き込み
-	const result = `${resultLines.join("\n\n").trimEnd()}\n`;
+	// FrontMatterがある場合とない場合で処理を分ける
+	let result: string;
+	if (markdown.frontMatter && !markdown.frontMatter.isEmpty()) {
+		// FrontMatterは既に末尾に改行を含んでいるので、そのまま結合
+		const frontMatter = resultLines.shift() || "";
+		result = `${frontMatter}${resultLines.join("\n\n")}\n`;
+	} else {
+		// FrontMatterがない場合は、ユニット間を2つの改行で結合
+		result = `${resultLines.join("\n\n")}\n`;
+	}
 	fs.writeFileSync(filePath, result, "utf-8");
 
 	return markerCount;

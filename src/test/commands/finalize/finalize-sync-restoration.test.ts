@@ -45,9 +45,17 @@ Content 2.`;
 			resultLines.push(markdown.frontMatter.raw);
 		}
 		for (const unit of markdown.units) {
-			resultLines.push(unit.content);
+			// コンテンツの末尾の改行を除去してから追加
+			resultLines.push(unit.content.replace(/\n+$/g, ""));
 		}
-		const finalized = `${resultLines.join("\n\n").trimEnd()}\n`;
+		// FrontMatterがある場合とない場合で処理を分ける
+		let finalized: string;
+		if (markdown.frontMatter && !markdown.frontMatter.isEmpty()) {
+			const frontMatter = resultLines.shift() || "";
+			finalized = `${frontMatter}${resultLines.join("\n\n")}\n`;
+		} else {
+			finalized = `${resultLines.join("\n\n")}\n`;
+		}
 
 		// 検証: マーカーが削除されている
 		assert.ok(!finalized.includes("<!-- mdait"), "全てのmdaitマーカーが削除されている");
@@ -74,9 +82,10 @@ This is content.`;
 		const markdown = markdownParser.parse(sourceContent, config);
 		const resultLines: string[] = [];
 		for (const unit of markdown.units) {
-			resultLines.push(unit.content);
+			// コンテンツの末尾の改行を除去してから追加
+			resultLines.push(unit.content.replace(/\n+$/g, ""));
 		}
-		const finalized = `${resultLines.join("\n\n").trimEnd()}\n`;
+		const finalized = `${resultLines.join("\n\n")}\n`;
 
 		// finalize後のファイルを再度パース（マーカーなしとして）
 		const reparsed = markdownParser.parse(finalized, config);

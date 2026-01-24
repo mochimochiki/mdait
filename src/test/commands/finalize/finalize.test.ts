@@ -50,9 +50,10 @@ Another content here.`;
 		// マーカーを除去した文字列を生成
 		const resultLines: string[] = [];
 		for (const unit of markdown.units) {
-			resultLines.push(unit.content);
+			// コンテンツの末尾の改行を除去してから追加
+			resultLines.push(unit.content.replace(/\n+$/g, ""));
 		}
-		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
+		const result = `${resultLines.join("\n\n")}\n`;
 
 		// 結果を確認
 		assert.ok(!result.includes("<!-- mdait"), "mdaitマーカーが含まれていないこと");
@@ -85,9 +86,17 @@ Content here.`;
 			resultLines.push(markdown.frontMatter.raw);
 		}
 		for (const unit of markdown.units) {
-			resultLines.push(unit.content);
+			// コンテンツの末尾の改行を除去してから追加
+			resultLines.push(unit.content.replace(/\n+$/g, ""));
 		}
-		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
+		// FrontMatterがある場合とない場合で処理を分ける
+		let result: string;
+		if (markdown.frontMatter && !markdown.frontMatter.isEmpty()) {
+			const frontMatter = resultLines.shift() || "";
+			result = `${frontMatter}${resultLines.join("\n\n")}\n`;
+		} else {
+			result = `${resultLines.join("\n\n")}\n`;
+		}
 
 		// 結果を確認
 		assert.ok(result.includes("---"), "FrontMatterの区切りが保持されていること");
@@ -110,9 +119,10 @@ Simple content without markers.`;
 		// マーカーを除去した文字列を生成（実際にはマーカーがないので変化なし）
 		const resultLines: string[] = [];
 		for (const unit of markdown.units) {
-			resultLines.push(unit.content);
+			// コンテンツの末尾の改行を除去してから追加
+			resultLines.push(unit.content.replace(/\n+$/g, ""));
 		}
-		const result = `${resultLines.join("\n\n").trimEnd()}\n`;
+		const result = `${resultLines.join("\n\n")}\n`;
 
 		// 結果を確認
 		assert.ok(result.includes("## Simple Heading"), "見出しが保持されていること");
