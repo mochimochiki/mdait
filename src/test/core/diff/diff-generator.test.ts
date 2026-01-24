@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { createUnifiedDiff, hasDiff, stripDiffHeader } from "../../../core/diff/diff-generator";
+import { applyUnifiedPatch, createUnifiedDiff, hasDiff, stripDiffHeader } from "../../../core/diff/diff-generator";
 
 suite("DiffGenerator", () => {
 	test("createUnifiedDiff: 基本的な差分を生成する", () => {
@@ -63,5 +63,34 @@ Line 3`;
 		assert.equal(hasDiff("Hello", "World"), true);
 		assert.equal(hasDiff("", ""), false);
 		assert.equal(hasDiff("", "Hello"), true);
+	});
+
+	test("applyUnifiedPatch: ヘッダ付きパッチを適用できる", () => {
+		const base = "Line 1\nLine 2\n";
+		const patch = `--- content
++++ content
+@@ -1,2 +1,2 @@
+-Line 1
++Line One
+ Line 2`;
+
+		const applied = applyUnifiedPatch(base, patch);
+		assert.equal(applied, "Line One\nLine 2\n");
+	});
+
+	test("applyUnifiedPatch: ヘッダなしパッチを補完して適用できる", () => {
+		const base = "Alpha\nBeta\n";
+		const patch = `@@ -1,2 +1,2 @@
+-Alpha
++Alpha Prime
+ Beta`;
+
+		const applied = applyUnifiedPatch(base, patch, "sample");
+		assert.equal(applied, "Alpha Prime\nBeta\n");
+	});
+
+	test("applyUnifiedPatch: 空パッチはnullを返す", () => {
+		const applied = applyUnifiedPatch("Hello", "\n");
+		assert.equal(applied, null);
 	});
 });

@@ -98,11 +98,11 @@ export class StatusCollector {
 
 			// ユニットの翻訳状況を分析
 			let translatedUnits = 0;
-			const totalUnits = markdown.units.length;
+			let totalUnits = 0; // ターゲットユニット数（ソース除外）
 			const children: UnitStatusItem[] = [];
 
-			// totalUnitsが0の場合は空のステータスを返す
-			if (totalUnits === 0) {
+			// markdown.units.lengthが0の場合は空のステータスを返す
+			if (markdown.units.length === 0) {
 				return {
 					type: StatusItemType.File,
 					label: fileName,
@@ -135,13 +135,20 @@ export class StatusCollector {
 					filePath,
 					fileName,
 				});
-				if (unitStatus === Status.Translated) {
-					translatedUnits++;
+				// ターゲットユニット（ソース以外）のみカウント
+				if (unitStatus !== Status.Source) {
+					totalUnits++;
+					if (unitStatus === Status.Translated) {
+						translatedUnits++;
+					}
 				}
 			}
 
 			// ファイル全体の状態を決定
 			const status = this.determineFileStatus(translatedUnits, totalUnits, children);
+
+			// ソースファイルは全ユニット数、ターゲットファイルはターゲットユニット数を表示
+			const displayTotalUnits = status === Status.Source ? children.length : totalUnits;
 
 			return {
 				type: StatusItemType.File,
@@ -150,7 +157,7 @@ export class StatusCollector {
 				filePath,
 				fileName,
 				translatedUnits,
-				totalUnits,
+				totalUnits: displayTotalUnits,
 				hasParseError: false,
 				children,
 				contextValue: status === Status.Source ? "mdaitFileSource" : "mdaitFileTarget",
@@ -209,29 +216,30 @@ export class StatusCollector {
 	 * ファイルの全体的な翻訳状態を決定する
 	 */
 	private determineFileStatus(translatedUnits: number, totalUnits: number, units: UnitStatusItem[]): Status {
+		// 1. すべてのユニットが `Source` なら、ファイルは `Source`（ソースファイル）
+		const allSource = units.length > 0 && units.every((u) => u.status === Status.Source);
+		if (allSource) {
+			return Status.Source;
+		}
+
+		// 2. ターゲットユニットがない場合（ユニットが空、または上記以外で0）
 		if (totalUnits === 0) {
 			return Status.Unknown;
 		}
 
-		// 1. `NeedsTranslation` のユニットが1つでもあれば、ファイルは `NeedsTranslation`
+		// 3. `NeedsTranslation` のユニットが1つでもあれば、ファイルは `NeedsTranslation`
 		const hasNeedsTranslation = units.some((u) => u.status === Status.NeedsTranslation);
 		if (hasNeedsTranslation) {
 			return Status.NeedsTranslation;
 		}
 
-		// 2. すべてのユニットが `Source` なら、ファイルは `Source`
-		const allSource = units.every((u) => u.status === Status.Source);
-		if (allSource) {
-			return Status.Source;
-		}
-
-		// 3. すべてのユニットが `Translated` または `Source` なら、ファイルは `Translated`
+		// 4. すべてのユニットが `Translated` または `Source` なら、ファイルは `Translated`
 		const isFullyTranslatedOrSource = units.every((u) => u.status === Status.Translated || u.status === Status.Source);
 		if (isFullyTranslatedOrSource) {
 			return Status.Translated;
 		}
 
-		// 4. それ以外のケース（`Unknown` などが混ざっている）は `NeedsTranslation` と見なす
+		// 5. それ以外のケース（`Unknown` などが混ざっている）は `NeedsTranslation` と見なす
 		return Status.NeedsTranslation;
 	}
 

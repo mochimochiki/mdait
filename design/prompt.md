@@ -77,6 +77,7 @@ prompts: ["trans.translate", "term.detect"]
 | ID | 概要 |
 |---|---|
 | `trans.translate` | Markdown翻訳用プロンプト |
+| `trans.revisePatch` | 改訂時の差分パッチ翻訳用プロンプト |
 | `term.detect` | テキストからの用語検出 |
 | `term.extractFromTranslations` | 対訳ペアからの用語抽出 |
 | `term.translateTerms` | 用語のAI翻訳 |
@@ -121,6 +122,53 @@ prompts: ["trans.translate", "term.detect"]
   ]
 }
 ```
+
+---
+
+## 改訂パッチ翻訳 (trans.revisePatch)
+
+**ファイル**:
+[`src/commands/trans/translator.ts`](../src/commands/trans/translator.ts)
+
+**概要**:
+原文差分がある改訂翻訳時に、前回訳文へのパッチのみを返却させるプロンプトです。全文再生成を避け、差分外の文は維持します。
+
+**主要ロジック**:
+前回訳文と原文差分（unified diff）を与え、ターゲット側の更新差分のみを出力させます。パッチ適用に失敗した場合はフォールバックとして全文翻訳に切り替えます。
+
+**変数**:
+- `{{sourceLang}}`: 翻訳元言語コード
+- `{{targetLang}}`: 翻訳先言語コード
+- `{{contextLang}}`: context抽出元の言語コード
+- `{{surroundingText}}`: 周辺テキスト（オプショナル）
+- `{{terms}}`: 用語集（オプショナル）
+- `{{previousTranslation}}`: 前回訳文（必須）
+- `{{sourceDiff}}`: 原文の変更差分（unified diff形式、必須）
+
+**Input**:
+- 原文テキスト（または必要な最小コンテキスト）
+- 前回訳文
+- 原文差分
+
+**Output**:
+```json
+{
+  "targetPatch": "unified diff against previous translation",
+  "termSuggestions": [
+    {
+      "source": "元の用語",
+      "target": "訳語",
+      "context": "用語を含むcontextLang言語からの引用文",
+      "reason": "(オプショナル) 追加理由"
+    }
+  ],
+  "warnings": ["(optional) patch risk or ambiguity"]
+}
+```
+
+**注意**:
+- `targetPatch`は前回訳文に適用可能な形式で返却すること。
+- 可能な限り差分パッチのみを返却し、全文再生成は避ける。
 
 ---
 

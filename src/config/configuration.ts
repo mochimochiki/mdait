@@ -92,6 +92,7 @@ interface MdaitConfig {
 	};
 	prompts?: {
 		"trans.translate"?: string;
+		"trans.revisePatch"?: string;
 		"term.detect"?: string;
 		"term.extractFromTranslations"?: string;
 		"term.translateTerms"?: string;
