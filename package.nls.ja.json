@@ -12,6 +12,7 @@
   "mdait.translate.directory.title": "✨ [AI] ディレクトリを翻訳",
   "mdait.translate.file.title": "✨ [AI] ファイルを翻訳",
   "mdait.translate.unit.title": "✨ [AI] ユニットを翻訳",
+  "mdait.translate.frontmatter.title": "✨ [AI] Frontmatterを翻訳",
   "mdait.term.detect.title": "✨ [AI] 用語検出",
   "mdait.term.detect.directory.title": "✨ [AI] ディレクトリから用語検出",
   "mdait.term.detect.file.title": "✨ [AI] ファイルから用語検出",

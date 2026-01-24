@@ -145,5 +145,8 @@
   "Tooltip: Mark this unit as completed": "Mark this unit as completed",
   "No need marker found to clear.": "No need marker found to clear.",
   "Failed to clear need marker: {0}": "Failed to clear need marker: {0}",
-  "AI_Usage_Confirmation": "✨️[AI] Commands with this mark use AI.\n\n  • Uses the AI service specified in mdait.json\n  • AI usage statistics will be logged to .mdait/ai-stats.log\n\nDo you want to proceed?"
+  "AI_Usage_Confirmation": "✨️[AI] Commands with this mark use AI.\n\n  • Uses the AI service specified in mdait.json\n  • AI usage statistics will be logged to .mdait/ai-stats.log\n\nDo you want to proceed?",
+  "No frontmatter keys configured for translation.": "No frontmatter keys configured for translation.",
+  "Source file not found: {0}": "Source file not found: {0}",
+  "Empty content": "Empty content"
 }

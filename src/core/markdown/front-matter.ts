@@ -19,14 +19,28 @@ export class FrontMatter {
 	private _pendingChanges: Map<string, { type: "set" | "delete"; value?: any }>;
 
 	/**
+	 * フロントマターの開始行番号（0ベース、通常0）
+	 */
+	public readonly startLine: number;
+
+	/**
+	 * フロントマターの終了行番号（0ベース、閉じ---の行）
+	 */
+	public readonly endLine: number;
+
+	/**
 	 * コンストラクタ
 	 * @param data フロントマターデータ
 	 * @param raw フロントマターの生文字列（オプション）
+	 * @param startLine 開始行番号（0ベース）
+	 * @param endLine 終了行番号（0ベース）
 	 */
-	private constructor(data: FrontMatterData, raw: string) {
+	private constructor(data: FrontMatterData, raw: string, startLine = 0, endLine = 0) {
 		this._data = data;
 		this._raw = raw;
 		this._pendingChanges = new Map();
+		this.startLine = startLine;
+		this.endLine = endLine;
 	}
 
 	/**
@@ -67,8 +81,12 @@ export class FrontMatter {
 			return { frontMatter: undefined, content, frontMatterLineOffset: 0 };
 		}
 
+		// 開始行は0、終了行はfrontMatterLineOffset（閉じ---の行）
+		const startLine = 0;
+		const endLine = frontMatterLineOffset;
+
 		return {
-			frontMatter: new FrontMatter(data, frontMatterRaw),
+			frontMatter: new FrontMatter(data, frontMatterRaw, startLine, endLine),
 			content,
 			frontMatterLineOffset,
 		};
@@ -417,6 +435,6 @@ export class FrontMatter {
 	 * @returns 新しいFrontMatterインスタンス
 	 */
 	clone(): FrontMatter {
-		return new FrontMatter({ ...this._data }, this._raw);
+		return new FrontMatter({ ...this._data }, this._raw, this.startLine, this.endLine);
 	}
 }

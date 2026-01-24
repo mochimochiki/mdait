@@ -13,7 +13,10 @@
   },
   "trans": {
     "contextSize": 1,
-    "retryLimit": 1
+    "retryLimit": 1,
+    "frontmatter": {
+      "keys": ["title", "description"]
+    }
   },
   "sync": {
     "level": 3

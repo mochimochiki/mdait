@@ -36,6 +36,13 @@
 - trans時に旧スナップショットと現在のコンテンツから動的にdiffを生成しLLMに提供。
 - 実装: `src/core/diff/`
 
+### FrontMatter翻訳
+- frontmatter内の指定キー値を翻訳対象として扱う機能群。
+- **mdait.frontマーカー**: frontmatter内に`mdait.front: "hash from:xxx need:translate"`形式でメタデータを保持。
+- **ハッシュ計算**: 設定されたkeys順に値を連結してハッシュ化（キー名・順序は差分対象外）。
+- **翻訳状態管理**: 本文ユニットと分離した専用フローでsync/transを実行。
+- 実装: `src/core/markdown/frontmatter-translation.ts`
+
 ## ステータス更新シーケンス
 
 ```mermaid

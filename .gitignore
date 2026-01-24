@@ -9,3 +9,4 @@ src/test/workspace/.mdait/terms.csv
 src/test/workspace/.mdait/logs/*
 src/test/sample-content/jp/*
 src/test/workspace/.mdait/snapshot
+review_report.md

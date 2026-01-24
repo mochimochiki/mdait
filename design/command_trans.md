@@ -33,11 +33,19 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
   - 差分適用に失敗した場合はフォールバックとして従来の全文翻訳に切り替える
 - 参照: [core.md](core.md)のSnapshot管理、Diff生成
 
+#### FrontMatter翻訳
+- `trans.frontmatter.keys`で指定されたキー値を翻訳対象として処理
+- `mdait.front`マーカーで翻訳状態（hash/from/need）を管理
+- 本文ユニットと分離した専用フローで実行（TranslationCheckerは適用しない）
+- キーごとにTranslator.translateで翻訳し、FrontMatter.setで更新
+- 前回訳文参照とrevise形式にも対応
+
 #### 翻訳品質チェック
 - markdown-itでパースした構造（見出し、リスト、コードブロック、引用、テーブル、リンク、画像）を原文と訳文で比較
 - 構造の不一致を検出し、確認推奨箇所を特定
 - 問題がある場合は`need:review`ステータスを設定し、Hoverツールチップに詳細な理由を表示
 - 各要素の数の差異を具体的に報告（例: 「見出しレベル2の数が不一致: 原文3個 vs 訳文2個」）
+- **注意**: frontmatter翻訳には品質チェックを適用しない
 
 #### 並列実行制御
 - **ディレクトリ翻訳**: ファイルを順次処理(キャンセル即応性とレート制限対策を重視)
@@ -55,6 +63,8 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
 - [src/commands/trans/trans-command.ts](../src/commands/trans/trans-command.ts): `transCommand()`, `transUnitCommand()` - 翻訳対象の選択と翻訳実行
   - [transFile_CoreProc()](../src/commands/trans/trans-command.ts#L88): ファイル単位の翻訳処理中核ロジック
   - [transUnit_CoreProc()](../src/commands/trans/trans-command.ts#L457): ユニット単位の翻訳処理中核ロジック
+  - [translateFrontmatterCommand()](../src/commands/trans/trans-command.ts): frontmatter専用翻訳コマンド（StatusTreeまたはCodeLensから呼び出し）
+  - [translateFrontmatter_CoreProc()](../src/commands/trans/trans-command.ts): frontmatter翻訳処理中核ロジック（本文翻訳と独立して実行）
 - [src/commands/trans/term-extractor.ts](../src/commands/trans/term-extractor.ts): `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出
 - [src/commands/trans/translation-checker.ts](../src/commands/trans/translation-checker.ts): `TranslationChecker.checkTranslationQuality()` - 翻訳品質チェック
 - [src/commands/trans/translator.ts](../src/commands/trans/translator.ts): `Translator` - 翻訳サービスインターフェース
@@ -88,6 +98,7 @@ sequenceDiagram
 2. **翻訳ペア取得**: ターゲットファイルから対応するソース言語・ターゲット言語を特定
 3. **翻訳サービス構築**: 設定に基づいてAIプロバイダーを初期化
 4. **ユニット読み込み**: Markdownファイルをパースし、`need:translate`ユニットを抽出
+5. **FrontMatter翻訳**: `mdait.front`が`need:translate`の場合、設定されたキーをキーごとに翻訳
 5. **各ユニット処理**:
    - 用語集から関連用語を抽出
    - 前回訳文を取得（改訂時）

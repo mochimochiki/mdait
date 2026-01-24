@@ -9,7 +9,9 @@
 import * as vscode from "vscode";
 import { transUnitCommand } from "../../commands/trans/trans-command";
 import { Configuration } from "../../config/configuration";
+import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 
@@ -367,4 +369,159 @@ function startOneWayScrollSync(
 		visibleEditorsSub,
 		selectionChangeSub,
 	);
+}
+
+/**
+ * CodeLensからfrontmatterのneedマーカーをクリアするコマンド
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensClearFrontmatterNeedCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+
+		const document = activeEditor.document;
+		const config = Configuration.getInstance();
+
+		// Markdownファイルを読み込み＆パース
+		const content = document.getText();
+		const markdown = markdownParser.parse(content, config);
+
+		if (!markdown.frontMatter) {
+			return;
+		}
+
+		// frontmatterマーカーを取得してneedをクリア
+		const marker = parseFrontmatterMarker(markdown.frontMatter);
+		if (!marker || !marker.need) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
+			return;
+		}
+
+		marker.removeNeedTag();
+		markdown.frontMatter.set(FRONTMATTER_MARKER_KEY, marker.toString().replace(/^<!--\s*mdait\s*|\s*-->$/g, ""));
+
+		// ファイルを保存
+		const updatedContent = markdownParser.stringify(markdown);
+		await activeEditor.edit((editBuilder) => {
+			const fullRange = new vscode.Range(0, 0, document.lineCount, 0);
+			editBuilder.replace(fullRange, updatedContent);
+		});
+
+		await document.save();
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear frontmatter need marker: {0}", errorMessage));
+	}
+}
+
+/**
+ * CodeLensからソースfrontmatterへジャンプするコマンド
+ * frontmatter領域を比較ビューで表示する
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensJumpToSourceFrontmatterCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+
+		const document = activeEditor.document;
+		const config = Configuration.getInstance();
+
+		// Markdownファイルを読み込み＆パース
+		const content = document.getText();
+		const markdown = markdownParser.parse(content, config);
+
+		if (!markdown.frontMatter) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No frontmatter found."));
+			return;
+		}
+
+		// frontmatterマーカーを取得
+		const marker = parseFrontmatterMarker(markdown.frontMatter);
+		if (!marker?.from) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No source hash found in frontmatter marker."));
+			return;
+		}
+
+		// クリック位置と可視範囲の取得
+		const clickedPos = new vscode.Position(range.start.line, 0);
+		const leftVisible = activeEditor.visibleRanges[0];
+
+		// ソースファイルパスを取得
+		const targetFilePath = document.uri.fsPath;
+		const explorer = new FileExplorer();
+		const pair = explorer.getTransPairFromTarget(targetFilePath, config);
+		const sourceFilePath = pair ? explorer.getSourcePath(targetFilePath, pair) : null;
+
+		if (!sourceFilePath) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Source file not found."));
+			return;
+		}
+
+		// ソースファイルを開く（frontmatter領域は0行目から開始）
+		const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
+		const sourceContent = sourceDoc.getText();
+		const sourceMarkdown = markdownParser.parse(sourceContent, config);
+
+		if (!sourceMarkdown.frontMatter) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Source frontmatter not found."));
+			return;
+		}
+
+		// frontmatter領域の行範囲を取得
+		const targetStartLine = markdown.frontMatter.startLine;
+		const targetEndLine = markdown.frontMatter.endLine;
+		const sourceStartLine = sourceMarkdown.frontMatter.startLine;
+		const sourceEndLine = sourceMarkdown.frontMatter.endLine;
+
+		// 右側（Beside）に分割して開く
+		const position = new vscode.Position(sourceStartLine, 0);
+		const selection = new vscode.Selection(position, position);
+
+		const editor = await vscode.window.showTextDocument(sourceDoc, {
+			viewColumn: vscode.ViewColumn.Beside,
+			preview: true,
+			preserveFocus: true,
+			selection,
+		});
+
+		// スクロール位置を調整
+		if (leftVisible) {
+			const offset = Math.max(0, clickedPos.line - leftVisible.start.line);
+			const desiredTop = Math.max(0, Math.min(sourceStartLine - offset, sourceDoc.lineCount - 1));
+			const topPos = new vscode.Position(desiredTop, 0);
+			editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+		} else {
+			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+		}
+
+		// frontmatter領域をハイライト（endLine-1まで、閉じ---まで）
+		const actualTargetEndLine = Math.max(targetStartLine, targetEndLine - 1);
+		const actualSourceEndLine = Math.max(sourceStartLine, sourceEndLine - 1);
+		highlightUnit(activeEditor, targetStartLine, actualTargetEndLine, "target");
+		highlightUnit(editor, sourceStartLine, actualSourceEndLine, "source");
+
+		// ハイライト範囲を保存
+		const targetLineLength = document.lineAt(actualTargetEndLine).text.length;
+		const sourceLineLength = sourceDoc.lineAt(actualSourceEndLine).text.length;
+		_highlightInfo = {
+			leftEditor: activeEditor,
+			rightEditor: editor,
+			leftRange: new vscode.Range(targetStartLine, 0, actualTargetEndLine, targetLineLength),
+			rightRange: new vscode.Range(sourceStartLine, 0, actualSourceEndLine, sourceLineLength),
+		};
+
+		// 左→右の継続スクロール同期を開始
+		startOneWayScrollSync(activeEditor, editor, clickedPos.line, sourceStartLine);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Jump to source frontmatter failed: {0}", errorMessage));
+	}
 }

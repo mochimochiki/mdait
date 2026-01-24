@@ -70,6 +70,9 @@ sequenceDiagram
     "markdown": {
       "skipCodeBlocks": true
     },
+    "frontmatter": {
+      "keys": ["title", "description"]
+    },
     "contextSize": 1
   },
   "terms": {
@@ -87,3 +90,25 @@ sequenceDiagram
 - `isConfigured()`メソッドは設定ファイルの存在とtransPairsの有無を簡易チェック
 - `isConfigured()`がfalseの場合、`StatusTreeProvider`が空配列を返しリソース消費を抑制
 - `mdaitConfigured`コンテキスト変数を更新し、ツールバーボタンとWelcome Viewの表示を切り替え
+
+## Frontmatter
+
+Markdown文書の先頭にあるfrontmatterセクションで、YAML形式でメタデータを記述する。
+
+### mdait.sync.level
+
+**用途**: ユニット境界として検知する見出しレベルの指定
+**形式**: `mdait.sync.level: 2`
+**概要**:
+- mdait.json の sync.level 設定をドキュメント単位で上書き
+- パース時に[MarkdownItParser](../src/core/markdown/parser.ts)が frontmatter から読み込み、グローバル設定より優先
+- 特定ドキュメントのみ異なる粒度でユニット分割したい場合に活用
+
+### mdait.front
+
+**用途**: Frontmatterの翻訳状態管理（本体の<!-- mdait ... -->マーカーに相当）
+**形式**: `mdait.front: abc123de from:def456gh need:translate`
+**概要**:
+- Frontmatter全体のハッシュ値、翻訳元ハッシュ、必要アクションを追跡
+- 本体のMarkdown内のmarkerとは異なり、frontmatter独自のメタデータとして使用
+- syncコマンド実行時にハッシュが更新され、transコマンドで翻訳対象判定に利用

@@ -4,6 +4,13 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { FrontMatter } from "../../core/markdown/front-matter";
+import {
+	calculateFrontmatterHash,
+	getFrontmatterTranslationKeys,
+	parseFrontmatterMarker,
+	setFrontmatterMarker,
+} from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -12,6 +19,7 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
+import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 
 /**
@@ -134,8 +142,12 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	const sourceContent = decoder.decode(document);
 	const source = markdownParser.parse(sourceContent, config);
 
-	// フロントマターのみのファイルは処理しない（書き換え不要）
-	if (source.units.length === 0) {
+	const frontmatterKeys = getFrontmatterTranslationKeys(config);
+	const sourceFrontHash = calculateFrontmatterHash(source.frontMatter, frontmatterKeys);
+	const shouldSyncFrontmatter = sourceFrontHash !== null;
+
+	// フロントマターのみのファイルは、frontmatter翻訳が無効なら処理しない
+	if (source.units.length === 0 && !shouldSyncFrontmatter) {
 		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
 		return {
 			diffs: [],
@@ -149,6 +161,9 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	// 2. mdaitマーカーとハッシュを付与（source側はneed,fromなし）
 	ensureMdaitMarkerHash(source.units);
 
+	// 2.5. frontmatterマーカーを同期（syncFrontmatterMarkersで統一処理）
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, undefined, frontmatterKeys);
+
 	// 3. target用ユニットを生成（from:hash, need:translateを付与）
 	const targetUnits = source.units.map((srcUnit) => {
 		const hash = srcUnit.marker?.hash ?? calculateHash(srcUnit.content);
@@ -157,8 +172,9 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 		Object.assign(tgtUnit, srcUnit, { marker: tgtMarker });
 		return tgtUnit;
 	});
+
 	const targetDoc = {
-		frontMatter: source.frontMatter,
+		frontMatter: frontmatterSync.targetFrontMatter ?? source.frontMatter,
 		units: targetUnits,
 	};
 
@@ -177,7 +193,10 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	}
 
 	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
-	const updatedSourceContent = markdownParser.stringify(source);
+	const updatedSourceContent = markdownParser.stringify({
+		frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
+		units: source.units,
+	});
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 6. DiffResultを返す
@@ -223,9 +242,12 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config);
 	const target = markdownParser.parse(targetContent, config);
-	
-	// フロントマターのみのファイルは処理しない（書き換え不要）
-	if (source.units.length === 0 && target.units.length === 0) {
+
+	const frontmatterKeys = getFrontmatterTranslationKeys(config);
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
+
+	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
+	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
 		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
 		return {
 			diffs: [],
@@ -235,7 +257,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 			unchanged: 0,
 		};
 	}
-	
+
 	// src, target に hash を付与（ない場合のみ）
 	ensureMdaitMarkerHash(source.units);
 	ensureMdaitMarkerHash(target.units);
@@ -265,7 +287,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
-		frontMatter: target.frontMatter,
+		frontMatter: frontmatterSync.targetFrontMatter ?? target.frontMatter,
 		units: syncedUnits,
 	};
 
@@ -280,8 +302,9 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
+	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
 	const updatedSourceContent = markdownParser.stringify({
-		frontMatter: source.frontMatter,
+		frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 		units: source.units,
 	});
 
@@ -304,6 +327,59 @@ function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 }
 
 /**
+ * frontmatterマーカーを同期する（テスト用にエクスポート）
+ * @param sourceFrontMatter ソース側のfrontmatter
+ * @param targetFrontMatter ターゲット側のfrontmatter
+ * @param keys 翻訳対象キー一覧
+ * @returns sourceFrontMatter, targetFrontMatter, processed
+ */
+export function syncFrontmatterMarkers(
+	sourceFrontMatter: FrontMatter | undefined,
+	targetFrontMatter: FrontMatter | undefined,
+	keys: string[],
+): { sourceFrontMatter: FrontMatter | undefined; targetFrontMatter: FrontMatter | undefined; processed: boolean } {
+	if (keys.length === 0) {
+		return { sourceFrontMatter, targetFrontMatter, processed: false };
+	}
+
+	const sourceHash = calculateFrontmatterHash(sourceFrontMatter, keys);
+	if (!sourceHash) {
+		if (targetFrontMatter && parseFrontmatterMarker(targetFrontMatter)) {
+			setFrontmatterMarker(targetFrontMatter, null);
+		}
+		return { sourceFrontMatter, targetFrontMatter, processed: false };
+	}
+
+	// Source側にもマーカーを設定（共通ロジック使用）
+	if (sourceFrontMatter) {
+		const existingSourceMarker = parseFrontmatterMarker(sourceFrontMatter);
+		const sourceResult = syncSourceMarker(sourceHash, existingSourceMarker);
+		if (sourceResult.changed) {
+			setFrontmatterMarker(sourceFrontMatter, sourceResult.marker);
+		}
+	}
+
+	// ターゲット側の処理
+	let workingTarget = targetFrontMatter;
+	if (!workingTarget) {
+		workingTarget = sourceFrontMatter?.clone() ?? FrontMatter.empty();
+	}
+
+	const targetHash = calculateFrontmatterHash(workingTarget, keys, { allowEmpty: true });
+	const existingMarker = parseFrontmatterMarker(workingTarget);
+
+	// 共通ロジックを使用してターゲットマーカーを同期
+	const targetResult = syncTargetMarker({
+		sourceHash,
+		targetHash,
+		existingMarker,
+	});
+
+	setFrontmatterMarker(workingTarget, targetResult.marker);
+	return { sourceFrontMatter, targetFrontMatter: workingTarget, processed: true };
+}
+
+/**
  * ユニットのハッシュを更新する
  * @param matchResult ユニットのマッチ結果
  */
@@ -322,70 +398,26 @@ function updateSectionHashes(
 			const sourceHash = calculateHash(source.content);
 			const targetHash = calculateHash(target.content);
 
-			const sourceMarker = source.marker ?? new MdaitMarker(sourceHash);
-			const targetMarker = target.marker ?? new MdaitMarker(targetHash, sourceMarker.hash);
-
-			const isSourceChanged = sourceMarker.hash !== sourceHash;
-			const isTargetChanged = targetMarker.hash !== targetHash;
-
-			// 双方向翻訳ペアで両方変更された場合、競合フラグを立てる
-			if (isSourceChanged && isTargetChanged) {
-				sourceMarker.setNeed("solve-conflict");
-				targetMarker.setNeed("solve-conflict");
-				// ハッシュは更新しない
-				source.marker = sourceMarker;
-				target.marker = targetMarker;
-				continue;
-			}
-
-			// source:hashを計算して付与
-			if (isSourceChanged) {
-				sourceMarker.hash = sourceHash;
-			}
-			// target:hashを計算して付与
-			if (isTargetChanged) {
-				targetMarker.hash = targetHash;
-			}
-
-			// ソースで変更があった場合、need:revise@{oldhash}付与
-			const oldSourceHash = targetMarker.from;
-			if (oldSourceHash !== sourceMarker.hash) {
-				targetMarker.from = sourceMarker.hash;
-				// 旧ハッシュがあればrevise形式、なければtranslate
-				if (oldSourceHash) {
-					targetMarker.setReviseNeed(oldSourceHash);
-				} else {
-					targetMarker.setNeed("translate");
-				}
-				source.marker = sourceMarker;
-				target.marker = targetMarker;
-				continue;
-			}
-
-			source.marker = sourceMarker;
-			target.marker = targetMarker;
+			// 共通ロジックを使用してペア同期
+			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker);
+			source.marker = result.sourceMarker;
+			target.marker = result.targetMarker;
 			continue;
 		}
+
 		// sourceのみ存在: 孤立sourceの処理
 		if (source && !target) {
-			// hashを計算して付与
 			const sourceHash = calculateHash(source.content);
-			if (!source.marker) {
-				source.marker = new MdaitMarker(sourceHash);
-			} else if (source.marker.hash !== sourceHash) {
-				source.marker.hash = sourceHash;
-			}
+			const result = syncSourceMarker(sourceHash, source.marker);
+			source.marker = result.marker;
 			continue;
 		}
+
 		// targetのみ存在: 孤立targetの処理
 		if (!source && target) {
-			// hashを計算して付与
-			const hash = calculateHash(target.content);
-			if (!target.marker) {
-				target.marker = new MdaitMarker(hash);
-			} else if (target.marker.hash !== hash) {
-				target.marker.hash = hash;
-			}
+			const targetHash = calculateHash(target.content);
+			const result = syncSourceMarker(targetHash, target.marker);
+			target.marker = result.marker;
 		}
 	}
 }

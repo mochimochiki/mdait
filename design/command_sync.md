@@ -48,8 +48,9 @@ sequenceDiagram
 4. **差分検出**: 追加・更新・削除されたユニットを特定
 5. **ハッシュ更新**: ユニット内容の変更を検出し、ハッシュを再計算
 6. **needフラグ付与**: 翻訳が必要なユニットに`need:translate`を設定
-7. **ファイル保存**: 更新されたマーカー情報を含むMarkdownファイルを保存
-8. **ステータス更新**: `StatusManager`にファイルステータスの再計算を依頼
+7. **FrontMatter同期**: 設定されたキーのハッシュを計算し、`mdait.front`マーカーを更新
+8. **ファイル保存**: 更新されたマーカー情報を含むMarkdownファイルを保存
+9. **ステータス更新**: `StatusManager`にファイルステータスの再計算を依頼
 
 ### 考慮事項
 
@@ -61,3 +62,5 @@ sequenceDiagram
 - **スナップショット管理**: 全ユニットのコンテンツを`.mdait/snapshot`に保存し、原文変更時のdiff生成に活用
 - **revise形式**: 原文変更時は`need:revise@{oldhash}`形式でoldhashを埋め込み、trans時にdiff生成
 - **GC処理**: sync完了後、使用中のhash以外のスナップショットを削除（ファイルサイズ5MB超過時）
+- **FrontMatter翻訳**: `trans.frontmatter.keys`で指定されたキーのハッシュを計算し、`mdait.front`マーカーで翻訳状態を管理
+- **FrontMatter-onlyファイル**: 本文ユニットがなくfrontmatterのみのファイルも、keys設定があれば処理対象

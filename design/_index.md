@@ -33,8 +33,8 @@
 
 ### 設定ファイルの構造を知りたい
 **[config.md](config.md) - 設定管理層設計**
-- **読むべき時**: mdait.json の構造、設定の読み込み方法を確認したい
-- **内容**: mdait.json 設定項目一覧、Configロードのシーケンス図
+- **読むべき時**: mdait.json の構造、設定の読み込み方法を確認したい、ドキュメント単位でのオーバーライド方法を知りたい
+- **内容**: mdait.json 設定項目一覧、Configロードのシーケンス図、Frontmatterによるドキュメント単位オーバーライド（mdait.sync.level、mdait.front）
 
 ### AI との連携を理解したい
 **[api.md](api.md) - API層設計**

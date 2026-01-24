@@ -7,12 +7,12 @@
 
 ## 主要コンポーネント
 
-- **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。部分更新イベントに対応して最小限のDOM更新を行う。`Configuration.isConfigured()`がfalseの場合は空配列を返し、リソース消費を抑制する。
+- **StatusTreeProvider**: `StatusItemTree`をVS Code TreeViewに変換し、needフラグをアイコンとバッジで表現する。frontmatterを含む場合は先頭に表示し、ファイル翻訳の前にfrontmatter翻訳を実行可能にする。部分更新イベントに対応して最小限のDOM更新を行う。`Configuration.isConfigured()`がfalseの場合は空配列を返し、リソース消費を抑制する。
 - **Welcome View**: `mdait.yaml`未設定時に表示される初期設定ガイド。`viewsWelcome`でギアアイコンCTAを表示し、`mdait.setup.createConfig`コマンドにリンク。`mdaitConfigured`コンテキスト変数で表示を制御。
-- **Command Entry Points**: コマンドパレット、ツリービューのコンテキストメニュー、コード上のCodeLensからコマンド層を呼び出す。対象ファイルや言語を引数として構築する。
+- **Command Entry Points**: コマンドパレット、ツリービューのコンテキストメニュー、コード上のCodeLensからコマンド層を呼び出す。frontmatterはStatusTreeとCodeLensの両方から翻訳・ジャンプ・needクリア操作が可能。対象ファイルや言語を引数として構築する。
 - **Progress Reporter**: sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理する。
-- **TranslationSummaryHoverProvider**: mdaitマーカー行にホバーしたときに翻訳サマリ(処理時間・トークン数・用語候補・警告)を表示する。`SummaryManager`からユニットハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示。
-- **SummaryDecorator**: 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供する。CodeLensと同じ色・フォントスタイルで統一し、詳細はHoverで確認可能。
+- **TranslationSummaryHoverProvider**: mdaitマーカー行およびfrontmatterマーカー行にホバーしたときに翻訳サマリ(処理時間・トークン数・用語候補・警告)を表示する。`SummaryManager`からハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示。
+- **SummaryDecorator**: 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供する。frontmatterマーカーも対象に含む。CodeLensと同じ色・フォントスタイルで統一し、詳細はHoverで確認可能。
 - **SummaryManager**: 翻訳実行時に生成されたサマリデータ(`TranslationSummary`)をメモリ上でMap管理するシングルトン。永続化は不要で、VS Code再起動時にクリアされる。翻訳完了時に`trans-command`から呼び出され、Hover/Decorator表示時に参照される。
 
 ## 更新シーケンス
