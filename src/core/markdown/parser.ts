@@ -45,10 +45,52 @@ export class MarkdownItParser implements IMarkdownParser {
 	private md: MarkdownIt;
 
 	/**
+	 * mdaitマーカーの正規表現パターン
+	 * 行頭のマーカーを検出するためのパターン
+	 */
+	private static readonly MDAIT_MARKER_LINE_REGEX =
+		/^<!-- mdait(?:\s+[a-zA-Z0-9]+)?(?:\s+from:[a-zA-Z0-9]+)?(?:\s+need:[\w@]+)?\s*-->\s*$/;
+
+	/**
 	 * コンストラクタ
 	 */
 	constructor() {
-		this.md = new MarkdownIt();
+		this.md = new MarkdownIt({
+			breaks: true,
+		});
+	}
+
+	/**
+	 * mdaitマーカーの直前に空行がなければ空行を挿入する正規化処理
+	 * markdown-itが正しくトークン化するための前処理
+	 *
+	 * 問題: markdown-itは空行で段落を区切る。マーカーの直前に空行がないと、
+	 * マーカーが前のテキストと同じinlineトークンに含まれてしまい、
+	 * 境界として正しく検出されない。
+	 *
+	 * @param content フロントマターを除いた本文コンテンツ
+	 * @returns 正規化されたコンテンツ
+	 */
+	private normalizeMarkerSpacing(content: string): string {
+		const lines = content.split(/\r?\n/);
+		const result: string[] = [];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const trimmedLine = line.trim();
+
+			// mdaitマーカー行かどうかをチェック
+			if (MarkdownItParser.MDAIT_MARKER_LINE_REGEX.test(trimmedLine)) {
+				// 直前の行が空行でない場合（かつ先頭行でない場合）、空行を挿入
+				if (i > 0 && result.length > 0 && result[result.length - 1].trim() !== "") {
+					result.push("");
+				}
+			}
+
+			result.push(line);
+		}
+
+		return result.join("\n");
 	}
 
 	/**
@@ -64,8 +106,11 @@ export class MarkdownItParser implements IMarkdownParser {
 		const fontMaterlevel = frontMatter?.get("mdait.sync.level");
 		const mdaitMarkerLevel = fontMaterlevel ?? config?.sync?.level ?? 2;
 
-		const parsedMdTokens = this.md.parse(content, {});
-		const lines = content.split(/\r?\n/);
+		// 前処理: mdaitマーカーの直前に空行がなければ挿入（markdown-it正規化）
+		const normalizedContent = this.normalizeMarkerSpacing(content);
+		const parsedMdTokens = this.md.parse(normalizedContent, {});
+		// 境界構築には正規化後のコンテンツを使用
+		const lines = normalizedContent.split(/\r?\n/);
 
 		// 第1パス: 境界トークンを収集
 		const boundaries = this.collectBoundaries(parsedMdTokens, mdaitMarkerLevel);
