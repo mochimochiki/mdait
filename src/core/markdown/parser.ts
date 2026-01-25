@@ -332,13 +332,40 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @returns Markdownテキスト
 	 */
 	stringify(doc: Markdown): string {
-		let fm = "";
-		if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
-			fm = `${doc.frontMatter.raw}\n`;
+		if (doc.units.length === 0) {
+			// ユニットがない場合はfrontmatterのみ
+			if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
+				return `${doc.frontMatter.raw}\n`;
+			}
+			return "";
 		}
-		// ユニット間は1つの改行で連結し、余分な改行増加を防ぐ
-		const body = doc.units.map((section) => section.toString().replace(/\n+$/g, "")).join("\n\n");
-		return `${fm}${body}\n`;
+
+		// frontmatterがある場合
+		let result = "";
+		if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
+			result = doc.frontMatter.raw;
+			// frontmatter後の改行
+			if (!result.endsWith("\n")) {
+				result += "\n";
+			}
+		}
+
+		// ユニット間は2つの改行で連結し、余分な改行増加を防ぐ
+		const unitStrings = doc.units.map((section) => section.toString().replace(/\n+$/g, ""));
+
+		if (result) {
+			// frontmatterがある場合、最初のユニットは直後に配置（空白行なし）
+			result += unitStrings[0];
+			// 2番目以降のユニットは\n\nで連結
+			for (let i = 1; i < unitStrings.length; i++) {
+				result += `\n\n${unitStrings[i]}`;
+			}
+		} else {
+			// frontmatterがない場合、全ユニットを\n\nで連結
+			result = unitStrings.join("\n\n");
+		}
+
+		return `${result}\n`;
 	}
 }
 

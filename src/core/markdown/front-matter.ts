@@ -15,6 +15,8 @@ export type FrontMatterData = {
 export class FrontMatter {
 	private _data: FrontMatterData;
 	private _raw: string;
+	/** mdait管理外のフィールドの元の文字列表現（フォーマット保持用） */
+	private _nonMdaitRaw: string;
 
 	/**
 	 * フロントマターの開始行番号（0ベース、通常0）
@@ -32,12 +34,14 @@ export class FrontMatter {
 	 * @param raw フロントマターの生文字列（オプション）
 	 * @param startLine 開始行番号（0ベース）
 	 * @param endLine 終了行番号（0ベース）
+	 * @param nonMdaitRaw mdait管理外のフィールドの元の文字列表現
 	 */
-	private constructor(data: FrontMatterData, raw: string, startLine = 0, endLine = 0) {
+	private constructor(data: FrontMatterData, raw: string, startLine = 0, endLine = 0, nonMdaitRaw = "") {
 		this._data = data;
 		this._raw = raw;
 		this.startLine = startLine;
 		this.endLine = endLine;
+		this._nonMdaitRaw = nonMdaitRaw;
 	}
 
 	/**
@@ -82,8 +86,11 @@ export class FrontMatter {
 		const startLine = 0;
 		const endLine = frontMatterLineOffset;
 
+		// mdait管理外の部分を抽出
+		const nonMdaitRaw = extractNonMdaitRaw(frontMatterRaw);
+
 		return {
-			frontMatter: new FrontMatter(data, frontMatterRaw, startLine, endLine),
+			frontMatter: new FrontMatter(data, frontMatterRaw, startLine, endLine, nonMdaitRaw),
 			content,
 			frontMatterLineOffset,
 		};
@@ -317,7 +324,7 @@ export class FrontMatter {
 
 	/**
 	 * Update raw string from data changes
-	 * Always regenerates the entire frontmatter using gray-matter
+	 * Regenerates only the mdait portion and merges with non-mdait portion
 	 */
 	private _updateRaw(): void {
 		if (Object.keys(this._data).length === 0) {
@@ -325,7 +332,37 @@ export class FrontMatter {
 			return;
 		}
 
-		this._raw = matter.stringify("", this._data).trim();
+		// mdait部分とnon-mdait部分を分離してマージ
+		const { mdait, nonMdait } = separateMdaitData(this._data);
+
+		// mdait部分が空でnon-mdait部分もない場合
+		if (Object.keys(mdait).length === 0 && Object.keys(nonMdait).length === 0) {
+			this._raw = "";
+			return;
+		}
+
+		// mdait部分を再生成
+		const mdaitRaw = Object.keys(mdait).length > 0 ? matter.stringify("", mdait).trim() : "";
+
+		// non-mdait部分は元のフォーマットを使用、なければgray-matterで生成
+		let nonMdaitRaw = this._nonMdaitRaw;
+		if (!nonMdaitRaw && Object.keys(nonMdait).length > 0) {
+			nonMdaitRaw = matter.stringify("", nonMdait).trim();
+		}
+
+		// 両方を結合
+		this._raw = mergeFrontmatterParts(nonMdaitRaw, mdaitRaw);
+
+		// 次回のために非mdait部分を更新
+		if (Object.keys(nonMdait).length > 0) {
+			// _nonMdaitRawは元のフォーマットを維持するため、更新しない
+			// 新しくnon-mdaitフィールドが追加された場合のみ更新
+			if (!this._nonMdaitRaw) {
+				this._nonMdaitRaw = extractNonMdaitRaw(this._raw);
+			}
+		} else {
+			this._nonMdaitRaw = "";
+		}
 	}
 
 	/**
@@ -333,6 +370,110 @@ export class FrontMatter {
 	 * @returns 新しいFrontMatterインスタンス
 	 */
 	clone(): FrontMatter {
-		return new FrontMatter({ ...this._data }, this._raw, this.startLine, this.endLine);
+		return new FrontMatter({ ...this._data }, this._raw, this.startLine, this.endLine, this._nonMdaitRaw);
 	}
+}
+
+/**
+ * frontmatterのrawからmdait管理外の部分を抽出
+ */
+function extractNonMdaitRaw(raw: string): string {
+	if (!raw) {
+		return "";
+	}
+
+	// frontmatterの区切り文字を除去
+	const lines = raw.split(/\r?\n/);
+	const contentLines = lines.filter((line) => line.trim() !== "---");
+
+	// mdaitセクションを検出して除去
+	const result: string[] = [];
+	let inMdaitSection = false;
+	let mdaitIndentLevel = -1;
+
+	for (const line of contentLines) {
+		// インデントレベルを計算
+		const indent = line.search(/\S/);
+		const trimmed = line.trim();
+
+		// mdaitセクションの開始を検出
+		if (indent === 0 && trimmed.startsWith("mdait:")) {
+			inMdaitSection = true;
+			mdaitIndentLevel = 0;
+			continue;
+		}
+
+		// mdaitセクション内かどうかを判定
+		if (inMdaitSection) {
+			// 同じまたはより深いインデントなら、まだmdaitセクション内
+			if (indent > mdaitIndentLevel || trimmed === "") {
+				continue;
+			}
+			// インデントが浅くなったら、mdaitセクション終了
+			inMdaitSection = false;
+		}
+
+		// mdaitセクション外の行を保持
+		if (!inMdaitSection) {
+			result.push(line);
+		}
+	}
+
+	return result.join("\n");
+}
+
+/**
+ * データオブジェクトをmdait部分とnon-mdait部分に分離
+ */
+function separateMdaitData(data: FrontMatterData): { mdait: FrontMatterData; nonMdait: FrontMatterData } {
+	const mdait: FrontMatterData = {};
+	const nonMdait: FrontMatterData = {};
+
+	for (const [key, value] of Object.entries(data)) {
+		if (key === "mdait") {
+			mdait[key] = value;
+		} else {
+			nonMdait[key] = value;
+		}
+	}
+
+	return { mdait, nonMdait };
+}
+
+/**
+ * non-mdait部分とmdait部分を結合してfrontmatter文字列を生成
+ */
+function mergeFrontmatterParts(nonMdaitRaw: string, mdaitRaw: string): string {
+	// 両方が空の場合
+	if (!nonMdaitRaw && !mdaitRaw) {
+		return "";
+	}
+
+	// mdaitのみの場合
+	if (!nonMdaitRaw) {
+		return mdaitRaw;
+	}
+
+	// non-mdaitのみの場合
+	if (!mdaitRaw) {
+		// 区切り文字を含む完全なフォーマットに変換
+		if (nonMdaitRaw.startsWith("---")) {
+			return nonMdaitRaw;
+		}
+		return `---\n${nonMdaitRaw}\n---`;
+	}
+
+	// 両方ある場合は結合
+	// nonMdaitRawから区切り文字を除去してコンテンツ部分のみを取得
+	const nonMdaitLines = nonMdaitRaw.split(/\r?\n/).filter((line) => line.trim() !== "---");
+	const mdaitLines = mdaitRaw.split(/\r?\n/).filter((line) => line.trim() !== "---");
+
+	// 末尾の空行を除去
+	while (nonMdaitLines.length > 0 && nonMdaitLines[nonMdaitLines.length - 1].trim() === "") {
+		nonMdaitLines.pop();
+	}
+
+	// 結合
+	const combined = [...nonMdaitLines, ...mdaitLines];
+	return `---\n${combined.join("\n")}\n---`;
 }
