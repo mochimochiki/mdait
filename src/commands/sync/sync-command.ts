@@ -20,6 +20,7 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
+import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 
@@ -121,7 +122,7 @@ export async function syncCommand(): Promise<void> {
 /**
  * 単一ファイルの同期を行う
  * ファイル保存時に呼び出され、そのファイルと関連するペアファイルのみを同期する
- * 
+ *
  * @param filePath 保存されたファイルのパス
  */
 export async function syncSingleFile(filePath: string): Promise<void> {
@@ -310,6 +311,9 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
+
+	// level設定の検証と同期
+	await validateAndSyncLevel(sourceFile, targetFile);
 
 	// ファイル読み込み
 	const decoder = new TextDecoder("utf-8");

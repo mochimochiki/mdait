@@ -65,3 +65,4 @@ sequenceDiagram
 - **GC処理**: sync完了後、使用中のhash以外のスナップショットを削除（ファイルサイズ5MB超過時）
 - **FrontMatter翻訳**: `trans.frontmatter.keys`で指定されたキーのハッシュを計算し、`mdait.front`マーカーで翻訳状態を管理
 - **FrontMatter-onlyファイル**: 本文ユニットがなくfrontmatterのみのファイルも、keys設定があれば処理対象
+- **level設定の同期**: 既存ターゲット同期時、原文と訳文のfrontmatterで`mdait.sync.level`が異なる場合、原文の設定を優先して訳文を自動修正。これによりユニット境界の粒度を揃え、マーカー対応付けの破綻を防止
