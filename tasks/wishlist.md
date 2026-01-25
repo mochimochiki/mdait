@@ -12,14 +12,6 @@
 
 ## 要望一覧
 
-### revise時に再変更がかかった場合の挙動がおかしい
-
-翻訳完了状態から、
-1. 原文変更後のsyncによりTarget側にfrom:source_v2 need:revise@v1 が付与される
-2. 再度原文が変更されてsyncによりTarget側にfrom:source_v3 need:revise@v2 が付与される
-実際には改訂はまだ一度も行われていないので、need:revise@v1 のままであるべき。
-単体テストより挙動を確認し、修正する。
-
 ### frontmatterのlevel指定動作の改善
 
 ja->enなどでfrontmatterのlevel指定がある場合の挙動がおかしい。そもそもlevel指定を各ファイルで行うべきかsrcのみで行うべきかなど。また、各言語ごとに指定された場合の動作仕様などが決まっていない

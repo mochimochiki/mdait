@@ -97,7 +97,13 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 		const oldSourceHash = existingMarker.from;
 		existingMarker.from = sourceHash;
 
-		if (oldSourceHash) {
+		// 既存のrevise@{hash}がある場合、そのhashを保持する
+		const existingReviseHash = existingMarker.getOldHashFromNeed();
+		if (existingReviseHash) {
+			// すでにrevise待ち状態なので、スナップショットハッシュを保持
+			existingMarker.setReviseNeed(existingReviseHash);
+		} else if (oldSourceHash) {
+			// 新規revise設定
 			existingMarker.setReviseNeed(oldSourceHash);
 		} else {
 			existingMarker.setNeed("translate");
@@ -190,7 +196,14 @@ export function syncMarkerPair(
 	const oldSourceHash = targetMarker.from;
 	if (oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
-		if (oldSourceHash) {
+
+		// 既存のrevise@{hash}がある場合、そのhashを保持する
+		const existingReviseHash = targetMarker.getOldHashFromNeed();
+		if (existingReviseHash) {
+			// すでにrevise待ち状態なので、スナップショットハッシュを保持
+			targetMarker.setReviseNeed(existingReviseHash);
+		} else if (oldSourceHash) {
+			// 新規revise設定
 			targetMarker.setReviseNeed(oldSourceHash);
 		} else {
 			targetMarker.setNeed("translate");

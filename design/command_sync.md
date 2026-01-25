@@ -61,6 +61,7 @@ sequenceDiagram
 - **初回作成**: ターゲットファイルが存在しない場合は自動作成
 - **スナップショット管理**: 全ユニットのコンテンツを`.mdait/snapshot`に保存し、原文変更時のdiff生成に活用
 - **revise形式**: 原文変更時は`need:revise@{oldhash}`形式でoldhashを埋め込み、trans時にdiff生成
+- **revise再変更時の挙動**: 改訂完了前に原文が再変更された場合、`need:revise@{oldhash}`のスナップショットハッシュは最初の値を保持し続ける。これにより改訂時に参照すべき前回訳文のスナップショットが維持される
 - **GC処理**: sync完了後、使用中のhash以外のスナップショットを削除（ファイルサイズ5MB超過時）
 - **FrontMatter翻訳**: `trans.frontmatter.keys`で指定されたキーのハッシュを計算し、`mdait.front`マーカーで翻訳状態を管理
 - **FrontMatter-onlyファイル**: 本文ユニットがなくfrontmatterのみのファイルも、keys設定があれば処理対象

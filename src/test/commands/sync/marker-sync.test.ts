@@ -132,6 +132,24 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.changed, false);
 			assert.strictEqual(result.changeType, "none");
 		});
+
+		test("revise前に原文が再変更された場合、need:revise@{hash}が保持されること", () => {
+			// 翻訳完了状態から原文変更①でneed:revise@src123が設定された状態
+			const existing = new MdaitMarker("tgt456", "src789");
+			existing.setReviseNeed("src123");
+
+			// 原文変更②が発生
+			const result = syncTargetMarker({
+				sourceHash: "src999",
+				targetHash: "tgt456",
+				existingMarker: existing,
+			});
+
+			// fromは最新に更新されるが、needのスナップショットハッシュは保持される
+			assert.strictEqual(result.marker.from, "src999");
+			assert.strictEqual(result.marker.need, "revise@src123", "改訂前の再変更時はneed:revise@src123が保持されるべき");
+			assert.strictEqual(result.changeType, "source-changed");
+		});
 	});
 
 	suite("syncMarkerPair", () => {
@@ -183,6 +201,20 @@ suite("marker-sync", () => {
 			const result = syncMarkerPair("src123", "tgt456", existingSource, existingTarget);
 
 			assert.strictEqual(result.changed, false);
+		});
+
+		test("revise前に原文が再変更された場合（syncMarkerPair）、need:revise@{hash}が保持されること", () => {
+			// 翻訳完了状態から原文変更①でneed:revise@src123が設定された状態
+			const existingSource = new MdaitMarker("src789");
+			const existingTarget = new MdaitMarker("tgt456", "src789");
+			existingTarget.setReviseNeed("src123");
+
+			// 原文変更②が発生
+			const result = syncMarkerPair("src999", "tgt456", existingSource, existingTarget);
+
+			// fromは最新に更新されるが、needのスナップショットハッシュは保持される
+			assert.strictEqual(result.targetMarker.from, "src999");
+			assert.strictEqual(result.targetMarker.need, "revise@src123", "改訂前の再変更時はneed:revise@src123が保持されるべき");
 		});
 	});
 });
