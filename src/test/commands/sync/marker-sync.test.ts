@@ -214,7 +214,11 @@ suite("marker-sync", () => {
 
 			// fromは最新に更新されるが、needのスナップショットハッシュは保持される
 			assert.strictEqual(result.targetMarker.from, "src999");
-			assert.strictEqual(result.targetMarker.need, "revise@src123", "改訂前の再変更時はneed:revise@src123が保持されるべき");
+			assert.strictEqual(
+				result.targetMarker.need,
+				"revise@src123",
+				"改訂前の再変更時はneed:revise@src123が保持されるべき",
+			);
 		});
 	});
 });
