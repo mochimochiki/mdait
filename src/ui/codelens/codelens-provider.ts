@@ -208,12 +208,6 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
 			};
 		}
-		if (need === "solve-conflict") {
-			return {
-				title: vscode.l10n.t("$(check) Mark as Conflict Resolved"),
-				tooltip: vscode.l10n.t("Tooltip: Mark this unit's conflict as resolved"),
-			};
-		}
 		// デフォルト
 		return {
 			title: vscode.l10n.t("$(check) Mark as Completed"),

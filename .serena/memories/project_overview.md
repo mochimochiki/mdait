@@ -13,7 +13,7 @@ Markdownドキュメントを**継続的に多言語運用するための**VS Co
 
 ## 核心概念
 - **mdaitUnit**: 翻訳・管理の基本単位。Markdown内に`<!-- mdait hash [from:hash] [need:flag] -->`形式のHTMLコメントマーカーとして埋め込まれる
-- **needフラグ**: `translate`, `review`, `verify-deletion`, `solve-conflict`などでワークフローを管理
+- **needフラグ**: `translate`, `review`, `verify-deletion`, `revise@{hash}`などでワークフローを管理
 
 ## コマンド
 - **sync**: 関連Markdownファイル群間でmdaitUnitの対応関係を確立し、差分検出とneedフラグ付与を行う

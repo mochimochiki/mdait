@@ -106,7 +106,7 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.changeType, "target-changed");
 		});
 
-		test("競合時（両方変更）、need:solve-conflictが設定されること", () => {
+		test("両方変更時（ソース+ターゲット）、need:revise@{oldhash}が設定されハッシュも更新されること", () => {
 			const existing = new MdaitMarker("tgt456", "src123");
 			const result = syncTargetMarker({
 				sourceHash: "src789",
@@ -114,11 +114,11 @@ suite("marker-sync", () => {
 				existingMarker: existing,
 			});
 
-			assert.strictEqual(result.marker.need, "solve-conflict");
-			assert.strictEqual(result.changeType, "conflict");
-			// 競合時はハッシュを更新しない
-			assert.strictEqual(result.marker.hash, "tgt456");
-			assert.strictEqual(result.marker.from, "src123");
+			assert.strictEqual(result.marker.need, "revise@src123");
+			assert.strictEqual(result.changeType, "source-changed");
+			// 両方変更時もハッシュを最新に更新
+			assert.strictEqual(result.marker.hash, "tgt999");
+			assert.strictEqual(result.marker.from, "src789");
 		});
 
 		test("変更なし時、changedがfalseとなること", () => {
@@ -147,7 +147,6 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.targetMarker.need, "translate");
 
 			assert.strictEqual(result.changed, true);
-			assert.strictEqual(result.hasConflict, false);
 		});
 
 		test("ソース変更時、ターゲットにneed:revise@{oldhash}が設定されること", () => {
@@ -159,21 +158,22 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.sourceMarker.hash, "src789");
 			assert.strictEqual(result.targetMarker.from, "src789");
 			assert.strictEqual(result.targetMarker.need, "revise@src123");
-			assert.strictEqual(result.hasConflict, false);
 		});
 
-		test("競合時、両方にneed:solve-conflictが設定されること", () => {
+		test("両方変更時、ターゲットにneed:revise@{oldhash}が設定されハッシュも更新されること", () => {
 			const existingSource = new MdaitMarker("src123");
 			const existingTarget = new MdaitMarker("tgt456", "src123");
 
 			const result = syncMarkerPair("src789", "tgt999", existingSource, existingTarget);
 
-			assert.strictEqual(result.sourceMarker.need, "solve-conflict");
-			assert.strictEqual(result.targetMarker.need, "solve-conflict");
-			assert.strictEqual(result.hasConflict, true);
-			// 競合時はハッシュを更新しない
-			assert.strictEqual(result.sourceMarker.hash, "src123");
-			assert.strictEqual(result.targetMarker.hash, "tgt456");
+			// ソースはneedを設定しない
+			assert.strictEqual(result.sourceMarker.need, null);
+			// ターゲットはreviseを設定
+			assert.strictEqual(result.targetMarker.need, "revise@src123");
+			// 両方のハッシュが最新に更新される
+			assert.strictEqual(result.sourceMarker.hash, "src789");
+			assert.strictEqual(result.targetMarker.hash, "tgt999");
+			assert.strictEqual(result.changed, true);
 		});
 
 		test("変更なし時、changedがfalseとなること", () => {
@@ -183,7 +183,6 @@ suite("marker-sync", () => {
 			const result = syncMarkerPair("src123", "tgt456", existingSource, existingTarget);
 
 			assert.strictEqual(result.changed, false);
-			assert.strictEqual(result.hasConflict, false);
 		});
 	});
 });

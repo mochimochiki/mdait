@@ -420,7 +420,7 @@ suite("syncコマンドE2E", () => {
 			assert.strictEqual(addedUnits.length, 4, "追加されたユニットの数が正しくありません");
 		});
 
-		test("競合: 双方向翻訳で競合が検出されること", async () => {
+		test("双方向編集: 両方変更時にneed:reviseが設定されること", async () => {
 			// ja <-> en の双方向編集をシミュレート
 			const tmpJaTest = join(tmpJaDir, "10_test.md");
 			const tmpEnTest = join(tmpEnDir, "10_test.md");
@@ -445,17 +445,18 @@ suite("syncコマンドE2E", () => {
 			const vscode = require("vscode");
 			await vscode.commands.executeCommand("mdait.sync");
 
-			// 両方にneed:solve-conflictが付与されることを期待
-			// （現在の実装では競合検出機能が必要）
+			// ターゲット（en）にneed:reviseが付与されることを期待
 			const updatedJaText = readFileSync(tmpJaTest, "utf8");
 			const updatedEnText = readFileSync(tmpEnTest, "utf8");
 
-			// 両方のファイルに "need:solve-conflict" タグが付与されていることを確認
+			// ターゲットファイルに "need:revise@" タグが付与されていることを確認
+			// conflict は使用しない仕様に変更
+			assert.ok(updatedEnText.includes("need:revise@"), "英語ファイル（ターゲット）に 'need:revise@' が見つかりません");
+			// ソース側には need が付与されない
 			assert.ok(
-				updatedJaText.includes("need:solve-conflict"),
-				"日本語ファイルに 'need:solve-conflict' が見つかりません",
+				!updatedJaText.includes("need:solve-conflict"),
+				"日本語ファイルに 'need:solve-conflict' があってはなりません",
 			);
-			assert.ok(updatedEnText.includes("need:solve-conflict"), "英語ファイルに 'need:solve-conflict' が見つかりません");
 		});
 	});
 

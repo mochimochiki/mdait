@@ -8,18 +8,17 @@
 
 mdaitは階層化されたモジュール構成を採用し、各層が明確な責務を持って連携します：
 
+```plain
+UI層 ([ui.md])：VS Code統合、ステータス表示
+↓
+Commands層 ([commands.md])：sync/transコマンド実行
+↓
+Core層 ([core.md])：mdaitUnit、ハッシュ、ステータス管理
+↓
+Config層 ([config.md])：設定管理
+API層 ([api.md])：外部連携
+Utils層 ([utils.md])：汎用機能
 ```
-┌─────────────────────────────────────────┐
-│                [UI層](ui.md)                                                     │ ← VS Code統合、ステータス表示
-├─────────────────────────────────────────┤
-│              [Commands層](commands.md)                                           │ ← sync/transコマンド実行
-├─────────────────────────────────────────┤
-│                [Core層](core.md)                                                 │ ← mdaitUnit、ハッシュ、ステータス管理
-├─────────────────────────────────────────┤
-│      [Config層](config.md)    │    [API層](api.md)    │[Utils層](utils.md)     │ ← 設定管理、外部連携、汎用機能
-└─────────────────────────────────────────┘
-```
-
 ## リポジトリ構成
 
 ```
@@ -51,13 +50,15 @@ design/                  # 設計ドキュメント
 - **from**: 翻訳元ユニットのハッシュ値（翻訳追跡用、オプショナル）
 - **need**: 必要なアクション指示（オプショナル）
 
-#### needフラグの重要性
+#### needフラグ
 needフラグはユニットの状態とプロジェクトワークフローを管理する重要な仕組みです：
 
 - **translate**: AI翻訳が必要な新規・更新ユニット
 - **review**: 人手レビューが推奨されるユニット
 - **verify-deletion**: 削除対象ユニットの確認が必要
-- **solve-conflict**: マージ競合の解決が必要
+- **revise@{hash}**: 原文変更に対する改訂が必要（hashは旧原文のハッシュ）
+
+※現在の実装では「conflict」状態は存在しない。ソースとターゲットの両方が変更された場合も、すべて`revise`として処理する。翻訳ドメインでは「原文と訳文の両方が変更される」ことは通常であり、それをconflictと扱うのは過剰防衛となる。LLMによるdiff-aware reviseを主戦力とする。
 
 #### 実用例
 ```markdown
@@ -70,10 +71,8 @@ This paragraph needs translation from the source document.
 ### 全体フロー
 
 ```plaintext
-----------------          ----------------          ----------------
-| documentA.md | ◀------▶ | documentB.md │◀------▶ | documentC.md |
-| (e.g. ja.md) |   hash   | (e.g. en.md) │  hash   | (e.g. de.md) |
-----------------          ----------------          ----------------
+ja.md <--> en.md <--> de.md
+      hash       hash
 ```
 
 **主要コマンド：**

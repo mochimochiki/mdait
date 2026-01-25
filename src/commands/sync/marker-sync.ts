@@ -27,7 +27,7 @@ export interface MarkerSyncResult {
 	/** 変更があったかどうか */
 	changed: boolean;
 	/** 変更の種類 */
-	changeType: "none" | "new" | "source-changed" | "target-changed" | "conflict";
+	changeType: "none" | "new" | "source-changed" | "target-changed";
 }
 
 /**
@@ -92,18 +92,7 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 	const isSourceChanged = existingMarker.from !== sourceHash;
 	const isTargetChanged = targetHash !== null && existingMarker.hash !== targetHash;
 
-	// 競合: ソースとターゲット両方が変更された
-	if (isSourceChanged && isTargetChanged) {
-		existingMarker.setNeed("solve-conflict");
-		// ハッシュは更新しない（競合状態を保持）
-		return {
-			marker: existingMarker,
-			changed: true,
-			changeType: "conflict",
-		};
-	}
-
-	// ソースのみ変更: revise または translate
+	// ソースが変更された場合: revise または translate（両方変更時も同様に処理）
 	if (isSourceChanged) {
 		const oldSourceHash = existingMarker.from;
 		existingMarker.from = sourceHash;
@@ -114,8 +103,8 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 			existingMarker.setNeed("translate");
 		}
 
-		// ターゲットハッシュも更新
-		if (isTargetChanged && targetHash) {
+		// ターゲットハッシュを常に最新に更新
+		if (targetHash) {
 			existingMarker.hash = targetHash;
 		}
 
@@ -154,8 +143,6 @@ export interface PairSyncResult {
 	targetMarker: MdaitMarker;
 	/** 変更があったかどうか */
 	changed: boolean;
-	/** 競合があるかどうか */
-	hasConflict: boolean;
 }
 
 /**
@@ -183,28 +170,11 @@ export function syncMarkerPair(
 	const isSourceChanged = sourceMarker.hash !== sourceHash;
 	const isTargetChanged = targetMarker.hash !== targetHash;
 
-	// 競合: 両方が変更された
-	if (isSourceChanged && isTargetChanged) {
-		sourceMarker.setNeed("solve-conflict");
-		targetMarker.setNeed("solve-conflict");
-		// ハッシュは更新しない
-		return {
-			sourceMarker,
-			targetMarker,
-			changed: true,
-			hasConflict: true,
-		};
-	}
+	// ソースハッシュを常に最新に更新
+	sourceMarker.hash = sourceHash;
 
-	// ソースハッシュを更新
-	if (isSourceChanged) {
-		sourceMarker.hash = sourceHash;
-	}
-
-	// ターゲットハッシュを更新
-	if (isTargetChanged) {
-		targetMarker.hash = targetHash;
-	}
+	// ターゲットハッシュを常に最新に更新
+	targetMarker.hash = targetHash;
 
 	// 新規ターゲットの場合は need:translate を設定
 	if (isNewTarget) {
@@ -213,11 +183,10 @@ export function syncMarkerPair(
 			sourceMarker,
 			targetMarker,
 			changed: true,
-			hasConflict: false,
 		};
 	}
 
-	// ソースの変更をターゲットに反映
+	// ソースの変更をターゲットに反映（両方変更時も同様に処理）
 	const oldSourceHash = targetMarker.from;
 	if (oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
@@ -232,6 +201,5 @@ export function syncMarkerPair(
 		sourceMarker,
 		targetMarker,
 		changed: isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash,
-		hasConflict: false,
 	};
 }

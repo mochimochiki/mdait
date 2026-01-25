@@ -306,9 +306,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			if (element.needFlag.startsWith("revise@")) {
 				return vscode.l10n.t("Translation needed");
 			}
-			if (element.needFlag === "solve-conflict") {
-				return vscode.l10n.t("Conflict resolution needed");
-			}
 		}
 
 		switch (element.status) {
@@ -355,9 +352,6 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			if (element.needFlag) {
 				if (element.needFlag === "review") {
 					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.yellow"));
-				}
-				if (element.needFlag === "solve-conflict") {
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.red"));
 				}
 			}
 
