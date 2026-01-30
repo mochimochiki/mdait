@@ -37,10 +37,12 @@ sequenceDiagram
 - ファイル・ディレクトリ・ユニットの表示順序や階層構造は変更しない
 - アイコン・ラベル・コンテキストメニューの動作は維持
 
-### 3.2 責務の移行範囲
-- `StatusItem`インターフェースから`collapsibleState`を削除しない（段階的移行のため）
-- `StatusCollector`での`collapsibleState`設定は残すが、使用しない方向へ
-- `StatusTreeProvider.getTreeItem`で動的判定に完全移行
+### 3.2 責務の移行とcollapsibleStateの削除
+- UI層への完全移行後、`collapsibleState`プロパティは不要となる
+- 以下の箇所から`collapsibleState`を削除する：
+  - `BaseStatusItem`インターフェース（`status-item.ts`）
+  - `StatusCollector`での設定処理（`status-collector.ts`）
+  - `StatusItemTree`での設定処理（`status-item-tree.ts`）
 
 ### 3.3 テスト戦略
 - 既存のGUIテストが通過することを確認
@@ -48,13 +50,36 @@ sequenceDiagram
 
 ### 3.4 リスク
 - VSCodeのTreeView APIの挙動に依存するため、API変更時の影響を受ける可能性
-- 段階的移行により一時的にコードの重複が発生
 
 ## 4. 実装計画と進捗
 
-- [ ] `StatusTreeProvider.getTreeItem`で`collapsibleState`を動的に決定するよう修正
-  - Directoryタイプ: 子要素（ファイル・サブディレクトリ）があれば`Collapsed`
-  - Fileタイプ: frontmatterまたはchildrenがあれば`Collapsed`
-  - Unit/Frontmatterタイプ: 常に`None`
-- [ ] 既存テスト（`npm test`）が通過することを確認
-- [ ] コードレビューおよびCodeQL検査を実施
+### Phase 1: UI層での動的判定に移行
+
+- [ ] **4.1** `StatusTreeProvider.getTreeItem`を修正（`src/ui/status/status-tree-provider.ts`）
+  - `determineCollapsibleState`メソッドを新規追加
+  - 判定ロジック:
+    - `StatusItemType.Directory`: 子要素があれば`Collapsed`、なければ`None`
+    - `StatusItemType.File`: `frontmatter`または`children.length > 0`なら`Collapsed`
+    - `StatusItemType.Unit`: 常に`None`
+    - `StatusItemType.Frontmatter`: 常に`None`
+  - `getTreeItem`の`new vscode.TreeItem(element.label, element.collapsibleState)`を`new vscode.TreeItem(element.label, this.determineCollapsibleState(element))`に変更
+
+### Phase 2: Core層からcollapsibleStateを削除
+
+- [ ] **4.2** `BaseStatusItem`から`collapsibleState`プロパティを削除（`src/core/status/status-item.ts`）
+  - 40行目の`collapsibleState?: vscode.TreeItemCollapsibleState;`を削除
+
+- [ ] **4.3** `StatusCollector`から`collapsibleState`設定を削除（`src/core/status/status-collector.ts`）
+  - `buildFileStatusItem`（197-200行目）: `collapsibleState`プロパティ削除
+  - `buildEmptyFileStatusItem`（220行目）: `collapsibleState`プロパティ削除
+  - `buildErrorFileStatusItem`（241行目）: `collapsibleState`プロパティ削除
+  - `collectAllFromDirectory`エラー処理（476行目）: `collapsibleState`プロパティ削除
+
+- [ ] **4.4** `StatusItemTree`から`collapsibleState`設定を削除（`src/core/status/status-item-tree.ts`）
+  - `recalcDirectoryAggregate`（456-462行目）: `collapsibleState`設定ブロック削除
+  - `createDirectoryStatusItem`（514-520行目）: `collapsibleState`プロパティ削除
+
+### Phase 3: 検証
+
+- [ ] **4.5** 既存テスト（`npm test`）が通過することを確認
+- [ ] **4.6** コードレビューおよびCodeQL検査を実施
