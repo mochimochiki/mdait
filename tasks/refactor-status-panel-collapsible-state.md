@@ -56,10 +56,10 @@ sequenceDiagram
 ### Phase 1: UI層での動的判定に移行
 
 - [ ] **4.1** `StatusTreeProvider.getTreeItem`を修正（`src/ui/status/status-tree-provider.ts`）
-  - `determineCollapsibleState`メソッドを新規追加
+  - `determineCollapsibleState(element: StatusItem)`メソッドを新規追加
   - 判定ロジック:
-    - `StatusItemType.Directory`: 子要素があれば`Collapsed`、なければ`None`
-    - `StatusItemType.File`: `frontmatter`または`children.length > 0`なら`Collapsed`
+    - `StatusItemType.Directory`: `this.statusItemTree.getDirectoryChildren(element.directoryPath).length > 0`なら`Collapsed`、なければ`None`
+    - `StatusItemType.File`: `this.getFileChildren(element).length > 0`なら`Collapsed`、なければ`None`
     - `StatusItemType.Unit`: 常に`None`
     - `StatusItemType.Frontmatter`: 常に`None`
   - `getTreeItem`の`new vscode.TreeItem(element.label, element.collapsibleState)`を`new vscode.TreeItem(element.label, this.determineCollapsibleState(element))`に変更
@@ -67,19 +67,20 @@ sequenceDiagram
 ### Phase 2: Core層からcollapsibleStateを削除
 
 - [ ] **4.2** `BaseStatusItem`から`collapsibleState`プロパティを削除（`src/core/status/status-item.ts`）
-  - 40行目の`collapsibleState?: vscode.TreeItemCollapsibleState;`を削除
+  - `BaseStatusItem`インターフェースの`collapsibleState?: vscode.TreeItemCollapsibleState;`を削除
 
 - [ ] **4.3** `StatusCollector`から`collapsibleState`設定を削除（`src/core/status/status-collector.ts`）
-  - `buildFileStatusItem`（197-200行目）: `collapsibleState`プロパティ削除
-  - `buildEmptyFileStatusItem`（220行目）: `collapsibleState`プロパティ削除
-  - `buildErrorFileStatusItem`（241行目）: `collapsibleState`プロパティ削除
-  - `collectAllFromDirectory`エラー処理（476行目）: `collapsibleState`プロパティ削除
+  - `buildFileStatusItem`メソッド: `collapsibleState`プロパティ削除
+  - `buildEmptyFileStatusItem`メソッド: `collapsibleState`プロパティ削除
+  - `buildErrorFileStatusItem`メソッド: `collapsibleState`プロパティ削除
+  - `collectAllFromDirectory`メソッドのエラー処理ブロック: `collapsibleState`プロパティ削除
 
 - [ ] **4.4** `StatusItemTree`から`collapsibleState`設定を削除（`src/core/status/status-item-tree.ts`）
-  - `recalcDirectoryAggregate`（456-462行目）: `collapsibleState`設定ブロック削除
-  - `createDirectoryStatusItem`（514-520行目）: `collapsibleState`プロパティ削除
+  - `recalcDirectoryAggregate`メソッド: `collapsibleState`設定ブロック削除（hasFiles/hasSubDirsの判定部分）
+  - `createDirectoryStatusItem`メソッド: `collapsibleState`プロパティ削除（末尾の即時実行関数部分）
 
 ### Phase 3: 検証
 
 - [ ] **4.5** 既存テスト（`npm test`）が通過することを確認
-- [ ] **4.6** コードレビューおよびCodeQL検査を実施
+- [ ] **4.6** 手動テスト: 空ディレクトリ、単一ファイル、frontmatterのみのファイル等のエッジケースで展開・折りたたみ動作を検証
+- [ ] **4.7** コードレビューおよびCodeQL検査を実施
