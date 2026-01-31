@@ -3,19 +3,29 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { decodeSnapshot, encodeSnapshot } from "./snapshot-encoder";
+import { SnapshotParseError, SnapshotStore } from "./snapshot-store";
 
 /**
  * スナップショットマネージャー
  * ユニットコンテンツのスナップショットを`.mdait/snapshot`ファイルで管理
+ *
+ * CRC32ハッシュの先頭3桁（000〜fff）で区画化し、
+ * 決定的な順序（バケット昇順＋エントリ昇順）で出力
  */
 export class SnapshotManager {
 	private static instance: SnapshotManager;
 
-	/** インメモリキャッシュ: hash -> content */
+	/** インメモリキャッシュ: hash -> decoded content */
 	private cache = new Map<string, string>();
 
 	/** バッチ書き込み用バッファ: hash -> encoded content */
 	private writeBuffer = new Map<string, string>();
+
+	/** バケット化ストア（ファイル読み込み時に使用） */
+	private store: SnapshotStore | null = null;
+
+	/** ストアが読み込み済みかどうか */
+	private storeLoaded = false;
 
 	/** GC閾値（バイト） */
 	private static readonly GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
@@ -81,24 +91,51 @@ export class SnapshotManager {
 
 		const filePath = path.join(mdaitDir, "snapshot");
 
-		// 既存のスナップショットを読み込み
-		const existingSnapshots = await this.loadAllSnapshots();
+		// ストアを取得または作成
+		const store = await this.getOrLoadStore();
 
-		// バッファの内容をマージ（重複は上書き）
+		// バッファの内容をマージ
 		for (const [hash, encoded] of this.writeBuffer) {
-			existingSnapshots.set(hash, encoded);
+			store.upsert(hash, encoded);
 		}
 
-		// ファイルに書き込み
-		const lines: string[] = [];
-		for (const [hash, encoded] of existingSnapshots) {
-			lines.push(`${hash} ${encoded}`);
-		}
-
-		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(lines.join("\n")));
+		// 正規形でファイルに書き込み
+		const content = store.serialize();
+		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(content));
 
 		// バッファをクリア
 		this.writeBuffer.clear();
+	}
+
+	/**
+	 * ストアを取得または読み込み
+	 */
+	private async getOrLoadStore(): Promise<SnapshotStore> {
+		if (this.store && this.storeLoaded) {
+			return this.store;
+		}
+
+		this.store = new SnapshotStore();
+		const filePath = this.getSnapshotFilePath();
+
+		if (filePath && fs.existsSync(filePath)) {
+			try {
+				const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+				const content = new TextDecoder().decode(fileContent);
+				this.store.parse(content);
+			} catch (error) {
+				if (error instanceof SnapshotParseError) {
+					console.warn("Snapshot file is in invalid format (possibly v1). Starting fresh:", error.message);
+				} else {
+					console.warn("Failed to load snapshot file:", error);
+				}
+				// パース失敗時は空のストアで継続
+				this.store = new SnapshotStore();
+			}
+		}
+
+		this.storeLoaded = true;
+		return this.store;
 	}
 
 	/**
@@ -112,79 +149,16 @@ export class SnapshotManager {
 			return this.cache.get(hash) ?? null;
 		}
 
-		// ファイルから読み込み
-		const content = await this.loadFromFile(hash);
-		if (content) {
+		// ストアから読み込み
+		const store = await this.getOrLoadStore();
+		const encoded = store.get(hash);
+		if (encoded) {
+			const content = decodeSnapshot(encoded);
 			this.cache.set(hash, content);
-		}
-		return content;
-	}
-
-	/**
-	 * ファイルからスナップショットを読み込み
-	 */
-	private async loadFromFile(hash: string): Promise<string | null> {
-		const filePath = this.getSnapshotFilePath();
-		if (!filePath || !fs.existsSync(filePath)) {
-			return null;
-		}
-
-		try {
-			const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-			const lines = new TextDecoder().decode(fileContent).split("\n");
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed) continue;
-
-				const spaceIndex = trimmed.indexOf(" ");
-				if (spaceIndex === -1) continue;
-
-				const lineHash = trimmed.substring(0, spaceIndex);
-				if (lineHash === hash) {
-					const encoded = trimmed.substring(spaceIndex + 1);
-					return decodeSnapshot(encoded);
-				}
-			}
-		} catch (error) {
-			console.warn(`Failed to load snapshot for hash ${hash}:`, error);
+			return content;
 		}
 
 		return null;
-	}
-
-	/**
-	 * すべてのスナップショットを読み込み
-	 * @returns hash -> encoded content のMap
-	 */
-	private async loadAllSnapshots(): Promise<Map<string, string>> {
-		const snapshots = new Map<string, string>();
-		const filePath = this.getSnapshotFilePath();
-
-		if (!filePath || !fs.existsSync(filePath)) {
-			return snapshots;
-		}
-
-		try {
-			const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-			const lines = new TextDecoder().decode(fileContent).split("\n");
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed) continue;
-
-				const spaceIndex = trimmed.indexOf(" ");
-				if (spaceIndex === -1) continue;
-
-				const hash = trimmed.substring(0, spaceIndex);
-				const encoded = trimmed.substring(spaceIndex + 1);
-				snapshots.set(hash, encoded);
-			}
-		} catch (error) {
-			console.warn("Failed to load all snapshots:", error);
-		}
-
-		return snapshots;
 	}
 
 	/**
@@ -205,16 +179,12 @@ export class SnapshotManager {
 
 		console.log(`Running snapshot GC (file size: ${Math.round(stats.size / 1024)}KB)`);
 
-		// 全スナップショットを読み込み
-		const allSnapshots = await this.loadAllSnapshots();
+		// ストアを取得
+		const store = await this.getOrLoadStore();
+		const beforeSize = store.size();
 
 		// アクティブなもののみ残す
-		const filteredSnapshots = new Map<string, string>();
-		for (const [hash, encoded] of allSnapshots) {
-			if (activeHashes.has(hash)) {
-				filteredSnapshots.set(hash, encoded);
-			}
-		}
+		store.retainOnly(activeHashes);
 
 		// キャッシュも更新
 		for (const hash of this.cache.keys()) {
@@ -223,15 +193,11 @@ export class SnapshotManager {
 			}
 		}
 
-		// ファイルに書き込み
-		const lines: string[] = [];
-		for (const [hash, encoded] of filteredSnapshots) {
-			lines.push(`${hash} ${encoded}`);
-		}
+		// 正規形でファイルに書き込み
+		const content = store.serialize();
+		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(content));
 
-		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(lines.join("\n")));
-
-		console.log(`GC completed: ${allSnapshots.size} -> ${filteredSnapshots.size} snapshots`);
+		console.log(`GC completed: ${beforeSize} -> ${store.size()} snapshots`);
 	}
 
 	/**
@@ -252,5 +218,7 @@ export class SnapshotManager {
 	clearCache(): void {
 		this.cache.clear();
 		this.writeBuffer.clear();
+		this.store = null;
+		this.storeLoaded = false;
 	}
 }
