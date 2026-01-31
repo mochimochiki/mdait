@@ -37,7 +37,6 @@ interface BaseStatusItem {
 	status: Status;
 
 	// UI用
-	collapsibleState?: vscode.TreeItemCollapsibleState;
 	iconPath?: vscode.ThemeIcon;
 	tooltip?: string;
 	contextValue?: string;

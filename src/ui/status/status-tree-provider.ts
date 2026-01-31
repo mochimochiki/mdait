@@ -46,6 +46,31 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
+	 * StatusItemのcollapsibleStateを動的に判定する
+	 * VSCodeのTreeViewがUI状態を管理できるよう、getTreeItem呼び出し時に毎回子要素の有無で判定する
+	 */
+	private determineCollapsibleState(element: StatusItem): vscode.TreeItemCollapsibleState {
+		switch (element.type) {
+			case StatusItemType.Directory:
+				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
+				return this.statusItemTree.getDirectoryChildren(element.directoryPath).length > 0
+					? vscode.TreeItemCollapsibleState.Collapsed
+					: vscode.TreeItemCollapsibleState.None;
+			case StatusItemType.File:
+				// ファイルは子要素（frontmatter + ユニット）があればCollapsed
+				return this.getFileChildren(element).length > 0
+					? vscode.TreeItemCollapsibleState.Collapsed
+					: vscode.TreeItemCollapsibleState.None;
+			case StatusItemType.Unit:
+			case StatusItemType.Frontmatter:
+				// ユニット・Frontmatterは常に子要素なし
+				return vscode.TreeItemCollapsibleState.None;
+			default:
+				return vscode.TreeItemCollapsibleState.None;
+		}
+	}
+
+	/**
 	 * アクティブなファイルに対応するツリーアイテムを展開・選択する
 	 * @param filePath ファイルの絶対パス
 	 * @param treeView TreeViewインスタンス
@@ -87,7 +112,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 各StatusItem更新ではAssignを使用しているため、最新の状態を反映する
 	 */
 	public getTreeItem(element: StatusItem): vscode.TreeItem {
-		const treeItem = new vscode.TreeItem(element.label, element.collapsibleState);
+		const treeItem = new vscode.TreeItem(element.label, this.determineCollapsibleState(element));
 
 		// ステータスに応じたアイコンを設定
 		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating, element);

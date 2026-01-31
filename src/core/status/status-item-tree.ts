@@ -453,14 +453,6 @@ export class StatusItemTree {
 	 * ディレクトリの集計・表示情報を更新（共通処理）
 	 */
 	private recalcDirectoryAggregate(dirPath: string, directoryItem: DirectoryStatusItem): void {
-		// 直下ファイルまたはサブディレクトリがある場合は折りたたみ可能
-		{
-			const hasFiles = !!directoryItem.children && directoryItem.children.length > 0;
-			const hasSubDirs = this.getSubDirectoryPaths(dirPath).length > 0;
-			directoryItem.collapsibleState =
-				hasFiles || hasSubDirs ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
-		}
-
 		// 再帰的に配下すべてのファイルから集計
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
 		directoryItem.status = this.determineMergedStatus(allFiles);
@@ -511,13 +503,6 @@ export class StatusItemTree {
 			children: [...files], // 直下ファイルのコピーを保持
 			totalUnits,
 			translatedUnits,
-			collapsibleState: (() => {
-				const hasFiles = files.length > 0;
-				const hasSubDirs = this.getSubDirectoryPaths(dirPath).length > 0;
-				return hasFiles || hasSubDirs
-					? vscode.TreeItemCollapsibleState.Collapsed
-					: vscode.TreeItemCollapsibleState.None;
-			})(),
 		};
 	}
 

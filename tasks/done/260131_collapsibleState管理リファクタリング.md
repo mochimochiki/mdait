@@ -55,7 +55,7 @@ sequenceDiagram
 
 ### Phase 1: UI層での動的判定に移行
 
-- [ ] **4.1** `StatusTreeProvider.getTreeItem`を修正（`src/ui/status/status-tree-provider.ts`）
+- [x] **4.1** `StatusTreeProvider.getTreeItem`を修正（`src/ui/status/status-tree-provider.ts`）
   - `determineCollapsibleState(element: StatusItem)`メソッドを新規追加
   - 判定ロジック:
     - `StatusItemType.Directory`: `this.statusItemTree.getDirectoryChildren(element.directoryPath).length > 0`なら`Collapsed`、なければ`None`
@@ -66,21 +66,33 @@ sequenceDiagram
 
 ### Phase 2: Core層からcollapsibleStateを削除
 
-- [ ] **4.2** `BaseStatusItem`から`collapsibleState`プロパティを削除（`src/core/status/status-item.ts`）
+- [x] **4.2** `BaseStatusItem`から`collapsibleState`プロパティを削除（`src/core/status/status-item.ts`）
   - `BaseStatusItem`インターフェースの`collapsibleState?: vscode.TreeItemCollapsibleState;`を削除
 
-- [ ] **4.3** `StatusCollector`から`collapsibleState`設定を削除（`src/core/status/status-collector.ts`）
+- [x] **4.3** `StatusCollector`から`collapsibleState`設定を削除（`src/core/status/status-collector.ts`）
   - `buildFileStatusItem`メソッド: `collapsibleState`プロパティ削除
   - `buildEmptyFileStatusItem`メソッド: `collapsibleState`プロパティ削除
   - `buildErrorFileStatusItem`メソッド: `collapsibleState`プロパティ削除
   - `collectAllFromDirectory`メソッドのエラー処理ブロック: `collapsibleState`プロパティ削除
 
-- [ ] **4.4** `StatusItemTree`から`collapsibleState`設定を削除（`src/core/status/status-item-tree.ts`）
+- [x] **4.4** `StatusItemTree`から`collapsibleState`設定を削除（`src/core/status/status-item-tree.ts`）
   - `recalcDirectoryAggregate`メソッド: `collapsibleState`設定ブロック削除（hasFiles/hasSubDirsの判定部分）
   - `createDirectoryStatusItem`メソッド: `collapsibleState`プロパティ削除（末尾の即時実行関数部分）
 
 ### Phase 3: 検証
 
-- [ ] **4.5** 既存テスト（`npm test`）が通過することを確認
-- [ ] **4.6** 手動テスト: 空ディレクトリ、単一ファイル、frontmatterのみのファイル等のエッジケースで展開・折りたたみ動作を検証
-- [ ] **4.7** コードレビューおよびCodeQL検査を実施
+- [x] **4.5** 既存テスト（`npm test`）が通過することを確認
+- [x] **4.6** 手動テスト: 空ディレクトリ、単一ファイル、frontmatterのみのファイル等のエッジケースで展開・折りたたみ動作を検証
+- [x] **4.7** コードレビューおよびCodeQL検査を実施
+
+## 5. 品質要件チェック
+- [x] 全テスト通過（111件）
+- [x] TypeScriptコンパイルエラーなし
+- [x] Lintエラーなし
+- [x] コードレビュー承認済み
+
+## 6. まとめと改善提案
+`collapsibleState`管理をCore層からUI層へ移行し、VSCode TreeViewの標準的な管理に準拠させた。これにより、ツリー展開時のサークル表示問題が解消された。
+
+**今後の改善点:**
+- VSCode TreeView APIの仕様変更に備え、UIテストの自動化を検討

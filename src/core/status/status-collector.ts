@@ -194,10 +194,6 @@ export class StatusCollector {
 			children,
 			frontmatter: frontmatterItem ?? undefined,
 			contextValue: status === Status.Source ? "mdaitFileSource" : "mdaitFileTarget",
-			collapsibleState:
-				children.length > 0 || frontmatterItem
-					? vscode.TreeItemCollapsibleState.Collapsed
-					: vscode.TreeItemCollapsibleState.None,
 		};
 	}
 
@@ -217,7 +213,6 @@ export class StatusCollector {
 			children: [],
 			frontmatter: undefined,
 			contextValue: "mdaitFileTarget",
-			collapsibleState: vscode.TreeItemCollapsibleState.None,
 		};
 	}
 
@@ -238,7 +233,6 @@ export class StatusCollector {
 			children: [],
 			frontmatter: undefined,
 			contextValue: "mdaitFileTarget",
-			collapsibleState: vscode.TreeItemCollapsibleState.None,
 		};
 	}
 
@@ -473,7 +467,6 @@ export class StatusCollector {
 							hasParseError: true,
 							errorMessage: (error as Error).message,
 							contextValue: "mdaitFileTarget",
-							collapsibleState: vscode.TreeItemCollapsibleState.None,
 						};
 					}
 				}
