@@ -6,6 +6,14 @@ import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
 
 /**
+ * HTMLコメント範囲を表す内部構造
+ */
+interface HtmlCommentRange {
+	startLine: number; // 開始行（0-indexed）
+	endLine: number; // 終了行（0-indexed、exclusive）
+}
+
+/**
  * ユニット境界を表す内部構造
  */
 interface UnitBoundary {
@@ -112,8 +120,11 @@ export class MarkdownItParser implements IMarkdownParser {
 		// 境界構築には正規化後のコンテンツを使用
 		const lines = normalizedContent.split(/\r?\n/);
 
+		// HTMLコメント範囲を検出
+		const htmlCommentRanges = this.collectHtmlCommentRanges(parsedMdTokens);
+
 		// 第1パス: 境界トークンを収集
-		const boundaries = this.collectBoundaries(parsedMdTokens, mdaitMarkerLevel);
+		const boundaries = this.collectBoundaries(parsedMdTokens, mdaitMarkerLevel, htmlCommentRanges);
 
 		// 第2パス: 境界からユニットを構築
 		const units = this.buildUnitsFromBoundaries(boundaries, lines, frontMatterLineOffset);
@@ -122,14 +133,76 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
+	 * HTMLコメント範囲を検出
+	 * html_blockトークン、またはinline/paragraph内のHTMLコメントを抽出する
+	 * <!-- mdait で始まるものは除外（mdait管理用マーカー）
+	 * @param tokens markdown-itのトークン配列
+	 * @returns HTMLコメント範囲の配列
+	 */
+	private collectHtmlCommentRanges(tokens: MarkdownIt.Token[]): HtmlCommentRange[] {
+		const ranges: HtmlCommentRange[] = [];
+
+		for (const token of tokens) {
+			// html_blockトークンをチェック
+			if (token.type === "html_block" && token.map) {
+				const content = token.content.trim();
+
+				// <!-- で始まり --> で終わることを確認
+				if (content.startsWith("<!--") && content.endsWith("-->")) {
+					// mdait管理用マーカーは除外
+					if (!content.startsWith("<!-- mdait")) {
+						ranges.push({
+							startLine: token.map[0],
+							endLine: token.map[1],
+						});
+					}
+				}
+			}
+
+			// inlineトークン内のHTMLコメントをチェック
+			if (token.type === "inline" && token.map && token.content) {
+				const content = token.content.trim();
+
+				// <!-- で始まり --> で終わることを確認
+				if (content.startsWith("<!--") && content.endsWith("-->")) {
+					// mdait管理用マーカーは除外
+					if (!content.startsWith("<!-- mdait")) {
+						ranges.push({
+							startLine: token.map[0],
+							endLine: token.map[1],
+						});
+					}
+				}
+			}
+		}
+
+		return ranges;
+	}
+
+	/**
+	 * 指定された行がHTMLコメント範囲内かどうかを判定
+	 * @param line 行番号（0-indexed）
+	 * @param ranges HTMLコメント範囲の配列
+	 * @returns HTMLコメント範囲内ならtrue
+	 */
+	private isInHtmlComment(line: number, ranges: HtmlCommentRange[]): boolean {
+		return ranges.some((r) => line >= r.startLine && line < r.endLine);
+	}
+
+	/**
 	 * 第1パス: 境界トークンを収集
 	 * mdaitMarkerと指定レベル以上の見出しを境界として抽出する
 	 * マーカーの直後に見出しがある場合は、レベルに関係なくマーカーを見出しに統合する
 	 * @param tokens markdown-itのトークン配列
 	 * @param mdaitMarkerLevel 検知する見出しレベル（境界として扱うレベル）
+	 * @param htmlCommentRanges HTMLコメント範囲の配列
 	 * @returns ソート済みの境界配列
 	 */
-	private collectBoundaries(tokens: MarkdownIt.Token[], mdaitMarkerLevel: number): UnitBoundary[] {
+	private collectBoundaries(
+		tokens: MarkdownIt.Token[],
+		mdaitMarkerLevel: number,
+		htmlCommentRanges: HtmlCommentRange[],
+	): UnitBoundary[] {
 		const boundaries: UnitBoundary[] = [];
 		const markers: Map<number, MdaitMarker> = new Map(); // 行番号 -> マーカー
 		const headings: Map<number, { level: number; title: string }> = new Map(); // 行番号 -> 見出し
@@ -149,8 +222,13 @@ export class MarkdownItParser implements IMarkdownParser {
 			if ((token.type === "inline" || token.type === "html_block") && token.content.includes("<!-- mdait")) {
 				const marker = MdaitMarker.parse(token.content);
 				if (marker !== null && token.map) {
-					// マーカーの開始行を記録
+					// HTMLコメント範囲内の場合はスキップ
 					const startLine = token.map[0];
+					if (this.isInHtmlComment(startLine, htmlCommentRanges)) {
+						continue;
+					}
+
+					// マーカーの開始行を記録
 					const endLine = token.map[1];
 					markers.set(startLine, marker);
 					markerEndLines.set(startLine, endLine);
@@ -247,6 +325,30 @@ export class MarkdownItParser implements IMarkdownParser {
 	}
 
 	/**
+	 * 指定されたコンテンツがHTMLコメントのみで構成されているかをチェック
+	 * @param content チェック対象のコンテンツ
+	 * @returns HTMLコメントのみの場合true
+	 */
+	private isOnlyHtmlComments(content: string): boolean {
+		// 空白と改行を除去
+		const trimmed = content.trim();
+		if (trimmed === "") {
+			return false;
+		}
+
+		// HTMLコメントパターン: <!-- ... --> (単一行または複数行)
+		// すべてのHTMLコメントを除去して、残りがあるかチェック
+		let remaining = trimmed;
+
+		// HTMLコメントを繰り返し除去
+		const commentPattern = /<!--[\s\S]*?-->/g;
+		remaining = remaining.replace(commentPattern, "");
+
+		// 残りが空白のみならtrue（HTMLコメントのみで構成されている）
+		return remaining.trim() === "";
+	}
+
+	/**
 	 * コンテンツからタイトルを抽出する
 	 * @param content コンテンツ文字列
 	 * @returns 抽出されたタイトル（最大50文字）
@@ -296,13 +398,18 @@ export class MarkdownItParser implements IMarkdownParser {
 
 		const units: MdaitUnit[] = [];
 
-		// 最初の境界より前にコンテンツがある場合、それを独立したユニットとして扱う
+		// 最初の境界より前にコンテンツがある場合の処理
+		let precedingHtmlComments = "";
 		const firstBoundaryLine = boundaries[0].line;
 		if (firstBoundaryLine > 0) {
 			const precedingContent = lines.slice(0, firstBoundaryLine).join("\n");
 			const normalizedPrecedingContent = this.trimLeadingEmptyLines(precedingContent);
-			// 空白のみでない場合はユニットとして追加
-			if (precedingContent.trim().length > 0) {
+
+			// HTMLコメントのみの場合は、最初のユニットに含めるために保存
+			if (this.isOnlyHtmlComments(normalizedPrecedingContent)) {
+				precedingHtmlComments = `${precedingContent}\n\n`;
+			} else if (precedingContent.trim().length > 0) {
+				// HTMLコメントでない通常のコンテンツの場合は独立したユニットとして追加
 				const title = this.extractTitleFromContent(normalizedPrecedingContent);
 				units.push(
 					new MdaitUnit(
@@ -325,6 +432,11 @@ export class MarkdownItParser implements IMarkdownParser {
 			// 次の境界までをこのユニットのコンテンツとする
 			const endLine = i + 1 < boundaries.length ? boundaries[i + 1].line : lines.length;
 			let rawContent = lines.slice(startLine, endLine).join("\n");
+
+			// 最初のユニットの場合、先頭のHTMLコメントを含める
+			if (i === 0 && precedingHtmlComments) {
+				rawContent = precedingHtmlComments + rawContent;
+			}
 
 			// マーカーと見出し情報を取得（既にcollectBoundariesで統合済み）
 			const marker = boundary.marker ?? new MdaitMarker("");
