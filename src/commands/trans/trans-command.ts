@@ -25,11 +25,11 @@ import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { SnapshotManager } from "../../core/snapshot/snapshot-manager";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
@@ -369,8 +369,8 @@ async function translateUnit(
 			const oldhash = unit.marker.getOldHashFromNeed();
 			if (oldhash) {
 				try {
-					const snapshotManager = SnapshotManager.getInstance();
-					const oldContent = await snapshotManager.loadSnapshot(oldhash);
+					const unitRegistryManager = UnitRegistryManager.getInstance();
+					const oldContent = await unitRegistryManager.loadUnitRegistry(oldhash);
 					if (oldContent && hasDiff(oldContent, sourceContent)) {
 						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
 						console.log(`Generated diff for revision from ${oldhash}`);

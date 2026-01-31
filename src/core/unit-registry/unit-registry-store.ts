@@ -1,11 +1,14 @@
+import { encodeUnitRegistry } from "./unit-registry-encoder";
+
 /**
- * Snapshot Store
+ * Unit Registry Store
  *
  * CRC32ハッシュの先頭3桁（000〜fff）でバケット化し、
  * 決定的な順序（バケット昇順＋エントリ昇順）で出力することでgit競合を軽減する。
  *
  * フォーマット:
- * - バケット行: `<3桁hex> ` (末尾スペース、payloadなし)
+ * - バケット行: `<3桁hex> ` (末尾スペース、payloadなし) ※旧形式、互換性のため残存
+ * - 初期エントリ: `<3桁hex>00000 <encodeUnitRegistry("")>` (各バケットの先頭)
  * - エントリ行: `<8桁hash> <encoded_content>`
  */
 
@@ -27,30 +30,32 @@ function isBucketLine(line: string): boolean {
 
 /** エントリ行かどうかを判定 */
 function isEntryLine(line: string): boolean {
-	// 8桁hex + スペース + 何か
-	return /^[0-9a-f]{8} .+$/i.test(line);
+	// 8桁hex + スペース + 任意の文字列（空も可）
+	return /^[0-9a-f]{8} /i.test(line);
 }
 
 /** パースエラー */
-export class SnapshotParseError extends Error {
+export class UnitRegistryParseError extends Error {
 	constructor(message: string) {
 		super(message);
-		this.name = "SnapshotParseError";
+		this.name = "UnitRegistryParseError";
 	}
 }
 
 /**
- * Snapshot Store
+ * Unit Registry Store
  * インメモリでバケット構造を管理し、パース・シリアライズを担当
  */
-export class SnapshotStore {
+export class UnitRegistryStore {
 	/** bucketId(3桁hex) -> Map<hash(8桁), encodedContent> */
 	private buckets = new Map<string, Map<string, string>>();
 
 	/**
 	 * バケット化形式の文字列をパースしてストアに読み込む
+	 * - 新形式: バケット行なし、エントリ行のみ（ハッシュから自動判定）
+	 * - 旧形式: バケット行あり（後方互換性のため対応）
 	 * @param content ファイル内容
-	 * @throws SnapshotParseError 形式不正の場合
+	 * @throws UnitRegistryParseError 形式不正の場合
 	 */
 	parse(content: string): void {
 		this.buckets.clear();
@@ -71,37 +76,53 @@ export class SnapshotStore {
 			}
 
 			if (isBucketLine(line)) {
-				// バケット行
+				// バケット行（旧形式との互換性）
 				currentBucket = line.substring(0, 3).toLowerCase();
 				if (!this.buckets.has(currentBucket)) {
 					this.buckets.set(currentBucket, new Map());
 				}
 			} else if (isEntryLine(line)) {
 				// エントリ行
-				if (currentBucket === null) {
-					throw new SnapshotParseError(`Line ${i + 1}: Entry found before any bucket line`);
-				}
-
 				const spaceIndex = line.indexOf(" ");
 				const hash = normalizeHash(line.substring(0, spaceIndex));
 				const encoded = line.substring(spaceIndex + 1);
 
-				// ハッシュがバケットに属するか確認
-				const expectedBucket = getBucketId(hash);
-				if (expectedBucket !== currentBucket) {
-					throw new SnapshotParseError(
-						`Line ${i + 1}: Hash ${hash} should be in bucket ${expectedBucket}, but found in ${currentBucket}`,
+				// 初期エントリ（payload空）はスキップ
+				const bucketId = getBucketId(hash);
+				if (hash === `${bucketId}00000` && encoded.trim() === "") {
+					// 初期エントリはストアに保存しない（serializeで自動生成される）
+					continue;
+				}
+
+				// ハッシュからバケットIDを自動判定
+				// 旧形式でバケット行があった場合は整合性チェック
+				if (currentBucket !== null && bucketId !== currentBucket) {
+					throw new UnitRegistryParseError(
+						`Line ${i + 1}: Hash ${hash} should be in bucket ${bucketId}, but found in ${currentBucket}`,
 					);
 				}
 
-				const bucketMap = this.buckets.get(currentBucket);
+				// 新形式の場合: currentBucketを自動設定
+				if (currentBucket === null) {
+					currentBucket = bucketId;
+				}
+
+				// バケットを作成（存在しなければ）
+				if (!this.buckets.has(bucketId)) {
+					this.buckets.set(bucketId, new Map());
+				}
+
+				const bucketMap = this.buckets.get(bucketId);
 				if (bucketMap?.has(hash)) {
-					throw new SnapshotParseError(`Line ${i + 1}: Duplicate hash ${hash}`);
+					throw new UnitRegistryParseError(`Line ${i + 1}: Duplicate hash ${hash}`);
 				}
 				bucketMap?.set(hash, encoded);
+
+				// 次のバケットに移行する可能性があるのでリセット
+				currentBucket = null;
 			} else {
 				// 不正な行
-				throw new SnapshotParseError(`Line ${i + 1}: Invalid line format: ${line.substring(0, 50)}...`);
+				throw new UnitRegistryParseError(`Line ${i + 1}: Invalid line format: ${line.substring(0, 50)}...`);
 			}
 		}
 	}
@@ -169,6 +190,7 @@ export class SnapshotStore {
 	/**
 	 * 正規形でシリアライズ
 	 * - 全バケット（000〜fff）を昇順で出力
+	 * - 各バケットの先頭に初期エントリ（<bucketId>00000）を配置（payload空）
 	 * - バケット内エントリはハッシュ昇順
 	 * @returns バケット化形式の文字列
 	 */
@@ -178,12 +200,20 @@ export class SnapshotStore {
 		// 全バケット（000〜fff）を昇順で出力
 		for (let i = 0; i < 4096; i++) {
 			const bucketId = i.toString(16).padStart(3, "0");
+			const initialHash = `${bucketId}00000`;
 
-			// バケット行（空バケットも出力）
-			lines.push(`${bucketId} `);
+			// このバケットにエントリがあるか確認
+			const entries = this.buckets.get(bucketId);
+			const hasInitialEntry = entries?.has(initialHash);
+
+			// 初期エントリ（<bucketId>00000）を追加
+			// - 実エントリがない場合: payload空で出力（ファイルサイズ削減）
+			// - 実エントリがある場合: スキップ（実エントリで上書き）
+			if (!hasInitialEntry) {
+				lines.push(`${initialHash} `);
+			}
 
 			// このバケットにエントリがあれば出力
-			const entries = this.buckets.get(bucketId);
 			if (entries && entries.size > 0) {
 				// エントリをハッシュ昇順でソート
 				const sortedHashes = Array.from(entries.keys()).sort();

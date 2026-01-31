@@ -15,9 +15,9 @@ import {
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { SnapshotManager } from "../../core/snapshot/snapshot-manager";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
@@ -101,12 +101,12 @@ export async function syncCommand(): Promise<void> {
 			await Promise.all(workers);
 
 			// スナップショットバッファをフラッシュ
-			const snapshotManager = SnapshotManager.getInstance();
-			await snapshotManager.flushBuffer();
+			const unitRegistryManager = UnitRegistryManager.getInstance();
+			await unitRegistryManager.flushBuffer();
 		}
 
 		// 全ファイル処理完了後、GC処理
-		await runSnapshotGC(statusManager);
+		await runUnitRegistryGC(statusManager);
 
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
@@ -136,7 +136,7 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		const fileExplorer = new FileExplorer();
 		const statusManager = StatusManager.getInstance();
-		const snapshotManager = SnapshotManager.getInstance();
+		const unitRegistryManager = UnitRegistryManager.getInstance();
 
 		// ファイルがソースかターゲットかを判定し、対応するペアを見つける
 		let sourceFile: string | null = null;
@@ -182,7 +182,7 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		}
 
 		// スナップショットバッファをフラッシュ
-		await snapshotManager.flushBuffer();
+		await unitRegistryManager.flushBuffer();
 
 		// ステータスを更新
 		await statusManager.refreshFileStatus(sourceFile);
@@ -265,10 +265,10 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
 
 	// 4.5. スナップショット保存（初回sync時も保存）
-	const snapshotManager = SnapshotManager.getInstance();
+	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			snapshotManager.saveSnapshot(srcUnit.marker.hash, srcUnit.content);
+			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
 		}
 	}
 
@@ -352,10 +352,10 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	updateSectionHashes(matchResult, config, sourceFile, targetFile);
 
 	// sourceのスナップショット保存
-	const snapshotManager = SnapshotManager.getInstance();
+	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			snapshotManager.saveSnapshot(srcUnit.marker.hash, srcUnit.content);
+			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
 		}
 	}
 
@@ -506,15 +506,15 @@ function updateSectionHashes(
 }
 
 /**
- * スナップショットのGC処理
- * StatusItemTreeから全ユニットのハッシュを収集し、不要なスナップショットを削除
+ * ユニットレジストリのGC処理
+ * StatusItemTreeから全ユニットのハッシュを収集し、不要なユニットレジストリを削除
  * @param statusManager StatusManagerインスタンス
  */
-async function runSnapshotGC(statusManager: StatusManager): Promise<void> {
-	const snapshotManager = SnapshotManager.getInstance();
+async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
+	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
-	if (snapshotManager.getSnapshotFileSize() < 5 * 1024 * 1024) {
+	if (unitRegistryManager.getUnitRegistryFileSize() < 5 * 1024 * 1024) {
 		return;
 	}
 
@@ -539,5 +539,5 @@ async function runSnapshotGC(statusManager: StatusManager): Promise<void> {
 		}
 	}
 
-	await snapshotManager.garbageCollect(activeHashes);
+	await unitRegistryManager.garbageCollect(activeHashes);
 }

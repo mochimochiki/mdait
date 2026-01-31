@@ -26,19 +26,19 @@
 - `StatusManager`がCollectorとUIの橋渡しとして全体構築・部分更新を担う。
 - 実装: `src/core/status/`
 
-### Snapshot管理
-- ユニットコンテンツのスナップショットを`.mdait/snapshot`ファイルで管理。
+### UnitRegistry管理
+- ユニットコンテンツのレジストリを`.mdait/unit-registry`ファイルで管理。
 - gzip圧縮+base64エンコードでコンパクトに保存。
 - **形式（区画化）**: CRC32ハッシュの先頭3桁（000〜fff）でバケット化し、決定的な順序（バケット昇順＋エントリ昇順）で出力することでgit競合を軽減。
 - **フォーマット**:
   - バケット行: `<3桁hex> `（末尾スペース、contentなし）
   - エントリ行: `<8桁hash> <encoded_content>`
-- sync時に全ユニットのスナップショットを保存し、GCで不要なものを削除。
-- 実装: `src/core/snapshot/`
+- sync時に全ユニットのレジストリを保存し、GCで不要なものを削除。
+- 実装: `src/core/unit-registry/`
 
 ### Diff生成
 - `diff`パッケージを使用してunified diff形式で差分を生成。
-- trans時に旧スナップショットと現在のコンテンツから動的にdiffを生成しLLMに提供。
+- trans時に旧レジストリと現在のコンテンツから動的にdiffを生成しLLMに提供。
 - 実装: `src/core/diff/`
 
 ### FrontMatter翻訳

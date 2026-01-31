@@ -31,7 +31,7 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
 - **改訂翻訳時は全文再生成ではなく、前回訳文に対するパッチのみをLLMに返させる**
   - LLM出力は「前回訳文へのunified diff（または差分パッチ）」とし、変更箇所だけを置換
   - 差分適用に失敗した場合はフォールバックとして従来の全文翻訳に切り替える
-- 参照: [core.md](core.md)のSnapshot管理、Diff生成
+- 参照: [core.md](core.md)のUnitRegistry管理、Diff生成
 
 #### FrontMatter翻訳
 - `trans.frontmatter.keys`で指定されたキー値を翻訳対象として処理

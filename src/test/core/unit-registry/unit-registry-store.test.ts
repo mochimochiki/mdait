@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
-import { SnapshotParseError, SnapshotStore, getBucketId } from "../../../core/snapshot/snapshot-store";
+import {
+	UnitRegistryParseError,
+	UnitRegistryStore,
+	getBucketId,
+} from "../../../core/unit-registry/unit-registry-store";
 
-suite("SnapshotStore", () => {
+suite("UnitRegistryStore", () => {
 	suite("getBucketId", () => {
 		test("ハッシュの先頭3桁を小文字で返す", () => {
 			assert.equal(getBucketId("abc12345"), "abc");
@@ -13,14 +17,14 @@ suite("SnapshotStore", () => {
 
 	suite("upsert / get", () => {
 		test("エントリを追加して取得できる", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsert("abc12345", "content1");
 
 			assert.equal(store.get("abc12345"), "content1");
 		});
 
 		test("大文字小文字を正規化して扱う", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsert("ABC12345", "content1");
 
 			assert.equal(store.get("abc12345"), "content1");
@@ -28,13 +32,13 @@ suite("SnapshotStore", () => {
 		});
 
 		test("存在しないハッシュはnullを返す", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 
 			assert.equal(store.get("abc12345"), null);
 		});
 
 		test("upsertで既存エントリを上書きできる", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsert("abc12345", "content1");
 			store.upsert("abc12345", "content2");
 
@@ -44,7 +48,7 @@ suite("SnapshotStore", () => {
 
 	suite("upsertMany", () => {
 		test("複数エントリを一括追加できる", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsertMany([
 				["abc12345", "content1"],
 				["def67890", "content2"],
@@ -58,8 +62,8 @@ suite("SnapshotStore", () => {
 	});
 
 	suite("serialize", () => {
-		test("全バケット（000〜fff）が出力され、エントリはバケット内で昇順", () => {
-			const store = new SnapshotStore();
+		test("全バケット（000〜fff）が出力され、各バケットに初期エントリが配置される", () => {
+			const store = new UnitRegistryStore();
 			// 逆順で追加
 			store.upsert("fff00001", "contentF");
 			store.upsert("abc00002", "contentA2");
@@ -69,36 +73,36 @@ suite("SnapshotStore", () => {
 			const result = store.serialize();
 			const lines = result.split("\n");
 
-			// 全4096バケットが出力される
-			assert.equal(lines.length, 4096 + 4); // 4096バケット行 + 4エントリ
+			// 全4096バケットが出力される: 各バケットに初期エントリ1行
+			// 4096個の初期エントリ + 4個の追加エントリ = 4100行
+			assert.equal(lines.length, 4096 + 4); // 4100行
 
-			// 000バケットとそのエントリ
-			assert.equal(lines[0], "000 ");
+			// 000バケット（初期エントリ+追加エントリ）
+			assert.ok(lines[0].startsWith("00000000 ")); // 初期エントリ
 			assert.equal(lines[1], "000fffff content0");
 
-			// 001〜abaバケットは空（バケット行のみ）
-			assert.equal(lines[2], "001 ");
+			// 001バケットは空（初期エントリのみ）
+			assert.ok(lines[2].startsWith("00100000 ")); // 初期エントリ
 
-			// abcバケット（0xabc = 2748、000からの行オフセットを計算）
-			// 000バケット+1エントリ = 2行、001〜abb = 2747行、abc = 2749行目（インデックス2748+1=2749）
-			// しかし000にエントリがあるので、001は index 2
-			// abcは 0xabc = 2748番目のバケット
-			// 000(+1entry)=2行、001〜aba=2747行、合計2749行目がabcバケット行
-			const abcBucketIndex = 1 + 1 + 2747; // 000行 + 000エントリ + (001〜aba)
-			assert.equal(lines[abcBucketIndex], "abc ");
+			// abcバケット（0xabc = 2748番目のバケット）
+			// 000: 2行（初期エントリ + 000fffff）
+			// 001〜abb: 2747バケット * 1行 = 2747行
+			// 合計: 2 + 2747 = 2749行目がabcバケット初期エントリ（インデックス2749）
+			const abcBucketIndex = 2 + 2747;
+			assert.ok(lines[abcBucketIndex].startsWith("abc00000 ")); // 初期エントリ
 			assert.equal(lines[abcBucketIndex + 1], "abc00001 contentA1");
 			assert.equal(lines[abcBucketIndex + 2], "abc00002 contentA2");
 		});
 
-		test("空のストアでも全バケット行が出力される", () => {
-			const store = new SnapshotStore();
+		test("空のストアでも全初期エントリが出力される", () => {
+			const store = new UnitRegistryStore();
 			const result = store.serialize();
 			const lines = result.split("\n");
 
-			// 全4096バケット行
+			// 4096個のバケット * 1行（初期エントリのみ） = 4096行
 			assert.equal(lines.length, 4096);
-			assert.equal(lines[0], "000 ");
-			assert.equal(lines[4095], "fff ");
+			assert.ok(lines[0].startsWith("00000000 ")); // 初期エントリ
+			assert.ok(lines[4095].startsWith("fff00000 ")); // 最後の初期エントリ
 		});
 
 		test("決定論的出力: 同じ入力からは同じ出力", () => {
@@ -109,8 +113,8 @@ suite("SnapshotStore", () => {
 				["12345678", "content4"],
 			];
 
-			const store1 = new SnapshotStore();
-			const store2 = new SnapshotStore();
+			const store1 = new UnitRegistryStore();
+			const store2 = new UnitRegistryStore();
 
 			// 異なる順序で追加
 			store1.upsertMany(entries);
@@ -128,7 +132,7 @@ abc
 abc00001 contentA1
 abc00002 contentA2`;
 
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.parse(content);
 
 			assert.equal(store.get("000fffff"), "content0");
@@ -137,7 +141,7 @@ abc00002 contentA2`;
 		});
 
 		test("空のコンテンツをパースできる", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.parse("");
 
 			assert.equal(store.size(), 0);
@@ -151,26 +155,30 @@ abc
 abc00001 contentA1
 `;
 
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.parse(content);
 
 			assert.equal(store.get("000fffff"), "content0");
 			assert.equal(store.get("abc00001"), "contentA1");
 		});
 
-		test("バケット行なしでエントリが出現するとエラー", () => {
-			const content = `abc00001 contentA1`;
+		test("バケット行なしでもエントリを正しくパースできる（新形式）", () => {
+			const content = `abc00001 contentA1
+abc00002 contentA2`;
 
-			const store = new SnapshotStore();
-			assert.throws(() => store.parse(content), SnapshotParseError);
+			const store = new UnitRegistryStore();
+			store.parse(content);
+
+			assert.equal(store.get("abc00001"), "contentA1");
+			assert.equal(store.get("abc00002"), "contentA2");
 		});
 
 		test("ハッシュが間違ったバケットにあるとエラー", () => {
 			const content = `000 
 abc00001 contentA1`;
 
-			const store = new SnapshotStore();
-			assert.throws(() => store.parse(content), SnapshotParseError);
+			const store = new UnitRegistryStore();
+			assert.throws(() => store.parse(content), UnitRegistryParseError);
 		});
 
 		test("重複ハッシュがあるとエラー", () => {
@@ -178,8 +186,8 @@ abc00001 contentA1`;
 abc00001 content1
 abc00001 content2`;
 
-			const store = new SnapshotStore();
-			assert.throws(() => store.parse(content), SnapshotParseError);
+			const store = new UnitRegistryStore();
+			assert.throws(() => store.parse(content), UnitRegistryParseError);
 		});
 	});
 
@@ -193,7 +201,7 @@ abc00002 contentA2
 fff 
 fff12345 contentF`;
 
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.parse(original);
 			const result = store.serialize();
 
@@ -205,7 +213,7 @@ fff12345 contentF`;
 			assert.equal(store.get("fff12345"), "contentF");
 
 			// 再パースしても同じ
-			const store2 = new SnapshotStore();
+			const store2 = new UnitRegistryStore();
 			store2.parse(result);
 			assert.equal(store2.get("000fffff"), "content0");
 		});
@@ -213,7 +221,7 @@ fff12345 contentF`;
 
 	suite("retainOnly (GC)", () => {
 		test("指定したハッシュのみを残す", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsertMany([
 				["abc12345", "content1"],
 				["abc54321", "content2"],
@@ -229,7 +237,7 @@ fff12345 contentF`;
 		});
 
 		test("大文字小文字を正規化して比較する", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsert("abc12345", "content1");
 
 			store.retainOnly(new Set(["ABC12345"]));
@@ -237,8 +245,8 @@ fff12345 contentF`;
 			assert.equal(store.get("abc12345"), "content1");
 		});
 
-		test("GC後もバケット行は全て出力される", () => {
-			const store = new SnapshotStore();
+		test("GC後も初期エントリは全て出力される", () => {
+			const store = new UnitRegistryStore();
 			store.upsertMany([
 				["abc12345", "content1"],
 				["def67890", "content2"],
@@ -247,15 +255,33 @@ fff12345 contentF`;
 			store.retainOnly(new Set(["abc12345"]));
 
 			const result = store.serialize();
-			// defバケット行は存在するが、エントリはない
-			assert.ok(result.includes("def "));
+			// def初期エントリは存在するが、def67890エントリは削除される
+			assert.ok(result.includes("def00000 "));
 			assert.ok(!result.includes("def67890"));
+		});
+
+		test("初期エントリが保護対象に含まれる場合、削除されない", () => {
+			const store = new UnitRegistryStore();
+			store.upsertMany([
+				["abc12345", "content1"],
+				["abc00000", "initial"], // 初期エントリと同じハッシュ
+				["def67890", "content2"],
+			]);
+
+			// abc00000を保護対象に含める
+			store.retainOnly(new Set(["abc00000"]));
+
+			// abc00000は残り、他は削除される
+			assert.equal(store.get("abc00000"), "initial");
+			assert.equal(store.get("abc12345"), null);
+			assert.equal(store.get("def67890"), null);
+			assert.equal(store.size(), 1);
 		});
 	});
 
 	suite("size / keys / clear", () => {
 		test("sizeはエントリ数を返す", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			assert.equal(store.size(), 0);
 
 			store.upsert("abc12345", "content1");
@@ -266,7 +292,7 @@ fff12345 contentF`;
 		});
 
 		test("keysはすべてのハッシュを返す", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsertMany([
 				["abc12345", "content1"],
 				["def67890", "content2"],
@@ -279,7 +305,7 @@ fff12345 contentF`;
 		});
 
 		test("clearはストアを空にする", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 			store.upsert("abc12345", "content1");
 			store.clear();
 
@@ -290,11 +316,11 @@ fff12345 contentF`;
 
 	suite("パフォーマンス", () => {
 		test("200エントリの一括更新が現実的な時間で完了する", () => {
-			const store = new SnapshotStore();
+			const store = new UnitRegistryStore();
 
-			// 200エントリを生成
+			// 200エントリを生成（初期エントリと重複しないように1から開始）
 			const entries: [string, string][] = [];
-			for (let i = 0; i < 200; i++) {
+			for (let i = 1; i <= 200; i++) {
 				const hash = i.toString(16).padStart(8, "0");
 				entries.push([hash, `content_${i}`]);
 			}
@@ -305,6 +331,7 @@ fff12345 contentF`;
 			store.parse(serialized);
 			const elapsed = Date.now() - start;
 
+			// パース後は200個のユーザーエントリのみ（初期エントリは空payloadのためスキップ）
 			assert.equal(store.size(), 200);
 			// 100ms以内で完了すること
 			assert.ok(elapsed < 100, `Elapsed: ${elapsed}ms should be < 100ms`);
