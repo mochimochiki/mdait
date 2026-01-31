@@ -5,12 +5,9 @@
  */
 
 import { strict as assert } from "node:assert";
-import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../../api/ai-service";
-import type { TranslationContext } from "../../../commands/trans/translation-context";
+import { TranslationContext } from "../../../commands/trans/translation-context";
 import { AITranslator, type RevisionPatchResult, type TranslationResult } from "../../../commands/trans/translator";
-import { Configuration } from "../../../config/configuration";
-import { PromptProvider } from "../../../prompts";
 
 /**
  * モックAIサービス
@@ -40,24 +37,7 @@ class MockAIService implements AIService {
 }
 
 suite("DefaultTranslator リトライ機構", () => {
-	const defaultContext: TranslationContext = {
-		surroundingText: "",
-		terms: "",
-		previousTranslation: undefined,
-		sourceDiff: undefined,
-	};
-
-	suiteSetup(() => {
-		// Configuration と PromptProvider の初期化
-		// テスト用のモックワークスペースを設定
-		const mockWorkspaceFolder = {
-			uri: { fsPath: "/mock/workspace" },
-			name: "mock",
-			index: 0,
-		};
-		Configuration.initialize([mockWorkspaceFolder as unknown as vscode.WorkspaceFolder]);
-		PromptProvider.initialize();
-	});
+	const defaultContext = new TranslationContext();
 
 	suite("translate", () => {
 		test("正常なレスポンスは1回で成功する", async () => {
@@ -171,12 +151,12 @@ suite("DefaultTranslator リトライ機構", () => {
 	});
 
 	suite("translateRevisionPatch", () => {
-		const contextWithPrevious: TranslationContext = {
-			surroundingText: "",
-			terms: "",
-			previousTranslation: "前回の翻訳",
-			sourceDiff: "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new",
-		};
+		const contextWithPrevious = new TranslationContext();
+
+		beforeEach(() => {
+			contextWithPrevious.previousTranslation = "前回の翻訳";
+			contextWithPrevious.sourceDiff = "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new";
+		});
 
 		test("正常なレスポンスは1回で成功する", async () => {
 			const mockService = new MockAIService([
