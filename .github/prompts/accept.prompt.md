@@ -1,5 +1,5 @@
 ---
-name: go
+name: accept
 description: 承認して実装を進めるときの指示です
 agent: agent
 ---
