@@ -65,22 +65,16 @@
 - タスクチケットを共通の情報源として活用する
 
 ## 設計ガイドライン
-
-[mdait.architect.agent.md](./agents/mdait.architect.agent.md)を参照して設計を行う
+設計を行う場合は、`mdait.architect.agent.md`を参照
 
 ## 実装ガイドライン
-
-[mdait.coder.agent.md](./agents/mdait.coder.agent.md)を参照して実装を行う
+実装を行う場合は`mdait.coder.agent.md`を参照
 
 ## テストガイドライン
-
-[mdait.coder.agent.md](./agents/mdait.coder.agent.md)を参照してテストを行う
+テストを行う場合は`mdait.coder.agent.md`を参照
 
 ## レビューガイドライン
-
-[mdait.reviewer.agent.md](./agents/mdait.reviewer.agent.md)を参照してレビューを行う
+レビューを行う場合は`mdait.reviewer.agent.md`を参照
 
 ## 翻訳ガイドライン
-
-[mdait.translator.agent.md](./agents/mdait.translator.agent.md)を参照して翻訳を行う
-
+翻訳を行う場合は`mdait.translator.agent.md`を参照

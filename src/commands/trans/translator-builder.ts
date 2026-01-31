@@ -1,6 +1,6 @@
 import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { TransConfig } from "../../config/configuration";
-import { DefaultTranslator, type Translator } from "./translator";
+import { AITranslator, type Translator } from "./translator";
 
 /**
  * 翻訳サービスの構築を担当するビルダークラス。
@@ -15,6 +15,6 @@ export class TranslatorBuilder {
 	 */
 	public async build(): Promise<Translator> {
 		const aiService = await new AIServiceBuilder().build();
-		return new DefaultTranslator(aiService);
+		return new AITranslator(aiService);
 	}
 }

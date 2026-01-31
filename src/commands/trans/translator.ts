@@ -2,6 +2,15 @@ import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../api/ai-service";
 import { Configuration } from "../../config/configuration";
 import { PromptIds, PromptProvider } from "../../prompts";
+import { sanitizeTranslationOutput } from "./output-sanitizer";
+import {
+	type ParsedRevisionPatchResponse,
+	type ParsedTranslationResponse,
+	type ValidationError,
+	type ValidationResult,
+	validateRevisionPatchResponse,
+	validateTranslationResponse,
+} from "./response-validator";
 import type { TranslationContext } from "./translation-context";
 
 /**
@@ -93,10 +102,12 @@ export interface Translator {
 }
 
 /**
- * デフォルトの翻訳サービス
+ * AI翻訳サービス実装
  */
-export class DefaultTranslator implements Translator {
+export class AITranslator implements Translator {
 	private readonly aiService: AIService;
+	/** 最大リトライ回数 */
+	private readonly maxRetries = 2;
 
 	constructor(aiService: AIService) {
 		this.aiService = aiService;
@@ -136,7 +147,6 @@ export class DefaultTranslator implements Translator {
 		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		// systemPrompt と AIMessage[] の構築
-		// @important design.md に記載の通り、terms や surroundingText を活用すること
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_TRANSLATE, {
 			sourceLang,
@@ -155,12 +165,8 @@ export class DefaultTranslator implements Translator {
 			},
 		];
 
-		// aiService.sendMessage() の呼び出し
-		const rawResponse = await this.aiService.sendMessage(systemPrompt, messages, cancellationToken);
-
-		// JSON応答をパース
-		const result = this.parseAIResponse(rawResponse, codeBlocks, placeholders);
-		return result;
+		// リトライ付きでAI呼び出し
+		return await this.executeTranslationWithRetry(systemPrompt, messages, codeBlocks, placeholders, cancellationToken);
 	}
 
 	/**
@@ -208,90 +214,214 @@ export class DefaultTranslator implements Translator {
 			},
 		];
 
-		const rawResponse = await this.aiService.sendMessage(systemPrompt, messages, cancellationToken);
-		return this.parseRevisionPatchResponse(rawResponse, codeBlocks, placeholders);
+		// リトライ付きでAI呼び出し
+		return await this.executeRevisionPatchWithRetry(
+			systemPrompt,
+			messages,
+			codeBlocks,
+			placeholders,
+			cancellationToken,
+		);
 	}
 
 	/**
-	 * AIの応答をパースしてTranslationResultを生成
-	 * @param rawResponse AIからの生の応答
-	 * @param codeBlocks 保存されたコードブロック
-	 * @param placeholders プレースホルダーのリスト
-	 * @returns パースされた翻訳結果
+	 * リトライ付き翻訳実行
 	 */
-	private parseAIResponse(rawResponse: string, codeBlocks: string[], placeholders: string[]): TranslationResult {
-		try {
-			// マークダウンのコードブロックを除去（```json ... ``` のような形式に対応）
-			const jsonMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-			const jsonString = jsonMatch ? jsonMatch[1] : rawResponse;
+	private async executeTranslationWithRetry(
+		systemPrompt: string,
+		messages: AIMessage[],
+		codeBlocks: string[],
+		placeholders: string[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<TranslationResult> {
+		let lastError: ValidationError | undefined;
+		let lastRawResponse = "";
 
-			const parsed = JSON.parse(jsonString.trim());
-
-			// プレースホルダーをコードブロックに戻す
-			let translatedText = parsed.translation || rawResponse;
-			for (let i = 0; i < placeholders.length; i++) {
-				translatedText = translatedText.replace(placeholders[i], codeBlocks[i]);
+		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+			// キャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Translation cancelled");
 			}
 
-			return {
-				translatedText,
-				termSuggestions: parsed.termSuggestions || [],
-				warnings: parsed.warnings,
-			};
-		} catch (error) {
-			// JSONパースに失敗した場合は、生のテキストを翻訳として使用
-			console.warn("Failed to parse AI response as JSON, using raw text:", error);
+			// リトライ時は補足プロンプトを追加
+			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
 
-			let translatedText = rawResponse;
-			for (let i = 0; i < placeholders.length; i++) {
-				translatedText = translatedText.replace(placeholders[i], codeBlocks[i]);
+			lastRawResponse = await this.aiService.sendMessage(finalSystemPrompt, messages, cancellationToken);
+			const validation = validateTranslationResponse(lastRawResponse);
+
+			if (validation.valid && validation.parsed) {
+				// バリデーション成功 → サニタイズ処理
+				return this.processValidTranslationResponse(validation.parsed, codeBlocks, placeholders);
 			}
 
-			return {
-				translatedText,
-				termSuggestions: [],
-				warnings: ["AI response format was unexpected"],
-			};
+			lastError = validation.error;
+
+			// リトライ不可能なエラーは即座にフォールバック
+			if (!lastError?.retryable) {
+				break;
+			}
+
+			console.warn(`Translation validation failed (attempt ${attempt + 1}): ${lastError.message}`);
 		}
+
+		// フォールバック処理
+		return this.createTranslationFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);
 	}
 
 	/**
-	 * 改訂パッチ翻訳の応答をパース
+	 * リトライ付き改訂パッチ翻訳実行
 	 */
-	private parseRevisionPatchResponse(
-		rawResponse: string,
+	private async executeRevisionPatchWithRetry(
+		systemPrompt: string,
+		messages: AIMessage[],
+		codeBlocks: string[],
+		placeholders: string[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<RevisionPatchResult> {
+		let lastError: ValidationError | undefined;
+		let lastRawResponse = "";
+
+		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+			// キャンセルチェック
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Translation cancelled");
+			}
+
+			// リトライ時は補足プロンプトを追加
+			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
+
+			lastRawResponse = await this.aiService.sendMessage(finalSystemPrompt, messages, cancellationToken);
+			const validation = validateRevisionPatchResponse(lastRawResponse);
+
+			if (validation.valid && validation.parsed) {
+				// バリデーション成功 → サニタイズ処理
+				return this.processValidRevisionPatchResponse(validation.parsed, codeBlocks, placeholders);
+			}
+
+			lastError = validation.error;
+
+			// リトライ不可能なエラーは即座にフォールバック
+			if (!lastError?.retryable) {
+				break;
+			}
+
+			console.warn(`Revision patch validation failed (attempt ${attempt + 1}): ${lastError.message}`);
+		}
+
+		// フォールバック処理
+		return this.createRevisionPatchFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);
+	}
+
+	/**
+	 * 有効な翻訳レスポンスを処理
+	 */
+	private processValidTranslationResponse(
+		parsed: ParsedTranslationResponse,
+		codeBlocks: string[],
+		placeholders: string[],
+	): TranslationResult {
+		let content = parsed.translation;
+
+		// プレースホルダー復元
+		for (let i = 0; i < placeholders.length; i++) {
+			content = content.replaceAll(placeholders[i], codeBlocks[i]);
+		}
+
+		// サニタイズ処理
+		const sanitized = sanitizeTranslationOutput(content);
+
+		return {
+			translatedText: sanitized.text,
+			termSuggestions: parsed.termSuggestions ?? [],
+			warnings: [...sanitized.warnings, ...(parsed.warnings ?? [])],
+		};
+	}
+
+	/**
+	 * 有効な改訂パッチレスポンスを処理
+	 */
+	private processValidRevisionPatchResponse(
+		parsed: ParsedRevisionPatchResponse,
 		codeBlocks: string[],
 		placeholders: string[],
 	): RevisionPatchResult {
-		try {
-			const jsonMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-			const jsonString = jsonMatch ? jsonMatch[1] : rawResponse;
+		let content = parsed.targetPatch;
 
-			const parsed = JSON.parse(jsonString.trim());
-			let targetPatch = parsed.targetPatch || "";
-
-			for (let i = 0; i < placeholders.length; i++) {
-				targetPatch = targetPatch.replaceAll(placeholders[i], codeBlocks[i]);
-			}
-
-			return {
-				targetPatch,
-				termSuggestions: parsed.termSuggestions || [],
-				warnings: parsed.warnings,
-			};
-		} catch (error) {
-			console.warn("Failed to parse AI response as JSON for revision patch:", error);
-
-			let fallbackPatch = rawResponse;
-			for (let i = 0; i < placeholders.length; i++) {
-				fallbackPatch = fallbackPatch.replaceAll(placeholders[i], codeBlocks[i]);
-			}
-
-			return {
-				targetPatch: fallbackPatch,
-				termSuggestions: [],
-				warnings: ["AI response format was unexpected"],
-			};
+		// プレースホルダー復元
+		for (let i = 0; i < placeholders.length; i++) {
+			content = content.replaceAll(placeholders[i], codeBlocks[i]);
 		}
+
+		// サニタイズ処理
+		const sanitized = sanitizeTranslationOutput(content);
+
+		return {
+			targetPatch: sanitized.text,
+			termSuggestions: parsed.termSuggestions ?? [],
+			warnings: [...sanitized.warnings, ...(parsed.warnings ?? [])],
+		};
+	}
+
+	/**
+	 * 翻訳フォールバック結果生成
+	 */
+	private createTranslationFallbackResult(
+		rawResponse: string,
+		codeBlocks: string[],
+		placeholders: string[],
+		error?: ValidationError,
+	): TranslationResult {
+		let text = rawResponse;
+		for (let i = 0; i < placeholders.length; i++) {
+			text = text.replaceAll(placeholders[i], codeBlocks[i]);
+		}
+
+		const sanitized = sanitizeTranslationOutput(text);
+
+		return {
+			translatedText: sanitized.text,
+			termSuggestions: [],
+			warnings: [`AI response format was unexpected: ${error?.message ?? "unknown error"}`, ...sanitized.warnings],
+		};
+	}
+
+	/**
+	 * 改訂パッチフォールバック結果生成
+	 */
+	private createRevisionPatchFallbackResult(
+		rawResponse: string,
+		codeBlocks: string[],
+		placeholders: string[],
+		error?: ValidationError,
+	): RevisionPatchResult {
+		let text = rawResponse;
+		for (let i = 0; i < placeholders.length; i++) {
+			text = text.replaceAll(placeholders[i], codeBlocks[i]);
+		}
+
+		const sanitized = sanitizeTranslationOutput(text);
+
+		return {
+			targetPatch: sanitized.text,
+			termSuggestions: [],
+			warnings: [`AI response format was unexpected: ${error?.message ?? "unknown error"}`, ...sanitized.warnings],
+		};
+	}
+
+	/**
+	 * リトライ用補足プロンプト生成
+	 */
+	private buildRetryPromptSuffix(error: ValidationError, attemptNumber: number): string {
+		return `
+
+RETRY INSTRUCTION (Attempt ${attemptNumber}):
+The previous response was invalid: ${error.message}
+
+CRITICAL REMINDER:
+- Return ONLY a valid JSON object with the required fields.
+- The "translation" or "targetPatch" field must contain PLAIN TEXT, not JSON.
+- Do NOT nest JSON inside the translation or targetPatch field.`;
 	}
 }

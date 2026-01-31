@@ -47,6 +47,20 @@ trans（翻訳）コマンドは、`need:translate`フラグが付与された�
 - 各要素の数の差異を具体的に報告（例: 「見出しレベル2の数が不一致: 原文3個 vs 訳文2個」）
 - **注意**: frontmatter翻訳には品質チェックを適用しない
 
+#### AIレスポンス検証
+- AI応答に不要なJSON構造が混入していないかを5層防御機構で検証
+- **第1層（プロンプト強化）**: システムプロンプトでJSON混入のアンチパターンを明示
+- **第2層（ResponseValidator）**: AIレスポンスを解析してJSON構造を検出
+  - コードブロック内のJSONは除外（技術文書でよくあるコードサンプルは誤検出しない）
+  - JSON検出時は詳細なエラーコード（`ValidationErrorCode`）を返す
+- **第3層（リトライ機構）**: バリデーションエラー時は最大2回まで自動リトライ
+- **第4層（フォールバック）**: リトライ失敗時はJSONを除去した内容で処理を継続
+  - 翻訳結果に警告（`warnings`フィールド）を付加してユーザーに通知
+- **第5層（OutputSanitizer）**: 最終出力時にもJSON混入を検出して警告
+- 関連コンポーネント:
+  - [src/commands/trans/response-validator.ts](../src/commands/trans/response-validator.ts): `ResponseValidator` - AIレスポンスのバリデーション
+  - [src/commands/trans/output-sanitizer.ts](../src/commands/trans/output-sanitizer.ts): `OutputSanitizer` - 出力テキストのJSON検出
+
 #### 並列実行制御
 - **ディレクトリ翻訳**: ファイルを順次処理(キャンセル即応性とレート制限対策を重視)
 - **ファイル翻訳**: ユニットを順次処理(AI APIレート制限対策)
@@ -108,6 +122,9 @@ sequenceDiagram
 		 - 前回訳文に対する差分パッチをAIから取得
 		 - パッチ適用に成功した場合のみ更新（失敗時は全文翻訳にフォールバック）
 	 - AI翻訳実行（全文翻訳 or フォールバック時）
+		 - AIレスポンスのバリデーション（JSON混入チェック）
+		 - バリデーションエラー時は最大2回まで自動リトライ
+		 - リトライ失敗時はJSON除去して警告付きで継続
    - 翻訳品質チェック
    - ハッシュ更新とneedフラグ除去
    - 翻訳サマリ保存

@@ -24,6 +24,7 @@
   ],
   "chat.tools.terminal.autoApprove": {
     "git checkout": true,
-    "npx mocha": true
+    "npx mocha": true,
+    "npx biome": true
   },
 }

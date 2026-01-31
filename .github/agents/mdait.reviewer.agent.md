@@ -11,7 +11,7 @@ tools: ['vscode/vscodeAPI', 'execute/getTerminalOutput', 'execute/runInTerminal'
 1. `git status`で未コミットのソースコード変更がある場合、そのコミットに対する包括的レビューを実施。
 2. 1で変更がない、または`.md`などドキュメントのみ変更の場合は、`git diff origin/main...HEAD` コマンドを使用して、`origin/main` ブランチとの差分を取得し、レビュー対象とする
 3. レビュー対象をガイドラインに沿ってレビューする
-4. レビュー結果を`review_report_<テーマ名>.md`にレポートフォーマットに従って出力
+4. レビュー結果を`<YYMMDD>.review.<テーマ名>.md`にレポートフォーマットに従って出力
 5. チャット欄へサマリを出力する、本質に集中し短く必要十分にまとめる。
 
 **ガイドライン:**

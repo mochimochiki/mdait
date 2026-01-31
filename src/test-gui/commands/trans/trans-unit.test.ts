@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 import { AIServiceBuilder } from "../../../api/ai-service-builder";
 import { TranslationContext } from "../../../commands/trans/translation-context";
-import { DefaultTranslator } from "../../../commands/trans/translator";
+import { AITranslator } from "../../../commands/trans/translator";
 import { Configuration } from "../../../config/configuration";
 import { markdownParser } from "../../../core/markdown/parser";
 

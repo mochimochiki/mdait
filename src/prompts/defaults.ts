@@ -14,8 +14,8 @@
 export const PromptIds = {
 	/** Markdown翻訳用プロンプト */
 	TRANS_TRANSLATE: "trans.translate",
-  /** 改訂パッチ翻訳用プロンプト */
-  TRANS_REVISE_PATCH: "trans.revisePatch",
+	/** 改訂パッチ翻訳用プロンプト */
+	TRANS_REVISE_PATCH: "trans.revisePatch",
 	/** 対訳ペアからの用語検出 */
 	TERM_DETECT_PAIRS: "term.detectPairs",
 	/** ソース単独からの用語検出 */
@@ -125,6 +125,41 @@ Self-Check (MANDATORY before responding):
 - Verify that all Markdown symbols remain in the same positions.
 - Verify that no Markdown elements were removed or altered.
 
+CRITICAL OUTPUT FORMAT RULES (READ CAREFULLY):
+
+1. The "translation" field must contain ONLY the translated plain text.
+2. Do NOT include any JSON structure inside the "translation" value.
+3. Do NOT escape quotes or add backslashes in the translation.
+4. If the source text contains JSON examples in code blocks, translate them as-is but NEVER confuse them with your output format.
+
+COMMON MISTAKES TO AVOID:
+
+❌ BAD (nested JSON - DO NOT DO THIS):
+{
+  "translation": "{\"translation\": \"翻訳されたテキスト\"}"
+}
+
+❌ BAD (escaped JSON - DO NOT DO THIS):
+{
+  "translation": "{\\\"key\\\": \\\"value\\\"}"
+}
+
+❌ BAD (missing translation field - DO NOT DO THIS):
+{
+  "translated_text": "翻訳されたテキスト"
+}
+
+✅ GOOD (correct format):
+{
+  "translation": "翻訳されたテキスト",
+  "termSuggestions": []
+}
+
+FINAL CHECK before responding:
+- Is "translation" a plain string without JSON syntax?
+- Is the JSON structure valid with proper quotes?
+- Did you use the exact field name "translation" (not "translated" or "text")?
+
 Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
 
@@ -215,6 +250,30 @@ Self-Check (MANDATORY before responding):
 - The patch applies cleanly to the previous translation.
 - Unchanged lines remain identical.
 - Markdown structure is preserved.
+
+CRITICAL OUTPUT FORMAT RULES (READ CAREFULLY):
+
+1. The "targetPatch" field must contain ONLY the unified diff patch text.
+2. Do NOT include any JSON structure inside the "targetPatch" value.
+3. Do NOT escape quotes or add backslashes in the patch.
+
+COMMON MISTAKES TO AVOID:
+
+❌ BAD (nested JSON - DO NOT DO THIS):
+{
+  "targetPatch": "{\"targetPatch\": \"--- content\\n+++ content\"}"
+}
+
+✅ GOOD (correct format):
+{
+  "targetPatch": "--- content\n+++ content\n@@ -1,3 +1,3 @@\n...",
+  "termSuggestions": []
+}
+
+FINAL CHECK before responding:
+- Is "targetPatch" a plain diff string without JSON syntax?
+- Is the JSON structure valid?
+- Did you use the exact field name "targetPatch"?
 
 Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
@@ -440,7 +499,7 @@ Return JSON object mapping source terms to translated terms:
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
-  [PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
+	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
 	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
 	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
