@@ -49,6 +49,21 @@
 (作業完了後に振り返りを記載。次回同じ仕事を最初からより高品質に行うための改善提案があれば記載)
 ```
 
+## エージェント連携
+
+| エージェント | 役割 | 呼び出しタイミング |
+|------------|------|------------------|
+| `mdait.orchestrator` | タスク全体の調整 | 複数ステップのタスク開始時 |
+| `mdait.architect` | 設計・方針決定 | 新機能・設計変更が必要な場合 |
+| `mdait.coder` | 実装・テスト | 設計完了後の実装作業 |
+| `mdait.reviewer` | コードレビュー | 実装完了後の品質確認 |
+| `mdait.translator` | l10n対応 | 翻訳・国際化作業 |
+
+**引き継ぎのポイント**
+- 各エージェントは作業完了時、次エージェントに必要な情報を明示する
+- 不明点があれば自己判断せずユーザーに確認する
+- タスクチケットを共通の情報源として活用する
+
 ## 設計ガイドライン
 
 [mdait.architect.agent.md](./agents/mdait.architect.agent.md)を参照して設計を行う
@@ -64,4 +79,8 @@
 ## レビューガイドライン
 
 [mdait.reviewer.agent.md](./agents/mdait.reviewer.agent.md)を参照してレビューを行う
+
+## 翻訳ガイドライン
+
+[mdait.translator.agent.md](./agents/mdait.translator.agent.md)を参照して翻訳を行う
 
