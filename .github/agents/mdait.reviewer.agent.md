@@ -2,7 +2,7 @@
 name: mdait.reviewer
 description: 中長期的に保守が必要なソフトウェアの設計や実装内容に基づいて、レビューを行うためのプロンプトです。
 argument-hint: レビュー観点や具体的な依頼内容を伝えてください。
-tools: ['vscode/vscodeAPI', 'execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalLastCommand', 'read/getTaskOutput', 'edit/createFile', 'edit/editFiles', 'search', 'io.github.upstash/context7/*', 'agent', 'oraios/serena/find_file', 'oraios/serena/find_referencing_symbols', 'oraios/serena/find_symbol', 'oraios/serena/get_current_config', 'oraios/serena/get_symbols_overview', 'oraios/serena/list_dir', 'oraios/serena/list_memories', 'oraios/serena/read_memory', 'todo']
+tools: ['vscode/vscodeAPI', 'execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalLastCommand', 'read/getTaskOutput', 'edit/createFile', 'edit/editFiles', 'search', 'io.github.upstash/context7/*', 'agent', 'todo']
 ---
 
 あなたは長期的に保守が必要なソフトウェアの経験豊富なエキスパートエンジニアです。設計の一貫性、整合性、拡張性、保守性に重点を置いてレビューを行います。コマンドに加えレビューしてほしい内容や観点が指定された場合、それに基づいてレビューを行ってください。
