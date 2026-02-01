@@ -98,6 +98,110 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 }
 
 /**
+ * CodeLensからターゲットユニット（訳文）へジャンプするコマンド
+ *
+ * ソースファイルのマーカー（特に hash 情報）から対応するターゲットファイルの訳文ユニットを特定し、
+ * 対応するターゲットユニットの位置へエディタをジャンプさせる。
+ *
+ * 複数のターゲットユニットが存在する場合は、設定で定義されたターゲットの優先順位に従い、
+ * 「設定順で最初に一致したターゲットユニット」を自動的に選択してジャンプする。
+ * ユーザーに選択肢を提示するダイアログ等は表示せず、最初に一致したもののみを対象とする。
+ *
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensJumpToTargetCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+
+		// クリック位置および左側の可視範囲から相対オフセットを取得
+		const clickedPos = new vscode.Position(range.start.line, 0);
+		const leftVisible = activeEditor.visibleRanges[0];
+		const document = activeEditor.document;
+		const lineText = document.lineAt(range.start.line).text;
+		const marker = MdaitMarker.parse(lineText);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No hash found in marker."));
+			return;
+		}
+
+		const statusManager = StatusManager.getInstance();
+		const config = Configuration.getInstance();
+		const explorer = new FileExplorer();
+
+		// ソースファイルから対応するTransPair配列を取得（設定順）
+		const sourceFilePath = document.uri.fsPath;
+		const transPairs = explorer.getTransPairsFromSource(sourceFilePath, config);
+
+		// 優先ターゲットファイルパス配列を構築（設定順）
+		const preferredTargetPaths: string[] = [];
+		for (const pair of transPairs) {
+			const targetPath = explorer.getTargetPath(sourceFilePath, pair);
+			if (targetPath) {
+				preferredTargetPaths.push(targetPath);
+			}
+		}
+
+		// from属性がソースハッシュと一致するターゲットユニットを検索
+		const tree = statusManager.getStatusItemTree();
+		const targetUnit = tree.getTargetUnitByFromHash(marker.hash, preferredTargetPaths);
+		if (!targetUnit || !targetUnit.filePath) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Target unit not found for hash: {0}", marker.hash));
+			return;
+		}
+
+		const targetDoc = await vscode.workspace.openTextDocument(targetUnit.filePath);
+		const jumpLine = targetUnit.startLine ?? 0;
+		const position = new vscode.Position(jumpLine, 0);
+		const selection = new vscode.Selection(position, position);
+
+		// 右側（Beside）に分割して開き、カーソルをジャンプ位置へ
+		const editor = await vscode.window.showTextDocument(targetDoc, {
+			viewColumn: vscode.ViewColumn.Beside,
+			preview: true,
+			preserveFocus: true,
+			selection,
+		});
+
+		// 左側の相対位置に同期するように右側のスクロール位置を調整
+		if (leftVisible) {
+			const offset = Math.max(0, clickedPos.line - leftVisible.start.line);
+			const desiredTop = Math.max(0, Math.min(jumpLine - offset, targetDoc.lineCount - 1));
+			const topPos = new vscode.Position(desiredTop, 0);
+			editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+		} else {
+			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+		}
+
+		// ソースユニット（左側）とターゲットユニット（右側）の両方をハイライト
+		const sourceStartLine = range.start.line;
+		const sourceEndLine = findUnitEndLine(document, sourceStartLine);
+		const targetStartLine = targetUnit.startLine ?? 0;
+		const targetEndLine = targetUnit.endLine ?? 0;
+
+		highlightUnit(activeEditor, sourceStartLine, sourceEndLine, "target");
+		highlightUnit(editor, targetStartLine, targetEndLine, "source");
+
+		// ハイライト範囲を保存
+		_highlightInfo = {
+			leftEditor: activeEditor,
+			rightEditor: editor,
+			leftRange: new vscode.Range(sourceStartLine, 0, sourceEndLine, Number.MAX_SAFE_INTEGER),
+			rightRange: new vscode.Range(targetStartLine, 0, targetEndLine, Number.MAX_SAFE_INTEGER),
+		};
+
+		// 左→右の継続スクロール同期を開始
+		startOneWayScrollSync(activeEditor, editor, clickedPos.line, jumpLine);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Jump to target failed: {0}", errorMessage));
+	}
+}
+
+/**
  * CodeLensからソースユニットへジャンプするコマンド
  * @param range CodeLensが表示されている行の範囲
  */

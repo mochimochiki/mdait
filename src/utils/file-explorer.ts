@@ -42,6 +42,25 @@ export class FileExplorer {
 	}
 
 	/**
+	 * ソースファイルから対応する翻訳ペア配列を取得（設定順を維持）
+	 * 1つのソースに対して複数のターゲット言語がある場合があるため配列で返す
+	 */
+	public getTransPairsFromSource(filePath: string, config: Configuration): TransPair[] {
+		const normalizedPath = this.normalizePath(filePath);
+		const result: TransPair[] = [];
+
+		for (const transPair of config.transPairs) {
+			const normalizedSourceDir = this.normalizePath(transPair.sourceDir);
+
+			if (this.isPathInDirectory(normalizedPath, normalizedSourceDir)) {
+				result.push(transPair);
+			}
+		}
+
+		return result;
+	}
+
+	/**
 	 * ファイルがソースファイルかどうかを判定
 	 */
 	public isSourceFile(filePath: string, config: Configuration): boolean {

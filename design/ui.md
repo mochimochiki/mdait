@@ -14,6 +14,38 @@
 - **TranslationSummaryHoverProvider**: mdaitマーカー行およびfrontmatterマーカー行にホバーしたときに翻訳サマリ(処理時間・トークン数・用語候補・警告)を表示する。`SummaryManager`からハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示。
 - **SummaryDecorator**: 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供する。frontmatterマーカーも対象に含む。CodeLensと同じ色・フォントスタイルで統一し、詳細はHoverで確認可能。
 - **SummaryManager**: 翻訳実行時に生成されたサマリデータ(`TranslationSummary`)をメモリ上でMap管理するシングルトン。永続化は不要で、VS Code再起動時にクリアされる。翻訳完了時に`trans-command`から呼び出され、Hover/Decorator表示時に参照される。
+- **MdaitCodeLensProvider**: mdaitマーカー行およびfrontmatterマーカー行にCodeLensを表示し、翻訳・ジャンプ・need状態管理の直感的な操作を提供する。ターゲットファイルには「Source」ジャンプ、ソースファイルには「Target」ジャンプを表示し、双方向のナビゲーションを実現する。
+
+## CodeLens機能
+
+mdaitマーカー上に表示されるインラインアクションボタン。VS CodeのCodeLens機能を利用してテスト実行ボタンのような直感的なUIを提供する。
+
+### 表示されるCodeLens
+
+#### ターゲットファイル（訳文）のマーカー
+- **$(symbol-reference) Source**: 原文ユニットへジャンプ（`from`属性がある場合）
+- **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
+- **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
+
+#### ソースファイル（原文）のマーカー
+- **$(symbol-reference) Target**: 訳文ユニットへジャンプ（`from`属性がなく、対応する訳文が存在する場合）
+- 複数の訳文言語がある場合、`transPairs`設定順で最初のターゲットへジャンプ
+
+#### frontmatterマーカー
+- **$(symbol-reference) Source**: 原文frontmatterへジャンプ（ターゲットファイルの場合）
+- **✨[AI]翻訳**: frontmatter翻訳を実行（`need:translate`がある場合）
+- **$(check) 完了マーク**: frontmatter needフラグをクリア
+
+### ジャンプ時の動作
+- 右側（Beside）に分割表示でジャンプ先を開く
+- 左右のユニットをハイライト表示（find match風の背景色）
+- 左側のスクロールに右側が追従する一方向スクロール同期
+- カーソルがハイライト範囲外に移動、または右側を手動スクロールすると同期解除
+
+### 実装の詳細
+- **Provider**: `MdaitCodeLensProvider`がドキュメント内のマーカーを検出し、適切なCodeLensを生成
+- **Command**: `codeLensJumpToSourceCommand`, `codeLensJumpToTargetCommand`, `codeLensTranslateCommand`, `codeLensClearNeedCommand`等がアクションを実行
+- **パフォーマンス**: ソースファイル判定は`FileExplorer.isSourceFile()`でO(transPairs数)、ターゲット検索は`StatusItemTree.getTargetUnitByFromHash()`で優先検索→全体検索のフォールバック
 
 ## 更新シーケンス
 

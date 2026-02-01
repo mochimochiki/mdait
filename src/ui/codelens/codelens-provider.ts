@@ -4,13 +4,16 @@
  *   Markdownファイル内のmdaitマーカーに対してCodeLensを表示するプロバイダー。
  *   - mdaitマーカー行を検出し、翻訳が必要なユニットに「翻訳」ボタンを表示する
  *   - frontmatter内のmdait.frontマーカーにもCodeLensを表示する
+ *   - ソースファイルのマーカーには「Target」ボタンを表示し、訳文へのジャンプを提供
  *   - VS CodeのCodeLens機能を利用して、テスト実行ボタンのような直感的なUIを提供
  * @module ui/codelens/codelens-provider
  */
 import * as vscode from "vscode";
+import { Configuration } from "../../config/configuration";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { FileExplorer } from "../../utils/file-explorer";
 
 /**
  * mdaitマーカーのCodeLensを提供するプロバイダー
@@ -43,6 +46,16 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 		const codeLenses: vscode.CodeLens[] = [];
 
+		// ソースファイルかどうかを判定
+		const config = Configuration.getInstance();
+		let isSourceFile = false;
+		try {
+			const fileExplorer = new FileExplorer();
+			isSourceFile = fileExplorer.isSourceFile(document.uri.fsPath, config);
+		} catch {
+			// ワークスペースがない場合などは無視
+		}
+
 		// FrontMatterクラスを使って正確なfrontmatter範囲を取得
 		const content = document.getText();
 		const { frontMatter } = FrontMatter.parse(content);
@@ -74,9 +87,11 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					marker,
 					range,
 					"mdait.codelens.jumpToSource",
+					"mdait.codelens.jumpToTarget",
 					"mdait.codelens.translate",
 					"mdait.codelens.clearNeed",
 					[range],
+					isSourceFile,
 				);
 				codeLenses.push(...unitCodeLenses);
 			}
@@ -100,13 +115,16 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		const line = document.lineAt(lineIndex);
 		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
 
+		// frontmatterはソースファイルでもTargetジャンプ不要（frontmatter専用のジャンプを使用）
 		return this.createCodeLensesForMarker(
 			marker,
 			range,
 			"mdait.codelens.jumpToSourceFrontmatter",
+			"", // frontmatterにはTargetジャンプなし
 			"mdait.translate.frontmatter",
 			"mdait.codelens.clearFrontmatterNeed",
 			[document.uri],
+			false,
 		);
 	}
 
@@ -114,29 +132,45 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * マーカーからCodeLensを作成する共通ロジック
 	 * @param marker mdaitマーカー
 	 * @param range CodeLensの範囲
-	 * @param jumpCommand ソースへジャンプするコマンド
+	 * @param jumpToSourceCommand ソースへジャンプするコマンド
+	 * @param jumpToTargetCommand ターゲットへジャンプするコマンド
 	 * @param translateCommand 翻訳コマンド
 	 * @param clearNeedCommand needクリアコマンド
 	 * @param translateArgs 翻訳コマンドの引数
+	 * @param isSourceFile ソースファイルかどうか
 	 * @returns CodeLensの配列
 	 */
 	private createCodeLensesForMarker(
 		marker: MdaitMarker,
 		range: vscode.Range,
-		jumpCommand: string,
+		jumpToSourceCommand: string,
+		jumpToTargetCommand: string,
 		translateCommand: string,
 		clearNeedCommand: string,
 		translateArgs: (vscode.Range | vscode.Uri)[],
+		isSourceFile: boolean,
 	): vscode.CodeLens[] {
 		const codeLenses: vscode.CodeLens[] = [];
 
-		// fromハッシュがある場合はソースへ移動ボタン
+		// fromハッシュがある場合はソースへ移動ボタン（ターゲットファイルのみ）
 		if (marker.from) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title: vscode.l10n.t("$(symbol-reference) Source"),
 					tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
-					command: jumpCommand,
+					command: jumpToSourceCommand,
+					arguments: [range],
+				}),
+			);
+		}
+
+		// ソースファイルでfromがない場合はターゲットへ移動ボタン
+		if (isSourceFile && !marker.from && jumpToTargetCommand) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(symbol-reference) Target"),
+					tooltip: vscode.l10n.t("Tooltip: Jump to target translation unit"),
+					command: jumpToTargetCommand,
 					arguments: [range],
 				}),
 			);

@@ -125,6 +125,43 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * from属性が指定ハッシュと一致するターゲットユニットを検索する。
+	 * まず`preferredFilePaths`で指定されたファイル群を順に走査し、見つからなければ全ファイルを対象に再検索する。
+	 *
+	 * @param fromHash ソースユニットのハッシュ値。`unit.fromHash` がこの値と一致するターゲットユニットを探索する。
+	 * @param preferredFilePaths 優先して検索するファイルパスの配列。配列の先頭から順に、該当ファイル内のユニットを検索する。
+	 *                          指定されたパスに対応するファイルが存在しない場合はスキップされる。未指定または空配列の場合は、直接全ファイル検索を行う。
+	 * @returns
+	 *   - 優先ファイルパス内で最初に見つかったユニット（`preferredFilePaths` に含まれるファイルから見つかった場合）
+	 *   - 優先ファイルで見つからなかった場合は、全ファイルを対象にした検索で最初に見つかったユニット
+	 *   - 上記いずれの検索でも見つからなかった場合は `undefined`
+	 */
+	public getTargetUnitByFromHash(fromHash: string, preferredFilePaths?: string[]): UnitStatusItem | undefined {
+		// 優先ファイルパスがある場合は順番に検索
+		if (preferredFilePaths) {
+			for (const filePath of preferredFilePaths) {
+				const fileItem = this.fileItemMap.get(filePath);
+				if (fileItem?.children) {
+					for (const unit of fileItem.children) {
+						if (unit.fromHash === fromHash) {
+							return unit;
+						}
+					}
+				}
+			}
+		}
+
+		// 優先ファイルで見つからなければ全ファイルから検索
+		for (const unit of this.unitItemMapWithPath.values()) {
+			if (unit.fromHash === fromHash) {
+				return unit;
+			}
+		}
+
+		return undefined;
+	}
+
+	/**
 	 * 指定ファイル内の未翻訳ユニット（needFlag付き）を取得
 	 */
 	public getUnitsUntranslatedInFile(filePath: string): UnitStatusItem[] {

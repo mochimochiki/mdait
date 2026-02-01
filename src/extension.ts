@@ -20,6 +20,7 @@ import {
 	codeLensClearNeedCommand,
 	codeLensJumpToSourceCommand,
 	codeLensJumpToSourceFrontmatterCommand,
+	codeLensJumpToTargetCommand,
 	codeLensTranslateCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
@@ -162,6 +163,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensJumpToSourceDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.jumpToSource",
 		codeLensJumpToSourceCommand,
+	);
+
+	// CodeLensターゲットジャンプコマンド
+	const codeLensJumpToTargetDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.jumpToTarget",
+		codeLensJumpToTargetCommand,
 	);
 
 	// CodeLens need削除コマンド
@@ -408,6 +415,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		termExpandFileDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
+		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
 		codeLensDisposable,
 		hoverDisposable,
