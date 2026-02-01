@@ -264,6 +264,13 @@ async function translateUnit(
 
 	const startTime = Date.now();
 
+	// 翻訳開始ログ
+	logger.info("trans", "Unit translation start", {
+		unitHash: unit.marker?.hash,
+		title: unit.title,
+		patchMode: unit.marker?.needsRevision() ?? false,
+	});
+
 	try {
 		// 用語集の取得（設定が有効な場合のみ）
 		const config = Configuration.getInstance();
@@ -397,6 +404,10 @@ async function translateUnit(
 					targetLang,
 					context,
 					cancellationToken,
+					{
+						unitHash: unit.marker?.hash,
+						title: unit.title,
+					},
 				);
 
 				const patched = applyUnifiedPatch(previousTranslation, patchResult.targetPatch);
@@ -420,7 +431,17 @@ async function translateUnit(
 
 		if (!translationResult) {
 			// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-			translationResult = await translator.translate(sourceContent, sourceLang, targetLang, context, cancellationToken);
+			translationResult = await translator.translate(
+				sourceContent,
+				sourceLang,
+				targetLang,
+				context,
+				cancellationToken,
+				{
+					unitHash: unit.marker?.hash,
+					title: unit.title,
+				},
+			);
 		}
 
 		const resolvedResult = translationResult;
@@ -496,6 +517,13 @@ async function translateUnit(
 				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
 				warnings: resolvedResult.warnings,
 				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
+			});
+
+			// 翻訳完了ログ
+			logger.info("trans", "Unit translation completed", {
+				unitHash: newHash,
+				duration,
+				needsReview: checkResult.needsReview,
 			});
 		}
 	} catch (error) {

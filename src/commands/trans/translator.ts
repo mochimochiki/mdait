@@ -73,6 +73,7 @@ export interface Translator {
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
 	 * @param cancellationToken キャンセル処理用トークン
+	 * @param unitContext ログ用ユニット情報
 	 * @returns 翻訳結果（翻訳テキストと追加メタデータ）
 	 */
 	translate(
@@ -81,6 +82,7 @@ export interface Translator {
 		targetLang: string,
 		context: TranslationContext,
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult>;
 
 	/**
@@ -90,6 +92,7 @@ export interface Translator {
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
 	 * @param cancellationToken キャンセル処理用トークン
+	 * @param unitContext ログ用ユニット情報
 	 * @returns 改訂パッチ翻訳結果
 	 */
 	translateRevisionPatch(
@@ -98,6 +101,7 @@ export interface Translator {
 		targetLang: string,
 		context: TranslationContext,
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult>;
 }
 
@@ -120,6 +124,7 @@ export class AITranslator implements Translator {
 	 * @param targetLang 翻訳先の言語コード
 	 * @param context 翻訳コンテキスト
 	 * @param cancellationToken キャンセル処理用トークン
+	 * @param unitContext ログ用ユニット情報
 	 * @returns 翻訳結果（翻訳テキストと追加メタデータ）
 	 */
 	async translate(
@@ -128,6 +133,7 @@ export class AITranslator implements Translator {
 		targetLang: string,
 		context: TranslationContext,
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
 		// コードブロックをスキップするロジック
 		const codeBlockRegex = /```[\s\S]*?```/g;
@@ -166,7 +172,14 @@ export class AITranslator implements Translator {
 		];
 
 		// リトライ付きでAI呼び出し
-		return await this.executeTranslationWithRetry(systemPrompt, messages, codeBlocks, placeholders, cancellationToken);
+		return await this.executeTranslationWithRetry(
+			systemPrompt,
+			messages,
+			codeBlocks,
+			placeholders,
+			cancellationToken,
+			unitContext,
+		);
 	}
 
 	/**
@@ -178,6 +191,7 @@ export class AITranslator implements Translator {
 		targetLang: string,
 		context: TranslationContext,
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
 		// コードブロックをスキップするロジック
 		const codeBlockRegex = /```[\s\S]*?```/g;
@@ -221,6 +235,7 @@ export class AITranslator implements Translator {
 			codeBlocks,
 			placeholders,
 			cancellationToken,
+			unitContext,
 		);
 	}
 
@@ -233,6 +248,7 @@ export class AITranslator implements Translator {
 		codeBlocks: string[],
 		placeholders: string[],
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
@@ -262,8 +278,31 @@ export class AITranslator implements Translator {
 				break;
 			}
 
-			console.warn(`Translation validation failed (attempt ${attempt + 1}): ${lastError.message}`);
+			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
+			if (attempt > 0) {
+				const Logger = (await import("../../utils/logger")).Logger;
+				const logger = Logger.getInstance();
+				logger.warn("trans", "Translation retry", {
+					attempt: attempt + 1,
+					maxRetries: this.maxRetries + 1,
+					reason: lastError.message,
+					retryable: lastError.retryable,
+					unitHash: unitContext?.unitHash,
+					title: unitContext?.title,
+				});
+			}
 		}
+
+		// リトライ上限到達後のエラーログ
+		const Logger = (await import("../../utils/logger")).Logger;
+		const formatError = (await import("../../utils/logger")).formatError;
+		const logger = Logger.getInstance();
+		logger.error("trans", "Translation failed after all retry attempts", {
+			totalAttempts: this.maxRetries + 1,
+			lastError: lastError ? formatError(lastError) : "No error details available",
+			unitHash: unitContext?.unitHash,
+			title: unitContext?.title,
+		});
 
 		// フォールバック処理
 		return this.createTranslationFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);
@@ -278,6 +317,7 @@ export class AITranslator implements Translator {
 		codeBlocks: string[],
 		placeholders: string[],
 		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
@@ -307,8 +347,31 @@ export class AITranslator implements Translator {
 				break;
 			}
 
-			console.warn(`Revision patch validation failed (attempt ${attempt + 1}): ${lastError.message}`);
+			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
+			if (attempt > 0) {
+				const Logger = (await import("../../utils/logger")).Logger;
+				const logger = Logger.getInstance();
+				logger.warn("trans", "Translation retry (revision patch)", {
+					attempt: attempt + 1,
+					maxRetries: this.maxRetries + 1,
+					reason: lastError.message,
+					retryable: lastError.retryable,
+					unitHash: unitContext?.unitHash,
+					title: unitContext?.title,
+				});
+			}
 		}
+
+		// リトライ上限到達後のエラーログ
+		const Logger = (await import("../../utils/logger")).Logger;
+		const formatError = (await import("../../utils/logger")).formatError;
+		const logger = Logger.getInstance();
+		logger.error("trans", "Translation failed after all retry attempts (revision patch)", {
+			totalAttempts: this.maxRetries + 1,
+			lastError: lastError ? formatError(lastError) : "No error details available",
+			unitHash: unitContext?.unitHash,
+			title: unitContext?.title,
+		});
 
 		// フォールバック処理
 		return this.createRevisionPatchFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);

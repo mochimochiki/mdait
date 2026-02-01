@@ -32,6 +32,7 @@ const logger = Logger.getInstance();
  * Markdownユニットの同期を行う
  */
 export async function syncCommand(): Promise<void> {
+	const startTime = Date.now();
 	try {
 		// 準備
 		const statusManager = StatusManager.getInstance();
@@ -41,11 +42,21 @@ export async function syncCommand(): Promise<void> {
 			vscode.window.showErrorMessage(vscode.l10n.t("Configuration error: {0}", validationError));
 			return;
 		}
+
+		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
+		logger.info("sync", "Sync started", {
+			pairCount: pairs.length,
+		});
+
 		let successCount = 0;
 		let errorCount = 0;
+		let totalFileCount = 0;
+		let totalAdded = 0;
+		let totalModified = 0;
+		let totalDeleted = 0;
+		let totalUnchanged = 0;
 
 		// TransPairごとに処理
-		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 		for (const pair of pairs) {
 			// Source Markdownファイル一覧を取得
 			const fileExplorer = new FileExplorer();
@@ -85,17 +96,31 @@ export async function syncCommand(): Promise<void> {
 						}
 
 						// 結果をStatusManagerに反映
-						logger.info("sync", "File synced", {
-							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
-							file: path.basename(sourceFile),
-							added: diffResult.added,
-							modified: diffResult.modified,
-							deleted: diffResult.deleted,
-							unchanged: diffResult.unchanged,
-						});
+						// 変化の有無でログレベルを切り替え
+						const hasChanges = diffResult.added > 0 || diffResult.modified > 0 || diffResult.deleted > 0;
+						if (hasChanges) {
+							logger.info("sync", "File synced", {
+								pair: `${pair.sourceDir} -> ${pair.targetDir}`,
+								file: path.basename(sourceFile),
+								added: diffResult.added,
+								modified: diffResult.modified,
+								deleted: diffResult.deleted,
+								unchanged: diffResult.unchanged,
+							});
+						} else {
+							logger.debug("sync", "File synced (no changes)", {
+								pair: `${pair.sourceDir} -> ${pair.targetDir}`,
+								file: path.basename(sourceFile),
+							});
+						}
 						await statusManager.refreshFileStatus(sourceFile);
 						await statusManager.refreshFileStatus(targetFile);
 						successCount++;
+						totalFileCount++;
+						totalAdded += diffResult.added;
+						totalModified += diffResult.modified;
+						totalDeleted += diffResult.deleted;
+						totalUnchanged += diffResult.unchanged;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -120,14 +145,33 @@ export async function syncCommand(): Promise<void> {
 		// 全ファイル処理完了後、GC処理
 		await runUnitRegistryGC(statusManager);
 
+		const endTime = Date.now();
+		const durationMs = endTime - startTime;
+
+		logger.info("sync", "Sync completed", {
+			totalFileCount,
+			successCount,
+			errorCount,
+			totalAdded,
+			totalModified,
+			totalDeleted,
+			totalUnchanged,
+			durationMs,
+		});
+
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 		);
 	} catch (error) {
+		const endTime = Date.now();
+		const durationMs = endTime - startTime;
+		logger.error("sync", "Sync command failed", {
+			durationMs,
+			...formatError(error),
+		});
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
-		logger.error("sync", "Sync command failed", formatError(error));
 	}
 }
 
@@ -200,13 +244,21 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		await statusManager.refreshFileStatus(sourceFile);
 		await statusManager.refreshFileStatus(targetFile);
 
-		logger.info("sync", "File sync completed", {
-			file: path.basename(filePath),
-			added: diffResult.added,
-			modified: diffResult.modified,
-			deleted: diffResult.deleted,
-			unchanged: diffResult.unchanged,
-		});
+		// 変化の有無でログレベルを切り替え
+		const hasChanges = diffResult.added > 0 || diffResult.modified > 0 || diffResult.deleted > 0;
+		if (hasChanges) {
+			logger.info("sync", "File sync completed", {
+				file: path.basename(filePath),
+				added: diffResult.added,
+				modified: diffResult.modified,
+				deleted: diffResult.deleted,
+				unchanged: diffResult.unchanged,
+			});
+		} else {
+			logger.debug("sync", "File sync completed (no changes)", {
+				file: path.basename(filePath),
+			});
+		}
 	} catch (error) {
 		logger.error("sync", "Error during single file sync", formatError(error));
 		// エラーは表示せず、ログに記録のみ（ユーザー体験を妨げない）
