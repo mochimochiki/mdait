@@ -17,6 +17,8 @@ export class FrontMatter {
 	private _raw: string;
 	/** mdait管理外のフィールドの元の文字列表現（フォーマット保持用） */
 	private _nonMdaitRaw: string;
+	/** set()で変更されたnon-mdaitトップレベルキー（これらは_dataから再生成される） */
+	private _modifiedNonMdaitKeys: Set<string>;
 
 	/**
 	 * フロントマターの開始行番号（0ベース、通常0）
@@ -36,12 +38,20 @@ export class FrontMatter {
 	 * @param endLine 終了行番号（0ベース）
 	 * @param nonMdaitRaw mdait管理外のフィールドの元の文字列表現
 	 */
-	private constructor(data: FrontMatterData, raw: string, startLine = 0, endLine = 0, nonMdaitRaw = "") {
+	private constructor(
+		data: FrontMatterData,
+		raw: string,
+		startLine = 0,
+		endLine = 0,
+		nonMdaitRaw = "",
+		modifiedNonMdaitKeys?: Set<string>,
+	) {
 		this._data = data;
 		this._raw = raw;
 		this.startLine = startLine;
 		this.endLine = endLine;
 		this._nonMdaitRaw = nonMdaitRaw;
+		this._modifiedNonMdaitKeys = modifiedNonMdaitKeys ?? new Set();
 	}
 
 	/**
@@ -175,6 +185,7 @@ export class FrontMatter {
 			throw new Error("Invalid key: empty key path");
 		}
 
+		const topLevelKey = keys[0];
 		if (keys.length === 1) {
 			this._data[key] = value;
 		} else {
@@ -195,6 +206,11 @@ export class FrontMatter {
 				current = current[k];
 			}
 			current[keys[keys.length - 1]] = value;
+		}
+
+		// mdait以外のトップレベルキーが変更された場合、記録する
+		if (topLevelKey !== "mdait") {
+			this._modifiedNonMdaitKeys.add(topLevelKey);
 		}
 
 		this._updateRaw();
@@ -324,7 +340,8 @@ export class FrontMatter {
 
 	/**
 	 * Update raw string from data changes
-	 * Regenerates only the mdait portion and merges with non-mdait portion
+	 * Regenerates mdait portion and modified non-mdait keys from _data,
+	 * while preserving original format for unmodified non-mdait keys
 	 */
 	private _updateRaw(): void {
 		if (Object.keys(this._data).length === 0) {
@@ -332,7 +349,7 @@ export class FrontMatter {
 			return;
 		}
 
-		// mdait部分とnon-mdait部分を分離してマージ
+		// mdait部分とnon-mdait部分を分離
 		const { mdait, nonMdait } = separateMdaitData(this._data);
 
 		// mdait部分が空でnon-mdait部分もない場合
@@ -344,19 +361,36 @@ export class FrontMatter {
 		// mdait部分を再生成
 		const mdaitRaw = Object.keys(mdait).length > 0 ? matter.stringify("", mdait).trim() : "";
 
-		// non-mdait部分は元のフォーマットを使用、なければgray-matterで生成
-		let nonMdaitRaw = this._nonMdaitRaw;
-		if (!nonMdaitRaw && Object.keys(nonMdait).length > 0) {
-			nonMdaitRaw = matter.stringify("", nonMdait).trim();
+		// non-mdait部分の処理：
+		// 1. 変更されていないキーは元のフォーマットを保持（_nonMdaitRawから抽出）
+		// 2. 変更されたキーは元の位置で値のみ置換
+		let nonMdaitRaw = "";
+		if (Object.keys(nonMdait).length > 0) {
+			if (this._nonMdaitRaw && this._modifiedNonMdaitKeys.size > 0) {
+				// 変更されたキーの新しい値を取得
+				const modifiedValues: Record<string, unknown> = {};
+				for (const key of this._modifiedNonMdaitKeys) {
+					if (key in nonMdait) {
+						modifiedValues[key] = nonMdait[key];
+					}
+				}
+				// 元のraw文字列内で変更されたキーの値を置換
+				nonMdaitRaw = replaceKeysInRaw(this._nonMdaitRaw, modifiedValues);
+			} else if (this._nonMdaitRaw) {
+				// 変更がない場合は元のフォーマットをそのまま使用
+				nonMdaitRaw = this._nonMdaitRaw;
+			} else {
+				// 元のrawがない場合は全て再生成
+				nonMdaitRaw = matter.stringify("", nonMdait).trim();
+			}
 		}
 
-		// 両方を結合
+		// 全体を結合
 		this._raw = mergeFrontmatterParts(nonMdaitRaw, mdaitRaw);
 
 		// 次回のために非mdait部分を更新
 		if (Object.keys(nonMdait).length > 0) {
-			// _nonMdaitRawは元のフォーマットを維持するため、更新しない
-			// 新しくnon-mdaitフィールドが追加された場合のみ更新
+			// _nonMdaitRawは元のフォーマットを維持するため、初期化時のみ設定
 			if (!this._nonMdaitRaw) {
 				this._nonMdaitRaw = extractNonMdaitRaw(this._raw);
 			}
@@ -372,7 +406,14 @@ export class FrontMatter {
 	clone(): FrontMatter {
 		// structuredCloneで深いクローンを行い、ネストされたオブジェクトの参照共有を防ぐ
 		const clonedData = structuredClone(this._data);
-		return new FrontMatter(clonedData, this._raw, this.startLine, this.endLine, this._nonMdaitRaw);
+		return new FrontMatter(
+			clonedData,
+			this._raw,
+			this.startLine,
+			this.endLine,
+			this._nonMdaitRaw,
+			new Set(this._modifiedNonMdaitKeys),
+		);
 	}
 }
 
@@ -478,4 +519,105 @@ function mergeFrontmatterParts(nonMdaitRaw: string, mdaitRaw: string): string {
 	// 結合
 	const combined = [...nonMdaitLines, ...mdaitLines];
 	return `---\n${combined.join("\n")}\n---`;
+}
+
+/**
+ * raw文字列内の指定されたキーの値を新しい値で置換（元の位置を維持）
+ * @param raw 元のraw文字列（区切り文字なし）
+ * @param newValues 置換するキーと新しい値のマップ
+ * @returns 値が置換されたraw文字列
+ */
+function replaceKeysInRaw(raw: string, newValues: Record<string, unknown>): string {
+	if (!raw || Object.keys(newValues).length === 0) {
+		return raw;
+	}
+
+	const lines = raw.split(/\r?\n/);
+	const result: string[] = [];
+	let currentKey: string | null = null;
+	let skipNestedLines = false;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const indent = line.search(/\S/);
+		const trimmed = line.trim();
+
+		// 空行の処理
+		if (trimmed === "") {
+			if (!skipNestedLines) {
+				result.push(line);
+			}
+			continue;
+		}
+
+		// トップレベルキー（インデントなし）を検出
+		if (indent === 0) {
+			const colonIdx = trimmed.indexOf(":");
+			if (colonIdx > 0) {
+				const keyName = trimmed.substring(0, colonIdx);
+
+				if (keyName in newValues) {
+					// このキーの値を置換
+					currentKey = keyName;
+					const newValue = newValues[keyName];
+
+					// 単純な値（文字列、数値、ブール）の場合は1行で置換
+					if (typeof newValue === "string" || typeof newValue === "number" || typeof newValue === "boolean") {
+						result.push(`${keyName}: ${formatSimpleValue(newValue)}`);
+						skipNestedLines = true;
+					} else {
+						// 複雑な値（オブジェクト、配列）の場合はgray-matterで生成
+						const generated = matter.stringify("", { [keyName]: newValue }).trim();
+						const generatedLines = generated.split(/\r?\n/).filter((l) => l.trim() !== "---");
+						result.push(...generatedLines);
+						skipNestedLines = true;
+					}
+					continue;
+				}
+				// 新しいトップレベルキーが始まったのでスキップ終了
+				currentKey = null;
+				skipNestedLines = false;
+			}
+		}
+
+		// スキップ中（置換したキーのネストされた行）
+		if (skipNestedLines && indent > 0) {
+			continue;
+		}
+
+		// インデントが0に戻ったらスキップ終了
+		if (skipNestedLines && indent === 0) {
+			skipNestedLines = false;
+		}
+
+		if (!skipNestedLines) {
+			result.push(line);
+		}
+	}
+
+	return result.join("\n");
+}
+
+/**
+ * 単純な値をYAML形式でフォーマット
+ */
+function formatSimpleValue(value: string | number | boolean): string {
+	if (typeof value === "string") {
+		// 特殊文字を含む場合はクォート
+		if (
+			value.includes(":") ||
+			value.includes("#") ||
+			value.includes("'") ||
+			value.includes('"') ||
+			value.includes("\n")
+		) {
+			// シングルクォート内のシングルクォートはエスケープ
+			if (value.includes("'")) {
+				return `"${value.replace(/"/g, '\\"')}"`;
+			}
+			return `'${value}'`;
+		}
+		return value;
+	}
+	return String(value);
 }

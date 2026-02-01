@@ -601,6 +601,13 @@ async function translateFrontmatterIfNeeded(
 	marker.removeNeedTag();
 	setFrontmatterMarker(targetFrontMatter, marker);
 	markdown.frontMatter = targetFrontMatter;
+
+	logger.info("trans", "frontmatter translation completed", {
+		updatedKeys: Object.keys(sourceValues),
+		newHash: marker.hash,
+		newFrom: marker.from,
+	});
+
 	return true;
 }
 

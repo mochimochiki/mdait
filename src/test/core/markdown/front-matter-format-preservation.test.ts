@@ -272,4 +272,157 @@ Content`;
 		assert.ok(result.includes("author: Alice"), "authorフィールドが保持されること");
 		assert.ok(result.includes("mdait:"), "mdaitフィールドが追加されること");
 	});
+
+	test("non-mdaitフィールドの値を更新した場合、更新が反映され他のフォーマットは保持される", () => {
+		const markdown = `---
+title: Original Title
+tags: ["Golang", "Markdown"]
+description: Original description
+author: John
+---
+Content`;
+
+		const { frontMatter } = FrontMatter.parse(markdown);
+		assert.ok(frontMatter, "frontmatterが存在すること");
+
+		// titleを更新（翻訳を想定）
+		frontMatter.set("title", "Translated Title");
+
+		const result = frontMatter.stringify();
+		console.log("Result:\n", result);
+
+		// 更新したtitleが反映されていること
+		assert.ok(result.includes("title: Translated Title"), "titleが更新されていること");
+		assert.ok(!result.includes("Original Title"), "元のtitleが残っていないこと");
+
+		// 他のフィールドは元のフォーマットが保持されていること
+		assert.ok(result.includes('tags: ["Golang", "Markdown"]'), "tags配列のフォーマットが保持されること");
+		assert.ok(result.includes("description: Original description"), "descriptionが保持されること");
+		assert.ok(result.includes("author: John"), "authorが保持されること");
+	});
+
+	test("複数のnon-mdaitフィールドを更新した場合、すべての更新が反映される", () => {
+		const markdown = `---
+title: Title
+description: Description
+tags: ["A", "B"]
+author: Author
+---
+Content`;
+
+		const { frontMatter } = FrontMatter.parse(markdown);
+		assert.ok(frontMatter, "frontmatterが存在すること");
+
+		// 複数のフィールドを更新
+		frontMatter.set("title", "New Title");
+		frontMatter.set("description", "New Description");
+
+		const result = frontMatter.stringify();
+		console.log("Result:\n", result);
+
+		// 更新したフィールドが反映されていること
+		assert.ok(result.includes("title: New Title"), "titleが更新されていること");
+		assert.ok(result.includes("description: New Description"), "descriptionが更新されていること");
+
+		// 他のフィールドは保持されていること
+		assert.ok(result.includes('tags: ["A", "B"]'), "tagsが保持されること");
+		assert.ok(result.includes("author: Author"), "authorが保持されること");
+	});
+
+	test("non-mdaitフィールドとmdaitフィールドを同時に更新した場合、両方が反映される", () => {
+		const markdown = `---
+title: Original
+tags: ["X", "Y"]
+mdait:
+  sync:
+    level: 2
+---
+Content`;
+
+		const { frontMatter } = FrontMatter.parse(markdown);
+		assert.ok(frontMatter, "frontmatterが存在すること");
+
+		// 両方を更新
+		frontMatter.set("title", "Updated Title");
+		frontMatter.set("mdait.front", "hash123");
+
+		const result = frontMatter.stringify();
+		console.log("Result:\n", result);
+
+		// 両方の更新が反映されていること
+		assert.ok(result.includes("title: Updated Title"), "titleが更新されていること");
+		assert.ok(result.includes("front:"), "mdait.frontが追加されていること");
+		assert.ok(result.includes('tags: ["X", "Y"]'), "tagsが保持されること");
+	});
+
+	test("non-mdaitフィールドを更新しても元の順序が保持される", () => {
+		const markdown = `---
+title: Original Title
+description: Original description
+tags: ["A", "B"]
+author: John
+---
+Content`;
+
+		const { frontMatter } = FrontMatter.parse(markdown);
+		assert.ok(frontMatter, "frontmatterが存在すること");
+
+		// titleを更新（翻訳を想定）
+		frontMatter.set("title", "Translated Title");
+
+		const result = frontMatter.stringify();
+		console.log("Result:\n", result);
+
+		// 順序を確認：title → description → tags → author の順
+		const titleIdx = result.indexOf("title:");
+		const descIdx = result.indexOf("description:");
+		const tagsIdx = result.indexOf("tags:");
+		const authorIdx = result.indexOf("author:");
+
+		assert.ok(titleIdx < descIdx, "titleがdescriptionより前にあること");
+		assert.ok(descIdx < tagsIdx, "descriptionがtagsより前にあること");
+		assert.ok(tagsIdx < authorIdx, "tagsがauthorより前にあること");
+
+		// 値も正しく更新されていること
+		assert.ok(result.includes("title: Translated Title"), "titleが更新されていること");
+		assert.ok(result.includes("description: Original description"), "descriptionが保持されること");
+	});
+
+	test("複数のnon-mdaitフィールドを更新しても順序が保持される", () => {
+		const markdown = `---
+title: Title
+description: Description
+category: Category
+tags: ["X"]
+author: Author
+---
+Content`;
+
+		const { frontMatter } = FrontMatter.parse(markdown);
+		assert.ok(frontMatter, "frontmatterが存在すること");
+
+		// 複数フィールドを更新
+		frontMatter.set("title", "New Title");
+		frontMatter.set("description", "New Description");
+
+		const result = frontMatter.stringify();
+		console.log("Result:\n", result);
+
+		// 順序を確認
+		const titleIdx = result.indexOf("title:");
+		const descIdx = result.indexOf("description:");
+		const catIdx = result.indexOf("category:");
+		const tagsIdx = result.indexOf("tags:");
+		const authorIdx = result.indexOf("author:");
+
+		assert.ok(titleIdx < descIdx, "titleがdescriptionより前にあること");
+		assert.ok(descIdx < catIdx, "descriptionがcategoryより前にあること");
+		assert.ok(catIdx < tagsIdx, "categoryがtagsより前にあること");
+		assert.ok(tagsIdx < authorIdx, "tagsがauthorより前にあること");
+
+		// 値も正しく更新されていること
+		assert.ok(result.includes("title: New Title"), "titleが更新されていること");
+		assert.ok(result.includes("description: New Description"), "descriptionが更新されていること");
+		assert.ok(result.includes("category: Category"), "categoryが保持されること");
+	});
 });
