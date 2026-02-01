@@ -16,10 +16,10 @@
   },
   "github.copilot.chat.commitMessageGeneration.instructions": [
     {
-      "text": "必ず日本語で記述してください"
+      "text": "**重要: 必ず日本語で記述してください**"
     },
     {
-      "text": "Conventional Commitsのスタイルで記述してください"
+      "text": "Conventional Commitsのスタイルで記述してください。概要を150文字以内で記載し詳細は省略してください。"
     }
   ],
   "chat.tools.terminal.autoApprove": {
