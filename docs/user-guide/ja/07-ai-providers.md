@@ -83,7 +83,7 @@ OpenAI APIを直接使用して翻訳を実行します。高品質な翻訳が�
     "openai": {
       "apiKey": "${env:OPENAI_API_KEY}",
       "baseURL": "https://api.openai.com/v1",
-      "maxTokens": 2048,
+      "maxTokens": 16384,
       "timeoutSec": 120
     }
   }

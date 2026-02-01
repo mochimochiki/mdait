@@ -48,7 +48,7 @@ OpenAI公式APIを使用。`openai`パッケージを使用して応答を受け
     "openai": {
       "apiKey": "${env:OPENAI_API_KEY}",
       "baseURL": "https://api.openai.com/v1",
-      "maxTokens": 2048,
+      "maxTokens": 16384,
       "timeoutSec": 120
     }
   }

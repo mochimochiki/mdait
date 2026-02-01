@@ -32,7 +32,7 @@ export class OpenAIProvider implements AIService {
 		this.apiKey = (config.openai?.apiKey as string) || process.env.OPENAI_API_KEY || "";
 		this.baseURL = (config.openai?.baseURL as string) || "https://api.openai.com/v1";
 		this.model = (config.model as string) || "gpt-5-mini";
-		this.maxOutputTokens = (config.openai?.maxTokens as number) ?? 2048;
+		this.maxOutputTokens = (config.openai?.maxTokens as number) ?? 16384;
 		const timeoutSec = (config.openai?.timeoutSec as number) ?? 120;
 		this.timeoutMs = timeoutSec * 1000;
 

@@ -92,13 +92,13 @@
           "type": "string",
           "description": "AI provider to use for translation",
           "enum": ["default", "vscode-lm", "ollama", "openai"],
-          "default": "default"
+          "default": "vscode-lm"
         },
         "model": {
           "type": "string",
           "description": "AI model name to use with the selected provider",
-          "default": "gpt-5 mini",
-          "examples": ["gpt-5 mini", "gpt-4.1"]
+          "default": "gpt-4.1",
+          "examples": ["gpt-4.1", "gpt-5 mini"]
         },
         "ollama": {
           "type": "object",
@@ -140,7 +140,7 @@
               "type": "integer",
               "description": "Maximum number of tokens to generate in the response.",
               "minimum": 1,
-              "default": 2048
+              "default": 16384
             },
             "timeoutSec": {
               "type": "integer",
