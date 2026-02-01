@@ -4,6 +4,7 @@ import { Configuration } from "../../config/configuration";
 import { SelectionState } from "../../core/status/selection-state";
 import { Status, type StatusItem, StatusItemType, isFrontmatterStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { Logger, formatError } from "../../utils/logger";
 
 /**
  * ステータスツリービューのデータプロバイダ
@@ -236,7 +237,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				}
 				this.isStatusInitialized = true;
 			} catch (e) {
-				console.warn("ステータス初期化に失敗", e);
+				Logger.getInstance().warn("status-tree", "failed to initialize status", formatError(e));
 			} finally {
 				this.isStatusLoading = false;
 			}

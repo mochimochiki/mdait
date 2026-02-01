@@ -33,12 +33,15 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
+import { Logger, formatError } from "../../utils/logger";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
 import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
+
+const logger = Logger.getInstance();
 
 /**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
@@ -157,7 +160,7 @@ export async function transFile_CoreProc(
 		for (let i = 0; i < unitsToTranslate.length; i++) {
 			// キャンセルチェック
 			if (token.isCancellationRequested) {
-				console.log(`Translation cancelled for ${targetFilePath}`);
+				logger.info("trans", "Translation cancelled", { file: targetFilePath });
 				await statusManager.changeFileStatus(targetFilePath, { isTranslating: false });
 				vscode.window.showInformationMessage(
 					vscode.l10n.t("Translation cancelled for: {0}", path.basename(targetFilePath)),
@@ -220,7 +223,7 @@ export async function transFile_CoreProc(
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.refreshFileStatus(targetFilePath);
 
-		console.log(`Translation completed - ${path.basename(targetFilePath)}`);
+		logger.info("trans", "Translation completed", { file: path.basename(targetFilePath) });
 	} finally {
 		// isTranslatingフラグをクリア
 		await statusManager.changeFileStatus(targetFilePath, { isTranslating: false });
@@ -279,14 +282,14 @@ async function translateUnit(
 				}
 			}
 		} catch (error) {
-			console.warn("Failed to load terms for translation:", error);
+			logger.warn("trans", "Failed to load terms for translation", formatError(error));
 		}
 
 		// 前回の訳文を取得（原文が改訂された場合）
 		// unit.contentには翻訳前の状態（＝前回の訳文）が含まれている
 		const previousTranslation = unit.marker?.from ? unit.content : undefined;
 		if (previousTranslation) {
-			console.log(`Using previous translation as reference for unit ${unit.marker?.hash}`);
+			logger.debug("trans", "Using previous translation as reference", { unitHash: unit.marker?.hash });
 		}
 
 		// 翻訳コンテキストの作成
@@ -328,7 +331,7 @@ async function translateUnit(
 					}
 				}
 			} catch (error) {
-				console.warn("Failed to get surrounding units for context:", error);
+				logger.warn("trans", "Failed to get surrounding units for context", formatError(error));
 			}
 		}
 
@@ -356,10 +359,13 @@ async function translateUnit(
 							}
 						}
 					} catch (error) {
-						console.warn(`Failed to read source unit from ${sourceUnit.filePath}:`, error);
+						logger.warn("trans", "Failed to read source unit", {
+							filePath: sourceUnit.filePath,
+							...formatError(error),
+						});
 					}
 				} else {
-					console.warn(`Source unit not found for hash: ${unit.marker.from}`);
+					logger.warn("trans", "Source unit not found", { hash: unit.marker.from });
 				}
 			}
 		}
@@ -373,10 +379,10 @@ async function translateUnit(
 					const oldContent = await unitRegistryManager.loadUnitRegistry(oldhash);
 					if (oldContent && hasDiff(oldContent, sourceContent)) {
 						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
-						console.log(`Generated diff for revision from ${oldhash}`);
+						logger.debug("trans", "Generated diff for revision", { oldhash });
 					}
 				} catch (error) {
-					console.warn(`Failed to generate diff for oldhash ${oldhash}:`, error);
+					logger.warn("trans", "Failed to generate diff", { oldhash, ...formatError(error) });
 				}
 			}
 		}
@@ -402,10 +408,13 @@ async function translateUnit(
 						stats: patchResult.stats,
 					};
 				} else {
-					console.warn(`Patch apply failed for unit ${unit.marker?.hash}, fallback to full translation`);
+					logger.warn("trans", "Patch apply failed, fallback to full translation", { unitHash: unit.marker?.hash });
 				}
 			} catch (error) {
-				console.warn(`Patch translation failed for unit ${unit.marker?.hash}, fallback to full translation`, error);
+				logger.warn("trans", "Patch translation failed, fallback to full translation", {
+					unitHash: unit.marker?.hash,
+					...formatError(error),
+				});
 			}
 		}
 
@@ -468,7 +477,7 @@ async function translateUnit(
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
 				unit.marker.setNeed("review");
-				console.log(`Setting need:review for unit ${newHash} due to quality concerns`);
+				logger.info("trans", "Setting need:review for unit due to quality concerns", { unitHash: newHash });
 			} else {
 				// 問題がない場合はneedフラグを削除
 				unit.marker.removeNeedTag();
@@ -512,7 +521,7 @@ async function translateFrontmatterIfNeeded(
 	}
 
 	if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
-		console.warn(`Source file not found for frontmatter translation: ${sourceFilePath}`);
+		logger.warn("trans", "Source file not found for frontmatter translation", { sourceFilePath });
 		return false;
 	}
 
@@ -653,7 +662,7 @@ export async function transUnit_CoreProc(
 	try {
 		// キャンセルチェック
 		if (token.isCancellationRequested) {
-			console.log(`Translation cancelled for ${targetPath}`);
+			logger.info("trans", "Unit translation cancelled", { targetPath });
 			await statusManager.changeUnitStatus(unitHash, { isTranslating: false }, targetPath);
 			vscode.window.showInformationMessage(
 				vscode.l10n.t("Translation cancelled for unit: {0}", unitHash.substring(0, 8)),
@@ -724,7 +733,7 @@ async function updateAndSaveUnit(file: vscode.Uri, markerText: string, unit: Mda
 	const content = decoder.decode(document);
 	const offsets = getUnitPosition(content, markerText);
 	if (!offsets) {
-		console.warn("mdait marker not found (fs path). Skipped unit replacement for:", unit.title);
+		logger.warn("trans", "mdait marker not found, skipped unit replacement", { unitTitle: unit.title });
 		return;
 	}
 	// 元のユニットの末尾改行を保持

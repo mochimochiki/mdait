@@ -1,6 +1,7 @@
-import * as vscode from "vscode";
-import * as path from "node:path";
 import * as fs from "node:fs";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { Logger, formatError } from "./logger";
 
 /**
  * .mdaitディレクトリを初期化する
@@ -31,7 +32,7 @@ export async function ensureMdaitDir(): Promise<string | null> {
 		}
 	} catch (error) {
 		// .gitignore作成失敗はベストエフォートなので警告のみ
-		console.warn("Failed to create .mdait/.gitignore:", error);
+		Logger.getInstance().warn("mdait-dir", "failed to create .mdait/.gitignore", formatError(error));
 	}
 
 	return mdaitDir;

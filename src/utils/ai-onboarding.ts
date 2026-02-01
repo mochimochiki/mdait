@@ -4,6 +4,7 @@
  */
 
 import * as vscode from "vscode";
+import { Logger } from "./logger";
 
 /**
  * AI機能の初回利用チェックとオンボーディング表示を行うクラス
@@ -39,7 +40,7 @@ export class AIOnboarding {
 	public async checkAndShowFirstUseDialog(): Promise<boolean> {
 		if (!this.globalState) {
 			// 初期化されていない場合はスキップ
-			console.warn("AIOnboarding: globalState is not initialized");
+			Logger.getInstance().warn("ai-onboarding", "globalState is not initialized");
 			return true;
 		}
 
@@ -52,9 +53,7 @@ export class AIOnboarding {
 		}
 
 		// 初回利用の場合、説明ダイアログを表示
-		const message = vscode.l10n.t(
-			"AI_Usage_Confirmation",
-		);
+		const message = vscode.l10n.t("AI_Usage_Confirmation");
 
 		const proceedButton = vscode.l10n.t("Proceed");
 

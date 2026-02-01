@@ -30,8 +30,21 @@ import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 import { AIOnboarding } from "./utils/ai-onboarding";
 import { FileExplorer } from "./utils/file-explorer";
+import { Logger, parseLogLevel } from "./utils/logger";
 
 export async function activate(context: vscode.ExtensionContext) {
+	// OutputChannel作成とLogger初期化
+	const outputChannel = vscode.window.createOutputChannel("mdait");
+	const logger = Logger.getInstance();
+	logger.initialize(outputChannel);
+
+	// 設定からログレベルを読み込み
+	const vsConfig = vscode.workspace.getConfiguration("mdait");
+	const logLevelStr = vsConfig.get<string>("logLevel", "INFO");
+	logger.setLevel(parseLogLevel(logLevelStr));
+
+	logger.info("extension", "mdait extension activating");
+
 	// Configuration の初期化
 	const config = Configuration.getInstance();
 	let configInitialized = false;
@@ -39,9 +52,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	try {
 		await config.initialize();
 		configInitialized = true;
+		logger.info("config", "Configuration loaded successfully");
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
-		console.log("mdait: Configuration not loaded:", (error as Error).message);
+		logger.info("config", "Configuration not loaded", { reason: (error as Error).message });
 	}
 
 	// AIOnboarding の初期化
@@ -83,6 +97,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		updateHasStatusContext(statusManager);
 		statusTreeProvider.refresh();
 	});
+
+	// VSCode設定変更時にログレベルを更新
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration("mdait.logLevel")) {
+				const newLogLevel = vscode.workspace.getConfiguration("mdait").get<string>("logLevel", "INFO");
+				logger.setLevel(parseLogLevel(newLogLevel));
+				logger.info("config", "Log level changed", { logLevel: newLogLevel });
+			}
+		}),
+	);
 
 	// ステータスツリー変更時にmdaitHasStatusを更新
 	statusManager.onStatusTreeChanged(() => {
@@ -333,9 +358,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (filePath.toLowerCase().endsWith("mdait.json")) {
 				try {
 					await config.initialize();
-					console.log("mdait: Configuration reloaded after mdait.json save");
+					logger.info("config", "Configuration reloaded after mdait.json save");
 				} catch (error) {
-					console.error("mdait: Failed to reload configuration:", error);
+					logger.error("config", "Failed to reload configuration", { error: (error as Error).message });
 				}
 				return;
 			}
@@ -357,7 +382,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				const fileExplorer = new FileExplorer();
 				shouldSync = fileExplorer.isSourceFile(filePath, config) || fileExplorer.isTargetFile(filePath, config);
 			} catch (error) {
-				console.warn("mdait: failed to initialize FileExplorer on save", error);
+				logger.warn("extension", "Failed to initialize FileExplorer on save", { error: (error as Error).message });
 			}
 
 			if (!shouldSync) {
@@ -384,18 +409,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				// いずれのマーカーも存在しない場合は除外
 				if (!hasUnitMarker && !hasFrontmatterMarker) {
-					console.debug(`mdait: Skipping file save sync (no mdait markers): ${filePath}`);
+					logger.debug("extension", "Skipping file save sync (no mdait markers)", { filePath });
 					return;
 				}
 			} catch (error) {
-				console.warn("mdait: failed to check mdait markers on save", error);
+				logger.warn("extension", "Failed to check mdait markers on save", { error: (error as Error).message });
 				return;
 			}
 
 			// ファイル保存時に自動的に同期を実行
 			await syncSingleFile(filePath);
 		} catch (error) {
-			console.warn("mdait: failed to sync file on save", error);
+			logger.warn("extension", "Failed to sync file on save", { error: (error as Error).message });
 		}
 	});
 
@@ -442,6 +467,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push({
 		dispose: () => summaryDecorator.dispose(),
 	});
+
+	// OutputChannelもdispose対象に追加
+	context.subscriptions.push(outputChannel);
+
+	logger.info("extension", "mdait extension activated successfully");
 }
 
 /**

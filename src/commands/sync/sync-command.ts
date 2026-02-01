@@ -19,10 +19,13 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { FileExplorer } from "../../utils/file-explorer";
+import { Logger, formatError } from "../../utils/logger";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+
+const logger = Logger.getInstance();
 
 /**
  * sync command
@@ -69,7 +72,7 @@ export async function syncCommand(): Promise<void> {
 						// TargetPathを決定
 						const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
 						if (!targetFile) {
-							console.warn(`Target path could not be determined for: ${sourceFile}`);
+							logger.warn("sync", "Target path could not be determined", { sourceFile });
 							continue;
 						}
 
@@ -82,14 +85,23 @@ export async function syncCommand(): Promise<void> {
 						}
 
 						// 結果をStatusManagerに反映
-						console.log(
-							`[${pair.sourceDir} -> ${pair.targetDir}] ${path.basename(sourceFile)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
-						);
+						logger.info("sync", "File synced", {
+							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
+							file: path.basename(sourceFile),
+							added: diffResult.added,
+							modified: diffResult.modified,
+							deleted: diffResult.deleted,
+							unchanged: diffResult.unchanged,
+						});
 						await statusManager.refreshFileStatus(sourceFile);
 						await statusManager.refreshFileStatus(targetFile);
 						successCount++;
 					} catch (error) {
-						console.error(`[${pair.sourceDir} -> ${pair.targetDir}] ファイル同期エラー: ${sourceFile}`, error);
+						logger.error("sync", "File sync error", {
+							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
+							file: sourceFile,
+							...formatError(error),
+						});
 						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
 						errorCount++;
 					}
@@ -115,7 +127,7 @@ export async function syncCommand(): Promise<void> {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
-		console.error(error);
+		logger.error("sync", "Sync command failed", formatError(error));
 	}
 }
 
@@ -130,7 +142,7 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
 		if (validationError) {
-			console.warn("mdait: Configuration error during file save sync:", validationError);
+			logger.warn("sync", "Configuration error during file save sync", { validationError });
 			return;
 		}
 
@@ -188,11 +200,15 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		await statusManager.refreshFileStatus(sourceFile);
 		await statusManager.refreshFileStatus(targetFile);
 
-		console.log(
-			`mdait: File sync completed - ${path.basename(filePath)}: +${diffResult.added} ~${diffResult.modified} -${diffResult.deleted} =${diffResult.unchanged}`,
-		);
+		logger.info("sync", "File sync completed", {
+			file: path.basename(filePath),
+			added: diffResult.added,
+			modified: diffResult.modified,
+			deleted: diffResult.deleted,
+			unchanged: diffResult.unchanged,
+		});
 	} catch (error) {
-		console.error("mdait: Error during single file sync:", error);
+		logger.error("sync", "Error during single file sync", formatError(error));
 		// エラーは表示せず、ログに記録のみ（ユーザー体験を妨げない）
 	}
 }
@@ -228,7 +244,7 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 
 	// フロントマターのみのファイルは、frontmatter翻訳が無効なら処理しない
 	if (source.units.length === 0 && !shouldSyncFrontmatter) {
-		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
+		logger.debug("sync", "Skipping frontmatter-only file", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,
@@ -331,7 +347,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
 	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
-		console.log(`Skipping frontmatter-only file: ${sourceFile}`);
+		logger.debug("sync", "Skipping frontmatter-only file", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,
