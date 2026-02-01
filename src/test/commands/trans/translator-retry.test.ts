@@ -153,7 +153,7 @@ suite("DefaultTranslator リトライ機構", () => {
 	suite("translateRevisionPatch", () => {
 		const contextWithPrevious = new TranslationContext();
 
-		beforeEach(() => {
+		setup(() => {
 			contextWithPrevious.previousTranslation = "前回の翻訳";
 			contextWithPrevious.sourceDiff = "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new";
 		});

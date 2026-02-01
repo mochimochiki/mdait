@@ -35,7 +35,8 @@ suite("StatusCollector（frontmatter対応）", () => {
 		const content = `---
 title: Test Title
 description: Test Description
-mdait.front: abc123 from:def456 need:translate
+mdait:
+  front: abc123 from:def456 need:translate
 ---
 
 <!-- mdait 111111 from:111111 -->
@@ -68,7 +69,8 @@ Translated content
 		const content = `---
 title: Translated Title
 description: Translated Description
-mdait.front: abc123 from:def456
+mdait:
+  front: abc123 from:def456
 ---
 
 <!-- mdait 111111 from:111111 -->
@@ -96,7 +98,8 @@ Translated content
 		const content = `---
 title: Test Title
 description: Test Description
-mdait.front: abc123 from:def456 need:translate
+mdait:
+  front: abc123 from:def456 need:translate
 ---
 `;
 		fs.writeFileSync(testFile, content, "utf-8");
@@ -119,7 +122,8 @@ mdait.front: abc123 from:def456 need:translate
 		const content = `---
 title: Source Title
 description: Source Description
-mdait.front: abc123
+mdait:
+  front: abc123
 ---
 
 <!-- mdait 111111 -->

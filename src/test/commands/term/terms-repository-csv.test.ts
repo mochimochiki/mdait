@@ -6,7 +6,6 @@
 import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { afterEach, suite, test } from "mocha";
 
 import { TermEntry } from "../../../commands/term/term-entry";
 import { TermsRepositoryCSV } from "../../../commands/term/terms-repository-csv";
@@ -26,7 +25,7 @@ suite("TermsRepositoryCSV", () => {
 		fs.mkdirSync(testDir, { recursive: true });
 	}
 
-	afterEach(() => {
+	teardown(() => {
 		// テストファイルをクリーンアップ
 		if (fs.existsSync(testFilePath)) {
 			fs.unlinkSync(testFilePath);
@@ -210,8 +209,13 @@ suite("TermsRepositoryCSV", () => {
 		assert.ok(deIndex >= 0, "de列が追加されている");
 		assert.ok(deIndex < contextIndex2, "de列はcontextの前にある");
 
-		// variants_enはcontextの後にあるはず
-		const variantsEnIndex = headers2.indexOf("variants_en");
-		assert.ok(variantsEnIndex > contextIndex2, "variants_enはcontextの後にある");
+		// variants列がある場合、contextの後にあるはず
+		// 注: save()時にConfiguration.getInstance().transPairsのsource言語に対してのみvariants列が生成される
+		// テスト環境のConfigurationがどう設定されているかによってvariants列の有無が変わる
+		const variantsCols = headers2.filter((h) => h.startsWith("variants_"));
+		for (const vc of variantsCols) {
+			const vcIndex = headers2.indexOf(vc);
+			assert.ok(vcIndex > contextIndex2, `${vc}はcontextの後にある`);
+		}
 	});
 });

@@ -7,7 +7,6 @@
 import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { afterEach, suite, test } from "mocha";
 
 import { TermEntry } from "../../../commands/term/term-entry";
 import { TermsRepositoryCSV } from "../../../commands/term/terms-repository-csv";
@@ -27,7 +26,7 @@ suite("TermsCacheManager", () => {
 		fs.mkdirSync(testDir, { recursive: true });
 	}
 
-	afterEach(() => {
+	teardown(() => {
 		// インスタンスクリア
 		TermsCacheManager.dispose();
 

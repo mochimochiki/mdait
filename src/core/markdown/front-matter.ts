@@ -370,7 +370,9 @@ export class FrontMatter {
 	 * @returns 新しいFrontMatterインスタンス
 	 */
 	clone(): FrontMatter {
-		return new FrontMatter({ ...this._data }, this._raw, this.startLine, this.endLine, this._nonMdaitRaw);
+		// structuredCloneで深いクローンを行い、ネストされたオブジェクトの参照共有を防ぐ
+		const clonedData = structuredClone(this._data);
+		return new FrontMatter(clonedData, this._raw, this.startLine, this.endLine, this._nonMdaitRaw);
 	}
 }
 

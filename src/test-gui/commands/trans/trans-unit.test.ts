@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import { join } from "node:path";
 import * as vscode from "vscode";
 import { AIServiceBuilder } from "../../../api/ai-service-builder";
+import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TranslationContext } from "../../../commands/trans/translation-context";
 import { AITranslator } from "../../../commands/trans/translator";
 import { Configuration } from "../../../config/configuration";
@@ -126,7 +127,6 @@ suite("TransCommand", () => {
 		unit.content = "# Test Heading\n\nThis is translated content.";
 		// ハッシュの更新
 		if (unit.marker) {
-			const { calculateHash } = await import("../../../core/hash/hash-calculator.js");
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
 		}
@@ -224,7 +224,6 @@ suite("TransCommand", () => {
 		const unit = markdown.units[0];
 		unit.content = "# Heading\n\nTranslated content.";
 		if (unit.marker) {
-			const { calculateHash } = await import("../../../core/hash/hash-calculator.js");
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
 		}
@@ -272,7 +271,6 @@ suite("TransCommand", () => {
 
 		// ハッシュ更新
 		if (unit.marker) {
-			const { calculateHash } = await import("../../../core/hash/hash-calculator.js");
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
 		}
@@ -370,7 +368,6 @@ suite("TransCommand", () => {
 		unit.content = "# Main Heading\n\nThis is translated content.";
 
 		if (unit.marker) {
-			const { calculateHash } = await import("../../../core/hash/hash-calculator.js");
 			const newHash = calculateHash(unit.content);
 			unit.marker.hash = newHash;
 		}

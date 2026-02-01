@@ -264,8 +264,8 @@ async function translateUnit(
 
 	const startTime = Date.now();
 
-	// 翻訳開始ログ
-	logger.info("trans", "Unit translation start", {
+	// 翻訳開始ログ（DEBUGレベル）
+	logger.debug("trans", "Unit translation start", {
 		unitHash: unit.marker?.hash,
 		title: unit.title,
 		patchMode: unit.marker?.needsRevision() ?? false,
@@ -519,9 +519,11 @@ async function translateUnit(
 				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
 			});
 
-			// 翻訳完了ログ
+			// 翻訳完了ログ（start情報も含める）
 			logger.info("trans", "Unit translation completed", {
 				unitHash: newHash,
+				title: unit.title,
+				patchMode: unit.marker?.needsRevision() ?? false,
 				duration,
 				needsReview: checkResult.needsReview,
 			});

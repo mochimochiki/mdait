@@ -2,6 +2,7 @@ import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../api/ai-service";
 import { Configuration } from "../../config/configuration";
 import { PromptIds, PromptProvider } from "../../prompts";
+import { Logger, formatError } from "../../utils/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
 	type ParsedRevisionPatchResponse,
@@ -280,7 +281,7 @@ export class AITranslator implements Translator {
 
 			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
 			if (attempt > 0) {
-				const Logger = (await import("../../utils/logger")).Logger;
+
 				const logger = Logger.getInstance();
 				logger.warn("trans", "Translation retry", {
 					attempt: attempt + 1,
@@ -294,8 +295,6 @@ export class AITranslator implements Translator {
 		}
 
 		// リトライ上限到達後のエラーログ
-		const Logger = (await import("../../utils/logger")).Logger;
-		const formatError = (await import("../../utils/logger")).formatError;
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts", {
 			totalAttempts: this.maxRetries + 1,
@@ -349,7 +348,7 @@ export class AITranslator implements Translator {
 
 			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
 			if (attempt > 0) {
-				const Logger = (await import("../../utils/logger")).Logger;
+
 				const logger = Logger.getInstance();
 				logger.warn("trans", "Translation retry (revision patch)", {
 					attempt: attempt + 1,
@@ -363,8 +362,6 @@ export class AITranslator implements Translator {
 		}
 
 		// リトライ上限到達後のエラーログ
-		const Logger = (await import("../../utils/logger")).Logger;
-		const formatError = (await import("../../utils/logger")).formatError;
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts (revision patch)", {
 			totalAttempts: this.maxRetries + 1,

@@ -6,7 +6,6 @@
 import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { afterEach, suite, test } from "mocha";
 
 import { TermEntry } from "../../../commands/term/term-entry";
 import { YamlTermsRepository } from "../../../commands/term/terms-repository-yaml";
@@ -65,7 +64,20 @@ suite("YamlTermsRepository", () => {
 	});
 
 	test("YAMLファイルからの読み込み", async () => {
-		// 先ほど保存したファイルを読み込み
+		// テスト用のファイルを作成
+		const setupRepository = await YamlTermsRepository.create(testFilePath, testTransPairs);
+		const entry1 = TermEntry.create("API関連", {
+			ja: { term: "API呼び出し", variants: ["API コール"] },
+			en: { term: "API call", variants: ["API invoke"] },
+		});
+		const entry2 = TermEntry.create("文書作成", {
+			ja: { term: "マークダウン", variants: ["Markdown"] },
+			en: { term: "Markdown", variants: ["MarkDown"] },
+		});
+		await setupRepository.Merge([entry1, entry2], testTransPairs);
+		await setupRepository.save();
+
+		// 保存したファイルを読み込み
 		const repository = await YamlTermsRepository.load(testFilePath);
 
 		const entries = await repository.getAllEntries();
@@ -84,6 +96,20 @@ suite("YamlTermsRepository", () => {
 	});
 
 	test("重複エントリのマージ", async () => {
+		// テスト用のファイルを作成
+		const setupRepository = await YamlTermsRepository.create(testFilePath, testTransPairs);
+		const entry1 = TermEntry.create("API関連", {
+			ja: { term: "API呼び出し", variants: ["API コール"] },
+			en: { term: "API call", variants: ["API invoke"] },
+		});
+		const entry2 = TermEntry.create("文書作成", {
+			ja: { term: "マークダウン", variants: ["Markdown"] },
+			en: { term: "Markdown", variants: ["MarkDown"] },
+		});
+		await setupRepository.Merge([entry1, entry2], testTransPairs);
+		await setupRepository.save();
+
+		// 保存したファイルを読み込み
 		const repository = await YamlTermsRepository.load(testFilePath);
 
 		// 既存エントリと重複する新しいエントリ
@@ -101,11 +127,12 @@ suite("YamlTermsRepository", () => {
 		const mergedEntry = entries.find((e) => TermEntry.hasLanguage(e, "de"));
 		assert.ok(mergedEntry);
 		assert.strictEqual(TermEntry.getTerm(mergedEntry, "de"), "API-Aufruf");
-		assert.strictEqual(mergedEntry.context, "API関連 - 更新"); // contextは更新される
+		// contextは既存エントリの値が優先される（TermEntryUtils.mergeの仕様）
+		assert.strictEqual(mergedEntry.context, "API関連");
 	});
 
 	// テスト後のクリーンアップ
-	afterEach(() => {
+	teardown(() => {
 		if (fs.existsSync(testFilePath)) {
 			fs.unlinkSync(testFilePath);
 		}

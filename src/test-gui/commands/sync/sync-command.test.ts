@@ -3,8 +3,9 @@
 
 import assert from "node:assert";
 import { execSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { resetMdaitState } from "../../test-utils";
 
 function copyDirSync(src: string, dest: string) {
 	if (!existsSync(dest)) {
@@ -41,6 +42,9 @@ suite("syncコマンドE2E", () => {
 	}
 
 	setup(() => {
+		// UnitRegistryManagerとunit-registryファイルをリセット
+		resetMdaitState();
+		// コンテンツディレクトリをサンプルからコピー
 		copyDirSync(sampleContentDir, contentDir);
 	});
 	teardown(() => {

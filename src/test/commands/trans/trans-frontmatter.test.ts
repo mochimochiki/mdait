@@ -26,7 +26,8 @@ suite("Trans処理（frontmatter翻訳）", () => {
 		const targetMd = `---
 title: Test Document
 description: This is a test
-mdait.front: abc123 from:def456 need:translate
+mdait:
+  front: abc123 from:def456 need:translate
 ---
 
 <!-- mdait 111111 from:111111 -->
