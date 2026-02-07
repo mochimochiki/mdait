@@ -1,0 +1,102 @@
+# ユーティリティ層設計
+
+> **上位設計**: [architecture.md](architecture.md) P5「Utils層：汎用機能、I/O、ログ」、[design.md](design.md)「階層構造」参照
+
+## このドキュメントの責務
+
+Utils層は、CoreやCommands層のロジックをシンプルに保つため、ファイル探索やログ出力などの汎用処理を切り出します。Node.js標準モジュールとVS Code APIの差異を吸収し、共通インターフェースで提供します。
+
+---
+
+## FileExplorer
+
+Markdown文書の探索とフィルタリングを担当します。
+
+### 処理フロー
+
+```mermaid
+sequenceDiagram
+	participant Caller as Callers
+	participant FE as FileExplorer
+	participant FS as node:fs
+
+	Caller->>FE: findMarkdownFiles(pattern)
+	FE->>FS: ディレクトリ走査
+	FE->>FE: ignoreパターン適用
+	FE-->>Caller: ファイルリスト
+```
+
+### 設計方針
+
+- ドメイン知識を含めず、入力と出力を純粋関数に近い形で返す
+- PromiseベースでI/Oを扱い、テストではスタブ化しやすい構造
+- 大規模リポジトリでも負荷を抑えられるよう、フィルター対象の正規表現や深さ制限を引数で受け取れる
+
+**設計意図**: ファイル探索という汎用機能を切り出すことで、Commands層は「どのファイルを処理するか」という判断に集中できます。
+
+---
+
+## Logger
+
+構造化ログによる診断情報の記録を担当します。
+
+### ログレベルの使い分け
+
+| レベル | 用途 | 例 |
+|--------|------|-----|
+| **DEBUG** | 開発・デバッグ時の詳細情報 | 変化のないファイルの同期完了、コンテキスト構築詳細 |
+| **INFO** | 正常系の重要なイベント | 変化があったファイルの同期完了、ユニット翻訳開始・完了 |
+| **WARN** | リカバリー可能な異常 | リトライ発生、パッチ適用失敗からのフォールバック |
+| **ERROR** | リカバリー不可能なエラー | リトライ上限到達、処理失敗 |
+
+### ログフォーマット規約
+
+```
+[YYYY-MM-DD HH:mm:ss][LEVEL][scope] message | context(JSON)
+```
+
+- **scope**: コンポーネント名（`sync`, `trans`, `config` など）
+- **message**: 人間が読みやすい簡潔なメッセージ
+- **context**: 追加情報をJSON形式で記録（ファイル名、unitHash、エラー詳細など）
+
+### 構造化ログのベストプラクティス
+
+| カテゴリ | フィールド | 例 |
+|---------|-----------|-----|
+| ファイル操作 | `file` または `filePath` | `{ file: "docs/ja/intro.md" }` |
+| ユニット処理 | `unitHash`, `title` | `{ unitHash: "abc12345", title: "Introduction" }` |
+| 差分情報 | `added`, `modified`, `deleted`, `unchanged` | `{ added: 2, modified: 3 }` |
+| リトライ情報 | `attempt`, `maxRetries`, `reason`, `retryable` | `{ attempt: 2, maxRetries: 3, reason: "API timeout" }` |
+| エラー情報 | `formatError(error)` | `{ name: "TypeError", message: "...", stack: "..." }` |
+
+### リトライログの構造化
+
+リトライが発生した場合、以下の情報を記録します：
+
+```json
+{
+  "attempt": 2,
+  "maxRetries": 3,
+  "reason": "API timeout",
+  "retryable": true,
+  "unitHash": "abc12345",
+  "title": "Introduction"
+}
+```
+
+**設計意図**: 構造化ログにより、問題発生時にログを検索・集計しやすくなります。例えば、特定のファイルやユニットで頻繁にリトライが発生している場合、それを容易に検出できます。
+
+---
+
+## 設計方針
+
+- **純粋関数優先**: 入力と出力を明確にし、副作用を最小化
+- **テスタビリティ**: PromiseベースでI/Oを扱い、スタブ化しやすい構造
+- **スケーラビリティ**: 大規模リポジトリでも負荷を抑えられるよう、フィルター対象の正規表現や深さ制限を引数で受け取れる
+
+---
+
+## 関連
+
+- ファイル探索利用例: [commands.md](commands.md)
+- 設定での除外パターン: [config.md](config.md)

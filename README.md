@@ -132,7 +132,7 @@ This project documents a financial API.
 - Clearing: クリアリング (transaction reconciliation)
 ```
 
-Omit the `prompts` field in frontmatter to apply to all prompts. See `design/prompt.md` for details.
+Omit the `prompts` field in frontmatter to apply to all prompts. See `docs/prompt.md` for details.
 
 ---
 
