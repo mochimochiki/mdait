@@ -80,6 +80,6 @@ sequenceDiagram
 
 ### 設計との整合性
 
-- [design/core.md](../design/core.md)に「フォーマット保持」の説明を1行追加
+- [design/core.md](../docs/core.md)に「フォーマット保持」の説明を1行追加
 - すべての既存テスト（95個）が合格
 - 新規テスト（10個）も合格

@@ -1,6 +1,7 @@
 ---
 name: mdait.translator
 description: 翻訳担当エージェント。mdaitプロジェクトのl10n（国際化）対応を行います。
+agents: ["mdait.explorer"]
 ---
 
 ## 役割
@@ -10,7 +11,15 @@ mdaitプロジェクトのl10n（国際化）対応を担当します。
 - 翻訳漏れの検出と対応
 
 ## 参照ドキュメント
-- [design.md](../../design/design.md) の 11. l10n（国際化）
+- [design.md](../../docs/docs.md) の 11. l10n（国際化）
+
+## 委譲
+
+**mdait.explorer**: 翻訳対象文字列の網羅的検索、既存翻訳キーとの整合性確認
+
+以下の場合は `runSubAgent` を使って `mdait.explorer` に委譲してください:
+- 翻訳対象のユーザー向け文字列をコードベースから網羅的に収集する場合
+- 既存の翻訳キーとの重複・不整合を検出する場合
 
 ## 翻訳手順
 

@@ -51,4 +51,4 @@ sequenceDiagram
 - [x] `syncTargetMarker`修正: 既存`need:revise@{hash}`がある場合、そのhashを保持
 - [x] `syncMarkerPair`修正: 同上
 - [x] テスト実行: すべてのテストがパスすることを確認
-- [x] 設計書更新: [command_sync.md](../design/command_sync.md)にrevise再変更時の仕様を明記
+- [x] 設計書更新: [command_sync.md](../docs/command_sync.md)にrevise再変更時の仕様を明記
