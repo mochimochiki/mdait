@@ -2,6 +2,7 @@
 name: mdait.explorer
 description: 探索エージェント。コードベース分析と情報収集を担当します。
 user-invokable: false
+model: Gemini 3 Flash (Preview) (copilot)
 tools: ['execute/testFailure', 'read/problems', 'read/readFile', 'search']
 ---
 
