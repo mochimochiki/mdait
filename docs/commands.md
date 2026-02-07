@@ -1,6 +1,12 @@
 # コマンド層設計
 
-このドキュメントでは、`mdait`拡張機能のコマンド層に関する設計を詳述します。各コマンドの目的、動作フロー、及び重要な考慮事項を説明します。
+> **上位設計**: [architecture.md](architecture.md) P5「Commands層：ワークフローの指揮者」、[design.md](design.md)「階層構造」、「主要コマンド」参照
+
+## このドキュメントの責務
+
+Commands層は、Core層の純粋関数を組み合わせて、実際のユーザーワークフローを実現します。進捗表示、エラーハンドリング、キャンセル対応もこの層の責務です（[architecture.md](architecture.md) P5参照）。
+
+このドキュメントでは、各コマンドの概要と共通設計方針を示します。詳細な処理フローは各コマンドの設計書を参照してください。
 
 ---
 
@@ -48,152 +54,101 @@ sequenceDiagram
 
 ---
 
-## sync（ユニット同期）
+## コマンド概要
 
-- Markdown間のユニット対応付けを確立し、`hash`・`from`・`need`を再計算。
-- 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御。
-- [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証。
-- 同期完了後はソース/ターゲット両ファイルのステータスを`StatusManager.refreshFileStatus`で再計算し、ツリー表示を即時追従させる。
+### setup - 初期設定
 
-**主要コンポーネント:**
-- [src/commands/sync/sync-command.ts](../src/commands/sync/sync-command.ts): `syncCommand()`, `syncMarkdownFile()` - ファイル対応付けと差分適用
-- [src/commands/sync/section-matcher.ts](../src/commands/sync/section-matcher.ts): `SectionMatcher.matchSections()` - ユニット間の対応関係を検出
+`mdait.template.json`をワークスペースにコピーし、初期設定を支援します。
 
-**シーケンス:**
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as SyncCommand
-	participant Core as SectionMatcher
-	participant Status as StatusManager
-
-	UX->>Cmd: 対象ファイル選択
-	Cmd->>Core: ユニット対応付け要求
-	Core-->>Cmd: 差分結果
-	Cmd->>Cmd: need/hash 更新・新規ユニット生成
-	Cmd->>Status: ステータス再計算
-	Status-->>UX: ツリー更新
-```
+**詳細**: [command_setup.md](command_setup.md)
 
 ---
 
-## trans (翻訳)
+### sync - ユニット同期
 
-- `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳。
-- 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去。
-- キャンセルやリトライに備え、進捗をUIへ逐次通知する。
-- **用語集連携**: `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る(キャッシュはmtime比較で管理)。
-- **前回訳文参照**: 原文改訂時（`from`フィールドで旧ソースハッシュを追跡可能）、前回の訳文を翻訳プロンプトに含めて参照させる。変更不要な箇所は既訳を尊重し、変更が必要な箇所のみを変更。
-- **翻訳品質チェック**: 翻訳後に原文と訳文を比較し、確認推奨箇所（数値の不一致、構造の差異など）を検出。問題がある場合は`need:review`ステータスを設定し、Hoverツールチップに理由を表示。
-- **並列実行制御**:
-  - ディレクトリ翻訳: ファイルを順次処理(キャンセル即応性とレート制限対策を重視)
-  - ファイル翻訳: ユニットを順次処理(AI APIレート制限対策)
-  - 現状は順次実行を採用し、キャンセル操作への即応性とAI APIのレート制限回避を優先
-  - 将来的な拡張: 設定可能な並列数制限(セマフォ方式)の導入を検討(例: `mdait.trans.concurrency`で同時翻訳数を指定)
-- **キャンセル管理**: VSCode標準の`withProgress`パターンで実装。通知バーの×ボタンから即座にキャンセル可能。進捗表示はファイル翻訳="X/Y units"、ディレクトリ翻訳="X/Y files"形式。
+ソースとターゲット間でユニット対応を確立し、差分を検出します。変更箇所に`need:translate`または`need:revise@{oldhash}`を付与します。
 
-**主要コンポーネント:**
-- [src/commands/trans/trans-command.ts](../src/commands/trans/trans-command.ts): `transCommand()`, `transUnitCommand()` - 翻訳対象の選択と翻訳実行
-- [src/commands/trans/term-extractor.ts](../src/commands/trans/term-extractor.ts): `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出
+**主な処理**:
+- ハッシュ比較による差分検出
+- `SectionMatcher`によるユニット対応付け
+- `.mdait/unit-registry`へのスナップショット保存
 
-**シーケンス:**
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as TransCommand
-	participant Status as StatusManager
-	participant Builder as AIServiceBuilder
-	participant AI as AIService
-
-	UX->>Cmd: 翻訳対象を実行
-	Cmd->>Status: need:translateユニット収集
-	Cmd->>Builder: プロバイダー構築
-	Builder-->>Cmd: AIService
-	loop 各ユニット
-		Cmd->>AI: ユニット本文と設定送信
-		AI-->>Cmd: 翻訳結果
-		Cmd->>Status: ユニット内容とneed更新
-	end
-	Status-->>UX: 進捗/完了通知
-```
+**詳細**: [command_sync.md](command_sync.md)
 
 ---
 
-## term（用語集）
+### trans - 翻訳実行
 
-- `mdait.term.detect`: 原文ユニットをバッチ化し、AIで用語候補を抽出。既存用語集とマージして保存。
-  - `mdait.term.detect.directory`: ソースディレクトリ配下の全ファイルを対象に用語検出
-  - `mdait.term.detect.file`: 単一ソースファイルを対象に用語検出
-- `mdait.term.expand`: 既存の翻訳から用語訳を抽出し`terms.csv`へ反映。原文/訳文ペアから用語訳を推定して展開。
-  - `mdait.term.expand.directory`: ターゲットディレクトリ配下のファイルに対応するソースのみを対象に展開
-  - `mdait.term.expand.file`: 単一ターゲットファイルに対応するソースのみを対象に展開
-- **並列実行制御**: ディレクトリ処理時はファイルを順次処理（trans翻訳と同様の理由）。バッチサイズはAI APIの入力トークン制限に応じて調整。
+`need:translate`が付与されたユニットをAI翻訳します。
 
-**主要コンポーネント:**
-- [src/commands/term/command-detect.ts](../src/commands/term/command-detect.ts): `detectTermCommand()` - 用語検出のエントリーポイント
-- [src/commands/term/term-detector.ts](../src/commands/term/term-detector.ts): `TermDetector.detect()` - AI APIを使用した用語抽出処理
-- [src/commands/term/command-expand.ts](../src/commands/term/command-expand.ts): `expandTermCommand()` - 用語展開のエントリーポイント
-- [src/commands/term/term-expander.ts](../src/commands/term/term-expander.ts): `TermExpander.expand()` - 原文/訳文ペアから用語訳を推定
-- [src/commands/term/status-tree-term-handler.ts](../src/commands/term/status-tree-term-handler.ts): ステータスツリーからの用語検出/展開アクションハンドラ
+**主な処理**:
+- 用語集から関連用語を抽出
+- **改訂時は差分パッチ翻訳**: 旧コンテンツとの差分（unified diff）をLLMに提示し、前回訳文へのパッチのみを返させる
+- 翻訳品質チェック（構造比較）
+- AIレスポンス検証（JSON混入チェック）
 
-**term.detectシーケンス:**
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as TermDetectCommand
-	participant Repo as TermsRepository
-	participant AI as AIService
-
-	UX->>Cmd: 対象ファイル指定
-	Cmd->>Repo: 既存terms.csv読み込み
-	Cmd->>Cmd: ユニットバッチ生成
-	loop 各バッチ
-		Cmd->>AI: 原文ユニットと既存用語送信
-		AI-->>Cmd: 新規用語候補
-		Cmd->>Cmd: 重複除外・統合
-	end
-	Cmd->>Repo: 用語集マージ・保存
-	Repo-->>UX: 更新結果通知
-```
-
-**term.expandシーケンス:**
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as TermExpandCommand
-	participant Repo as TermsRepository
-	participant Expander as TermExpander
-
-	UX->>Cmd: 対象言語指定
-	Cmd->>Repo: 未展開用語取得
-	Cmd->>Cmd: Unitペア抽出・バッチ化
-	loop 各バッチ
-		Cmd->>Expander: 原文+訳文と用語リスト送信
-		Expander-->>Cmd: 用語訳ペア
-	end
-	Cmd->>Repo: CSV更新
-	Repo-->>UX: 保存完了通知
-```
+**詳細**: [command_trans.md](command_trans.md)
 
 ---
 
-## translate-selection（オンデマンド翻訳）
+### term - 用語管理
 
-- エディタ選択範囲を一時的に翻訳する軽量機能（mdaitステータスに影響しない）。詳細は [command_trans-selection.md](command_trans-selection.md) を参照。
+#### term.detect - 用語検出
+原文から重要用語を検出します。対訳がある場合は両言語から同時抽出します。
+
+#### term.expand - 用語展開
+既訳から訳語を抽出し、用語集を展開します。
+
+**詳細**: [command_term.md](command_term.md)
+
 ---
 
-## 考慮事項
+### translate-selection - オンデマンド翻訳
 
-- すべてのコマンドはVSCode標準の`withProgress`パターンで`CancellationToken`対応と冪等性確保を優先する。
-- 設定は[config.md](config.md)で定義されたシングルトン経由で最新値を取得する。
-- 翻訳や用語抽出など外部呼び出しは[api.md](api.md)のビルダーで動的にプロバイダー切り替えを行う。
+エディタ選択範囲を一時的に翻訳します。マーカーレスで、mdaitのステータスには影響しません。
+
+**詳細**: [command_trans-selection.md](command_trans-selection.md)
+
+---
+
+## 共通設計方針
+
+### 冪等性と決定性
+
+すべてのコマンドは何度実行しても安全で一貫した結果を返します（[architecture.md](architecture.md) 哲学4参照）。
+
+**実現方法**:
+- マーカーの再計算は現在のコンテンツから導出（状態の累積ではない）
+- ハッシュは正規化された内容から決定的に算出
+- needフラグは現在の状態から再計算可能
+
+### 並列実行制御
+
+現状は順次実行を採用し、キャンセル即応性とAI APIレート制限回避を優先します。
+
+**ディレクトリ処理**: ファイルを順次処理  
+**ファイル内処理**: ユニットを順次処理
+
+**将来的な拡張**: 設定可能な並列数制限（セマフォ方式）の導入を検討（例: `mdait.trans.concurrency`で同時翻訳数を指定）
+
+**設計意図**: 無制限な並列実行は採用しません。これはユーザーのキャンセル操作への即応性とAI APIレート制限対策を優先した結果です（[architecture.md](architecture.md) 「意図的な制約」参照）。
+
+### キャンセル管理
+
+すべての長時間処理（AI翻訳、用語検出等）は`CancellationToken`による中断を全面サポートします。
+
+**実装パターン**: VSCode標準の`withProgress`パターン  
+**進捗表示**: ファイル翻訳="X/Y units"、ディレクトリ翻訳="X/Y files"形式  
+**キャンセルポイント**: ユニット単位/バッチ単位でキャンセルチェック
+
+**設計意図**: 長時間処理でもユーザーが状況を把握でき、必要に応じて即座にキャンセルできます（[architecture.md](architecture.md) 哲学4参照）。
+
+---
 
 ## 参照
 
 - 実装コード: `src/commands/` 以下
 - UI連携: [ui.md](ui.md)
 - テスト観点: [test.md](test.md)
+- 設定: [config.md](config.md)
+- AIサービス: [api.md](api.md)

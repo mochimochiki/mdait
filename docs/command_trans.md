@@ -1,8 +1,12 @@
-# trans（翻訳）コマンド設計
+# transコマンド設計
 
-## 概要
+> **上位設計**: [architecture.md](architecture.md) P3「翻訳ドメインにおけるconflictの否定」、P4「LLMをdiff-aware reviseの主戦力とする」、[commands.md](commands.md)、[design.md](design.md)「trans - 翻訳実行」参照
 
-trans（翻訳）コマンドは、`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行し、翻訳品質チェックも行います。
+## 役割
+
+`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行し、翻訳品質チェックも行います。
+
+**設計意図**: diff-aware reviseにより、変更箇所以外は既存訳文を維持します。これは「原文と訳文の両方が変更される」ことを通常のワークフローとして扱う設計です（[architecture.md](architecture.md) 哲学3、P4参照）。
 
 ---
 

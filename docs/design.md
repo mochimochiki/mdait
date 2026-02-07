@@ -1,139 +1,193 @@
-# 📘 設計書：mdait (Markdown AI Translator)
+# 全体設計書
 
-## 概要
+> **設計哲学**: このドキュメントを読む前に [architecture.md](architecture.md) を参照してください。  
+> mdaitの存在理由、設計哲学、中核となる原則が記載されています。
 
-**mdait**（Markdown AI Translator）は、Markdown文書の構造を活かしてAI翻訳を支援するVS Code拡張機能です。文書を「ユニット」に分割し、ハッシュベースの差分管理と翻訳状態追跡により、**変更検出・翻訳差分・多段翻訳**に対応する設計となっています。
+## システム概要
 
-## アーキテクチャ概要
+mdaitは、Markdownの構造を活かした**継続的な多言語文書管理**を実現するVS Code拡張機能です。文書を「ユニット」に分割し、ハッシュベースの差分検出により、原文の変更箇所のみを再翻訳します。
 
-mdaitは階層化されたモジュール構成を採用し、各層が明確な責務を持って連携します：
+### 解決する課題
 
-```plain
-UI層 ([ui.md])：VS Code統合、ステータス表示
-↓
-Commands層 ([commands.md])：sync/transコマンド実行
-↓
-Core層 ([core.md])：mdaitUnit、ハッシュ、ステータス管理
-↓
-Config層 ([config.md])：設定管理
-API層 ([api.md])：外部連携
-Utils層 ([utils.md])：汎用機能
+- 原文変更時、どこを再翻訳すべきか人間の目視に依存している
+- 翻訳後の手修正が原文変更で消えてしまう
+- 用語集があっても実際の翻訳で反映される保証がない
+
+### mdaitのアプローチ
+
+- **ユニット単位の管理**: Markdown文書内にHTMLコメントマーカーを埋め込み、ユニットごとに状態管理
+- **ハッシュによる追跡**: CRC32で内容変更を検出し、変更箇所のみに`need:translate`を付与
+- **diff-aware revise**: 原文変更時、LLMに差分を提示して訳文へのパッチのみを生成
+
+---
+
+## 階層構造
+
+mdaitは責務分離を徹底した層構造を持ちます：
+
 ```
+UI層 (ui.md)        VS Code統合、ユーザーインタラクション
+   ↓
+Commands層 (commands.md)   ビジネスロジック、ワークフロー制御
+   ↓                       ↓
+Core層 (core.md)    API層 (api.md)
+純粋な翻訳ロジック     外部AI通信
+   ↓                       ↓
+Config層 (config.md) / Utils層 (utils.md)
+設定管理 / 汎用機能
+```
+
+**設計意図**: Core層をVS Code APIから独立させることで、ロジックの単体テストが容易になり、将来的な他環境への移植可能性も担保されます（[architecture.md](architecture.md) P5参照）。
+---
+
 ## リポジトリ構成
 
 ```
 src/
-  extension.ts           # エントリーポイント
-  commands/              # sync,transなど各種コマンド処理
-  core/                  # コア機能
-    ├── markdown/        # Markdownの構造解析、ユニット分割、marker処理など
-    ├── hash/            # 文書の正規化とハッシュ計算アルゴリズム
-    └── status/          # ステータス情報管理
-  config/                # 設定管理
-  utils/                 # 汎用ユーティリティ
-  api/                   # 外部サービス連携
-  ui/                    # UI コンポーネント
-  test/                  # テスト関連
-    └── workspace/       # テスト作業ディレクトリ
-docs/                    # 設計ドキュメント
+  extension.ts           # VS Code拡張機能のエントリーポイント
+  commands/              # ワークフロー制御とビジネスロジック
+    ├── sync/            # ユニット同期・差分検出
+    ├── trans/           # 翻訳実行・品質チェック
+    ├── term/            # 用語検出・展開
+    ├── setup/           # 初期設定
+    └── trans-selection/ # オンデマンド翻訳
+  core/                  # 純粋な翻訳ドメインロジック
+    ├── markdown/        # 構造解析、ユニット分割、marker処理
+    ├── hash/            # 正規化とハッシュ計算
+    ├── status/          # ステータス情報管理
+    ├── unit-registry/   # ユニット内容のスナップショット管理
+    └── diff/            # unified diff生成
+  api/                   # 外部AIサービス通信
+  ui/                    # VS Code UI統合
+  config/                # 設定ロード・バリデーション
+  utils/                 # ファイル探索、ログ出力
+  prompts/               # AIプロンプト定義
+  test/                  # テスト
+docs/                    # 設計ドキュメント（このディレクトリ）
+schemas/                 # JSON Schema定義
+l10n/                    # 国際化リソース
 ```
 
-## 中核概念
+---
 
-### mdaitUnit
-**mdaitUnit**は翻訳・管理の基本単位であり、mdaitシステムの中核となる概念です。Markdown文書をユニット単位に分割し、各ユニットに状態情報を付与することで、精密な差分管理と翻訳追跡を実現します。
+## mdaitUnitの構造
 
-#### マーカー構造
-ユニットはMarkdown内に`<!-- mdait hash [from:hash] [need:flag] -->`形式のHTMLコメントマーカーとして埋め込まれます：
+mdaitの管理単位である**mdaitUnit**は、Markdown本文とHTMLコメントマーカーのペアで構成されます。
 
-- **hash**: ユニット内容の正規化後8文字短縮ハッシュ（CRC32）
-- **from**: 翻訳元ユニットのハッシュ値（翻訳追跡用、オプショナル）
-- **need**: 必要なアクション指示（オプショナル）
+### マーカー形式
 
-#### needフラグ
-needフラグはユニットの状態とプロジェクトワークフローを管理する重要な仕組みです：
-
-- **translate**: AI翻訳が必要な新規・更新ユニット
-- **review**: 人手レビューが推奨されるユニット
-- **verify-deletion**: 削除対象ユニットの確認が必要
-- **revise@{hash}**: 原文変更に対する改訂が必要（hashは旧原文のハッシュ）
-
-※現在の実装では「conflict」状態は存在しない。ソースとターゲットの両方が変更された場合も、すべて`revise`として処理する。翻訳ドメインでは「原文と訳文の両方が変更される」ことは通常であり、それをconflictと扱うのは過剰防衛となる。LLMによるdiff-aware reviseを主戦力とする。
-
-#### 実用例
 ```markdown
-<!-- mdait 3f7c8a1b from:2d5e9c4f need:translate -->
-This paragraph needs translation from the source document.
+<!-- mdait {hash} [from:{hash}] [need:{flag}] -->
 ```
 
-**詳細実装：** [core.md](core.md) の mdaitUnit概念
+- **hash**: ユニット内容の正規化後CRC32（8文字）
+- **from**: 翻訳元ユニットのハッシュ（オプショナル）
+- **need**: 必要なアクション（オプショナル）
+  - `translate` - 新規翻訳が必要
+  - `revise@{oldhash}` - 原文変更により改訂が必要（oldhashは旧原文のハッシュ）
+  - `review` - 人手確認が推奨される
+  - `verify-deletion` - 削除確認が必要
 
-### 全体フロー
+### マーカー配置のルール
 
-```plaintext
-ja.md <--> en.md <--> de.md
-      hash       hash
+- マーカーの直後（空行なし）に見出しがある場合、その見出しがユニットのタイトル
+- ユニット境界は「指定レベル以下の見出し」または「mdaitマーカー」で決定
+- ハッシュ省略マーカー `<!-- mdait -->` もsync時に自動計算される
+
+**設計意図**: マーカーをHTMLコメントとして埋め込むことで、外部データベース不要で文書と管理情報を一体管理します（[architecture.md](architecture.md) 哲学1参照）。Markdownの純粋性は多少損なわれますが、レンダリング時には不可視であり、この小さな代償で長期運用の安定性を得ています。
+
+---
+
+## 主要コマンド
+
+### sync - ユニット同期
+
+ソースとターゲットのMarkdownファイル間でユニット対応を確立し、差分を検出します。
+
+**主な処理**:
+1. ソース・ターゲットのユニットをパース
+2. `SectionMatcher`でユニット対応を確立
+3. ハッシュ比較で変更を検出
+4. 変更箇所に`need:translate`または`need:revise@{oldhash}`を付与
+5. `.mdait/unit-registry`にユニット内容を保存（diff生成用）
+
+**詳細**: [command_sync.md](command_sync.md)
+
+### trans - 翻訳実行
+
+`need:translate`が付与されたユニットをAI翻訳します。
+
+**主な処理**:
+1. 翻訳対象ユニットを収集
+2. 用語集から関連用語を抽出
+3. **改訂時は差分パッチ翻訳**: 旧コンテンツとの差分（unified diff）をLLMに提示し、前回訳文へのパッチのみを返させる
+4. 翻訳品質チェック（構造比較）
+5. ハッシュ更新、needフラグ除去
+
+**設計意図**: diff-aware reviseにより、変更箇所以外は既存訳文を維持します。これは「原文と訳文の両方が変更される」ことを通常のワークフローとして扱う設計です（[architecture.md](architecture.md) 哲学3参照）。
+
+**詳細**: [command_trans.md](command_trans.md)
+
+### term - 用語管理
+
+原文から重要用語を検出し（`term.detect`）、既訳から訳語を抽出します（`term.expand`）。
+
+**詳細**: [command_term.md](command_term.md)
+
+### setup - 初期設定
+
+`mdait.template.json`をワークスペースにコピーし、初期設定を支援します。
+
+**詳細**: [command_setup.md](command_setup.md)
+
+---
+
+## データフローの全体像
+
+```mermaid
+graph LR
+    A[原文変更] --> B[sync検出]
+    B --> C[need:revise付与]
+    C --> D[trans実行]
+    D --> E[diff-aware revise]
+    E --> F[訳文更新]
+    F --> G[sync再実行]
+    G --> H[needクリア]
 ```
 
-**主要コマンド：**
+1. 原文が変更される
+2. `sync`がハッシュ変更を検出し、`need:revise@{oldhash}`を付与
+3. `trans`が実行され、旧コンテンツとの差分を取得
+4. LLMに差分と前回訳文を提示し、訳文へのパッチを生成
+5. パッチを適用して訳文を更新
+6. `sync`を再実行してハッシュを更新、needをクリア
 
-#### sync - ユニット同期
-関連Markdownファイル群間でmdaitUnitの対応関係を確立し、差分検出とneedフラグ付与を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`を自動付与し、翻訳ワークフローを開始します。
-- **機能**: ハッシュ比較による差分検出、from追跡による翻訳チェーン管理
-- **詳細**: [command_sync.md](command_sync.md)
+**設計意図**: すべてのコマンドは冪等です。何度実行しても結果は一貫します（[architecture.md](architecture.md) 哲学4参照）。
 
-#### trans - AI翻訳実行  
-`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行します。
-- **機能**: 翻訳対象の自動識別、AIプロバイダー連携、翻訳結果の統合
-- **詳細**: [command_trans.md](command_trans.md)
-
-## モジュール間の依存関係
-
-### データフロー
-1. **Config層** → 各層への設定提供
-2. **Core層** → Commands層への基盤機能提供  
-3. **Commands層** → UI層への処理結果通知
-4. **API層** → Commands層への外部サービス連携
-5. **Utils層** → 全層への汎用機能提供
-
-### 状態管理
-全ユニットの状態は[core.md](core.md)のStatusItem構造で一元管理され、[ui.md](ui.md)でツリー表示されます。
+---
 
 ## 国際化（l10n）
 
-VS Codeの標準l10nシステムを活用し、日本語・英語の完全サポートを提供します。
+VS Code標準l10nシステムにより、日本語・英語をサポート。
 
-**言語リソース：** `/l10n` ディレクトリ
-**UI統合詳細：** [ui.md](ui.md)
+- `/l10n/bundle.l10n.json` - 英語リソース
+- `/l10n/bundle.l10n.ja.json` - 日本語リソース
+- `package.nls.json` / `package.nls.ja.json` - package.jsonの多言語化
 
-## 開発・デバッグ環境
+---
 
-### テスト環境
-- **サンプルコンテンツ**: `src/test/sample-content/` のテスト用原稿
-- **自動コピー**: テスト実行前の `src/test/workspace/content/` への自動展開
-- **VS Code Test**: 拡張機能環境での統合テスト
-
-**詳細：** [test.md](test.md)
+## 開発・デバッグ
 
 ### ビルド・実行
 ```bash
 npm run compile  # TypeScriptコンパイル
 npm run lint     # コード品質チェック  
-npm run test     # テスト実行
+npm run test     # 単体テスト実行
+npm run test:vscode  # VS Code統合テスト
 npm run watch    # 開発時の自動ビルド
 ```
 
-## 設計原則
-
-### 全体方針
-- **モジュラー設計**: 各層の独立性と明確な責務分離
-- **VS Code統合**: VS Codeエコシステムとの完全な統合
-- **型安全性**: TypeScriptによる堅牢な型システム活用
-- **拡張性**: 新機能・新プロバイダーの追加容易性
-
-### 品質保証
-- **冪等性**: sync処理の何度実行しても安全な設計
-- **エラー回復**: 各処理段階での適切なエラーハンドリング
-- **パフォーマンス**: メモリ効率とファイルI/O最小化
-- **テスタビリティ**: [test.md](test.md)による包括的テスト
-- **キャンセル対応**: 長時間処理（AI翻訳・用語検出等）は`CancellationToken`による中断を全面サポート
+### テスト環境
+- `src/test/sample-content/` - テスト用原稿
+- `src/test/workspace/` - テスト作業ディレクトリ
+- **詳細**: [test.md](test.md)

@@ -1,23 +1,20 @@
-# setup（初期設定）コマンド設計
+# setupコマンド設計
 
-## 概要
+> **上位設計**: [commands.md](commands.md)、[config.md](config.md)「オンボーディングサポート」参照
 
-setup（初期設定）コマンドは、mdait拡張機能の初回セットアップを支援します。拡張機能にバンドルされた設定ファイルテンプレートをワークスペースにコピーし、ユーザーが編集できる状態にします。
+## 役割
+
+初回セットアップを支援し、ユーザーがmdaitをスムーズに使い始められるようにします。
 
 ---
 
-## setup.createConfig（設定ファイル作成）
+## setup.createConfig - 設定ファイル作成
 
-### 機能概要
+### 目的
 
-- 拡張機能にバンドルされた`mdait.template.json`をワークスペースルートに`mdait.json`としてコピー
-- ファイル作成後、VS Codeエディタで開いてユーザーに編集を促す
+拡張機能にバンドルされた`mdait.template.json`をワークスペースルートに`mdait.json`としてコピーし、ユーザーが編集できる状態にします。
 
-### 主要コンポーネント
-
-- [src/commands/setup/setup-command.ts](../src/commands/setup/setup-command.ts): `createConfigCommand()` - テンプレートファイルのコピーとエディタで開く処理を実行
-
-### シーケンス図
+### 処理フロー
 
 ```mermaid
 sequenceDiagram
@@ -43,9 +40,15 @@ sequenceDiagram
 	end
 ```
 
+### 主要コンポーネント
+
+- [`src/commands/setup/setup-command.ts`](../src/commands/setup/setup-command.ts): `createConfigCommand()` - テンプレートファイルのコピーとエディタで開く処理
+
 ### 考慮事項
 
-- ワークスペースが開いていない場合はエラーメッセージを表示
-- 既存ファイルの上書きを防ぐため、確認ダイアログを表示
-- テンプレートファイルが見つからない場合は、拡張機能の再インストールを促す
-- 設定ファイル作成後、自動的に`mdaitConfigured`コンテキスト変数を更新してUIを有効化
+- **ワークスペース未オープン**: エラーメッセージを表示
+- **既存ファイル保護**: 確認ダイアログで上書きを防止
+- **テンプレート不在**: 拡張機能の再インストールを促す
+- **自動UI更新**: 設定ファイル作成後、`mdaitConfigured`コンテキスト変数を自動更新してWelcome Viewを非表示に
+
+**設計意図**: ユーザーが手動で設定ファイルを作成する負担を軽減し、テンプレートから開始することでスムーズなセットアップを実現します（[config.md](config.md) 「オンボーディングサポート」参照）。

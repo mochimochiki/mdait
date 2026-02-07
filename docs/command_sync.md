@@ -1,8 +1,12 @@
-# sync（ユニット同期）コマンド設計
+# syncコマンド設計
 
-## 概要
+> **上位設計**: [architecture.md](architecture.md) P2「ハッシュによる変更追跡」、P3「差分駆動のワークフロー」、[commands.md](commands.md)、[design.md](design.md)「sync - ユニット同期」参照
 
-sync（ユニット同期）コマンドは、ソースとターゲットのMarkdownファイル間でmdaitUnitの対応関係を確立し、差分検出とステータス更新を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`フラグを自動付与し、翻訳ワークフローを開始します。
+## 役割
+
+ソースとターゲットのMarkdownファイル間でmdaitUnitの対応関係を確立し、差分検出とステータス更新を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`フラグを自動付与し、翻訳ワークフローを開始します。
+
+**設計意図**: ハッシュベースの追跡により、gitのコミット履歴に依存せず、どんなVCS（またはVCS未使用環境）でも動作します（[architecture.md](architecture.md) 哲学2参照）。
 
 ---
 
