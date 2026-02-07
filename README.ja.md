@@ -133,7 +133,7 @@ prompts: ["trans.translate"]
 - Clearing: クリアリング（取引の照合・計算）
 ```
 
-フロントマターの`prompts`フィールドを省略すると全プロンプトに適用されます。詳細は`design/prompt.md`を参照してください。
+フロントマターの`prompts`フィールドを省略すると全プロンプトに適用されます。詳細は`docs/prompt.md`を参照してください。
 
 ---
 

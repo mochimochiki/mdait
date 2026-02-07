@@ -183,7 +183,7 @@ sequenceDiagram
 
 ## translate-selection（オンデマンド翻訳）
 
-- エディタ選択範囲を一時的に翻訳する軽量機能（mdaitステータスに影響しない）。詳細は [design/command_trans_ondemand.md](design/command_trans_ondemand.md) を参照。
+- エディタ選択範囲を一時的に翻訳する軽量機能（mdaitステータスに影響しない）。詳細は [command_trans-selection.md](command_trans-selection.md) を参照。
 ---
 
 ## 考慮事項
