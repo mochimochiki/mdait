@@ -25,6 +25,9 @@
   "chat.tools.terminal.autoApprove": {
     "git checkout": true,
     "npx mocha": true,
-    "npx biome": true
+    "npx biome": true,
+    "Select": true,
+    "npx tsc": true,
+    "Move-Item": true
   },
 }
