@@ -114,9 +114,10 @@ suite("TmCommitProcessor", () => {
 			const store = new TmxStore();
 			const mockAligner = new MockSentenceAligner();
 			mockAligner.pairs = [
-				{ source: "This is **bold** text here for testing.", target: "これは太字のテキストです。" },
-				{ source: "See [link](url) for more info here.", target: "詳細はリンクを参照してください。" },
-				{ source: "Code `snippet` removed from this sentence.", target: "コードは除去されます。" },
+				// SentenceAlignerはstripMarkdown済みのペアを返すため、モックも同様にする
+				{ source: "This is bold text here for testing.", target: "これは太字のテキストです。" },
+				{ source: "See link for more info here.", target: "詳細はリンクを参照してください。" },
+				{ source: "Code removed from this sentence.", target: "コードは除去されます。" },
 			];
 
 			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");

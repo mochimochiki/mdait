@@ -277,6 +277,8 @@ prompts: ["trans.translate", "term.detect"]
 - 非1:1対応（1文→複数文など）は結合して1ペアにまとめる
 - 原文を忠実に保持（改変・意訳禁止）
 - Markdown構造（リンク、太字、コード等）は文内で保持
+- Professional TM curator roleにより、LLM側でノイズや意味のない文字列を自動除外
+- クライアント側`isWorthyForTm`と合わせて二段階の品質確保
 
 #### 変数
 - `{{sourceLang}}`: ソース言語コード

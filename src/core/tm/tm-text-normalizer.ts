@@ -34,6 +34,30 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 	for (let i = 0; i < tokens.length; i++) {
 		const token = tokens[i];
 
+		// 見出しの後に改行2つ（段落との区別を明確化）
+		if (token.type === "heading_close") {
+			textParts.push("\n\n");
+			continue;
+		}
+
+		// リスト項目の後に改行1つ（項目間の区切り）
+		if (token.type === "list_item_close") {
+			textParts.push("\n");
+			continue;
+		}
+
+		// 引用ブロックの後に改行2つ
+		if (token.type === "blockquote_close") {
+			textParts.push("\n\n");
+			continue;
+		}
+
+		// 区切り線（hr）の後に改行2つ
+		if (token.type === "hr") {
+			textParts.push("\n\n");
+			continue;
+		}
+
 		// 段落の開始
 		if (token.type === "paragraph_open") {
 			inParagraph = true;
@@ -58,9 +82,15 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 			continue;
 		}
 
-		// セルの終了（セル間にスペースを挿入、最終正規化で余分なスペースは除去される）
+		// セルの終了（セルごとに改行を挿入）
 		if (token.type === "th_close" || token.type === "td_close") {
-			textParts.push(" ");
+			textParts.push("\n");
+			continue;
+		}
+
+		// 行の終了（行の終了処理）
+		if (token.type === "tr_close") {
+			// すでにセル終了で改行が入っているため、追加処理は不要
 			continue;
 		}
 
@@ -72,7 +102,6 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 			token.type === "tbody_open" ||
 			token.type === "tbody_close" ||
 			token.type === "tr_open" ||
-			token.type === "tr_close" ||
 			token.type === "th_open" ||
 			token.type === "td_open"
 		) {
@@ -149,8 +178,18 @@ export function stripMarkdown(text: string): string {
 	// HTMLタグを除去（markdown-itはHTMLをそのまま通すため）
 	result = result.replace(/<[^>]+>/g, "");
 
-	// 余分な空白を正規化（複数スペースを1つに、前後トリム）
-	result = result.replace(/\s+/g, " ").trim();
+	// 改行を保持した空白正規化
+	// 改行以外の連続空白を1つに正規化
+	result = result.replace(/[^\S\n]+/g, " ");
+
+	// 改行の前後の空白を除去
+	result = result.replace(/ *\n */g, "\n");
+
+	// 連続する改行を最大2つに制限
+	result = result.replace(/\n{3,}/g, "\n\n");
+
+	// 先頭と末尾をトリム
+	result = result.trim();
 
 	return result;
 }

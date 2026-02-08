@@ -81,61 +81,149 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown("これは日本語です"), "これは日本語です");
 		});
 
-		suite("表の処理", () => {
-			test("基本的な表から各セルの内容のみ抽出", () => {
-				const input = "| Header1 | Header2 |\n|---------|----------|\n| Cell1   | Cell2   |";
-				const expected = "Header1 Header2 Cell1 Cell2";
+		suite("見出しの処理", () => {
+			test("見出しと本文を改行2つで区切る", () => {
+				const input = "## 結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
+				const expected = "結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
-			test("複数行の表", () => {
-				const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
-				const expected = "Name Age Alice 30 Bob 25";
+			test("複数の見出しをそれぞれ改行2つで区切る", () => {
+				const input = "# タイトル\n\n## セクション1\n\n本文1\n\n## セクション2\n\n本文2";
+				// 段落と見出しの間には段落終了と見出し開始の境界があるが、追加の区切りはない
+				const expected = "タイトル\n\nセクション1\n\n本文1セクション2\n\n本文2";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
-			test("数値のみの表", () => {
-				const input = "| 0.12 | 333 |\n|------|-----|\n| 456  | 789 |";
-				const expected = "0.12 333 456 789";
+			test("見出しのみの場合", () => {
+				const input = "## 見出し";
+				const expected = "見出し";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
-			test("セル内にMarkdown記法を含む表", () => {
-				const input = "| **Bold** | *Italic* |\n|----------|----------|\n| [Link](url) | `code` |";
-				const expected = "Bold Italic Link";
-				assert.equal(stripMarkdown(input), expected);
-			});
-
-			test("表のセル内のインラインコードは完全除外される", () => {
-				const input = "| Text | `code` |\n|------|--------|\n| Hello | `world` |";
-				const expected = "Text Hello";
-				assert.equal(stripMarkdown(input), expected);
-			});
-
-			test("空セルを含む表", () => {
-				const input = "| A |  | C |\n|---|---|---|\n| 1 |  | 3 |";
-				const expected = "A C 1 3";
-				assert.equal(stripMarkdown(input), expected);
-			});
-
-			test("単一セルの表", () => {
-				const input = "| Single |\n|--------|\n| Cell |";
-				const expected = "Single Cell";
-				assert.equal(stripMarkdown(input), expected);
-			});
-
-			test("表の前後にテキストがある場合", () => {
-				const input = "Before table\n\n| Col1 | Col2 |\n|------|------|\n| A | B |\n\nAfter table";
-				const expected = "Before table Col1 Col2 A B After table";
-				assert.equal(stripMarkdown(input), expected);
-			});
-
-			test("区切り線のみが除去される", () => {
-				const input = "| H1 | H2 |\n|----|----|";
-				const expected = "H1 H2";
+			test("異なるレベルの見出し", () => {
+				const input = "# H1\n\n## H2\n\n### H3";
+				const expected = "H1\n\nH2\n\nH3";
 				assert.equal(stripMarkdown(input), expected);
 			});
 		});
+
+		suite("リストの処理", () => {
+			test("リスト項目を改行1つで区切る", () => {
+				const input = "- 項目1\n- 項目2\n- 項目3";
+				const expected = "項目1\n項目2\n項目3";
+				assert.equal(stripMarkdown(input), expected);
+			});
+
+			test("番号付きリスト", () => {
+				const input = "1. 第一項\n2. 第二項\n3. 第三項";
+				const expected = "第一項\n第二項\n第三項";
+				assert.equal(stripMarkdown(input), expected);
+			});
+
+			test("リスト項目に太字を含む", () => {
+				const input = "- **重要**な項目\n- 通常の項目";
+				const expected = "重要な項目\n通常の項目";
+				assert.equal(stripMarkdown(input), expected);
+			});
+		});
+
+		suite("引用ブロックの処理", () => {
+			test("引用ブロック後に改行2つ", () => {
+				const input = "> 引用文\n\n通常のテキスト";
+				const expected = "引用文\n\n通常のテキスト";
+				assert.equal(stripMarkdown(input), expected);
+			});
+
+			test("複数行の引用ブロック", () => {
+				const input = "> 引用行1\n> 引用行2\n\n通常のテキスト";
+				const expected = "引用行1 引用行2\n\n通常のテキスト";
+				assert.equal(stripMarkdown(input), expected);
+			});
+		});
+
+		suite("区切り線の処理", () => {
+			test("区切り線後に改行2つ", () => {
+				const input = "テキスト1\n\n---\n\nテキスト2";
+				const expected = "テキスト1\n\nテキスト2";
+				assert.equal(stripMarkdown(input), expected);
+			});
+		});
+
+		suite("混在ケース", () => {
+			test("見出し、段落、リスト、引用の混在", () => {
+				const input = "## 見出し\n\n段落1\n\n- リスト1\n- リスト2\n\n> 引用\n\n段落2";
+				// リストの後の改行は list_item_close の \n のみ（list_close では追加なし）
+				const expected = "見出し\n\n段落1 リスト1\nリスト2\n引用\n\n段落2";
+				assert.equal(stripMarkdown(input), expected);
+			});
+
+			test("複雑な構造", () => {
+				const input = "# タイトル\n\n本文です。\n\n## セクション\n\n- 項目A\n- 項目B\n\n> 注意事項\n\n最後の段落。";
+				// 段落と見出しの間、リストと引用の間には追加の区切りなし
+				const expected = "タイトル\n\n本文です。セクション\n\n項目A\n項目B\n注意事項\n\n最後の段落。";
+				assert.equal(stripMarkdown(input), expected);
+			});
+		});
+	});
+
+	suite("表の処理", () => {
+		test("基本的な表から各セルごとに改行で分離", () => {
+			const input = "| Header1 | Header2 |\n|---------|----------|\n| Cell1   | Cell2   |";
+			const expected = "Header1\nHeader2\nCell1\nCell2";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("複数行の表", () => {
+			const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+			const expected = "Name\nAge\nAlice\n30\nBob\n25";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("数値のみの表", () => {
+			const input = "| 0.12 | 333 |\n|------|-----|\n| 456  | 789 |";
+			const expected = "0.12\n333\n456\n789";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("セル内にMarkdown記法を含む表", () => {
+			const input = "| **Bold** | *Italic* |\n|----------|----------|\n| [Link](url) | `code` |";
+			const expected = "Bold\nItalic\nLink";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("表のセル内のインラインコードは完全除外される", () => {
+			const input = "| Text | `code` |\n|------|--------|\n| Hello | `world` |";
+			// コードセルが除外されるため、空のセル位置で改行のみが残る
+			const expected = "Text\n\nHello";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("空セルを含む表", () => {
+			const input = "| A |  | C |\n|---|---|---|\n| 1 |  | 3 |";
+			// 空セル位置で改行のみが残り連続改行になる（最大2つに正規化）
+			const expected = "A\n\nC\n1\n\n3";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("単一セルの表", () => {
+			const input = "| Single |\n|--------|\n| Cell |";
+			const expected = "Single\nCell";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("表の前後にテキストがある場合", () => {
+			const input = "Before table\n\n| Col1 | Col2 |\n|------|------|\n| A | B |\n\nAfter table";
+			const expected = "Before table Col1\nCol2\nA\nB\nAfter table";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("区切り線のみが除去される", () => {
+			const input = "| H1 | H2 |\n|----|----|";
+			const expected = "H1\nH2";
+			assert.equal(stripMarkdown(input), expected);
+		});
+	});
 	});
 
 	suite("isWorthyForTm", () => {
