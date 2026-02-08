@@ -5,7 +5,13 @@
  * 文単位のTmEntryが管理単位で、sentenceHash（ソース文の正規化後CRC32）をキーとする。
  */
 
-/** 出典情報 */
+/**
+ * 出典情報（将来用）
+ *
+ * 現在は未使用。将来、以下の機能が必要になった場合に使用予定:
+ * - 複数出典の追跡（同じ文が複数ユニットで使用されている場合）
+ * - 統計情報の収集（どのファイル・ユニットから多く登録されているか）
+ */
 export interface TmUsedIn {
 	/** ワークスペースからの相対パス */
 	unitPath: string;
@@ -19,10 +25,8 @@ export interface TmEntry {
 	sentenceHash: string;
 	/** 言語コード → テキスト (例: "en" → "...", "ja" → "...") */
 	segments: Map<string, string>;
-	/** 出典ユニット一覧 */
-	usedIn: TmUsedIn[];
-	/** 初回登録日時（ISO 8601） */
-	createdAt: string;
+	/** 最初の出典（相対パス） */
+	unitPath: string;
 }
 
 /** TM検索結果 */
@@ -43,26 +47,4 @@ export interface SentencePair {
 	source: string;
 	/** ターゲット文 */
 	target: string;
-}
-
-/** TMXファイル全体のデータ構造 */
-export interface TmxData {
-	/** TMXバージョン */
-	version: string;
-	/** ヘッダー情報 */
-	header: TmxHeader;
-	/** エントリーMap: sentenceHash → TmEntry */
-	entries: Map<string, TmEntry>;
-}
-
-/** TMXヘッダー */
-export interface TmxHeader {
-	creationtool: string;
-	creationtoolversion: string;
-	datatype: string;
-	segtype: string;
-	/** TMX原形式 */
-	"o-tmf": string;
-	/** ソース言語 ("*all*" = 各TUで異なる) */
-	srclang: string;
 }

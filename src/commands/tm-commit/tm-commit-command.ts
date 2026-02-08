@@ -16,7 +16,6 @@ import { markdownParser } from "../../core/markdown/parser";
 import { Status, type StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
-import type { TmUsedIn } from "../../core/tm/types";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
@@ -345,12 +344,7 @@ async function executeTmCommitForUnits(
 				continue;
 			}
 
-			const unitInfo: TmUsedIn = {
-				unitPath: relativePath,
-				unitHash: unit.marker.hash ?? "",
-			};
-
-			const unitResult = await processor.processUnit(sourceContent, unit.content, unitInfo, token);
+			const unitResult = await processor.processUnit(sourceContent, unit.content, relativePath, token);
 
 			result.processedUnits++;
 			result.newEntries += unitResult.newCount;

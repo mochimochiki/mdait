@@ -7,8 +7,9 @@
  * @module commands/tm-commit/tm-commit-processor
  */
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { TmxStore } from "../../core/tm/tmx-store";
-import type { SentencePair, TmEntry, TmUsedIn } from "../../core/tm/types";
+import type { SentencePair, TmEntry } from "../../core/tm/types";
 import { Logger } from "../../utils/logger";
 import type { SentenceAligner } from "./sentence-aligner";
 
@@ -54,14 +55,14 @@ export class TmCommitProcessor {
 	 * 単一ユニットを処理してTMに登録する。
 	 * @param sourceContent ソースユニットの本文
 	 * @param targetContent ターゲットユニットの本文
-	 * @param unitInfo 出典情報
+	 * @param unitPath 出典パス（相対パス）
 	 * @param cancellationToken キャンセルトークン
 	 * @returns ユニット単位の処理結果
 	 */
 	async processUnit(
 		sourceContent: string,
 		targetContent: string,
-		unitInfo: TmUsedIn,
+		unitPath: string,
 		cancellationToken?: import("vscode").CancellationToken,
 	): Promise<TmCommitUnitResult> {
 		// 文アライメント
@@ -75,45 +76,65 @@ export class TmCommitProcessor {
 
 		if (pairs.length === 0) {
 			logger.debug("tm-commit", "No sentence pairs from alignment", {
-				unitPath: unitInfo.unitPath,
+				unitPath,
 			});
 			return { newCount: 0, existingCount: 0, skippedCount: 0 };
 		}
 
-		return this.registerPairs(pairs, unitInfo);
+		return this.registerPairs(pairs, unitPath);
 	}
 
 	/**
 	 * 対訳ペア配列をTmxStoreに登録する。
 	 * @param pairs 対訳ペア配列
-	 * @param unitInfo 出典情報
+	 * @param unitPath 出典パス（相対パス）
 	 * @returns 登録結果
 	 */
-	registerPairs(pairs: SentencePair[], unitInfo: TmUsedIn): TmCommitUnitResult {
+	registerPairs(pairs: SentencePair[], unitPath: string): TmCommitUnitResult {
 		let newCount = 0;
 		let existingCount = 0;
 		let skippedCount = 0;
 
 		for (const pair of pairs) {
-			if (!pair.source.trim() || !pair.target.trim()) {
+			// SentenceAlignerで既にstripMarkdown済みのテキストを使用
+			const sourceText = pair.source;
+			const targetText = pair.target;
+
+			// 空文字列チェック
+			if (!sourceText.trim() || !targetText.trim()) {
 				skippedCount++;
+				logger.debug("tm-commit", "Empty text", {
+					original: pair.source,
+					unitPath,
+				});
 				continue;
 			}
 
-			const sentenceHash = calculateHash(pair.source, true);
+			// 翻訳価値判定（短文・断片・数値のみ等を除外）
+			if (!isWorthyForTm(sourceText, this.sourceLang)) {
+				skippedCount++;
+				logger.debug("tm-commit", "Not worthy for TM", {
+					text: sourceText,
+					lang: this.sourceLang,
+					unitPath,
+				});
+				continue;
+			}
+
+			// ハッシュ計算（正規化済みテキストから。calculateHashは内部でnormalizeTextを実行）
+			const sentenceHash = calculateHash(sourceText, true);
 			const existing = this.store.findByHash(sentenceHash);
 
 			const entry: TmEntry = {
 				sentenceHash,
 				segments: new Map([
-					[this.sourceLang, pair.source],
-					[this.targetLang, pair.target],
+					[this.sourceLang, sourceText],
+					[this.targetLang, targetText],
 				]),
-				usedIn: [unitInfo],
-				createdAt: new Date().toISOString(),
+				unitPath,
 			};
 
-			// addEntryは既存時にセグメント上書き+usedIn追加を行う
+			// addEntryは既存時にセグメント上書き+unitPath更新を行う
 			this.store.addEntry(entry);
 
 			if (existing) {
@@ -122,6 +143,14 @@ export class TmCommitProcessor {
 				newCount++;
 			}
 		}
+
+		// 統計ログ出力
+		logger.info("tm-commit", "Unit processing completed", {
+			newCount,
+			existingCount,
+			skippedCount,
+			unitPath,
+		});
 
 		return { newCount, existingCount, skippedCount };
 	}

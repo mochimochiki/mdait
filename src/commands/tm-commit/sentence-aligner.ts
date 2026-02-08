@@ -7,6 +7,7 @@
  */
 import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../api/ai-service";
+import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { SentencePair } from "../../core/tm/types";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { Logger, formatError } from "../../utils/logger";
@@ -40,12 +41,16 @@ export class SentenceAligner {
 		targetLang: string,
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<SentencePair[]> {
+		// Markdown要素を除去して純粋なテキストに変換（LLMの負荷軽減と表などの複数行構造の正しい処理）
+		const strippedSource = stripMarkdown(sourceText);
+		const strippedTarget = stripMarkdown(targetText);
+
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
 			sourceLang,
 			targetLang,
-			sourceText,
-			targetText,
+			sourceText: strippedSource,
+			targetText: strippedTarget,
 		});
 
 		const messages: AIMessage[] = [

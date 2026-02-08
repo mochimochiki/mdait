@@ -118,7 +118,7 @@ sequenceDiagram
 **主な処理**:
 - LLMによる高精度な対訳文アライメント
 - sentenceHash（CRC32）による重複防止
-- usedIn[]による出典管理
+- unitPathによる出典管理
 - trans実行時: 正規表現文分割 → TM検索 → プロンプト統合
 
 **詳細**: [command_tm-commit.md](command_tm-commit.md)

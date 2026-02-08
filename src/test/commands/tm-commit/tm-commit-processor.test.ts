@@ -5,7 +5,7 @@ import * as path from "node:path";
 import type { SentenceAligner } from "../../../commands/tm-commit/sentence-aligner";
 import { TmCommitProcessor } from "../../../commands/tm-commit/tm-commit-processor";
 import { TmxStore } from "../../../core/tm/tmx-store";
-import type { SentencePair, TmUsedIn } from "../../../core/tm/types";
+import type { SentencePair } from "../../../core/tm/types";
 
 /**
  * テスト用SentenceAlignerモック。
@@ -36,10 +36,7 @@ function createTempFilePath(): string {
 }
 
 suite("TmCommitProcessor", () => {
-	const unitInfo: TmUsedIn = {
-		unitPath: "docs/guide.md",
-		unitHash: "abc12345",
-	};
+	const unitPath = "docs/guide.md";
 
 	suite("processUnit", () => {
 		test("文ペアがTmxStoreに登録される", async () => {
@@ -48,16 +45,16 @@ suite("TmCommitProcessor", () => {
 
 			const mockAligner = new MockSentenceAligner();
 			mockAligner.pairs = [
-				{ source: "Hello world.", target: "こんにちは世界。" },
-				{ source: "Good morning.", target: "おはようございます。" },
+				{ source: "Hello world from here.", target: "こんにちは世界からこちら。" },
+				{ source: "Good morning everyone.", target: "おはようございますみなさん。" },
 			];
 
 			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
 
 			const result = await processor.processUnit(
-				"Hello world. Good morning.",
-				"こんにちは世界。おはようございます。",
-				unitInfo,
+				"Hello world from here. Good morning everyone.",
+				"こんにちは世界からこちら。おはようございますみなさん。",
+				unitPath,
 			);
 
 			assert.strictEqual(result.newCount, 2);
@@ -88,7 +85,7 @@ suite("TmCommitProcessor", () => {
 
 			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
 
-			const result = await processor.processUnit("Some source text.", "翻訳テキスト。", unitInfo);
+			const result = await processor.processUnit("Some source text.", "翻訳テキスト。", unitPath);
 
 			assert.strictEqual(result.newCount, 0);
 			assert.strictEqual(result.existingCount, 0);
@@ -99,18 +96,75 @@ suite("TmCommitProcessor", () => {
 			const store = new TmxStore();
 			const mockAligner = new MockSentenceAligner();
 			mockAligner.pairs = [
-				{ source: "Valid sentence.", target: "有効な文。" },
-				{ source: "", target: "空ソース" },
-				{ source: "空ターゲット", target: "" },
+				{ source: "This is a valid sentence here.", target: "これは有効な文です。" },
+				{ source: "", target: "空ソース文字列" },
+				{ source: "空ターゲット文字列", target: "" },
 			];
 
 			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
 
-			const result = await processor.processUnit("Source content", "ターゲットコンテンツ", unitInfo);
+			const result = await processor.processUnit("Source content", "ターゲットコンテンツ", unitPath);
 
 			assert.strictEqual(result.newCount, 1);
 			assert.strictEqual(result.skippedCount, 2);
 			assert.strictEqual(store.getEntryCount(), 1);
+		});
+
+		test("Markdown含むペアは正規化されて登録される", async () => {
+			const store = new TmxStore();
+			const mockAligner = new MockSentenceAligner();
+			mockAligner.pairs = [
+				{ source: "This is **bold** text here for testing.", target: "これは太字のテキストです。" },
+				{ source: "See [link](url) for more info here.", target: "詳細はリンクを参照してください。" },
+				{ source: "Code `snippet` removed from this sentence.", target: "コードは除去されます。" },
+			];
+
+			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
+
+			const result = await processor.processUnit(
+				"This is **bold** text here for testing. See [link](url) for more info here. Code `snippet` removed from this sentence.",
+				"これは太字のテキストです。詳細はリンクを参照してください。コードは除去されます。",
+				unitPath,
+			);
+
+			assert.strictEqual(result.newCount, 3);
+			assert.strictEqual(result.skippedCount, 0);
+			assert.strictEqual(store.getEntryCount(), 3);
+
+			// ストア内のエントリーが正規化されていることを確認
+			const entries = Array.from(store.entries.values());
+			assert.ok(entries.some((e) => e.segments.get("en") === "This is bold text here for testing."));
+			assert.ok(entries.some((e) => e.segments.get("en") === "See link for more info here."));
+			assert.ok(entries.some((e) => e.segments.get("en") === "Code removed from this sentence."));
+		});
+
+		test("翻訳価値のない短文・断片はスキップされる", async () => {
+			const store = new TmxStore();
+			const mockAligner = new MockSentenceAligner();
+			mockAligner.pairs = [
+				{ source: "This is a valid sentence here.", target: "有効な文です。" },
+				{ source: "short", target: "短い" }, // 12文字未満
+				{ source: "123", target: "123" }, // 数値のみ
+				{ source: "Hello world", target: "こんにちは世界" }, // 2単語以下
+				{ source: "https://example.com", target: "https://example.com" }, // URLのみ
+			];
+
+			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
+
+			const result = await processor.processUnit(
+				"This is a valid sentence here. short 123 Hello world https://example.com",
+				"有効な文です。短い 123 こんにちは世界 https://example.com",
+				unitPath,
+			);
+
+			assert.strictEqual(result.newCount, 1);
+			assert.strictEqual(result.skippedCount, 4);
+			assert.strictEqual(store.getEntryCount(), 1);
+
+			// スキップされたペアがストアに存在しないことを確認
+			const entries = Array.from(store.entries.values());
+			assert.strictEqual(entries.length, 1);
+			assert.strictEqual(entries[0].segments.get("en"), "This is a valid sentence here.");
 		});
 	});
 
@@ -121,19 +175,16 @@ suite("TmCommitProcessor", () => {
 
 			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
 
-			const pairs: SentencePair[] = [{ source: "Same sentence.", target: "同じ文。" }];
+			const pairs: SentencePair[] = [{ source: "This is the same sentence here.", target: "これは同じ文です。" }];
 
 			// 初回登録
-			const result1 = processor.registerPairs(pairs, unitInfo);
+			const result1 = processor.registerPairs(pairs, unitPath);
 			assert.strictEqual(result1.newCount, 1);
 			assert.strictEqual(result1.existingCount, 0);
 
 			// 同じ文ペアで再登録
-			const unitInfo2: TmUsedIn = {
-				unitPath: "docs/api.md",
-				unitHash: "def67890",
-			};
-			const result2 = processor.registerPairs(pairs, unitInfo2);
+			const unitPath2 = "docs/api.md";
+			const result2 = processor.registerPairs(pairs, unitPath2);
 			assert.strictEqual(result2.newCount, 0);
 			assert.strictEqual(result2.existingCount, 1);
 

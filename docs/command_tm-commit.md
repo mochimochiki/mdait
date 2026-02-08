@@ -42,11 +42,33 @@
    - ソースユニットの内容を取得（`from`ハッシュ経由）
    - SentenceAligner: LLMで対訳を文ペアに分割
    - 各文ペアについて:
-     - sentenceHash = CRC32(normalize(source_sentence))
-     - 既存ハッシュ → usedIn追加 + ターゲット訳文を最新で上書き
+     - **正規化**: stripMarkdown(source)でMarkdown要素除去
+     - **フィルタリング**: isWorthyForTm()で翻訳価値判定（短文・断片・数値のみ等を除外）
+     - sentenceHash = CRC32(normalize(stripped_source))
+     - 既存ハッシュ → unitPath更新 + ターゲット訳文を最新で上書き
      - 新規ハッシュ → 新規TmEntryを作成
 4. **永続化**: TmxStore.save()でTMXファイルに書き込み
 5. **結果レポート**: 新規/既存/スキップの件数を通知
+
+### 正規化とフィルタリング
+
+tm-commitでは、TM登録前に以下の処理を行い、TM品質を向上させる：
+
+**stripMarkdown**: Markdown要素を除去して純粋なテキストに変換
+- コードブロック・インラインコード → 完全除外（空文字列）
+- リンク・画像 → テキスト部分のみ抽出
+- 太字・強調・削除線 → テキスト部分のみ抽出
+- HTMLタグ → content部分のみ抽出
+
+**isWorthyForTm**: 翻訳価値のない短文・断片を除外
+- 最小文字数未満: 日本語8文字、英語12文字未満
+- 数値のみ: `"123"`, `"3.14"`, `"1,000"` 等
+- URL/パスのみ: `"https://example.com"`, `"./path/to/file"` 等
+- 英語2単語以下: 短すぎるフレーズ
+
+**統計ログ**: 各ユニット処理後に newCount / existingCount / skippedCount をログ出力。debugレベルでスキップ理由を記録。
+
+**詳細**: [core.md](core.md)「TmTextNormalizer」参照
 
 ---
 
@@ -90,15 +112,29 @@ sequenceDiagram
         Note over Cmd,AI: ユニット処理ループ（順次）
         loop 各対象ユニット
             Cmd->>Proc: processUnit(source, target, unitInfo)
-            Proc->>Aligner: alignSentences(source, target)
-            Aligner->>AI: tm.splitSentences
-            AI-->>Aligner: SentencePair[]
+            
+            rect rgb(255, 250, 230)
+                Note over Proc,AI: SentenceAlignerでのstripMarkdown適用
+                Proc->>Aligner: alignSentences(source, target)
+                Aligner->>Aligner: stripMarkdown(source)
+                Aligner->>Aligner: stripMarkdown(target)
+                Note over Aligner: LLMへの負荷軽減と<br/>表などの複数行構造の正しい処理
+                Aligner->>AI: tm.splitSentences<br/>(stripMarkdown済み)
+                AI-->>Aligner: SentencePair[]<br/>(既にstripMarkdown済み)
+            end
+            
             loop 各文ペア
-                Proc->>Proc: computeHash(source)
-                alt 既存
-                    Proc->>Store: addUsedIn + updateTarget
-                else 新規
-                    Proc->>Store: addEntry
+                Note over Proc: pair.source/targetは<br/>既にstripMarkdown済み
+                Proc->>Proc: isWorthyForTm(pair.source)
+                alt 翻訳価値なし
+                    Proc->>Proc: skippedCount++
+                else 翻訳価値あり
+                    Proc->>Proc: computeHash(pair.source)
+                    alt 既存
+                        Proc->>Store: updateTarget + unitPath更新
+                    else 新規
+                        Proc->>Store: addEntry
+                    end
                 end
             end
         end
@@ -117,11 +153,18 @@ tm-commitで蓄積されたTMは、trans実行時に参照される。
 ### TM検索フロー（trans内）
 
 1. TmxStoreをロード（キャッシュ再利用、mtime判定）
-2. ソースユニットの内容をSentenceSplitter（正規表現）で文分割
-3. 各文のsentenceHashを計算
-4. TmxStore.lookupBatch()で一括検索
-5. ヒットした参照を`tm.maxReferences`件まで選定
-6. フォーマットしてTranslationContext.tmReferencesに設定
+2. **ソースユニット全体をstripMarkdownで正規化**（表などの複数行構造を正しく処理）
+3. 正規化済みテキストをSentenceSplitter（正規表現）で文分割
+4. 各文でsentenceHashを計算
+5. TmxStore.lookupBatch()で一括検索
+6. ヒットした参照を`tm.maxReferences`件まで選定
+7. フォーマットしてTranslationContext.tmReferencesに設定
+
+**正規化の一貫性**: tm-commit登録時（SentenceAligner内）とtrans検索時で同一の正規化処理（stripMarkdown）を使用することで、Markdown記法の差異を吸収し、検索精度を向上させる。
+
+**stripMarkdownの適用タイミング**:
+- **tm-commit**: SentenceAlignerがLLMに渡す前に全体をstripMarkdown → 文分割 → TM登録
+- **trans検索**: ソースユニット全体をstripMarkdown → 文分割 → ハッシュ計算 → TM検索
 
 ### プロンプト統合
 
@@ -216,14 +259,14 @@ Use them as reference for consistency, but prioritize accuracy and context.
 
 ## 考慮事項
 
-- **冪等性**: tm-commitを複数回実行しても結果は同一。既存エントリーはusedIn追加のみ
+- **冪等性**: tm-commitを複数回実行しても結果は同一。既存エントリーはunitPath更新のみ
 - **プライバシー**: LLM通信（文分割）はtm-commit実行時のみ。trans時のTM検索はローカル完結
 - **エラーハンドリング**: ユニット単位のLLMエラーは記録して続行。他ユニットの処理に影響しない
 - **fixコマンドとの連携**: TmCommitProcessorを独立設計し、fix --tm実装時に委譲可能
 
 ---
 
-## 参照
+## 参照done/260208_翻訳メモリ機能.md](/tasks/done/260208_翻訳メモリ機能.md), [/tasks/260208_TM正規化とフィルタリング.md](/tasks/260208_TM正規化とフィルタリング
 
 - 実装コード: `src/core/tm/`, `src/commands/tm-commit/`
 - プロンプト設計: [prompt.md](prompt.md)

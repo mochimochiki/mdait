@@ -31,6 +31,7 @@ import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { SentenceSplitter } from "../../core/tm/sentence-splitter";
 import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
+import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import { TmxStore } from "../../core/tm/tmx-store";
 import type { TmMatch } from "../../core/tm/types";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -944,7 +945,7 @@ async function translateFrontmatter_CoreProc(
  * @param targetLang ターゲット言語コード
  * @returns フォーマット済みTM参照文字列、またはundefined
  */
-function lookupTmReferences(sourceContent: string, sourceLang: string, targetLang: string): string | undefined {
+export function lookupTmReferences(sourceContent: string, sourceLang: string, targetLang: string): string | undefined {
 	const config = Configuration.getInstance();
 	if (!config.getTmEnabled()) {
 		return undefined;
@@ -962,14 +963,15 @@ function lookupTmReferences(sourceContent: string, sourceLang: string, targetLan
 		return undefined;
 	}
 
-	// ソースを文分割（SentenceSplitterはステートレスのためモジュールスコープで再利用）
-	const sentences = sentenceSplitter.split(sourceContent, sourceLang);
+	// Markdown要素を除去してから文分割（表などの複数行構造を正しく処理するため）
+	const strippedContent = stripMarkdown(sourceContent);
+	const sentences = sentenceSplitter.split(strippedContent, sourceLang);
 	if (sentences.length === 0) {
 		return undefined;
 	}
 
-	// 各文のハッシュを計算してバッチ検索
-	const hashes = sentences.map((s) => calculateHash(s, true));
+	// 各文をハッシュ計算（stripMarkdownは全体に対して既に実施済み）
+	const hashes = sentences.filter((text) => text.trim().length > 0).map((text) => calculateHash(text, true));
 	const matches = store.lookupBatch(hashes, sourceLang, targetLang);
 	if (matches.length === 0) {
 		return undefined;

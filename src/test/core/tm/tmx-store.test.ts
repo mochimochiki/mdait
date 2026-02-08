@@ -3,32 +3,21 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { TmxStore, escapeXml, unescapeXml } from "../../../core/tm/tmx-store";
-import type { TmEntry, TmUsedIn } from "../../../core/tm/types";
+import type { TmEntry } from "../../../core/tm/types";
 
 /** テスト用TMXテンプレート */
 const SAMPLE_TMX = `<?xml version="1.0" encoding="UTF-8"?>
 <tmx version="1.4">
-  <header
-    creationtool="mdait"
-    creationtoolversion="0.0.1"
-    datatype="Markdown"
-    segtype="sentence"
-    o-tmf="mdait"
-    srclang="*all*"
-  />
   <body>
     <tu>
-      <prop type="x-mdait-hash">a1b2c3d4</prop>
-      <prop type="x-mdait-created-at">2026-02-08T12:00:00Z</prop>
-      <prop type="x-mdait-used-in">docs/guide.md#abc12345</prop>
+      <prop type="x-hash">a1b2c3d4</prop>
+      <prop type="x-unit">docs/guide.md</prop>
       <tuv xml:lang="en"><seg>Download the installer</seg></tuv>
       <tuv xml:lang="ja"><seg>インストーラーをダウンロード</seg></tuv>
     </tu>
     <tu>
-      <prop type="x-mdait-hash">e5f6a7b8</prop>
-      <prop type="x-mdait-created-at">2026-02-08T13:00:00Z</prop>
-      <prop type="x-mdait-used-in">docs/api.md#def67890</prop>
-      <prop type="x-mdait-used-in">docs/guide.md#abc12345</prop>
+      <prop type="x-hash">e5f6a7b8</prop>
+      <prop type="x-unit">docs/api.md</prop>
       <tuv xml:lang="en"><seg>Run the installer</seg></tuv>
       <tuv xml:lang="ja"><seg>インストーラーを実行</seg></tuv>
     </tu>
@@ -51,8 +40,7 @@ function createTestEntry(overrides?: Partial<TmEntry>): TmEntry {
 				["en", "Hello world"],
 				["ja", "こんにちは世界"],
 			]),
-		usedIn: overrides?.usedIn ?? [{ unitPath: "docs/test.md", unitHash: "aabb1122" }],
-		createdAt: overrides?.createdAt ?? "2026-02-08T10:00:00Z",
+		unitPath: overrides?.unitPath ?? "docs/test.md",
 	};
 }
 
@@ -105,10 +93,7 @@ suite("TmxStore", () => {
 			assert.ok(entry1);
 			assert.strictEqual(entry1.segments.get("en"), "Download the installer");
 			assert.strictEqual(entry1.segments.get("ja"), "インストーラーをダウンロード");
-			assert.strictEqual(entry1.createdAt, "2026-02-08T12:00:00Z");
-			assert.strictEqual(entry1.usedIn.length, 1);
-			assert.strictEqual(entry1.usedIn[0].unitPath, "docs/guide.md");
-			assert.strictEqual(entry1.usedIn[0].unitHash, "abc12345");
+			assert.strictEqual(entry1.unitPath, "docs/guide.md");
 		});
 
 		test("複数のusedInを持つエントリーが正しくパースされる", () => {
@@ -118,9 +103,7 @@ suite("TmxStore", () => {
 			store.load(tempFilePath);
 			const entry2 = store.findByHash("e5f6a7b8");
 			assert.ok(entry2);
-			assert.strictEqual(entry2.usedIn.length, 2);
-			assert.strictEqual(entry2.usedIn[0].unitPath, "docs/api.md");
-			assert.strictEqual(entry2.usedIn[1].unitPath, "docs/guide.md");
+			assert.strictEqual(entry2.unitPath, "docs/api.md");
 		});
 	});
 
@@ -222,39 +205,38 @@ suite("TmxStore", () => {
 			store.addEntry(createTestEntry());
 			store.addEntry(
 				createTestEntry({
-					usedIn: [{ unitPath: "docs/other.md", unitHash: "ccdd3344" }],
+					unitPath: "docs/other.md",
 				}),
 			);
 
 			const entry = store.findByHash("11223344");
 			assert.ok(entry);
-			assert.strictEqual(entry.usedIn.length, 2);
+			assert.strictEqual(entry.unitPath, "docs/other.md");
 		});
 
 		test("同一usedInの重複追加は無視される", () => {
 			store.addEntry(createTestEntry());
-			store.addEntry(createTestEntry()); // 同じusedIn
+			store.addEntry(createTestEntry()); // 同じunitPath
 
 			const entry = store.findByHash("11223344");
 			assert.ok(entry);
-			assert.strictEqual(entry.usedIn.length, 1);
+			assert.strictEqual(entry.unitPath, "docs/test.md");
 		});
 	});
 
-	suite("addUsedIn", () => {
-		test("既存エントリーに出典情報が追加される", () => {
+	suite("setUnitPath", () => {
+		test("既存エントリーの出典パスが設定される", () => {
 			store.addEntry(createTestEntry());
-			const newUsedIn: TmUsedIn = { unitPath: "docs/new.md", unitHash: "eeff5566" };
-			const result = store.addUsedIn("11223344", newUsedIn);
+			const result = store.setUnitPath("11223344", "docs/new.md");
 
 			assert.strictEqual(result, true);
 			const entry = store.findByHash("11223344");
 			assert.ok(entry);
-			assert.strictEqual(entry.usedIn.length, 2);
+			assert.strictEqual(entry.unitPath, "docs/new.md");
 		});
 
 		test("存在しないハッシュにはfalseを返す", () => {
-			const result = store.addUsedIn("nonexist", { unitPath: "docs/x.md", unitHash: "xxxx" });
+			const result = store.setUnitPath("nonexist", "docs/x.md");
 			assert.strictEqual(result, false);
 		});
 	});
@@ -372,7 +354,7 @@ suite("TmxStoreシングルトン", () => {
 		assert.strictEqual(store.getEntryCount(), 2);
 
 		// 外部からファイルを書き換え（mtimeが変わるようにutimesで明示的にタイムスタンプを変更）
-		const newTmx = SAMPLE_TMX.replace(/<tu>\s*<prop type="x-mdait-hash">e5f6a7b8<\/prop>[\s\S]*?<\/tu>/, "");
+		const newTmx = SAMPLE_TMX.replace(/<tu>\s*<prop type="x-hash">e5f6a7b8<\/prop>[\s\S]*?<\/tu>/, "");
 		// mtimeが変わるようにutimesで明示的にタイムスタンプを変更
 		fs.writeFileSync(tempFilePath, newTmx, "utf-8");
 		const futureTime = Date.now() / 1000 + 10;

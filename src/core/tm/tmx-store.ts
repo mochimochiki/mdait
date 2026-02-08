@@ -1,25 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
-import type { TmEntry, TmMatch, TmUsedIn, TmxData, TmxHeader } from "./types";
-
-/** TMXのデフォルトヘッダー */
-const DEFAULT_HEADER: TmxHeader = {
-	creationtool: "mdait",
-	creationtoolversion: "0.0.1",
-	datatype: "Markdown",
-	segtype: "sentence",
-	"o-tmf": "mdait",
-	srclang: "*all*",
-};
+import type { TmEntry, TmMatch } from "./types";
 
 /** TMXバージョン */
 const TMX_VERSION = "1.4";
 
 /** XMLプロパティタイプ定数 */
-const PROP_TYPE_HASH = "x-mdait-hash";
-const PROP_TYPE_CREATED_AT = "x-mdait-created-at";
-const PROP_TYPE_USED_IN = "x-mdait-used-in";
+const PROP_TYPE_HASH = "x-hash";
+const PROP_TYPE_UNIT = "x-unit";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -67,35 +56,11 @@ const tmxParser = new XMLParser({
 });
 
 /**
- * usedIn文字列をパースする
- * 形式: "相対パス#ユニットハッシュ"
- */
-function parseUsedIn(value: string): TmUsedIn {
-	const separatorIndex = value.lastIndexOf("#");
-	if (separatorIndex === -1) {
-		return { unitPath: value, unitHash: "" };
-	}
-	return {
-		unitPath: value.substring(0, separatorIndex),
-		unitHash: value.substring(separatorIndex + 1),
-	};
-}
-
-/**
- * usedInを文字列にシリアライズする
- * 形式: "相対パス#ユニットハッシュ"
- */
-function formatUsedIn(usedIn: TmUsedIn): string {
-	return `${usedIn.unitPath}#${usedIn.unitHash}`;
-}
-
-/**
  * パース済みTUノードからTmEntryに変換する
  */
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	let sentenceHash = "";
-	let createdAt = "";
-	const usedIn: TmUsedIn[] = [];
+	let unitPath = "";
 	const segments = new Map<string, string>();
 
 	// <prop> 要素を処理
@@ -107,11 +72,8 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 			case PROP_TYPE_HASH:
 				sentenceHash = value;
 				break;
-			case PROP_TYPE_CREATED_AT:
-				createdAt = value;
-				break;
-			case PROP_TYPE_USED_IN:
-				usedIn.push(parseUsedIn(value));
+			case PROP_TYPE_UNIT:
+				unitPath = value;
 				break;
 		}
 	}
@@ -133,15 +95,14 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	return {
 		sentenceHash,
 		segments,
-		usedIn,
-		createdAt,
+		unitPath,
 	};
 }
 
 /**
  * TMX XMLを全件パースする
  */
-function parseTmx(xml: string): TmxData {
+function parseTmx(xml: string): Map<string, TmEntry> {
 	const entries = new Map<string, TmEntry>();
 	const parsed = tmxParser.parse(xml);
 	const tuArray = parsed?.tmx?.body?.tu;
@@ -155,11 +116,7 @@ function parseTmx(xml: string): TmxData {
 		}
 	}
 
-	return {
-		version: TMX_VERSION,
-		header: { ...DEFAULT_HEADER },
-		entries,
-	};
+	return entries;
 }
 
 /**
@@ -168,10 +125,8 @@ function parseTmx(xml: string): TmxData {
 function buildTuObject(entry: TmEntry): Record<string, unknown> {
 	const props: Record<string, unknown>[] = [];
 	props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_HASH, "#text": entry.sentenceHash });
-	props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_CREATED_AT, "#text": entry.createdAt });
-
-	for (const usedInItem of entry.usedIn) {
-		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_USED_IN, "#text": formatUsedIn(usedInItem) });
+	if (entry.unitPath) {
+		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT, "#text": entry.unitPath });
 	}
 
 	// セグメントを言語コード順でソート（決定的出力）
@@ -186,26 +141,16 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 }
 
 /**
- * TmxDataを完全なTMX XML文字列にシリアライズする
+ * エントリーMap を完全なTMX XML文字列にシリアライズする
  */
-function serializeTmx(data: TmxData): string {
-	const h = data.header;
-
+function serializeTmx(entries: Map<string, TmEntry>): string {
 	// エントリーをハッシュ順でソート（決定的出力、git差分最小化）
-	const sortedEntries = [...data.entries.values()].sort((a, b) => a.sentenceHash.localeCompare(b.sentenceHash));
+	const sortedEntries = [...entries.values()].sort((a, b) => a.sentenceHash.localeCompare(b.sentenceHash));
 	const tuArray = sortedEntries.map((entry) => buildTuObject(entry));
 
 	const tmxObject = {
 		tmx: {
-			[`${ATTR_PREFIX}version`]: data.version,
-			header: {
-				[`${ATTR_PREFIX}creationtool`]: h.creationtool,
-				[`${ATTR_PREFIX}creationtoolversion`]: h.creationtoolversion,
-				[`${ATTR_PREFIX}datatype`]: h.datatype,
-				[`${ATTR_PREFIX}segtype`]: h.segtype,
-				[`${ATTR_PREFIX}o-tmf`]: h["o-tmf"],
-				[`${ATTR_PREFIX}srclang`]: h.srclang,
-			},
+			[`${ATTR_PREFIX}version`]: TMX_VERSION,
 			body: tuArray.length > 0 ? { tu: tuArray } : {},
 		},
 	};
@@ -229,7 +174,7 @@ function serializeTmx(data: TmxData): string {
  * 主要機能:
  * - TMX XMLのパース/シリアライズ
  * - Map<sentenceHash, TmEntry>による高速検索（O(1)）
- * - CRUD操作: addEntry, addUsedIn, updateTarget, lookupByHash, lookupBatch
+ * - CRUD操作: addEntry, setUnitPath, updateTarget, lookupByHash, lookupBatch
  */
 export class TmxStore {
 	private static instance: TmxStore | null = null;
@@ -296,8 +241,7 @@ export class TmxStore {
 		}
 
 		const xml = fs.readFileSync(filePath, "utf-8");
-		const data = parseTmx(xml);
-		this.index = data.entries;
+		this.index = parseTmx(xml);
 	}
 
 	/**
@@ -311,13 +255,7 @@ export class TmxStore {
 			fs.mkdirSync(dir, { recursive: true });
 		}
 
-		const data: TmxData = {
-			version: TMX_VERSION,
-			header: { ...DEFAULT_HEADER },
-			entries: this.index,
-		};
-
-		const xml = serializeTmx(data);
+		const xml = serializeTmx(this.index);
 		fs.writeFileSync(filePath, xml, "utf-8");
 
 		// save後のファイルmtimeを記録（次回getInstanceでリロードを回避）
@@ -327,38 +265,35 @@ export class TmxStore {
 
 	/**
 	 * 新規エントリーを追加する。
-	 * 同一sentenceHashが既に存在する場合は、ターゲット訳文を最新で上書きし、usedInを追加する。
+	 * 同一sentenceHashが既に存在する場合は、ターゲット訳文を最新で上書きし、unitPathも最新で上書きする。
 	 * @param entry 追加するエントリー
 	 */
 	addEntry(entry: TmEntry): void {
 		const existing = this.index.get(entry.sentenceHash);
 		if (existing) {
-			// 既存: セグメントを最新で上書き
+			// 既存: セグメントとunitPathを最新で上書き
 			for (const [lang, text] of entry.segments) {
 				existing.segments.set(lang, text);
 			}
-			// usedInを追加（重複チェック）
-			for (const newUsedIn of entry.usedIn) {
-				this.addUsedInToEntry(existing, newUsedIn);
-			}
+			existing.unitPath = entry.unitPath;
 		} else {
 			// 新規
-			this.index.set(entry.sentenceHash, { ...entry, segments: new Map(entry.segments), usedIn: [...entry.usedIn] });
+			this.index.set(entry.sentenceHash, { ...entry, segments: new Map(entry.segments) });
 		}
 	}
 
 	/**
-	 * 既存エントリーに出典情報を追加する。
+	 * 既存エントリーの出典パスを設定する。
 	 * @param hash sentenceHash
-	 * @param usedIn 追加する出典情報
-	 * @returns 追加できた場合true
+	 * @param unitPath 設定する出典パス
+	 * @returns 更新できた場合true
 	 */
-	addUsedIn(hash: string, usedIn: TmUsedIn): boolean {
+	setUnitPath(hash: string, unitPath: string): boolean {
 		const entry = this.index.get(hash);
 		if (!entry) {
 			return false;
 		}
-		this.addUsedInToEntry(entry, usedIn);
+		entry.unitPath = unitPath;
 		return true;
 	}
 
@@ -404,12 +339,11 @@ export class TmxStore {
 		if (!source || !target) {
 			return undefined;
 		}
-		const firstUsedIn = entry.usedIn.length > 0 ? formatUsedIn(entry.usedIn[0]) : "";
 		return {
 			sentenceHash: entry.sentenceHash,
 			source,
 			target,
-			firstUsedIn,
+			firstUsedIn: entry.unitPath,
 		};
 	}
 
@@ -461,17 +395,5 @@ export class TmxStore {
 	 */
 	clear(): void {
 		this.index.clear();
-	}
-
-	/**
-	 * usedInの重複チェック付き追加（内部ヘルパー）
-	 */
-	private addUsedInToEntry(entry: TmEntry, newUsedIn: TmUsedIn): void {
-		const exists = entry.usedIn.some(
-			(existing) => existing.unitPath === newUsedIn.unitPath && existing.unitHash === newUsedIn.unitHash,
-		);
-		if (!exists) {
-			entry.usedIn.push(newUsedIn);
-		}
 	}
 }

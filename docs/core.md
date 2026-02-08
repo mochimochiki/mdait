@@ -214,12 +214,12 @@ TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデ�
 **主要機能**:
 - TMX XMLのパース/シリアライズ（`fast-xml-parser`のXMLParser/XMLBuilderを使用）
 - Map<sentenceHash, TmEntry>による高速検索（O(1)）
-- CRUD操作: addEntry, addUsedIn, updateTarget, lookupByHash, lookupBatch
+- CRUD操作: addEntry, setUnitPath, updateTarget, lookupByHash, lookupBatch
 - グローバル遅延シングルトン: `getInstance(tmxFilePath)`で取得、mtimeベースの自動リロード
 
 **シングルトンパターン**: 本番コードでは`TmxStore.getInstance(path)`を使用。save()後はmtimeを記録するため不要なリロードを回避。外部変更時のみmtime差分でリロード。テストでは`new TmxStore()`の直接インスタンス化も可能。
 
-**データモデル**: 文単位のTmEntryが管理単位。各エントリーはsentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）と出典情報（usedIn[]）を保持します。
+**データモデル**: 文単位のTmEntryが管理単位。各エントリーはsentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）と最初の出典パス（unitPath）を保持します。
 
 **実装**: [`src/core/tm/tmx-store.ts`](../src/core/tm/tmx-store.ts)
 
@@ -236,6 +236,35 @@ TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデ�
 TM検索結果（`TmMatch[]`）をプロンプト用のフォーマット済み文字列に変換するユーティリティ関数。VS Code非依存のためCore層に配置。
 
 **実装**: [`src/core/tm/tm-reference-formatter.ts`](../src/core/tm/tm-reference-formatter.ts)
+
+### TmTextNormalizer
+
+TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文・断片をフィルタリングする正規化処理モジュール。
+
+**主要機能**:
+- `stripMarkdown(text: string)`: **markdown-itでパースし**、Markdown要素（リンク、太字、強調、削除線、コード、HTMLタグ等）を除去して純粋なテキストに変換
+- `isWorthyForTm(text: string, lang: string)`: 翻訳価値判定（最小文字数、数値のみ、URL/パスのみ、単語数不足を除外）
+
+**設計方針**: markdown-itの既存パーサーインフラを活用し、トークンツリーを走査してテキストのみを抽出。コードブロック・インラインコード・HTMLタグは除外。正規表現による独自実装を避け、保守性と正確性を確保。
+
+**処理順序**: stripMarkdown → isWorthyForTm → calculateHash（内部でnormalizeText実行）
+
+**フィルタリング基準**:
+- 最小文字数: 日本語8文字未満、英語12文字未満を除外
+- 数値のみ: `"123"`, `"3.14"`, `"1,000"` 等を除外
+- URL/パスのみ: `"https://example.com"`, `"./path/to/file"` 等を除外
+- 英語2単語以下: 短すぎるフレーズを除外（日本語は単語数チェックなし）
+
+**stripMarkdown処理内容**:
+- コードブロック（````...````）→ 完全除外（空文字列）
+- インラインコード（`` `...` ``）→ 完全除外（空文字列）
+- 画像（`![alt](url)`）→ alt部分のみ抽出
+- リンク（`[text](url)`）→ text部分のみ抽出
+- 太字・強調・削除線 → テキスト部分のみ抽出
+- HTMLタグ → content部分のみ抽出
+- 表（GFM tables） → 各セルの内容のみ抽出、構造要素（ヘッダー/本文の境界など）は自動除外、セル間にスペース挿入
+
+**実装**: [`src/core/tm/tm-text-normalizer.ts`](../src/core/tm/tm-text-normalizer.ts)
 
 **詳細**: [command_tm-commit.md](command_tm-commit.md)
 
