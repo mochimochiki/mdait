@@ -6,6 +6,11 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import {
+	tmCommitDirectoryCommand,
+	tmCommitFileCommand,
+	tmCommitUnitCommand,
+} from "./commands/tm-commit/tm-commit-command";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
@@ -176,6 +181,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	const translateSelectionDisposable = vscode.commands.registerCommand(
 		"mdait.translateSelection",
 		translateSelectionCommand,
+	);
+
+	// TM Commit commands
+	const tmCommitUnitDisposable = vscode.commands.registerCommand("mdait.tm-commit.unit", (range?: vscode.Range) =>
+		tmCommitUnitCommand(range),
+	);
+	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm-commit.file", (item?: StatusItem) =>
+		tmCommitFileCommand(item),
+	);
+	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.tm-commit.directory",
+		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
 
 	// CodeLens翻訳コマンド
@@ -451,6 +468,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,
 		codeLensJumpToSourceFrontmatterDisposable,
+		tmCommitUnitDisposable,
+		tmCommitFileDisposable,
+		tmCommitDirectoryDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

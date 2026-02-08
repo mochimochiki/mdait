@@ -1,0 +1,3428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+  <header creationtool="mdait" creationtoolversion="0.0.1" datatype="Markdown" segtype="sentence" o-tmf="mdait" srclang="*all*"/>
+  <body>
+    <tu>
+      <prop type="x-mdait-hash">01b1b40e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>### Required Funding Amount</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 必要資金額</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">03378d69</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:25.689Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#2647ce8a</prop>
+      <tuv xml:lang="en">
+        <seg>## Fundraising Plan</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 資金調達計画</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">037522b8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Starter**: 9,800 yen/month (up to 100,000 characters, additional 8 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **スターター**: 月額9,800円（10万文字まで、追加1文字8円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0414ad7e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>### Research Background</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 研究背景</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">04c3eb3b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:11.957Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f1313c0e</prop>
+      <tuv xml:lang="en">
+        <seg>We will establish a positioning as &quot;the standard for technical translation,&quot; emphasizing high quality and reliability.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>「技術翻訳のスタンダード」というポジショニングを確立し、高品質と信頼性を訴求します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">06b7face</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Thermometer (digital, accuracy ±0.5°C)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 温度計（デジタル式、精度±0.5°C）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">070567d1</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>When the experiment was conducted on a 100 mmol scale (10 times the amount), the yield slightly decreased to 82%, but it remained within a practical range.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>100 mmolスケール（10倍量）での実験を実施したところ、収率82%と若干の低下が見られたものの、実用的な範囲内であった。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0935e2cc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>Furthermore, the global market is valued at around 50 billion dollars, with an annual growth rate projected at about 7%.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>さらに、グローバル市場では500億ドル規模の市場が存在し、年間成長率は約7%と予測されています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0b0da7df</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>¹H-NMR (400 MHz, CDCl₃): δ 7.58-7.55 (m, 4H, ArH), 7.45-7.42 (m, 4H, ArH), 7.36-7.32 (m, 2H, ArH)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>¹H-NMR（400 MHz、CDCl₃）：δ 7.58-7.55（m、4H、ArH）、7.45-7.42（m、4H、ArH）、7.36-7.32（m、2H、ArH）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0c2ddc73</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:23:08.090Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#f60ac1d6</prop>
+      <tuv xml:lang="en">
+        <seg>The Suzuki–Miyaura coupling reaction is one of the most important C–C bond-forming reactions in the synthesis of aromatic compounds and is widely applied in the synthesis of pharmaceuticals, agrochemicals, and functional materials.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>鈴木・宮浦カップリング反応は、芳香族化合物の合成において最も重要なC-C結合形成反応の一つであり、医薬品、農薬、機能性材料の合成に広く応用されている。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0c748f6f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:43.448Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#548d0ac5</prop>
+      <tuv xml:lang="en">
+        <seg>Our vision is to enable seamless business communication beyond language barriers and support success in the global market.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>私たちのビジョンは、言語の壁を越えたシームレスなビジネスコミュニケーションを実現し、グローバル市場での成功を支援することです。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0f752cb4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>- Can use reagents with low toxicity</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 毒性の低い試薬を使用できる</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">0f9f7b0a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Solvent: Dimethylformamide (DMF, anhydrous, purity 99.8%)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 溶媒：ジメチルホルムアミド（DMF、脱水品、純度99.8%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1195584d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>1. Established optimal conditions: DMF as solvent, reaction temperature of 80°C, and catalyst loading of 0.5 mol%</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. DMFを溶媒、80°Cの反応温度、0.5 mol%の触媒量という最適条件を確立</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">12ee45b2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>This reaction forms carbon–carbon bonds by reacting organohalides with organoboronic acids in the presence of a palladium catalyst.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>この反応は、パラジウム触媒存在下で、有機ハロゲン化物と有機ボロン酸を反応させることにより、炭素-炭素結合を形成する。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1372cc8c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Phase 1 (First Year): Establishment of Japanese-English Translation</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### フェーズ1（初年度）: 日英翻訳の確立</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">154f04d2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:36.589Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#64b534e0</prop>
+      <tuv xml:lang="en">
+        <seg>Our company aims to become a leading company in this market by providing unique solutions that combine technological capabilities and industry knowledge.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>弊社は、技術力と業界知識を組み合わせた独自のソリューションにより、この市場でのリーディングカンパニーを目指します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">15e4e92d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Potassium carbonate (20 mmol, 2 equiv, special grade reagent)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 炭酸カリウム（20 mmol、2当量、特級試薬）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">15f89603</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:23:08.090Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#f60ac1d6</prop>
+      <tuv xml:lang="en">
+        <seg>In this study, we systematically examined reaction conditions such as reaction solvent, temperature, catalyst amount, and type of base, with the goal of achieving a yield of over 85%.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本研究では、反応溶媒、温度、触媒量、塩基の種類など、反応条件を系統的に検討することで、収率85%以上を達成することを目標とした。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">16149019</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| Solvent | Temperature | Yield |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 溶媒 | 温度 | 収率 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1750f7ce</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>Potassium carbonate gave the best results.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>炭酸カリウムが最も良好な結果を示した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">17c92b3f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>The second step, transmetalation, is often the rate-determining step.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>第二段階のトランスメタル化が律速段階となることが多い。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">17d2453e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>- Requires only a small amount of catalyst</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 触媒量が少量で済む</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1891ea54</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| Catalyst amount (mol%) | Yield (%) | Reaction time (h) |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 触媒量（mol%） | 収率（%） | 反応時間（h） |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">18dbb26a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Phenylboronic acid (12 mmol, 1.2 equiv, purity ≥97%, TCI)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- フェニルボロン酸（12 mmol、1.2当量、純度97%以上、TCI社製）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">18dcfa16</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Magnetic stirrer</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- マグネティックスターラー</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">19a5afa0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| 1 | 85 | 98.5 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 1 | 85 | 98.5 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">19aec069</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:19.841Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#7fc206e4</prop>
+      <tuv xml:lang="en">
+        <seg>- **CTO**: Machine learning engineer, PhD in natural language processing</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **CTO**: 機械学習エンジニア、自然言語処理の博士号</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">19ea8d8b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:23:08.090Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#f60ac1d6</prop>
+      <tuv xml:lang="en">
+        <seg>In this study, we investigated reaction conditions with the aim of improving the yield of the Suzuki–Miyaura coupling reaction using a palladium catalyst.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本研究では、パラジウム触媒を用いた鈴木・宮浦カップリング反応の収率向上を目的とした条件検討を行った。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1d24b256</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| Dioxane | 100°C | 75% |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| ジオキサン | 100°C | 75% |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1d2bdac3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Manufacturing Industry**: Translation of technical specifications, operation manuals, and safety standard documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **製造業**: 技術仕様書、操作マニュアル、安全規格文書の翻訳</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1dcb882e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>- Research and development expenses (15% of sales)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 研究開発費（売上の15%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1edca21a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>After completion of the reaction, the following workup procedure was performed.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>反応終了後、以下の手順で後処理を行った。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">1f0aae1c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>- High functional group tolerance</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 官能基許容性が高い</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">20904399</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>3. Add potassium carbonate (20 mmol)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. 炭酸カリウム（20 mmol）を加える</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">20a64b81</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Potassium acetate | 52 | Insufficient basicity |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 酢酸カリウム | 52 | 塩基性不足 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">21358833</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.281Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f3679797</prop>
+      <tuv xml:lang="en">
+        <seg>- **24 months**: Implement quality evaluation AI, reduce human review costs by 50%</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **24ヶ月**: 品質評価AI実装、人間レビューコスト50%削減</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">21584148</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>4. **Solubility of Base**: Potassium carbonate has suitable solubility</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. **塩基の溶解性**: 炭酸カリウムの溶解度が適切</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">22311165</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>- Development costs: 20 million yen (engineer recruitment, infrastructure construction)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 開発費: 2,000万円（エンジニア採用、インフラ構築）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2253cd91</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:58.901Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#065a19ad</prop>
+      <tuv xml:lang="en">
+        <seg>## Experimental Method</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 実験方法</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">22ffcd39</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>The following reasons are considered for why DMF showed the highest yield.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>DMFが最も高い収率を示した理由として、以下が考えられる。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2315cc9c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| Experiment Number | Yield (%) | Purity (%) |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 実験回数 | 収率（%） | 純度（%） |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">23eb1cb3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>The break-even point is expected to be reached with a monthly sales of 5 million yen.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>月間売上500万円で損益分岐点に到達する見込みです。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">23f54708</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>7. Monitor the reaction progress by thin-layer chromatography (TLC)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>7. 薄層クロマトグラフィー（TLC）で反応の進行を確認する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">24eb0b75</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.851Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#a0ad4b34</prop>
+      <tuv xml:lang="en">
+        <seg>### Revenue Forecast</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 収益予測</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">251f2c98</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:43.447Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#548d0ac5</prop>
+      <tuv xml:lang="en">
+        <seg>Our company aims to eliminate barriers to global communication by providing translation services utilizing AI technology.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>弊社は、AI技術を活用した翻訳サービスの提供を通じて、グローバルなコミュニケーションの壁を取り除くことを目指しています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">26840191</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>¹³C-NMR (100 MHz, CDCl₃): δ 141.2, 140.8, 128.7, 127.3, 127.1</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>¹³C-NMR（100 MHz、CDCl₃）：δ 141.2、140.8、128.7、127.3、127.1</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">26bde7ac</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>We target small and medium-sized enterprises (SMEs) and startups aiming for global expansion.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>グローバル展開を目指す中小企業およびスタートアップ企業をターゲットとしています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">27105e84</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>- Using a moderate excess of boronic acid (1.2 equivalents is optimal)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- ボロン酸の適度な過剰量使用（1.2当量が最適）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2837e317</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>| 2-Bromopyridine | Phenylboronic acid | 76 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 2-ブロモピリジン | フェニルボロン酸 | 76 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">28c73b28</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:44.252Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#de2539cf</prop>
+      <tuv xml:lang="en">
+        <seg>## Market Analysis</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 市場分析</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">298ccf94</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>- Can proceed in aqueous solvents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 水系溶媒でも反応が進行する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2ae9304c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>- Working capital: 10 million yen (six months of fixed costs)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 運転資金: 1,000万円（6ヶ月分の固定費）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2b76c767</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>- Proceeds under mild reaction conditions</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 温和な反応条件で進行する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2be07b1c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| 4 | 85 | 98.4 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 4 | 85 | 98.4 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2c56dfb1</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>- **Lack of expertise in specialized fields**: General translators find it difficult to accurately translate technical terms</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **専門分野の知識不足**: 一般的な翻訳者では専門用語の正確な翻訳が困難</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2cfac73d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>### Application to Pharmaceutical Synthesis</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 医薬品合成への応用</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2d6c63c0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>The optimal yield was obtained under the following conditions.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>以下の条件で最適な収率が得られた。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2d7313a9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>| Aryl Bromide | Boronic Acid | Yield (%) |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 臭化アリール | ボロン酸 | 収率（%） |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2e4e7668</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| Average | 85.0 ± 0.7 | 98.5 ± 0.2 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 平均 | 85.0 ± 0.7 | 98.5 ± 0.2 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2e6d64ac</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>The following challenges have become apparent in the current market.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>現在の市場では、以下のような課題が顕在化しています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2f24d51f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>1. Weigh and add aryl bromide (10 mmol) to a three-neck flask</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. 三口フラスコに臭化アリール（10 mmol）を秤量して加える</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">2fa605f3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>- Sales and marketing expenses (25% of sales)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 営業・マーケティング費用（売上の25%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">307a4644</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Enterprise**: 198,000 yen/month (up to 10,000,000 characters, additional 5 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **エンタープライズ**: 月額198,000円（1,000万文字まで、追加1文字5円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">30c449cc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Market Risk**: Intensification of price competition among competitors</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **市場リスク**: 競合の価格競争激化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">31125482</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>In the final step, reductive elimination, the two aryl groups couple to give the product, and palladium(0) is regenerated to complete the catalytic cycle.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>最終段階の還元的脱離では、二つのアリール基がカップリングして生成物を与え、同時にパラジウム(0)が再生されて触媒サイクルが完結する。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3120fb8e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Aiming to exceed 300 corporate clients</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 顧客数300社超えを目指す</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">32aadd42</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Phase 2 (Years 2-3): Multilingual Support and API Deployment</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### フェーズ2（2-3年目）: 多言語対応とAPI展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">33ce3098</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>2. **SEO Measures**: Optimizing keywords such as &quot;technical document translation&quot; and &quot;high-precision AI translation&quot;</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **SEO対策**: 「技術文書 翻訳」「AI翻訳 高精度」などのキーワード最適化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">33cef024</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>#### NMR Data</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### NMRデータ</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3466a958</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:07.711Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#bbd8264d</prop>
+      <tuv xml:lang="en">
+        <seg>## Marketing Strategy</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## マーケティング戦略</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">35a52176</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>The structure was confirmed by ¹H-NMR, ¹³C-NMR, and mass spectrometry.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>構造は¹H-NMR、¹³C-NMR、および質量分析により確認した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">370c80cd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>2. Improved yield from the conventional 65% to 85% (an improvement of about 30%)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. 収率を従来の65%から85%へと向上（約30%の改善）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">37a16bdd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>- Customer support personnel expenses (20% of sales)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- カスタマーサポート人件費（売上の20%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">37a55d11</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>### Market Needs and Challenges</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 市場のニーズと課題</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">37d5c50b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- **Continuous Learning**: Improves translation accuracy by reflecting customer feedback</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **継続的な学習**: 顧客のフィードバックを反映し、翻訳精度を向上</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">38019c5f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:11.956Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f1313c0e</prop>
+      <tuv xml:lang="en">
+        <seg>### Branding Strategy</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### ブランディング戦略</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">38423fde</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>- Thorough nitrogen replacement (especially important for large volumes)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 窒素置換の徹底（大容量では特に重要）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">38a718e9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>The following main side reactions were observed.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>主な副反応として以下が観察された。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">39f3fd7c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Protodeboronation**: Decomposition of boronic acid (2-4%)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **プロトデボロネーション**: ボロン酸の分解（2-4%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3acb7bf3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>MS (EI): m/z 154 (M⁺), calculated 154.08, found 154.08</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>MS（EI）：m/z 154（M⁺）、計算値 154.08、実測値 154.08</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3cbb136e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Dehalogenation**: Loss of starting material due to reduction of aryl bromide (3-5%)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **脱ハロゲン化**: 臭化アリールの還元による原料の損失（3-5%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3d913ec5</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>### Verification of Reproducibility</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 再現性の検証</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">3dcde892</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>#### Detailed Reaction Mechanism</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 詳細な反応機構</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">421f4020</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Major Competitors</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 主要競合企業</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">42afffa5</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Potassium phosphate | 76 | Slightly lower yield |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| リン酸カリウム | 76 | やや低収率 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">43401c2a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>This step usually proceeds rapidly.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>この段階は通常速やかに進行する。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">440780ea</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>High yields were obtained with substrates bearing electron-donating substituents, while yields slightly decreased for substrates with strongly electron-withdrawing nitro groups.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>電子供与性置換基を有する基質では高収率が得られたが、電子求引性の強いニトロ基を有する基質ではやや収率が低下した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">44c6823f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>#### Target Customer Segments</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### ターゲット顧客セグメント</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">452ce70b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>- **Priority Support**: Delivery guaranteed within 24 hours (+30% fee)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **優先対応**: 24時間以内の納品保証（+30%料金）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">45bdd495</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>To confirm reproducibility under the optimal conditions, five experiments were conducted under identical conditions.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>最適条件での再現性を確認するため、同一条件で5回の実験を実施した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">466028e1</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Mass Spectrometry Data</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 質量分析データ</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4725bbfe</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>- Controlling the reaction temperature at 80°C (homocoupling increases at higher temperatures)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 反応温度を80°Cに制御（高温ではホモカップリングが増加）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">48057eb9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Research Institutions**: English translation of papers, research reports, and patent documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **研究機関**: 論文、研究報告書、特許文書の英訳</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">48f8ce11</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Moderate Polarity**: As a solvent with moderate polarity, it stabilizes ionic intermediates</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **極性の適度さ**: 中程度の極性溶媒であり、イオン性中間体を安定化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">48fdc828</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Silica gel column (inner diameter 3 cm, length 30 cm)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- シリカゲルカラム（内径3 cm、長さ30 cm）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4a0dd227</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>#### Break-even Point Analysis</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 損益分岐点分析</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4a715df2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:43.448Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#548d0ac5</prop>
+      <tuv xml:lang="en">
+        <seg>In particular, we aim to become a platform that solves the challenges faced by technology startups and small and medium-sized enterprises when expanding internationally, and delivers Japan-originated innovation to the world.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>特に、技術系スタートアップや中小企業が国際展開する際の課題を解決し、日本発のイノベーションを世界に届けるプラットフォームとなることを目指します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4c1fcd78</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:15.132Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#d0133b89</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Contextual Understanding**: Consistent translation based on understanding the overall context of documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **文脈理解**: 文書全体の文脈を理解した一貫性のある翻訳</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4c56b4ec</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>This reaction is considered to proceed via the following cycle.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本反応は以下のサイクルで進行すると考えられる。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4c8a7107</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- **Transparent Pricing**: Clear, character-based pricing system (5-10 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **透明な価格設定**: 文字数ベースの明確な料金体系（1文字5-10円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">4fddafa6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>Existing translation services face the following challenges.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>既存の翻訳サービスは、以下の課題を抱えています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5014dded</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Reflux condenser</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 還流冷却器</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">511745af</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:15.132Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#d0133b89</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Neural Machine Translation**: Industry-specific customization of Transformer models</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **ニューラル機械翻訳**: Transformer モデルの業界特化型カスタマイズ</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">53c9474c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Machine Translation Services**: Low cost and fast, but quality is unstable (1-5 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **機械翻訳サービス**: 低コストで高速だが、品質が不安定（1文字1-5円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5475b5e0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>- Cloud infrastructure costs (10% of sales)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- クラウドインフラのコスト（売上の10%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">548bafac</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>### Effect of Catalyst Amount</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 触媒量の影響</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">54aff783</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>3. Combine the organic layers and wash with saturated brine (50 mL)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. 有機層を合わせ、飽和食塩水（50 mL）で洗浄する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">54f6a56d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>The features of the reaction are as follows.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>反応の特徴として、以下の点が挙げられる。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">55f5b4f9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>Melting point: 68-70°C (literature value: 69-71°C)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>融点：68-70°C（文献値：69-71°C）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5706adf3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:15.132Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#d0133b89</prop>
+      <tuv xml:lang="en">
+        <seg>### Key Areas of Research and Development</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 研究開発の重点領域</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">570ec522</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>### Reaction Mechanism</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 反応機構</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">583e4ba8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>Good reproducibility was confirmed, indicating that this method is a highly reliable synthetic procedure.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>良好な再現性が確認され、本手法が信頼性の高い合成法であることが示された。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">58d5dafc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:22.435Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#c1b234a4</prop>
+      <tuv xml:lang="en">
+        <seg>## Risk Management</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## リスク管理</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5990715c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| 3 | 86 | 98.7 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 3 | 86 | 98.7 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5995aa06</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>#### Workup</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 後処理</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5a590f1f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Traditional Translation Companies**: High quality but long delivery times and high costs (15-30 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **従来型翻訳会社**: 高品質だが納期が長く、コストが高い（1文字15-30円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5c757ce0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Others: Toluene (anhydrous), tetrahydrofuran (THF, anhydrous)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- その他：トルエン（脱水品）、テトラヒドロフラン（THF、脱水品）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5f511045</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>- **Lack of consistency**: When multiple translators are involved, it is difficult to maintain terminology consistency</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **一貫性の欠如**: 複数の翻訳者が関わることで、用語の統一性が保たれない</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">5fd31d9c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Oxidative Addition**: Oxidative addition of aryl bromide to palladium(0) generates an arylpalladium(II) intermediate</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **酸化的付加**: パラジウム(0)への臭化アリールの酸化的付加により、アリールパラジウム(II)中間体を生成</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">621822f2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>The reaction was carried out under a nitrogen atmosphere under reflux conditions for 24 hours. The progress of the reaction was monitored over time by thin-layer chromatography (TLC, developing solvent: hexane/ethyl acetate = 9:1).</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>反応は窒素雰囲気下、還流条件で24時間実施した。反応の進行は薄層クロマトグラフィー（TLC、展開溶媒：ヘキサン/酢酸エチル = 9:1）により経時的に追跡した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">62808c81</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| DMF | 80°C | 85% |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| DMF | 80°C | 85% |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">628f1baa</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>With industrial application in mind, we examined the scale-up of the reaction.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>工業的応用を見据え、反応のスケールアップを検討した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">62c405e9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>2. Add water (100 mL) and extract with ethyl acetate (50 mL × 3)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. 水（100 mL）を加え、酢酸エチル（50 mL × 3）で抽出する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6365e2d0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>### Catalyst Recycling</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 触媒リサイクル</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6398c600</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>| Number of Recycles | Yield (%) | Palladium Recovery Rate (%) |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| リサイクル回数 | 収率（%） | パラジウム回収率（%） |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">64d0f41a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>In particular, we focus on companies with high demand for translation of technical documents and marketing materials.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>特に、技術ドキュメントやマーケティング資料の翻訳ニーズが高い企業にフォーカスします。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">65797ce3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:29.333Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#e6ef2c52</prop>
+      <tuv xml:lang="en">
+        <seg>### Fundraising Methods</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 調達方法</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">664937fa</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>The effect of the base used on yield was investigated.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>使用する塩基による収率への影響を調査した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">66a159d2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>The main costs are as follows.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>主なコストは以下の通りです。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">66eb0fd0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Base | Yield (%) | Remarks |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 塩基 | 収率（%） | 備考 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">692d65b6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Phase 3 (Years 4-5): Global Expansion</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### フェーズ3（4-5年目）: グローバル展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6a415daf</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>1. **SaaS Companies**: Multilingualization of product documents, UI translation, and support materials</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **SaaS企業**: 製品ドキュメント、UI翻訳、サポート資料の多言語化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6ac1ae86</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.609Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>| 2nd                | 83        | 85                          |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 2回目 | 83 | 85 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6c0310d8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>### Scale-up Experiment</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### スケールアップ実験</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6c5df50f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>- Bosentan (pulmonary hypertension treatment)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- ボセンタン（肺高血圧症治療薬）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6cb77a58</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>### Choice of Base</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 塩基の選択</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6d1abcdd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Entry into overseas markets (Southeast Asia, North America)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 海外市場への進出（東南アジア、北米）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6d3133a8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>5. Add tetrakis(triphenylphosphine)palladium(0) (0.05 mmol)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>5. テトラキス(トリフェニルホスフィン)パラジウム(0)（0.05 mmol）を加える</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6dcb2205</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>| 4-Bromonitrobenzene | 4-Methylphenylboronic acid | 80 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 4-ブロモニトロベンゼン | 4-メチルフェニルボロン酸 | 80 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">6fe2f6e8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>#### Competitive Advantages</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 競合優位性</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">70e93d3d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Potassium carbonate | 85 | Optimal |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 炭酸カリウム | 85 | 最適 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">710ec51e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:30.546Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#30dd6fd5</prop>
+      <tuv xml:lang="en">
+        <seg>## Future Plans</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 今後の展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">72326db7</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.851Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#a0ad4b34</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 1**: Sales of 50 million yen, 50 customers, average unit price 1 million yen/year</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **1年目**: 売上5,000万円、顧客数50社、平均単価100万円/年</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">731c2960</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>### Substrate Scope</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 基質適用範囲</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">73751139</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:12.782Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f34d05eb</prop>
+      <tuv xml:lang="en">
+        <seg>## Technology Development Plan</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 技術開発計画</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">739fcdcd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>### Phase-by-Phase Deployment Plan</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### フェーズ別展開計画</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">75a4254c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.642Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#41ea0efc</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 1**: 3 engineers, 2 customer support staff, 2 sales staff</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **1年目**: エンジニア3名、カスタマーサポート2名、営業2名</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">77632948</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>Since toluene is nonpolar, the ionic intermediates became unstable, which is considered to have led to a decrease in yield.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>トルエンは非極性であるため、イオン性中間体が不安定となり、収率が低下したと考えられる。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">77ac819c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Acquisition of 50 initial corporate clients</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 初期顧客50社の獲得</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">78796950</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:36.589Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#64b534e0</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>## Conclusion</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 結論</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">78a4ffcd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>By optimizing the amount of palladium catalyst, we successfully achieved a significant improvement in the yield of the Suzuki–Miyaura coupling reaction.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>パラジウム触媒量の最適化により、鈴木・宮浦カップリング反応の収率を大幅に向上させることに成功した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">78c7fe77</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>- **Trade-off between quality and speed**: High-quality translation takes time, reducing business agility</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **品質とスピードのトレードオフ**: 高品質な翻訳には時間がかかり、ビジネスの機動性が損なわれる</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">78e2cbb2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>### Reagents and Equipment</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 試薬および装置</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">798fd78b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>Our service differentiates itself from competitors in the following ways.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>弊社のサービスは、以下の点で競合他社と差別化されます。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">79aca46e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>1. Cool the reaction mixture to room temperature</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. 反応混合物を室温まで冷却する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7a1c9c0b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>- **Scalability issues**: It is difficult to process large volumes of documents in a short period of time</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **スケーラビリティの問題**: 大量の文書を短期間で処理することが困難</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7a393f2f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:43.447Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#548d0ac5</prop>
+      <tuv xml:lang="en">
+        <seg>By combining cutting-edge natural language processing technology with reviews by human experts, we deliver high-quality and fast translation services.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>最先端の自然言語処理技術と人間の専門家によるレビューを組み合わせることで、高品質かつ高速な翻訳サービスを実現します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7a51f361</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>- AI API usage fees (15% of sales)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- AI APIの利用料（売上の15%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7a6657b3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>The method established in this study is expected to contribute to the efficient synthesis of pharmaceuticals, agrochemicals, and functional materials.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本研究で確立した手法は、医薬品、農薬、機能性材料の効率的な合成に貢献することが期待される。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7b6de4c6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.642Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#41ea0efc</prop>
+      <tuv xml:lang="en">
+        <seg>### Recruitment Plan</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 採用計画</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7c0fb836</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>### Detailed Analysis of Solvent Effects</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 溶媒効果の詳細解析</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7d613e59</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>### Competitive Analysis</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 競合分析</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7dbd65ad</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.851Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#a0ad4b34</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 2**: Sales of 200 million yen, 150 customers, average unit price 1.33 million yen/year</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **2年目**: 売上2億円、顧客数150社、平均単価133万円/年</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">7e3c1a12</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>4. **Partnerships**: Mutual customer referrals through alliances with SaaS companies and production agencies</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. **パートナーシップ**: SaaS企業、制作会社との提携による相互送客</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">80e0644c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>#### Reagents Used</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 使用試薬</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">812311ab</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.281Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f3679797</prop>
+      <tuv xml:lang="en">
+        <seg>### Technology Roadmap</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 技術ロードマップ</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">81287fc0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>In the first step, oxidative addition, the palladium(0) complex inserts into the C-Br bond of the aryl bromide to form an aryl-Pd(II)-Br intermediate.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>第一段階の酸化的付加では、パラジウム(0)錯体が臭化アリールのC-Br結合に挿入し、アリール-Pd(II)-Br中間体を形成する。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">816c8aa2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Coordination Ability**: Maintains catalytic activity through appropriate coordination to the palladium center</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **配位能力**: パラジウム中心への適度な配位により触媒活性を維持</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">81c4c25a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>- **Expert Review**: Quality assurance by human translators (+50% fee)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **専門家レビュー**: 人間の翻訳者による品質保証（+50%料金）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">81d6e7d0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>|------|-----------|------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|------|-----------|------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">81f7b4e7</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:29.333Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#e6ef2c52</prop>
+      <tuv xml:lang="en">
+        <seg>- 20 million yen in government subsidies (IT introduction subsidies, startup support, etc.)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 政府系補助金2,000万円（IT導入補助金、創業支援等）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">82dce528</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.281Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f3679797</prop>
+      <tuv xml:lang="en">
+        <seg>- **12 months**: Implementation of terminology extraction feature, achieve BLEU score of 30 or higher</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **12ヶ月**: 用語抽出機能の実装、BLEU スコア30以上達成</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">83a915d4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:23:08.090Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#f60ac1d6</prop>
+      <tuv xml:lang="en">
+        <seg>## Experimental Overview</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 実験概要</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">85fc741c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Content Marketing**: Publishing technical blogs and industry reports on translation quality</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **コンテンツマーケティング**: 翻訳品質に関する技術ブログ、業界レポートの発信</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">86485f01</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>On the other hand, although the reaction proceeded at low temperature in THF, the solubility of the base was low, resulting in a slower reaction rate.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>一方、THFは低温で反応が進行するものの、塩基の溶解度が低く、反応速度が遅くなった。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">87247de2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| Water/Ethanol (1:1) | 80°C | 63% |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 水/エタノール（1:1） | 80°C | 63% |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">879517f2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>| 4-Bromoanisole | Phenylboronic acid | 88 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 4-ブロモアニソール | フェニルボロン酸 | 88 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">887fab45</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:11.957Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f1313c0e</prop>
+      <tuv xml:lang="en">
+        <seg>By publishing case studies and quality scores, we will build a highly transparent service image.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>導入事例や品質スコアの公開により、透明性の高いサービスイメージを構築します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8895d576</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>2. Add phenylboronic acid (12 mmol)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. フェニルボロン酸（12 mmol）を追加する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">889ffdf6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:19.841Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#7fc206e4</prop>
+      <tuv xml:lang="en">
+        <seg>- **CEO**: Experience launching a translation platform in a previous position, holds an MBA</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **CEO**: 前職で翻訳プラットフォーム立ち上げ経験、MBA保有</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">89406e60</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:18.123Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#3d155850</prop>
+      <tuv xml:lang="en">
+        <seg>## Organizational Structure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 組織体制</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8a375011</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.609Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>| 1st (new)          | 85        | -                           |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 1回目（新品） | 85 | - |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8b8d0ed3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>### Purification and Identification</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 精製と同定</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8c874110</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:15.132Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#d0133b89</prop>
+      <tuv xml:lang="en">
+        <seg>4. **Quality Evaluation**: Automatic evaluation of translation quality and determination of the necessity for human review</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. **品質評価**: 翻訳品質の自動評価と人間レビューの要否判定</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8ced48ae</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| 0.25 | 68 | 36 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 0.25 | 68 | 36 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8d23c07b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:23:08.090Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#f60ac1d6</prop>
+      <tuv xml:lang="en">
+        <seg>Under conventional reaction conditions, the yield remained at around 60–70%, and the formation of impurities due to side reactions and catalyst deactivation were issues.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>従来の反応条件では、収率が60-70%程度にとどまり、副反応による不純物の生成や触媒の失活が課題となっていた。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8db84273</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:29.333Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#e6ef2c52</prop>
+      <tuv xml:lang="en">
+        <seg>- 30 million yen in the seed round (from angel investors and VCs)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- シードラウンドで3,000万円（エンジェル投資家、VCから）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8dd130b1</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:19.841Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#7fc206e4</prop>
+      <tuv xml:lang="en">
+        <seg>### Founding Members</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 創業メンバー</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8de2154a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>After the reaction, the organic layer was diluted with hexane, and the palladium catalyst was recovered as a precipitate.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>反応後の有機層をヘキサンで希釈し、パラジウム触媒を沈殿として回収した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8e21fcdb</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>6. Stir under a nitrogen atmosphere at 80°C for 24 hours</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>6. 窒素雰囲気下、80°Cで24時間撹拌する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">8f724621</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>3. Confirmed good reproducibility and broad substrate scope</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. 良好な再現性と基質適用範囲の広さを確認</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">90501efb</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>### Customer Acquisition Channels</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 顧客獲得チャネル</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9169c0be</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:30.546Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#30dd6fd5</prop>
+      <tuv xml:lang="en">
+        <seg>In the first phase, we will focus on Japanese-English translation, and then gradually expand to support multiple languages.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>第一フェーズでは日英翻訳に特化し、その後、多言語対応を順次拡大していく計画です。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">919f749a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| 5 | 85 | 98.6 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 5 | 85 | 98.6 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">91c765d0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Tetrakis(triphenylphosphine)palladium(0) (0.5 mol%, purity 99%, Wako Pure Chemical Industries)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- テトラキス(トリフェニルホスフィン)パラジウム(0)（0.5 mol%、純度99%、和光純薬社製）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">93ab2283</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>### Cost Structure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### コスト構造</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">94cbd816</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>- **Glossary Customization**: Creation of company-specific terminology dictionaries (initial fee 50,000 yen)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **用語集カスタマイズ**: 企業固有の用語辞書作成サービス（初期費用50,000円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">94eb907d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>- Development of continuous production processes through application to flow synthesis</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- フロー合成への応用による連続生産プロセスの開発</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">953d6d31</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Integration with other services through the launch of API offerings</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- API提供開始による他サービスとの連携</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">96aeb37b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- Long delivery times that cannot keep up with business speed</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 納期が長く、ビジネスのスピード感に対応できない</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">96bb068a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>This method can be applied to the synthesis of pharmaceutical intermediates.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本手法は医薬品中間体の合成に応用可能である。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">96d99759</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>It was found that 0.5 mol% is optimal.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>0.5 mol%が最適であることが明らかとなった。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">97ca884c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>- Reserve fund: 5 million yen</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 予備費: 500万円</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">98ba6fa4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>- Expansion to more environmentally friendly aqueous solvents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- より環境調和型の水系溶媒への展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">99782225</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Development of a translation engine specialized for technical documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 技術文書特化型翻訳エンジンの開発</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9a8c7a6d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>- Importance of stirring efficiency (a large stir bar is necessary)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 撹拌効率の重要性（大型スターラーバーが必要）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9b08406d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Support for Chinese, Korean, and German</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 中国語、韓国語、ドイツ語対応</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9b6b7dc9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>Future developments are planned as follows:</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>今後の展開として、以下の研究を予定している。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9d2331ef</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>#### Value-Added Services</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 付加価値サービス</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">9e7b613e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>4. Demonstrated the potential for scale-up and catalyst recycling</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. スケールアップおよび触媒リサイクルの可能性を実証</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a1a532ff</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| 2.0 | 84 | 18 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 2.0 | 84 | 18 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a2faed08</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| Toluene | 110°C | 72% |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| トルエン | 110°C | 72% |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a47360be</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.801Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Deployment of industry-specific solutions (medical, legal, finance)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 業界特化型ソリューションの展開（医療、法律、金融）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a5605438</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>We will raise an initial investment of 50 million yen and allocate it as follows.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>初期投資として5,000万円を調達し、以下に配分します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a62cb738</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.346Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#92b1217f</prop>
+      <tuv xml:lang="en">
+        <seg>3. **High Boiling Point**: Enables long reactions at 80°C</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **沸点の高さ**: 80°Cでの長時間反応が可能</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a7f89596</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Webinars**: Hosting online seminars on topics such as &quot;translation strategies for global expansion&quot;</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **ウェビナー**: 「グローバル展開のための翻訳戦略」などのテーマでオンラインセミナー開催</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">a8264779</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>The boronic acid anion activated by the base reacts with the palladium intermediate to generate a bis-aryl palladium complex.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>塩基により活性化されたボロン酸アニオンが、パラジウム中間体と反応し、ビスアリールパラジウム錯体を生成する。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ab3f7ad0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>|------|------|------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|------|------|------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ab63ad0b</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>The strong base sodium hydroxide promoted side reactions, and decomposition of boronic acid was observed.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>強塩基である水酸化ナトリウムは副反応を促進し、ボロン酸の分解が観察された。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">abc006c9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>- Expansion to other cross-coupling reactions</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 他のクロスカップリング反応への応用展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">abf718c5</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.160Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#8cfa6dbb</prop>
+      <tuv xml:lang="en">
+        <seg>## Business Model</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## ビジネスモデル</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ac544ea6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>#### Pricing Plans</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 料金プラン</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ac5965af</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:47.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#3a430d82</prop>
+      <tuv xml:lang="en">
+        <seg># Research Report on the Optimization of Organic Synthesis Reactions</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg># 有機合成反応の最適化に関する研究報告</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">acce4ce4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>|--------------|-------------|-----------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|--------------|----------|-----------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">adb9b3cf</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:27.911Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#874e83b6</prop>
+      <tuv xml:lang="en">
+        <seg>- Sales and marketing: 15 million yen (customer acquisition measures)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 営業・マーケティング: 1,500万円（顧客獲得施策）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">af48492a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.281Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f3679797</prop>
+      <tuv xml:lang="en">
+        <seg>- **6 months**: Release of the Japanese-English translation engine beta version</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **6ヶ月**: 日英翻訳エンジンのβ版リリース</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">afbdaaa6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.609Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>| 3rd                | 81        | 78                          |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 3回目 | 81 | 78 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b04810b8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Cesium carbonate | 82 | Expensive |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 炭酸セシウム | 82 | 高価 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b0c7cefd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>4. Dry over anhydrous sodium sulfate and remove the solvent under reduced pressure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. 無水硫酸ナトリウムで乾燥後、溶媒を減圧留去する</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b216b9d0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>- Countermeasure: Strengthen human review, continuous model improvement</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 対策: 人間レビューの強化、継続的なモデル改善</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b235096f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:45.094Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#3befa4ea</prop>
+      <tuv xml:lang="en">
+        <seg>## Applied Research</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 応用研究</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b2ca0a03</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>| 4-Bromotoluene | 4-Methoxyphenylboronic acid | 82 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 4-ブロモトルエン | 4-メトキシフェニルボロン酸 | 82 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b3bc3f1a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.800Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Building a track record of translation quality</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 翻訳品質の実績構築</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b3bde733</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>Using the optimized conditions, reactions were examined for various combinations of aryl bromides and boronic acids.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>最適化した条件を用いて、様々な臭化アリールとボロン酸の組み合わせについて反応を検討した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b3e76510</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.609Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>| 4th                | 75        | 72                          |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 4回目 | 75 | 72 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b5dff8a9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>Hexane/ethyl acetate (9:1) was used as the eluent, and the spot with Rf = 0.45 was collected as the target compound.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>展開溶媒はヘキサン/酢酸エチル（9:1）を使用し、Rf = 0.45のスポットを目的物として回収した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b6555441</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>By optimizing the catalyst amount to 0.5 mol%, a yield of 85% was achieved. This is a significant improvement compared to the conventional method&apos;s 65%.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>触媒量を0.5 mol%に最適化することで、収率85%を達成した。これは従来法の65%と比較して顕著な向上である。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b8c18172</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>The following points became clear as precautions during scale-up:</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>スケールアップ時の注意点として、以下が明らかになった。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b8dd2638</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>#### Experimental Equipment</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 実験装置</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">b986193a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.281Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f3679797</prop>
+      <tuv xml:lang="en">
+        <seg>- **18 months**: Start support for Chinese, release API</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **18ヶ月**: 中国語対応開始、API公開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ba27cb70</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>| THF | 65°C | 68% |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| THF | 65°C | 68% |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ba3d01a3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.851Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#a0ad4b34</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 3**: Sales of 500 million yen, 350 customers, average unit price 1.43 million yen/year</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **3年目**: 売上5億円、顧客数350社、平均単価143万円/年</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">be53cdc2</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>5. **Law Firms**: Accurate translation of contracts and legal documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>5. **法律事務所**: 契約書、法的文書の正確な翻訳</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">be832d66</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- **Real-Time Processing**: Reduces average delivery time to one-third of the conventional period</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **リアルタイム処理**: 平均納期を従来の1/3に短縮</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">bea09060</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>### General Experimental Procedure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 一般的な実験手順</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">bf5235cc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:40.236Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#6974a3ff</prop>
+      <tuv xml:lang="en">
+        <seg># Business Plan</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg># 事業計画書</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">bf9b1843</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:52.159Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#daf40845</prop>
+      <tuv xml:lang="en">
+        <seg>## Introduction</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 序論</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c123b873</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>The experimental results for varying the amount of catalyst are shown below.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>触媒量を変化させた実験結果を以下に示す。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c20a6205</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>|--------------------|-----------|-----------------------------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|----------------|-----------|----------------------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c3096669</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| 0.5 | 85 | 24 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 0.5 | 85 | 24 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c3935389</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Transmetalation**: In the presence of base, the aryl group is transferred from boronic acid to palladium</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **トランスメタル化**: 塩基の存在下、ボロン酸からパラジウムへのアリール基の転位</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c4a06a52</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>- **API Integration**: Seamless integration with existing systems (20,000 yen/month)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **API連携**: 既存システムとのシームレス統合（月額20,000円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c4bb2ca8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>From the perspective of reducing environmental impact and cost, catalyst recycling was investigated.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>環境負荷低減とコスト削減の観点から、触媒のリサイクルを検討した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c4c0c103</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>We adopt a subscription-based monthly fee system, combined with pay-as-you-go charges based on the number of translated characters.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>サブスクリプション型の月額課金制を採用し、翻訳文字数に応じた従量課金を組み合わせます。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c500a0fd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:28.233Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#90eb463a</prop>
+      <tuv xml:lang="en">
+        <seg>| Sodium hydroxide | 58 | Many side reactions |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 水酸化ナトリウム | 58 | 副反応多い |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c613c4f4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>- Synthesis of optically active compounds using asymmetric catalysts</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 不斉触媒を用いた光学活性化合物の合成</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c767f805</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>- Countermeasure: Differentiation by quality, specialization in niche fields</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 対策: 品質差別化、ニッチ分野への特化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c8a900f9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>The translation market in Japan is estimated to be approximately 300 billion yen, with business document translation accounting for about 40% of the total.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>日本国内の翻訳市場規模は約3,000億円と推定されており、そのうちビジネス文書の翻訳が約40%を占めています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">c9f55953</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| 0.1 | 45 | 48 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 0.1 | 45 | 48 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">cde1d642</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Three-necked flask (100 mL)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 三口フラスコ（100 mL）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">cde88671</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>- Losartan (antihypertensive agent)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- ロサルタン（高血圧治療薬）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">cdfc7234</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- **Fusion of AI and Human**: Combines the speed of machine translation with the quality of human review</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **AIと人間の融合**: 機械翻訳の速度と人間のレビューの品質を両立</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ce0dde10</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.922Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>### Anticipated Risks</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 想定されるリスク</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d34cf9f8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Aryl bromide (10 mmol, purity ≥98%, Sigma-Aldrich)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 臭化アリール（10 mmol、純度98%以上、Sigma-Aldrich社製）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d4b460cc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>### Suppression of Side Reactions</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 副反応の抑制</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d4f54642</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:13.576Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#282689b3</prop>
+      <tuv xml:lang="en">
+        <seg>The reaction mixture was purified by silica gel column chromatography to isolate the target compound.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>反応混合物をシリカゲルカラムクロマトグラフィーにより精製し、目的化合物を単離した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d812fa56</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Crowdsourcing Type**: Moderate pricing, but quality control is difficult (8-15 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **クラウドソーシング型**: 中間的な価格だが、品質管理が困難（1文字8-15円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d825f9e6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:14.356Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#fb694b95</prop>
+      <tuv xml:lang="en">
+        <seg>## Results and Discussion</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## 結果と考察</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d82b1118</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:56.178Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#ddac17a4</prop>
+      <tuv xml:lang="en">
+        <seg>Specifically, the following results were obtained.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>具体的には、以下の成果が得られた。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d8fe345c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>- Intermediates of various anticancer agents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 各種抗がん剤の中間体</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">d9a849bd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Business**: 49,800 yen/month (up to 1,000,000 characters, additional 6 yen per character)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **ビジネス**: 月額49,800円（100万文字まで、追加1文字6円）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">dac08810</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>|----------|-----------|-----------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|----------|-----------|-----------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">db87dfcc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>These side reactions were minimized by the following measures.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>これらの副反応は、以下の対策により最小化できた。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">dba569dc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:10.461Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#01226052</prop>
+      <tuv xml:lang="en">
+        <seg>5. **Referral Program**: Providing incentives for referrals from existing customers</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>5. **紹介プログラム**: 既存顧客からの紹介に対するインセンティブ提供</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">dc13ba71</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:44.376Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a137261a</prop>
+      <tuv xml:lang="en">
+        <seg>In addition, a decrease in yield was observed for 2-substituted compounds with significant steric hindrance.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>また、立体障害の大きい2-置換体では収率の低下が見られた。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">dc92ae98</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:43.447Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#548d0ac5</prop>
+      <tuv xml:lang="en">
+        <seg>## Executive Summary</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>## エグゼクティブサマリー</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">dda233f4</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:19.841Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#7fc206e4</prop>
+      <tuv xml:lang="en">
+        <seg>- **COO**: 15-year veteran of the translation industry, specialist in quality control</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **COO**: 翻訳業界15年のベテラン、品質管理のスペシャリスト</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ddb2ec0e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- Low accuracy in translating technical terms</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 専門用語の翻訳精度が低い</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ddb7c737</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:17.555Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#94c02303</prop>
+      <tuv xml:lang="en">
+        <seg>### Examination of Yield</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 収率の検討</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e1e96cc6</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Legal Risk**: Compensation for damages due to errors in translation content</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **法的リスク**: 翻訳内容の誤りによる損害賠償</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e241abdd</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- Large variations in translation quality</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 翻訳品質のばらつきが大きい</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e255b862</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:40.648Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#1de6bde5</prop>
+      <tuv xml:lang="en">
+        <seg>| 2 | 84 | 98.2 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 2 | 84 | 98.2 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e43e932d</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Homocoupling**: Coupling between boronic acids (5-8%)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **ホモカップリング**: ボロン酸同士のカップリング（5-8%）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e48c4c1c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:37.272Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#45ec17b2</prop>
+      <tuv xml:lang="en">
+        <seg>- Strict maintenance of a nitrogen atmosphere (prevents oxidation of palladium by oxygen)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 窒素雰囲気の厳密な維持（酸素によるパラジウムの酸化を防止）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e54fcfc9</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.539Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#88fdaf6d</prop>
+      <tuv xml:lang="en">
+        <seg>- Nitrogen gas supply system</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 窒素ガス供給装置</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e605abb8</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:36.589Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#64b534e0</prop>
+      <tuv xml:lang="en">
+        <seg>With the evolution of AI technology and the acceleration of globalization, the translation market is undergoing a major transformation.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>AI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e7e912cc</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:34.801Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#189651c3</prop>
+      <tuv xml:lang="en">
+        <seg>- Accelerating growth with a view to IPO or M&amp;A</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- IPOまたはM&amp;Aを視野に入れた成長加速</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e80abbfb</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>4. Add DMF (40 mL) and perform nitrogen purging three times</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. DMF（40 mL）を加え、窒素置換を3回繰り返す</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e8113763</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:15.132Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#d0133b89</prop>
+      <tuv xml:lang="en">
+        <seg>2. **Terminology Extraction Technology**: Automatic extraction and dictionary creation of technical terms from documents</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>2. **用語抽出技術**: 文書から自動的に専門用語を抽出・辞書化</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e8422c00</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:56.351Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#982a54f3</prop>
+      <tuv xml:lang="en">
+        <seg>- **Technical Term Database**: High-precision translation utilizing industry-specific glossaries</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **専門用語データベース**: 業界特化の用語集を活用した高精度翻訳</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e92bb0f3</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:51.369Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#ba7907df</prop>
+      <tuv xml:lang="en">
+        <seg>- **High costs**: Human translation is expensive and burdensome for small and medium-sized enterprises</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **コストの高さ**: 人手による翻訳は高コストで、中小企業には負担が大きい</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e996a336</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>- Countermeasure: Purchase liability insurance, clearly state disclaimer clauses</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 対策: 賠償責任保険への加入、免責条項の明記</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">e9c5e476</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.642Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#41ea0efc</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 3**: Hire a marketing manager and a business development officer</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **3年目**: マーケティング責任者、事業開発担当の採用</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ea064fbb</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.923Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#928a1fd9</prop>
+      <tuv xml:lang="en">
+        <seg>1. **Technical Risk**: The quality of AI translation does not meet expectations</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1. **技術リスク**: AI翻訳の品質が期待に達しない</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">eb9bdbb7</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:55.583Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#d98d67ef</prop>
+      <tuv xml:lang="en">
+        <seg>Since its report by Akira Suzuki and Norio Miyaura in 1979, the Suzuki–Miyaura coupling reaction has become one of the most important reactions in organic synthetic chemistry.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>鈴木・宮浦カップリング反応は、1979年に鈴木章と宮浦憲夫により報告されて以来、有機合成化学において最も重要な反応の一つとなっている。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ebe732f7</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>4. **E-commerce Companies**: Multilingual deployment of product descriptions and marketing content</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>4. **Eコマース企業**: 商品説明、マーケティングコンテンツの多言語展開</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ec47c4d1</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>|-----------------------|-----------|-------------------|</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>|----------------|-----------|---------------|</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ee06c572</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:06.910Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#f846cec7</prop>
+      <tuv xml:lang="en">
+        <seg>This corresponds to approximately 30 paying customers, with the goal of achieving this within six months from the service launch.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>これは約30社の有料顧客に相当し、サービス開始から6ヶ月での達成を目指します。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ee5ba1ad</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>| 1.0 | 86 | 20 |</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>| 1.0 | 86 | 20 |</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">f07e0606</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:08.997Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#a5bd87ac</prop>
+      <tuv xml:lang="en">
+        <seg>#### Reaction Procedure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>#### 反応の実施</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">f693e14e</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:01.416Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#0af0ab60</prop>
+      <tuv xml:lang="en">
+        <seg>### Revenue Structure</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 収益構造</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">f894508f</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>This reaction is used in the synthesis of the following pharmaceuticals:</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>本反応は、以下のような医薬品の合成に利用されている。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">f90d7a21</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:33.316Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#150ac6de</prop>
+      <tuv xml:lang="en">
+        <seg>3. **Reductive Elimination**: The product is formed and palladium(0) is regenerated simultaneously</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>3. **還元的脱離**: 生成物の形成と同時にパラジウム(0)が再生される</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">f9d89829</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:51.608Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8e5fe32d</prop>
+      <tuv xml:lang="en">
+        <seg>The recovered catalyst could be reused, and yields of over 80% were maintained up to the third use.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>回収した触媒は再度使用可能であり、3回目まで収率80%以上を維持した。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">fb3450b5</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:03.851Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#a0ad4b34</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 5**: Sales of 1.5 billion yen, 900 customers, average unit price 1.67 million yen/year</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **5年目**: 売上15億円、顧客数900社、平均単価167万円/年</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">fcccd620</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:21.642Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#41ea0efc</prop>
+      <tuv xml:lang="en">
+        <seg>- **Year 2**: Add 5 engineers, secure 20 translator partners</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- **2年目**: エンジニア5名追加、翻訳者パートナー20名確保</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">fd210444</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:48.270Z</prop>
+      <prop type="x-mdait-used-in">content/en/business.md#470942e5</prop>
+      <tuv xml:lang="en">
+        <seg>### Target Market</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>### 対象市場</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">fd5da11c</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:48.021Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#8c7f00ea</prop>
+      <tuv xml:lang="en">
+        <seg>- Strict temperature control (temperature unevenness affects yield)</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>- 温度制御の厳密さ（温度ムラが収率に影響）</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ff3973d0</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:28:57.895Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#5afd3ca2</prop>
+      <tuv xml:lang="en">
+        <seg>These compounds have complex biaryl structures, and efficient synthesis is difficult without the Suzuki–Miyaura coupling reaction.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>これらの化合物は複雑なビアリール構造を有しており、鈴木・宮浦カップリング反応なしでは効率的な合成が困難である。</seg>
+      </tuv>
+    </tu>
+    <tu>
+      <prop type="x-mdait-hash">ffd63a0a</prop>
+      <prop type="x-mdait-created-at">2026-02-08T07:29:24.856Z</prop>
+      <prop type="x-mdait-used-in">content/en/chemistry.md#43f33645</prop>
+      <tuv xml:lang="en">
+        <seg>At 1.0 mol% or higher, no improvement in yield was observed; rather, the formation of palladium black tended to decrease the yield.</seg>
+      </tuv>
+      <tuv xml:lang="ja">
+        <seg>1.0 mol%以上では収率の向上は見られず、むしろパラジウムブラックの生成により収率が低下する傾向が見られた。</seg>
+      </tuv>
+    </tu>
+  </body>
+</tmx>

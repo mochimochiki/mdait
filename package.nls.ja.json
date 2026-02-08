@@ -37,5 +37,8 @@
   "mdait.trans.markdown.skipCodeBlocks.description": "マークダウン翻訳時にコードブロックを翻訳対象から除外するかどうか",
   "mdait.terms.filename.description": "用語集ファイル名（.csv、.yaml形式に対応）",
   "mdait.terms.primaryLang.description": "用語集管理の基準言語コード",
-  "mdait.logLevel.description": "mdait拡張機能のログ出力レベル"
+  "mdait.logLevel.description": "mdait拡張機能のログ出力レベル",
+  "mdait.tm-commit.unit.title": "📝 TM登録（ユニット）",
+  "mdait.tm-commit.file.title": "📝 TM登録（ファイル）",
+  "mdait.tm-commit.directory.title": "📝 TM登録（ディレクトリ）"
 }

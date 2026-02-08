@@ -149,6 +149,17 @@
   "Proceed": "続行",
   "No frontmatter keys configured for translation.": "翻訳対象のFrontmatterキーが設定されていません。",
   "Source file not found: {0}": "ソースファイルが見つかりません: {0}",
-  "Empty content": "空のコンテンツ"
+  "Empty content": "空のコンテンツ",
+  "$(notebook) TM Commit": "📝 TM登録",
+  "Tooltip: Register this unit to Translation Memory": "このユニットを翻訳メモリに登録します",
+  "TM feature is disabled. Enable it in mdait.json.": "TM機能が無効です。mdait.jsonで有効にしてください。",
+  "TM Commit": "TM登録",
+  "TM Commit: {0}": "TM登録: {0}",
+  "Initializing...": "初期化中...",
+  "This unit is not eligible for TM commit.": "このユニットはTM登録の対象外です。",
+  "TM commit error: {0}": "TM登録エラー: {0}",
+  "Register TM for all files in directory '{0}'?": "ディレクトリ '{0}' 内の全ファイルのTM登録を実行しますか？",
+  "TM commit completed: {0} new, {1} updated, {2} errors": "TM登録完了: 新規 {0} 件、更新 {1} 件、エラー {2} 件",
+  "{0}/{1} units": "{0}/{1} ユニット"
 }
 

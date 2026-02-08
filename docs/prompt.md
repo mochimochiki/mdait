@@ -95,6 +95,7 @@ prompts: ["trans.translate", "term.detect"]
 | `term.detect` | テキストからの用語検出 | term.detect |
 | `term.extractFromTranslations` | 対訳ペアからの用語抽出 | term.expand |
 | `term.translateTerms` | 用語のAI翻訳 | term.expand |
+| `tm.splitSentences` | 対訳文の文単位アライメント | tm-commit |
 
 ---
 
@@ -260,3 +261,52 @@ prompts: ["trans.translate", "term.detect"]
   "source term 2": "translated term 2"
 }
 ```
+
+---
+
+### tm.splitSentences - 対訳文アライメント
+
+**ファイル**: [`src/commands/tm-commit/sentence-aligner.ts`](../src/commands/tm-commit/sentence-aligner.ts)
+
+#### 概要
+ソーステキストとターゲットテキストを受け取り、1:1にアラインされた対訳文ペアの配列を返します。
+
+#### 設計意図
+- tm-commitで使用する高精度な文分割
+- ソースとターゲットの対応関係を正確に把握
+- 非1:1対応（1文→複数文など）は結合して1ペアにまとめる
+- 原文を忠実に保持（改変・意訳禁止）
+- Markdown構造（リンク、太字、コード等）は文内で保持
+
+#### 変数
+- `{{sourceLang}}`: ソース言語コード
+- `{{targetLang}}`: ターゲット言語コード
+- `{{sourceText}}`: ソースユニット本文
+- `{{targetText}}`: ターゲットユニット本文
+
+#### Output
+```json
+[
+  {"source": "source sentence 1", "target": "target sentence 1"},
+  {"source": "source sentence 2", "target": "target sentence 2"}
+]
+```
+
+---
+
+### trans.translate TM参照変数
+
+`trans.translate` および `trans.revisePatch` プロンプトに以下の条件ブロックを追加:
+
+```
+{{#tmReferences}}
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
+```
+
+**設計意図**: 過去対訳が100%正しいとは限らないニュアンスを保つ。LLMには参考情報として提示し、文脈を優先させる。

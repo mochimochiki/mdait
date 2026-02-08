@@ -37,5 +37,8 @@
   "mdait.trans.markdown.skipCodeBlocks.description": "Whether to exclude code blocks from translation targets when translating markdown",
   "mdait.terms.filename.description": "Glossary file name (supports .csv and .yaml formats)",
   "mdait.terms.primaryLang.description": "Primary language code for glossary management",
-  "mdait.logLevel.description": "Set the log level for mdait extension output"
+  "mdait.logLevel.description": "Set the log level for mdait extension output",
+  "mdait.tm-commit.unit.title": "📝 TM Commit Unit",
+  "mdait.tm-commit.file.title": "📝 TM Commit File",
+  "mdait.tm-commit.directory.title": "📝 TM Commit Directory"
 }

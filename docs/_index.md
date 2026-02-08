@@ -38,6 +38,7 @@
 - **[command_trans.md](command_trans.md)** - 翻訳実行、改訂パッチ、品質チェックの詳細
 - **[command_term.md](command_term.md)** - 用語検出・展開の処理フロー
 - **[command_trans-selection.md](command_trans-selection.md)** - オンデマンド翻訳（マーカーレス）
+- **[command_tm-commit.md](command_tm-commit.md)** - 翻訳メモリ登録とTM参照の設計
 
 ### UI層
 **[ui.md](ui.md) - UI層設計**

@@ -163,6 +163,7 @@ export class AITranslator implements Translator {
 			terms: context.terms,
 			previousTranslation: context.previousTranslation,
 			sourceDiff: context.sourceDiff,
+			tmReferences: context.tmReferences,
 		});
 
 		const messages: AIMessage[] = [
@@ -220,6 +221,7 @@ export class AITranslator implements Translator {
 			terms: context.terms,
 			previousTranslation: context.previousTranslation,
 			sourceDiff: context.sourceDiff,
+			tmReferences: context.tmReferences,
 		});
 
 		const messages: AIMessage[] = [
@@ -281,7 +283,6 @@ export class AITranslator implements Translator {
 
 			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
 			if (attempt > 0) {
-
 				const logger = Logger.getInstance();
 				logger.warn("trans", "Translation retry", {
 					attempt: attempt + 1,
@@ -348,7 +349,6 @@ export class AITranslator implements Translator {
 
 			// リトライ発生時のログ（初回実行の失敗はログ出力しない）
 			if (attempt > 0) {
-
 				const logger = Logger.getInstance();
 				logger.warn("trans", "Translation retry (revision patch)", {
 					attempt: attempt + 1,

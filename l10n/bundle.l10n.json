@@ -150,5 +150,15 @@
   "AI_Usage_Confirmation": "✨️[AI] Commands with this mark use AI.\n\n  • Uses the AI service specified in mdait.json\n  • AI usage statistics will be logged to .mdait/ai-stats.log\n\nDo you want to proceed?",
   "No frontmatter keys configured for translation.": "No frontmatter keys configured for translation.",
   "Source file not found: {0}": "Source file not found: {0}",
-  "Empty content": "Empty content"
+  "Empty content": "Empty content",
+  "$(notebook) TM Commit": "📝 TM Commit",
+  "Tooltip: Register this unit to Translation Memory": "Register this unit to Translation Memory",
+  "TM feature is disabled. Enable it in mdait.json.": "TM feature is disabled. Enable it in mdait.json.",
+  "TM Commit": "TM Commit",
+  "TM Commit: {0}": "TM Commit: {0}",
+  "Initializing...": "Initializing...",
+  "This unit is not eligible for TM commit.": "This unit is not eligible for TM commit.",
+  "TM commit error: {0}": "TM commit error: {0}",
+  "Register TM for all files in directory '{0}'?": "Register TM for all files in directory '{0}'?",
+  "TM commit completed: {0} new, {1} updated, {2} errors": "TM commit completed: {0} new, {1} updated, {2} errors"
 }

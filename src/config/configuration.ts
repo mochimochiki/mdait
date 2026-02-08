@@ -97,6 +97,10 @@ interface MdaitConfig {
 		filename?: string;
 		primaryLang?: string;
 	};
+	tm?: {
+		enabled?: boolean;
+		maxReferences?: number;
+	};
 	prompts?: {
 		"trans.translate"?: string;
 		"trans.revisePatch"?: string;
@@ -170,6 +174,13 @@ export class Configuration {
 	 * プロンプト設定（カスタムプロンプトファイルパス）
 	 */
 	public prompts: Record<string, string> = {};
+	/**
+	 * 翻訳メモリ（TM）設定
+	 */
+	public tm = {
+		enabled: true,
+		maxReferences: 5,
+	};
 
 	/**
 	 * プライベートコンストラクタ（シングルトンパターン）
@@ -415,6 +426,16 @@ export class Configuration {
 				}
 			}
 
+			// TM設定の読み込み
+			if (config.tm) {
+				if (config.tm.enabled !== undefined) {
+					this.tm.enabled = config.tm.enabled;
+				}
+				if (config.tm.maxReferences !== undefined) {
+					this.tm.maxReferences = Math.max(1, Math.min(20, config.tm.maxReferences));
+				}
+			}
+
 			// 設定ファイルの監視を開始（初回のみ）
 			if (!this.configurationWatcher) {
 				this.setupConfigurationWatcher();
@@ -509,6 +530,22 @@ export class Configuration {
 	public getTermsFileFormat(): "csv" | "yaml" {
 		const ext = this.terms.filename.toLowerCase().split(".").pop();
 		return ext === "yaml" || ext === "yml" ? "yaml" : "csv";
+	}
+
+	/**
+	 * TM機能が有効かどうかを取得
+	 * @returns TM機能の有効/無効
+	 */
+	public getTmEnabled(): boolean {
+		return this.tm.enabled;
+	}
+
+	/**
+	 * TM参照の最大数を取得
+	 * @returns 最大参照数
+	 */
+	public getTmMaxReferences(): number {
+		return this.tm.maxReferences;
 	}
 
 	/**

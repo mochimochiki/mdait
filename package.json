@@ -127,6 +127,24 @@
         "title": "%mdait.translate.frontmatter.title%",
         "icon": "$(play)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.tm-commit.unit",
+        "title": "%mdait.tm-commit.unit.title%",
+        "icon": "$(notebook)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.tm-commit.file",
+        "title": "%mdait.tm-commit.file.title%",
+        "icon": "$(notebook)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.tm-commit.directory",
+        "title": "%mdait.tm-commit.directory.title%",
+        "icon": "$(notebook)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -229,6 +247,16 @@
           "command": "mdait.translate.frontmatter",
           "when": "view == mdait.status && viewItem == mdaitFrontmatterTarget",
           "group": "inline"
+        },
+        {
+          "command": "mdait.tm-commit.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "group": "inline@3"
+        },
+        {
+          "command": "mdait.tm-commit.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "group": "inline@3"
         }
       ]
     },
@@ -244,7 +272,12 @@
         "mdait.logLevel": {
           "type": "string",
           "default": "INFO",
-          "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
+          "enum": [
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR"
+          ],
           "description": "%mdait.logLevel.description%"
         }
       }
@@ -266,6 +299,7 @@
     "csv-parse": "^5.5.6",
     "csv-stringify": "^6.5.2",
     "diff": "^8.0.2",
+    "fast-xml-parser": "^5.3.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
     "ollama": "^0.6.0",

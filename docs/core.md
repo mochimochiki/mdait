@@ -205,6 +205,42 @@ mdait管理外のフィールドは元のYAMLフォーマットを維持し、md
 
 ---
 
+## 翻訳メモリ（TM）
+
+### TmxStore
+
+TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデックスを担当します。
+
+**主要機能**:
+- TMX XMLのパース/シリアライズ（`fast-xml-parser`のXMLParser/XMLBuilderを使用）
+- Map<sentenceHash, TmEntry>による高速検索（O(1)）
+- CRUD操作: addEntry, addUsedIn, updateTarget, lookupByHash, lookupBatch
+- グローバル遅延シングルトン: `getInstance(tmxFilePath)`で取得、mtimeベースの自動リロード
+
+**シングルトンパターン**: 本番コードでは`TmxStore.getInstance(path)`を使用。save()後はmtimeを記録するため不要なリロードを回避。外部変更時のみmtime差分でリロード。テストでは`new TmxStore()`の直接インスタンス化も可能。
+
+**データモデル**: 文単位のTmEntryが管理単位。各エントリーはsentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）と出典情報（usedIn[]）を保持します。
+
+**実装**: [`src/core/tm/tmx-store.ts`](../src/core/tm/tmx-store.ts)
+
+### SentenceSplitter
+
+正規表現による高速文分割。trans実行時のTM検索で使用します。
+
+**分割ルール**: コードブロック/インラインコード保護、言語別分割（日本語: 句読点、英語: ピリオド+空白+大文字）、数値内ドット保護。
+
+**実装**: [`src/core/tm/sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts)
+
+### formatTmReferences
+
+TM検索結果（`TmMatch[]`）をプロンプト用のフォーマット済み文字列に変換するユーティリティ関数。VS Code非依存のためCore層に配置。
+
+**実装**: [`src/core/tm/tm-reference-formatter.ts`](../src/core/tm/tm-reference-formatter.ts)
+
+**詳細**: [command_tm-commit.md](command_tm-commit.md)
+
+---
+
 ## シーケンス図
 
 ### ステータス更新

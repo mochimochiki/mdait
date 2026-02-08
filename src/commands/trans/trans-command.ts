@@ -29,6 +29,10 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { SentenceSplitter } from "../../core/tm/sentence-splitter";
+import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
+import { TmxStore } from "../../core/tm/tmx-store";
+import type { TmMatch } from "../../core/tm/types";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
@@ -42,6 +46,9 @@ import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 const logger = Logger.getInstance();
+
+/** SentenceSplitterはステートレスなのでモジュールスコープで再利用 */
+const sentenceSplitter = new SentenceSplitter();
 
 /**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
@@ -392,6 +399,16 @@ async function translateUnit(
 					logger.warn("trans", "Failed to generate diff", { oldhash, ...formatError(error) });
 				}
 			}
+		}
+
+		// TM参照の検索（tm.enabledかつTmxStoreが利用可能な場合）
+		try {
+			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang);
+			if (tmReferences) {
+				context.tmReferences = tmReferences;
+			}
+		} catch (error) {
+			logger.debug("trans", "TM reference lookup skipped", formatError(error));
 		}
 
 		let translationResult: TranslationResult | null = null;
@@ -917,4 +934,50 @@ async function translateFrontmatter_CoreProc(
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
 	}
+}
+
+/**
+ * TM参照を検索してフォーマット済み文字列を返す。
+ * tm.enabledがfalseまたはTMXファイルが存在しない場合はundefinedを返す。
+ * @param sourceContent ソースユニットの本文
+ * @param sourceLang ソース言語コード
+ * @param targetLang ターゲット言語コード
+ * @returns フォーマット済みTM参照文字列、またはundefined
+ */
+function lookupTmReferences(sourceContent: string, sourceLang: string, targetLang: string): string | undefined {
+	const config = Configuration.getInstance();
+	if (!config.getTmEnabled()) {
+		return undefined;
+	}
+
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!workspaceRoot) {
+		return undefined;
+	}
+
+	const tmxFilePath = path.join(workspaceRoot, ".mdait", "translations.tmx");
+
+	const store = TmxStore.getInstance(tmxFilePath);
+	if (store.getEntryCount() === 0) {
+		return undefined;
+	}
+
+	// ソースを文分割（SentenceSplitterはステートレスのためモジュールスコープで再利用）
+	const sentences = sentenceSplitter.split(sourceContent, sourceLang);
+	if (sentences.length === 0) {
+		return undefined;
+	}
+
+	// 各文のハッシュを計算してバッチ検索
+	const hashes = sentences.map((s) => calculateHash(s, true));
+	const matches = store.lookupBatch(hashes, sourceLang, targetLang);
+	if (matches.length === 0) {
+		return undefined;
+	}
+
+	// maxReferences件に制限
+	const maxReferences = config.getTmMaxReferences();
+	const limited = matches.slice(0, maxReferences);
+
+	return formatTmReferences(limited);
 }

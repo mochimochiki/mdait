@@ -241,6 +241,25 @@
       },
       "additionalProperties": false
     },
+    "tm": {
+      "type": "object",
+      "description": "Translation Memory (TM) settings",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable or disable the TM feature. When disabled, both tm-commit and trans TM references are deactivated.",
+          "default": true
+        },
+        "maxReferences": {
+          "type": "integer",
+          "description": "Maximum number of TM references to include in translation prompts. Higher values provide more context but increase token usage.",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5
+        }
+      },
+      "additionalProperties": false
+    },
     "prompts": {
       "type": "object",
       "description": "Custom prompt overrides. Specify file paths (relative to workspace root) for each prompt ID.",
@@ -269,6 +288,11 @@
           "type": "string",
           "description": "Path to custom term translation prompt file",
           "examples": [".mdait/prompts/term-translate.txt"]
+        },
+        "tm.splitSentences": {
+          "type": "string",
+          "description": "Path to custom TM sentence alignment prompt file",
+          "examples": [".mdait/prompts/tm-split-sentences.txt"]
         }
       },
       "additionalProperties": false

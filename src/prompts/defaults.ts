@@ -24,6 +24,8 @@ export const PromptIds = {
 	TERM_EXTRACT_FROM_TRANSLATIONS: "term.extractFromTranslations",
 	/** 用語のAI翻訳 */
 	TERM_TRANSLATE_TERMS: "term.translateTerms",
+	/** 対訳文の文単位アライメント */
+	TM_SPLIT_SENTENCES: "tm.splitSentences",
 } as const;
 
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
@@ -101,6 +103,15 @@ IMPORTANT: The diff above shows exactly what changed in the source text.
 - Focus your translation updates on the changed portions
 - Unchanged lines should generally keep the same translation
 {{/sourceDiff}}
+{{#tmReferences}}
+
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
@@ -233,6 +244,15 @@ Terminology (preferred translations):
 
 Previous Translation (target to patch):
 {{previousTranslation}}
+{{#tmReferences}}
+
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
 
 Source Text Changes (unified diff format):
 \`\`\`diff
@@ -495,6 +515,65 @@ Return JSON object mapping source terms to translated terms:
 }`;
 
 /**
+ * tm.splitSentences - 対訳文アライメントプロンプト
+ *
+ * @description
+ * ソーステキストとターゲットテキストを受け取り、1:1にアラインされた対訳文ペアの配列を返します。
+ * tm-commitで使用する高精度な文分割。
+ *
+ * @input
+ * - {{sourceLang}}: ソース言語コード
+ * - {{targetLang}}: ターゲット言語コード
+ * - {{sourceText}}: ソースユニット本文
+ * - {{targetText}}: ターゲットユニット本文
+ *
+ * @output
+ * ```json
+ * [
+ *   {"source": "source sentence 1", "target": "target sentence 1"},
+ *   {"source": "source sentence 2", "target": "target sentence 2"}
+ * ]
+ * ```
+ */
+export const DEFAULT_TM_SPLIT_SENTENCES = `You are a professional translation alignment expert.
+
+Your task is to split the given source and target texts into aligned sentence pairs.
+
+### Language Configuration
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+
+### Source Text
+{{sourceText}}
+
+### Target Text
+{{targetText}}
+
+### Instructions
+1. Split both source and target texts into sentences.
+2. Align each source sentence with its corresponding target sentence.
+3. If one source sentence maps to multiple target sentences (or vice versa), combine them into a single pair.
+4. Preserve the original text exactly — do NOT modify, rephrase, or improve the text.
+5. Preserve Markdown formatting (links, bold, code, etc.) within each sentence.
+6. Do NOT include empty sentences.
+7. Each pair must have both source and target (do NOT include unmatched sentences).
+8. Heading lines (starting with #) should be treated as independent sentences.
+9. List items (starting with -, *, +, or numbers) should each be treated as independent sentences.
+
+### Output Format
+Return ONLY a valid JSON array with this structure:
+
+[
+  {"source": "source sentence 1", "target": "target sentence 1"},
+  {"source": "source sentence 2", "target": "target sentence 2"}
+]
+
+CRITICAL:
+- Return ONLY the JSON array. No explanations or markdown code blocks.
+- Each pair must contain both "source" and "target" fields.
+- Preserve exact original text without any modifications.`;
+
+/**
  * デフォルトプロンプトのマッピング
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
@@ -504,4 +583,5 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
 	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
+	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 };

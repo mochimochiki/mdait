@@ -111,6 +111,20 @@ sequenceDiagram
 
 ---
 
+### tm-commit - 翻訳メモリ登録
+
+翻訳済みユニットの対訳を文単位に分割し、TMX形式の翻訳メモリに登録します。蓄積されたTMはtrans実行時にLLMプロンプトへ参考提示され、翻訳表現の一貫性を向上させます。
+
+**主な処理**:
+- LLMによる高精度な対訳文アライメント
+- sentenceHash（CRC32）による重複防止
+- usedIn[]による出典管理
+- trans実行時: 正規表現文分割 → TM検索 → プロンプト統合
+
+**詳細**: [command_tm-commit.md](command_tm-commit.md)
+
+---
+
 ## 共通設計方針
 
 ### 冪等性と決定性

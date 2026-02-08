@@ -50,13 +50,15 @@ src/
     ├── trans/           # 翻訳実行・品質チェック
     ├── term/            # 用語検出・展開
     ├── setup/           # 初期設定
-    └── trans-selection/ # オンデマンド翻訳
+    ├── trans-selection/ # オンデマンド翻訳
+    └── tm-commit/       # 翻訳メモリ登録
   core/                  # 純粋な翻訳ドメインロジック
     ├── markdown/        # 構造解析、ユニット分割、marker処理
     ├── hash/            # 正規化とハッシュ計算
     ├── status/          # ステータス情報管理
     ├── unit-registry/   # ユニット内容のスナップショット管理
-    └── diff/            # unified diff生成
+    ├── diff/            # unified diff生成
+    └── tm/              # 翻訳メモリ（TMXストア、文分割）
   api/                   # 外部AIサービス通信
   ui/                    # VS Code UI統合
   config/                # 設定ロード・バリデーション
@@ -133,6 +135,12 @@ mdaitの管理単位である**mdaitUnit**は、Markdown本文とHTMLコメン�
 原文から重要用語を検出し（`term.detect`）、既訳から訳語を抽出します（`term.expand`）。
 
 **詳細**: [command_term.md](command_term.md)
+
+### tm-commit - 翻訳メモリ登録
+
+翻訳済みユニットの対訳を文単位に分割し、TMX形式の翻訳メモリに登録します。蓄積されたTMはtrans実行時に参照されます。
+
+**詳細**: [command_tm-commit.md](command_tm-commit.md)
 
 ### setup - 初期設定
 

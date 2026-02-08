@@ -59,6 +59,9 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **✨[AI]翻訳**: frontmatter翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: frontmatter needフラグをクリア
 
+**TM登録アクション**:
+- **📝 TM登録**: 翻訳済みユニット（needなし、fixedなし）に表示。`mdait.tm-commit.unit`を呼び出し
+
 #### ジャンプ時の動作
 
 - 右側（Beside）に分割表示でジャンプ先を開く

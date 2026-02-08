@@ -188,6 +188,18 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
+		// 翻訳済みユニット（from属性あり、needなし）にTM登録ボタン
+		if (marker.from && !marker.need) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(notebook) TM Commit"),
+					tooltip: vscode.l10n.t("Tooltip: Register this unit to Translation Memory"),
+					command: "mdait.tm-commit.unit",
+					arguments: [range],
+				}),
+			);
+		}
+
 		// needマーカーがある場合は完了ボタン
 		if (marker.need) {
 			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
