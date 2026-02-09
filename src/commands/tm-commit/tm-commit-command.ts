@@ -21,6 +21,7 @@ import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { SentenceAligner } from "./sentence-aligner";
+import { isTmCommitTarget } from "./tm-commit-filter";
 import { TmCommitProcessor, type TmCommitResult } from "./tm-commit-processor";
 
 const logger = Logger.getInstance();
@@ -38,27 +39,6 @@ function getTmxFilePath(): string | null {
 		return null;
 	}
 	return path.join(workspaceRoot, ".mdait", TMX_FILENAME);
-}
-
-/**
- * ユニットがTM処理対象かどうか判定する。
- *
- * 対象条件:
- * - from属性あり（ターゲットファイルのユニット）
- * - need:translate でない（翻訳済み）
- * - need:revise@ でない（旧版訳文）
- */
-function isTmCommitTarget(unit: MdaitUnit): boolean {
-	if (!unit.marker?.from) {
-		return false;
-	}
-	if (unit.marker.need === "translate") {
-		return false;
-	}
-	if (unit.marker.need?.startsWith("revise@")) {
-		return false;
-	}
-	return true;
 }
 
 /**
