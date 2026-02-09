@@ -27,11 +27,17 @@
 | 条件 | 判定 | 理由 |
 |---|---|---|
 | `from`属性あり + `need`なし | 処理対象 | 翻訳済み |
-| `from`属性あり + `need:review` | 処理対象 | 翻訳済み（レビュー待ち） |
+| `from`属性あり + `need:review` | スキップ | レビュー待ち（未承認） |
 | `from`属性あり + `need:revise@*` | スキップ | 訳文が旧版 |
 | `from`属性あり + `need:translate` | スキップ | 未翻訳 |
 | `from`属性なし | スキップ | ソースファイルまたは未リンク |
 | `fixed`フラグあり | スキップ | 登録済み最適化（将来機能） |
+
+**`need:review`ワークフロー:**  
+1. trans実行時にTranslationCheckerが構造不一致を検出 → `need:review`自動設定  
+2. ユーザーが訳文を手動レビュー・修正  
+3. CodeLensの「Mark as Reviewed」ボタンで`need`フラグをクリア  
+4. TM登録ボタンが表示される → tm-commit実行可能
 
 ### 処理フロー
 

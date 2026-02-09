@@ -224,7 +224,6 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown(input), expected);
 		});
 	});
-	});
 
 	suite("isWorthyForTm", () => {
 		suite("日本語の最小長チェック（8文字）", () => {

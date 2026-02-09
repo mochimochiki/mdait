@@ -49,6 +49,10 @@
 - 構造の不一致を検出し、確認推奨箇所を特定
 - 問題がある場合は`need:review`ステータスを設定し、Hoverツールチップに詳細な理由を表示
 - 各要素の数の差異を具体的に報告（例: 「見出しレベル2の数が不一致: 原文3個 vs 訳文2個」）
+- **`need:review`後のワークフロー**:
+  1. 訳文を手動レビュー・修正
+  2. CodeLensの「Mark as Reviewed」で`need`フラグクリア
+  3. tm-commitコマンドでTM登録可能に（詳細: [command_tm-commit.md](command_tm-commit.md)）
 - **注意**: frontmatter翻訳には品質チェックを適用しない
 
 #### AIレスポンス検証
