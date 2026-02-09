@@ -91,7 +91,7 @@ tm-commitでは、TM登録前に以下の処理を行い、TM品質を向上さ�
 ### Core層
 
 - **TmxStore** (`src/core/tm/tmx-store.ts`): TMXファイルのI/O、インメモリインデックス（Map<sentenceHash, TmEntry>）、CRUD操作
-- **SentenceSplitter** (`src/core/tm/sentence-splitter.ts`): 正規表現ベースの文分割。trans検索時の高速分割に使用
+- **SentenceSplitter** (`src/core/tm/sentence-splitter.ts`): `Intl.Segmenter` ベースの文分割。trans検索時の多言語対応分割に使用
 
 ### Commands層
 

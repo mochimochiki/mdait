@@ -225,9 +225,9 @@ TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデ�
 
 ### SentenceSplitter
 
-正規表現による高速文分割。trans実行時のTM検索で使用します。
+`Intl.Segmenter` ベースの文分割。trans実行時のTM検索で使用します。言語ごとにSegmenterインスタンスをキャッシュし、日英中を含む多言語の文境界検出に対応します。
 
-**分割ルール**: コードブロック/インラインコード保護、言語別分割（日本語: 句読点、英語: ピリオド+空白+大文字）、数値内ドット保護。
+**分割ルール**: コードブロック/インラインコード保護、段落分割（空行区切り）、リスト項目の独立文分割、`Intl.Segmenter(lang, { granularity: "sentence" })` による文境界検出。
 
 **実装**: [`src/core/tm/sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts)
 

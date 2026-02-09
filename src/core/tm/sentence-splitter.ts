@@ -1,13 +1,12 @@
 /**
- * 正規表現ベースの高速文分割。
+ * Intl.Segmenter ベースの文分割。
  * trans実行時のTM検索で使用する。
  *
  * 分割ルール:
  * 1. コードブロック（```）、インラインコード（`）をプレースホルダーに置換（保護）
  * 2. リスト項目を独立文として分割
- * 3. 日本語: [。！？] の後で分割。数値内ドット（3.14）は保護
- * 4. 英語: [.!?]\s+(?=[A-Z]) で分割
- * 5. 各文をトリム、空文字列除去
+ * 3. Intl.Segmenter(lang, { granularity: "sentence" }) で文境界を検出
+ * 4. 各文をトリム、空文字列除去
  */
 
 /** コードブロックのプレースホルダー接頭辞 */
@@ -20,22 +19,28 @@ const CODE_BLOCK_REGEX = /```[\s\S]*?```/g;
 /** インラインコード正規表現（`...`） */
 const INLINE_CODE_REGEX = /`[^`\n]+`/g;
 
-/** 日本語の句読点による分割（数値内ドット保護済み） */
-const JA_SENTENCE_BOUNDARY_REGEX = /([。！？])\s*/g;
-/** 英語のピリオド+空白+大文字による分割 */
-const EN_SENTENCE_BOUNDARY_REGEX = /([.!?])\s+(?=[A-Z])/g;
-
-/** 数値内ドット保護用プレースホルダー */
-const NUMERIC_DOT_PLACEHOLDER = "\u0000ND";
-/** 数値内ドット検出パターン (例: 3.14, 1.0) */
-const NUMERIC_DOT_REGEX = /(\d)\.(\d)/g;
-
 /** リスト項目の行パターン */
 const LIST_ITEM_REGEX = /^(\s*[-*+]\s+|\s*\d+\.\s+)/;
 
+/** 言語ごとの Intl.Segmenter キャッシュ */
+const segmenterCache = new Map<string, Intl.Segmenter>();
+
 /**
- * 正規表現ベースの文分割クラス。
- * trans検索時の高速分割で使用する。
+ * 言語に対応する Intl.Segmenter を取得する。キャッシュがあればそれを返す。
+ */
+function getSegmenter(lang: string): Intl.Segmenter {
+	const key = lang.toLowerCase();
+	let segmenter = segmenterCache.get(key);
+	if (!segmenter) {
+		segmenter = new Intl.Segmenter(key, { granularity: "sentence" });
+		segmenterCache.set(key, segmenter);
+	}
+	return segmenter;
+}
+
+/**
+ * Intl.Segmenter ベースの文分割クラス。
+ * trans検索時の文分割で使用する。
  */
 export class SentenceSplitter {
 	/**
@@ -91,7 +96,7 @@ export class SentenceSplitter {
 			// 段落内の改行を空白に結合
 			const joined = lines.map((l) => l.trim()).join(" ");
 
-			// 言語別分割
+			// Intl.Segmenter で文分割
 			const splitSentences = this.splitBySentenceBoundary(joined, lang);
 			sentences.push(...splitSentences);
 		}
@@ -104,57 +109,18 @@ export class SentenceSplitter {
 	}
 
 	/**
-	 * 言語別の文境界で分割する。
+	 * Intl.Segmenter を使用して文境界で分割する。
 	 */
 	private splitBySentenceBoundary(text: string, lang: string): string[] {
-		// 数値内ドットを保護
-		const protected_ = text.replace(NUMERIC_DOT_REGEX, `$1${NUMERIC_DOT_PLACEHOLDER}$2`);
-
-		let parts: string[];
-		if (this.isJapanese(lang)) {
-			// 日本語: 句読点で分割（句読点は前の文に含める）
-			parts = this.splitWithDelimiter(protected_, JA_SENTENCE_BOUNDARY_REGEX);
-		} else {
-			// 英語・その他: ピリオド+空白+大文字で分割
-			parts = this.splitWithDelimiter(protected_, EN_SENTENCE_BOUNDARY_REGEX);
-		}
-
-		// 数値内ドットを復元
-		return parts.map((s) => s.replace(new RegExp(NUMERIC_DOT_PLACEHOLDER, "g"), "."));
-	}
-
-	/**
-	 * 正規表現の区切り文字を含めて分割する。
-	 * 区切り文字は直前の文に付加される。
-	 */
-	private splitWithDelimiter(text: string, regex: RegExp): string[] {
+		const segmenter = getSegmenter(lang);
+		const segments = segmenter.segment(text);
 		const result: string[] = [];
-		let lastIndex = 0;
-
-		// 正規表現をリセット
-		const re = new RegExp(regex.source, regex.flags);
-		for (const match of text.matchAll(re)) {
-			const delimiter = match[1]; // キャプチャグループ（句読点）
-			const endOfSentence = match.index + delimiter.length;
-			const sentence = text.substring(lastIndex, endOfSentence);
-			if (sentence.trim()) {
-				result.push(sentence.trim());
-			}
-			lastIndex = endOfSentence;
-			// 区切り後の空白をスキップ
-			const afterDelimiter = text.substring(endOfSentence);
-			const leadingSpace = afterDelimiter.match(/^\s*/);
-			if (leadingSpace && leadingSpace[0].length > 0) {
-				lastIndex += leadingSpace[0].length;
+		for (const { segment } of segments) {
+			const trimmed = segment.trim();
+			if (trimmed) {
+				result.push(trimmed);
 			}
 		}
-
-		// 残りのテキスト
-		const remaining = text.substring(lastIndex);
-		if (remaining.trim()) {
-			result.push(remaining.trim());
-		}
-
 		return result;
 	}
 
@@ -174,12 +140,5 @@ export class SentenceSplitter {
 			return inlineCodes[index] ?? "";
 		});
 		return result;
-	}
-
-	/**
-	 * 日本語かどうかを判定する。
-	 */
-	private isJapanese(lang: string): boolean {
-		return lang.toLowerCase().startsWith("ja");
 	}
 }
