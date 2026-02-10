@@ -282,7 +282,7 @@
         "name": "mdait_sync",
         "displayName": "mdait: Sync Translation Markers",
         "toolReferenceName": "mdaitSync",
-        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise) in target documents. This modifies files by updating HTML comment markers.",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers.",
         "canBeReferencedInPrompt": true,
         "tags": ["mdait", "translation", "sync"],
         "inputSchema": {

@@ -11,6 +11,24 @@ Tools層は、GitHub Copilot ChatなどのLanguageModel向けにmdaitの機能�
 3. **エラーハンドリング**: 全てのエラーをキャッチし、ユーザーフレンドリーなメッセージを返す
 4. **i18n対応**: `vscode.l10n.t()` を使用して国際化対応
 
+## LanguageModelTool APIの基本
+
+VS CodeのLanguageModelTool APIは、拡張機能の機能をGitHub Copilot Chatなどから呼び出せるようにするAPIです。
+
+### Tool実行の流れ
+
+1. **Tool呼び出し**: Copilot Chatがツールを選択し、入力パラメータを決定
+2. **prepareInvocation()**: ツール実行前の確認UIを提供（オプショナル）
+3. **ユーザー承認**: 確認メッセージが表示され、ユーザーが承認/拒否
+4. **invoke()**: 実際のツール処理を実行
+5. **結果返却**: `LanguageModelToolResult`をCopilot Chatに返す
+
+### 確認UIのベストプラクティス
+
+- **読み取り専用の操作**: 確認不要（`prepareInvocation()`は簡潔なメッセージのみ）
+- **ファイル変更を伴う操作**: 確認メッセージで変更内容を明示
+- **AIを使用する操作**: コスト・時間がかかることを伝え、対象ユニット数などの具体情報を含めて確認
+
 ## アーキテクチャ
 
 ```
@@ -83,7 +101,8 @@ interface TranslateInput {
 
 **確認UI**: あり（AIを使用するため）
 - タイトル: "Confirm Translation"
-- メッセージ: "Translate file: {filePath}?\n\nThis will use AI to translate marked units."
+- メッセージ: "Translate file: {filePath}?\n\nThis will translate {n} units using AI."
+- 翻訳対象ユニット数を表示してユーザーの意思決定を支援
 
 ## ファイル構成
 

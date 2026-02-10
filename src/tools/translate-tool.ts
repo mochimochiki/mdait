@@ -39,7 +39,13 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 
 			// ファイルがターゲットファイルか確認
 			const config = Configuration.getInstance();
-			const fileExplorer = new FileExplorer();
+			let fileExplorer: FileExplorer;
+			try {
+				fileExplorer = new FileExplorer();
+			} catch (error) {
+				const message = vscode.l10n.t("No workspace folder is open.");
+				return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(message)]);
+			}
 			const transPair = fileExplorer.getTransPairFromTarget(filePath, config);
 			if (!transPair) {
 				const message = vscode.l10n.t(
@@ -105,12 +111,25 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
 		const { filePath } = options.input;
-		// 翻訳対象ファイルを表示して確認を求める
+
+		// 対象ファイルの翻訳必要ユニット数を取得
+		const statusManager = StatusManager.getInstance();
+		const tree = statusManager.getStatusItemTree();
+		const units = tree.getUnitsInFile(filePath);
+		const needCount = units.filter(
+			(u) => u.needFlag === "translate" || u.needFlag?.startsWith("revise"),
+		).length;
+
+		// 翻訳対象ファイルとユニット数を表示して確認を求める
 		return {
 			invocationMessage: vscode.l10n.t("Translating file..."),
 			confirmationMessages: {
 				title: vscode.l10n.t("Confirm Translation"),
-				message: vscode.l10n.t("Translate file: {0}?\n\nThis will use AI to translate marked units.", filePath),
+				message: vscode.l10n.t(
+					"Translate file: {0}?\n\nThis will translate {1} units using AI.",
+					filePath,
+					needCount,
+				),
 			},
 		};
 	}
