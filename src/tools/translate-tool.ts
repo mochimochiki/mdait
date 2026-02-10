@@ -56,6 +56,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 			}
 
 			// AI初回チェック（Tool経由でもチェックを実施）
+			// NOTE: prepareInvocation()はside-effect禁止のため、invoke()で実施
 			const aiOnboarding = AIOnboarding.getInstance();
 			const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
 			if (!shouldProceed) {
@@ -66,7 +67,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 			// ダミーのprogressオブジェクトを作成（Tool APIではwithProgressが使えない）
 			const dummyProgress: vscode.Progress<{ message?: string; increment?: number }> = {
 				report: () => {
-					// 何もしない
+					// No-op
 				},
 			};
 
