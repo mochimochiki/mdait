@@ -160,6 +160,20 @@
   "TM commit error: {0}": "TM登録エラー: {0}",
   "Register TM for all files in directory '{0}'?": "ディレクトリ '{0}' 内の全ファイルのTM登録を実行しますか？",
   "TM commit completed: {0} new, {1} updated, {2} errors": "TM登録完了: 新規 {0} 件、更新 {1} 件、エラー {2} 件",
-  "{0}/{1} units": "{0}/{1} ユニット"
+  "{0}/{1} units": "{0}/{1} ユニット",
+  "$(check-all) Fix": "$(check-all) 確定",
+  "Tooltip: Fix this unit (mark as confirmed)": "このユニットを確定します",
+  "Fix": "確定",
+  "Fix: {0}": "確定: {0}",
+  "This unit is not eligible for fix.": "このユニットは確定の対象外です。",
+  "This unit is already fixed.": "このユニットは既に確定済みです。",
+  "Fix completed: {0} fixed, {1} skipped, {2} errors": "確定完了: 確定 {0} 件、スキップ {1} 件、エラー {2} 件",
+  "Fix all files in directory '{0}'?": "ディレクトリ '{0}' 内の全ファイルを確定しますか？",
+  "Fix error: {0}": "確定エラー: {0}",
+  "Unit not found": "ユニットが見つかりません",
+  "Fix completed: {0}": "確定完了: {0}",
+  "Fix completed but TM commit failed: {0}": "確定完了しましたが、TM登録に失敗しました: {0}",
+  "Registering to TM...": "TM登録中...",
+  "{0}/{1} files": "{0}/{1} ファイル"
 }
 

@@ -160,5 +160,19 @@
   "This unit is not eligible for TM commit.": "This unit is not eligible for TM commit.",
   "TM commit error: {0}": "TM commit error: {0}",
   "Register TM for all files in directory '{0}'?": "Register TM for all files in directory '{0}'?",
-  "TM commit completed: {0} new, {1} updated, {2} errors": "TM commit completed: {0} new, {1} updated, {2} errors"
+  "TM commit completed: {0} new, {1} updated, {2} errors": "TM commit completed: {0} new, {1} updated, {2} errors",
+  "$(check-all) Fix": "$(check-all) Fix",
+  "Tooltip: Fix this unit (mark as confirmed)": "Fix this unit (mark as confirmed)",
+  "Fix": "Fix",
+  "Fix: {0}": "Fix: {0}",
+  "This unit is not eligible for fix.": "This unit is not eligible for fix.",
+  "This unit is already fixed.": "This unit is already fixed.",
+  "Fix completed: {0} fixed, {1} skipped, {2} errors": "Fix completed: {0} fixed, {1} skipped, {2} errors",
+  "Fix all files in directory '{0}'?": "Fix all files in directory '{0}'?",
+  "Fix error: {0}": "Fix error: {0}",
+  "Unit not found": "Unit not found",
+  "Fix completed: {0}": "Fix completed: {0}",
+  "Fix completed but TM commit failed: {0}": "Fix completed but TM commit failed: {0}",
+  "Registering to TM...": "Registering to TM...",
+  "{0}/{1} files": "{0}/{1} files"
 }
