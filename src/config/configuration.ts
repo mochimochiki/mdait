@@ -524,6 +524,18 @@ export class Configuration {
 	}
 
 	/**
+	 * TMファイルのパスを取得
+	 * @returns TMファイルの絶対パス
+	 */
+	public getTmFilePath(): string {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			throw new Error("Workspace not found");
+		}
+		return path.join(workspaceRoot, ".mdait", "translations.tmx");
+	}
+
+	/**
 	 * 用語集ファイル名から形式を判定
 	 * @returns 'csv' | 'yaml'
 	 */

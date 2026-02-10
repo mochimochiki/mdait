@@ -112,6 +112,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.status.openTm",
+        "title": "%mdait.status.openTm.title%",
+        "icon": "$(database)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.setup.createConfig",
         "title": "%mdait.setup.createConfig.title%",
         "icon": "$(gear)",
@@ -131,19 +137,19 @@
       {
         "command": "mdait.tm-commit.unit",
         "title": "%mdait.tm-commit.unit.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
         "category": "mdait"
       },
       {
         "command": "mdait.tm-commit.file",
         "title": "%mdait.tm-commit.file.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
         "category": "mdait"
       },
       {
         "command": "mdait.tm-commit.directory",
         "title": "%mdait.tm-commit.directory.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
         "category": "mdait"
       }
     ],
@@ -203,6 +209,11 @@
         },
         {
           "command": "mdait.status.openTerm",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.status.openTm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "navigation"
         }
