@@ -101,6 +101,9 @@ interface MdaitConfig {
 		enabled?: boolean;
 		maxReferences?: number;
 	};
+	fix?: {
+		tm?: boolean;
+	};
 	prompts?: {
 		"trans.translate"?: string;
 		"trans.revisePatch"?: string;
@@ -180,6 +183,12 @@ export class Configuration {
 	public tm = {
 		enabled: true,
 		maxReferences: 5,
+	};
+	/**
+	 * Fix（ユニット確定）設定
+	 */
+	public fix = {
+		tm: false,
 	};
 
 	/**
@@ -436,6 +445,13 @@ export class Configuration {
 				}
 			}
 
+			// Fix設定の読み込み
+			if (config.fix) {
+				if (config.fix.tm !== undefined) {
+					this.fix.tm = config.fix.tm;
+				}
+			}
+
 			// 設定ファイルの監視を開始（初回のみ）
 			if (!this.configurationWatcher) {
 				this.setupConfigurationWatcher();
@@ -566,5 +582,13 @@ export class Configuration {
 	 */
 	public getTermsPrimaryLang(): string {
 		return this.terms.primaryLang;
+	}
+
+	/**
+	 * fix時にTM登録を同時実行するかどうかを取得
+	 * @returns TM登録の有効/無効
+	 */
+	public getFixTmEnabled(): boolean {
+		return this.fix.tm;
 	}
 }
