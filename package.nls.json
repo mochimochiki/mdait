@@ -41,5 +41,8 @@
   "mdait.logLevel.description": "Set the log level for mdait extension output",
   "mdait.tm-commit.unit.title": "📝 TM Commit Unit",
   "mdait.tm-commit.file.title": "📝 TM Commit File",
-  "mdait.tm-commit.directory.title": "📝 TM Commit Directory"
+  "mdait.tm-commit.directory.title": "📝 TM Commit Directory",
+  "mdait.fix.unit.title": "Fix Unit",
+  "mdait.fix.file.title": "Fix File",
+  "mdait.fix.directory.title": "Fix Directory"
 }

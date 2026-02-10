@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { fixDirectoryCommand, fixFileCommand, fixUnitCommand } from "./commands/fix/fix-command";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -194,6 +195,17 @@ export async function activate(context: vscode.ExtensionContext) {
 	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
 		"mdait.tm-commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
+	);
+
+	// Fix commands
+	const fixUnitDisposable = vscode.commands.registerCommand("mdait.fix.unit", (range?: vscode.Range) =>
+		fixUnitCommand(range),
+	);
+	const fixFileDisposable = vscode.commands.registerCommand("mdait.fix.file", (item?: StatusItem) =>
+		fixFileCommand(item),
+	);
+	const fixDirectoryDisposable = vscode.commands.registerCommand("mdait.fix.directory", (item?: StatusItem) =>
+		fixDirectoryCommand(item),
 	);
 
 	// CodeLens翻訳コマンド
@@ -475,6 +487,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmCommitUnitDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
+		fixUnitDisposable,
+		fixFileDisposable,
+		fixDirectoryDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

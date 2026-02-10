@@ -41,5 +41,8 @@
   "mdait.logLevel.description": "mdait拡張機能のログ出力レベル",
   "mdait.tm-commit.unit.title": "📝 TM登録（ユニット）",
   "mdait.tm-commit.file.title": "📝 TM登録（ファイル）",
-  "mdait.tm-commit.directory.title": "📝 TM登録（ディレクトリ）"
+  "mdait.tm-commit.directory.title": "📝 TM登録（ディレクトリ）",
+  "mdait.fix.unit.title": "確定（ユニット）",
+  "mdait.fix.file.title": "確定（ファイル）",
+  "mdait.fix.directory.title": "確定（ディレクトリ）"
 }

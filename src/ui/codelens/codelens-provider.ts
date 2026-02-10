@@ -188,13 +188,25 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
-		// 翻訳済みユニット（from属性あり、needなし）にTM登録ボタン
-		if (marker.from && !marker.need) {
+		// 翻訳済みユニット（from属性あり、needなし、fixedなし）にTM登録ボタン
+		if (marker.from && !marker.need && !marker.isFixed()) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title: vscode.l10n.t("$(notebook) TM Commit"),
 					tooltip: vscode.l10n.t("Tooltip: Register this unit to Translation Memory"),
 					command: "mdait.tm-commit.unit",
+					arguments: [range],
+				}),
+			);
+		}
+
+		// 翻訳済みユニット（from属性あり、needなし、fixedなし）にfixボタン
+		if (marker.from && !marker.need && !marker.isFixed()) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(check-all) Fix"),
+					tooltip: vscode.l10n.t("Tooltip: Fix this unit (mark as confirmed)"),
+					command: "mdait.fix.unit",
 					arguments: [range],
 				}),
 			);
