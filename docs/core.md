@@ -22,7 +22,7 @@ Core層は、**翻訳ドメインの純粋なロジック**を提供します。
 mdaitUnitは以下の要素で構成されます：
 
 - **content**: ユニット本文（Markdownテキスト）
-- **marker**: `<!-- mdait {hash} [from:{hash}] [need:{flag}] -->`
+- **marker**: `<!-- mdait {hash} [from:{hash}] [need:{flag}] [fixed] -->`
 - **range**: ドキュメント内の開始・終了位置
 
 ### ユニット境界の決定
