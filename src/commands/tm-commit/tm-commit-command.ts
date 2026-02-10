@@ -26,21 +26,6 @@ import { TmCommitProcessor, type TmCommitResult } from "./tm-commit-processor";
 
 const logger = Logger.getInstance();
 
-/** TMXファイル名 */
-const TMX_FILENAME = "translations.tmx";
-
-/**
- * TMXファイルのパスを取得する。
- * @returns TMXファイルの絶対パス（ワークスペースが見つからない場合はnull）
- */
-function getTmxFilePath(): string | null {
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!workspaceRoot) {
-		return null;
-	}
-	return path.join(workspaceRoot, ".mdait", TMX_FILENAME);
-}
-
 /**
  * ユニット単位のtm-commitコマンド（CodeLensから呼び出し）
  * @param range マーカー行のRange
@@ -261,7 +246,7 @@ async function executeTmCommitForFile(
 /**
  * 指定ユニット群にtm-commitを実行する。
  */
-async function executeTmCommitForUnits(
+export async function executeTmCommitForUnits(
 	units: MdaitUnit[],
 	filePath: string,
 	config: Configuration,
@@ -277,10 +262,7 @@ async function executeTmCommitForUnits(
 	}
 
 	// TMXストアの初期化
-	const tmxFilePath = getTmxFilePath();
-	if (!tmxFilePath) {
-		throw new Error("Workspace not found");
-	}
+	const tmxFilePath = config.getTmFilePath();
 	await ensureMdaitDir();
 	const store = TmxStore.getInstance(tmxFilePath);
 
@@ -355,7 +337,7 @@ async function executeTmCommitForUnits(
 /**
  * ユニットのfrom属性からソースコンテンツを取得する。
  */
-async function getSourceContent(
+export async function getSourceContent(
 	unit: MdaitUnit,
 	statusManager: StatusManager,
 	config: Configuration,

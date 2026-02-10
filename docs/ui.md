@@ -184,6 +184,26 @@ sequenceDiagram
 
 ---
 
+## ナビゲーションボタン
+
+ステータスビューのツールバー（`view/title`メニュー）に配置されるナビゲーションボタンです。
+
+**用語集を開く** (`mdait.status.openTerm`):
+- **アイコン**: `$(repo)`
+- **機能**: `.mdait/`配下の用語集ファイルをVSCodeエディタで開く
+- **表示条件**: `mdaitConfigured && mdaitHasStatus`
+- **エラーハンドリング**: ファイルが存在しない場合は情報メッセージを表示
+
+**TMを開く** (`mdait.status.openTm`):
+- **アイコン**: `$(database)`
+- **機能**: `.mdait/translations.tmx`をVSCodeエディタで開く
+- **表示条件**: `mdaitConfigured && mdaitHasStatus`
+- **エラーハンドリング**: ファイルが存在しない場合は情報メッセージを表示
+
+**設計意図**: 用語集とTMファイルに素早くアクセスできることで、翻訳品質の確認・編集が容易になります。用語集は「本」アイコン（`$(repo)`）、TMは「データベース」アイコン（`$(database)`）で視覚的に区別します。
+
+---
+
 ## コンテキスト変数
 
 ### mdaitConfigured

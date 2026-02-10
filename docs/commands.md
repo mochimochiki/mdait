@@ -125,6 +125,22 @@ sequenceDiagram
 
 ---
 
+### fix - ユニット確定
+
+翻訳済みユニットを「確定（fixed）」状態にマークします。マーカーに`fixed`フラグを付与し、オプションでTM登録も同時実行可能。
+
+**主な処理**:
+- マーカーへの`fixed`フラグ付与
+- 冪等性保証（既にfixed済みはスキップ）
+- オプション: TM登録の同時実行（config.fix.tm制御）
+- fixed済みユニットはtm-commit対象から除外
+
+**tm-commitとの違い**: fixは「確定」、tm-commitは「TM登録」が主目的。fixはオプションでTM登録も可能だが、tm-commitは必ずTM登録を実行。
+
+**詳細**: [command_fix.md](command_fix.md)
+
+---
+
 ## 共通設計方針
 
 ### 冪等性と決定性

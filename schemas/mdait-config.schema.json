@@ -260,6 +260,18 @@
       },
       "additionalProperties": false
     },
+    "fix": {
+      "type": "object",
+      "description": "Fix (unit confirmation) settings",
+      "properties": {
+        "tm": {
+          "type": "boolean",
+          "description": "When true, automatically register to Translation Memory when fixing units. Requires TM feature to be enabled.",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
     "prompts": {
       "type": "object",
       "description": "Custom prompt overrides. Specify file paths (relative to workspace root) for each prompt ID.",

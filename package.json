@@ -112,6 +112,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.status.openTm",
+        "title": "%mdait.status.openTm.title%",
+        "icon": "$(database)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.setup.createConfig",
         "title": "%mdait.setup.createConfig.title%",
         "icon": "$(gear)",
@@ -131,19 +137,37 @@
       {
         "command": "mdait.tm-commit.unit",
         "title": "%mdait.tm-commit.unit.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
         "category": "mdait"
       },
       {
         "command": "mdait.tm-commit.file",
         "title": "%mdait.tm-commit.file.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
         "category": "mdait"
       },
       {
         "command": "mdait.tm-commit.directory",
         "title": "%mdait.tm-commit.directory.title%",
-        "icon": "$(notebook)",
+        "icon": "$(database)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.fix.unit",
+        "title": "%mdait.fix.unit.title%",
+        "icon": "$(check-all)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.fix.file",
+        "title": "%mdait.fix.file.title%",
+        "icon": "$(check-all)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.fix.directory",
+        "title": "%mdait.fix.directory.title%",
+        "icon": "$(check-all)",
         "category": "mdait"
       }
     ],
@@ -205,6 +229,11 @@
           "command": "mdait.status.openTerm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "navigation"
+        },
+        {
+          "command": "mdait.status.openTm",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -257,6 +286,16 @@
           "command": "mdait.tm-commit.file",
           "when": "view == mdait.status && viewItem == mdaitFileTarget",
           "group": "inline@3"
+        },
+        {
+          "command": "mdait.fix.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "group": "inline@4"
+        },
+        {
+          "command": "mdait.fix.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "group": "inline@4"
         }
       ]
     },

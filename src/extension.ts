@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { fixDirectoryCommand, fixFileCommand, fixUnitCommand } from "./commands/fix/fix-command";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -6,6 +7,7 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { openTmCommand } from "./commands/tm/command-open";
 import {
 	tmCommitDirectoryCommand,
 	tmCommitFileCommand,
@@ -198,6 +200,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
 
+	// Fix commands
+	const fixUnitDisposable = vscode.commands.registerCommand("mdait.fix.unit", (range?: vscode.Range) =>
+		fixUnitCommand(range),
+	);
+	const fixFileDisposable = vscode.commands.registerCommand("mdait.fix.file", (item?: StatusItem) =>
+		fixFileCommand(item),
+	);
+	const fixDirectoryDisposable = vscode.commands.registerCommand("mdait.fix.directory", (item?: StatusItem) =>
+		fixDirectoryCommand(item),
+	);
+
 	// CodeLens翻訳コマンド
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.translate",
@@ -321,6 +334,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// status.openTerm command
 	const openTermStatusDisposable = vscode.commands.registerCommand("mdait.status.openTerm", openTermCommand);
+
+	// status.openTm command
+	const openTmStatusDisposable = vscode.commands.registerCommand("mdait.status.openTm", openTmCommand);
 
 	// jumpToUnit command
 	const jumpToUnitDisposable = vscode.commands.registerCommand(
@@ -479,11 +495,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmCommitUnitDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
+		fixUnitDisposable,
+		fixFileDisposable,
+		fixDirectoryDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,
 		syncStatusDisposable,
 		openTermStatusDisposable,
+		openTmStatusDisposable,
 		jumpToUnitDisposable,
 		getStatusToolDisposable,
 		syncToolDisposable,
