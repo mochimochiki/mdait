@@ -35,9 +35,13 @@ Core層 (core.md)    API層 (api.md)
    ↓                       ↓
 Config層 (config.md) / Utils層 (utils.md)
 設定管理 / 汎用機能
+
+Tools層 (tools.md) ─────→ Commands層 / Core層
+  ↑
+GitHub Copilot
 ```
 
-**設計意図**: Core層をVS Code APIから独立させることで、ロジックの単体テストが容易になり、将来的な他環境への移植可能性も担保されます（[architecture.md](architecture.md) P5参照）。
+**設計意図**: Core層をVS Code APIから独立させることで、ロジックの単体テストが容易になり、将来的な他環境への移植可能性も担保されます（[architecture.md](architecture.md) P5参照）。Tools層はCommands層・Core層の既存機能を薄くラップし、GitHub Copilot ChatなどからのLanguageModelTool呼び出しに対応します。
 ---
 
 ## リポジトリ構成
@@ -60,6 +64,10 @@ src/
     ├── diff/            # unified diff生成
     └── tm/              # 翻訳メモリ（TMXストア、文分割）
   api/                   # 外部AIサービス通信
+  tools/                 # LanguageModelTool API統合
+    ├── get-status-tool.ts    # ステータス取得ツール
+    ├── sync-tool.ts          # 同期ツール
+    └── translate-tool.ts     # 翻訳ツール
   ui/                    # VS Code UI統合
   config/                # 設定ロード・バリデーション
   utils/                 # ファイル探索、ログ出力

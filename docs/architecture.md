@@ -146,15 +146,19 @@ mdaitは以下の層構造を持つ：
 UI層 → Commands層 → Core層 → Utils層
               ↓
            API層
+Tools層 ─────→ Commands層 / Core層
+  ↑
+GitHub Copilot
 ```
 
 - **UI層**：VS Code統合、ユーザーとのインタラクション
 - **Commands層**：ビジネスロジック、ワークフロー制御
 - **Core層**：純粋な翻訳ドメインロジック（ユニット分割、ハッシュ計算、差分検出）
 - **API層**：外部AI サービスとの通信
+- **Tools層**：LanguageModelTool API、GitHub Copilot Chatなど外部AIからの機能呼び出し
 - **Utils層**：汎用機能、I/O、ログ
 
-各層は明確な責務を持ち、下位層は上位層に依存しない。Core層は純粋関数に近い設計とし、テストとメンテナンスを容易にする。
+各層は明確な責務を持ち、下位層は上位層に依存しない。Core層は純粋関数に近い設計とし、テストとメンテナンスを容易にする。Tools層はCommands層やCore層の既存機能を薄くラップし、新しいビジネスロジックは持たない。
 
 ### P6: VS Code標準パターンへの準拠
 
@@ -205,6 +209,15 @@ API層は、LLMの多様性を吸収する。OpenAI、Ollama、VS Code LM APIな
 - Welcome View：初期設定ガイド
 
 UI層は、mdaitの内部状態をVS Codeの標準UIパターンで可視化する。独自のWebビューは使わず、VS Codeネイティブな体験を提供する。
+
+#### Tools層：外部AIからのアクセス
+
+- LanguageModelTool API：GitHub Copilot ChatなどからのTool呼び出し
+- Get Status Tool (`mdait_getStatus`)：翻訳ステータス取得
+- Sync Tool (`mdait_sync`)：翻訳マーカー同期
+- Translate Tool (`mdait_translate`)：ファイル翻訳
+
+Tools層は、Commands層やCore層の既存機能を薄くラップし、LanguageModelToolResultとして返す。新しいビジネスロジックは持たず、VS Code LM APIに準拠した確認UIを提供する。
 
 ---
 
