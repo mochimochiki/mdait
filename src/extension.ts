@@ -6,6 +6,7 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { openTmCommand } from "./commands/tm/command-open";
 import {
 	tmCommitDirectoryCommand,
 	tmCommitFileCommand,
@@ -319,6 +320,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// status.openTerm command
 	const openTermStatusDisposable = vscode.commands.registerCommand("mdait.status.openTerm", openTermCommand);
 
+	// status.openTm command
+	const openTmStatusDisposable = vscode.commands.registerCommand("mdait.status.openTm", openTmCommand);
+
 	// jumpToUnit command
 	const jumpToUnitDisposable = vscode.commands.registerCommand(
 		"mdait.jumpToUnit",
@@ -476,6 +480,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		syncStatusInitialDisposable,
 		syncStatusDisposable,
 		openTermStatusDisposable,
+		openTmStatusDisposable,
 		jumpToUnitDisposable,
 	);
 
