@@ -8,24 +8,17 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { StatusItem } from "../../core/status/status-item";
-import { StatusManager } from "../../core/status/status-manager";
-import { TmxStore } from "../../core/tm/tmx-store";
+import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
-import { ensureMdaitDir } from "../../utils/mdait-dir";
-import { SentenceAligner } from "../tm-commit/sentence-aligner";
-import { TmCommitProcessor } from "../tm-commit/tm-commit-processor";
+import { executeTmCommitForUnits } from "../tm-commit/tm-commit-command";
 
 const logger = Logger.getInstance();
-
-/** TMXファイル名 */
-const TMX_FILENAME = "translations.tmx";
 
 /** fix処理の結果 */
 interface FixResult {
@@ -35,18 +28,6 @@ interface FixResult {
 	skippedUnits: number;
 	/** エラーが発生したユニット数 */
 	errorUnits: number;
-}
-
-/**
- * TMXファイルのパスを取得する。
- * @returns TMXファイルの絶対パス（ワークスペースが見つからない場合はnull）
- */
-function getTmxFilePath(): string | null {
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!workspaceRoot) {
-		return null;
-	}
-	return path.join(workspaceRoot, ".mdait", TMX_FILENAME);
 }
 
 /**
@@ -90,6 +71,16 @@ export async function fixUnitCommand(range?: vscode.Range): Promise<void> {
 	}
 
 	const config = Configuration.getInstance();
+	const shouldCommitTm = config.getTmEnabled() && config.getFixTmEnabled();
+
+	// TM登録を行う場合のみAI利用確認
+	if (shouldCommitTm) {
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return;
+		}
+	}
 
 	await vscode.window.withProgress(
 		{
@@ -132,7 +123,6 @@ export async function fixUnitCommand(range?: vscode.Range): Promise<void> {
 				await writeMarkerToFile(editor.document, targetUnit, range.start.line);
 
 				// TM登録処理
-				const shouldCommitTm = config.getTmEnabled() && config.getFixTmEnabled();
 				if (shouldCommitTm) {
 					progress.report({ message: vscode.l10n.t("Registering to TM...") });
 					try {
@@ -164,6 +154,17 @@ export async function fixFileCommand(item?: StatusItem): Promise<void> {
 	}
 
 	const config = Configuration.getInstance();
+	const shouldCommitTm = config.getTmEnabled() && config.getFixTmEnabled();
+
+	// TM登録を行う場合のみAI利用確認
+	if (shouldCommitTm) {
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return;
+		}
+	}
+
 	const filePath = (item as { filePath: string }).filePath;
 
 	await vscode.window.withProgress(
@@ -203,6 +204,17 @@ export async function fixDirectoryCommand(item?: StatusItem): Promise<void> {
 	);
 	if (confirm !== vscode.l10n.t("Yes")) {
 		return;
+	}
+
+	const shouldCommitTm = config.getTmEnabled() && config.getFixTmEnabled();
+
+	// TM登録を行う場合のみAI利用確認
+	if (shouldCommitTm) {
+		const aiOnboarding = AIOnboarding.getInstance();
+		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+		if (!shouldProceed) {
+			return;
+		}
 	}
 
 	await vscode.window.withProgress(
@@ -316,111 +328,6 @@ async function executeFixForFile(
 	});
 
 	return result;
-}
-
-/**
- * 指定ユニット群にtm-commitを実行する。
- */
-async function executeTmCommitForUnits(
-	units: MdaitUnit[],
-	filePath: string,
-	config: Configuration,
-	progress: vscode.Progress<{ message?: string; increment?: number }>,
-	token: vscode.CancellationToken,
-): Promise<void> {
-	const statusManager = StatusManager.getInstance();
-	const fileExplorer = new FileExplorer();
-	const transPair = fileExplorer.getTransPairFromTarget(filePath, config);
-
-	if (!transPair) {
-		throw new Error(vscode.l10n.t("No translation pair found for file: {0}", filePath));
-	}
-
-	// TMXストアの初期化
-	const tmxFilePath = getTmxFilePath();
-	if (!tmxFilePath) {
-		throw new Error("Workspace not found");
-	}
-	await ensureMdaitDir();
-	const store = TmxStore.getInstance(tmxFilePath);
-
-	// AIServiceとSentenceAlignerの構築
-	const aiService = await new AIServiceBuilder().build();
-	const aligner = new SentenceAligner(aiService);
-	const processor = new TmCommitProcessor(store, aligner, transPair.sourceLang, transPair.targetLang);
-
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
-	const relativePath = path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
-
-	for (let i = 0; i < units.length; i++) {
-		if (token.isCancellationRequested) {
-			logger.info("fix-tm", "TM commit cancelled");
-			break;
-		}
-
-		const unit = units[i];
-
-		if (!unit.marker?.from) {
-			continue;
-		}
-
-		try {
-			// ソースユニットの内容を取得
-			const sourceContent = await getSourceContent(unit, statusManager, config);
-			if (!sourceContent) {
-				continue;
-			}
-
-			await processor.processUnit(sourceContent, unit.content, relativePath, token);
-		} catch (error) {
-			logger.warn("fix-tm", "Unit processing error", {
-				unitHash: unit.marker?.hash,
-				...formatError(error),
-			});
-		}
-	}
-
-	// 永続化
-	store.save(tmxFilePath);
-
-	logger.info("fix-tm", "TM commit completed", {
-		file: relativePath,
-		processedUnits: units.length,
-	});
-}
-
-/**
- * ユニットのfrom属性からソースコンテンツを取得する。
- */
-async function getSourceContent(
-	unit: MdaitUnit,
-	statusManager: StatusManager,
-	config: Configuration,
-): Promise<string | null> {
-	if (!unit.marker?.from) {
-		return null;
-	}
-
-	const tree = statusManager.getStatusItemTree();
-	const sourceUnit = tree.getUnitByHash(unit.marker.from);
-	if (!sourceUnit?.filePath) {
-		return null;
-	}
-
-	try {
-		const sourceUri = vscode.Uri.file(sourceUnit.filePath);
-		const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
-		const sourceFileContent = sourceDoc.getText();
-		const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
-		const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
-		return sourceUnitData?.content ?? null;
-	} catch (error) {
-		logger.warn("fix", "Failed to read source unit", {
-			filePath: sourceUnit.filePath,
-			...formatError(error),
-		});
-		return null;
-	}
 }
 
 /**

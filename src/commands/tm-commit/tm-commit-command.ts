@@ -261,7 +261,7 @@ async function executeTmCommitForFile(
 /**
  * 指定ユニット群にtm-commitを実行する。
  */
-async function executeTmCommitForUnits(
+export async function executeTmCommitForUnits(
 	units: MdaitUnit[],
 	filePath: string,
 	config: Configuration,
@@ -355,7 +355,7 @@ async function executeTmCommitForUnits(
 /**
  * ユニットのfrom属性からソースコンテンツを取得する。
  */
-async function getSourceContent(
+export async function getSourceContent(
 	unit: MdaitUnit,
 	statusManager: StatusManager,
 	config: Configuration,
