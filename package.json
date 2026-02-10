@@ -260,6 +260,55 @@
         }
       ]
     },
+    "languageModelTools": [
+      {
+        "name": "mdait_getStatus",
+        "displayName": "mdait: Get Translation Status",
+        "toolReferenceName": "mdaitStatus",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a summary of translation progress including total units, translated units, and files needing translation. Optionally pass a filePath to get status for a specific file.",
+        "canBeReferencedInPrompt": true,
+        "tags": ["mdait", "translation", "status"],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Optional file path to get status for a specific file. If omitted, returns overall status."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_sync",
+        "displayName": "mdait: Sync Translation Markers",
+        "toolReferenceName": "mdaitSync",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise) in target documents. This modifies files by updating HTML comment markers.",
+        "canBeReferencedInPrompt": true,
+        "tags": ["mdait", "translation", "sync"],
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "mdait_translate",
+        "displayName": "mdait: Translate File",
+        "toolReferenceName": "mdaitTranslate",
+        "modelDescription": "Translate a Markdown file using AI. Translates units that have need:translate or need:revise flags. The file must be a target file managed by mdait. Uses diff-aware revision for changed content to preserve existing translations.",
+        "canBeReferencedInPrompt": true,
+        "tags": ["mdait", "translation", "ai"],
+        "inputSchema": {
+          "type": "object",
+          "required": ["filePath"],
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "The file path of the target Markdown file to translate."
+            }
+          }
+        }
+      }
+    ],
     "jsonValidation": [
       {
         "fileMatch": "mdait.json",

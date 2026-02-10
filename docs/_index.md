@@ -50,6 +50,11 @@
 - **読むべき時**: AIプロバイダーの抽象化と実装を理解したい
 - **内容**: AIServiceインターフェース、各プロバイダー（OpenAI/Ollama/VSCode LM）の実装詳細
 
+### Tools層
+**[tools.md](tools.md) - Tools層設計**
+- **読むべき時**: GitHub Copilot ChatなどからmdaitをToolとして呼び出す実装を知りたい
+- **内容**: LanguageModelTool API、Get Status/Sync/Translate toolの実装、拡張ガイド
+
 ### 設定管理層
 **[config.md](config.md) - 設定管理層設計**
 - **読むべき時**: mdait.jsonの構造とFrontmatter設定を理解したい

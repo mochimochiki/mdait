@@ -20,6 +20,9 @@ import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
+import { MdaitGetStatusTool } from "./tools/get-status-tool";
+import { MdaitSyncTool } from "./tools/sync-tool";
+import { MdaitTranslateTool } from "./tools/translate-tool";
 import {
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
@@ -441,6 +444,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// LanguageModel Tools 登録
+	const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
+	const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
+	const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new MdaitTranslateTool());
+
 	// 初回データ読み込み
 	context.subscriptions.push(
 		createConfigDisposable,
@@ -477,6 +485,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		syncStatusDisposable,
 		openTermStatusDisposable,
 		jumpToUnitDisposable,
+		getStatusToolDisposable,
+		syncToolDisposable,
+		translateToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる
