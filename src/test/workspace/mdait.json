@@ -29,5 +29,8 @@
   },
   "terms": {
     "primaryLang": "en"
+  },
+  "fix": {
+    "tm": true
   }
 }

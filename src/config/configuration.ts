@@ -228,7 +228,7 @@ export class Configuration {
 	/**
 	 * 設定ファイルのパスを取得
 	 */
-	private getConfigFilePath(): string | undefined {
+	public getConfigFilePath(): string | undefined {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return undefined;

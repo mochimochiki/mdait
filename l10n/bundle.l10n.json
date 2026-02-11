@@ -192,5 +192,10 @@
   "File is not a translation target. Only target files can be translated: {0}": "File is not a translation target. Only target files can be translated: {0}",
   "Translation cancelled by user.": "Translation cancelled by user.",
   "Translation completed for: {0}\n\nStatus:\n- Total units: {1}\n- Translated: {2}\n- Still needs translation: {3}\n- Still needs revision: {4}": "Translation completed for: {0}\n\nStatus:\n- Total units: {1}\n- Translated: {2}\n- Still needs translation: {3}\n- Still needs revision: {4}",
-  "Failed to translate: {0}": "Failed to translate: {0}"
+  "Failed to translate: {0}": "Failed to translate: {0}",
+  "Fix this unit (mark as confirmed).": "Fix this unit (mark as confirmed).",
+  "Actions on fix:": "Actions on fix:",
+  "On": "On",
+  "Off": "Off",
+  "Add fixed attribute": "Add fixed attribute"
 }

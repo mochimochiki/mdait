@@ -24,6 +24,32 @@ UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、�
 
 **設計意図**: ツリー構造により、ディレクトリ→ファイル→ユニットという自然な階層でステータスを把握できます。
 
+#### コンテキストメニューの表示制御
+
+StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件で各コマンドの表示を制御します。
+
+**contextValueの種類**:
+- `mdaitFileSource` / `mdaitDirectorySource`: ソースファイル/ディレクトリ（用語集検出コマンド用）
+- `mdaitFileTarget` / `mdaitDirectoryTarget`: ターゲットファイル/ディレクトリ（翻訳コマンド用、常に設定）
+- `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了状態（TM登録・用語集展開・確定コマンド用）
+
+**複数のcontextValue**:
+ターゲットファイル/ディレクトリは常に`mdaitFileTarget`/`mdaitDirectoryTarget`を持ち、完了状態の場合は追加で`~Complete`も持ちます。例: `"mdaitFileTarget mdaitFileTargetComplete"`
+
+**package.jsonのwhen条件**:
+- 翻訳コマンド: `viewItem =~ /mdaitFileTarget/` （正規表現マッチ、完了・未完了関係なく表示）
+- TM登録・fix等: `viewItem =~ /Complete/` （完了時のみ表示）
+
+**翻訳完了判定** (`isFullyTranslated`):
+- すべてのユニットが`status === Status.Translated`かつ`needFlag`なし
+- frontmatterも翻訳済み（存在する場合）
+- ディレクトリの場合、直下のファイルとサブディレクトリすべてが完了状態
+
+**エッジケース**:
+- **空ファイル**: 翻訳すべき内容がないため完了扱い (`mdaitFileTarget mdaitFileTargetComplete`)
+- **エラーファイル**: パースエラーがある状態は不完全 (`mdaitFileTarget`)
+- **空ディレクトリ**: ファイルもサブディレクトリもない場合は不完全扱い
+
 ---
 
 ### Welcome View
@@ -59,8 +85,13 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **✨[AI]翻訳**: frontmatter翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: frontmatter needフラグをクリア
 
-**TM登録アクション**:
-- **📝 TM登録**: 翻訳済みユニット（needなし、fixedなし）に表示。`mdait.tm-commit.unit`を呼び出し
+**TM登録・確定アクション**:
+- **📝 TM登録**: 翻訳済みユニット（`from`あり、needなし、fixedなし）に表示。`mdait.tm-commit.unit`を呼び出し
+- **$(check-all) 確定 [+追加アクション]**: 翻訳済みユニット（`from`あり、needなし、fixedなし）に表示。`mdait.fix.unit`を呼び出し
+  - ラベルとツールチップは設定に応じて動的に変化
+  - `fix.tm=true`の場合: `$(check-all) 確定 (+TM)` と表示され、確定と同時にTM登録も実行
+  - ツールチップには実行されるアクションと設定ファイルパスを表示
+  - 将来の拡張（用語集展開など）にも対応可能な設計
 
 #### ジャンプ時の動作
 

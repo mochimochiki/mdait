@@ -44,5 +44,12 @@
   "mdait.tm-commit.directory.title": "📝 TM登録（ディレクトリ）",
   "mdait.fix.unit.title": "確定（ユニット）",
   "mdait.fix.file.title": "確定（ファイル）",
-  "mdait.fix.directory.title": "確定（ディレクトリ）"
+  "mdait.fix.directory.title": "確定（ディレクトリ）",
+  "TM Commit": "TM登録",
+  "Term Expansion": "用語集展開",
+  "Fix": "確定",
+  "Fix this unit (mark as confirmed).": "翻訳を確定させます。",
+  "The following actions will also be performed:": "また、以下も行います。",
+  "Configuration": "設定項目",
+  "Configuration file: {0}": "設定ファイル: {0}"
 }

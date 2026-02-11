@@ -202,10 +202,13 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 		// 翻訳済みユニット（from属性あり、needなし、fixedなし）にfixボタン
 		if (marker.from && !marker.need && !marker.isFixed()) {
+			const config = Configuration.getInstance();
+			const { title, tooltip } = this.getFixLabelAndTooltip(config);
+
 			codeLenses.push(
 				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(check-all) Fix"),
-					tooltip: vscode.l10n.t("Tooltip: Fix this unit (mark as confirmed)"),
+					title,
+					tooltip,
 					command: "mdait.fix.unit",
 					arguments: [range],
 				}),
@@ -240,6 +243,66 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	): vscode.ProviderResult<vscode.CodeLens> {
 		// 既にprovideで設定済みなのでそのまま返す
 		return codeLens;
+	}
+
+	/**
+	 * Fix確定CodeLensのラベルとツールチップを取得する
+	 * @param config Configuration
+	 * @returns ラベルとツールチップ
+	 */
+	private getFixLabelAndTooltip(config: Configuration): { title: string; tooltip: string } {
+		// すべての設定項目を定義（拡張可能）
+		// label: ツールチップ表示用の詳細名, shortLabel: ボタンラベル表示用の短縮名
+		// configKey: 設定ファイルでの場所を示す
+		const allSettings: Array<{ key: string; label: string; shortLabel: string; configKey: string; enabled: boolean }> = [
+			{
+				key: "tm",
+				label: vscode.l10n.t("TM Commit"),
+				shortLabel: "TM",
+				configKey: "fix.tm",
+				enabled: config.fix.tm,
+			},
+			// 将来の拡張例:
+			// {
+			//   key: "term",
+			//   label: vscode.l10n.t("Term Expansion"),
+			//   shortLabel: "Term",
+			//   configKey: "fix.term",
+			//   enabled: config.fix.term
+			// }
+		];
+
+		// ボタンラベル用に有効なアクションを収集
+		const enabledActions = allSettings.filter((s) => s.enabled);
+
+		// ラベル構築
+		let title = `$(check-all) ${vscode.l10n.t("Fix")}`;
+		if (enabledActions.length > 0) {
+			const shortLabels = enabledActions.map((a) => a.shortLabel).join(" +");
+			title += ` (+${shortLabels})`;
+		}
+
+		// ツールチップ構築
+		let tooltip = vscode.l10n.t("Fix this unit (mark as confirmed).");
+
+		// 確定時のアクションを表示
+		const configPath = config.getConfigFilePath();
+		const configFileName = configPath ? configPath.split(/[\\/]/).pop() : "mdait.json";
+
+		tooltip += `\n\n${vscode.l10n.t("Actions on fix:")}\n`;
+
+		// TM登録オプション
+		if (allSettings.length > 0) {
+			for (const setting of allSettings) {
+				const status = setting.enabled ? vscode.l10n.t("On") : vscode.l10n.t("Off");
+				tooltip += `- ${setting.label}: ${status} (🛠 ${configFileName} - ${setting.configKey})\n`;
+			}
+		}
+
+		// fixed付与は常に有効
+		tooltip += `- ${vscode.l10n.t("Add fixed attribute")}: ${vscode.l10n.t("On")}\n`;
+
+		return { title, tooltip };
 	}
 
 	/**

@@ -44,5 +44,12 @@
   "mdait.tm-commit.directory.title": "📝 TM Commit Directory",
   "mdait.fix.unit.title": "Fix Unit",
   "mdait.fix.file.title": "Fix File",
-  "mdait.fix.directory.title": "Fix Directory"
+  "mdait.fix.directory.title": "Fix Directory",
+  "TM Commit": "TM Commit",
+  "Term Expansion": "Term Expansion",
+  "Fix": "Fix",
+  "Fix this unit (mark as confirmed).": "Fix this unit (mark as confirmed).",
+  "The following actions will also be performed:": "The following actions will also be performed:",
+  "Configuration": "Configuration",
+  "Configuration file: {0}": "Configuration file: {0}"
 }
