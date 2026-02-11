@@ -239,12 +239,12 @@
       "view/item/context": [
         {
           "command": "mdait.translate.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && (viewItem == mdaitDirectoryTarget || viewItem == mdaitDirectoryTargetComplete)",
           "group": "inline"
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
           "group": "inline"
         },
         {
@@ -264,12 +264,12 @@
         },
         {
           "command": "mdait.term.expand.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
           "group": "inline@2"
         },
         {
           "command": "mdait.term.expand.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@2"
         },
         {
@@ -279,22 +279,22 @@
         },
         {
           "command": "mdait.tm-commit.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
           "group": "inline@3"
         },
         {
           "command": "mdait.tm-commit.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@3"
         },
         {
           "command": "mdait.fix.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
           "group": "inline@4"
         },
         {
           "command": "mdait.fix.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@4"
         }
       ]

@@ -30,23 +30,25 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 
 **contextValueの種類**:
 - `mdaitFileSource` / `mdaitDirectorySource`: ソースファイル/ディレクトリ（用語集検出コマンド用）
-- `mdaitFileTarget` / `mdaitDirectoryTarget`: ターゲットファイル/ディレクトリ（翻訳コマンド用、常に設定）
-- `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了状態（TM登録・用語集展開・確定コマンド用）
+- `mdaitFileTarget` / `mdaitDirectoryTarget`: 翻訳未完了のターゲットファイル/ディレクトリ
+- `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了のターゲットファイル/ディレクトリ（TM登録・用語集展開・確定コマンド用）
 
-**複数のcontextValue**:
-ターゲットファイル/ディレクトリは常に`mdaitFileTarget`/`mdaitDirectoryTarget`を持ち、完了状態の場合は追加で`~Complete`も持ちます。例: `"mdaitFileTarget mdaitFileTargetComplete"`
+**contextValueの設定**:
+ターゲットファイル/ディレクトリは、翻訳状態に応じて以下のいずれかのcontextValueを持ちます：
+- 未完了: `mdaitFileTarget` / `mdaitDirectoryTarget`
+- 完了: `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`
 
 **package.jsonのwhen条件**:
-- 翻訳コマンド: `viewItem =~ /mdaitFileTarget/` （正規表現マッチ、完了・未完了関係なく表示）
-- TM登録・fix等: `viewItem =~ /Complete/` （完了時のみ表示）
+- 翻訳コマンド: `viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete` （完了・未完了両方で表示）
+- TM登録・fix等: `viewItem == mdaitFileTargetComplete` （完了時のみ表示）
 
-**翻訳完了判定** (`isFullyTranslated`):
-- すべてのユニットが`status === Status.Translated`かつ`needFlag`なし
+**翻訳完了判定** (`Status.Translated`):
+- すべてのユニットが`status === Status.Translated`
 - frontmatterも翻訳済み（存在する場合）
 - ディレクトリの場合、直下のファイルとサブディレクトリすべてが完了状態
 
 **エッジケース**:
-- **空ファイル**: 翻訳すべき内容がないため完了扱い (`mdaitFileTarget mdaitFileTargetComplete`)
+- **空ファイル**: 翻訳すべき内容がないため完了扱い (`mdaitFileTargetComplete`)
 - **エラーファイル**: パースエラーがある状態は不完全 (`mdaitFileTarget`)
 - **空ディレクトリ**: ファイルもサブディレクトリもない場合は不完全扱い
 
