@@ -254,23 +254,24 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		// すべての設定項目を定義（拡張可能）
 		// label: ツールチップ表示用の詳細名, shortLabel: ボタンラベル表示用の短縮名
 		// configKey: 設定ファイルでの場所を示す
-		const allSettings: Array<{ key: string; label: string; shortLabel: string; configKey: string; enabled: boolean }> = [
-			{
-				key: "tm",
-				label: vscode.l10n.t("TM Commit"),
-				shortLabel: "TM",
-				configKey: "fix.tm",
-				enabled: config.fix.tm,
-			},
-			// 将来の拡張例:
-			// {
-			//   key: "term",
-			//   label: vscode.l10n.t("Term Expansion"),
-			//   shortLabel: "Term",
-			//   configKey: "fix.term",
-			//   enabled: config.fix.term
-			// }
-		];
+		const allSettings: Array<{ key: string; label: string; shortLabel: string; configKey: string; enabled: boolean }> =
+			[
+				{
+					key: "tm",
+					label: vscode.l10n.t("TM Commit"),
+					shortLabel: "TM",
+					configKey: "fix.tm",
+					enabled: config.fix.tm,
+				},
+				// 将来の拡張例:
+				// {
+				//   key: "term",
+				//   label: vscode.l10n.t("Term Expansion"),
+				//   shortLabel: "Term",
+				//   configKey: "fix.term",
+				//   enabled: config.fix.term
+				// }
+			];
 
 		// ボタンラベル用に有効なアクションを収集
 		const enabledActions = allSettings.filter((s) => s.enabled);
