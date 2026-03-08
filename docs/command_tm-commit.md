@@ -1,338 +1,124 @@
-# tm-commitコマンド設計
+# tm-commitコマンド
 
-> **上位設計**: [architecture.md](architecture.md) P5「層の責務分離」、[commands.md](commands.md)「共通設計方針」参照
+翻訳済みユニットの対訳を文単位に分割してTMX翻訳メモリに登録するコマンドです。登録済みの対訳は次回trans実行時にLLMプロンプトへ参考情報として自動反映されます。
 
-## 役割
+> **ワークフロー位置:** [trans](command_trans.md) → **tm-commit** → （ワークフロー終了）
 
-翻訳済みユニットの対訳を文単位に分割し、TMX形式の翻訳メモリ（TM）に登録する。TMに蓄積された過去の対訳は、trans実行時にLLMプロンプトへ参考情報として提供され、翻訳表現の一貫性を高める。
+## 機能
 
-**設計意図**: tm-commitはユーザーの明示的操作でのみ実行される（プライバシー原則準拠）。バックグラウンドでの自動TM登録は行わない。
+### 何をするか
 
----
+翻訳済み（`from`ありかつ`need`なし）のユニットから対訳ペアをAI（SentenceAligner）で文単位に分割し、`.mdait/translations.tmx`に登録します。ユニットごとに`x-mdait-hash`で登録済みチェックを行い、既登録のユニットはスキップされます。
 
-## TMファイル操作
+### before/after
 
-### TMを開くコマンド
+`from:a1b2c3d4`（`from`=訳文が対応する原文hash）の翻訳済みユニットをtm-commit:
 
-**コマンド**: `mdait.status.openTm`
+```markdown
+<!-- tm-commit前: translations.tmx はこのユニットのエントリなし -->
+<!-- mdait from:a1b2c3d4 hash:22222222 -->
+## はじめに
+これは導入文です。
+```
 
-**機能**: `.mdait/translations.tmx`をVSCodeエディタで開き、TMの内容を確認・編集可能にする。
+```xml
+<!-- tm-commit後: translations.tmx にエントリ追加 -->
+<tu>
+  <prop type="x-mdait-hash">a1b2c3d4</prop>
+  <tuv xml:lang="en"><seg>This is an introduction.</seg></tuv>
+  <tuv xml:lang="ja"><seg>これは導入文です。</seg></tuv>
+</tu>
+```
 
-**UI起点**: ステータスビューのナビゲーションボタン（`$(database)`アイコン）
+### 前提・操作
 
-**実装**: `src/commands/tm/command-open.ts`
+**前提:** 翻訳済みファイル（`from`ありかつ`need`なし）が存在すること。AIプロバイダー設定済み（[config.md](config.md)参照）。
 
-**エラーハンドリング**:
-- ワークスペースが見つからない場合: エラーメッセージ表示
-- TMXファイルが存在しない場合: 情報メッセージ表示（まだTM登録が行われていない状態）
-
-**注意事項**: TMXファイルは標準的なXML形式ですが、手動編集には注意が必要です。不正なXML構造やエントリーの追加はTM機能の動作に影響を与える可能性があります。基本的には`tm-commit`コマンド経由での登録を推奨します。
-
-**設計意図**: TMの内容を直接確認できることで、翻訳メモリの品質管理が容易になります。
-
----
-
-## 機能詳細
-
-### コマンド体系
-
-| コマンド | 粒度 | UI起点 |
+| 操作 | 対象 | トリガー |
 |---|---|---|
-| `mdait.tm-commit.file` | ファイル単位 | StatusTree |
-| `mdait.tm-commit.directory` | ディレクトリ単位 | StatusTree |
+| StatusTreeからのtm-commit | ファイル単位 | ユーザー操作 |
+| StatusTreeからのtm-commit | ディレクトリ単位 | ユーザー操作 |
+| `mdait.status.openTm` | `.mdait/translations.tmx` | StatusViewボタン（確認・手動編集用） |
 
-ファイル/ディレクトリ単位でのみ利用可能。ユニット単位のTM登録は廃止された（TM登録は一括処理が基本であるため）。
-各コマンドの処理ロジックは同一。対象範囲のみが異なる。
-
-### TM処理対象の判定
+### 結果
 
 | 条件 | 判定 | 理由 |
 |---|---|---|
-| `from`属性あり + `need`なし | 処理対象 | 翻訳済み |
-| `from`属性あり + `need:review` | スキップ | レビュー待ち（未承認） |
-| `from`属性あり + `need:revise@*` | スキップ | 訳文が旧版 |
-| `from`属性あり + `need:translate` | スキップ | 未翻訳 |
-| `from`属性なし | スキップ | ソースファイルまたは未リンク |
+| `from`あり + `need`なし | 処理対象 | 翻訳済み |
+| `from`あり + `need:review` | スキップ | 未承認（レビュー待ち） |
+| `from`あり + `need:revise@*` | スキップ | 訳文が旧版 |
+| `from`あり + `need:translate` | スキップ | 未翻訳 |
+| `from`なし | スキップ | ソースファイルまたは未リンク |
+| `x-mdait-hash`が既存TMXに一致 | スキップ | 登録済み |
 
-**`need:review`ワークフロー:**  
-1. trans実行時にTranslationCheckerが構造不一致を検出 → `need:review`自動設定  
-2. ユーザーが訳文を手動レビュー・修正  
-3. CodeLensの「Mark as Reviewed」ボタンで`need`フラグをクリア  
-4. TM登録ボタンが表示される → tm-commit実行可能
+**`need:review`ワークフロー:** trans実行 → 構造不一致で`need:review`付与 → 手動修正 → CodeLensの「Mark as Reviewed」でクリア → tm-commit実行可能。
 
-### sourceHashベーススキップ
+### エラー処理
 
-TMXの`x-source-hash`プロパティを活用し、既にTM登録済みのユニットをスキップする。
+- **個別ユニットエラー**: ログ記録し後続ユニットの処理を継続
+- **TMXファイル書き込みエラー**: ユーザーに通知して処理中断
+- **キャンセル**: ユニット単位でキャンセルチェック
 
-- 各ユニットの`marker.hash`（原文コンテンツハッシュ）がTMXに存在するかチェック
-- 存在すればスキップ（原文が一文字でも変わっていれば再処理される）
-- これにより、大量のファイルに対してtm-commitを実行しても、未登録・変更済みのユニットのみが処理される
+---
+
+## 設計
+
+### 概要
+
+`TmCommitProcessor.processUnit()`がユニットごとにSentenceAlignerでLLMベースの文アライメントを実行します。登録前にstripMarkdownで正規化し、`isWorthyForTm()`で翻訳価値を判定します。trans検索時は同一のstripMarkdown処理でハッシュを計算し、TmxStoreで一括検索します。
 
 ### 処理フロー
 
-1. **初期化**: TmxStore.getInstance()でシングルトン取得（mtime判定で自動リロード）
-2. **対象スキャン**: 指定範囲のターゲットユニットを収集
-3. **フィルタリング**: isTmCommitTarget()で処理対象判定 + sourceHashベーススキップ
-4. **ユニット処理**（順次、キャンセルチェック付き）:
-   - ソースユニットの内容を取得（`from`ハッシュ経由）
-   - SentenceAligner: LLMで対訳を文ペアに分割
-   - 各文ペアについて:
-     - **正規化**: stripMarkdown(source)でMarkdown要素除去
-     - **フィルタリング**: isWorthyForTm()で翻訳価値判定（短文・断片・数値のみ等を除外）
-     - sentenceHash = CRC32(normalize(stripped_source))
-     - 既存ハッシュ → unitPath更新 + ターゲット訳文を最新で上書き
-     - 新規ハッシュ → 新規TmEntryを作成
-4. **永続化**: TmxStore.save()でTMXファイルに書き込み
-5. **結果レポート**: 新規/既存/スキップの件数を通知
-
-### 正規化とフィルタリング
-
-tm-commitでは、TM登録前に以下の処理を行い、TM品質を向上させる：
-
-**LLM品質フィルタリング**: `tm.splitSentences`プロンプトは、Professional TM curator roleを採用し、LLM側で以下のノイズを自動除外:
-- ランダム文字列や意味のない文字列
-- プレースホルダー、変数、ID、パスのみのもの
-- テスト入力や記号・装飾のみの行
-- 数字、URL、ファイルパスのみのもの
-
-**stripMarkdown**: Markdown要素を除去して純粋なテキストに変換
-- コードブロック・インラインコード → 完全除外（空文字列）
-- リンク・画像 → テキスト部分のみ抽出
-- 太字・強調・削除線 → テキスト部分のみ抽出
-- HTMLタグ → content部分のみ抽出
-
-**isWorthyForTm**: 翻訳価値のない短文・断片を除外
-- 最小文字数未満: 日本語8文字、英語12文字未満
-- 数値のみ: `"123"`, `"3.14"`, `"1,000"` 等
-- URL/パスのみ: `"https://example.com"`, `"./path/to/file"` 等
-- 英語2単語以下: 短すぎるフレーズ
-
-これにより、LLM側フィルタリングとクライアント側フィルタリング（`isWorthyForTm`）の二段階でTM品質を確保します。
-
-**統計ログ**: 各ユニット処理後に newCount / existingCount / skippedCount をログ出力。debugレベルでスキップ理由を記録。
-
-**詳細**: [core.md](core.md)「TmTextNormalizer」参照
-
----
-
-## 主要コンポーネント
-
-### Core層
-
-- **TmxStore** (`src/core/tm/tmx-store.ts`): TMXファイルのI/O、インメモリインデックス（Map<sentenceHash, TmEntry>）、CRUD操作
-- **SentenceSplitter** (`src/core/tm/sentence-splitter.ts`): `Intl.Segmenter` ベースの文分割。trans検索時の多言語対応分割に使用
-
-### Commands層
-
-- **TmCommitCommand** (`src/commands/tm-commit/tm-commit-command.ts`): コマンドエントリーポイント。withProgressパターンで進捗表示・キャンセル対応
-- **TmCommitProcessor** (`src/commands/tm-commit/tm-commit-processor.ts`): ユニット処理のコアロジック
-- **SentenceAligner** (`src/commands/tm-commit/sentence-aligner.ts`): LLMベースの文アライメント。PromptProviderでプロンプトを構築
-
----
-
-## シーケンス図
-
-### ファイル単位のtm-commit
-
 ```mermaid
 sequenceDiagram
-    participant User
+    participant User as UI/Command
     participant Cmd as TmCommitCommand
     participant Proc as TmCommitProcessor
     participant Store as TmxStore
-    participant Aligner as SentenceAligner
-    participant AI as AIService
+    participant AI as SentenceAligner
 
-    User->>Cmd: mdait.tm-commit.file
+    User->>Cmd: tm-commit 実行
 
     rect rgb(230, 240, 255)
-        Note over Cmd,Store: 初期化
-        Cmd->>Store: load()
-        Store-->>Cmd: TmEntryMap
+        Note over Cmd,Store: 初期化: TmxStore.load()（mtime判定で自動リロード）
     end
 
     rect rgb(240, 255, 240)
         Note over Cmd,AI: ユニット処理ループ（順次）
-        loop 各対象ユニット
-            Cmd->>Proc: processUnit(source, target, unitInfo)
-            
-            rect rgb(255, 250, 230)
-                Note over Proc,AI: SentenceAlignerでのstripMarkdown適用
-                Proc->>Aligner: alignSentences(source, target)
-                Aligner->>Aligner: stripMarkdown(source)
-                Aligner->>Aligner: stripMarkdown(target)
-                Note over Aligner: LLMへの負荷軽減と<br/>表などの複数行構造の正しい処理
-                Aligner->>AI: tm.splitSentences<br/>(stripMarkdown済み)
-                AI-->>Aligner: SentencePair[]<br/>(既にstripMarkdown済み)
-            end
-            
+        loop 各翻訳済みユニット
+            Cmd->>Proc: processUnit(source, target)
+            Proc->>AI: alignSentences(stripMarkdown済み)
+            AI-->>Proc: SentencePair[]
             loop 各文ペア
-                Note over Proc: pair.source/targetは<br/>既にstripMarkdown済み
                 Proc->>Proc: isWorthyForTm(pair.source)
-                alt 翻訳価値なし
-                    Proc->>Proc: skippedCount++
-                else 翻訳価値あり
-                    Proc->>Proc: computeHash(pair.source)
-                    alt 既存
-                        Proc->>Store: updateTarget + unitPath更新
-                    else 新規
-                        Proc->>Store: addEntry
-                    end
+                alt 価値あり
+                    Proc->>Store: addEntry or updateTarget
                 end
             end
         end
     end
 
-    Cmd->>Store: save()
-    Cmd-->>User: 結果レポート
+    rect rgb(255, 245, 230)
+        Note over Cmd,Store: 後処理: TmxStore.save() + 結果レポート
+    end
+
+    Store-->>User: 新規/既存/スキップ件数通知
 ```
 
----
+### 設計ノート
 
-## trans連携: TM参照
+- **明示的コミット原則**: ユーザーの明示的操作でのみ実行（プライバシー保護のため自動TM登録なし）
+- **sourceHashベーススキップ**: TMXの`x-mdait-hash`でスキップ判定。原文1文字でも変わると再処理
+- **stripMarkdown一貫性**: tm-commit（SentenceAligner内）とtrans検索時で同一処理を使用。Markdown記法の差異でTM参照を取りこぼさないよう設計
+- **文分割非対称性**: tm-commit=LLM分割（高精度・一回のみ）、trans検索=正規表現分割（毎回実行・即時性重視）。分割差異よりも「誤参照の提示」を避けることを優先
+- **LLM品質フィルター**: `tm.splitSentences`プロンプトでランダム文字列・プレースホルダー・URL等を自動除外。`isWorthyForTm()`で短文・数値のみ等をさらに除外（二段階フィルタリング）
 
-tm-commitで蓄積されたTMは、trans実行時に参照される。
+### 主要コンポーネント
 
-### TM検索フロー（trans内）
-
-1. TmxStoreをロード（キャッシュ再利用、mtime判定）
-2. **ソースユニット全体をstripMarkdownで正規化**（表などの複数行構造を正しく処理）
-3. 正規化済みテキストをSentenceSplitter（正規表現）で文分割
-4. 各文でsentenceHashを計算
-5. TmxStore.lookupBatch()で一括検索
-6. ヒットした参照を`tm.maxReferences`件まで選定
-7. フォーマットしてTranslationContext.tmReferencesに設定
-
-**正規化の一貫性**: tm-commit登録時（SentenceAligner内）とtrans検索時で同一の正規化処理（stripMarkdown）を使用することで、Markdown記法の差異を吸収し、検索精度を向上させる。
-
-**stripMarkdownの適用タイミング**:
-- **tm-commit**: SentenceAlignerがLLMに渡す前に全体をstripMarkdown → 文分割 → TM登録
-- **trans検索**: ソースユニット全体をstripMarkdown → 文分割 → ハッシュ計算 → TM検索
-
-**stripMarkdownの構造保持（2026-02-08追加）**:
-- Markdown構造で分離されている要素（見出し、リスト、引用ブロック等）は、プレーンテキスト化後も改行で区切られます
-- 見出し終了時: 改行2つ（`\n\n`）を追加
-- リスト項目終了時: 改行1つ（`\n`）を追加
-- 引用ブロック・区切り線終了時: 改行2つ（`\n\n`）を追加
-- 最終正規化: 改行前後の空白除去、3連続以上の改行は2つに制限
-- **意図**: 見出しと本文が1文として連結されることを防ぎ、LLMが文脈を正しく理解できるようにする
-
-**例**:
-```markdown
-## 結論
-
-AI技術の進化...
-```
-↓ stripMarkdown後
-```
-結論
-
-AI技術の進化...
-```
-
-### プロンプト統合
-
-`trans.translate` および `trans.revisePatch` に条件ブロックとして統合:
-
-```
-{{#tmReferences}}
-## Translation Memory Reference
-
-The following are past translations of similar sentences.
-Use them as reference for consistency, but prioritize accuracy and context.
-
-{{tmReferences}}
-{{/tmReferences}}
-```
-
-**設計意図**: 過去の対訳が100%正しいとは限らないニュアンスを保つ。LLMには参考情報として提示し、文脈やニュアンスを優先させる。
-
----
-
-## 文分割戦略
-
-| 場面 | 方法 | 理由 |
-|---|---|---|
-| tm-commit（書き込み） | LLM (`tm.splitSentences`) | 高精度なアライメントが必要。一度だけ実行 |
-| trans（検索） | 正規表現 (`SentenceSplitter`) | 毎回実行。即時性重視 |
-
-**非対称性のトレードオフ**: 分割結果の差異でTM参照を取りこぼす可能性があるが、「誤った参照の提示」よりも安全。
-
-### 正規表現分割ルール（SentenceSplitter）
-
-1. コードブロック・インラインコードをプレースホルダーに置換
-2. 言語別分割:
-   - 日本語: `[。！？]` + 後続空白/末尾
-   - 英語: `[.!?]\s+(?=[A-Z])`
-3. 数値保護: 小数点（3.14）での分割を防止
-4. リスト項目: 各項目を独立文として扱い
-5. 空文字列除去、トリム
-
----
-
-## TMXファイル構造
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<tmx version="1.4">
-  <header
-    creationtool="mdait"
-    creationtoolversion="0.0.1"
-    datatype="Markdown"
-    segtype="sentence"
-    o-tmf="mdait"
-    srclang="*all*"
-  />
-  <body>
-    <tu>
-      <prop type="x-mdait-hash">a1b2c3d4</prop>
-      <prop type="x-mdait-created-at">2026-02-08T12:00:00Z</prop>
-      <prop type="x-mdait-used-in">docs/guide.md#abc12345</prop>
-      <tuv xml:lang="en"><seg>Download the installer</seg></tuv>
-      <tuv xml:lang="ja"><seg>インストーラーをダウンロード</seg></tuv>
-    </tu>
-  </body>
-</tmx>
-```
-
-- **TMX 1.4準拠**: 外部CATツールとの互換性
-- **`x-mdait-*` プロパティ**: mdait固有のメタデータ。TMX標準の拡張プロパティとして格納
-- **多言語TUV**: 1つのTUに複数言語を格納可能
-
----
-
-## 設定
-
-`mdait.json` の `tm` セクション:
-
-```json
-{
-  "tm": {
-    "enabled": true,
-    "maxReferences": 5
-  }
-}
-```
-
-| フィールド | 型 | デフォルト | 説明 |
-|---|---|---|---|
-| `enabled` | boolean | `true` | TM機能全体の有効/無効 |
-| `maxReferences` | number | `5` | transプロンプトに含める最大TM参照数 |
-
----
-
-## 考慮事項
-
-- **冪等性**: tm-commitを複数回実行しても結果は同一。既存エントリーはunitPath更新のみ
-- **プライバシー**: LLM通信（文分割）はtm-commit実行時のみ。trans時のTM検索はローカル完結
-- **エラーハンドリング**: ユニット単位のLLMエラーは記録して続行。他ユニットの処理に影響しない
-
----
-
-## 参照done/260208_翻訳メモリ機能.md](/tasks/done/260208_翻訳メモリ機能.md), [/tasks/260208_TM正規化とフィルタリング.md](/tasks/260208_TM正規化とフィルタリング
-
-- 実装コード: `src/core/tm/`, `src/commands/tm-commit/`
-- プロンプト設計: [prompt.md](prompt.md)
-- 設定: [config.md](config.md)
-- UI連携: [ui.md](ui.md)
-- タスクチケット: [/tasks/260208_翻訳メモリ機能.md](/tasks/260208_翻訳メモリ機能.md)
+| ファイル | 責務 |
+|---|---|
+| [`tm-commit-command.ts`](../src/commands/tm-commit/tm-commit-command.ts) | `TmCommitCommand` - エントリーポイント、進捗表示・キャンセル制御 |
+| [`tm-commit-processor.ts`](../src/commands/tm-commit/tm-commit-processor.ts) | `TmCommitProcessor.processUnit()` - ユニット処理コアロジック |
+| [`sentence-aligner.ts`](../src/commands/tm-commit/sentence-aligner.ts) | `SentenceAligner.alignSentences()` - LLMベース文アライメント |
+| [`tmx-store.ts`](../src/core/tm/tmx-store.ts) | `TmxStore` - TMXファイルI/O、インメモリインデックス、CRUD |
+| [`sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts) | `SentenceSplitter` - 正規表現ベース文分割（trans検索用） |

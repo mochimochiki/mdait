@@ -1,72 +1,124 @@
-# syncコマンド設計
+# syncコマンド
 
-> **上位設計**: [architecture.md](architecture.md) P2「ハッシュによる変更追跡」、P3「差分駆動のワークフロー」、[commands.md](commands.md)、[design.md](design.md)「sync - ユニット同期」参照
+原文と訳文を同期し、翻訳が必要な箇所を自動検出するコマンドです。
 
-## 役割
+> **ワークフロー位置:** [setup](command_setup.md) → **sync** → [trans](command_trans.md) → [tm-commit](command_tm-commit.md)
 
-ソースとターゲットのMarkdownファイル間でmdaitUnitの対応関係を確立し、差分検出とステータス更新を行います。変更されたソースユニットに対応するターゲットユニットに`need:translate`フラグを自動付与し、翻訳ワークフローを開始します。
+## 機能
 
-**設計意図**: ハッシュベースの追跡により、gitのコミット履歴に依存せず、どんなVCS（またはVCS未使用環境）でも動作します（[architecture.md](architecture.md) 哲学2参照）。
+### 何をするか
+
+syncは原文と訳文を比較して、翻訳が必要な箇所を見つけます。
+
+原文（source）と訳文（target）のMarkdownを見出し（`##`等）単位のブロック（**ユニット**）に分割し、対応付けます。原文が変更されたユニットには**needフラグ**が自動付与され、翻訳ワークフローの起点となります。状態管理はMarkdown内のHTMLコメント（**mdaitマーカー**）で行います。
+
+### before/after
+
+原文の"Introduction"が変更され `hash:a1b2c3d4` → `hash:ff03a1b2` に更新された場合（`hash`=原文ハッシュ、`from`=訳文が対応する原文hash）:
+
+```markdown
+<!-- sync前のターゲット -->
+<!-- mdait from:a1b2c3d4 hash:11111111 -->
+## はじめに
+これは古い導入文です。
+```
+
+```markdown
+<!-- sync後のターゲット（fromが更新され、needフラグ付与） -->
+<!-- mdait from:ff03a1b2 hash:11111111 need:revise@a1b2c3d4 -->
+## はじめに
+これは古い導入文です。
+```
+
+### 前提・操作
+
+**前提:** `mdait.json`設定済み（[command_setup.md](command_setup.md)参照）。FrontMatter翻訳を行う場合は`trans.frontmatter.keys`設定が必要（[config.md](config.md)参照）。
+
+| 操作 | 対象 | トリガー |
+|---|---|---|
+| コマンドパレット `mdait.sync` | 全ファイル一括 | ユーザー操作 |
+| StatusTreeからのsync | 単一ファイル | ユーザー操作 |
+| ファイル保存時の自動sync | 単一ファイル | `sync.autoSyncOnSave`有効（デフォルト）かつマーカーが存在する場合 |
+
+### 結果
+
+| 状況 | needフラグ | 意味 |
+|---|---|---|
+| 新規ターゲット作成 | `translate` | 未翻訳。全ユニットに付与 |
+| ソース変更 | `revise@{oldhash}` | 原文が変わったので改訂が必要 |
+| revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
+| ターゲットのみ変更 | なし | hash更新のみ |
+| 両方変更 | `revise` | 原文優先で改訂扱い（[architecture.md](architecture.md) 哲学3参照） |
+
+FrontMatterも同一ルールで管理されます（`mdait.front`マーカー、ソース側にも付与）。
+
+**孤立ターゲット**（対応する原文がないユニット）: `sync.autoDelete`が`true`（デフォルト）なら自動削除、`false`なら`need:verify-deletion`を付与して保持。
+
+### エラー処理
+
+- **個別ファイルエラー**: 他ファイルの処理に影響せず続行。エラーはStatusManagerに記録
+- **設定エラー**: バリデーション失敗時は即時通知して処理中断
+- **自動sync失敗時**: ログ記録のみ（UIを阻害しない）
 
 ---
 
-## 機能詳細
+## 設計
 
-### コア機能
+### 概要
 
-- Markdown間のユニット対応付けを確立し、`hash`・`from`・`need`を再計算
-- 差分検出後は`need:translate`付与や未使用ターゲットユニットの削除/保留を制御
-- [core.md](core.md)のSectionMatcherとStatus管理を活用し、冪等な再実行を保証
-- 同期完了後はソース/ターゲット両ファイルのステータスを`StatusManager.refreshFileStatus`で再計算し、ツリー表示を即時追従させる
+2つの中核プロセスで構成されます:
 
-### 主要コンポーネント
-
-- [src/commands/sync/sync-command.ts](../src/commands/sync/sync-command.ts): `syncCommand()`, `syncMarkdownFile()` - ファイル対応付けと差分適用
-  - [syncNew_CoreProc()](../src/commands/sync/sync-command.ts#L120): 新規ターゲットファイル作成時の同期処理中核ロジック
-  - [sync_CoreProc()](../src/commands/sync/sync-command.ts#L188): 既存ターゲットファイル同期処理中核ロジック
-- [src/commands/sync/section-matcher.ts](../src/commands/sync/section-matcher.ts): `SectionMatcher.matchSections()` - ユニット間の対応関係を検出
-- [src/commands/sync/diff-detector.ts](../src/commands/sync/diff-detector.ts): `DiffDetector.detect()` - 差分検出
-
-### シーケンス図
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as SyncCommand
-	participant Core as SectionMatcher
-	participant Status as StatusManager
-
-	UX->>Cmd: 対象ファイル選択
-	Cmd->>Core: ユニット対応付け要求
-	Core-->>Cmd: 差分結果
-	Cmd->>Cmd: need/hash 更新・新規ユニット生成
-	Cmd->>Status: ステータス再計算
-	Status-->>UX: ツリー更新
-```
+- **syncNew_CoreProc**: 新規ターゲット生成。ソースをパースし全ユニットに`need:translate`を付与。ソース側にもマーカーを書き込む
+- **sync_CoreProc**: 既存ターゲット同期。マッチング→マーカー更新→差分検出を順次実行
 
 ### 処理フロー
 
-1. **ファイル探索**: 設定に基づいてソースファイルを列挙
-2. **ターゲットパス生成**: 各ソースファイルに対応するターゲットパスを計算
-3. **ユニット対応付け**: `SectionMatcher`を使用してソースとターゲットのユニットをマッチング
-4. **差分検出**: 追加・更新・削除されたユニットを特定
-5. **ハッシュ更新**: ユニット内容の変更を検出し、ハッシュを再計算
-6. **needフラグ付与**: 翻訳が必要なユニットに`need:translate`を設定
-7. **FrontMatter同期**: 設定されたキーのハッシュを計算し、`mdait.front`マーカーを更新
-8. **ファイル保存**: 更新されたマーカー情報を含むMarkdownファイルを保存
-9. **ステータス更新**: `StatusManager`にファイルステータスの再計算を依頼
+```mermaid
+sequenceDiagram
+    participant User as UI/Command
+    participant Sync as SyncCommand
+    participant Core as Matcher/Marker/Diff
+    participant Store as UnitRegistry/StatusManager
 
-### 考慮事項
+    User->>Sync: sync実行
 
-- **冪等性**: 同じファイルに対して複数回実行しても結果が一貫
-- **並列処理**: 複数ファイルを並列処理してパフォーマンスを最適化
-- **エラーハンドリング**: 個別ファイルのエラーは他のファイル処理を妨げない
-- **双方向変更**: ソースとターゲットの両方が変更された場合も`need:revise`フラグを設定し通常の改訂フローとして処理
-- **初回作成**: ターゲットファイルが存在しない場合は自動作成
-- **ユニットレジストリ管理**: 全ユニットのコンテンツを`.mdait/unit-registry`に保存し、原文変更時のdiff生成に活用
-- **revise形式**: 原文変更時は`need:revise@{oldhash}`形式でoldhashを埋め込み、trans時にdiff生成
-- **revise再変更時の挙動**: 改訂完了前に原文が再変更された場合、`need:revise@{oldhash}`のレジストリハッシュは最初の値を保持し続ける。これにより改訂時に参照すべき前回訳文のレジストリが維持される
-- **GC処理**: sync完了後、使用中のhash以外のレジストリを削除（ファイルサイズ5MB超過時）
-- **FrontMatter翻訳**: `trans.frontmatter.keys`で指定されたキーのハッシュを計算し、`mdait.front`マーカーで翻訳状態を管理
-- **FrontMatter-onlyファイル**: 本文ユニットがなくfrontmatterのみのファイルも、keys設定があれば処理対象
-- **level設定の同期**: 既存ターゲット同期時、原文と訳文のfrontmatterで`mdait.sync.level`が異なる場合、原文の設定を優先して訳文を自動修正。これによりユニット境界の粒度を揃え、マーカー対応付けの破綻を防止
+    rect rgb(230, 240, 255)
+        Note over Sync: 初期化: 設定バリデーション・ファイル一覧取得
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Sync,Store: ファイル単位処理（CPUコア数ベースの並列ワーカー: 1-8）
+        Sync->>Sync: パース・level同期
+        alt 新規ターゲット (syncNew_CoreProc)
+            Sync->>Sync: 全ユニットにtranslate付与・双方にマーカー書込
+        else 既存ターゲット (sync_CoreProc)
+            Note over Core: 3フェーズマッチング→マーカー更新
+            Sync->>Core: match → マーカー更新 → 差分検出
+        end
+        Sync->>Store: スナップショット保存・ステータス再計算
+    end
+
+    rect rgb(255, 245, 230)
+        Note over Sync,Store: 後処理: バッファフラッシュ・GC（5MB超過時）
+    end
+
+    Store-->>User: ツリー更新・完了通知
+```
+
+### 設計ノート
+
+- **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[architecture.md](architecture.md) P4参照）
+- **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
+- **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出
+- **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../src/commands/sync/level-validator.ts)）
+- **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除
+
+### 主要コンポーネント
+
+| ファイル | 責務 |
+|---|---|
+| [`sync-command.ts`](../src/commands/sync/sync-command.ts) | `syncCommand()`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()` |
+| [`section-matcher.ts`](../src/commands/sync/section-matcher.ts) | `match()` - 3フェーズユニット対応付け、`createSyncedTargets()` - 孤立処理 |
+| [`diff-detector.ts`](../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
+| [`marker-sync.ts`](../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |
+| [`level-validator.ts`](../src/commands/sync/level-validator.ts) | `validateAndSyncLevel()` - level設定の検証と同期 |

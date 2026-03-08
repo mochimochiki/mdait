@@ -1,148 +1,115 @@
-# transコマンド設計
+# transコマンド
 
-> **上位設計**: [architecture.md](architecture.md) P3「翻訳ドメインにおけるconflictの否定」、P4「LLMをdiff-aware reviseの主戦力とする」、[commands.md](commands.md)、[design.md](design.md)「trans - 翻訳実行」参照
+`need:translate`/`need:revise`フラグのユニットをAIで翻訳し、ハッシュ更新とフラグ除去を行うコマンドです。
 
-## 役割
+> **ワークフロー位置:** [sync](command_sync.md) → **trans** → [tm-commit](command_tm-commit.md)
 
-`need:translate`フラグが付与されたユニットを特定し、設定されたAIプロバイダーを使用してバッチ翻訳を実行します。翻訳完了後はハッシュ更新とneedフラグ除去を自動実行し、翻訳品質チェックも行います。
+## 機能
 
-**設計意図**: diff-aware reviseにより、変更箇所以外は既存訳文を維持します。これは「原文と訳文の両方が変更される」ことを通常のワークフローとして扱う設計です（[architecture.md](architecture.md) 哲学3、P4参照）。
+### 何をするか
+
+AIプロバイダーを使用してユニットを翻訳します。改訂時（`need:revise`）は前回訳文との差分パッチのみをLLMに生成させる**diff-aware revise**により、変更箇所以外の既存訳文を保持します。翻訳後は構造整合性チェックを行い、問題がある場合は`need:review`を付与します。
+
+### before/after
+
+`need:translate`（`need`=翻訳要求フラグ、`from`=訳文が対応する原文hash）のユニットを翻訳:
+
+```markdown
+<!-- 翻訳前 -->
+<!-- mdait from:a1b2c3d4 hash:11111111 need:translate -->
+## Introduction
+（未翻訳のまま）
+```
+
+```markdown
+<!-- 翻訳後（needフラグ除去・hashは訳文内容のハッシュに更新） -->
+<!-- mdait from:a1b2c3d4 hash:22222222 -->
+## はじめに
+これは導入文です。
+```
+
+### 前提・操作
+
+**前提:** `mdait.json`設定済み・AIプロバイダー設定済み（[config.md](config.md)参照）。翻訳対象ファイルに`need:translate`または`need:revise`ユニットが存在する。
+
+| 操作 | 対象 | トリガー |
+|---|---|---|
+| コマンドパレット `mdait.trans` | ディレクトリ内全ファイル | ユーザー操作 |
+| StatusTreeからのtrans | 単一ファイル / ディレクトリ | ユーザー操作 |
+| CodeLensのTranslate Unit | 単一ユニット | ユーザー操作 |
+
+### 結果
+
+| 状況 | 結果 | 意味 |
+|---|---|---|
+| 翻訳成功 | `need`除去・`hash`更新 | 翻訳完了 |
+| 構造不一致を検出 | `need:review`設定 | 手動レビュー推奨（CodeLensでクリア可能） |
+| FrontMatter対象キー存在 | FrontMatter個別翻訳 | 本文翻訳と独立して実行。TranslationCheckerは不適用 |
+| AI応答にJSON混入 | 最大2回リトライ → 除去して継続 | 5層防御機構で対処 |
+
+FrontMatterも同一のneedフラグで管理されます（`mdait.front`マーカー使用）。
+
+### エラー処理
+
+- **ユニット翻訳エラー**: `Status.Error`として記録し、後続ユニットの処理を継続
+- **リトライ失敗**: JSON部分を除去した訳文で警告付き継続
+- **キャンセル**: ユニット単位でチェック。中断済みユニットは未翻訳状態を維持
 
 ---
 
-## 機能詳細
+## 設計
 
-### コア機能
+### 概要
 
-- `need:translate`ユニットを絞り込み、設定されたプロバイダーで一括翻訳
-- 翻訳完了後はユニット本文と`hash`を更新し、`need`フラグを除去
-- キャンセルやリトライに備え、進捗をUIへ逐次通知
-
-### 高度な機能
-
-#### 用語集連携
-- `terms.csv`が存在する場合、翻訳対象ユニットに出現する用語を抽出してAIプロンプトに含め、用語統一を図る
-- キャッシュはmtime比較で管理し、効率的な用語読み込みを実現
-- 翻訳後の用語提案（termSuggestions）のcontext言語はprimaryLangを優先（primaryLangがsourceLang/targetLangに含まれる場合はその値、含まれなければsourceLang）
-
-#### 前回訳文参照
-- 原文改訂時（`from`フィールドで旧ソースハッシュを追跡可能）、前回の訳文を翻訳プロンプトに含めて参照させる
-- 変更不要な箇所は既訳を尊重し、変更が必要な箇所のみを変更
-
-#### 原文変更diff参照（改訂パッチ翻訳）
-- `need:revise@{oldhash}`形式の場合、スナップショットからoldhashのコンテンツを取得
-- 旧コンテンツと現在のソースコンテンツからunified diff形式で差分を生成
-- **改訂翻訳時は全文再生成ではなく、前回訳文に対するパッチのみをLLMに返させる**
-  - LLM出力は「前回訳文へのunified diff（または差分パッチ）」とし、変更箇所だけを置換
-  - 差分適用に失敗した場合はフォールバックとして従来の全文翻訳に切り替える
-- 参照: [core.md](core.md)のUnitRegistry管理、Diff生成
-
-#### FrontMatter翻訳
-- `trans.frontmatter.keys`で指定されたキー値を翻訳対象として処理
-- `mdait.front`マーカーで翻訳状態（hash/from/need）を管理
-- 本文ユニットと分離した専用フローで実行（TranslationCheckerは適用しない）
-- キーごとにTranslator.translateで翻訳し、FrontMatter.setで更新
-- 前回訳文参照とrevise形式にも対応
-
-#### 翻訳品質チェック
-- markdown-itでパースした構造（見出し、リスト、コードブロック、引用、テーブル、リンク、画像）を原文と訳文で比較
-- 構造の不一致を検出し、確認推奨箇所を特定
-- 問題がある場合は`need:review`ステータスを設定し、Hoverツールチップに詳細な理由を表示
-- 各要素の数の差異を具体的に報告（例: 「見出しレベル2の数が不一致: 原文3個 vs 訳文2個」）
-- **`need:review`後のワークフロー**:
-  1. 訳文を手動レビュー・修正
-  2. CodeLensの「Mark as Reviewed」で`need`フラグクリア
-  3. tm-commitコマンドでTM登録可能に（詳細: [command_tm-commit.md](command_tm-commit.md)）
-- **注意**: frontmatter翻訳には品質チェックを適用しない
-
-#### AIレスポンス検証
-- AI応答に不要なJSON構造が混入していないかを5層防御機構で検証
-- **第1層（プロンプト強化）**: システムプロンプトでJSON混入のアンチパターンを明示
-- **第2層（ResponseValidator）**: AIレスポンスを解析してJSON構造を検出
-  - コードブロック内のJSONは除外（技術文書でよくあるコードサンプルは誤検出しない）
-  - JSON検出時は詳細なエラーコード（`ValidationErrorCode`）を返す
-- **第3層（リトライ機構）**: バリデーションエラー時は最大2回まで自動リトライ
-- **第4層（フォールバック）**: リトライ失敗時はJSONを除去した内容で処理を継続
-  - 翻訳結果に警告（`warnings`フィールド）を付加してユーザーに通知
-- **第5層（OutputSanitizer）**: 最終出力時にもJSON混入を検出して警告
-- 関連コンポーネント:
-  - [src/commands/trans/response-validator.ts](../src/commands/trans/response-validator.ts): `ResponseValidator` - AIレスポンスのバリデーション
-  - [src/commands/trans/output-sanitizer.ts](../src/commands/trans/output-sanitizer.ts): `OutputSanitizer` - 出力テキストのJSON検出
-
-#### 並列実行制御
-- **ディレクトリ翻訳**: ファイルを順次処理(キャンセル即応性とレート制限対策を重視)
-- **ファイル翻訳**: ユニットを順次処理(AI APIレート制限対策)
-- 現状は順次実行を採用し、キャンセル操作への即応性とAI APIのレート制限回避を優先
-- 将来的な拡張: 設定可能な並列数制限(セマフォ方式)の導入を検討(例: `mdait.trans.concurrency`で同時翻訳数を指定)
-
-#### キャンセル管理
-- VSCode標準の`withProgress`パターンで実装
-- 通知バーの×ボタンから即座にキャンセル可能
-- 進捗表示はファイル翻訳="X/Y units"、ディレクトリ翻訳="X/Y files"形式
-
-### 主要コンポーネント
-
-- [src/commands/trans/trans-command.ts](../src/commands/trans/trans-command.ts): `transCommand()`, `transUnitCommand()` - 翻訳対象の選択と翻訳実行
-  - [transFile_CoreProc()](../src/commands/trans/trans-command.ts#L88): ファイル単位の翻訳処理中核ロジック
-  - [transUnit_CoreProc()](../src/commands/trans/trans-command.ts#L457): ユニット単位の翻訳処理中核ロジック
-  - [translateFrontmatterCommand()](../src/commands/trans/trans-command.ts): frontmatter専用翻訳コマンド（StatusTreeまたはCodeLensから呼び出し）
-  - [translateFrontmatter_CoreProc()](../src/commands/trans/trans-command.ts): frontmatter翻訳処理中核ロジック（本文翻訳と独立して実行）
-- [src/commands/trans/term-extractor.ts](../src/commands/trans/term-extractor.ts): `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出
-- [src/commands/trans/translation-checker.ts](../src/commands/trans/translation-checker.ts): `TranslationChecker.checkTranslationQuality()` - 翻訳品質チェック
-- [src/commands/trans/translator.ts](../src/commands/trans/translator.ts): `Translator` - 翻訳サービスインターフェース
-- [src/commands/trans/translator-builder.ts](../src/commands/trans/translator-builder.ts): `TranslatorBuilder` - 翻訳サービスの構築
-
-### シーケンス図
-
-```mermaid
-sequenceDiagram
-	participant UX as UI/Command
-	participant Cmd as TransCommand
-	participant Status as StatusManager
-	participant Builder as AIServiceBuilder
-	participant AI as AIService
-
-	UX->>Cmd: 翻訳対象を実行
-	Cmd->>Status: need:translateユニット収集
-	Cmd->>Builder: プロバイダー構築
-	Builder-->>Cmd: AIService
-	loop 各ユニット
-		Cmd->>AI: ユニット本文と設定送信
-		AI-->>Cmd: 翻訳結果
-		Cmd->>Status: ユニット内容とneed更新
-	end
-	Status-->>UX: 進捗/完了通知
-```
+`transFile_CoreProc()`が各ユニットを順次処理します。`need:revise@{oldhash}`形式ではUnitRegistryのスナップショットから旧版を取得してUnified Diff生成し、差分パッチのみをLLMに生成させます（差分適用失敗時は全文翻訳にフォールバック）。
 
 ### 処理フロー
 
-1. **初期化**: AI初回利用チェック、進捗表示の開始
-2. **翻訳ペア取得**: ターゲットファイルから対応するソース言語・ターゲット言語を特定
-3. **翻訳サービス構築**: 設定に基づいてAIプロバイダーを初期化
-4. **ユニット読み込み**: Markdownファイルをパースし、`need:translate`ユニットを抽出
-5. **FrontMatter翻訳**: `mdait.front`が`need:translate`の場合、設定されたキーをキーごとに翻訳
-5. **各ユニット処理**:
-   - 用語集から関連用語を抽出
-   - 前回訳文を取得（改訂時）
-   - 翻訳コンテキスト構築（周辺ユニット）
-	 - ソースコンテンツ取得（from属性がある場合）
-	 - **改訂時はパッチ翻訳を優先**（差分がある場合）
-		 - 前回訳文に対する差分パッチをAIから取得
-		 - パッチ適用に成功した場合のみ更新（失敗時は全文翻訳にフォールバック）
-	 - AI翻訳実行（全文翻訳 or フォールバック時）
-		 - AIレスポンスのバリデーション（JSON混入チェック）
-		 - バリデーションエラー時は最大2回まで自動リトライ
-		 - リトライ失敗時はJSON除去して警告付きで継続
-   - 翻訳品質チェック
-   - ハッシュ更新とneedフラグ除去
-   - 翻訳サマリ保存
-6. **ファイル保存**: 更新されたユニットをファイルに反映
-7. **ステータス更新**: `StatusManager`にファイルステータスの再計算を依頼
+```mermaid
+sequenceDiagram
+    participant User as UI/Command
+    participant Cmd as TransCommand
+    participant Core as Translator/Checker
+    participant Store as UnitRegistry/TmxStore
 
-### 考慮事項
+    User->>Cmd: trans 実行
 
-- **キャンセル対応**: ユニット単位でキャンセルチェックを実行
-- **エラーハンドリング**: ユニット翻訳エラーは`Status.Error`として記録し、処理を継続
-- **進捗通知**: ユーザーに現在の進捗状況を明確に表示
-- **レート制限**: AI APIのレート制限を考慮して順次処理を採用
-- **翻訳品質**: 自動チェックにより確認推奨箇所を特定
+    rect rgb(230, 240, 255)
+        Note over Cmd: 初期化: AIプロバイダー構築・ファイルパース・need収集
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Cmd,Store: ユニット処理ループ（順次）
+        loop 各 need:translate / revise ユニット
+            Cmd->>Store: スナップショット取得（revise時）・TM参照取得
+            Cmd->>Core: 用語抽出・翻訳実行（diffパッチ or 全文）
+            Core->>Core: 翻訳品質チェック（TranslationChecker）
+            Core-->>Cmd: 翻訳結果 + 品質チェック結果
+            Cmd->>Cmd: hash更新・needフラグ除去（review付与時は維持）
+        end
+    end
+
+    rect rgb(255, 245, 230)
+        Note over Cmd: 後処理: ファイル保存・StatusManager再計算
+    end
+
+    Store-->>User: ツリー更新・完了通知
+```
+
+### 設計ノート
+
+- **diff-aware revise**: `need:revise@{oldhash}`時はUnified Diff → LLMにパッチのみ生成させる → 適用。失敗時は全文翻訳にフォールバック（[architecture.md](architecture.md) P4参照）
+- **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
+- **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
+- **TM参照**: tm-commit済みエントリをTmxStoreから検索し、`tm.maxReferences`件をプロンプトに注入（[command_tm-commit.md](command_tm-commit.md) 参照）
+- **順次処理**: AI APIレート制限対策とキャンセル即応性のため、ファイル内ユニットは順次処理
+
+### 主要コンポーネント
+
+| ファイル | 責務 |
+|---|---|
+| [`trans-command.ts`](../src/commands/trans/trans-command.ts) | `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()` |
+| [`translator.ts`](../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース |
+| [`translation-checker.ts`](../src/commands/trans/translation-checker.ts) | `TranslationChecker.checkTranslationQuality()` - 構造整合性チェック |
+| [`term-extractor.ts`](../src/commands/trans/term-extractor.ts) | `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出 |
+| [`response-validator.ts`](../src/commands/trans/response-validator.ts) | `ResponseValidator` - AIレスポンスのJSON混入検出 |
