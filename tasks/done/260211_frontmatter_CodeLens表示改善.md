@@ -44,7 +44,7 @@ sequenceDiagram
 ## 4. 設計
 
 ### 4.1 変更対象ファイル
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts)
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts)
   - `createFrontmatterCodeLenses()`: フロントマター専用の CodeLens 生成ロジックを実装
 
 ### 4.2 実装内容

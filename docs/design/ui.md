@@ -6,7 +6,7 @@
 
 UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、ユーザーに直感的な操作体験を提供します。
 
-**設計意図**: 独自のWebビューは使わず、VS Codeネイティブな体験を提供します（[architecture.md](architecture.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。
+**設計意図**: 独自のWebビューは使わず、VS Codeネイティブな体験を提供します（[architecture.md](../architecture.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。
 
 ---
 
@@ -148,7 +148,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 
 sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理します。
 
-**設計意図**: 長時間処理でもユーザーが状況を把握でき、必要に応じて即座にキャンセルできます（[architecture.md](architecture.md) 哲学4参照）。
+**設計意図**: 長時間処理でもユーザーが状況を把握でき、必要に応じて即座にキャンセルできます（[architecture.md](../architecture.md) 哲学4参照）。
 
 ---
 

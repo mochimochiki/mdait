@@ -48,7 +48,7 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | ソース変更 | `revise@{oldhash}` | 原文が変わったので改訂が必要 |
 | revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
 | ターゲットのみ変更 | なし | hash更新のみ |
-| 両方変更 | `revise` | 原文優先で改訂扱い（[architecture.md](architecture.md) 哲学3参照） |
+| 両方変更 | `revise` | 原文優先で改訂扱い（[architecture.md](../architecture.md) 哲学3参照） |
 
 FrontMatterも同一ルールで管理されます（`mdait.front`マーカー、ソース側にも付与）。
 
@@ -107,18 +107,18 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[architecture.md](architecture.md) P4参照）
+- **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[architecture.md](../architecture.md) P4参照）
 - **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
 - **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出
-- **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../src/commands/sync/level-validator.ts)）
+- **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除
 
 ### 主要コンポーネント
 
 | ファイル | 責務 |
 |---|---|
-| [`sync-command.ts`](../src/commands/sync/sync-command.ts) | `syncCommand()`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()` |
-| [`section-matcher.ts`](../src/commands/sync/section-matcher.ts) | `match()` - 3フェーズユニット対応付け、`createSyncedTargets()` - 孤立処理 |
-| [`diff-detector.ts`](../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
-| [`marker-sync.ts`](../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |
-| [`level-validator.ts`](../src/commands/sync/level-validator.ts) | `validateAndSyncLevel()` - level設定の検証と同期 |
+| [`sync-command.ts`](../../src/commands/sync/sync-command.ts) | `syncCommand()`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()` |
+| [`section-matcher.ts`](../../src/commands/sync/section-matcher.ts) | `match()` - 3フェーズユニット対応付け、`createSyncedTargets()` - 孤立処理 |
+| [`diff-detector.ts`](../../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
+| [`marker-sync.ts`](../../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |
+| [`level-validator.ts`](../../src/commands/sync/level-validator.ts) | `validateAndSyncLevel()` - level設定の検証と同期 |

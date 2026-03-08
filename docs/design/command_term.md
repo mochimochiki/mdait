@@ -122,9 +122,9 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`command-detect.ts`](../src/commands/term/command-detect.ts) | `detectTermCommand()`, `detectTerm_CoreProc()` - 用語検出エントリーポイント |
-| [`command-expand.ts`](../src/commands/term/command-expand.ts) | `expandTermCommand()`, `expandTerm_CoreProc()` - 用語展開エントリーポイント |
-| [`term-detector.ts`](../src/commands/term/term-detector.ts) | `TermDetector.detectTerms()` - AI用語抽出 |
-| [`term-expander.ts`](../src/commands/term/term-expander.ts) | `TermExpander.expand()` - AI訳語推定 |
-| [`unit-pair-collector.ts`](../src/commands/term/unit-pair-collector.ts) | `UnitPairCollector` - ソース/ターゲットのペア収集 |
-| [`command-open.ts`](../src/commands/term/command-open.ts) | `openTermCommand()` - 用語集ファイルをエディタで開く |
+| [`command-detect.ts`](../../src/commands/term/command-detect.ts) | `detectTermCommand()`, `detectTerm_CoreProc()` - 用語検出エントリーポイント |
+| [`command-expand.ts`](../../src/commands/term/command-expand.ts) | `expandTermCommand()`, `expandTerm_CoreProc()` - 用語展開エントリーポイント |
+| [`term-detector.ts`](../../src/commands/term/term-detector.ts) | `TermDetector.detectTerms()` - AI用語抽出 |
+| [`term-expander.ts`](../../src/commands/term/term-expander.ts) | `TermExpander.expand()` - AI訳語推定 |
+| [`unit-pair-collector.ts`](../../src/commands/term/unit-pair-collector.ts) | `UnitPairCollector` - ソース/ターゲットのペア収集 |
+| [`command-open.ts`](../../src/commands/term/command-open.ts) | `openTermCommand()` - 用語集ファイルをエディタで開く |

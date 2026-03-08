@@ -12,7 +12,7 @@ mdaitが各コマンドでAIに送信するプロンプトの設計と、カス�
 
 ### 基本方針
 
-すべてのシステムプロンプトは外部ファイルで上書き可能です。これにより、プロジェクト固有の翻訳スタイルやドメイン知識を反映できます（[architecture.md](architecture.md) 「拡張可能にするもの」参照）。
+すべてのシステムプロンプトは外部ファイルで上書き可能です。これにより、プロジェクト固有の翻訳スタイルやドメイン知識を反映できます。
 
 ### 設定方法
 
@@ -77,12 +77,10 @@ prompts: ["trans.translate", "term.detect"]
 - プロジェクト固有の用語説明
 - 翻訳スタイルガイド
 
-**設計意図**: プロンプトのコア部分は拡張機能側で管理し、プロジェクト固有の知識はInstructionで追加することで、バージョンアップ時の互換性を保ちます。
-
 ### 実装
 
-- デフォルトプロンプト: [`src/prompts/defaults.ts`](../src/prompts/defaults.ts)
-- プロンプト提供サービス: [`src/prompts/prompt-provider.ts`](../src/prompts/prompt-provider.ts)
+- デフォルトプロンプト: [`src/prompts/defaults.ts`](../../src/prompts/defaults.ts)
+- プロンプト提供サービス: [`src/prompts/prompt-provider.ts`](../../src/prompts/prompt-provider.ts)
 
 ---
 
@@ -103,7 +101,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### trans.translate - 翻訳
 
-**ファイル**: [`src/commands/trans/translator.ts`](../src/commands/trans/translator.ts)
+**ファイル**: [`src/commands/trans/translator.ts`](../../src/commands/trans/translator.ts)
 
 #### 概要
 指定言語ペアでMarkdownセクションを翻訳し、新規用語候補を提案します。
@@ -142,13 +140,13 @@ prompts: ["trans.translate", "term.detect"]
 
 ### trans.revisePatch - 改訂パッチ翻訳
 
-**ファイル**: [`src/commands/trans/translator.ts`](../src/commands/trans/translator.ts)
+**ファイル**: [`src/commands/trans/translator.ts`](../../src/commands/trans/translator.ts)
 
 #### 概要
 原文差分がある改訂翻訳時に、**前回訳文へのパッチのみ**を返却させるプロンプトです。全文再生成を避け、差分外の文は維持します。
 
 #### 設計意図
-これが[architecture.md](architecture.md) P4「LLMをdiff-aware reviseの主戦力とする」の中核です：
+これが[architecture.md](../architecture.md) P4「LLMをdiff-aware reviseの主戦力とする」の中核です：
 - 原文の変更差分（unified diff）と前回訳文をLLMに提示
 - 訳文への差分パッチのみを生成させる
 - 変更箇所以外は既存訳文を維持し、人間の修正を尊重
@@ -186,7 +184,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### term.detect - 用語検出
 
-**ファイル**: [`src/commands/term/term-detector.ts`](../src/commands/term/term-detector.ts)
+**ファイル**: [`src/commands/term/term-detector.ts`](../../src/commands/term/term-detector.ts)
 
 #### 概要
 テキストから技術用語、製品名、UI要素などの重要な用語を抽出します。
@@ -215,7 +213,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### term.extractFromTranslations - 用語抽出
 
-**ファイル**: [`src/commands/term/term-expander.ts`](../src/commands/term/term-expander.ts)
+**ファイル**: [`src/commands/term/term-expander.ts`](../../src/commands/term/term-expander.ts)
 
 #### 概要
 ソース-ターゲット対訳ペアから用語対応を抽出します。
@@ -240,7 +238,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### term.translateTerms - 用語AI翻訳
 
-**ファイル**: [`src/commands/term/term-expander.ts`](../src/commands/term/term-expander.ts)
+**ファイル**: [`src/commands/term/term-expander.ts`](../../src/commands/term/term-expander.ts)
 
 #### 概要
 未解決用語を直接AI翻訳します。
@@ -266,7 +264,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### tm.splitSentences - 対訳文アライメント
 
-**ファイル**: [`src/commands/tm-commit/sentence-aligner.ts`](../src/commands/tm-commit/sentence-aligner.ts)
+**ファイル**: [`src/commands/tm-commit/sentence-aligner.ts`](../../src/commands/tm-commit/sentence-aligner.ts)
 
 #### 概要
 ソーステキストとターゲットテキストを受け取り、1:1にアラインされた対訳文ペアの配列を返します。

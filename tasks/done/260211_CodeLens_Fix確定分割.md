@@ -50,20 +50,20 @@ sequenceDiagram
 ## 4. 設計
 
 ### 4.1 変更ファイル
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts)
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts)
   - TM登録CodeLensを削除
   - Fix CodeLensを2つに分割
   - `getFixLabelAndTooltip`メソッドを削除（不要）
   
-- [src/commands/fix/fix-command.ts](../src/commands/fix/fix-command.ts)
+- [src/commands/fix/fix-command.ts](../../src/commands/fix/fix-command.ts)
   - `fixUnitCommand`: TM登録処理を削除（確定のみ）
   - `fixUnitWithTmCommand`: 新規作成（確定+TM登録）
   - File/Directoryコマンドも同様に分割
   
-- [src/extension.ts](../src/extension.ts)
+- [src/extension.ts](../../src/extension.ts)
   - 新しいコマンドを登録
   
-- [src/config/configuration.ts](../src/config/configuration.ts)
+- [src/config/configuration.ts](../../src/config/configuration.ts)
   - `fix.tm`プロパティを削除
   - `getFixTmEnabled()`メソッドを削除
   

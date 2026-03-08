@@ -57,13 +57,13 @@ sequenceDiagram
 
 ## mdait.jsonフォーマット
 
-[`schemas/mdait-config.schema.json`](../schemas/mdait-config.schema.json)で定義された形式に従います。
+[`schemas/mdait-config.schema.json`](../../schemas/mdait-config.schema.json)で定義された形式に従います。
 
 ### 主要フィールド
 
 ```json
 {
-  "$schema": "./schemas/mdait-config.schema.json",
+  "$schema": "../../schemas/mdait-config.schema.json",
   "transPairs": [
     {
       "sourceDir": "docs/ja",

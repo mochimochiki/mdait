@@ -432,7 +432,7 @@ export function stripMarkdown(text: string): string {
 ### 4.6 影響範囲
 
 **変更ファイル**:
-- [`src/core/tm/tm-text-normalizer.ts`](../src/core/tm/tm-text-normalizer.ts): `extractTextFromTokens`関数と最終正規化ロジック
+- [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts): `extractTextFromTokens`関数と最終正規化ロジック
 
 **影響を受けるコンポーネント**:
 - TM登録（tm-commit）: `SentenceAligner`経由で`stripMarkdown`を使用
@@ -464,7 +464,7 @@ export function stripMarkdown(text: string): string {
 
 ### 5.2 normalizeText との整合性
 
-**normalizeText の正規化ルール**（[`src/core/hash/normalizer.ts`](../src/core/hash/normalizer.ts)）:
+**normalizeText の正規化ルール**（[`src/core/hash/normalizer.ts`](../../src/core/hash/normalizer.ts)）:
 ```typescript
 // 改行コードの正規化 (CR+LF -> LF)
 result = result.replace(/\r\n/g, "\n");
@@ -488,7 +488,7 @@ result = result.replace(/\n+$/g, "");
 ### 5.3 影響範囲
 
 **変更箇所**:
-- [`src/core/tm/tm-text-normalizer.ts`](../src/core/tm/tm-text-normalizer.ts)
+- [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts)
   - `extractTextFromTokens`: 見出し、リスト、引用ブロックの終了時に改行を追加
   - 最終正規化: `/\s+/g`を`/[^\S\n]+/g`に変更し、改行を保持
 
@@ -505,8 +505,8 @@ result = result.replace(/\n+$/g, "");
 - sync、tm-commit以外のコマンド: `stripMarkdown`を使用しない
 
 **既存テストへの影響**:
-- [`src/test/core/tm/tm-text-normalizer.test.ts`](../src/test/core/tm/tm-text-normalizer.test.ts): 見出しを含むテストケースの期待値を更新
-- [`src/test/commands/trans/trans-tm-lookup.test.ts`](../src/test/commands/trans/trans-tm-lookup.test.ts): TM検索統合テストの期待値を更新
+- [`src/test/core/tm/tm-text-normalizer.test.ts`](../../src/test/core/tm/tm-text-normalizer.test.ts): 見出しを含むテストケースの期待値を更新
+- [`src/test/commands/trans/trans-tm-lookup.test.ts`](../../src/test/commands/trans/trans-tm-lookup.test.ts): TM検索統合テストの期待値を更新
 
 ### 5.4 パフォーマンス
 
@@ -679,9 +679,9 @@ AI技術の進化とグローバル化の加速により...
 - TM関連のテスト: すべてパス
 
 **変更したファイル**:
-- [src/core/tm/tm-text-normalizer.ts](../src/core/tm/tm-text-normalizer.ts)
-- [src/test/core/tm/tm-text-normalizer.test.ts](../src/test/core/tm/tm-text-normalizer.test.ts)
-- [src/test/commands/tm-commit/tm-commit-processor.test.ts](../src/test/commands/tm-commit/tm-commit-processor.test.ts)
+- [src/core/tm/tm-text-normalizer.ts](../../src/core/tm/tm-text-normalizer.ts)
+- [src/test/core/tm/tm-text-normalizer.test.ts](../../src/test/core/tm/tm-text-normalizer.test.ts)
+- [src/test/commands/tm-commit/tm-commit-processor.test.ts](../../src/test/commands/tm-commit/tm-commit-processor.test.ts)
 
 **設計との差分**:
 - なし（設計通りに実装）

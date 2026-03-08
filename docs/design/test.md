@@ -18,7 +18,7 @@
 
 **実行**: CIで常時実行（`npm run test`）
 
-**設計意図**: Core層をVS Code APIから独立させているため、ロジックの単体テストが容易です（[architecture.md](architecture.md) P5参照）。副作用のない処理を中心に、入出力の正確性を検証します。
+**設計意図**: Core層をVS Code APIから独立させているため、ロジックの単体テストが容易です（[architecture.md](../architecture.md) P5参照）。副作用のない処理を中心に、入出力の正確性を検証します。
 
 ### GUI/統合テスト (`src/test-gui/`)
 
@@ -92,5 +92,4 @@ test("syncコマンドは全ファイルを同期する", function() {
 ## 参照
 
 - スクリプト: `package.json`
-- コマンド挙動: [commands.md](commands.md)
 - UI検証: [ui.md](ui.md)

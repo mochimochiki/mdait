@@ -190,8 +190,8 @@ if (marker.from && !marker.need && !marker.isFixed()) {
 ## 9. 参考
 
 ### 関連ファイル
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts)
-- [src/config/configuration.ts](../src/config/configuration.ts)
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts)
+- [src/config/configuration.ts](../../src/config/configuration.ts)
 - [package.nls.json](../package.nls.json)
 - [package.nls.ja.json](../package.nls.ja.json)
 

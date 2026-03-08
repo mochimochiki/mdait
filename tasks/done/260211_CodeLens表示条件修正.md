@@ -44,7 +44,7 @@ sequenceDiagram
 ## 4. 設計
 
 ### 4.1 変更対象ファイル
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts)
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts)
   - `provideCodeLenses()`: ファイル全体のステータスを取得
   - `createCodeLensesForMarker()`: ファイルステータスを引数に追加し、条件判定に使用
 
@@ -175,7 +175,7 @@ private createCodeLensesForMarker(
 
 ### 変更ファイル
 
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts)
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts)
   - インポート追加: `Status`, `StatusManager`
   - `provideCodeLenses()`: ファイルステータス取得ロジック追加
   - `createFrontmatterCodeLenses()`: `isFileFullyTranslated` パラメータ追加
@@ -205,7 +205,7 @@ private createCodeLensesForMarker(
 - [docs/command_tm-commit.md](../docs/command_tm-commit.md) - TM登録コマンド設計
 
 ### 関連コード
-- [src/ui/codelens/codelens-provider.ts](../src/ui/codelens/codelens-provider.ts) - 修正対象
-- [src/core/status/status-manager.ts](../src/core/status/status-manager.ts) - ステータス管理
-- [src/core/status/status-item-tree.ts](../src/core/status/status-item-tree.ts) - ステータスツリー
-- [src/core/status/status-item.ts](../src/core/status/status-item.ts) - Status列挙型
+- [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts) - 修正対象
+- [src/core/status/status-manager.ts](../../src/core/status/status-manager.ts) - ステータス管理
+- [src/core/status/status-item-tree.ts](../../src/core/status/status-item-tree.ts) - ステータスツリー
+- [src/core/status/status-item.ts](../../src/core/status/status-item.ts) - Status列挙型

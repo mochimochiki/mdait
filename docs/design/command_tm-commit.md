@@ -117,8 +117,8 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`tm-commit-command.ts`](../src/commands/tm-commit/tm-commit-command.ts) | `TmCommitCommand` - エントリーポイント、進捗表示・キャンセル制御 |
-| [`tm-commit-processor.ts`](../src/commands/tm-commit/tm-commit-processor.ts) | `TmCommitProcessor.processUnit()` - ユニット処理コアロジック |
-| [`sentence-aligner.ts`](../src/commands/tm-commit/sentence-aligner.ts) | `SentenceAligner.alignSentences()` - LLMベース文アライメント |
-| [`tmx-store.ts`](../src/core/tm/tmx-store.ts) | `TmxStore` - TMXファイルI/O、インメモリインデックス、CRUD |
-| [`sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts) | `SentenceSplitter` - 正規表現ベース文分割（trans検索用） |
+| [`tm-commit-command.ts`](../../src/commands/tm-commit/tm-commit-command.ts) | `TmCommitCommand` - エントリーポイント、進捗表示・キャンセル制御 |
+| [`tm-commit-processor.ts`](../../src/commands/tm-commit/tm-commit-processor.ts) | `TmCommitProcessor.processUnit()` - ユニット処理コアロジック |
+| [`sentence-aligner.ts`](../../src/commands/tm-commit/sentence-aligner.ts) | `SentenceAligner.alignSentences()` - LLMベース文アライメント |
+| [`tmx-store.ts`](../../src/core/tm/tmx-store.ts) | `TmxStore` - TMXファイルI/O、インメモリインデックス、CRUD |
+| [`sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | `SentenceSplitter` - 正規表現ベース文分割（trans検索用） |

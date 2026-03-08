@@ -54,7 +54,7 @@ const units = parseMarkdown(markdownText, config);
 // units[0].content, units[0].marker, units[0].range で各要素にアクセス
 ```
 
-**実装**: [`src/core/markdown/parser.ts`](../src/core/markdown/parser.ts)
+**実装**: [`src/core/markdown/parser.ts`](../../src/core/markdown/parser.ts)
 
 ## Hash & Normalizer
 
@@ -69,7 +69,7 @@ graph LR
 
 **CRC32の選択理由**: SHA-256と比べてハッシュが短くマーカーが肥大化しない。同一内容から必ず同じハッシュを生成する決定的計算で、数千ユニット規模での衝突リスクは極めて低い。
 
-**実装**: [`src/core/hash/`](../src/core/hash/)
+**実装**: [`src/core/hash/`](../../src/core/hash/)
 
 ## Status管理
 
@@ -97,7 +97,7 @@ const manager = new StatusManager(workspaceRoot);
 await manager.refreshFileStatus(filePath);
 ```
 
-**実装**: [`src/core/status/`](../src/core/status/)
+**実装**: [`src/core/status/`](../../src/core/status/)
 
 ## UnitRegistry管理
 
@@ -114,13 +114,13 @@ a2b5c7d8 <encoded_content>
 
 **GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリを削除します。
 
-**実装**: [`src/core/unit-registry/`](../src/core/unit-registry/)
+**実装**: [`src/core/unit-registry/`](../../src/core/unit-registry/)
 
 ## Diff生成
 
 trans実行時、旧レジストリと現在のコンテンツからunified diff形式で差分を生成します（`diff`パッケージ）。LLMにdiffを提示することで差分パッチのみを生成させ、変更箇所以外の既存訳文を維持します（[architecture.md](../architecture.md) P4参照）。
 
-**実装**: [`src/core/diff/`](../src/core/diff/)
+**実装**: [`src/core/diff/`](../../src/core/diff/)
 
 ## FrontMatter翻訳
 
@@ -133,13 +133,13 @@ mdait:
   front: "abc12345 from:def67890 need:translate"  # 更新時
 ```
 
-**実装**: [`src/core/markdown/frontmatter-translation.ts`](../src/core/markdown/frontmatter-translation.ts)
+**実装**: [`src/core/markdown/frontmatter-translation.ts`](../../src/core/markdown/frontmatter-translation.ts)
 
 ## マーカー正規化
 
 mdaitマーカー直前の空行を保証し、markdown-itが段落区切りを正しく認識できるようにします。
 
-**実装**: [`src/core/markdown/parser.ts`](../src/core/markdown/parser.ts) (`normalizeMarkerSpacing`)
+**実装**: [`src/core/markdown/parser.ts`](../../src/core/markdown/parser.ts) (`normalizeMarkerSpacing`)
 
 ## 翻訳メモリ（TM）
 
@@ -172,13 +172,13 @@ await store.save();
 
 **sourceHashスキップ**: `hasSourceHash(hash)` により、tm-commitバッチ処理で処理済みユニットをスキップ。
 
-**実装**: [`src/core/tm/tmx-store.ts`](../src/core/tm/tmx-store.ts)
+**実装**: [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts)
 
 ### SentenceSplitter
 
 `Intl.Segmenter`ベースの文分割。コードブロック/インラインコード保護、段落・リスト項目の独立分割に対応し、言語ごとにSegmenterをキャッシュして日英中の文境界を検出します。
 
-**実装**: [`src/core/tm/sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts)
+**実装**: [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts)
 
 ### TmTextNormalizer
 
@@ -189,13 +189,13 @@ TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文�
   before: `**重要**: [詳細はこちら](url)を参照。` → after: `重要: 詳細はこちらを参照。`
 - `isWorthyForTm(text, lang)`: 日本語8文字未満・英語12文字未満・数値のみ・URL/パスのみ・英語2単語以下を除外。
 
-**実装**: [`src/core/tm/tm-text-normalizer.ts`](../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm-commit.md](command_tm-commit.md)
+**実装**: [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm-commit.md](command_tm-commit.md)
 
 ### formatTmReferences
 
 TM検索結果（`TmMatch[]`）をプロンプト用文字列に変換。VS Code非依存のためCore層配置。
 
-**実装**: [`src/core/tm/tm-reference-formatter.ts`](../src/core/tm/tm-reference-formatter.ts)
+**実装**: [`src/core/tm/tm-reference-formatter.ts`](../../src/core/tm/tm-reference-formatter.ts)
 
 ## シーケンス図
 
@@ -254,13 +254,13 @@ sequenceDiagram
 
 | コンポーネント | ファイル | 責務 |
 |---|---|---|
-| Parser | [`src/core/markdown/parser.ts`](../src/core/markdown/parser.ts) | Markdownをmdaitユニット配列に分割 |
-| FrontMatter | [`src/core/markdown/frontmatter-translation.ts`](../src/core/markdown/frontmatter-translation.ts) | frontmatter翻訳状態の読み書き |
-| HashCalculator | [`src/core/hash/`](../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
-| StatusManager | [`src/core/status/`](../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
-| UnitRegistry | [`src/core/unit-registry/`](../src/core/unit-registry/) | ユニット内容の永続化・GC |
-| DiffGenerator | [`src/core/diff/`](../src/core/diff/) | unified diff形式の差分生成 |
-| TmxStore | [`src/core/tm/tmx-store.ts`](../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス |
-| SentenceSplitter | [`src/core/tm/sentence-splitter.ts`](../src/core/tm/sentence-splitter.ts) | Intl.SegmenterによるTM文分割 |
-| TmTextNormalizer | [`src/core/tm/tm-text-normalizer.ts`](../src/core/tm/tm-text-normalizer.ts) | Markdown除去・TM価値フィルタリング |
-| formatTmReferences | [`src/core/tm/tm-reference-formatter.ts`](../src/core/tm/tm-reference-formatter.ts) | TM検索結果のプロンプト文字列変換 |
+| Parser | [`src/core/markdown/parser.ts`](../../src/core/markdown/parser.ts) | Markdownをmdaitユニット配列に分割 |
+| FrontMatter | [`src/core/markdown/frontmatter-translation.ts`](../../src/core/markdown/frontmatter-translation.ts) | frontmatter翻訳状態の読み書き |
+| HashCalculator | [`src/core/hash/`](../../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
+| StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
+| UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
+| DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | unified diff形式の差分生成 |
+| TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス |
+| SentenceSplitter | [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | Intl.SegmenterによるTM文分割 |
+| TmTextNormalizer | [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) | Markdown除去・TM価値フィルタリング |
+| formatTmReferences | [`src/core/tm/tm-reference-formatter.ts`](../../src/core/tm/tm-reference-formatter.ts) | TM検索結果のプロンプト文字列変換 |

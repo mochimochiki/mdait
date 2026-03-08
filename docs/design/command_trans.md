@@ -98,7 +98,7 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **diff-aware revise**: `need:revise@{oldhash}`時はUnified Diff → LLMにパッチのみ生成させる → 適用。失敗時は全文翻訳にフォールバック（[architecture.md](architecture.md) P4参照）
+- **diff-aware revise**: `need:revise@{oldhash}`時はUnified Diff → LLMにパッチのみ生成させる → 適用。失敗時は全文翻訳にフォールバック（[architecture.md](../architecture.md) P4参照）
 - **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
 - **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
 - **TM参照**: tm-commit済みエントリをTmxStoreから検索し、`tm.maxReferences`件をプロンプトに注入（[command_tm-commit.md](command_tm-commit.md) 参照）
@@ -108,8 +108,8 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`trans-command.ts`](../src/commands/trans/trans-command.ts) | `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()` |
-| [`translator.ts`](../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース |
-| [`translation-checker.ts`](../src/commands/trans/translation-checker.ts) | `TranslationChecker.checkTranslationQuality()` - 構造整合性チェック |
-| [`term-extractor.ts`](../src/commands/trans/term-extractor.ts) | `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出 |
-| [`response-validator.ts`](../src/commands/trans/response-validator.ts) | `ResponseValidator` - AIレスポンスのJSON混入検出 |
+| [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()` |
+| [`translator.ts`](../../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース |
+| [`translation-checker.ts`](../../src/commands/trans/translation-checker.ts) | `TranslationChecker.checkTranslationQuality()` - 構造整合性チェック |
+| [`term-extractor.ts`](../../src/commands/trans/term-extractor.ts) | `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出 |
+| [`response-validator.ts`](../../src/commands/trans/response-validator.ts) | `ResponseValidator` - AIレスポンスのJSON混入検出 |

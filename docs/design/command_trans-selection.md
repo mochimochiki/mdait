@@ -133,7 +133,7 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`trans-selection-command.ts`](../src/commands/trans-selection/trans-selection-command.ts) | `translateSelectionCommand()` - エントリーポイント。パイプライン全体の制御と`parseTranslationResponse()` |
-| [`direction-picker.ts`](../src/commands/trans-selection/direction-picker.ts) | `pickTranslationDirection()` - transPair候補取得とQuickPick選択UI |
-| [`output-strategy.ts`](../src/commands/trans-selection/output-strategy.ts) | `OutputStrategy`インターフェース・`TranslationOutput`型定義 |
-| [`append-below-strategy.ts`](../src/commands/trans-selection/strategies/append-below-strategy.ts) | `AppendBelowStrategy` - 選択範囲直下への翻訳テキスト追記（Phase 1実装） |
+| [`trans-selection-command.ts`](../../src/commands/trans-selection/trans-selection-command.ts) | `translateSelectionCommand()` - エントリーポイント。パイプライン全体の制御と`parseTranslationResponse()` |
+| [`direction-picker.ts`](../../src/commands/trans-selection/direction-picker.ts) | `pickTranslationDirection()` - transPair候補取得とQuickPick選択UI |
+| [`output-strategy.ts`](../../src/commands/trans-selection/output-strategy.ts) | `OutputStrategy`インターフェース・`TranslationOutput`型定義 |
+| [`append-below-strategy.ts`](../../src/commands/trans-selection/strategies/append-below-strategy.ts) | `AppendBelowStrategy` - 選択範囲直下への翻訳テキスト追記（Phase 1実装） |
