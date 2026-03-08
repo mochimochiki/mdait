@@ -5,7 +5,7 @@
   "search.exclude": {
     "out": true
   },
-  "typescript.tsc.autoDetect": "off",
+  "js/ts.tsc.autoDetect": "off",
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome",
     "editor.formatOnSave": true,
@@ -29,6 +29,7 @@
     "Select": true,
     "npx tsc": true,
     "Move-Item": true,
-    "npx vitest": true
+    "npx vitest": true,
+    "ForEach-Object": true
   },
 }

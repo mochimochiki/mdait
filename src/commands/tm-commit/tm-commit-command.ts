@@ -9,13 +9,13 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { Status, type StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";

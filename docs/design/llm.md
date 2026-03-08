@@ -1,12 +1,10 @@
-# API層設計
+# LLM
 
-> **上位設計**: [architecture.md](architecture.md) P5「API層：外部世界との橋渡し」、[design.md](design.md)「階層構造」参照
+> [architecture](../architecture.md) > **LLM**
 
 ## このドキュメントの責務
 
-API層は、外部AIサービスとの通信を抽象化し、Commands層からは統一された`AIService`インターフェースとして見えるようにします。
-
-**設計意図**: LLMプロバイダーの多様性を吸収します。OpenAI、Ollama、VS Code LM APIなど、異なるプロバイダーに対して統一されたインターフェースを提供し、Commands層はプロバイダーの違いを意識しません（[architecture.md](architecture.md) 「API層」参照）。
+LLM層は、外部AIサービスとの通信を抽象化し、Commands層からは統一された`AIService`インターフェースとして見えるようにします。
 
 ---
 
@@ -26,8 +24,12 @@ interface AIService {
 
 **特徴**:
 - シンプルなメッセージベースAPI
-- キャンセル対応（`CancellationToken`）
+- キャンセル対応（`CancellationToken`：VS Code組み込みのキャンセル制御オブジェクト）
 - 戻り値は常に`Promise<string>`（プロバイダーの違いを吸収）
+
+**実装**: [`src/llm/ai-service.ts`](../../src/llm/ai-service.ts)
+
+**設計意図**: LLMプロバイダーの多様性を吸収します。OpenAI、Ollama、VS Code LM APIなど、異なるプロバイダーに対して統一されたインターフェースを提供し、Commands層はプロバイダーの違いを意識しません。
 
 ---
 
@@ -42,6 +44,8 @@ interface AIService {
 4. インスタンスを返却
 
 **開発用モック**: `provider: "default"`で固定応答またはエコーバックを返すモック実装を生成できます。
+
+**実装**: [`src/llm/ai-service-builder.ts`](../../src/llm/ai-service-builder.ts)
 
 ---
 
@@ -77,7 +81,9 @@ interface AIService {
 #### セキュリティ
 - APIキーは`${env:VARIABLE_NAME}`形式で環境変数から読み込み
 - 設定ファイルには平文で記載しない
-- **`store: false`でプロンプト・応答をOpenAIサーバーに保存しない**（[architecture.md](architecture.md) 哲学5参照）
+- **`store: false`でプロンプト・応答をOpenAIサーバーに保存しない**（[architecture.md](../architecture.md) 哲典5参照）
+
+**実装**: [`src/llm/providers/openai-provider.ts`](../../src/llm/providers/openai-provider.ts)
 
 **設計意図**: Responses APIを採用することで、将来のツール連携や機能拡張に対応しています。
 
@@ -103,6 +109,8 @@ interface AIService {
 
 **用途**: ネットワーク外部にデータを送信したくない場合や、オフライン環境での翻訳に適しています。
 
+**実装**: [`src/llm/providers/ollama-provider.ts`](../../src/llm/providers/ollama-provider.ts)
+
 ---
 
 ### VSCodeLanguageModelProvider
@@ -114,6 +122,8 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 **特徴**:
 - 内部でストリーミング応答をバッファリングし、完全な応答を返す
 - VS Code環境に統合されたLMを利用するため、追加の認証設定が不要
+
+**実装**: [`src/llm/providers/vscode-lm-provider.ts`](../../src/llm/providers/vscode-lm-provider.ts)
 
 ---
 
@@ -144,7 +154,7 @@ sequenceDiagram
 	end
 ```
 
-**設計のポイント**:
+**設計意図**:
 - Builder パターンで構築ロジックを分離
 - すべてのプロバイダーは同じインターフェースを実装
 - Commands層はプロバイダーの種類を意識しない
@@ -172,3 +182,9 @@ sequenceDiagram
 ### キャンセル対応
 - すべてのプロバイダーは`CancellationToken`をサポート
 - ユーザーからのキャンセル要求に即座に応答
+
+---
+
+## 関連
+
+- [architecture.md](../architecture.md) 「LLM層」参照

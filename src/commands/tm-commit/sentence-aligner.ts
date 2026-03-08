@@ -6,9 +6,9 @@
  * @module commands/tm-commit/sentence-aligner
  */
 import type * as vscode from "vscode";
-import type { AIMessage, AIService } from "../../api/ai-service";
 import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { SentencePair } from "../../core/tm/types";
+import type { AIMessage, AIService } from "../../llm/ai-service";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { Logger, formatError } from "../../utils/logger";
 

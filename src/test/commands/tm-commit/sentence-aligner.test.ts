@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
-import type { AIMessage, AIService } from "../../../api/ai-service";
 import { SentenceAligner } from "../../../commands/tm-commit/sentence-aligner";
+import type { AIMessage, AIService } from "../../../llm/ai-service";
 
 /**
  * テスト用AIServiceモック。sendMessageに渡されたプロンプトを記録し、

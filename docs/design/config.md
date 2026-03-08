@@ -1,6 +1,6 @@
-# 設定管理層設計
+# Config
 
-> **上位設計**: [architecture.md](architecture.md) P2「ハッシュによる変更追跡」、[design.md](design.md)「階層構造」参照
+[architecture](../architecture.md) > **Config**
 
 ## このドキュメントの責務
 
@@ -16,7 +16,7 @@ Config層は、`mdait.json`の読み込み、バリデーション、ファイ�
 - **ソース**: ワークスペースルートの`mdait.json`
 - **スキーマ**: `schemas/mdait-config.schema.json`による補完と検証
 
-**実装**: [`src/config/configuration.ts`](../src/config/configuration.ts)
+**実装**: [`src/config/configuration.ts`](../../src/config/configuration.ts)
 
 ### オンボーディングサポート
 
@@ -104,42 +104,21 @@ sequenceDiagram
 
 ### 重要な設定項目
 
-#### transPairs（必須）
-ソース・ターゲットのディレクトリペアと言語を定義します。複数ペアの定義により、多言語展開に対応します。
-
-#### sync.level
-ユニット境界として検知する見出しレベルを指定します。デフォルトは2（`##`）です。
-
-#### sync.autoSyncOnSave
-保存時に自動同期を行うかを制御します。デフォルトは`true`です。
-
-**設計意図**: 自動同期により、原文編集直後に差分検出が行われ、翻訳が必要な箇所が即座に可視化されます。
-
-#### trans.frontmatter.keys
-翻訳対象とするfrontmatterのキーを指定します。指定されたキーのみが翻訳管理の対象となります。
+| フィールド | デフォルト | 説明 |
+|-----------|-----------|------|
+| `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応 |
+| `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
+| `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
+| `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
 
 ---
 
 ### tm（翻訳メモリ）
 
-翻訳メモリ機能に関する設定です。
-
-```json
-{
-  "tm": {
-    "enabled": true,
-    "maxReferences": 5
-  }
-}
-```
-
-#### tm.enabled
-TM機能の有効/無効を制御します。デフォルトは`true`です。
-
-**動作**: `false`の場合、tm-commitコマンドとtrans実行時のTM参照の両方が無効化されます。
-
-#### tm.maxReferences
-trans実行時にプロンプトに含めるTM参照の最大数を指定します。デフォルトは`5`です。
+| 設定 | デフォルト | 動作 |
+|------|-----------|------|
+| `tm.enabled` | `true` | `false`でtm-commitとTM参照を両方無効化 |
+| `tm.maxReferences` | `5` | プロンプトに含めるTM参照の最大数 |
 
 **設計意図**: プロンプトの肥大化を防ぎつつ、一貫性に寄与する十分な参照を提供します。
 
@@ -152,11 +131,8 @@ trans実行時にプロンプトに含めるTM参照の最大数を指定しま�
 - 必須フィールド(`transPairs`)の有無
 - ディレクトリパスの妥当性
 
-### isConfigured()メソッド
-設定ファイルの存在とtransPairsの有無を簡易チェックします。
-
 **UIへの影響**:
-- `isConfigured()`がfalseの場合、`StatusTreeProvider`が空配列を返しリソース消費を抑制
+- `StatusTreeProvider`が空配列を返しリソース消費を抑制
 - `mdaitConfigured`コンテキスト変数を更新し、ツールバーボタンとWelcome Viewの表示を切り替え
 
 ---
@@ -193,12 +169,7 @@ mdait:
 
 **動作**:
 - `mdait.json`の`sync.level`設定をドキュメント単位で上書き
-- パース時に[`MarkdownItParser`](../src/core/markdown/parser.ts)がfrontmatterから読み込み、グローバル設定より優先
-- 特定ドキュメントのみ異なる粒度でユニット分割したい場合に活用
-
-**level設定の自動同期**:
 - sync実行時、原文と訳文でlevel設定が異なる場合、**原文の設定を優先して訳文を自動修正**
-- これによりユニット境界の粒度を揃え、マーカー対応付けの破綻を防止
 
 **設計意図**: 大きなドキュメントでは粗い粒度（level 2）、詳細なドキュメントでは細かい粒度（level 3）など、ドキュメントの性質に応じて柔軟に調整できます。
 
@@ -221,4 +192,9 @@ mdait:
 
 **設計意図**: frontmatterは構造的にHTMLコメントを挿入できないため、専用フィールドで状態を管理します。本文ユニットと分離した専用フローで処理することで、frontmatter翻訳を柔軟に制御できます。
 
-**詳細**: [core.md](core.md) FrontMatter翻訳セクション参照
+---
+
+## 関連
+
+- [core.md](core.md) FrontMatter翻訳セクション参照
+- [architecture.md](../architecture.md) 「Config層」参照

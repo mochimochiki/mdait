@@ -1,8 +1,12 @@
-# Tools層 設計書
+# Tools
 
-## 概要
+> [architecture](../architecture.md) > **Tools**
+
+## このドキュメントの責務
 
 Tools層は、GitHub Copilot ChatなどのLanguageModel向けにmdaitの機能を公開するためのAPI層です。VS CodeのLanguageModelTool APIを使用して、mdaitの主要機能をCopilot Chatから呼び出せるようにします。
+
+---
 
 ## 設計原則
 
@@ -10,6 +14,10 @@ Tools層は、GitHub Copilot ChatなどのLanguageModel向けにmdaitの機能�
 2. **読み取り専用優先**: 副作用のある操作には適切な確認UIを提供
 3. **エラーハンドリング**: 全てのエラーをキャッチし、ユーザーフレンドリーなメッセージを返す
 4. **i18n対応**: `vscode.l10n.t()` を使用して国際化対応
+
+**設計意図**: 既存のCommands/Core層の薄いラッパーとして設計することで、Copilot Chat連携機能の追加によるビジネスロジックの二重管理を防ぎます。
+
+---
 
 ## LanguageModelTool APIの基本
 
@@ -29,6 +37,10 @@ VS CodeのLanguageModelTool APIは、拡張機能の機能をGitHub Copilot Chat
 - **ファイル変更を伴う操作**: 確認メッセージで変更内容を明示
 - **AIを使用する操作**: コスト・時間がかかることを伝え、対象ユニット数などの具体情報を含めて確認
 
+**設計意図**: `prepareInvocation()`での確認UIにより、AI使用や破壊的操作をユーザーが意図して承認したことを保証します。
+
+---
+
 ## アーキテクチャ
 
 ```
@@ -41,6 +53,8 @@ GitHub Copilot
 ```
 
 Tools層は既存のCommands層やCore層の機能を呼び出し、結果をLanguageModelToolResultとして返します。
+
+---
 
 ## 実装ツール一覧
 
@@ -63,6 +77,8 @@ interface GetStatusInput {
 
 **確認UI**: なし（読み取り専用）
 
+**実装**: [`src/tools/get-status-tool.ts`](../../src/tools/get-status-tool.ts)
+
 ### 2. Sync Tool (`mdait_sync`)
 
 **機能**: 翻訳マーカーの同期
@@ -79,6 +95,8 @@ type SyncInput = Record<string, never>;  // パラメータなし
 **確認UI**: あり（マーカーを書き換えるため）
 - タイトル: "Confirm Synchronization"
 - メッセージ: "This will update translation markers in your Markdown files. Do you want to proceed?"
+
+**実装**: [`src/tools/sync-tool.ts`](../../src/tools/sync-tool.ts)
 
 ### 3. Translate Tool (`mdait_translate`)
 
@@ -104,6 +122,10 @@ interface TranslateInput {
 - メッセージ: "Translate file: {filePath}?\n\nThis will translate {n} units using AI."
 - 翻訳対象ユニット数を表示してユーザーの意思決定を支援
 
+**実装**: [`src/tools/translate-tool.ts`](../../src/tools/translate-tool.ts)
+
+---
+
 ## ファイル構成
 
 ```
@@ -113,10 +135,13 @@ src/tools/
 └── translate-tool.ts     # 翻訳ツール
 ```
 
-## package.jsonへの登録
+---
 
-`contributes.languageModelTools` セクションに各ツールを定義:
+## 登録方法
 
+`package.json`の`contributes.languageModelTools`にツール定義を追加し、`extension.ts`の`activate()`で登録する。
+
+**package.json（抜粋）**:
 ```json
 {
   "name": "mdait_getStatus",
@@ -129,68 +154,40 @@ src/tools/
 }
 ```
 
-## extension.tsへの登録
-
-`activate()` 関数内で各ツールを登録:
-
+**extension.ts（抜粋）**:
 ```typescript
 const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
 const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
 const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new MdaitTranslateTool());
 ```
 
+---
+
 ## エラーハンドリング
 
-全てのツールで以下のパターンでエラーをハンドリング:
+全てのツールは`try/catch`でエラーをキャッチし、`logger.error()`でログ記録後、`vscode.l10n.t()`でローカライズしたメッセージを`LanguageModelToolResult`で返します。
 
-```typescript
-try {
-  // 処理
-  return new vscode.LanguageModelToolResult([
-    new vscode.LanguageModelTextPart(resultText)
-  ]);
-} catch (error) {
-  logger.error("LanguageModelTool", "Error in tool", { error });
-  const errorMessage = vscode.l10n.t("Failed to ...: {0}", (error as Error).message);
-  return new vscode.LanguageModelToolResult([
-    new vscode.LanguageModelTextPart(errorMessage)
-  ]);
-}
-```
+---
 
 ## 使用例
 
-GitHub Copilot Chatでの使用例:
+GitHub Copilot Chatでのコマンド例:
 
 ```
-User: @mdaitStatus 翻訳の状況を教えて
-Copilot: (mdait_getStatus toolを呼び出す)
-
-User: @mdaitSync ドキュメントを同期して
-Copilot: (mdait_sync toolを呼び出す)
-
-User: @mdaitTranslate README.ja.md を翻訳して
-Copilot: (mdait_translate toolを呼び出す)
+@mdaitStatus  → mdait_getStatus 呼び出し（翻訳状況を取得）
+@mdaitSync    → mdait_sync 呼び出し（マーカー同期）
+@mdaitTranslate README.ja.md → mdait_translate 呼び出し（ファイル翻訳）
 ```
+
+---
 
 ## 今後の拡張可能性
 
-将来的に追加可能なツール:
+追加ツールの候補: Term Detection、TM Commit、Validate、Search。
+追加手順: `src/tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
-1. **Term Detection Tool**: 用語抽出の実行
-2. **TM Commit Tool**: 翻訳メモリへの登録
-3. **Validate Tool**: 設定ファイルの検証
-4. **Search Tool**: 翻訳済み/未翻訳ユニットの検索
+---
 
-拡張時は以下の手順で追加:
+## 関連
 
-1. `src/tools/` に新しいツールファイルを作成
-2. `package.json` の `languageModelTools` に定義追加
-3. `extension.ts` で `vscode.lm.registerTool()` を呼び出し
-4. l10nリソースにメッセージを追加
-5. この設計書を更新
-
-## 参考
-
-- [VS Code LanguageModelTool API](https://code.visualstudio.com/api/extension-guides/ai/tools)
-- [vscode-extension-samples chat-sample](https://github.com/microsoft/vscode-extension-samples/tree/main/chat-sample)
+- [architecture.md](../architecture.md) 「Tools層」参照

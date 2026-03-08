@@ -5,9 +5,9 @@
  */
 
 import type * as vscode from "vscode";
-import type { AIService } from "../../api/ai-service";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import type { AIService } from "../../llm/ai-service";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { PromptIds, PromptProvider } from "../../prompts";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";

@@ -1,6 +1,6 @@
 import type * as vscode from "vscode";
-import type { AIMessage, AIService } from "../../api/ai-service";
 import { Configuration } from "../../config/configuration";
+import type { AIMessage, AIService } from "../../llm/ai-service";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { Logger, formatError } from "../../utils/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";

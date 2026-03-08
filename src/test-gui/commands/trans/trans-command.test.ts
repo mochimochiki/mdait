@@ -5,7 +5,7 @@ import { strict as assert } from "node:assert";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../../api/ai-service-builder";
+import { AIServiceBuilder } from "../../../llm/ai-service-builder";
 import { AIOnboarding } from "../../../utils/ai-onboarding";
 import { resetMdaitState } from "../../test-utils";
 

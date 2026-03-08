@@ -5,6 +5,12 @@
       "sourceDir": "content/ja",
       "targetLang": "en",
       "targetDir": "content/en"
+    },
+    {
+      "sourceLang": "en",
+      "sourceDir": "content/en",
+      "targetLang": "zh-hans",
+      "targetDir": "content/zh-hans"
     }
   ],
   "ai": {

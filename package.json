@@ -272,7 +272,11 @@
         "toolReferenceName": "mdaitStatus",
         "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a summary of translation progress including total units, translated units, and files needing translation. Optionally pass a filePath to get status for a specific file.",
         "canBeReferencedInPrompt": true,
-        "tags": ["mdait", "translation", "status"],
+        "tags": [
+          "mdait",
+          "translation",
+          "status"
+        ],
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -289,7 +293,11 @@
         "toolReferenceName": "mdaitSync",
         "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers.",
         "canBeReferencedInPrompt": true,
-        "tags": ["mdait", "translation", "sync"],
+        "tags": [
+          "mdait",
+          "translation",
+          "sync"
+        ],
         "inputSchema": {
           "type": "object",
           "properties": {}
@@ -301,10 +309,16 @@
         "toolReferenceName": "mdaitTranslate",
         "modelDescription": "Translate a Markdown file using AI. Translates units that have need:translate or need:revise flags. The file must be a target file managed by mdait. Uses diff-aware revision for changed content to preserve existing translations.",
         "canBeReferencedInPrompt": true,
-        "tags": ["mdait", "translation", "ai"],
+        "tags": [
+          "mdait",
+          "translation",
+          "ai"
+        ],
         "inputSchema": {
           "type": "object",
-          "required": ["filePath"],
+          "required": [
+            "filePath"
+          ],
           "properties": {
             "filePath": {
               "type": "string",
@@ -370,9 +384,27 @@
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
+    "madge": "^8.0.0",
     "mocha": "^11.3.0",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "madge": {
+    "fileExtensions": [
+      "ts",
+      "tsx"
+    ],
+    "tsConfig": "./tsconfig.json",
+    "detectiveOptions": {
+      "ts": {
+        "skipAsyncImports": true,
+        "skipTypeImports": true
+      },
+      "tsx": {
+        "skipAsyncImports": true,
+        "skipTypeImports": true
+      }
+    }
   }
 }

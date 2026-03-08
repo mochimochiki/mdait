@@ -1,6 +1,6 @@
-# ユーティリティ層設計
+# utils
 
-> **上位設計**: [architecture.md](architecture.md) P5「Utils層：汎用機能、I/O、ログ」、[design.md](design.md)「階層構造」参照
+> [architecture](../architecture.md) > **Utils**
 
 ## このドキュメントの責務
 
@@ -26,6 +26,11 @@ sequenceDiagram
 	FE-->>Caller: ファイルリスト
 ```
 
+### 主要API
+
+- `findMarkdownFiles(pattern, options)`: パターンマッチによるファイル探索
+- `getTransPairFromTarget(filePath)`: 対象ファイルが属するtransPairを解決
+
 ### 設計方針
 
 - ドメイン知識を含めず、入力と出力を純粋関数に近い形で返す
@@ -33,6 +38,8 @@ sequenceDiagram
 - 大規模リポジトリでも負荷を抑えられるよう、フィルター対象の正規表現や深さ制限を引数で受け取れる
 
 **設計意図**: ファイル探索という汎用機能を切り出すことで、Commands層は「どのファイルを処理するか」という判断に集中できます。
+
+**実装**: [`src/utils/file-explorer.ts`](../../src/utils/file-explorer.ts)
 
 ---
 
@@ -86,17 +93,12 @@ sequenceDiagram
 
 **設計意図**: 構造化ログにより、問題発生時にログを検索・集計しやすくなります。例えば、特定のファイルやユニットで頻繁にリトライが発生している場合、それを容易に検出できます。
 
----
-
-## 設計方針
-
-- **純粋関数優先**: 入力と出力を明確にし、副作用を最小化
-- **テスタビリティ**: PromiseベースでI/Oを扱い、スタブ化しやすい構造
-- **スケーラビリティ**: 大規模リポジトリでも負荷を抑えられるよう、フィルター対象の正規表現や深さ制限を引数で受け取れる
+**実装**: [`src/utils/logger.ts`](../../src/utils/logger.ts)
 
 ---
 
 ## 関連
 
-- ファイル探索利用例: [commands.md](commands.md)
+- ファイル探索利用例: [command_sync.md](command_sync.md)
 - 設定での除外パターン: [config.md](config.md)
+- [architecture.md](../architecture.md) 「Utils層」参照

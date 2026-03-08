@@ -5,8 +5,8 @@
  */
 
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { PromptIds } from "../../prompts/defaults";
 import { PromptProvider } from "../../prompts/prompt-provider";
 import { AIOnboarding } from "../../utils/ai-onboarding";

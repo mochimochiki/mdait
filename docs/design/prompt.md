@@ -1,6 +1,6 @@
-# プロンプト設計
+# プロンプト
 
-> **上位設計**: [architecture.md](architecture.md) P4「LLMをdiff-aware reviseの主戦力とする」参照
+> [architecture](../architecture.md) > **Prompt**
 
 ## このドキュメントの責務
 

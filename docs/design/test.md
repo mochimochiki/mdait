@@ -1,6 +1,6 @@
-# テスト層設計
+# Test
 
-> **上位設計**: [architecture.md](architecture.md) P5「Core層：翻訳ドメインの心臓部」（純粋関数によるテスト容易性）
+> [architecture](../architecture.md) > **Test**
 
 ## このドキュメントの責務
 

@@ -2,12 +2,12 @@ import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import { join } from "node:path";
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../../api/ai-service-builder";
-import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TranslationContext } from "../../../commands/trans/translation-context";
 import { AITranslator } from "../../../commands/trans/translator";
 import { Configuration } from "../../../config/configuration";
+import { calculateHash } from "../../../core/hash/hash-calculator";
 import { markdownParser } from "../../../core/markdown/parser";
+import { AIServiceBuilder } from "../../../llm/ai-service-builder";
 
 suite("TransCommand", () => {
 	let tmpDir: string;

@@ -1,6 +1,6 @@
-# UI層設計
+# UI
 
-> **上位設計**: [architecture.md](architecture.md) P5「UI層：VS Codeとの融合」、P6「VS Code標準パターンへの準拠」、[design.md](design.md)「階層構造」参照
+> [architecture](../architecture.md) > **UI**
 
 ## このドキュメントの責務
 

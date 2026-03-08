@@ -1,5 +1,5 @@
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import type { TransConfig } from "../../config/configuration";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { AITranslator, type Translator } from "./translator";
 
 /**
