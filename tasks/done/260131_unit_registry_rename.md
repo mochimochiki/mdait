@@ -377,7 +377,7 @@ RM src/test/core/snapshot/* → src/test/core/unit-registry/*
 
 ### レビュー完了・承認（2026-01-31）
 
-**レビュアー:** mdait.reviewer  
+**レビュアー:** m.reviewer  
 **結論:** ✅承認  
 **評価:** ⭐⭐⭐⭐⭐ (5/5)
 

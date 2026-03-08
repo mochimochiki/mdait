@@ -28,6 +28,7 @@
     "npx biome": true,
     "Select": true,
     "npx tsc": true,
-    "Move-Item": true
+    "Move-Item": true,
+    "npx vitest": true
   },
 }

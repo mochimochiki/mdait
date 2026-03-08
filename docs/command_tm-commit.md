@@ -38,10 +38,10 @@
 
 | コマンド | 粒度 | UI起点 |
 |---|---|---|
-| `mdait.tm-commit.unit` | ユニット単位 | CodeLens |
 | `mdait.tm-commit.file` | ファイル単位 | StatusTree |
 | `mdait.tm-commit.directory` | ディレクトリ単位 | StatusTree |
 
+ファイル/ディレクトリ単位でのみ利用可能。ユニット単位のTM登録は廃止された（TM登録は一括処理が基本であるため）。
 各コマンドの処理ロジックは同一。対象範囲のみが異なる。
 
 ### TM処理対象の判定
@@ -53,7 +53,6 @@
 | `from`属性あり + `need:revise@*` | スキップ | 訳文が旧版 |
 | `from`属性あり + `need:translate` | スキップ | 未翻訳 |
 | `from`属性なし | スキップ | ソースファイルまたは未リンク |
-| `fixed`フラグあり | スキップ | 登録済み最適化（将来機能） |
 
 **`need:review`ワークフロー:**  
 1. trans実行時にTranslationCheckerが構造不一致を検出 → `need:review`自動設定  
@@ -61,12 +60,20 @@
 3. CodeLensの「Mark as Reviewed」ボタンで`need`フラグをクリア  
 4. TM登録ボタンが表示される → tm-commit実行可能
 
+### sourceHashベーススキップ
+
+TMXの`x-source-hash`プロパティを活用し、既にTM登録済みのユニットをスキップする。
+
+- 各ユニットの`marker.hash`（原文コンテンツハッシュ）がTMXに存在するかチェック
+- 存在すればスキップ（原文が一文字でも変わっていれば再処理される）
+- これにより、大量のファイルに対してtm-commitを実行しても、未登録・変更済みのユニットのみが処理される
+
 ### 処理フロー
 
 1. **初期化**: TmxStore.getInstance()でシングルトン取得（mtime判定で自動リロード）
 2. **対象スキャン**: 指定範囲のターゲットユニットを収集
-3. **ユニット処理**（順次、キャンセルチェック付き）:
-   - 処理対象判定（上表参照）
+3. **フィルタリング**: isTmCommitTarget()で処理対象判定 + sourceHashベーススキップ
+4. **ユニット処理**（順次、キャンセルチェック付き）:
    - ソースユニットの内容を取得（`from`ハッシュ経由）
    - SentenceAligner: LLMで対訳を文ペアに分割
    - 各文ペアについて:
@@ -118,7 +125,7 @@ tm-commitでは、TM登録前に以下の処理を行い、TM品質を向上さ�
 ### Commands層
 
 - **TmCommitCommand** (`src/commands/tm-commit/tm-commit-command.ts`): コマンドエントリーポイント。withProgressパターンで進捗表示・キャンセル対応
-- **TmCommitProcessor** (`src/commands/tm-commit/tm-commit-processor.ts`): ユニット処理のコアロジック。将来のfix --tmからも呼び出し可能
+- **TmCommitProcessor** (`src/commands/tm-commit/tm-commit-processor.ts`): ユニット処理のコアロジック
 - **SentenceAligner** (`src/commands/tm-commit/sentence-aligner.ts`): LLMベースの文アライメント。PromptProviderでプロンプトを構築
 
 ---
@@ -319,7 +326,6 @@ Use them as reference for consistency, but prioritize accuracy and context.
 - **冪等性**: tm-commitを複数回実行しても結果は同一。既存エントリーはunitPath更新のみ
 - **プライバシー**: LLM通信（文分割）はtm-commit実行時のみ。trans時のTM検索はローカル完結
 - **エラーハンドリング**: ユニット単位のLLMエラーは記録して続行。他ユニットの処理に影響しない
-- **fixコマンドとの連携**: TmCommitProcessorを独立設計し、fix --tm実装時に委譲可能
 
 ---
 

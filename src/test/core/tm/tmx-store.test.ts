@@ -32,7 +32,7 @@ function createTempFilePath(): string {
 
 /** テスト用エントリーを作成するヘルパー */
 function createTestEntry(overrides?: Partial<TmEntry>): TmEntry {
-	return {
+	const entry: TmEntry = {
 		sentenceHash: overrides?.sentenceHash ?? "11223344",
 		segments:
 			overrides?.segments ??
@@ -42,6 +42,10 @@ function createTestEntry(overrides?: Partial<TmEntry>): TmEntry {
 			]),
 		unitPath: overrides?.unitPath ?? "docs/test.md",
 	};
+	if (overrides?.sourceHash) {
+		entry.sourceHash = overrides.sourceHash;
+	}
+	return entry;
 }
 
 suite("XMLエスケープ", () => {
@@ -299,6 +303,67 @@ suite("TmxStore", () => {
 			store.addEntry(createTestEntry());
 			const results = store.searchBySource("No match", "en");
 			assert.strictEqual(results.length, 0);
+		});
+	});
+
+	suite("hasSourceHash", () => {
+		test("sourceHash付きエントリーが登録されている場合trueを返す", () => {
+			store.addEntry(createTestEntry({ sourceHash: "src-hash-001" }));
+			assert.strictEqual(store.hasSourceHash("src-hash-001"), true);
+		});
+
+		test("sourceHashが存在しない場合falseを返す", () => {
+			store.addEntry(createTestEntry());
+			assert.strictEqual(store.hasSourceHash("nonexist"), false);
+		});
+
+		test("clear後はfalseを返す", () => {
+			store.addEntry(createTestEntry({ sourceHash: "src-hash-001" }));
+			store.clear();
+			assert.strictEqual(store.hasSourceHash("src-hash-001"), false);
+		});
+
+		test("複数エントリーのsourceHashが正しくインデックスされる", () => {
+			store.addEntry(createTestEntry({ sentenceHash: "aaa", sourceHash: "src-1" }));
+			store.addEntry(createTestEntry({ sentenceHash: "bbb", sourceHash: "src-2" }));
+			assert.strictEqual(store.hasSourceHash("src-1"), true);
+			assert.strictEqual(store.hasSourceHash("src-2"), true);
+			assert.strictEqual(store.hasSourceHash("src-3"), false);
+		});
+
+		test("addEntryによるsourceHash更新後も検索可能", () => {
+			store.addEntry(createTestEntry({ sentenceHash: "aaa", sourceHash: "old-hash" }));
+			store.addEntry(createTestEntry({ sentenceHash: "aaa", sourceHash: "new-hash" }));
+			assert.strictEqual(store.hasSourceHash("new-hash"), true);
+			// 旧hashはインデックスに残存するがfalse positiveは実害なし（スキップされるだけ）
+			assert.strictEqual(store.hasSourceHash("old-hash"), true);
+		});
+	});
+
+	suite("sourceHashラウンドトリップ", () => {
+		let tempFilePath: string;
+
+		setup(() => {
+			tempFilePath = createTempFilePath();
+		});
+
+		teardown(() => {
+			const dir = path.dirname(tempFilePath);
+			if (fs.existsSync(dir)) {
+				fs.rmSync(dir, { recursive: true, force: true });
+			}
+		});
+
+		test("sourceHash付きエントリーがsave→loadで保持される", () => {
+			store.addEntry(createTestEntry({ sourceHash: "src-hash-roundtrip" }));
+			store.save(tempFilePath);
+
+			const store2 = new TmxStore();
+			store2.load(tempFilePath);
+			const entry = store2.findByHash("11223344");
+			assert.ok(entry);
+			assert.strictEqual(entry.sourceHash, "src-hash-roundtrip");
+			assert.strictEqual(store2.hasSourceHash("src-hash-roundtrip"), true);
 		});
 	});
 });

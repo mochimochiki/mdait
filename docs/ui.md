@@ -31,7 +31,7 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 **contextValueの種類**:
 - `mdaitFileSource` / `mdaitDirectorySource`: ソースファイル/ディレクトリ（用語集検出コマンド用）
 - `mdaitFileTarget` / `mdaitDirectoryTarget`: 翻訳未完了のターゲットファイル/ディレクトリ
-- `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了のターゲットファイル/ディレクトリ（TM登録・用語集展開・確定コマンド用）
+- `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了のターゲットファイル/ディレクトリ（TM登録・用語集展開コマンド用）
 
 **contextValueの設定**:
 ターゲットファイル/ディレクトリは、翻訳状態に応じて以下のいずれかのcontextValueを持ちます：
@@ -40,7 +40,7 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 
 **package.jsonのwhen条件**:
 - 翻訳コマンド: `viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete` （完了・未完了両方で表示）
-- TM登録・fix等: `viewItem == mdaitFileTargetComplete` （完了時のみ表示）
+- TM登録等: `viewItem == mdaitFileTargetComplete` （完了時のみ表示）
 
 **翻訳完了判定** (`Status.Translated`):
 - すべてのユニットが`status === Status.Translated`
@@ -83,17 +83,12 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - 複数の訳文言語がある場合、`transPairs`設定順で最初のターゲットへジャンプ
 
 **frontmatterマーカー**:
-- **$(symbol-reference) Source**: 原文frontmatterへジャンプ（ターゲットファイルの場合）
-- **✨[AI]翻訳**: frontmatter翻訳を実行（`need:translate`がある場合）
-- **$(check) 完了マーク**: frontmatter needフラグをクリア
+- **$(play) 翻訳**: frontmatter翻訳を実行（`need:translate`がある場合のみ）
+- **$(check) 完了マーク**: frontmatter needフラグをクリア（`need`がある場合のみ）
+- **翻訳完了後（`from`あり、`need`なし）**: CodeLensを表示しない
+  - 理由: TM登録・確定は非対応、原文は同ファイル内のため移動不要
 
-**TM登録・確定アクション**:
-- **📝 TM登録**: 翻訳済みユニット（`from`あり、needなし、fixedなし）に表示。`mdait.tm-commit.unit`を呼び出し
-- **$(check-all) 確定 [+追加アクション]**: 翻訳済みユニット（`from`あり、needなし、fixedなし）に表示。`mdait.fix.unit`を呼び出し
-  - ラベルとツールチップは設定に応じて動的に変化
-  - `fix.tm=true`の場合: `$(check-all) 確定 (+TM)` と表示され、確定と同時にTM登録も実行
-  - ツールチップには実行されるアクションと設定ファイルパスを表示
-  - 将来の拡張（用語集展開など）にも対応可能な設計
+**TM登録**: StatusTreeのファイル/ディレクトリコンテキストメニューから利用可能。ユニット単位のTM登録CodeLensは廃止された。
 
 #### ジャンプ時の動作
 

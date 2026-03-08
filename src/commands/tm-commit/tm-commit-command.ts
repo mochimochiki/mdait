@@ -2,15 +2,15 @@
  * @file tm-commit-command.ts
  * @description
  *   tm-commitコマンドのエントリーポイント。
- *   ユニット/ファイル/ディレクトリ単位のTM登録を提供する。
+ *   ファイル/ディレクトリ単位のTM登録を提供する。
  *   withProgressパターンで進捗表示・キャンセル対応。
+ *   TMXのsourceHashによるスキップ判定でバッチ効率を最適化。
  * @module commands/tm-commit/tm-commit-command
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
-import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { Status, type StatusItem } from "../../core/status/status-item";
@@ -25,70 +25,6 @@ import { isTmCommitTarget } from "./tm-commit-filter";
 import { TmCommitProcessor, type TmCommitResult } from "./tm-commit-processor";
 
 const logger = Logger.getInstance();
-
-/**
- * ユニット単位のtm-commitコマンド（CodeLensから呼び出し）
- * @param range マーカー行のRange
- */
-export async function tmCommitUnitCommand(range?: vscode.Range): Promise<void> {
-	const editor = vscode.window.activeTextEditor;
-	if (!editor || !range) {
-		return;
-	}
-
-	// マーカー行からunitHashを抽出
-	const lineText = editor.document.lineAt(range.start.line).text;
-	const marker = MdaitMarker.parse(lineText);
-	const unitHash = marker?.hash;
-	if (!unitHash) {
-		vscode.window.showErrorMessage(vscode.l10n.t("Could not extract unit hash from marker."));
-		return;
-	}
-
-	const config = Configuration.getInstance();
-	if (!config.getTmEnabled()) {
-		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
-		return;
-	}
-
-	// AI初回利用チェック
-	const aiOnboarding = AIOnboarding.getInstance();
-	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
-	if (!shouldProceed) {
-		return;
-	}
-
-	await vscode.window.withProgress(
-		{
-			location: vscode.ProgressLocation.Notification,
-			title: vscode.l10n.t("TM Commit"),
-			cancellable: true,
-		},
-		async (progress, token) => {
-			try {
-				progress.report({ message: vscode.l10n.t("Initializing...") });
-
-				const filePath = editor.document.uri.fsPath;
-				const content = editor.document.getText();
-				const markdown = markdownParser.parse(content, config);
-
-				// unitHashでユニットを検索（行番号ベースではなくハッシュベース）
-				const targetUnit = markdown.units.find((u) => u.marker?.hash === unitHash);
-
-				if (!targetUnit || !isTmCommitTarget(targetUnit)) {
-					vscode.window.showInformationMessage(vscode.l10n.t("This unit is not eligible for TM commit."));
-					return;
-				}
-
-				const result = await executeTmCommitForUnits([targetUnit], filePath, config, progress, token);
-
-				showTmCommitResult(result);
-			} catch (error) {
-				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
-			}
-		},
-	);
-}
 
 /**
  * ファイル単位のtm-commitコマンド（StatusTreeから呼び出し）
@@ -298,6 +234,12 @@ export async function executeTmCommitForUnits(
 			continue;
 		}
 
+		// sourceHashベーススキップ: 原文が変わっていなければスキップ
+		if (unit.marker.hash && store.hasSourceHash(unit.marker.hash)) {
+			result.skippedUnits++;
+			continue;
+		}
+
 		try {
 			// ソースユニットの内容を取得
 			const sourceContent = await getSourceContent(unit, statusManager, config);
@@ -306,7 +248,13 @@ export async function executeTmCommitForUnits(
 				continue;
 			}
 
-			const unitResult = await processor.processUnit(sourceContent, unit.content, relativePath, token);
+			const unitResult = await processor.processUnit(
+				sourceContent,
+				unit.content,
+				relativePath,
+				token,
+				unit.marker.hash,
+			);
 
 			result.processedUnits++;
 			result.newEntries += unitResult.newCount;

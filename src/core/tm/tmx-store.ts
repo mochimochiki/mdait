@@ -9,6 +9,7 @@ const TMX_VERSION = "1.4";
 /** XMLプロパティタイプ定数 */
 const PROP_TYPE_HASH = "x-hash";
 const PROP_TYPE_UNIT = "x-unit";
+const PROP_TYPE_SOURCE_HASH = "x-source-hash";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -61,6 +62,7 @@ const tmxParser = new XMLParser({
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	let sentenceHash = "";
 	let unitPath = "";
+	let sourceHash: string | undefined;
 	const segments = new Map<string, string>();
 
 	// <prop> 要素を処理
@@ -74,6 +76,9 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 				break;
 			case PROP_TYPE_UNIT:
 				unitPath = value;
+				break;
+			case PROP_TYPE_SOURCE_HASH:
+				sourceHash = value;
 				break;
 		}
 	}
@@ -92,11 +97,15 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 		}
 	}
 
-	return {
+	const entry: TmEntry = {
 		sentenceHash,
 		segments,
 		unitPath,
 	};
+	if (sourceHash) {
+		entry.sourceHash = sourceHash;
+	}
+	return entry;
 }
 
 /**
@@ -127,6 +136,9 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 	props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_HASH, "#text": entry.sentenceHash });
 	if (entry.unitPath) {
 		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT, "#text": entry.unitPath });
+	}
+	if (entry.sourceHash) {
+		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_SOURCE_HASH, "#text": entry.sourceHash });
 	}
 
 	// セグメントを言語コード順でソート（決定的出力）
@@ -184,6 +196,9 @@ export class TmxStore {
 	/** sentenceHash → TmEntry */
 	private index = new Map<string, TmEntry>();
 
+	/** sourceHash二次インデックス（O(1)検索用） */
+	private sourceHashIndex = new Set<string>();
+
 	/**
 	 * グローバルシングルトンを取得する（遅延初期化）。
 	 * TMXファイルパスを指定して初回ロードまたはmtime変更時リロードする。
@@ -209,6 +224,7 @@ export class TmxStore {
 		if (!fs.existsSync(filePath)) {
 			if (this.loadedFilePath !== filePath || this.index.size > 0) {
 				this.index.clear();
+				this.sourceHashIndex.clear();
 				this.loadedFilePath = filePath;
 				this.loadedMtime = 0;
 			}
@@ -235,6 +251,7 @@ export class TmxStore {
 	 */
 	load(filePath: string): void {
 		this.index.clear();
+		this.sourceHashIndex.clear();
 
 		if (!fs.existsSync(filePath)) {
 			return;
@@ -242,6 +259,7 @@ export class TmxStore {
 
 		const xml = fs.readFileSync(filePath, "utf-8");
 		this.index = parseTmx(xml);
+		this.rebuildSourceHashIndex();
 	}
 
 	/**
@@ -271,14 +289,24 @@ export class TmxStore {
 	addEntry(entry: TmEntry): void {
 		const existing = this.index.get(entry.sentenceHash);
 		if (existing) {
-			// 既存: セグメントとunitPathを最新で上書き
+			// 既存: セグメントとunitPath、sourceHashを最新で上書き
 			for (const [lang, text] of entry.segments) {
 				existing.segments.set(lang, text);
 			}
 			existing.unitPath = entry.unitPath;
+			if (entry.sourceHash) {
+				// 旧sourceHashをインデックスから削除（他エントリが同じ値を持つ可能性は低いが、
+				// rebuildSourceHashIndexを避けるため新値を追加し旧値は残存させる。
+				// 実害なし: false positiveはスキップが起こるだけ）
+				existing.sourceHash = entry.sourceHash;
+				this.sourceHashIndex.add(entry.sourceHash);
+			}
 		} else {
 			// 新規
 			this.index.set(entry.sentenceHash, { ...entry, segments: new Map(entry.segments) });
+			if (entry.sourceHash) {
+				this.sourceHashIndex.add(entry.sourceHash);
+			}
 		}
 	}
 
@@ -384,6 +412,16 @@ export class TmxStore {
 	}
 
 	/**
+	 * 指定されたsourceHashがTMに登録済みかどうかを返す。
+	 * ユニットの原文ハッシュがTMに存在するかの確認に使用。
+	 * @param sourceHash ユニットの原文コンテンツハッシュ（MdaitMarker.hash）
+	 * @returns 登録済みならtrue
+	 */
+	hasSourceHash(sourceHash: string): boolean {
+		return this.sourceHashIndex.has(sourceHash);
+	}
+
+	/**
 	 * 登録エントリー数を返す。
 	 */
 	getEntryCount(): number {
@@ -395,5 +433,19 @@ export class TmxStore {
 	 */
 	clear(): void {
 		this.index.clear();
+		this.sourceHashIndex.clear();
+	}
+
+	/**
+	 * sourceHash二次インデックスを再構築する。
+	 * load()時に呼び出される。
+	 */
+	private rebuildSourceHashIndex(): void {
+		this.sourceHashIndex.clear();
+		for (const entry of this.index.values()) {
+			if (entry.sourceHash) {
+				this.sourceHashIndex.add(entry.sourceHash);
+			}
+		}
 	}
 }

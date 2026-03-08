@@ -135,12 +135,6 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.tm-commit.unit",
-        "title": "%mdait.tm-commit.unit.title%",
-        "icon": "$(database)",
-        "category": "mdait"
-      },
-      {
         "command": "mdait.tm-commit.file",
         "title": "%mdait.tm-commit.file.title%",
         "icon": "$(database)",
@@ -150,24 +144,6 @@
         "command": "mdait.tm-commit.directory",
         "title": "%mdait.tm-commit.directory.title%",
         "icon": "$(database)",
-        "category": "mdait"
-      },
-      {
-        "command": "mdait.fix.unit",
-        "title": "%mdait.fix.unit.title%",
-        "icon": "$(check-all)",
-        "category": "mdait"
-      },
-      {
-        "command": "mdait.fix.file",
-        "title": "%mdait.fix.file.title%",
-        "icon": "$(check-all)",
-        "category": "mdait"
-      },
-      {
-        "command": "mdait.fix.directory",
-        "title": "%mdait.fix.directory.title%",
-        "icon": "$(check-all)",
         "category": "mdait"
       }
     ],
@@ -286,16 +262,6 @@
           "command": "mdait.tm-commit.file",
           "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@3"
-        },
-        {
-          "command": "mdait.fix.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
-          "group": "inline@4"
-        },
-        {
-          "command": "mdait.fix.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
-          "group": "inline@4"
         }
       ]
     },

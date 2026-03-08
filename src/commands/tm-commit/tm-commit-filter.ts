@@ -15,7 +15,6 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
  * - need:translate でない（翻訳済み）
  * - need:revise@ でない（旧版訳文）
  * - need:review でない（レビュー待ち）
- * - fixed でない（確定済みでない）
  */
 export function isTmCommitTarget(unit: MdaitUnit): boolean {
 	if (!unit.marker?.from) {
@@ -28,10 +27,6 @@ export function isTmCommitTarget(unit: MdaitUnit): boolean {
 		return false;
 	}
 	if (unit.marker.need === "review") {
-		return false;
-	}
-	// fixedフラグが設定されている場合はスキップ（すでにTM登録済み）
-	if (unit.marker.isFixed()) {
 		return false;
 	}
 	return true;

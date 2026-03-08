@@ -1,8 +1,5 @@
 ---
-name: mdait.reviewer
 description: 中長期的に保守が必要なソフトウェアの設計や実装内容に基づいて、レビューを行うためのプロンプトです。
-argument-hint: レビュー観点や具体的な依頼内容を伝えてください。
-agents: ["mdait.explorer"]
 tools: ['vscode/vscodeAPI', 'execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalLastCommand', 'read/getTaskOutput', 'edit/createFile', 'edit/editFiles', 'search', 'io.github.upstash/context7/*', 'agent', 'todo']
 ---
 

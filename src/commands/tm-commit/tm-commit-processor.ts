@@ -3,7 +3,6 @@
  * @description
  *   tm-commit処理の中核ロジック。
  *   ユニット単位でソース/ターゲットの対訳を文アライメントし、TmxStoreに登録する。
- *   将来のfixコマンドからも呼び出し可能な独立設計。
  * @module commands/tm-commit/tm-commit-processor
  */
 import { calculateHash } from "../../core/hash/hash-calculator";
@@ -57,6 +56,7 @@ export class TmCommitProcessor {
 	 * @param targetContent ターゲットユニットの本文
 	 * @param unitPath 出典パス（相対パス）
 	 * @param cancellationToken キャンセルトークン
+	 * @param sourceHash ユニットの原文コンテンツハッシュ（MdaitMarker.hash）
 	 * @returns ユニット単位の処理結果
 	 */
 	async processUnit(
@@ -64,6 +64,7 @@ export class TmCommitProcessor {
 		targetContent: string,
 		unitPath: string,
 		cancellationToken?: import("vscode").CancellationToken,
+		sourceHash?: string,
 	): Promise<TmCommitUnitResult> {
 		// 文アライメント
 		const pairs = await this.aligner.alignSentences(
@@ -81,16 +82,17 @@ export class TmCommitProcessor {
 			return { newCount: 0, existingCount: 0, skippedCount: 0 };
 		}
 
-		return this.registerPairs(pairs, unitPath);
+		return this.registerPairs(pairs, unitPath, sourceHash);
 	}
 
 	/**
 	 * 対訳ペア配列をTmxStoreに登録する。
 	 * @param pairs 対訳ペア配列
 	 * @param unitPath 出典パス（相対パス）
+	 * @param sourceHash ユニットの原文コンテンツハッシュ（MdaitMarker.hash）
 	 * @returns 登録結果
 	 */
-	registerPairs(pairs: SentencePair[], unitPath: string): TmCommitUnitResult {
+	registerPairs(pairs: SentencePair[], unitPath: string, sourceHash?: string): TmCommitUnitResult {
 		let newCount = 0;
 		let existingCount = 0;
 		let skippedCount = 0;
@@ -132,6 +134,7 @@ export class TmCommitProcessor {
 					[this.targetLang, targetText],
 				]),
 				unitPath,
+				...(sourceHash ? { sourceHash } : {}),
 			};
 
 			// addEntryは既存時にセグメント上書き+unitPath更新を行う

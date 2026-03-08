@@ -27,6 +27,8 @@ export interface TmEntry {
 	segments: Map<string, string>;
 	/** 最初の出典（相対パス） */
 	unitPath: string;
+	/** ユニットの原文コンテンツハッシュ（MdaitMarker.hash） */
+	sourceHash?: string;
 }
 
 /** TM検索結果 */

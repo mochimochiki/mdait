@@ -1,7 +1,5 @@
 ---
-name: mdait.translator
 description: 翻訳担当エージェント。mdaitプロジェクトのl10n（国際化）対応を行います。
-agents: ["mdait.explorer"]
 ---
 
 ## 役割

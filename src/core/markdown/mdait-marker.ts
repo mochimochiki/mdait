@@ -9,23 +9,20 @@ export class MdaitMarker {
 	 * @param hash ユニット本文のハッシュ
 	 * @param from 翻訳元ユニットのハッシュ
 	 * @param need 翻訳の必要性を表すタグ
-	 * @param fixed 確定フラグ
 	 */
 	constructor(
 		public hash: string,
 		public from: string | null = null,
 		public need: string | null = null,
-		public fixed = false,
 	) {}
 
 	/**
 	 * MdaitMarkerの正規表現パターン
 	 * ハッシュは省略可能（<!-- mdait --> のみも許容）
 	 * needフィールドは revise@{hash} 形式もサポート
-	 * fixedキーワードは末尾に配置される
 	 */
 	static readonly MARKER_REGEX =
-		/<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:([\w@]+))?(\s+fixed)?\s*-->/;
+		/<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:([\w@]+))?\s*-->/;
 
 	/**
 	 * コメントをMarkdown形式の文字列として出力
@@ -46,10 +43,6 @@ export class MdaitMarker {
 			result += ` need:${this.need}`;
 		}
 
-		if (this.fixed) {
-			result += " fixed";
-		}
-
 		result += " -->";
 		return result;
 	}
@@ -66,10 +59,9 @@ export class MdaitMarker {
 		if (!match) {
 			return null;
 		}
-		const [, hash, from, needTag, fixedKeyword] = match;
+		const [, hash, from, needTag] = match;
 		// ハッシュが省略された場合は空文字列とする
-		const fixed = fixedKeyword !== undefined;
-		return new MdaitMarker(hash || "", from || null, needTag || null, fixed);
+		return new MdaitMarker(hash || "", from || null, needTag || null);
 	}
 
 	/**
@@ -138,21 +130,5 @@ export class MdaitMarker {
 			return null;
 		}
 		return need.substring(7); // "revise@".length = 7
-	}
-
-	/**
-	 * 確定済みかどうかを返す
-	 * @returns 確定済みであればtrue
-	 */
-	isFixed(): boolean {
-		return this.fixed;
-	}
-
-	/**
-	 * 確定フラグを設定する
-	 * @param value 確定フラグの値
-	 */
-	setFixed(value: boolean): void {
-		this.fixed = value;
 	}
 }

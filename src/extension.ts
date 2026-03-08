@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import { fixDirectoryCommand, fixFileCommand, fixUnitCommand } from "./commands/fix/fix-command";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -7,12 +6,8 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm-commit/tm-commit-command";
 import { openTmCommand } from "./commands/tm/command-open";
-import {
-	tmCommitDirectoryCommand,
-	tmCommitFileCommand,
-	tmCommitUnitCommand,
-} from "./commands/tm-commit/tm-commit-command";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
@@ -189,26 +184,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// TM Commit commands
-	const tmCommitUnitDisposable = vscode.commands.registerCommand("mdait.tm-commit.unit", (range?: vscode.Range) =>
-		tmCommitUnitCommand(range),
-	);
 	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm-commit.file", (item?: StatusItem) =>
 		tmCommitFileCommand(item),
 	);
 	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
 		"mdait.tm-commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
-	);
-
-	// Fix commands
-	const fixUnitDisposable = vscode.commands.registerCommand("mdait.fix.unit", (range?: vscode.Range) =>
-		fixUnitCommand(range),
-	);
-	const fixFileDisposable = vscode.commands.registerCommand("mdait.fix.file", (item?: StatusItem) =>
-		fixFileCommand(item),
-	);
-	const fixDirectoryDisposable = vscode.commands.registerCommand("mdait.fix.directory", (item?: StatusItem) =>
-		fixDirectoryCommand(item),
 	);
 
 	// CodeLens翻訳コマンド
@@ -492,12 +473,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,
 		codeLensJumpToSourceFrontmatterDisposable,
-		tmCommitUnitDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
-		fixUnitDisposable,
-		fixFileDisposable,
-		fixDirectoryDisposable,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

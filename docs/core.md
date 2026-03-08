@@ -22,7 +22,7 @@ Core層は、**翻訳ドメインの純粋なロジック**を提供します。
 mdaitUnitは以下の要素で構成されます：
 
 - **content**: ユニット本文（Markdownテキスト）
-- **marker**: `<!-- mdait {hash} [from:{hash}] [need:{flag}] [fixed] -->`
+- **marker**: `<!-- mdait {hash} [from:{hash}] [need:{flag}] -->`
 - **range**: ドキュメント内の開始・終了位置
 
 ### ユニット境界の決定
@@ -219,7 +219,9 @@ TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデ�
 
 **シングルトンパターン**: 本番コードでは`TmxStore.getInstance(path)`を使用。save()後はmtimeを記録するため不要なリロードを回避。外部変更時のみmtime差分でリロード。テストでは`new TmxStore()`の直接インスタンス化も可能。
 
-**データモデル**: 文単位のTmEntryが管理単位。各エントリーはsentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）と最初の出典パス（unitPath）を保持します。
+**データモデル**: 文単位のTmEntryが管理単位。各エントリーはsentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）、最初の出典パス（unitPath）、およびオプションのsourceHash（登録元ユニットのコンテンツハッシュ）を保持します。
+
+**sourceHashスキップ**: `hasSourceHash(hash)`メソッドにより、指定ハッシュが既にTMに登録済みかを判定します。tm-commitのバッチ処理時に、既に処理済みのユニットをスキップするために使用されます。
 
 **実装**: [`src/core/tm/tmx-store.ts`](../src/core/tm/tmx-store.ts)
 
