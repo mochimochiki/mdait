@@ -1,9 +1,9 @@
 /**
- * @file tm-commit-processor.ts
+ * @file commit-processor.ts
  * @description
  *   tm-commit処理の中核ロジック。
  *   ユニット単位でソース/ターゲットの対訳を文アライメントし、TmxStoreに登録する。
- * @module commands/tm-commit/tm-commit-processor
+ * @module commands/tm/commit-processor
  */
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
@@ -76,7 +76,7 @@ export class TmCommitProcessor {
 		);
 
 		if (pairs.length === 0) {
-			logger.debug("tm-commit", "No sentence pairs from alignment", {
+			logger.debug("tm.commit", "No sentence pairs from alignment", {
 				unitPath,
 			});
 			return { newCount: 0, existingCount: 0, skippedCount: 0 };
@@ -105,7 +105,7 @@ export class TmCommitProcessor {
 			// 空文字列チェック
 			if (!sourceText.trim() || !targetText.trim()) {
 				skippedCount++;
-				logger.debug("tm-commit", "Empty text", {
+				logger.debug("tm.commit", "Empty text", {
 					original: pair.source,
 					unitPath,
 				});
@@ -115,7 +115,7 @@ export class TmCommitProcessor {
 			// 翻訳価値判定（短文・断片・数値のみ等を除外）
 			if (!isWorthyForTm(sourceText, this.sourceLang)) {
 				skippedCount++;
-				logger.debug("tm-commit", "Not worthy for TM", {
+				logger.debug("tm.commit", "Not worthy for TM", {
 					text: sourceText,
 					lang: this.sourceLang,
 					unitPath,
@@ -148,7 +148,7 @@ export class TmCommitProcessor {
 		}
 
 		// 統計ログ出力
-		logger.info("tm-commit", "Unit processing completed", {
+		logger.info("tm.commit", "Unit processing completed", {
 			newCount,
 			existingCount,
 			skippedCount,

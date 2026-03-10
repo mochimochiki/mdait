@@ -1,9 +1,9 @@
 /**
- * @file tm-commit-filter.ts
+ * @file commit-filter.ts
  * @description
  *   TM登録対象のフィルタリングロジック。
  *   ユニットがTM処理対象かどうかを判定する純粋関数。
- * @module commands/tm-commit/tm-commit-filter
+ * @module commands/tm/commit-filter
  */
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 

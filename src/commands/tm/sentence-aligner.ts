@@ -3,7 +3,7 @@
  * @description
  *   LLMベースの対訳文アライメント。
  *   原文/訳文ペアを入力し、文単位の対訳ペア配列を返す。
- * @module commands/tm-commit/sentence-aligner
+ * @module commands/tm/sentence-aligner
  */
 import type * as vscode from "vscode";
 import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
@@ -81,7 +81,7 @@ export class SentenceAligner {
 			const parsed: unknown = JSON.parse(cleaned);
 
 			if (!Array.isArray(parsed)) {
-				logger.warn("tm-commit", "LLM response is not an array", { response: cleaned.substring(0, 200) });
+				logger.warn("tm.commit", "LLM response is not an array", { response: cleaned.substring(0, 200) });
 				return [];
 			}
 
@@ -103,7 +103,7 @@ export class SentenceAligner {
 
 			return pairs;
 		} catch (error) {
-			logger.warn("tm-commit", "Failed to parse LLM alignment response", {
+			logger.warn("tm.commit", "Failed to parse LLM alignment response", {
 				...formatError(error),
 				response: response.substring(0, 200),
 			});

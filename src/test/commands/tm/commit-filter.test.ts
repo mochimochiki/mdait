@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { isTmCommitTarget } from "../../../commands/tm-commit/tm-commit-filter";
+import { isTmCommitTarget } from "../../../commands/tm/commit-filter";
 import { MdaitMarker } from "../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../core/markdown/mdait-unit";
 

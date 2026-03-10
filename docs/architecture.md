@@ -48,7 +48,7 @@ graph TD
 | 層 | 説明 | ドキュメント |
 |---|---|---|
 | Core層 | `MarkdownItParser` でユニット分割、`Normalizer`/`HashCalculator` でハッシュ計算・正規化、`SectionMatcher` でソース/ターゲット対応検出、`StatusManager`/`StatusCollector` でステータス集約。mdaitUnit・ハッシュ・ステータス管理・UnitRegistry・Diff・FrontMatter翻訳を担当。VS Code APIに非依存な純粋TypeScript実装でテスト・移植が容易。 | [core.md](design/core.md) |
-| Commands層 | Core層の純粋関数を組み合わせてユーザーワークフローを実現（sync・trans・term・setup・tm・tm-commit・translate-selection）。進捗表示・エラーハンドリング・キャンセル対応も責務。 | コマンド層参照 |
+| Commands層 | Core層の純粋関数を組み合わせてユーザーワークフローを実現（sync・trans・term・setup・tm・translate-selection）。進捗表示・エラーハンドリング・キャンセル対応も責務。 | コマンド層参照 |
 | LLM層 | `AIService` インターフェースでプロバイダーを抽象化。`AIServiceBuilder` が動的選択し、OpenAI/Ollama/VS Code LM APIの差異を吸収。AIServiceインターフェース・各プロバイダー実装を提供。 | [llm.md](design/llm.md) |
 | UI層 | StatusTreeProvider・CodeLensProvider・HoverProvider・Welcome View でmdait内部状態をVS Code標準UIパターンで可視化。自動同期機能も統合。 | [ui.md](design/ui.md) |
 | Tools層 | `mdait_getStatus` / `mdait_sync` / `mdait_translate` をLanguageModelTool APIとして提供。Commands層・Core層の薄いラッパーとしてGitHub Copilot Chat連携を実現。 | [tools.md](design/tools.md) |
@@ -78,7 +78,7 @@ graph TD
 ```
 src/
   extension.ts           # VS Code拡張機能のエントリーポイント
-  commands/              # sync/trans/term/setup/trans-selection/tm-commit
+  commands/              # sync/trans/term/setup/trans-selection/tm
   core/                  # markdown/hash/status/unit-registry/diff/tm
   api/                   # 外部AIサービス通信
   tools/                 # LanguageModelTool API統合

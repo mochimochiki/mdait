@@ -2,8 +2,8 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { SentenceAligner } from "../../../commands/tm-commit/sentence-aligner";
-import { TmCommitProcessor } from "../../../commands/tm-commit/tm-commit-processor";
+import { TmCommitProcessor } from "../../../commands/tm/commit-processor";
+import type { SentenceAligner } from "../../../commands/tm/sentence-aligner";
 import { TmxStore } from "../../../core/tm/tmx-store";
 import type { SentencePair } from "../../../core/tm/types";
 

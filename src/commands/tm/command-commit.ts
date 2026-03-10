@@ -1,11 +1,11 @@
 /**
- * @file tm-commit-command.ts
+ * @file command-commit.ts
  * @description
  *   tm-commitコマンドのエントリーポイント。
  *   ファイル/ディレクトリ単位のTM登録を提供する。
  *   withProgressパターンで進捗表示・キャンセル対応。
  *   TMXのsourceHashによるスキップ判定でバッチ効率を最適化。
- * @module commands/tm-commit/tm-commit-command
+ * @module commands/tm/command-commit
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -20,9 +20,9 @@ import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { isTmCommitTarget } from "./commit-filter";
+import { TmCommitProcessor, type TmCommitResult } from "./commit-processor";
 import { SentenceAligner } from "./sentence-aligner";
-import { isTmCommitTarget } from "./tm-commit-filter";
-import { TmCommitProcessor, type TmCommitResult } from "./tm-commit-processor";
 
 const logger = Logger.getInstance();
 
@@ -136,7 +136,7 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 						overallResult.existingEntries += result.existingEntries;
 						overallResult.errorUnits += result.errorUnits;
 					} catch (error) {
-						logger.warn("tm-commit", "File processing error", {
+						logger.warn("tm.commit", "File processing error", {
 							file: files[i],
 							...formatError(error),
 						});
@@ -182,7 +182,7 @@ async function executeTmCommitForFile(
 /**
  * 指定ユニット群にtm-commitを実行する。
  */
-export async function executeTmCommitForUnits(
+async function executeTmCommitForUnits(
 	units: MdaitUnit[],
 	filePath: string,
 	config: Configuration,
@@ -220,7 +220,7 @@ export async function executeTmCommitForUnits(
 
 	for (let i = 0; i < units.length; i++) {
 		if (token.isCancellationRequested) {
-			logger.info("tm-commit", "TM commit cancelled");
+			logger.info("tm.commit", "TM commit cancelled");
 			break;
 		}
 
@@ -260,7 +260,7 @@ export async function executeTmCommitForUnits(
 			result.newEntries += unitResult.newCount;
 			result.existingEntries += unitResult.existingCount;
 		} catch (error) {
-			logger.warn("tm-commit", "Unit processing error", {
+			logger.warn("tm.commit", "Unit processing error", {
 				unitHash: unit.marker?.hash,
 				...formatError(error),
 			});
@@ -271,7 +271,7 @@ export async function executeTmCommitForUnits(
 	// 永続化
 	store.save(tmxFilePath);
 
-	logger.info("tm-commit", "TM commit completed", {
+	logger.info("tm.commit", "TM commit completed", {
 		file: relativePath,
 		processedUnits: result.processedUnits,
 		newEntries: result.newEntries,
@@ -285,7 +285,7 @@ export async function executeTmCommitForUnits(
 /**
  * ユニットのfrom属性からソースコンテンツを取得する。
  */
-export async function getSourceContent(
+async function getSourceContent(
 	unit: MdaitUnit,
 	statusManager: StatusManager,
 	config: Configuration,
@@ -308,7 +308,7 @@ export async function getSourceContent(
 		const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
 		return sourceUnitData?.content ?? null;
 	} catch (error) {
-		logger.warn("tm-commit", "Failed to read source unit", {
+		logger.warn("tm.commit", "Failed to read source unit", {
 			filePath: sourceUnit.filePath,
 			...formatError(error),
 		});

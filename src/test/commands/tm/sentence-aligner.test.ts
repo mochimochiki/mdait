@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { SentenceAligner } from "../../../commands/tm-commit/sentence-aligner";
+import { SentenceAligner } from "../../../commands/tm/sentence-aligner";
 import type { AIMessage, AIService } from "../../../llm/ai-service";
 
 /**

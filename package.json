@@ -135,14 +135,14 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.tm-commit.file",
-        "title": "%mdait.tm-commit.file.title%",
+        "command": "mdait.tm.commit.file",
+        "title": "%mdait.tm.commit.file.title%",
         "icon": "$(database)",
         "category": "mdait"
       },
       {
-        "command": "mdait.tm-commit.directory",
-        "title": "%mdait.tm-commit.directory.title%",
+        "command": "mdait.tm.commit.directory",
+        "title": "%mdait.tm.commit.directory.title%",
         "icon": "$(database)",
         "category": "mdait"
       }
@@ -254,12 +254,12 @@
           "group": "inline"
         },
         {
-          "command": "mdait.tm-commit.directory",
+          "command": "mdait.tm.commit.directory",
           "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
           "group": "inline@3"
         },
         {
-          "command": "mdait.tm-commit.file",
+          "command": "mdait.tm.commit.file",
           "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@3"
         }

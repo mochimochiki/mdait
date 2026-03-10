@@ -6,7 +6,7 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
-import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm-commit/tm-commit-command";
+import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
@@ -184,11 +184,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// TM Commit commands
-	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm-commit.file", (item?: StatusItem) =>
+	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm.commit.file", (item?: StatusItem) =>
 		tmCommitFileCommand(item),
 	);
 	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
-		"mdait.tm-commit.directory",
+		"mdait.tm.commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
 
