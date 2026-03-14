@@ -185,8 +185,8 @@ await store.save();
 TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文・断片をフィルタリングします。
 
 **主要関数**:
-- `stripMarkdown(text)`: markdown-itでパースし、リンク・太字・強調・コード・HTMLタグ等を除去して純粋テキストに変換。**構造保持**として見出し後に`\n\n`、リスト項目・表セル後に`\n`を挿入し、LLMが要素間の文脈を正しく理解できるよう分離します（markdown-itトークンツリー走査で正規表現独自実装を回避）。
-  before: `**重要**: [詳細はこちら](url)を参照。` → after: `重要: 詳細はこちらを参照。`
+- `stripMarkdown(text)`: markdown-itでパースし、先頭のYAML frontmatterとコードブロック、リンク装飾・太字・強調・HTMLタグ等を除去して純粋テキストに変換。インラインコードはバッククォート付きで保持する。**構造保持**として見出し後に`\n\n`、リスト項目・表セル後に`\n`を挿入し、LLMが要素間の文脈を正しく理解できるよう分離します（markdown-itトークンツリー走査で正規表現独自実装を回避）。
+    before: ``---\ntitle: 重要\n---\n**重要**: [詳細はこちら](url) と `0.1.0` を参照。`` → after: ``重要: 詳細はこちら と `0.1.0` を参照。``
 - `isWorthyForTm(text, lang)`: 日本語8文字未満・英語12文字未満・数値のみ・URL/パスのみ・英語2単語以下を除外。
 
 **実装**: [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm.md](command_tm.md)

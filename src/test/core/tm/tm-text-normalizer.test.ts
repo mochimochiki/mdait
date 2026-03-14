@@ -36,10 +36,10 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown("This is ~~deleted~~ text"), "This is deleted text");
 		});
 
-		test("インラインコードを完全除外", () => {
-			assert.equal(stripMarkdown("`code`"), "");
-			assert.equal(stripMarkdown("This is `code` here"), "This is here");
-			assert.equal(stripMarkdown("Use `npm install` command"), "Use command");
+		test("インラインコードは保持", () => {
+			assert.equal(stripMarkdown("`code`"), "`code`");
+			assert.equal(stripMarkdown("This is `code` here"), "This is `code` here");
+			assert.equal(stripMarkdown("Use `npm install` command"), "Use `npm install` command");
 		});
 
 		test("コードブロックを完全除外", () => {
@@ -56,7 +56,7 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		test("複数要素が混在する複雑なケース", () => {
 			const input = "Visit **[Google](https://google.com)** for `code` examples";
-			const expected = "Visit Google for examples";
+			const expected = "Visit Google for `code` examples";
 			assert.equal(stripMarkdown(input), expected);
 		});
 
@@ -79,6 +79,18 @@ suite("core/tm/tm-text-normalizer", () => {
 		test("Markdown要素が含まれない通常テキスト", () => {
 			assert.equal(stripMarkdown("Hello world"), "Hello world");
 			assert.equal(stripMarkdown("これは日本語です"), "これは日本語です");
+		});
+
+		test("先頭のYAML frontmatterを除外する", () => {
+			const input = "---\ntitle: Sample\ntags:\n  - tm\n---\n\n本文の `code` です";
+			const expected = "本文の `code` です";
+			assert.equal(stripMarkdown(input), expected);
+		});
+
+		test("本文中の区切り線はfrontmatterとして扱わない", () => {
+			const input = "導入文\n\n---\n\n本文";
+			const expected = "導入文\n\n本文";
+			assert.equal(stripMarkdown(input), expected);
 		});
 
 		suite("見出しの処理", () => {
@@ -188,14 +200,13 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		test("セル内にMarkdown記法を含む表", () => {
 			const input = "| **Bold** | *Italic* |\n|----------|----------|\n| [Link](url) | `code` |";
-			const expected = "Bold\nItalic\nLink";
+			const expected = "Bold\nItalic\nLink\n`code`";
 			assert.equal(stripMarkdown(input), expected);
 		});
 
-		test("表のセル内のインラインコードは完全除外される", () => {
+		test("表のセル内のインラインコードも保持される", () => {
 			const input = "| Text | `code` |\n|------|--------|\n| Hello | `world` |";
-			// コードセルが除外されるため、空のセル位置で改行のみが残る
-			const expected = "Text\n\nHello";
+			const expected = "Text\n`code`\nHello\n`world`";
 			assert.equal(stripMarkdown(input), expected);
 		});
 

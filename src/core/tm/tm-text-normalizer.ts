@@ -12,12 +12,14 @@ import MarkdownIt from "markdown-it";
 /** markdown-itインスタンス（モジュールスコープで再利用） */
 const md = new MarkdownIt("default");
 
+const LEADING_YAML_FRONTMATTER_PATTERN = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+
 /**
  * markdown-itトークンから純粋なテキストのみを抽出する。
  *
  * 処理方針：
  * - text, softbreak, hardbreak トークンのテキストを抽出
- * - code_inline, code_block, fence は除外（翻訳対象外）
+ * - code_inline は保持し、code_block, fence は除外する
  * - HTMLタグは後処理で除去
  * - 画像のaltテキストとリンクのテキストは抽出
  * - 段落間には空白を挿入
@@ -108,8 +110,13 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 			continue;
 		}
 
-		// インラインコード・コードブロックは除外
-		if (token.type === "code_inline" || token.type === "code_block" || token.type === "fence") {
+		// インラインコードは保持し、コードブロックのみ除外
+		if (token.type === "code_inline") {
+			textParts.push(`\`${token.content}\``);
+			continue;
+		}
+
+		if (token.type === "code_block" || token.type === "fence") {
 			continue;
 		}
 
@@ -148,7 +155,8 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
  * Markdown要素を除去し、純粋なテキストに変換する。
  *
  * markdown-itでパースしてトークンツリーを走査し、テキストのみを抽出する。
- * コードブロック・インラインコード・HTMLタグは除外される。
+ * 先頭のYAML frontmatterとコードブロック、HTMLタグは除外される。
+ * インラインコードはバッククォート付きで保持される。
  * リンクや画像は表示テキスト部分のみが抽出される。
  *
  * @param text Markdown付きテキスト
@@ -158,13 +166,15 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
  * ```typescript
  * stripMarkdown("Hello **world**")  // => "Hello world"
  * stripMarkdown("[link](url)")      // => "link"
- * stripMarkdown("`code`")           // => ""
+ * stripMarkdown("`code`")           // => "`code`"
  * ```
  */
 export function stripMarkdown(text: string): string {
+	const withoutFrontmatter = text.replace(LEADING_YAML_FRONTMATTER_PATTERN, "");
+
 	// 前処理：不正な位置のコードフェンスを除去（markdown-itが認識しない形式）
 	// 例: "Text ```js\ncode\n```" → "Text "
-	const preprocessed = text.replace(/```[\s\S]*?```/g, "");
+	const preprocessed = withoutFrontmatter.replace(/```[\s\S]*?```/g, "");
 
 	// markdown-itでパース
 	const tokens = md.parse(preprocessed, {});

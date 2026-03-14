@@ -78,13 +78,24 @@ suite("trans-command TM検索の正規化ロジック", () => {
 		const complexSource = "This is **bold** and *italic* with [link](url) and `code` here.";
 		const normalizedSource = stripMarkdown(complexSource);
 
-		// インラインコードは除去される
-		assert.strictEqual(normalizedSource, "This is bold and italic with link and here.");
+		assert.strictEqual(normalizedSource, "This is bold and italic with link and `code` here.");
 
 		const hash = calculateHash(normalizedSource, true);
 		const hashFromOriginal = calculateHash(stripMarkdown(complexSource), true);
 
 		assert.strictEqual(hash, hashFromOriginal, "ハッシュは同じになるべき");
+	});
+
+	test("先頭frontmatterは正規化とハッシュ計算から除外される", () => {
+		const sourceWithFrontmatter = "---\ntitle: Sample\n---\n\nThis is `code` here.";
+		const normalizedSource = stripMarkdown(sourceWithFrontmatter);
+
+		assert.strictEqual(normalizedSource, "This is `code` here.");
+
+		const hash = calculateHash(normalizedSource, true);
+		const hashFromOriginal = calculateHash(stripMarkdown(sourceWithFrontmatter), true);
+
+		assert.strictEqual(hash, hashFromOriginal, "frontmatter除外後のハッシュは同じになるべき");
 	});
 
 	test("TmxStoreでの登録・検索の統合テスト", () => {
