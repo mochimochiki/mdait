@@ -51,7 +51,7 @@ sequenceDiagram
 ### 変更対象
 - **ファイル**: `src/commands/tm-commit/tm-commit-command.ts`
 - **関数**: `isTmCommitTarget(unit: MdaitUnit): boolean` (51-62行目)
-- **ドキュメント**: `docs/command_tm-commit.md` (30行目の表)
+- **ドキュメント**: `docs/command_tm.md` (30行目の表)
 
 ### 実装詳細
 `isTmCommitTarget`関数に以下のチェックを追加:
@@ -64,7 +64,7 @@ if (unit.marker.need === "review") {
 ## 5. 考慮事項
 
 - **既存テストへの影響**: `src/test/commands/tm-commit/`配下のテストがあればチェックが必要
-- **ドキュメント整合性**: `docs/command_tm-commit.md`の仕様表を必ず更新
+- **ドキュメント整合性**: `docs/command_tm.md`の仕様表を必ず更新
 - **後方互換性**: 既存のTMファイルには影響なし（判定ロジックのみ変更）
 - **UI表示**: StatusTreeでの表示は変更不要（tm-commit対象判定のみの変更）
 
@@ -73,7 +73,7 @@ if (unit.marker.need === "review") {
 - [x] explorerエージェントで影響範囲の確認
 - [x] coderエージェントで実装
   - [x] `isTmCommitTarget`関数の修正（別ファイルに分離）
-  - [x] `docs/command_tm-commit.md`の仕様表の更新
+  - [x] `docs/command_tm.md`の仕様表の更新
   - [x] 既存テストの実行と必要に応じた修正
 - [x] reviewerエージェントでコードレビュー
 - [x] レビュー指摘への対応（JSDoc更新・テスト追加）
@@ -102,5 +102,5 @@ if (unit.marker.need === "review") {
 
 ## 9. 参考
 
-- 関連ドキュメント: `docs/command_tm-commit.md`
+- 関連ドキュメント: `docs/command_tm.md`
 - 関連実装: `src/commands/tm-commit/tm-commit-command.ts`

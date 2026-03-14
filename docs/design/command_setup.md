@@ -2,7 +2,7 @@
 
 ワークスペースに`mdait.json`設定ファイルを作成し、翻訳ワークフローを開始できる状態にするコマンドです。
 
-> **ワークフロー位置:** **setup** → [sync](command_sync.md) → [trans](command_trans.md) → [tm-commit](command_tm-commit.md)
+> **ワークフロー位置:** **setup** → [sync](command_sync.md) → [trans](command_trans.md) → [tm-commit](command_tm.md)
 
 ## 機能
 

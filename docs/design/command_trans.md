@@ -2,7 +2,7 @@
 
 `need:translate`/`need:revise`フラグのユニットをAIで翻訳し、ハッシュ更新とフラグ除去を行うコマンドです。
 
-> **ワークフロー位置:** [sync](command_sync.md) → **trans** → [tm-commit](command_tm-commit.md)
+> **ワークフロー位置:** [sync](command_sync.md) → **trans** → [tm-commit](command_tm.md)
 
 ## 機能
 
@@ -101,7 +101,7 @@ sequenceDiagram
 - **diff-aware revise**: `need:revise@{oldhash}`時はUnified Diff → LLMにパッチのみ生成させる → 適用。失敗時は全文翻訳にフォールバック（[architecture.md](../architecture.md) P4参照）
 - **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
 - **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
-- **TM参照**: tm-commit済みエントリをTmxStoreから検索し、`tm.maxReferences`件をプロンプトに注入（[command_tm-commit.md](command_tm-commit.md) 参照）
+- **TM参照**: tm-commit済みエントリをTmxStoreから検索し、`tm.maxReferences`件をプロンプトに注入（[command_tm.md](command_tm.md) 参照）
 - **順次処理**: AI APIレート制限対策とキャンセル即応性のため、ファイル内ユニットは順次処理
 
 ### 主要コンポーネント

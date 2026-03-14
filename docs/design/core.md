@@ -189,7 +189,7 @@ TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文�
   before: `**重要**: [詳細はこちら](url)を参照。` → after: `重要: 詳細はこちらを参照。`
 - `isWorthyForTm(text, lang)`: 日本語8文字未満・英語12文字未満・数値のみ・URL/パスのみ・英語2単語以下を除外。
 
-**実装**: [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm-commit.md](command_tm-commit.md)
+**実装**: [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm.md](command_tm.md)
 
 ### formatTmReferences
 

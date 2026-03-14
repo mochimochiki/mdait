@@ -13,7 +13,7 @@
 | `docs/command_setup.md` | 要改善 |
 | `docs/command_trans.md` | 要改善 |
 | `docs/command_trans-selection.md` | 要改善 |
-| `docs/command_tm-commit.md` | 要改善 |
+| `docs/command_tm.md` | 要改善 |
 | `docs/command_term.md` | 要改善 |
 
 ## 3. スタイルリファレンス構造（command_sync.mdより）
@@ -48,7 +48,7 @@
 - [x] フェーズ2a: command_setup.md → 既にスタイル適合済み（改善不要）
 - [x] フェーズ2b: command_trans.md → 既にスタイル適合済み（改善不要）
 - [x] フェーズ2c: command_trans-selection.md 全面改訂（大幅乖離→スタイル適合）
-- [x] フェーズ2d: command_tm-commit.md 修正（不正行・破損セクション除去＋mermaid図追加）
+- [x] フェーズ2d: command_tm.md 修正（不正行・破損セクション除去＋mermaid図追加）
 - [x] フェーズ2e: command_term.md 修正（重複行・孤立箇条書き除去＋mermaid図追加）
 - [x] フェーズ3: 全ファイル品質評価（m.researcher）
 - [x] フェーズ4: 修正ループ（command_trans-selection.mdの設計ノート・主要コンポーネント追記）

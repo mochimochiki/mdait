@@ -212,7 +212,7 @@ context.subscriptions.push(openTmStatusDisposable);
 
 5. **設計書の更新**
    - `docs/ui.md`: ナビゲーションボタンセクションを追加
-   - `docs/command_tm-commit.md`: TMファイル操作セクションを追加
+   - `docs/command_tm.md`: TMファイル操作セクションを追加
 
 6. **ビルド確認**
    - `npm run compile`成功を確認

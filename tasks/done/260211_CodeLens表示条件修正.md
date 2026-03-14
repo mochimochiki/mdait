@@ -202,7 +202,7 @@ private createCodeLensesForMarker(
 
 ### 関連ドキュメント
 - [docs/ui.md](../docs/ui.md) - UI層設計
-- [docs/command_tm-commit.md](../docs/command_tm-commit.md) - TM登録コマンド設計
+- [docs/command_tm.md](../docs/command_tm.md) - TM登録コマンド設計
 
 ### 関連コード
 - [src/ui/codelens/codelens-provider.ts](../../src/ui/codelens/codelens-provider.ts) - 修正対象

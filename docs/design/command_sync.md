@@ -2,7 +2,7 @@
 
 原文と訳文を同期し、翻訳が必要な箇所を自動検出するコマンドです。
 
-> **ワークフロー位置:** [setup](command_setup.md) → **sync** → [trans](command_trans.md) → [tm-commit](command_tm-commit.md)
+> **ワークフロー位置:** [setup](command_setup.md) → **sync** → [trans](command_trans.md) → [tm-commit](command_tm.md)
 
 ## 機能
 

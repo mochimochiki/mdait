@@ -594,7 +594,7 @@ AI技術の進化とグローバル化の加速により...
 
 - [x] [`docs/core.md`](../docs/core.md) - TmTextNormalizerセクション
   - [x] stripMarkdown処理内容の更新（改行保持について）
-- [x] [`docs/command_tm-commit.md`](../docs/command_tm-commit.md) - 正規化の説明更新
+- [x] [`docs/command_tm.md`](../docs/command_tm.md) - 正規化の説明更新
   - [x] 構造保持の説明追加
 
 ### 6.4 レビュー
@@ -628,7 +628,7 @@ AI技術の進化とグローバル化の加速により...
 
 ### 7.5 ドキュメント要件
 - [ ] core.mdが更新されている
-- [ ] command_tm-commit.mdが更新されている
+- [ ] command_tm.mdが更新されている
 - [x] 実装者が理解できる明確なコメントがある
 
 ## 8. まとめと改善提案
@@ -699,7 +699,7 @@ AI技術の進化とグローバル化の加速により...
    - これらは今回の変更と無関係だが、修正が必要
 
 **次のステップ**:
-1. ドキュメント更新（`docs/core.md`, `docs/command_tm-commit.md`）
+1. ドキュメント更新（`docs/core.md`, `docs/command_tm.md`）
 2. コードレビュー（m.reviewer）
 3. CI/CD確認
 

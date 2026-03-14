@@ -221,7 +221,7 @@ const targetText = pair.target;
 - [x] エラーチェック: コンパイルエラーがないことを確認
 - [x] テスト実行: 全テストが成功することを確認（259 passing）
 - [x] ドキュメント更新
-  - [x] command_tm-commit.md のシーケンス図を更新
+  - [x] command_tm.md のシーケンス図を更新
   - [x] trans検索フローの説明を更新
 
 ## 7. 品質要件チェック
