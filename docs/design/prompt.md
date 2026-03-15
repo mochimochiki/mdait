@@ -262,35 +262,54 @@ prompts: ["trans.translate", "term.detect"]
 
 ---
 
-### tm.splitSentences - 対訳文アライメント
+### tm.splitSentences - TM登録計画生成
 
-**ファイル**: [`src/commands/tm-commit/sentence-aligner.ts`](../../src/commands/tm-commit/sentence-aligner.ts)
+**ファイル**: [`src/commands/tm/sentence-aligner.ts`](../../src/commands/tm/sentence-aligner.ts)
 
 #### 概要
-ソーステキストとターゲットテキストを受け取り、1:1にアラインされた対訳文ペアの配列を返します。
+`primaryUnit` / `localUnit` と既存 TM 情報を受け取り、TM 登録用の `new|update` 計画を返します。
 
 #### 設計意図
-- tm-commitで使用する高精度な文分割
-- ソースとターゲットの対応関係を正確に把握
-- 非1:1対応（1文→複数文など）は結合して1ペアにまとめる
-- 原文を忠実に保持（改変・意訳禁止）
-- Markdown構造（リンク、太字、コード等）は文内で保持
+- tm-commit の正準軸を source/target から primary/local へ切り替える
+- 既存 TU 更新と新規 TU 追加を一度の応答で分離する
+- `update必須tuid` を欠落させない制約付き応答を生成する
+- `primary` / `local` を unit 全体のサブセットとして保持し、勝手な言い換えを防ぐ
+- primary sentence を基準にした TU reuse を優先し、non-primary 側だけでの新規作成を防ぐ
 - Professional TM curator roleにより、LLM側でノイズや意味のない文字列を自動除外
 - クライアント側`isWorthyForTm`と合わせて二段階の品質確保
 
 #### 変数
-- `{{sourceLang}}`: ソース言語コード
-- `{{targetLang}}`: ターゲット言語コード
-- `{{sourceText}}`: ソースユニット本文
-- `{{targetText}}`: ターゲットユニット本文
+- `{{primaryLang}}`: primary 言語コード
+- `{{localLang}}`: 今回登録する local 言語コード
+- `{{primaryUnit}}`: primaryLang 側ユニット本文
+- `{{localUnit}}`: localLang 側ユニット本文
+- `{{existingTmSet}}`: `{tuid, primarySentence, localSentence|null}` 配列
+- `{{requiredUpdateTuids}}`: 欠落不可の既存 tuid 一覧
+- `{{retryMissingTuids}}`: 再試行時に補完対象とする tuid 一覧（初回は空）
+- `{{retryReason}}`: 再試行理由の要約（初回は空）
 
 #### Output
 ```json
 [
-  {"source": "source sentence 1", "target": "target sentence 1"},
-  {"source": "source sentence 2", "target": "target sentence 2"}
+  {
+    "type": "new",
+    "tuid": "-",
+    "primary": "primary sentence 1",
+    "local": "local sentence 1"
+  },
+  {
+    "type": "update",
+    "tuid": "e1f2g3h4",
+    "primary": "primary sentence 2",
+    "local": "local sentence 2"
+  }
 ]
 ```
+
+#### 補足
+- `type=update` の `tuid` は必ず入力済み `existingTmSet` を参照する
+- `type=new` の `tuid` はプレースホルダー `"-"` とし、実際の tuid はクライアントが `primary` から計算する
+- 再試行では `retryMissingTuids` に含まれる `tuid` の `local` 補完だけを返す契約とし、新規候補や既に確定済みの update を再送させない
 
 ---
 

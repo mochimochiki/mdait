@@ -23,6 +23,9 @@
     "level": 3,
     "autoSyncOnSave": true
   },
+  "tm": {
+    "retryLimit": 1
+  },
   "terms": {
     "filename": "terms.csv"
   }

@@ -82,4 +82,29 @@ suite("Configuration primaryLang設定のテスト", () => {
 		assert.equal(configuration.validate(), "Primary language (primaryLang) is not configured.");
 		assert.equal(configuration.isConfigured(), false);
 	});
+
+	test("tm.retryLimit は trans.retryLimit と独立して読み込める", async () => {
+		writeConfig({
+			transPairs: [
+				{
+					sourceLang: "ja",
+					sourceDir: "docs/ja",
+					targetLang: "en",
+					targetDir: "docs/en",
+				},
+			],
+			primaryLang: "en",
+			trans: {
+				retryLimit: 4,
+			},
+			tm: {
+				retryLimit: 2,
+			},
+		});
+
+		const configuration = await Configuration.getInstance().initialize();
+
+		assert.equal(configuration.trans.retryLimit, 4);
+		assert.equal(configuration.getTmRetryLimit(), 2);
+	});
 });

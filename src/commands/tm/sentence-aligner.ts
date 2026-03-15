@@ -1,22 +1,32 @@
 /**
  * @file sentence-aligner.ts
  * @description
- *   LLMベースの対訳文アライメント。
- *   原文/訳文ペアを入力し、文単位の対訳ペア配列を返す。
+ *   LLMベースの TM登録計画生成。
+ *   primary/local ユニットと既存TM情報を入力し、new/update 配列を返す。
  * @module commands/tm/sentence-aligner
  */
 import type * as vscode from "vscode";
 import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
-import type { SentencePair } from "../../core/tm/types";
+import type { ExistingTmSetItem, TmCommitPlanItem } from "../../core/tm/types";
 import type { AIMessage, AIService } from "../../llm/ai-service";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { Logger, formatError } from "../../utils/logger";
 
 const logger = Logger.getInstance();
 
+export interface SentenceAlignmentRequest {
+	primaryLang: string;
+	localLang: string;
+	primaryUnit: string;
+	localUnit: string;
+	existingTmSet: ExistingTmSetItem[];
+	requiredUpdateTuids: string[];
+	retryMissingTuids?: string[];
+	retryReason?: string;
+}
+
 /**
- * LLMによる対訳文の高精度アライメントを行うクラス。
- * tm-commit時にソースとターゲットの文を1:1にアラインする。
+ * LLMによる TM登録計画の高精度生成を行うクラス。
  */
 export class SentenceAligner {
 	private readonly aiService: AIService;
@@ -26,37 +36,37 @@ export class SentenceAligner {
 	}
 
 	/**
-	 * ソーステキストとターゲットテキストを文単位にアラインする。
-	 * @param sourceText ソースユニット本文
-	 * @param targetText ターゲットユニット本文
-	 * @param sourceLang ソース言語コード
-	 * @param targetLang ターゲット言語コード
+	 * primary/local ユニットから TM登録計画を生成する。
+	 * @param request TM登録計画生成要求
 	 * @param cancellationToken キャンセルトークン
-	 * @returns 対訳文ペア配列
+	 * @returns TM登録計画配列
 	 */
 	async alignSentences(
-		sourceText: string,
-		targetText: string,
-		sourceLang: string,
-		targetLang: string,
+		request: SentenceAlignmentRequest,
 		cancellationToken?: vscode.CancellationToken,
-	): Promise<SentencePair[]> {
-		// Markdown要素を除去して純粋なテキストに変換（LLMの負荷軽減と表などの複数行構造の正しい処理）
-		const strippedSource = stripMarkdown(sourceText);
-		const strippedTarget = stripMarkdown(targetText);
+	): Promise<TmCommitPlanItem[]> {
+		const strippedPrimary = stripMarkdown(request.primaryUnit);
+		const strippedLocal = stripMarkdown(request.localUnit);
 
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
-			sourceLang,
-			targetLang,
-			sourceText: strippedSource,
-			targetText: strippedTarget,
+			primaryLang: request.primaryLang,
+			localLang: request.localLang,
+			primaryUnit: strippedPrimary,
+			localUnit: strippedLocal,
+			existingTmSet: JSON.stringify(request.existingTmSet, null, 2),
+			requiredUpdateTuids: JSON.stringify(request.requiredUpdateTuids, null, 2),
+			retryMissingTuids: JSON.stringify(request.retryMissingTuids ?? [], null, 2),
+			retryReason: request.retryReason ?? "",
 		});
 
+		const isRetry = (request.retryMissingTuids?.length ?? 0) > 0;
 		const messages: AIMessage[] = [
 			{
 				role: "user",
-				content: `Split and align the source (${sourceLang}) and target (${targetLang}) texts into sentence pairs.`,
+				content: isRetry
+					? `Return ONLY update items for these tuids: ${request.retryMissingTuids?.join(", ")}. Focus on local completion only.`
+					: `Create TM commit plan items for primary (${request.primaryLang}) and local (${request.localLang}).`,
 			},
 		];
 
@@ -66,11 +76,11 @@ export class SentenceAligner {
 	}
 
 	/**
-	 * LLMレスポンスをパースしてSentencePair配列を返す。
+	 * LLMレスポンスをパースして TM登録計画配列を返す。
 	 * @param response LLMからのJSON文字列レスポンス
-	 * @returns パース済みの対訳ペア配列
+	 * @returns パース済みの TM登録計画配列
 	 */
-	parseResponse(response: string): SentencePair[] {
+	parseResponse(response: string): TmCommitPlanItem[] {
 		try {
 			// JSONコードブロックのマーカーを除去
 			const cleaned = response
@@ -85,23 +95,16 @@ export class SentenceAligner {
 				return [];
 			}
 
-			const pairs: SentencePair[] = [];
-			for (const item of parsed) {
-				if (
-					typeof item === "object" &&
-					item !== null &&
-					typeof (item as Record<string, unknown>).source === "string" &&
-					typeof (item as Record<string, unknown>).target === "string"
-				) {
-					const source = ((item as Record<string, unknown>).source as string).trim();
-					const target = ((item as Record<string, unknown>).target as string).trim();
-					if (source && target) {
-						pairs.push({ source, target });
-					}
-				}
+			const validation = this.validatePlanItems(parsed);
+			if (!validation.valid) {
+				logger.warn("tm.commit", "LLM alignment response failed validation", {
+					reason: validation.reason,
+					response: cleaned.substring(0, 200),
+				});
+				return [];
 			}
 
-			return pairs;
+			return validation.items;
 		} catch (error) {
 			logger.warn("tm.commit", "Failed to parse LLM alignment response", {
 				...formatError(error),
@@ -109,5 +112,50 @@ export class SentenceAligner {
 			});
 			return [];
 		}
+	}
+
+	private validatePlanItems(
+		parsed: unknown[],
+	): { valid: true; items: TmCommitPlanItem[] } | { valid: false; reason: string } {
+		const items: TmCommitPlanItem[] = [];
+
+		for (let index = 0; index < parsed.length; index++) {
+			const item = parsed[index];
+			if (typeof item !== "object" || item === null || Array.isArray(item)) {
+				return { valid: false, reason: `item ${index} must be an object` };
+			}
+
+			const record = item as Record<string, unknown>;
+			const keys = Object.keys(record).sort();
+			if (keys.join(",") !== "local,primary,tuid,type") {
+				return { valid: false, reason: `item ${index} must contain exactly type,tuid,primary,local` };
+			}
+
+			if (record.type !== "new" && record.type !== "update") {
+				return { valid: false, reason: `item ${index} has invalid type` };
+			}
+			if (typeof record.tuid !== "string" || typeof record.primary !== "string" || typeof record.local !== "string") {
+				return { valid: false, reason: `item ${index} fields must be strings` };
+			}
+
+			const type = record.type;
+			const tuid = record.tuid.trim();
+			const primary = record.primary.trim();
+			const local = record.local.trim();
+
+			if (!primary || !local) {
+				return { valid: false, reason: `item ${index} primary/local must not be empty` };
+			}
+			if (type === "new" && tuid !== "-") {
+				return { valid: false, reason: `item ${index} new item must use '-' tuid` };
+			}
+			if (type === "update" && !tuid) {
+				return { valid: false, reason: `item ${index} update item must have tuid` };
+			}
+
+			items.push({ type, tuid, primary, local });
+		}
+
+		return { valid: true, items };
 	}
 }

@@ -61,7 +61,7 @@ graph TD
 | **sync** | ユニット対応確立・ハッシュ比較・needフラグ付与 | [command_sync.md](design/command_sync.md) |
 | **trans** | needユニット翻訳・diff-aware revise（原文差分と前回訳文をLLMに提示し変更箇所のみ更新）・品質チェック | [command_trans.md](design/command_trans.md) |
 | **term** | 用語検出（detect）・訳語展開（expand） | [command_term.md](design/command_term.md) |
-| **tm** | 翻訳ユニットをTMX（翻訳メモリ交換フォーマット）へ文単位登録 | [command_tm.md](design/command_tm.md) |
+| **tm** | 翻訳ユニットを primaryLang 基準の sentence TU として guarded upsert し、将来の参照用 TM を構築 | [command_tm.md](design/command_tm.md) |
 | **setup** | mdait.template.jsonをワークスペースにコピー | [command_setup.md](design/command_setup.md) |
 | **translate-selection** | マーカーレスのオンデマンド翻訳 | [command_trans-selection.md](design/command_trans-selection.md) |
 

@@ -149,28 +149,42 @@ mdaitマーカー直前の空行を保証し、markdown-itが段落区切りを�
 
 TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデックスを担当します。
 
-- TMX XMLパース/シリアライズ（`fast-xml-parser`）・`Map<sentenceHash, TmEntry>`による高速検索（O(1)）
-- CRUD: `addEntry` / `setUnitPath` / `updateTarget` / `lookupByHash` / `lookupBatch`
+- TMX XMLパース/シリアライズ（`fast-xml-parser`）・`Map<tuid, TmEntry>` による高速検索（O(1)）
+- CRUD: primary anchor lookup、`existing TM set` 取得、variant upsert、retrieval 用 batch lookup
 - グローバル遅延シングルトン（`getInstance(tmxFilePath)`、ファイル更新時刻（mtime）ベースの自動リロード）
 
-**データモデル**: sentenceHash（ソース文の正規化後CRC32）をキーとし、複数言語の訳文（segments）・出典パス（unitPath）・sourceHashを保持する文単位のTmEntry。
+**データモデル**: `tuid = hash(norm(primary sentence))` をキーとし、primary 文面と各言語 variant、その provenance を保持する TU 単位の TmEntry。`x-source-hash` はユニット再処理抑止のための補助インデックスであり、TU 同一性のキーではありません。
 
 ```typescript
 interface TmEntry {
-  segments: Map<string, string>; // lang → 訳文テキスト
-  unitPath?: string;             // 最初の出典パス
-  sourceHash?: string;           // 登録元ユニットのコンテンツハッシュ
+    tuid: string;
+    primary: string;
+    variants: Map<string, {
+        text: string;
+        unitPath?: string;
+        unitHash?: string;
+    }>;
 }
 ```
 
 ```typescript
 // 使用例: Command層からの典型的な呼び出し
 const store = TmxStore.getInstance(tmxPath);
-const matches = await store.lookupBatch(sentenceHashes);
-await store.save();
+const existing = store.getExistingTmSet(
+    primaryUnitText,
+    primaryLang,
+    localLang,
+    primaryUnitPath,
+    primaryUnitHash,
+    localUnitText,
+    localUnitPath,
+    localUnitHash,
+);
+const matches = store.lookupBatch(sentenceHashes, sourceLang, targetLang);
+store.save(tmxPath);
 ```
 
-**sourceHashスキップ**: `hasSourceHash(hash)` により、tm-commitバッチ処理で処理済みユニットをスキップ。
+**primary anchor reuse**: cleanup 後も同一 primary unit に属する TU を引き続き見つけられるよう、lookup は current `unitHash` 完全一致だけでなく primary provenance を基準に行います。
 
 **実装**: [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts)
 

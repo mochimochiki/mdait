@@ -75,6 +75,9 @@ mdait is designed to handle translations not as separate sentences or files, but
     "contextSize": 1,
     "retryLimit": 1
   },
+  "tm": {
+    "retryLimit": 1
+  },
   "sync": {
     "level": 3
   }
@@ -82,6 +85,7 @@ mdait is designed to handle translations not as separate sentences or files, but
 ```
 
 `trans.retryLimit` sets the maximum number of retries for translation failures (limited to 1-5, values 6+ are capped at 5).
+`tm.retryLimit` sets the maximum number of focused retries for tm-commit guard failures.
 
 ---
 

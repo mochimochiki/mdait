@@ -93,7 +93,11 @@ sequenceDiagram
     "frontmatter": {
       "keys": ["title", "description"]
     },
-    "contextSize": 1
+    "contextSize": 1,
+    "retryLimit": 1
+  },
+  "tm": {
+    "retryLimit": 1
   },
   "primaryLang": "en",
   "terms": {
@@ -111,6 +115,7 @@ sequenceDiagram
 | `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
 | `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
+| `trans.retryLimit` | `1` | trans の再試行上限 |
 
 `primaryLang` は必須設定であり、未設定時は設定不備として扱う。
 
@@ -122,6 +127,7 @@ sequenceDiagram
 |------|-----------|------|
 | `tm.enabled` | `true` | `false`でtm-commitとTM参照を両方無効化 |
 | `tm.maxReferences` | `5` | プロンプトに含めるTM参照の最大数 |
+| `tm.retryLimit` | `1` | tm-commit の focused retry 上限 |
 
 **設計意図**: プロンプトの肥大化を防ぎつつ、一貫性に寄与する十分な参照を提供します。
 

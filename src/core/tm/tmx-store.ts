@@ -1,15 +1,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
-import type { TmEntry, TmMatch } from "./types";
+import { calculateHash } from "../hash/hash-calculator";
+import { SentenceSplitter } from "./sentence-splitter";
+import type { ExistingTmSetItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
 
 /** TMXバージョン */
 const TMX_VERSION = "1.4";
 
 /** XMLプロパティタイプ定数 */
 const PROP_TYPE_HASH = "x-hash";
+const PROP_TYPE_PRIMARY = "x-primary";
 const PROP_TYPE_UNIT = "x-unit";
-const PROP_TYPE_SOURCE_HASH = "x-source-hash";
+const PROP_TYPE_UNIT_HASH = "x-unit-hash";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -19,6 +22,17 @@ const ATTR_PREFIX = "@_";
 
 /** 配列として強制するタグ名 */
 const ARRAY_TAG_NAMES = new Set(["tu", "tuv", "prop"]);
+const sentenceSplitter = new SentenceSplitter();
+
+function inferPrimaryFromVariants(tuid: string, variants: Iterable<TmVariant>): string | null {
+	const candidates = [...variants].map((variant) => variant.text).filter((text) => text.length > 0);
+	for (const text of candidates) {
+		if (calculateHash(text, true) === tuid) {
+			return text;
+		}
+	}
+	return candidates.length === 1 ? candidates[0] : null;
+}
 
 /**
  * XMLテキストをエスケープする
@@ -60,10 +74,10 @@ const tmxParser = new XMLParser({
  * パース済みTUノードからTmEntryに変換する
  */
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
-	let sentenceHash = "";
-	let unitPath = "";
-	let sourceHash: string | undefined;
-	const segments = new Map<string, string>();
+	let tuid = String(tuNode[`${ATTR_PREFIX}tuid`] ?? "");
+	let primary = "";
+	let legacyUnitPath = "";
+	const variants = new Map<string, TmVariant>();
 
 	// <prop> 要素を処理
 	const props = (tuNode.prop as Array<Record<string, unknown>>) ?? [];
@@ -72,18 +86,20 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 		const value = String(prop["#text"] ?? "");
 		switch (type) {
 			case PROP_TYPE_HASH:
-				sentenceHash = value;
+				if (!tuid) {
+					tuid = value;
+				}
+				break;
+			case PROP_TYPE_PRIMARY:
+				primary = value;
 				break;
 			case PROP_TYPE_UNIT:
-				unitPath = value;
-				break;
-			case PROP_TYPE_SOURCE_HASH:
-				sourceHash = value;
+				legacyUnitPath = value;
 				break;
 		}
 	}
 
-	if (!sentenceHash) {
+	if (!tuid) {
 		return null;
 	}
 
@@ -93,19 +109,65 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 		const lang = tuv[`${ATTR_PREFIX}xml:lang`] as string;
 		const text = String(tuv.seg ?? "");
 		if (lang) {
-			segments.set(lang, text);
+			let unitPath = legacyUnitPath;
+			let unitHash: string | undefined;
+			const tuvProps = (tuv.prop as Array<Record<string, unknown>>) ?? [];
+			for (const prop of tuvProps) {
+				const type = prop[`${ATTR_PREFIX}type`] as string;
+				const value = String(prop["#text"] ?? "");
+				if (type === PROP_TYPE_UNIT) {
+					unitPath = value;
+				}
+				if (type === PROP_TYPE_UNIT_HASH) {
+					unitHash = value;
+				}
+			}
+			variants.set(lang, {
+				text,
+				...(unitPath ? { unitPath } : {}),
+				...(unitHash ? { unitHash } : {}),
+			});
 		}
 	}
 
-	const entry: TmEntry = {
-		sentenceHash,
-		segments,
-		unitPath,
-	};
-	if (sourceHash) {
-		entry.sourceHash = sourceHash;
+	if (!primary) {
+		primary = inferPrimaryFromVariants(tuid, variants.values()) ?? "";
 	}
+
+	if (!primary) {
+		return null;
+	}
+
+	const entry: TmEntry = {
+		tuid,
+		primary,
+		variants,
+	};
 	return entry;
+}
+
+function isLegacyTmEntry(entry: TmEntry | LegacyTmEntry): entry is LegacyTmEntry {
+	return "sentenceHash" in entry;
+}
+
+function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
+	if (!isLegacyTmEntry(entry)) {
+		return entry;
+	}
+
+	const sortedVariants = [...entry.segments.entries()];
+	const primary =
+		inferPrimaryFromVariants(
+			entry.sentenceHash,
+			sortedVariants.map(([, text]) => ({ text })),
+		) ?? "";
+	return {
+		tuid: entry.sentenceHash,
+		primary,
+		variants: new Map(
+			sortedVariants.map(([lang, text]) => [lang, { text, ...(entry.unitPath ? { unitPath: entry.unitPath } : {}) }]),
+		),
+	};
 }
 
 /**
@@ -120,7 +182,7 @@ function parseTmx(xml: string): Map<string, TmEntry> {
 		for (const tuNode of tuArray) {
 			const entry = parseTuNode(tuNode);
 			if (entry) {
-				entries.set(entry.sentenceHash, entry);
+				entries.set(entry.tuid, entry);
 			}
 		}
 	}
@@ -132,32 +194,37 @@ function parseTmx(xml: string): Map<string, TmEntry> {
  * TmEntryをXMLBuilder用オブジェクトに変換する
  */
 function buildTuObject(entry: TmEntry): Record<string, unknown> {
-	const props: Record<string, unknown>[] = [];
-	props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_HASH, "#text": entry.sentenceHash });
-	if (entry.unitPath) {
-		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT, "#text": entry.unitPath });
-	}
-	if (entry.sourceHash) {
-		props.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_SOURCE_HASH, "#text": entry.sourceHash });
-	}
-
-	// セグメントを言語コード順でソート（決定的出力）
-	const sortedLangs = [...entry.segments.keys()].sort();
+	// variant を言語コード順でソート（決定的出力）
+	const sortedLangs = [...entry.variants.keys()].sort();
 	const tuvs: Record<string, unknown>[] = [];
 	for (const lang of sortedLangs) {
-		const text = entry.segments.get(lang) as string;
-		tuvs.push({ [`${ATTR_PREFIX}xml:lang`]: lang, seg: text });
+		const variant = entry.variants.get(lang) as TmVariant;
+		const tuvProps: Record<string, unknown>[] = [];
+		if (variant.unitPath) {
+			tuvProps.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT, "#text": variant.unitPath });
+		}
+		if (variant.unitHash) {
+			tuvProps.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT_HASH, "#text": variant.unitHash });
+		}
+		tuvs.push({
+			[`${ATTR_PREFIX}xml:lang`]: lang,
+			seg: variant.text,
+			...(tuvProps.length > 0 ? { prop: tuvProps } : {}),
+		});
 	}
 
-	return { prop: props, tuv: tuvs };
+	return {
+		[`${ATTR_PREFIX}tuid`]: entry.tuid,
+		tuv: tuvs,
+	};
 }
 
 /**
  * エントリーMap を完全なTMX XML文字列にシリアライズする
  */
 function serializeTmx(entries: Map<string, TmEntry>): string {
-	// エントリーをハッシュ順でソート（決定的出力、git差分最小化）
-	const sortedEntries = [...entries.values()].sort((a, b) => a.sentenceHash.localeCompare(b.sentenceHash));
+	// エントリーをtuid順でソート（決定的出力、git差分最小化）
+	const sortedEntries = [...entries.values()].sort((a, b) => a.tuid.localeCompare(b.tuid));
 	const tuArray = sortedEntries.map((entry) => buildTuObject(entry));
 
 	const tmxObject = {
@@ -185,19 +252,16 @@ function serializeTmx(entries: Map<string, TmEntry>): string {
  *
  * 主要機能:
  * - TMX XMLのパース/シリアライズ
- * - Map<sentenceHash, TmEntry>による高速検索（O(1)）
- * - CRUD操作: addEntry, setUnitPath, updateTarget, lookupByHash, lookupBatch
+ * - Map<tuid, TmEntry>による高速検索（O(1)）
+ * - CRUD操作: addEntry, getExistingTmSet, lookupByHash, lookupBatch
  */
 export class TmxStore {
 	private static instance: TmxStore | null = null;
 	private loadedFilePath: string | null = null;
 	private loadedMtime = 0;
 
-	/** sentenceHash → TmEntry */
+	/** tuid → TmEntry */
 	private index = new Map<string, TmEntry>();
-
-	/** sourceHash二次インデックス（O(1)検索用） */
-	private sourceHashIndex = new Set<string>();
 
 	/**
 	 * グローバルシングルトンを取得する（遅延初期化）。
@@ -224,7 +288,6 @@ export class TmxStore {
 		if (!fs.existsSync(filePath)) {
 			if (this.loadedFilePath !== filePath || this.index.size > 0) {
 				this.index.clear();
-				this.sourceHashIndex.clear();
 				this.loadedFilePath = filePath;
 				this.loadedMtime = 0;
 			}
@@ -251,7 +314,6 @@ export class TmxStore {
 	 */
 	load(filePath: string): void {
 		this.index.clear();
-		this.sourceHashIndex.clear();
 
 		if (!fs.existsSync(filePath)) {
 			return;
@@ -259,7 +321,6 @@ export class TmxStore {
 
 		const xml = fs.readFileSync(filePath, "utf-8");
 		this.index = parseTmx(xml);
-		this.rebuildSourceHashIndex();
 	}
 
 	/**
@@ -282,77 +343,44 @@ export class TmxStore {
 	}
 
 	/**
-	 * 新規エントリーを追加する。
-	 * 同一sentenceHashが既に存在する場合は、ターゲット訳文を最新で上書きし、unitPathも最新で上書きする。
+	 * 新規エントリーを追加またはマージする。
+	 * 同一tuidが既に存在する場合は、variant と provenance を最新でマージする。
 	 * @param entry 追加するエントリー
 	 */
-	addEntry(entry: TmEntry): void {
-		const existing = this.index.get(entry.sentenceHash);
+	addEntry(entry: TmEntry | LegacyTmEntry): void {
+		const normalizedEntry = normalizeEntry(entry);
+		if (!normalizedEntry.primary) {
+			return;
+		}
+		const existing = this.index.get(normalizedEntry.tuid);
 		if (existing) {
-			// 既存: セグメントとunitPath、sourceHashを最新で上書き
-			for (const [lang, text] of entry.segments) {
-				existing.segments.set(lang, text);
+			if (normalizedEntry.primary) {
+				existing.primary = normalizedEntry.primary;
 			}
-			existing.unitPath = entry.unitPath;
-			if (entry.sourceHash) {
-				// 旧sourceHashをインデックスから削除（他エントリが同じ値を持つ可能性は低いが、
-				// rebuildSourceHashIndexを避けるため新値を追加し旧値は残存させる。
-				// 実害なし: false positiveはスキップが起こるだけ）
-				existing.sourceHash = entry.sourceHash;
-				this.sourceHashIndex.add(entry.sourceHash);
+			for (const [lang, variant] of normalizedEntry.variants) {
+				existing.variants.set(lang, {
+					...(existing.variants.get(lang) ?? {}),
+					...variant,
+				});
 			}
 		} else {
-			// 新規
-			this.index.set(entry.sentenceHash, { ...entry, segments: new Map(entry.segments) });
-			if (entry.sourceHash) {
-				this.sourceHashIndex.add(entry.sourceHash);
-			}
+			this.index.set(normalizedEntry.tuid, {
+				...normalizedEntry,
+				variants: new Map([...normalizedEntry.variants.entries()].map(([lang, variant]) => [lang, { ...variant }])),
+			});
 		}
 	}
 
 	/**
-	 * 既存エントリーの出典パスを設定する。
-	 * @param hash sentenceHash
-	 * @param unitPath 設定する出典パス
-	 * @returns 更新できた場合true
+	 * tuid で単一検索する。
 	 */
-	setUnitPath(hash: string, unitPath: string): boolean {
-		const entry = this.index.get(hash);
-		if (!entry) {
-			return false;
-		}
-		entry.unitPath = unitPath;
-		return true;
+	findByTuid(tuid: string): TmEntry | undefined {
+		return this.index.get(tuid);
 	}
 
 	/**
-	 * 既存エントリーのターゲット訳文を更新する。
-	 * @param hash sentenceHash
-	 * @param lang 言語コード
-	 * @param text 新しい訳文
-	 * @returns 更新できた場合true
-	 */
-	updateTarget(hash: string, lang: string, text: string): boolean {
-		const entry = this.index.get(hash);
-		if (!entry) {
-			return false;
-		}
-		entry.segments.set(lang, text);
-		return true;
-	}
-
-	/**
-	 * ハッシュで単一検索する。
-	 * @param hash sentenceHash
-	 * @returns 見つかったエントリー、またはundefined
-	 */
-	findByHash(hash: string): TmEntry | undefined {
-		return this.index.get(hash);
-	}
-
-	/**
-	 * ハッシュで検索し、指定ターゲット言語の訳文を含むTmMatchを返す。
-	 * @param hash sentenceHash
+	 * tuid で検索し、指定ターゲット言語の訳文を含むTmMatchを返す。
+	 * @param hash tuid
 	 * @param sourceLang ソース言語コード
 	 * @param targetLang ターゲット言語コード
 	 * @returns TmMatch、またはundefined
@@ -362,16 +390,18 @@ export class TmxStore {
 		if (!entry) {
 			return undefined;
 		}
-		const source = entry.segments.get(sourceLang);
-		const target = entry.segments.get(targetLang);
+		const sourceVariant = entry.variants.get(sourceLang);
+		const targetVariant = entry.variants.get(targetLang);
+		const source = sourceVariant?.text;
+		const target = targetVariant?.text;
 		if (!source || !target) {
 			return undefined;
 		}
 		return {
-			sentenceHash: entry.sentenceHash,
+			sentenceHash: entry.tuid,
 			source,
 			target,
-			firstUsedIn: entry.unitPath,
+			firstUsedIn: sourceVariant?.unitPath ?? targetVariant?.unitPath ?? "",
 		};
 	}
 
@@ -395,7 +425,7 @@ export class TmxStore {
 
 	/**
 	 * 原文テキストによるTMヒット検索。
-	 * 全エントリーのうち、指定言語のセグメントが一致するものを返す。
+	 * 全エントリーのうち、指定言語のvariantが一致するものを返す。
 	 * @param text 検索テキスト
 	 * @param lang 言語コード
 	 * @returns 一致するエントリー配列
@@ -403,7 +433,7 @@ export class TmxStore {
 	searchBySource(text: string, lang: string): TmEntry[] {
 		const results: TmEntry[] = [];
 		for (const entry of this.index.values()) {
-			const segment = entry.segments.get(lang);
+			const segment = entry.variants.get(lang)?.text;
 			if (segment === text) {
 				results.push(entry);
 			}
@@ -412,13 +442,82 @@ export class TmxStore {
 	}
 
 	/**
-	 * 指定されたsourceHashがTMに登録済みかどうかを返す。
-	 * ユニットの原文ハッシュがTMに存在するかの確認に使用。
-	 * @param sourceHash ユニットの原文コンテンツハッシュ（MdaitMarker.hash）
-	 * @returns 登録済みならtrue
+	 * 現在の primaryUnit にアンカーされた既存 TM set を返す。
 	 */
-	hasSourceHash(sourceHash: string): boolean {
-		return this.sourceHashIndex.has(sourceHash);
+	getExistingTmSet(
+		primaryUnitText: string,
+		primaryLang: string,
+		localLang: string,
+		primaryUnitPath: string,
+		primaryUnitHash?: string,
+		localUnitText?: string,
+		localUnitPath?: string,
+		localUnitHash?: string,
+	): ExistingTmSetItem[] {
+		const sentenceCandidates = new Map<string, Array<TmEntry>>();
+		const primarySentences = new Set(
+			sentenceSplitter
+				.split(primaryUnitText, primaryLang)
+				.map((sentence) => sentence.trim())
+				.filter((sentence) => sentence.length > 0),
+		);
+		const localSentences = new Set(
+			sentenceSplitter
+				.split(localUnitText ?? "", localLang)
+				.map((sentence) => sentence.trim())
+				.filter((sentence) => sentence.length > 0),
+		);
+		for (const entry of this.index.values()) {
+			const primaryVariant = entry.variants.get(primaryLang);
+			if (!primaryVariant?.unitPath || primaryVariant.unitPath !== primaryUnitPath) {
+				continue;
+			}
+			if (!primarySentences.has(entry.primary.trim())) {
+				continue;
+			}
+			const sentenceKey = entry.primary.trim();
+			const bucket = sentenceCandidates.get(sentenceKey) ?? [];
+			bucket.push(entry);
+			sentenceCandidates.set(sentenceKey, bucket);
+		}
+
+		const results: ExistingTmSetItem[] = [];
+		for (const candidates of sentenceCandidates.values()) {
+			const prioritizedCandidates =
+				primaryUnitHash &&
+				candidates.some((candidate) => candidate.variants.get(primaryLang)?.unitHash === primaryUnitHash)
+					? candidates.filter((candidate) => candidate.variants.get(primaryLang)?.unitHash === primaryUnitHash)
+					: candidates;
+
+			for (const entry of prioritizedCandidates) {
+				const localVariant = entry.variants.get(localLang);
+				const matchesPrimaryHash = Boolean(
+					primaryUnitHash && entry.variants.get(primaryLang)?.unitHash === primaryUnitHash,
+				);
+				const matchesLocalHash = Boolean(
+					localVariant?.unitHash &&
+						localUnitHash &&
+						localVariant.unitHash === localUnitHash &&
+						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
+				);
+				const matchesLocalText = Boolean(
+					localVariant?.text &&
+						localSentences.has(localVariant.text.trim()) &&
+						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
+				);
+				const matchesPrimarySentenceOnly = !localVariant;
+				if (!matchesPrimaryHash && !matchesLocalHash && !matchesLocalText && !matchesPrimarySentenceOnly) {
+					continue;
+				}
+				results.push({
+					tuid: entry.tuid,
+					primarySentence: entry.primary,
+					localSentence: localVariant?.text ?? null,
+				});
+			}
+		}
+
+		return results.sort((a, b) => a.tuid.localeCompare(b.tuid));
 	}
 
 	/**
@@ -433,19 +532,5 @@ export class TmxStore {
 	 */
 	clear(): void {
 		this.index.clear();
-		this.sourceHashIndex.clear();
-	}
-
-	/**
-	 * sourceHash二次インデックスを再構築する。
-	 * load()時に呼び出される。
-	 */
-	private rebuildSourceHashIndex(): void {
-		this.sourceHashIndex.clear();
-		for (const entry of this.index.values()) {
-			if (entry.sourceHash) {
-				this.sourceHashIndex.add(entry.sourceHash);
-			}
-		}
 	}
 }

@@ -29,43 +29,42 @@ suite("SentenceAligner", () => {
 			aligner = new SentenceAligner(new MockAIService());
 		});
 
-		test("正常なJSON配列をパースできる", () => {
+		test("正常なTM登録計画配列をパースできる", () => {
 			const response = JSON.stringify([
-				{ source: "Hello world.", target: "こんにちは世界。" },
-				{ source: "Good bye.", target: "さようなら。" },
+				{ type: "new", tuid: "-", primary: "Hello world.", local: "こんにちは世界。" },
+				{ type: "update", tuid: "abcd1234", primary: "Good bye.", local: "さようなら。" },
 			]);
 
 			const result = aligner.parseResponse(response);
 
 			assert.strictEqual(result.length, 2);
-			assert.strictEqual(result[0].source, "Hello world.");
-			assert.strictEqual(result[0].target, "こんにちは世界。");
-			assert.strictEqual(result[1].source, "Good bye.");
-			assert.strictEqual(result[1].target, "さようなら。");
+			assert.strictEqual(result[0].type, "new");
+			assert.strictEqual(result[0].primary, "Hello world.");
+			assert.strictEqual(result[0].local, "こんにちは世界。");
+			assert.strictEqual(result[1].type, "update");
+			assert.strictEqual(result[1].tuid, "abcd1234");
 		});
 
 		test("JSONコードブロック付きレスポンスをパースできる", () => {
-			const response = `\`\`\`json\n${JSON.stringify([{ source: "Test sentence.", target: "テスト文。" }])}\n\`\`\``;
+			const response = `\`\`\`json\n${JSON.stringify([{ type: "new", tuid: "-", primary: "Test sentence.", local: "テスト文。" }])}\n\`\`\``;
 
 			const result = aligner.parseResponse(response);
 
 			assert.strictEqual(result.length, 1);
-			assert.strictEqual(result[0].source, "Test sentence.");
-			assert.strictEqual(result[0].target, "テスト文。");
+			assert.strictEqual(result[0].primary, "Test sentence.");
+			assert.strictEqual(result[0].local, "テスト文。");
 		});
 
-		test("空のソースまたはターゲットはフィルタされる", () => {
+		test("空のprimaryまたはlocalを含む応答は fail-closed で空配列になる", () => {
 			const response = JSON.stringify([
-				{ source: "Valid.", target: "有効。" },
-				{ source: "", target: "空ソース" },
-				{ source: "空ターゲット", target: "" },
-				{ source: "  ", target: "空白のみ" },
+				{ type: "new", tuid: "-", primary: "Valid.", local: "有効。" },
+				{ type: "new", tuid: "-", primary: "", local: "空primary" },
+				{ type: "update", tuid: "abcd1234", primary: "空local", local: "" },
 			]);
 
 			const result = aligner.parseResponse(response);
 
-			assert.strictEqual(result.length, 1);
-			assert.strictEqual(result[0].source, "Valid.");
+			assert.deepStrictEqual(result, []);
 		});
 
 		test("配列でないレスポンスは空配列を返す", () => {
@@ -78,18 +77,25 @@ suite("SentenceAligner", () => {
 			assert.strictEqual(result.length, 0);
 		});
 
-		test("不正な要素（source/target欠落）はスキップされる", () => {
+		test("不正な要素（type/primary/local欠落）を含む応答は fail-closed で空配列になる", () => {
 			const response = JSON.stringify([
-				{ source: "Valid.", target: "有効。" },
-				{ source: "Missing target" },
-				{ target: "Missing source" },
+				{ type: "new", tuid: "-", primary: "Valid.", local: "有効。" },
+				{ type: "update", tuid: "abcd1234", primary: "Missing local" },
+				{ type: "new", tuid: "-", local: "Missing primary" },
 				"not an object",
 			]);
 
 			const result = aligner.parseResponse(response);
 
-			assert.strictEqual(result.length, 1);
-			assert.strictEqual(result[0].source, "Valid.");
+			assert.deepStrictEqual(result, []);
+		});
+
+		test("余計なプロパティを含む応答は fail-closed で空配列になる", () => {
+			const response = JSON.stringify([{ type: "new", tuid: "-", primary: "Valid.", local: "有効。", extra: true }]);
+
+			const result = aligner.parseResponse(response);
+
+			assert.deepStrictEqual(result, []);
 		});
 	});
 
@@ -97,21 +103,25 @@ suite("SentenceAligner", () => {
 		test("AIServiceにプロンプトを送信してレスポンスをパースする", async () => {
 			const mockAI = new MockAIService();
 			mockAI.response = JSON.stringify([
-				{ source: "Download the installer.", target: "インストーラーをダウンロードします。" },
+				{ type: "new", tuid: "-", primary: "Download the installer.", local: "インストーラーをダウンロードします。" },
 			]);
 
 			const aligner = new SentenceAligner(mockAI);
-			const result = await aligner.alignSentences(
-				"Download the installer.",
-				"インストーラーをダウンロードします。",
-				"en",
-				"ja",
-			);
+			const result = await aligner.alignSentences({
+				primaryLang: "en",
+				localLang: "ja",
+				primaryUnit: "Download the installer.",
+				localUnit: "インストーラーをダウンロードします。",
+				existingTmSet: [],
+				requiredUpdateTuids: [],
+			});
 
 			assert.strictEqual(mockAI.callCount, 1);
 			assert.strictEqual(result.length, 1);
-			assert.strictEqual(result[0].source, "Download the installer.");
-			assert.strictEqual(result[0].target, "インストーラーをダウンロードします。");
+			assert.strictEqual(result[0].primary, "Download the installer.");
+			assert.strictEqual(result[0].local, "インストーラーをダウンロードします。");
+			assert.ok(mockAI.lastSystemPrompt.includes("Primary language: en"));
+			assert.ok(mockAI.lastSystemPrompt.includes("Local language: ja"));
 		});
 	});
 });

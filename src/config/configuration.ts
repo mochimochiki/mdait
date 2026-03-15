@@ -45,6 +45,17 @@ export interface TransConfig {
 }
 
 /**
+ * TM設定の型定義
+ */
+export interface TmConfig {
+	enabled: boolean;
+	maxReferences: number;
+	/** tm-commit focused retry の上限 */
+	retryLimit: number;
+	[key: string]: unknown;
+}
+
+/**
  * 翻訳ペア設定の型定義
  */
 export interface TransPair {
@@ -100,6 +111,7 @@ interface MdaitConfig {
 	tm?: {
 		enabled?: boolean;
 		maxReferences?: number;
+		retryLimit?: number;
 	};
 	prompts?: {
 		"trans.translate"?: string;
@@ -180,9 +192,10 @@ export class Configuration {
 	/**
 	 * 翻訳メモリ（TM）設定
 	 */
-	public tm = {
+	public tm: TmConfig = {
 		enabled: true,
 		maxReferences: 5,
+		retryLimit: 1,
 	};
 
 	/**
@@ -438,6 +451,9 @@ export class Configuration {
 				if (config.tm.maxReferences !== undefined) {
 					this.tm.maxReferences = Math.max(1, Math.min(20, config.tm.maxReferences));
 				}
+				if (config.tm.retryLimit !== undefined) {
+					this.tm.retryLimit = Math.min(5, Math.max(1, config.tm.retryLimit));
+				}
 			}
 
 			// 設定ファイルの監視を開始（初回のみ）
@@ -566,6 +582,14 @@ export class Configuration {
 	 */
 	public getTmMaxReferences(): number {
 		return this.tm.maxReferences;
+	}
+
+	/**
+	 * tm-commit focused retry の上限を取得
+	 * @returns 最大リトライ回数
+	 */
+	public getTmRetryLimit(): number {
+		return this.tm.retryLimit;
 	}
 
 	/**

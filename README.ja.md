@@ -75,6 +75,9 @@ mdait は、翻訳を個々の文やファイルとしてではなく、文書�
     "contextSize": 1,
     "retryLimit": 1
   },
+  "tm": {
+    "retryLimit": 1
+  },
   "sync": {
     "level": 3
   }
@@ -83,6 +86,7 @@ mdait は、翻訳を個々の文やファイルとしてではなく、文書�
 ```
 
 `trans.retryLimit` は翻訳失敗時のリトライ上限を設定します（1〜5に制限され、6以上は5回で打ち止め）。
+`tm.retryLimit` は tm-commit の guard 失敗に対する focused retry 上限を設定します。
 
 ---
 

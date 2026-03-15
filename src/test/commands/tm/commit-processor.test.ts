@@ -1,196 +1,225 @@
 import * as assert from "node:assert";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import { TmCommitProcessor } from "../../../commands/tm/commit-processor";
-import type { SentenceAligner } from "../../../commands/tm/sentence-aligner";
+import { TmCommitProcessor, type TmCommitResolvedUnit } from "../../../commands/tm/commit-processor";
+import type { SentenceAligner, SentenceAlignmentRequest } from "../../../commands/tm/sentence-aligner";
+import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../core/tm/tmx-store";
-import type { SentencePair } from "../../../core/tm/types";
+import type { TmCommitPlanItem } from "../../../core/tm/types";
+
+const PRIMARY_SENTENCE = "Primary sentence.";
+const PRIMARY_TUID = calculateHash(PRIMARY_SENTENCE, true);
 
 /**
  * テスト用SentenceAlignerモック。
  * 事前に設定した固定のペアを返す。
  */
 class MockSentenceAligner {
-	/** alignSentences呼び出し回数 */
-	callCount = 0;
-	/** 返却するペア */
-	pairs: SentencePair[] = [];
+	responses: TmCommitPlanItem[][] = [];
+	requests: SentenceAlignmentRequest[] = [];
 
-	async alignSentences(
-		_sourceText: string,
-		_targetText: string,
-		_sourceLang: string,
-		_targetLang: string,
-		_cancellationToken?: unknown,
-	): Promise<SentencePair[]> {
-		this.callCount++;
-		return this.pairs;
+	async alignSentences(request: SentenceAlignmentRequest): Promise<TmCommitPlanItem[]> {
+		this.requests.push(request);
+		return this.responses.shift() ?? [];
 	}
 }
 
-/** テスト用一時ディレクトリとファイルパスを生成するヘルパー */
-function createTempFilePath(): string {
-	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-proc-test-"));
-	return path.join(tmpDir, "translations.tmx");
+function createResolvedUnit(overrides?: Partial<TmCommitResolvedUnit>): TmCommitResolvedUnit {
+	return {
+		content: overrides?.content ?? "Primary sentence. Another sentence.",
+		lang: overrides?.lang ?? "en",
+		unitPath: overrides?.unitPath ?? "docs/guide.md",
+		unitHash: overrides?.unitHash ?? "unit-primary-1",
+	};
 }
 
 suite("TmCommitProcessor", () => {
-	const unitPath = "docs/guide.md";
-
-	suite("processUnit", () => {
-		test("文ペアがTmxStoreに登録される", async () => {
-			const tmxPath = createTempFilePath();
-			const store = new TmxStore();
-
-			const mockAligner = new MockSentenceAligner();
-			mockAligner.pairs = [
-				{ source: "Hello world from here.", target: "こんにちは世界からこちら。" },
-				{ source: "Good morning everyone.", target: "おはようございますみなさん。" },
-			];
-
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const result = await processor.processUnit(
-				"Hello world from here. Good morning everyone.",
-				"こんにちは世界からこちら。おはようございますみなさん。",
-				unitPath,
-			);
-
-			assert.strictEqual(result.newCount, 2);
-			assert.strictEqual(result.existingCount, 0);
-			assert.strictEqual(result.skippedCount, 0);
-			assert.strictEqual(mockAligner.callCount, 1);
-
-			// ストアに登録されているか確認
-			assert.strictEqual(store.getEntryCount(), 2);
-
-			// ファイルに永続化できるか確認
-			store.save(tmxPath);
-			assert.ok(fs.existsSync(tmxPath));
-
-			// 再読み込みして検証
-			const reloaded = new TmxStore();
-			reloaded.load(tmxPath);
-			assert.strictEqual(reloaded.getEntryCount(), 2);
-
-			// クリーンアップ
-			fs.rmSync(path.dirname(tmxPath), { recursive: true });
+	test("existing TM set と update必須tuid を期待通り導出できる", () => {
+		const store = new TmxStore();
+		store.addEntry({
+			tuid: PRIMARY_TUID,
+			primary: PRIMARY_SENTENCE,
+			variants: new Map([
+				["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "unit-primary-1" }],
+				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+			]),
+		});
+		store.addEntry({
+			tuid: "b2c3d4e5",
+			primary: "Another sentence.",
+			variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "unit-primary-1" }]]),
 		});
 
-		test("アライメント結果が空の場合はスキップされる", async () => {
-			const store = new TmxStore();
-			const mockAligner = new MockSentenceAligner();
-			mockAligner.pairs = [];
+		const processor = new TmCommitProcessor(store, new MockSentenceAligner() as unknown as SentenceAligner, "en");
+		const existing = store.getExistingTmSet(
+			"Primary sentence. Another sentence.",
+			"en",
+			"ja",
+			"docs/guide.md",
+			"unit-primary-1",
+			"新しい訳文。",
+			"docs/guide.ja.md",
+			"new-local-hash",
+		);
+		assert.deepStrictEqual(
+			existing.map((item) => item.tuid),
+			[PRIMARY_TUID, "b2c3d4e5"],
+		);
 
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const result = await processor.processUnit("Some source text.", "翻訳テキスト。", unitPath);
-
-			assert.strictEqual(result.newCount, 0);
-			assert.strictEqual(result.existingCount, 0);
-			assert.strictEqual(store.getEntryCount(), 0);
-		});
-
-		test("空文字ペアはスキップされる", async () => {
-			const store = new TmxStore();
-			const mockAligner = new MockSentenceAligner();
-			mockAligner.pairs = [
-				{ source: "This is a valid sentence here.", target: "これは有効な文です。" },
-				{ source: "", target: "空ソース文字列" },
-				{ source: "空ターゲット文字列", target: "" },
-			];
-
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const result = await processor.processUnit("Source content", "ターゲットコンテンツ", unitPath);
-
-			assert.strictEqual(result.newCount, 1);
-			assert.strictEqual(result.skippedCount, 2);
-			assert.strictEqual(store.getEntryCount(), 1);
-		});
-
-		test("Markdown含むペアは正規化されて登録される", async () => {
-			const store = new TmxStore();
-			const mockAligner = new MockSentenceAligner();
-			mockAligner.pairs = [
-				// SentenceAlignerはstripMarkdown済みのペアを返すため、モックも同様にする
-				{ source: "This is bold text here for testing.", target: "これは太字のテキストです。" },
-				{ source: "See link for more info here.", target: "詳細はリンクを参照してください。" },
-				{ source: "Code removed from this sentence.", target: "コードは除去されます。" },
-			];
-
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const result = await processor.processUnit(
-				"This is **bold** text here for testing. See [link](url) for more info here. Code `snippet` removed from this sentence.",
-				"これは太字のテキストです。詳細はリンクを参照してください。コードは除去されます。",
-				unitPath,
-			);
-
-			assert.strictEqual(result.newCount, 3);
-			assert.strictEqual(result.skippedCount, 0);
-			assert.strictEqual(store.getEntryCount(), 3);
-
-			// ストア内のエントリーが正規化されていることを確認
-			const entries = Array.from(store.entries.values());
-			assert.ok(entries.some((e) => e.segments.get("en") === "This is bold text here for testing."));
-			assert.ok(entries.some((e) => e.segments.get("en") === "See link for more info here."));
-			assert.ok(entries.some((e) => e.segments.get("en") === "Code removed from this sentence."));
-		});
-
-		test("翻訳価値のない短文・断片はスキップされる", async () => {
-			const store = new TmxStore();
-			const mockAligner = new MockSentenceAligner();
-			mockAligner.pairs = [
-				{ source: "This is a valid sentence here.", target: "有効な文です。" },
-				{ source: "short", target: "短い" }, // 12文字未満
-				{ source: "123", target: "123" }, // 数値のみ
-				{ source: "Hello world", target: "こんにちは世界" }, // 2単語以下
-				{ source: "https://example.com", target: "https://example.com" }, // URLのみ
-			];
-
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const result = await processor.processUnit(
-				"This is a valid sentence here. short 123 Hello world https://example.com",
-				"有効な文です。短い 123 こんにちは世界 https://example.com",
-				unitPath,
-			);
-
-			assert.strictEqual(result.newCount, 1);
-			assert.strictEqual(result.skippedCount, 4);
-			assert.strictEqual(store.getEntryCount(), 1);
-
-			// スキップされたペアがストアに存在しないことを確認
-			const entries = Array.from(store.entries.values());
-			assert.strictEqual(entries.length, 1);
-			assert.strictEqual(entries[0].segments.get("en"), "This is a valid sentence here.");
-		});
+		const currentLocalText = "新しい訳文。 Another sentence.";
+		const required = processor.deriveRequiredUpdateTuids(existing, "ja", "new-local-hash", currentLocalText);
+		assert.deepStrictEqual(required, [PRIMARY_TUID, "b2c3d4e5"]);
 	});
 
-	suite("registerPairs", () => {
-		test("同一ハッシュの再登録は既存更新としてカウントされる", () => {
-			const store = new TmxStore();
-			const mockAligner = new MockSentenceAligner();
-
-			const processor = new TmCommitProcessor(store, mockAligner as unknown as SentenceAligner, "en", "ja");
-
-			const pairs: SentencePair[] = [{ source: "This is the same sentence here.", target: "これは同じ文です。" }];
-
-			// 初回登録
-			const result1 = processor.registerPairs(pairs, unitPath);
-			assert.strictEqual(result1.newCount, 1);
-			assert.strictEqual(result1.existingCount, 0);
-
-			// 同じ文ペアで再登録
-			const unitPath2 = "docs/api.md";
-			const result2 = processor.registerPairs(pairs, unitPath2);
-			assert.strictEqual(result2.newCount, 0);
-			assert.strictEqual(result2.existingCount, 1);
-
-			// ストアには1エントリーのみ
-			assert.strictEqual(store.getEntryCount(), 1);
+	test("現在の local 文面が既に反映済みなら required update にしない", () => {
+		const store = new TmxStore();
+		store.addEntry({
+			tuid: PRIMARY_TUID,
+			primary: PRIMARY_SENTENCE,
+			variants: new Map([
+				["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "unit-primary-1" }],
+				["ja", { text: "現在訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+			]),
 		});
+
+		const processor = new TmCommitProcessor(store, new MockSentenceAligner() as unknown as SentenceAligner, "en");
+		const existing = store.getExistingTmSet(
+			"Primary sentence.",
+			"en",
+			"ja",
+			"docs/guide.md",
+			"unit-primary-1",
+			"現在訳文",
+			"docs/guide.ja.md",
+			"new-local-hash",
+		);
+
+		const currentLocalText = "現在訳文";
+		const required = processor.deriveRequiredUpdateTuids(existing, "ja", "new-local-hash", currentLocalText);
+		assert.deepStrictEqual(required, []);
+	});
+
+	test("guard が欠落・subset違反・文粒度違反を弾く", async () => {
+		const store = new TmxStore();
+		store.addEntry({
+			tuid: PRIMARY_TUID,
+			primary: PRIMARY_SENTENCE,
+			variants: new Map([
+				["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "unit-primary-1" }],
+				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+			]),
+		});
+		const aligner = new MockSentenceAligner();
+		aligner.responses = [
+			[
+				{ type: "update", tuid: "zzzz9999", primary: "Primary sentence.", local: "更新訳" },
+				{ type: "new", tuid: "-", primary: "Not included", local: "含まれない" },
+				{ type: "new", tuid: "-", primary: "Primary sentence. Another sentence.", local: "複数文です。次です。" },
+			],
+		];
+
+		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 0);
+		const result = await processor.processUnit(
+			createResolvedUnit(),
+			createResolvedUnit({
+				content: "更新訳。別文。",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
+		);
+
+		assert.strictEqual(result.newCount, 0);
+		assert.strictEqual(result.existingCount, 0);
+		assert.strictEqual(result.warnedCount, 4);
+		assert.ok(result.skippedCount >= 3);
+	});
+
+	test("focused retry が欠落分だけ再試行する", async () => {
+		const store = new TmxStore();
+		store.addEntry({
+			tuid: PRIMARY_TUID,
+			primary: PRIMARY_SENTENCE,
+			variants: new Map([
+				["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "unit-primary-1" }],
+				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+			]),
+		});
+		const aligner = new MockSentenceAligner();
+		aligner.responses = [
+			[],
+			[{ type: "update", tuid: PRIMARY_TUID, primary: PRIMARY_SENTENCE, local: "更新済み訳文" }],
+		];
+
+		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 1);
+		const result = await processor.processUnit(
+			createResolvedUnit({ content: "Primary sentence." }),
+			createResolvedUnit({
+				content: "更新済み訳文",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
+		);
+
+		assert.strictEqual(result.existingCount, 1);
+		assert.strictEqual(aligner.requests.length, 2);
+		assert.deepStrictEqual(aligner.requests[1].retryMissingTuids, [PRIMARY_TUID]);
+	});
+
+	test("retry 上限到達後も保存継続し warned に計上される", async () => {
+		const store = new TmxStore();
+		store.addEntry({
+			tuid: PRIMARY_TUID,
+			primary: PRIMARY_SENTENCE,
+			variants: new Map([
+				["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "unit-primary-1" }],
+				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+			]),
+		});
+		const aligner = new MockSentenceAligner();
+		aligner.responses = [
+			[{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳がここにあります。" }],
+			[],
+		];
+
+		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 1);
+		const result = await processor.processUnit(
+			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
+			createResolvedUnit({
+				content: "更新不能。別文の新規訳がここにあります。",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
+		);
+
+		assert.strictEqual(result.newCount, 1);
+		assert.strictEqual(result.warnedCount, 1);
+		assert.strictEqual(store.findByTuid(PRIMARY_TUID)?.variants.get("ja")?.text, "旧訳文");
+	});
+
+	test("重複した new 候補でも件数集計は安定する", async () => {
+		const store = new TmxStore();
+		const aligner = new MockSentenceAligner();
+		aligner.responses = [
+			[
+				{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳です。" },
+				{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳です。" },
+			],
+		];
+
+		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 0);
+		const result = await processor.processUnit(
+			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
+			createResolvedUnit({
+				content: "現在訳文。別文の新規訳です。",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
+		);
+
+		assert.strictEqual(result.newCount, 1);
+		assert.strictEqual(result.existingCount, 0);
+		assert.strictEqual(store.getEntryCount(), 1);
 	});
 });

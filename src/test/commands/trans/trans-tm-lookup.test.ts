@@ -107,12 +107,12 @@ suite("trans-command TM検索の正規化ロジック", () => {
 		const hash = calculateHash(normalizedSource, true);
 
 		store.addEntry({
-			sentenceHash: hash,
-			segments: new Map([
-				["en", normalizedSource],
-				["ja", "これは太字のテキストです。"],
+			tuid: hash,
+			primary: normalizedSource,
+			variants: new Map([
+				["en", { text: normalizedSource, unitPath: "docs/test.md", unitHash: "en-unit-1" }],
+				["ja", { text: "これは太字のテキストです。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
 			]),
-			unitPath: "docs/test.md",
 		});
 
 		assert.strictEqual(store.getEntryCount(), 1);
@@ -150,12 +150,12 @@ suite("trans-command TM検索の正規化ロジック", () => {
 			const normalized = stripMarkdown(entry.source);
 			const hash = calculateHash(normalized, true);
 			store.addEntry({
-				sentenceHash: hash,
-				segments: new Map([
-					["en", normalized],
-					["ja", entry.target],
+				tuid: hash,
+				primary: normalized,
+				variants: new Map([
+					["en", { text: normalized, unitPath: "docs/test.md", unitHash: `en-${hash}` }],
+					["ja", { text: entry.target, unitPath: "docs/test.ja.md", unitHash: `ja-${hash}` }],
 				]),
-				unitPath: "docs/test.md",
 			});
 		}
 

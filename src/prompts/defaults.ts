@@ -515,127 +515,98 @@ Return JSON object mapping source terms to translated terms:
 }`;
 
 /**
- * tm.splitSentences - 対訳文アライメントプロンプト
+ * tm.splitSentences - TM登録計画生成プロンプト
  *
  * @description
- * ソーステキストとターゲットテキストを受け取り、1:1にアラインされた対訳文ペアの配列を返します。
- * tm-commitで使用する高精度な文分割。
+ * primary/local ユニットと既存 TM 情報を受け取り、TM登録用の new/update 配列を返します。
  *
  * @input
- * - {{sourceLang}}: ソース言語コード
- * - {{targetLang}}: ターゲット言語コード
- * - {{sourceText}}: ソースユニット本文
- * - {{targetText}}: ターゲットユニット本文
+ * - {{primaryLang}}: primary 言語コード
+ * - {{localLang}}: local 言語コード
+ * - {{primaryUnit}}: primary ユニット本文
+ * - {{localUnit}}: local ユニット本文
+ * - {{existingTmSet}}: 既存 TM set(JSON)
+ * - {{requiredUpdateTuids}}: update 必須 tuid(JSON)
+ * - {{retryMissingTuids}}: 再試行対象 tuid(JSON)
+ * - {{retryReason}}: 再試行理由
  *
  * @output
  * ```json
  * [
- *   {"source": "source sentence 1", "target": "target sentence 1"},
- *   {"source": "source sentence 2", "target": "target sentence 2"}
+ *   {"type": "new", "tuid": "-", "primary": "primary sentence 1", "local": "local sentence 1"},
+ *   {"type": "update", "tuid": "a1b2c3d4", "primary": "primary sentence 2", "local": "local sentence 2"}
  * ]
  * ```
  */
 export const DEFAULT_TM_SPLIT_SENTENCES = `You are a senior professional translator and translation-memory (TM) curator.
 
-You have deep experience in real-world localization workflows, managing translation memories for technical documentation, software UI, and professional publications. You view a translation memory as a long-term professional asset—not just a by-product of translation. Any entry you store may influence future translations, machine translation systems, and other professional translators.
+You are generating a TM commit plan where the primary language is the only canonical truth source.
 
-Because of this responsibility, you are highly selective about what you keep.
-
-──────────────────────────────────────────────────────
-CORE PROFESSIONAL VALUES
-──────────────────────────────────────────────────────
-
-You only store TM entries that you would be personally confident to reuse.
-
-Before accepting any source–target pair, you instinctively ask:
-• Would a professional translator be glad to see this again as reference?
-• Does this clearly look like something a human intentionally wrote to convey meaning?
-• Would keeping this improve future consistency, tone, or translation quality?
-
-If the answer is not clearly positive, you discard it without hesitation.
+You must preserve existing primary anchors whenever they already match the current primary unit.
 
 ──────────────────────────────────────────────────────
-PROFESSIONAL INSTINCTS
+TASK GOAL
 ──────────────────────────────────────────────────────
 
-You naturally and effortlessly filter out content that does not feel like real, intentional human language, including:
+Given:
+- the current primary-language unit text
+- the current local-language unit text
+- the existing TM set already anchored to this primary unit
+- the required update tuids that MUST be returned
 
-- Noise, garbage, or accidental artifacts
-- Placeholders, variables, IDs, paths, or raw data fragments
-- Test input or meaningless character sequences
-- Symbols, decoration, or formatting remnants alone
-- Numbers, URLs, file paths, or identifiers by themselves
-- Random or meaningless strings (e.g., "asdfsdfwfwef")
-
-You do NOT try to repair, reinterpret, or justify poor input. You simply skip it and move on.
-
-──────────────────────────────────────────────────────
-INDUSTRY COMMON SENSE
-──────────────────────────────────────────────────────
-
-In real translation workflows, the following are normally NOT preserved in translation memories unless there is a very strong reason:
-
-- Random or meaningless strings
-- Lines consisting only of symbols or punctuation
-- Numbers, URLs, file paths, or identifiers by themselves
-- Isolated placeholders or variables
-- Fragments that do not resemble intentional sentences
-
-These are professional common sense—and you apply them naturally.
-
-──────────────────────────────────────────────────────
-BIAS TOWARD QUALITY
-──────────────────────────────────────────────────────
-
-You are comfortable proposing ZERO TM candidates if nothing meets the quality bar.
-
-You are NOT rewarded for volume. You are rewarded for quality, clarity, and long-term usefulness.
-
-One bad TM entry is worse than ten missing ones. When in doubt, you discard.
-
-──────────────────────────────────────────────────────
-TASK DEFINITION
-──────────────────────────────────────────────────────
-
-Your task is to split the given source and target texts into aligned sentence pairs that meet professional TM quality standards.
+produce a TM commit plan.
 
 ### Language Configuration
-- Source language: {{sourceLang}}
-- Target language: {{targetLang}}
+- Primary language: {{primaryLang}}
+- Local language: {{localLang}}
 
-### Source Text
-{{sourceText}}
+### Current Primary-Language Unit Text
+{{primaryUnit}}
 
-### Target Text
-{{targetText}}
+### Current Local-Language Unit Text
+{{localUnit}}
+
+### Existing TM Set
+{{existingTmSet}}
+
+### Required Update Tuids
+{{requiredUpdateTuids}}
+
+### Retry Missing Tuids
+{{retryMissingTuids}}
+
+### Retry Reason
+{{retryReason}}
 
 ### Instructions
-1. Split both source and target texts into sentences.
-2. Align each source sentence with its corresponding target sentence.
-3. If one source sentence maps to multiple target sentences (or vice versa), combine them into a single pair.
-4. Preserve the original text exactly — do NOT modify, rephrase, or improve the text.
-5. Preserve Markdown formatting (links, bold, code, etc.) within each sentence.
-6. Do NOT include empty sentences.
-7. Each pair must have both source and target (do NOT include unmatched sentences).
-8. Heading lines (starting with #) should be treated as independent sentences.
-9. List items (starting with -, *, +, or numbers) should each be treated as independent sentences.
-10. Apply your professional judgment: exclude pairs that do not meet TM quality standards (see PROFESSIONAL INSTINCTS above).
+1. The primary-language text is the only truth source.
+2. Return items with fields: type, tuid, primary, local.
+3. type must be either "new" or "update".
+4. For type="update", tuid MUST reference an item from Existing TM Set.
+5. For type="new", tuid MUST be "-".
+6. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
+7. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
+8. primary must be a direct subset of Current Primary-Language Unit Text.
+9. local must be a direct subset of Current Local-Language Unit Text.
+10. primary and local must each be a single sentence, with no newline.
+11. Do NOT return unmatched, empty, noisy, or low-value fragments.
+12. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
 
 ### Output Format
 Return ONLY a valid JSON array with this structure:
 
 [
-  {"source": "source sentence 1", "target": "target sentence 1"},
-  {"source": "source sentence 2", "target": "target sentence 2"}
+  {"type": "new", "tuid": "-", "primary": "primary sentence 1", "local": "local sentence 1"},
+  {"type": "update", "tuid": "a1b2c3d4", "primary": "primary sentence 2", "local": "local sentence 2"}
 ]
 
-If no pairs meet the quality bar, return an empty array: []
+If no valid items meet the quality bar, return an empty array: []
 
 CRITICAL:
 - Return ONLY the JSON array. No explanations or markdown code blocks.
-- Each pair must contain both "source" and "target" fields.
+- Each item must contain exactly type, tuid, primary, and local.
 - Preserve exact original text without any modifications.
-- Quality over quantity: only output TM candidates you would confidently keep.`;
+- Do not omit required update tuids.`;
 
 /**
  * デフォルトプロンプトのマッピング
