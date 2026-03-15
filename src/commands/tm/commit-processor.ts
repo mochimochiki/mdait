@@ -108,8 +108,8 @@ export class TmCommitProcessor {
 			{
 				primaryLang: this.primaryLang,
 				localLang: localUnit.lang,
-				primaryUnit: primaryUnit.content,
-				localUnit: localUnit.content,
+				primaryUnit: strippedPrimaryUnit,
+				localUnit: strippedLocalUnit,
 				existingTmSet,
 				requiredUpdateTuids,
 			},
@@ -152,8 +152,8 @@ export class TmCommitProcessor {
 				{
 					primaryLang: this.primaryLang,
 					localLang: localUnit.lang,
-					primaryUnit: primaryUnit.content,
-					localUnit: localUnit.content,
+					primaryUnit: strippedPrimaryUnit,
+					localUnit: strippedLocalUnit,
 					existingTmSet,
 					requiredUpdateTuids,
 					retryMissingTuids: [...unresolvedRequiredTuids],

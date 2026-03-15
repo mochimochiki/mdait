@@ -6,7 +6,6 @@
  * @module commands/tm/sentence-aligner
  */
 import type * as vscode from "vscode";
-import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { ExistingTmSetItem, TmCommitPlanItem } from "../../core/tm/types";
 import type { AIMessage, AIService } from "../../llm/ai-service";
 import { PromptIds, PromptProvider } from "../../prompts";
@@ -17,7 +16,9 @@ const logger = Logger.getInstance();
 export interface SentenceAlignmentRequest {
 	primaryLang: string;
 	localLang: string;
+	/** Markdown除去済みのprimaryユニットテキスト */
 	primaryUnit: string;
+	/** Markdown除去済みのlocalユニットテキスト */
 	localUnit: string;
 	existingTmSet: ExistingTmSetItem[];
 	requiredUpdateTuids: string[];
@@ -45,15 +46,12 @@ export class SentenceAligner {
 		request: SentenceAlignmentRequest,
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<TmCommitPlanItem[]> {
-		const strippedPrimary = stripMarkdown(request.primaryUnit);
-		const strippedLocal = stripMarkdown(request.localUnit);
-
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
 			primaryLang: request.primaryLang,
 			localLang: request.localLang,
-			primaryUnit: strippedPrimary,
-			localUnit: strippedLocal,
+			primaryUnit: request.primaryUnit,
+			localUnit: request.localUnit,
 			existingTmSet: JSON.stringify(request.existingTmSet, null, 2),
 			requiredUpdateTuids: JSON.stringify(request.requiredUpdateTuids, null, 2),
 			retryMissingTuids: JSON.stringify(request.retryMissingTuids ?? [], null, 2),
