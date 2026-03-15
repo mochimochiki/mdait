@@ -22,12 +22,12 @@ Config層は、`mdait.json`の読み込み、バリデーション、ファイ�
 
 初回セットアップを支援する仕組みを提供します：
 
-1. `isConfigured()`メソッドで`mdait.json`の存在と妥当性をチェック
+1. `isConfigured()`メソッドで`mdait.json`の存在と`validate()`結果をチェック
 2. 初期セットアップ時は`mdait.setup.createConfig`コマンドで`mdait.template.json`から設定ファイルを生成
 3. `mdaitConfigured`コンテキスト変数でUI表示を制御し、未設定時はWelcome Viewを表示
 4. `package.json`の`jsonValidation`でJSON Schemaを関連付け、IDE上でIntelliSenseと検証が機能
 
-**設計意図**: ユーザーが設定ファイルを手動で作成する負担を軽減し、テンプレートから開始することでスムーズなセットアップを実現します。
+**設計意図**: ユーザーが設定ファイルを手動で作成する負担を軽減し、テンプレートから開始することでスムーズなセットアップを実現します。詳細な必須項目チェックは`validate()`が担います。
 
 ---
 
@@ -95,9 +95,9 @@ sequenceDiagram
     },
     "contextSize": 1
   },
+  "primaryLang": "en",
   "terms": {
-    "filename": "terms.csv",
-    "primaryLang": "en"
+    "filename": "terms.csv"
   }
 }
 ```
@@ -107,9 +107,12 @@ sequenceDiagram
 | フィールド | デフォルト | 説明 |
 |-----------|-----------|------|
 | `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応 |
+| `primaryLang` | — | 用語集と TM で共有する基準言語。設定上の正準言語として扱う |
 | `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
 | `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
+
+`primaryLang` は必須設定であり、未設定時は設定不備として扱う。
 
 ---
 
@@ -129,6 +132,7 @@ sequenceDiagram
 ### validate()メソッド
 設定ファイルロード後に以下をチェックします：
 - 必須フィールド(`transPairs`)の有無
+- 必須フィールド(`primaryLang`)の有無
 - ディレクトリパスの妥当性
 
 **UIへの影響**:

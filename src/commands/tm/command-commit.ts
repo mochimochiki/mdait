@@ -37,6 +37,11 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
 	}
 
 	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
 	if (!config.getTmEnabled()) {
 		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
 		return;
@@ -77,6 +82,11 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 	}
 
 	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
 	if (!config.getTmEnabled()) {
 		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
 		return;

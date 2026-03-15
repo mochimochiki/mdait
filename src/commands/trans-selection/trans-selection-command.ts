@@ -41,6 +41,11 @@ export async function translateSelectionCommand(): Promise<void> {
 	}
 
 	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
 
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();

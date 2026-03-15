@@ -59,6 +59,7 @@ export interface TransPair {
  */
 interface MdaitConfig {
 	transPairs?: TransPair[];
+	primaryLang?: string;
 	ignoredPatterns?: string | string[];
 	sync?: {
 		level?: number;
@@ -95,7 +96,6 @@ interface MdaitConfig {
 	};
 	terms?: {
 		filename?: string;
-		primaryLang?: string;
 	};
 	tm?: {
 		enabled?: boolean;
@@ -127,6 +127,10 @@ export class Configuration {
 	 * 除外パターン
 	 */
 	public ignoredPatterns = "**/node_modules/**";
+	/**
+	 * 基準言語
+	 */
+	public primaryLang = "";
 	/**
 	 * sync設定
 	 */
@@ -168,7 +172,6 @@ export class Configuration {
 	 */
 	public terms = {
 		filename: "terms.csv", // デフォルトはCSV形式
-		primaryLang: "", // 用語管理の基準言語
 	};
 	/**
 	 * プロンプト設定（カスタムプロンプトファイルパス）
@@ -239,8 +242,7 @@ export class Configuration {
 		if (!fs.existsSync(configPath)) {
 			return false;
 		}
-		// transPairsが有効に設定されているか
-		return this.transPairs.length > 0;
+		return this.validate() === null;
 	}
 
 	/**
@@ -321,6 +323,11 @@ export class Configuration {
 				} else {
 					this.ignoredPatterns = config.ignoredPatterns;
 				}
+			}
+
+			// 基準言語の読み込み
+			if (config.primaryLang) {
+				this.primaryLang = config.primaryLang;
 			}
 
 			// sync設定の読み込み
@@ -411,9 +418,6 @@ export class Configuration {
 				if (config.terms.filename) {
 					this.terms.filename = config.terms.filename;
 				}
-				if (config.terms.primaryLang) {
-					this.terms.primaryLang = config.terms.primaryLang;
-				}
 			}
 
 			// プロンプト設定の読み込み
@@ -466,6 +470,10 @@ export class Configuration {
 			if (!pair.targetDir) {
 				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
 			}
+		}
+
+		if (!this.primaryLang) {
+			return vscode.l10n.t("Primary language (primaryLang) is not configured.");
 		}
 
 		return null;
@@ -573,10 +581,10 @@ export class Configuration {
 	}
 
 	/**
-	 * 用語集の基準言語を取得
+	 * 基準言語を取得
 	 * @returns 基準言語コード
 	 */
 	public getTermsPrimaryLang(): string {
-		return this.terms.primaryLang;
+		return this.primaryLang;
 	}
 }

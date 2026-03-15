@@ -31,6 +31,13 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 		return;
 	}
 
+	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
+
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();

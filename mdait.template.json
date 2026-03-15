@@ -18,11 +18,12 @@
       "keys": ["title", "description"]
     }
   },
+  "primaryLang": "en",
   "sync": {
     "level": 3,
     "autoSyncOnSave": true
   },
   "terms": {
-    "primaryLang": "en"
+    "filename": "terms.csv"
   }
 }

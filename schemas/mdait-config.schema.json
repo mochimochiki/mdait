@@ -221,6 +221,12 @@
       },
       "additionalProperties": false
     },
+    "primaryLang": {
+      "type": "string",
+      "description": "Primary language code shared across terminology and TM features",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "examples": ["en", "ja", "de"]
+    },
     "terms": {
       "type": "object",
       "description": "Glossary/terminology settings",
@@ -231,12 +237,6 @@
           "default": "terms.csv",
           "pattern": "^[^/\\\\]+\\.(csv|ya?ml)$",
           "examples": ["terms.csv", "glossary.yaml", "terminology.yml"]
-        },
-        "primaryLang": {
-          "type": "string",
-          "description": "Primary language code for glossary management",
-          "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
-          "examples": ["en", "ja", "de"]
         }
       },
       "additionalProperties": false
@@ -298,6 +298,6 @@
       "additionalProperties": false
     }
   },
-  "required": ["transPairs"],
+  "required": ["transPairs", "primaryLang"],
   "additionalProperties": false
 }
