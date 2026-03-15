@@ -1,5 +1,6 @@
 ---
 description: 翻訳担当エージェント。mdaitプロジェクトのl10n（国際化）対応を行います。
+user-invocable: false
 ---
 
 ## 役割
