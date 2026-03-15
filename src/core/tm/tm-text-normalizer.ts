@@ -13,6 +13,21 @@ import MarkdownIt from "markdown-it";
 const md = new MarkdownIt("default");
 
 const LEADING_YAML_FRONTMATTER_PATTERN = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+const BLOCK_SEPARATOR = "\n\n";
+
+function appendTopLevelBlockSeparator(textParts: string[]): void {
+	if (textParts.length === 0) {
+		return;
+	}
+
+	const lastPart = textParts[textParts.length - 1];
+	if (lastPart.endsWith("\n")) {
+		textParts.push("\n");
+		return;
+	}
+
+	textParts.push(BLOCK_SEPARATOR);
+}
 
 /**
  * markdown-itトークンから純粋なテキストのみを抽出する。
@@ -22,8 +37,8 @@ const LEADING_YAML_FRONTMATTER_PATTERN = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?
  * - code_inline は保持し、code_block, fence は除外する
  * - HTMLタグは後処理で除去
  * - 画像のaltテキストとリンクのテキストは抽出
- * - 段落間には空白を挿入
- * - 表のセル内容を抽出し、セル間にスペースを挿入
+ * - トップレベルのブロック境界は改行2つで保持する
+ * - 表のセル内容を抽出し、セルごとに改行で分離する
  *
  * @param tokens markdown-itトークン配列
  * @param isTopLevel トップレベルのトークン走査かどうか
@@ -31,14 +46,26 @@ const LEADING_YAML_FRONTMATTER_PATTERN = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?
  */
 function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): string[] {
 	const textParts: string[] = [];
-	let inParagraph = false;
 
 	for (let i = 0; i < tokens.length; i++) {
 		const token = tokens[i];
 
+		if (
+			isTopLevel &&
+			token.level === 0 &&
+			(token.type === "heading_open" ||
+				token.type === "blockquote_open" ||
+				token.type === "paragraph_open" ||
+				token.type === "bullet_list_open" ||
+				token.type === "ordered_list_open" ||
+				token.type === "table_open")
+		) {
+			appendTopLevelBlockSeparator(textParts);
+		}
+
 		// 見出しの後に改行2つ（段落との区別を明確化）
 		if (token.type === "heading_close") {
-			textParts.push("\n\n");
+			textParts.push(BLOCK_SEPARATOR);
 			continue;
 		}
 
@@ -50,37 +77,28 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 
 		// 引用ブロックの後に改行2つ
 		if (token.type === "blockquote_close") {
-			textParts.push("\n\n");
+			textParts.push(BLOCK_SEPARATOR);
 			continue;
 		}
 
 		// 区切り線（hr）の後に改行2つ
 		if (token.type === "hr") {
-			textParts.push("\n\n");
+			textParts.push(BLOCK_SEPARATOR);
 			continue;
 		}
 
 		// 段落の開始
 		if (token.type === "paragraph_open") {
-			inParagraph = true;
-			// 段落の前にテキストがあれば空白を追加（段落間のスペース）
-			if (textParts.length > 0 && isTopLevel) {
-				textParts.push(" ");
-			}
 			continue;
 		}
 
 		// 段落の終了
 		if (token.type === "paragraph_close") {
-			inParagraph = false;
 			continue;
 		}
 
-		// 表の開始（表の前にテキストがあればスペースを追加）
+		// 表の開始
 		if (token.type === "table_open") {
-			if (textParts.length > 0 && isTopLevel) {
-				textParts.push(" ");
-			}
 			continue;
 		}
 

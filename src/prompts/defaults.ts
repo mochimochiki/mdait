@@ -540,13 +540,17 @@ Return JSON object mapping source terms to translated terms:
  */
 export const DEFAULT_TM_SPLIT_SENTENCES = `You are a senior professional translator and translation-memory (TM) curator.
 
-You are generating a TM commit plan where the primary language is the only canonical truth source.
+Store only sentence-level TM entries that a professional translator would genuinely want to reuse.
+Reject anything low-value, noisy, or non-sentential. Do not repair poor input.
 
-You must preserve existing primary anchors whenever they already match the current primary unit.
+Especially reject:
+- Noise, placeholders, IDs, paths, URLs, raw data, random strings, or formatting remnants
+- Empty or weak fragments that do not read like intentional human language
+- Single words, very short phrases, short collocations, labels, or brief UI fragments whose value is terminological rather than sentential
 
-──────────────────────────────────────────────────────
-TASK GOAL
-──────────────────────────────────────────────────────
+Short terms and short set phrases usually belong in a glossary/termbase, not in TM.
+
+Your task is to split the given primary and local texts into aligned sentence pairs that are worth storing in TM.
 
 Given:
 - the current primary-language unit text
@@ -560,37 +564,73 @@ produce a TM commit plan.
 - Primary language: {{primaryLang}}
 - Local language: {{localLang}}
 
-### Current Primary-Language Unit Text
+<primaryLanguageUnit>
 {{primaryUnit}}
+</primaryLanguageUnit>
 
-### Current Local-Language Unit Text
+<localLanguageUnit>
 {{localUnit}}
+</localLanguageUnit>
 
-### Existing TM Set
+<existingTmSet>
 {{existingTmSet}}
+</existingTmSet>
 
-### Required Update Tuids
+{{#requiredUpdateTuids}}
+<requiredUpdateTuids>
 {{requiredUpdateTuids}}
+</requiredUpdateTuids>
+{{/requiredUpdateTuids}}
 
-### Retry Missing Tuids
+{{#retryMissingTuids}}
+<retryMissingTuids>
 {{retryMissingTuids}}
+</retryMissingTuids>
+{{/retryMissingTuids}}
 
-### Retry Reason
+{{#retryReason}}
+<retryReason>
 {{retryReason}}
+</retryReason>
+{{/retryReason}}
 
 ### Instructions
-1. The primary-language text is the only truth source.
-2. Return items with fields: type, tuid, primary, local.
-3. type must be either "new" or "update".
-4. For type="update", tuid MUST reference an item from Existing TM Set.
-5. For type="new", tuid MUST be "-".
-6. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
-7. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
-8. primary must be a direct subset of Current Primary-Language Unit Text.
-9. local must be a direct subset of Current Local-Language Unit Text.
-10. primary and local must each be a single sentence, with no newline.
-11. Do NOT return unmatched, empty, noisy, or low-value fragments.
-12. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
+1. Split both primary and local texts into sentences.
+2. Align each primary sentence with its corresponding local sentence.
+3. If one primary sentence maps to multiple local sentences (or vice versa), combine them into a single pair.
+4. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
+5. primary must be a direct subset of Current Primary-Language Unit Text.
+6. local must be a direct subset of Current Local-Language Unit Text.
+7. primary and local must each be a single sentence, with no newline.
+8. Return only sentence-level pairs with real TM value. Do NOT return unmatched, empty, noisy, or low-value fragments.
+9. Do NOT return isolated terms, short noun phrases, short fixed phrases, labels, headings with little standalone value, or other content better suited for a glossary.
+
+### Decision Policy
+Work in two passes. Resolve updates first, then consider new items.
+
+PHASE 1: UPDATE DECISIONS
+10. Review Existing TM Set and requiredUpdateTuids before considering any new item.
+11. type must be either "new" or "update".
+12. For type="update", tuid MUST reference an item from Existing TM Set.
+13. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
+14. If a current aligned pair clearly corresponds to an existing TM anchor that must be preserved, return it as type="update", not "new".
+15. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
+
+PHASE 2: NEW DECISIONS
+16. Only after PHASE 1, inspect the remaining aligned pairs not consumed by any update item.
+17. For type="new", tuid MUST be "-".
+18. Return type="new" only when the aligned pair is reusable, sentence-level, and not already represented by an update item or existing TM anchor.
+
+MUTUAL EXCLUSIVITY
+19. For one aligned pair, choose exactly one outcome: either "update" or "new".
+20. Never output both a new item and an update item for the same aligned pair.
+21. Never convert a required update into a new item.
+22. Do not create a new item that duplicates or paraphrases an update item.
+
+OUTPUT SHAPE AND ORDER
+23. Return items with fields: type, tuid, primary, local.
+24. List all update items first. If requiredUpdateTuids are present, keep their order.
+25. After all update items, list new items in source order.
 
 ### Output Format
 Return ONLY a valid JSON array with this structure:
@@ -606,6 +646,8 @@ CRITICAL:
 - Return ONLY the JSON array. No explanations or markdown code blocks.
 - Each item must contain exactly type, tuid, primary, and local.
 - Preserve exact original text without any modifications.
+- Resolve updates first, then consider new items.
+- Short terms and short phrases belong in glossary/termbase, not TM.
 - Do not omit required update tuids.`;
 
 /**

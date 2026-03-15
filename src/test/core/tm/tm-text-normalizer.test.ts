@@ -44,7 +44,7 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		test("コードブロックを完全除外", () => {
 			assert.equal(stripMarkdown("```\ncode block\n```"), "");
-			assert.equal(stripMarkdown("Before\n```\ncode block\n```\nAfter"), "Before After");
+			assert.equal(stripMarkdown("Before\n```\ncode block\n```\nAfter"), "Before\n\nAfter");
 			assert.equal(stripMarkdown("Text ```javascript\nconst x = 1;\n``` more"), "Text more");
 		});
 
@@ -68,7 +68,7 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		test("余分な空白の正規化", () => {
 			assert.equal(stripMarkdown("  multiple   spaces  "), "multiple spaces");
-			assert.equal(stripMarkdown("before\n\nafter"), "before after");
+			assert.equal(stripMarkdown("before\n\nafter"), "before\n\nafter");
 		});
 
 		test("空文字列の場合", () => {
@@ -102,8 +102,7 @@ suite("core/tm/tm-text-normalizer", () => {
 
 			test("複数の見出しをそれぞれ改行2つで区切る", () => {
 				const input = "# タイトル\n\n## セクション1\n\n本文1\n\n## セクション2\n\n本文2";
-				// 段落と見出しの間には段落終了と見出し開始の境界があるが、追加の区切りはない
-				const expected = "タイトル\n\nセクション1\n\n本文1セクション2\n\n本文2";
+				const expected = "タイトル\n\nセクション1\n\n本文1\n\nセクション2\n\n本文2";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
@@ -165,15 +164,21 @@ suite("core/tm/tm-text-normalizer", () => {
 		suite("混在ケース", () => {
 			test("見出し、段落、リスト、引用の混在", () => {
 				const input = "## 見出し\n\n段落1\n\n- リスト1\n- リスト2\n\n> 引用\n\n段落2";
-				// リストの後の改行は list_item_close の \n のみ（list_close では追加なし）
-				const expected = "見出し\n\n段落1 リスト1\nリスト2\n引用\n\n段落2";
+				const expected = "見出し\n\n段落1\n\nリスト1\nリスト2\n\n引用\n\n段落2";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
 			test("複雑な構造", () => {
 				const input = "# タイトル\n\n本文です。\n\n## セクション\n\n- 項目A\n- 項目B\n\n> 注意事項\n\n最後の段落。";
-				// 段落と見出しの間、リストと引用の間には追加の区切りなし
-				const expected = "タイトル\n\n本文です。セクション\n\n項目A\n項目B\n注意事項\n\n最後の段落。";
+				const expected = "タイトル\n\n本文です。\n\nセクション\n\n項目A\n項目B\n\n注意事項\n\n最後の段落。";
+				assert.equal(stripMarkdown(input), expected);
+			});
+
+			test("コードブロックや画像や表の前後でブロック境界を保持する", () => {
+				const input =
+					'# Test File 2\n\n> This is a quote.\n\nCode block:\n\n```\nconsole.log("Hello, World!");\n```\n\nImage:\n\n![Sample Image](https://via.placeholder.com/150)\n\n---\n\nTable:\n\n| Heading 1 | Heading 2 |\n| -------- | -------- |\n| Data 1 | Data 2 |\n| Data 3 | Data 4 |';
+				const expected =
+					"Test File 2\n\nThis is a quote.\n\nCode block:\n\nImage:\n\nSample Image\n\nTable:\n\nHeading 1\nHeading 2\nData 1\nData 2\nData 3\nData 4";
 				assert.equal(stripMarkdown(input), expected);
 			});
 		});
@@ -225,7 +230,7 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		test("表の前後にテキストがある場合", () => {
 			const input = "Before table\n\n| Col1 | Col2 |\n|------|------|\n| A | B |\n\nAfter table";
-			const expected = "Before table Col1\nCol2\nA\nB\nAfter table";
+			const expected = "Before table\n\nCol1\nCol2\nA\nB\n\nAfter table";
 			assert.equal(stripMarkdown(input), expected);
 		});
 
