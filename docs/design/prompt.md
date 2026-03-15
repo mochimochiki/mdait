@@ -264,7 +264,7 @@ prompts: ["trans.translate", "term.detect"]
 
 ### tm.splitSentences - TM登録計画生成
 
-**ファイル**: [`src/commands/tm/sentence-aligner.ts`](../../src/commands/tm/sentence-aligner.ts)
+**ファイル**: [`src/commands/tm/tm-entry-generator.ts`](../../src/commands/tm/tm-entry-generator.ts)
 
 #### 概要
 `primaryUnit` / `localUnit` と既存 TM 情報を受け取り、TM 登録用の `new|update` 計画を返します。

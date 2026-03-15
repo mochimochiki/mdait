@@ -22,7 +22,7 @@
 
 **意思決定:** tm-commit retry は `tm.retryLimit` へ分離し、sourceHash 済みユニットは lineage 解決前に即 skip する。existing TM set は primary provenance を優先して same-file 重複文の混入を抑え、required update は current local 文面一致なら no-op 扱いにした。加えて LLM 応答は要素欠落や余計なプロパティを含めて fail-closed とし、duplicate new 応答の件数ぶれも吸収した。
 
-**実装:** [src/config/configuration.ts](../src/config/configuration.ts)、[src/commands/tm/command-commit.ts](../src/commands/tm/command-commit.ts)、[src/commands/tm/commit-processor.ts](../src/commands/tm/commit-processor.ts)、[src/commands/tm/sentence-aligner.ts](../src/commands/tm/sentence-aligner.ts)、[src/core/tm/tmx-store.ts](../src/core/tm/tmx-store.ts) と関連テスト・ドキュメントを更新した。TM 関連と trans 側回帰を合わせて 38 件、追加の commit-processor 単体 6 件が成功し、3 観点レビューは最終的に全件承認となった。
+**実装:** [src/config/configuration.ts](../src/config/configuration.ts)、[src/commands/tm/command-commit.ts](../src/commands/tm/command-commit.ts)、[src/commands/tm/commit-processor.ts](../src/commands/tm/commit-processor.ts)、[src/commands/tm/tm-entry-generator.ts](../src/commands/tm/tm-entry-generator.ts)、[src/core/tm/tmx-store.ts](../src/core/tm/tmx-store.ts) と関連テスト・ドキュメントを更新した。TM 関連と trans 側回帰を合わせて 38 件、追加の commit-processor 単体 6 件が成功し、3 観点レビューは最終的に全件承認となった。
 
 **詳細:** [tasks/done/260315_TM登録primary総合レビュー修正.md](done/260315_TM登録primary総合レビュー修正.md)
 
@@ -34,7 +34,7 @@
 
 **意思決定:** command 層で primaryUnit/localUnit を先に確定し、processor は guarded upsert に専念する構造へ分離した。existing TM set は file の部分一致ではなく sentence 単位と provenance を併用して抽出し、旧TMX互換は x-primary 不在時に tuid から primary を復元する保守的方針に寄せた。
 
-**実装:** [src/commands/tm/command-commit.ts](../src/commands/tm/command-commit.ts)、[src/commands/tm/commit-processor.ts](../src/commands/tm/commit-processor.ts)、[src/commands/tm/sentence-aligner.ts](../src/commands/tm/sentence-aligner.ts)、[src/core/tm/tmx-store.ts](../src/core/tm/tmx-store.ts)、[src/prompts/defaults.ts](../src/prompts/defaults.ts) を中心に更新し、関連テストを拡張した。レビューで same-file 混入、旧TMX primary 推定、lineage 循環保護が指摘されたが、回帰テスト追加まで含めて収束し、TM 関連 31 件成功と `npx tsc --noEmit` 成功を確認した。
+**実装:** [src/commands/tm/command-commit.ts](../src/commands/tm/command-commit.ts)、[src/commands/tm/commit-processor.ts](../src/commands/tm/commit-processor.ts)、[src/commands/tm/tm-entry-generator.ts](../src/commands/tm/tm-entry-generator.ts)、[src/core/tm/tmx-store.ts](../src/core/tm/tmx-store.ts)、[src/prompts/defaults.ts](../src/prompts/defaults.ts) を中心に更新し、関連テストを拡張した。レビューで same-file 混入、旧TMX primary 推定、lineage 循環保護が指摘されたが、回帰テスト追加まで含めて収束し、TM 関連 31 件成功と `npx tsc --noEmit` 成功を確認した。
 
 **詳細:** [tasks/done/260315_TM登録primary基準化.md](done/260315_TM登録primary基準化.md)
 

@@ -21,7 +21,7 @@ import { Logger, formatError } from "../../utils/logger";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { isTmCommitTarget } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
-import { SentenceAligner } from "./sentence-aligner";
+import { TmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();
 
@@ -224,10 +224,10 @@ async function executeTmCommitForUnits(
 	await ensureMdaitDir();
 	const store = TmxStore.getInstance(tmxFilePath);
 
-	// AIServiceとSentenceAlignerの構築
+	// AIServiceとTmEntryGeneratorの構築
 	const aiService = await new AIServiceBuilder().build();
-	const aligner = new SentenceAligner(aiService);
-	const processor = new TmCommitProcessor(store, aligner, config.getTermsPrimaryLang(), config.getTmRetryLimit());
+	const generator = new TmEntryGenerator(aiService);
+	const processor = new TmCommitProcessor(store, generator, config.getTermsPrimaryLang(), config.getTmRetryLimit());
 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	const relativePath = path.relative(workspaceRoot, filePath).replace(/\\/g, "/");

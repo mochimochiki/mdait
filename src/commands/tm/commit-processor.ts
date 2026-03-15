@@ -11,7 +11,7 @@ import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { TmxStore } from "../../core/tm/tmx-store";
 import type { ExistingTmSetItem, TmCommitPlanItem, TmEntry } from "../../core/tm/types";
 import { Logger } from "../../utils/logger";
-import type { SentenceAligner } from "./sentence-aligner";
+import type { TmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();
 const sentenceSplitter = new SentenceSplitter();
@@ -67,7 +67,7 @@ interface GuardResult {
 export class TmCommitProcessor {
 	constructor(
 		private readonly store: TmxStore,
-		private readonly aligner: SentenceAligner,
+		private readonly generator: TmEntryGenerator,
 		private readonly primaryLang: string,
 		private readonly retryLimit = 1,
 	) {}
@@ -104,7 +104,7 @@ export class TmCommitProcessor {
 			strippedLocalUnit,
 		);
 
-		const pairs = await this.aligner.alignSentences(
+		const pairs = await this.generator.generateEntries(
 			{
 				primaryLang: this.primaryLang,
 				localLang: localUnit.lang,
@@ -148,7 +148,7 @@ export class TmCommitProcessor {
 		let lastInvalidReasons = initialGuard.invalidReasons;
 
 		for (let attempt = 1; attempt <= this.retryLimit && unresolvedRequiredTuids.size > 0; attempt++) {
-			const retryItems = await this.aligner.alignSentences(
+			const retryItems = await this.generator.generateEntries(
 				{
 					primaryLang: this.primaryLang,
 					localLang: localUnit.lang,

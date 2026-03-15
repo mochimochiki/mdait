@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { TmEntryGenerator } from "../../../commands/tm/sentence-aligner";
+import { TmEntryGenerator } from "../../../commands/tm/tm-entry-generator";
 import type { AIMessage, AIService } from "../../../llm/ai-service";
 
 /**
@@ -21,12 +21,12 @@ class MockAIService implements AIService {
 	}
 }
 
-suite("SentenceAligner", () => {
+suite("TmEntryGenerator", () => {
 	suite("parseResponse", () => {
-		let aligner: TmEntryGenerator;
+		let generator: TmEntryGenerator;
 
 		setup(() => {
-			aligner = new TmEntryGenerator(new MockAIService());
+			generator = new TmEntryGenerator(new MockAIService());
 		});
 
 		test("正常なTM登録計画配列をパースできる", () => {
@@ -35,7 +35,7 @@ suite("SentenceAligner", () => {
 				{ type: "update", tuid: "abcd1234", primary: "Good bye.", local: "さようなら。" },
 			]);
 
-			const result = aligner.parseResponse(response);
+			const result = generator.parseResponse(response);
 
 			assert.strictEqual(result.length, 2);
 			assert.strictEqual(result[0].type, "new");
@@ -48,7 +48,7 @@ suite("SentenceAligner", () => {
 		test("JSONコードブロック付きレスポンスをパースできる", () => {
 			const response = `\`\`\`json\n${JSON.stringify([{ type: "new", tuid: "-", primary: "Test sentence.", local: "テスト文。" }])}\n\`\`\``;
 
-			const result = aligner.parseResponse(response);
+			const result = generator.parseResponse(response);
 
 			assert.strictEqual(result.length, 1);
 			assert.strictEqual(result[0].primary, "Test sentence.");
@@ -62,18 +62,18 @@ suite("SentenceAligner", () => {
 				{ type: "update", tuid: "abcd1234", primary: "空local", local: "" },
 			]);
 
-			const result = aligner.parseResponse(response);
+			const result = generator.parseResponse(response);
 
 			assert.deepStrictEqual(result, []);
 		});
 
 		test("配列でないレスポンスは空配列を返す", () => {
-			const result = aligner.parseResponse('{"not": "array"}');
+			const result = generator.parseResponse('{"not": "array"}');
 			assert.strictEqual(result.length, 0);
 		});
 
 		test("不正なJSONは空配列を返す", () => {
-			const result = aligner.parseResponse("this is not json");
+			const result = generator.parseResponse("this is not json");
 			assert.strictEqual(result.length, 0);
 		});
 
@@ -85,7 +85,7 @@ suite("SentenceAligner", () => {
 				"not an object",
 			]);
 
-			const result = aligner.parseResponse(response);
+			const result = generator.parseResponse(response);
 
 			assert.deepStrictEqual(result, []);
 		});
@@ -93,21 +93,21 @@ suite("SentenceAligner", () => {
 		test("余計なプロパティを含む応答は fail-closed で空配列になる", () => {
 			const response = JSON.stringify([{ type: "new", tuid: "-", primary: "Valid.", local: "有効。", extra: true }]);
 
-			const result = aligner.parseResponse(response);
+			const result = generator.parseResponse(response);
 
 			assert.deepStrictEqual(result, []);
 		});
 	});
 
-	suite("alignSentences", () => {
+	suite("generateEntries", () => {
 		test("AIServiceにプロンプトを送信してレスポンスをパースする", async () => {
 			const mockAI = new MockAIService();
 			mockAI.response = JSON.stringify([
 				{ type: "new", tuid: "-", primary: "Download the installer.", local: "インストーラーをダウンロードします。" },
 			]);
 
-			const aligner = new TmEntryGenerator(mockAI);
-			const result = await aligner.generateEntries({
+			const generator = new TmEntryGenerator(mockAI);
+			const result = await generator.generateEntries({
 				primaryLang: "en",
 				localLang: "ja",
 				primaryUnit: "Download the installer.",

@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import { TmCommitProcessor, type TmCommitResolvedUnit } from "../../../commands/tm/commit-processor";
-import type { SentenceAligner, SentenceAlignmentRequest } from "../../../commands/tm/sentence-aligner";
+import type { TmEntryGenerationRequest, TmEntryGenerator } from "../../../commands/tm/tm-entry-generator";
 import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../core/tm/tmx-store";
 import type { TmCommitPlanItem } from "../../../core/tm/types";
@@ -9,14 +9,14 @@ const PRIMARY_SENTENCE = "Primary sentence.";
 const PRIMARY_TUID = calculateHash(PRIMARY_SENTENCE, true);
 
 /**
- * テスト用SentenceAlignerモック。
+ * テスト用TmEntryGeneratorモック。
  * 事前に設定した固定のペアを返す。
  */
-class MockSentenceAligner {
+class MockTmEntryGenerator {
 	responses: TmCommitPlanItem[][] = [];
-	requests: SentenceAlignmentRequest[] = [];
+	requests: TmEntryGenerationRequest[] = [];
 
-	async alignSentences(request: SentenceAlignmentRequest): Promise<TmCommitPlanItem[]> {
+	async generateEntries(request: TmEntryGenerationRequest): Promise<TmCommitPlanItem[]> {
 		this.requests.push(request);
 		return this.responses.shift() ?? [];
 	}
@@ -48,7 +48,7 @@ suite("TmCommitProcessor", () => {
 			variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "unit-primary-1" }]]),
 		});
 
-		const processor = new TmCommitProcessor(store, new MockSentenceAligner() as unknown as SentenceAligner, "en");
+		const processor = new TmCommitProcessor(store, new MockTmEntryGenerator() as unknown as TmEntryGenerator, "en");
 		const existing = store.getExistingTmSet(
 			"Primary sentence. Another sentence.",
 			"en",
@@ -80,7 +80,7 @@ suite("TmCommitProcessor", () => {
 			]),
 		});
 
-		const processor = new TmCommitProcessor(store, new MockSentenceAligner() as unknown as SentenceAligner, "en");
+		const processor = new TmCommitProcessor(store, new MockTmEntryGenerator() as unknown as TmEntryGenerator, "en");
 		const existing = store.getExistingTmSet(
 			"Primary sentence.",
 			"en",
@@ -107,8 +107,8 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const aligner = new MockSentenceAligner();
-		aligner.responses = [
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [
 			[
 				{ type: "update", tuid: "zzzz9999", primary: "Primary sentence.", local: "更新訳" },
 				{ type: "new", tuid: "-", primary: "Not included", local: "含まれない" },
@@ -116,7 +116,7 @@ suite("TmCommitProcessor", () => {
 			],
 		];
 
-		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 0);
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
 		const result = await processor.processUnit(
 			createResolvedUnit(),
 			createResolvedUnit({
@@ -143,13 +143,13 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const aligner = new MockSentenceAligner();
-		aligner.responses = [
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [
 			[],
 			[{ type: "update", tuid: PRIMARY_TUID, primary: PRIMARY_SENTENCE, local: "更新済み訳文" }],
 		];
 
-		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 1);
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 1);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence." }),
 			createResolvedUnit({
@@ -161,8 +161,8 @@ suite("TmCommitProcessor", () => {
 		);
 
 		assert.strictEqual(result.existingCount, 1);
-		assert.strictEqual(aligner.requests.length, 2);
-		assert.deepStrictEqual(aligner.requests[1].retryMissingTuids, [PRIMARY_TUID]);
+		assert.strictEqual(generator.requests.length, 2);
+		assert.deepStrictEqual(generator.requests[1].retryMissingTuids, [PRIMARY_TUID]);
 	});
 
 	test("retry 上限到達後も保存継続し warned に計上される", async () => {
@@ -175,13 +175,13 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const aligner = new MockSentenceAligner();
-		aligner.responses = [
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [
 			[{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳がここにあります。" }],
 			[],
 		];
 
-		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 1);
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 1);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
 			createResolvedUnit({
@@ -199,15 +199,15 @@ suite("TmCommitProcessor", () => {
 
 	test("重複した new 候補でも件数集計は安定する", async () => {
 		const store = new TmxStore();
-		const aligner = new MockSentenceAligner();
-		aligner.responses = [
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [
 			[
 				{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳です。" },
 				{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳です。" },
 			],
 		];
 
-		const processor = new TmCommitProcessor(store, aligner as unknown as SentenceAligner, "en", 0);
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
 			createResolvedUnit({

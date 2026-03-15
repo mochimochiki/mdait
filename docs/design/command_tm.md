@@ -72,7 +72,7 @@ sequenceDiagram
     participant Cmd as TmCommitCommand
     participant Proc as TmCommitProcessor
     participant Store as TmxStore
-    participant AI as SentenceAligner
+    participant AI as TmEntryGenerator
     participant Guard as CommitGuard
 
     User->>Cmd: tm-commit 実行
@@ -89,7 +89,7 @@ sequenceDiagram
             Proc->>Store: getExistingTmSet(primaryUnit, localLang)
             Store-->>Proc: {tuid, primarySentence, localSentence?}[]
             Proc->>Proc: update必須tuid を導出
-            Proc->>AI: alignSentences(primaryUnit, localUnit, existing TM set, update必須tuid)
+            Proc->>AI: generateEntries(primaryUnit, localUnit, existing TM set, update必須tuid)
             AI-->>Proc: new|update[]
             Proc->>Guard: schema + subset + 粒度 + 必須update検証
             alt ガード違反あり
@@ -115,7 +115,7 @@ sequenceDiagram
 - **primaryLang正本**: source/target の相対関係ではなく `primaryLang` を正準軸にし、non-primary pair でも `marker.from` チェーンから primary を解決する
 - **tuid正準化**: TU の識別は `hash(norm(primary sentence))` に統一し、既存 TU 更新と新規 TU 追加を同じキーで扱う
 - **guarded upsert一本化**: 同一ユニットの再処理も事前スキップせず、`existing TM set` と guard で既存TU更新・no-op吸収を判断する
-- **stripMarkdown一貫性**: tm-commit（SentenceAligner内）とtrans検索時で同一処理を使用。Markdown記法の差異でTM参照を取りこぼさないよう設計
+- **stripMarkdown一貫性**: tm-commit（TmEntryGenerator内）とtrans検索時で同一処理を使用。Markdown記法の差異でTM参照を取りこぼさないよう設計
 - **guarded commit**: `update必須tuid` の欠落、subset 違反、文粒度違反を no-op で吸収せず、focused retry に回す
 - **focused retry**: 再試行は「欠落した required update の local 補完」に限定し、guard 通過済みの結果は再生成させない
 - **文分割非対称性**: tm-commit は LLM に sentence 粒度の抽出を委ねるが、retrieval 側は `SentenceSplitter` による高速 candidate generation を優先する
@@ -129,6 +129,6 @@ sequenceDiagram
 | [`command-commit.ts`](../../src/commands/tm/command-commit.ts) | エントリーポイント、設定検証、`primaryUnit` / `localUnit` 解決、進捗表示・キャンセル制御 |
 | [`commit-processor.ts`](../../src/commands/tm/commit-processor.ts) | `existing TM set` 取得、`update必須tuid` 導出、guard / retry / upsert のオーケストレーション |
 | [`commit-filter.ts`](../../src/commands/tm/commit-filter.ts) | `isTmCommitTarget()` - TM登録対象フィルタリング |
-| [`sentence-aligner.ts`](../../src/commands/tm/sentence-aligner.ts) | `SentenceAligner.alignSentences()` - LLMベースの primary/local 登録計画生成 |
+| [`tm-entry-generator.ts`](../../src/commands/tm/tm-entry-generator.ts) | `TmEntryGenerator.generateEntries()` - LLMベースの primary/local 登録計画生成 |
 | [`tmx-store.ts`](../../src/core/tm/tmx-store.ts) | `TmxStore` - TU/tuv の永続化、primary anchor lookup、variant provenance 管理 |
 | [`sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | `SentenceSplitter` - `Intl.Segmenter` ベース文分割（trans検索用） |

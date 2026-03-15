@@ -1,9 +1,9 @@
 /**
- * @file sentence-aligner.ts
+ * @file tm-entry-generator.ts
  * @description
  *   LLMベースの TM登録計画生成。
  *   primary/local ユニットと既存TM情報を入力し、new/update 配列を返す。
- * @module commands/tm/sentence-aligner
+ * @module commands/tm/tm-entry-generator
  */
 import type * as vscode from "vscode";
 import type { ExistingTmSetItem, TmCommitPlanItem } from "../../core/tm/types";
