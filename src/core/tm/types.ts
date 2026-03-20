@@ -40,6 +40,13 @@ export interface TmCommitEntry {
 	local: string;
 }
 
+/** sync時のTMクリーンアップで参照される処理対象ユニット */
+export interface CurrentPrimaryUnit {
+	unitPath: string;
+	unitHash: string;
+	content: string;
+}
+
 /** TM検索結果 */
 export interface TmMatch {
 	/** TU識別子（互換のため sentenceHash 名を維持） */

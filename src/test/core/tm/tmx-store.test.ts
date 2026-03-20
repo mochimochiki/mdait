@@ -523,4 +523,78 @@ suite("TmxStore.findCandidatesByTrigram", () => {
 		const results = store.findCandidatesByTrigram("Hello world test sentence", "en");
 		assert.deepStrictEqual(results, []);
 	});
+
+	test("Markdown含む生テキストを渡しても正規化後の候補がヒットする", () => {
+		// TM に正規化済みテキストで登録
+		store.addEntry(
+			createTestEntry({
+				tuid: "md-entry",
+				primary: "Download the installer package",
+				variants: new Map([["en", { text: "Download the installer package" }]]),
+			}),
+		);
+
+		// 生テキスト（Markdown記法あり）をそのまま渡す
+		// findCandidatesByTrigram 内部で normalizeForTm を適用するため一致するはず
+		const results = store.findCandidatesByTrigram("Download the **installer** package", "en");
+		assert.ok(results.some((e) => e.tuid === "md-entry"), "Markdown含む生テキストでも候補がヒットすること");
+	});
+});
+
+suite("TmxStore.getTrigramCache", () => {
+	let store: TmxStore;
+
+	setup(() => {
+		store = new TmxStore();
+	});
+
+	test("addEntry 後にキャッシュが構築される", () => {
+		store.addEntry(
+			createTestEntry({
+				tuid: "cache-entry",
+				primary: "Hello cache world",
+				variants: new Map([
+					["en", { text: "Hello cache world" }],
+					["ja", { text: "キャッシュのテスト" }],
+				]),
+			}),
+		);
+
+		const cache = store.getTrigramCache();
+		assert.ok(cache.has("cache-entry:en"), 'キャッシュに "cache-entry:en" が存在すること');
+		assert.ok(cache.has("cache-entry:ja"), 'キャッシュに "cache-entry:ja" が存在すること');
+		assert.ok((cache.get("cache-entry:en")?.size ?? 0) > 0, "en trigram が格納されていること");
+	});
+
+	test("clear() 後はキャッシュが空になる", () => {
+		store.addEntry(createTestEntry({ tuid: "c1", primary: "Clear test sentence" }));
+		store.clear();
+		assert.strictEqual(store.getTrigramCache().size, 0);
+	});
+
+	test("load() 後にキャッシュが再構築される", () => {
+		const tmpDir = require("node:os").tmpdir();
+		const tmpPath = require("node:path").join(require("node:fs").mkdtempSync(require("node:path").join(tmpDir, "cache-test-")), "test.tmx");
+		require("node:fs").mkdirSync(require("node:path").dirname(tmpPath), { recursive: true });
+		require("node:fs").writeFileSync(tmpPath, SAMPLE_TMX, "utf-8");
+
+		store.load(tmpPath);
+
+		const cache = store.getTrigramCache();
+		assert.ok(cache.size > 0, "load 後にキャッシュが構築されること");
+
+		require("node:fs").rmSync(require("node:path").dirname(tmpPath), { recursive: true, force: true });
+	});
+
+	test("getTrigramCache の戻り値は ReadonlyMap 型である", () => {
+		store.addEntry(createTestEntry({ tuid: "r1", primary: "Readonly test sentence" }));
+		const cache = store.getTrigramCache();
+		// ReadonlyMap なので set() メソッドが存在しないことを型レベルで保証
+		// 実行時テスト: entries() を使って読み取りのみ可能か確認
+		let count = 0;
+		for (const [_key, trigrams] of cache) {
+			count += trigrams.size;
+		}
+		assert.ok(count > 0, "ReadonlyMap からトリグラムを読み取れること");
+	});
 });

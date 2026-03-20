@@ -17,7 +17,6 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
-import { runTmCleanup } from "../../core/tm/tm-cleanup";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
@@ -74,9 +73,6 @@ export async function syncCommand(): Promise<void> {
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
 			let index = 0;
 
-			// TMクリーンアップ対象（sync_CoreProcを使ったファイルのみ）
-			const tmCleanupTasks: Array<{ sourceFile: string; targetFile: string; diffs: DiffResult["diffs"] }> = [];
-
 			// ワーカー関数（並列実行処理）
 			const worker = async () => {
 				while (true) {
@@ -100,10 +96,6 @@ export async function syncCommand(): Promise<void> {
 							diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
 						}
 
-						// TMクリーンアップ対象として登録（syncNew は対象外）
-						if (isExistingTarget) {
-							tmCleanupTasks.push({ sourceFile, targetFile, diffs: diffResult.diffs });
-						}
 
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
@@ -150,24 +142,6 @@ export async function syncCommand(): Promise<void> {
 			// スナップショットバッファをフラッシュ
 			const unitRegistryManager = UnitRegistryManager.getInstance();
 			await unitRegistryManager.flushBuffer();
-
-			// TMクリーンアップ（sourceFile/targetFile の両方を対象、primaryLang 側のみ候補が見つかる）
-			if (config.getTmEnabled() && tmCleanupTasks.length > 0) {
-				const tmxFilePath = config.getTmFilePath();
-				const primaryLang = config.getTermsPrimaryLang();
-				const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
-				for (const task of tmCleanupTasks) {
-					for (const cleanupFile of [task.sourceFile, task.targetFile]) {
-						try {
-							const content = fs.readFileSync(cleanupFile, "utf-8");
-							const unitPath = path.relative(workspaceRoot, cleanupFile).replace(/\\/g, "/");
-							await runTmCleanup(tmxFilePath, primaryLang, unitPath, task.diffs, content);
-						} catch (error) {
-							logger.warn("sync", "TM cleanup error", { file: cleanupFile, ...formatError(error) });
-						}
-					}
-				}
-			}
 		}
 
 		// 全ファイル処理完了後、GC処理
@@ -268,22 +242,6 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
-
-		// TMクリーンアップ（sourceFile/targetFile の両方を対象、primaryLang 側のみ候補が見つかる）
-		if (config.getTmEnabled() && isExistingFile) {
-			const tmxFilePath = config.getTmFilePath();
-			const primaryLang = config.getTermsPrimaryLang();
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
-			for (const cleanupFile of [sourceFile, targetFile]) {
-				try {
-					const content = fs.readFileSync(cleanupFile, "utf-8");
-					const unitPath = path.relative(workspaceRoot, cleanupFile).replace(/\\/g, "/");
-					await runTmCleanup(tmxFilePath, primaryLang, unitPath, diffResult.diffs, content);
-				} catch (error) {
-					logger.warn("sync", "TM cleanup error during single file sync", { file: cleanupFile, ...formatError(error) });
-				}
-			}
-		}
 
 		// ステータスを更新
 		await statusManager.refreshFileStatus(sourceFile);

@@ -96,15 +96,15 @@ sequenceDiagram
 
     rect rgb(235,245,255)
         Note over Trans,Store: ① 粗い絞り込み（trigram 転置インデックス）
-        Trans->>Store: findCandidatesByTrigram(query, sourceLang, 200)
-        Note over Store: trigram ヒット数カウント → 上位 limit 件を返す
+        Trans->>Store: findCandidatesByTrigram(rawText, sourceLang, 200)
+        Note over Store: normalizeForTm(rawText) を内部実行 → trigram ヒット数カウント → 上位 limit 件を返す
         Store-->>Trans: TmEntry[] (最大 200 件)
     end
 
     rect rgb(240,255,240)
         Note over Trans,Ranker: ② 精密スコアリング（Jaccard + MMR）
-        Trans->>Ranker: rankTmEntries(query, candidates, { topK, lang })
-        Note over Ranker: Jaccard 計算 → MMR greedy 選択
+        Trans->>Ranker: rankTmEntries(rawText, candidates, { topK, lang, trigramCache })
+        Note over Ranker: normalizeForTm(rawText) 内部実行、候補 trigram はキャッシュから取得
         Ranker-->>Trans: ScoredTmEntry[] (topK 件以内)
     end
 ```
@@ -113,13 +113,14 @@ sequenceDiagram
 
 **目的：** 全 TM エントリー（数千件規模）から、後続の Jaccard 計算対象を高速に絞り込む。
 
-`TmxStore` はロード時に **trigram 転置インデックス** を構築する。
+`TmxStore` はロード時に **trigram 転置インデックス** と **trigramCache** を構築する。
 
 ```
 trigramIndex: Map<lang, Map<trigram, Set<tuid>>>
+trigramCache: Map<"${tuid}:${lang}", Set<trigram>>
 ```
 
-クエリの各 trigram をインデックスで引き、tuid ごとのヒット数をカウントして上位 `limit` 件（デフォルト 200）を返す。
+`findCandidatesByTrigram(rawText, lang, limit)` は内部で `normalizeForTm(rawText)` を実行し、呼び出し元が Markdown を事前除去する必要はない。`getTrigramCache()` で trigramCache の読み取り専用ビューを返し、ランカーに渡す。
 
 **なぜ言語別か：** ソース言語・ターゲット言語それぞれの variant テキストでインデックスを持つことで、「sourceLang の variant を持つエントリのみ」という絞り込みをインデックス段階で行える。英語で検索しているときに日本語のみの TU がノイズとして混入しない。
 
@@ -127,9 +128,10 @@ trigramIndex: Map<lang, Map<trigram, Set<tuid>>>
 
 [`tm-ranker.ts`](../../src/core/tm/tm-ranker.ts) が入力の 200 件から topK 件を選ぶ。
 
-1. クエリと各候補の `sourceLang` variant を `normalizeForTm` + `computeTrigrams` で集合化
-2. Jaccard でクエリとの類似度 `querySim` を計算・キャッシュ
-3. MMR greedy ループで topK 件を選択し、最終 MMR スコアを `score` として付与
+1. `normalizeForTm(rawText)` でクエリを正規化し trigram を生成
+2. 各候補の trigram を `options.trigramCache`（`TmxStore.getTrigramCache()` から渡される）から取得。キャッシュなしの場合は `computeTrigrams(normalizeForTm(text))` でフォールバック
+3. Jaccard でクエリとの類似度 `querySim` を計算
+4. MMR greedy ループで topK 件を選択し、最終 MMR スコアを `score` として付与
 
 ---
 
@@ -153,7 +155,7 @@ trigramIndex: Map<lang, Map<trigram, Set<tuid>>>
 
 ### `primary` をインデックス対象にする理由
 
-`TmxStore.indexEntry()` は `variant.text`（全言語）を lang 別にインデックスするが、trigram 粗絞り込みのスコアは variant テキストのヒット数で判定される。インデックスの元テキストと Jaccard 計算のテキストを統一するため、`tm-ranker` では同じ `normalizeForTm` を使って variant テキストから trigram を生成する。
+`TmxStore.indexEntry()` は `variant.text`（全言語）を lang 別にインデックスするが、trigram 粗絞り込みのスコアは variant テキストのヒット数で判定される。インデックス構築時と Jaccard 計算時の trigram を統一するため、`indexEntry` で `normalizeForTm + computeTrigrams` した結果が `trigramCache` に保存され、`tm-ranker` はこれを参照する。キャッシュなしの場合でも同じ `normalizeForTm` を適用することで一貫性を保証する。
 
 ### ソースリンク
 

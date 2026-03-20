@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/20: TM normalize処理の一元化とtrigramキャッシュ
+
+**背景:** TM検索フローで `stripMarkdown`（markdown-it パース）が同一テキストに対して最大3回実行されており、ランキング時には候補数分だけ trigramが毎回再計算されるという無駄が積み重なっていた。normalize処理が `trans-command`・`TmxStore`・`tm-ranker` の3層に散らばっており、「誰がnormalizeするか」が不明確だった。
+
+**意思決定:** normalize処理をStore/Ranker内部に閉じ込め、呼び出し側（trans-command）は生テキストを渡すだけにする方針を採用。trigramも `TmxStore` がエントリ登録時に計算・保持し、ランキング時に再利用するフォワードキャッシュを追加した。設計レビューで `getTrigramCache()` の戻り値型を `ReadonlyMap<string, ReadonlySet<string>>` として型安全性を確保した点も採用。dead code（コンパイルエラー状態の2ファイル）も合わせて除去。
+
+**実装:** `TmxStore` に `trigramCache` フィールドと `getTrigramCache()` を追加。`tm-ranker.ts` の `RankOptions` にオプショナルな `trigramCache` を追加しキャッシュ優先取得に変更。`trans-command.ts` の `stripMarkdown` 事前呼び出しを削除。レビューで `loadIfNeeded` の `trigramCache.clear()` 漏れを指摘・修正して承認。
+
+**詳細:** [tasks/done/260320_TM_normalize一元化.md](done/260320_TM_normalize一元化.md)
+
 ## 2026/03/20: TM スコアリングエンジン langfix（trigram インデックスの lang 別分離）
 
 **背景:** TM スコアリングエンジン実装直後に、ja→en 翻訳で TM 参照がほぼヒットしない問題を発見。`trigramIndex` が `entry.primary`（= en テキスト）だけでインデックスを構築しており、ja テキストのクエリと言語が噛み合っていなかった。

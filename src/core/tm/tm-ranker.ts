@@ -21,12 +21,15 @@ export interface RankOptions {
 	lambda?: number;
 	/** スコアリング対象言語（sourceLang を渡す） */
 	lang: string;
+	/** TmxStore.getTrigramCache() から渡されるキャッシュ（省略可）。
+	 * キー: "${tuid}:${lang}" — 存在する場合は候補の trigram 再計算をスキップする */
+	trigramCache?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /** trigram インデックス用の内部候補型 */
 type CandidateWithTrigrams = {
 	entry: TmEntry;
-	trigrams: Set<string>;
+	trigrams: ReadonlySet<string>;
 	querySim: number;
 };
 
@@ -34,7 +37,7 @@ type CandidateWithTrigrams = {
  * 2つの trigram 集合の Jaccard 係数を計算する。
  * 両方が空集合の場合は 0 を返す。
  */
-function jaccard(a: Set<string>, b: Set<string>): number {
+function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
 	if (a.size === 0 || b.size === 0) {
 		return 0;
 	}
@@ -73,7 +76,8 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 			if (text === undefined) {
 				return null;
 			}
-			const trigrams = computeTrigrams(normalizeForTm(text));
+			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`)
+				?? computeTrigrams(normalizeForTm(text));
 			const querySim = jaccard(queryTrigrams, trigrams);
 			return { entry, trigrams, querySim };
 		})

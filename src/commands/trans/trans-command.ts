@@ -29,9 +29,8 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { rankTmEntries } from "../../core/tm/tm-ranker";
-import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
+import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
 import type { TmMatch } from "../../core/tm/types";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -960,18 +959,19 @@ export function lookupTmReferences(sourceContent: string, sourceLang: string, ta
 		return undefined;
 	}
 
-	// Markdown要素を除去してからクエリ文字列として使用
-	const strippedContent = stripMarkdown(sourceContent);
-
 	// trigram インデックスで粗い絞り込み
-	const candidates = store.findCandidatesByTrigram(strippedContent, sourceLang, 200);
+	const candidates = store.findCandidatesByTrigram(sourceContent, sourceLang, 200);
 	if (candidates.length === 0) {
 		return undefined;
 	}
 
-	// trigram Jaccard + MMR でスコアリング
+	// trigram Jaccard + MMR でスコアリング（候補 trigram はキャッシュから参照）
 	const maxReferences = config.getTmMaxReferences();
-	const ranked = rankTmEntries(strippedContent, candidates, { topK: maxReferences, lang: sourceLang });
+	const ranked = rankTmEntries(sourceContent, candidates, {
+		topK: maxReferences,
+		lang: sourceLang,
+		trigramCache: store.getTrigramCache(),
+	});
 	if (ranked.length === 0) {
 		return undefined;
 	}

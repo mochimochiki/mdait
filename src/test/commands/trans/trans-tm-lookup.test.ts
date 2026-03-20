@@ -12,6 +12,10 @@ import { TmxStore } from "../../../core/tm/tmx-store";
  * lookupTmReferences 関数は VSCode ワークスペースに依存するため、
  * ここでは正規化とハッシュ計算の組み合わせのみをテストする。
  * E2E統合テストは test-gui で実施。
+ *
+ * @note normalize処理（stripMarkdown）は Store/Ranker に内部化された（260320_TM_normalize一元化）。
+ * 呼び出し側（trans-command）は生テキストをそのまま渡すようになっており、
+ * TmxStore.findCandidatesByTrigram と tm-ranker.rankTmEntries が内部で normalizeForTm を適用する。
  */
 suite("trans-command TM検索の正規化ロジック", () => {
 	let tmpDir: string;

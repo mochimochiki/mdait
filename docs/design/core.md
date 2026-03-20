@@ -150,7 +150,10 @@ mdaitマーカー直前の空行を保証し、markdown-itが段落区切りを�
 TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデックスを担当します。
 
 - TMX XMLパース/シリアライズ（`fast-xml-parser`）・`Map<tuid, TmEntry>` による高速検索（O(1)）
-- CRUD: primary anchor lookup、`existing TM set` 取得、variant upsert、retrieval 用 batch lookup- **trigram 転置インデックス** (`Map<trigram, Set<tuid>>`): `entry.primary` を正規化（stripMarkdown + lowercase）した trigram を事前構築・キャッシュ。`findCandidatesByTrigram(query, lang, limit)` で高速な粗絞り込みを提供- グローバル遅延シングルトン（`getInstance(tmxFilePath)`、ファイル更新時刻（mtime）ベースの自動リロード）
+- CRUD: primary anchor lookup、`existing TM set` 取得、variant upsert、retrieval 用 batch lookup
+- **trigram 転置インデックス** `Map<lang, Map<trigram, Set<tuid>>>`: variant テキストを `normalizeForTm` した trigram を lang 別に事前構築。`findCandidatesByTrigram(rawText, lang, limit)` でクエリの正規化・粗絞り込みを内部完結
+- **trigramCache** `Map<"${tuid}:${lang}", Set<string>>`: `indexEntry` 時に variant trigram を保存するフォワードキャッシュ。`getTrigramCache()` で読み取り専用ビューを返し、ランカーが再計算を回避する
+- グローバル遅延シングルトン（`getInstance(tmxFilePath)`、ファイル更新時刻（mtime）ベースの自動リロード）
 
 **データモデル**: `tuid = hash(norm(primary sentence))` をキーとし、primary 文面と各言語 variant、その provenance を保持する TU 単位の TmEntry。`x-source-hash` はユニット再処理抑止のための補助インデックスであり、TU 同一性のキーではありません。
 
@@ -209,6 +212,7 @@ TM検索結果（`TmMatch[]`）をプロンプト用文字列に変換。VS Code
 
 - **trigram Jaccard 類似度**: `options.lang` の variant テキストとクエリの trigram 集合を比較（`|A∩B|/|A∪B|`）
 - **MMR 選択**: `λ × querySim(c) − (1−λ) × max_{s∈selected}(sim(s,c))` の greedy 選択。`λ=1.0` のとき純粋な類似度順と一致
+- **trigramCache**: `RankOptions.trigramCache`（`TmxStore.getTrigramCache()` から渡す）が指定されると候補 variant の trigram 再計算をスキップしキャッシュから取得。省略時は `computeTrigrams(normalizeForTm(text))` にフォールバック
 - 返却型 `ScoredTmEntry = TmEntry & { score: number }`
 
 **実装**: [`src/core/tm/tm-ranker.ts`](../../src/core/tm/tm-ranker.ts)

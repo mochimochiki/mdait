@@ -265,6 +265,9 @@ export class TmxStore {
 	/** lang → (trigram → Set<tuid>)（言語別転置インデックス） */
 	private trigramIndex = new Map<string, Map<string, Set<string>>>();
 
+	/** "${tuid}:${lang}" → trigrams（ランキング時の再計算を省くフォワードキャッシュ） */
+	private trigramCache = new Map<string, Set<string>>();
+
 	/**
 	 * グローバルシングルトンを取得する（遅延初期化）。
 	 * TMXファイルパスを指定して初回ロードまたはmtime変更時リロードする。
@@ -291,6 +294,7 @@ export class TmxStore {
 			if (this.loadedFilePath !== filePath || this.index.size > 0) {
 				this.index.clear();
 				this.trigramIndex.clear();
+				this.trigramCache.clear();
 				this.loadedFilePath = filePath;
 				this.loadedMtime = 0;
 			}
@@ -579,11 +583,13 @@ export class TmxStore {
 	clear(): void {
 		this.index.clear();
 		this.trigramIndex.clear();
+		this.trigramCache.clear();
 	}
 
 	/** 全エントリーの全 variant テキストを lang 別に再インデックスする（load専用） */
 	private rebuildTrigramIndex(): void {
 		this.trigramIndex.clear();
+		this.trigramCache.clear();
 		for (const entry of this.index.values()) {
 			this.indexEntry(entry);
 		}
@@ -593,12 +599,14 @@ export class TmxStore {
 	private indexEntry(entry: TmEntry): void {
 		for (const [lang, variant] of entry.variants) {
 			const norm = normalizeForTm(variant.text);
+			const trigrams = computeTrigrams(norm);
+			this.trigramCache.set(`${entry.tuid}:${lang}`, trigrams);
 			let langMap = this.trigramIndex.get(lang);
 			if (!langMap) {
 				langMap = new Map<string, Set<string>>();
 				this.trigramIndex.set(lang, langMap);
 			}
-			for (const trigram of computeTrigrams(norm)) {
+			for (const trigram of trigrams) {
 				let tuids = langMap.get(trigram);
 				if (!tuids) {
 					tuids = new Set();
@@ -607,5 +615,13 @@ export class TmxStore {
 				tuids.add(entry.tuid);
 			}
 		}
+	}
+
+	/**
+	 * ランカーが候補の trigram を再計算せずに参照するための読み取り専用ビューを返す。
+	 * キー形式: "${tuid}:${lang}"
+	 */
+	getTrigramCache(): ReadonlyMap<string, ReadonlySet<string>> {
+		return this.trigramCache;
 	}
 }
