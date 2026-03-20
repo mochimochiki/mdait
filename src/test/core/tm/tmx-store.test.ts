@@ -364,3 +364,163 @@ suite("TmxStoreシングルトン", () => {
 		assert.strictEqual(TmxStore.getInstance(tempFilePath), TmxStore.getInstance(tempFilePath));
 	});
 });
+
+suite("TmxStore.findCandidatesByTrigram", () => {
+	let store: TmxStore;
+	let tempFilePath: string;
+
+	setup(() => {
+		store = new TmxStore();
+		tempFilePath = createTempFilePath();
+	});
+
+	teardown(() => {
+		const dir = path.dirname(tempFilePath);
+		if (fs.existsSync(dir)) {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("クエリに trigram が一致するエントリーを返す", () => {
+		store.addEntry(
+			createTestEntry({
+				tuid: "entry1",
+				primary: "Download the installer from the website",
+				variants: new Map([
+					["en", { text: "Download the installer from the website" }],
+					["ja", { text: "ウェブサイトからインストーラーをダウンロード" }],
+				]),
+			}),
+		);
+		store.addEntry(
+			createTestEntry({
+				tuid: "entry2",
+				primary: "Completely unrelated content xyz",
+				variants: new Map([
+					["en", { text: "Completely unrelated content xyz" }],
+					["ja", { text: "無関係な内容" }],
+				]),
+			}),
+		);
+
+		const results = store.findCandidatesByTrigram("Download the installer", "en");
+		assert.ok(results.length > 0);
+		// entry1 がヒットすること
+		assert.ok(results.some((e) => e.tuid === "entry1"));
+	});
+
+	test("クエリが空ストアのとき空配列を返す", () => {
+		const results = store.findCandidatesByTrigram("Hello world", "en");
+		assert.deepStrictEqual(results, []);
+	});
+
+	test("クエリが3文字未満のとき空配列を返す", () => {
+		store.addEntry(createTestEntry());
+		const results = store.findCandidatesByTrigram("ab", "en");
+		assert.deepStrictEqual(results, []);
+	});
+
+	test("lang フィルタ: 指定言語の variant を持つエントリーのみ返す", () => {
+		store.addEntry(
+			createTestEntry({
+				tuid: "en-only",
+				primary: "Hello world test sentence",
+				variants: new Map([["en", { text: "Hello world test sentence" }]]),
+			}),
+		);
+		store.addEntry(
+			createTestEntry({
+				tuid: "en-ja",
+				primary: "Hello world test sentence",
+				variants: new Map([
+					["en", { text: "Hello world test sentence" }],
+					["ja", { text: "こんにちは世界テスト文" }],
+				]),
+			}),
+		);
+
+		const resultsEn = store.findCandidatesByTrigram("Hello world test", "en");
+		const resultsFr = store.findCandidatesByTrigram("Hello world test", "fr");
+
+		// en variant を持つ両エントリーが返る
+		assert.strictEqual(resultsEn.length, 2);
+		// fr variant を持つエントリーはゼロ
+		assert.strictEqual(resultsFr.length, 0);
+	});
+
+	test("limit を超えて返さない", () => {
+		for (let i = 0; i < 10; i++) {
+			store.addEntry(
+				createTestEntry({
+					tuid: `entry${i}`,
+					primary: `Hello world test sentence number ${i}`,
+					variants: new Map([["en", { text: `Hello world test sentence number ${i}` }]]),
+				}),
+			);
+		}
+		const results = store.findCandidatesByTrigram("Hello world test sentence", "en", 3);
+		assert.ok(results.length <= 3);
+	});
+
+	test("addEntry 後にインデックスが更新される", () => {
+		// 最初はヒットなし
+		const before = store.findCandidatesByTrigram("New entry text sample", "en");
+		assert.strictEqual(before.length, 0);
+
+		store.addEntry(
+			createTestEntry({
+				tuid: "new1",
+				primary: "New entry text sample",
+				variants: new Map([["en", { text: "New entry text sample" }]]),
+			}),
+		);
+
+		const after = store.findCandidatesByTrigram("New entry text sample", "en");
+		assert.ok(after.some((e) => e.tuid === "new1"));
+	});
+
+	test("load() でインデックスが構築される", () => {
+		fs.mkdirSync(path.dirname(tempFilePath), { recursive: true });
+		fs.writeFileSync(tempFilePath, SAMPLE_TMX, "utf-8");
+
+		store.load(tempFilePath);
+
+		// SAMPLE_TMX に "Download the installer" が含まれる
+		const results = store.findCandidatesByTrigram("Download the installer", "en");
+		assert.ok(results.length > 0);
+	});
+
+	test("ja クエリで ja variant を検索できる（言語別インデックス）", () => {
+		store.addEntry(
+			createTestEntry({
+				tuid: "bi-lang",
+				primary: "Download the installer",
+				variants: new Map([
+					["en", { text: "Download the installer" }],
+					["ja", { text: "インストーラーをダウンロード" }],
+				]),
+			}),
+		);
+
+		// ja クエリは ja インデックスを検索するのでヒットする
+		const jaResults = store.findCandidatesByTrigram("インストーラーをダウンロード", "ja");
+		assert.ok(jaResults.some((e) => e.tuid === "bi-lang"));
+
+		// en クエリで ja テキストを検索しても en インデックスにないのでヒットしない
+		const enWithJaQuery = store.findCandidatesByTrigram("インストーラーをダウンロード", "en");
+		assert.strictEqual(enWithJaQuery.length, 0);
+	});
+
+	test("clear() 後はインデックスが空になる", () => {
+		store.addEntry(
+			createTestEntry({
+				tuid: "e1",
+				primary: "Hello world test sentence",
+				variants: new Map([["en", { text: "Hello world test sentence" }]]),
+			}),
+		);
+		store.clear();
+		const results = store.findCandidatesByTrigram("Hello world test sentence", "en");
+		assert.deepStrictEqual(results, []);
+	});
+});

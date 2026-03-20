@@ -274,3 +274,39 @@ export function isWorthyForTm(text: string, lang: string): boolean {
 
 	return true;
 }
+
+/**
+ * テキストを trigram（3-gram）集合に変換する。
+ *
+ * Unicodeサロゲートペアに対応するため、[...text] でスプレッドして文字配列化する。
+ * テキストが3文字未満の場合は空集合を返す（パディングなし）。
+ *
+ * @param text 正規化済みテキスト
+ * @returns trigram の Set
+ *
+ * @example
+ * ```typescript
+ * computeTrigrams("hello")  // => Set { "hel", "ell", "llo" }
+ * computeTrigrams("ab")     // => Set {} (3文字未満)
+ * ```
+ */
+export function computeTrigrams(text: string): Set<string> {
+	const chars = [...text];
+	const trigrams = new Set<string>();
+	for (let i = 0; i <= chars.length - 3; i++) {
+		trigrams.add(chars[i] + chars[i + 1] + chars[i + 2]);
+	}
+	return trigrams;
+}
+
+/**
+ * TM trigramインデックス・スコアリング用のテキスト正規化。
+ * TmxStore（インデックス構築）とtm-ranker（スコアリング）で共有し、
+ * インデックス構築時とスコアリング時のtrigramが常に一致することを保証する。
+ *
+ * @param text 正規化対象テキスト（Markdown含む可能性あり）
+ * @returns stripMarkdown + toLowerCase + trim 適用後のテキスト
+ */
+export function normalizeForTm(text: string): string {
+	return stripMarkdown(text).toLowerCase().trim();
+}

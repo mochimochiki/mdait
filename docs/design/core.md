@@ -150,8 +150,7 @@ mdaitマーカー直前の空行を保証し、markdown-itが段落区切りを�
 TMXファイル（`.mdait/translations.tmx`）のI/Oとインメモリインデックスを担当します。
 
 - TMX XMLパース/シリアライズ（`fast-xml-parser`）・`Map<tuid, TmEntry>` による高速検索（O(1)）
-- CRUD: primary anchor lookup、`existing TM set` 取得、variant upsert、retrieval 用 batch lookup
-- グローバル遅延シングルトン（`getInstance(tmxFilePath)`、ファイル更新時刻（mtime）ベースの自動リロード）
+- CRUD: primary anchor lookup、`existing TM set` 取得、variant upsert、retrieval 用 batch lookup- **trigram 転置インデックス** (`Map<trigram, Set<tuid>>`): `entry.primary` を正規化（stripMarkdown + lowercase）した trigram を事前構築・キャッシュ。`findCandidatesByTrigram(query, lang, limit)` で高速な粗絞り込みを提供- グローバル遅延シングルトン（`getInstance(tmxFilePath)`、ファイル更新時刻（mtime）ベースの自動リロード）
 
 **データモデル**: `tuid = hash(norm(primary sentence))` をキーとし、primary 文面と各言語 variant、その provenance を保持する TU 単位の TmEntry。`x-source-hash` はユニット再処理抑止のための補助インデックスであり、TU 同一性のキーではありません。
 
@@ -194,6 +193,7 @@ TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文�
 - `stripMarkdown(text)`: markdown-itでパースし、先頭のYAML frontmatterとコードブロック、リンク装飾・太字・強調・HTMLタグ等を除去して純粋テキストに変換。インラインコードはバッククォート付きで保持する。**構造保持**としてトップレベルの見出し・段落・引用・リスト・表の境界を`\n\n`、リスト項目・表セルの区切りを`\n`で保持し、LLMが要素間の文脈を正しく理解できるよう分離します（markdown-itトークンツリー走査で正規表現独自実装を回避）。
     before: ``---\ntitle: 重要\n---\n**重要**: [詳細はこちら](url) と `0.1.0` を参照。`` → after: ``重要: 詳細はこちら と `0.1.0` を参照。``
 - `isWorthyForTm(text, lang)`: 日本語8文字未満・英語12文字未満・数値のみ・URL/パスのみ・英語2単語以下を除外。
+- `computeTrigrams(text)`: Unicode文字単位の3-gramを生成して`Set<string>`を返す。3文字未満は空集合。`[...text]`でサロゲートペア対応。`TmxStore`（インデックス構築）と`rankTmEntries`（スコアリング）が同一ロジックを保証するため、本モジュールで一元管理。
 
 **実装**: [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) ／ **詳細**: [command_tm.md](command_tm.md)
 
@@ -202,6 +202,16 @@ TM登録・検索時にMarkdown要素を除去し、翻訳価値のない短文�
 TM検索結果（`TmMatch[]`）をプロンプト用文字列に変換。VS Code非依存のためCore層配置。
 
 **実装**: [`src/core/tm/tm-reference-formatter.ts`](../../src/core/tm/tm-reference-formatter.ts)
+
+### rankTmEntries
+
+`TmxStore.findCandidatesByTrigram()` で絞り込んだ候補を精密スコアリングし、MMR (Maximal Marginal Relevance) で多様性を確保した top-k を返す純粋関数。
+
+- **trigram Jaccard 類似度**: `options.lang` の variant テキストとクエリの trigram 集合を比較（`|A∩B|/|A∪B|`）
+- **MMR 選択**: `λ × querySim(c) − (1−λ) × max_{s∈selected}(sim(s,c))` の greedy 選択。`λ=1.0` のとき純粋な類似度順と一致
+- 返却型 `ScoredTmEntry = TmEntry & { score: number }`
+
+**実装**: [`src/core/tm/tm-ranker.ts`](../../src/core/tm/tm-ranker.ts)
 
 ## シーケンス図
 
@@ -266,7 +276,8 @@ sequenceDiagram
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | unified diff形式の差分生成 |
-| TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス |
+| TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |
 | SentenceSplitter | [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | Intl.SegmenterによるTM文分割 |
 | TmTextNormalizer | [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) | Markdown除去・TM価値フィルタリング |
 | formatTmReferences | [`src/core/tm/tm-reference-formatter.ts`](../../src/core/tm/tm-reference-formatter.ts) | TM検索結果のプロンプト文字列変換 |
+| rankTmEntries | [`src/core/tm/tm-ranker.ts`](../../src/core/tm/tm-ranker.ts) | trigram Jaccard + MMR による TM スコアリング |

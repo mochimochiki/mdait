@@ -2,7 +2,25 @@
 
 (新しい情報が上)
 
-## 2026/03/20: tm-commit 完了後の登録内容プレビュー
+## 2026/03/20: TM スコアリングエンジン langfix（trigram インデックスの lang 別分離）
+
+**背景:** TM スコアリングエンジン実装直後に、ja→en 翻訳で TM 参照がほぼヒットしない問題を発見。`trigramIndex` が `entry.primary`（= en テキスト）だけでインデックスを構築しており、ja テキストのクエリと言語が噛み合っていなかった。
+
+**修正:** `trigramIndex` を `Map<lang, Map<trigram, Set<tuid>>>` に変更し、`indexEntry` が全 variants を lang 別に索引化するよう修正。`findCandidatesByTrigram` は `trigramIndex.get(lang)` のサブマップを検索するよう変更。設計段階で「primary を検索軸にする」という前提を疑わずに進めたことが原因。実際に動かして初めて見えたバグだった。
+
+**詳細:** [tasks/done/260320_tm-scorer-langfix.review.md](done/260320_tm-scorer-langfix.review.md)
+
+## 2026/03/20: TM スコアリングエンジン実装
+
+**背景:** trans 時の TM retrieval はこれまで文ハッシュによる exact match lookup に頼っていたため、文面が少し変わった場合に参考訳をほとんど返せなかった。TM の価値を「登録されているかどうか」ではなく「実際の翻訳入力に対してどれだけ有力な候補として再浮上するか」で測るべきだという考え方から、類似度ベースの retrieval エンジンの必要性が生まれた。
+
+**意思決定:** 雑談の中で「字句的類似度（trigram）+ MMR による多様性確保」という2段階アプローチを採用することが固まった。単純な類似度ランキングでは似た文が偏って LLM に渡る問題を MMR で解決し、スケーラビリティ確保のため粗い絞り込み（trigram 転置インデックス、TmxStore 担当）と精密スコアリング（tm-ranker、純粋関数）に責務を分離した。embedding は API 依存・コスト増になるため、将来の差し替えポイントとして残しつつ現時点では採用しなかった。
+
+**実装:** `tm-text-normalizer.ts` に `computeTrigrams` と `normalizeForTm` を追加し、`TmxStore` に trigram 転置インデックスと `findCandidatesByTrigram()` を追加。`tm-ranker.ts` を新規作成（Jaccard + MMR）。`trans-command.ts` の `lookupTmReferences()` を新パイプラインに差し替え。レビューで指摘された `trigramIndex.clear()` 漏れと正規化関数の重複を修正して承認。
+
+**詳細:** [tasks/done/260320_tm-scorer.md](done/260320_tm-scorer.md)
+
+
 
 **背景:** `tm-commit` 完了後の通知は件数のみで、「何が登録/更新されたか」を確認するには tmx ファイルを直接開くか git diff を見る必要があり、UX として煩雑だった。また同日、ファイル単位の tm-commit で `showTmCommitResult` が呼ばれないバグも発見・修正した。
 

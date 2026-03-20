@@ -29,8 +29,8 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { SentenceSplitter } from "../../core/tm/sentence-splitter";
 import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
+import { rankTmEntries } from "../../core/tm/tm-ranker";
 import { stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import { TmxStore } from "../../core/tm/tmx-store";
 import type { TmMatch } from "../../core/tm/types";
@@ -47,9 +47,6 @@ import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 const logger = Logger.getInstance();
-
-/** SentenceSplitterはステートレスなのでモジュールスコープで再利用 */
-const sentenceSplitter = new SentenceSplitter();
 
 /**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
@@ -963,23 +960,35 @@ export function lookupTmReferences(sourceContent: string, sourceLang: string, ta
 		return undefined;
 	}
 
-	// Markdown要素を除去してから文分割（表などの複数行構造を正しく処理するため）
+	// Markdown要素を除去してからクエリ文字列として使用
 	const strippedContent = stripMarkdown(sourceContent);
-	const sentences = sentenceSplitter.split(strippedContent, sourceLang);
-	if (sentences.length === 0) {
+
+	// trigram インデックスで粗い絞り込み
+	const candidates = store.findCandidatesByTrigram(strippedContent, sourceLang, 200);
+	if (candidates.length === 0) {
 		return undefined;
 	}
 
-	// 各文をハッシュ計算（stripMarkdownは全体に対して既に実施済み）
-	const hashes = sentences.filter((text) => text.trim().length > 0).map((text) => calculateHash(text, true));
-	const matches = store.lookupBatch(hashes, sourceLang, targetLang);
+	// trigram Jaccard + MMR でスコアリング
+	const maxReferences = config.getTmMaxReferences();
+	const ranked = rankTmEntries(strippedContent, candidates, { topK: maxReferences, lang: sourceLang });
+	if (ranked.length === 0) {
+		return undefined;
+	}
+
+	// targetLang variant があるものに絞り込み、TmMatch に変換
+	const matches: TmMatch[] = ranked
+		.filter((e) => e.variants.has(targetLang))
+		.map((e) => ({
+			sentenceHash: e.tuid,
+			source: e.variants.get(sourceLang)?.text ?? "",
+			target: e.variants.get(targetLang)?.text ?? "",
+			firstUsedIn: e.variants.get(sourceLang)?.unitPath ?? "",
+		}));
+
 	if (matches.length === 0) {
 		return undefined;
 	}
 
-	// maxReferences件に制限
-	const maxReferences = config.getTmMaxReferences();
-	const limited = matches.slice(0, maxReferences);
-
-	return formatTmReferences(limited);
+	return formatTmReferences(matches);
 }

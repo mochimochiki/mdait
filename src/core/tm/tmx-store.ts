@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import { calculateHash } from "../hash/hash-calculator";
+import { computeTrigrams, normalizeForTm } from "./tm-text-normalizer";
 import type { ExistingTmEntriesItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
 
 /** TMXバージョン */
@@ -261,6 +262,9 @@ export class TmxStore {
 	/** tuid → TmEntry */
 	private index = new Map<string, TmEntry>();
 
+	/** lang → (trigram → Set<tuid>)（言語別転置インデックス） */
+	private trigramIndex = new Map<string, Map<string, Set<string>>>();
+
 	/**
 	 * グローバルシングルトンを取得する（遅延初期化）。
 	 * TMXファイルパスを指定して初回ロードまたはmtime変更時リロードする。
@@ -286,6 +290,7 @@ export class TmxStore {
 		if (!fs.existsSync(filePath)) {
 			if (this.loadedFilePath !== filePath || this.index.size > 0) {
 				this.index.clear();
+				this.trigramIndex.clear();
 				this.loadedFilePath = filePath;
 				this.loadedMtime = 0;
 			}
@@ -319,6 +324,7 @@ export class TmxStore {
 
 		const xml = fs.readFileSync(filePath, "utf-8");
 		this.index = parseTmx(xml);
+		this.rebuildTrigramIndex();
 	}
 
 	/**
@@ -367,6 +373,7 @@ export class TmxStore {
 				variants: new Map([...normalizedEntry.variants.entries()].map(([lang, variant]) => [lang, { ...variant }])),
 			});
 		}
+		this.indexEntry(normalizedEntry);
 	}
 
 	/**
@@ -524,6 +531,42 @@ export class TmxStore {
 	}
 
 	/**
+	 * trigram クエリで候補エントリーを絞り込む。
+	 * クエリを正規化して trigram を生成し、ヒット数降順で lang variant を持つエントリーを返す。
+	 * @param query 検索クエリテキスト
+	 * @param lang 対象言語コード（このvariantを持つエントリーのみ返す）
+	 * @param limit 最大返却件数（デフォルト: 200）
+	 */
+	findCandidatesByTrigram(query: string, lang: string, limit = 200): TmEntry[] {
+		const norm = normalizeForTm(query);
+		const queryTrigrams = computeTrigrams(norm);
+		if (queryTrigrams.size === 0) {
+			return [];
+		}
+
+		const langMap = this.trigramIndex.get(lang);
+		if (!langMap) {
+			return [];
+		}
+
+		const hitCount = new Map<string, number>();
+		for (const trigram of queryTrigrams) {
+			const tuids = langMap.get(trigram);
+			if (tuids) {
+				for (const tuid of tuids) {
+					hitCount.set(tuid, (hitCount.get(tuid) ?? 0) + 1);
+				}
+			}
+		}
+
+		return [...hitCount.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.map(([tuid]) => this.index.get(tuid))
+			.filter((entry): entry is TmEntry => entry?.variants.has(lang) ?? false)
+			.slice(0, limit);
+	}
+
+	/**
 	 * 登録エントリー数を返す。
 	 */
 	getEntryCount(): number {
@@ -535,5 +578,34 @@ export class TmxStore {
 	 */
 	clear(): void {
 		this.index.clear();
+		this.trigramIndex.clear();
+	}
+
+	/** 全エントリーの全 variant テキストを lang 別に再インデックスする（load専用） */
+	private rebuildTrigramIndex(): void {
+		this.trigramIndex.clear();
+		for (const entry of this.index.values()) {
+			this.indexEntry(entry);
+		}
+	}
+
+	/** 全 variant のテキストを lang 別に trigram インデックスへ追加する */
+	private indexEntry(entry: TmEntry): void {
+		for (const [lang, variant] of entry.variants) {
+			const norm = normalizeForTm(variant.text);
+			let langMap = this.trigramIndex.get(lang);
+			if (!langMap) {
+				langMap = new Map<string, Set<string>>();
+				this.trigramIndex.set(lang, langMap);
+			}
+			for (const trigram of computeTrigrams(norm)) {
+				let tuids = langMap.get(trigram);
+				if (!tuids) {
+					tuids = new Set();
+					langMap.set(trigram, tuids);
+				}
+				tuids.add(entry.tuid);
+			}
+		}
 	}
 }
