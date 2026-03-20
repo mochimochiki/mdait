@@ -22,6 +22,7 @@ import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { isTmCommitTarget } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
+import { TmResultContentProvider } from "./tm-result-provider";
 
 const logger = Logger.getInstance();
 
@@ -74,6 +75,7 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
 			try {
 				const result = await executeTmCommitForFile(filePath, config, progress, token);
 				showTmCommitResult(result);
+				await showTmCommitPreview(result);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
 			}
@@ -137,6 +139,8 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 					existingEntries: 0,
 					warnedEntries: 0,
 					errorUnits: 0,
+					newItems: [],
+					updatedItems: [],
 				};
 
 				for (let i = 0; i < files.length; i++) {
@@ -157,6 +161,8 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 						overallResult.existingEntries += result.existingEntries;
 						overallResult.warnedEntries += result.warnedEntries;
 						overallResult.errorUnits += result.errorUnits;
+						overallResult.newItems.push(...result.newItems);
+						overallResult.updatedItems.push(...result.updatedItems);
 					} catch (error) {
 						logger.warn("tm.commit", "File processing error", {
 							file: files[i],
@@ -167,6 +173,7 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 				}
 
 				showTmCommitResult(overallResult);
+				await showTmCommitPreview(overallResult);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
 			}
@@ -196,6 +203,8 @@ async function executeTmCommitForFile(
 			existingEntries: 0,
 			warnedEntries: 0,
 			errorUnits: 0,
+			newItems: [],
+			updatedItems: [],
 		};
 	}
 
@@ -240,6 +249,8 @@ async function executeTmCommitForUnits(
 		existingEntries: 0,
 		warnedEntries: 0,
 		errorUnits: 0,
+		newItems: [],
+		updatedItems: [],
 	};
 
 	for (let i = 0; i < units.length; i++) {
@@ -283,6 +294,8 @@ async function executeTmCommitForUnits(
 			result.newEntries += unitResult.newCount;
 			result.existingEntries += unitResult.existingCount;
 			result.warnedEntries += unitResult.warnedCount;
+			result.newItems.push(...unitResult.newItems);
+			result.updatedItems.push(...unitResult.updatedItems);
 		} catch (error) {
 			logger.warn("tm.commit", "Unit processing error", {
 				unitHash: unit.marker?.hash,
@@ -541,4 +554,15 @@ function showTmCommitResult(result: TmCommitResult): void {
 	} else {
 		vscode.window.showInformationMessage(message);
 	}
+}
+
+/**
+ * tm-commit 結果のプレビュードキュメントを開く。1 件以上の新規/更新がある場合のみ表示する。
+ */
+async function showTmCommitPreview(result: TmCommitResult): Promise<void> {
+	if (result.newItems.length + result.updatedItems.length === 0) {
+		return;
+	}
+	TmResultContentProvider.getInstance().setContent(result);
+	await TmResultContentProvider.openPreview();
 }

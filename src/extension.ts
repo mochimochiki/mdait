@@ -8,6 +8,7 @@ import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
+import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
@@ -190,6 +191,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
 		"mdait.tm.commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
+	);
+
+	// TM Result ContentProvider登録
+	const tmResultProvider = TmResultContentProvider.getInstance();
+	const tmResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+		"mdait-tm-result",
+		tmResultProvider,
 	);
 
 	// CodeLens翻訳コマンド
@@ -475,6 +483,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceFrontmatterDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
+		tmResultProviderDisposable,
+		tmResultProvider,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

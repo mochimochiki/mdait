@@ -21,6 +21,12 @@ export interface TmCommitResolvedUnit {
 	unitHash: string;
 }
 
+/** TM登録/更新された文ペア（結果プレビュー用） */
+export interface TmResultItem {
+	primary: string;
+	local: string;
+}
+
 /** tm-commitの処理結果（ユニット単位） */
 export interface TmCommitUnitResult {
 	/** 新規登録された文ペア数 */
@@ -31,6 +37,10 @@ export interface TmCommitUnitResult {
 	skippedCount: number;
 	/** warning 件数 */
 	warnedCount: number;
+	/** 新規登録された文ペア */
+	newItems: TmResultItem[];
+	/** 更新された文ペア */
+	updatedItems: TmResultItem[];
 }
 
 /** tm-commitの処理結果（全体） */
@@ -47,6 +57,10 @@ export interface TmCommitResult {
 	warnedEntries: number;
 	/** エラーが発生したユニット数 */
 	errorUnits: number;
+	/** 新規登録された文ペア */
+	newItems: TmResultItem[];
+	/** 更新された文ペア */
+	updatedItems: TmResultItem[];
 }
 
 interface GuardResult {
@@ -100,7 +114,7 @@ export class TmCommitProcessor {
 			logger.debug("tm.commit", "Skipping unit (no hash change)", {
 				unitPath: localUnit.unitPath,
 			});
-			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0 };
+			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0, newItems: [], updatedItems: [] };
 		}
 
 		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(
@@ -126,7 +140,7 @@ export class TmCommitProcessor {
 			logger.debug("tm.commit", "No sentence pairs from alignment", {
 				unitPath: localUnit.unitPath,
 			});
-			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0 };
+			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0, newItems: [], updatedItems: [] };
 		}
 
 		const existingTmMap = new Map(ExistingTmEntries.map((item) => [item.tuid, item]));
@@ -213,6 +227,8 @@ export class TmCommitProcessor {
 			existingCount: mutationResult.existingCount,
 			skippedCount,
 			warnedCount: warningCount,
+			newItems: mutationResult.newItems,
+			updatedItems: mutationResult.updatedItems,
 		};
 	}
 	/**
@@ -450,9 +466,11 @@ export class TmCommitProcessor {
 		updateItems: ReadonlyMap<string, TmCommitEntry>,
 		primaryUnit: TmCommitResolvedUnit,
 		localUnit: TmCommitResolvedUnit,
-	): { newCount: number; existingCount: number } {
+	): { newCount: number; existingCount: number; newItems: TmResultItem[]; updatedItems: TmResultItem[] } {
 		let newCount = 0;
 		let existingCount = 0;
+		const resultNewItems: TmResultItem[] = [];
+		const resultUpdatedItems: TmResultItem[] = [];
 		const dedupedNewItems = new Map<string, TmCommitEntry>();
 		for (const item of newItems) {
 			dedupedNewItems.set(calculateHash(item.primary, true), item);
@@ -472,8 +490,10 @@ export class TmCommitProcessor {
 			this.store.addEntry(entry);
 			if (existing) {
 				existingCount++;
+				resultUpdatedItems.push({ primary, local });
 			} else {
 				newCount++;
+				resultNewItems.push({ primary, local });
 			}
 		};
 
@@ -484,6 +504,6 @@ export class TmCommitProcessor {
 		for (const item of updateItems.values()) {
 			commitEntry(item.tuid, item.primary, item.local);
 		}
-		return { newCount, existingCount };
+		return { newCount, existingCount, newItems: resultNewItems, updatedItems: resultUpdatedItems };
 	}
 }

@@ -155,9 +155,19 @@ sequenceDiagram
 
 | ファイル | 役割 |
 |---|---|
-| [command-commit.ts](../../src/commands/tm/command-commit.ts) | エントリーポイント。`isTmCommitTarget()` フィルタ、`withProgress` 制御 |
+| [command-commit.ts](../../src/commands/tm/command-commit.ts) | エントリーポイント。`isTmCommitTarget()` フィルタ、`withProgress` 制御、プレビュー呼び出し |
 | [commit-filter.ts](../../src/commands/tm/commit-filter.ts) | `isTmCommitTarget()` の実装 |
-| [commit-processor.ts](../../src/commands/tm/commit-processor.ts) | 核心。guard / retry / upsert のオーケストレーション |
+| [commit-processor.ts](../../src/commands/tm/commit-processor.ts) | 核心。guard / retry / upsert のオーケストレーション。`TmResultItem` 型定義 |
 | [tm-entry-generator.ts](../../src/commands/tm/tm-entry-generator.ts) | LLM 呼び出し。`TM_SPLIT_SENTENCES` プロンプトで計画生成 |
+| [tm-result-provider.ts](../../src/commands/tm/tm-result-provider.ts) | 登録結果の仮想ドキュメントプレビュー（`TextDocumentContentProvider`、シングルトン） |
 | [tmx-store.ts](../../src/core/tm/tmx-store.ts) | TU 永続化。tuid 採番・variant 管理 |
 | [types.ts](../../src/core/tm/types.ts) | `TmEntry` / `TmVariant` / `TmCommitEntry` の型定義 |
+
+### 完了後プレビュー
+
+`tm-commit` 完了後、新規/更新件数が 1 件以上あれば `TmResultContentProvider`（シングルトン）が仮想ドキュメントとして登録結果を表示する。
+
+- スキーム: `mdait-tm-result:`、URI 固定 `mdait-tm-result:tm-commit-result`
+- 固定URI + `onDidChange` で既存タブを上書き更新（毎回新規タブを開かない）
+- `extension.ts` で `workspace.registerTextDocumentContentProvider` として登録
+- コンテンツ生成は `generateContent()` 純粋関数（ユニットテスト容易）

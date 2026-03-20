@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/20: tm-commit 完了後の登録内容プレビュー
+
+**背景:** `tm-commit` 完了後の通知は件数のみで、「何が登録/更新されたか」を確認するには tmx ファイルを直接開くか git diff を見る必要があり、UX として煩雑だった。また同日、ファイル単位の tm-commit で `showTmCommitResult` が呼ばれないバグも発見・修正した。
+
+**意思決定:** 雑談の中で「100件超でもドキュメントとして開くほうが見やすい」「仮想ドキュメントならファイルシステムに残らず扱いやすい」という方向性が固まった。VS Code の `TextDocumentContentProvider` + 固定URI + `onDidChange` による既存タブ上書き方式を採用。シングルトンパターンでコマンドコールバックからアクセスできるよう設計した。
+
+**実装:** `commit-processor.ts` に `TmResultItem` 型・各結果型へのフィールド追加、`tm-result-provider.ts` を新規作成（シングルトン + `generateContent` 純粋関数）、`extension.ts` に provider 登録、`command-commit.ts` に `showTmCommitPreview` を追加。レビューで指摘された `private constructor` と EventEmitter dispose も修正済み。
+
+**詳細:** [tasks/done/260320_tm-commit-preview.md](done/260320_tm-commit-preview.md)
+
 ## 2026/03/20: tm-commit dual-hashスキップ最適化
 
 **背景:** tm-commitは「ソースも訳文も変わっていないユニット」に対しても毎回LLMを呼び出してしまい、大量ユニットがある場合に処理が重くなる問題があった。過去にunitHash（primary側のみ）を使ったスキップが試みられたが、local（訳文）の変更を検出できなかったため廃止されていた。

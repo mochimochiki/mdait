@@ -30,6 +30,7 @@
     "npx tsc": true,
     "Move-Item": true,
     "npx vitest": true,
-    "ForEach-Object": true
+    "ForEach-Object": true,
+    "pwsh -File .github/scripts/done.ps1": true
   },
 }
