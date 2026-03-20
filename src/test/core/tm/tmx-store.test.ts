@@ -15,13 +15,9 @@ const SAMPLE_TMX = `<?xml version="1.0" encoding="UTF-8"?>
       <prop type="x-primary">Download the installer</prop>
       <tuv xml:lang="en">
         <seg>Download the installer</seg>
-        <prop type="x-unit">docs/guide.md</prop>
-        <prop type="x-unit-hash">unit-en-1</prop>
       </tuv>
       <tuv xml:lang="ja">
         <seg>インストーラーをダウンロード</seg>
-        <prop type="x-unit">docs/guide.ja.md</prop>
-        <prop type="x-unit-hash">unit-ja-1</prop>
       </tuv>
     </tu>
   </body>
@@ -40,8 +36,8 @@ function createTestEntry(overrides?: TmEntryOverrides): TmEntry {
 		variants:
 			overrides?.variants ??
 			new Map([
-				["en", { text: primary, unitPath: "docs/test.md", unitHash: "en-unit-1" }],
-				["ja", { text: "こんにちは世界", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
+				["en", { text: primary }],
+				["ja", { text: "こんにちは世界" }],
 			]),
 	};
 }
@@ -83,168 +79,28 @@ suite("TmxStore", () => {
 		assert.strictEqual(entry.variants.get("ja")?.text, "こんにちは世界");
 	});
 
-	test("save したTMXに x-primary / x-source-hash を出力しない", () => {
+	test("save したTMXに x-primary / x-source-hash / x-unit / x-unit-hash を出力しない", () => {
 		store.addEntry(createTestEntry());
 		store.save(tempFilePath);
 
 		const xml = fs.readFileSync(tempFilePath, "utf-8");
 		assert.strictEqual(xml.includes("x-primary"), false);
 		assert.strictEqual(xml.includes("x-source-hash"), false);
+		assert.strictEqual(xml.includes("x-unit"), false);
+		assert.strictEqual(xml.includes("x-unit-hash"), false);
 	});
 
 	test("同一tuidの addEntry は variants をマージする", () => {
 		store.addEntry(createTestEntry());
 		store.addEntry(
 			createTestEntry({
-				variants: new Map([["zh-hans", { text: "你好，世界", unitPath: "docs/test.zh.md", unitHash: "zh-unit-1" }]]),
+				variants: new Map([["zh-hans", { text: "你好，世界" }]]),
 			}),
 		);
 
 		assert.strictEqual(
 			store.findByTuid(calculateHash("Hello world", true))?.variants.get("zh-hans")?.text,
 			"你好，世界",
-		);
-	});
-
-	test("getExistingTmEntries が primary anchor と localSentence を返す", () => {
-		store.addEntry(
-			createTestEntry({
-				primary: "Hello world.",
-				variants: new Map([
-					["en", { text: "Hello world.", unitPath: "docs/test.md", unitHash: "en-unit-1" }],
-					["ja", { text: "こんにちは世界。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
-				]),
-			}),
-		);
-		store.addEntry(
-			createTestEntry({
-				tuid: "22334455",
-				primary: "Another sentence.",
-				variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/test.md", unitHash: "en-unit-1" }]]),
-			}),
-		);
-
-		assert.deepStrictEqual(
-			store.getExistingTmEntries(
-				"Hello world. Another sentence.",
-				"en",
-				"ja",
-				"docs/test.md",
-				"en-unit-1",
-				"こんにちは世界。",
-				"docs/test.ja.md",
-				"ja-unit-1",
-			),
-			[
-				{ tuid: "22334455", primarySentence: "Another sentence.", localSentence: null },
-				{
-					tuid: calculateHash("Hello world.", true),
-					primarySentence: "Hello world.",
-					localSentence: "こんにちは世界。",
-				},
-			],
-		);
-	});
-
-	test("getExistingTmEntries は同一ファイル内の別ユニットTUを混入させない", () => {
-		store.addEntry(
-			createTestEntry({
-				primary: "Hello world.",
-				variants: new Map([
-					["en", { text: "Hello world.", unitPath: "docs/test.md", unitHash: "en-unit-1" }],
-					["ja", { text: "こんにちは世界。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
-				]),
-			}),
-		);
-		store.addEntry(
-			createTestEntry({
-				tuid: "33445566",
-				primary: "Separate document sentence.",
-				variants: new Map([
-					["en", { text: "Separate document sentence.", unitPath: "docs/test.md", unitHash: "en-unit-2" }],
-				]),
-			}),
-		);
-
-		assert.deepStrictEqual(
-			store.getExistingTmEntries(
-				"Hello world.",
-				"en",
-				"ja",
-				"docs/test.md",
-				"en-unit-1",
-				"こんにちは世界。",
-				"docs/test.ja.md",
-				"ja-unit-1",
-			),
-			[
-				{
-					tuid: calculateHash("Hello world.", true),
-					primarySentence: "Hello world.",
-					localSentence: "こんにちは世界。",
-				},
-			],
-		);
-	});
-
-	test("getExistingTmEntries は同一 primary sentence の重複候補でも current primary provenance を優先する", () => {
-		store.addEntry(
-			createTestEntry({
-				tuid: "55667788",
-				primary: "Hello world.",
-				variants: new Map([
-					["en", { text: "Hello world.", unitPath: "docs/test.md", unitHash: "en-unit-1" }],
-					["ja", { text: "こんにちは世界。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
-				]),
-			}),
-		);
-		store.addEntry(
-			createTestEntry({
-				tuid: "66778899",
-				primary: "Hello world.",
-				variants: new Map([
-					["en", { text: "Hello world.", unitPath: "docs/test.md", unitHash: "en-unit-2" }],
-					["ja", { text: "別ユニット訳文。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-2" }],
-				]),
-			}),
-		);
-
-		assert.deepStrictEqual(
-			store.getExistingTmEntries(
-				"Hello world.",
-				"en",
-				"ja",
-				"docs/test.md",
-				"en-unit-1",
-				"こんにちは世界。",
-				"docs/test.ja.md",
-				"ja-unit-1",
-			),
-			[{ tuid: "55667788", primarySentence: "Hello world.", localSentence: "こんにちは世界。" }],
-		);
-	});
-
-	test("getExistingTmEntries は primary hash が変わっても local未登録TUを再利用できる", () => {
-		store.addEntry(
-			createTestEntry({
-				tuid: "44556677",
-				primary: "Another sentence.",
-				variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/test.md", unitHash: "en-unit-old" }]]),
-			}),
-		);
-
-		assert.deepStrictEqual(
-			store.getExistingTmEntries(
-				"Another sentence.",
-				"en",
-				"ja",
-				"docs/test.md",
-				"en-unit-new",
-				"別の文。",
-				"docs/test.ja.md",
-				"ja-unit-2",
-			),
-			[{ tuid: "44556677", primarySentence: "Another sentence.", localSentence: null }],
 		);
 	});
 
@@ -309,13 +165,13 @@ suite("TmxStore", () => {
 		assert.strictEqual(entry?.variants.get("ja")?.text, "インストーラーをダウンロード");
 	});
 
-	test("getEntriesByUnitPath が primaryLang の unitPath に一致する全エントリーを返す", () => {
+	test("getEntriesByUnitPath が primaryLang を持つ全エントリーを返す", () => {
 		store.addEntry(
 			createTestEntry({
 				primary: "Hello world.",
 				variants: new Map([
-					["en", { text: "Hello world.", unitPath: "docs/guide.md", unitHash: "en-unit-1" }],
-					["ja", { text: "こんにちは世界。", unitPath: "docs/guide.ja.md", unitHash: "ja-unit-1" }],
+					["en", { text: "Hello world." }],
+					["ja", { text: "こんにちは世界。" }],
 				]),
 			}),
 		);
@@ -323,22 +179,22 @@ suite("TmxStore", () => {
 			createTestEntry({
 				tuid: "aaaabbbb",
 				primary: "Another sentence.",
-				variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "en-unit-1" }]]),
+				variants: new Map([["en", { text: "Another sentence." }]]),
 			}),
 		);
 		store.addEntry(
 			createTestEntry({
 				tuid: "ccccdddd",
-				primary: "Unrelated sentence.",
-				variants: new Map([["en", { text: "Unrelated sentence.", unitPath: "docs/other.md", unitHash: "en-unit-2" }]]),
+				primary: "Japanese only.",
+				variants: new Map([["ja", { text: "日本語のみ。" }]]),
 			}),
 		);
 
-		const entries = store.getEntriesByUnitPath("docs/guide.md", "en", "ja");
+		const entries = store.getEntriesByUnitPath("any-path", "en", "ja");
 		assert.strictEqual(entries.length, 2);
 		assert.ok(entries.some((e) => e.primary === "Hello world."));
 		assert.ok(entries.some((e) => e.primary === "Another sentence."));
-		assert.ok(!entries.some((e) => e.primary === "Unrelated sentence."));
+		assert.ok(!entries.some((e) => e.primary === "Japanese only."));
 	});
 });
 

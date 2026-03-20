@@ -983,7 +983,7 @@ export function lookupTmReferences(sourceContent: string, sourceLang: string, ta
 			sentenceHash: e.tuid,
 			source: e.variants.get(sourceLang)?.text ?? "",
 			target: e.variants.get(targetLang)?.text ?? "",
-			firstUsedIn: e.variants.get(sourceLang)?.unitPath ?? "",
+			firstUsedIn: "",
 		}));
 
 	if (matches.length === 0) {

@@ -100,3 +100,11 @@ sync 後のポストプロセスとして TM cleanup を呼び出す。cleanup �
   A: tm-commit は「new を登録するまで」が責務。混ぜると責務が曖昧になり、cleanup だけ独立してテストしにくくなる。
 - Q: sentence 完全一致ではなく fuzzy でよいのでは？  
   A: 誤削除のリスクがあるため、normalize + 完全一致を基準とする。
+
+### `getEntriesByUnitPath` を `getEntriesForCommit` に改名
+
+**背景・目的**  
+x-unit/x-unit-hash フィールド削除に伴い、`TmxStore.getEntriesByUnitPath(unitPath, localLang)` は unitPath での絞り込みをせず primaryLang を持つ全エントリを返すようになった。メソッド名と実際の動作が乖離しているため、命名を実態に合わせて改める。
+
+**コンセプト**  
+`getEntriesForCommit(primaryLang: string)` のような名称に変更し、引数も実際に使われている `primaryLang` のみにする。呼び出し元（`commit-processor.ts`）も合わせて修正すること。

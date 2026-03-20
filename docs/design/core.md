@@ -163,8 +163,6 @@ interface TmEntry {
     primary: string;
     variants: Map<string, {
         text: string;
-        unitPath?: string;
-        unitHash?: string;
     }>;
 }
 ```
@@ -172,13 +170,11 @@ interface TmEntry {
 ```typescript
 // 使用例: Command層からの典型的な呼び出し
 const store = TmxStore.getInstance(tmxPath);
-// 純粋データアクセス: unitPathに属する全TUを取得（フィルタリングはCommands層の責務）
+// primaryLang を持つ全TUを取得（フィルタリングはCommands層の責務）
 const allEntries = store.getEntriesByUnitPath(primaryUnitPath, primaryLang, localLang);
 const matches = store.lookupBatch(sentenceHashes, sourceLang, targetLang);
 store.save(tmxPath);
 ```
-
-**primary anchor reuse**: cleanup 後も同一 primary unit に属する TU を引き続き見つけられるよう、lookup は current `unitHash` 完全一致だけでなく primary provenance を基準に行います。
 
 **実装**: [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts)
 

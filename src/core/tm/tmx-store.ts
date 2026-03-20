@@ -11,8 +11,6 @@ const TMX_VERSION = "1.4";
 /** XMLプロパティタイプ定数 */
 const PROP_TYPE_HASH = "x-hash";
 const PROP_TYPE_PRIMARY = "x-primary";
-const PROP_TYPE_UNIT = "x-unit";
-const PROP_TYPE_UNIT_HASH = "x-unit-hash";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -75,7 +73,6 @@ const tmxParser = new XMLParser({
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	let tuid = String(tuNode[`${ATTR_PREFIX}tuid`] ?? "");
 	let primary = "";
-	let legacyUnitPath = "";
 	const variants = new Map<string, TmVariant>();
 
 	// <prop> 要素を処理
@@ -92,9 +89,6 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 			case PROP_TYPE_PRIMARY:
 				primary = value;
 				break;
-			case PROP_TYPE_UNIT:
-				legacyUnitPath = value;
-				break;
 		}
 	}
 
@@ -108,24 +102,7 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 		const lang = tuv[`${ATTR_PREFIX}xml:lang`] as string;
 		const text = String(tuv.seg ?? "");
 		if (lang) {
-			let unitPath = legacyUnitPath;
-			let unitHash: string | undefined;
-			const tuvProps = (tuv.prop as Array<Record<string, unknown>>) ?? [];
-			for (const prop of tuvProps) {
-				const type = prop[`${ATTR_PREFIX}type`] as string;
-				const value = String(prop["#text"] ?? "");
-				if (type === PROP_TYPE_UNIT) {
-					unitPath = value;
-				}
-				if (type === PROP_TYPE_UNIT_HASH) {
-					unitHash = value;
-				}
-			}
-			variants.set(lang, {
-				text,
-				...(unitPath ? { unitPath } : {}),
-				...(unitHash ? { unitHash } : {}),
-			});
+			variants.set(lang, { text });
 		}
 	}
 
@@ -164,7 +141,7 @@ function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 		tuid: entry.sentenceHash,
 		primary,
 		variants: new Map(
-			sortedVariants.map(([lang, text]) => [lang, { text, ...(entry.unitPath ? { unitPath: entry.unitPath } : {}) }]),
+			sortedVariants.map(([lang, text]) => [lang, { text }]),
 		),
 	};
 }
@@ -198,17 +175,9 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 	const tuvs: Record<string, unknown>[] = [];
 	for (const lang of sortedLangs) {
 		const variant = entry.variants.get(lang) as TmVariant;
-		const tuvProps: Record<string, unknown>[] = [];
-		if (variant.unitPath) {
-			tuvProps.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT, "#text": variant.unitPath });
-		}
-		if (variant.unitHash) {
-			tuvProps.push({ [`${ATTR_PREFIX}type`]: PROP_TYPE_UNIT_HASH, "#text": variant.unitHash });
-		}
 		tuvs.push({
 			[`${ATTR_PREFIX}xml:lang`]: lang,
 			seg: variant.text,
-			...(tuvProps.length > 0 ? { prop: tuvProps } : {}),
 		});
 	}
 
@@ -410,7 +379,7 @@ export class TmxStore {
 			sentenceHash: entry.tuid,
 			source,
 			target,
-			firstUsedIn: sourceVariant?.unitPath ?? targetVariant?.unitPath ?? "",
+			firstUsedIn: "",
 		};
 	}
 
@@ -451,87 +420,17 @@ export class TmxStore {
 	}
 
 	/**
-	 * 指定 unitPath に属する全 TmEntry を返す（純粋データアクセス）。
+	 * 全 TmEntry を返す（純粋データアクセス）。
 	 * フィルタリングは呼び出し元が行う。
 	 */
-	getEntriesByUnitPath(unitPath: string, primaryLang: string, _localLang: string): TmEntry[] {
+	getEntriesByUnitPath(_unitPath: string, primaryLang: string, _localLang: string): TmEntry[] {
 		const results: TmEntry[] = [];
 		for (const entry of this.index.values()) {
-			const primaryVariant = entry.variants.get(primaryLang);
-			if (!primaryVariant?.unitPath || primaryVariant.unitPath !== unitPath) {
-				continue;
+			if (entry.variants.has(primaryLang)) {
+				results.push(entry);
 			}
-			results.push(entry);
 		}
 		return results;
-	}
-
-	/**
-	 * 現在の primaryUnit にアンカーされた既存 TM set を返す。
-	 * @deprecated `getEntriesByUnitPath` へ移行してください。
-	 */
-	getExistingTmEntries(
-		primaryUnitText: string,
-		primaryLang: string,
-		localLang: string,
-		primaryUnitPath: string,
-		primaryUnitHash?: string,
-		localUnitText?: string,
-		localUnitPath?: string,
-		localUnitHash?: string,
-	): ExistingTmEntriesItem[] {
-		const sentenceCandidates = new Map<string, Array<TmEntry>>();
-		for (const entry of this.index.values()) {
-			const primaryVariant = entry.variants.get(primaryLang);
-			if (!primaryVariant?.unitPath || primaryVariant.unitPath !== primaryUnitPath) {
-				continue;
-			}
-			if (!primaryUnitText.includes(entry.primary.trim())) {
-				continue;
-			}
-			const sentenceKey = entry.primary.trim();
-			const bucket = sentenceCandidates.get(sentenceKey) ?? [];
-			bucket.push(entry);
-			sentenceCandidates.set(sentenceKey, bucket);
-		}
-
-		const results: ExistingTmEntriesItem[] = [];
-		for (const candidates of sentenceCandidates.values()) {
-			const prioritizedCandidates =
-				primaryUnitHash &&
-				candidates.some((candidate) => candidate.variants.get(primaryLang)?.unitHash === primaryUnitHash)
-					? candidates.filter((candidate) => candidate.variants.get(primaryLang)?.unitHash === primaryUnitHash)
-					: candidates;
-
-			for (const entry of prioritizedCandidates) {
-				const localVariant = entry.variants.get(localLang);
-				const matchesPrimaryHash = Boolean(
-					primaryUnitHash && entry.variants.get(primaryLang)?.unitHash === primaryUnitHash,
-				);
-				const matchesLocalHash = Boolean(
-					localVariant?.unitHash &&
-						localUnitHash &&
-						localVariant.unitHash === localUnitHash &&
-						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
-				);
-				const matchesLocalText = Boolean(
-					localVariant?.text &&
-						(localUnitText ?? "").includes(localVariant.text.trim()) &&
-						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
-				);
-				const matchesPrimarySentenceOnly = !localVariant;
-				if (!matchesPrimaryHash && !matchesLocalHash && !matchesLocalText && !matchesPrimarySentenceOnly) {
-					continue;
-				}
-				results.push({
-					tuid: entry.tuid,
-					primarySentence: entry.primary,
-					localSentence: localVariant?.text ?? null,
-				});
-			}
-		}
-
-		return results.sort((a, b) => a.tuid.localeCompare(b.tuid));
 	}
 
 	/**

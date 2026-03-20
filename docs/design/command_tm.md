@@ -43,7 +43,7 @@ trans は毎回ゼロショットで翻訳するため、同じ原文が異な�
 ### 重要概念
 
 - **tuid**: `hash(norm(primary sentence))` で一意に決まる TU の識別子。TmxStore が採番する（primary sentence = ユニット内の1文。文分割後の最小翻訳単位）
-- **TmEntry / TmVariant**: TU = 1 primary sentence + 複数言語の variant（text, unitPath, unitHash）
+- **TmEntry / TmVariant**: TU = 1 primary sentence + 複数言語の variant（text のみ）
 - **ExistingTmEntries**: 処理ユニットに関連する既存 TU 一覧。LLM のコンテキストとして渡す
 - **TmCommitEntry**: LLM が返す登録計画の単位 `{type, tuid, primary, local}`
 
@@ -80,7 +80,6 @@ command-commit.ts   ← エントリーポイント・フィルタ・進捗制�
 **必須更新の判定条件** (`deriveRequiredUpdateTuids()`):
 - その TU の `localVariant` が存在しない
 - `localSentence` が現在の localUnit テキスト内に見当たらない
-- `unitHash`（localUnitHash）が変わっている
 
 必須更新は guard で「TmCommitEntry に含まれているか」を検証し、欠落があれば focused retry を行う。
 
@@ -90,17 +89,16 @@ command-commit.ts   ← エントリーポイント・フィルタ・進捗制�
 2. `TmxStore.load()`（mtime 判定で自動リロード）
 3. ユニットごとに `stripMarkdown()` → primaryUnit / localUnit のテキスト確定
 4. `store.getEntriesByUnitPath()` → `filterRelevantEntries()` で関連 TU を絞り込み
-5. **`canSkipUnit()`** — 全エントリの primary + local `unitHash` が現在と一致する場合、LLM 呼び出しをスキップ（0件の場合はスキップ不可）
-6. `deriveRequiredUpdateTuids()` で必須更新 tuid セットを導出
-7. `LLMTmEntryGenerator.generateEntries()` で LLM 呼び出し → `TmCommitEntry[]` を取得
-8. `guardPlanItems()` で検証（schema / subset / 粒度 / 必須更新の網羅）
-9. guard 違反があれば **focused retry**（欠落 required tuid の local 補完のみ再生成）
-10. `applyPlanItems()` で TmxStore に upsert → save
+5. `deriveRequiredUpdateTuids()` で必須更新 tuid セットを導出
+6. `LLMTmEntryGenerator.generateEntries()` で LLM 呼び出し → `TmCommitEntry[]` を取得
+7. `guardPlanItems()` で検証（schema / subset / 粒度 / 必須更新の網羅）
+8. guard 違反があれば **focused retry**（欠落 required tuid の local 補完のみ再生成）
+9. `applyPlanItems()` で TmxStore に upsert → save
 
 ### 検討した代替案
 
 - **単一 hash スキップ（廃止）**: primary `unitHash` のみ比較して全スキップ → 訳文を手動修正しても TMX に反映されない問題があり廃止
-- **dual-hash スキップ（現行）**: `canSkipUnit()` が primary + local の両 `unitHash` を全エントリで照合。両方一致かつ 1 件以上ある場合のみスキップ。条件外れが 1 件でもあれば LLM を呼ぶ
+- **dual-hash スキップ（廃止）**: `canSkipUnit()` が primary + local の両 `unitHash` を全エントリで照合。`TmVariant` から `unitHash` が削除されたため廃止。現在はすべての処理対象ユニットで LLM を呼び出す
 - **guard なし全件登録**: LLM 出力をそのまま登録 → 誤 primary（ユニット外の文）や短文ノイズが混入するリスクが高く不採用。guard + focused retry が妥当
 
 ### リスク
@@ -127,20 +125,15 @@ sequenceDiagram
         loop 各翻訳済みユニット
             Cmd->>Proc: processUnit(primaryUnit, localUnit)
             Proc->>Store: getEntriesByUnitPath → filterRelevantEntries
-            Proc->>Proc: canSkipUnit()チェック
-            alt 全エントリの primary+local unitHash 一致（1件以上）
-                Proc-->>Cmd: skip（LLM呼ばない）
-            else 変更あり or 初回コミット
-                Proc->>Proc: deriveRequiredUpdateTuids()
-                Proc->>Gen: generateEntries(existing, requiredTuids)
-                Gen-->>Proc: TmCommitEntry[] (new/update)
-                Proc->>Proc: guardPlanItems()
-                alt guard 違反（必須 tuid 欠落）
-                    Proc->>Gen: focused retry（欠落 tuid のみ）
-                    Gen-->>Proc: update[]
-                end
-                Proc->>Store: applyPlanItems() upsert
+            Proc->>Proc: deriveRequiredUpdateTuids()
+            Proc->>Gen: generateEntries(existing, requiredTuids)
+            Gen-->>Proc: TmCommitEntry[] (new/update)
+            Proc->>Proc: guardPlanItems()
+            alt guard 違反（必須 tuid 欠落）
+                Proc->>Gen: focused retry（欠落 tuid のみ）
+                Gen-->>Proc: update[]
             end
+            Proc->>Store: applyPlanItems() upsert
         end
     end
 

@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/20: TMX x-unit / x-unit-hash フィールドの削除
+
+**背景:** TMX の `<prop type="x-unit">` (ファイルパス) と `<prop type="x-unit-hash">` (ユニットハッシュ) は、provenance 追跡として設計されたが「正確に更新し続けるコストがあるのに有用な使い道がない」という判断に至った。cleanup も tuid ベースの原文現存確認で実現できるためこれらは不要。リリース前のため互換性維持も不要と判断し、コードベースから完全に削除した。
+
+**意思決定:** YAGNI原則。想定ユースケース（ファイルパス基準の逆引きやUI連携）のいずれも実装コストに見合うほど便利でなかった。正確に保てないフィールドを持ち続けることへの懸念が決め手。
+
+**実装:** `TmVariant` から `unitPath`/`unitHash` を削除、TMX I/O の x-unit/x-unit-hash prop を除去。これにより `canSkipUnit`（unitHash ベースの LLM スキップ最適化）も同時に削除された。`getEntriesByUnitPath` の命名・セマンティクス不整合は wishlist に別途積んだ。
+
+**詳細:** [tasks/done/260320_TM_x-unit削除.md](done/260320_TM_x-unit削除.md)
+
 ## 2026/03/20: TM normalize処理の一元化とtrigramキャッシュ
 
 **背景:** TM検索フローで `stripMarkdown`（markdown-it パース）が同一テキストに対して最大3回実行されており、ランキング時には候補数分だけ trigramが毎回再計算されるという無駄が積み重なっていた。normalize処理が `trans-command`・`TmxStore`・`tm-ranker` の3層に散らばっており、「誰がnormalizeするか」が不明確だった。

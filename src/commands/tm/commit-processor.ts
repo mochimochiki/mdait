@@ -103,24 +103,13 @@ export class TmCommitProcessor {
 		const ExistingTmEntries = this.filterRelevantEntries(
 			allEntries,
 			strippedPrimaryUnit,
-			primaryUnit.unitHash,
 			strippedLocalUnit,
-			localUnit.unitPath,
-			localUnit.unitHash,
 			localUnit.lang,
 		);
-
-		if (this.canSkipUnit(ExistingTmEntries, primaryUnit, localUnit)) {
-			logger.debug("tm.commit", "Skipping unit (no hash change)", {
-				unitPath: localUnit.unitPath,
-			});
-			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0, newItems: [], updatedItems: [] };
-		}
 
 		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(
 			ExistingTmEntries,
 			localUnit.lang,
-			localUnit.unitHash,
 			strippedLocalUnit,
 		);
 
@@ -231,26 +220,6 @@ export class TmCommitProcessor {
 			updatedItems: mutationResult.updatedItems,
 		};
 	}
-	/**
-	 * ソースも訳文も変わっていないユニットをスキップできるか判定する。
-	 * ExistingTmEntriesが1件以上あり、全エントリのprimary/local unitHashが現在と一致する場合 true を返す。
-	 */
-	private canSkipUnit(
-		existingTmEntries: ExistingTmEntriesItem[],
-		primaryUnit: TmCommitResolvedUnit,
-		localUnit: TmCommitResolvedUnit,
-	): boolean {
-		if (existingTmEntries.length === 0) {
-			return false;
-		}
-		return existingTmEntries.every((item) => {
-			const entry = this.store.findByTuid(item.tuid);
-			if (!entry) return false;
-			const primaryVar = entry.variants.get(this.primaryLang);
-			const localVar = entry.variants.get(localUnit.lang);
-			return primaryVar?.unitHash === primaryUnit.unitHash && localVar?.unitHash === localUnit.unitHash;
-		});
-	}
 
 	/**
 	 * existing TM set から update 必須 tuid を導出する。
@@ -258,7 +227,6 @@ export class TmCommitProcessor {
 	deriveRequiredUpdateTuids(
 		ExistingTmEntries: ExistingTmEntriesItem[],
 		localLang: string,
-		localUnitHash: string,
 		strippedLocalUnit: string,
 	): string[] {
 		return ExistingTmEntries.filter((item) => {
@@ -267,24 +235,17 @@ export class TmCommitProcessor {
 			if (!localVariant) {
 				return true;
 			}
-			if (item.localSentence && strippedLocalUnit.includes(item.localSentence.trim())) {
-				return false;
-			}
-			return !localUnitHash || localVariant.unitHash !== localUnitHash;
+			return !item.localSentence || !strippedLocalUnit.includes(item.localSentence.trim());
 		}).map((item) => item.tuid);
 	}
 
 	/**
 	 * `getEntriesByUnitPath` の全件から、現在の commit コンテキストに関連するエントリのみを抽出する。
-	 * （旧 `getExistingTmEntries` のフィルタロジックを Commands 層に移植）
 	 */
 	private filterRelevantEntries(
 		allEntries: TmEntry[],
 		primaryUnitText: string,
-		primaryUnitHash: string | undefined,
-		localUnitText: string | undefined,
-		localUnitPath: string | undefined,
-		localUnitHash: string | undefined,
+		_localUnitText: string | undefined,
 		localLang: string,
 	): ExistingTmEntriesItem[] {
 		const sentenceCandidates = new Map<string, TmEntry[]>();
@@ -298,31 +259,8 @@ export class TmCommitProcessor {
 
 		const results: ExistingTmEntriesItem[] = [];
 		for (const candidates of sentenceCandidates.values()) {
-			const prioritizedCandidates =
-				primaryUnitHash && candidates.some((c) => c.variants.get(this.primaryLang)?.unitHash === primaryUnitHash)
-					? candidates.filter((c) => c.variants.get(this.primaryLang)?.unitHash === primaryUnitHash)
-					: candidates;
-
-			for (const entry of prioritizedCandidates) {
+			for (const entry of candidates) {
 				const localVariant = entry.variants.get(localLang);
-				const matchesPrimaryHash = Boolean(
-					primaryUnitHash && entry.variants.get(this.primaryLang)?.unitHash === primaryUnitHash,
-				);
-				const matchesLocalHash = Boolean(
-					localVariant?.unitHash &&
-						localUnitHash &&
-						localVariant.unitHash === localUnitHash &&
-						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
-				);
-				const matchesLocalText = Boolean(
-					localVariant?.text &&
-						(localUnitText ?? "").includes(localVariant.text.trim()) &&
-						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
-				);
-				const matchesPrimarySentenceOnly = !localVariant;
-				if (!matchesPrimaryHash && !matchesLocalHash && !matchesLocalText && !matchesPrimarySentenceOnly) {
-					continue;
-				}
 				results.push({
 					tuid: entry.tuid,
 					primarySentence: entry.primary,
@@ -482,8 +420,8 @@ export class TmCommitProcessor {
 				tuid,
 				primary,
 				variants: new Map([
-					[this.primaryLang, { text: primary, unitPath: primaryUnit.unitPath, unitHash: primaryUnit.unitHash }],
-					[localUnit.lang, { text: local, unitPath: localUnit.unitPath, unitHash: localUnit.unitHash }],
+					[this.primaryLang, { text: primary }],
+					[localUnit.lang, { text: local }],
 				]),
 			};
 

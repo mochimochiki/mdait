@@ -114,8 +114,8 @@ suite("trans-command TM検索の正規化ロジック", () => {
 			tuid: hash,
 			primary: normalizedSource,
 			variants: new Map([
-				["en", { text: normalizedSource, unitPath: "docs/test.md", unitHash: "en-unit-1" }],
-				["ja", { text: "これは太字のテキストです。", unitPath: "docs/test.ja.md", unitHash: "ja-unit-1" }],
+				["en", { text: normalizedSource }],
+				["ja", { text: "これは太字のテキストです。" }],
 			]),
 		});
 
@@ -157,8 +157,8 @@ suite("trans-command TM検索の正規化ロジック", () => {
 				tuid: hash,
 				primary: normalized,
 				variants: new Map([
-					["en", { text: normalized, unitPath: "docs/test.md", unitHash: `en-${hash}` }],
-					["ja", { text: entry.target, unitPath: "docs/test.ja.md", unitHash: `ja-${hash}` }],
+					["en", { text: normalized }],
+					["ja", { text: entry.target }],
 				]),
 			});
 		}

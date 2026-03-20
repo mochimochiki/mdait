@@ -2,10 +2,6 @@
 export interface TmVariant {
 	/** 言語別テキスト */
 	text: string;
-	/** ワークスペース相対パス */
-	unitPath?: string;
-	/** mdaitユニットハッシュ */
-	unitHash?: string;
 }
 
 /** TM 1エントリー（1 TU = 1 primary sentence） */
