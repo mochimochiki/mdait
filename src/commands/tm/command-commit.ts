@@ -72,7 +72,8 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
 		},
 		async (progress, token) => {
 			try {
-				await executeTmCommitForFile(filePath, config, progress, token);
+				const result = await executeTmCommitForFile(filePath, config, progress, token);
+				showTmCommitResult(result);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
 			}
