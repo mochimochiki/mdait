@@ -283,7 +283,7 @@ prompts: ["trans.translate", "term.detect"]
 - `{{localLang}}`: 今回登録する local 言語コード
 - `{{primaryUnit}}`: primaryLang 側ユニット本文
 - `{{localUnit}}`: localLang 側ユニット本文
-- `{{existingTmSet}}`: `{tuid, primarySentence, localSentence|null}` 配列
+- `{{ExistingTmEntries}}`: `{tuid, primarySentence, localSentence|null}` 配列
 - `{{requiredUpdateTuids}}`: 欠落不可の既存 tuid 一覧
 - `{{retryMissingTuids}}`: 再試行時に補完対象とする tuid 一覧（初回は空）
 - `{{retryReason}}`: 再試行理由の要約（初回は空）
@@ -307,7 +307,7 @@ prompts: ["trans.translate", "term.detect"]
 ```
 
 #### 補足
-- `type=update` の `tuid` は必ず入力済み `existingTmSet` を参照する
+- `type=update` の `tuid` は必ず入力済み `ExistingTmEntries` を参照する
 - `type=new` の `tuid` はプレースホルダー `"-"` とし、実際の tuid はクライアントが `primary` から計算する
 - 再試行では `retryMissingTuids` に含まれる `tuid` の `local` 補完だけを返す契約とし、新規候補や既に確定済みの update を再送させない
 

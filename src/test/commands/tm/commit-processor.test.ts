@@ -1,22 +1,22 @@
 import * as assert from "node:assert";
 import { TmCommitProcessor, type TmCommitResolvedUnit } from "../../../commands/tm/commit-processor";
-import type { TmEntryGenerationRequest, TmEntryGenerator } from "../../../commands/tm/tm-entry-generator";
+import type { LLMTmEntryGenerator, TmEntryGenerationRequest } from "../../../commands/tm/tm-entry-generator";
 import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../core/tm/tmx-store";
-import type { TmCommitPlanItem } from "../../../core/tm/types";
+import type { TmCommitEntry } from "../../../core/tm/types";
 
 const PRIMARY_SENTENCE = "Primary sentence.";
 const PRIMARY_TUID = calculateHash(PRIMARY_SENTENCE, true);
 
 /**
- * テスト用TmEntryGeneratorモック。
+ * テスト用LLMTmEntryGeneratorモック。
  * 事前に設定した固定のペアを返す。
  */
-class MockTmEntryGenerator {
-	responses: TmCommitPlanItem[][] = [];
+class MockLLMTmEntryGenerator {
+	responses: TmCommitEntry[][] = [];
 	requests: TmEntryGenerationRequest[] = [];
 
-	async generateEntries(request: TmEntryGenerationRequest): Promise<TmCommitPlanItem[]> {
+	async generateEntries(request: TmEntryGenerationRequest): Promise<TmCommitEntry[]> {
 		this.requests.push(request);
 		return this.responses.shift() ?? [];
 	}
@@ -48,9 +48,9 @@ suite("TmCommitProcessor", () => {
 			variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "unit-primary-1" }]]),
 		});
 
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [[]];
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
 		await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence. Another sentence." }),
 			createResolvedUnit({
@@ -63,7 +63,10 @@ suite("TmCommitProcessor", () => {
 
 		assert.strictEqual(generator.requests.length, 1);
 		const request = generator.requests[0];
-		assert.deepStrictEqual(request.existingTmSet.map((item) => item.tuid).sort(), ["b2c3d4e5", PRIMARY_TUID].sort());
+		assert.deepStrictEqual(
+			request.ExistingTmEntries.map((item) => item.tuid).sort(),
+			["b2c3d4e5", PRIMARY_TUID].sort(),
+		);
 		assert.deepStrictEqual(request.requiredUpdateTuids.sort(), ["b2c3d4e5", PRIMARY_TUID].sort());
 	});
 
@@ -78,9 +81,9 @@ suite("TmCommitProcessor", () => {
 			]),
 		});
 
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [[]];
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en");
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en");
 
 		await processor.processUnit(
 			createResolvedUnit({ content: PRIMARY_SENTENCE }),
@@ -106,7 +109,7 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [
 			[
 				{ type: "update", tuid: "zzzz9999", primary: "Primary sentence.", local: "更新訳" },
@@ -115,7 +118,7 @@ suite("TmCommitProcessor", () => {
 			],
 		];
 
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
 		const result = await processor.processUnit(
 			createResolvedUnit(),
 			createResolvedUnit({
@@ -142,13 +145,13 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [
 			[],
 			[{ type: "update", tuid: PRIMARY_TUID, primary: PRIMARY_SENTENCE, local: "更新済み訳文" }],
 		];
 
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 1);
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 1);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence." }),
 			createResolvedUnit({
@@ -174,13 +177,13 @@ suite("TmCommitProcessor", () => {
 				["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
 			]),
 		});
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [
 			[{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳がここにあります。" }],
 			[],
 		];
 
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 1);
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 1);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
 			createResolvedUnit({
@@ -198,7 +201,7 @@ suite("TmCommitProcessor", () => {
 
 	test("重複した new 候補でも件数集計は安定する", async () => {
 		const store = new TmxStore();
-		const generator = new MockTmEntryGenerator();
+		const generator = new MockLLMTmEntryGenerator();
 		generator.responses = [
 			[
 				{ type: "new", tuid: "-", primary: "Another sentence appears here.", local: "別文の新規訳です。" },
@@ -206,7 +209,7 @@ suite("TmCommitProcessor", () => {
 			],
 		];
 
-		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
+		const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
 		const result = await processor.processUnit(
 			createResolvedUnit({ content: "Primary sentence. Another sentence appears here." }),
 			createResolvedUnit({
@@ -220,5 +223,153 @@ suite("TmCommitProcessor", () => {
 		assert.strictEqual(result.newCount, 1);
 		assert.strictEqual(result.existingCount, 0);
 		assert.strictEqual(store.getEntryCount(), 1);
+	});
+
+	suite("canSkipUnit — hashベーススキップ", () => {
+		test("primary/local 両方のunitHashが一致する場合 LLMを呼ばずスキップする", async () => {
+			const store = new TmxStore();
+			store.addEntry({
+				tuid: PRIMARY_TUID,
+				primary: PRIMARY_SENTENCE,
+				variants: new Map([
+					["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "hash-primary" }],
+					["ja", { text: "現在訳文", unitPath: "docs/guide.ja.md", unitHash: "hash-local" }],
+				]),
+			});
+
+			const generator = new MockLLMTmEntryGenerator();
+			const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
+
+			const result = await processor.processUnit(
+				createResolvedUnit({ content: PRIMARY_SENTENCE, unitHash: "hash-primary" }),
+				createResolvedUnit({
+					content: "現在訳文",
+					lang: "ja",
+					unitPath: "docs/guide.ja.md",
+					unitHash: "hash-local",
+				}),
+			);
+
+			assert.strictEqual(generator.requests.length, 0, "LLMが呼ばれていないこと");
+			assert.strictEqual(result.newCount, 0);
+			assert.strictEqual(result.existingCount, 0);
+		});
+
+		test("ExistingTmEntriesが0件（初回コミット）の場合はスキップしない", async () => {
+			const store = new TmxStore();
+			// エントリなし
+			const generator = new MockLLMTmEntryGenerator();
+			generator.responses = [[]];
+			const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
+
+			await processor.processUnit(
+				createResolvedUnit({ content: PRIMARY_SENTENCE, unitHash: "hash-primary" }),
+				createResolvedUnit({
+					content: "新規訳文",
+					lang: "ja",
+					unitPath: "docs/guide.ja.md",
+					unitHash: "hash-local",
+				}),
+			);
+
+			assert.strictEqual(generator.requests.length, 1, "LLMが呼ばれること");
+		});
+
+		test("primary unitHashが不一致の場合はスキップしない", async () => {
+			const store = new TmxStore();
+			store.addEntry({
+				tuid: PRIMARY_TUID,
+				primary: PRIMARY_SENTENCE,
+				variants: new Map([
+					["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "old-primary-hash" }],
+					["ja", { text: "現在訳文", unitPath: "docs/guide.ja.md", unitHash: "hash-local" }],
+				]),
+			});
+
+			const generator = new MockLLMTmEntryGenerator();
+			generator.responses = [[]];
+			const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
+
+			await processor.processUnit(
+				// primaryHashが変わっている
+				createResolvedUnit({ content: PRIMARY_SENTENCE, unitHash: "new-primary-hash" }),
+				createResolvedUnit({
+					content: "現在訳文",
+					lang: "ja",
+					unitPath: "docs/guide.ja.md",
+					unitHash: "hash-local",
+				}),
+			);
+
+			assert.strictEqual(generator.requests.length, 1, "LLMが呼ばれること");
+		});
+
+		test("local unitHashが不一致の場合はスキップしない", async () => {
+			const store = new TmxStore();
+			store.addEntry({
+				tuid: PRIMARY_TUID,
+				primary: PRIMARY_SENTENCE,
+				variants: new Map([
+					["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "hash-primary" }],
+					["ja", { text: "旧訳文", unitPath: "docs/guide.ja.md", unitHash: "old-local-hash" }],
+				]),
+			});
+
+			const generator = new MockLLMTmEntryGenerator();
+			generator.responses = [[]];
+			const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
+
+			await processor.processUnit(
+				createResolvedUnit({ content: PRIMARY_SENTENCE, unitHash: "hash-primary" }),
+				createResolvedUnit({
+					// localHashが変わっている（訳文を手動修正した想定）
+					content: "新しい訳文",
+					lang: "ja",
+					unitPath: "docs/guide.ja.md",
+					unitHash: "new-local-hash",
+				}),
+			);
+
+			assert.strictEqual(generator.requests.length, 1, "LLMが呼ばれること");
+		});
+
+		test("複数エントリのうち1件でもhashが不一致ならスキップしない", async () => {
+			const SECOND_SENTENCE = "Another sentence.";
+			const SECOND_TUID = calculateHash(SECOND_SENTENCE, true);
+			const store = new TmxStore();
+			store.addEntry({
+				tuid: PRIMARY_TUID,
+				primary: PRIMARY_SENTENCE,
+				variants: new Map([
+					["en", { text: PRIMARY_SENTENCE, unitPath: "docs/guide.md", unitHash: "hash-primary" }],
+					["ja", { text: "第一文訳", unitPath: "docs/guide.ja.md", unitHash: "hash-local" }],
+				]),
+			});
+			store.addEntry({
+				tuid: SECOND_TUID,
+				primary: SECOND_SENTENCE,
+				variants: new Map([
+					// localHashが古い
+					["en", { text: SECOND_SENTENCE, unitPath: "docs/guide.md", unitHash: "hash-primary" }],
+					["ja", { text: "第二文旧訳", unitPath: "docs/guide.ja.md", unitHash: "old-hash" }],
+				]),
+			});
+
+			const generator = new MockLLMTmEntryGenerator();
+			generator.responses = [[]];
+			const processor = new TmCommitProcessor(store, generator as unknown as LLMTmEntryGenerator, "en", 0);
+
+			await processor.processUnit(
+				createResolvedUnit({ content: `${PRIMARY_SENTENCE} ${SECOND_SENTENCE}`, unitHash: "hash-primary" }),
+				createResolvedUnit({
+					content: "第一文訳 第二文新訳",
+					lang: "ja",
+					unitPath: "docs/guide.ja.md",
+					unitHash: "hash-local",
+				}),
+			);
+
+			assert.strictEqual(generator.requests.length, 1, "LLMが呼ばれること");
+		});
 	});
 });

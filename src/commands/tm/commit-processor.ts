@@ -8,9 +8,9 @@
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { TmxStore } from "../../core/tm/tmx-store";
-import type { ExistingTmSetItem, TmCommitPlanItem, TmEntry } from "../../core/tm/types";
+import type { ExistingTmEntriesItem, TmCommitEntry, TmEntry } from "../../core/tm/types";
 import { Logger } from "../../utils/logger";
-import type { TmEntryGenerator } from "./tm-entry-generator";
+import type { LLMTmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();
 
@@ -50,8 +50,8 @@ export interface TmCommitResult {
 }
 
 interface GuardResult {
-	acceptedNewItems: TmCommitPlanItem[];
-	acceptedUpdateItems: Map<string, TmCommitPlanItem>;
+	acceptedNewItems: TmCommitEntry[];
+	acceptedUpdateItems: Map<string, TmCommitEntry>;
 	unresolvedRequiredTuids: Set<string>;
 	invalidReasons: Map<string, string>;
 	skippedCount: number;
@@ -65,7 +65,7 @@ interface GuardResult {
 export class TmCommitProcessor {
 	constructor(
 		private readonly store: TmxStore,
-		private readonly generator: TmEntryGenerator,
+		private readonly generator: LLMTmEntryGenerator,
 		private readonly primaryLang: string,
 		private readonly retryLimit = 1,
 	) {}
@@ -86,7 +86,7 @@ export class TmCommitProcessor {
 		const strippedLocalUnit = stripMarkdown(localUnit.content);
 
 		const allEntries = this.store.getEntriesByUnitPath(primaryUnit.unitPath, this.primaryLang, localUnit.lang);
-		const existingTmSet = this.filterRelevantEntries(
+		const ExistingTmEntries = this.filterRelevantEntries(
 			allEntries,
 			strippedPrimaryUnit,
 			primaryUnit.unitHash,
@@ -95,8 +95,16 @@ export class TmCommitProcessor {
 			localUnit.unitHash,
 			localUnit.lang,
 		);
+
+		if (this.canSkipUnit(ExistingTmEntries, primaryUnit, localUnit)) {
+			logger.debug("tm.commit", "Skipping unit (no hash change)", {
+				unitPath: localUnit.unitPath,
+			});
+			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0 };
+		}
+
 		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(
-			existingTmSet,
+			ExistingTmEntries,
 			localUnit.lang,
 			localUnit.unitHash,
 			strippedLocalUnit,
@@ -108,7 +116,7 @@ export class TmCommitProcessor {
 				localLang: localUnit.lang,
 				primaryUnit: strippedPrimaryUnit,
 				localUnit: strippedLocalUnit,
-				existingTmSet,
+				ExistingTmEntries,
 				requiredUpdateTuids,
 			},
 			cancellationToken,
@@ -121,9 +129,9 @@ export class TmCommitProcessor {
 			return { newCount: 0, existingCount: 0, skippedCount: 0, warnedCount: 0 };
 		}
 
-		const existingTmMap = new Map(existingTmSet.map((item) => [item.tuid, item]));
-		const acceptedNewItems: TmCommitPlanItem[] = [];
-		const acceptedUpdateItems = new Map<string, TmCommitPlanItem>();
+		const existingTmMap = new Map(ExistingTmEntries.map((item) => [item.tuid, item]));
+		const acceptedNewItems: TmCommitEntry[] = [];
+		const acceptedUpdateItems = new Map<string, TmCommitEntry>();
 
 		let warningCount = 0;
 		let skippedCount = 0;
@@ -152,7 +160,7 @@ export class TmCommitProcessor {
 					localLang: localUnit.lang,
 					primaryUnit: strippedPrimaryUnit,
 					localUnit: strippedLocalUnit,
-					existingTmSet,
+					ExistingTmEntries,
 					requiredUpdateTuids,
 					retryMissingTuids: [...unresolvedRequiredTuids],
 					retryReason: this.buildRetryReason(lastInvalidReasons),
@@ -208,32 +216,51 @@ export class TmCommitProcessor {
 		};
 	}
 	/**
+	 * ソースも訳文も変わっていないユニットをスキップできるか判定する。
+	 * ExistingTmEntriesが1件以上あり、全エントリのprimary/local unitHashが現在と一致する場合 true を返す。
+	 */
+	private canSkipUnit(
+		existingTmEntries: ExistingTmEntriesItem[],
+		primaryUnit: TmCommitResolvedUnit,
+		localUnit: TmCommitResolvedUnit,
+	): boolean {
+		if (existingTmEntries.length === 0) {
+			return false;
+		}
+		return existingTmEntries.every((item) => {
+			const entry = this.store.findByTuid(item.tuid);
+			if (!entry) return false;
+			const primaryVar = entry.variants.get(this.primaryLang);
+			const localVar = entry.variants.get(localUnit.lang);
+			return primaryVar?.unitHash === primaryUnit.unitHash && localVar?.unitHash === localUnit.unitHash;
+		});
+	}
+
+	/**
 	 * existing TM set から update 必須 tuid を導出する。
 	 */
 	deriveRequiredUpdateTuids(
-		existingTmSet: ExistingTmSetItem[],
+		ExistingTmEntries: ExistingTmEntriesItem[],
 		localLang: string,
 		localUnitHash: string,
 		strippedLocalUnit: string,
 	): string[] {
-		return existingTmSet
-			.filter((item) => {
-				const entry = this.store.findByTuid(item.tuid);
-				const localVariant = entry?.variants.get(localLang);
-				if (!localVariant) {
-					return true;
-				}
-				if (item.localSentence && strippedLocalUnit.includes(item.localSentence.trim())) {
-					return false;
-				}
-				return !localUnitHash || localVariant.unitHash !== localUnitHash;
-			})
-			.map((item) => item.tuid);
+		return ExistingTmEntries.filter((item) => {
+			const entry = this.store.findByTuid(item.tuid);
+			const localVariant = entry?.variants.get(localLang);
+			if (!localVariant) {
+				return true;
+			}
+			if (item.localSentence && strippedLocalUnit.includes(item.localSentence.trim())) {
+				return false;
+			}
+			return !localUnitHash || localVariant.unitHash !== localUnitHash;
+		}).map((item) => item.tuid);
 	}
 
 	/**
 	 * `getEntriesByUnitPath` の全件から、現在の commit コンテキストに関連するエントリのみを抽出する。
-	 * （旧 `getExistingTmSet` のフィルタロジックを Commands 層に移植）
+	 * （旧 `getExistingTmEntries` のフィルタロジックを Commands 層に移植）
 	 */
 	private filterRelevantEntries(
 		allEntries: TmEntry[],
@@ -243,7 +270,7 @@ export class TmCommitProcessor {
 		localUnitPath: string | undefined,
 		localUnitHash: string | undefined,
 		localLang: string,
-	): ExistingTmSetItem[] {
+	): ExistingTmEntriesItem[] {
 		const sentenceCandidates = new Map<string, TmEntry[]>();
 		for (const entry of allEntries) {
 			if (!primaryUnitText.includes(entry.primary.trim())) continue;
@@ -253,7 +280,7 @@ export class TmCommitProcessor {
 			sentenceCandidates.set(key, bucket);
 		}
 
-		const results: ExistingTmSetItem[] = [];
+		const results: ExistingTmEntriesItem[] = [];
 		for (const candidates of sentenceCandidates.values()) {
 			const prioritizedCandidates =
 				primaryUnitHash && candidates.some((c) => c.variants.get(this.primaryLang)?.unitHash === primaryUnitHash)
@@ -292,17 +319,17 @@ export class TmCommitProcessor {
 	}
 
 	private guardPlanItems(
-		items: TmCommitPlanItem[],
+		items: TmCommitEntry[],
 		strippedPrimaryUnit: string,
 		strippedLocalUnit: string,
-		existingTmMap: ReadonlyMap<string, ExistingTmSetItem>,
+		existingTmMap: ReadonlyMap<string, ExistingTmEntriesItem>,
 		requiredUpdateTuids: ReadonlySet<string>,
 		localLang: string,
 		unitPath: string,
 		allowOnlyUpdates = false,
 	): GuardResult {
-		const acceptedNewItems: TmCommitPlanItem[] = [];
-		const acceptedUpdateItems = new Map<string, TmCommitPlanItem>();
+		const acceptedNewItems: TmCommitEntry[] = [];
+		const acceptedUpdateItems = new Map<string, TmCommitEntry>();
 		const unresolvedRequiredTuids = new Set(requiredUpdateTuids);
 		const invalidReasons = new Map<string, string>();
 		let skippedCount = 0;
@@ -361,10 +388,10 @@ export class TmCommitProcessor {
 	}
 
 	private validatePlanItem(
-		item: TmCommitPlanItem,
+		item: TmCommitEntry,
 		strippedPrimaryUnit: string,
 		strippedLocalUnit: string,
-		existingTmMap: ReadonlyMap<string, ExistingTmSetItem>,
+		existingTmMap: ReadonlyMap<string, ExistingTmEntriesItem>,
 		requiredUpdateTuids: ReadonlySet<string>,
 		localLang: string,
 		allowOnlyUpdates: boolean,
@@ -412,24 +439,21 @@ export class TmCommitProcessor {
 		return [...invalidReasons.entries()].map(([tuid, reason]) => `${tuid}: ${reason}`).join("; ");
 	}
 
-	private mergeAcceptedUpdates(
-		target: Map<string, TmCommitPlanItem>,
-		source: ReadonlyMap<string, TmCommitPlanItem>,
-	): void {
+	private mergeAcceptedUpdates(target: Map<string, TmCommitEntry>, source: ReadonlyMap<string, TmCommitEntry>): void {
 		for (const [tuid, item] of source) {
 			target.set(tuid, item);
 		}
 	}
 
 	private applyPlanItems(
-		newItems: readonly TmCommitPlanItem[],
-		updateItems: ReadonlyMap<string, TmCommitPlanItem>,
+		newItems: readonly TmCommitEntry[],
+		updateItems: ReadonlyMap<string, TmCommitEntry>,
 		primaryUnit: TmCommitResolvedUnit,
 		localUnit: TmCommitResolvedUnit,
 	): { newCount: number; existingCount: number } {
 		let newCount = 0;
 		let existingCount = 0;
-		const dedupedNewItems = new Map<string, TmCommitPlanItem>();
+		const dedupedNewItems = new Map<string, TmCommitEntry>();
 		for (const item of newItems) {
 			dedupedNewItems.set(calculateHash(item.primary, true), item);
 		}

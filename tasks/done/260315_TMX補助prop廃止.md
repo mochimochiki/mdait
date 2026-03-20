@@ -21,7 +21,7 @@ sequenceDiagram
     participant Store as TmxStore
 
     Cmd->>Proc: processUnit(primaryUnit, localUnit)
-    Proc->>Store: getExistingTmSet(...)
+    Proc->>Store: getExistingTmEntries(...)
     Proc->>Store: addEntry(tuid, variants)
     Cmd->>Store: save()
     Store-->>Cmd: tuid + tuv のみを持つ TMX を出力

@@ -21,7 +21,7 @@ import { Logger, formatError } from "../../utils/logger";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { isTmCommitTarget } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
-import { TmEntryGenerator } from "./tm-entry-generator";
+import { LLMTmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();
 
@@ -224,9 +224,9 @@ async function executeTmCommitForUnits(
 	await ensureMdaitDir();
 	const store = TmxStore.getInstance(tmxFilePath);
 
-	// AIServiceとTmEntryGeneratorの構築
+	// AIServiceとLLMTmEntryGeneratorの構築
 	const aiService = await new AIServiceBuilder().build();
-	const generator = new TmEntryGenerator(aiService);
+	const generator = new LLMTmEntryGenerator(aiService);
 	const processor = new TmCommitProcessor(store, generator, config.getTermsPrimaryLang(), config.getTmRetryLimit());
 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";

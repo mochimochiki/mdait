@@ -106,7 +106,7 @@ suite("TmxStore", () => {
 		);
 	});
 
-	test("getExistingTmSet が primary anchor と localSentence を返す", () => {
+	test("getExistingTmEntries が primary anchor と localSentence を返す", () => {
 		store.addEntry(
 			createTestEntry({
 				primary: "Hello world.",
@@ -125,7 +125,7 @@ suite("TmxStore", () => {
 		);
 
 		assert.deepStrictEqual(
-			store.getExistingTmSet(
+			store.getExistingTmEntries(
 				"Hello world. Another sentence.",
 				"en",
 				"ja",
@@ -146,7 +146,7 @@ suite("TmxStore", () => {
 		);
 	});
 
-	test("getExistingTmSet は同一ファイル内の別ユニットTUを混入させない", () => {
+	test("getExistingTmEntries は同一ファイル内の別ユニットTUを混入させない", () => {
 		store.addEntry(
 			createTestEntry({
 				primary: "Hello world.",
@@ -167,7 +167,7 @@ suite("TmxStore", () => {
 		);
 
 		assert.deepStrictEqual(
-			store.getExistingTmSet(
+			store.getExistingTmEntries(
 				"Hello world.",
 				"en",
 				"ja",
@@ -187,7 +187,7 @@ suite("TmxStore", () => {
 		);
 	});
 
-	test("getExistingTmSet は同一 primary sentence の重複候補でも current primary provenance を優先する", () => {
+	test("getExistingTmEntries は同一 primary sentence の重複候補でも current primary provenance を優先する", () => {
 		store.addEntry(
 			createTestEntry({
 				tuid: "55667788",
@@ -210,7 +210,7 @@ suite("TmxStore", () => {
 		);
 
 		assert.deepStrictEqual(
-			store.getExistingTmSet(
+			store.getExistingTmEntries(
 				"Hello world.",
 				"en",
 				"ja",
@@ -224,7 +224,7 @@ suite("TmxStore", () => {
 		);
 	});
 
-	test("getExistingTmSet は primary hash が変わっても local未登録TUを再利用できる", () => {
+	test("getExistingTmEntries は primary hash が変わっても local未登録TUを再利用できる", () => {
 		store.addEntry(
 			createTestEntry({
 				tuid: "44556677",
@@ -234,7 +234,7 @@ suite("TmxStore", () => {
 		);
 
 		assert.deepStrictEqual(
-			store.getExistingTmSet(
+			store.getExistingTmEntries(
 				"Another sentence.",
 				"en",
 				"ja",

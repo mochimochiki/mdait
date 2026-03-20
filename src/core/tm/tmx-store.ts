@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import { calculateHash } from "../hash/hash-calculator";
-import type { ExistingTmSetItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
+import type { ExistingTmEntriesItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
 
 /** TMXバージョン */
 const TMX_VERSION = "1.4";
@@ -459,7 +459,7 @@ export class TmxStore {
 	 * 現在の primaryUnit にアンカーされた既存 TM set を返す。
 	 * @deprecated `getEntriesByUnitPath` へ移行してください。
 	 */
-	getExistingTmSet(
+	getExistingTmEntries(
 		primaryUnitText: string,
 		primaryLang: string,
 		localLang: string,
@@ -468,7 +468,7 @@ export class TmxStore {
 		localUnitText?: string,
 		localUnitPath?: string,
 		localUnitHash?: string,
-	): ExistingTmSetItem[] {
+	): ExistingTmEntriesItem[] {
 		const sentenceCandidates = new Map<string, Array<TmEntry>>();
 		for (const entry of this.index.values()) {
 			const primaryVariant = entry.variants.get(primaryLang);
@@ -484,7 +484,7 @@ export class TmxStore {
 			sentenceCandidates.set(sentenceKey, bucket);
 		}
 
-		const results: ExistingTmSetItem[] = [];
+		const results: ExistingTmEntriesItem[] = [];
 		for (const candidates of sentenceCandidates.values()) {
 			const prioritizedCandidates =
 				primaryUnitHash &&

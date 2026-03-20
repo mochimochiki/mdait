@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { TmEntryGenerator } from "../../../commands/tm/tm-entry-generator";
+import { LLMTmEntryGenerator } from "../../../commands/tm/tm-entry-generator";
 import type { AIMessage, AIService } from "../../../llm/ai-service";
 
 /**
@@ -21,12 +21,12 @@ class MockAIService implements AIService {
 	}
 }
 
-suite("TmEntryGenerator", () => {
+suite("LLMTmEntryGenerator", () => {
 	suite("parseResponse", () => {
-		let generator: TmEntryGenerator;
+		let generator: LLMTmEntryGenerator;
 
 		setup(() => {
-			generator = new TmEntryGenerator(new MockAIService());
+			generator = new LLMTmEntryGenerator(new MockAIService());
 		});
 
 		test("正常なTM登録計画配列をパースできる", () => {
@@ -106,13 +106,13 @@ suite("TmEntryGenerator", () => {
 				{ type: "new", tuid: "-", primary: "Download the installer.", local: "インストーラーをダウンロードします。" },
 			]);
 
-			const generator = new TmEntryGenerator(mockAI);
+			const generator = new LLMTmEntryGenerator(mockAI);
 			const result = await generator.generateEntries({
 				primaryLang: "en",
 				localLang: "ja",
 				primaryUnit: "Download the installer.",
 				localUnit: "インストーラーをダウンロードします。",
-				existingTmSet: [],
+				ExistingTmEntries: [],
 				requiredUpdateTuids: [],
 			});
 

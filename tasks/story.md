@@ -2,9 +2,19 @@
 
 (新しい情報が上)
 
-## 2026/03/16: sentenceSplitter TM登録除去（責務分離）
+## 2026/03/20: tm-commit dual-hashスキップ最適化
 
-**背景:** `SentenceSplitter` はコメントに「trans実行時のTM検索で使用する」と明記されていたが、TM登録処理（tm-commit）の `TmxStore.getExistingTmSet()`・`TmCommitProcessor.deriveRequiredUpdateTuids()` でも使われていた。これはCore層に検索用ロジックが混入した責務違反であり、TM登録の保守性・層の純粋性を損なっていた。
+**背景:** tm-commitは「ソースも訳文も変わっていないユニット」に対しても毎回LLMを呼び出してしまい、大量ユニットがある場合に処理が重くなる問題があった。過去にunitHash（primary側のみ）を使ったスキップが試みられたが、local（訳文）の変更を検出できなかったため廃止されていた。
+
+**意思決定:** 雑談の中で「TmVariantにはlanguageごとのunitHashが既に保持されている」という事実に気づき、primaryとlocalの両方のunitHashを確認すれば安全にスキップできることが判明。スキップ条件を「ExistingTmEntriesが1件以上かつ全エントリのprimary+local unitHashが現在と一致」と定義した。syncやり直し時は必ずhashが変わるため新文の追加も自然に検出できる、と確認できたのが決め手。
+
+**実装:** `commit-processor.ts` に `canSkipUnit()` を追加し、`processUnit()` 内のLLM呼び出し前にスキップチェックを組み込んだ。テスト5ケース（正常スキップ/初回コミット/primary変化/local変化/部分変化）を追加。設計書も更新済み。レビューは承認。
+
+**詳細:** [tasks/done/260320_tm-commit-hash-skip.md](done/260320_tm-commit-hash-skip.md)
+
+
+
+**背景:** `SentenceSplitter` はコメントに「trans実行時のTM検索で使用する」と明記されていたが、TM登録処理（tm-commit）の `TmxStore.getExistingTmEntries()`・`TmCommitProcessor.deriveRequiredUpdateTuids()` でも使われていた。これはCore層に検索用ロジックが混入した責務違反であり、TM登録の保守性・層の純粋性を損なっていた。
 
 **意思決定:** 3つの設計案（unitHash優先 / テキスト直接照合 / 責務分離）を架 architect に並列設計させ、设计レビューで案C（責務分離）を選択。`TmxStore` を「unitPathに属する全エントリを返す純粋データアクセス（`getEntriesByUnitPath`）」に縮小し、フィルタリングロジック（バケット化・hash優先・includes照合）を `filterRelevantEntries` としてCommands層に移譲した。sentenceSplitterは完全削除。
 

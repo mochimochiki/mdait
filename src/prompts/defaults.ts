@@ -525,7 +525,7 @@ Return JSON object mapping source terms to translated terms:
  * - {{localLang}}: local 言語コード
  * - {{primaryUnit}}: primary ユニット本文
  * - {{localUnit}}: local ユニット本文
- * - {{existingTmSet}}: 既存 TM set(JSON)
+ * - {{ExistingTmEntries}}: 既存 TM set(JSON)
  * - {{requiredUpdateTuids}}: update 必須 tuid(JSON)
  * - {{retryMissingTuids}}: 再試行対象 tuid(JSON)
  * - {{retryReason}}: 再試行理由
@@ -572,9 +572,9 @@ produce a TM commit plan.
 {{localUnit}}
 </localLanguageUnit>
 
-<existingTmSet>
-{{existingTmSet}}
-</existingTmSet>
+<ExistingTmEntries>
+{{ExistingTmEntries}}
+</ExistingTmEntries>
 
 {{#requiredUpdateTuids}}
 <requiredUpdateTuids>

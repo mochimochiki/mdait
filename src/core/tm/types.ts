@@ -26,14 +26,14 @@ export interface LegacyTmEntry {
 }
 
 /** tm-commit に渡す既存 TM 情報 */
-export interface ExistingTmSetItem {
+export interface ExistingTmEntriesItem {
 	tuid: string;
 	primarySentence: string;
 	localSentence: string | null;
 }
 
 /** LLM が返す TM登録計画 */
-export interface TmCommitPlanItem {
+export interface TmCommitEntry {
 	type: "new" | "update";
 	tuid: string;
 	primary: string;

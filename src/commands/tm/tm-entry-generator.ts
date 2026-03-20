@@ -6,7 +6,7 @@
  * @module commands/tm/tm-entry-generator
  */
 import type * as vscode from "vscode";
-import type { ExistingTmSetItem, TmCommitPlanItem } from "../../core/tm/types";
+import type { ExistingTmEntriesItem, TmCommitEntry } from "../../core/tm/types";
 import type { AIMessage, AIService } from "../../llm/ai-service";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { Logger, formatError } from "../../utils/logger";
@@ -20,7 +20,7 @@ export interface TmEntryGenerationRequest {
 	primaryUnit: string;
 	/** Markdown除去済みのlocalユニットテキスト */
 	localUnit: string;
-	existingTmSet: ExistingTmSetItem[];
+	ExistingTmEntries: ExistingTmEntriesItem[];
 	requiredUpdateTuids: string[];
 	retryMissingTuids?: string[];
 	retryReason?: string;
@@ -29,7 +29,7 @@ export interface TmEntryGenerationRequest {
 /**
  * LLMによる TM登録計画の高精度生成を行うクラス。
  */
-export class TmEntryGenerator {
+export class LLMTmEntryGenerator {
 	private readonly aiService: AIService;
 
 	constructor(aiService: AIService) {
@@ -45,14 +45,14 @@ export class TmEntryGenerator {
 	async generateEntries(
 		request: TmEntryGenerationRequest,
 		cancellationToken?: vscode.CancellationToken,
-	): Promise<TmCommitPlanItem[]> {
+	): Promise<TmCommitEntry[]> {
 		const promptProvider = PromptProvider.getInstance();
 		const systemPrompt = promptProvider.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
 			primaryLang: request.primaryLang,
 			localLang: request.localLang,
 			primaryUnit: request.primaryUnit,
 			localUnit: request.localUnit,
-			existingTmSet: JSON.stringify(request.existingTmSet, null, 2),
+			ExistingTmEntries: JSON.stringify(request.ExistingTmEntries, null, 2),
 			requiredUpdateTuids: JSON.stringify(request.requiredUpdateTuids, null, 2),
 			retryMissingTuids: JSON.stringify(request.retryMissingTuids ?? [], null, 2),
 			retryReason: request.retryReason ?? "",
@@ -78,7 +78,7 @@ export class TmEntryGenerator {
 	 * @param response LLMからのJSON文字列レスポンス
 	 * @returns パース済みの TM登録計画配列
 	 */
-	parseResponse(response: string): TmCommitPlanItem[] {
+	parseResponse(response: string): TmCommitEntry[] {
 		try {
 			// JSONコードブロックのマーカーを除去
 			const cleaned = response
@@ -114,8 +114,8 @@ export class TmEntryGenerator {
 
 	private validatePlanItems(
 		parsed: unknown[],
-	): { valid: true; items: TmCommitPlanItem[] } | { valid: false; reason: string } {
-		const items: TmCommitPlanItem[] = [];
+	): { valid: true; items: TmCommitEntry[] } | { valid: false; reason: string } {
+		const items: TmCommitEntry[] = [];
 
 		for (let index = 0; index < parsed.length; index++) {
 			const item = parsed[index];
