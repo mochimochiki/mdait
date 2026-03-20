@@ -1,6 +1,6 @@
 # setupコマンド
 
-ワークスペースに`mdait.json`設定ファイルを作成し、翻訳ワークフローを開始できる状態にするコマンドです。
+ワークスペースの`.mdait/mdait.json`設定ファイルを作成し、翻訳ワークフローを開始できる状態にするコマンドです。
 
 > **ワークフロー位置:** **setup** → [sync](command_sync.md) → [trans](command_trans.md) → [tm-commit](command_tm.md)
 
@@ -8,15 +8,15 @@
 
 ### 何をするか
 
-拡張機能にバンドルされたテンプレート（`mdait.template.json`）をワークスペースルートに`mdait.json`としてコピーし、エディタで開きます。保存・バリデーション成功後、StatusTreeが自動表示されてワークフローを開始できます。
+拡張機能にバンドルされたテンプレート（`mdait.template.json`）をワークスペースの`.mdait/mdait.json`としてコピーし（`.mdait`ディレクトリが存在しない場合は自動作成）、エディタで開きます。保存・バリデーション成功後、StatusTreeが自動表示されてワークフローを開始できます。
 
 ### before/after
 
-`mdait.json`がない状態でコマンドを実行すると、テンプレートが作成されてエディタで開かれます:
+`.mdait/mdait.json`がない状態でコマンドを実行すると、テンプレートが作成されてエディタで開かれます:
 
 ```
-【実行前】ワークスペースルートに mdait.json なし → Welcome View のみ表示
-【実行後】mdait.json 作成 → エディタで開く → 保存後 StatusTree 表示
+【実行前】.mdait/mdait.json なし → Welcome View のみ表示
+【実行後】.mdait/mdait.json 作成 → エディタで開く → 保存後 StatusTree 表示
 ```
 
 ### 前提・操作
@@ -32,8 +32,8 @@
 
 | 状況 | 結果 | 意味 |
 |---|---|---|
-| `mdait.json`が存在しない | ファイル作成・エディタ表示 | 正常フロー |
-| `mdait.json`が既に存在する | 警告ダイアログ表示 | 上書き保護 |
+| `.mdait/mdait.json`が存在しない | ファイル作成・エディタ表示 | 正常フロー |
+| `.mdait/mdait.json`が既に存在する | 警告ダイアログ表示 | 上書き保護 |
 | 保存後バリデーション成功 | `mdaitConfigured`コンテキスト更新 | Welcome View非表示、StatusTree表示 |
 
 ### エラー処理
@@ -48,7 +48,7 @@
 
 ### 概要
 
-`createConfigCommand()`がバンドルの`mdait.template.json`をワークスペースルートにコピーし、`vscode.openTextDocument()`でエディタ表示します。その後`Configuration`がファイル変更イベントを検知してリロード・バリデーションし、`mdaitConfigured`コンテキスト変数を更新します。
+`createConfigCommand()`がバンドルの`mdait.template.json`をワークスペースの`.mdait/`配下にコピーし、`vscode.openTextDocument()`でエディタ表示します。その後`Configuration`がファイル変更イベントを検知してリロード・バリデーションし、`mdaitConfigured`コンテキスト変数を更新します。
 
 ### 処理フロー
 
@@ -63,7 +63,7 @@ sequenceDiagram
 
     rect rgb(230, 240, 255)
         Note over Cmd,FS: 初期化: ワークスペース確認・既存ファイルチェック
-        Cmd->>FS: mdait.json 存在チェック
+        Cmd->>FS: .mdait/mdait.json 存在チェック
         alt 既存ファイルあり
             Cmd-->>User: 警告ダイアログ表示（中断）
         end
@@ -72,8 +72,8 @@ sequenceDiagram
     rect rgb(240, 255, 240)
         Note over Cmd,FS: 作成: テンプレートコピー・エディタ表示
         Cmd->>FS: mdait.template.json 読み込み
-        Cmd->>FS: mdait.json 作成
-        Cmd-->>User: エディタで mdait.json を表示
+        Cmd->>FS: .mdait/mdait.json 作成
+        Cmd-->>User: エディタで .mdait/mdait.json を表示
     end
 
     rect rgb(255, 245, 230)

@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
@@ -380,7 +381,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const filePath = document.uri.fsPath;
 
 			// mdait.jsonの保存を検知して設定を再読み込み
-			if (filePath.toLowerCase().endsWith("mdait.json")) {
+			if (filePath.toLowerCase().endsWith(path.join(".mdait", "mdait.json").toLowerCase())) {
 				try {
 					await config.initialize();
 					logger.info("config", "Configuration reloaded after mdait.json save");

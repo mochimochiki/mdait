@@ -52,7 +52,7 @@ graph TD
 | LLM層 | `AIService` インターフェースでプロバイダーを抽象化。`AIServiceBuilder` が動的選択し、OpenAI/Ollama/VS Code LM APIの差異を吸収。AIServiceインターフェース・各プロバイダー実装を提供。 | [llm.md](design/llm.md) |
 | UI層 | StatusTreeProvider・CodeLensProvider・HoverProvider・Welcome View でmdait内部状態をVS Code標準UIパターンで可視化。自動同期機能も統合。 | [ui.md](design/ui.md) |
 | Tools層 | `mdait_getStatus` / `mdait_sync` / `mdait_translate` をLanguageModelTool APIとして提供。Commands層・Core層の薄いラッパーとしてGitHub Copilot Chat連携を実現。 | [tools.md](design/tools.md) |
-| 設定管理 | mdait.json構造・Frontmatterオーバーライドで設定を一元管理。設定ファイルの読み込み・バリデーション・適用を統一して処理。 | [config.md](design/config.md) |
+| 設定管理 | `.mdait/mdait.json`の構造・Frontmatterオーバーライドで設定を一元管理。設定ファイルの読み込み・バリデーション・適用を統一して処理。 | [config.md](design/config.md) |
 
 ### コマンド層
 

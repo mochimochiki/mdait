@@ -4,7 +4,7 @@
 
 ## このドキュメントの責務
 
-Config層は、`mdait.json`の読み込み、バリデーション、ファイル変更監視を担当します。また、Frontmatterによるドキュメント単位の設定オーバーライドを定義します。
+Config層は、`.mdait/mdait.json`の読み込み、バリデーション、ファイル変更監視を担当します。また、Frontmatterによるドキュメント単位の設定オーバーライドを定義します。
 
 ---
 
@@ -13,7 +13,7 @@ Config層は、`mdait.json`の読み込み、バリデーション、ファイ�
 ### 基本設計
 
 - **シングルトン**: `initialize()`でロード、`getInstance()`で提供
-- **ソース**: ワークスペースルートの`mdait.json`
+- **ソース**: `.mdait/mdait.json`（ワークスペースルート配下の`.mdait`ディレクトリ）
 - **スキーマ**: `schemas/mdait-config.schema.json`による補完と検証
 
 **実装**: [`src/config/configuration.ts`](../../src/config/configuration.ts)
@@ -22,7 +22,7 @@ Config層は、`mdait.json`の読み込み、バリデーション、ファイ�
 
 初回セットアップを支援する仕組みを提供します：
 
-1. `isConfigured()`メソッドで`mdait.json`の存在と`validate()`結果をチェック
+1. `isConfigured()`メソッドで`.mdait/mdait.json`の存在と`validate()`結果をチェック
 2. 初期セットアップ時は`mdait.setup.createConfig`コマンドで`mdait.template.json`から設定ファイルを生成
 3. `mdaitConfigured`コンテキスト変数でUI表示を制御し、未設定時はWelcome Viewを表示
 4. `package.json`の`jsonValidation`でJSON Schemaを関連付け、IDE上でIntelliSenseと検証が機能
@@ -41,7 +41,7 @@ sequenceDiagram
 		participant Caller as Commands/Core/API
 
 		VS->>Cfg: initialize(context)
-		Cfg->>FS: mdait.jsonの読み込み
+		Cfg->>FS: .mdait/mdait.jsonの読み込み
 		FS-->>Cfg: JSON内容
 		Cfg->>Cfg: パース+型チェック
 		Cfg->>FS: ファイル変更監視の開始
@@ -51,11 +51,11 @@ sequenceDiagram
 		Cfg->>Cfg: 値リロード
 ```
 
-**設計意図**: ファイル変更監視により、ユーザーがmdait.jsonを編集中でも、保存時に即座に設定が反映されます。
+**設計意図**: ファイル変更監視により、ユーザーが`.mdait/mdait.json`を編集中でも、保存時に即座に設定が反映されます。
 
 ---
 
-## mdait.jsonフォーマット
+## `.mdait/mdait.json` フォーマット
 
 [`schemas/mdait-config.schema.json`](../../schemas/mdait-config.schema.json)で定義された形式に従います。
 
@@ -178,7 +178,7 @@ mdait:
 ```
 
 **動作**:
-- `mdait.json`の`sync.level`設定をドキュメント単位で上書き
+- `.mdait/mdait.json`の`sync.level`設定をドキュメント単位で上書き
 - sync実行時、原文と訳文でlevel設定が異なる場合、**原文の設定を優先して訳文を自動修正**
 
 **設計意図**: 大きなドキュメントでは粗い粒度（level 2）、詳細なドキュメントでは細かい粒度（level 3）など、ドキュメントの性質に応じて柔軟に調整できます。

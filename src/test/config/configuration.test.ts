@@ -6,7 +6,9 @@ import { Configuration } from "../../config/configuration";
 
 function createTempConfigFile(): string {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-config-test-"));
-	const configPath = path.join(tempDir, "mdait.json");
+	const mdaitDir = path.join(tempDir, ".mdait");
+	fs.mkdirSync(mdaitDir, { recursive: true });
+	const configPath = path.join(mdaitDir, "mdait.json");
 	fs.writeFileSync(configPath, "{}", "utf-8");
 	return configPath;
 }
@@ -32,7 +34,7 @@ suite("Configuration", () => {
 
 		assert.strictEqual(config.isConfigured(), false);
 
-		fs.rmSync(path.dirname(configPath), { recursive: true, force: true });
+		fs.rmSync(path.dirname(path.dirname(configPath)), { recursive: true, force: true });
 	});
 
 	test("primaryLang を含む構成は isConfigured で設定済み扱いになる", () => {
@@ -57,6 +59,6 @@ suite("Configuration", () => {
 
 		assert.strictEqual(config.isConfigured(), true);
 
-		fs.rmSync(path.dirname(configPath), { recursive: true, force: true });
+		fs.rmSync(path.dirname(path.dirname(configPath)), { recursive: true, force: true });
 	});
 });

@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../../config/configuration";
+import { Configuration } from "../../config/configuration";
 
 suite("Configuration primaryLang設定のテスト", () => {
 	let workspaceRoot: string;
@@ -20,7 +20,7 @@ suite("Configuration primaryLang設定のテスト", () => {
 		}
 
 		workspaceRoot = folders[0].uri.fsPath;
-		configPath = path.join(workspaceRoot, "mdait.json");
+		configPath = path.join(workspaceRoot, ".mdait", "mdait.json");
 		backupContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : undefined;
 		Configuration.dispose();
 	});

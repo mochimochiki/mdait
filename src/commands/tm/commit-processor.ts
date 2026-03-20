@@ -107,11 +107,7 @@ export class TmCommitProcessor {
 			localUnit.lang,
 		);
 
-		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(
-			ExistingTmEntries,
-			localUnit.lang,
-			strippedLocalUnit,
-		);
+		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(ExistingTmEntries, localUnit.lang, strippedLocalUnit);
 
 		const pairs = await this.generator.generateEntries(
 			{

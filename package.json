@@ -330,7 +330,7 @@
     ],
     "jsonValidation": [
       {
-        "fileMatch": "mdait.json",
+        "fileMatch": "**/.mdait/mdait.json",
         "url": "./schemas/mdait-config.schema.json"
       }
     ],

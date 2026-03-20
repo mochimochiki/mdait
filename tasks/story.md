@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/20: mdait.json を .mdait/mdait.json に移動
+
+**背景:** `mdait.json` がワークスペースルートに置かれており、他の mdait 管理ファイル（terms、TM、unit-registry）が `.mdait/` 配下にあるのと場所が統一されていなかった。リリース前なので互換性維持は不要と判断。
+
+**意思決定:** シンプルにパスを変更して `.mdait/` に統一。`setup-command.ts` での `.mdait` ディレクトリ作成は `ensureMdaitDir()` 経由にする（`.gitignore` 自動生成を担う関数を使うことでセットアップ時の一貫性を保つ）。
+
+**実装:** `configuration.ts`・`setup-command.ts`・`extension.ts`・`package.json` のパス参照を変更、テストワークスペースのファイルも移動。レビューで `ensureMdaitDir()` 未使用の指摘を受けて修正。README・docs も全件更新。
+
+**詳細:** [tasks/done/260320_mdait-json-移動.md](done/260320_mdait-json-移動.md)
+
 ## 2026/03/20: TMX x-unit / x-unit-hash フィールドの削除
 
 **背景:** TMX の `<prop type="x-unit">` (ファイルパス) と `<prop type="x-unit-hash">` (ユニットハッシュ) は、provenance 追跡として設計されたが「正確に更新し続けるコストがあるのに有用な使い道がない」という判断に至った。cleanup も tuid ベースの原文現存確認で実現できるためこれらは不要。リリース前のため互換性維持も不要と判断し、コードベースから完全に削除した。

@@ -140,9 +140,7 @@ function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 	return {
 		tuid: entry.sentenceHash,
 		primary,
-		variants: new Map(
-			sortedVariants.map(([lang, text]) => [lang, { text }]),
-		),
+		variants: new Map(sortedVariants.map(([lang, text]) => [lang, { text }])),
 	};
 }
 

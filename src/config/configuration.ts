@@ -240,7 +240,7 @@ export class Configuration {
 		if (!workspaceRoot) {
 			return undefined;
 		}
-		return path.join(workspaceRoot, "mdait.json");
+		return path.join(workspaceRoot, ".mdait", "mdait.json");
 	}
 
 	/**

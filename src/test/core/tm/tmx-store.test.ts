@@ -393,7 +393,10 @@ suite("TmxStore.findCandidatesByTrigram", () => {
 		// 生テキスト（Markdown記法あり）をそのまま渡す
 		// findCandidatesByTrigram 内部で normalizeForTm を適用するため一致するはず
 		const results = store.findCandidatesByTrigram("Download the **installer** package", "en");
-		assert.ok(results.some((e) => e.tuid === "md-entry"), "Markdown含む生テキストでも候補がヒットすること");
+		assert.ok(
+			results.some((e) => e.tuid === "md-entry"),
+			"Markdown含む生テキストでも候補がヒットすること",
+		);
 	});
 });
 
@@ -430,7 +433,10 @@ suite("TmxStore.getTrigramCache", () => {
 
 	test("load() 後にキャッシュが再構築される", () => {
 		const tmpDir = require("node:os").tmpdir();
-		const tmpPath = require("node:path").join(require("node:fs").mkdtempSync(require("node:path").join(tmpDir, "cache-test-")), "test.tmx");
+		const tmpPath = require("node:path").join(
+			require("node:fs").mkdtempSync(require("node:path").join(tmpDir, "cache-test-")),
+			"test.tmx",
+		);
 		require("node:fs").mkdirSync(require("node:path").dirname(tmpPath), { recursive: true });
 		require("node:fs").writeFileSync(tmpPath, SAMPLE_TMX, "utf-8");
 
