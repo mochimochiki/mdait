@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import { calculateHash } from "../hash/hash-calculator";
-import { SentenceSplitter } from "./sentence-splitter";
 import type { ExistingTmSetItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
 
 /** TMXバージョン */
@@ -22,7 +21,6 @@ const ATTR_PREFIX = "@_";
 
 /** 配列として強制するタグ名 */
 const ARRAY_TAG_NAMES = new Set(["tu", "tuv", "prop"]);
-const sentenceSplitter = new SentenceSplitter();
 
 function inferPrimaryFromVariants(tuid: string, variants: Iterable<TmVariant>): string | null {
 	const candidates = [...variants].map((variant) => variant.text).filter((text) => text.length > 0);
@@ -253,7 +251,7 @@ function serializeTmx(entries: Map<string, TmEntry>): string {
  * 主要機能:
  * - TMX XMLのパース/シリアライズ
  * - Map<tuid, TmEntry>による高速検索（O(1)）
- * - CRUD操作: addEntry, getExistingTmSet, lookupByHash, lookupBatch
+ * - CRUD操作: addEntry, getEntriesByUnitPath, lookupByHash, lookupBatch
  */
 export class TmxStore {
 	private static instance: TmxStore | null = null;
@@ -442,7 +440,24 @@ export class TmxStore {
 	}
 
 	/**
+	 * 指定 unitPath に属する全 TmEntry を返す（純粋データアクセス）。
+	 * フィルタリングは呼び出し元が行う。
+	 */
+	getEntriesByUnitPath(unitPath: string, primaryLang: string, _localLang: string): TmEntry[] {
+		const results: TmEntry[] = [];
+		for (const entry of this.index.values()) {
+			const primaryVariant = entry.variants.get(primaryLang);
+			if (!primaryVariant?.unitPath || primaryVariant.unitPath !== unitPath) {
+				continue;
+			}
+			results.push(entry);
+		}
+		return results;
+	}
+
+	/**
 	 * 現在の primaryUnit にアンカーされた既存 TM set を返す。
+	 * @deprecated `getEntriesByUnitPath` へ移行してください。
 	 */
 	getExistingTmSet(
 		primaryUnitText: string,
@@ -455,24 +470,12 @@ export class TmxStore {
 		localUnitHash?: string,
 	): ExistingTmSetItem[] {
 		const sentenceCandidates = new Map<string, Array<TmEntry>>();
-		const primarySentences = new Set(
-			sentenceSplitter
-				.split(primaryUnitText, primaryLang)
-				.map((sentence) => sentence.trim())
-				.filter((sentence) => sentence.length > 0),
-		);
-		const localSentences = new Set(
-			sentenceSplitter
-				.split(localUnitText ?? "", localLang)
-				.map((sentence) => sentence.trim())
-				.filter((sentence) => sentence.length > 0),
-		);
 		for (const entry of this.index.values()) {
 			const primaryVariant = entry.variants.get(primaryLang);
 			if (!primaryVariant?.unitPath || primaryVariant.unitPath !== primaryUnitPath) {
 				continue;
 			}
-			if (!primarySentences.has(entry.primary.trim())) {
+			if (!primaryUnitText.includes(entry.primary.trim())) {
 				continue;
 			}
 			const sentenceKey = entry.primary.trim();
@@ -502,7 +505,7 @@ export class TmxStore {
 				);
 				const matchesLocalText = Boolean(
 					localVariant?.text &&
-						localSentences.has(localVariant.text.trim()) &&
+						(localUnitText ?? "").includes(localVariant.text.trim()) &&
 						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
 				);
 				const matchesPrimarySentenceOnly = !localVariant;

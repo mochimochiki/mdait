@@ -170,16 +170,8 @@ interface TmEntry {
 ```typescript
 // 使用例: Command層からの典型的な呼び出し
 const store = TmxStore.getInstance(tmxPath);
-const existing = store.getExistingTmSet(
-    primaryUnitText,
-    primaryLang,
-    localLang,
-    primaryUnitPath,
-    primaryUnitHash,
-    localUnitText,
-    localUnitPath,
-    localUnitHash,
-);
+// 純粋データアクセス: unitPathに属する全TUを取得（フィルタリングはCommands層の責務）
+const allEntries = store.getEntriesByUnitPath(primaryUnitPath, primaryLang, localLang);
 const matches = store.lookupBatch(sentenceHashes, sourceLang, targetLang);
 store.save(tmxPath);
 ```

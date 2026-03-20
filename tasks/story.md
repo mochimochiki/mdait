@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/16: sentenceSplitter TM登録除去（責務分離）
+
+**背景:** `SentenceSplitter` はコメントに「trans実行時のTM検索で使用する」と明記されていたが、TM登録処理（tm-commit）の `TmxStore.getExistingTmSet()`・`TmCommitProcessor.deriveRequiredUpdateTuids()` でも使われていた。これはCore層に検索用ロジックが混入した責務違反であり、TM登録の保守性・層の純粋性を損なっていた。
+
+**意思決定:** 3つの設計案（unitHash優先 / テキスト直接照合 / 責務分離）を架 architect に並列設計させ、设计レビューで案C（責務分離）を選択。`TmxStore` を「unitPathに属する全エントリを返す純粋データアクセス（`getEntriesByUnitPath`）」に縮小し、フィルタリングロジック（バケット化・hash優先・includes照合）を `filterRelevantEntries` としてCommands層に移譲した。sentenceSplitterは完全削除。
+
+**実装:** `tmx-store.ts` に `getEntriesByUnitPath` を追加・`SentenceSplitter` 依存を除去、`commit-processor.ts` に `filterRelevantEntries` を新設・呼び出し経路を変更、テストを `processUnit` 統合テスト形式に更新。テスト20件全通過。
+
+**詳細:** [tasks/done/260316_sentenceSplitter_TM登録除去.md](done/260316_sentenceSplitter_TM登録除去.md)
+
 ## 2026/03/15: TMX補助propを廃止し保存契約を簡素化
 
 **背景:** `.mdait/translations.tmx` には primary sentence や unit 再処理用ハッシュを補助 prop として埋め込んでいたが、TM の正準キーはすでに `tuid` と各言語 `tuv` に寄っており、保存形式が冗長になっていた。特に `x-primary` と `x-source-hash` はサンプル TMX にも露出しており、互換と現在契約の境界が曖昧だった。

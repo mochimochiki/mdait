@@ -597,40 +597,44 @@ produce a TM commit plan.
 ### Instructions
 1. Split both primary and local texts into sentences.
 2. Align each primary sentence with its corresponding local sentence.
-3. If one primary sentence maps to multiple local sentences (or vice versa), combine them into a single pair.
-4. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
-5. primary must be a direct subset of Current Primary-Language Unit Text.
-6. local must be a direct subset of Current Local-Language Unit Text.
-7. primary and local must each be a single sentence, with no newline.
-8. Return only sentence-level pairs with real TM value. Do NOT return unmatched, empty, noisy, or low-value fragments.
-9. Do NOT return isolated terms, short noun phrases, short fixed phrases, labels, headings with little standalone value, or other content better suited for a glossary.
+3. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
+4. primary must be a direct subset of Current Primary-Language Unit Text.
+5. local must be a direct subset of Current Local-Language Unit Text.
+6. primary and local must each be a single sentence, with no newline.
+7. Return only sentence-level pairs with real TM value. Do NOT return unmatched, empty, noisy, or low-value fragments.
+8. Do NOT return isolated terms, short noun phrases, short fixed phrases, labels, headings with little standalone value, or other content better suited for a glossary.
+
+### Sentence Completeness (MANDATORY)
+- If you encounter "." "?" "!" or any other characters that commonly separate sentences in current languages, consider whether the sentence should be broken at that point.
+- If it is broken, you must consider whether each sentence should be registered independently as a TM.
+- The 2nd, 3rd, and all subsequent sentences are equally important — not just the first.
 
 ### Decision Policy
 Work in two passes. Resolve updates first, then consider new items.
 
 PHASE 1: UPDATE DECISIONS
-10. Review Existing TM Set and requiredUpdateTuids before considering any new item.
-11. type must be either "new" or "update".
-12. For type="update", tuid MUST reference an item from Existing TM Set.
-13. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
-14. If a current aligned pair clearly corresponds to an existing TM anchor that must be preserved, return it as type="update", not "new".
-15. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
+9. Review Existing TM Set and requiredUpdateTuids before considering any new item.
+10. type must be either "new" or "update".
+11. For type="update", tuid MUST reference an item from Existing TM Set.
+12. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
+13. If a current aligned pair clearly corresponds to an existing TM anchor that must be preserved, return it as type="update", not "new".
+14. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
 
 PHASE 2: NEW DECISIONS
-16. Only after PHASE 1, inspect the remaining aligned pairs not consumed by any update item.
-17. For type="new", tuid MUST be "-".
-18. Return type="new" only when the aligned pair is reusable, sentence-level, and not already represented by an update item or existing TM anchor.
+15. Only after PHASE 1, inspect the remaining aligned pairs not consumed by any update item.
+16. For type="new", tuid MUST be "-".
+17. Return type="new" only when the aligned pair is reusable, sentence-level, and not already represented by an update item or existing TM anchor.
 
 MUTUAL EXCLUSIVITY
-19. For one aligned pair, choose exactly one outcome: either "update" or "new".
-20. Never output both a new item and an update item for the same aligned pair.
-21. Never convert a required update into a new item.
-22. Do not create a new item that duplicates or paraphrases an update item.
+18. For one aligned pair, choose exactly one outcome: either "update" or "new".
+19. Never output both a new item and an update item for the same aligned pair.
+20. Never convert a required update into a new item.
+21. Do not create a new item that duplicates or paraphrases an update item.
 
 OUTPUT SHAPE AND ORDER
-23. Return items with fields: type, tuid, primary, local.
-24. List all update items first. If requiredUpdateTuids are present, keep their order.
-25. After all update items, list new items in source order.
+22. Return items with fields: type, tuid, primary, local.
+23. List all update items first. If requiredUpdateTuids are present, keep their order.
+24. After all update items, list new items in source order.
 
 ### Output Format
 Return ONLY a valid JSON array with this structure:
@@ -648,7 +652,8 @@ CRITICAL:
 - Preserve exact original text without any modifications.
 - Resolve updates first, then consider new items.
 - Short terms and short phrases belong in glossary/termbase, not TM.
-- Do not omit required update tuids.`;
+- Do not omit required update tuids.
+- If you encounter "." "?" "!" or any other characters that commonly separate sentences in current languages, consider whether the sentence should be broken at that point.`;
 
 /**
  * デフォルトプロンプトのマッピング

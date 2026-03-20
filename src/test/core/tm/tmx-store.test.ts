@@ -159,8 +159,10 @@ suite("TmxStore", () => {
 		store.addEntry(
 			createTestEntry({
 				tuid: "33445566",
-				primary: "world",
-				variants: new Map([["en", { text: "world", unitPath: "docs/test.md", unitHash: "en-unit-2" }]]),
+				primary: "Separate document sentence.",
+				variants: new Map([
+					["en", { text: "Separate document sentence.", unitPath: "docs/test.md", unitHash: "en-unit-2" }],
+				]),
 			}),
 		);
 
@@ -305,6 +307,38 @@ suite("TmxStore", () => {
 		assert.ok(entry);
 		assert.strictEqual(entry?.primary, "Download the installer");
 		assert.strictEqual(entry?.variants.get("ja")?.text, "インストーラーをダウンロード");
+	});
+
+	test("getEntriesByUnitPath が primaryLang の unitPath に一致する全エントリーを返す", () => {
+		store.addEntry(
+			createTestEntry({
+				primary: "Hello world.",
+				variants: new Map([
+					["en", { text: "Hello world.", unitPath: "docs/guide.md", unitHash: "en-unit-1" }],
+					["ja", { text: "こんにちは世界。", unitPath: "docs/guide.ja.md", unitHash: "ja-unit-1" }],
+				]),
+			}),
+		);
+		store.addEntry(
+			createTestEntry({
+				tuid: "aaaabbbb",
+				primary: "Another sentence.",
+				variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "en-unit-1" }]]),
+			}),
+		);
+		store.addEntry(
+			createTestEntry({
+				tuid: "ccccdddd",
+				primary: "Unrelated sentence.",
+				variants: new Map([["en", { text: "Unrelated sentence.", unitPath: "docs/other.md", unitHash: "en-unit-2" }]]),
+			}),
+		);
+
+		const entries = store.getEntriesByUnitPath("docs/guide.md", "en", "ja");
+		assert.strictEqual(entries.length, 2);
+		assert.ok(entries.some((e) => e.primary === "Hello world."));
+		assert.ok(entries.some((e) => e.primary === "Another sentence."));
+		assert.ok(!entries.some((e) => e.primary === "Unrelated sentence."));
 	});
 });
 

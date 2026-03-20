@@ -86,8 +86,10 @@ sequenceDiagram
         loop 各翻訳済みユニット
             Cmd->>Cmd: primaryUnit / localUnit を解決
             Cmd->>Proc: processUnit(primaryUnit, localUnit)
-            Proc->>Store: getExistingTmSet(primaryUnit, localLang)
-            Store-->>Proc: {tuid, primarySentence, localSentence?}[]
+            Proc->>Store: getEntriesByUnitPath(primaryUnitPath, primaryLang, localLang)
+            Store-->>Proc: TmEntry[]（unitPath一致の全件）
+            Proc->>Proc: filterRelevantEntries(allEntries, primaryUnitText, ...)
+            Proc-->>Proc: {tuid, primarySentence, localSentence?}[]
             Proc->>Proc: update必須tuid を導出
             Proc->>AI: generateEntries(primaryUnit, localUnit, existing TM set, update必須tuid)
             AI-->>Proc: new|update[]

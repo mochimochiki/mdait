@@ -6,7 +6,6 @@
  * @module commands/tm/commit-processor
  */
 import { calculateHash } from "../../core/hash/hash-calculator";
-import { SentenceSplitter } from "../../core/tm/sentence-splitter";
 import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { TmxStore } from "../../core/tm/tmx-store";
 import type { ExistingTmSetItem, TmCommitPlanItem, TmEntry } from "../../core/tm/types";
@@ -14,7 +13,6 @@ import { Logger } from "../../utils/logger";
 import type { TmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();
-const sentenceSplitter = new SentenceSplitter();
 
 export interface TmCommitResolvedUnit {
 	content: string;
@@ -87,15 +85,15 @@ export class TmCommitProcessor {
 		const strippedPrimaryUnit = stripMarkdown(primaryUnit.content);
 		const strippedLocalUnit = stripMarkdown(localUnit.content);
 
-		const existingTmSet = this.store.getExistingTmSet(
+		const allEntries = this.store.getEntriesByUnitPath(primaryUnit.unitPath, this.primaryLang, localUnit.lang);
+		const existingTmSet = this.filterRelevantEntries(
+			allEntries,
 			strippedPrimaryUnit,
-			this.primaryLang,
-			localUnit.lang,
-			primaryUnit.unitPath,
 			primaryUnit.unitHash,
 			strippedLocalUnit,
 			localUnit.unitPath,
 			localUnit.unitHash,
+			localUnit.lang,
 		);
 		const requiredUpdateTuids = this.deriveRequiredUpdateTuids(
 			existingTmSet,
@@ -218,13 +216,6 @@ export class TmCommitProcessor {
 		localUnitHash: string,
 		strippedLocalUnit: string,
 	): string[] {
-		const currentLocalSentences = new Set(
-			sentenceSplitter
-				.split(strippedLocalUnit, localLang)
-				.map((sentence) => sentence.trim())
-				.filter((sentence) => sentence.length > 0),
-		);
-
 		return existingTmSet
 			.filter((item) => {
 				const entry = this.store.findByTuid(item.tuid);
@@ -232,12 +223,72 @@ export class TmCommitProcessor {
 				if (!localVariant) {
 					return true;
 				}
-				if (item.localSentence && currentLocalSentences.has(item.localSentence.trim())) {
+				if (item.localSentence && strippedLocalUnit.includes(item.localSentence.trim())) {
 					return false;
 				}
 				return !localUnitHash || localVariant.unitHash !== localUnitHash;
 			})
 			.map((item) => item.tuid);
+	}
+
+	/**
+	 * `getEntriesByUnitPath` の全件から、現在の commit コンテキストに関連するエントリのみを抽出する。
+	 * （旧 `getExistingTmSet` のフィルタロジックを Commands 層に移植）
+	 */
+	private filterRelevantEntries(
+		allEntries: TmEntry[],
+		primaryUnitText: string,
+		primaryUnitHash: string | undefined,
+		localUnitText: string | undefined,
+		localUnitPath: string | undefined,
+		localUnitHash: string | undefined,
+		localLang: string,
+	): ExistingTmSetItem[] {
+		const sentenceCandidates = new Map<string, TmEntry[]>();
+		for (const entry of allEntries) {
+			if (!primaryUnitText.includes(entry.primary.trim())) continue;
+			const key = entry.primary.trim();
+			const bucket = sentenceCandidates.get(key) ?? [];
+			bucket.push(entry);
+			sentenceCandidates.set(key, bucket);
+		}
+
+		const results: ExistingTmSetItem[] = [];
+		for (const candidates of sentenceCandidates.values()) {
+			const prioritizedCandidates =
+				primaryUnitHash && candidates.some((c) => c.variants.get(this.primaryLang)?.unitHash === primaryUnitHash)
+					? candidates.filter((c) => c.variants.get(this.primaryLang)?.unitHash === primaryUnitHash)
+					: candidates;
+
+			for (const entry of prioritizedCandidates) {
+				const localVariant = entry.variants.get(localLang);
+				const matchesPrimaryHash = Boolean(
+					primaryUnitHash && entry.variants.get(this.primaryLang)?.unitHash === primaryUnitHash,
+				);
+				const matchesLocalHash = Boolean(
+					localVariant?.unitHash &&
+						localUnitHash &&
+						localVariant.unitHash === localUnitHash &&
+						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
+				);
+				const matchesLocalText = Boolean(
+					localVariant?.text &&
+						(localUnitText ?? "").includes(localVariant.text.trim()) &&
+						(!localUnitPath || !localVariant.unitPath || localVariant.unitPath === localUnitPath),
+				);
+				const matchesPrimarySentenceOnly = !localVariant;
+				if (!matchesPrimaryHash && !matchesLocalHash && !matchesLocalText && !matchesPrimarySentenceOnly) {
+					continue;
+				}
+				results.push({
+					tuid: entry.tuid,
+					primarySentence: entry.primary,
+					localSentence: localVariant?.text ?? null,
+				});
+			}
+		}
+
+		return results.sort((a, b) => a.tuid.localeCompare(b.tuid));
 	}
 
 	private guardPlanItems(
@@ -330,9 +381,6 @@ export class TmCommitProcessor {
 		if (!strippedPrimaryUnit.includes(item.primary) || !strippedLocalUnit.includes(item.local)) {
 			return "primary/local must be subset of stripped units";
 		}
-		if (!this.isSingleSentence(item.primary, this.primaryLang) || !this.isSingleSentence(item.local, localLang)) {
-			return "primary/local must be single sentences";
-		}
 
 		if (item.type === "new") {
 			if (item.tuid !== "-") {
@@ -358,10 +406,6 @@ export class TmCommitProcessor {
 			return "update item is a no-op";
 		}
 		return null;
-	}
-
-	private isSingleSentence(text: string, lang: string): boolean {
-		return sentenceSplitter.split(text, lang).length === 1;
 	}
 
 	private buildRetryReason(invalidReasons: ReadonlyMap<string, string>): string {

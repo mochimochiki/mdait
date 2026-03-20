@@ -32,7 +32,7 @@ function createResolvedUnit(overrides?: Partial<TmCommitResolvedUnit>): TmCommit
 }
 
 suite("TmCommitProcessor", () => {
-	test("existing TM set と update必須tuid を期待通り導出できる", () => {
+	test("existing TM set と update必須tuid を期待通り導出できる", async () => {
 		const store = new TmxStore();
 		store.addEntry({
 			tuid: PRIMARY_TUID,
@@ -48,28 +48,26 @@ suite("TmCommitProcessor", () => {
 			variants: new Map([["en", { text: "Another sentence.", unitPath: "docs/guide.md", unitHash: "unit-primary-1" }]]),
 		});
 
-		const processor = new TmCommitProcessor(store, new MockTmEntryGenerator() as unknown as TmEntryGenerator, "en");
-		const existing = store.getExistingTmSet(
-			"Primary sentence. Another sentence.",
-			"en",
-			"ja",
-			"docs/guide.md",
-			"unit-primary-1",
-			"新しい訳文。",
-			"docs/guide.ja.md",
-			"new-local-hash",
-		);
-		assert.deepStrictEqual(
-			existing.map((item) => item.tuid),
-			[PRIMARY_TUID, "b2c3d4e5"],
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [[]];
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en", 0);
+		await processor.processUnit(
+			createResolvedUnit({ content: "Primary sentence. Another sentence." }),
+			createResolvedUnit({
+				content: "新しい訳文。 Another sentence.",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
 		);
 
-		const currentLocalText = "新しい訳文。 Another sentence.";
-		const required = processor.deriveRequiredUpdateTuids(existing, "ja", "new-local-hash", currentLocalText);
-		assert.deepStrictEqual(required, [PRIMARY_TUID, "b2c3d4e5"]);
+		assert.strictEqual(generator.requests.length, 1);
+		const request = generator.requests[0];
+		assert.deepStrictEqual(request.existingTmSet.map((item) => item.tuid).sort(), ["b2c3d4e5", PRIMARY_TUID].sort());
+		assert.deepStrictEqual(request.requiredUpdateTuids.sort(), ["b2c3d4e5", PRIMARY_TUID].sort());
 	});
 
-	test("現在の local 文面が既に反映済みなら required update にしない", () => {
+	test("現在の local 文面が既に反映済みなら required update にしない", async () => {
 		const store = new TmxStore();
 		store.addEntry({
 			tuid: PRIMARY_TUID,
@@ -80,21 +78,22 @@ suite("TmCommitProcessor", () => {
 			]),
 		});
 
-		const processor = new TmCommitProcessor(store, new MockTmEntryGenerator() as unknown as TmEntryGenerator, "en");
-		const existing = store.getExistingTmSet(
-			"Primary sentence.",
-			"en",
-			"ja",
-			"docs/guide.md",
-			"unit-primary-1",
-			"現在訳文",
-			"docs/guide.ja.md",
-			"new-local-hash",
+		const generator = new MockTmEntryGenerator();
+		generator.responses = [[]];
+		const processor = new TmCommitProcessor(store, generator as unknown as TmEntryGenerator, "en");
+
+		await processor.processUnit(
+			createResolvedUnit({ content: PRIMARY_SENTENCE }),
+			createResolvedUnit({
+				content: "現在訳文",
+				lang: "ja",
+				unitPath: "docs/guide.ja.md",
+				unitHash: "new-local-hash",
+			}),
 		);
 
-		const currentLocalText = "現在訳文";
-		const required = processor.deriveRequiredUpdateTuids(existing, "ja", "new-local-hash", currentLocalText);
-		assert.deepStrictEqual(required, []);
+		assert.strictEqual(generator.requests.length, 1);
+		assert.deepStrictEqual(generator.requests[0].requiredUpdateTuids, []);
 	});
 
 	test("guard が欠落・subset違反・文粒度違反を弾く", async () => {
