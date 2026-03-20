@@ -1,6 +1,6 @@
 ---
 description: 設計について雑談します
-tools: [vscode/askQuestions, read/readFile, agent, edit/createFile, edit/editFiles, search, web/fetch, browser, todo]
+tools: [vscode/askQuestions, execute/getTerminalOutput, execute/runInTerminal, read/readFile, agent, edit/createFile, edit/editFiles, search, web/fetch, browser, todo]
 ---
 
 **IMPORTANT: 会話の終わらせ方**
