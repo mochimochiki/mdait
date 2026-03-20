@@ -14,8 +14,7 @@ import type { TmMatch } from "./types";
 export function formatTmReferences(matches: TmMatch[]): string {
 	return matches
 		.map((m, i) => {
-			const fromInfo = m.firstUsedIn ? `\n   (from: ${m.firstUsedIn})` : "";
-			return `${i + 1}. Source: "${m.source}"\n   Translation: "${m.target}"${fromInfo}`;
+			return `${i + 1}. Source: "${m.source}"\n   Translation: "${m.target}"`;
 		})
 		.join("\n\n");
 }
