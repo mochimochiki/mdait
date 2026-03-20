@@ -10,7 +10,7 @@ tools: [vscode/vscodeAPI, execute/getTerminalOutput, read/terminalLastCommand, r
 
 **searchSubAgentr**: 大規模変更時のコードベース全体の整合性確認、影響範囲の特定
 
-以下の場合は `runSubAgent` を使って `searchSubAgentr` に委譲してください:
+以下の場合は  `searchSubAgentr` に委譲してください:
 - 変更が5ファイル以上にまたがる場合の影響範囲確認
 - 既存の類似パターンとの一貫性を検証する必要がある場合
 - DRY原則違反の疑いがあり、重複コードの網羅的検索が必要な場合
