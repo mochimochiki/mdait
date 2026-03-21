@@ -102,7 +102,8 @@ export class OpenAIProvider implements AIService {
 					model: this.model,
 					messages: openaiMessages,
 					stream: false,
-					max_tokens: this.maxOutputTokens,
+					store: false,
+					max_completion_tokens: this.maxOutputTokens,
 				}),
 				signal: controller.signal,
 			});
