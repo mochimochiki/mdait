@@ -10,6 +10,10 @@ suite("Configuration primaryLang設定のテスト", () => {
 	let backupContent: string | undefined;
 
 	function writeConfig(config: unknown): void {
+		const dir = path.dirname(configPath);
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir, { recursive: true });
+		}
 		fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 	}
 

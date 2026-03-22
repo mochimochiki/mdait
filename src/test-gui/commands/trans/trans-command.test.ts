@@ -43,9 +43,9 @@ suite("transコマンドE2E", () => {
 		}
 	}
 
-	setup(() => {
+	setup(async () => {
 		// UnitRegistryManagerとunit-registryファイルをリセット
-		resetMdaitState();
+		await resetMdaitState();
 		// コンテンツディレクトリをサンプルからコピー
 		copyDirSync(sampleContentDir, contentDir);
 	});

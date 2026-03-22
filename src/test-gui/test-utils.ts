@@ -6,6 +6,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { Configuration } from "../config/configuration";
 import { StatusManager } from "../core/status/status-manager";
 import { UnitRegistryManager } from "../core/unit-registry/unit-registry-manager";
 
@@ -82,7 +83,7 @@ export function cleanupTestWorkspace(suiteId: string): void {
  * unit-registryファイルを削除し、UnitRegistryManagerをリセット
  * StatusManagerもリセットして前のテストの状態を引き継がないようにする
  */
-export function resetMdaitState(): void {
+export async function resetMdaitState(): Promise<void> {
 	const { workspaceDir } = getTestBasePaths();
 	const mdaitDir = join(workspaceDir, ".mdait");
 	const unitRegistryPath = join(mdaitDir, "unit-registry");
@@ -104,6 +105,13 @@ export function resetMdaitState(): void {
 		StatusManager.getInstance().dispose();
 	} catch {
 		// dispose済みの場合は無視
+	}
+
+	// Configuration を再初期化（前のテストで dispose されている可能性があるため）
+	try {
+		await Configuration.getInstance().initialize();
+	} catch {
+		// 設定ファイルがない場合は無視
 	}
 }
 
