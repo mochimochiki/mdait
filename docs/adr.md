@@ -4,6 +4,27 @@
 
 ---
 
+## ADR-260322-0000: TM検索クエリを行単位分割し、既存API（findCandidatesByTrigram / rankTmEntries）を無変更で再利用する
+
+### 背景
+TMエントリは文単位だが、TM検索クエリはユニット全体テキストで行われており、長いユニットでJaccard類似度が希薄化していた。行単位分割を導入する際、P8原則（normalize処理はモジュール内部に閉じ込める）との整合性と、既存APIの変更範囲が設計課題となった。
+
+### 決定
+新モジュール `tm-line-search.ts` をcore/tm/内に配置し、内部で `normalizeForTm` → 行分割 → 各行をそのまま既存 `findCandidatesByTrigram` / `rankTmEntries` に渡す構成とする。`normalizeForTm` のべき等性（正規化済みテキストに再適用しても結果不変）を活用し、既存APIは一切変更しない。revise時の変更行検出はunified diff解析ではなく正規化テキスト同士の集合差分で行う。
+
+### 理由
+`normalizeForTm` = `stripMarkdown` + `toLowerCase` + `trim` は正規化済みプレーンテキストに再適用しても変化しない。この性質により、行単位検索のオーケストレータが正規化後の行を既存APIに渡しても二重正規化の実害がなく、`findCandidatesByTrigram` / `rankTmEntries` に `preNormalized` フラグや新メソッドを追加する必要がない。変更影響範囲を最小化しつつP8を維持できる。
+
+### 判断の補足
+- 守ること: P8（外部呼び出し元は生テキストを渡す）。`lookupTmReferences` は生テキストを `searchTmByLines` に渡すだけ
+- 避けること: 既存の `TmxStore` / `tm-ranker` のシグネチャ変更。`preNormalized` フラグの導入
+- 却下案: `findCandidatesByTrigramSet(trigrams)` の新メソッド追加 → べき等性で不要であり、APIの増殖を避けた
+- 影響: 各行で `normalizeForTm` が重複実行される（内部で markdown-it パース）。短い行に対するパースコストは無視できるが、行数が極端に多い場合は軽微なオーバーヘッドとなる。受容できると判断
+- 未決: 特になし
+- 詳細: [tasks/do/260322_TM検索行単位化revise対応.md](../tasks/do/260322_TM検索行単位化revise対応.md)
+
+---
+
 ## ADR-260320-0000: TM normalize 処理をモジュール内部に閉じ込める
 
 ### 背景

@@ -69,7 +69,7 @@
           "description": "Heading level at which to automatically insert mdait markers (1-6, or 0 to disable). Can be overridden in frontmatter.",
           "minimum": 0,
           "maximum": 6,
-          "default": 2
+          "default": 3
         },
         "autoDelete": {
           "type": "boolean",
@@ -264,6 +264,13 @@
           "maximum": 5,
           "default": 1,
           "examples": [1, 2, 3, 5]
+        },
+        "minQueryLength": {
+          "type": "integer",
+          "description": "Minimum character count for a normalized line to be used as a TM search query. Lines shorter than this are excluded to avoid noise from table fragments etc.",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
         }
       },
       "additionalProperties": false

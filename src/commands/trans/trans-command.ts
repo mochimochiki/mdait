@@ -29,10 +29,9 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { rankTmEntries } from "../../core/tm/tm-ranker";
+import { searchTmByLines } from "../../core/tm/tm-line-search";
 import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
-import type { TmMatch } from "../../core/tm/types";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
@@ -382,6 +381,7 @@ async function translateUnit(
 		}
 
 		// revise@{oldhash}形式の場合、スナップショットからdiffを生成（ソースコンテンツ取得後）
+		let oldSourceContent: string | undefined;
 		if (unit.marker?.needsRevision()) {
 			const oldhash = unit.marker.getOldHashFromNeed();
 			if (oldhash) {
@@ -390,6 +390,7 @@ async function translateUnit(
 					const oldContent = await unitRegistryManager.loadUnitRegistry(oldhash);
 					if (oldContent && hasDiff(oldContent, sourceContent)) {
 						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
+						oldSourceContent = oldContent;
 						logger.debug("trans", "Generated diff for revision", { oldhash });
 					}
 				} catch (error) {
@@ -400,7 +401,7 @@ async function translateUnit(
 
 		// TM参照の検索（tm.enabledかつTmxStoreが利用可能な場合）
 		try {
-			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang);
+			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
 			if (tmReferences) {
 				context.tmReferences = tmReferences;
 			}
@@ -941,7 +942,12 @@ async function translateFrontmatter_CoreProc(
  * @param targetLang ターゲット言語コード
  * @returns フォーマット済みTM参照文字列、またはundefined
  */
-export function lookupTmReferences(sourceContent: string, sourceLang: string, targetLang: string): string | undefined {
+export function lookupTmReferences(
+	sourceContent: string,
+	sourceLang: string,
+	targetLang: string,
+	oldSourceContent?: string,
+): string | undefined {
 	const config = Configuration.getInstance();
 	if (!config.getTmEnabled()) {
 		return undefined;
@@ -959,32 +965,19 @@ export function lookupTmReferences(sourceContent: string, sourceLang: string, ta
 		return undefined;
 	}
 
-	// trigram インデックスで粗い絞り込み
-	const candidates = store.findCandidatesByTrigram(sourceContent, sourceLang, 200);
-	if (candidates.length === 0) {
-		return undefined;
-	}
-
-	// trigram Jaccard + MMR でスコアリング（候補 trigram はキャッシュから参照）
-	const maxReferences = config.getTmMaxReferences();
-	const ranked = rankTmEntries(sourceContent, candidates, {
-		topK: maxReferences,
-		lang: sourceLang,
-		trigramCache: store.getTrigramCache(),
-	});
-	if (ranked.length === 0) {
-		return undefined;
-	}
-
-	// targetLang variant があるものに絞り込み、TmMatch に変換
-	const matches: TmMatch[] = ranked
-		.filter((e) => e.variants.has(targetLang))
-		.map((e) => ({
-			sentenceHash: e.tuid,
-			source: e.variants.get(sourceLang)?.text ?? "",
-			target: e.variants.get(targetLang)?.text ?? "",
-			firstUsedIn: "",
-		}));
+	// 行単位TM検索に委譲
+	const matches = searchTmByLines(
+		sourceContent,
+		store,
+		{
+			minQueryLength: config.getTmMinQueryLength(),
+			maxReferences: config.getTmMaxReferences(),
+			sourceLang,
+			targetLang,
+			trigramCache: store.getTrigramCache(),
+		},
+		oldSourceContent,
+	);
 
 	if (matches.length === 0) {
 		return undefined;

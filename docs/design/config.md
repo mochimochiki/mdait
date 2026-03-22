@@ -128,6 +128,7 @@ sequenceDiagram
 | `tm.enabled` | `true` | `false`でtm-commitとTM参照を両方無効化 |
 | `tm.maxReferences` | `5` | プロンプトに含めるTM参照の最大数 |
 | `tm.retryLimit` | `1` | tm-commit の focused retry 上限 |
+| `tm.minQueryLength` | `10` | 行単位TM検索時、normalize後の行がこの文字数未満の場合は検索対象から除外（範囲: 1–100） |
 
 **設計意図**: プロンプトの肥大化を防ぎつつ、一貫性に寄与する十分な参照を提供します。
 

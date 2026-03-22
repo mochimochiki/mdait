@@ -14,6 +14,9 @@
   "trans": {
     "contextSize": 1,
     "retryLimit": 1,
+    "markdown": {
+      "skipCodeBlocks": true
+    },
     "frontmatter": {
       "keys": ["title", "description"]
     }
@@ -21,10 +24,12 @@
   "primaryLang": "en",
   "sync": {
     "level": 3,
+    "autoDelete": true,
     "autoSyncOnSave": true
   },
   "tm": {
-    "retryLimit": 1
+    "retryLimit": 1,
+    "maxReferences": 5
   },
   "terms": {
     "filename": "terms.csv"

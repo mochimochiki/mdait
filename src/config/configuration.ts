@@ -52,6 +52,8 @@ export interface TmConfig {
 	maxReferences: number;
 	/** tm-commit focused retry の上限 */
 	retryLimit: number;
+	/** TM検索時の最低クエリ文字数（normalize後の行がこの文字数未満の場合除外） */
+	minQueryLength: number;
 	[key: string]: unknown;
 }
 
@@ -112,6 +114,7 @@ interface MdaitConfig {
 		enabled?: boolean;
 		maxReferences?: number;
 		retryLimit?: number;
+		minQueryLength?: number;
 	};
 	prompts?: {
 		"trans.translate"?: string;
@@ -196,6 +199,7 @@ export class Configuration {
 		enabled: true,
 		maxReferences: 5,
 		retryLimit: 1,
+		minQueryLength: 10,
 	};
 
 	/**
@@ -454,6 +458,9 @@ export class Configuration {
 				if (config.tm.retryLimit !== undefined) {
 					this.tm.retryLimit = Math.min(5, Math.max(1, config.tm.retryLimit));
 				}
+				if (config.tm.minQueryLength !== undefined) {
+					this.tm.minQueryLength = Math.max(1, Math.min(100, config.tm.minQueryLength));
+				}
 			}
 
 			// 設定ファイルの監視を開始（初回のみ）
@@ -590,6 +597,14 @@ export class Configuration {
 	 */
 	public getTmRetryLimit(): number {
 		return this.tm.retryLimit;
+	}
+
+	/**
+	 * TM検索時の最低クエリ文字数を取得
+	 * @returns 最低クエリ文字数
+	 */
+	public getTmMinQueryLength(): number {
+		return this.tm.minQueryLength;
 	}
 
 	/**

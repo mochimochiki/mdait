@@ -44,10 +44,10 @@
 
 ### tm-commit 完了後の登録内容プレビュー
 
-**背景・目的**  
+**背景・目的**
 `tm-commit` 完了後に「何が新規登録されて何が更新されたか」をサッと確認したい。現状は件数通知のみで、内容を確認するには tmx ファイルを直接開くか git diff する必要がある。
 
-**コンセプト**  
+**コンセプト**
 コミット完了後、その場限りの仮想ドキュメントをエディタで開き、今回の登録/更新内容を一覧表示する。ファイルシステムには残らず、閉じたら終わり。
 
 **表示形式イメージ**
@@ -70,22 +70,22 @@
 - 0件の場合は開かない（件数通知のみ）
 
 **想定問答**
-- Q: git diff で見ればいいのでは？  
+- Q: git diff で見ればいいのでは？
   A: xml は見にくい。手間がかかる。「作業完了後にすぐ確認したい」という UX 改善。
-- Q: OutputChannel への追記ではダメ？  
+- Q: OutputChannel への追記ではダメ？
   A: OutputChannel は流れていくので一覧確認に向かない。エディタで開くほうがサッと見て閉じやすい。
-- Q: ファイルに残さなくていい？  
+- Q: ファイルに残さなくていい？
   A: 仮想ドキュメントなので閉じたら消える。永続化したければ tmx 本体を git 管理すればよい。
 
 ### sync時のTMクリーンアップ実装
 
-**背景・目的**  
+**背景・目的**
 `tm-commit` によって TM が蓄積されていく一方、sync 時に削除・改訂された primaryLang のユニットに対応する obsolete な TU が TM に残り続ける。これを定期的に除去する機能（TM cleanup）が未実装なので実装する。
 
-**コンセプト**  
+**コンセプト**
 sync 後のポストプロセスとして TM cleanup を呼び出す。cleanup は「primary sentence がまだ原稿に存在するか」だけを判定軸にして obsolete TU を削除する。sync / cleanup / tm-commit の責務分離を維持すること（tm.md 6.3節参照）。
 
-**設計の根拠**  
+**設計の根拠**
 - 設計仕様: [tasks/done/tm.md](tasks/done/tm.md) 6章・8.2節シーケンス図参照
 - cleanup は 2 段階判定: (1) unit情報から削除候補を抽出、(2) primary sentence の現存性を照合
 - 照合は normalize + 完全一致（`tm-text-normalizer.ts` 流用）
@@ -94,17 +94,17 @@ sync 後のポストプロセスとして TM cleanup を呼び出す。cleanup �
 - `TmxStore` に削除メソッド（`removeByTuid`）を追加する必要あり
 
 **想定問答**
-- Q: cleanup しないと何が困る？  
+- Q: cleanup しないと何が困る？
   A: 翻訳時の TM 参照でノイズが増える。削除・改訂済みの古い訳が参考例として出てきてしまう。
-- Q: cleanup を tm-commit 側に混ぜればいいのでは？  
+- Q: cleanup を tm-commit 側に混ぜればいいのでは？
   A: tm-commit は「new を登録するまで」が責務。混ぜると責務が曖昧になり、cleanup だけ独立してテストしにくくなる。
-- Q: sentence 完全一致ではなく fuzzy でよいのでは？  
+- Q: sentence 完全一致ではなく fuzzy でよいのでは？
   A: 誤削除のリスクがあるため、normalize + 完全一致を基準とする。
 
 ### `getEntriesByUnitPath` を `getEntriesForCommit` に改名
 
-**背景・目的**  
+**背景・目的**
 x-unit/x-unit-hash フィールド削除に伴い、`TmxStore.getEntriesByUnitPath(unitPath, localLang)` は unitPath での絞り込みをせず primaryLang を持つ全エントリを返すようになった。メソッド名と実際の動作が乖離しているため、命名を実態に合わせて改める。
 
-**コンセプト**  
+**コンセプト**
 `getEntriesForCommit(primaryLang: string)` のような名称に変更し、引数も実際に使われている `primaryLang` のみにする。呼び出し元（`commit-processor.ts`）も合わせて修正すること。

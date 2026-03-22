@@ -2,6 +2,16 @@
 
 (新しい情報が上)
 
+## 2026/03/22: TM検索を行単位に分割、revise時diff対応
+
+**背景:** TM登録は文単位だが、TM検索はユニット全体をクエリにしていた。長いユニットでJaccard類似度が薄まりマッチ精度が低下。revise時も変更のない文に対するTMがノイズになっていた。
+
+**意思決定:** normalizeForTm後に改行分割して行ごとにTM検索する方式を採用。SentenceSplitterではなく改行分割としたのはhardwrap前提で段落区切り=改行であるため。revise時はold/new正規化テキストの集合差分で変更行のみを対象にする。短文フィルタ（デフォルト10文字）でテーブル断片等のノイズも除外。
+
+**実装:** 新モジュール`tm-line-search.ts`をcore/tm/に追加し、既存のTmxStore・tm-rankerは無変更で再利用。設定`tm.minQueryLength`を追加。レビューでwishlist.mdの無関係項目が誤削除されていた点を修正。
+
+**詳細:** [tasks/done/260322_TM検索行単位化revise対応.md](done/260322_TM検索行単位化revise対応.md)
+
 ## 2026/03/20: mdait.json を .mdait/mdait.json に移動
 
 **背景:** `mdait.json` がワークスペースルートに置かれており、他の mdait 管理ファイル（terms、TM、unit-registry）が `.mdait/` 配下にあるのと場所が統一されていなかった。リリース前なので互換性維持は不要と判断。
