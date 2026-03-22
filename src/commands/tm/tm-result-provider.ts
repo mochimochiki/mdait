@@ -67,22 +67,26 @@ export function generateContent(result: { newItems: TmResultItem[]; updatedItems
 	lines.push(`## New (${result.newItems.length})`);
 	if (result.newItems.length === 0) {
 		lines.push("(none)");
+		lines.push("");
 	} else {
 		for (const item of result.newItems) {
-			lines.push(`[NEW] "${item.primary}" \u2192 "${item.local}"`);
+			lines.push(`"${item.primary}"`);
+			lines.push(`  \u2192 "${item.local}"`);
+			lines.push("");
 		}
 	}
-	lines.push("");
 
 	lines.push(`## Updated (${result.updatedItems.length})`);
 	if (result.updatedItems.length === 0) {
 		lines.push("(none)");
+		lines.push("");
 	} else {
 		for (const item of result.updatedItems) {
-			lines.push(`[UPDATE] "${item.primary}" \u2192 "${item.local}"`);
+			lines.push(`"${item.primary}"`);
+			lines.push(`  \u2192 "${item.local}"`);
+			lines.push("");
 		}
 	}
-	lines.push("");
 
 	return lines.join("\n");
 }

@@ -95,8 +95,8 @@ sequenceDiagram
     participant Ranker as tm-ranker
 
     rect rgb(230,240,255)
-        Note over Search: ⓪ 前処理（行単位分割）
-        Note over Search: normalizeForTm(sourceContent)<br/>→ 改行分割 → 短文フィルタ（minQueryLength未満除外）<br/>[revise時] 旧ソース正規化行との差分で変更行のみ抽出
+        Note over Search: ⓪ 前処理（文単位分割）
+        Note over Search: normalizeForTm(sourceContent)<br/>→ 改行分割 → Intl.Segmenter(sourceLang)で文分割 → 短文フィルタ（minQueryLength未満除外）<br/>[revise時] 旧ソース正規化行との差分で変更行のみ抽出
     end
 
     loop 各queryLine

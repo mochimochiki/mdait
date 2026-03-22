@@ -235,4 +235,38 @@ suite("searchTmByLines", () => {
 		// 全く無関係なエントリはスコア閾値でフィルタされる
 		assert.strictEqual(result.length, 0, "無関係なエントリはフィルタされること");
 	});
+
+	test("日本語の句点（。）で文単位分割されること", () => {
+		// makeEntry(tuid, enText, jaText) → variants: { en: enText, ja: jaText }
+		// sourceLang="ja"なのでrankTmEntriesはja variantのテキストでマッチ判定する
+		const entries = [
+			makeEntry("t1", "First sentence.", "最初の文です。"),
+			makeEntry("t2", "Second sentence.", "次の文です。"),
+		];
+		const store = new StubTmxStore(entries);
+		// 句点で区切られた2文が1行に結合されたテキスト
+		const sourceContent = "最初の文です。次の文です。";
+		const result = searchTmByLines(sourceContent, store as never, defaultOptions({
+			sourceLang: "ja",
+			targetLang: "en",
+			minQueryLength: 4,
+		}));
+		// 文分割により各文がTMエントリにマッチ可能になる
+		assert.ok(result.length >= 1, "文分割により少なくとも1件ヒットすること");
+	});
+
+	test("文分割後にminQueryLengthフィルタが適用されること", () => {
+		const entries = [
+			makeEntry("t1", "This is a sufficiently long sentence for matching", "十分な長さの文"),
+		];
+		const store = new StubTmxStore(entries);
+		// 英語テキスト: 短い文と長い文が混在
+		const sourceContent = "Hi. This is a sufficiently long sentence for matching.";
+		const result = searchTmByLines(sourceContent, store as never, defaultOptions({
+			minQueryLength: 10,
+		}));
+		// "Hi." は minQueryLength=10 未満なのでフィルタされる
+		// 長い文のみが検索対象
+		assert.ok(result.length <= 1, "短文がフィルタされ検索対象が限定されること");
+	});
 });

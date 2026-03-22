@@ -9,9 +9,9 @@ suite("generateContent", () => {
 		};
 		const content = generateContent(result);
 		assert.ok(content.includes("## New (1)"));
-		assert.ok(content.includes('[NEW] "Hello." \u2192 "\u3053\u3093\u306b\u3061\u306f\u3002"'));
+		assert.ok(content.includes('"Hello."\n  \u2192 "\u3053\u3093\u306b\u3061\u306f\u3002"'));
 		assert.ok(content.includes("## Updated (1)"));
-		assert.ok(content.includes('[UPDATE] "Goodbye." \u2192 "\u3055\u3088\u3046\u306a\u3089\u3002"'));
+		assert.ok(content.includes('"Goodbye."\n  \u2192 "\u3055\u3088\u3046\u306a\u3089\u3002"'));
 	});
 
 	test("0件の場合、(none) が両セクションに表示される", () => {
@@ -33,7 +33,7 @@ suite("generateContent", () => {
 		assert.ok(content.includes("## New (0)"));
 		assert.ok(content.includes("(none)"));
 		assert.ok(content.includes("## Updated (1)"));
-		assert.ok(content.includes('[UPDATE] "Existing sentence." \u2192 "\u65e2\u5b58\u6587"'));
+		assert.ok(content.includes('"Existing sentence."\n  \u2192 "\u65e2\u5b58\u6587"'));
 	});
 
 	test("特殊文字（& < > など）を含む場合も正しく出力される", () => {
@@ -42,7 +42,7 @@ suite("generateContent", () => {
 			updatedItems: [],
 		};
 		const content = generateContent(result);
-		assert.ok(content.includes('[NEW] "A & B < C > D" \u2192 "\u7279\u6b8a\u6587\u5b57\u30c6\u30b9\u30c8"'));
+		assert.ok(content.includes('"A & B < C > D"\n  \u2192 "\u7279\u6b8a\u6587\u5b57\u30c6\u30b9\u30c8"'));
 	});
 
 	test("ヘッダーにタイムスタンプが含まれる", () => {

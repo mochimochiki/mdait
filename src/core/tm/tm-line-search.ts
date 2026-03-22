@@ -33,15 +33,20 @@ const TRIGRAM_CANDIDATE_LIMIT = 50;
 const MIN_SCORE_THRESHOLD = 0.15;
 
 /**
- * 正規化テキストを行分割し、空行除去・trim・短文フィルタ・重複除去を行う。
+ * 正規化テキストを行分割し、各行をIntl.Segmenterで文単位に分割する。
+ * 空行除去・trim・短文フィルタ・重複除去を行う。
  */
-function splitToQueryLines(normalizedText: string, minQueryLength: number): Set<string> {
+function splitToQuerySentences(normalizedText: string, lang: string, minQueryLength: number): Set<string> {
 	const lines = normalizedText.split("\n");
+	const segmenter = new Intl.Segmenter(lang, { granularity: "sentence" });
 	const result = new Set<string>();
 	for (const raw of lines) {
 		const trimmed = raw.trim();
-		if (trimmed.length >= minQueryLength) {
-			result.add(trimmed);
+		for (const { segment } of segmenter.segment(trimmed)) {
+			const s = segment.trim();
+			if (s.length >= minQueryLength) {
+				result.add(s);
+			}
 		}
 	}
 	return result;
@@ -66,12 +71,12 @@ export function searchTmByLines(
 
 	// 1. 正規化・分割
 	const normalizedNew = normalizeForTm(sourceContent);
-	const queryLines = splitToQueryLines(normalizedNew, minQueryLength);
+	const queryLines = splitToQuerySentences(normalizedNew, sourceLang, minQueryLength);
 
 	// 2. revise差分フィルタ
 	if (oldSourceContent !== undefined) {
 		const normalizedOld = normalizeForTm(oldSourceContent);
-		const oldLineSet = splitToQueryLines(normalizedOld, 0);
+		const oldLineSet = splitToQuerySentences(normalizedOld, sourceLang, 0);
 		for (const line of queryLines) {
 			if (oldLineSet.has(line)) {
 				queryLines.delete(line);

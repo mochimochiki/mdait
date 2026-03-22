@@ -42,41 +42,6 @@
 
 - UserGuideを作成し、Readmeからリンクを張る
 
-### tm-commit 完了後の登録内容プレビュー
-
-**背景・目的**
-`tm-commit` 完了後に「何が新規登録されて何が更新されたか」をサッと確認したい。現状は件数通知のみで、内容を確認するには tmx ファイルを直接開くか git diff する必要がある。
-
-**コンセプト**
-コミット完了後、その場限りの仮想ドキュメントをエディタで開き、今回の登録/更新内容を一覧表示する。ファイルシステムには残らず、閉じたら終わり。
-
-**表示形式イメージ**
-```
-# TM Commit Results - 2026-03-20 15:30
-
-## New (3)
-[NEW] "This is an introduction." → "これは導入文です。"
-[NEW] "Click OK to proceed." → "OK をクリックして続行します。"
-...
-
-## Updated (1)
-[UPDATE] "The file was saved." → "ファイルが保存されました。"
-```
-
-**実装ポイント**
-- `TextDocumentContentProvider` で `mdait-tm-result:` スキームの仮想ドキュメントを作成
-- `applyPlanItems` の戻り値に実際の文テキスト（primary/local）を含める
-- 完了後 `vscode.workspace.openTextDocument` + `vscode.window.showTextDocument` で開く
-- 0件の場合は開かない（件数通知のみ）
-
-**想定問答**
-- Q: git diff で見ればいいのでは？
-  A: xml は見にくい。手間がかかる。「作業完了後にすぐ確認したい」という UX 改善。
-- Q: OutputChannel への追記ではダメ？
-  A: OutputChannel は流れていくので一覧確認に向かない。エディタで開くほうがサッと見て閉じやすい。
-- Q: ファイルに残さなくていい？
-  A: 仮想ドキュメントなので閉じたら消える。永続化したければ tmx 本体を git 管理すればよい。
-
 ### sync時のTMクリーンアップ実装
 
 **背景・目的**
@@ -108,3 +73,26 @@ x-unit/x-unit-hash フィールド削除に伴い、`TmxStore.getEntriesByUnitPa
 
 **コンセプト**
 `getEntriesForCommit(primaryLang: string)` のような名称に変更し、引数も実際に使われている `primaryLang` のみにする。呼び出し元（`commit-processor.ts`）も合わせて修正すること。
+
+### TM検索クエリの文単位分割（ハイブリッドアプローチ）
+
+**背景・目的**
+TM登録時はLLMが文単位でアライメントするためTMエントリは「文」粒度だが、TM検索時は`normalizeForTm` → 改行分割で「段落/リスト項目」粒度になっている。この粒度ギャップにより、1段落に複数文を含むケース（特に論文・技術文書）でJaccardスコアが希薄化し、TM参照精度が低下する。
+
+**コンセプト**
+`splitToQueryLines` の改行分割後に `Intl.Segmenter(lang, { granularity: "sentence" })` を追加し、各行をさらに文単位に分割する。`normalizeForTm`（markdown-it経由）で改行コードが正規化されるため、既存のSentenceSplitterクラスのCRLFバグも回避できる。
+
+chemistry.mdでの実験結果:
+- 60字超のクエリ: 15件 → 7件（半減）
+- 101字超のクエリ: 4件 → **0件**（全滅）
+- NMRデータ等の非文テキストは正しく非分割
+
+付随してSentenceSplitterの `split(/\n\n+/)` をCRLF対応（`/\r?\n\r?\n/`）に修正する。現在は未使用だが将来の再利用に備える。
+
+**想定問答**
+- Q: 文分割すると短すぎるクエリが増えて検索ノイズが増えない？
+  A: 既存の`minQueryLength`フィルタが適用されるため、短文は除外される。また`isWorthyForTm`で登録時にも短文はフィルタされているのでTM側にも短文は少ない。
+- Q: Intl.Segmenterの精度は大丈夫？
+  A: 実験で確認済み。日本語の「。」区切りは正確に検出され、NMRデータのような非文テキストは分割されなかった。
+- Q: SentenceSplitterクラスを使わないなら削除する？
+  A: 削除する。YAGNI。

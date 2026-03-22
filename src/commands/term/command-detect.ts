@@ -11,6 +11,7 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
+import { TermResultContentProvider } from "./term-result-provider";
 import { TermsRepository } from "./terms-repository";
 import { UnitPair, UnitPairCollector } from "./unit-pair-collector";
 
@@ -50,7 +51,7 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 	const pairs = collector.collectFromUnits(units);
 
 	// withProgressで進捗表示とキャンセル機能を提供
-	await vscode.window.withProgress(
+	const detectedTerms = await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("Detecting terms..."),
@@ -58,19 +59,32 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 		},
 		async (progress, token) => {
 			try {
-				await detectTerm_CoreProc(pairs, transPair, progress, token);
+				const entries = await detectTerm_CoreProc(pairs, transPair, progress, token);
 
 				if (!token.isCancellationRequested) {
 					vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
 				}
+				return entries;
 			} catch (error) {
 				console.error("用語検出エラー:", error);
 				vscode.window.showErrorMessage(
 					vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
 				);
+				return [];
 			}
 		},
 	);
+
+	// 検出用語が1件以上あればプレビュー表示
+	if (detectedTerms.length > 0) {
+		const provider = TermResultContentProvider.getInstance();
+		provider.setContent({
+			entries: detectedTerms,
+			sourceLang: transPair.sourceLang,
+			targetLang: transPair.targetLang,
+		});
+		await TermResultContentProvider.openPreview();
+	}
 }
 
 /**
@@ -97,7 +111,7 @@ export async function detectTerm_CoreProc(
 	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
-): Promise<void> {
+): Promise<TermEntry[]> {
 	const config = Configuration.getInstance();
 	const sourceLang = transPair.sourceLang;
 	const targetLang = transPair.targetLang;
@@ -135,7 +149,7 @@ export async function detectTerm_CoreProc(
 	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
 			console.log("Term detection was cancelled by user");
-			return; // キャンセルされた
+			return allDetectedTerms; // キャンセルされた（途中結果を返却）
 		}
 
 		progress.report({
@@ -194,6 +208,8 @@ export async function detectTerm_CoreProc(
 	} else {
 		console.log("新しい用語は検出されませんでした");
 	}
+
+	return allDetectedTerms;
 }
 
 /**

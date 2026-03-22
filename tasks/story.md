@@ -2,6 +2,22 @@
 
 (新しい情報が上)
 
+## 2026/03/22: TM検索クエリの文単位分割
+
+**背景:** TM登録は文単位だが検索は改行分割（段落単位）で、粒度のギャップがJaccard類似度を希薄化していた。chemistry.mdでの実験で、101字超のクエリが4件残ることを確認。SentenceSplitterは実装済みだったがCRLFバグで機能しておらず事実上死んでいた。
+
+**意思決定:** SentenceSplitter経由ではなく、normalizeForTm→改行分割→Intl.Segmenter文分割のハイブリッドパイプラインを採用。markdown-itが改行コードを正規化するため、CRLFの問題を構造的に回避できる。SentenceSplitterのCRLFバグも将来の再利用に備え修正。
+
+**詳細:** [tasks/do/260322_TM検索クエリ文単位分割.md](do/260322_TM検索クエリ文単位分割.md)
+
+## 2026/03/22: 結果プレビューの視認性改善とTerm Detect結果プレビュー追加
+
+**背景:** tm-commitの結果プレビューは1行に原文・訳文が詰め込まれ、長文での切れ目が見づらかった。また用語検出（term-detect）にはプレビュー自体がなく、結果確認にCSVファイルを直接開く必要があった。
+
+**意思決定:** TM結果を「原文→インデント付き訳文」の2行表示に変更し、冗長な`[NEW]`/`[UPDATE]`タグを削除。Term側にもTMと同じ`TextDocumentContentProvider`パターンで結果プレビューを追加。既存パターンの横展開で設計判断は最小限に抑えた。
+
+**詳細:** [tasks/done/260322_tm-commit-result表示改善.md](done/260322_tm-commit-result表示改善.md) / [tasks/done/260322_term-detect結果プレビュー追加.md](done/260322_term-detect結果プレビュー追加.md)
+
 ## 2026/03/22: TM検索を行単位に分割、revise時diff対応
 
 **背景:** TM登録は文単位だが、TM検索はユニット全体をクエリにしていた。長いユニットでJaccard類似度が薄まりマッチ精度が低下。revise時も変更のない文に対するTMがノイズになっていた。

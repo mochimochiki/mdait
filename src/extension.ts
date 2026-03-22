@@ -7,6 +7,7 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { TermResultContentProvider } from "./commands/term/term-result-provider";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
@@ -199,6 +200,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	const tmResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
 		"mdait-tm-result",
 		tmResultProvider,
+	);
+
+	// Term Result ContentProvider登録
+	const termResultProvider = TermResultContentProvider.getInstance();
+	const termResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+		"mdait-term-result",
+		termResultProvider,
 	);
 
 	// CodeLens翻訳コマンド
@@ -486,6 +494,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmCommitDirectoryDisposable,
 		tmResultProviderDisposable,
 		tmResultProvider,
+		termResultProviderDisposable,
+		termResultProvider,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,
