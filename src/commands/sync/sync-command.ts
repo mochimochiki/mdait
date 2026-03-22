@@ -89,11 +89,13 @@ export async function syncCommand(): Promise<void> {
 
 						// 同期を実行（中核プロセス）
 						let diffResult = null;
-						if (fs.existsSync(targetFile)) {
+						const isExistingTarget = fs.existsSync(targetFile);
+						if (isExistingTarget) {
 							diffResult = await sync_CoreProc(sourceFile, targetFile, config);
 						} else {
 							diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
 						}
+
 
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
@@ -231,7 +233,8 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		// 同期処理を実行
 		let diffResult: DiffResult;
-		if (fs.existsSync(targetFile)) {
+		const isExistingFile = fs.existsSync(targetFile);
+		if (isExistingFile) {
 			diffResult = await sync_CoreProc(sourceFile, targetFile, config);
 		} else {
 			diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);

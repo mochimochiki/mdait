@@ -26,7 +26,6 @@ suite("MdaitMarker", () => {
 		assert.equal(header3.need, null);
 	});
 	test("toString: 正しいフォーマットの文字列が生成される", () => {
-		// 全てのパラメータがある場合
 		const header1 = new MdaitMarker(testHash, testFrom, "translate");
 		assert.equal(header1.toString(), `<!-- mdait ${testHash} from:${testFrom} need:translate -->`);
 

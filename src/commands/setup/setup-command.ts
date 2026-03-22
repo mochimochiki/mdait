@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
+import { ensureMdaitDir } from "../../utils/mdait-dir";
 
 /**
  * mdait.json設定ファイルのテンプレートを作成するコマンド（中核プロセス）
@@ -15,7 +16,7 @@ export async function createConfigCommand(context: vscode.ExtensionContext): Pro
 		return;
 	}
 
-	const configPath = path.join(workspaceFolder, "mdait.json");
+	const configPath = path.join(workspaceFolder, ".mdait", "mdait.json");
 
 	// 既存ファイルのチェック
 	if (fs.existsSync(configPath)) {
@@ -46,6 +47,9 @@ export async function createConfigCommand(context: vscode.ExtensionContext): Pro
 	}
 
 	try {
+		// .mdait ディレクトリを作成（存在しない場合）、.gitignore も自動生成
+		await ensureMdaitDir();
+
 		// mdait.jsonを作成
 		fs.writeFileSync(configPath, templateContent, "utf8");
 

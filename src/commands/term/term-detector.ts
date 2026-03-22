@@ -5,8 +5,8 @@
  */
 
 import type * as vscode from "vscode";
-import type { AIService } from "../../api/ai-service";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
+import type { AIService } from "../../llm/ai-service";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
@@ -112,8 +112,7 @@ export class AITermDetector implements TermDetector {
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<TermEntry[]> {
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
-		const contextLang =
-			primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		const existingTermsList = this.buildExistingTermsList(existingTerms, sourceLang, targetLang);
 		const pairsText = this.buildPairsText(pairs, sourceLang, targetLang);

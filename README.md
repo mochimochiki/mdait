@@ -49,7 +49,7 @@ mdait is designed to handle translations not as separate sentences or files, but
 ## Quick Start
 
 1. Open the mdait view by clicking the 🌐 (globe) icon in the activity bar
-2. Create mdait.json with the `Create mdait.json` button and configure source/target languages and directories in `transPairs`
+2. Create `.mdait/mdait.json` with the `Create mdait.json` button and configure source/target languages and directories in `transPairs`
 3. Execute 🔄 (Sync) from the mdait view
 4. Open a .md file in the target language and start unit translation by clicking the ▶️ (Translate) button on the mdait marker attached to headings
 5. Mouse over `Translation completed` to view the result summary and glossary addition suggestions
@@ -75,6 +75,9 @@ mdait is designed to handle translations not as separate sentences or files, but
     "contextSize": 1,
     "retryLimit": 1
   },
+  "tm": {
+    "retryLimit": 1
+  },
   "sync": {
     "level": 3
   }
@@ -82,6 +85,7 @@ mdait is designed to handle translations not as separate sentences or files, but
 ```
 
 `trans.retryLimit` sets the maximum number of retries for translation failures (limited to 1-5, values 6+ are capped at 5).
+`tm.retryLimit` sets the maximum number of focused retries for tm-commit guard failures.
 
 ---
 

@@ -5,7 +5,7 @@
   "search.exclude": {
     "out": true
   },
-  "typescript.tsc.autoDetect": "off",
+  "js/ts.tsc.autoDetect": "off",
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome",
     "editor.formatOnSave": true,
@@ -28,6 +28,9 @@
     "npx biome": true,
     "Select": true,
     "npx tsc": true,
-    "Move-Item": true
+    "Move-Item": true,
+    "npx vitest": true,
+    "ForEach-Object": true,
+    "pwsh -File .github/scripts/done.ps1": true
   },
 }

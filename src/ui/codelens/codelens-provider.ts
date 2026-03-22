@@ -114,18 +114,38 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	): vscode.CodeLens[] {
 		const line = document.lineAt(lineIndex);
 		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
+		const codeLenses: vscode.CodeLens[] = [];
 
-		// frontmatterはソースファイルでもTargetジャンプ不要（frontmatter専用のジャンプを使用）
-		return this.createCodeLensesForMarker(
-			marker,
-			range,
-			"mdait.codelens.jumpToSourceFrontmatter",
-			"", // frontmatterにはTargetジャンプなし
-			"mdait.translate.frontmatter",
-			"mdait.codelens.clearFrontmatterNeed",
-			[document.uri],
-			false,
-		);
+		// frontmatter専用のCodeLens表示ロジック
+		// 翻訳が必要な場合のみAI翻訳ボタンを表示
+		if (marker.needsTranslation()) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(play) Translate"),
+					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+					command: "mdait.translate.frontmatter",
+					arguments: [document.uri],
+				}),
+			);
+		}
+
+		// needマーカーがある場合は完了ボタンを表示
+		if (marker.need) {
+			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title,
+					tooltip,
+					command: "mdait.codelens.clearFrontmatterNeed",
+					arguments: [range],
+				}),
+			);
+		}
+
+		// 翻訳済み（from && !need）の場合は何も表示しない
+		// TM登録、確定、ソースジャンプは不要（理由：TM/Fix非対応、原文は同ファイル内）
+
+		return codeLenses;
 	}
 
 	/**

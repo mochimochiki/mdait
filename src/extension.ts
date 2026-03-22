@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
@@ -6,6 +7,10 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
+import { TermResultContentProvider } from "./commands/term/term-result-provider";
+import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
+import { openTmCommand } from "./commands/tm/command-open";
+import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
@@ -15,6 +20,9 @@ import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
+import { MdaitGetStatusTool } from "./tools/get-status-tool";
+import { MdaitSyncTool } from "./tools/sync-tool";
+import { MdaitTranslateTool } from "./tools/translate-tool";
 import {
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
@@ -178,6 +186,29 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateSelectionCommand,
 	);
 
+	// TM Commit commands
+	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm.commit.file", (item?: StatusItem) =>
+		tmCommitFileCommand(item),
+	);
+	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.tm.commit.directory",
+		(item?: StatusItem) => tmCommitDirectoryCommand(item),
+	);
+
+	// TM Result ContentProvider登録
+	const tmResultProvider = TmResultContentProvider.getInstance();
+	const tmResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+		"mdait-tm-result",
+		tmResultProvider,
+	);
+
+	// Term Result ContentProvider登録
+	const termResultProvider = TermResultContentProvider.getInstance();
+	const termResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+		"mdait-term-result",
+		termResultProvider,
+	);
+
 	// CodeLens翻訳コマンド
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.translate",
@@ -302,6 +333,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// status.openTerm command
 	const openTermStatusDisposable = vscode.commands.registerCommand("mdait.status.openTerm", openTermCommand);
 
+	// status.openTm command
+	const openTmStatusDisposable = vscode.commands.registerCommand("mdait.status.openTm", openTmCommand);
+
 	// jumpToUnit command
 	const jumpToUnitDisposable = vscode.commands.registerCommand(
 		"mdait.jumpToUnit",
@@ -355,7 +389,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const filePath = document.uri.fsPath;
 
 			// mdait.jsonの保存を検知して設定を再読み込み
-			if (filePath.toLowerCase().endsWith("mdait.json")) {
+			if (filePath.toLowerCase().endsWith(path.join(".mdait", "mdait.json").toLowerCase())) {
 				try {
 					await config.initialize();
 					logger.info("config", "Configuration reloaded after mdait.json save");
@@ -424,6 +458,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// LanguageModel Tools 登録
+	const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
+	const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
+	const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new MdaitTranslateTool());
+
 	// 初回データ読み込み
 	context.subscriptions.push(
 		createConfigDisposable,
@@ -451,12 +490,22 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,
 		codeLensJumpToSourceFrontmatterDisposable,
+		tmCommitFileDisposable,
+		tmCommitDirectoryDisposable,
+		tmResultProviderDisposable,
+		tmResultProvider,
+		termResultProviderDisposable,
+		termResultProvider,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,
 		syncStatusDisposable,
 		openTermStatusDisposable,
+		openTmStatusDisposable,
 		jumpToUnitDisposable,
+		getStatusToolDisposable,
+		syncToolDisposable,
+		translateToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる

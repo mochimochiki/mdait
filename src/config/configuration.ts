@@ -45,6 +45,19 @@ export interface TransConfig {
 }
 
 /**
+ * TM設定の型定義
+ */
+export interface TmConfig {
+	enabled: boolean;
+	maxReferences: number;
+	/** tm-commit focused retry の上限 */
+	retryLimit: number;
+	/** TM検索時の最低クエリ文字数（normalize後の行がこの文字数未満の場合除外） */
+	minQueryLength: number;
+	[key: string]: unknown;
+}
+
+/**
  * 翻訳ペア設定の型定義
  */
 export interface TransPair {
@@ -59,6 +72,7 @@ export interface TransPair {
  */
 interface MdaitConfig {
 	transPairs?: TransPair[];
+	primaryLang?: string;
 	ignoredPatterns?: string | string[];
 	sync?: {
 		level?: number;
@@ -95,7 +109,12 @@ interface MdaitConfig {
 	};
 	terms?: {
 		filename?: string;
-		primaryLang?: string;
+	};
+	tm?: {
+		enabled?: boolean;
+		maxReferences?: number;
+		retryLimit?: number;
+		minQueryLength?: number;
 	};
 	prompts?: {
 		"trans.translate"?: string;
@@ -123,6 +142,10 @@ export class Configuration {
 	 * 除外パターン
 	 */
 	public ignoredPatterns = "**/node_modules/**";
+	/**
+	 * 基準言語
+	 */
+	public primaryLang = "";
 	/**
 	 * sync設定
 	 */
@@ -164,12 +187,20 @@ export class Configuration {
 	 */
 	public terms = {
 		filename: "terms.csv", // デフォルトはCSV形式
-		primaryLang: "", // 用語管理の基準言語
 	};
 	/**
 	 * プロンプト設定（カスタムプロンプトファイルパス）
 	 */
 	public prompts: Record<string, string> = {};
+	/**
+	 * 翻訳メモリ（TM）設定
+	 */
+	public tm: TmConfig = {
+		enabled: true,
+		maxReferences: 5,
+		retryLimit: 1,
+		minQueryLength: 10,
+	};
 
 	/**
 	 * プライベートコンストラクタ（シングルトンパターン）
@@ -208,12 +239,12 @@ export class Configuration {
 	/**
 	 * 設定ファイルのパスを取得
 	 */
-	private getConfigFilePath(): string | undefined {
+	public getConfigFilePath(): string | undefined {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return undefined;
 		}
-		return path.join(workspaceRoot, "mdait.json");
+		return path.join(workspaceRoot, ".mdait", "mdait.json");
 	}
 
 	/**
@@ -228,8 +259,7 @@ export class Configuration {
 		if (!fs.existsSync(configPath)) {
 			return false;
 		}
-		// transPairsが有効に設定されているか
-		return this.transPairs.length > 0;
+		return this.validate() === null;
 	}
 
 	/**
@@ -310,6 +340,11 @@ export class Configuration {
 				} else {
 					this.ignoredPatterns = config.ignoredPatterns;
 				}
+			}
+
+			// 基準言語の読み込み
+			if (config.primaryLang) {
+				this.primaryLang = config.primaryLang;
 			}
 
 			// sync設定の読み込み
@@ -400,9 +435,6 @@ export class Configuration {
 				if (config.terms.filename) {
 					this.terms.filename = config.terms.filename;
 				}
-				if (config.terms.primaryLang) {
-					this.terms.primaryLang = config.terms.primaryLang;
-				}
 			}
 
 			// プロンプト設定の読み込み
@@ -412,6 +444,22 @@ export class Configuration {
 					if (typeof value === "string") {
 						this.prompts[key] = value;
 					}
+				}
+			}
+
+			// TM設定の読み込み
+			if (config.tm) {
+				if (config.tm.enabled !== undefined) {
+					this.tm.enabled = config.tm.enabled;
+				}
+				if (config.tm.maxReferences !== undefined) {
+					this.tm.maxReferences = Math.max(1, Math.min(20, config.tm.maxReferences));
+				}
+				if (config.tm.retryLimit !== undefined) {
+					this.tm.retryLimit = Math.min(5, Math.max(1, config.tm.retryLimit));
+				}
+				if (config.tm.minQueryLength !== undefined) {
+					this.tm.minQueryLength = Math.max(1, Math.min(100, config.tm.minQueryLength));
 				}
 			}
 
@@ -445,6 +493,10 @@ export class Configuration {
 			if (!pair.targetDir) {
 				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
 			}
+		}
+
+		if (!this.primaryLang) {
+			return vscode.l10n.t("Primary language (primaryLang) is not configured.");
 		}
 
 		return null;
@@ -503,12 +555,56 @@ export class Configuration {
 	}
 
 	/**
+	 * TMファイルのパスを取得
+	 * @returns TMファイルの絶対パス
+	 */
+	public getTmFilePath(): string {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			throw new Error("Workspace not found");
+		}
+		return path.join(workspaceRoot, ".mdait", "translations.tmx");
+	}
+
+	/**
 	 * 用語集ファイル名から形式を判定
 	 * @returns 'csv' | 'yaml'
 	 */
 	public getTermsFileFormat(): "csv" | "yaml" {
 		const ext = this.terms.filename.toLowerCase().split(".").pop();
 		return ext === "yaml" || ext === "yml" ? "yaml" : "csv";
+	}
+
+	/**
+	 * TM機能が有効かどうかを取得
+	 * @returns TM機能の有効/無効
+	 */
+	public getTmEnabled(): boolean {
+		return this.tm.enabled;
+	}
+
+	/**
+	 * TM参照の最大数を取得
+	 * @returns 最大参照数
+	 */
+	public getTmMaxReferences(): number {
+		return this.tm.maxReferences;
+	}
+
+	/**
+	 * tm-commit focused retry の上限を取得
+	 * @returns 最大リトライ回数
+	 */
+	public getTmRetryLimit(): number {
+		return this.tm.retryLimit;
+	}
+
+	/**
+	 * TM検索時の最低クエリ文字数を取得
+	 * @returns 最低クエリ文字数
+	 */
+	public getTmMinQueryLength(): number {
+		return this.tm.minQueryLength;
 	}
 
 	/**
@@ -524,10 +620,10 @@ export class Configuration {
 	}
 
 	/**
-	 * 用語集の基準言語を取得
+	 * 基準言語を取得
 	 * @returns 基準言語コード
 	 */
 	public getTermsPrimaryLang(): string {
-		return this.terms.primaryLang;
+		return this.primaryLang;
 	}
 }

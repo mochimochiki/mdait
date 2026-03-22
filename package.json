@@ -112,6 +112,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.status.openTm",
+        "title": "%mdait.status.openTm.title%",
+        "icon": "$(database)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.setup.createConfig",
         "title": "%mdait.setup.createConfig.title%",
         "icon": "$(gear)",
@@ -126,6 +132,18 @@
         "command": "mdait.translate.frontmatter",
         "title": "%mdait.translate.frontmatter.title%",
         "icon": "$(play)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.tm.commit.file",
+        "title": "%mdait.tm.commit.file.title%",
+        "icon": "$(database)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.tm.commit.directory",
+        "title": "%mdait.tm.commit.directory.title%",
+        "icon": "$(database)",
         "category": "mdait"
       }
     ],
@@ -187,17 +205,22 @@
           "command": "mdait.status.openTerm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "navigation"
+        },
+        {
+          "command": "mdait.status.openTm",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "mdait.translate.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && (viewItem == mdaitDirectoryTarget || viewItem == mdaitDirectoryTargetComplete)",
           "group": "inline"
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
           "group": "inline"
         },
         {
@@ -217,24 +240,97 @@
         },
         {
           "command": "mdait.term.expand.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
           "group": "inline@2"
         },
         {
           "command": "mdait.term.expand.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@2"
         },
         {
           "command": "mdait.translate.frontmatter",
           "when": "view == mdait.status && viewItem == mdaitFrontmatterTarget",
           "group": "inline"
+        },
+        {
+          "command": "mdait.tm.commit.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
+          "group": "inline@3"
+        },
+        {
+          "command": "mdait.tm.commit.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
+          "group": "inline@3"
         }
       ]
     },
+    "languageModelTools": [
+      {
+        "name": "mdait_getStatus",
+        "displayName": "mdait: Get Translation Status",
+        "toolReferenceName": "mdaitStatus",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a summary of translation progress including total units, translated units, and files needing translation. Optionally pass a filePath to get status for a specific file.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "status"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Optional file path to get status for a specific file. If omitted, returns overall status."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_sync",
+        "displayName": "mdait: Sync Translation Markers",
+        "toolReferenceName": "mdaitSync",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "sync"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "mdait_translate",
+        "displayName": "mdait: Translate File",
+        "toolReferenceName": "mdaitTranslate",
+        "modelDescription": "Translate a Markdown file using AI. Translates units that have need:translate or need:revise flags. The file must be a target file managed by mdait. Uses diff-aware revision for changed content to preserve existing translations.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "filePath"
+          ],
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "The file path of the target Markdown file to translate."
+            }
+          }
+        }
+      }
+    ],
     "jsonValidation": [
       {
-        "fileMatch": "mdait.json",
+        "fileMatch": "**/.mdait/mdait.json",
         "url": "./schemas/mdait-config.schema.json"
       }
     ],
@@ -244,7 +340,12 @@
         "mdait.logLevel": {
           "type": "string",
           "default": "INFO",
-          "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
+          "enum": [
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR"
+          ],
           "description": "%mdait.logLevel.description%"
         }
       }
@@ -255,7 +356,7 @@
     "lint": "biome lint ./src",
     "test": "npm run test:unit",
     "test:unit": "npm run compile && npm run lint && mocha --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\"",
-    "test:vscode": "rimraf out/test-gui && npm run compile && npm run lint && vscode-test",
+    "test:vscode": "rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test",
     "watch": "tsc -watch -p ./",
     "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
@@ -266,6 +367,7 @@
     "csv-parse": "^5.5.6",
     "csv-stringify": "^6.5.2",
     "diff": "^8.0.2",
+    "fast-xml-parser": "^5.3.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.0",
     "ollama": "^0.6.0",
@@ -282,9 +384,27 @@
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
+    "madge": "^8.0.0",
     "mocha": "^11.3.0",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "madge": {
+    "fileExtensions": [
+      "ts",
+      "tsx"
+    ],
+    "tsConfig": "./tsconfig.json",
+    "detectiveOptions": {
+      "ts": {
+        "skipAsyncImports": true,
+        "skipTypeImports": true
+      },
+      "tsx": {
+        "skipAsyncImports": true,
+        "skipTypeImports": true
+      }
+    }
   }
 }

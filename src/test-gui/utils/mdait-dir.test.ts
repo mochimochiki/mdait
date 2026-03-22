@@ -9,11 +9,13 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { copyDirSync } from "../test-utils";
 
 suite("ensureMdaitDir", () => {
 	let workspaceRoot: string;
 	let mdaitDir: string;
 	let gitignorePath: string;
+	let backupDir: string;
 
 	// ディレクトリ削除のヘルパー関数（EBUSYエラーを無視）
 	const safeRemoveDir = (dirPath: string) => {
@@ -27,10 +29,28 @@ suite("ensureMdaitDir", () => {
 		}
 	};
 
-	setup(() => {
-		// テスト用ワークスペースのパスを取得
+	suiteSetup(() => {
 		workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
 		mdaitDir = path.join(workspaceRoot, ".mdait");
+		backupDir = path.join(workspaceRoot, ".mdait-backup-test");
+
+		// .mdaitディレクトリをバックアップ
+		safeRemoveDir(backupDir);
+		if (fs.existsSync(mdaitDir)) {
+			copyDirSync(mdaitDir, backupDir);
+		}
+	});
+
+	suiteTeardown(() => {
+		// バックアップから.mdaitを復元
+		safeRemoveDir(mdaitDir);
+		if (fs.existsSync(backupDir)) {
+			copyDirSync(backupDir, mdaitDir);
+			safeRemoveDir(backupDir);
+		}
+	});
+
+	setup(() => {
 		gitignorePath = path.join(mdaitDir, ".gitignore");
 
 		// UnitRegistryManagerのキャッシュをリセット
@@ -41,7 +61,7 @@ suite("ensureMdaitDir", () => {
 	});
 
 	teardown(() => {
-		// テスト後のクリーンアップ
+		// テスト後のクリーンアップ（個別テスト間）
 		safeRemoveDir(mdaitDir);
 	});
 

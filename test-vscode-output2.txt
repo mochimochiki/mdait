@@ -1,0 +1,1027 @@
+
+> mdait@0.0.1 test:vscode
+> rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test
+
+
+> mdait@0.0.1 compile
+> tsc -p ./
+
+
+> mdait@0.0.1 lint
+> biome lint ./src
+
+Checked 158 files in 54ms. No fixes applied.
+- Resolving version...
+笨・Validated version: 1.112.0
+笨・Found existing install in C:\Data\Study\TypeScript\mdait\.vscode-test\vscode-win32-x64-archive-1.112.0
+
+[28032:0322/232354.780:ERROR:electron\shell\common\node_bindings.cc:485] Most NODE_OPTIONs are not supported in packaged apps. See documentation for more details.
+[main 2026-03-22T14:23:55.349Z] Error: Error mutex already exists
+    at ds.installMutex (file:///C:/Data/Study/TypeScript/mdait/.vscode-test/vscode-win32-x64-archive-1.112.0/07ff9d6178/resources/app/out/main.js:584:23368)
+[main 2026-03-22T14:23:55.377Z] update#setState disabled
+[main 2026-03-22T14:23:55.377Z] update#ctor - updates are disabled by the environment
+Started local extension host with pid 25484.
+Loading development extension at c:\Data\Study\TypeScript\mdait
+MCP Registry configured: https://api.mcp.github.com
+Settings Sync: Account status changed from uninitialized to unavailable
+
+  LogLevel
+    笨・DEBUG縺ｯ10縺ｧ縺ゅｋ縺薙→
+    笨・INFO縺ｯ20縺ｧ縺ゅｋ縺薙→
+    笨・WARN縺ｯ30縺ｧ縺ゅｋ縺薙→
+    笨・ERROR縺ｯ40縺ｧ縺ゅｋ縺薙→
+    笨・繝ｭ繧ｰ繝ｬ繝吶Ν縺ｮ螟ｧ蟆城未菫ゅ′豁｣縺励＞縺薙→
+  parseLogLevel
+    笨・'DEBUG'縺鍬ogLevel.DEBUG縺ｫ螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・'INFO'縺鍬ogLevel.INFO縺ｫ螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・'WARN'縺鍬ogLevel.WARN縺ｫ螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・'ERROR'縺鍬ogLevel.ERROR縺ｫ螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・蟆乗枚蟄励〒繧ょ､画鋤縺輔ｌ繧九％縺ｨ
+    笨・荳肴・縺ｪ譁・ｭ怜・縺ｯINFO縺ｫ繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ縺吶ｋ縺薙→
+  formatError
+    笨・Error繧ｪ繝悶ず繧ｧ繧ｯ繝医′name, message, stack繧貞性繧繧ｪ繝悶ず繧ｧ繧ｯ繝医↓螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・繧ｫ繧ｹ繧ｿ繝繧ｨ繝ｩ繝ｼ繧ｯ繝ｩ繧ｹ繧よｭ｣縺励￥螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・繧ｪ繝悶ず繧ｧ繧ｯ繝医′縺昴・縺ｾ縺ｾ霑斐＆繧後ｋ縺薙→
+    笨・譁・ｭ怜・縺計alue螻樊ｧ繧呈戟縺､繧ｪ繝悶ず繧ｧ繧ｯ繝医↓螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・謨ｰ蛟､縺計alue螻樊ｧ繧呈戟縺､繧ｪ繝悶ず繧ｧ繧ｯ繝医↓螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・null縺計alue螻樊ｧ繧呈戟縺､繧ｪ繝悶ず繧ｧ繧ｯ繝医↓螟画鋤縺輔ｌ繧九％縺ｨ
+    笨・undefined縺計alue螻樊ｧ繧呈戟縺､繧ｪ繝悶ず繧ｧ繧ｯ繝医↓螟画鋤縺輔ｌ繧九％縺ｨ
+  PromptProvider 繧､繝ｳ繧ｹ繝医Λ繧ｯ繧ｷ繝ｧ繝ｳ讖溯・縺ｮ繝・せ繝・    笨・繧､繝ｳ繧ｹ繝医Λ繧ｯ繧ｷ繝ｧ繝ｳ繝輔ぃ繧､繝ｫ縺悟ｭ伜惠縺励↑縺・ｴ蜷医√・繝ｭ繝ｳ繝励ヨ縺ｯ縺昴・縺ｾ縺ｾ霑斐＆繧後ｋ
+    笨・繧､繝ｳ繧ｹ繝医Λ繧ｯ繧ｷ繝ｧ繝ｳ繝輔ぃ繧､繝ｫ縺悟ｭ伜惠縺吶ｋ蝣ｴ蜷医∝・螳ｹ縺後・繝ｭ繝ｳ繝励ヨ縺ｫ霑ｽ蜉縺輔ｌ繧・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｧ繝励Ο繝ｳ繝励ヨID繧呈欠螳壹＠縺溷ｴ蜷医∬ｩｲ蠖薙・繝ｭ繝ｳ繝励ヨ縺ｫ縺ｮ縺ｿ驕ｩ逕ｨ縺輔ｌ繧・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｧ隍・焚縺ｮ繝励Ο繝ｳ繝励ヨID繧呈欠螳壹〒縺阪ｋ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｧ繝励Ο繝ｳ繝励ヨID縺梧欠螳壹＆繧後※縺・↑縺・ｴ蜷医∝・繝励Ο繝ｳ繝励ヨ縺ｫ驕ｩ逕ｨ縺輔ｌ繧・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ閾ｪ菴薙′逵∫払縺輔ｌ縺溷ｴ蜷医∝・繝励Ο繝ｳ繝励ヨ縺ｫ驕ｩ逕ｨ縺輔ｌ繧・    笨・繧､繝ｳ繧ｹ繝医Λ繧ｯ繧ｷ繝ｧ繝ｳ縺ｮ蜀・ｮｹ縺後く繝｣繝・す繝･縺輔ｌ繧・    笨・clearCache()縺ｧ繧､繝ｳ繧ｹ繝医Λ繧ｯ繧ｷ繝ｧ繝ｳ縺ｮ繧ｭ繝｣繝・す繝･縺後け繝ｪ繧｢縺輔ｌ繧・  Configuration
+    笨・primaryLang 縺梧悴險ｭ螳壹・讒区・縺ｯ isConfigured 縺ｧ譛ｪ險ｭ螳壽桶縺・↓縺ｪ繧・    笨・primaryLang 繧貞性繧讒区・縺ｯ isConfigured 縺ｧ險ｭ螳壽ｸ医∩謇ｱ縺・↓縺ｪ繧・  ensureMdaitDir
+    笨・.mdait繝・ぅ繝ｬ繧ｯ繝医Μ縺悟ｭ伜惠縺励↑縺・ｴ蜷医∵眠隕丈ｽ懈・縺輔ｌ繧・    笨・.gitignore縺瑚・蜍慕函謌舌＆繧後ｋ
+    笨・.mdait繝・ぅ繝ｬ繧ｯ繝医Μ縺梧里縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷医∝・遲画ｧ縺御ｿ晁ｨｼ縺輔ｌ繧・    笨・.mdait繝・ぅ繝ｬ繧ｯ繝医Μ縺悟ｭ伜惠縺励・gitignore縺檎┌縺・ｴ蜷医・霑ｽ蜉縺輔ｌ繧・    笨・.mdait繝・ぅ繝ｬ繧ｯ繝医Μ縺ｨ.gitignore縺梧里縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷医∽ｸ頑嶌縺阪＆繧後↑縺・  Extension Test Suite
+    笨・Sample test
+  StatusCollector・・rontmatter蟇ｾ蠢懶ｼ・    笨・frontmatter縺梧悴鄙ｻ險ｳ縺ｮ蝣ｴ蜷医√ヵ繧｡繧､繝ｫ繧ｹ繝・・繧ｿ繧ｹ縺君eedsTranslation縺ｨ縺ｪ繧九％縺ｨ
+    笨・frontmatter縺檎ｿｻ險ｳ貂医∩縺ｧ譛ｬ譁・ｂ鄙ｻ險ｳ貂医∩縺ｮ蝣ｴ蜷医√ヵ繧｡繧､繝ｫ繧ｹ繝・・繧ｿ繧ｹ縺卦ranslated縺ｨ縺ｪ繧九％縺ｨ
+    笨・frontmatter縺ｮ縺ｿ縺ｮ繝輔ぃ繧､繝ｫ縺ｧfrontmatter縺梧悴鄙ｻ險ｳ縺ｮ蝣ｴ蜷医√ヵ繧｡繧､繝ｫ繧ｹ繝・・繧ｿ繧ｹ縺君eedsTranslation縺ｨ縺ｪ繧九％縺ｨ
+    笨・Source蛛ｴ繝輔ぃ繧､繝ｫ・・rom縺ｪ縺暦ｼ峨・蝣ｴ蜷医’rontmatter縺郡ource繧ｹ繝・・繧ｿ繧ｹ縺ｨ縺ｪ繧九％縺ｨ
+  Configuration
+    getTransPairForFile
+      笨・繧ｿ繝ｼ繧ｲ繝・ヨ繝・ぅ繝ｬ繧ｯ繝医Μ縺ｮ繝輔ぃ繧､繝ｫ縺ｫ蟇ｾ蠢懊☆繧狗ｿｻ險ｳ繝壹い繧貞叙蠕励〒縺阪ｋ
+      笨・蟇ｾ蠢懊＠縺ｪ縺・ヵ繧｡繧､繝ｫ繝代せ縺ｮ蝣ｴ蜷・ull繧定ｿ斐☆
+      笨・鄙ｻ險ｳ繝壹い縺檎ｩｺ縺ｮ蝣ｴ蜷・ull繧定ｿ斐☆
+  Configuration primaryLang險ｭ螳壹・繝・せ繝・    笨・繝医ャ繝鈴嚴螻､primaryLang繧定ｪｭ縺ｿ霎ｼ繧√ｋ
+    笨・primaryLang譛ｪ險ｭ螳壹・validation error縺ｫ縺ｪ繧・    笨・tm.retryLimit 縺ｯ trans.retryLimit 縺ｨ迢ｬ遶九＠縺ｦ隱ｭ縺ｿ霎ｼ繧√ｋ
+  UnitRegistryStore
+    getBucketId
+      笨・繝上ャ繧ｷ繝･縺ｮ蜈磯ｭ3譯√ｒ蟆乗枚蟄励〒霑斐☆
+    upsert / get
+      笨・繧ｨ繝ｳ繝医Μ繧定ｿｽ蜉縺励※蜿門ｾ励〒縺阪ｋ
+      笨・螟ｧ譁・ｭ怜ｰ乗枚蟄励ｒ豁｣隕丞喧縺励※謇ｱ縺・      笨・蟄伜惠縺励↑縺・ワ繝・す繝･縺ｯnull繧定ｿ斐☆
+      笨・upsert縺ｧ譌｢蟄倥お繝ｳ繝医Μ繧剃ｸ頑嶌縺阪〒縺阪ｋ
+    upsertMany
+      笨・隍・焚繧ｨ繝ｳ繝医Μ繧剃ｸ諡ｬ霑ｽ蜉縺ｧ縺阪ｋ
+    serialize
+      笨・蜈ｨ繝舌こ繝・ヨ・・00縲彷ff・峨′蜃ｺ蜉帙＆繧後∝推繝舌こ繝・ヨ縺ｫ蛻晄悄繧ｨ繝ｳ繝医Μ縺碁・鄂ｮ縺輔ｌ繧・      笨・遨ｺ縺ｮ繧ｹ繝医い縺ｧ繧ょ・蛻晄悄繧ｨ繝ｳ繝医Μ縺悟・蜉帙＆繧後ｋ
+      笨・豎ｺ螳夊ｫ也噪蜃ｺ蜉・ 蜷後§蜈･蜉帙°繧峨・蜷後§蜃ｺ蜉・    parse
+      笨・豁｣縺励＞蠖｢蠑上ｒ繝代・繧ｹ縺ｧ縺阪ｋ
+      笨・遨ｺ縺ｮ繧ｳ繝ｳ繝・Φ繝・ｒ繝代・繧ｹ縺ｧ縺阪ｋ
+      笨・遨ｺ逋ｽ陦後ｒ蜷ｫ繧繧ｳ繝ｳ繝・Φ繝・ｒ繝代・繧ｹ縺ｧ縺阪ｋ
+      笨・繝舌こ繝・ヨ陦後↑縺励〒繧ゅお繝ｳ繝医Μ繧呈ｭ｣縺励￥繝代・繧ｹ縺ｧ縺阪ｋ・域眠蠖｢蠑擾ｼ・      笨・繝上ャ繧ｷ繝･縺碁俣驕輔▲縺溘ヰ繧ｱ繝・ヨ縺ｫ縺ゅｋ縺ｨ繧ｨ繝ｩ繝ｼ
+      笨・驥崎､・ワ繝・す繝･縺後≠繧九→繧ｨ繝ｩ繝ｼ
+    parse 竊・serialize 繝ｩ繧ｦ繝ｳ繝峨ヨ繝ｪ繝・・
+      笨・繝代・繧ｹ縺励※繧ｷ繝ｪ繧｢繝ｩ繧､繧ｺ縺吶ｋ縺ｨ繧ｨ繝ｳ繝医Μ縺御ｿ晄戟縺輔ｌ繧・    retainOnly (GC)
+      笨・謖・ｮ壹＠縺溘ワ繝・す繝･縺ｮ縺ｿ繧呈ｮ九☆
+      笨・螟ｧ譁・ｭ怜ｰ乗枚蟄励ｒ豁｣隕丞喧縺励※豈碑ｼ・☆繧・      笨・GC蠕後ｂ蛻晄悄繧ｨ繝ｳ繝医Μ縺ｯ蜈ｨ縺ｦ蜃ｺ蜉帙＆繧後ｋ
+      笨・蛻晄悄繧ｨ繝ｳ繝医Μ縺御ｿ晁ｭｷ蟇ｾ雎｡縺ｫ蜷ｫ縺ｾ繧後ｋ蝣ｴ蜷医∝炎髯､縺輔ｌ縺ｪ縺・    size / keys / clear
+      笨・size縺ｯ繧ｨ繝ｳ繝医Μ謨ｰ繧定ｿ斐☆
+      笨・keys縺ｯ縺吶∋縺ｦ縺ｮ繝上ャ繧ｷ繝･繧定ｿ斐☆
+      笨・clear縺ｯ繧ｹ繝医い繧堤ｩｺ縺ｫ縺吶ｋ
+    繝代ヵ繧ｩ繝ｼ繝槭Φ繧ｹ
+      笨・200繧ｨ繝ｳ繝医Μ縺ｮ荳諡ｬ譖ｴ譁ｰ縺檎樟螳溽噪縺ｪ譎る俣縺ｧ螳御ｺ・☆繧・  UnitRegistryEncoder
+    笨・encode/decode: 蝓ｺ譛ｬ逧・↑繝・く繧ｹ繝医ｒ豁｣縺励￥繧ｨ繝ｳ繧ｳ繝ｼ繝峨・繝・さ繝ｼ繝峨☆繧・    笨・encode/decode: 譌･譛ｬ隱槭ユ繧ｭ繧ｹ繝医ｒ豁｣縺励￥蜃ｦ逅・☆繧・    笨・encode/decode: 遨ｺ譁・ｭ怜・繧呈ｭ｣縺励￥蜃ｦ逅・☆繧・    笨・encode/decode: 謾ｹ陦後ｒ蜷ｫ繧繝・く繧ｹ繝医ｒ豁｣縺励￥蜃ｦ逅・☆繧・    笨・encode/decode: Markdown繧ｳ繝ｳ繝・Φ繝・ｒ豁｣縺励￥蜃ｦ逅・☆繧・    笨・encode: 蝨ｧ邵ｮ縺ｫ繧医ｊ蜈・・繝・く繧ｹ繝医ｈ繧顔洒縺上↑繧句ｴ蜷医′縺ゅｋ
+  TmxStore
+    笨・XML繧ｨ繧ｹ繧ｱ繝ｼ繝励′繝ｩ繧ｦ繝ｳ繝峨ヨ繝ｪ繝・・縺吶ｋ
+    笨・蟄伜惠縺励↑縺・ヵ繧｡繧､繝ｫ縺ｧ縺ｯ遨ｺ繧ｹ繝医い縺ｫ縺ｪ繧・    笨・save -> load 縺ｧ tuid/variants 繧剃ｿ晄戟縺ｧ縺阪ｋ
+    笨・save 縺励◆TMX縺ｫ x-primary / x-source-hash / x-unit / x-unit-hash 繧貞・蜉帙＠縺ｪ縺・    笨・蜷御ｸtuid縺ｮ addEntry 縺ｯ variants 繧偵・繝ｼ繧ｸ縺吶ｋ
+    笨・lookupByHash / lookupBatch 縺ｯ variants 縺九ｉ讀懃ｴ｢縺ｧ縺阪ｋ
+    笨・x-primary 縺檎┌縺・立TMX縺ｧ繧・tuid 縺ｫ荳閾ｴ縺吶ｋ variant 縺九ｉ primary 繧貞ｾｩ蜈・☆繧・    笨・x-source-hash 縺梧ｮ九ｋ譌ｧTMX繧る壼ｸｸ隱ｭ霎ｼ縺ｧ縺阪ｋ
+    笨・getEntriesByUnitPath 縺・primaryLang 繧呈戟縺､蜈ｨ繧ｨ繝ｳ繝医Μ繝ｼ繧定ｿ斐☆
+  TmxStore繧ｷ繝ｳ繧ｰ繝ｫ繝医Φ
+    笨・getInstance 縺悟酔荳繧､繝ｳ繧ｹ繧ｿ繝ｳ繧ｹ繧定ｿ斐☆
+  TmxStore.findCandidatesByTrigram
+    笨・繧ｯ繧ｨ繝ｪ縺ｫ trigram 縺御ｸ閾ｴ縺吶ｋ繧ｨ繝ｳ繝医Μ繝ｼ繧定ｿ斐☆
+    笨・繧ｯ繧ｨ繝ｪ縺檎ｩｺ繧ｹ繝医い縺ｮ縺ｨ縺咲ｩｺ驟榊・繧定ｿ斐☆
+    笨・繧ｯ繧ｨ繝ｪ縺・譁・ｭ玲悴貅縺ｮ縺ｨ縺咲ｩｺ驟榊・繧定ｿ斐☆
+    笨・lang 繝輔ぅ繝ｫ繧ｿ: 謖・ｮ夊ｨ隱槭・ variant 繧呈戟縺､繧ｨ繝ｳ繝医Μ繝ｼ縺ｮ縺ｿ霑斐☆
+    笨・limit 繧定ｶ・∴縺ｦ霑斐＆縺ｪ縺・    笨・addEntry 蠕後↓繧､繝ｳ繝・ャ繧ｯ繧ｹ縺梧峩譁ｰ縺輔ｌ繧・    笨・load() 縺ｧ繧､繝ｳ繝・ャ繧ｯ繧ｹ縺梧ｧ狗ｯ峨＆繧後ｋ
+    笨・ja 繧ｯ繧ｨ繝ｪ縺ｧ ja variant 繧呈､懃ｴ｢縺ｧ縺阪ｋ・郁ｨ隱槫挨繧､繝ｳ繝・ャ繧ｯ繧ｹ・・    笨・clear() 蠕後・繧､繝ｳ繝・ャ繧ｯ繧ｹ縺檎ｩｺ縺ｫ縺ｪ繧・    笨・Markdown蜷ｫ繧逕溘ユ繧ｭ繧ｹ繝医ｒ貂｡縺励※繧よｭ｣隕丞喧蠕後・蛟呵｣懊′繝偵ャ繝医☆繧・  TmxStore.getTrigramCache
+    笨・addEntry 蠕後↓繧ｭ繝｣繝・す繝･縺梧ｧ狗ｯ峨＆繧後ｋ
+    笨・clear() 蠕後・繧ｭ繝｣繝・す繝･縺檎ｩｺ縺ｫ縺ｪ繧・    笨・load() 蠕後↓繧ｭ繝｣繝・す繝･縺悟・讒狗ｯ峨＆繧後ｋ
+    笨・getTrigramCache 縺ｮ謌ｻ繧雁､縺ｯ ReadonlyMap 蝙九〒縺ゅｋ
+  core/tm/tm-text-normalizer
+    stripMarkdown
+      笨・繝ｪ繝ｳ繧ｯ繧帝勁蜴ｻ縺励※繝・く繧ｹ繝医・縺ｿ謚ｽ蜃ｺ
+      笨・逕ｻ蜒上ｒ髯､蜴ｻ縺励※alt驛ｨ蛻・・縺ｿ謚ｽ蜃ｺ
+      笨・螟ｪ蟄励ｒ髯､蜴ｻ縺励※繝・く繧ｹ繝医・縺ｿ謚ｽ蜃ｺ
+      笨・蠑ｷ隱ｿ繧帝勁蜴ｻ縺励※繝・く繧ｹ繝医・縺ｿ謚ｽ蜃ｺ
+      笨・蜑企勁邱壹ｒ髯､蜴ｻ縺励※繝・く繧ｹ繝医・縺ｿ謚ｽ蜃ｺ
+      笨・繧､繝ｳ繝ｩ繧､繝ｳ繧ｳ繝ｼ繝峨・菫晄戟
+      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け繧貞ｮ悟・髯､螟・      笨・HTML繧ｿ繧ｰ繧帝勁蜴ｻ縺励※content縺ｮ縺ｿ謚ｽ蜃ｺ
+      笨・隍・焚隕∫ｴ縺梧ｷｷ蝨ｨ縺吶ｋ隍・尅縺ｪ繧ｱ繝ｼ繧ｹ
+      笨・繝阪せ繝域ｧ矩縺ｮ繧ｱ繝ｼ繧ｹ
+      笨・菴吝・縺ｪ遨ｺ逋ｽ縺ｮ豁｣隕丞喧
+      笨・遨ｺ譁・ｭ怜・縺ｮ蝣ｴ蜷・      笨・Markdown隕∫ｴ縺悟性縺ｾ繧後↑縺・壼ｸｸ繝・く繧ｹ繝・      笨・蜈磯ｭ縺ｮYAML frontmatter繧帝勁螟悶☆繧・      笨・譛ｬ譁・ｸｭ縺ｮ蛹ｺ蛻・ｊ邱壹・frontmatter縺ｨ縺励※謇ｱ繧上↑縺・      隕句・縺励・蜃ｦ逅・        笨・隕句・縺励→譛ｬ譁・ｒ謾ｹ陦・縺､縺ｧ蛹ｺ蛻・ｋ
+        笨・隍・焚縺ｮ隕句・縺励ｒ縺昴ｌ縺槭ｌ謾ｹ陦・縺､縺ｧ蛹ｺ蛻・ｋ
+        笨・隕句・縺励・縺ｿ縺ｮ蝣ｴ蜷・        笨・逡ｰ縺ｪ繧九Ξ繝吶Ν縺ｮ隕句・縺・      繝ｪ繧ｹ繝医・蜃ｦ逅・        笨・繝ｪ繧ｹ繝磯・岼繧呈隼陦・縺､縺ｧ蛹ｺ蛻・ｋ
+        笨・逡ｪ蜿ｷ莉倥″繝ｪ繧ｹ繝・        笨・繝ｪ繧ｹ繝磯・岼縺ｫ螟ｪ蟄励ｒ蜷ｫ繧
+      蠑慕畑繝悶Ο繝・け縺ｮ蜃ｦ逅・        笨・蠑慕畑繝悶Ο繝・け蠕後↓謾ｹ陦・縺､
+        笨・隍・焚陦後・蠑慕畑繝悶Ο繝・け
+      蛹ｺ蛻・ｊ邱壹・蜃ｦ逅・        笨・蛹ｺ蛻・ｊ邱壼ｾ後↓謾ｹ陦・縺､
+      豺ｷ蝨ｨ繧ｱ繝ｼ繧ｹ
+        笨・隕句・縺励∵ｮｵ關ｽ縲√Μ繧ｹ繝医∝ｼ慕畑縺ｮ豺ｷ蝨ｨ
+        笨・隍・尅縺ｪ讒矩
+        笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け繧・判蜒上ｄ陦ｨ縺ｮ蜑榊ｾ後〒繝悶Ο繝・け蠅・阜繧剃ｿ晄戟縺吶ｋ
+    陦ｨ縺ｮ蜃ｦ逅・      笨・蝓ｺ譛ｬ逧・↑陦ｨ縺九ｉ蜷・そ繝ｫ縺斐→縺ｫ謾ｹ陦後〒蛻・屬
+      笨・隍・焚陦後・陦ｨ
+      笨・謨ｰ蛟､縺ｮ縺ｿ縺ｮ陦ｨ
+      笨・繧ｻ繝ｫ蜀・↓Markdown險俶ｳ輔ｒ蜷ｫ繧陦ｨ
+      笨・陦ｨ縺ｮ繧ｻ繝ｫ蜀・・繧､繝ｳ繝ｩ繧､繝ｳ繧ｳ繝ｼ繝峨ｂ菫晄戟縺輔ｌ繧・      笨・遨ｺ繧ｻ繝ｫ繧貞性繧陦ｨ
+      笨・蜊倅ｸ繧ｻ繝ｫ縺ｮ陦ｨ
+      笨・陦ｨ縺ｮ蜑榊ｾ後↓繝・く繧ｹ繝医′縺ゅｋ蝣ｴ蜷・      笨・蛹ｺ蛻・ｊ邱壹・縺ｿ縺碁勁蜴ｻ縺輔ｌ繧・    isWorthyForTm
+      譌･譛ｬ隱槭・譛蟆城聞繝√ぉ繝・け・・譁・ｭ暦ｼ・        笨・8譁・ｭ玲悴貅縺ｯ髯､螟・        笨・8譁・ｭ嶺ｻ･荳翫・騾夐℃
+      闍ｱ隱槭・譛蟆城聞繝√ぉ繝・け・・2譁・ｭ暦ｼ・        笨・12譁・ｭ玲悴貅縺ｯ髯､螟・        笨・12譁・ｭ嶺ｻ･荳翫〒繧ょ腰隱樊焚荳崎ｶｳ縺ｪ繧蛾勁螟・        笨・12譁・ｭ嶺ｻ･荳翫°縺､3蜊倩ｪ樔ｻ･荳翫・騾夐℃
+      謨ｰ蛟､縺ｮ縺ｿ縺ｯ髯､螟・        笨・謨ｴ謨ｰ
+        笨・蟆乗焚
+        笨・繧ｫ繝ｳ繝槫玄蛻・ｊ
+        笨・雋縺ｮ謨ｰ蛟､
+        笨・謨ｰ蛟､繧貞性繧縺梧枚遶縺ｮ蝣ｴ蜷医・騾夐℃
+      URL/繝代せ縺ｮ縺ｿ縺ｯ髯､螟・        笨・URL
+        笨・逶ｸ蟇ｾ繝代せ
+        笨・邨ｶ蟇ｾ繝代せ
+        笨・URL/繝代せ繧貞性繧縺梧枚遶縺ｮ蝣ｴ蜷医・騾夐℃
+      闍ｱ隱槭・蜊倩ｪ樊焚繝√ぉ繝・け・・蜊倩ｪ樔ｻ･荳九・髯､螟厄ｼ・        笨・1蜊倩ｪ槭・髯､螟・        笨・2蜊倩ｪ槭・髯､螟・        笨・3蜊倩ｪ樔ｻ･荳翫・騾夐℃
+      譌･譛ｬ隱槭・蜊倩ｪ樊焚繝√ぉ繝・け・医メ繧ｧ繝・け縺ｪ縺暦ｼ・        笨・譌･譛ｬ隱槭・蜊倩ｪ樊焚繝√ぉ繝・け縺輔ｌ縺ｪ縺・      豁｣蟶ｸ縺ｪ譁・・騾夐℃
+        笨・闍ｱ隱槭・豁｣蟶ｸ縺ｪ譁・        笨・譌･譛ｬ隱槭・豁｣蟶ｸ縺ｪ譁・      繧ｨ繝・ず繧ｱ繝ｼ繧ｹ
+        笨・遨ｺ譁・ｭ怜・縺ｯ髯､螟・        笨・繧ｹ繝壹・繧ｹ縺ｮ縺ｿ縺ｯ髯､螟・        笨・謾ｹ陦後・縺ｿ縺ｯ髯､螟・  formatTmReferences
+    笨・蜊倅ｸ縺ｮTM蜿ら・繧偵ヵ繧ｩ繝ｼ繝槭ャ繝医〒縺阪ｋ
+    笨・隍・焚縺ｮTM蜿ら・繧堤分蜿ｷ莉倥″縺ｧ繝輔か繝ｼ繝槭ャ繝医〒縺阪ｋ
+    笨・firstUsedIn縺檎ｩｺ譁・ｭ励・蝣ｴ蜷医・from諠・ｱ繧貞性縺ｾ縺ｪ縺・    笨・遨ｺ驟榊・縺ｮ蝣ｴ蜷医・遨ｺ譁・ｭ怜・繧定ｿ斐☆
+  rankTmEntries
+    笨・遨ｺ縺ｮ candidates 縺ｯ遨ｺ驟榊・繧定ｿ斐☆
+    笨・lang variant 繧呈戟縺溘↑縺・candidates 縺ｯ髯､螟悶＆繧後ｋ
+    笨・lambda=1.0 縺ｮ縺ｨ縺・querySim 髯埼・→荳閾ｴ縺吶ｋ
+    笨・繧ｯ繧ｨ繝ｪ縺ｫ譛繧りｿ代＞蛟呵｣懊′ top-1 縺ｫ驕ｸ縺ｰ繧後ｋ
+    笨・topK 莉ｶ繧定ｶ・∴縺ｦ霑斐＆縺ｪ縺・    笨・candidates 縺・topK 繧医ｊ蟆代↑縺・ｴ蜷医・蜈ｨ莉ｶ霑斐☆
+    笨・ScoredTmEntry 縺ｫ score 繝輔ぅ繝ｼ繝ｫ繝峨′莉倅ｸ弱＆繧後ｋ
+    笨・MMR lambda=0.0 縺ｮ縺ｨ縺・逡ｪ逶ｮ莉･髯阪・1逡ｪ逶ｮ縺ｨ逡ｰ縺ｪ繧句呵｣懊ｒ蜆ｪ蜈医☆繧・    笨・繧ｯ繧ｨ繝ｪ縺・譁・ｭ玲悴貅縺ｧ繧ょ・逅・′螳御ｺ・☆繧具ｼ・rigram=遨ｺ縺ｧ繧ょ呵｣懊・霑斐☆・・  searchTmByLines
+    笨・陦悟腰菴榊・蜑ｲ縺ｧ讀懃ｴ｢縺瑚｡後ｏ繧後ｋ縺薙→
+    笨・minQueryLength譛ｪ貅縺ｮ陦後′繝輔ぅ繝ｫ繧ｿ縺輔ｌ繧九％縺ｨ
+    笨・revise譎ゅ↓oldSourceContent縺ｮ陦後→荳閾ｴ縺吶ｋ陦後′髯､螟悶＆繧後ｋ縺薙→
+    笨・蜷御ｸtuid縺ｮ驥崎､・・maxScore縺ｧ邨ｱ蜷医＆繧後ｋ縺薙→
+    笨・maxReferences莉ｶ縺ｫ蛻ｶ髯舌＆繧後ｋ縺薙→
+    笨・targetLang variant縺ｪ縺励・繧ｨ繝ｳ繝医Μ縺碁勁螟悶＆繧後ｋ縺薙→
+    笨・蜈ｨ陦後′minQueryLength譛ｪ貅縺ｮ蝣ｴ蜷医↓遨ｺ驟榊・繧定ｿ斐☆縺薙→
+    笨・normalizeForTm縺ｮ縺ｹ縺咲ｭ画ｧ・亥腰荳陦後ユ繧ｭ繧ｹ繝茨ｼ・    笨・繝・・繝悶Ν縺ｮnormalize蜃ｺ蜉帛ｽ｢蠑上・遒ｺ隱・    笨・revise譎ゅ↓蜈ｨ陦後′譌ｧ繧ｽ繝ｼ繧ｹ縺ｨ荳閾ｴ縺吶ｋ蝣ｴ蜷医・遨ｺ驟榊・繧定ｿ斐☆縺薙→
+    笨・繝ｩ繧ｦ繝ｳ繝峨Ο繝薙Φ縺ｧ蜷・｡後↓蜈ｬ蟷ｳ縺ｫ蜑ｲ繧雁ｽ薙※繧峨ｌ繧九％縺ｨ
+    笨・繧ｹ繧ｳ繧｢髢ｾ蛟､莉･荳九・繧ｨ繝ｳ繝医Μ縺後ヵ繧｣繝ｫ繧ｿ縺輔ｌ繧九％縺ｨ
+    笨・譌･譛ｬ隱槭・蜿･轤ｹ・医ゑｼ峨〒譁・腰菴榊・蜑ｲ縺輔ｌ繧九％縺ｨ
+    笨・譁・・蜑ｲ蠕後↓minQueryLength繝輔ぅ繝ｫ繧ｿ縺碁←逕ｨ縺輔ｌ繧九％縺ｨ
+  MarkdownParser・域忰蟆ｾ遨ｺ陦後↑縺励・sync蝠城｡鯉ｼ・    笨・譛ｫ蟆ｾ縺ｫ遨ｺ逋ｽ陦後′縺ｪ縺・憾諷九〒繝槭・繧ｫ繝ｼ蜑阪↓遨ｺ陦後′縺ｪ縺・ｴ蜷医〒繧よｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・遨ｺ逋ｽ陦後′縺ゅｋ豁｣蟶ｸ繧ｱ繝ｼ繧ｹ縺ｮ繝代・繧ｹ遒ｺ隱・    笨・sync蠕茎tringify蠕後・蜀膏arse譎ゅ↓繝槭・繧ｫ繝ｼ縺悟・陬ゅ＠縺ｪ縺・％縺ｨ
+    笨・隍・焚騾｣邯壹☆繧九・繝ｼ繧ｫ繝ｼ縺ｮ髢薙↓遨ｺ陦後′縺ｪ縺上※繧よｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+  MarkdownParser・郁ｦ句・縺礼┌縺励・繝ｼ繧ｫ繝ｼ・・    笨・隕句・縺礼┌縺嶺ｽ咲ｽｮ縺ｮmdait繝槭・繧ｫ繝ｼ縺悟・鬆ｭ繝ｦ繝九ャ繝医→縺励※繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・隕句・縺礼┌縺励Θ繝九ャ繝医′谺｡縺ｮ隕句・縺励・謇句燕縺ｫ縺ゅｋ蝣ｴ蜷医∫峡遶九Θ繝九ャ繝医→縺励※繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・騾比ｸｭ縺ｫ隍・焚縺ｮ隕句・縺礼┌縺励・繝ｼ繧ｫ繝ｼ縺後≠繧句ｴ蜷医√◎繧後◇繧檎峡遶九Θ繝九ャ繝医→縺励※繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・繝上ャ繧ｷ繝･縺檎怐逡･縺輔ｌ縺溘・繝ｼ繧ｫ繝ｼ縺ｧ繧ょ｢・阜縺ｨ縺励※繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・繝上ャ繧ｷ繝･逵∫払繝槭・繧ｫ繝ｼ縺ｮ蠕後↓隕句・縺励′縺ゅｋ蝣ｴ蜷医〒繧よｭ｣縺励￥邨ｱ蜷医＆繧後ｋ縺薙→
+    笨・隍・焚縺ｮ繝上ャ繧ｷ繝･逵∫払繝槭・繧ｫ繝ｼ縺碁｣邯壹☆繧句ｴ蜷医〒繧よｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧九％縺ｨ
+    笨・譛ｬ譁・°繧牙ｧ九∪繧九Θ繝九ャ繝医・蜈磯ｭ遨ｺ陦後′髯､蜴ｻ縺輔ｌ繧九％縺ｨ
+    笨・蜈磯ｭ縺ｫ隍・焚遨ｺ陦後′縺ゅ▲縺ｦ繧る勁蜴ｻ縺輔ｌ繧九％縺ｨ
+  MarkdownParser・・TML繧ｳ繝｡繝ｳ繝亥・繝槭・繧ｫ繝ｼ謖ｿ蜈･繧ｹ繧ｭ繝・・・・    笨・蜊倅ｸ陦粂TML繧ｳ繝｡繝ｳ繝亥・縺ｫ繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ縺ｪ縺・％縺ｨ
+    笨・隍・焚陦粂TML繧ｳ繝｡繝ｳ繝亥・縺ｫ繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ縺ｪ縺・％縺ｨ
+    笨・mdait邂｡逅・畑繝槭・繧ｫ繝ｼ縺ｯ騾壼ｸｸ縺ｮ繝槭・繧ｫ繝ｼ縺ｨ縺励※隱崎ｭ倥＆繧後ｋ縺薙→
+    笨・HTML繧ｳ繝｡繝ｳ繝医→mdait繝槭・繧ｫ繝ｼ縺梧ｷｷ蝨ｨ縺吶ｋ譁・嶌縺梧ｭ｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け縺ｨHTML繧ｳ繝｡繝ｳ繝医′豺ｷ蝨ｨ縺吶ｋ譁・嶌縺梧ｭ｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・荳榊ｮ悟・縺ｪHTML繧ｳ繝｡繝ｳ繝茨ｼ磯哩縺倥ち繧ｰ縺ｪ縺暦ｼ峨・騾壼ｸｸ縺ｮ繝・く繧ｹ繝医→縺励※謇ｱ繧上ｌ繧九％縺ｨ
+    笨・繧､繝ｳ繝ｩ繧､繝ｳHTML繧ｳ繝｡繝ｳ繝医′驕ｩ蛻・↓蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・mdait繝槭・繧ｫ繝ｼ縺ｨHTML繧ｳ繝｡繝ｳ繝医′蜷御ｸ陦後↓縺ゅｋ蝣ｴ蜷医′驕ｩ蛻・↓蜃ｦ逅・＆繧後ｋ縺薙→
+  MarkdownParser・医ヵ繝ｭ繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ・・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｮMD繝輔ぃ繧､繝ｫ繧偵ヱ繝ｼ繧ｹ縺励◆蝣ｴ蜷医’rontMatter縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｮMD繝輔ぃ繧､繝ｫ繧痴tringify縺励◆蝣ｴ蜷医√ヵ繝ｭ繝ｳ繝医・繧ｿ繝ｼ縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｧ譛ｫ蟆ｾ縺ｫ謾ｹ陦後′縺ｪ縺・ｴ蜷医ｂ豁｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｮMD繝輔ぃ繧､繝ｫ繧恥arse竊痴tringify竊恥arse縺励※繧ょ・螳ｹ縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+    笨・遨ｺ縺ｮ繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｮ蝣ｴ蜷医ｂ豁｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｮ縺ｿ縺ｮ繝輔ぃ繧､繝ｫ縺継arse竊痴tringify竊恥arse竊痴tringify繧ｵ繧､繧ｯ繝ｫ縺ｧ遐ｴ謳阪＠縺ｪ縺・％縺ｨ・・UG菫ｮ豁｣・・  MarkdownParser・・rontmatter-繝槭・繧ｫ繝ｼ遨ｺ逋ｽ陦鯉ｼ・=== 1蝗樒岼縺ｮstringify邨先棡 ===
+---
+title: Test Document
+---
+<!-- mdait abc123 -->
+
+<!-- mdait -->
+# Heading 1
+
+Content here.
+
+    笨・frontmatter逶ｴ蠕後↓mdait繝槭・繧ｫ繝ｼ縺後≠繧句ｴ蜷医∫ｩｺ逋ｽ陦後′謖ｿ蜈･縺輔ｌ縺ｪ縺・％縺ｨ・・蝗樒岼縺ｮsync諠ｳ螳夲ｼ・=== 1蝗樒岼縺ｮstringify邨先棡 ===
+---
+title: Test Document
+---
+<!-- mdait abc123 -->
+
+<!-- mdait -->
+# Heading 1
+
+Content here.
+
+=== 2蝗樒岼縺ｮstringify邨先棡 ===
+---
+title: Test Document
+---
+<!-- mdait abc123 -->
+
+<!-- mdait -->
+# Heading 1
+
+Content here.
+
+    笨・frontmatter逶ｴ蠕後↓mdait繝槭・繧ｫ繝ｼ縺後≠繧句ｴ蜷医・蝗槭・parse竊痴tringify蠕後ｂ遨ｺ逋ｽ陦後′謖ｿ蜈･縺輔ｌ縺ｪ縺・％縺ｨ
+=== 隕句・縺励°繧牙ｧ九∪繧句ｴ蜷・===
+---
+title: Test Document
+---
+<!-- mdait -->
+# Heading
+
+Content here without marker.
+
+Parsed units: 1
+    笨・frontmatter逶ｴ蠕後↓隕句・縺励′縺ゅｋ蝣ｴ蜷茨ｼ医・繝ｼ繧ｫ繝ｼ縺ｪ縺暦ｼ峨ｂ豁｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ
+=== 隍・焚繝ｦ繝九ャ繝・===
+---
+title: Test Document
+---
+<!-- mdait abc123 -->
+
+<!-- mdait -->
+# Heading 1
+
+Content 1.
+
+<!-- mdait def456 -->
+
+<!-- mdait -->
+# Heading 2
+
+Content 2.
+
+    笨・隍・焚繝ｦ繝九ャ繝医′縺ゅｋ蝣ｴ蜷医〒繧ゅ’rontmatter逶ｴ蠕後・繝槭・繧ｫ繝ｼ縺ｫ遨ｺ逋ｽ陦後′謖ｿ蜈･縺輔ｌ縺ｪ縺・％縺ｨ
+  MarkdownParser・医ヵ繝ｭ繝ｳ繝医・繧ｿ繝ｼ蠕後・譛ｬ譁・ｼ・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ逶ｴ蠕後′譛ｬ譁・・蝣ｴ蜷医√◎縺ｮ譛ｬ譁・′繝ｦ繝九ャ繝医→縺励※菫晄戟縺輔ｌ繧九％縺ｨ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ逶ｴ蠕後↓mdaitMarker縺後≠繧翫√◎縺ｮ蠕後↓譛ｬ譁・′縺ゅｋ蝣ｴ蜷医∵悽譁・′菫晄戟縺輔ｌ繧九％縺ｨ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ辟｡縺励〒縲∝・鬆ｭ縺梧悽譁・・蝣ｴ蜷医ｂ豁｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ辟｡縺励〒縲∝・鬆ｭ縺ｫmdaitMarker縺後≠繧頑悽譁・′邯壹￥蝣ｴ蜷・  MdaitSection
+    笨・繧ｳ繝ｳ繧ｹ繝医Λ繧ｯ繧ｿ縺ｧ繝励Ο繝代ユ繧｣縺梧ｭ｣縺励￥蛻晄悄蛹悶＆繧後ｋ
+    笨・toString: mdait繝槭・繧ｫ繝ｼ縺ゅｊ縺ｮ蝣ｴ蜷医・豁｣縺励＞蠖｢蠑上〒蜃ｺ蜉帙＆繧後ｋ
+    笨・toString: mdait繝槭・繧ｫ繝ｼ縺蛍ndefined縺ｮ蝣ｴ蜷医・繧ｳ繝ｳ繝・Φ繝・・縺ｿ蜃ｺ蜉帙＆繧後ｋ
+    笨・needsTranslation: 繝槭・繧ｫ繝ｼ縺後≠繧句ｴ蜷医・繝槭・繧ｫ繝ｼ縺ｮ迥ｶ諷九ｒ蜿肴丐縺吶ｋ
+    笨・needsTranslation: 繝槭・繧ｫ繝ｼ縺蛍ndefined縺ｮ蝣ｴ蜷医・蟶ｸ縺ｫfalse繧定ｿ斐☆
+    笨・getSourceHash: 繝槭・繧ｫ繝ｼ縺後≠繧句ｴ蜷医・from繧定ｿ斐☆
+    笨・getSourceHash: 繝槭・繧ｫ繝ｼ縺蛍ndefined縺ｮ蝣ｴ蜷医・null繧定ｿ斐☆
+    笨・markAsTranslated: 豁｣縺励￥need繧ｿ繧ｰ繧貞炎髯､縺吶ｋ
+    笨・createEmptyTargetSection: 豁｣縺励￥繧ｿ繝ｼ繧ｲ繝・ヨ繝ｦ繝九ャ繝医′菴懈・縺輔ｌ繧・  MdaitMarker
+    笨・繧ｳ繝ｳ繧ｹ繝医Λ繧ｯ繧ｿ縺ｧ繝励Ο繝代ユ繧｣縺梧ｭ｣縺励￥蛻晄悄蛹悶＆繧後ｋ
+    笨・toString: 豁｣縺励＞繝輔か繝ｼ繝槭ャ繝医・譁・ｭ怜・縺檎函謌舌＆繧後ｋ
+    笨・parse: 豁｣蟶ｸ縺ｪ繧ｳ繝｡繝ｳ繝域枚蟄怜・縺九ｉ繧ｪ繝悶ず繧ｧ繧ｯ繝医′逕滓・縺輔ｌ繧・    笨・parse: 繝上ャ繧ｷ繝･縺檎怐逡･縺輔ｌ縺溘・繝ｼ繧ｫ繝ｼ縺ｯ遨ｺ譁・ｭ怜・縺ｮ繝上ャ繧ｷ繝･繧呈戟縺､
+    笨・parse: 荳肴ｭ｣縺ｪ繝輔か繝ｼ繝槭ャ繝医・譁・ｭ怜・縺九ｉ縺ｯnull縺瑚ｿ斐＆繧後ｋ
+    笨・updateHash: 繝上ャ繧ｷ繝･蛟､縺梧ｭ｣縺励￥譖ｴ譁ｰ縺輔ｌ繧・    笨・removeNeedTag: needTag縺碁←蛻・↓蜑企勁縺輔ｌ繧・    笨・needsTranslation: 鄙ｻ險ｳ縺悟ｿ・ｦ√°縺ｩ縺・°縺梧ｭ｣縺励￥蛻､螳壹＆繧後ｋ
+    笨・needsRevision: revise@{hash}蠖｢蠑上ｒ豁｣縺励￥蛻､螳壹☆繧・    笨・getOldHashFromNeed: revise@{hash}縺九ｉoldhash繧呈歓蜃ｺ縺吶ｋ
+    笨・setReviseNeed: need:revise@{oldhash}蠖｢蠑上ｒ險ｭ螳壹☆繧・    笨・parse: revise@{hash}蠖｢蠑上ｒ豁｣縺励￥繝代・繧ｹ縺吶ｋ
+    笨・toString: revise@{hash}蠖｢蠑上ｒ豁｣縺励￥譁・ｭ怜・蛹悶☆繧・  level-validator
+    笨・level險ｭ螳壹′荳閾ｴ縺励※縺・ｋ蝣ｴ蜷医√さ繝ｳ繝・Φ繝・ｒ螟画峩縺励↑縺・    笨・level險ｭ螳壹′逡ｰ縺ｪ繧句ｴ蜷医∬ｨｳ譁・ｒ蜴滓枚縺ｫ蜷医ｏ縺帙※菫ｮ豁｣縺吶ｋ
+    笨・蜴滓枚縺ｫlevel險ｭ螳壹↑縺励∬ｨｳ譁・↓縺ゅｊ 竊・險ｳ譁・・level險ｭ螳壹ｒ蜑企勁
+    笨・蜴滓枚縺ｫlevel險ｭ螳壹≠繧翫∬ｨｳ譁・↓frontmatter縺ｪ縺・竊・險ｳ譁・↓frontmatter繧剃ｽ懈・縺励※level險ｭ螳・    笨・荳｡譁ｹ縺ｫlevel險ｭ螳壹↑縺・竊・菴輔ｂ縺励↑縺・    笨・level蛟､縺系umber蝙九〒縺ｪ縺・ｴ蜷医√お繝ｩ繝ｼ繧偵せ繝ｭ繝ｼ
+    笨・frontmatter縺ｫmdait縺ｮ縺ｿ縺梧ｮ九ｊ縲∫ｩｺ縺ｫ縺ｪ縺｣縺溷ｴ蜷医・蜑企勁縺輔ｌ繧・    笨・蜴滓枚縺ｫfrontmatter縺ｪ縺励∬ｨｳ譁・↓level險ｭ螳壹≠繧・竊・險ｳ譁・・level險ｭ螳壹ｒ蜑企勁
+  FrontMatter鄙ｻ險ｳ繝ｦ繝ｼ繝・ぅ繝ｪ繝・ぅ
+    getFrontmatterTranslationValues
+      笨・譁・ｭ怜・繧ｭ繝ｼ縺ｮ縺ｿ繧堤ｿｻ險ｳ蟇ｾ雎｡縺ｨ縺励※謚ｽ蜃ｺ縺ｧ縺阪ｋ縺薙→
+      笨・undefined縺ｮfrontmatter縺ｧ縺ｯ遨ｺ繧ｪ繝悶ず繧ｧ繧ｯ繝医ｒ霑斐☆縺薙→
+      笨・蟄伜惠縺励↑縺・く繝ｼ繧呈欠螳壹＠縺ｦ繧らｵ先棡縺ｫ蜷ｫ縺ｾ繧後↑縺・％縺ｨ
+    calculateFrontmatterHash
+      笨・譁・ｭ怜・繧ｭ繝ｼ縺ｧ繝上ャ繧ｷ繝･險育ｮ励＠縲・撼譁・ｭ怜・縺ｮ縺ｿ縺ｮ蝣ｴ蜷医・null縺ｫ縺ｪ繧九％縺ｨ
+      笨・undefined縺ｮfrontmatter縺ｧ縺ｯnull繧定ｿ斐☆縺薙→
+      笨・遨ｺ縺ｮkeys縺ｧ縺ｯnull繧定ｿ斐☆縺薙→
+      笨・allowEmpty: true縺ｪ繧臥ｩｺ蛟､縺ｧ繧ゅワ繝・す繝･繧定ｨ育ｮ励☆繧九％縺ｨ
+      笨・蜷御ｸ繧ｳ繝ｳ繝・Φ繝・・蜷後§繝上ャ繧ｷ繝･縺ｫ縺ｪ繧九％縺ｨ
+    parseFrontmatterMarker / serializeFrontmatterMarker
+      笨・frontmatter繝槭・繧ｫ繝ｼ縺ｮparse/serialize縺御ｸ閾ｴ縺吶ｋ縺薙→
+      笨・undefined縺ｮfrontmatter縺ｧ縺ｯnull繧定ｿ斐☆縺薙→
+      笨・繝槭・繧ｫ繝ｼ繧ｭ繝ｼ縺檎ｩｺ譁・ｭ励・蝣ｴ蜷医・null繧定ｿ斐☆縺薙→
+      笨・hash縺ｮ縺ｿ縺ｮ繝槭・繧ｫ繝ｼ繧ゅヱ繝ｼ繧ｹ縺ｧ縺阪ｋ縺薙→
+      笨・revise蠖｢蠑上・need繧ゅヱ繝ｼ繧ｹ縺ｧ縺阪ｋ縺薙→
+    setFrontmatterMarker
+      笨・繝槭・繧ｫ繝ｼ繧定ｨｭ螳壹〒縺阪ｋ縺薙→
+      笨・null繧定ｨｭ螳壹☆繧九→譌｢蟄倥・繝ｼ繧ｫ繝ｼ縺悟炎髯､縺輔ｌ繧九％縺ｨ
+      笨・hash縺後↑縺・・繝ｼ繧ｫ繝ｼ繧定ｨｭ螳壹☆繧九→譌｢蟄倥・繝ｼ繧ｫ繝ｼ縺悟炎髯､縺輔ｌ繧九％縺ｨ
+  Frontmatter蜷梧悄繝ｭ繧ｸ繝・け・医さ繧｢繝ｭ繧ｸ繝・け・・    笨・鄙ｻ險ｳ蠕後↓蜴滓枚繧貞､画峩縺励◆蝣ｴ蜷医］eed:revise縺瑚ｨｭ螳壹＆繧後ｋ縺ｹ縺・Frontmatter output:
+ ---
+title: Test
+description: Test description
+mdait:
+  front: 'abc123 from:def456 need:translate'
+---
+    笨・mdait.front繝槭・繧ｫ繝ｼ縺悟ｼ慕畑隨ｦ縺ｧ蝗ｲ繧上ｌ縺ｦ蜃ｺ蜉帙＆繧後ｋ縺薙→
+  FrontMatter - 繝輔か繝ｼ繝槭ャ繝井ｿ晄戟
+Result:
+ ---
+tags: ["Golang", "Markdown", "Front Matter"]
+author: John Doe
+date: 2024-01-01
+mdait:
+  front: 'abc123 from:def456 need:translate'
+---
+    笨・mdait邂｡逅・､悶・繝輔ぅ繝ｼ繝ｫ繝峨・繝輔か繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test Title
+description: Test description
+mdait:
+  sync:
+    level: 3
+---
+    笨・mdait繝輔ぅ繝ｼ繝ｫ繝峨・縺ｿ縺悟ｭ伜惠縺吶ｋ蝣ｴ蜷医〒繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test Title
+tags: ["Tag1", "Tag2"]
+mdait:
+  sync:
+    level: 3
+  front: xyz789
+---
+    笨・mdait繝輔ぅ繝ｼ繝ｫ繝峨′蜈磯ｭ縺ｫ縺ゅｋ蝣ｴ蜷医〒繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test Title
+description: Test description
+tags: ["A", "B", "C"]
+mdait:
+  sync:
+    level: 3
+  front: hash123
+---
+    笨・mdait繝輔ぅ繝ｼ繝ｫ繝峨′荳ｭ髢薙↓縺ゅｋ蝣ｴ蜷医〒繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test Title
+author: Jane Doe
+tags: ["X", "Y"]
+mdait:
+  sync:
+    level: 3
+  front: final123
+---
+    笨・mdait繝輔ぅ繝ｼ繝ｫ繝峨′譛ｫ蟆ｾ縺ｫ縺ゅｋ蝣ｴ蜷医〒繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: No Mdait
+tags: ["One", "Two"]
+complex:
+  nested:
+    value: 123
+mdait:
+  front: new123
+  sync:
+    level: 2
+---
+    笨・frontmatter縺ｫmdait縺悟ｭ伜惠縺励↑縺・ｴ蜷・Result:
+ ---
+mdait:
+  sync:
+    level: 2
+  front: updated456
+---
+    笨・frontmatter縺稽dait縺ｮ縺ｿ縺ｮ蝣ｴ蜷・Result:
+ ---
+title: Complex Structure
+metadata:
+  authors: ["Alice", "Bob"]
+  tags: ["tech", "tutorial"]
+  versions:
+    - v1.0
+    - v2.0
+date: 2024-01-01
+mdait:
+  front: complex123
+---
+    笨・隍・尅縺ｪ繝阪せ繝域ｧ矩繧呈戟縺､frontmatter縺ｧ繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test
+tags: ["A", "B"]
+author: John
+
+---
+    笨・mdait繝輔ぅ繝ｼ繝ｫ繝峨ｒ蜑企勁縺励◆蝣ｴ蜷医〒繧ゆｻ悶・繝輔か繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Test With Spaces
+
+tags: ["Tag1", "Tag2"]
+
+author: Alice
+mdait:
+  front: space123
+---
+    笨・遨ｺ逋ｽ繧・さ繝｡繝ｳ繝医ｒ蜷ｫ繧frontmatter縺ｧ繧ゅヵ繧ｩ繝ｼ繝槭ャ繝医′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: Translated Title
+tags: ["Golang", "Markdown"]
+description: Original description
+author: John
+
+---
+    笨・non-mdait繝輔ぅ繝ｼ繝ｫ繝峨・蛟､繧呈峩譁ｰ縺励◆蝣ｴ蜷医∵峩譁ｰ縺悟渚譏縺輔ｌ莉悶・繝輔か繝ｼ繝槭ャ繝医・菫晄戟縺輔ｌ繧・Result:
+ ---
+title: New Title
+description: New Description
+tags: ["A", "B"]
+author: Author
+
+---
+    笨・隍・焚縺ｮnon-mdait繝輔ぅ繝ｼ繝ｫ繝峨ｒ譖ｴ譁ｰ縺励◆蝣ｴ蜷医√☆縺ｹ縺ｦ縺ｮ譖ｴ譁ｰ縺悟渚譏縺輔ｌ繧・Result:
+ ---
+title: Updated Title
+tags: ["X", "Y"]
+mdait:
+  sync:
+    level: 2
+  front: hash123
+---
+    笨・non-mdait繝輔ぅ繝ｼ繝ｫ繝峨→mdait繝輔ぅ繝ｼ繝ｫ繝峨ｒ蜷梧凾縺ｫ譖ｴ譁ｰ縺励◆蝣ｴ蜷医∽ｸ｡譁ｹ縺悟渚譏縺輔ｌ繧・Result:
+ ---
+title: Translated Title
+description: Original description
+tags: ["A", "B"]
+author: John
+
+---
+    笨・non-mdait繝輔ぅ繝ｼ繝ｫ繝峨ｒ譖ｴ譁ｰ縺励※繧ょ・縺ｮ鬆・ｺ上′菫晄戟縺輔ｌ繧・Result:
+ ---
+title: New Title
+description: New Description
+category: Category
+tags: ["X"]
+author: Author
+
+---
+    笨・隍・焚縺ｮnon-mdait繝輔ぅ繝ｼ繝ｫ繝峨ｒ譖ｴ譁ｰ縺励※繧る・ｺ上′菫晄戟縺輔ｌ繧・  DefaultTranslator 繝ｪ繝医Λ繧､讖滓ｧ・    translate
+      笨・豁｣蟶ｸ縺ｪ繝ｬ繧ｹ繝昴Φ繧ｹ縺ｯ1蝗槭〒謌仙粥縺吶ｋ
+      笨・1蝗樒岼螟ｱ謨冷・2蝗樒岼謌仙粥縺ｧ繝ｪ繝医Λ繧､縺梧ｩ溯・縺吶ｋ
+      笨・2蝗槫､ｱ謨冷・3蝗樒岼謌仙粥縺ｧ繝ｪ繝医Λ繧､縺梧ｩ溯・縺吶ｋ
+      笨・3蝗槭☆縺ｹ縺ｦ螟ｱ謨励〒繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ縺梧ｩ溯・縺吶ｋ
+      笨・translation 繝輔ぅ繝ｼ繝ｫ繝画ｬ關ｽ縺ｧ繝ｪ繝医Λ繧､縺吶ｋ
+      笨・JSON豺ｷ蜈･讀懷・縺ｧ繝ｪ繝医Λ繧､縺吶ｋ
+      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け繝励Ξ繝ｼ繧ｹ繝帙Ν繝繝ｼ縺悟ｾｩ蜈・＆繧後ｋ
+      笨・termSuggestions縺梧ｭ｣縺励￥霑斐＆繧後ｋ
+    translateRevisionPatch
+      笨・豁｣蟶ｸ縺ｪ繝ｬ繧ｹ繝昴Φ繧ｹ縺ｯ1蝗槭〒謌仙粥縺吶ｋ
+      笨・1蝗樒岼螟ｱ謨冷・2蝗樒岼謌仙粥縺ｧ繝ｪ繝医Λ繧､縺梧ｩ溯・縺吶ｋ
+      笨・targetPatch 繝輔ぅ繝ｼ繝ｫ繝画ｬ關ｽ縺ｧ繝ｪ繝医Λ繧､縺吶ｋ
+      笨・3蝗槭☆縺ｹ縺ｦ螟ｱ謨励〒繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ縺梧ｩ溯・縺吶ｋ
+      笨・warnings縺梧ｭ｣縺励￥邨仙粋縺輔ｌ繧・  TranslationChecker
+    checkTranslationQuality
+      笨・螳悟・荳閾ｴ縺吶ｋ讒矩縺ｯ蝠城｡後↑縺・      笨・隕句・縺励Ξ繝吶Ν縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・隕句・縺玲焚縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・繝ｪ繧ｹ繝磯・岼謨ｰ縺御ｸ閾ｴ縺吶ｋ蝣ｴ蜷医・蝠城｡後↑縺・      笨・繝ｪ繧ｹ繝磯・岼謨ｰ縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け謨ｰ縺御ｸ閾ｴ縺吶ｋ蝣ｴ蜷医・蝠城｡後↑縺・      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け謨ｰ縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・蠑慕畑繝悶Ο繝・け謨ｰ縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・繝・・繝悶Ν謨ｰ縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・繝ｪ繝ｳ繧ｯ謨ｰ縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・逕ｻ蜒乗焚縺御ｸ堺ｸ閾ｴ縺ｮ蝣ｴ蜷医・遒ｺ隱肴耳螂ｨ
+      笨・隍・焚縺ｮ蝠城｡後′縺ゅｋ蝣ｴ蜷医・蜈ｨ縺ｦ讀懷・
+      笨・逡ｪ蜿ｷ莉倥″繝ｪ繧ｹ繝医ｂ豁｣縺励￥繧ｫ繧ｦ繝ｳ繝医＆繧後ｋ
+      笨・繝阪せ繝医＆繧後◆繝ｪ繧ｹ繝医ｂ豁｣縺励￥繧ｫ繧ｦ繝ｳ繝医＆繧後ｋ
+  trans-command TM讀懃ｴ｢縺ｮ豁｣隕丞喧繝ｭ繧ｸ繝・け
+    笨・Markdown蜷ｫ繧繧ｽ繝ｼ繧ｹ縺梧ｭ｣隕丞喧縺輔ｌ縺ｦ蜷後§繝上ャ繧ｷ繝･縺ｫ縺ｪ繧・    笨・逡ｰ縺ｪ繧貴arkdown險俶ｳ輔〒繧ょ酔縺倥ワ繝・す繝･縺ｧ繝槭ャ繝√Φ繧ｰ
+    笨・繝ｪ繝ｳ繧ｯ險俶ｳ輔ｒ蜷ｫ繧繧ｽ繝ｼ繧ｹ繧よｭ｣隕丞喧縺輔ｌ縺ｦ蜷後§繝上ャ繧ｷ繝･縺ｫ縺ｪ繧・    笨・隍・焚縺ｮMarkdown隕∫ｴ繧貞性繧隍・尅縺ｪ譁・・豁｣隕丞喧
+    笨・蜈磯ｭfrontmatter縺ｯ豁｣隕丞喧縺ｨ繝上ャ繧ｷ繝･險育ｮ励°繧蛾勁螟悶＆繧後ｋ
+    笨・TmxStore縺ｧ縺ｮ逋ｻ骭ｲ繝ｻ讀懃ｴ｢縺ｮ邨ｱ蜷医ユ繧ｹ繝・    笨・TmxStore縺ｧ縺ｮ繝舌ャ繝∵､懃ｴ｢縺ｮ蜍穂ｽ懃｢ｺ隱・  Trans蜃ｦ逅・ｼ・rontmatter鄙ｻ險ｳ・・    笨・frontmatter縺ｮneed:translate繝輔Λ繧ｰ縺梧ｭ｣縺励￥讀懷・縺輔ｌ繧九％縺ｨ
+    笨・frontmatter縺檎ｿｻ險ｳ貂医∩縺ｮ蝣ｴ蜷医］eedsTranslation()縺掲alse繧定ｿ斐☆縺薙→
+    笨・need:revise@{hash}蠖｢蠑上′豁｣縺励￥讀懷・縺輔ｌ繧九％縺ｨ
+    笨・MdaitMarker.removeNeedTag縺ｧ鄙ｻ險ｳ螳御ｺ・ｒ陦ｨ迴ｾ縺ｧ縺阪ｋ縺薙→
+    笨・鄙ｻ險ｳ蟇ｾ雎｡蛟､縺梧ｭ｣縺励￥謚ｽ蜃ｺ縺輔ｌ繧九％縺ｨ
+  TermsCacheManager
+    笨・繧ｷ繝ｳ繧ｰ繝ｫ繝医Φ繧､繝ｳ繧ｹ繧ｿ繝ｳ繧ｹ縺梧ｭ｣縺励￥蜿門ｾ励〒縺阪ｋ
+    笨・繝輔ぃ繧､繝ｫ縺悟ｭ伜惠縺励↑縺・ｴ蜷医・遨ｺ驟榊・繧定ｿ斐☆
+    笨・蛻晏屓隱ｭ縺ｿ霎ｼ縺ｿ縺ｧ繧ｭ繝｣繝・す繝･繧呈ｧ狗ｯ峨〒縺阪ｋ
+    笨・蜷後§繝輔ぃ繧､繝ｫ縺ｮ2蝗樒岼縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｯ繧ｭ繝｣繝・す繝･繧剃ｽｿ逕ｨ縺吶ｋ
+    笨・繝輔ぃ繧､繝ｫ縺梧峩譁ｰ縺輔ｌ縺溷ｴ蜷医・繧ｭ繝｣繝・す繝･繧堤┌蜉ｹ蛹悶＠縺ｦ蜀崎ｪｭ縺ｿ霎ｼ縺ｿ縺吶ｋ (109ms)
+    笨・clearCache縺ｧ迚ｹ螳壹ヵ繧｡繧､繝ｫ縺ｮ繧ｭ繝｣繝・す繝･繧偵け繝ｪ繧｢縺ｧ縺阪ｋ
+    笨・clearCache蠑墓焚縺ｪ縺励〒蜈ｨ繧ｭ繝｣繝・す繝･繧偵け繝ｪ繧｢縺ｧ縺阪ｋ
+  TermExtractor
+    extractRelevantTerms
+      笨・繝ｦ繝九ャ繝亥・螳ｹ縺ｫ蜷ｫ縺ｾ繧後ｋ逕ｨ隱槭ｒ謚ｽ蜃ｺ縺ｧ縺阪ｋ
+      笨・variants縺ｫ荳閾ｴ縺吶ｋ逕ｨ隱槭ｂ謚ｽ蜃ｺ縺ｧ縺阪ｋ
+      笨・蜴溯ｪ槭∪縺溘・險ｳ隱槭′縺ｪ縺・ｴ蜷医・繧ｹ繧ｭ繝・・縺吶ｋ
+      笨・context縺後≠繧句ｴ蜷医・TranslationTerm縺ｫ蜷ｫ繧√ｋ
+    termsToJson
+      笨・逕ｨ隱槭Μ繧ｹ繝医ｒJSON譁・ｭ怜・縺ｫ螟画鋤縺ｧ縺阪ｋ
+      笨・context縺後≠繧句ｴ蜷医・JSON蜃ｺ蜉帙↓蜷ｫ繧√ｋ
+      笨・context縺蛍ndefined縺ｮ蝣ｴ蜷医・JSON蜃ｺ蜉帙↓蜷ｫ繧√↑縺・      笨・遨ｺ縺ｮ逕ｨ隱槭Μ繧ｹ繝医・遨ｺ譁・ｭ怜・繧定ｿ斐☆
+  ResponseValidator
+    extractJsonFromResponse
+      笨・逕溘・JSON繧呈歓蜃ｺ縺ｧ縺阪ｋ
+      笨・繝槭・繧ｯ繝繧ｦ繝ｳ繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け縺九ｉJSON繧呈歓蜃ｺ縺ｧ縺阪ｋ
+      笨・險隱樊欠螳壹↑縺励・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け縺九ｉJSON繧呈歓蜃ｺ縺ｧ縺阪ｋ
+      笨・蜑榊ｾ後・遨ｺ逋ｽ繧偵ヨ繝ｪ繝縺吶ｋ
+    detectJsonInContent
+      笨・騾壼ｸｸ縺ｮ繝・く繧ｹ繝医・JSON讀懷・縺励↑縺・      笨・translation 繝ｩ繝・ヱ繝ｼ繧呈､懷・縺吶ｋ
+      笨・targetPatch 繝ｩ繝・ヱ繝ｼ繧呈､懷・縺吶ｋ
+      笨・陦碁ｭ縺ｮJSON繧ｪ繝悶ず繧ｧ繧ｯ繝医ｒ讀懷・縺吶ｋ
+      笨・繧ｨ繧ｹ繧ｱ繝ｼ繝励＆繧後◆JSON繧呈､懷・縺吶ｋ
+      笨・荳ｭ諡ｬ蠑ｧ繧貞性繧騾壼ｸｸ縺ｮ繝・く繧ｹ繝医・隱､讀懷・縺励↑縺・    validateTranslationResponse
+      笨・豁｣縺励＞JSON蠖｢蠑上ｒ蜿励￠蜈･繧後ｋ
+      笨・termSuggestions縺ｪ縺励〒繧よ怏蜉ｹ
+      笨・termSuggestions縺梧ｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧・      笨・warnings縺梧ｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧・      笨・JSON繝代・繧ｹ繧ｨ繝ｩ繝ｼ繧呈､懷・縺吶ｋ
+      笨・荳肴ｭ｣縺ｪJSON繧呈､懷・縺吶ｋ
+      笨・translation 繝輔ぅ繝ｼ繝ｫ繝画ｬ關ｽ繧呈､懷・縺吶ｋ
+      笨・translation 繝輔ぅ繝ｼ繝ｫ繝峨′譁・ｭ怜・縺ｧ縺ｪ縺・ｴ蜷医ｒ讀懷・縺吶ｋ
+      笨・驟榊・繝ｬ繧ｹ繝昴Φ繧ｹ繧呈拠蜷ｦ縺吶ｋ
+      笨・translation蜀・・JSON豺ｷ蜈･繧呈､懷・縺吶ｋ・医ヱ繧ｿ繝ｼ繝ｳA: 繝ｩ繝・ヱ繝ｼ讒矩・・      笨・繝槭・繧ｯ繝繧ｦ繝ｳ繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け莉倥″繝ｬ繧ｹ繝昴Φ繧ｹ繧貞・逅・〒縺阪ｋ
+    validateRevisionPatchResponse
+      笨・豁｣縺励＞JSON蠖｢蠑上ｒ蜿励￠蜈･繧後ｋ
+      笨・termSuggestions縺ｨwarnings縺梧ｭ｣縺励￥繝代・繧ｹ縺輔ｌ繧・      笨・targetPatch 繝輔ぅ繝ｼ繝ｫ繝画ｬ關ｽ繧呈､懷・縺吶ｋ
+      笨・targetPatch 繝輔ぅ繝ｼ繝ｫ繝峨′譁・ｭ怜・縺ｧ縺ｪ縺・ｴ蜷医ｒ讀懷・縺吶ｋ
+      笨・targetPatch蜀・・JSON豺ｷ蜈･繧呈､懷・縺吶ｋ
+      笨・JSON繝代・繧ｹ繧ｨ繝ｩ繝ｼ繧呈､懷・縺吶ｋ
+  OutputSanitizer
+    sanitizeTranslationOutput
+      笨・騾壼ｸｸ縺ｮ繝・く繧ｹ繝医・隴ｦ蜻翫↑縺励〒騾夐℃縺吶ｋ
+      笨・繝槭・繧ｯ繝繧ｦ繝ｳ蠖｢蠑上・繝・く繧ｹ繝医・隴ｦ蜻翫↑縺励〒騾夐℃縺吶ｋ
+      笨・TRANSLATION_WRAPPER 繝代ち繝ｼ繝ｳ繧呈､懷・縺吶ｋ
+      笨・targetPatch 繝ｩ繝・ヱ繝ｼ繝代ち繝ｼ繝ｳ繧呈､懷・縺吶ｋ
+      笨・FULL_JSON_OBJECT 繝代ち繝ｼ繝ｳ繧呈､懷・縺吶ｋ
+      笨・ESCAPED_JSON 繝代ち繝ｼ繝ｳ繧呈､懷・縺吶ｋ
+      笨・NESTED_BRACES 繝代ち繝ｼ繝ｳ繧呈､懷・縺吶ｋ
+      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け蜀・・JSON縺ｯ髯､螟悶＆繧後ｋ
+      笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け螟悶・JSON縺ｯ讀懷・縺輔ｌ繧・      笨・隍・焚縺ｮ繝代ち繝ｼ繝ｳ縺梧､懷・縺輔ｌ繧・      笨・讀懷・縺輔ｌ縺溘ヱ繧ｿ繝ｼ繝ｳ縺ｮ菴咲ｽｮ諠・ｱ縺梧ｭ｣縺励＞
+      笨・繧ｵ繝ｳ繝励Ν縺ｯ50譁・ｭ嶺ｻ･蜀・↓蛻・ｊ隧ｰ繧√ｉ繧後ｋ
+      笨・繝・く繧ｹ繝医・螟画峩縺輔ｌ縺ｪ縺・ｼ郁ｭｦ蜻翫・縺ｿ・・      笨・豕｢諡ｬ蠑ｧ繧貞性繧騾壼ｸｸ縺ｮ繝・く繧ｹ繝医・隱､讀懷・縺励↑縺・      笨・Mustache繝・Φ繝励Ξ繝ｼ繝域ｧ区枚縺ｯ隱､讀懷・縺励↑縺・      笨・遨ｺ譁・ｭ怜・繧貞・逅・〒縺阪ｋ
+  generateContent
+    笨・new/update 豺ｷ蝨ｨ縺ｮ蝣ｴ蜷医∽ｸ｡繧ｻ繧ｯ繧ｷ繝ｧ繝ｳ縺ｫ蜀・ｮｹ縺瑚｡ｨ遉ｺ縺輔ｌ繧・    笨・0莉ｶ縺ｮ蝣ｴ蜷医・none) 縺御ｸ｡繧ｻ繧ｯ繧ｷ繝ｧ繝ｳ縺ｫ陦ｨ遉ｺ縺輔ｌ繧・    笨・new 0莉ｶ繝ｻupdate 1莉ｶ縺ｮ蝣ｴ蜷医¨ew 縺ｫ (none)縲ゞpdated 縺ｫ蜀・ｮｹ縺瑚｡ｨ遉ｺ縺輔ｌ繧・    笨・迚ｹ谿頑枚蟄暦ｼ・ < > 縺ｪ縺ｩ・峨ｒ蜷ｫ繧蝣ｴ蜷医ｂ豁｣縺励￥蜃ｺ蜉帙＆繧後ｋ
+    笨・繝倥ャ繝繝ｼ縺ｫ繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝励′蜷ｫ縺ｾ繧後ｋ
+  LLMTmEntryGenerator
+    parseResponse
+      笨・豁｣蟶ｸ縺ｪTM逋ｻ骭ｲ險育判驟榊・繧偵ヱ繝ｼ繧ｹ縺ｧ縺阪ｋ
+      笨・JSON繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け莉倥″繝ｬ繧ｹ繝昴Φ繧ｹ繧偵ヱ繝ｼ繧ｹ縺ｧ縺阪ｋ
+      笨・遨ｺ縺ｮprimary縺ｾ縺溘・local繧貞性繧蠢懃ｭ斐・ fail-closed 縺ｧ遨ｺ驟榊・縺ｫ縺ｪ繧・      笨・驟榊・縺ｧ縺ｪ縺・Ξ繧ｹ繝昴Φ繧ｹ縺ｯ遨ｺ驟榊・繧定ｿ斐☆
+      笨・荳肴ｭ｣縺ｪJSON縺ｯ遨ｺ驟榊・繧定ｿ斐☆
+      笨・荳肴ｭ｣縺ｪ隕∫ｴ・・ype/primary/local谺關ｽ・峨ｒ蜷ｫ繧蠢懃ｭ斐・ fail-closed 縺ｧ遨ｺ驟榊・縺ｫ縺ｪ繧・      笨・菴呵ｨ医↑繝励Ο繝代ユ繧｣繧貞性繧蠢懃ｭ斐・ fail-closed 縺ｧ遨ｺ驟榊・縺ｫ縺ｪ繧・    generateEntries
+      笨・AIService縺ｫ繝励Ο繝ｳ繝励ヨ繧帝∽ｿ｡縺励※繝ｬ繧ｹ繝昴Φ繧ｹ繧偵ヱ繝ｼ繧ｹ縺吶ｋ
+  TmCommitProcessor
+    笨・existing TM set 縺ｨ update蠢・・uid 繧呈悄蠕・壹ｊ蟆主・縺ｧ縺阪ｋ
+    笨・迴ｾ蝨ｨ縺ｮ local 譁・擇縺梧里縺ｫ蜿肴丐貂医∩縺ｪ繧・required update 縺ｫ縺励↑縺・    笨・guard 縺梧ｬ關ｽ繝ｻsubset驕募渚繝ｻ譁・ｲ貞ｺｦ驕募渚繧貞ｼｾ縺・    笨・focused retry 縺梧ｬ關ｽ蛻・□縺大・隧ｦ陦後☆繧・    笨・retry 荳企剞蛻ｰ驕泌ｾ後ｂ菫晏ｭ倡ｶ咏ｶ壹＠ warned 縺ｫ險井ｸ翫＆繧後ｋ
+    笨・驥崎､・＠縺・new 蛟呵｣懊〒繧ゆｻｶ謨ｰ髮・ｨ医・螳牙ｮ壹☆繧・  isTmCommitTarget
+    蜃ｦ逅・ｯｾ雎｡縺ｮ蛻､螳・      笨・from螻樊ｧ縺ゅｊ繝ｻneed譛ｪ險ｭ螳壹・繝ｦ繝九ャ繝医・蜃ｦ逅・ｯｾ雎｡
+      笨・from螻樊ｧ縺ｪ縺励・繝ｦ繝九ャ繝医・繧ｹ繧ｭ繝・・縺輔ｌ繧具ｼ医た繝ｼ繧ｹ繝輔ぃ繧､繝ｫ・・      笨・need:translate莉倥″繝ｦ繝九ャ繝医・繧ｹ繧ｭ繝・・縺輔ｌ繧具ｼ域悴鄙ｻ險ｳ・・      笨・need:revise@莉倥″繝ｦ繝九ャ繝医・繧ｹ繧ｭ繝・・縺輔ｌ繧具ｼ域立迚郁ｨｳ譁・ｼ・      笨・need:review莉倥″繝ｦ繝九ャ繝医・繧ｹ繧ｭ繝・・縺輔ｌ繧具ｼ医Ξ繝薙Η繝ｼ蠕・■・・      笨・縺昴・莉悶・need蛟､繧呈戟縺､繝ｦ繝九ャ繝医・蜃ｦ逅・ｯｾ雎｡
+  buildTmCommitUnitResolution
+    笨・髱・primary pair 縺九ｉ primaryUnit 繧帝■蜿願ｧ｣豎ｺ縺ｧ縺阪ｋ
+    笨・lineage 荳堺ｸ閾ｴ譎ゅ・ null 繧定ｿ斐☆
+    笨・prepareTmCommitUnit 縺ｯ marker.hash 縺ｮ譛臥┌縺ｫ髢｢菫ゅ↑縺・lineage 隗｣豎ｺ繧貞ｮ溯｡後☆繧・  TextNormalizer 繧ｯ繝ｩ繧ｹ縺ｮ繝・せ繝・    笨・繝・ヵ繧ｩ繝ｫ繝医が繝励す繝ｧ繝ｳ縺ｧ蜈ｨ縺ｦ縺ｮ豁｣隕丞喧蜃ｦ逅・′驕ｩ逕ｨ縺輔ｌ繧・    笨・trim 繧ｪ繝励す繝ｧ繝ｳ縺・false 縺ｮ蝣ｴ蜷医・蜑榊ｾ後・遨ｺ逋ｽ縺梧ｮ九ｋ
+    笨・collapseSpaces 繧ｪ繝励す繝ｧ繝ｳ縺・false 縺ｮ蝣ｴ蜷医・騾｣邯夂ｩｺ逋ｽ縺檎ｵｱ蜷医＆繧後↑縺・    笨・collapseSpaces 繧ｪ繝励す繝ｧ繝ｳ縺・false 縺ｮ蝣ｴ蜷医・繧ｿ繝匁枚蟄励′遨ｺ逋ｽ縺ｫ螟画鋤縺輔ｌ縺ｪ縺・    笨・normalizeNewlines 繧ｪ繝励す繝ｧ繝ｳ縺・false 縺ｮ蝣ｴ蜷医・CRLF縺鍬F縺ｫ螟画鋤縺輔ｌ縺ｪ縺・    笨・隍・焚縺ｮ繧ｪ繝励す繝ｧ繝ｳ繧貞酔譎ゅ↓辟｡蜉ｹ蛹悶〒縺阪ｋ
+    笨・遨ｺ縺ｮ譁・ｭ怜・繧呈ｭ｣隕丞喧縺吶ｋ縺ｨ縺昴・縺ｾ縺ｾ遨ｺ譁・ｭ怜・縺瑚ｿ斐＆繧後ｋ
+    笨・遨ｺ逋ｽ縺ｮ縺ｿ縺ｮ譁・ｭ怜・繧呈ｭ｣隕丞喧縺吶ｋ縺ｨ遨ｺ譁・ｭ怜・縺瑚ｿ斐＆繧後ｋ
+    笨・normalizeText 髢｢謨ｰ縺ｯ蟶ｸ縺ｫ繝・ヵ繧ｩ繝ｫ繝医が繝励す繝ｧ繝ｳ縺ｧ豁｣隕丞喧縺吶ｋ
+  HashCalculator
+    笨・繝・く繧ｹ繝医・繝上ャ繧ｷ繝･縺・譁・ｭ励〒霑斐＆繧後ｋ縺薙→
+    笨・遨ｺ縺ｮ繝・く繧ｹ繝医↓蟇ｾ縺励※蝗ｺ螳壹ワ繝・す繝･00000000縺瑚ｿ斐＆繧後ｋ縺薙→
+    笨・豁｣隕丞喧縺ｪ縺励〒8譁・ｭ励・繝上ャ繧ｷ繝･縺瑚ｿ斐＆繧後ｋ縺薙→
+  calculateHash
+    笨・繝・ヵ繧ｩ繝ｫ繝医・險育ｮ玲ｩ溘ｒ菴ｿ逕ｨ縺励※繝上ャ繧ｷ繝･縺瑚ｨ育ｮ励＆繧後ｋ縺薙→
+  UnitPair
+    笨・繧ｽ繝ｼ繧ｹ縺ｮ縺ｿ縺ｧ繝壹い繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・繧ｽ繝ｼ繧ｹ縺ｨ繧ｿ繝ｼ繧ｲ繝・ヨ縺ｧ繝壹い繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・hasTarget縺檎ｿｻ險ｳ貂医∩繧ｿ繝ｼ繧ｲ繝・ヨ縺ｮ蝣ｴ蜷・rue繧定ｿ斐☆
+    笨・hasTarget縺後ち繝ｼ繧ｲ繝・ヨ縺ｪ縺励・蝣ｴ蜷・alse繧定ｿ斐☆
+    笨・hasTarget縺系eed:translate縺ｮ繧ｿ繝ｼ繧ｲ繝・ヨ縺ｮ蝣ｴ蜷・alse繧定ｿ斐☆
+    笨・getCharCount縺後た繝ｼ繧ｹ縺ｮ縺ｿ縺ｮ譁・ｭ玲焚繧呈ｭ｣縺励￥險育ｮ励☆繧・    笨・getCharCount縺後た繝ｼ繧ｹ縺ｨ繧ｿ繝ｼ繧ｲ繝・ヨ縺ｮ蜷郁ｨ域枚蟄玲焚繧呈ｭ｣縺励￥險育ｮ励☆繧・  YamlTermsRepository
+    笨・譁ｰ縺励＞YAML繝ｪ繝昴ず繝医Μ縺ｮ菴懈・
+    笨・逕ｨ隱槭お繝ｳ繝医Μ縺ｮ霑ｽ蜉縺ｨ菫晏ｭ・    笨・YAML繝輔ぃ繧､繝ｫ縺九ｉ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ
+    笨・驥崎､・お繝ｳ繝医Μ縺ｮ繝槭・繧ｸ
+  TermsRepositoryCSV
+    笨・譁ｰ縺励＞CSV繝ｪ繝昴ず繝医Μ縺ｮ菴懈・
+    笨・逕ｨ隱槭お繝ｳ繝医Μ縺ｮ霑ｽ蜉縺ｨ菫晏ｭ・    笨・CSV繝輔ぃ繧､繝ｫ縺九ｉ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ
+    笨・驥崎､・お繝ｳ繝医Μ縺ｮ繝槭・繧ｸ
+蛻晄悄縺ｮ蛻鈴・ｺ・ ja,en,de,context
+繝槭・繧ｸ蠕後・蛻鈴・ｺ・ ja,en,de,context
+    笨・蛻鈴・ｺ上・菫晄戟 - 譌｢蟄倥ヵ繧｡繧､繝ｫ邱ｨ髮・凾
+蛻晄悄縺ｮ蛻鈴・ｺ・ [ 'ja', 'en', 'context' ]
+譁ｰ險隱櫁ｿｽ蜉蠕後・蛻鈴・ｺ・ [ 'ja', 'en', 'de', 'context' ]
+    笨・蛻鈴・ｺ上・菫晄戟 - 譁ｰ縺励＞險隱槫・縺ｮ霑ｽ蜉
+  generateContent (term-detect)
+    笨・蟇ｾ險ｳ縺ゅｊ/縺ｪ縺玲ｷｷ蝨ｨ縺ｮ蝣ｴ蜷医∵ｭ｣縺励￥陦ｨ遉ｺ縺輔ｌ繧・    笨・0莉ｶ縺ｮ蝣ｴ蜷医・none) 縺瑚｡ｨ遉ｺ縺輔ｌ繧・    笨・context縺檎ｩｺ縺ｮ蝣ｴ蜷医…ontext陦後′逵∫払縺輔ｌ繧・    笨・context縺ゅｊ縺ｮ蝣ｴ蜷医…ontext陦後′陦ｨ遉ｺ縺輔ｌ繧・    笨・迚ｹ谿頑枚蟄暦ｼ・ < > 縺ｪ縺ｩ・峨ｒ蜷ｫ繧蝣ｴ蜷医ｂ豁｣縺励￥蜃ｺ蜉帙＆繧後ｋ
+    笨・繝倥ャ繝繝ｼ縺ｫ繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝励′蜷ｫ縺ｾ繧後ｋ
+  TermEntry
+    笨・譁ｰ縺励＞TermEntry繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・險隱槭Μ繧ｹ繝医ｒ豁｣縺励￥蜿門ｾ励〒縺阪ｋ
+    笨・險隱槭・蟄伜惠繝√ぉ繝・け縺後〒縺阪ｋ
+    笨・遨ｺ縺ｮ繧ｨ繝ｳ繝医Μ繧呈､懃衍縺ｧ縺阪ｋ
+    笨・驥崎､・､懃衍縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧・    笨・繧ｨ繝ｳ繝医Μ縺ｮ繝槭・繧ｸ縺後〒縺阪ｋ
+  LanguageTermInfo
+    笨・譁ｰ縺励＞LanguageTermInfo繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・遨ｺ逋ｽ譁・ｭ励′驕ｩ蛻・↓蜃ｦ逅・＆繧後ｋ
+  TermEntryConverter
+    笨・CSV繝ｭ繧ｦ縺九ｉTermEntry繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・TermEntry縺九ｉCSV繝ｭ繧ｦ繧剃ｽ懈・縺ｧ縺阪ｋ
+    笨・遨ｺ縺ｮ陦ｨ險俶昭繧後′豁｣縺励￥蜃ｦ逅・＆繧後ｋ
+    笨・CSV繝倥ャ繝繝ｼ縺九ｉ險隱槭Μ繧ｹ繝医ｒ謚ｽ蜃ｺ縺ｧ縺阪ｋ
+    笨・蟄伜惠縺励↑縺・ｨ隱槭・蜃ｦ逅・    笨・驛ｨ蛻・噪縺ｪ險隱樊ュ蝣ｱ縺ｮ蠕蠕ｩ螟画鋤
+  MarkdownItParser: 蝓ｺ譛ｬ繝ｦ繝九ャ繝亥・蜑ｲ
+    笨・蜊倡ｴ斐↑隕句・縺・縺､
+    笨・mdait繧ｳ繝｡繝ｳ繝井ｻ倥″
+    笨・譛ｬ譁・↓繝ｪ繧ｹ繝医ｄ繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け
+    笨・繝輔ぃ繧､繝ｫ蜈磯ｭ繝ｻ譛ｫ蟆ｾ縺ｮ隕句・縺・    笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け蜀・・#繧・dait繧ｳ繝｡繝ｳ繝医・辟｡隕・    笨・繧ｳ繝ｼ繝峨ヶ繝ｭ繝・け蜀・・繧ｳ繝｡繝ｳ繝医→隕句・縺励・辟｡隕悶＆繧後ｋ
+    笨・parse竊痴tringify縺ｧ繝ｭ繧ｹ繝ｬ繧ｹ
+    笨・8譁・ｭ玲悴貅縺ｮmdait繧ｳ繝｡繝ｳ繝医・辟｡隕悶＆繧後ｋ
+    笨・隍・焚陦後・mdait繧ｳ繝｡繝ｳ繝・    笨・隍・焚繝ｬ繝吶Ν縺ｫ繧上◆繧砧dait繧ｳ繝｡繝ｳ繝井ｻ倥″隕句・縺・    笨・TOML繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺ｫmdait繧ｳ繝｡繝ｳ繝医・縺､縺九↑縺・    笨・隍・焚縺ｮmdait繧ｳ繝｡繝ｳ繝・    笨・隍・焚陦後・mdait繧ｳ繝｡繝ｳ繝医→隍・焚隕句・縺・    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ逶ｴ蠕後・mdait繧ｳ繝｡繝ｳ繝医→隕句・縺・    笨・YAML繝輔Ο繝ｳ繝医・繧ｿ繝ｼ・玖､・焚隕句・縺暦ｼ砧dait繧ｳ繝｡繝ｳ繝医・邨・∩蜷医ｏ縺・    笨・隕句・縺励′縺ｪ縺・ｴ謇縺ｫmdait繝槭・繧ｫ繝ｼ繧偵▽縺代◆蝣ｴ蜷・    笨・隕句・縺励′縺ｪ縺・ｴ謇縺ｮmdait繝槭・繧ｫ繝ｼ: 繝輔ぃ繧､繝ｫ蜈磯ｭ
+    笨・隕句・縺励′縺ｪ縺・ｴ謇縺ｮmdait繝槭・繧ｫ繝ｼ: 隍・焚騾｣邯・  StatusTreeProvider Test Suite
+StatusManager: buildAllStatusItem() - Parse all files
+=>build
+<=build (0ms)
+StatusManager: buildAllStatusItem() - finish (0ms)
+    笨・StatusManager縺梧ｭ｣縺励￥繝輔ぃ繧､繝ｫ迥ｶ豕√ｒ蜿朱寔縺ｧ縺阪ｋ
+StatusManager: buildAllStatusItem() - Parse all files
+=>build
+<=build (0ms)
+StatusManager: buildAllStatusItem() - finish (0ms)
+    笨・StatusManager縺悟ｭ伜惠縺励↑縺・ョ繧｣繝ｬ繧ｯ繝医Μ繧帝←蛻・↓蜃ｦ逅・☆繧・    笨・StatusManager縺後す繝ｳ繧ｰ繝ｫ繝医Φ繝代ち繝ｼ繝ｳ縺ｧ蜍穂ｽ懊☆繧・StatusManager: buildAllStatusItem() - Parse all files
+=>build
+<=build (0ms)
+StatusManager: buildAllStatusItem() - finish (0ms)
+    笨・StatusManager縺ｮ蛻晄悄蛹悶ヵ繝ｩ繧ｰ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧・StatusManager: buildAllStatusItem() - Parse all files
+=>build
+<=build (0ms)
+StatusManager: buildAllStatusItem() - finish (0ms)
+    笨・StatusManager縺ｮ騾ｲ謐鈴寔險域ｩ溯・縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧・  StatusTreeProvider 騾ｲ陦御ｸｭ繧｢繧､繧ｳ繝ｳ陦ｨ遉ｺ繝・せ繝・    笨・isTranslating縺荊rue縺ｮ縺ｨ縺行ync~spin繧｢繧､繧ｳ繝ｳ縺瑚ｿ斐ｋ
+    笨・isTranslating縺掲alse縺ｮ縺ｨ縺埼壼ｸｸ繧｢繧､繧ｳ繝ｳ縺瑚ｿ斐ｋ
+  鄙ｻ險ｳ繧｢繧､繝・Β繧ｳ繝槭Φ繝峨ユ繧ｹ繝・    笨・繝・ぅ繝ｬ繧ｯ繝医Μ繧｢繧､繝・Β縺ｮ讀懆ｨｼ - 豁｣蟶ｸ縺ｪ繝・ぅ繝ｬ繧ｯ繝医Μ繧｢繧､繝・Β
+    笨・繝輔ぃ繧､繝ｫ繧｢繧､繝・Β縺ｮ讀懆ｨｼ - 豁｣蟶ｸ縺ｪ繝輔ぃ繧､繝ｫ繧｢繧､繝・Β
+    笨・繝ｦ繝九ャ繝医い繧､繝・Β縺ｮ讀懆ｨｼ - 豁｣蟶ｸ縺ｪ繝ｦ繝九ャ繝医い繧､繝・Β
+    笨・辟｡蜉ｹ縺ｪ繝・ぅ繝ｬ繧ｯ繝医Μ繧｢繧､繝・Β縺ｮ蜃ｦ逅・    笨・辟｡蜉ｹ縺ｪ繝輔ぃ繧､繝ｫ繧｢繧､繝・Β縺ｮ蜃ｦ逅・    笨・辟｡蜉ｹ縺ｪ繝ｦ繝九ャ繝医い繧､繝・Β縺ｮ蜃ｦ逅・  TransCommand
+    笨・need:translate繝輔Λ繧ｰ莉倥″繝ｦ繝九ャ繝医′豁｣縺励￥迚ｹ螳壹＆繧後ｋ縺薙→
+    笨・from螻樊ｧ縺後≠繧句ｴ蜷医↓鄙ｻ險ｳ蜈・Θ繝九ャ繝医′豁｣縺励￥迚ｹ螳壹＆繧後ｋ縺薙→
+    笨・鄙ｻ險ｳ蠕後↓need繝輔Λ繧ｰ縺碁勁蜴ｻ縺輔ｌ繝上ャ繧ｷ繝･縺梧峩譁ｰ縺輔ｌ繧九％縺ｨ
+    笨・鄙ｻ險ｳ蟇ｾ雎｡繝ｦ繝九ャ繝医′蟄伜惠縺励↑縺・ｴ蜷医・蜃ｦ逅・    笨・隍・焚繝ｦ繝九ャ繝医・鄙ｻ險ｳ蜃ｦ逅・・ｺ上′菫晄戟縺輔ｌ繧九％縺ｨ
+    笨・Markdown縺ｮstringify蠕後↓繝槭・繧ｫ繝ｼ縺梧ｭ｣縺励￥菫晏ｭ倥＆繧後ｋ縺薙→
+    笨・AI繧ｵ繝ｼ繝薙せ邨ｱ蜷医ユ繧ｹ繝茨ｼ夂ｿｻ險ｳ繝励Ο繝舌う繝縺梧ｭ｣蟶ｸ縺ｫ蜍穂ｽ懊☆繧九％縺ｨ
+    笨・from螻樊ｧ蜿ら・繧ｨ繝ｩ繝ｼ・壼ｭ伜惠縺励↑縺・ワ繝・す繝･縺梧欠螳壹＆繧後◆蝣ｴ蜷・    笨・螟ｧ驥上Θ繝九ャ繝亥・逅・ｼ夊､・焚繝ｦ繝九ャ繝医・鄙ｻ險ｳ縺梧ｭ｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・遨ｺ繝輔ぃ繧､繝ｫ蜃ｦ逅・ｼ夂ｩｺ縺ｮMarkdown繝輔ぃ繧､繝ｫ縺梧ｭ｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    笨・繝輔Ο繝ｳ繝医・繧ｿ繝ｼ菫晄戟・夂ｿｻ險ｳ蜃ｦ逅・ｾ後ｂ繝輔Ο繝ｳ繝医・繧ｿ繝ｼ縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+  trans繧ｳ繝槭Φ繝右2E
+    1) need:translate繝輔Λ繧ｰ莉倥″繝ｦ繝九ャ繝医′鄙ｻ險ｳ縺輔ｌ縲√ヵ繝ｩ繧ｰ縺ｨ繝上ャ繧ｷ繝･縺梧ｭ｣縺励￥譖ｴ譁ｰ縺輔ｌ繧九％縺ｨ
+  DiffGenerator
+    笨・createUnifiedDiff: 蝓ｺ譛ｬ逧・↑蟾ｮ蛻・ｒ逕滓・縺吶ｋ
+    笨・createUnifiedDiff: 蜷御ｸ繧ｳ繝ｳ繝・Φ繝・・蝣ｴ蜷医・螟画峩縺ｪ縺励・蟾ｮ蛻・ｒ逕滓・縺吶ｋ
+    笨・createUnifiedDiff: 隍・焚陦後・蟾ｮ蛻・ｒ逕滓・縺吶ｋ
+    笨・stripDiffHeader: 繝倥ャ繝陦後ｒ髯､蜴ｻ縺吶ｋ
+    笨・hasDiff: 蟾ｮ蛻・・譛臥┌繧呈ｭ｣縺励￥蛻､螳壹☆繧・    笨・applyUnifiedPatch: 繝倥ャ繝莉倥″繝代ャ繝√ｒ驕ｩ逕ｨ縺ｧ縺阪ｋ
+    笨・applyUnifiedPatch: 繝倥ャ繝縺ｪ縺励ヱ繝・メ繧定｣懷ｮ後＠縺ｦ驕ｩ逕ｨ縺ｧ縺阪ｋ
+    笨・applyUnifiedPatch: 遨ｺ繝代ャ繝√・null繧定ｿ斐☆
+  sync繧ｳ繝槭Φ繝右2E
+    蝓ｺ譛ｬ
+      2) 繝槭・繧ｫ繝ｼ莉倅ｸ・ 譌｢蟄倥・Markdown縺ｫmdait繝槭・繧ｫ繝ｼ縺御ｻ倅ｸ弱＆繧後ｋ縺薙→
+      3) from莉倅ｸ・ 繝槭・繧ｫ繝ｼ莉倅ｸ主ｾ後↓from縺ｧ縺ｮ蟇ｾ蠢應ｻ倥￠縺後〒縺阪※縺・ｋ縺薙→
+      4) level: level險ｭ螳壹↓蠕薙▲縺ｦ驕ｩ蛻・↑隕句・縺励Ξ繝吶Ν縺ｫ繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ繧九％縺ｨ
+      5) FrontMatter: Front Matter 縺悟ｭ伜惠縺吶ｋ繝輔ぃ繧､繝ｫ縺ｧ繧よｭ｣縺励￥繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ繧九％縺ｨ
+      6) FrontMatter荳頑嶌縺・ source縺ｮmdait.sync.level=3縺ｧH3縺ｾ縺ｧ繝ｦ繝九ャ繝亥喧縺輔ｌ繧・    邱ｨ髮・      7) 霑ｽ蜉: 譛ｫ蟆ｾ縺ｫ譁ｰ縺溘↑繝ｦ繝九ャ繝郁ｿｽ蜉
+      8) 霑ｽ蜉: 騾比ｸｭ縺ｫ隍・焚繝ｦ繝九ャ繝医ｒ謖ｿ蜈･
+      9) 霑ｽ蜉: 遨ｺ繝ｦ繝九ャ繝茨ｼ郁ｦ句・縺励・縺ｿ・峨ｒ霑ｽ蜉
+      10) 霑ｽ蜉: Front Matter逶ｴ蠕後↓繝ｦ繝九ャ繝郁ｿｽ蜉
+      11) 霑ｽ蜉: 譌｢蟄倥Θ繝九ャ繝医・蛻・牡縺ｫ繧医ｋ霑ｽ蜉
+      12) 螟画峩: 譌｢蟄倥Θ繝九ャ繝医・繧ｳ繝ｳ繝・Φ繝・､画峩譎ゅ］eed:translate縺御ｻ倅ｸ弱＆繧後ｋ縺薙→
+      笨・蜑企勁: 蟄､遶九Θ繝九ャ繝医′auto-delete險ｭ螳壹↓蠕薙▲縺ｦ蜃ｦ逅・＆繧後ｋ縺薙→
+      13) 隍・粋: 隍・焚繝ｦ繝九ャ繝医・霑ｽ蜉縺ｨ蜑企勁縺悟酔譎ゅ↓陦後ｏ繧後ｋ縺薙→
+      14) 蜿梧婿蜷醍ｷｨ髮・ 荳｡譁ｹ螟画峩譎ゅ↓need:revise縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+    繝輔ぃ繧､繝ｫ謫堺ｽ・      笨・遨ｺ繝輔ぃ繧､繝ｫ: 遨ｺ繝輔ぃ繧､繝ｫ縺ｧ繧ゅお繝ｩ繝ｼ縺檎匱逕溘＠縺ｪ縺・％縺ｨ
+      笨・荳肴ｭ｣繝槭・繧ｫ繝ｼ: 荳肴ｭ｣縺ｪmdait繝槭・繧ｫ繝ｼ蠖｢蠑上〒繧ゅお繝ｩ繝ｼ縺檎匱逕溘＠縺ｪ縺・％縺ｨ
+      笨・髯､螟・ 髯､螟悶ヱ繧ｿ繝ｼ繝ｳ縺ｫ荳閾ｴ縺吶ｋ繝輔ぃ繧､繝ｫ縺悟・逅・＆繧後↑縺・％縺ｨ
+      笨・隍・焚from: 隍・焚縺ｮmdait繝槭・繧ｫ繝ｼ縺悟酔縺惑rom繧呈戟縺､蝣ｴ蜷医ｂ豁｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+      笨・繝・ぅ繝ｬ繧ｯ繝医Μ: 繝・ぅ繝ｬ繧ｯ繝医Μ縺悟ｭ伜惠縺励↑縺・ｴ蜷医ｂ豁｣縺励￥蜃ｦ逅・＆繧後ｋ縺薙→
+    縺昴・莉・      笨・繝√ぉ繝ｼ繝ｳ: 迚・婿蜷代メ繧ｧ繝ｼ繝ｳ鄙ｻ險ｳ縺梧ｭ｣縺励￥讖溯・縺吶ｋ縺薙→
+  Sync蜃ｦ逅・ｼ・rontmatter繝槭・繧ｫ繝ｼ莉倅ｸ趣ｼ・    笨・譁ｰ隕峻ync譎ゅ↓source蛛ｴ縺ｫ繧Ｎdait.front繝槭・繧ｫ繝ｼ縺御ｻ倅ｸ弱＆繧後ｋ縺薙→
+    笨・譌｢蟄・ync譎ゅ↓source蛛ｴ繝上ャ繧ｷ繝･縺梧峩譁ｰ縺輔ｌ縲》arget蛛ｴ縺ｫneed:revise縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+    笨・譌｢蟄倥・繝ｼ繧ｫ繝ｼ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｨ邯ｭ謖√′縺ｧ縺阪ｋ縺薙→
+    笨・鄙ｻ險ｳ蟇ｾ雎｡繧ｭ繝ｼ縺檎ｩｺ縺ｮ蝣ｴ蜷医・frontmatter蜷梧悄縺後せ繧ｭ繝・・縺輔ｌ繧九％縺ｨ
+  Sync蜃ｦ逅・ｼ医ヵ繝ｭ繝ｳ繝医・繧ｿ繝ｼ蠕後・譛ｬ譁・ｼ・    笨・蛻晏屓sync譎ゅ↓繝輔Ο繝ｳ繝医・繧ｿ繝ｼ逶ｴ蠕後・譛ｬ譁・′菫晄戟縺輔ｌ繧九％縺ｨ
+    笨・譌｢蟄・arget繝輔ぃ繧､繝ｫ縺ｨ縺ｮsync譎ゅ↓繝輔Ο繝ｳ繝医・繧ｿ繝ｼ逶ｴ蠕後・譛ｬ譁・′繝槭ャ繝√☆繧九％縺ｨ
+    笨・source蛛ｴ縺ｧ譛ｬ譁・′霑ｽ蜉縺輔ｌ縺溷ｴ蜷医》arget蛛ｴ縺ｧ繧よ眠隕上Θ繝九ャ繝医→縺励※霑ｽ蜉縺輔ｌ繧九％縺ｨ
+  SectionMatcher・郁ｦ句・縺礼┌縺励Θ繝九ャ繝茨ｼ・    笨・source隕句・縺礼┌縺励Θ繝九ャ繝医′target縺ｮfrom縺ｧ繝槭ャ繝√＠縲∝炎髯､謇ｱ縺・↓縺ｪ繧峨↑縺・％縺ｨ
+    笨・繝上ャ繧ｷ繝･縺檎ｩｺ縺ｮ繝槭・繧ｫ繝ｼ繧呈戟縺､繝ｦ繝九ャ繝医〒繧ゅ・繝・メ繝ｳ繧ｰ蜿ｯ閭ｽ縺ｧ縺ゅｋ縺薙→
+  marker-sync
+    syncSourceMarker
+      笨・譁ｰ隕上・繝ｼ繧ｫ繝ｼ菴懈・譎ゅ”ash縺ｮ縺ｿ險ｭ螳壹＆繧後ｋ縺薙→
+      笨・繝上ャ繧ｷ繝･螟画峩譎ゅ”ash縺梧峩譁ｰ縺輔ｌ繧九％縺ｨ
+      笨・繝上ャ繧ｷ繝･譛ｪ螟画峩譎ゅ∝､画峩縺ｪ縺励→縺ｪ繧九％縺ｨ
+    syncTargetMarker
+      笨・譁ｰ隕上・繝ｼ繧ｫ繝ｼ菴懈・譎ゅ］eed:translate縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+      笨・譁ｰ隕上・繝ｼ繧ｫ繝ｼ菴懈・譎ゅ》argetHash縺系ull縺ｮ蝣ｴ蜷・ourceHash縺御ｽｿ繧上ｌ繧九％縺ｨ
+      笨・繧ｽ繝ｼ繧ｹ螟画峩譎ゑｼ亥・蝗槭°繧会ｼ峨］eed:translate縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+      笨・繧ｽ繝ｼ繧ｹ螟画峩譎ゑｼ域里蟄倥°繧会ｼ峨］eed:revise@{oldhash}縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+      笨・繧ｿ繝ｼ繧ｲ繝・ヨ縺ｮ縺ｿ螟画峩譎ゅ”ash縺ｮ縺ｿ譖ｴ譁ｰ縺輔ｌneed縺ｯ險ｭ螳壹＆繧後↑縺・％縺ｨ
+      笨・荳｡譁ｹ螟画峩譎ゑｼ医た繝ｼ繧ｹ+繧ｿ繝ｼ繧ｲ繝・ヨ・峨］eed:revise@{oldhash}縺瑚ｨｭ螳壹＆繧後ワ繝・す繝･繧よ峩譁ｰ縺輔ｌ繧九％縺ｨ
+      笨・螟画峩縺ｪ縺玲凾縲…hanged縺掲alse縺ｨ縺ｪ繧九％縺ｨ
+      笨・revise蜑阪↓蜴滓枚縺悟・螟画峩縺輔ｌ縺溷ｴ蜷医］eed:revise@{hash}縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+    syncMarkerPair
+      笨・譁ｰ隕上・繧｢菴懈・譎ゅ√た繝ｼ繧ｹ縺ｫhash縲√ち繝ｼ繧ｲ繝・ヨ縺ｫfrom縺ｨneed:translate縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+      笨・繧ｽ繝ｼ繧ｹ螟画峩譎ゅ√ち繝ｼ繧ｲ繝・ヨ縺ｫneed:revise@{oldhash}縺瑚ｨｭ螳壹＆繧後ｋ縺薙→
+      笨・荳｡譁ｹ螟画峩譎ゅ√ち繝ｼ繧ｲ繝・ヨ縺ｫneed:revise@{oldhash}縺瑚ｨｭ螳壹＆繧後ワ繝・す繝･繧よ峩譁ｰ縺輔ｌ繧九％縺ｨ
+      笨・螟画峩縺ｪ縺玲凾縲…hanged縺掲alse縺ｨ縺ｪ繧九％縺ｨ
+      笨・revise蜑阪↓蜴滓枚縺悟・螟画峩縺輔ｌ縺溷ｴ蜷茨ｼ・yncMarkerPair・峨］eed:revise@{hash}縺御ｿ晄戟縺輔ｌ繧九％縺ｨ
+  collectCurrentPrimaryUnits
+    笨・marker hash 繧呈戟縺､繝ｦ繝九ャ繝医□縺代ｒ蜿朱寔縺吶ｋ
+    笨・primaryLang 縺・target 蛛ｴ縺ｮ pair 縺ｧ縺ｯ cleanup 蜈･蜉帛・繧貞庶髮・＠縺ｪ縺・    笨・primaryLang 縺・source 蛛ｴ縺ｮ pair 縺ｧ縺ｯ譛ｪ蜿朱寔縺ｮ source path 縺縺代ｒ霑斐☆
+  542 passing (2s)
+  14 failing
+  1) trans繧ｳ繝槭Φ繝右2E
+       need:translate繝輔Λ繧ｰ莉倥″繝ｦ繝九ャ繝医′鄙ｻ險ｳ縺輔ｌ縲√ヵ繝ｩ繧ｰ縺ｨ繝上ャ繧ｷ繝･縺梧ｭ｣縺励￥譖ｴ譁ｰ縺輔ｌ繧九％縺ｨ:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  node_assert_1.strict.ok(!updatedContent.includes("need:translate"))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\trans\trans-command.test.js:186:34)
+
+  2) sync繧ｳ繝槭Φ繝右2E
+       蝓ｺ譛ｬ
+         繝槭・繧ｫ繝ｼ莉倅ｸ・ 譌｢蟄倥・Markdown縺ｫmdait繝槭・繧ｫ繝ｼ縺御ｻ倅ｸ弱＆繧後ｋ縺薙→:
+     AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^<!--\s*mdait [^\s]+/m. Input:
+
+'---\r\n' +
+  'title: "English Test 2"\r\n' +
+  '---\r\n' +
+  '# Test File 2\r\n' +
+  '\r\n' +
+  '> This is a blockquote.\r\n' +
+  '\r\n' +
+  'Code block:\r\n' +
+  '\r\n' +
+  '```\r\n' +
+  'console.log("Hello, World!");\r\n' +
+  '```\r\n' +
+  '\r\n' +
+  'Image:\r\n' +
+  '\r\n' +
+  '![Sample Image](https://via.placeholder.com/150)\r\n' +
+  '\r\n' +
+  '---\r\n' +
+  '\r\n' +
+  'Table:\r\n' +
+  '\r\n' +
+  '| Header 1 | Header 2 |\r\n' +
+  '| -------- | -------- |\r\n' +
+  '| Data 1   | Data 2   |\r\n' +
+  '| Data 3   | Data 4   |\r\n' +
+  '\r\n' +
+  '## Heading 2\r\n' +
+  '\r\n' +
+  '- List item 1\r\n' +
+  '- List item 2\r\n' +
+  '- List item 3\r\n' +
+  '\r\n' +
+  '### Heading 3\r\n' +
+  '\r\n' +
+  '1. Numbered list 1\r\n' +
+  '2. Numbered list 2\r\n' +
+  '3. Numbered list 3\r\n' +
+  '\r\n' +
+  '#### Heading 4\r\n' +
+  '\r\n' +
+  'This is a test Markdown file.\r\n' +
+  '\r\n' +
+  '**Bold** and _italic_ text are also included.\r\n' +
+  '\r\n' +
+  'Example of a link: [Google](https://www.google.com)\r\n' +
+  '\r\n' +
+  '#### Heading 5\r\n' +
+  '\r\n' +
+  'Below is an additional paragraph.\r\n' +
+  '\r\n' +
+  'Markdown is a convenient tool for creating formatted text easily. This file was created to test various features of Markdown.\r\n' +
+  '\r\n' +
+  'Adding more content to make it exceed 50 lines.\r\n' +
+  '\r\n' +
+  'Markdown is a very useful tool for developers and writers.\r\n'
+
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:65:35)
+
+  3) sync繧ｳ繝槭Φ繝右2E
+       蝓ｺ譛ｬ
+         from莉倅ｸ・ 繝槭・繧ｫ繝ｼ莉倅ｸ主ｾ後↓from縺ｧ縺ｮ蟇ｾ蠢應ｻ倥￠縺後〒縺阪※縺・ｋ縺薙→:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(jaHashes.length > 0)
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:92:35)
+
+  4) sync繧ｳ繝槭Φ繝右2E
+       蝓ｺ譛ｬ
+         level: level險ｭ螳壹↓蠕薙▲縺ｦ驕ｩ蛻・↑隕句・縺励Ξ繝吶Ν縺ｫ繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ繧九％縺ｨ:
+
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+0 !== 3
+
+      + expected - actual
+
+      -0
+      +3
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:126:35)
+
+  5) sync繧ｳ繝槭Φ繝右2E
+       蝓ｺ譛ｬ
+         FrontMatter: Front Matter 縺悟ｭ伜惠縺吶ｋ繝輔ぃ繧､繝ｫ縺ｧ繧よｭ｣縺励￥繝槭・繧ｫ繝ｼ縺梧諺蜈･縺輔ｌ繧九％縺ｨ:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(firstMarker > frontMatterEnd)
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:144:35)
+
+  6) sync繧ｳ繝槭Φ繝右2E
+       蝓ｺ譛ｬ
+         FrontMatter荳頑嶌縺・ source縺ｮmdait.sync.level=3縺ｧH3縺ｾ縺ｧ繝ｦ繝九ャ繝亥喧縺輔ｌ繧・
+     Error: ENOENT: no such file or directory, open 'c:\Data\Study\TypeScript\mdait\src\test\workspace\content\en\level_frontmatter_source_only.md'
+  	at readFileSync (node:fs:441:20)
+  	at t.readFileSync (node:electron/js2c/node_init:2:11013)
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:157:55)
+
+  7) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         霑ｽ蜉: 譛ｫ蟆ｾ縺ｫ譁ｰ縺溘↑繝ｦ繝九ャ繝郁ｿｽ蜉:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(enText.includes("## 譁ｰ隕剰ｦ句・縺・))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:185:35)
+
+  8) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         霑ｽ蜉: 騾比ｸｭ縺ｫ隍・焚繝ｦ繝九ャ繝医ｒ謖ｿ蜈･:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(enText.includes("## 霑ｽ蜉隕句・縺輸"))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:202:35)
+
+  9) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         霑ｽ蜉: 遨ｺ繝ｦ繝九ャ繝茨ｼ郁ｦ句・縺励・縺ｿ・峨ｒ霑ｽ蜉:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(enText.includes("## 遨ｺ隕句・縺・))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:229:35)
+
+  10) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         霑ｽ蜉: Front Matter逶ｴ蠕後↓繝ｦ繝九ャ繝郁ｿｽ蜉:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(enText.includes("# Front逶ｴ蠕瑚ｦ句・縺・))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:245:35)
+
+  11) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         霑ｽ蜉: 譌｢蟄倥Θ繝九ャ繝医・蛻・牡縺ｫ繧医ｋ霑ｽ蜉:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(enText.includes("## 蛻・牡蠕瑚ｦ句・縺・))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:265:35)
+
+  12) sync繧ｳ繝槭Φ繝右2E
+14 tests failed.
+       邱ｨ髮・         螟画峩: 譌｢蟄倥Θ繝九ャ繝医・繧ｳ繝ｳ繝・Φ繝・､画峩譎ゅ］eed:translate縺御ｻ倅ｸ弱＆繧後ｋ縺薙→:
+     AssertionError [ERR_ASSERTION]: The input did not match the regular expression /<!-- mdait [^\s]+ from:[^\s]+ need:revise@[^\s]+ -->/. Input:
+
+'---\r\n' +
+  'title: "test content"\r\n' +
+  '---\r\n' +
+  '<!-- mdait 68a7c2cc from:403206cb -->\r\n' +
+  '# Heading 1\r\n' +
+  '\r\n' +
+  'This is a test Markdown file in English.\r\n' +
+  '\r\n' +
+  '<!-- mdait db4d7c09 from:d2be4567 -->\r\n' +
+  '## Heading 2\r\n' +
+  '\r\n' +
+  '- List item 1\r\n' +
+  '- List item 2\r\n' +
+  '- List item 3\r\n' +
+  '\r\n' +
+  '<!-- mdait 1ea6f507 from:e1bd9636 -->\r\n' +
+  '### Heading 3\r\n' +
+  '\r\n' +
+  '1. Numbered list 1\r\n' +
+  '2. Numbered list 2\r\n' +
+  '3. Numbered list 3\r\n' +
+  '\r\n' +
+  '**Bold text** and _italic text_.\r\n' +
+  '\r\n' +
+  '[Link](https://example.com) is also included.\r\n' +
+  '\r\n' +
+  '<!-- mdait cb4dda29 from:0641b670 -->\r\n' +
+  '#### Heading 4\r\n' +
+  '\r\n' +
+  'Below is an example of a code block:\r\n' +
+  '\r\n' +
+  '```\r\n' +
+  'function greet() {\r\n' +
+  '    console.log("Hello, World!");\r\n' +
+  '}\r\n' +
+  'greet();\r\n' +
+  '```\r\n' +
+  '\r\n' +
+  '<!-- mdait 3d220b99 from:6f9de5a9 -->\r\n' +
+  '#### Heading 5\r\n' +
+  '\r\n' +
+  '> This is a blockquote.\r\n' +
+  '\r\n' +
+  'Images can also be included:\r\n' +
+  '\r\n' +
+  '![Sample Image](https://via.placeholder.com/150)\r\n' +
+  '\r\n' +
+  '---\r\n' +
+  '\r\n' +
+  'Example of a table:\r\n' +
+  '\r\n' +
+  '| Header 1 | Header 2 | Header 3 |\r\n' +
+  '| -------- | -------- | -------- |\r\n' +
+  '| Data 1   | Data 2   | Data 3   |\r\n' +
+  '| Data 4   | Data 5   | Data 6   |\r\n' +
+  '\r\n' +
+  '<!-- mdait dc5d14d1 from:dc5d14d1 need:translate -->\r\n' +
+  '#### 鄙ｻ險ｳ縺悟ｿ・ｦ√↑蜴溽ｨｿ\r\n' +
+  '\r\n' +
+  '谿ｵ關ｽ繧定ｿｽ蜉縺励※縲√＆繧峨↓蜀・ｮｹ繧貞・螳溘＆縺帙∪縺吶・r\n' +
+  '\r\n' +
+  '縺薙・繝輔ぃ繧､繝ｫ縺ｯ Markdown 縺ｮ讒倥・↑讖溯・繧偵ユ繧ｹ繝医☆繧九◆繧√↓菴懈・縺輔ｌ縺ｾ縺励◆縲ゅ％繧後↓縺ｯ縲√Μ繧ｹ繝医√さ繝ｼ繝峨ヶ繝ｭ繝・け縲∬｡ｨ縲∫判蜒上√Μ繝ｳ繧ｯ縲∝ｼ慕畑縺ｪ縺ｩ縺悟性縺ｾ繧後∪縺吶・r\n' +
+  '\r\n' +
+  'Markdown 縺ｯ髱槫ｸｸ縺ｫ譟碑ｻ溘〒縲∫ｰ｡蜊倥↓繝輔か繝ｼ繝槭ャ繝医＆繧後◆繝・く繧ｹ繝医ｒ菴懈・縺ｧ縺阪∪縺吶・r\n'
+
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:291:35)
+
+  13) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         隍・粋: 隍・焚繝ｦ繝九ャ繝医・霑ｽ蜉縺ｨ蜑企勁縺悟酔譎ゅ↓陦後ｏ繧後ｋ縺薙→:
+
+      AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  ok(!enText.includes("from:0641b670"))
+
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:337:35)
+
+  14) sync繧ｳ繝槭Φ繝右2E
+       邱ｨ髮・         蜿梧婿蜷醍ｷｨ髮・ 荳｡譁ｹ螟画峩譎ゅ↓need:revise縺瑚ｨｭ螳壹＆繧後ｋ縺薙→:
+
+      AssertionError [ERR_ASSERTION]: 闍ｱ隱槭ヵ繧｡繧､繝ｫ・医ち繝ｼ繧ｲ繝・ヨ・峨↓ 'need:revise@' 縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ
+      + expected - actual
+
+      -false
+      +true
+      
+  	at Context.<anonymous> (c:\Data\Study\TypeScript\mdait\out\test-gui\commands\sync\sync-command.test.js:370:35)
+
+[main 2026-03-22T14:24:01.088Z] Extension host with pid 25484 exited with code: 0, signal: unknown.
+Exit code:   1

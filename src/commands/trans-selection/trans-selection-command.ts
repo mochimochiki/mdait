@@ -5,8 +5,8 @@
  */
 
 import * as vscode from "vscode";
-import { AIServiceBuilder } from "../../api/ai-service-builder";
 import { Configuration } from "../../config/configuration";
+import { AIServiceBuilder } from "../../llm/ai-service-builder";
 import { PromptIds } from "../../prompts/defaults";
 import { PromptProvider } from "../../prompts/prompt-provider";
 import { AIOnboarding } from "../../utils/ai-onboarding";
@@ -41,6 +41,11 @@ export async function translateSelectionCommand(): Promise<void> {
 	}
 
 	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
 
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();

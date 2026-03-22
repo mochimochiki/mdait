@@ -29,6 +29,9 @@ import { SelectionState } from "../../core/status/selection-state";
 import { StatusCollector } from "../../core/status/status-collector";
 import { Status } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { searchTmByLines } from "../../core/tm/tm-line-search";
+import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
+import { TmxStore } from "../../core/tm/tmx-store";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
@@ -378,6 +381,7 @@ async function translateUnit(
 		}
 
 		// revise@{oldhash}形式の場合、スナップショットからdiffを生成（ソースコンテンツ取得後）
+		let oldSourceContent: string | undefined;
 		if (unit.marker?.needsRevision()) {
 			const oldhash = unit.marker.getOldHashFromNeed();
 			if (oldhash) {
@@ -386,12 +390,23 @@ async function translateUnit(
 					const oldContent = await unitRegistryManager.loadUnitRegistry(oldhash);
 					if (oldContent && hasDiff(oldContent, sourceContent)) {
 						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
+						oldSourceContent = oldContent;
 						logger.debug("trans", "Generated diff for revision", { oldhash });
 					}
 				} catch (error) {
 					logger.warn("trans", "Failed to generate diff", { oldhash, ...formatError(error) });
 				}
 			}
+		}
+
+		// TM参照の検索（tm.enabledかつTmxStoreが利用可能な場合）
+		try {
+			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
+			if (tmReferences) {
+				context.tmReferences = tmReferences;
+			}
+		} catch (error) {
+			logger.debug("trans", "TM reference lookup skipped", formatError(error));
 		}
 
 		let translationResult: TranslationResult | null = null;
@@ -917,4 +932,56 @@ async function translateFrontmatter_CoreProc(
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
 	}
+}
+
+/**
+ * TM参照を検索してフォーマット済み文字列を返す。
+ * tm.enabledがfalseまたはTMXファイルが存在しない場合はundefinedを返す。
+ * @param sourceContent ソースユニットの本文
+ * @param sourceLang ソース言語コード
+ * @param targetLang ターゲット言語コード
+ * @returns フォーマット済みTM参照文字列、またはundefined
+ */
+export function lookupTmReferences(
+	sourceContent: string,
+	sourceLang: string,
+	targetLang: string,
+	oldSourceContent?: string,
+): string | undefined {
+	const config = Configuration.getInstance();
+	if (!config.getTmEnabled()) {
+		return undefined;
+	}
+
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!workspaceRoot) {
+		return undefined;
+	}
+
+	const tmxFilePath = path.join(workspaceRoot, ".mdait", "translations.tmx");
+
+	const store = TmxStore.getInstance(tmxFilePath);
+	if (store.getEntryCount() === 0) {
+		return undefined;
+	}
+
+	// 行単位TM検索に委譲
+	const matches = searchTmByLines(
+		sourceContent,
+		store,
+		{
+			minQueryLength: config.getTmMinQueryLength(),
+			maxReferences: config.getTmMaxReferences(),
+			sourceLang,
+			targetLang,
+			trigramCache: store.getTrigramCache(),
+		},
+		oldSourceContent,
+	);
+
+	if (matches.length === 0) {
+		return undefined;
+	}
+
+	return formatTmReferences(matches);
 }

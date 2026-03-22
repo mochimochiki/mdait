@@ -5,9 +5,9 @@
  */
 
 import { strict as assert } from "node:assert";
-import type { AIMessage, AIService } from "../../../api/ai-service";
 import { TranslationContext } from "../../../commands/trans/translation-context";
 import { AITranslator, type RevisionPatchResult, type TranslationResult } from "../../../commands/trans/translator";
+import type { AIMessage, AIService } from "../../../llm/ai-service";
 
 /**
  * モックAIサービス

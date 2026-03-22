@@ -31,6 +31,12 @@ export class TranslationContext {
 	sourceDiff?: string;
 
 	/**
+	 * 翻訳メモリ参照（TM参照）。
+	 * 過去の対訳をフォーマットした文字列。プロンプトに参考情報として追加される。
+	 */
+	tmReferences?: string;
+
+	/**
 	 * 周辺テキストを結合した文字列を取得
 	 * @returns 前後のユニットを結合した文字列（存在する場合）
 	 */

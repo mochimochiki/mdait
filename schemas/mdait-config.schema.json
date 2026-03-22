@@ -69,7 +69,7 @@
           "description": "Heading level at which to automatically insert mdait markers (1-6, or 0 to disable). Can be overridden in frontmatter.",
           "minimum": 0,
           "maximum": 6,
-          "default": 2
+          "default": 3
         },
         "autoDelete": {
           "type": "boolean",
@@ -221,6 +221,12 @@
       },
       "additionalProperties": false
     },
+    "primaryLang": {
+      "type": "string",
+      "description": "Primary language code shared across terminology and TM features",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "examples": ["en", "ja", "de"]
+    },
     "terms": {
       "type": "object",
       "description": "Glossary/terminology settings",
@@ -231,12 +237,40 @@
           "default": "terms.csv",
           "pattern": "^[^/\\\\]+\\.(csv|ya?ml)$",
           "examples": ["terms.csv", "glossary.yaml", "terminology.yml"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "tm": {
+      "type": "object",
+      "description": "Translation Memory (TM) settings",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable or disable the TM feature. When disabled, both tm-commit and trans TM references are deactivated.",
+          "default": true
         },
-        "primaryLang": {
-          "type": "string",
-          "description": "Primary language code for glossary management",
-          "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
-          "examples": ["en", "ja", "de"]
+        "maxReferences": {
+          "type": "integer",
+          "description": "Maximum number of TM references to include in translation prompts. Higher values provide more context but increase token usage.",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5
+        },
+        "retryLimit": {
+          "type": "integer",
+          "description": "Maximum number of focused retries for tm-commit guard failures. Limited to 1-5; values below 1 are raised to 1, and values 6+ are capped at 5.",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 1,
+          "examples": [1, 2, 3, 5]
+        },
+        "minQueryLength": {
+          "type": "integer",
+          "description": "Minimum character count for a normalized line to be used as a TM search query. Lines shorter than this are excluded to avoid noise from table fragments etc.",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
         }
       },
       "additionalProperties": false
@@ -269,11 +303,16 @@
           "type": "string",
           "description": "Path to custom term translation prompt file",
           "examples": [".mdait/prompts/term-translate.txt"]
+        },
+        "tm.splitSentences": {
+          "type": "string",
+          "description": "Path to custom TM sentence alignment prompt file",
+          "examples": [".mdait/prompts/tm-split-sentences.txt"]
         }
       },
       "additionalProperties": false
     }
   },
-  "required": ["transPairs"],
+  "required": ["transPairs", "primaryLang"],
   "additionalProperties": false
 }

@@ -530,13 +530,23 @@ export class StatusItemTree {
 		// sourceディレクトリの場合は翻訳ユニット数を表示しない
 		const label = status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
 
+		// contextValueにステータスを反映（翻訳完了状態を識別）
+		let contextValue: string;
+		if (status === Status.Source) {
+			contextValue = "mdaitDirectorySource";
+		} else if (status === Status.Translated) {
+			contextValue = "mdaitDirectoryTargetComplete";
+		} else {
+			contextValue = "mdaitDirectoryTarget";
+		}
+
 		return {
 			type: StatusItemType.Directory,
 			label,
 			directoryPath: dirPath,
 			status,
 			isTranslating,
-			contextValue: status === Status.Source ? "mdaitDirectorySource" : "mdaitDirectoryTarget",
+			contextValue,
 			children: [...files], // 直下ファイルのコピーを保持
 			totalUnits,
 			translatedUnits,

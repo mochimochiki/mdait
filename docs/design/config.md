@@ -1,0 +1,211 @@
+# Config
+
+[architecture](../architecture.md) > **Config**
+
+## このドキュメントの責務
+
+Config層は、`.mdait/mdait.json`の読み込み、バリデーション、ファイル変更監視を担当します。また、Frontmatterによるドキュメント単位の設定オーバーライドを定義します。
+
+---
+
+## Configurationクラス
+
+### 基本設計
+
+- **シングルトン**: `initialize()`でロード、`getInstance()`で提供
+- **ソース**: `.mdait/mdait.json`（ワークスペースルート配下の`.mdait`ディレクトリ）
+- **スキーマ**: `schemas/mdait-config.schema.json`による補完と検証
+
+**実装**: [`src/config/configuration.ts`](../../src/config/configuration.ts)
+
+### オンボーディングサポート
+
+初回セットアップを支援する仕組みを提供します：
+
+1. `isConfigured()`メソッドで`.mdait/mdait.json`の存在と`validate()`結果をチェック
+2. 初期セットアップ時は`mdait.setup.createConfig`コマンドで`mdait.template.json`から設定ファイルを生成
+3. `mdaitConfigured`コンテキスト変数でUI表示を制御し、未設定時はWelcome Viewを表示
+4. `package.json`の`jsonValidation`でJSON Schemaを関連付け、IDE上でIntelliSenseと検証が機能
+
+**設計意図**: ユーザーが設定ファイルを手動で作成する負担を軽減し、テンプレートから開始することでスムーズなセットアップを実現します。詳細な必須項目チェックは`validate()`が担います。
+
+---
+
+## ロードシーケンス
+
+```mermaid
+sequenceDiagram
+		participant VS as VS Code
+		participant Cfg as Configuration
+		participant FS as File System
+		participant Caller as Commands/Core/API
+
+		VS->>Cfg: initialize(context)
+		Cfg->>FS: .mdait/mdait.jsonの読み込み
+		FS-->>Cfg: JSON内容
+		Cfg->>Cfg: パース+型チェック
+		Cfg->>FS: ファイル変更監視の開始
+		Caller->>Cfg: getInstance()
+		Cfg-->>Caller: 設定スナップショット
+		FS->>Cfg: ファイル変更イベント
+		Cfg->>Cfg: 値リロード
+```
+
+**設計意図**: ファイル変更監視により、ユーザーが`.mdait/mdait.json`を編集中でも、保存時に即座に設定が反映されます。
+
+---
+
+## `.mdait/mdait.json` フォーマット
+
+[`schemas/mdait-config.schema.json`](../../schemas/mdait-config.schema.json)で定義された形式に従います。
+
+### 主要フィールド
+
+```json
+{
+  "$schema": "../../schemas/mdait-config.schema.json",
+  "transPairs": [
+    {
+      "sourceDir": "docs/ja",
+      "targetDir": "docs/en",
+      "sourceLang": "ja",
+      "targetLang": "en"
+    }
+  ],
+  "ignoredPatterns": ["**/node_modules/**"],
+  "sync": {
+    "level": 2,
+    "autoDelete": true,
+    "autoSyncOnSave": true
+  },
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "openai": {
+      "apiKey": "${env:OPENAI_API_KEY}",
+      "baseURL": "https://api.openai.com/v1"
+    }
+  },
+  "trans": {
+    "markdown": {
+      "skipCodeBlocks": true
+    },
+    "frontmatter": {
+      "keys": ["title", "description"]
+    },
+    "contextSize": 1,
+    "retryLimit": 1
+  },
+  "tm": {
+    "retryLimit": 1
+  },
+  "primaryLang": "en",
+  "terms": {
+    "filename": "terms.csv"
+  }
+}
+```
+
+### 重要な設定項目
+
+| フィールド | デフォルト | 説明 |
+|-----------|-----------|------|
+| `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応 |
+| `primaryLang` | — | 用語集と TM で共有する基準言語。設定上の正準言語として扱う |
+| `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
+| `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
+| `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
+| `trans.retryLimit` | `1` | trans の再試行上限 |
+
+`primaryLang` は必須設定であり、未設定時は設定不備として扱う。
+
+---
+
+### tm（翻訳メモリ）
+
+| 設定 | デフォルト | 動作 |
+|------|-----------|------|
+| `tm.enabled` | `true` | `false`でtm-commitとTM参照を両方無効化 |
+| `tm.maxReferences` | `5` | プロンプトに含めるTM参照の最大数 |
+| `tm.retryLimit` | `1` | tm-commit の focused retry 上限 |
+| `tm.minQueryLength` | `10` | 行単位TM検索時、normalize後の行がこの文字数未満の場合は検索対象から除外（範囲: 1–100） |
+
+**設計意図**: プロンプトの肥大化を防ぎつつ、一貫性に寄与する十分な参照を提供します。
+
+---
+
+## バリデーション
+
+### validate()メソッド
+設定ファイルロード後に以下をチェックします：
+- 必須フィールド(`transPairs`)の有無
+- 必須フィールド(`primaryLang`)の有無
+- ディレクトリパスの妥当性
+
+**UIへの影響**:
+- `StatusTreeProvider`が空配列を返しリソース消費を抑制
+- `mdaitConfigured`コンテキスト変数を更新し、ツールバーボタンとWelcome Viewの表示を切り替え
+
+---
+
+## Frontmatter設定
+
+Markdown文書の先頭にあるfrontmatterセクションで、YAML形式でメタデータを記述します。
+
+### mdait名前空間
+
+mdaitの内部設定は`mdait`名前空間の下に階層的に配置します。
+
+```yaml
+mdait:
+  sync:
+    level: 2
+  front: abc123de from:def456gh need:translate
+```
+
+**設計意図**: 他のツールのfrontmatterと衝突を避けるため、mdait専用の名前空間を使用します。
+
+---
+
+### mdait.sync.level - ドキュメント単位のユニット粒度
+
+**用途**: ユニット境界として検知する見出しレベルの指定
+
+**設定形式**:
+```yaml
+mdait:
+  sync:
+    level: 3
+```
+
+**動作**:
+- `.mdait/mdait.json`の`sync.level`設定をドキュメント単位で上書き
+- sync実行時、原文と訳文でlevel設定が異なる場合、**原文の設定を優先して訳文を自動修正**
+
+**設計意図**: 大きなドキュメントでは粗い粒度（level 2）、詳細なドキュメントでは細かい粒度（level 3）など、ドキュメントの性質に応じて柔軟に調整できます。
+
+---
+
+### mdait.front - Frontmatterの翻訳状態管理
+
+**用途**: Frontmatterの翻訳状態管理（本体の`<!-- mdait ... -->`マーカーに相当）
+
+**設定形式**:
+```yaml
+mdait:
+  front: "abc123de from:def456gh need:translate"
+```
+
+**動作**:
+- Frontmatter全体のハッシュ値、翻訳元ハッシュ、必要アクションを追跡
+- 本体のMarkdown内のmarkerとは異なり、frontmatter独自のメタデータとして使用
+- syncコマンド実行時にハッシュが更新され、transコマンドで翻訳対象判定に利用
+
+**設計意図**: frontmatterは構造的にHTMLコメントを挿入できないため、専用フィールドで状態を管理します。本文ユニットと分離した専用フローで処理することで、frontmatter翻訳を柔軟に制御できます。
+
+---
+
+## 関連
+
+- [core.md](core.md) FrontMatter翻訳セクション参照
+- [architecture.md](../architecture.md) 「Config層」参照

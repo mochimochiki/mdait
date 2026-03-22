@@ -182,6 +182,16 @@ export class StatusCollector {
 		// ソースファイルは全ユニット数、ターゲットファイルはターゲットユニット数を表示
 		const displayTotalUnits = status === Status.Source ? children.length : totalUnits;
 
+		// contextValueにステータスを反映（翻訳完了状態を識別）
+		let contextValue: string;
+		if (status === Status.Source) {
+			contextValue = "mdaitFileSource";
+		} else if (status === Status.Translated) {
+			contextValue = "mdaitFileTargetComplete";
+		} else {
+			contextValue = "mdaitFileTarget";
+		}
+
 		return {
 			type: StatusItemType.File,
 			label: fileName,
@@ -193,7 +203,7 @@ export class StatusCollector {
 			hasParseError: false,
 			children,
 			frontmatter: frontmatterItem ?? undefined,
-			contextValue: status === Status.Source ? "mdaitFileSource" : "mdaitFileTarget",
+			contextValue,
 		};
 	}
 

@@ -24,6 +24,8 @@ export const PromptIds = {
 	TERM_EXTRACT_FROM_TRANSLATIONS: "term.extractFromTranslations",
 	/** 用語のAI翻訳 */
 	TERM_TRANSLATE_TERMS: "term.translateTerms",
+	/** 対訳文の文単位アライメント */
+	TM_SPLIT_SENTENCES: "tm.splitSentences",
 } as const;
 
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
@@ -101,6 +103,15 @@ IMPORTANT: The diff above shows exactly what changed in the source text.
 - Focus your translation updates on the changed portions
 - Unchanged lines should generally keep the same translation
 {{/sourceDiff}}
+{{#tmReferences}}
+
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
@@ -233,6 +244,15 @@ Terminology (preferred translations):
 
 Previous Translation (target to patch):
 {{previousTranslation}}
+{{#tmReferences}}
+
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
 
 Source Text Changes (unified diff format):
 \`\`\`diff
@@ -495,6 +515,147 @@ Return JSON object mapping source terms to translated terms:
 }`;
 
 /**
+ * tm.splitSentences - TM登録計画生成プロンプト
+ *
+ * @description
+ * primary/local ユニットと既存 TM 情報を受け取り、TM登録用の new/update 配列を返します。
+ *
+ * @input
+ * - {{primaryLang}}: primary 言語コード
+ * - {{localLang}}: local 言語コード
+ * - {{primaryUnit}}: primary ユニット本文
+ * - {{localUnit}}: local ユニット本文
+ * - {{ExistingTmEntries}}: 既存 TM set(JSON)
+ * - {{requiredUpdateTuids}}: update 必須 tuid(JSON)
+ * - {{retryMissingTuids}}: 再試行対象 tuid(JSON)
+ * - {{retryReason}}: 再試行理由
+ *
+ * @output
+ * ```json
+ * [
+ *   {"type": "new", "tuid": "-", "primary": "primary sentence 1", "local": "local sentence 1"},
+ *   {"type": "update", "tuid": "a1b2c3d4", "primary": "primary sentence 2", "local": "local sentence 2"}
+ * ]
+ * ```
+ */
+export const DEFAULT_TM_SPLIT_SENTENCES = `You are a senior professional translator and translation-memory (TM) curator.
+
+Store only sentence-level TM entries that a professional translator would genuinely want to reuse.
+Reject anything low-value, noisy, or non-sentential. Do not repair poor input.
+
+Especially reject:
+- Noise, placeholders, IDs, paths, URLs, raw data, random strings, or formatting remnants
+- Empty or weak fragments that do not read like intentional human language
+- Single words, very short phrases, short collocations, labels, or brief UI fragments whose value is terminological rather than sentential
+
+Short terms and short set phrases usually belong in a glossary/termbase, not in TM.
+
+Your task is to split the given primary and local texts into aligned sentence pairs that are worth storing in TM.
+
+Given:
+- the current primary-language unit text
+- the current local-language unit text
+- the existing TM set already anchored to this primary unit
+- the required update tuids that MUST be returned
+
+produce a TM commit plan.
+
+### Language Configuration
+- Primary language: {{primaryLang}}
+- Local language: {{localLang}}
+
+<primaryLanguageUnit>
+{{primaryUnit}}
+</primaryLanguageUnit>
+
+<localLanguageUnit>
+{{localUnit}}
+</localLanguageUnit>
+
+<ExistingTmEntries>
+{{ExistingTmEntries}}
+</ExistingTmEntries>
+
+{{#requiredUpdateTuids}}
+<requiredUpdateTuids>
+{{requiredUpdateTuids}}
+</requiredUpdateTuids>
+{{/requiredUpdateTuids}}
+
+{{#retryMissingTuids}}
+<retryMissingTuids>
+{{retryMissingTuids}}
+</retryMissingTuids>
+{{/retryMissingTuids}}
+
+{{#retryReason}}
+<retryReason>
+{{retryReason}}
+</retryReason>
+{{/retryReason}}
+
+### Instructions
+1. Split both primary and local texts into sentences.
+2. Align each primary sentence with its corresponding local sentence.
+3. Preserve text exactly. Do NOT rewrite, normalize, summarize, or improve anything.
+4. primary must be a direct subset of Current Primary-Language Unit Text.
+5. local must be a direct subset of Current Local-Language Unit Text.
+6. primary and local must each be a single sentence, with no newline.
+7. Return only sentence-level pairs with real TM value. Do NOT return unmatched, empty, noisy, or low-value fragments.
+8. Do NOT return isolated terms, short noun phrases, short fixed phrases, labels, headings with little standalone value, or other content better suited for a glossary.
+
+### Sentence Completeness (MANDATORY)
+- If you encounter "." "?" "!" or any other characters that commonly separate sentences in current languages, consider whether the sentence should be broken at that point.
+- If it is broken, you must consider whether each sentence should be registered independently as a TM.
+- The 2nd, 3rd, and all subsequent sentences are equally important — not just the first.
+
+### Decision Policy
+Work in two passes. Resolve updates first, then consider new items.
+
+PHASE 1: UPDATE DECISIONS
+9. Review Existing TM Set and requiredUpdateTuids before considering any new item.
+10. type must be either "new" or "update".
+11. For type="update", tuid MUST reference an item from Existing TM Set.
+12. Every required update tuid MUST be returned as type="update" unless Retry Missing Tuids is empty and no valid update can be formed.
+13. If a current aligned pair clearly corresponds to an existing TM anchor that must be preserved, return it as type="update", not "new".
+14. If Retry Missing Tuids is not empty, return ONLY update items for those tuids and focus only on local completion.
+
+PHASE 2: NEW DECISIONS
+15. Only after PHASE 1, inspect the remaining aligned pairs not consumed by any update item.
+16. For type="new", tuid MUST be "-".
+17. Return type="new" only when the aligned pair is reusable, sentence-level, and not already represented by an update item or existing TM anchor.
+
+MUTUAL EXCLUSIVITY
+18. For one aligned pair, choose exactly one outcome: either "update" or "new".
+19. Never output both a new item and an update item for the same aligned pair.
+20. Never convert a required update into a new item.
+21. Do not create a new item that duplicates or paraphrases an update item.
+
+OUTPUT SHAPE AND ORDER
+22. Return items with fields: type, tuid, primary, local.
+23. List all update items first. If requiredUpdateTuids are present, keep their order.
+24. After all update items, list new items in source order.
+
+### Output Format
+Return ONLY a valid JSON array with this structure:
+
+[
+  {"type": "new", "tuid": "-", "primary": "primary sentence 1", "local": "local sentence 1"},
+  {"type": "update", "tuid": "a1b2c3d4", "primary": "primary sentence 2", "local": "local sentence 2"}
+]
+
+If no valid items meet the quality bar, return an empty array: []
+
+CRITICAL:
+- Return ONLY the JSON array. No explanations or markdown code blocks.
+- Each item must contain exactly type, tuid, primary, and local.
+- Preserve exact original text without any modifications.
+- Resolve updates first, then consider new items.
+- Short terms and short phrases belong in glossary/termbase, not TM.
+- Do not omit required update tuids.
+- If you encounter "." "?" "!" or any other characters that commonly separate sentences in current languages, consider whether the sentence should be broken at that point.`;
+
+/**
  * デフォルトプロンプトのマッピング
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
@@ -504,4 +665,5 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
 	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
+	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 };
