@@ -1,7 +1,7 @@
 # mdait TM 概念設計メモ（改訂版）
 
 実装エージェント向けガードレール
-対象: 保存側 / 参照側 / 改訂 sync・cleanup・tm-commit
+対象: 保存側 / 参照側 / 改訂 sync・tm-optimize・tm-commit
 
 ## 1. この文書の役割
 
@@ -112,10 +112,11 @@ sentence を扱うのは `tm-commit` のみである。
 Trans 前参照の目的は exact lookup ではなく translation example retrieval である。
 
 ### 原則6
-改訂反映は二段階で行う。
+TM は翻訳資産として保持し、自動削除は行わない。
 
-- `sync/cleanup` で obsolete な旧 TU を除去する
-- `tm-commit` で新しい sentence 集合を upsert する
+- `sync` は unit 同期のみ担当する
+- `tm-optimize` は `x-wt` を再計算する
+- `tm-commit` は新しい sentence 集合を upsert する
 
 ### 原則7
 changed unit は sentence 集合に変化があった可能性を示すだけであり、
@@ -248,7 +249,7 @@ pair 相対の `source` / `target` は trans pair の説明には使ってよい
 - `existing TM set` は `currentPrimaryAnchors` に既存 `localSentence` を添えた拡張ビューとして扱ってよい
 
 `tm-commit` は「新しい正本を書き込む責務」に集中し、
-old を落とす責務は cleanup に分離する。
+重み再計算は `tm-optimize` に分離する。
 
 ---
 
@@ -262,7 +263,7 @@ old を落とす責務は cleanup に分離する。
 - unit hash の比較
 - unchanged / changed / added / removed の判定
 - need:translate / need:revise 判定
-- cleanup 用の current unit 情報準備
+- TM の削除・最適化は行わない
 
 ### 行わないこと
 - sentence segmentation
@@ -280,36 +281,19 @@ old を落とす責務は cleanup に分離する。
 
 ---
 
-## 9. cleanup の責務
+## 9. tm-optimize の責務
 
-cleanup は obsolete な旧 TU を除去する処理である。
-ただし sentence segmentation は使わない。
+`tm-optimize` は TU を削除せず、`x-wt` を冪等に再計算する処理である。
 
-### cleanup の基本思想
-unit 変更は sentence 変更の可能性を示すだけである。
-したがって unit-hash だけでは削除できない。
+### tm-optimize の基本思想
+- TM は現行原稿キャッシュではなく翻訳資産
+- obsolete 判定による自動削除は行わない
+- retrieval 補正用に TU 単位の `x-wt` だけを保持する
 
-### 二段階判定を必須とする
-
-#### Phase 1: unit-hash による候補抽出
-TM 内の primary `tuv` が持つ `x-unit-hash` を見て、
-現在の primary units に存在しないものを削除候補とする。
-
-#### Phase 2: primary seg の実文照合
-削除候補 TU について、
-その primary `seg` が現在の primary 原稿群に現存するかを確認する。
-
-- 現存するなら keep
-- 現存しないなら delete
-
-### 重要な意味
-cleanup の判定軸は unit-hash ではない。
-最終判定軸は primary sentence の現存性である。
-
-### 禁止事項
-- unit-hash 不一致だけで即削除する
-- changed unit 配下の TU を一括削除する
-- non-primary 文面だけを見て削除判定する
+### 重み計算
+- `corpusPresence`: 現行 primary sentence と完全一致なら 1.0 / 不一致は 0.0
+- `retrievalUsefulness`: 現行 query 群で top5 順位点を加算して 0..1 正規化
+- `x-wt = clamp(0.7 * corpusPresence + 0.3 * retrievalUsefulness)`
 
 ---
 
@@ -350,11 +334,11 @@ unit-hash ではない。
 ### フェーズA: `sync`
 - unit レベルの変化を認識する
 - changed / removed / added を判定する
-- cleanup と再翻訳に必要な current 状態を準備する
+- 再翻訳に必要な current 状態を準備する
 
-### フェーズB: cleanup
-- 旧 TU のうち、現在の primary 原稿に現存しないものを除去する
-- まだ現存する旧 TU は残す
+### フェーズB: tm-optimize（明示実行）
+- 現行 primary 原稿群を query 化する
+- 各 TU の `x-wt` を冪等再計算する
 
 ### フェーズC: v2 翻訳後 `tm-commit`
 - 新しい primary sentence 群を確定する
@@ -362,7 +346,7 @@ unit-hash ではない。
 - 各言語の `tuv` を最新状態へ更新する
 
 ### 分離の意味
-- cleanup は old を落とす責務
+- `tm-optimize` は重み再計算の責務
 - `tm-commit` は new を登録・更新する責務
 
 これらを混ぜない。
@@ -595,7 +579,7 @@ source 中心ではなく primary-centered な名前にする。
 この二層が分離されて初めて、
 
 - `tm-commit` は厳密
-- `sync/cleanup` は安全
+- `sync` は安全
 - Trans 前参照は実用的
 
 という全体像が成立する。
@@ -604,7 +588,7 @@ source 中心ではなく primary-centered な名前にする。
 
 ## 21. 一文で要約
 
-**TM は `primaryLang` の sentence を正本として厳密に保存し、改訂時は cleanup で obsolete な旧 sentence を落とし、`tm-commit` では承認済みの anchor-aware 契約を前提に `existing TM set` を参照しつつ `localized mappings` と `additions` を後段で分離して新 sentence 集合へ寄せる。翻訳前参照は exact lookup ではなく、source language 起点の類似翻訳例 retrieval として再設計する。**
+**TM は `primaryLang` の sentence を正本として厳密に保存し、`sync` は同期責務に限定し、`tm-optimize` で `x-wt` を冪等再計算し、`tm-commit` は承認済みの anchor-aware 契約を前提に `existing TM set` を参照しつつ `localized mappings` と `additions` を後段で分離して新 sentence 集合へ寄せる。翻訳前参照は exact lookup ではなく、source language 起点の類似翻訳例 retrieval として再設計する。**
 
 ```mermaid
 sequenceDiagram

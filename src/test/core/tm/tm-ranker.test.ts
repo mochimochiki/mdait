@@ -3,7 +3,7 @@ import { rankTmEntries } from "../../../core/tm/tm-ranker";
 import type { RankOptions, ScoredTmEntry } from "../../../core/tm/tm-ranker";
 import type { TmEntry } from "../../../core/tm/types";
 
-function makeEntry(tuid: string, enText: string, jaText?: string): TmEntry {
+function makeEntry(tuid: string, enText: string, jaText?: string, weight = 1): TmEntry {
 	const variants = new Map<string, { text: string }>();
 	variants.set("en", { text: enText });
 	if (jaText !== undefined) {
@@ -12,6 +12,7 @@ function makeEntry(tuid: string, enText: string, jaText?: string): TmEntry {
 	return {
 		tuid,
 		primary: enText,
+		weight,
 		variants,
 	};
 }
@@ -112,5 +113,12 @@ suite("rankTmEntries", () => {
 		const result = rankTmEntries("ab", entries, { lang: "en", topK: 3, lambda: 1.0 });
 		assert.strictEqual(result.length, 1);
 		assert.strictEqual(result[0].score, 0);
+	});
+
+	test("weight 補正により同一類似度なら高weightが優先される", () => {
+		const entries = [makeEntry("low", "Download the installer", undefined, 0), makeEntry("high", "Download the installer", undefined, 1)];
+		const result = rankTmEntries("Download the installer", entries, { lang: "en", topK: 2, lambda: 1.0 });
+		assert.strictEqual(result[0].tuid, "high");
+		assert.ok(result[0].score > result[1].score);
 	});
 });

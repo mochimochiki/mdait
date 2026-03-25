@@ -35,7 +35,7 @@ function makeEntry(tuid: string, enText: string, jaText?: string): TmEntry {
 	if (jaText !== undefined) {
 		variants.set("ja", { text: jaText });
 	}
-	return { tuid, primary: enText, variants };
+	return { tuid, primary: enText, weight: 1, variants };
 }
 
 function defaultOptions(overrides?: Partial<TmLineSearchOptions>): TmLineSearchOptions {

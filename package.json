@@ -145,6 +145,12 @@
         "title": "%mdait.tm.commit.directory.title%",
         "icon": "$(database)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.tm.optimize",
+        "title": "%mdait.tm.optimize.title%",
+        "icon": "$(sparkle)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {

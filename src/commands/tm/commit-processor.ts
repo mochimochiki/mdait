@@ -415,6 +415,7 @@ export class TmCommitProcessor {
 			const entry: TmEntry = {
 				tuid,
 				primary,
+				weight: 1,
 				variants: new Map([
 					[this.primaryLang, { text: primary }],
 					[localUnit.lang, { text: local }],

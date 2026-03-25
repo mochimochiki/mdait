@@ -42,29 +42,27 @@
 
 - UserGuideを作成し、Readmeからリンクを張る
 
-### sync時のTMクリーンアップ実装
+### tm-optimize 実装
 
 **背景・目的**
-`tm-commit` によって TM が蓄積されていく一方、sync 時に削除・改訂された primaryLang のユニットに対応する obsolete な TU が TM に残り続ける。これを定期的に除去する機能（TM cleanup）が未実装なので実装する。
+`tm-commit` によって TM が蓄積されるため、TU ごとの有用度 `x-wt` を定期再計算して retrieval 品質を維持する `tm-optimize` を実装する。
 
 **コンセプト**
-sync 後のポストプロセスとして TM cleanup を呼び出す。cleanup は「primary sentence がまだ原稿に存在するか」だけを判定軸にして obsolete TU を削除する。sync / cleanup / tm-commit の責務分離を維持すること（tm.md 6.3節参照）。
+`tm-optimize` は明示実行コマンドとして提供する。sync からは呼び出さず、`sync / tm-optimize / tm-commit` の責務分離を維持する。
 
 **設計の根拠**
 - 設計仕様: [tasks/done/tm.md](tasks/done/tm.md) 6章・8.2節シーケンス図参照
-- cleanup は 2 段階判定: (1) unit情報から削除候補を抽出、(2) primary sentence の現存性を照合
-- 照合は normalize + 完全一致（`tm-text-normalizer.ts` 流用）
-- cleanup 呼び出しは `sync_CoreProc` の外、`flushBuffer()` 後のポストプロセスとして追加
-- primaryLang の changed/modified/removed ユニットのみが候補抽出の対象
-- `TmxStore` に削除メソッド（`removeByTuid`）を追加する必要あり
+- `x-wt = clamp(0.7 * corpusPresence + 0.3 * retrievalUsefulness)`
+- `corpusPresence` は normalize 後 primary sentence 完全一致のみ
+- `retrievalUsefulness` は既存 retrieval の top5 順位点を合算し 0..1 正規化
+- `x-wt` 以外の補助メタデータは TMX に追加しない
+- sync から optimize を自動呼び出ししない
 
 **想定問答**
-- Q: cleanup しないと何が困る？
-  A: 翻訳時の TM 参照でノイズが増える。削除・改訂済みの古い訳が参考例として出てきてしまう。
-- Q: cleanup を tm-commit 側に混ぜればいいのでは？
-  A: tm-commit は「new を登録するまで」が責務。混ぜると責務が曖昧になり、cleanup だけ独立してテストしにくくなる。
+- Q: optimize を sync 側に混ぜればいいのでは？
+  A: sync は同期責務に限定し、重み更新は明示実行に分離する方が運用と検証が明確。
 - Q: sentence 完全一致ではなく fuzzy でよいのでは？
-  A: 誤削除のリスクがあるため、normalize + 完全一致を基準とする。
+  A: 初期版は deterministic を優先し、normalize + 完全一致のみ採用する。
 
 ### `getEntriesByUnitPath` を `getEntriesForCommit` に改名
 

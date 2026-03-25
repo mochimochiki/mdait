@@ -113,6 +113,7 @@ suite("trans-command TM検索の正規化ロジック", () => {
 		store.addEntry({
 			tuid: hash,
 			primary: normalizedSource,
+			weight: 1,
 			variants: new Map([
 				["en", { text: normalizedSource }],
 				["ja", { text: "これは太字のテキストです。" }],
@@ -153,10 +154,11 @@ suite("trans-command TM検索の正規化ロジック", () => {
 		for (const entry of entries) {
 			const normalized = stripMarkdown(entry.source);
 			const hash = calculateHash(normalized, true);
-			store.addEntry({
-				tuid: hash,
-				primary: normalized,
-				variants: new Map([
+				store.addEntry({
+					tuid: hash,
+					primary: normalized,
+					weight: 1,
+					variants: new Map([
 					["en", { text: normalized }],
 					["ja", { text: entry.target }],
 				]),
