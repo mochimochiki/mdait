@@ -193,12 +193,17 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 		});
 	}
 
+	// weight は非finite の可能性があるため、保存時にもサニタイズしてから使用する
+	const rawWeight = entry.weight;
+	const finiteWeight = Number.isFinite(rawWeight) ? (rawWeight as number) : 1;
+	const safeWeight = Math.max(0, Math.min(1, finiteWeight));
+
 	return {
 		[`${ATTR_PREFIX}tuid`]: entry.tuid,
 		prop: [
 			{
 				[`${ATTR_PREFIX}type`]: PROP_TYPE_WEIGHT,
-				"#text": entry.weight.toFixed(6),
+				"#text": safeWeight.toFixed(6),
 			},
 		],
 		tuv: tuvs,
