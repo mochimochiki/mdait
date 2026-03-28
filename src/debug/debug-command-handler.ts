@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Logger } from "../utils/logger";
+import type { StructuredLogEntry } from "../utils/logger";
 
 const DEBUG_DIR = ".mdait/debug";
 const COMMAND_FILE = "command.json";
@@ -20,10 +21,11 @@ interface CommandPayload {
 interface ResultPayload {
 	id: string | null;
 	command: string | null;
-	status: "running" | "done" | "error";
+	status: "running" | "done" | "done-with-errors" | "error";
 	result: unknown | null;
 	error: string | null;
 	logs: string[];
+	structuredLogs: StructuredLogEntry[];
 	startedAt: string | null;
 	completedAt: string | null;
 }
@@ -144,6 +146,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				result: null,
 				error: "Invalid command.json",
 				logs: [],
+				structuredLogs: [],
 				startedAt: null,
 				completedAt: null,
 			});
@@ -159,6 +162,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				result: null,
 				error: `Command not allowed: ${payload.command}`,
 				logs: [],
+				structuredLogs: [],
 				startedAt: null,
 				completedAt: null,
 			});
@@ -174,12 +178,17 @@ export class DebugCommandHandler implements vscode.Disposable {
 			result: null,
 			error: null,
 			logs: [],
+			structuredLogs: [],
 			startedAt,
 			completedAt: null,
 		});
 
 		const capturedLogs: string[] = [];
-		const logDisposable = this.logger.addLogListener((line) => capturedLogs.push(line));
+		const capturedStructuredLogs: StructuredLogEntry[] = [];
+		const logDisposable = this.logger.addLogListener((line, entry) => {
+			capturedLogs.push(line);
+			capturedStructuredLogs.push(entry);
+		});
 
 		try {
 			let args = payload.args ?? [];
@@ -191,13 +200,21 @@ export class DebugCommandHandler implements vscode.Disposable {
 			const result = await vscode.commands.executeCommand(payload.command, ...args);
 			const completedAt = new Date().toISOString();
 
+			const hasErrors =
+				result != null &&
+				typeof result === "object" &&
+				"errorCount" in (result as object) &&
+				((result as Record<string, unknown>).errorCount as number) > 0;
+			const status = hasErrors ? "done-with-errors" : "done";
+
 			await this.writeResult({
 				id: payload.id,
 				command: payload.command,
-				status: "done",
+				status,
 				result: result ?? null,
 				error: null,
 				logs: capturedLogs,
+				structuredLogs: capturedStructuredLogs,
 				startedAt,
 				completedAt,
 			});
@@ -210,6 +227,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				result: null,
 				error: error instanceof Error ? error.message : String(error),
 				logs: capturedLogs,
+				structuredLogs: capturedStructuredLogs,
 				startedAt,
 				completedAt,
 			});

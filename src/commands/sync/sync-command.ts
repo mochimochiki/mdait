@@ -132,7 +132,13 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 							});
 						}
 						await statusManager.refreshFileStatus(sourceFile);
-						await statusManager.refreshFileStatus(targetFile);
+						if (fs.existsSync(targetFile)) {
+							await statusManager.refreshFileStatus(targetFile);
+						} else {
+							logger.debug("sync", "Skipping target status refresh (file not created)", {
+								targetFile,
+							});
+						}
 						successCount++;
 						totalFileCount++;
 						totalAdded += diffResult.added;
@@ -330,7 +336,7 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 
 	// フロントマターのみのファイルは、frontmatter翻訳が無効なら処理しない
 	if (source.units.length === 0 && !shouldSyncFrontmatter) {
-		logger.debug("sync", "Skipping frontmatter-only file", { sourceFile });
+		logger.debug("sync", "Skipping empty file (no units, no frontmatter translation keys)", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,
@@ -433,7 +439,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
 	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
-		logger.debug("sync", "Skipping frontmatter-only file", { sourceFile });
+		logger.debug("sync", "Skipping empty file (no units, no frontmatter changes)", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,

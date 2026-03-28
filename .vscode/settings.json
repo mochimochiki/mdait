@@ -31,6 +31,7 @@
     "Move-Item": true,
     "npx vitest": true,
     "ForEach-Object": true,
-    "pwsh -File .github/scripts/done.ps1": true
+    "pwsh -File .github/scripts/done.ps1": true,
+    "Test-Path": true
   },
 }

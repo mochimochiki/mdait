@@ -1,6 +1,14 @@
 import type * as vscode from "vscode";
 
-export type LogListener = (line: string) => void;
+export interface StructuredLogEntry {
+	level: string;
+	scope: string;
+	message: string;
+	context?: Record<string, unknown>;
+	timestamp: string;
+}
+
+export type LogListener = (line: string, entry: StructuredLogEntry) => void;
 
 /**
  * ログレベル定義
@@ -156,6 +164,16 @@ export class Logger {
 	 */
 	private formatMessage(level: LogLevel, scope: string, message: string, context?: object): string {
 		const timestamp = formatTimestamp();
+		return this.formatMessageWithTimestamp(level, scope, message, timestamp, context);
+	}
+
+	private formatMessageWithTimestamp(
+		level: LogLevel,
+		scope: string,
+		message: string,
+		timestamp: string,
+		context?: object,
+	): string {
 		const levelStr = levelToString(level);
 		let line = `[${timestamp}][${levelStr}][${scope}] ${message}`;
 		if (context !== undefined) {
@@ -175,12 +193,20 @@ export class Logger {
 		if (level < this.level) {
 			return;
 		}
-		const line = this.formatMessage(level, scope, message, context);
+		const timestamp = formatTimestamp();
+		const line = this.formatMessageWithTimestamp(level, scope, message, timestamp, context);
 		if (this.channel) {
 			this.channel.appendLine(line);
 		}
+		const entry: StructuredLogEntry = {
+			level: levelToString(level),
+			scope,
+			message,
+			context: context as Record<string, unknown> | undefined,
+			timestamp,
+		};
 		for (const listener of this.listeners) {
-			listener(line);
+			listener(line, entry);
 		}
 	}
 

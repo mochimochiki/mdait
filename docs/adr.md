@@ -4,6 +4,23 @@
 
 ---
 
+## ADR-260328-1800: debug-ipcの結果報告に部分失敗ステータスと構造化ログを導入する
+
+### 背景
+debug-ipcのresult.jsonは`status: "done" | "error"`の2値だった。syncが部分的にファイルエラーを起こしても`status: "done"`で返り、エージェントが成功と誤判断する問題が発生した。またlogsがフォーマット済み文字列の配列で、機械的なアサーションにはパースが必要だった。
+
+### 決定
+`status`に`"done-with-errors"`を追加し、resultオブジェクトに`errorCount > 0`がある場合に設定する。ResultPayloadに`structuredLogs: StructuredLogEntry[]`フィールドを追加し、level/scope/message/context/timestampの構造化ログを既存の文字列ログと併存させる。
+
+### 理由
+エージェントの自律テストでは、statusの3値判定（成功/部分失敗/完全失敗）で分岐処理が書ける方が、全ログをパースして失敗を検出するより遥かに簡潔で堅牢。構造化ログは既存の文字列ログを壊さず追加できるため、後方互換性を維持しつつ新しいアサーションパターンを可能にする。
+
+### 備考
+- 却下案: statusを`"done"`のまま維持しエージェント側でresult.errorCountをチェック → コマンド種類ごとにフィールド名が異なる可能性があり、ステータスに集約する方がシンプル
+- 詳細: [tasks/done/260328_デバッグ可観測性改善.md](../tasks/done/260328_デバッグ可観測性改善.md)
+
+---
+
 ## ADR-260322-0000: TM検索クエリを行単位分割し、既存API（findCandidatesByTrigram / rankTmEntries）を無変更で再利用する
 
 ### 背景
@@ -15,13 +32,11 @@ TMエントリは文単位だが、TM検索クエリはユニット全体テキ�
 ### 理由
 `normalizeForTm` = `stripMarkdown` + `toLowerCase` + `trim` は正規化済みプレーンテキストに再適用しても変化しない。この性質により、行単位検索のオーケストレータが正規化後の行を既存APIに渡しても二重正規化の実害がなく、`findCandidatesByTrigram` / `rankTmEntries` に `preNormalized` フラグや新メソッドを追加する必要がない。変更影響範囲を最小化しつつP8を維持できる。
 
-### 判断の補足
-- 守ること: P8（外部呼び出し元は生テキストを渡す）。`lookupTmReferences` は生テキストを `searchTmByLines` に渡すだけ
-- 避けること: 既存の `TmxStore` / `tm-ranker` のシグネチャ変更。`preNormalized` フラグの導入
+### 備考
 - 却下案: `findCandidatesByTrigramSet(trigrams)` の新メソッド追加 → べき等性で不要であり、APIの増殖を避けた
-- 影響: 各行で `normalizeForTm` が重複実行される（内部で markdown-it パース）。短い行に対するパースコストは無視できるが、行数が極端に多い場合は軽微なオーバーヘッドとなる。受容できると判断
-- 未決: 特になし
 - 詳細: [tasks/do/260322_TM検索行単位化revise対応.md](../tasks/do/260322_TM検索行単位化revise対応.md)
+- 守ること: P8（外部呼び出し元は生テキストを渡す）。`lookupTmReferences` は生テキストを `searchTmByLines` に渡すだけ
+- 影響: 各行で `normalizeForTm` が重複実行される（markdown-itパース）。行数が極端に多い場合は軽微なオーバーヘッド
 
 ---
 
@@ -36,13 +51,10 @@ normalize処理（`normalizeForTm` 等）はそれを必要とするモジュー
 ### 理由
 二重適用を構造的に防ぐには、normalize の発動権を「使う側」ではなく「そのデータを管理する側」に持たせるのが最も単純。trigramキャッシュも `TmxStore` がエントリ登録時に計算・保持することで、normalize変更の影響がモジュール境界を越えなくなる。
 
-### 判断の補足
-- 守ること: 呼び出し側は常に生テキストを渡す
-- 避けること: モジュール外部での事前normalize
+### 備考
 - 却下案: normalize共通ユーティリティ化（呼び出し側が選択的に呼ぶ形）→ 呼び出し忘れ・二重呼びが防げない
-- 影響: `getTrigramCache()` の戻り値型は `ReadonlyMap<string, ReadonlySet<string>>` で型安全性確保。trans-commandの `stripMarkdown` 事前呼び出しを削除済み（※`commit-processor.ts` が LLM プロンプト組み立て用途で `stripMarkdown` を呼ぶが、TmxStore・ranker への引数は生テキストのままであり本ADRの制約を遵守）
-- 未決: 特になし
 - 詳細: [tasks/done/260320_TM_normalize一元化.md](done/260320_TM_normalize一元化.md)
+- 守ること: 呼び出し側は常に生テキストを渡す（※`commit-processor.ts`のLLMプロンプト用途`stripMarkdown`は本制約の対象外）
 
 ---
 
@@ -57,13 +69,11 @@ exact matchのみでは原文が少し変わるとTM参照がほぼゼロにな�
 ### 理由
 exact match から完全脱却すると diff-aware な文改訂でもTMが活用できるようになる。embedding-based retrieval はオフライン不可・外部APIコスト増のため将来の差し替えポイントとして保留し、まず説明可能で調整しやすい lexical 中心で構成する。lang別インデックスは初期バグの再発防止として必須。
 
-### 判断の補足
-- 守ること: インデックスは lang 別に分離して構築する
-- 避けること: TM参照を exact match の補助として扱うこと（逆転させた）
-- 却下案: embedding 先行方式 → 外部API依存・初期コスト・オフライン不可で却下
-- 影響: trigram + scoring の演算コスト対策として trigramCache を TmxStore 内に保持。アーキテクチャ原則 P7 として文書化済み
-- 未決: embedding による rerank 層の後段追加は未検討
+### 備考
+- 却下案: embedding先行方式 → 外部API依存・初期コスト・オフライン不可で却下
 - 詳細: [tasks/done/260320_tm-scorer.md](done/260320_tm-scorer.md)
+- 守ること: インデックスはlang別に分離して構築する（初期バグの再発防止）
+- 未決: embeddingによるrerank層の後段追加は未検討
 
 ---
 
@@ -78,13 +88,10 @@ Command 層で primaryUnit/localUnit を先に確定し、processor は guarded 
 ### 理由
 正本一意性（同一primary sentenceは1TUに集約）を保証するには、Command層で入力を正規化してからprocessorに渡す二段構えが必要。fail-closedにすることでTMXの整合性破壊を構造的に防ぐ。
 
-### 判断の補足
-- 守ること: `reuse` 行は既存TUへ、`create` 行のみ新規TU候補とする
-- 避けること: processorがprimaryUnit/localUnitを自己判断で導出すること
+### 備考
 - 却下案: 応答をfail-open（不正でも書き込む）→ TMX整合性が保証できない
-- 影響: `primaryLang` 必須化はschemaだけでなくruntime validated stateとtm-commit入口validationに反映
-- 未決: 特になし
 - 詳細: [tasks/done/260315_TM多言語マージ再設計修正.md](done/260315_TM多言語マージ再設計修正.md)
+- 守ること: `reuse`行は既存TUへ、`create`行のみ新規TU候補とする
 
 ---
 
@@ -99,13 +106,12 @@ Command 層で primaryUnit/localUnit を先に確定し、processor は guarded 
 ### 理由
 source-relative 設計では non-primary 言語からの commit 時にTU一意性が保証できない。`x-unit-path` ベースのキーは同一ファイルで複数文が混入するリスクがあり、sentence hash の方が意味的に正確。
 
-### 判断の補足
-- 守ること: `primaryLang` は必須設定（未設定はvalidation error）
-- 避けること: translationDirection 相対のtuid生成
-- 却下案: `x-unit-path` ベースのキー → 同一ファイルに複数文が混入するリスクあり
-- 影響: 旧TMX（x-primary prop なし）は tuid から primary を逆引き復元する互換読み込みを維持。`terms.primaryLang`（nested設定）は廃止済み
-- 未決: non-primary言語のみのTU（primaryが消えた場合）の扱い
+### 備考
+- 却下案: `x-unit-path`ベースのキー → 同一ファイルに複数文が混入するリスクあり
 - 詳細: [tasks/done/260315_TM正本管理と参照方式再設計.md](done/260315_TM正本管理と参照方式再設計.md)
+- 守ること: `primaryLang`は必須設定（未設定はvalidation error）
+- 影響: 旧TMX（x-primary propなし）はtuidからprimaryを逆引き復元する互換読み込みを維持。`terms.primaryLang`（nested設定）は廃止済み
+- 未決: non-primary言語のみのTU（primaryが消えた場合）の扱い
 
 ---
 
@@ -120,13 +126,10 @@ TMX保存契約は `tuid + tuv（各言語 variant）+ tuv provenance` を正本
 ### 理由
 「あると便利そう」というだけでは正確に保てないフィールドを持ち続けるコストは正当化できない（YAGNI）。cleanup は tuid ベースの原文現存確認で実現可能であり、補助propに依存する必要がない。
 
-### 判断の補足
-- 守ること: 互換読み込み（旧TMXの x-primary 逆引き）は保持する
-- 避けること: 新規保存への補助prop追記
+### 備考
 - 却下案: 補助propを維持してprovenance追跡を強化する → 正確に維持できないフィールドは設計の負債になる
-- 影響: TMXファイルサイズ削減。cleanup・retrieval は tuid と primary sentence 照合のみに依存
-- 未決: 特になし
 - 詳細: [tasks/done/260315_TMX補助prop廃止.md](done/260315_TMX補助prop廃止.md)
+- 守ること: 互換読み込み（旧TMXのx-primary逆引き）は保持する
 
 ---
 
@@ -141,13 +144,10 @@ TMX保存契約は `tuid + tuv（各言語 variant）+ tuv provenance` を正本
 ### 理由
 Node.js 18+（VS Code拡張の前提環境）でサポート済みのネイティブAPI。ICUベースで多言語の文境界を適切に検出でき、正規表現よりメンテナンスコストが低い。インターフェース互換を維持するため上位層への影響がない。
 
-### 判断の補足
-- 守ること: コードブロック内の文分割禁止・lang引数への依存
-- 避けること: 独自辞書による例外処理の積み上げ
+### 備考
 - 却下案: 正規表現カスタム拡張 → 省略語・混合言語の例外処理が無限に増加する
-- 影響: VS Code拡張（Node.js 18+）前提を明示的な制約として確認済み
-- 未決: 特になし
 - 詳細: [tasks/done/260209_sentence-segmentation-intl.md](done/260209_sentence-segmentation-intl.md)
+- 守ること: コードブロック内の文分割禁止・lang引数への依存
 
 ---
 
@@ -162,13 +162,10 @@ markdown-itトークンツリー走査で、トップレベルの見出し・段
 ### 理由
 markdown-it は TM正規化・TMX処理・品質チェックでも使用済み（依存追加なし）。インラインコード保持でコードを含む文のTM検索精度が向上する。frontmatterはMarkdownパーサーが誤認識しやすいため手動パターンマッチの方が安全。
 
-### 判断の補足
-- 守ること: frontmatterは先頭パターンマッチで除去（markdown-itに依存しない）
-- 避けること: 構造情報をすべて捨てた単純フラット化
+### 備考
 - 却下案: 正規表現独自実装の継続 → ネスト・混合言語で誤検出が増え続ける
-- 影響: TM正規化テキストの品質向上。構造保持によりTM候補の文分割精度も改善
-- 未決: 特になし
 - 詳細: [tasks/done/260208_stripMarkdown構造保持改善.md](done/260208_stripMarkdown構造保持改善.md)
+- 守ること: frontmatterは先頭パターンマッチで除去（markdown-itに依存しない）
 
 ---
 
@@ -183,13 +180,11 @@ markdown-it は TM正規化・TMX処理・品質チェックでも使用済み�
 ### 理由
 拡張のデバッグ時に出力が散らばると問題の特定が困難になる。ユーザー通知とログを同一経路にすると、ユーザーに見せるべきでない内部情報が漏れるリスクがある。
 
-### 判断の補足
-- 守ること: `console.log` の直接使用禁止（Logger 経由のみ）
-- 避けること: OutputChannel の複数作成
-- 却下案: console.logのラッパー方式 → VS Code 拡張ホストのログと混在する
-- 影響: AIStatsLogger のみ別系統（コスト追跡の別目的のため）
-- 未決: unit-registry-manager.ts・configuration.ts・status-collector.ts・prompt-provider.ts・openai-provider.ts（キャンセルハンドラ）で console.* 直接呼び出しが残存（Logger移行未完了）
+### 備考
+- 却下案: console.logのラッパー方式 → VS Code拡張ホストのログと混在する
 - 詳細: [tasks/done/260201_ログ戦略実装.md](done/260201_ログ戦略実装.md)
+- 守ること: `console.log`の直接使用禁止（Logger経由のみ）。AIStatsLoggerのみ別系統（コスト追跡目的）
+- 未決: unit-registry-manager.ts・configuration.ts・status-collector.ts・prompt-provider.ts・openai-provider.tsでconsole.*直接呼び出しが残存
 
 ---
 
@@ -204,13 +199,11 @@ CRC32ハッシュの先頭3桁でバケット化（000〜fff、4096バケット�
 ### 理由
 決定的な全書き直しにすることで、同一状態のファイルはgit diffがゼロになり、マージ競合が解消される。バケットヘッダ行も有効なCRC32ハッシュ形式（`aaa00000`）として統一しパース処理の二重ロジックを回避する。
 
-### 判断の補足
-- 守ること: バケット昇順・エントリ昇順の決定的出力
-- 避けること: partial append（生成物の非決定性の原因）
+### 備考
 - 却下案: DB/SQLiteへの移行 → VS Code拡張の配布・インストール複雑化。ファイルベースの方がgit管理・バックアップと相性が良い
-- 影響: sync完了後5MB超過時にGCを実行（activeHashesのみ保持）。gzip+base64エンコードでファイルサイズ抑制
-- 未決: 特になし
 - 詳細: [tasks/done/260131_snapshot_v2_bucketing.md](done/260131_snapshot_v2_bucketing.md)
+- 守ること: バケット昇順・エントリ昇順の決定的出力
+- 影響: sync完了後5MB超過時にGCを実行（activeHashesのみ保持）。gzip+base64エンコードでファイルサイズ抑制
 
 ---
 
@@ -225,13 +218,11 @@ CRC32ハッシュの先頭3桁でバケット化（000〜fff、4096バケット�
 ### 理由
 LLMには差分と変更後訳文の両方が渡るため、並走変更は自動改訂（diff-aware revise）で自然に吸収できる。conflict解決UIは複雑な割に、LLMが担当できる範囲で代替可能。人手介入が真に必要な条件（マーカー消失・構造破壊・差分過大）は将来の拡張で対応する。
 
-### 判断の補足
-- 守ること: target-only変更（訳文直接編集）は `need:revise` にしない（非干渉）
-- 避けること: conflictを検出するロジックの再導入
+### 備考
 - 却下案: conflict解決UI維持 → 複雑性が高い割にLLMが代替可能な範囲が大きい
-- 影響: conflict解決CodeLens・UI・アイコン・集計はすべて廃止済み。設計書にはconflect概念を「将来案」として最小限残す
-- 未決: 差分過大・構造破壊などの「本当に危険な状態」への対応は将来検討
 - 詳細: [tasks/done/260124_conflict仕様改善.md](done/260124_conflict仕様改善.md)
+- 守ること: target-only変更（訳文直接編集）は`need:revise`にしない（非干渉）
+- 未決: 差分過大・構造破壊などの「本当に危険な状態」への対応は将来検討
 
 ---
 
@@ -246,12 +237,8 @@ markdown-itでパースした構造（見出しレベル別数・リスト項目
 ### 理由
 正規表現ではネスト構造の正確な検出が困難であり、構造チェックの追加コストが高い。markdown-it は既存依存として追加コスト不要であり、トークンツリーから構造を正確に抽出できる。
 
-### 判断の補足
-- 守ること: 不一致は「何が何個 vs 何個」と具体的に報告する
-- 避けること: 正規表現による構造検出の再導入
+### 備考
 - 却下案: 正規表現の改善継続 → ネスト・混合言語での例外処理が無限に増加する
-- 影響: markdown-it は TM正規化でも使用済みのため依存追加なし
-- 未決: 特になし
 - 詳細: [tasks/done/260112_品質チェック再設計.md](done/260112_品質チェック再設計.md)
 
 ---
@@ -267,13 +254,10 @@ markdown-itでパースした構造（見出しレベル別数・リスト項目
 ### 理由
 全コマンドがバッファリングしている以上、インターフェースだけストリーミングにしても複雑性しか残らない。将来リアルタイムプレビューが必要になった場合は `sendMessageStream()` をオプショナルで追加すれば良い。
 
-### 判断の補足
-- 守ること: Commands層はプロバイダーの違いを意識しない（全プロバイダーが同一インターフェース）
-- 避けること: Commands層でのストリーミング受信ロジック（ストリームが必要になったら別メソッド追加）
+### 備考
 - 却下案: ストリーミング維持 → 全コマンドでバッファリングが必要なため複雑性のみ増す
-- 影響: 長時間応答はタイムアウト設定で対処（既存機構で対応済み）
-- 未決: リアルタイムプレビュー機能が必要になった場合の拡張方針は未決
 - 詳細: [tasks/done/260111_AIServiceストリーミング廃止.md](done/260111_AIServiceストリーミング廃止.md)
+- 未決: リアルタイムプレビュー機能が必要になった場合の拡張方針は未決
 
 ---
 
@@ -288,13 +272,11 @@ OpenAIProvider の API 呼び出しで `store: false` を常にハードコー�
 ### 理由
 翻訳ツールの性質上、機密性は非交渉的な要件。「設定で変更できる」という選択肢自体がセキュリティリスクになるため、構造的に排除するのが正しい。
 
-### 判断の補足
-- 守ること: `store: false` は設定から除外し、コードに固定する
-- 避けること: OpenAIのログ機能の有効化（意図的な制約）
+### 備考
 - 却下案: 設定で切り替え可能にする → ユーザーの設定ミスによる機密漏洩リスクが構造的に残る
-- 影響: OpenAIのデバッグログ・活用分析は利用不可（受け入れるトレードオフ）
-- 未決: 特になし
 - 詳細: [docs/design/llm.md](../docs/design/llm.md)
+- 守ること: `store: false`は設定から除外しコードに固定する
+- 影響: OpenAIのデバッグログ・活用分析は利用不可（受け入れるトレードオフ）
 
 ---
 
@@ -309,13 +291,10 @@ OpenAIProvider の API 呼び出しで `store: false` を常にハードコー�
 ### 理由
 プロンプトIDをコードの識別子として固定しテキスト内容を外部化することで、コード変更なしにプロンプトをカスタマイズできる。サイレントフォールバック禁止はパスミスによる「変更が効いていない」問題を防ぐため。
 
-### 判断の補足
-- 守ること: プロンプトIDはコード識別子として安定させる（リネーム禁止に準ずる）
-- 避けること: サイレントフォールバック（ファイル不在を通知せずにデフォルトに戻る）
+### 備考
 - 却下案: プロンプト全文をmdait.jsonに直接記述 → JSONエスケープが煩雑・長文管理不可
-- 影響: カスタムプロンプトの変数一覧はドキュメント整備が必要
-- 未決: 特になし
 - 詳細: [tasks/done/260103_システムプロンプト外部注入機能.md](done/260103_システムプロンプト外部注入機能.md)
+- 守ること: プロンプトIDはコード識別子として安定させる（リネーム禁止に準ずる）
 
 ---
 
@@ -330,13 +309,10 @@ OpenAIProvider の API 呼び出しで `store: false` を常にハードコー�
 ### 理由
 ファイル単体で自己完結するため、ドキュメント移動・コピー時に管理情報が失われない。バージョン管理との相性が良く（ファイルそのものに状態が追跡される）、どんな状態からでも `sync` で復帰できる冪等性が保証できる。HTMLコメントはMarkdownレンダラーで非表示になり可読性を損なわない。
 
-### 判断の補足
-- 守ること: マーカーフォーマット `<!-- mdait hash from:xxx need:yyy -->` は変更禁止。ハッシュアルゴリズムはCRC32（8文字）で固定
-- 避けること: マーカーフォーマットの追加属性・変更（後方互換性の破壊）
+### 備考
 - 却下案: サイドカーファイル（`file.ja.md.mdait`）→ ファイル移動時に管理情報が孤立する
-- 影響: マーカーパーサーの変更は全ドキュメントの再sync不能につながるため実質不変制約
-- 未決: 特になし
 - 詳細: [docs/architecture.md](../docs/architecture.md)
+- 守ること: マーカーフォーマット `<!-- mdait hash from:xxx need:yyy -->` は変更禁止。CRC32（8文字）固定
 
 ---
 
@@ -351,10 +327,7 @@ CRC32（8文字）を採用する。SHA-256（64文字）は不採用。ハッ�
 ### 理由
 SHA-256はマーカーを視覚的に壊す（64文字長）。数千ユニット規模での衝突確率はCRC32でも実用上無視できるレベル。ハッシュの目的が変更検出であり暗号強度は不要。
 
-### 判断の補足
-- 守ること: ハッシュアルゴリズムはCRC32固定（変更禁止）
-- 避けること: セキュリティ強度のためのハッシュ変更（既存マーカーとの後方互換性が壊れる）
-- 却下案: SHA-256 → 64文字でマーカーが読めなくなる。xxHash等の他アルゴリズム → 切り替えコストに見合う理由がない
-- 影響: 衝突時は `sync` で再ハッシュされるため運用上問題なし
-- 未決: 特になし
+### 備考
+- 却下案: SHA-256 → 64文字でマーカーが読めなくなる。xxHash等 → 切り替えコストに見合う理由がない
 - 詳細: [docs/design/core.md](../docs/design/core.md)
+- 守ること: CRC32固定（変更禁止）。衝突時は`sync`で再ハッシュされるため運用上問題なし

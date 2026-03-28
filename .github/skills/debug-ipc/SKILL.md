@@ -47,13 +47,23 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
   "result": null,
   "error": null,
   "logs": ["[timestamp][LEVEL][scope] message | {context}"],
+  "structuredLogs": [
+    {
+      "level": "info",
+      "scope": "sync",
+      "message": "Sync started",
+      "context": { "pairCount": 1 },
+      "timestamp": "2026-03-28 12:00:00"
+    }
+  ],
   "startedAt": "ISO8601",
   "completedAt": "ISO8601"
 }
 ```
 
-- `status`: `"running"` → 実行中, `"done"` → 成功, `"error"` → 失敗
+- `status`: `"running"` → 実行中, `"done"` → 成功, `"done-with-errors"` → 成功だがエラーあり（resultのerrorCount > 0）, `"error"` → 失敗
 - `logs`: コマンド実行中にLoggerが出力した全ログ行（フォーマット済み文字列）
+- `structuredLogs`: 構造化されたログエントリの配列。各エントリは `level`, `scope`, `message`, `context`（任意）, `timestamp` を持つ
 
 ## 実行手順
 

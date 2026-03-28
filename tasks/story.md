@@ -2,6 +2,10 @@
 
 (新しい情報が上。各エントリは100-200文字の自然文で、何があってどう判断したかを簡潔に伝える)
 
+## 2026/03/28: debug-ipc可観測性改善（第2弾）
+
+実際のバグ（空ファイルsync時のENOENT）をお題に自律デバッグの仕組みを評価した。sync部分失敗がstatus:doneで返る問題、ログが文字列のみで構造化されてない問題、スキップ理由の「なぜ」が不足する問題を発見。done-with-errorsステータス、structuredLogsフィールド、診断ログ強化の3件を即座に実装。Loggerの`LogListener`シグネチャを拡張しentry付きに変更。→ [詳細](done/260328_デバッグ可観測性改善.md)
+
 ## 2026/03/28: デバッグ可観測性改善
 
 sync/transコマンドがvoidを返していたため、debug-ipcのresult.jsonで構造化アサーションができなかった。tm.commitに倣いSyncResult/TransCommandResult型を導入し戻り値を構造化。syncにはrevisionsNeeded（need:revise付与件数）を追加してtotalModifiedとの混同を解消。patchMode不発はコードトレースで構造的欠陥なしと判断し、診断ログを強化して再現待ちとした。自律テスト設計の基盤が整った。→ [詳細](done/260328_デバッグ可観測性改善.md)
