@@ -89,6 +89,14 @@ test("syncコマンドは全ファイルを同期する", function() {
 
 ---
 
+### デバッグ環境ファイルベースIPC（エージェント自律テスト基盤）
+
+マルチステップ統合シナリオ（sync → trans → TM → 改訂 → re-sync → re-trans等）をエージェントが自律的に実行・検証するための仕組み。`MDAIT_DEBUG_IPC=1`環境変数でdebug時のみ`DebugCommandHandler`が有効化され、`.mdait/debug/command.json`へのファイル書き込みでコマンド発行、`.mdait/debug/result.json`で結果を受け取る。LLMはvscode-lm（Copilot）で実際に呼び出される。
+
+詳細はタスクチケット `tasks/do/260328_デバッグ環境ファイルベースIPC.md` を参照。
+
+---
+
 ## 参照
 
 - スクリプト: `package.json`

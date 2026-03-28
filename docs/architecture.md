@@ -86,6 +86,7 @@ src/
   config/                # 設定ロード・バリデーション
   utils/                 # ファイル探索、ログ出力
   prompts/               # AIプロンプト定義
+  debug/                 # デバッグ環境IPC（debug時のみ有効）
   test/                  # テスト
 docs/                    # 設計ドキュメント
 schemas/                 # JSON Schema定義

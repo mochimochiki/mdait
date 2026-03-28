@@ -2,6 +2,14 @@
 
 (新しい情報が上)
 
+## 2026/03/28: デバッグ環境ファイルベースIPC
+
+**背景:** mdaitの統合シナリオ（sync→trans→TM登録→改訂→再翻訳…）は人間の手動デバッグに依存していた。エージェントが自律的にLLM込みの動作確認を行える環境がなかった。
+
+**意思決定:** Extension Host内にファイルベースIPCを導入。`.mdait/debug/command.json`への書き込みをFileSystemWatcherが検知し、`executeCommand()`で実行、結果を`result.json`に返す。環境変数ガード＋動的importでリリースへの影響をゼロに。レビューで引数型変換の不整合（StatusItemのtype欠損、tmCommitのdirPath/directoryPath混在）が発覚し修正。
+
+**詳細:** [tasks/done/260328_デバッグ環境ファイルベースIPC.md](done/260328_デバッグ環境ファイルベースIPC.md)
+
 ## 2026/03/22: TM検索クエリの文単位分割
 
 **背景:** TM登録は文単位だが検索は改行分割（段落単位）で、粒度のギャップがJaccard類似度を希薄化していた。chemistry.mdでの実験で、101字超のクエリが4件残ることを確認。SentenceSplitterは実装済みだったがCRLFバグで機能しておらず事実上死んでいた。

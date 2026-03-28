@@ -523,6 +523,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	// OutputChannelもdispose対象に追加
 	context.subscriptions.push(outputChannel);
 
+	if (process.env.MDAIT_DEBUG_IPC) {
+		const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (wsRoot) {
+			const { DebugCommandHandler } = await import("./debug/debug-command-handler.js");
+			const debugHandler = new DebugCommandHandler(wsRoot);
+			context.subscriptions.push(debugHandler);
+			logger.info("debug", "DebugCommandHandler activated (IPC mode)");
+		}
+	}
+
 	logger.info("extension", "mdait extension activated successfully");
 }
 
