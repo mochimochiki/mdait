@@ -17,7 +17,7 @@
 - 実装を行う場合は`m.coder.agent.md`を参照
 - テストを行う場合は`m.coder.agent.md`を参照
 - レビューを行う場合は`m.reviewer.agent.md`を参照
-- 翻訳を行う場合は`m.translator.agent.md`を参照
+- 翻訳を行う場合は`mdait-translate` スキルを参照
 
 ## 作業チケット
 
@@ -76,7 +76,6 @@
 | `m.coder` | 実装・テスト | 設計完了後の実装作業 |
 | `m.reviewer` | コードレビュー | 実装完了後の品質確認 |
 | `m.researcher` | 技術調査 | 特定の技術的テーマについて深堀調査する場合 |
-| `m.translator` | l10n対応 | 翻訳・国際化作業 |
 | `m.doc-writer` | ドキュメント執筆・改善 | 技術ドキュメントの新規作成・全面改善時 |
 
 **引き継ぎのポイント**
