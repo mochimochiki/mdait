@@ -8,6 +8,7 @@
 
 import type { ScoredTmEntry } from "./tm-ranker";
 import { rankTmEntries } from "./tm-ranker";
+import { buildSentenceQueries } from "./tm-query";
 import { normalizeForTm } from "./tm-text-normalizer";
 import type { TmxStore } from "./tmx-store";
 import type { TmMatch } from "./types";
@@ -33,26 +34,6 @@ const TRIGRAM_CANDIDATE_LIMIT = 50;
 const MIN_SCORE_THRESHOLD = 0.15;
 
 /**
- * 正規化テキストを行分割し、各行をIntl.Segmenterで文単位に分割する。
- * 空行除去・trim・短文フィルタ・重複除去を行う。
- */
-function splitToQuerySentences(normalizedText: string, lang: string, minQueryLength: number): Set<string> {
-	const lines = normalizedText.split("\n");
-	const segmenter = new Intl.Segmenter(lang, { granularity: "sentence" });
-	const result = new Set<string>();
-	for (const raw of lines) {
-		const trimmed = raw.trim();
-		for (const { segment } of segmenter.segment(trimmed)) {
-			const s = segment.trim();
-			if (s.length >= minQueryLength) {
-				result.add(s);
-			}
-		}
-	}
-	return result;
-}
-
-/**
  * ソーステキストを行単位に分割してTM検索を行い、統合結果を返す。
  *
  * @param sourceContent 生テキスト（Markdown含む）
@@ -70,13 +51,11 @@ export function searchTmByLines(
 	const { minQueryLength, maxReferences, sourceLang, targetLang, trigramCache } = options;
 
 	// 1. 正規化・分割
-	const normalizedNew = normalizeForTm(sourceContent);
-	const queryLines = splitToQuerySentences(normalizedNew, sourceLang, minQueryLength);
+	const queryLines = buildSentenceQueries(sourceContent, sourceLang, minQueryLength);
 
 	// 2. revise差分フィルタ
 	if (oldSourceContent !== undefined) {
-		const normalizedOld = normalizeForTm(oldSourceContent);
-		const oldLineSet = splitToQuerySentences(normalizedOld, sourceLang, 0);
+		const oldLineSet = buildSentenceQueries(oldSourceContent, sourceLang, 0);
 		for (const line of queryLines) {
 			if (oldLineSet.has(line)) {
 				queryLines.delete(line);

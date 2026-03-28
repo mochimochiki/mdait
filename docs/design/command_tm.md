@@ -6,6 +6,12 @@
 
 > **ワークフロー位置:** [trans](command_trans.md) → **tm-commit** → （ワークフロー終了）
 
+## コマンド責務分離（tm-commit / tm-optimize）
+
+- `tm-commit`: 翻訳済みユニットから TU を upsert する（登録・更新）。
+- `tm-optimize`: 現行 primary コーパスを材料に各 TU の `x-wt` を冪等再計算する。
+- `sync`: TM の削除・最適化を呼ばない（unit 同期に限定）。
+
 ---
 
 ## 機能仕様

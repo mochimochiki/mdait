@@ -11,6 +11,7 @@ const TMX_VERSION = "1.4";
 /** XMLプロパティタイプ定数 */
 const PROP_TYPE_HASH = "x-hash";
 const PROP_TYPE_PRIMARY = "x-primary";
+const PROP_TYPE_WEIGHT = "x-wt";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -73,6 +74,7 @@ const tmxParser = new XMLParser({
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	let tuid = String(tuNode[`${ATTR_PREFIX}tuid`] ?? "");
 	let primary = "";
+	let weight = 1;
 	const variants = new Map<string, TmVariant>();
 
 	// <prop> 要素を処理
@@ -89,6 +91,13 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 			case PROP_TYPE_PRIMARY:
 				primary = value;
 				break;
+			case PROP_TYPE_WEIGHT: {
+				const parsedWeight = Number.parseFloat(value);
+				if (Number.isFinite(parsedWeight)) {
+					weight = Math.min(1, Math.max(0, parsedWeight));
+				}
+				break;
+			}
 		}
 	}
 
@@ -117,6 +126,7 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	const entry: TmEntry = {
 		tuid,
 		primary,
+		weight,
 		variants,
 	};
 	return entry;
@@ -128,7 +138,10 @@ function isLegacyTmEntry(entry: TmEntry | LegacyTmEntry): entry is LegacyTmEntry
 
 function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 	if (!isLegacyTmEntry(entry)) {
-		return entry;
+		return {
+			...entry,
+			weight: entry.weight ?? 1,
+		};
 	}
 
 	const sortedVariants = [...entry.segments.entries()];
@@ -140,6 +153,7 @@ function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 	return {
 		tuid: entry.sentenceHash,
 		primary,
+		weight: 1,
 		variants: new Map(sortedVariants.map(([lang, text]) => [lang, { text }])),
 	};
 }
@@ -179,8 +193,19 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 		});
 	}
 
+	// weight は非finite の可能性があるため、保存時にもサニタイズしてから使用する
+	const rawWeight = entry.weight;
+	const finiteWeight = Number.isFinite(rawWeight) ? (rawWeight as number) : 1;
+	const safeWeight = Math.max(0, Math.min(1, finiteWeight));
+
 	return {
 		[`${ATTR_PREFIX}tuid`]: entry.tuid,
+		prop: [
+			{
+				[`${ATTR_PREFIX}type`]: PROP_TYPE_WEIGHT,
+				"#text": safeWeight.toFixed(6),
+			},
+		],
 		tuv: tuvs,
 	};
 }

@@ -31,7 +31,13 @@ type CandidateWithTrigrams = {
 	entry: TmEntry;
 	trigrams: ReadonlySet<string>;
 	querySim: number;
+	finalScore: number;
 };
+
+function applyWeightBoost(similarityScore: number, weight: number): number {
+	const safeWeight = Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 1;
+	return similarityScore * (0.7 + 0.3 * safeWeight);
+}
 
 /**
  * 2つの trigram 集合の Jaccard 係数を計算する。
@@ -79,12 +85,13 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`)
 				?? computeTrigrams(normalizeForTm(text));
 			const querySim = jaccard(queryTrigrams, trigrams);
-			return { entry, trigrams, querySim };
+			const finalScore = applyWeightBoost(querySim, entry.weight);
+			return { entry, trigrams, querySim, finalScore };
 		})
 		.filter((c): c is CandidateWithTrigrams => c !== null);
 
-	// querySim 降順にソート（lambda=1.0 時の純粋な類似度順を保証）
-	pool.sort((a, b) => b.querySim - a.querySim);
+	// finalScore 降順にソート（重み補正後の候補順）
+	pool.sort((a, b) => b.finalScore - a.finalScore);
 
 	const selected: Array<CandidateWithTrigrams & { score: number }> = [];
 	const remaining = [...pool];
@@ -94,14 +101,14 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 		let bestScore = Number.NEGATIVE_INFINITY;
 
 		if (selected.length === 0) {
-			// 初回: querySim が最高の候補を選択
+			// 初回: finalScore が最高の候補を選択
 			bestIdx = 0;
-			bestScore = remaining[0].querySim;
+			bestScore = remaining[0].finalScore;
 		} else {
 			for (let i = 0; i < remaining.length; i++) {
 				const c = remaining[i];
 				const maxSimToSelected = Math.max(...selected.map((s) => jaccard(s.trigrams, c.trigrams)));
-				const score = lambda * c.querySim - (1 - lambda) * maxSimToSelected;
+				const score = lambda * c.finalScore - (1 - lambda) * maxSimToSelected;
 				if (score > bestScore) {
 					bestScore = score;
 					bestIdx = i;

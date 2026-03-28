@@ -6,7 +6,7 @@ import { calculateHash } from "../../../core/hash/hash-calculator";
 import { TmxStore, escapeXml, unescapeXml } from "../../../core/tm/tmx-store";
 import type { TmEntry } from "../../../core/tm/types";
 
-type TmEntryOverrides = Partial<Pick<TmEntry, "tuid" | "primary" | "variants">>;
+type TmEntryOverrides = Partial<Pick<TmEntry, "tuid" | "primary" | "weight" | "variants">>;
 
 const SAMPLE_TMX = `<?xml version="1.0" encoding="UTF-8"?>
 <tmx version="1.4">
@@ -33,6 +33,7 @@ function createTestEntry(overrides?: TmEntryOverrides): TmEntry {
 	return {
 		tuid: overrides?.tuid ?? calculateHash(primary, true),
 		primary,
+		weight: overrides?.weight ?? 1,
 		variants:
 			overrides?.variants ??
 			new Map([
@@ -79,12 +80,12 @@ suite("TmxStore", () => {
 		assert.strictEqual(entry.variants.get("ja")?.text, "こんにちは世界");
 	});
 
-	test("save したTMXに x-primary / x-source-hash / x-unit / x-unit-hash を出力しない", () => {
+test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-wt は出力する", () => {
 		store.addEntry(createTestEntry());
 		store.save(tempFilePath);
 
 		const xml = fs.readFileSync(tempFilePath, "utf-8");
-		assert.strictEqual(xml.includes("x-primary"), false);
+		assert.strictEqual(xml.includes("x-wt"), true);
 		assert.strictEqual(xml.includes("x-source-hash"), false);
 		assert.strictEqual(xml.includes("x-unit"), false);
 		assert.strictEqual(xml.includes("x-unit-hash"), false);
@@ -136,6 +137,25 @@ suite("TmxStore", () => {
 			store.findByTuid(calculateHash("Download the installer", true))?.primary,
 			"Download the installer",
 		);
+		assert.strictEqual(store.findByTuid(calculateHash("Download the installer", true))?.weight, 1);
+	});
+
+	test("x-wt がある TMX を読める", () => {
+		const weightedTmx = `<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+  <body>
+    <tu tuid="a1b2c3d4">
+      <prop type="x-wt">0.250000</prop>
+      <tuv xml:lang="en">
+        <seg>Download the installer</seg>
+      </tuv>
+    </tu>
+  </body>
+</tmx>`;
+		fs.mkdirSync(path.dirname(tempFilePath), { recursive: true });
+		fs.writeFileSync(tempFilePath, weightedTmx, "utf-8");
+		store.load(tempFilePath);
+		assert.strictEqual(store.findByTuid("a1b2c3d4")?.weight, 0.25);
 	});
 
 	test("x-source-hash が残る旧TMXも通常読込できる", () => {

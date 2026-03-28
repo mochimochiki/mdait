@@ -9,6 +9,7 @@ import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { TermResultContentProvider } from "./commands/term/term-result-provider";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
+import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { openTmCommand } from "./commands/tm/command-open";
 import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
@@ -194,6 +195,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait.tm.commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
+	const tmOptimizeDisposable = vscode.commands.registerCommand("mdait.tm.optimize", tmOptimizeCommand);
 
 	// TM Result ContentProvider登録
 	const tmResultProvider = TmResultContentProvider.getInstance();
@@ -492,6 +494,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceFrontmatterDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
+		tmOptimizeDisposable,
 		tmResultProviderDisposable,
 		tmResultProvider,
 		termResultProviderDisposable,

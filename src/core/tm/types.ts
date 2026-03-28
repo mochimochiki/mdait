@@ -10,6 +10,8 @@ export interface TmEntry {
 	tuid: string;
 	/** 正準 primary sentence */
 	primary: string;
+	/** 参照有用性の重み（0.0-1.0） */
+	weight: number;
 	/** 言語コード → variant */
 	variants: Map<string, TmVariant>;
 }

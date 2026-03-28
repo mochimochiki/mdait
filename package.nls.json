@@ -40,6 +40,7 @@
   "mdait.logLevel.description": "Set the log level for mdait extension output",
   "mdait.tm.commit.file.title": "✨TM Commit File",
   "mdait.tm.commit.directory.title": "✨TM Commit Directory",
+  "mdait.tm.optimize.title": "✨TM Optimize",
   "TM Commit": "TM Commit",
   "Term Expansion": "Term Expansion",
   "The following actions will also be performed:": "The following actions will also be performed:",
