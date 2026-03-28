@@ -28,10 +28,26 @@ import { SectionMatcher } from "./section-matcher";
 const logger = Logger.getInstance();
 
 /**
+ * syncコマンドの結果
+ */
+export interface SyncResult {
+	totalFileCount: number;
+	successCount: number;
+	errorCount: number;
+	totalAdded: number;
+	totalModified: number;
+	totalDeleted: number;
+	totalUnchanged: number;
+	/** need:revise付与件数 */
+	revisionsNeeded: number;
+	durationMs: number;
+}
+
+/**
  * sync command
  * Markdownユニットの同期を行う
  */
-export async function syncCommand(): Promise<void> {
+export async function syncCommand(): Promise<SyncResult | undefined> {
 	const startTime = Date.now();
 	try {
 		// 準備
@@ -55,6 +71,7 @@ export async function syncCommand(): Promise<void> {
 		let totalModified = 0;
 		let totalDeleted = 0;
 		let totalUnchanged = 0;
+		let totalRevisionsNeeded = 0;
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
@@ -96,7 +113,6 @@ export async function syncCommand(): Promise<void> {
 							diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
 						}
 
-
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
 						const hasChanges = diffResult.added > 0 || diffResult.modified > 0 || diffResult.deleted > 0;
@@ -123,6 +139,7 @@ export async function syncCommand(): Promise<void> {
 						totalModified += diffResult.modified;
 						totalDeleted += diffResult.deleted;
 						totalUnchanged += diffResult.unchanged;
+						totalRevisionsNeeded += diffResult.revisionsNeeded ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -158,12 +175,25 @@ export async function syncCommand(): Promise<void> {
 			totalModified,
 			totalDeleted,
 			totalUnchanged,
+			revisionsNeeded: totalRevisionsNeeded,
 			durationMs,
 		});
 
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 		);
+
+		return {
+			totalFileCount,
+			successCount,
+			errorCount,
+			totalAdded,
+			totalModified,
+			totalDeleted,
+			totalUnchanged,
+			revisionsNeeded: totalRevisionsNeeded,
+			durationMs,
+		};
 	} catch (error) {
 		const endTime = Date.now();
 		const durationMs = endTime - startTime;
@@ -174,6 +204,7 @@ export async function syncCommand(): Promise<void> {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
+		return undefined;
 	}
 }
 
@@ -420,7 +451,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	const matchResult = sectionMatcher.match(source.units, target.units);
 
 	// ユニットのハッシュを更新
-	updateSectionHashes(matchResult, config, sourceFile, targetFile);
+	const revisionsNeeded = updateSectionHashes(matchResult, config, sourceFile, targetFile);
 
 	// sourceのスナップショット保存
 	const unitRegistryManager = UnitRegistryManager.getInstance();
@@ -438,6 +469,7 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
+	diffResult.revisionsNeeded = revisionsNeeded;
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
@@ -536,13 +568,15 @@ export function syncFrontmatterMarkers(
 /**
  * ユニットのハッシュを更新する
  * @param matchResult ユニットのマッチ結果
+ * @returns need:revise付与件数
  */
 function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 	config: Configuration,
 	sourceFilePath: string,
 	targetFilePath: string,
-) {
+): number {
+	let revisionsNeeded = 0;
 	for (const pair of matchResult) {
 		const source = pair.source;
 		const target = pair.target;
@@ -556,6 +590,9 @@ function updateSectionHashes(
 			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker);
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
+			if (result.targetMarker.needsRevision()) {
+				revisionsNeeded++;
+			}
 			continue;
 		}
 
@@ -574,6 +611,7 @@ function updateSectionHashes(
 			target.marker = result.marker;
 		}
 	}
+	return revisionsNeeded;
 }
 
 /**

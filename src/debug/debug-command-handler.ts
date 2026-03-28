@@ -31,8 +31,17 @@ interface ResultPayload {
 type ArgTransformer = (args: unknown[]) => unknown[];
 
 const URI_FILE_COMMANDS = new Set(["mdait.trans", "mdait.translate.frontmatter"]);
-const FILE_ITEM_COMMANDS = new Set(["mdait.translate.file", "mdait.tm.commit.file"]);
-const DIRECTORY_ITEM_COMMANDS = new Set(["mdait.translate.directory"]);
+const FILE_ITEM_COMMANDS = new Set([
+	"mdait.translate.file",
+	"mdait.tm.commit.file",
+	"mdait.term.detect.file",
+	"mdait.term.expand.file",
+]);
+const DIRECTORY_ITEM_COMMANDS = new Set([
+	"mdait.translate.directory",
+	"mdait.term.detect.directory",
+	"mdait.term.expand.directory",
+]);
 const TM_DIRECTORY_COMMANDS = new Set(["mdait.tm.commit.directory"]);
 
 function buildArgTransformer(command: string): ArgTransformer | undefined {
@@ -56,7 +65,10 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 	if (DIRECTORY_ITEM_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {
-				return [{ type: "directory", directoryPath: args[0], label: args[0].split(/[\\/]/).pop() ?? "" }, ...args.slice(1)];
+				return [
+					{ type: "directory", directoryPath: args[0], label: args[0].split(/[\\/]/).pop() ?? "" },
+					...args.slice(1),
+				];
 			}
 			return args;
 		};
@@ -65,7 +77,10 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 	if (TM_DIRECTORY_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {
-				return [{ type: "directory", dirPath: args[0], directoryPath: args[0], label: args[0].split(/[\\/]/).pop() ?? "" }, ...args.slice(1)];
+				return [
+					{ type: "directory", dirPath: args[0], directoryPath: args[0], label: args[0].split(/[\\/]/).pop() ?? "" },
+					...args.slice(1),
+				];
 			}
 			return args;
 		};
@@ -163,6 +178,9 @@ export class DebugCommandHandler implements vscode.Disposable {
 			completedAt: null,
 		});
 
+		const capturedLogs: string[] = [];
+		const logDisposable = this.logger.addLogListener((line) => capturedLogs.push(line));
+
 		try {
 			let args = payload.args ?? [];
 			const transformer = buildArgTransformer(payload.command);
@@ -179,7 +197,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				status: "done",
 				result: result ?? null,
 				error: null,
-				logs: [],
+				logs: capturedLogs,
 				startedAt,
 				completedAt,
 			});
@@ -191,10 +209,12 @@ export class DebugCommandHandler implements vscode.Disposable {
 				status: "error",
 				result: null,
 				error: error instanceof Error ? error.message : String(error),
-				logs: [],
+				logs: capturedLogs,
 				startedAt,
 				completedAt,
 			});
+		} finally {
+			logDisposable.dispose();
 		}
 
 		this.deleteCommandFile();

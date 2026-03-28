@@ -108,8 +108,8 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()` |
+| [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transCommand()` → `TransCommandResult`, `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()` |
 | [`translator.ts`](../../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース |
 | [`translation-checker.ts`](../../src/commands/trans/translation-checker.ts) | `TranslationChecker.checkTranslationQuality()` - 構造整合性チェック |
-| [`term-extractor.ts`](../../src/commands/trans/term-extractor.ts) | `TranslationTermExtractor.extract()` - 用語集から該当用語を抽出 |
-| [`response-validator.ts`](../../src/commands/trans/response-validator.ts) | `ResponseValidator` - AIレスポンスのJSON混入検出 |
+| [`term-extractor.ts`](../../src/commands/trans/term-extractor.ts) | `extractRelevantTerms()` - 用語集から該当用語を抽出 |
+| [`response-validator.ts`](../../src/commands/trans/response-validator.ts) | `validateTranslationResponse()`, `extractJsonFromResponse()` - AIレスポンスのJSON混入検出・除去 |

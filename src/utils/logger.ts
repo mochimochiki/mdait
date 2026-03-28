@@ -1,5 +1,7 @@
 import type * as vscode from "vscode";
 
+export type LogListener = (line: string) => void;
+
 /**
  * ログレベル定義
  * 値が大きいほど重要度が高い
@@ -98,6 +100,7 @@ export class Logger {
 	private static instance: Logger | undefined;
 	private channel: vscode.OutputChannel | undefined;
 	private level: LogLevel = LogLevel.INFO;
+	private listeners: LogListener[] = [];
 
 	private constructor() {}
 
@@ -134,6 +137,15 @@ export class Logger {
 		return this.level;
 	}
 
+	addLogListener(listener: LogListener): vscode.Disposable {
+		this.listeners.push(listener);
+		return {
+			dispose: () => {
+				this.listeners = this.listeners.filter((l) => l !== listener);
+			},
+		};
+	}
+
 	/**
 	 * ログメッセージをフォーマット
 	 * @param level ログレベル
@@ -166,6 +178,9 @@ export class Logger {
 		const line = this.formatMessage(level, scope, message, context);
 		if (this.channel) {
 			this.channel.appendLine(line);
+		}
+		for (const listener of this.listeners) {
+			listener(line);
 		}
 	}
 

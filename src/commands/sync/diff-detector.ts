@@ -40,6 +40,8 @@ export interface DiffResult {
 	deleted: number;
 	/** 変更なしのユニット数 */
 	unchanged: number;
+	/** need:revise付与件数 */
+	revisionsNeeded?: number;
 }
 
 /**

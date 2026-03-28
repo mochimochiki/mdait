@@ -117,7 +117,7 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`sync-command.ts`](../../src/commands/sync/sync-command.ts) | `syncCommand()`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()` |
+| [`sync-command.ts`](../../src/commands/sync/sync-command.ts) | `syncCommand()` → `SyncResult`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()` |
 | [`section-matcher.ts`](../../src/commands/sync/section-matcher.ts) | `match()` - 3フェーズユニット対応付け、`createSyncedTargets()` - 孤立処理 |
 | [`diff-detector.ts`](../../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
 | [`marker-sync.ts`](../../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |

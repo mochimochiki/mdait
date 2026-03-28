@@ -2,9 +2,13 @@
 
 (新しい情報が上。各エントリは100-200文字の自然文で、何があってどう判断したかを簡潔に伝える)
 
+## 2026/03/28: デバッグ可観測性改善
+
+sync/transコマンドがvoidを返していたため、debug-ipcのresult.jsonで構造化アサーションができなかった。tm.commitに倣いSyncResult/TransCommandResult型を導入し戻り値を構造化。syncにはrevisionsNeeded（need:revise付与件数）を追加してtotalModifiedとの混同を解消。patchMode不発はコードトレースで構造的欠陥なしと判断し、診断ログを強化して再現待ちとした。自律テスト設計の基盤が整った。→ [詳細](done/260328_デバッグ可観測性改善.md)
+
 ## 2026/03/28: デバッグ環境ファイルベースIPC
 
-エージェントが自律的にLLM込みの統合シナリオをテストできるよう、Extension Host内にファイルベースIPCを導入した。`.mdait/debug/`にコマンドJSONを書くとFileSystemWatcherが検知して実行し結果を返す仕組みで、環境変数ガードと動的importによりリリースビルドには一切影響しない。レビューで引数型変換の不整合が見つかり修正して承認。→ [詳細](done/260328_デバッグ環境ファイルベースIPC.md)
+エージェントが自律的にLLM込みの統合シナリオをテストできるよう、Extension Host内にファイルベースIPCを導入した。`.mdait/debug/`にコマンドJSONを書くとFileSystemWatcherが検知して実行し結果を返す仕組みで、環境変数ガードと動的importによりリリースビルドには一切影響しない。レビューで引数型変換の不整合が見つかり修正して承認。第2マイルストーンでLoggerにonLogリスナー機構を追加しresult.jsonにログキャプチャを実装、`--profile-temp`を`--profile=mdait-debug`に変更してAI同意ダイアログの永続化も対応。フルシナリオ（sync→trans→tm.commit→改訂→re-sync→re-trans）をIPC経由で実行し正常動作とログキャプチャを確認。洗い出しでterm系コマンドのarg変換不足、patchMode判定理由ログの欠如、TM参照ヒットログの欠如を発見し修正。debug-ipc Skillを作成。→ [詳細](done/260328_デバッグ環境ファイルベースIPC.md)
 
 ## 2026/03/22: TM検索クエリの文単位分割
 
@@ -73,8 +77,6 @@ TM機能をprimaryLang基準に寄せる前提として、用語集専用のterm
 ## 2026/03/15: TM正規化でinline保持とfrontmatter除外を修正
 
 stripMarkdownでインラインコードが消えfrontmatterが混入する問題を修正。frontmatterは先頭パターンマッチで除去し、inline codeはcode_inlineトークンをバッククォート付きで保持する方式を採用。markdown-itベースの既存設計を保ったまま最小差分で対応した。→ [詳細](done/260315_tm正規化_inline保持とfrontmatter除外.md)
-
----
 
 ## 2026/03/08: tm-commitフォルダをtmフォルダに統合
 

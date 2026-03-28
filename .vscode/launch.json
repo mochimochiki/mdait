@@ -8,7 +8,7 @@
       "args": [
         "${workspaceFolder}/src/test/workspace",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--profile-temp"
+        "--profile=mdait-debug"
       ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "build-and-copy",
