@@ -101,7 +101,7 @@ await manager.refreshFileStatus(filePath);
 
 ## UnitRegistry管理
 
-ユニット内容を`.mdait/unit-registry`ファイルで永続化します。原文変更時、旧コンテンツとの差分（unified diff: 変更前後を+/-で示す標準差分フォーマット）生成に使用します。
+ユニット内容を`.mdait/unit-registry`ファイルで永続化します。原文変更時、旧コンテンツとの差分生成に使用します。
 
 **保存形式**: gzip圧縮 + base64エンコード。CRC32先頭3桁でバケット化（ハッシュ先頭3桁ごとに分割管理）し、バケット昇順でgit競合を軽減。
 
@@ -118,7 +118,7 @@ a2b5c7d8 <encoded_content>
 
 ## Diff生成
 
-trans実行時、旧レジストリと現在のコンテンツからunified diff形式で差分を生成します（`diff`パッケージ）。LLMにdiffを提示することで差分パッチのみを生成させ、変更箇所以外の既存訳文を維持します（[architecture.md](../architecture.md) P4参照）。
+trans実行時、旧レジストリと現在のコンテンツから差分を生成します。LLMには`=`/`-`/`+`プレフィックス形式のパッチを入出力フォーマットとして用い、機械的に適用可能な変更指示をやり取りすることで、変更箇所以外の既存訳文を維持します（[architecture.md](../architecture.md) P4参照）。一方で、ユーザーが確認するための差分ビュー（例: VS Code上のdiff表示やログ・レビュー用のdiff）にはunified diff形式を用い、その生成には`diff`パッケージを使用します。
 
 **実装**: [`src/core/diff/`](../../src/core/diff/)
 
@@ -275,7 +275,7 @@ sequenceDiagram
 | HashCalculator | [`src/core/hash/`](../../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
-| DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | unified diff形式の差分生成 |
+| DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |
 | TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |
 | SentenceSplitter | [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | Intl.SegmenterによるTM文分割 |
 | TmTextNormalizer | [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) | Markdown除去・TM価値フィルタリング |

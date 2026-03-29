@@ -182,5 +182,8 @@
   "Translation completed for: {0}\n\nStatus:\n- Total units: {1}\n- Translated: {2}\n- Still needs translation: {3}\n- Still needs revision: {4}": "{0} の翻訳が完了しました。\n\nステータス:\n- 総ユニット数: {1}\n- 翻訳済み: {2}\n- まだ翻訳が必要: {3}\n- まだレビューが必要: {4}",
   "Failed to translate: {0}": "翻訳に失敗しました: {0}",
   "On": "On",
-  "Off": "Off"
+  "Off": "Off",
+  "Patch application failed. Full re-translation may overwrite manual edits. Continue?": "パッチ適用に失敗しました。全文再翻訳を行うと手修正が失われる可能性があります。続行しますか？",
+  "Continue": "続行",
+  "Skip": "スキップ"
 }

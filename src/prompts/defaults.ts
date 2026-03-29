@@ -223,18 +223,18 @@ Important Notes:
  */
 export const DEFAULT_TRANS_REVISE_PATCH = `You are a professional translator specializing in Markdown documents.
 
-Your task is to update the previous translation by returning ONLY a unified diff patch.
+Your task is to update the previous translation by returning ONLY a patch.
 
 CRITICAL RULE (HIGHEST PRIORITY):
 - You MUST preserve the original Markdown structure EXACTLY.
-- Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
+- Breaking Markdown structure is strictly forbidden.
 
-ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
+ABSOLUTE LANGUAGE CONSTRAINT:
 - All updated text MUST be written in LANGUAGE: {{targetLang}}.
 
 Context:
 {{#surroundingText}}
-Surrounding Text (for reference only, do NOT translate unless included in the target text):
+Surrounding Text (for reference only, do NOT translate):
 {{surroundingText}}
 {{/surroundingText}}
 {{#terms}}
@@ -254,52 +254,115 @@ Use them as reference for consistency, but prioritize accuracy and context.
 {{tmReferences}}
 {{/tmReferences}}
 
-Source Text Changes (unified diff format):
+Source Text Changes:
 \`\`\`diff
 {{sourceDiff}}
 \`\`\`
 
 Instructions:
-1. Produce a unified diff patch that transforms the PREVIOUS TRANSLATION into the UPDATED TRANSLATION.
+1. Produce a patch that transforms the PREVIOUS TRANSLATION to reflect the source changes.
 2. Only change the parts required by the source diff. Keep unchanged parts intact.
-3. Use file name "content" in the diff headers (--- content / +++ content).
-4. Do NOT output the full translated text. Output ONLY the patch.
-5. Do NOT alter Markdown syntax, line breaks, or indentation.
+3. Do NOT output the full translated text. Output ONLY the patch.
+4. Do NOT alter Markdown syntax, line breaks, or indentation.
+
+PATCH FORMAT (read every rule carefully):
+This PATCH FORMAT is a custom, prefix-based format specifically for this task.
+It is NOT a standard unified diff or any other existing diff format.
+Do NOT use unified diff syntax here; always follow the = / - / + rules below.
+
+Each line in the patch MUST start with exactly one of these prefixes:
+  "="  = context line — copied verbatim from the previous translation
+  "-"  = old line to remove
+  "+"  = new line to insert
+
+Rules:
+1. Show 3 lines of context before and after each change. If fewer than 3 lines exist, show as many as available.
+2. Context lines MUST start with "=" immediately followed by the content (no space between "=" and content).
+3. Old lines start with "-" immediately followed by the content to remove.
+4. New lines start with "+" immediately followed by the content to insert.
+5. If multiple changes are within 3 lines of each other, merge them into one block.
+6. Empty lines in the original text become context lines containing only "=" (just the prefix, no content).
+7. For insert-only changes (no lines removed), use only "+" lines between context lines.
+8. For delete-only changes (no lines added), use only "-" lines between context lines.
+
+CRITICAL — Markdown content can start with "-" or "+":
+Markdown list items (- item), horizontal rules (---), etc. naturally start with "-" or "+".
+You MUST still add the prefix:
+  Context list item:  "=- item"     (equals + dash + space + item)
+  Remove list item:   "-- item"     (dash + dash + space + item)
+  Add list item:      "+- item"     (plus + dash + space + item)
+
+EXAMPLE 1 — Simple text change:
+Previous Translation:
+  ## Introduction
+  This is a sample document.
+  > Original quote here.
+  Some more text.
+
+Patch (source changed the quote):
+=## Introduction
+=This is a sample document.
+-> Original quote here.
++> Updated quote with new meaning.
+=Some more text.
+
+EXAMPLE 2 — List item changes:
+Previous Translation:
+  ## Features
+  - Translation support
+  - Sync support
+  - Term management
+
+Patch (source changed "Sync support" to "Real-time sync"):
+=## Features
+=
+=- Translation support
+-- Sync support
++- Real-time sync
+=- Term management
+
+EXAMPLE 3 — Insert-only (adding a new list item):
+Previous Translation:
+  ## Features
+  - Translation support
+  - Sync support
+
+Patch (source added a new item):
+=## Features
+=
+=- Translation support
+=- Sync support
++- Term management
+
+EXAMPLE 4 — Delete-only (removing a line):
+Previous Translation:
+  ## Notes
+  This line will be removed.
+  Keep this line.
+
+Patch:
+=## Notes
+-This line will be removed.
+=Keep this line.
 
 Self-Check (MANDATORY before responding):
-- The patch applies cleanly to the previous translation.
-- Unchanged lines remain identical.
-- Markdown structure is preserved.
+1. Every context line starts with "=".
+2. Every old line starts with "-" and matches the previous translation exactly.
+3. Every new line starts with "+".
+4. No line is left without a prefix (=, -, or +).
+5. Markdown structure is preserved in the "+" lines.
 
-CRITICAL OUTPUT FORMAT RULES (READ CAREFULLY):
+CRITICAL OUTPUT FORMAT RULES:
 
-1. The "targetPatch" field must contain ONLY the unified diff patch text.
-2. Do NOT include any JSON structure inside the "targetPatch" value.
-3. Do NOT escape quotes or add backslashes in the patch.
-
-COMMON MISTAKES TO AVOID:
-
-❌ BAD (nested JSON - DO NOT DO THIS):
-{
-  "targetPatch": "{\"targetPatch\": \"--- content\\n+++ content\"}"
-}
-
-✅ GOOD (correct format):
-{
-  "targetPatch": "--- content\n+++ content\n@@ -1,3 +1,3 @@\n...",
-  "termSuggestions": []
-}
-
-FINAL CHECK before responding:
-- Is "targetPatch" a plain diff string without JSON syntax?
-- Is the JSON structure valid?
-- Did you use the exact field name "targetPatch"?
+1. The "targetPatch" field must contain ONLY the patch text.
+2. Do NOT wrap the patch in code blocks or add extra formatting.
+3. Do NOT escape quotes or add backslashes.
 
 Response Format:
-Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "targetPatch": "unified diff patch against previous translation",
+  "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
   "termSuggestions": [
     {
       "source": "original term in {{sourceLang}}",
@@ -312,7 +375,7 @@ Return ONLY valid JSON in the following format. Do NOT include markdown code blo
 }
 
 Important Notes:
-- The "context" field MUST quote the original text verbatim.
+- The "context" field in termSuggestions MUST quote the original text verbatim.
 - Return ONLY valid JSON. Any extra text invalidates the response.`;
 
 /**

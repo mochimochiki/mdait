@@ -182,5 +182,8 @@
   "Translation completed for: {0}\n\nStatus:\n- Total units: {1}\n- Translated: {2}\n- Still needs translation: {3}\n- Still needs revision: {4}": "Translation completed for: {0}\n\nStatus:\n- Total units: {1}\n- Translated: {2}\n- Still needs translation: {3}\n- Still needs revision: {4}",
   "Failed to translate: {0}": "Failed to translate: {0}",
   "On": "On",
-  "Off": "Off"
+  "Off": "Off",
+  "Patch application failed. Full re-translation may overwrite manual edits. Continue?": "Patch application failed. Full re-translation may overwrite manual edits. Continue?",
+  "Continue": "Continue",
+  "Skip": "Skip"
 }

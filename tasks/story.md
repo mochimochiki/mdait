@@ -2,6 +2,10 @@
 
 (新しい情報が上。各エントリは100-200文字の自然文で、何があってどう判断したかを簡潔に伝える)
 
+## 2026/03/28: patchMode保護と可観測性改善
+
+自律デバッグ検証でpatchMode失敗時にサイレント全文再翻訳→手修正消失という致命的バグを発見。applyUnifiedPatchに@@ハンク行補完を追加してLLMのパッチ形式揺れを吸収し、それでも失敗する場合はshowWarningMessageで確認ダイアログを出してスキップ可能にした。レビューでCodeLens経由のtransUnit_CoreProcにスキップ判定漏れが見つかり追加修正。translateFile/translateUnitの戻り値修正とTMログINFO昇格も併せて実施。→ [詳細](done/260328_patchMode保護と可観測性改善.md)
+
 ## 2026/03/28: debug-ipc可観測性改善（第2弾）
 
 実際のバグ（空ファイルsync時のENOENT）をお題に自律デバッグの仕組みを評価した。sync部分失敗がstatus:doneで返る問題、ログが文字列のみで構造化されてない問題、スキップ理由の「なぜ」が不足する問題を発見。done-with-errorsステータス、structuredLogsフィールド、診断ログ強化の3件を即座に実装。Loggerの`LogListener`シグネチャを拡張しentry付きに変更。→ [詳細](done/260328_デバッグ可観測性改善.md)

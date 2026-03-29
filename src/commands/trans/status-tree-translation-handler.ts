@@ -4,7 +4,12 @@ import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { AIOnboarding } from "../../utils/ai-onboarding";
-import { transFile_CoreProc, transUnitCommand } from "./trans-command";
+import {
+	type TransCommandResult,
+	type TranslateUnitMetrics,
+	transFile_CoreProc,
+	transUnitCommand,
+} from "./trans-command";
 
 /**
  * ステータスツリーアイテムの翻訳アクションハンドラ
@@ -136,7 +141,7 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * 単一ファイルを翻訳する
 	 */
-	public async translateFile(item: StatusItem): Promise<void> {
+	public async translateFile(item: StatusItem): Promise<TransCommandResult | undefined> {
 		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
@@ -152,6 +157,8 @@ export class StatusTreeTranslationHandler {
 		const statusManager = StatusManager.getInstance();
 		const filePath = item.filePath; // 型安全性のためローカル変数に保存
 
+		let result: TransCommandResult | undefined;
+
 		try {
 			// StatusManagerを通じてisTranslatingを設定
 			await statusManager.changeFileStatus(filePath, { isTranslating: true });
@@ -166,7 +173,7 @@ export class StatusTreeTranslationHandler {
 				async (progress, token) => {
 					try {
 						// 内部実装を直接呼び出し（二重のwithProgressを回避）
-						await transFile_CoreProc(vscode.Uri.file(filePath), progress, token);
+						result = await transFile_CoreProc(vscode.Uri.file(filePath), progress, token);
 					} finally {
 						// StatusManagerを通じてisTranslatingを解除
 						await statusManager.changeFileStatus(filePath, { isTranslating: false });
@@ -177,21 +184,26 @@ export class StatusTreeTranslationHandler {
 			console.error("Error during file translation:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during file translation: {0}", (error as Error).message));
 		}
-	} /**
+
+		return result;
+	}
+
+	/**
 	 * 単一ユニットを翻訳する
 	 */
-	public async translateUnit(item: StatusItem): Promise<void> {
+	public async translateUnit(item: StatusItem): Promise<TranslateUnitMetrics | undefined> {
 		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
 		}
 
 		const statusManager = StatusManager.getInstance();
+		let result: TranslateUnitMetrics | undefined;
 
 		try {
 			// StatusManagerを通じてisTranslatingを設定（これにより親ファイル・ディレクトリも自動更新される）
 			statusManager.changeUnitStatus(item.unitHash, { isTranslating: true }, item.filePath);
-			await transUnitCommand(item.filePath, item.unitHash);
+			result = await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			console.error("Error during unit translation:", error);
 			vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
@@ -199,5 +211,7 @@ export class StatusTreeTranslationHandler {
 			// StatusManagerを通じてisTranslatingを解除（これにより親ファイル・ディレクトリも自動更新される）
 			statusManager.changeUnitStatus(item.unitHash, { isTranslating: false }, item.filePath);
 		}
+
+		return result;
 	}
 }

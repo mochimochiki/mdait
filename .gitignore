@@ -11,3 +11,5 @@ src/test/sample-content/jp/*
 src/test/workspace/.mdait/unit-registry
 *.review.*.md
 src/test/workspace/.mdait/translations.tmx
+tasks/do/*
+tasks/done/*

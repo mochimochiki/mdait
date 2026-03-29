@@ -11,7 +11,7 @@ import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールの
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../config/configuration";
-import { applyUnifiedPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
+import { applySimplePatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
@@ -222,16 +222,20 @@ export async function transFile_CoreProc(
 
 			try {
 				const metrics = await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath, token);
-				translatedCount++;
-				if (metrics.patched) {
-					patchedCount++;
+				if (metrics.skipped) {
+					skippedCount++;
+				} else {
+					translatedCount++;
+					if (metrics.patched) {
+						patchedCount++;
+					}
 				}
 				if (metrics.tmHit) {
 					tmHits++;
 				}
 
-				// 翻訳完了をStatusManagerに通知
-				if (oldHash) {
+				// スキップ時はStatusManager更新をスキップ
+				if (!metrics.skipped && oldHash) {
 					statusManager.changeUnitStatus(
 						oldHash,
 						{
@@ -304,11 +308,13 @@ export async function transFile_CoreProc(
 /**
  * translateUnitの結果メトリクス
  */
-interface TranslateUnitMetrics {
+export interface TranslateUnitMetrics {
 	/** patchModeで翻訳したか */
 	patched: boolean;
 	/** TM参照がヒットしたか */
 	tmHit: boolean;
+	/** パッチ失敗時にスキップしたか */
+	skipped: boolean;
 }
 
 async function translateUnit(
@@ -324,6 +330,21 @@ async function translateUnit(
 	const config = Configuration.getInstance();
 
 	const startTime = Date.now();
+
+	/**
+	 * パッチ適用失敗時のユーザー確認ダイアログを表示する
+	 * @returns true: 全文再翻訳に続行, false: スキップ（手修正保持）
+	 */
+	async function confirmPatchFallback(): Promise<boolean> {
+		const continueLabel = vscode.l10n.t("Continue");
+		const skipLabel = vscode.l10n.t("Skip");
+		const choice = await vscode.window.showWarningMessage(
+			vscode.l10n.t("Patch application failed. Full re-translation may overwrite manual edits. Continue?"),
+			continueLabel,
+			skipLabel,
+		);
+		return choice === continueLabel;
+	}
 
 	// 翻訳開始ログ（DEBUGレベル）
 	logger.debug("trans", "Unit translation start", {
@@ -347,6 +368,7 @@ async function translateUnit(
 				relevantTerms.push(...extractedTerms);
 				if (extractedTerms.length > 0) {
 					termsJson = termsToJson(extractedTerms);
+					logger.info("trans", "Term references found", { count: extractedTerms.length });
 				}
 			}
 		} catch (error) {
@@ -468,7 +490,7 @@ async function translateUnit(
 			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
 			if (tmReferences) {
 				context.tmReferences = tmReferences;
-				logger.debug("trans", "TM references found", {
+				logger.info("trans", "TM references found", {
 					count: tmReferences.split("\n").filter((l) => l.trim()).length,
 				});
 			}
@@ -478,6 +500,7 @@ async function translateUnit(
 
 		let translationResult: TranslationResult | null = null;
 		let usedPatchMode = false;
+		let skipped = false;
 
 		const canPatch = unit.marker?.needsRevision() && previousTranslation && context.sourceDiff;
 		if (!canPatch && unit.marker?.needsRevision()) {
@@ -502,7 +525,7 @@ async function translateUnit(
 					},
 				);
 
-				const patched = applyUnifiedPatch(previousTranslation, patchResult.targetPatch);
+				const patched = applySimplePatch(previousTranslation, patchResult.targetPatch);
 				if (patched) {
 					translationResult = {
 						translatedText: patched,
@@ -512,13 +535,28 @@ async function translateUnit(
 					};
 					usedPatchMode = true;
 				} else {
-					logger.warn("trans", "Patch apply failed, fallback to full translation", { unitHash: unit.marker?.hash });
+					logger.warn("trans", "Patch apply failed, fallback to full translation", {
+						unitHash: unit.marker?.hash,
+						patchContent: patchResult.targetPatch,
+						baseContentPreview: previousTranslation.slice(0, 200),
+					});
+					const shouldContinue = await confirmPatchFallback();
+					if (!shouldContinue && previousTranslation) {
+						translationResult = { translatedText: previousTranslation, termSuggestions: [], warnings: [] };
+						skipped = true;
+					}
 				}
 			} catch (error) {
 				logger.warn("trans", "Patch translation failed, fallback to full translation", {
 					unitHash: unit.marker?.hash,
+					patchContent: (error as { patchContent?: string }).patchContent ?? "N/A",
 					...formatError(error),
 				});
+				const shouldContinue = await confirmPatchFallback();
+				if (!shouldContinue && previousTranslation) {
+					translationResult = { translatedText: previousTranslation, termSuggestions: [], warnings: [] };
+					skipped = true;
+				}
 			}
 		}
 
@@ -544,6 +582,12 @@ async function translateUnit(
 
 		// ユニットのコンテンツを更新
 		unit.content = resolvedResult.translatedText;
+
+		// スキップ時はmarker更新をスキップ（手修正保持）
+		if (skipped) {
+			logger.info("trans", "Unit translation skipped by user", { unitHash: unit.marker?.hash });
+			return { patched: false, tmHit: !!context.tmReferences, skipped: true };
+		}
 
 		// ハッシュを再計算してmarkerを更新
 		if (unit.marker) {
@@ -617,6 +661,8 @@ async function translateUnit(
 				unitHash: newHash,
 				title: unit.title,
 				patchMode: usedPatchMode,
+				tmHit: !!context.tmReferences,
+				termHit: relevantTerms.length > 0,
 				duration,
 				needsReview: checkResult.needsReview,
 			});
@@ -625,6 +671,7 @@ async function translateUnit(
 		return {
 			patched: usedPatchMode,
 			tmHit: !!context.tmReferences,
+			skipped: false,
 		};
 	} catch (error) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Unit translation error: {0}", (error as Error).message));
@@ -714,13 +761,18 @@ async function translateFrontmatterIfNeeded(
  * @param targetPath 対象ファイルのパス
  * @param unitHash 翻訳対象のユニットハッシュ
  */
-export async function transUnitCommand(targetPath: string, unitHash: string) {
+export async function transUnitCommand(
+	targetPath: string,
+	unitHash: string,
+): Promise<TranslateUnitMetrics | undefined> {
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
 	if (!shouldProceed) {
 		return; // ユーザーがキャンセルした場合
 	}
+
+	let result: TranslateUnitMetrics | undefined;
 
 	// withProgressで進捗表示とキャンセル機能を提供
 	await vscode.window.withProgress(
@@ -731,12 +783,14 @@ export async function transUnitCommand(targetPath: string, unitHash: string) {
 		},
 		async (progress, token) => {
 			try {
-				await transUnit_CoreProc(targetPath, unitHash, progress, token);
+				result = await transUnit_CoreProc(targetPath, unitHash, progress, token);
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
 			}
 		},
 	);
+
+	return result;
 }
 
 /**
@@ -758,7 +812,7 @@ export async function transUnit_CoreProc(
 	unitHash: string,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<void> {
+): Promise<TranslateUnitMetrics | undefined> {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
@@ -808,7 +862,13 @@ export async function transUnit_CoreProc(
 		const oldMarkerText = targetUnit.marker.toString();
 
 		// 翻訳実行（中核プロセス）
-		await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath, token);
+		const metrics = await translateUnit(targetUnit, translator, sourceLang, targetLang, targetPath, token);
+
+		// スキップ時はステータス更新・ファイル保存をスキップ（手修正保持）
+		if (metrics.skipped) {
+			statusManager.changeUnitStatus(unitHash, { isTranslating: false }, targetPath);
+			return metrics;
+		}
 
 		// ステータス: 翻訳完了
 		statusManager.changeUnitStatus(
@@ -829,6 +889,8 @@ export async function transUnit_CoreProc(
 		await statusManager.refreshFileStatus(targetPath);
 
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit translation completed: {0}", unitHash));
+
+		return metrics;
 	} catch (error) {
 		// ステータス: エラー
 		statusManager.changeUnitStatus(

@@ -32,6 +32,8 @@
     "npx vitest": true,
     "ForEach-Object": true,
     "pwsh -File .github/scripts/done.ps1": true,
-    "Test-Path": true
+    "Test-Path": true,
+    "ConvertFrom-Json": true,
+    "Remove-Item \"src/test/workspace/.mdait/debug/result.json\"": true
   },
 }

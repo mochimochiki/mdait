@@ -98,7 +98,8 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **diff-aware revise**: `need:revise@{oldhash}`時はUnified Diff → LLMにパッチのみ生成させる → 適用。失敗時は全文翻訳にフォールバック（[architecture.md](../architecture.md) P4参照）
+- **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用。失敗時はユーザーに確認ダイアログを表示し、「スキップ」で手修正を保持、「続行」で全文再翻訳にフォールバック（[architecture.md](../architecture.md) P4参照）
+- **パッチ補完**: LLMが`@@`ハンク行なしのパッチを返すケースに対応し、`applyUnifiedPatch`内で自動補完する
 - **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
 - **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
 - **TM参照**: tm-commit済みエントリをTmxStoreから検索し、`tm.maxReferences`件をプロンプトに注入（[command_tm.md](command_tm.md) 参照）
