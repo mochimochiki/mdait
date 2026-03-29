@@ -33,7 +33,7 @@ import { searchTmByLines } from "../../core/tm/tm-line-search";
 import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { SummaryManager } from "../../ui/hover/summary-manager";
+import { SummaryManager, type TmReferenceInfo } from "../../ui/hover/summary-manager";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
@@ -486,12 +486,14 @@ async function translateUnit(
 		}
 
 		// TM参照の検索（tm.enabledかつTmxStoreが利用可能な場合）
+		let tmReferenceMatches: TmReferenceInfo[] | undefined;
 		try {
-			const tmReferences = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
-			if (tmReferences) {
-				context.tmReferences = tmReferences;
+			const tmResult = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
+			if (tmResult) {
+				context.tmReferences = tmResult.formatted;
+				tmReferenceMatches = tmResult.matches;
 				logger.info("trans", "TM references found", {
-					count: tmReferences.split("\n").filter((l) => l.trim()).length,
+					count: tmResult.matches.length,
 				});
 			}
 		} catch (error) {
@@ -652,6 +654,7 @@ async function translateUnit(
 				},
 				appliedTerms: appliedTerms.length > 0 ? appliedTerms : undefined,
 				termCandidates: termCandidates.length > 0 ? termCandidates : undefined,
+				tmReferences: tmReferenceMatches,
 				warnings: resolvedResult.warnings,
 				reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
 			});
@@ -1080,19 +1083,19 @@ async function translateFrontmatter_CoreProc(
 }
 
 /**
- * TM参照を検索してフォーマット済み文字列を返す。
+ * TM参照を検索してフォーマット済み文字列とマッチ情報を返す。
  * tm.enabledがfalseまたはTMXファイルが存在しない場合はundefinedを返す。
  * @param sourceContent ソースユニットの本文
  * @param sourceLang ソース言語コード
  * @param targetLang ターゲット言語コード
- * @returns フォーマット済みTM参照文字列、またはundefined
+ * @returns フォーマット済み文字列とマッチ情報のオブジェクト、またはundefined
  */
 export function lookupTmReferences(
 	sourceContent: string,
 	sourceLang: string,
 	targetLang: string,
 	oldSourceContent?: string,
-): string | undefined {
+): { formatted: string; matches: TmReferenceInfo[] } | undefined {
 	const config = Configuration.getInstance();
 	if (!config.getTmEnabled()) {
 		return undefined;
@@ -1128,5 +1131,12 @@ export function lookupTmReferences(
 		return undefined;
 	}
 
-	return formatTmReferences(matches);
+	return {
+		formatted: formatTmReferences(matches),
+		matches: matches.map((m) => ({
+			source: m.source,
+			target: m.target,
+			firstUsedIn: m.firstUsedIn,
+		})),
+	};
 }

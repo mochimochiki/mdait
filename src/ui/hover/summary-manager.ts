@@ -36,6 +36,18 @@ export interface TermCandidate {
 }
 
 /**
+ * TM参照ヒット情報
+ */
+export interface TmReferenceInfo {
+	/** ソース文 */
+	source: string;
+	/** ターゲット文 */
+	target: string;
+	/** 出典情報（オプション） */
+	firstUsedIn?: string;
+}
+
+/**
  * 翻訳サマリ情報のインターフェース
  */
 export interface TranslationSummary {
@@ -55,6 +67,9 @@ export interface TranslationSummary {
 
 	/** 用語集への追加候補 */
 	termCandidates?: TermCandidate[];
+
+	/** TM参照ヒット情報 */
+	tmReferences?: TmReferenceInfo[];
 
 	/** 注意事項や警告メッセージ */
 	warnings?: string[];

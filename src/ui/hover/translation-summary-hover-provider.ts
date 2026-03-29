@@ -107,6 +107,16 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown("\n");
 		}
 
+		// TM参照
+		if (summary.tmReferences && summary.tmReferences.length > 0) {
+			md.appendMarkdown(`**📚 ${vscode.l10n.t("TM References")}:**\n`);
+			for (const ref of summary.tmReferences) {
+				md.appendMarkdown(`- ${ref.source}\n`);
+				md.appendMarkdown(`  →${ref.target}\n`);
+			}
+			md.appendMarkdown("\n");
+		}
+
 		// 適用された用語
 		if (summary.appliedTerms && summary.appliedTerms.length > 0) {
 			md.appendMarkdown(`**📓 ${vscode.l10n.t("Applied Terms")}:**\n`);

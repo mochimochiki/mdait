@@ -36,4 +36,7 @@
     "ConvertFrom-Json": true,
     "Remove-Item \"src/test/workspace/.mdait/debug/result.json\"": true
   },
+  "chat.tools.edits.autoApprove": {
+    "**/mdait.json": false,
+  }
 }
