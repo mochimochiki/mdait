@@ -40,7 +40,7 @@ interface PreparedTmCommitUnit {
  * ファイル単位のtm-commitコマンド（StatusTreeから呼び出し）
  * @param item StatusItem
  */
-export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
+export async function tmCommitFileCommand(item?: StatusItem): Promise<TmCommitResult | undefined> {
 	if (!item || !("filePath" in item)) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 		return;
@@ -65,7 +65,7 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
 
 	const filePath = (item as { filePath: string }).filePath;
 
-	await vscode.window.withProgress(
+	return await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("TM Commit: {0}", path.basename(filePath)),
@@ -76,8 +76,10 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
 				const result = await executeTmCommitForFile(filePath, config, progress, token);
 				showTmCommitResult(result);
 				await showTmCommitPreview(result);
+				return result;
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
+				return undefined;
 			}
 		},
 	);
@@ -87,7 +89,7 @@ export async function tmCommitFileCommand(item?: StatusItem): Promise<void> {
  * ディレクトリ単位のtm-commitコマンド（StatusTreeから呼び出し）
  * @param item StatusItem
  */
-export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void> {
+export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCommitResult | undefined> {
 	if (!item || !("dirPath" in item)) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
 		return;
@@ -121,7 +123,7 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 		return;
 	}
 
-	await vscode.window.withProgress(
+	return await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("TM Commit: {0}", path.basename(dirPath)),
@@ -174,8 +176,10 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<void>
 
 				showTmCommitResult(overallResult);
 				await showTmCommitPreview(overallResult);
+				return overallResult;
 			} catch (error) {
 				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
+				return undefined;
 			}
 		},
 	);

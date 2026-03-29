@@ -131,6 +131,9 @@ Get-Content $rp -Raw
 
 ## よくあるシナリオ
 
+> **E2Eテストパターンの詳細は [E2E-PATTERNS.md](E2E-PATTERNS.md) を参照。**
+> 機能実装後のテストでは、変更内容に応じて適切なパターンを選んで組み合わせる。
+
 ### sync → trans → TM登録（基本フロー）
 
 ```json
