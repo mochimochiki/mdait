@@ -1,12 +1,12 @@
-# done.ps1 - タスクチケットを tasks/do から tasks/done に移動する
+# done.ps1 - タスクチケットを .tasks/do から .tasks/done に移動する
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$TicketName
 )
 
-$src = "tasks/do/$TicketName"
-$dst = "tasks/done/$TicketName"
+$src = ".tasks/do/$TicketName"
+$dst = ".tasks/done/$TicketName"
 
 if (-not (Test-Path "$src.md")) {
     Write-Error "Ticket not found: $src.md"
@@ -21,4 +21,4 @@ if (Test-Path "$src.review.md") {
     Write-Host "Moved: $src.review.md -> $dst.review.md"
 }
 
-Write-Host "Done: $TicketName is now in tasks/done/"
+Write-Host "Done: $TicketName is now in .tasks/done/"

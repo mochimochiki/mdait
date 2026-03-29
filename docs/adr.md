@@ -18,7 +18,7 @@ Markdownの内容で`=`から始まる行は実質存在せず（Setext見出し
 ### 備考
 - 却下案: スペースプレフィックス（unified diff準拠）→ インデントとの混同リスク・LLMが忘れやすい
 - 却下案: heuristicフォールバック（baseContent照合で`-`行を判定）→ 複雑で偽陽性リスクあり
-- 詳細: [tasks/do/260328_自律デバッグ検証分析.md](../tasks/do/260328_自律デバッグ検証分析.md)
+- 詳細: [.tasks/do/260328_自律デバッグ検証分析.md](../.tasks/do/260328_自律デバッグ検証分析.md)
 
 ---
 
@@ -35,7 +35,7 @@ patchMode（差分翻訳）がLLMのパッチ形式揺れで失敗した場合�
 
 ### 備考
 - 却下案: 全文再翻訳前にバックアップファイルを作成 → ファイル管理の複雑さが増し、ユーザーが気付かないまま上書きが進む可能性が残る
-- 詳細: [tasks/done/260328_patchMode保護と可観測性改善.md](../tasks/done/260328_patchMode保護と可観測性改善.md)
+- 詳細: [.tasks/done/260328_patchMode保護と可観測性改善.md](../.tasks/done/260328_patchMode保護と可観測性改善.md)
 
 ---
 
@@ -52,7 +52,7 @@ debug-ipcのresult.jsonは`status: "done" | "error"`の2値だった。syncが�
 
 ### 備考
 - 却下案: statusを`"done"`のまま維持しエージェント側でresult.errorCountをチェック → コマンド種類ごとにフィールド名が異なる可能性があり、ステータスに集約する方がシンプル
-- 詳細: [tasks/done/260328_デバッグ可観測性改善.md](../tasks/done/260328_デバッグ可観測性改善.md)
+- 詳細: [.tasks/done/260328_デバッグ可観測性改善.md](../.tasks/done/260328_デバッグ可観測性改善.md)
 
 ---
 
@@ -69,7 +69,7 @@ TMエントリは文単位だが、TM検索クエリはユニット全体テキ�
 
 ### 備考
 - 却下案: `findCandidatesByTrigramSet(trigrams)` の新メソッド追加 → べき等性で不要であり、APIの増殖を避けた
-- 詳細: [tasks/do/260322_TM検索行単位化revise対応.md](../tasks/do/260322_TM検索行単位化revise対応.md)
+- 詳細: [.tasks/do/260322_TM検索行単位化revise対応.md](../.tasks/do/260322_TM検索行単位化revise対応.md)
 - 守ること: P8（外部呼び出し元は生テキストを渡す）。`lookupTmReferences` は生テキストを `searchTmByLines` に渡すだけ
 - 影響: 各行で `normalizeForTm` が重複実行される（markdown-itパース）。行数が極端に多い場合は軽微なオーバーヘッド
 
@@ -88,7 +88,7 @@ normalize処理（`normalizeForTm` 等）はそれを必要とするモジュー
 
 ### 備考
 - 却下案: normalize共通ユーティリティ化（呼び出し側が選択的に呼ぶ形）→ 呼び出し忘れ・二重呼びが防げない
-- 詳細: [tasks/done/260320_TM_normalize一元化.md](done/260320_TM_normalize一元化.md)
+- 詳細: [.tasks/done/260320_TM_normalize一元化.md](done/260320_TM_normalize一元化.md)
 - 守ること: 呼び出し側は常に生テキストを渡す（※`commit-processor.ts`のLLMプロンプト用途`stripMarkdown`は本制約の対象外）
 
 ---
@@ -106,7 +106,7 @@ exact match から完全脱却すると diff-aware な文改訂でもTMが活用
 
 ### 備考
 - 却下案: embedding先行方式 → 外部API依存・初期コスト・オフライン不可で却下
-- 詳細: [tasks/done/260320_tm-scorer.md](done/260320_tm-scorer.md)
+- 詳細: [.tasks/done/260320_tm-scorer.md](done/260320_tm-scorer.md)
 - 守ること: インデックスはlang別に分離して構築する（初期バグの再発防止）
 - 未決: embeddingによるrerank層の後段追加は未検討
 
@@ -125,7 +125,7 @@ Command 層で primaryUnit/localUnit を先に確定し、processor は guarded 
 
 ### 備考
 - 却下案: 応答をfail-open（不正でも書き込む）→ TMX整合性が保証できない
-- 詳細: [tasks/done/260315_TM多言語マージ再設計修正.md](done/260315_TM多言語マージ再設計修正.md)
+- 詳細: [.tasks/done/260315_TM多言語マージ再設計修正.md](done/260315_TM多言語マージ再設計修正.md)
 - 守ること: `reuse`行は既存TUへ、`create`行のみ新規TU候補とする
 
 ---
@@ -143,7 +143,7 @@ source-relative 設計では non-primary 言語からの commit 時にTU一意�
 
 ### 備考
 - 却下案: `x-unit-path`ベースのキー → 同一ファイルに複数文が混入するリスクあり
-- 詳細: [tasks/done/260315_TM正本管理と参照方式再設計.md](done/260315_TM正本管理と参照方式再設計.md)
+- 詳細: [.tasks/done/260315_TM正本管理と参照方式再設計.md](done/260315_TM正本管理と参照方式再設計.md)
 - 守ること: `primaryLang`は必須設定（未設定はvalidation error）
 - 影響: 旧TMX（x-primary propなし）はtuidからprimaryを逆引き復元する互換読み込みを維持。`terms.primaryLang`（nested設定）は廃止済み
 - 未決: non-primary言語のみのTU（primaryが消えた場合）の扱い
@@ -163,7 +163,7 @@ TMX保存契約は `tuid + tuv（各言語 variant）+ tuv provenance` を正本
 
 ### 備考
 - 却下案: 補助propを維持してprovenance追跡を強化する → 正確に維持できないフィールドは設計の負債になる
-- 詳細: [tasks/done/260315_TMX補助prop廃止.md](done/260315_TMX補助prop廃止.md)
+- 詳細: [.tasks/done/260315_TMX補助prop廃止.md](done/260315_TMX補助prop廃止.md)
 - 守ること: 互換読み込み（旧TMXのx-primary逆引き）は保持する
 
 ---
@@ -181,7 +181,7 @@ Node.js 18+（VS Code拡張の前提環境）でサポート済みのネイテ�
 
 ### 備考
 - 却下案: 正規表現カスタム拡張 → 省略語・混合言語の例外処理が無限に増加する
-- 詳細: [tasks/done/260209_sentence-segmentation-intl.md](done/260209_sentence-segmentation-intl.md)
+- 詳細: [.tasks/done/260209_sentence-segmentation-intl.md](done/260209_sentence-segmentation-intl.md)
 - 守ること: コードブロック内の文分割禁止・lang引数への依存
 
 ---
@@ -199,7 +199,7 @@ markdown-it は TM正規化・TMX処理・品質チェックでも使用済み�
 
 ### 備考
 - 却下案: 正規表現独自実装の継続 → ネスト・混合言語で誤検出が増え続ける
-- 詳細: [tasks/done/260208_stripMarkdown構造保持改善.md](done/260208_stripMarkdown構造保持改善.md)
+- 詳細: [.tasks/done/260208_stripMarkdown構造保持改善.md](done/260208_stripMarkdown構造保持改善.md)
 - 守ること: frontmatterは先頭パターンマッチで除去（markdown-itに依存しない）
 
 ---
@@ -217,7 +217,7 @@ markdown-it は TM正規化・TMX処理・品質チェックでも使用済み�
 
 ### 備考
 - 却下案: console.logのラッパー方式 → VS Code拡張ホストのログと混在する
-- 詳細: [tasks/done/260201_ログ戦略実装.md](done/260201_ログ戦略実装.md)
+- 詳細: [.tasks/done/260201_ログ戦略実装.md](done/260201_ログ戦略実装.md)
 - 守ること: `console.log`の直接使用禁止（Logger経由のみ）。AIStatsLoggerのみ別系統（コスト追跡目的）
 - 未決: unit-registry-manager.ts・configuration.ts・status-collector.ts・prompt-provider.ts・openai-provider.tsでconsole.*直接呼び出しが残存
 
@@ -236,7 +236,7 @@ CRC32ハッシュの先頭3桁でバケット化（000〜fff、4096バケット�
 
 ### 備考
 - 却下案: DB/SQLiteへの移行 → VS Code拡張の配布・インストール複雑化。ファイルベースの方がgit管理・バックアップと相性が良い
-- 詳細: [tasks/done/260131_snapshot_v2_bucketing.md](done/260131_snapshot_v2_bucketing.md)
+- 詳細: [.tasks/done/260131_snapshot_v2_bucketing.md](done/260131_snapshot_v2_bucketing.md)
 - 守ること: バケット昇順・エントリ昇順の決定的出力
 - 影響: sync完了後5MB超過時にGCを実行（activeHashesのみ保持）。gzip+base64エンコードでファイルサイズ抑制
 
@@ -255,7 +255,7 @@ LLMには差分と変更後訳文の両方が渡るため、並走変更は自�
 
 ### 備考
 - 却下案: conflict解決UI維持 → 複雑性が高い割にLLMが代替可能な範囲が大きい
-- 詳細: [tasks/done/260124_conflict仕様改善.md](done/260124_conflict仕様改善.md)
+- 詳細: [.tasks/done/260124_conflict仕様改善.md](done/260124_conflict仕様改善.md)
 - 守ること: target-only変更（訳文直接編集）は`need:revise`にしない（非干渉）
 - 未決: 差分過大・構造破壊などの「本当に危険な状態」への対応は将来検討
 
@@ -274,7 +274,7 @@ markdown-itでパースした構造（見出しレベル別数・リスト項目
 
 ### 備考
 - 却下案: 正規表現の改善継続 → ネスト・混合言語での例外処理が無限に増加する
-- 詳細: [tasks/done/260112_品質チェック再設計.md](done/260112_品質チェック再設計.md)
+- 詳細: [.tasks/done/260112_品質チェック再設計.md](done/260112_品質チェック再設計.md)
 
 ---
 
@@ -291,7 +291,7 @@ markdown-itでパースした構造（見出しレベル別数・リスト項目
 
 ### 備考
 - 却下案: ストリーミング維持 → 全コマンドでバッファリングが必要なため複雑性のみ増す
-- 詳細: [tasks/done/260111_AIServiceストリーミング廃止.md](done/260111_AIServiceストリーミング廃止.md)
+- 詳細: [.tasks/done/260111_AIServiceストリーミング廃止.md](done/260111_AIServiceストリーミング廃止.md)
 - 未決: リアルタイムプレビュー機能が必要になった場合の拡張方針は未決
 
 ---
@@ -328,7 +328,7 @@ OpenAIProvider の API 呼び出しで `store: false` を常にハードコー�
 
 ### 備考
 - 却下案: プロンプト全文をmdait.jsonに直接記述 → JSONエスケープが煩雑・長文管理不可
-- 詳細: [tasks/done/260103_システムプロンプト外部注入機能.md](done/260103_システムプロンプト外部注入機能.md)
+- 詳細: [.tasks/done/260103_システムプロンプト外部注入機能.md](done/260103_システムプロンプト外部注入機能.md)
 - 守ること: プロンプトIDはコード識別子として安定させる（リネーム禁止に準ずる）
 
 ---

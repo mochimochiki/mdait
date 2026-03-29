@@ -7,7 +7,7 @@
 
 ## チケット
 - 一連の作業はチケットを作成して管理する
-- `/tasks/do/<YYMMDD>_<作業名>.md`として作成する
+- `/.tasks/do/<YYMMDD>_<作業名>.md`として作成する
 - 人間や上位エージェントが読むことを意識して簡潔明快に。
 - 全作業完了時`pwsh -File .github/scripts/done.ps1 -TicketName <YYMMDD_作業名>`で移動
 - テンプレートは以下

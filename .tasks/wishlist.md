@@ -1,4 +1,4 @@
-# wish list
+﻿# wish list
 
 ## ガイドライン
 
@@ -72,7 +72,7 @@ Skillにシナリオを定義し、エージェントがIPC経由で`sync → tr
 `tm-optimize` は明示実行コマンドとして提供する。sync からは呼び出さず、`sync / tm-optimize / tm-commit` の責務分離を維持する。
 
 **設計の根拠**
-- 設計仕様: [tasks/done/tm.md](tasks/done/tm.md) 6章・8.2節シーケンス図参照
+- 設計仕様: [.tasks/done/tm.md](.tasks/done/tm.md) 6章・8.2節シーケンス図参照
 - `x-wt = clamp(0.7 * corpusPresence + 0.3 * retrievalUsefulness)`
 - `corpusPresence` は normalize 後 primary sentence 完全一致のみ
 - `retrievalUsefulness` は既存 retrieval の top5 順位点を合算し 0..1 正規化

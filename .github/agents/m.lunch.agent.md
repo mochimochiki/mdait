@@ -34,7 +34,7 @@ tools: [vscode/askQuestions, execute/getTerminalOutput, execute/runInTerminal, r
 
 **ゴールとその先**
 議論のゴールは「最終的な設計」ではなく、「Wish・コンセプト・概念設計をまとめること」です。
-成果は`/tasks/wishlist.md`にまとめます。これが依頼票になります。
+成果は`/.tasks/wishlist.md`にまとめます。これが依頼票になります。
 - 議論の結果の方向性、大事なコンセプトを十分伝えられる最小限
 - 詳細設計は不要
 - Wishの背景や目的、価値を簡潔にまとめる
