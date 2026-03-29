@@ -8,7 +8,9 @@
 import type * as vscode from "vscode";
 import type { ExistingTmEntriesItem, TmCommitEntry } from "../../core/tm/types";
 import type { AIMessage, AIService } from "../../llm/ai-service";
-import { PromptIds, PromptProvider } from "../../prompts";
+import { PromptIds } from "../../prompts/defaults";
+import type { PromptId } from "../../prompts/defaults";
+import type { PromptVariables } from "../../prompts/prompt-provider";
 import { Logger, formatError } from "../../utils/logger";
 
 const logger = Logger.getInstance();
@@ -31,9 +33,11 @@ export interface TmEntryGenerationRequest {
  */
 export class LLMTmEntryGenerator {
 	private readonly aiService: AIService;
+	private readonly getPrompt: (id: PromptId, variables?: PromptVariables) => string;
 
-	constructor(aiService: AIService) {
+	constructor(aiService: AIService, getPrompt: (id: PromptId, variables?: PromptVariables) => string) {
 		this.aiService = aiService;
+		this.getPrompt = getPrompt;
 	}
 
 	/**
@@ -46,8 +50,7 @@ export class LLMTmEntryGenerator {
 		request: TmEntryGenerationRequest,
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<TmCommitEntry[]> {
-		const promptProvider = PromptProvider.getInstance();
-		const systemPrompt = promptProvider.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
+		const systemPrompt = this.getPrompt(PromptIds.TM_SPLIT_SENTENCES, {
 			primaryLang: request.primaryLang,
 			localLang: request.localLang,
 			primaryUnit: request.primaryUnit,

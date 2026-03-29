@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { generateContent } from "../../../commands/tm/tm-result-provider";
+import { generateContent } from "../../../commands/tm/tm-result-content";
 
 suite("generateContent", () => {
 	test("new/update 混在の場合、両セクションに内容が表示される", () => {

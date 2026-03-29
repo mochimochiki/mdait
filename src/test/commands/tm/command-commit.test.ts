@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
-import { buildTmCommitUnitResolution, prepareTmCommitUnit } from "../../../commands/tm/command-commit";
 import type { TmCommitResolvedUnit } from "../../../commands/tm/commit-processor";
+import { buildTmCommitUnitResolution, prepareTmCommitUnit } from "../../../commands/tm/tm-commit-unit-resolution";
 import type { MdaitUnit } from "../../../core/markdown/mdait-unit";
 
 function createUnit(overrides?: Partial<TmCommitResolvedUnit>): TmCommitResolvedUnit {

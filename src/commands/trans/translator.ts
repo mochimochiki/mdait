@@ -1,7 +1,8 @@
 import type * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
 import type { AIMessage, AIService } from "../../llm/ai-service";
-import { PromptIds, PromptProvider } from "../../prompts";
+import { PromptIds } from "../../prompts/defaults";
+import type { PromptId } from "../../prompts/defaults";
+import type { PromptVariables } from "../../prompts/prompt-provider";
 import { Logger, formatError } from "../../utils/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
@@ -111,11 +112,19 @@ export interface Translator {
  */
 export class AITranslator implements Translator {
 	private readonly aiService: AIService;
+	private readonly primaryLang: string;
+	private readonly getPrompt: (id: PromptId, variables?: PromptVariables) => string;
 	/** 最大リトライ回数 */
 	private readonly maxRetries = 2;
 
-	constructor(aiService: AIService) {
+	constructor(
+		aiService: AIService,
+		primaryLang: string,
+		getPrompt: (id: PromptId, variables?: PromptVariables) => string,
+	) {
 		this.aiService = aiService;
+		this.primaryLang = primaryLang;
+		this.getPrompt = getPrompt;
 	}
 
 	/**
@@ -149,13 +158,11 @@ export class AITranslator implements Translator {
 		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
-		const config = Configuration.getInstance();
-		const primaryLang = config.getTermsPrimaryLang();
+		const primaryLang = this.primaryLang;
 		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		// systemPrompt と AIMessage[] の構築
-		const promptProvider = PromptProvider.getInstance();
-		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_TRANSLATE, {
+		const systemPrompt = this.getPrompt(PromptIds.TRANS_TRANSLATE, {
 			sourceLang,
 			targetLang,
 			contextLang,
@@ -208,12 +215,10 @@ export class AITranslator implements Translator {
 		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
-		const config = Configuration.getInstance();
-		const primaryLang = config.getTermsPrimaryLang();
+		const primaryLang = this.primaryLang;
 		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
-		const promptProvider = PromptProvider.getInstance();
-		const systemPrompt = promptProvider.getPrompt(PromptIds.TRANS_REVISE_PATCH, {
+		const systemPrompt = this.getPrompt(PromptIds.TRANS_REVISE_PATCH, {
 			sourceLang,
 			targetLang,
 			contextLang,

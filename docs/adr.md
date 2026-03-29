@@ -4,6 +4,22 @@
 
 ---
 
+## ADR-260329-03: vscode依存の切り離し方針 — 値DI + 関数DI
+
+### 背景
+test:unitで実行不可だったNG9テストの原因は、ビジネスロジックファイルが`Configuration.getInstance()`や`PromptProvider.getInstance()`を内部で呼び出し、そのモジュールロード時に`import * as vscode`が実行されることだった。
+
+### 決定
+Configuration依存は「必要な値（primaryLang, transPairs）だけを引数に渡す」方式、PromptProvider依存は「`getPrompt`関数を引数に渡す」方式で切り離す。純粋関数がvscode依存ファイルに同居しているケースは別ファイルに抽出する。元ファイルからはre-exportで後方互換を維持する。
+
+### 理由
+Configオブジェクト自体を渡すとConfigクラスへの型依存が残り、テストでConfig相当のモックが必要になる。値だけ渡せばテスト側は単純なリテラルで済む。PromptProviderは引数がランタイムで決まるため関数DIにしたが、インターフェースではなく関数型`(id, vars) => string`を採用して過度な抽象化を避けた。
+
+### 備考
+- 却下案: Configオブジェクトごと引数に渡す → テスト側でConfigモックが必要になり冗長
+- 却下案: vscodeモジュールのstub → Node.jsのmodule cacheを汚染し不安定
+- 詳細: [260329-07_vscode依存チェーン切り離し.md](.tasks/done/260329-07_vscode依存チェーン切り離し.md)
+
 ## ADR-260329-02: テスト層の3層分類とunit対象の切り分け基準
 
 ### 背景

@@ -38,11 +38,13 @@ class MockAIService implements AIService {
 
 suite("DefaultTranslator リトライ機構", () => {
 	const defaultContext = new TranslationContext();
+	const stubGetPrompt = (_id: string, _vars?: Record<string, string | undefined>) => "stub-prompt";
+	const createTranslator = (service: AIService) => new AITranslator(service, "en", stubGetPrompt);
 
 	suite("translate", () => {
 		test("正常なレスポンスは1回で成功する", async () => {
 			const mockService = new MockAIService(['{"translation": "翻訳されたテキスト", "termSuggestions": []}']);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -56,7 +58,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				"これはJSONではありません", // 1回目: パースエラー
 				'{"translation": "リトライ後の翻訳", "termSuggestions": []}', // 2回目: 成功
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -70,7 +72,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				"JSONではない2", // 2回目: パースエラー
 				'{"translation": "3回目で成功", "termSuggestions": []}', // 3回目: 成功
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -84,7 +86,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				"フォールバックテキスト2",
 				"フォールバックテキスト3",
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -99,7 +101,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				'{"text": "間違ったフィールド名"}', // 1回目: フィールド欠落
 				'{"translation": "正しいフィールド名", "termSuggestions": []}', // 2回目: 成功
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -114,7 +116,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				// 2回目: 正常
 				'{"translation": "正常な翻訳", "termSuggestions": []}',
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -126,7 +128,7 @@ suite("DefaultTranslator リトライ機構", () => {
 			const mockService = new MockAIService([
 				'{"translation": "翻訳 __CODE_BLOCK_PLACEHOLDER_0__ 続き", "termSuggestions": []}',
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Text ```code``` more", "en", "ja", defaultContext);
 
@@ -141,7 +143,7 @@ suite("DefaultTranslator リトライ機構", () => {
 					termSuggestions: [{ source: "test", target: "テスト", context: "this is a test" }],
 				}),
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translate("Hello", "en", "ja", defaultContext);
 
@@ -162,7 +164,7 @@ suite("DefaultTranslator リトライ機構", () => {
 			const mockService = new MockAIService([
 				'{"targetPatch": "--- content\\n+++ content\\n@@ -1 +1 @@\\n-old\\n+new", "termSuggestions": []}',
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
@@ -175,7 +177,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				"これはJSONではありません",
 				'{"targetPatch": "--- content\\n+++ content", "termSuggestions": []}',
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
@@ -188,7 +190,7 @@ suite("DefaultTranslator リトライ機構", () => {
 				'{"patch": "間違ったフィールド名"}',
 				'{"targetPatch": "正しいパッチ", "termSuggestions": []}',
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
@@ -198,7 +200,7 @@ suite("DefaultTranslator リトライ機構", () => {
 
 		test("3回すべて失敗でフォールバックが機能する", async () => {
 			const mockService = new MockAIService(["フォールバック1", "フォールバック2", "フォールバック3"]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
@@ -213,7 +215,7 @@ suite("DefaultTranslator リトライ機構", () => {
 					warnings: ["AIからの警告"],
 				}),
 			]);
-			const translator = new AITranslator(mockService);
+			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 

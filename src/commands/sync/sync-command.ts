@@ -22,8 +22,9 @@ import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
-import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "./marker-sync";
+import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 const logger = Logger.getInstance();
 
@@ -520,56 +521,9 @@ function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 
 /**
  * frontmatterマーカーを同期する（テスト用にエクスポート）
- * @param sourceFrontMatter ソース側のfrontmatter
- * @param targetFrontMatter ターゲット側のfrontmatter
- * @param keys 翻訳対象キー一覧
- * @returns sourceFrontMatter, targetFrontMatter, processed
+ * @deprecated sync-frontmatter.ts から直接importしてください
  */
-export function syncFrontmatterMarkers(
-	sourceFrontMatter: FrontMatter | undefined,
-	targetFrontMatter: FrontMatter | undefined,
-	keys: string[],
-): { sourceFrontMatter: FrontMatter | undefined; targetFrontMatter: FrontMatter | undefined; processed: boolean } {
-	if (keys.length === 0) {
-		return { sourceFrontMatter, targetFrontMatter, processed: false };
-	}
-
-	const sourceHash = calculateFrontmatterHash(sourceFrontMatter, keys);
-	if (!sourceHash) {
-		if (targetFrontMatter && parseFrontmatterMarker(targetFrontMatter)) {
-			setFrontmatterMarker(targetFrontMatter, null);
-		}
-		return { sourceFrontMatter, targetFrontMatter, processed: false };
-	}
-
-	// Source側にもマーカーを設定（共通ロジック使用）
-	if (sourceFrontMatter) {
-		const existingSourceMarker = parseFrontmatterMarker(sourceFrontMatter);
-		const sourceResult = syncSourceMarker(sourceHash, existingSourceMarker);
-		if (sourceResult.changed) {
-			setFrontmatterMarker(sourceFrontMatter, sourceResult.marker);
-		}
-	}
-
-	// ターゲット側の処理
-	let workingTarget = targetFrontMatter;
-	if (!workingTarget) {
-		workingTarget = sourceFrontMatter?.clone() ?? FrontMatter.empty();
-	}
-
-	const targetHash = calculateFrontmatterHash(workingTarget, keys, { allowEmpty: true });
-	const existingMarker = parseFrontmatterMarker(workingTarget);
-
-	// 共通ロジックを使用してターゲットマーカーを同期
-	const targetResult = syncTargetMarker({
-		sourceHash,
-		targetHash,
-		existingMarker,
-	});
-
-	setFrontmatterMarker(workingTarget, targetResult.marker);
-	return { sourceFrontMatter, targetFrontMatter: workingTarget, processed: true };
-}
+export { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 /**
  * ユニットのハッシュを更新する

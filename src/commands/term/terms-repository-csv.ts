@@ -10,7 +10,6 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 
 import type { TransPair } from "../../config/configuration";
-import { Configuration } from "../../config/configuration";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { TermEntryConverter } from "./term-entry-converter";
@@ -31,19 +30,28 @@ export class TermsRepositoryCSV implements TermsRepository {
 	private sourceLanguages: Set<string> = new Set();
 	// 既存CSVから読み込んだ元の列順序（既存ファイル編集時に列順序を保持するため）
 	private originalColumnOrder: string[] | null = null;
+	// DI: Configuration依存を除去するためインスタンスに保持
+	private currentTransPairs: readonly TransPair[] = [];
+	private currentPrimaryLang = "";
 
 	private constructor(public readonly path: string) {}
 
 	/**
 	 * 新しいCSVリポジトリを作成
 	 */
-	static async create(path: string, transPairs: readonly TransPair[]): Promise<TermsRepositoryCSV> {
+	static async create(
+		path: string,
+		transPairs: readonly TransPair[],
+		primaryLang?: string,
+	): Promise<TermsRepositoryCSV> {
 		const repository = new TermsRepositoryCSV(path);
 
 		// transPairsから言語リストを抽出
 		repository.allLanguages = extractLanguagesFromTransPairs(transPairs);
 		// source言語セットを更新
 		repository.updateSourceLanguages(transPairs);
+		repository.currentTransPairs = transPairs;
+		repository.currentPrimaryLang = primaryLang ?? "";
 
 		// 空のリポジトリとして初期化
 		repository.entries = [];
@@ -54,8 +62,18 @@ export class TermsRepositoryCSV implements TermsRepository {
 	/**
 	 * 既存CSVファイルを読み込み
 	 */
-	static async load(path: string): Promise<TermsRepositoryCSV> {
+	static async load(
+		path: string,
+		transPairs?: readonly TransPair[],
+		primaryLang?: string,
+	): Promise<TermsRepositoryCSV> {
 		const repository = new TermsRepositoryCSV(path);
+		if (transPairs) {
+			repository.currentTransPairs = transPairs;
+		}
+		if (primaryLang !== undefined) {
+			repository.currentPrimaryLang = primaryLang;
+		}
 		await repository.loadFromFile();
 		return repository;
 	}
@@ -71,6 +89,9 @@ export class TermsRepositoryCSV implements TermsRepository {
 	 * 用語エントリをバッチでマージ
 	 */
 	async Merge(candidates: readonly TermEntry[], transPairs: readonly TransPair[]): Promise<void> {
+		// DI: transPairsをインスタンスに保持
+		this.currentTransPairs = transPairs;
+
 		// 言語リストを更新（transPairの順序を保持）
 		const newLanguages = extractLanguagesFromTransPairs(transPairs);
 		const existingLanguages = this.allLanguages;
@@ -96,9 +117,8 @@ export class TermsRepositoryCSV implements TermsRepository {
 		// source言語セットを更新
 		this.updateSourceLanguages(transPairs);
 
-		// primaryLangを取得
-		const config = Configuration.getInstance();
-		const primaryLang = config.getTermsPrimaryLang();
+		// primaryLangを取得（transPairsから導出可能な場合はそちらを使用）
+		const primaryLang = this.getEffectivePrimaryLang();
 
 		// 既存エントリをコピー
 		const mergedEntries = [...this.entries];
@@ -153,11 +173,10 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 	// 内部: 有効なprimaryLangを決定
 	private getEffectivePrimaryLang(): string {
-		const config = Configuration.getInstance();
-		const configured = (config.getTermsPrimaryLang() || "").trim();
+		const configured = (this.currentPrimaryLang || "").trim();
 		if (configured) return configured;
 		// 未設定の場合は最初のsourceLang
-		for (const p of config.transPairs) {
+		for (const p of this.currentTransPairs) {
 			if (p.sourceLang) return p.sourceLang;
 		}
 		// それも無ければallLanguages先頭
@@ -166,7 +185,6 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 	// 内部: 列順序（primary → source → target → context → variants → unknown）に必要な情報を返す
 	private getOrderedLangs(): { sourceOrder: string[]; targetOrder: string[]; primary: string } {
-		const config = Configuration.getInstance();
 		const primary = this.getEffectivePrimaryLang();
 		const langSet = new Set(this.allLanguages);
 
@@ -175,7 +193,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 		const sourceOrder: string[] = [];
 		const targetOrder: string[] = [];
 
-		for (const pair of config.transPairs) {
+		for (const pair of this.currentTransPairs) {
 			if (pair.sourceLang && langSet.has(pair.sourceLang) && !seenS.has(pair.sourceLang)) {
 				seenS.add(pair.sourceLang);
 				sourceOrder.push(pair.sourceLang);
@@ -305,8 +323,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 		}
 
 		// 設定から最新のsource言語セットを取得（ロード後に設定が変わる可能性に備える）
-		const config = Configuration.getInstance();
-		this.updateSourceLanguages(config.transPairs);
+		this.updateSourceLanguages(this.currentTransPairs);
 		const { sourceOrder, targetOrder, primary } = this.getOrderedLangs();
 
 		// CSVヘッダーを生成
@@ -411,8 +428,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 		this.allLanguages = TermEntryConverter.extractLanguagesFromHeaders(headers);
 		// 最新設定からsource言語セットを更新
-		const config = Configuration.getInstance();
-		this.updateSourceLanguages(config.transPairs);
+		this.updateSourceLanguages(this.currentTransPairs);
 		// 管理対象の列集合を作り、未知列ヘッダーを記録
 		const managed = new Set<string>([
 			"context",

@@ -9,7 +9,6 @@ import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import type { TransPair } from "../../config/configuration";
-import { Configuration } from "../../config/configuration";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { extractLanguagesFromTransPairs } from "./term-utils";
@@ -96,9 +95,8 @@ export class YamlTermsRepository implements TermsRepository {
 	/**
 	 * 用語エントリをバッチでマージ
 	 */
-	async Merge(candidates: readonly TermEntry[], transPairs: readonly TransPair[]): Promise<void> {
-		const config = Configuration.getInstance();
-		const primaryLang = config.getTermsPrimaryLang();
+	async Merge(candidates: readonly TermEntry[], transPairs: readonly TransPair[], primaryLang?: string): Promise<void> {
+		const effectivePrimaryLang = primaryLang ?? transPairs[0]?.sourceLang ?? "";
 		const mergedEntries: TermEntry[] = [...this.entries];
 
 		for (const candidate of candidates) {
@@ -107,7 +105,7 @@ export class YamlTermsRepository implements TermsRepository {
 
 			// 既存エントリとの同一性チェック（contextと言語で判定）
 			const duplicateIndex = mergedEntries.findIndex((existing) =>
-				TermEntryUtils.isSameEntry(existing, candidate, primaryLang),
+				TermEntryUtils.isSameEntry(existing, candidate, effectivePrimaryLang),
 			);
 
 			if (duplicateIndex >= 0) {

@@ -6,17 +6,13 @@
  * @module commands/term/term-result-provider
  */
 import * as vscode from "vscode";
-import type { TermEntry } from "./term-entry";
+import { type TermDetectResult, generateContent } from "./term-result-content";
+
+export type { TermDetectResult } from "./term-result-content";
+export { generateContent } from "./term-result-content";
 
 const SCHEME = "mdait-term-result";
 const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:term-detect-result`);
-
-/** term-detect 結果をまとめた型 */
-export interface TermDetectResult {
-	readonly entries: readonly TermEntry[];
-	readonly sourceLang: string;
-	readonly targetLang: string;
-}
 
 /**
  * term-detect 結果の仮想ドキュメントを提供するシングルトン。
@@ -57,45 +53,4 @@ export class TermResultContentProvider implements vscode.TextDocumentContentProv
 		const doc = await vscode.workspace.openTextDocument(PREVIEW_URI);
 		await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Active, preview: true });
 	}
-}
-
-const TARGET_NOT_DETECTED = "(target not detected)";
-
-/**
- * term-detect 結果からプレビュー用テキストを生成する純粋関数。
- */
-export function generateContent(result: TermDetectResult): string {
-	const now = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
-	const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-	const lines: string[] = [];
-	lines.push(`# Term Detect Results - ${timestamp}`);
-	lines.push("");
-
-	lines.push(`## Detected (${result.entries.length})`);
-	if (result.entries.length === 0) {
-		lines.push("(none)");
-		lines.push("");
-	} else {
-		for (const entry of result.entries) {
-			const sourceTerm = entry.languages[result.sourceLang]?.term;
-			lines.push(`"${sourceTerm ?? ""}"`);
-
-			const targetTerm = entry.languages[result.targetLang]?.term;
-			if (targetTerm) {
-				lines.push(`  \u2192 "${targetTerm}"`);
-			} else {
-				lines.push(`  ${TARGET_NOT_DETECTED}`);
-			}
-
-			if (entry.context) {
-				lines.push(`  context: ${entry.context}`);
-			}
-
-			lines.push("");
-		}
-	}
-
-	return lines.join("\n");
 }

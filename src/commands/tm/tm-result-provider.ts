@@ -7,6 +7,9 @@
  */
 import * as vscode from "vscode";
 import type { TmCommitResult, TmResultItem } from "./commit-processor";
+import { generateContent } from "./tm-result-content";
+
+export { generateContent } from "./tm-result-content";
 
 const SCHEME = "mdait-tm-result";
 const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:tm-commit-result`);
@@ -50,43 +53,4 @@ export class TmResultContentProvider implements vscode.TextDocumentContentProvid
 		const doc = await vscode.workspace.openTextDocument(PREVIEW_URI);
 		await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Active, preview: true });
 	}
-}
-
-/**
- * tm-commit 結果からプレビュー用テキストを生成する純粋関数。
- */
-export function generateContent(result: { newItems: TmResultItem[]; updatedItems: TmResultItem[] }): string {
-	const now = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
-	const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-	const lines: string[] = [];
-	lines.push(`# TM Commit Results - ${timestamp}`);
-	lines.push("");
-
-	lines.push(`## New (${result.newItems.length})`);
-	if (result.newItems.length === 0) {
-		lines.push("(none)");
-		lines.push("");
-	} else {
-		for (const item of result.newItems) {
-			lines.push(`"${item.primary}"`);
-			lines.push(`  \u2192 "${item.local}"`);
-			lines.push("");
-		}
-	}
-
-	lines.push(`## Updated (${result.updatedItems.length})`);
-	if (result.updatedItems.length === 0) {
-		lines.push("(none)");
-		lines.push("");
-	} else {
-		for (const item of result.updatedItems) {
-			lines.push(`"${item.primary}"`);
-			lines.push(`  \u2192 "${item.local}"`);
-			lines.push("");
-		}
-	}
-
-	return lines.join("\n");
 }

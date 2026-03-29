@@ -7,12 +7,23 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
 
 ## 前提条件
 
-- Extension Host が **F5（launch.json の `Run Extension`）** で起動済みであること
-- `MDAIT_DEBUG_IPC=1` 環境変数が設定されている（launch.json で自動設定）
+- Extension Host が起動済みであること（下記いずれかの方法）
+- `MDAIT_DEBUG_IPC=1` 環境変数が設定されている（自動設定）
 - プロファイルは `mdait-debug`（AI同意ダイアログが記憶される）
 - テストワークスペース: `src/test/workspace`
 
-**注意**: CLI（`code` コマンド）からの Extension Host 起動では環境変数が伝播しない。必ず F5 を使うこと。
+### 起動方法
+
+**方法1: 自動化スクリプト（推奨）**
+```powershell
+pwsh -File .github/skills/debug-ipc/scripts/debug-ipc-start.ps1
+```
+code CLIでExtension Development Hostを起動し、readyシグナル（`src/test/workspace/.mdait/debug/ready`）を自動検知する。ready後にIPC送信可能。
+
+**方法2: F5（手動）**
+VS Codeで F5（launch.json の `Run Extension`）を実行。
+
+**注意**: 方法1では`code`コマンドがPATH上に必要。VS Code の Command Palette → "Shell Command: Install 'code' command in PATH" で設定可能。
 
 ## IPC プロトコル
 
@@ -20,6 +31,7 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
 
 | ファイル | パス | 役割 |
 |---------|------|------|
+| ready | `src/test/workspace/.mdait/debug/ready` | Extension Host ready シグナル |
 | command.json | `src/test/workspace/.mdait/debug/command.json` | コマンド発行（Agent → Extension Host） |
 | result.json | `src/test/workspace/.mdait/debug/result.json` | 結果返却（Extension Host → Agent） |
 

@@ -1,5 +1,5 @@
 {
-  "description": "sync.level以下の見出しのみ（H3/H4、level=2）→ 分割されない",
+  "description": "sync.level以下の見出しのみ（H3/H4、level=2）→ 全体が1ユニット",
   "syncLevel": 2,
-  "expectedUnits": 0
+  "expectedUnits": 1
 }

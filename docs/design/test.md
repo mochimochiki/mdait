@@ -22,7 +22,7 @@
 
 **対象**: 
 - Core層の純粋な関数（`src/test/core/**`）: 正規化、ハッシュ計算、Markdownパーサー、差分生成、TM、ユニットレジストリ等
-- Commandロジック（`src/test/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、output-sanitizer、response-validator等
+- Commandロジック（`src/test/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、sync-frontmatter、term-result-provider、terms-repository、tm-entry-generator、translator-retry、output-sanitizer、response-validator等。DI化によりConfiguration/PromptProviderの直接参照を排除したモジュールを含む
 
 **スタイル**: `suite`/`test`のTDDスタイル
 
@@ -80,13 +80,13 @@ sequenceDiagram
 	rect rgb(230,245,230)
 		Note over Dev,Unit: ①unit（CI常時）
 		Dev->>Unit: mocha実行
-		Unit-->>Dev: core/** + commands/**のOK15個 + utils
+		Unit-->>Dev: core/** + commands/** + utils
 	end
 
 	rect rgb(230,235,250)
 		Note over Dev,E2E: ②e2e/統合（手動）
 		Dev->>E2E: VS Code Test Runner
-		E2E-->>Dev: test-gui/** + commands/**のNG9個
+		E2E-->>Dev: test-gui/** + commands/**のvscode依存テスト
 	end
 
 	rect rgb(250,240,230)

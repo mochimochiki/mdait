@@ -7,6 +7,7 @@ import type { StructuredLogEntry } from "../utils/logger";
 const DEBUG_DIR = ".mdait/debug";
 const COMMAND_FILE = "command.json";
 const RESULT_FILE = "result.json";
+const READY_FILE = "ready";
 const COMMAND_PREFIX = "mdait.";
 
 const PARSE_RETRY_DELAY_MS = 100;
@@ -94,6 +95,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 	private readonly debugDirPath: string;
 	private readonly commandFilePath: string;
 	private readonly resultFilePath: string;
+	private readonly readyFilePath: string;
 	private readonly watcher: vscode.FileSystemWatcher;
 	private readonly logger = Logger.getInstance();
 	private isProcessing = false;
@@ -102,6 +104,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 		this.debugDirPath = path.join(workspaceRoot, DEBUG_DIR);
 		this.commandFilePath = path.join(this.debugDirPath, COMMAND_FILE);
 		this.resultFilePath = path.join(this.debugDirPath, RESULT_FILE);
+		this.readyFilePath = path.join(this.debugDirPath, READY_FILE);
 
 		this.ensureDebugDirectory();
 
@@ -111,9 +114,13 @@ export class DebugCommandHandler implements vscode.Disposable {
 		this.watcher.onDidChange(() => this.onCommandFileDetected());
 
 		this.logger.info("debug", "DebugCommandHandler initialized", { debugDir: this.debugDirPath });
+		fs.writeFileSync(this.readyFilePath, new Date().toISOString(), "utf-8");
 	}
 
 	dispose(): void {
+		try {
+			fs.unlinkSync(this.readyFilePath);
+		} catch {}
 		this.watcher.dispose();
 	}
 

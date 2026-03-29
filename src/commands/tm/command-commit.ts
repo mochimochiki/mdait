@@ -15,26 +15,26 @@ import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import { PromptProvider } from "../../prompts";
 import { AIOnboarding } from "../../utils/ai-onboarding";
 import { FileExplorer } from "../../utils/file-explorer";
 import { Logger, formatError } from "../../utils/logger";
 import { ensureMdaitDir } from "../../utils/mdait-dir";
 import { isTmCommitTarget } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
+import {
+	type PreparedTmCommitUnit,
+	type TmCommitResolutionResult,
+	buildTmCommitUnitResolution,
+	prepareTmCommitUnit,
+} from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
 import { TmResultContentProvider } from "./tm-result-provider";
 
+export { buildTmCommitUnitResolution, prepareTmCommitUnit } from "./tm-commit-unit-resolution";
+export type { TmCommitResolutionResult, PreparedTmCommitUnit } from "./tm-commit-unit-resolution";
+
 const logger = Logger.getInstance();
-
-interface TmCommitResolutionResult {
-	primaryUnit: TmCommitResolvedUnit;
-	localUnit: TmCommitResolvedUnit;
-}
-
-interface PreparedTmCommitUnit {
-	shouldSkip: boolean;
-	resolution: TmCommitResolutionResult | null;
-}
 
 /**
  * ファイル単位のtm-commitコマンド（StatusTreeから呼び出し）
@@ -240,7 +240,8 @@ async function executeTmCommitForUnits(
 
 	// AIServiceとLLMTmEntryGeneratorの構築
 	const aiService = await new AIServiceBuilder().build();
-	const generator = new LLMTmEntryGenerator(aiService);
+	const promptProvider = PromptProvider.getInstance();
+	const generator = new LLMTmEntryGenerator(aiService, (id, variables) => promptProvider.getPrompt(id, variables));
 	const processor = new TmCommitProcessor(store, generator, config.getTermsPrimaryLang(), config.getTmRetryLimit());
 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
@@ -324,16 +325,6 @@ async function executeTmCommitForUnits(
 	return result;
 }
 
-export async function prepareTmCommitUnit(
-	unit: Pick<MdaitUnit, "marker">,
-	resolveUnits: () => Promise<TmCommitResolutionResult | null>,
-): Promise<PreparedTmCommitUnit> {
-	return {
-		shouldSkip: unit.marker === undefined,
-		resolution: await resolveUnits(),
-	};
-}
-
 /**
  * tm-commit 用に primaryUnit / localUnit を解決する。
  */
@@ -387,43 +378,6 @@ async function resolveTmCommitUnits(
 	}
 
 	return resolution;
-}
-
-export async function buildTmCommitUnitResolution(
-	currentUnit: TmCommitResolvedUnit,
-	sourceUnit: TmCommitResolvedUnit,
-	primaryLang: string,
-	resolvePrimaryAncestor: (unit: TmCommitResolvedUnit) => Promise<TmCommitResolvedUnit | null>,
-): Promise<TmCommitResolutionResult | null> {
-	const localUnit = currentUnit.lang === primaryLang ? sourceUnit : currentUnit;
-	const candidates = new Map<string, TmCommitResolvedUnit>();
-
-	if (currentUnit.lang === primaryLang) {
-		candidates.set(`${currentUnit.unitPath}#${currentUnit.unitHash}`, currentUnit);
-	}
-	if (sourceUnit.lang === primaryLang) {
-		candidates.set(`${sourceUnit.unitPath}#${sourceUnit.unitHash}`, sourceUnit);
-	}
-
-	const currentAncestor = currentUnit.lang === primaryLang ? null : await resolvePrimaryAncestor(currentUnit);
-	if (currentAncestor) {
-		candidates.set(`${currentAncestor.unitPath}#${currentAncestor.unitHash}`, currentAncestor);
-	}
-	const sourceAncestor = sourceUnit.lang === primaryLang ? null : await resolvePrimaryAncestor(sourceUnit);
-	if (sourceAncestor) {
-		candidates.set(`${sourceAncestor.unitPath}#${sourceAncestor.unitHash}`, sourceAncestor);
-	}
-
-	if (candidates.size !== 1) {
-		return null;
-	}
-
-	const primaryUnit = candidates.values().next().value as TmCommitResolvedUnit | undefined;
-	if (!primaryUnit) {
-		return null;
-	}
-
-	return { primaryUnit, localUnit };
 }
 
 async function resolvePrimaryAncestor(

@@ -393,6 +393,21 @@ export class MarkdownItParser implements IMarkdownParser {
 		frontMatterLineOffset: number,
 	): MdaitUnit[] {
 		if (boundaries.length === 0) {
+			const allContent = lines.join("\n");
+			const normalizedContent = this.trimLeadingEmptyLines(allContent);
+			if (normalizedContent.trim().length > 0) {
+				const title = this.extractTitleFromContent(normalizedContent);
+				return [
+					new MdaitUnit(
+						new MdaitMarker(""),
+						title,
+						0,
+						normalizedContent,
+						frontMatterLineOffset,
+						lines.length - 1 + frontMatterLineOffset,
+					),
+				];
+			}
 			return [];
 		}
 

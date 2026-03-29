@@ -22,11 +22,16 @@ class MockAIService implements AIService {
 }
 
 suite("LLMTmEntryGenerator", () => {
+	const stubGetPrompt = (_id: string, vars?: Record<string, string | undefined>) =>
+		Object.entries(vars ?? {})
+			.map(([k, v]) => `${k}: ${v}`)
+			.join("\n");
+
 	suite("parseResponse", () => {
 		let generator: LLMTmEntryGenerator;
 
 		setup(() => {
-			generator = new LLMTmEntryGenerator(new MockAIService());
+			generator = new LLMTmEntryGenerator(new MockAIService(), stubGetPrompt);
 		});
 
 		test("正常なTM登録計画配列をパースできる", () => {
@@ -106,7 +111,7 @@ suite("LLMTmEntryGenerator", () => {
 				{ type: "new", tuid: "-", primary: "Download the installer.", local: "インストーラーをダウンロードします。" },
 			]);
 
-			const generator = new LLMTmEntryGenerator(mockAI);
+			const generator = new LLMTmEntryGenerator(mockAI, stubGetPrompt);
 			const result = await generator.generateEntries({
 				primaryLang: "en",
 				localLang: "ja",
@@ -120,8 +125,8 @@ suite("LLMTmEntryGenerator", () => {
 			assert.strictEqual(result.length, 1);
 			assert.strictEqual(result[0].primary, "Download the installer.");
 			assert.strictEqual(result[0].local, "インストーラーをダウンロードします。");
-			assert.ok(mockAI.lastSystemPrompt.includes("Primary language: en"));
-			assert.ok(mockAI.lastSystemPrompt.includes("Local language: ja"));
+			assert.ok(mockAI.lastSystemPrompt.includes("primaryLang: en"));
+			assert.ok(mockAI.lastSystemPrompt.includes("localLang: ja"));
 		});
 	});
 });

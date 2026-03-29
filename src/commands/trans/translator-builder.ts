@@ -1,5 +1,6 @@
-import type { TransConfig } from "../../config/configuration";
+import { Configuration } from "../../config/configuration";
 import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import { PromptProvider } from "../../prompts";
 import { AITranslator, type Translator } from "./translator";
 
 /**
@@ -15,6 +16,10 @@ export class TranslatorBuilder {
 	 */
 	public async build(): Promise<Translator> {
 		const aiService = await new AIServiceBuilder().build();
-		return new AITranslator(aiService);
+		const config = Configuration.getInstance();
+		const promptProvider = PromptProvider.getInstance();
+		return new AITranslator(aiService, config.getTermsPrimaryLang(), (id, variables) =>
+			promptProvider.getPrompt(id, variables),
+		);
 	}
 }

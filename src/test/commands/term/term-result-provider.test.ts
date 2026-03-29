@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import type { TermEntry } from "../../../commands/term/term-entry";
-import { generateContent } from "../../../commands/term/term-result-provider";
+import { generateContent } from "../../../commands/term/term-result-content";
 
 /** テスト用TermEntryヘルパー */
 function entry(

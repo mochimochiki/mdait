@@ -2,7 +2,7 @@
 // syncコマンド実行時にsource側とtarget側の両方にmdait.frontマーカーが付与されることを確認するテスト
 
 import { strict as assert } from "node:assert";
-import { syncFrontmatterMarkers } from "../../../commands/sync/sync-command";
+import { syncFrontmatterMarkers } from "../../../commands/sync/sync-frontmatter";
 import type { Configuration } from "../../../config/configuration";
 import { FrontMatter } from "../../../core/markdown/front-matter";
 import {
