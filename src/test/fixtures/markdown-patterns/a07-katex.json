@@ -1,0 +1,5 @@
+{
+  "description": "KaTeX数式がユニット内に保持される",
+  "syncLevel": 2,
+  "expectedUnits": 2
+}

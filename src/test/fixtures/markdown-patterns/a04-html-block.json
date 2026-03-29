@@ -1,0 +1,5 @@
+{
+  "description": "HTMLブロック要素がユニット内に正しく含まれる",
+  "syncLevel": 2,
+  "expectedUnits": 2
+}

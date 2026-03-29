@@ -1,0 +1,5 @@
+{
+  "description": "空ドキュメント → エラーなし、0ユニット",
+  "syncLevel": 2,
+  "expectedUnits": 0
+}

@@ -361,7 +361,7 @@
     "compile": "tsc -p ./",
     "lint": "biome lint --config-path .config ./src",
     "test": "npm run test:unit",
-    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\"",
+    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\" \"out/test/commands/sync/{marker-sync,section-matcher-no-heading,current-primary-unit-collector,sync-frontmatter-content}.test.js\" \"out/test/commands/term/{term-entry,term-entry-converter,unit-pair}.test.js\" \"out/test/commands/tm/{commit-filter,commit-processor}.test.js\" \"out/test/commands/trans/{output-sanitizer,response-validator,term-extractor,trans-frontmatter,trans-tm-lookup,translation-checker}.test.js\"",
     "test:vscode": "rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
     "watch": "tsc -watch -p ./",
     "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",

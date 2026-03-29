@@ -1,0 +1,5 @@
+{
+  "description": "テーブルを含むユニットが正しく分割される",
+  "syncLevel": 2,
+  "expectedUnits": 3
+}

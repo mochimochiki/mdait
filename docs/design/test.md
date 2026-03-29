@@ -10,25 +10,47 @@
 
 ## テスト戦略
 
-### 単体テスト (`src/test/`)
+### テスト層の概要
 
-**対象**: Core層の純粋な関数（正規化、ハッシュ計算、SectionMatcherなど）
+| 層 | 名前 | 対象 | 実行 | CI |
+|---|------|------|------|-----|
+| ①unit | 単体テスト | Core層 + VS Code非依存のCommandロジック | `npm test` | 常時 |
+| ②e2e | 統合テスト | VS Code統合（StatusTree, コマンドフロー, UI）+ VS Code依存のCommandテスト | `npm run test:vscode` | 手動 |
+| ③debug | 探索的テスト | マルチステップE2Eシナリオ | ファイルベースIPC | 手動 |
+
+### 単体テスト（`npm test`）
+
+**対象**: 
+- Core層の純粋な関数（`src/test/core/**`）: 正規化、ハッシュ計算、Markdownパーサー、差分生成、TM、ユニットレジストリ等
+- Commandロジック（`src/test/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、output-sanitizer、response-validator等
 
 **スタイル**: `suite`/`test`のTDDスタイル
 
 **実行**: CIで常時実行（`npm run test`）
 
-**設計意図**: Core層をVS Code APIから独立させているため、ロジックの単体テストが容易です（[architecture.md](../architecture.md) P5参照）。副作用のない処理を中心に、入出力の正確性を検証します。
+**設計意図**: Core層とCommandビジネスロジック層をVS Code APIから独立させているため、副作用のない処理の入出力を高速に検証できます（[architecture.md](../architecture.md) P5参照）。
 
-### GUI/統合テスト (`src/test-gui/`)
+- **パターンテスト**: fixture駆動でMarkdown特殊構文と見出しレベル分割を網羅的に検証（`src/test/core/markdown/parser-patterns.test.ts`）
 
-**対象**: コマンド、StatusTreeProviderなどのVS Code統合部分
+### 統合テスト（`npm run test:vscode`）
 
-**実行**: VS Code Test Runnerを使用し、E2Eを検証（`npm run test:vscode`）
+**対象**: 
+- GUI統合テスト（`src/test-gui/**`）: コマンドE2E、StatusTreeProvider、UI表示
+- VS Code依存のCommandテスト（`src/test/commands/**` のうちimportチェーンでvscodeに到達するもの）
+
+**実行**: VS Code Test Runnerを使用し、E2Eを検証
 
 **頻度**: 手動実行（CI統合は将来検討）
 
 **設計意図**: VS Code環境でのみ発生するバグ（UI更新、コマンド実行フロー等）を検出します。
+
+### 探索的テスト（デバッグIPC）
+
+**対象**: マルチステップ統合シナリオ（sync → trans → TM → 改訂 → re-sync → re-trans等）
+
+**実行**: `MDAIT_DEBUG_IPC=1`環境変数でDebugCommandHandlerを有効化し、ファイルベースIPCで実行
+
+**設計意図**: エージェントが自律的にE2Eシナリオを実行・検証するための基盤。
 
 ### サンプルワークスペース
 
@@ -48,14 +70,30 @@
 sequenceDiagram
 	participant Dev as Developer/CI
 	participant Task as copy-test-content
-	participant Test as npm test / npm run test:vscode
-	participant VS as VS Code Test Host
+	participant Unit as npm test (unit)
+	participant E2E as npm run test:vscode (e2e)
+	participant IPC as Debug IPC
 
 	Dev->>Task: npm run copy-test-files
 	Task-->>Dev: ワークスペース同期済み
-	Dev->>Test: テストスクリプト起動
-	Test->>VS: 拡張機能ロード
-	VS-->>Dev: 結果レポート
+
+	rect rgb(230,245,230)
+		Note over Dev,Unit: ①unit（CI常時）
+		Dev->>Unit: mocha実行
+		Unit-->>Dev: core/** + commands/**のOK15個 + utils
+	end
+
+	rect rgb(230,235,250)
+		Note over Dev,E2E: ②e2e/統合（手動）
+		Dev->>E2E: VS Code Test Runner
+		E2E-->>Dev: test-gui/** + commands/**のNG9個
+	end
+
+	rect rgb(250,240,230)
+		Note over Dev,IPC: ③debug（探索的）
+		Dev->>IPC: ファイルベースIPC
+		IPC-->>Dev: マルチステップシナリオ
+	end
 ```
 
 ---
@@ -86,14 +124,6 @@ test("syncコマンドは全ファイルを同期する", function() {
 新しいエッジケースを発見したら、`sample-content`にテストケースを追加します。
 
 **理由**: リグレッションテストでカバレッジを確保します。
-
----
-
-### デバッグ環境ファイルベースIPC（エージェント自律テスト基盤）
-
-マルチステップ統合シナリオ（sync → trans → TM → 改訂 → re-sync → re-trans等）をエージェントが自律的に実行・検証するための仕組み。`MDAIT_DEBUG_IPC=1`環境変数でdebug時のみ`DebugCommandHandler`が有効化され、`.mdait/debug/command.json`へのファイル書き込みでコマンド発行、`.mdait/debug/result.json`で結果を受け取る。LLMはvscode-lm（Copilot）で実際に呼び出される。
-
-詳細はタスクチケット `tasks/do/260328_デバッグ環境ファイルベースIPC.md` を参照。
 
 ---
 

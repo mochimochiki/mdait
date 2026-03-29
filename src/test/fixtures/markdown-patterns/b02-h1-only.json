@@ -1,0 +1,5 @@
+{
+  "description": "H1のみ（level=2）→ H1で分割",
+  "syncLevel": 2,
+  "expectedUnits": 3
+}
