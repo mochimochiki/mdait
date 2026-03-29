@@ -34,7 +34,7 @@ export async function createConfigCommand(context: vscode.ExtensionContext): Pro
 
 	// 拡張機能にバンドルされているmdait.template.jsonを読み込む
 	let templateContent: string;
-	const bundledTemplatePath = path.join(context.extensionPath, "mdait.template.json");
+	const bundledTemplatePath = path.join(context.extensionPath, "assets/mdait.template.json");
 
 	if (fs.existsSync(bundledTemplatePath)) {
 		templateContent = fs.readFileSync(bundledTemplatePath, "utf8");

@@ -337,7 +337,7 @@
     "jsonValidation": [
       {
         "fileMatch": "**/.mdait/mdait.json",
-        "url": "./schemas/mdait-config.schema.json"
+        "url": "./assets/schemas/mdait-config.schema.json"
       }
     ],
     "configuration": {
@@ -359,10 +359,10 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "lint": "biome lint ./src",
+    "lint": "biome lint --config-path .config ./src",
     "test": "npm run test:unit",
-    "test:unit": "npm run compile && npm run lint && mocha --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\"",
-    "test:vscode": "rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test",
+    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\"",
+    "test:vscode": "rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
     "watch": "tsc -watch -p ./",
     "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
