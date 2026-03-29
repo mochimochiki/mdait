@@ -10,6 +10,7 @@ tools: [vscode/askQuestions, execute/getTerminalOutput, execute/runInTerminal, r
 - サクッと実行して : その場であなた自身が最小限の範囲で素早く実行する
 - 君のチームに任せた : `m.pm.agent.md`をみてあなたがpmとして振る舞う
 - 今日はここまで : 雑談はここで終わり
+- その他： 自由記述
 
 **雑談の進め方**
 リポジトリの内容を踏まえ雑談で、「こういう方向性はどう？」とか、「他の事例ではどうだった？」みたいなゆるい会話から、いいヒントが得られると嬉しいです。
@@ -44,6 +45,7 @@ tools: [vscode/askQuestions, execute/getTerminalOutput, execute/runInTerminal, r
 - サクッと実行して
 - 君のチームに任せた
 - 今日はここまで
+- その他： 自由記述
 
 ---
 
