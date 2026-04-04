@@ -27,7 +27,7 @@ interface AIService {
 - キャンセル対応（`CancellationToken`：VS Code組み込みのキャンセル制御オブジェクト）
 - 戻り値は常に`Promise<string>`（プロバイダーの違いを吸収）
 
-**実装**: [`src/llm/ai-service.ts`](../../src/llm/ai-service.ts)
+**実装**: [`src/infra/llm/ai-service.ts`](../../src/infra/llm/ai-service.ts)
 
 **設計意図**: LLMプロバイダーの多様性を吸収します。OpenAI、Ollama、VS Code LM APIなど、異なるプロバイダーに対して統一されたインターフェースを提供し、Commands層はプロバイダーの違いを意識しません。
 
@@ -45,7 +45,7 @@ interface AIService {
 
 **開発用モック**: `provider: "default"`で固定応答またはエコーバックを返すモック実装を生成できます。
 
-**実装**: [`src/llm/ai-service-builder.ts`](../../src/llm/ai-service-builder.ts)
+**実装**: [`src/infra/llm/ai-service-builder.ts`](../../src/infra/llm/ai-service-builder.ts)
 
 ---
 
@@ -83,7 +83,7 @@ interface AIService {
 - 設定ファイルには平文で記載しない
 - **`store: false`でプロンプト・応答をOpenAIサーバーに保存しない**（[architecture.md](../architecture.md) 哲典5参照）
 
-**実装**: [`src/llm/providers/openai-provider.ts`](../../src/llm/providers/openai-provider.ts)
+**実装**: [`src/infra/llm/providers/openai-provider.ts`](../../src/infra/llm/providers/openai-provider.ts)
 
 **設計意図**: Responses APIを採用することで、将来のツール連携や機能拡張に対応しています。
 
@@ -109,7 +109,7 @@ interface AIService {
 
 **用途**: ネットワーク外部にデータを送信したくない場合や、オフライン環境での翻訳に適しています。
 
-**実装**: [`src/llm/providers/ollama-provider.ts`](../../src/llm/providers/ollama-provider.ts)
+**実装**: [`src/infra/llm/providers/ollama-provider.ts`](../../src/infra/llm/providers/ollama-provider.ts)
 
 ---
 
@@ -123,7 +123,7 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 - 内部でストリーミング応答をバッファリングし、完全な応答を返す
 - VS Code環境に統合されたLMを利用するため、追加の認証設定が不要
 
-**実装**: [`src/llm/providers/vscode-lm-provider.ts`](../../src/llm/providers/vscode-lm-provider.ts)
+**実装**: [`src/infra/llm/providers/vscode-lm-provider.ts`](../../src/infra/llm/providers/vscode-lm-provider.ts)
 
 ---
 

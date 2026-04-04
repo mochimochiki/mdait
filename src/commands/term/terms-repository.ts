@@ -3,7 +3,7 @@
  * @description 用語集の永続化とバッチ処理を抽象化するリポジトリインターフェース
  */
 
-import type { TransPair } from "../../config/configuration";
+import type { TransPair } from "../../infra/config/configuration";
 import type { TermEntry } from "./term-entry";
 
 /**

@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { markdownParser } from "../../core/markdown/parser";
 import { buildSentenceQueries } from "../../core/tm/tm-query";
 import { recomputeTmWeights } from "../../core/tm/tm-optimize";
 import { TmxStore } from "../../core/tm/tmx-store";
-import { FileExplorer } from "../../utils/file-explorer";
-import { Logger, formatError } from "../../utils/logger";
-import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { Logger, formatError } from "../../infra/logging/logger";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 const logger = Logger.getInstance();
 

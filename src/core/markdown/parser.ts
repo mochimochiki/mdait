@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { Configuration } from "../../config/configuration";
+import type { Configuration } from "../../infra/config/configuration";
 import { FrontMatter } from "./front-matter";
 import type { Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";

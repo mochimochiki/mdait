@@ -25,21 +25,16 @@ graph TD
     UI["UI層 (ui.md)<br/>VS Code統合<br/>ユーザーインタラクション"]
     Commands["Commands層<br/>ビジネスロジック<br/>ワークフロー制御"]
     Core["Core層 (core.md)<br/>純粋な翻訳ロジック"]
-    LLM["LLM層 (llm.md)<br/>外部AI通信"]
-    Config["Config層 (config.md)<br/>設定管理"]
-    Utils["Utils層 (utils.md)<br/>汎用機能"]
-    Tools["Tools層 (tools.md)"]
+    Infra["Infra層<br/>config / llm / logging<br/>workspace / debug / onboarding"]
+    Tools["LM Tools層 (tools.md)"]
     Copilot["GitHub Copilot"]
     LLMModels["LLMプロバイダー<br/>OpenAI/Ollama/VS Code LM API等"]
     
     UI --> Commands
     Commands --> Core
-    Commands --> LLM
-    Core --> Config
-    Core --> Utils
-    LLM --> Config
-    LLM --> Utils
-    LLM --> LLMModels
+    Commands --> Infra
+    Core --> Infra
+    Infra --> LLMModels
     Tools --> Commands
     Tools --> Core
     Copilot --> Tools
@@ -49,10 +44,9 @@ graph TD
 |---|---|---|
 | Core層 | `MarkdownItParser` でユニット分割、`Normalizer`/`HashCalculator` でハッシュ計算・正規化、`SectionMatcher` でソース/ターゲット対応検出、`StatusManager`/`StatusCollector` でステータス集約。mdaitUnit・ハッシュ・ステータス管理・UnitRegistry・Diff・FrontMatter翻訳を担当。VS Code APIに非依存な純粋TypeScript実装でテスト・移植が容易。 | [core.md](design/core.md) |
 | Commands層 | Core層の純粋関数を組み合わせてユーザーワークフローを実現（sync・trans・term・setup・tm・translate-selection）。進捗表示・エラーハンドリング・キャンセル対応も責務。 | コマンド層参照 |
-| LLM層 | `AIService` インターフェースでプロバイダーを抽象化。`AIServiceBuilder` が動的選択し、OpenAI/Ollama/VS Code LM APIの差異を吸収。AIServiceインターフェース・各プロバイダー実装を提供。 | [llm.md](design/llm.md) |
+| Infra層 | 基盤機能を統合。LLM通信（`AIService`抽象化・プロバイダー実装）、設定管理（`.mdait/mdait.json`の読み込み・バリデーション）、ログ出力、ワークスペースファイル探索、デバッグIPC、オンボーディングを担当。 | [llm.md](design/llm.md), [config.md](design/config.md), [utils.md](design/utils.md) |
 | UI層 | StatusTreeProvider・CodeLensProvider・HoverProvider・Welcome View でmdait内部状態をVS Code標準UIパターンで可視化。自動同期機能も統合。 | [ui.md](design/ui.md) |
-| Tools層 | `mdait_getStatus` / `mdait_sync` / `mdait_translate` をLanguageModelTool APIとして提供。Commands層・Core層の薄いラッパーとしてGitHub Copilot Chat連携を実現。 | [tools.md](design/tools.md) |
-| 設定管理 | `.mdait/mdait.json`の構造・Frontmatterオーバーライドで設定を一元管理。設定ファイルの読み込み・バリデーション・適用を統一して処理。 | [config.md](design/config.md) |
+| LM Tools層 | `mdait_getStatus` / `mdait_sync` / `mdait_translate` をLanguageModelTool APIとして提供。Commands層・Core層の薄いラッパーとしてGitHub Copilot Chat連携を実現。 | [tools.md](design/tools.md) |
 
 ### コマンド層
 
@@ -70,7 +64,7 @@ graph TD
 | 観点 | 内容 | ドキュメント |
 |---|---|---|
 | プロンプト | プロンプトID一覧・変数・カスタマイズ | [prompt.md](design/prompt.md) |
-| ユーティリティ | FileExplorer・Logger使用方針 | [utils.md](design/utils.md) |
+| ユーティリティ | FileExplorer・Logger使用方針（infra/配下） | [utils.md](design/utils.md) |
 | テスト | テスト戦略・実行方法 | [test.md](design/test.md) |
 
 ### リポジトリ構成
@@ -80,13 +74,10 @@ src/
   extension.ts           # VS Code拡張機能のエントリーポイント
   commands/              # sync/trans/term/setup/trans-selection/tm
   core/                  # markdown/hash/status/unit-registry/diff/tm
-  api/                   # 外部AIサービス通信
-  tools/                 # LanguageModelTool API統合
+  infra/                 # 基盤層（config/llm/logging/workspace/debug/onboarding）
+  lm-tools/              # LanguageModelTool API統合
   ui/                    # VS Code UI統合
-  config/                # 設定ロード・バリデーション
-  utils/                 # ファイル探索、ログ出力
   prompts/               # AIプロンプト定義
-  debug/                 # デバッグ環境IPC（debug時のみ有効）
   test/                  # テスト
 docs/                    # 設計ドキュメント
 schemas/                 # JSON Schema定義

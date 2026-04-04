@@ -8,12 +8,12 @@
  */
 import * as vscode from "vscode";
 import { transUnitCommand } from "../../commands/trans/trans-command";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
-import { FileExplorer } from "../../utils/file-explorer";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 
 /**
  * CodeLensから翻訳を実行するコマンド

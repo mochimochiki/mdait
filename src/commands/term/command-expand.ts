@@ -6,13 +6,13 @@
 
 import * as vscode from "vscode";
 
-import { Configuration, type TransPair } from "../../config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { AIOnboarding } from "../../utils/ai-onboarding";
-import { FileExplorer } from "../../utils/file-explorer";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { type TermExpansionContext, createTermExpander } from "./term-expander";

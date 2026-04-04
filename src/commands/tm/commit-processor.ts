@@ -9,7 +9,7 @@ import { calculateHash } from "../../core/hash/hash-calculator";
 import { isWorthyForTm, stripMarkdown } from "../../core/tm/tm-text-normalizer";
 import type { TmxStore } from "../../core/tm/tmx-store";
 import type { ExistingTmEntriesItem, TmCommitEntry, TmEntry } from "../../core/tm/types";
-import { Logger } from "../../utils/logger";
+import { Logger } from "../../infra/logging/logger";
 import type { LLMTmEntryGenerator } from "./tm-entry-generator";
 
 const logger = Logger.getInstance();

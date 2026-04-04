@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { decodeUnitRegistry, encodeUnitRegistry } from "./unit-registry-encoder";
 import { UnitRegistryParseError, UnitRegistryStore } from "./unit-registry-store";
 

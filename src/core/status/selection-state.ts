@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { Configuration, type TransPair } from "../../config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 
 /**
  * 対象言語（ターゲット）選択状態の一元管理

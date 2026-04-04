@@ -8,18 +8,18 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
-import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptProvider } from "../../prompts";
-import { AIOnboarding } from "../../utils/ai-onboarding";
-import { FileExplorer } from "../../utils/file-explorer";
-import { Logger, formatError } from "../../utils/logger";
-import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { Logger, formatError } from "../../infra/logging/logger";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { isTmCommitTarget } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
 import {

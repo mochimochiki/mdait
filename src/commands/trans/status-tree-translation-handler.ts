@@ -3,7 +3,7 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
-import { AIOnboarding } from "../../utils/ai-onboarding";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import {
 	type TransCommandResult,
 	type TranslateUnitMetrics,

@@ -39,7 +39,7 @@ sequenceDiagram
 
 **設計意図**: ファイル探索という汎用機能を切り出すことで、Commands層は「どのファイルを処理するか」という判断に集中できます。
 
-**実装**: [`src/utils/file-explorer.ts`](../../src/utils/file-explorer.ts)
+**実装**: [`src/infra/workspace/file-explorer.ts`](../../src/infra/workspace/file-explorer.ts)
 
 ---
 
@@ -93,7 +93,7 @@ sequenceDiagram
 
 **設計意図**: 構造化ログにより、問題発生時にログを検索・集計しやすくなります。例えば、特定のファイルやユニットで頻繁にリトライが発生している場合、それを容易に検出できます。
 
-**実装**: [`src/utils/logger.ts`](../../src/utils/logger.ts)
+**実装**: [`src/infra/logging/logger.ts`](../../src/infra/logging/logger.ts)
 
 ---
 

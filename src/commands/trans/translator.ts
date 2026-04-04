@@ -1,9 +1,9 @@
 import type * as vscode from "vscode";
-import type { AIMessage, AIService } from "../../llm/ai-service";
+import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
 import type { PromptVariables } from "../../prompts/prompt-provider";
-import { Logger, formatError } from "../../utils/logger";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
 	type ParsedRevisionPatchResponse,

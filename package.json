@@ -361,10 +361,10 @@
     "compile": "tsc -p ./",
     "lint": "biome lint --config-path .config ./src",
     "test": "npm run test:unit",
-    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/core/**/*.test.js\" \"out/test/utils/logger.test.js\" \"out/test/commands/sync/{marker-sync,section-matcher-no-heading,current-primary-unit-collector,sync-frontmatter-content,sync-frontmatter-marker}.test.js\" \"out/test/commands/term/{term-entry,term-entry-converter,unit-pair,term-result-provider,terms-repository-csv,terms-repository-yaml}.test.js\" \"out/test/commands/tm/{commit-filter,commit-processor,command-commit,tm-entry-generator,tm-result-provider}.test.js\" \"out/test/commands/trans/{output-sanitizer,response-validator,term-extractor,trans-frontmatter,trans-tm-lookup,translation-checker,terms-cache-manager,translator-retry}.test.js\"",
-    "test:vscode": "rimraf out/test-gui out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
+    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/unit/core/**/*.test.js\" \"out/test/unit/utils/**/*.test.js\" \"out/test/unit/commands/**/*.test.js\"",
+    "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
     "watch": "tsc -watch -p ./",
-    "copy-test-files": "rimraf ./src/test/workspace/content && node -e \"require('node:fs').cpSync('./src/test/sample-content', './src/test/workspace/content', { recursive: true, force: true })\"",
+    "copy-test-files": "rimraf ./src/test/unit/workspace/content && node -e \"require('node:fs').cpSync('./src/test/unit/sample-content', './src/test/unit/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
     "l10n-validate": "npx @vscode/l10n-dev validate ./l10n"
   },

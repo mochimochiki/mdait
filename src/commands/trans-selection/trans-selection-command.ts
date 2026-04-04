@@ -5,11 +5,11 @@
  */
 
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
-import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import { Configuration } from "../../infra/config/configuration";
+import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptIds } from "../../prompts/defaults";
 import { PromptProvider } from "../../prompts/prompt-provider";
-import { AIOnboarding } from "../../utils/ai-onboarding";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
 import { pickTranslationDirection } from "./direction-picker";

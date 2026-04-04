@@ -6,9 +6,9 @@
 
 import * as vscode from "vscode";
 
-import { Configuration, type TransPair } from "../../config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import { AIOnboarding } from "../../utils/ai-onboarding";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
 import { TermResultContentProvider } from "./term-result-provider";

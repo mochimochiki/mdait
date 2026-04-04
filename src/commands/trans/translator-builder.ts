@@ -1,5 +1,5 @@
-import { Configuration } from "../../config/configuration";
-import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import { Configuration } from "../../infra/config/configuration";
+import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptProvider } from "../../prompts";
 import { AITranslator, type Translator } from "./translator";
 

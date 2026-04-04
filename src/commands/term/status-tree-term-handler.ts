@@ -5,13 +5,13 @@
  */
 
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
-import { AIOnboarding } from "../../utils/ai-onboarding";
-import { FileExplorer } from "../../utils/file-explorer";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { detectTerm_CoreProc } from "./command-detect";
 import { expandTerm_CoreProc } from "./command-expand";
 import { UnitPairCollector } from "./unit-pair-collector";

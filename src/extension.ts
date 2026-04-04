@@ -8,22 +8,34 @@ import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { TermResultContentProvider } from "./commands/term/term-result-provider";
-import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
-import { tmOptimizeCommand } from "./commands/tm/command-optimize";
+import {
+	tmCommitDirectoryCommand,
+	tmCommitFileCommand,
+} from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
+import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
-import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
-import { Configuration } from "./config/configuration";
+import {
+	transCommand,
+	translateFrontmatterCommand,
+} from "./commands/trans/trans-command";
 import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
 import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
-import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
+import {
+	type StatusItem,
+	isFrontmatterStatusItem,
+} from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
-import { MdaitGetStatusTool } from "./tools/get-status-tool";
-import { MdaitSyncTool } from "./tools/sync-tool";
-import { MdaitTranslateTool } from "./tools/translate-tool";
+import { Configuration } from "./infra/config/configuration";
+import { Logger, parseLogLevel } from "./infra/logging/logger";
+import { AIOnboarding } from "./infra/onboarding/ai-onboarding";
+import { FileExplorer } from "./infra/workspace/file-explorer";
+import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
+import { MdaitSyncTool } from "./lm-tools/sync-tool";
+import { MdaitTranslateTool } from "./lm-tools/translate-tool";
 import {
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
@@ -37,9 +49,6 @@ import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
 import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
-import { AIOnboarding } from "./utils/ai-onboarding";
-import { FileExplorer } from "./utils/file-explorer";
-import { Logger, parseLogLevel } from "./utils/logger";
 
 export async function activate(context: vscode.ExtensionContext) {
 	// OutputChannel作成とLogger初期化
@@ -64,7 +73,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		logger.info("config", "Configuration loaded successfully");
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
-		logger.info("config", "Configuration not loaded", { reason: (error as Error).message });
+		logger.info("config", "Configuration not loaded", {
+			reason: (error as Error).message,
+		});
 	}
 
 	// AIOnboarding の初期化
@@ -111,7 +122,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("mdait.logLevel")) {
-				const newLogLevel = vscode.workspace.getConfiguration("mdait").get<string>("logLevel", "INFO");
+				const newLogLevel = vscode.workspace
+					.getConfiguration("mdait")
+					.get<string>("logLevel", "INFO");
 				logger.setLevel(parseLogLevel(newLogLevel));
 				logger.info("config", "Log level changed", { logLevel: newLogLevel });
 			}
@@ -124,61 +137,85 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	// setup.createConfig command
-	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>
-		createConfigCommand(context),
+	const createConfigDisposable = vscode.commands.registerCommand(
+		"mdait.setup.createConfig",
+		() => createConfigCommand(context),
 	);
 
 	// sync command
-	const syncDisposable = vscode.commands.registerCommand("mdait.sync", syncCommand);
+	const syncDisposable = vscode.commands.registerCommand(
+		"mdait.sync",
+		syncCommand,
+	);
 
 	// trans command
-	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
+	const transDisposable = vscode.commands.registerCommand(
+		"mdait.trans",
+		transCommand,
+	);
 
 	// Trans handler
 	const translateItemCommand = new StatusTreeTranslationHandler();
 	translateItemCommand.setStatusTreeProvider(statusTreeProvider);
 
-	const translateDirectoryDisposable = vscode.commands.registerCommand("mdait.translate.directory", (item) =>
-		translateItemCommand.translateDirectory(item),
+	const translateDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.translate.directory",
+		(item) => translateItemCommand.translateDirectory(item),
 	);
-	const translateFileDisposable = vscode.commands.registerCommand("mdait.translate.file", (item) =>
-		translateItemCommand.translateFile(item),
+	const translateFileDisposable = vscode.commands.registerCommand(
+		"mdait.translate.file",
+		(item) => translateItemCommand.translateFile(item),
 	);
-	const translateUnitDisposable = vscode.commands.registerCommand("mdait.translate.unit", (item) =>
-		translateItemCommand.translateUnit(item),
+	const translateUnitDisposable = vscode.commands.registerCommand(
+		"mdait.translate.unit",
+		(item) => translateItemCommand.translateUnit(item),
 	);
 
 	// term.detect command
-	const termDetectDisposable = vscode.commands.registerCommand("mdait.term.detect", detectTermCommand);
+	const termDetectDisposable = vscode.commands.registerCommand(
+		"mdait.term.detect",
+		detectTermCommand,
+	);
 
 	// term.expand command
-	const termExpandDisposable = vscode.commands.registerCommand("mdait.term.expand", (item) =>
-		expandTermCommand(item as StatusItem),
+	const termExpandDisposable = vscode.commands.registerCommand(
+		"mdait.term.expand",
+		(item) => expandTermCommand(item as StatusItem),
 	);
 
 	// term.open command
-	const termOpenDisposable = vscode.commands.registerCommand("mdait.term.open", openTermCommand);
+	const termOpenDisposable = vscode.commands.registerCommand(
+		"mdait.term.open",
+		openTermCommand,
+	);
 
 	// term.addToGlossary command
-	const addToGlossaryDisposable = vscode.commands.registerCommand("mdait.addToGlossary", addToGlossaryCommand);
+	const addToGlossaryDisposable = vscode.commands.registerCommand(
+		"mdait.addToGlossary",
+		addToGlossaryCommand,
+	);
 
 	// Term handler
 	const termHandler = new StatusTreeTermHandler();
 	termHandler.setStatusTreeProvider(statusTreeProvider);
 
-	const termDirectoryDisposable = vscode.commands.registerCommand("mdait.term.detect.directory", (item) =>
-		termHandler.termDetectDirectory(item as StatusItem),
+	const termDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.term.detect.directory",
+		(item) => termHandler.termDetectDirectory(item as StatusItem),
 	);
-	const termFileDisposable = vscode.commands.registerCommand("mdait.term.detect.file", (item) =>
-		termHandler.termDetectFile(item as StatusItem),
+	const termFileDisposable = vscode.commands.registerCommand(
+		"mdait.term.detect.file",
+		(item) => termHandler.termDetectFile(item as StatusItem),
 	);
 
 	// term.expand.directory/file commands
-	const termExpandDirectoryDisposable = vscode.commands.registerCommand("mdait.term.expand.directory", (item) =>
-		termHandler.termExpandDirectory(item as StatusItem),
+	const termExpandDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.term.expand.directory",
+		(item) => termHandler.termExpandDirectory(item as StatusItem),
 	);
-	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
-		termHandler.termExpandFile(item as StatusItem),
+	const termExpandFileDisposable = vscode.commands.registerCommand(
+		"mdait.term.expand.file",
+		(item) => termHandler.termExpandFile(item as StatusItem),
 	);
 
 	// Translate Selection command
@@ -188,28 +225,34 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// TM Commit commands
-	const tmCommitFileDisposable = vscode.commands.registerCommand("mdait.tm.commit.file", (item?: StatusItem) =>
-		tmCommitFileCommand(item),
+	const tmCommitFileDisposable = vscode.commands.registerCommand(
+		"mdait.tm.commit.file",
+		(item?: StatusItem) => tmCommitFileCommand(item),
 	);
 	const tmCommitDirectoryDisposable = vscode.commands.registerCommand(
 		"mdait.tm.commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
-	const tmOptimizeDisposable = vscode.commands.registerCommand("mdait.tm.optimize", tmOptimizeCommand);
+	const tmOptimizeDisposable = vscode.commands.registerCommand(
+		"mdait.tm.optimize",
+		tmOptimizeCommand,
+	);
 
 	// TM Result ContentProvider登録
 	const tmResultProvider = TmResultContentProvider.getInstance();
-	const tmResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
-		"mdait-tm-result",
-		tmResultProvider,
-	);
+	const tmResultProviderDisposable =
+		vscode.workspace.registerTextDocumentContentProvider(
+			"mdait-tm-result",
+			tmResultProvider,
+		);
 
 	// Term Result ContentProvider登録
 	const termResultProvider = TermResultContentProvider.getInstance();
-	const termResultProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
-		"mdait-term-result",
-		termResultProvider,
-	);
+	const termResultProviderDisposable =
+		vscode.workspace.registerTextDocumentContentProvider(
+			"mdait-term-result",
+			termResultProvider,
+		);
 
 	// CodeLens翻訳コマンド
 	const codeLensTranslateDisposable = vscode.commands.registerCommand(
@@ -249,16 +292,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// CodeLens Frontmatter need削除コマンド
-	const codeLensClearFrontmatterNeedDisposable = vscode.commands.registerCommand(
-		"mdait.codelens.clearFrontmatterNeed",
-		codeLensClearFrontmatterNeedCommand,
-	);
+	const codeLensClearFrontmatterNeedDisposable =
+		vscode.commands.registerCommand(
+			"mdait.codelens.clearFrontmatterNeed",
+			codeLensClearFrontmatterNeedCommand,
+		);
 
 	// CodeLens ソースFrontmatterジャンプコマンド
-	const codeLensJumpToSourceFrontmatterDisposable = vscode.commands.registerCommand(
-		"mdait.codelens.jumpToSourceFrontmatter",
-		codeLensJumpToSourceFrontmatterCommand,
-	);
+	const codeLensJumpToSourceFrontmatterDisposable =
+		vscode.commands.registerCommand(
+			"mdait.codelens.jumpToSourceFrontmatter",
+			codeLensJumpToSourceFrontmatterCommand,
+		);
 
 	// CodeLensProvider登録
 	const codeLensProvider = new MdaitCodeLensProvider();
@@ -296,7 +341,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	vscode.workspace.onDidChangeTextDocument(
 		(event) => {
 			const editor = vscode.window.activeTextEditor;
-			if (editor && event.document === editor.document && editor.document.languageId === "markdown") {
+			if (
+				editor &&
+				event.document === editor.document &&
+				editor.document.languageId === "markdown"
+			) {
 				summaryDecorator.updateDecorations(editor);
 			}
 		},
@@ -305,38 +354,76 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// status.sync.initial command（初回同期）
-	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", async () => {
-		try {
-			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
-			await syncCommand();
-			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
-			await statusManager.buildStatusItemTree();
-		} catch (error) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
-		} finally {
-			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
-		}
-	});
+	const syncStatusInitialDisposable = vscode.commands.registerCommand(
+		"mdait.status.sync.initial",
+		async () => {
+			try {
+				await vscode.commands.executeCommand(
+					"setContext",
+					"mdaitSyncProcessing",
+					true,
+				);
+				await syncCommand();
+				// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
+				await statusManager.buildStatusItemTree();
+			} catch (error) {
+				vscode.window.showErrorMessage(
+					vscode.l10n.t(
+						"Failed to sync and refresh: {0}",
+						(error as Error).message,
+					),
+				);
+			} finally {
+				await vscode.commands.executeCommand(
+					"setContext",
+					"mdaitSyncProcessing",
+					false,
+				);
+			}
+		},
+	);
 
 	// status.sync command（通常同期）
-	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", async () => {
-		try {
-			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", true);
-			await syncCommand();
-			// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
-			await statusManager.buildStatusItemTree();
-		} catch (error) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
-		} finally {
-			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
-		}
-	});
+	const syncStatusDisposable = vscode.commands.registerCommand(
+		"mdait.status.sync",
+		async () => {
+			try {
+				await vscode.commands.executeCommand(
+					"setContext",
+					"mdaitSyncProcessing",
+					true,
+				);
+				await syncCommand();
+				// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
+				await statusManager.buildStatusItemTree();
+			} catch (error) {
+				vscode.window.showErrorMessage(
+					vscode.l10n.t(
+						"Failed to sync and refresh: {0}",
+						(error as Error).message,
+					),
+				);
+			} finally {
+				await vscode.commands.executeCommand(
+					"setContext",
+					"mdaitSyncProcessing",
+					false,
+				);
+			}
+		},
+	);
 
 	// status.openTerm command
-	const openTermStatusDisposable = vscode.commands.registerCommand("mdait.status.openTerm", openTermCommand);
+	const openTermStatusDisposable = vscode.commands.registerCommand(
+		"mdait.status.openTerm",
+		openTermCommand,
+	);
 
 	// status.openTm command
-	const openTmStatusDisposable = vscode.commands.registerCommand("mdait.status.openTm", openTmCommand);
+	const openTmStatusDisposable = vscode.commands.registerCommand(
+		"mdait.status.openTm",
+		openTmCommand,
+	);
 
 	// jumpToUnit command
 	const jumpToUnitDisposable = vscode.commands.registerCommand(
@@ -349,121 +436,182 @@ export async function activate(context: vscode.ExtensionContext) {
 				// 指定行にジャンプ（0ベースから1ベースに変換）
 				const position = new vscode.Position(line, 0);
 				editor.selection = new vscode.Selection(position, position);
-				editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+				editor.revealRange(
+					new vscode.Range(position, position),
+					vscode.TextEditorRevealType.InCenter,
+				);
 			} catch (error) {
-				vscode.window.showErrorMessage(vscode.l10n.t("Failed to jump to unit: {0}", (error as Error).message));
+				vscode.window.showErrorMessage(
+					vscode.l10n.t(
+						"Failed to jump to unit: {0}",
+						(error as Error).message,
+					),
+				);
 			}
 		},
 	);
 
 	// 対象言語選択コマンド（QuickPick: 複数選択、空は確定不可）
-	const selectTargetsDisposable = vscode.commands.registerCommand("mdait.status.selectTargets", async () => {
-		const pick = vscode.window.createQuickPick<{ label: string; description?: string; key: string }>();
-		pick.canSelectMany = true;
-		const items = SelectionState.getInstance()
-			.getSelectableTargets()
-			.map((t) => ({ label: t.label, description: t.description, key: t.key }));
-		pick.items = items;
-		// 既存選択を反映
-		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());
-		pick.selectedItems = items.filter((i) => selectedKeys.includes(i.key));
+	const selectTargetsDisposable = vscode.commands.registerCommand(
+		"mdait.status.selectTargets",
+		async () => {
+			const pick = vscode.window.createQuickPick<{
+				label: string;
+				description?: string;
+				key: string;
+			}>();
+			pick.canSelectMany = true;
+			const items = SelectionState.getInstance()
+				.getSelectableTargets()
+				.map((t) => ({
+					label: t.label,
+					description: t.description,
+					key: t.key,
+				}));
+			pick.items = items;
+			// 既存選択を反映
+			const selectedKeys = Array.from(
+				SelectionState.getInstance().getActiveKeys(),
+			);
+			pick.selectedItems = items.filter((i) => selectedKeys.includes(i.key));
 
-		// 空禁止: accept を抑止（代替メッセージはタイトルに表示）
-		pick.onDidAccept(() => {
-			const keys = pick.selectedItems.map((i) => i.key);
-			if (keys.length === 0) {
-				pick.title = vscode.l10n.t("Select at least one target.");
-				return; // stay open
-			}
-			SelectionState.getInstance().updateSelection(keys);
-			pick.hide();
-		});
-		pick.onDidHide(() => pick.dispose());
-		pick.show();
-	});
+			// 空禁止: accept を抑止（代替メッセージはタイトルに表示）
+			pick.onDidAccept(() => {
+				const keys = pick.selectedItems.map((i) => i.key);
+				if (keys.length === 0) {
+					pick.title = vscode.l10n.t("Select at least one target.");
+					return; // stay open
+				}
+				SelectionState.getInstance().updateSelection(keys);
+				pick.hide();
+			});
+			pick.onDidHide(() => pick.dispose());
+			pick.show();
+		},
+	);
 
 	// ドキュメント保存時のステータス更新
-	const saveDisposable = vscode.workspace.onDidSaveTextDocument(async (document) => {
-		try {
-			if (document.uri.scheme !== "file") {
-				return;
-			}
-			const filePath = document.uri.fsPath;
-
-			// mdait.jsonの保存を検知して設定を再読み込み
-			if (filePath.toLowerCase().endsWith(path.join(".mdait", "mdait.json").toLowerCase())) {
-				try {
-					await config.initialize();
-					logger.info("config", "Configuration reloaded after mdait.json save");
-				} catch (error) {
-					logger.error("config", "Failed to reload configuration", { error: (error as Error).message });
-				}
-				return;
-			}
-
-			if (!filePath.toLowerCase().endsWith(".md")) {
-				return;
-			}
-
-			// 設定が有効かチェック
-			if (!configInitialized) {
-				return;
-			}
-			if (!config.sync.autoSyncOnSave) {
-				return;
-			}
-
-			let shouldSync = false;
+	const saveDisposable = vscode.workspace.onDidSaveTextDocument(
+		async (document) => {
 			try {
-				const fileExplorer = new FileExplorer();
-				shouldSync = fileExplorer.isSourceFile(filePath, config) || fileExplorer.isTargetFile(filePath, config);
-			} catch (error) {
-				logger.warn("extension", "Failed to initialize FileExplorer on save", { error: (error as Error).message });
-			}
-
-			if (!shouldSync) {
-				const tree = statusManager.getStatusItemTree();
-				shouldSync = !!tree.getFile(filePath);
-			}
-
-			if (!shouldSync) {
-				return;
-			}
-
-			// mdaitマーカーが存在するかチェック（まだ一度もsyncしていないファイルは除外）
-			try {
-				const fileDocument = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-				const decoder = new TextDecoder("utf-8");
-				const content = decoder.decode(fileDocument);
-				const parsed = markdownParser.parse(content, config);
-
-				// ユニットにマーカーが存在するか確認
-				const hasUnitMarker = parsed.units.some((unit) => unit.marker.hash !== null);
-
-				// フロントマターにマーカーが存在するか確認
-				const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;
-
-				// いずれのマーカーも存在しない場合は除外
-				if (!hasUnitMarker && !hasFrontmatterMarker) {
-					logger.debug("extension", "Skipping file save sync (no mdait markers)", { filePath });
+				if (document.uri.scheme !== "file") {
 					return;
 				}
-			} catch (error) {
-				logger.warn("extension", "Failed to check mdait markers on save", { error: (error as Error).message });
-				return;
-			}
+				const filePath = document.uri.fsPath;
 
-			// ファイル保存時に自動的に同期を実行
-			await syncSingleFile(filePath);
-		} catch (error) {
-			logger.warn("extension", "Failed to sync file on save", { error: (error as Error).message });
-		}
-	});
+				// mdait.jsonの保存を検知して設定を再読み込み
+				if (
+					filePath
+						.toLowerCase()
+						.endsWith(path.join(".mdait", "mdait.json").toLowerCase())
+				) {
+					try {
+						await config.initialize();
+						logger.info(
+							"config",
+							"Configuration reloaded after mdait.json save",
+						);
+					} catch (error) {
+						logger.error("config", "Failed to reload configuration", {
+							error: (error as Error).message,
+						});
+					}
+					return;
+				}
+
+				if (!filePath.toLowerCase().endsWith(".md")) {
+					return;
+				}
+
+				// 設定が有効かチェック
+				if (!configInitialized) {
+					return;
+				}
+				if (!config.sync.autoSyncOnSave) {
+					return;
+				}
+
+				let shouldSync = false;
+				try {
+					const fileExplorer = new FileExplorer();
+					shouldSync =
+						fileExplorer.isSourceFile(filePath, config) ||
+						fileExplorer.isTargetFile(filePath, config);
+				} catch (error) {
+					logger.warn(
+						"extension",
+						"Failed to initialize FileExplorer on save",
+						{ error: (error as Error).message },
+					);
+				}
+
+				if (!shouldSync) {
+					const tree = statusManager.getStatusItemTree();
+					shouldSync = !!tree.getFile(filePath);
+				}
+
+				if (!shouldSync) {
+					return;
+				}
+
+				// mdaitマーカーが存在するかチェック（まだ一度もsyncしていないファイルは除外）
+				try {
+					const fileDocument = await vscode.workspace.fs.readFile(
+						vscode.Uri.file(filePath),
+					);
+					const decoder = new TextDecoder("utf-8");
+					const content = decoder.decode(fileDocument);
+					const parsed = markdownParser.parse(content, config);
+
+					// ユニットにマーカーが存在するか確認
+					const hasUnitMarker = parsed.units.some(
+						(unit) => unit.marker.hash !== null,
+					);
+
+					// フロントマターにマーカーが存在するか確認
+					const hasFrontmatterMarker = parsed.frontMatter
+						? parseFrontmatterMarker(parsed.frontMatter) !== null
+						: false;
+
+					// いずれのマーカーも存在しない場合は除外
+					if (!hasUnitMarker && !hasFrontmatterMarker) {
+						logger.debug(
+							"extension",
+							"Skipping file save sync (no mdait markers)",
+							{ filePath },
+						);
+						return;
+					}
+				} catch (error) {
+					logger.warn("extension", "Failed to check mdait markers on save", {
+						error: (error as Error).message,
+					});
+					return;
+				}
+
+				// ファイル保存時に自動的に同期を実行
+				await syncSingleFile(filePath);
+			} catch (error) {
+				logger.warn("extension", "Failed to sync file on save", {
+					error: (error as Error).message,
+				});
+			}
+		},
+	);
 
 	// LanguageModel Tools 登録
-	const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
-	const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
-	const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new MdaitTranslateTool());
+	const getStatusToolDisposable = vscode.lm.registerTool(
+		"mdait_getStatus",
+		new MdaitGetStatusTool(),
+	);
+	const syncToolDisposable = vscode.lm.registerTool(
+		"mdait_sync",
+		new MdaitSyncTool(),
+	);
+	const translateToolDisposable = vscode.lm.registerTool(
+		"mdait_translate",
+		new MdaitTranslateTool(),
+	);
 
 	// 初回データ読み込み
 	context.subscriptions.push(
@@ -526,7 +674,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (process.env.MDAIT_DEBUG_IPC) {
 		const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (wsRoot) {
-			const { DebugCommandHandler } = await import("./debug/debug-command-handler.js");
+			const { DebugCommandHandler } = await import(
+				"./infra/debug/debug-command-handler.js"
+			);
 			const debugHandler = new DebugCommandHandler(wsRoot);
 			context.subscriptions.push(debugHandler);
 			logger.info("debug", "DebugCommandHandler activated (IPC mode)");
@@ -541,13 +691,23 @@ export async function activate(context: vscode.ExtensionContext) {
  */
 async function updateConfiguredContext(config: Configuration): Promise<void> {
 	const isConfigured = config.isConfigured();
-	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+	await vscode.commands.executeCommand(
+		"setContext",
+		"mdaitConfigured",
+		isConfigured,
+	);
 }
 
 /**
  * mdaitHasStatusコンテキスト変数を更新する
  */
-async function updateHasStatusContext(statusManager: StatusManager): Promise<void> {
+async function updateHasStatusContext(
+	statusManager: StatusManager,
+): Promise<void> {
 	const hasStatus = !statusManager.getStatusItemTree().isEmpty();
-	await vscode.commands.executeCommand("setContext", "mdaitHasStatus", hasStatus);
+	await vscode.commands.executeCommand(
+		"setContext",
+		"mdaitHasStatus",
+		hasStatus,
+	);
 }

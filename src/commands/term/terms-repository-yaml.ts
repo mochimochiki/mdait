@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-import type { TransPair } from "../../config/configuration";
+import type { TransPair } from "../../infra/config/configuration";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { extractLanguagesFromTransPairs } from "./term-utils";

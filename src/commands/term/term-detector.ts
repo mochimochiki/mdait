@@ -5,8 +5,8 @@
  */
 
 import type * as vscode from "vscode";
-import type { AIService } from "../../llm/ai-service";
-import { AIServiceBuilder } from "../../llm/ai-service-builder";
+import type { AIService } from "../../infra/llm/ai-service";
+import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";

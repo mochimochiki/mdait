@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
-import { ensureMdaitDir } from "../../utils/mdait-dir";
+import { Configuration } from "../../infra/config/configuration";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 /**
  * mdait.json設定ファイルのテンプレートを作成するコマンド（中核プロセス）

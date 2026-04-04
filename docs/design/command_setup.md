@@ -96,4 +96,4 @@ sequenceDiagram
 | ファイル | 責務 |
 |---|---|
 | [`setup-command.ts`](../../src/commands/setup/setup-command.ts) | `createConfigCommand()` - テンプレートコピーとエディタ表示 |
-| [`configuration.ts`](../../src/config/configuration.ts) | `Configuration` - 設定ファイル変更・リロード・バリデーション |
+| [`configuration.ts`](../../src/infra/config/configuration.ts) | `Configuration` - 設定ファイル変更・リロード・バリデーション |

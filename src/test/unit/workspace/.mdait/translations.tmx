@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+  <body>
+    <tu tuid="test001">
+      <prop type="x-wt">1.000000</prop>
+      <prop type="x-primary">鈴木・宮浦カップリング反応は有機合成化学において最も重要な反応の一つとなっている。</prop>
+      <tuv xml:lang="ja">
+        <seg>鈴木・宮浦カップリング反応は有機合成化学において最も重要な反応の一つとなっている。</seg>
+      </tuv>
+      <tuv xml:lang="en">
+        <seg>The Suzuki-Miyaura coupling reaction has become one of the most important reactions in organic synthetic chemistry.</seg>
+      </tuv>
+    </tu>
+    <tu tuid="test002">
+      <prop type="x-wt">1.000000</prop>
+      <prop type="x-primary">パラジウム触媒を用いた鈴木・宮浦カップリング反応の収率向上を目的とした条件検討を行った。</prop>
+      <tuv xml:lang="ja">
+        <seg>パラジウム触媒を用いた鈴木・宮浦カップリング反応の収率向上を目的とした条件検討を行った。</seg>
+      </tuv>
+      <tuv xml:lang="en">
+        <seg>We investigated reaction conditions aimed at improving the yield of the Suzuki-Miyaura coupling reaction using a palladium catalyst.</seg>
+      </tuv>
+    </tu>
+    <tu tuid="test003">
+      <prop type="x-wt">1.000000</prop>
+      <prop type="x-primary">従来の反応条件では収率が60-70%程度にとどまり副反応による不純物の生成や触媒の失活が課題となっていた。</prop>
+      <tuv xml:lang="ja">
+        <seg>従来の反応条件では収率が60-70%程度にとどまり副反応による不純物の生成や触媒の失活が課題となっていた。</seg>
+      </tuv>
+      <tuv xml:lang="en">
+        <seg>Under conventional reaction conditions, the yield remained at approximately 60-70%, with the generation of impurities from side reactions and catalyst deactivation being major challenges.</seg>
+      </tuv>
+    </tu>
+    <tu tuid="test004">
+      <prop type="x-wt">1.000000</prop>
+      <prop type="x-primary">医薬品、農薬、機能性材料の合成に広く応用されている。</prop>
+      <tuv xml:lang="ja">
+        <seg>医薬品、農薬、機能性材料の合成に広く応用されている。</seg>
+      </tuv>
+      <tuv xml:lang="en">
+        <seg>It is widely applied in the synthesis of pharmaceuticals, agrochemicals, and functional materials.</seg>
+      </tuv>
+    </tu>
+  </body>
+</tmx>

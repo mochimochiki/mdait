@@ -77,7 +77,7 @@ interface GetStatusInput {
 
 **確認UI**: なし（読み取り専用）
 
-**実装**: [`src/tools/get-status-tool.ts`](../../src/tools/get-status-tool.ts)
+**実装**: [`src/lm-tools/get-status-tool.ts`](../../src/lm-tools/get-status-tool.ts)
 
 ### 2. Sync Tool (`mdait_sync`)
 
@@ -96,7 +96,7 @@ type SyncInput = Record<string, never>;  // パラメータなし
 - タイトル: "Confirm Synchronization"
 - メッセージ: "This will update translation markers in your Markdown files. Do you want to proceed?"
 
-**実装**: [`src/tools/sync-tool.ts`](../../src/tools/sync-tool.ts)
+**実装**: [`src/lm-tools/sync-tool.ts`](../../src/lm-tools/sync-tool.ts)
 
 ### 3. Translate Tool (`mdait_translate`)
 
@@ -122,14 +122,14 @@ interface TranslateInput {
 - メッセージ: "Translate file: {filePath}?\n\nThis will translate {n} units using AI."
 - 翻訳対象ユニット数を表示してユーザーの意思決定を支援
 
-**実装**: [`src/tools/translate-tool.ts`](../../src/tools/translate-tool.ts)
+**実装**: [`src/lm-tools/translate-tool.ts`](../../src/lm-tools/translate-tool.ts)
 
 ---
 
 ## ファイル構成
 
 ```
-src/tools/
+src/lm-tools/
 ├── get-status-tool.ts    # ステータス取得ツール
 ├── sync-tool.ts          # 同期ツール
 └── translate-tool.ts     # 翻訳ツール
@@ -184,7 +184,7 @@ GitHub Copilot Chatでのコマンド例:
 ## 今後の拡張可能性
 
 追加ツールの候補: Term Detection、TM Commit、Validate、Search。
-追加手順: `src/tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
+追加手順: `src/lm-tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
 ---
 

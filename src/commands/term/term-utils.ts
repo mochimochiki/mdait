@@ -3,7 +3,7 @@
  * @description 用語集関連の共通ユーティリティ関数
  */
 
-import type { TransPair } from "../../config/configuration";
+import type { TransPair } from "../../infra/config/configuration";
 
 /**
  * TransPairから言語リストを抽出する共通ユーティリティ

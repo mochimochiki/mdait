@@ -1,10 +1,10 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { SelectionState } from "../../core/status/selection-state";
 import { Status, type StatusItem, StatusItemType, isFrontmatterStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { Logger, formatError } from "../../utils/logger";
+import { Logger, formatError } from "../../infra/logging/logger";
 
 /**
  * ステータスツリービューのデータプロバイダ

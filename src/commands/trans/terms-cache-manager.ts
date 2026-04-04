@@ -5,7 +5,7 @@
  */
 
 import * as fs from "node:fs";
-import type { Configuration, TransPair } from "../../config/configuration";
+import type { Configuration, TransPair } from "../../infra/config/configuration";
 import type { TermEntry } from "../term/term-entry";
 import { TermsRepository } from "../term/terms-repository";
 

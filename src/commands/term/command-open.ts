@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 
 /**
  * openTerm command

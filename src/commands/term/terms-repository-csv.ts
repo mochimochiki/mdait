@@ -9,7 +9,7 @@ import * as path from "node:path";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 
-import type { TransPair } from "../../config/configuration";
+import type { TransPair } from "../../infra/config/configuration";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { TermEntryConverter } from "./term-entry-converter";

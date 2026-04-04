@@ -1,4 +1,4 @@
-import type { TransPair } from "../../config/configuration";
+import type { TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { CurrentPrimaryUnit } from "../../core/tm/types";
 

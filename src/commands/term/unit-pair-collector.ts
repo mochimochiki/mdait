@@ -4,10 +4,10 @@
  */
 
 import * as vscode from "vscode";
-import { Configuration, type TransPair } from "../../config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { FileExplorer } from "../../utils/file-explorer";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { UnitPair } from "./unit-pair";
 
 // UnitPairをre-export（外部からUnitPairCollectorと一緒にインポートできるように）

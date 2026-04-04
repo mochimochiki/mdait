@@ -6,7 +6,7 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "${workspaceFolder}/src/test/workspace",
+        "${workspaceFolder}/src/test/unit/workspace",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--profile=mdait-debug"
       ],

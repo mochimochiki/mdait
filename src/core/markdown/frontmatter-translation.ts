@@ -1,4 +1,4 @@
-import type { Configuration } from "../../config/configuration";
+import type { Configuration } from "../../infra/config/configuration";
 import { calculateHash } from "../hash/hash-calculator";
 import type { FrontMatter } from "./front-matter";
 import { MdaitMarker } from "./mdait-marker";

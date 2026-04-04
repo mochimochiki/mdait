@@ -9,11 +9,11 @@
  * @module ui/codelens/codelens-provider
  */
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
-import { FileExplorer } from "../../utils/file-explorer";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 
 /**
  * mdaitマーカーのCodeLensを提供するプロバイダー

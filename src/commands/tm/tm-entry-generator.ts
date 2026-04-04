@@ -7,11 +7,11 @@
  */
 import type * as vscode from "vscode";
 import type { ExistingTmEntriesItem, TmCommitEntry } from "../../core/tm/types";
-import type { AIMessage, AIService } from "../../llm/ai-service";
+import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
 import type { PromptVariables } from "../../prompts/prompt-provider";
-import { Logger, formatError } from "../../utils/logger";
+import { Logger, formatError } from "../../infra/logging/logger";
 
 const logger = Logger.getInstance();
 

@@ -5,7 +5,7 @@
  */
 
 import * as vscode from "vscode";
-import type { Configuration, TransPair } from "../../config/configuration";
+import type { Configuration, TransPair } from "../../infra/config/configuration";
 
 /**
  * 現在のファイルパスから翻訳ペア候補を取得

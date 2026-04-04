@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import matter from "gray-matter";
 import * as vscode from "vscode";
-import { Configuration } from "../config/configuration";
+import { Configuration } from "../infra/config/configuration";
 import { DEFAULT_PROMPTS, type PromptId } from "./defaults";
 
 /**

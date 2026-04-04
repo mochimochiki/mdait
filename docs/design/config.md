@@ -16,7 +16,7 @@ Config層は、`.mdait/mdait.json`の読み込み、バリデーション、フ�
 - **ソース**: `.mdait/mdait.json`（ワークスペースルート配下の`.mdait`ディレクトリ）
 - **スキーマ**: `schemas/mdait-config.schema.json`による補完と検証
 
-**実装**: [`src/config/configuration.ts`](../../src/config/configuration.ts)
+**実装**: [`src/infra/config/configuration.ts`](../../src/infra/config/configuration.ts)
 
 ### オンボーディングサポート
 

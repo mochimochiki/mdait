@@ -10,7 +10,7 @@
 import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { applySimplePatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
@@ -34,9 +34,9 @@ import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { SummaryManager, type TmReferenceInfo } from "../../ui/hover/summary-manager";
-import { AIOnboarding } from "../../utils/ai-onboarding";
-import { FileExplorer } from "../../utils/file-explorer";
-import { Logger, formatError } from "../../utils/logger";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
