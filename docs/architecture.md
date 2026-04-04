@@ -226,4 +226,4 @@ npm run test:vscode  # VS Code統合テスト
 npm run watch        # 開発時の自動ビルド
 ```
 
-テスト環境: `src/test/sample-content/`（テスト用原稿）/ `src/test/workspace/`（作業ディレクトリ） — 詳細: [test.md](design/test.md)
+テスト環境: `src/test/unit/sample-content/`（テスト用原稿）/ `src/test/unit/workspace/`（作業ディレクトリ） — 詳細: [test.md](design/test.md)

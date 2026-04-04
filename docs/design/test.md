@@ -21,8 +21,8 @@
 ### 単体テスト（`npm test`）
 
 **対象**: 
-- Core層の純粋な関数（`src/test/core/**`）: 正規化、ハッシュ計算、Markdownパーサー、差分生成、TM、ユニットレジストリ等
-- Commandロジック（`src/test/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、sync-frontmatter、term-result-provider、terms-repository、tm-entry-generator、translator-retry、output-sanitizer、response-validator等。DI化によりConfiguration/PromptProviderの直接参照を排除したモジュールを含む
+- Core層の純粋な関数（`src/test/unit/core/**`）: 正規化、ハッシュ計算、Markdownパーサー、差分生成、TM、ユニットレジストリ等
+- Commandロジック（`src/test/unit/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、sync-frontmatter、term-result-provider、terms-repository、tm-entry-generator、translator-retry、output-sanitizer、response-validator等。DI化によりConfiguration/PromptProviderの直接参照を排除したモジュールを含む
 
 **スタイル**: `suite`/`test`のTDDスタイル
 
@@ -30,13 +30,13 @@
 
 **設計意図**: Core層とCommandビジネスロジック層をVS Code APIから独立させているため、副作用のない処理の入出力を高速に検証できます（[architecture.md](../architecture.md) P5参照）。
 
-- **パターンテスト**: fixture駆動でMarkdown特殊構文と見出しレベル分割を網羅的に検証（`src/test/core/markdown/parser-patterns.test.ts`）
+- **パターンテスト**: fixture駆動でMarkdown特殊構文と見出しレベル分割を網羅的に検証（`src/test/unit/core/markdown/parser-patterns.test.ts`）
 
 ### 統合テスト（`npm run test:vscode`）
 
 **対象**: 
-- GUI統合テスト（`src/test-gui/**`）: コマンドE2E、StatusTreeProvider、UI表示
-- VS Code依存のCommandテスト（`src/test/commands/**` のうちimportチェーンでvscodeに到達するもの）
+- GUI統合テスト（`src/test/gui/**`）: コマンドE2E、StatusTreeProvider、UI表示
+- VS Code依存のCommandテスト（`src/test/gui/commands/**` のうちimportチェーンでvscodeに到達するもの）
 
 **実行**: VS Code Test Runnerを使用し、E2Eを検証
 
@@ -54,7 +54,7 @@
 
 ### サンプルワークスペース
 
-**場所**: `src/test/sample-content/`
+**場所**: `src/test/unit/sample-content/`
 
 **セットアップ**: `copy-test-files`スクリプトで`sample-content`から`workspace/content`へ同期
 
@@ -86,7 +86,7 @@ sequenceDiagram
 	rect rgb(230,235,250)
 		Note over Dev,E2E: ②e2e/統合（手動）
 		Dev->>E2E: VS Code Test Runner
-		E2E-->>Dev: test-gui/** + commands/**のvscode依存テスト
+		E2E-->>Dev: test/gui/** + commands/**のvscode依存テスト
 	end
 
 	rect rgb(250,240,230)

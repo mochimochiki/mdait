@@ -10,14 +10,14 @@
 src/直下にconfig(1ファイル), utils(4), debug(1), llm(7)が散在し、新ファイルの配置基準が不明確だった。レイヤー浄化の議論でservices層(コマンド横断ロジック集約)とinfra層(プラットフォーム適応)の両方が候補に上がった。
 
 ### 決定
-infra層を新設し、config/llm/utils/debugを統合する。services層は導入しない。tools/とprompts/はトップレベルに据え置く。
+infra層を新設し、config/llm/utils/debugを統合する。services層は導入しない。lm-tools/とprompts/はトップレベルに据え置く。
 
 ### 理由
-services/に入る候補（file-handler, status-collector, prompts, file-explorer）は4つしかなく、性質がバラバラ（戦略パターン、データ収集、定数セット、ユーティリティ）で統一的な配置基準が定義できない。将来ビジネスロジックが育ったタイミングで切り出す方が「分類不能の受け皿」化を防げる。tools/はアーキテクチャ上commandsと並列のエントリポイント層であり、commands配下に入れると呼び出し側/呼ばれる側が混在する。
+services/に入る候補（file-handler, status-collector, prompts, file-explorer）は4つしかなく、性質がバラバラ（戦略パターン、データ収集、定数セット、ユーティリティ）で統一的な配置基準が定義できない。将来ビジネスロジックが育ったタイミングで切り出す方が「分類不能の受け皿」化を防げる。lm-tools/はアーキテクチャ上commandsと並列のエントリポイント層であり、commands配下に入れると呼び出し側/呼ばれる側が混在する。
 
 ### 備考
 - 却下案: services/層を同時に導入 → 責務が曖昧で「何を入れるか」の判断基準が不明確
-- 却下案: tools/をcommands/tools/に移動 → エントリポイント層の並列性が崩れる
+- 却下案: lm-tools/をcommands/tools/に移動 → エントリポイント層の並列性が崩れる
 - 却下案: infra/をフラット配置（サブフォルダなし）→ ユーザーの一貫性優先の判断でサブフォルダ化
 - 詳細: [260404-01_src-directory-restructure.md](../.tasks/done/260404-01_src-directory-restructure.md)
 
