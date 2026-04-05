@@ -186,5 +186,6 @@
   "Off": "Off",
   "Patch application failed. Full re-translation may overwrite manual edits. Continue?": "パッチ適用に失敗しました。全文再翻訳を行うと手修正が失われる可能性があります。続行しますか？",
   "Continue": "続行",
-  "Skip": "スキップ"
+  "Skip": "スキップ",
+  "File size limit exceeded, translation skipped": "ファイルサイズ上限超過のためスキップ"
 }

@@ -90,6 +90,8 @@ prompts: ["trans.translate", "term.detect"]
 |---|---|---|
 | `trans.translate` | Markdown翻訳 | trans |
 | `trans.revisePatch` | 改訂時の差分パッチ翻訳 | trans（revise時） |
+| `trans.translatePlain` | 非MDファイル翻訳 | trans（非MDファイル） |
+| `trans.revisePatchPlain` | 非MDファイルの改訂パッチ翻訳 | trans（非MDファイルrevise時） |
 | `term.detect` | テキストからの用語検出 | term.detect |
 | `term.extractFromTranslations` | 対訳ペアからの用語抽出 | term.expand |
 | `term.translateTerms` | 用語のAI翻訳 | term.expand |

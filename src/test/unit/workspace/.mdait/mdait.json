@@ -4,7 +4,8 @@
       "sourceLang": "ja",
       "sourceDir": "content/ja",
       "targetLang": "en",
-      "targetDir": "content/en"
+      "targetDir": "content/en",
+      "extensions": [".txt", ".csv"]
     },
     {
       "sourceLang": "en",

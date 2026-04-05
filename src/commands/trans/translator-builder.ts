@@ -1,7 +1,11 @@
 import { Configuration } from "../../infra/config/configuration";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptProvider } from "../../prompts";
-import { AITranslator, type Translator } from "./translator";
+import {
+	AITranslator,
+	PLAIN_PROMPT_CONFIG,
+	type Translator,
+} from "./translator";
 
 /**
  * 翻訳サービスの構築を担当するビルダークラス。
@@ -9,7 +13,7 @@ import { AITranslator, type Translator } from "./translator";
  */
 export class TranslatorBuilder {
 	/**
-	 * 設定に基づいて翻訳サービスのインスタンスを構築します。
+	 * Markdown用翻訳サービスのインスタンスを構築します。
 	 *
 	 * @returns Translator のインスタンス。
 	 * @throws サポートされていないプロバイダが指定された場合。
@@ -18,8 +22,28 @@ export class TranslatorBuilder {
 		const aiService = await new AIServiceBuilder().build();
 		const config = Configuration.getInstance();
 		const promptProvider = PromptProvider.getInstance();
-		return new AITranslator(aiService, config.getTermsPrimaryLang(), (id, variables) =>
-			promptProvider.getPrompt(id, variables),
+		return new AITranslator(
+			aiService,
+			config.getTermsPrimaryLang(),
+			(id, variables) => promptProvider.getPrompt(id, variables),
+		);
+	}
+
+	/**
+	 * 非MDファイル用翻訳サービスのインスタンスを構築します。
+	 * PlainFileHandler用のプロンプト設定を使用します。
+	 *
+	 * @returns Translator のインスタンス。
+	 */
+	public async buildPlain(): Promise<Translator> {
+		const aiService = await new AIServiceBuilder().build();
+		const config = Configuration.getInstance();
+		const promptProvider = PromptProvider.getInstance();
+		return new AITranslator(
+			aiService,
+			config.getTermsPrimaryLang(),
+			(id, variables) => promptProvider.getPrompt(id, variables),
+			PLAIN_PROMPT_CONFIG,
 		);
 	}
 }

@@ -40,6 +40,8 @@ export interface TransConfig {
 	contextSize: number;
 	/** 翻訳失敗時のリトライ上限 */
 	retryLimit: number;
+	/** 非MDファイルの最大サイズ（バイト）。超過時はスキップ */
+	maxFileSize: number;
 	// 翻訳固有設定の拡張用
 	[key: string]: unknown;
 }
@@ -65,6 +67,7 @@ export interface TransPair {
 	targetDir: string;
 	sourceLang: string;
 	targetLang: string;
+	extensions?: string[];
 }
 
 /**
@@ -106,6 +109,7 @@ interface MdaitConfig {
 		};
 		contextSize?: number;
 		retryLimit?: number;
+		maxFileSize?: number;
 	};
 	terms?: {
 		filename?: string;
@@ -181,6 +185,7 @@ export class Configuration {
 		},
 		contextSize: 1,
 		retryLimit: 1,
+		maxFileSize: 51200,
 	};
 	/**
 	 * 用語集設定
@@ -381,7 +386,9 @@ export class Configuration {
 						this.ai.openai = {};
 					}
 					if (config.ai.openai.apiKey) {
-						this.ai.openai.apiKey = this.expandEnvironmentVariables(config.ai.openai.apiKey);
+						this.ai.openai.apiKey = this.expandEnvironmentVariables(
+							config.ai.openai.apiKey,
+						);
 					}
 					if (config.ai.openai.baseURL) {
 						this.ai.openai.baseURL = config.ai.openai.baseURL;
@@ -401,10 +408,12 @@ export class Configuration {
 						};
 					}
 					if (config.ai.debug.enableStatsLogging !== undefined) {
-						this.ai.debug.enableStatsLogging = config.ai.debug.enableStatsLogging;
+						this.ai.debug.enableStatsLogging =
+							config.ai.debug.enableStatsLogging;
 					}
 					if (config.ai.debug.logPromptAndResponse !== undefined) {
-						this.ai.debug.logPromptAndResponse = config.ai.debug.logPromptAndResponse;
+						this.ai.debug.logPromptAndResponse =
+							config.ai.debug.logPromptAndResponse;
 					}
 				}
 			}
@@ -412,13 +421,15 @@ export class Configuration {
 			// 翻訳設定の読み込み
 			if (config.trans?.markdown) {
 				if (config.trans.markdown.skipCodeBlocks !== undefined) {
-					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
+					this.trans.markdown.skipCodeBlocks =
+						config.trans.markdown.skipCodeBlocks;
 				}
 			}
 			if (config.trans?.frontmatter?.keys !== undefined) {
 				if (Array.isArray(config.trans.frontmatter.keys)) {
 					this.trans.frontmatter.keys = config.trans.frontmatter.keys.filter(
-						(key): key is string => typeof key === "string" && key.trim().length > 0,
+						(key): key is string =>
+							typeof key === "string" && key.trim().length > 0,
 					);
 				}
 			}
@@ -426,8 +437,14 @@ export class Configuration {
 				this.trans.contextSize = config.trans.contextSize;
 			}
 			if (config.trans?.retryLimit !== undefined) {
-				const normalizedRetryLimit = Math.min(5, Math.max(1, config.trans.retryLimit));
+				const normalizedRetryLimit = Math.min(
+					5,
+					Math.max(1, config.trans.retryLimit),
+				);
 				this.trans.retryLimit = normalizedRetryLimit;
+			}
+			if (config.trans?.maxFileSize !== undefined) {
+				this.trans.maxFileSize = Math.max(1024, config.trans.maxFileSize);
 			}
 
 			// 用語集設定の読み込み
@@ -453,13 +470,19 @@ export class Configuration {
 					this.tm.enabled = config.tm.enabled;
 				}
 				if (config.tm.maxReferences !== undefined) {
-					this.tm.maxReferences = Math.max(1, Math.min(20, config.tm.maxReferences));
+					this.tm.maxReferences = Math.max(
+						1,
+						Math.min(20, config.tm.maxReferences),
+					);
 				}
 				if (config.tm.retryLimit !== undefined) {
 					this.tm.retryLimit = Math.min(5, Math.max(1, config.tm.retryLimit));
 				}
 				if (config.tm.minQueryLength !== undefined) {
-					this.tm.minQueryLength = Math.max(1, Math.min(100, config.tm.minQueryLength));
+					this.tm.minQueryLength = Math.max(
+						1,
+						Math.min(100, config.tm.minQueryLength),
+					);
 				}
 			}
 
@@ -482,16 +505,22 @@ export class Configuration {
 	public validate(): string | null {
 		// 翻訳ペアが設定されているか
 		if (!this.transPairs || this.transPairs.length === 0) {
-			return vscode.l10n.t("Translation pairs (mdait.transPairs) are not configured.");
+			return vscode.l10n.t(
+				"Translation pairs (mdait.transPairs) are not configured.",
+			);
 		}
 
 		// 各翻訳ペアのディレクトリが設定されているか
 		for (const pair of this.transPairs) {
 			if (!pair.sourceDir) {
-				return vscode.l10n.t("Source directory (sourceDir) is not set in translation pair.");
+				return vscode.l10n.t(
+					"Source directory (sourceDir) is not set in translation pair.",
+				);
 			}
 			if (!pair.targetDir) {
-				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
+				return vscode.l10n.t(
+					"Target directory (targetDir) is not set in translation pair.",
+				);
 			}
 		}
 

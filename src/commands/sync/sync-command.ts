@@ -2,8 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { TransPair } from "../../infra/config/configuration";
-import { Configuration } from "../../infra/config/configuration";
+import { FileStateStore } from "../../core/file-state/file-state-store";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
@@ -18,8 +17,13 @@ import { markdownParser } from "../../core/markdown/parser";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { FileExplorer } from "../../infra/workspace/file-explorer";
+import type { TransPair } from "../../infra/config/configuration";
+import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import type { FileSyncResult } from "../file-handler/file-handler";
+import { getFileHandler } from "../file-handler/file-handler-factory";
 import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
@@ -56,11 +60,15 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
 		if (validationError) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Configuration error: {0}", validationError));
+			vscode.window.showErrorMessage(
+				vscode.l10n.t("Configuration error: {0}", validationError),
+			);
 			return;
 		}
 
-		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
+		const pairs = SelectionState.getInstance().filterTransPairs(
+			config.transPairs,
+		);
 		logger.info("sync", "Sync started", {
 			pairCount: pairs.length,
 		});
@@ -74,18 +82,44 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
 
+		// FileStateStoreをロード
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			FileStateStore.getInstance().load(mdaitDir);
+		}
+
+		// orphanクリーンアップ用: 全pairの有効ターゲットパスを収集
+		const validTargetPaths = new Set<string>();
+
 		// TransPairごとに処理
 		for (const pair of pairs) {
-			// Source Markdownファイル一覧を取得
+			// ソースファイル一覧を取得（extensions対応）
 			const fileExplorer = new FileExplorer();
-			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config);
+			const files = await fileExplorer.getSourceFiles(
+				pair.sourceDir,
+				config,
+				pair.extensions,
+			);
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
-					vscode.l10n.t("[{0} -> {1}] No files found for synchronization.", pair.sourceDir, pair.targetDir),
+					vscode.l10n.t(
+						"[{0} -> {1}] No files found for synchronization.",
+						pair.sourceDir,
+						pair.targetDir,
+					),
 				);
 				continue;
 			}
-			const sourceMdFiles = files.filter((f) => path.extname(f).toLowerCase() === ".md");
+
+			// 有効ターゲットパスを収集（非MDファイルのorphanクリーンアップ用）
+			for (const file of files) {
+				if (path.extname(file).toLowerCase() !== ".md") {
+					const tgt = fileExplorer.getTargetPath(file, pair);
+					if (tgt) {
+						validTargetPaths.add(fileExplorer.normalizePath(tgt));
+					}
+				}
+			}
 
 			// CPUコア数に基づく並列処理制限
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
@@ -95,36 +129,42 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			const worker = async () => {
 				while (true) {
 					const i = index++;
-					if (i >= sourceMdFiles.length) break;
-					const sourceFile = sourceMdFiles[i];
+					if (i >= files.length) break;
+					const sourceFile = files[i];
 					try {
 						// TargetPathを決定
 						const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
 						if (!targetFile) {
-							logger.warn("sync", "Target path could not be determined", { sourceFile });
+							logger.warn("sync", "Target path could not be determined", {
+								sourceFile,
+							});
 							continue;
 						}
 
-						// 同期を実行（中核プロセス）
-						let diffResult = null;
+						// FileHandlerを取得してdispatch
+						const handler = getFileHandler(sourceFile);
+						let syncResult: FileSyncResult;
 						const isExistingTarget = fs.existsSync(targetFile);
 						if (isExistingTarget) {
-							diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+							syncResult = await handler.sync(sourceFile, targetFile);
 						} else {
-							diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
+							syncResult = await handler.syncNew(sourceFile, targetFile);
 						}
 
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
-						const hasChanges = diffResult.added > 0 || diffResult.modified > 0 || diffResult.deleted > 0;
+						const hasChanges =
+							syncResult.added > 0 ||
+							syncResult.modified > 0 ||
+							syncResult.deleted > 0;
 						if (hasChanges) {
 							logger.info("sync", "File synced", {
 								pair: `${pair.sourceDir} -> ${pair.targetDir}`,
 								file: path.basename(sourceFile),
-								added: diffResult.added,
-								modified: diffResult.modified,
-								deleted: diffResult.deleted,
-								unchanged: diffResult.unchanged,
+								added: syncResult.added,
+								modified: syncResult.modified,
+								deleted: syncResult.deleted,
+								unchanged: syncResult.unchanged,
 							});
 						} else {
 							logger.debug("sync", "File synced (no changes)", {
@@ -136,36 +176,58 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 						if (fs.existsSync(targetFile)) {
 							await statusManager.refreshFileStatus(targetFile);
 						} else {
-							logger.debug("sync", "Skipping target status refresh (file not created)", {
-								targetFile,
-							});
+							logger.debug(
+								"sync",
+								"Skipping target status refresh (file not created)",
+								{
+									targetFile,
+								},
+							);
 						}
 						successCount++;
 						totalFileCount++;
-						totalAdded += diffResult.added;
-						totalModified += diffResult.modified;
-						totalDeleted += diffResult.deleted;
-						totalUnchanged += diffResult.unchanged;
-						totalRevisionsNeeded += diffResult.revisionsNeeded ?? 0;
+						totalAdded += syncResult.added;
+						totalModified += syncResult.modified;
+						totalDeleted += syncResult.deleted;
+						totalUnchanged += syncResult.unchanged;
+						totalRevisionsNeeded += syncResult.revisionsNeeded;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
 							file: sourceFile,
 							...formatError(error),
 						});
-						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
+						await statusManager.changeFileStatusWithError(
+							sourceFile,
+							error as Error,
+						);
 						errorCount++;
 					}
 				}
 			};
 
 			// ワーカー起動と完了待機
-			const workers = Array.from({ length: Math.min(parallelCpuLimit, sourceMdFiles.length) }, () => worker());
+			const workers = Array.from(
+				{ length: Math.min(parallelCpuLimit, files.length) },
+				() => worker(),
+			);
 			await Promise.all(workers);
 
 			// スナップショットバッファをフラッシュ
 			const unitRegistryManager = UnitRegistryManager.getInstance();
 			await unitRegistryManager.flushBuffer();
+		}
+
+		// FileStateStoreのorphanクリーンアップ＋保存
+		if (mdaitDir) {
+			const fileStateStore = FileStateStore.getInstance();
+			const orphansRemoved = fileStateStore.cleanupOrphans(validTargetPaths);
+			if (orphansRemoved > 0) {
+				logger.info("sync", "Cleaned up orphan file-state entries", {
+					orphansRemoved,
+				});
+			}
+			fileStateStore.save(mdaitDir);
 		}
 
 		// 全ファイル処理完了後、GC処理
@@ -187,7 +249,11 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		});
 
 		vscode.window.showInformationMessage(
-			vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
+			vscode.l10n.t(
+				"Synchronization completed: {0} succeeded, {1} failed",
+				successCount,
+				errorCount,
+			),
 		);
 
 		return {
@@ -209,7 +275,10 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			...formatError(error),
 		});
 		vscode.window.showErrorMessage(
-			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
+			vscode.l10n.t(
+				"An error occurred during synchronization: {0}",
+				(error as Error).message,
+			),
 		);
 		return undefined;
 	}
@@ -226,7 +295,9 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
 		if (validationError) {
-			logger.warn("sync", "Configuration error during file save sync", { validationError });
+			logger.warn("sync", "Configuration error during file save sync", {
+				validationError,
+			});
 			return;
 		}
 
@@ -240,7 +311,9 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		let matchedPair: TransPair | null = null;
 
 		// 選択された TransPair のみを処理対象とする
-		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
+		const pairs = SelectionState.getInstance().filterTransPairs(
+			config.transPairs,
+		);
 
 		for (const pair of pairs) {
 			if (fileExplorer.isSourceFile(filePath, config)) {
@@ -269,31 +342,49 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 			return;
 		}
 
-		// 同期処理を実行
-		let diffResult: DiffResult;
+		// FileStateStoreの遅延ロード（非MDファイル対応）
+		const handler = getFileHandler(sourceFile);
+		if (handler.fileType === "plain") {
+			const mdaitDir = await ensureMdaitDir();
+			if (mdaitDir) {
+				FileStateStore.getInstance().ensureLoaded(mdaitDir);
+			}
+		}
+
+		// FileHandlerを使って同期処理を実行
+		let syncResult: FileSyncResult;
 		const isExistingFile = fs.existsSync(targetFile);
 		if (isExistingFile) {
-			diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+			syncResult = await handler.sync(sourceFile, targetFile);
 		} else {
-			diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
+			syncResult = await handler.syncNew(sourceFile, targetFile);
 		}
 
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
+
+		// 非MDファイルの場合はFileStateStoreを保存
+		if (handler.fileType === "plain") {
+			const mdaitDir = await ensureMdaitDir();
+			if (mdaitDir) {
+				FileStateStore.getInstance().save(mdaitDir);
+			}
+		}
 
 		// ステータスを更新
 		await statusManager.refreshFileStatus(sourceFile);
 		await statusManager.refreshFileStatus(targetFile);
 
 		// 変化の有無でログレベルを切り替え
-		const hasChanges = diffResult.added > 0 || diffResult.modified > 0 || diffResult.deleted > 0;
+		const hasChanges =
+			syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;
 		if (hasChanges) {
 			logger.info("sync", "File sync completed", {
 				file: path.basename(filePath),
-				added: diffResult.added,
-				modified: diffResult.modified,
-				deleted: diffResult.deleted,
-				unchanged: diffResult.unchanged,
+				added: syncResult.added,
+				modified: syncResult.modified,
+				deleted: syncResult.deleted,
+				unchanged: syncResult.unchanged,
 			});
 		} else {
 			logger.debug("sync", "File sync completed (no changes)", {
@@ -322,22 +413,35 @@ export async function syncSingleFile(filePath: string): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
-async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
+export async function syncNew_CoreProc(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): Promise<DiffResult> {
 	const fileExplorer = new FileExplorer();
 
 	// 1. ソースファイル読み込み＆パース
-	const document = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
+	const document = await vscode.workspace.fs.readFile(
+		vscode.Uri.file(sourceFile),
+	);
 	const decoder = new TextDecoder("utf-8");
 	const sourceContent = decoder.decode(document);
 	const source = markdownParser.parse(sourceContent, config);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
-	const sourceFrontHash = calculateFrontmatterHash(source.frontMatter, frontmatterKeys);
+	const sourceFrontHash = calculateFrontmatterHash(
+		source.frontMatter,
+		frontmatterKeys,
+	);
 	const shouldSyncFrontmatter = sourceFrontHash !== null;
 
 	// フロントマターのみのファイルは、frontmatter翻訳が無効なら処理しない
 	if (source.units.length === 0 && !shouldSyncFrontmatter) {
-		logger.debug("sync", "Skipping empty file (no units, no frontmatter translation keys)", { sourceFile });
+		logger.debug(
+			"sync",
+			"Skipping empty file (no units, no frontmatter translation keys)",
+			{ sourceFile },
+		);
 		return {
 			diffs: [],
 			added: 0,
@@ -351,7 +455,11 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	ensureMdaitMarkerHash(source.units);
 
 	// 2.5. frontmatterマーカーを同期（syncFrontmatterMarkersで統一処理）
-	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, undefined, frontmatterKeys);
+	const frontmatterSync = syncFrontmatterMarkers(
+		source.frontMatter,
+		undefined,
+		frontmatterKeys,
+	);
 
 	// 3. target用ユニットを生成（from:hash, need:translateを付与）
 	const targetUnits = source.units.map((srcUnit) => {
@@ -371,13 +479,19 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 	const encoder = new TextEncoder();
 	const targetContent = markdownParser.stringify(targetDoc);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
+	await vscode.workspace.fs.writeFile(
+		vscode.Uri.file(targetFile),
+		encoder.encode(targetContent),
+	);
 
 	// 4.5. スナップショット保存（初回sync時も保存）
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
+			unitRegistryManager.saveUnitRegistry(
+				srcUnit.marker.hash,
+				srcUnit.content,
+			);
 		}
 	}
 
@@ -386,11 +500,18 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
 		frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 		units: source.units,
 	});
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
+	await vscode.workspace.fs.writeFile(
+		vscode.Uri.file(sourceFile),
+		encoder.encode(updatedSourceContent),
+	);
 
 	// 6. DiffResultを返す
 	return {
-		diffs: source.units.map((u) => ({ type: DiffType.ADDED, source: u, target: null })),
+		diffs: source.units.map((u) => ({
+			type: DiffType.ADDED,
+			source: u,
+			target: null,
+		})),
 		added: source.units.length,
 		modified: 0,
 		deleted: 0,
@@ -416,7 +537,11 @@ async function syncNew_CoreProc(sourceFile: string, targetFile: string, config: 
  * @param config 設定
  * @returns 差分検出結果
  */
-async function sync_CoreProc(sourceFile: string, targetFile: string, config: Configuration): Promise<DiffResult> {
+export async function sync_CoreProc(
+	sourceFile: string,
+	targetFile: string,
+	config: Configuration,
+): Promise<DiffResult> {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
@@ -426,8 +551,12 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// ファイル読み込み
 	const decoder = new TextDecoder("utf-8");
-	const sourceDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
-	const targetDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile));
+	const sourceDoc = await vscode.workspace.fs.readFile(
+		vscode.Uri.file(sourceFile),
+	);
+	const targetDoc = await vscode.workspace.fs.readFile(
+		vscode.Uri.file(targetFile),
+	);
 	const sourceContent = decoder.decode(sourceDoc);
 	const targetContent = decoder.decode(targetDoc);
 
@@ -436,11 +565,23 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	const target = markdownParser.parse(targetContent, config);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
-	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
+	const frontmatterSync = syncFrontmatterMarkers(
+		source.frontMatter,
+		target.frontMatter,
+		frontmatterKeys,
+	);
 
 	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
-	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
-		logger.debug("sync", "Skipping empty file (no units, no frontmatter changes)", { sourceFile });
+	if (
+		source.units.length === 0 &&
+		target.units.length === 0 &&
+		!frontmatterSync.processed
+	) {
+		logger.debug(
+			"sync",
+			"Skipping empty file (no units, no frontmatter changes)",
+			{ sourceFile },
+		);
 		return {
 			diffs: [],
 			added: 0,
@@ -458,13 +599,21 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 	const matchResult = sectionMatcher.match(source.units, target.units);
 
 	// ユニットのハッシュを更新
-	const revisionsNeeded = updateSectionHashes(matchResult, config, sourceFile, targetFile);
+	const revisionsNeeded = updateSectionHashes(
+		matchResult,
+		config,
+		sourceFile,
+		targetFile,
+	);
 
 	// sourceのスナップショット保存
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
+			unitRegistryManager.saveUnitRegistry(
+				srcUnit.marker.hash,
+				srcUnit.content,
+			);
 		}
 	}
 
@@ -492,7 +641,10 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 
 	// ファイル出力
 	const encoder = new TextEncoder();
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
+	await vscode.workspace.fs.writeFile(
+		vscode.Uri.file(targetFile),
+		encoder.encode(syncedContent),
+	);
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
@@ -501,7 +653,10 @@ async function sync_CoreProc(sourceFile: string, targetFile: string, config: Con
 		units: source.units,
 	});
 
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
+	await vscode.workspace.fs.writeFile(
+		vscode.Uri.file(sourceFile),
+		encoder.encode(updatedSourceContent),
+	);
 
 	return diffResult;
 }
@@ -547,7 +702,12 @@ function updateSectionHashes(
 			const targetHash = calculateHash(target.content);
 
 			// 共通ロジックを使用してペア同期
-			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker);
+			const result = syncMarkerPair(
+				sourceHash,
+				targetHash,
+				source.marker,
+				target.marker,
+			);
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
 			if (result.targetMarker.needsRevision()) {

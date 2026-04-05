@@ -10,6 +10,7 @@ suite("sync command TM responsibility", () => {
 		);
 		const content = fs.readFileSync(syncCommandPath, "utf-8");
 		assert.strictEqual(content.includes("tmOptimize"), false);
-		assert.strictEqual(content.includes("cleanup"), false);
+		assert.strictEqual(content.includes("tmCleanup"), false);
+		assert.strictEqual(content.includes("tm-store"), false);
 	});
 });

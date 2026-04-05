@@ -108,12 +108,37 @@ export interface Translator {
 }
 
 /**
+ * Translatorが使用するプロンプトIDの設定
+ * デフォルトはMarkdown用プロンプト
+ */
+export interface TranslatorPromptConfig {
+	translatePromptId: PromptId;
+	revisePatchPromptId: PromptId;
+}
+
+/** Markdown用のデフォルトプロンプト設定 */
+const DEFAULT_MD_PROMPT_CONFIG: TranslatorPromptConfig = {
+	translatePromptId: PromptIds.TRANS_TRANSLATE,
+	revisePatchPromptId: PromptIds.TRANS_REVISE_PATCH,
+};
+
+/** 非MDファイル用のプロンプト設定 */
+export const PLAIN_PROMPT_CONFIG: TranslatorPromptConfig = {
+	translatePromptId: PromptIds.TRANS_TRANSLATE_PLAIN,
+	revisePatchPromptId: PromptIds.TRANS_REVISE_PATCH_PLAIN,
+};
+
+/**
  * AI翻訳サービス実装
  */
 export class AITranslator implements Translator {
 	private readonly aiService: AIService;
 	private readonly primaryLang: string;
-	private readonly getPrompt: (id: PromptId, variables?: PromptVariables) => string;
+	private readonly getPrompt: (
+		id: PromptId,
+		variables?: PromptVariables,
+	) => string;
+	private readonly promptConfig: TranslatorPromptConfig;
 	/** 最大リトライ回数 */
 	private readonly maxRetries = 2;
 
@@ -121,10 +146,12 @@ export class AITranslator implements Translator {
 		aiService: AIService,
 		primaryLang: string,
 		getPrompt: (id: PromptId, variables?: PromptVariables) => string,
+		promptConfig?: TranslatorPromptConfig,
 	) {
 		this.aiService = aiService;
 		this.primaryLang = primaryLang;
 		this.getPrompt = getPrompt;
+		this.promptConfig = promptConfig ?? DEFAULT_MD_PROMPT_CONFIG;
 	}
 
 	/**
@@ -159,10 +186,13 @@ export class AITranslator implements Translator {
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
-		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+		const contextLang =
+			primaryLang === sourceLang || primaryLang === targetLang
+				? primaryLang
+				: sourceLang;
 
 		// systemPrompt と AIMessage[] の構築
-		const systemPrompt = this.getPrompt(PromptIds.TRANS_TRANSLATE, {
+		const systemPrompt = this.getPrompt(this.promptConfig.translatePromptId, {
 			sourceLang,
 			targetLang,
 			contextLang,
@@ -171,6 +201,7 @@ export class AITranslator implements Translator {
 			previousTranslation: context.previousTranslation,
 			sourceDiff: context.sourceDiff,
 			tmReferences: context.tmReferences,
+			fileExtension: context.fileExtension,
 		});
 
 		const messages: AIMessage[] = [
@@ -216,9 +247,12 @@ export class AITranslator implements Translator {
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
-		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
+		const contextLang =
+			primaryLang === sourceLang || primaryLang === targetLang
+				? primaryLang
+				: sourceLang;
 
-		const systemPrompt = this.getPrompt(PromptIds.TRANS_REVISE_PATCH, {
+		const systemPrompt = this.getPrompt(this.promptConfig.revisePatchPromptId, {
 			sourceLang,
 			targetLang,
 			contextLang,
@@ -227,6 +261,7 @@ export class AITranslator implements Translator {
 			previousTranslation: context.previousTranslation,
 			sourceDiff: context.sourceDiff,
 			tmReferences: context.tmReferences,
+			fileExtension: context.fileExtension,
 		});
 
 		const messages: AIMessage[] = [
@@ -268,15 +303,26 @@ export class AITranslator implements Translator {
 			}
 
 			// リトライ時は補足プロンプトを追加
-			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const retryPromptSuffix =
+				attempt > 0 && lastError
+					? this.buildRetryPromptSuffix(lastError, attempt)
+					: "";
 			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
 
-			lastRawResponse = await this.aiService.sendMessage(finalSystemPrompt, messages, cancellationToken);
+			lastRawResponse = await this.aiService.sendMessage(
+				finalSystemPrompt,
+				messages,
+				cancellationToken,
+			);
 			const validation = validateTranslationResponse(lastRawResponse);
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
-				return this.processValidTranslationResponse(validation.parsed, codeBlocks, placeholders);
+				return this.processValidTranslationResponse(
+					validation.parsed,
+					codeBlocks,
+					placeholders,
+				);
 			}
 
 			lastError = validation.error;
@@ -304,13 +350,20 @@ export class AITranslator implements Translator {
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts", {
 			totalAttempts: this.maxRetries + 1,
-			lastError: lastError ? formatError(lastError) : "No error details available",
+			lastError: lastError
+				? formatError(lastError)
+				: "No error details available",
 			unitHash: unitContext?.unitHash,
 			title: unitContext?.title,
 		});
 
 		// フォールバック処理
-		return this.createTranslationFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);
+		return this.createTranslationFallbackResult(
+			lastRawResponse,
+			codeBlocks,
+			placeholders,
+			lastError,
+		);
 	}
 
 	/**
@@ -334,15 +387,26 @@ export class AITranslator implements Translator {
 			}
 
 			// リトライ時は補足プロンプトを追加
-			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const retryPromptSuffix =
+				attempt > 0 && lastError
+					? this.buildRetryPromptSuffix(lastError, attempt)
+					: "";
 			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
 
-			lastRawResponse = await this.aiService.sendMessage(finalSystemPrompt, messages, cancellationToken);
+			lastRawResponse = await this.aiService.sendMessage(
+				finalSystemPrompt,
+				messages,
+				cancellationToken,
+			);
 			const validation = validateRevisionPatchResponse(lastRawResponse);
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
-				return this.processValidRevisionPatchResponse(validation.parsed, codeBlocks, placeholders);
+				return this.processValidRevisionPatchResponse(
+					validation.parsed,
+					codeBlocks,
+					placeholders,
+				);
 			}
 
 			lastError = validation.error;
@@ -368,15 +432,26 @@ export class AITranslator implements Translator {
 
 		// リトライ上限到達後のエラーログ
 		const logger = Logger.getInstance();
-		logger.error("trans", "Translation failed after all retry attempts (revision patch)", {
-			totalAttempts: this.maxRetries + 1,
-			lastError: lastError ? formatError(lastError) : "No error details available",
-			unitHash: unitContext?.unitHash,
-			title: unitContext?.title,
-		});
+		logger.error(
+			"trans",
+			"Translation failed after all retry attempts (revision patch)",
+			{
+				totalAttempts: this.maxRetries + 1,
+				lastError: lastError
+					? formatError(lastError)
+					: "No error details available",
+				unitHash: unitContext?.unitHash,
+				title: unitContext?.title,
+			},
+		);
 
 		// フォールバック処理
-		return this.createRevisionPatchFallbackResult(lastRawResponse, codeBlocks, placeholders, lastError);
+		return this.createRevisionPatchFallbackResult(
+			lastRawResponse,
+			codeBlocks,
+			placeholders,
+			lastError,
+		);
 	}
 
 	/**
@@ -448,7 +523,10 @@ export class AITranslator implements Translator {
 		return {
 			translatedText: sanitized.text,
 			termSuggestions: [],
-			warnings: [`AI response format was unexpected: ${error?.message ?? "unknown error"}`, ...sanitized.warnings],
+			warnings: [
+				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
+				...sanitized.warnings,
+			],
 		};
 	}
 
@@ -471,14 +549,20 @@ export class AITranslator implements Translator {
 		return {
 			targetPatch: sanitized.text,
 			termSuggestions: [],
-			warnings: [`AI response format was unexpected: ${error?.message ?? "unknown error"}`, ...sanitized.warnings],
+			warnings: [
+				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
+				...sanitized.warnings,
+			],
 		};
 	}
 
 	/**
 	 * リトライ用補足プロンプト生成
 	 */
-	private buildRetryPromptSuffix(error: ValidationError, attemptNumber: number): string {
+	private buildRetryPromptSuffix(
+		error: ValidationError,
+		attemptNumber: number,
+	): string {
 		return `
 
 RETRY INSTRUCTION (Attempt ${attemptNumber}):

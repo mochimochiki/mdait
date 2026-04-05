@@ -37,6 +37,12 @@ export class TranslationContext {
 	tmReferences?: string;
 
 	/**
+	 * ファイル拡張子（非MDファイル翻訳時のプロンプト変数用）。
+	 * 例: ".csv", ".txt", ".tsv"
+	 */
+	fileExtension?: string;
+
+	/**
 	 * 周辺テキストを結合した文字列を取得
 	 * @returns 前後のユニットを結合した文字列（存在する場合）
 	 */

@@ -1,11 +1,17 @@
 ﻿import * as assert from "node:assert";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { StatusCollector } from "../../../../commands/file-handler/status-collector";
 import { Status } from "../../../../core/status/status-item";
 import { StatusManager } from "../../../../core/status/status-manager";
 import { Configuration } from "../../../../infra/config/configuration";
 
 suite("StatusTreeProvider Test Suite", () => {
+	suiteSetup(() => {
+		const statusManager = StatusManager.getInstance();
+		statusManager.setCollector(new StatusCollector());
+	});
+
 	test("StatusManagerが正しくファイル状況を収集できる", async () => {
 		const statusManager = StatusManager.getInstance();
 		Configuration.dispose();

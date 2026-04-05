@@ -1,6 +1,6 @@
 {
   "ui": "tdd",
   "recursive": true,
-  "require": ["ts-node/register"],
+  "require": ["./src/test/unit/__mocks__/register-vscode-mock.js", "ts-node/register"],
   "timeout": 10000
 }

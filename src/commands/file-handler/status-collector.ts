@@ -2,24 +2,30 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../infra/config/configuration";
-import { FileExplorer } from "../../infra/workspace/file-explorer";
-import { getFrontmatterTranslationKeys, parseFrontmatterMarker } from "../markdown/frontmatter-translation";
-import type { MdaitUnit } from "../markdown/mdait-unit";
-import { MarkdownItParser } from "../markdown/parser";
+import { FileStateStore } from "../../core/file-state/file-state-store";
+import {
+	getFrontmatterTranslationKeys,
+	parseFrontmatterMarker,
+} from "../../core/markdown/frontmatter-translation";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { MarkdownItParser } from "../../core/markdown/parser";
+import type { StatusCollectorPort } from "../../core/status/status-collector-port";
 import {
 	type FileStatusItem,
 	type FrontmatterStatusItem,
 	Status,
 	StatusItemType,
 	type UnitStatusItem,
-} from "./status-item";
-import { StatusItemTree } from "./status-item-tree";
+} from "../../core/status/status-item";
+import { StatusItemTree } from "../../core/status/status-item-tree";
+import { Configuration } from "../../infra/config/configuration";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { getFileHandler } from "./file-handler-factory";
 
 /**
  * ファイルの翻訳状況を収集するクラス
  */
-export class StatusCollector {
+export class StatusCollector implements StatusCollectorPort {
 	/**
 	 * ファイルシステム操作とMarkdownパースを行うためのユーティリティ
 	 */
@@ -56,12 +62,20 @@ export class StatusCollector {
 
 		try {
 			// 重複のないディレクトリリストを取得
-			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(this.config);
+			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(
+				this.config,
+			);
+			const dirExtensions = this.collectDirectoryExtensions();
 			const files: FileStatusItem[] = [];
 
 			// sourceディレクトリからsource情報を収集
 			for (const sourceDir of sourceDirs) {
-				const sourceDirItems = await this.collectAllFromDirectory(sourceDir, this.config);
+				const exts = dirExtensions.get(sourceDir);
+				const sourceDirItems = await this.collectAllFromDirectory(
+					sourceDir,
+					this.config,
+					exts,
+				);
 				// sort
 				sourceDirItems.sort((a, b) => a.filePath.localeCompare(b.filePath));
 				files.push(...sourceDirItems);
@@ -69,7 +83,12 @@ export class StatusCollector {
 
 			// targetディレクトリから翻訳状況を収集
 			for (const targetDir of targetDirs) {
-				const targetDirItems = await this.collectAllFromDirectory(targetDir, this.config);
+				const exts = dirExtensions.get(targetDir);
+				const targetDirItems = await this.collectAllFromDirectory(
+					targetDir,
+					this.config,
+					exts,
+				);
 				// sort
 				targetDirItems.sort((a, b) => a.filePath.localeCompare(b.filePath));
 				files.push(...targetDirItems);
@@ -79,7 +98,12 @@ export class StatusCollector {
 			statusItemTree.buildTree(files, allDirs);
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
-			vscode.window.showErrorMessage(vscode.l10n.t("Error collecting file statuses: {0}", (error as Error).message));
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					"Error collecting file statuses: {0}",
+					(error as Error).message,
+				),
+			);
 		}
 
 		return statusItemTree;
@@ -91,13 +115,23 @@ export class StatusCollector {
 	 * @return FileStatusItem - ファイルのステータス
 	 */
 	public async collectFileStatus(filePath: string): Promise<FileStatusItem> {
+		// 非MDファイルはFileHandlerに委譲
+		if (path.extname(filePath).toLowerCase() !== ".md") {
+			return getFileHandler(filePath).collectStatus(filePath);
+		}
+
 		const fileName = path.basename(filePath);
 
 		try {
 			const content = await this.readFileContent(filePath);
 			const markdown = this.parseMarkdown(content);
 			const frontmatterKeys = getFrontmatterTranslationKeys(this.config);
-			const frontmatterItem = this.collectFrontmatterStatus(markdown.frontMatter, frontmatterKeys, filePath, fileName);
+			const frontmatterItem = this.collectFrontmatterStatus(
+				markdown.frontMatter,
+				frontmatterKeys,
+				filePath,
+				fileName,
+			);
 
 			// 空ファイルチェック
 			if (markdown.units.length === 0 && !frontmatterItem) {
@@ -105,10 +139,19 @@ export class StatusCollector {
 			}
 
 			const units = this.collectUnitsStatus(markdown.units, filePath, fileName);
-			return this.buildFileStatusItem(filePath, fileName, units, frontmatterItem);
+			return this.buildFileStatusItem(
+				filePath,
+				fileName,
+				units,
+				frontmatterItem,
+			);
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
-			return this.buildErrorFileStatusItem(filePath, fileName, (error as Error).message);
+			return this.buildErrorFileStatusItem(
+				filePath,
+				fileName,
+				(error as Error).message,
+			);
 		}
 	}
 
@@ -134,7 +177,11 @@ export class StatusCollector {
 	/**
 	 * ユニットの翻訳状態を収集する
 	 */
-	private collectUnitsStatus(units: readonly MdaitUnit[], filePath: string, fileName: string): UnitStatusItem[] {
+	private collectUnitsStatus(
+		units: readonly MdaitUnit[],
+		filePath: string,
+		fileName: string,
+	): UnitStatusItem[] {
 		return units.map((unit) => {
 			const unitStatus = this.determineUnitStatus(unit);
 			return {
@@ -148,7 +195,8 @@ export class StatusCollector {
 				needFlag: unit.marker?.need || undefined,
 				startLine: unit.startLine,
 				endLine: unit.endLine,
-				contextValue: unitStatus === Status.Source ? "mdaitUnitSource" : "mdaitUnitTarget",
+				contextValue:
+					unitStatus === Status.Source ? "mdaitUnitSource" : "mdaitUnitTarget",
 				filePath,
 				fileName,
 			};
@@ -177,10 +225,16 @@ export class StatusCollector {
 		}
 
 		// ファイル全体の状態を決定
-		const status = this.determineFileStatus(translatedUnits, totalUnits, children, frontmatterItem);
+		const status = this.determineFileStatus(
+			translatedUnits,
+			totalUnits,
+			children,
+			frontmatterItem,
+		);
 
 		// ソースファイルは全ユニット数、ターゲットファイルはターゲットユニット数を表示
-		const displayTotalUnits = status === Status.Source ? children.length : totalUnits;
+		const displayTotalUnits =
+			status === Status.Source ? children.length : totalUnits;
 
 		// contextValueにステータスを反映（翻訳完了状態を識別）
 		let contextValue: string;
@@ -210,7 +264,10 @@ export class StatusCollector {
 	/**
 	 * 空のファイル用のStatusItemを構築する
 	 */
-	private buildEmptyFileStatusItem(filePath: string, fileName: string): FileStatusItem {
+	private buildEmptyFileStatusItem(
+		filePath: string,
+		fileName: string,
+	): FileStatusItem {
 		return {
 			type: StatusItemType.File,
 			label: fileName,
@@ -229,7 +286,11 @@ export class StatusCollector {
 	/**
 	 * エラーファイル用のStatusItemを構築する
 	 */
-	private buildErrorFileStatusItem(filePath: string, fileName: string, errorMessage: string): FileStatusItem {
+	private buildErrorFileStatusItem(
+		filePath: string,
+		fileName: string,
+		errorMessage: string,
+	): FileStatusItem {
 		return {
 			type: StatusItemType.File,
 			label: fileName,
@@ -276,7 +337,9 @@ export class StatusCollector {
 	 * frontmatterの翻訳状態を収集する
 	 */
 	private collectFrontmatterStatus(
-		frontMatter: import("../markdown/front-matter").FrontMatter | undefined,
+		frontMatter:
+			| import("../../core/markdown/front-matter").FrontMatter
+			| undefined,
 		keys: string[],
 		filePath: string,
 		fileName: string,
@@ -314,7 +377,9 @@ export class StatusCollector {
 			fileName,
 			fromHash: marker.from ?? undefined,
 			needFlag: marker.need ?? undefined,
-			contextValue: isSource ? "mdaitFrontmatterSource" : "mdaitFrontmatterTarget",
+			contextValue: isSource
+				? "mdaitFrontmatterSource"
+				: "mdaitFrontmatterTarget",
 		};
 	}
 
@@ -353,10 +418,16 @@ export class StatusCollector {
 	private classifyFileType(
 		children: UnitStatusItem[],
 		frontmatterItem: FrontmatterStatusItem | null | undefined,
-	): "source-only" | "frontmatter-only" | "units-with-frontmatter" | "units-only" | "empty" {
+	):
+		| "source-only"
+		| "frontmatter-only"
+		| "units-with-frontmatter"
+		| "units-only"
+		| "empty" {
 		const hasUnits = children.length > 0;
 		const hasFrontmatter = !!frontmatterItem;
-		const allUnitsSource = hasUnits && children.every((u) => u.status === Status.Source);
+		const allUnitsSource =
+			hasUnits && children.every((u) => u.status === Status.Source);
 		const frontmatterIsSource = frontmatterItem?.status === Status.Source;
 
 		// 全てがSourceの場合
@@ -386,7 +457,9 @@ export class StatusCollector {
 	/**
 	 * frontmatterのみのファイルのステータスを決定する
 	 */
-	private determineFrontmatterOnlyStatus(frontmatterItem: FrontmatterStatusItem | null | undefined): Status {
+	private determineFrontmatterOnlyStatus(
+		frontmatterItem: FrontmatterStatusItem | null | undefined,
+	): Status {
 		if (!frontmatterItem) {
 			return Status.Unknown;
 		}
@@ -406,15 +479,21 @@ export class StatusCollector {
 		}
 
 		// ユニットに翻訳が必要なものがある場合
-		const hasNeedsTranslation = children.some((u) => u.status === Status.NeedsTranslation);
+		const hasNeedsTranslation = children.some(
+			(u) => u.status === Status.NeedsTranslation,
+		);
 		if (hasNeedsTranslation) {
 			return Status.NeedsTranslation;
 		}
 
 		// すべてが翻訳済みまたはSourceの場合
-		const allTranslatedOrSource = children.every((u) => u.status === Status.Translated || u.status === Status.Source);
+		const allTranslatedOrSource = children.every(
+			(u) => u.status === Status.Translated || u.status === Status.Source,
+		);
 		const frontmatterTranslatedOrSource =
-			!frontmatterItem || frontmatterItem.status === Status.Translated || frontmatterItem.status === Status.Source;
+			!frontmatterItem ||
+			frontmatterItem.status === Status.Translated ||
+			frontmatterItem.status === Status.Source;
 
 		if (allTranslatedOrSource && frontmatterTranslatedOrSource) {
 			return Status.Translated;
@@ -425,9 +504,35 @@ export class StatusCollector {
 	}
 
 	/**
+	 * transPairs設定からディレクトリ→拡張子のマッピングを構築する
+	 */
+	private collectDirectoryExtensions(): Map<string, string[] | undefined> {
+		const result = new Map<string, string[] | undefined>();
+		for (const pair of this.config.transPairs) {
+			const exts = pair.extensions;
+			// 同一ディレクトリが複数pairで使われる場合はマージ
+			for (const dir of [pair.sourceDir, pair.targetDir]) {
+				const existing = result.get(dir);
+				if (existing === undefined && !result.has(dir)) {
+					result.set(dir, exts);
+				} else if (exts && existing) {
+					// 両方ある場合はマージ
+					const merged = [...new Set([...existing, ...exts])];
+					result.set(dir, merged);
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
 	 * ディレクトリから直接ファイル状況を収集する
 	 */
-	private async collectAllFromDirectory(targetDir: string, config: Configuration): Promise<FileStatusItem[]> {
+	private async collectAllFromDirectory(
+		targetDir: string,
+		config: Configuration,
+		extensions?: string[],
+	): Promise<FileStatusItem[]> {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return [];
@@ -438,31 +543,49 @@ export class StatusCollector {
 
 		try {
 			// ディレクトリが存在するかチェック（非同期I/O）
-			const stat = await fs.promises.stat(absoluteTargetDir).catch(() => null as fs.Stats | null);
+			const stat = await fs.promises
+				.stat(absoluteTargetDir)
+				.catch(() => null as fs.Stats | null);
 			if (!stat || !stat.isDirectory()) {
 				return [];
 			}
 
-			// ディレクトリ内のMarkdownファイルを再帰的に検索
-			const includePattern = new vscode.RelativePattern(absoluteTargetDir, "**/*.md");
+			// 対象拡張子のglobパターンを構築
+			const globPattern = FileExplorer.buildExtensionGlob(extensions);
+
+			const includePattern = new vscode.RelativePattern(
+				absoluteTargetDir,
+				globPattern,
+			);
 			const excludePattern = config.ignoredPatterns
-				? (new vscode.RelativePattern(absoluteTargetDir, config.ignoredPatterns) as vscode.GlobPattern)
+				? (new vscode.RelativePattern(
+						absoluteTargetDir,
+						config.ignoredPatterns,
+					) as vscode.GlobPattern)
 				: undefined;
-			const files = await vscode.workspace.findFiles(includePattern, excludePattern);
-			const mdFiles = files.map((f) => f.fsPath);
+			const files = await vscode.workspace.findFiles(
+				includePattern,
+				excludePattern,
+			);
+			const allFiles = files.map((f) => f.fsPath);
 
 			// 各ファイルの状況を並列に収集（同時実行数を制限）
 			const concurrency = Math.max(1, Math.min(os.cpus()?.length ?? 4, 16));
-			const results: FileStatusItem[] = new Array(mdFiles.length);
+			const results: FileStatusItem[] = new Array(allFiles.length);
 			let index = 0;
 
 			const worker = async () => {
 				while (true) {
 					const i = index++;
-					if (i >= mdFiles.length) break;
-					const filePath = mdFiles[i];
+					if (i >= allFiles.length) break;
+					const filePath = allFiles[i];
 					try {
-						results[i] = await this.collectFileStatus(filePath);
+						if (filePath.toLowerCase().endsWith(".md")) {
+							results[i] = await this.collectFileStatus(filePath);
+						} else {
+							results[i] =
+								await getFileHandler(filePath).collectStatus(filePath);
+						}
 					} catch (error) {
 						console.error(`Error processing file ${filePath}:`, error);
 						// エラーファイルも含める
@@ -482,11 +605,16 @@ export class StatusCollector {
 				}
 			};
 
-			const workers = Array.from({ length: Math.min(concurrency, mdFiles.length) }, () => worker());
+			const workers = Array.from(
+				{ length: Math.min(concurrency, allFiles.length) },
+				() => worker(),
+			);
 			await Promise.all(workers);
 
 			const checkPoint = performance.now();
-			console.log(`collectAllFromDirectory: dir:${targetDir} ${Math.round(checkPoint - startTime)}ms`);
+			console.log(
+				`collectAllFromDirectory: dir:${targetDir} ${Math.round(checkPoint - startTime)}ms`,
+			);
 			return results;
 		} catch (error) {
 			console.error(`Error scanning directory ${absoluteTargetDir}:`, error);

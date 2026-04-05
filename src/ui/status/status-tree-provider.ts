@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { Configuration } from "../../infra/config/configuration";
 import { SelectionState } from "../../core/status/selection-state";
 import { Status, type StatusItem, StatusItemType, isFrontmatterStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 
 /**
@@ -298,6 +298,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 指定ファイルの子要素（frontmatter + ユニット）を返す
 	 */
 	private getFileChildren(fileItem: import("../../core/status/status-item").FileStatusItem): StatusItem[] {
+		// 非MDファイルはユニット分割されないため子要素なし
+		if (!fileItem.filePath.toLowerCase().endsWith(".md")) {
+			return [];
+		}
+
 		const children: StatusItem[] = [];
 
 		// frontmatter項目があれば先頭に追加

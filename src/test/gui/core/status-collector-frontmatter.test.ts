@@ -4,7 +4,7 @@
 import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StatusCollector } from "../../../core/status/status-collector";
+import { StatusCollector } from "../../../commands/file-handler/status-collector";
 import { Status } from "../../../core/status/status-item";
 
 const TEST_WORKSPACE_PATH = path.resolve(__dirname, "../test/workspace/content");

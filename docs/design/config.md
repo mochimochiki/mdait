@@ -111,11 +111,13 @@ sequenceDiagram
 | フィールド | デフォルト | 説明 |
 |-----------|-----------|------|
 | `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応 |
+| `transPairs[].extensions` | `[]` | 追加の翻訳対象拡張子（例: `[".txt", ".csv"]`）。`.md`は常に含まれる |
 | `primaryLang` | — | 用語集と TM で共有する基準言語。設定上の正準言語として扱う |
 | `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
 | `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
 | `trans.retryLimit` | `1` | trans の再試行上限 |
+| `trans.maxFileSize` | `51200` | 非MDファイルの翻訳時ファイルサイズ上限（バイト）。超過時はスキップ＋警告 |
 
 `primaryLang` は必須設定であり、未設定時は設定不備として扱う。
 

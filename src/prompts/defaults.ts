@@ -16,6 +16,10 @@ export const PromptIds = {
 	TRANS_TRANSLATE: "trans.translate",
 	/** 改訂パッチ翻訳用プロンプト */
 	TRANS_REVISE_PATCH: "trans.revisePatch",
+	/** 非MDファイル翻訳用プロンプト */
+	TRANS_TRANSLATE_PLAIN: "trans.translatePlain",
+	/** 非MDファイル改訂パッチ翻訳用プロンプト */
+	TRANS_REVISE_PATCH_PLAIN: "trans.revisePatchPlain",
 	/** 対訳ペアからの用語検出 */
 	TERM_DETECT_PAIRS: "term.detectPairs",
 	/** ソース単独からの用語検出 */
@@ -719,14 +723,170 @@ CRITICAL:
 - If you encounter "." "?" "!" or any other characters that commonly separate sentences in current languages, consider whether the sentence should be broken at that point.`;
 
 /**
+ * trans.translatePlain - 非MDファイル翻訳プロンプト
+ *
+ * @description
+ * 非Markdownテキストファイル（.txt, .csv, .tsv等）を翻訳します。
+ * ファイル形式と構造を厳密に保持しつつ翻訳を行います。
+ *
+ * @input
+ * - {{sourceLang}}: 翻訳元言語コード
+ * - {{targetLang}}: 翻訳先言語コード
+ * - {{fileExtension}}: ファイル拡張子（例: ".csv"）
+ * - {{terms}}: 用語集（オプショナル）
+ * - {{tmReferences}}: 翻訳メモリ参照（オプショナル）
+ * - {{previousTranslation}}: 前回翻訳（改訂時、オプショナル）
+ * - {{sourceDiff}}: 原文の変更差分（改訂時、オプショナル）
+ *
+ * @output
+ * ```json
+ * {
+ *   "translation": "翻訳テキスト",
+ *   "termSuggestions": []
+ * }
+ * ```
+ */
+export const DEFAULT_TRANS_TRANSLATE_PLAIN = `You are a professional translator. Translate the following {{fileExtension}} file content from {{sourceLang}} to {{targetLang}}.
+
+CRITICAL RULES:
+- Preserve the original file format and structure EXACTLY.
+- Do NOT add, remove, or reorder lines unless the translation requires it.
+- For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
+- Translate only human-readable text content. Do not translate code, variable names, or technical identifiers.
+{{#terms}}
+
+TERMINOLOGY:
+Use the following terms consistently:
+{{terms}}
+{{/terms}}
+{{#previousTranslation}}
+
+Previous Translation (for reference - the source has been revised):
+{{previousTranslation}}
+
+IMPORTANT: The source has been revised. Please refer to the previous translation and:
+- Keep parts that don't need to be changed (respect the existing translation)
+- Only modify the parts that need to be updated based on the source changes
+- Maintain consistency with the unchanged parts of the previous translation
+{{/previousTranslation}}
+{{#sourceDiff}}
+
+Source Changes (unified diff format):
+\`\`\`diff
+{{sourceDiff}}
+\`\`\`
+
+IMPORTANT: The diff above shows exactly what changed in the source.
+- Lines starting with "-" were removed
+- Lines starting with "+" were added
+- Focus your translation updates on the changed portions
+{{/sourceDiff}}
+{{#tmReferences}}
+
+TRANSLATION MEMORY REFERENCES:
+{{tmReferences}}
+{{/tmReferences}}
+
+Response Format:
+Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+
+{
+  "translation": "the translated content (LANGUAGE:{{targetLang}}) with file format perfectly preserved",
+  "termSuggestions": [
+    {
+      "source": "original term in {{sourceLang}}",
+      "target": "translated term in {{targetLang}}",
+      "context": "an actual phrase from the text including the term",
+      "reason": "(optional) brief explanation"
+    }
+  ]
+}
+
+Important Notes:
+- The "translation" field must contain the complete translated file content.
+- Return ONLY valid JSON. Any extra text invalidates the response.`;
+
+/**
+ * trans.revisePatchPlain - 非MDファイル改訂翻訳プロンプト
+ *
+ * @description
+ * 非Markdownファイルの改訂翻訳。ソースが変更された場合、差分を参照して既存翻訳を更新します。
+ * 非MDファイルではパッチモードではなく全文翻訳で改訂します。
+ *
+ * @input
+ * - {{sourceLang}}: 翻訳元言語コード
+ * - {{targetLang}}: 翻訳先言語コード
+ * - {{fileExtension}}: ファイル拡張子
+ * - {{sourceDiff}}: 原文の変更差分（unified diff形式）
+ * - {{previousTranslation}}: 前回翻訳
+ * - {{terms}}: 用語集（オプショナル）
+ * - {{tmReferences}}: 翻訳メモリ参照（オプショナル）
+ *
+ * @output
+ * ```json
+ * {
+ *   "translation": "更新された翻訳テキスト",
+ *   "termSuggestions": []
+ * }
+ * ```
+ */
+export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source {{fileExtension}} file has been modified. Update the existing translation to reflect the changes.
+
+SOURCE DIFF (unified format):
+\`\`\`diff
+{{sourceDiff}}
+\`\`\`
+
+EXISTING TRANSLATION:
+{{previousTranslation}}
+
+CRITICAL RULES:
+- Apply changes corresponding to the source diff to the existing translation.
+- Do NOT modify parts of the translation that are unaffected by the source changes.
+- Preserve the original file format and structure EXACTLY.
+- For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
+{{#terms}}
+
+TERMINOLOGY:
+{{terms}}
+{{/terms}}
+{{#tmReferences}}
+
+TRANSLATION MEMORY REFERENCES:
+{{tmReferences}}
+{{/tmReferences}}
+
+Response Format:
+Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+
+{
+  "translation": "the complete updated translation (LANGUAGE:{{targetLang}}) with file format preserved",
+  "termSuggestions": [
+    {
+      "source": "original term in {{sourceLang}}",
+      "target": "translated term in {{targetLang}}",
+      "context": "an actual phrase from the text including the term",
+      "reason": "(optional) brief explanation"
+    }
+  ]
+}
+
+Important Notes:
+- The "translation" field must contain the COMPLETE updated file content, not just the changed parts.
+- Return ONLY valid JSON. Any extra text invalidates the response.`;
+
+/**
  * デフォルトプロンプトのマッピング
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
 	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
+	[PromptIds.TRANS_TRANSLATE_PLAIN]: DEFAULT_TRANS_TRANSLATE_PLAIN,
+	[PromptIds.TRANS_REVISE_PATCH_PLAIN]: DEFAULT_TRANS_REVISE_PATCH_PLAIN,
 	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
-	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
+	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]:
+		DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 };

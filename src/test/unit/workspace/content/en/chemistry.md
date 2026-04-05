@@ -1,82 +1,81 @@
-<!-- mdait 3a430d82 from:ac5965af -->
-# Research Report on the Optimization of Organic Synthesis Reactions
+<!-- mdait ac5965af from:ac5965af need:translate -->
+# 有機合成反応の最適化に関する研究報告
 
-<!-- mdait 9fa729ff from:ac72bafb -->
-## Experimental Overview
+<!-- mdait ac72bafb from:ac72bafb need:translate -->
+## 実験概要
 
-We investigated reaction conditions aimed at improving the yield of the Suzuki-Miyaura coupling reaction using a palladium catalyst. While the conventional method yields 60-70%, our goal was to achieve over 85%.
+パラジウム触媒を用いた鈴木・宮浦カップリング反応の収率向上を目的に条件検討を行った。従来法の収率60-70%に対し、85%以上の達成を目標とした。
 
-<!-- mdait 2c484f4c from:ca4d32b4 -->
-## Introduction
+<!-- mdait ca4d32b4 from:ca4d32b4 need:translate -->
+## 序論
 
-The Suzuki–Miyaura coupling reaction is a reaction that forms C–C bonds from organic halides and organoboronic acids, and is widely applied in the synthesis of pharmaceuticals and functional materials. It proceeds under mild conditions and is characterized by high functional group tolerance.
+鈴木・宮浦カップリング反応は有機ハロゲン化物と有機ボロン酸からC-C結合を形成する反応であり、医薬品・機能性材料の合成に広く応用されている。温和な条件で進行し、官能基許容性が高い点が特徴である。
 
-![Reaction scheme](images/structure.png)
+![反応スキーム](images/structure.png)
 
-<!-- mdait b36f4a47 from:2253cd91 -->
-## Experimental Methods
+<!-- mdait 2253cd91 from:2253cd91 need:translate -->
+## 実験方法
 
-<!-- mdait 36190aa1 from:488f8079 -->
-### Reagents Used
+<!-- mdait 488f8079 from:488f8079 need:translate -->
+### 使用試薬
 
-- Aryl bromide (10 mmol, purity ≥98%)
-- Phenylboronic acid (12 mmol, 1.2 equivalents)
-- Pd(PPh₃)₄ (0.5 mol%)
-- Potassium carbonate (20 mmol, 2 equivalents)
-- Solvent: DMF (anhydrous)
+- 臭化アリール（10 mmol、純度98%以上）
+- フェニルボロン酸（12 mmol、1.2当量）
+- Pd(PPh₃)₄（0.5 mol%）
+- 炭酸カリウム（20 mmol、2当量）
+- 溶媒：DMF（脱水品）
 
-<!-- mdait 2d69db54 from:8319d4b4 -->
-### Experimental Procedure
+<!-- mdait 8319d4b4 from:8319d4b4 need:translate -->
+### 実験手順
 
-1. Weigh aryl bromide (10 mmol) into a three-neck flask
-2. Add phenylboronic acid (12 mmol) and potassium carbonate (20 mmol)
-3. Add DMF (40 mL) and repeat nitrogen purging three times
-4. Add Pd(PPh₃)₄ (0.05 mmol) and stir at 80°C for 24 hours
-5. Monitor the reaction by TLC (hexane/ethyl acetate = 9:1)
+1. 三口フラスコに臭化アリール（10 mmol）を秤量
+2. フェニルボロン酸（12 mmol）と炭酸カリウム（20 mmol）を追加
+3. DMF（40 mL）を加え、窒素置換を3回繰り返す
+4. Pd(PPh₃)₄（0.05 mmol）を加え、80°Cで24時間撹拌
+5. TLC（ヘキサン/酢酸エチル = 9:1）で反応追跡
 
 <details>
-<summary>Detailed Post-treatment and Purification Procedure</summary>
+<summary>後処理・精製の詳細手順</summary>
 
-1. Cool the reaction mixture to room temperature
-2. Add water (100 mL) and extract with ethyl acetate (50 mL × 3)
-3. Wash the organic layer with saturated brine (50 mL) and dry over anhydrous sodium sulfate
-4. After removing the solvent under reduced pressure, purify by silica gel column chromatography (hexane/ethyl acetate = 9:1)
-5. Collect the spot with Rf = 0.45 as the target compound
+1. 反応混合物を室温まで冷却
+2. 水（100 mL）を加え、酢酸エチル（50 mL × 3）で抽出
+3. 有機層を飽和食塩水（50 mL）で洗浄し、無水硫酸ナトリウムで乾燥
+4. 溶媒を減圧留去後、シリカゲルカラム（ヘキサン/酢酸エチル = 9:1）で精製
+5. Rf = 0.45のスポットを目的物として回収
 
-> Note: Degas the eluent in advance during column purification. Oxygen contamination may cause decomposition of the product.
+> 注: カラム精製時は展開溶媒を事前に脱気すること。酸素混入は生成物の分解を招く可能性がある。
 
 </details>
 
-<!-- mdait b8a84bf8 from:fc4a86b4 -->
-### Analytical Data
+<!-- mdait fc4a86b4 from:fc4a86b4 need:translate -->
+### 分析データ
 
-¹H-NMR (400 MHz, CDCl₃): δ 7.58-7.55 (m, 4H, ArH), 7.45-7.42 (m, 4H, ArH), 7.36-7.32 (m, 2H, ArH)
+¹H-NMR（400 MHz、CDCl₃）：δ 7.58-7.55（m、4H、ArH）、7.45-7.42（m、4H、ArH）、7.36-7.32（m、2H、ArH）
 
-¹³C-NMR (100 MHz, CDCl₃): δ 141.2, 140.8, 128.7, 127.3, 127.1
+¹³C-NMR（100 MHz、CDCl₃）：δ 141.2、140.8、128.7、127.3、127.1
 
-MS (EI): m/z 154 (M⁺), calculated 154.08, found 154.08. Melting point: 68-70°C (lit. 69-71°C)
+MS（EI）：m/z 154（M⁺）、計算値 154.08、実測値 154.08。融点：68-70°C（文献値：69-71°C）
 
+<!-- mdait d825f9e6 from:d825f9e6 need:translate -->
+## 結果と考察
 
-<!-- mdait fb694b95 from:d825f9e6 -->
-## Results and Discussion
+<!-- mdait 7a2a1fd9 from:7a2a1fd9 need:translate -->
+### 溶媒・温度による収率変化
 
-<!-- mdait c4ab0abb from:7a2a1fd9 -->
-### Yield Variation by Solvent and Temperature
-
-| Solvent | Temperature | Yield |
+| 溶媒 | 温度 | 収率 |
 |------|------|------|
 | DMF | 80°C | 85% |
-| Toluene | 110°C | 72% |
+| トルエン | 110°C | 72% |
 | THF | 65°C | 68% |
-| Dioxane | 100°C | 75% |
-| Water/Ethanol (1:1) | 80°C | 63% |
+| ジオキサン | 100°C | 75% |
+| 水/エタノール（1:1） | 80°C | 63% |
 
-DMF was the optimal solvent. The main reasons for the high yield are considered to be the stabilization of ionic intermediates due to its moderate polarity and the good solubility of the base. On the other hand, in THF, the reaction rate was slow due to the low solubility of the base, and in toluene, the ionic intermediates were destabilized because of its non-polarity.
+DMFが最適溶媒であった。極性の適度さによるイオン性中間体の安定化と、塩基の良好な溶解性が高収率の主因と考えられる。一方、THFは塩基溶解度の低さから反応速度が遅く、トルエンは非極性ゆえにイオン性中間体が不安定化した。
 
-<!-- mdait 33db2c3d from:2ecb63eb -->
-### Optimization of Catalyst Amount
+<!-- mdait 2ecb63eb from:2ecb63eb need:translate -->
+### 触媒量の最適化
 
-| Catalyst Amount (mol%) | Yield (%) | Reaction Time (h) |
+| 触媒量（mol%） | 収率（%） | 反応時間（h） |
 |----------------|-----------|---------------|
 | 0.1 | 45 | 48 |
 | 0.25 | 68 | 36 |
@@ -84,47 +83,47 @@ DMF was the optimal solvent. The main reasons for the high yield are considered 
 | 1.0 | 86 | 20 |
 | 2.0 | 84 | 18 |
 
-0.5 mol% was optimal, and no further increase in yield was observed at higher amounts; instead, a decreasing trend due to the formation of palladium black was confirmed.
+0.5 mol%が最適であり、それ以上では収率向上が見られずパラジウムブラック生成による低下傾向が確認された。
 
-<!-- mdait c438beb8 from:6ca78c86 -->
-### Selection of Base
+<!-- mdait 6ca78c86 from:6ca78c86 need:translate -->
+### 塩基の選択
 
-| Base | Yield (%) | Remarks |
+| 塩基 | 収率（%） | 備考 |
 |------|-----------|------|
-| Potassium carbonate | 85 | Optimal |
-| Cesium carbonate | 82 | Expensive |
-| Sodium hydroxide | 58 | Many side reactions |
-| Potassium phosphate | 76 | Slightly lower yield |
+| 炭酸カリウム | 85 | 最適 |
+| 炭酸セシウム | 82 | 高価 |
+| 水酸化ナトリウム | 58 | 副反応多い |
+| リン酸カリウム | 76 | やや低収率 |
 
-Potassium carbonate was the best. The strong base sodium hydroxide promoted the decomposition of boronic acid.
+炭酸カリウムが最良であった。強塩基の水酸化ナトリウムはボロン酸分解を促進した。
 
-<!-- mdait d48354b1 from:29b13746 -->
-### Reaction Mechanism
+<!-- mdait 29b13746 from:29b13746 need:translate -->
+### 反応機構
 
-The reaction proceeds in the following three steps.
+反応は以下の3段階で進行する。
 
-1. **Oxidative Addition**: Oxidative addition of aryl bromide to Pd(0) generates the aryl-Pd(II)-Br intermediate
-2. **Transmetalation**: Reaction of the base-activated boronic acid anion with the Pd intermediate
-3. **Reductive Elimination**: Formation of the target product and regeneration of Pd(0)
+1. **酸化的付加**: Pd(0)への臭化アリールの酸化的付加によりアリール-Pd(II)-Br中間体を生成
+2. **トランスメタル化**: 塩基活性化ボロン酸アニオンとPd中間体の反応
+3. **還元的脱離**: 目的物の形成とPd(0)の再生
 
 <details>
-<summary>Kinetic Data</summary>
+<summary>反応速度論的データ</summary>
 
 <table>
-<tr><th>Step</th><th>Activation Energy (kJ/mol)</th><th>Half-life (min)</th></tr>
-<tr><td>Oxidative Addition</td><td>45.2</td><td>15</td></tr>
-<tr><td>Transmetalation</td><td>68.7</td><td>120</td></tr>
-<tr><td>Reductive Elimination</td><td>52.1</td><td>30</td></tr>
+<tr><th>段階</th><th>活性化エネルギー (kJ/mol)</th><th>半減期 (min)</th></tr>
+<tr><td>酸化的付加</td><td>45.2</td><td>15</td></tr>
+<tr><td>トランスメタル化</td><td>68.7</td><td>120</td></tr>
+<tr><td>還元的脱離</td><td>52.1</td><td>30</td></tr>
 </table>
 
-Transmetalation is the rate-determining step, and the choice of base and temperature control determine the overall reaction rate.
+トランスメタル化が律速段階であり、塩基の選択と温度制御が全体の反応速度を決定する。
 
 </details>
 
-<!-- mdait 8dbda0c6 from:acfd77fc -->
-## Conclusion
+<!-- mdait acfd77fc from:acfd77fc need:translate -->
+## 結論
 
-By using DMF as the solvent, 0.5 mol% catalyst loading, and potassium carbonate as the base, the yield of the Suzuki-Miyaura coupling reaction was improved to 85%. This condition represents a significant improvement over the conventional method (yield 65%) and is expected to be applicable to scale-up.
+溶媒にDMF、触媒量0.5 mol%、塩基に炭酸カリウムを用いることで、鈴木・宮浦カップリング反応の収率を85%に向上させた。この条件は従来法（収率65%）に対して顕著な改善であり、スケールアップへの適用が期待される。
 
 ```
 > ArBr + Pd(0) → Ar-Pd(II)-Br        [酸化的付加]

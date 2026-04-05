@@ -38,6 +38,11 @@ export class AIOnboarding {
 	 * @returns ユーザーが承認した場合はtrue、キャンセルした場合はfalse
 	 */
 	public async checkAndShowFirstUseDialog(): Promise<boolean> {
+		// デバッグIPC環境ではダイアログをスキップ（自動テスト対応）
+		if (process.env.MDAIT_DEBUG_IPC === "1") {
+			return true;
+		}
+
 		if (!this.globalState) {
 			// 初期化されていない場合はスキップ
 			Logger.getInstance().warn(

@@ -42,7 +42,7 @@ graph TD
 
 | 層 | 説明 | ドキュメント |
 |---|---|---|
-| Core層 | `MarkdownItParser` でユニット分割、`Normalizer`/`HashCalculator` でハッシュ計算・正規化、`SectionMatcher` でソース/ターゲット対応検出、`StatusManager`/`StatusCollector` でステータス集約。mdaitUnit・ハッシュ・ステータス管理・UnitRegistry・Diff・FrontMatter翻訳を担当。VS Code APIに非依存な純粋TypeScript実装でテスト・移植が容易。 | [core.md](design/core.md) |
+| Core層 | `MarkdownItParser` でユニット分割、`Normalizer`/`HashCalculator` でハッシュ計算・正規化、`SectionMatcher` でソース/ターゲット対応検出、`StatusManager` でステータス集約。mdaitUnit・ハッシュ・ステータス管理・UnitRegistry・Diff・FrontMatter翻訳・FileStateStoreを担当。VS Code APIに非依存な純粋TypeScript実装でテスト・移植が容易。 | [core.md](design/core.md) |
 | Commands層 | Core層の純粋関数を組み合わせてユーザーワークフローを実現（sync・trans・term・setup・tm・translate-selection）。進捗表示・エラーハンドリング・キャンセル対応も責務。 | コマンド層参照 |
 | Infra層 | 基盤機能を統合。LLM通信（`AIService`抽象化・プロバイダー実装）、設定管理（`.mdait/mdait.json`の読み込み・バリデーション）、ログ出力、ワークスペースファイル探索、デバッグIPC、オンボーディングを担当。 | [llm.md](design/llm.md), [config.md](design/config.md), [utils.md](design/utils.md) |
 | UI層 | StatusTreeProvider・CodeLensProvider・HoverProvider・Welcome View でmdait内部状態をVS Code標準UIパターンで可視化。自動同期機能も統合。 | [ui.md](design/ui.md) |
@@ -73,7 +73,8 @@ graph TD
 src/
   extension.ts           # VS Code拡張機能のエントリーポイント
   commands/              # sync/trans/term/setup/trans-selection/tm
-  core/                  # markdown/hash/status/unit-registry/diff/tm
+    file-handler/        # FileHandler Strategy（MD/非MD分岐の集約点）
+  core/                  # markdown/hash/status/unit-registry/diff/tm/file-state
   infra/                 # 基盤層（config/llm/logging/workspace/debug/onboarding）
   lm-tools/              # LanguageModelTool API統合
   ui/                    # VS Code UI統合
@@ -100,7 +101,7 @@ mdait は Markdown の構造を活かし文書を「ユニット」（見出し�
 **対象外とする領域:**
 - リアルタイムコラボレーション
 - WYSIWYG編集
-- Markdown以外のフォーマット（HTML/DOCX/PDF等）
+- バイナリフォーマット（DOCX/PDF等）
 
 ### 設計原則
 
@@ -109,6 +110,8 @@ Markdown文書を見出しレベルで「ユニット」に分割し、独立し
 
 #### P2: ステートレスな再計算と管理情報の自己完結
 すべての状態（ハッシュ・need・from）は現在のファイル内容から再計算可能である。文書外への管理情報の分離はコピー・移動時に整合性を崩すため、HTMLコメントとして文書内に埋め込む（レンダリング時不可視）。どんな状態からでも `sync` で復帰でき、冪等性を保証する。
+
+> **例外: 非MDファイルのfile-state** — テキストファイル（.csv, .txt等）にはHTMLコメントマーカーを埋め込めないため、翻訳状態を `.mdait/file-state`（外部TSVファイル）で管理する。P2の自己完結原則からは逸脱するが、(1) sync実行で完全に再構築可能（冪等性は維持）、(2) rebuild時は `need:review` を付与し人間確認を促すことで安全性確保、(3) `.mdait/` 配下でgit追跡対象のためバージョン管理との相性は維持される。
 
 #### P3: ハッシュ差分駆動のワークフロー
 変更されたユニットのみに `need:translate` が自動付与される。git履歴依存を避けCRC32ハッシュで決定的に変更を検出するため、どんなVCS環境・コミット粒度でも安定動作する。
@@ -191,6 +194,7 @@ graph TD
 ### 拡張可能にするもの
 
 - **AIプロバイダー**: `AIService` 実装として追加
+- **ファイルタイプ**: `FileHandler` Strategy + `FileHandlerFactory` で新ファイルタイプ対応を追加可能。非MDファイルは `PlainFileHandler` が処理し、翻訳状態は `.mdait/file-state` で管理。TransPairの `extensions` 設定で対象拡張子を柔軟に指定
 - **出力戦略**: 翻訳結果の出力先（クリップボード等）を `OutputStrategy` として拡張
 - **用語集フォーマット**: CSV → JSON/YAML等への移行が可能
 - **プロンプトカスタマイズ**: 全システムプロンプトを外部ファイルで上書き可能

@@ -37,6 +37,15 @@
             "type": "string",
             "description": "Path to the directory to store target language documents (relative to workspace root)",
             "examples": ["docs/en", "content/ja"]
+          },
+          "extensions": {
+            "type": "array",
+            "description": "Additional file extensions to include for translation. Markdown (.md) is always included.",
+            "items": {
+              "type": "string",
+              "pattern": "^\\.[a-zA-Z0-9]+$"
+            },
+            "examples": [[".txt"], [".csv", ".tsv"]]
           }
         },
         "additionalProperties": false
@@ -217,6 +226,13 @@
           "maximum": 5,
           "default": 1,
           "examples": [1, 2, 3, 5]
+        },
+        "maxFileSize": {
+          "type": "integer",
+          "description": "Maximum file size in bytes for non-Markdown file translation. Files exceeding this limit are skipped with a warning.",
+          "minimum": 1024,
+          "default": 51200,
+          "examples": [51200, 102400, 204800]
         }
       },
       "additionalProperties": false

@@ -27,7 +27,10 @@ export class FileExplorer {
 	/**
 	 * ターゲットファイルから対応する翻訳ペアを取得
 	 */
-	public getTransPairFromTarget(filePath: string, config: Configuration): TransPair | null {
+	public getTransPairFromTarget(
+		filePath: string,
+		config: Configuration,
+	): TransPair | null {
 		const normalizedPath = this.normalizePath(filePath);
 
 		for (const transPair of config.transPairs) {
@@ -45,7 +48,10 @@ export class FileExplorer {
 	 * ソースファイルから対応する翻訳ペア配列を取得（設定順を維持）
 	 * 1つのソースに対して複数のターゲット言語がある場合があるため配列で返す
 	 */
-	public getTransPairsFromSource(filePath: string, config: Configuration): TransPair[] {
+	public getTransPairsFromSource(
+		filePath: string,
+		config: Configuration,
+	): TransPair[] {
 		const normalizedPath = this.normalizePath(filePath);
 		const result: TransPair[] = [];
 
@@ -112,7 +118,10 @@ export class FileExplorer {
 	): Promise<string[]> {
 		// VS Code APIを使用してファイルを検索
 		const includeGlob = new vscode.RelativePattern(sourceDir, includePattern);
-		const files: vscode.Uri[] = await vscode.workspace.findFiles(includeGlob, excludePattern);
+		const files: vscode.Uri[] = await vscode.workspace.findFiles(
+			includeGlob,
+			excludePattern,
+		);
 
 		// 指定された拡張子のファイルだけをフィルタリング
 		return files
@@ -124,9 +133,28 @@ export class FileExplorer {
 	}
 
 	/**
-	 * 設定に基づいてファイルを取得する
+	 * 拡張子リストからglobパターンを構築する。
+	 * .md は常に含まれる。
 	 */
-	public async getSourceFiles(sourceDirConfig: string, config: Configuration): Promise<string[]> {
+	public static buildExtensionGlob(extensions?: string[]): string {
+		const allExtensions = [".md", ...(extensions ?? [])];
+		const uniqueExtensions = [...new Set(allExtensions)];
+		if (uniqueExtensions.length === 1) {
+			return "**/*.md";
+		}
+		const extStr = uniqueExtensions.map((e) => e.slice(1)).join(",");
+		return `**/*.{${extStr}}`;
+	}
+
+	/**
+	 * 設定に基づいてファイルを取得する
+	 * @param extensions 追加の拡張子配列（省略時は.mdのみ、既存動作を維持）
+	 */
+	public async getSourceFiles(
+		sourceDirConfig: string,
+		config: Configuration,
+		extensions?: string[],
+	): Promise<string[]> {
 		let sourceDir = sourceDirConfig;
 		if (!path.isAbsolute(sourceDir)) {
 			sourceDir = path.resolve(this.workspaceRoot, sourceDir);
@@ -134,10 +162,20 @@ export class FileExplorer {
 
 		// ディレクトリの存在を確認
 		if (!this.directoryExists(sourceDir)) {
-			throw new Error(vscode.l10n.t("Source directory does not exist: {0}", sourceDir));
+			throw new Error(
+				vscode.l10n.t("Source directory does not exist: {0}", sourceDir),
+			);
 		}
-		// ファイルの検索（Markdownファイルのみを対象とする）
-		return await this.findFilesInDirectory(sourceDir, [".md"], "**/*.md", config.ignoredPatterns);
+
+		const allExtensions = [".md", ...(extensions ?? [])];
+		const uniqueExtensions = [...new Set(allExtensions)];
+		const globPattern = FileExplorer.buildExtensionGlob(extensions);
+		return await this.findFilesInDirectory(
+			sourceDir,
+			uniqueExtensions,
+			globPattern,
+			config.ignoredPatterns,
+		);
 	}
 
 	/**
@@ -157,7 +195,10 @@ export class FileExplorer {
 	public getTargetPath(sourceFilePath: string, pair: TransPair): string | null {
 		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
 		const normalizedTargetDir = this.normalizePath(pair.targetDir);
-		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(sourceFilePath), normalizedSourceDir);
+		const relativePath = this.getRelativePathFromDirectory(
+			this.normalizePath(sourceFilePath),
+			normalizedSourceDir,
+		);
 
 		if (!relativePath) {
 			return null;
@@ -174,7 +215,10 @@ export class FileExplorer {
 	public getSourcePath(targetFilePath: string, pair: TransPair): string | null {
 		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
 		const normalizedTargetDir = this.normalizePath(pair.targetDir);
-		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(targetFilePath), normalizedTargetDir);
+		const relativePath = this.getRelativePathFromDirectory(
+			this.normalizePath(targetFilePath),
+			normalizedTargetDir,
+		);
 
 		if (!relativePath) {
 			return null;
@@ -223,7 +267,9 @@ export class FileExplorer {
 		if (path.isAbsolute(normalizedPath)) {
 			const workspaceNormalized = this.workspaceRoot.replace(/\\/g, "/");
 			if (normalizedPath.startsWith(workspaceNormalized)) {
-				normalizedPath = path.relative(workspaceNormalized, normalizedPath).replace(/\\/g, "/");
+				normalizedPath = path
+					.relative(workspaceNormalized, normalizedPath)
+					.replace(/\\/g, "/");
 			}
 		}
 
@@ -247,13 +293,18 @@ export class FileExplorer {
 	 * パスが指定ディレクトリ配下にあるかチェック
 	 */
 	private isPathInDirectory(filePath: string, directoryPath: string): boolean {
-		return filePath.startsWith(`${directoryPath}/`) || filePath === directoryPath;
+		return (
+			filePath.startsWith(`${directoryPath}/`) || filePath === directoryPath
+		);
 	}
 
 	/**
 	 * ディレクトリからの相対パスを取得
 	 */
-	private getRelativePathFromDirectory(filePath: string, directoryPath: string): string | null {
+	private getRelativePathFromDirectory(
+		filePath: string,
+		directoryPath: string,
+	): string | null {
 		if (filePath === directoryPath) {
 			return "";
 		}

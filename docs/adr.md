@@ -21,6 +21,23 @@ services/に入る候補（file-handler, status-collector, prompts, file-explore
 - 却下案: infra/をフラット配置（サブフォルダなし）→ ユーザーの一貫性優先の判断でサブフォルダ化
 - 詳細: [260404-01_src-directory-restructure.md](../.tasks/done/260404-01_src-directory-restructure.md)
 
+---
+
+## ADR-260329-04: FileHandler Strategyによる多フォーマット翻訳対応
+
+### 背景
+非MDファイル（.txt, .csv等）の翻訳サポートを追加するにあたり、sync-command、trans-command、status-collector、extension.tsの4箇所にMD/nonMD分岐が散在する問題がスパイク（260329-01）で判明した。ファイルタイプが増えるたびに全箇所に分岐追加が必要になるため、構造的に解決する必要がある。
+
+### 決定
+FileHandler Strategyパターンを採用し、ファイルタイプ別の処理をMdFileHandler / PlainFileHandlerに分離する。分岐はFileHandlerFactoryの1箇所に集約する。非MDファイルの翻訳状態はファイル内マーカーではなく`.mdait/file-state`（行ベースTSV）で管理する。MdFileHandlerは既存関数への薄いラッパーとし、既存コードへの影響を最小化する。
+
+### 理由
+Strategy+Factoryにより、新ファイルタイプ追加時の影響範囲がHandler新設+Factory登録の2箇所に限定される。MdFileHandlerを薄いラッパーにすることで既存317テストに影響を与えずに段階的に導入できる。file-stateを分離ストアとした理由は、テキストファイルにHTMLコメントマーカーを埋め込めないため。
+
+### 備考
+- 却下案: 各コマンドに直接if分岐 → 分岐が4箇所に散在しファイルタイプ追加時の保守コスト大
+- 詳細: [260329-02_非MDファイル翻訳サポート](.tasks/do/260329-02_非MDファイル翻訳サポート.md)
+
 ## ADR-260329-03: vscode依存の切り離し方針 — 値DI + 関数DI
 
 ### 背景

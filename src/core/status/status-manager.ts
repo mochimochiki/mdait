@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
-import { StatusCollector } from "./status-collector";
+import type { StatusCollectorPort } from "./status-collector-port";
 import {
+	type DirectoryStatusItem,
+	type FileStatusItem,
 	Status,
 	type StatusItem,
-	type FileStatusItem,
-	type DirectoryStatusItem,
 	type UnitStatusItem,
 } from "./status-item";
 import type { StatusItemType } from "./status-item";
@@ -26,8 +26,8 @@ export class StatusManager {
 	// StatusItemTree（ファーストクラスコレクション）
 	private statusItemTree: StatusItemTree;
 
-	// StatusCollectorインスタンス（ファイル状況の収集・更新を担当）
-	private statusCollector: StatusCollector;
+	// StatusCollectorPort（DI注入。ファイル状況の収集・更新を担当）
+	private statusCollector: StatusCollectorPort | undefined;
 
 	// 設定情報
 	private config: Configuration;
@@ -39,7 +39,6 @@ export class StatusManager {
 	 * Constructor (private)
 	 */
 	private constructor() {
-		this.statusCollector = new StatusCollector();
 		this.config = Configuration.getInstance();
 		this.statusItemTree = new StatusItemTree();
 	}
@@ -56,6 +55,14 @@ export class StatusManager {
 	}
 
 	/**
+	 * setCollector
+	 * StatusCollectorPort実装をDI注入する。activate時に呼び出す。
+	 */
+	public setCollector(collector: StatusCollectorPort): void {
+		this.statusCollector = collector;
+	}
+
+	/**
 	 * buildAllStatusItem
 	 * [重い処理]
 	 * 全ファイルをパースしてStatusItemツリーを再構築
@@ -66,6 +73,10 @@ export class StatusManager {
 		const startTime = performance.now();
 
 		try {
+			if (!this.statusCollector) {
+				console.warn("StatusManager: buildStatusItemTree() - collector not set, skipping");
+				return;
+			}
 			this.initialize();
 			// StatusCollectorから直接StatusItemTreeを取得
 			if (this.statusItemTree) {
@@ -96,6 +107,10 @@ export class StatusManager {
 	 */
 	public async refreshFileStatus(filePath: string): Promise<void> {
 		try {
+			if (!this.statusCollector) {
+				console.warn("StatusManager: refreshFileStatus() - collector not set, skipping");
+				return;
+			}
 			const newStatus = await this.statusCollector.collectFileStatus(filePath);
 
 			// 該当ファイルのStatusItemを再構築

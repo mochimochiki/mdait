@@ -87,17 +87,34 @@ interface StatusItemTree {
 
 ### StatusManager
 
-StatusCollectorとUIの橋渡しとして全体構築・部分更新を担います。
+StatusCollector（Commands層）とUIの橋渡しとして全体構築・部分更新を担います。StatusCollectorはCommands層に配置されているため、`StatusCollectorPort`インターフェース（Core層定義）を介したDI注入で接続します。
 
-**主要メソッド**: `refreshFileStatus(filePath)` / `getFileStatus(filePath)` / `clear()`
+**主要メソッド**: `refreshFileStatus(filePath)` / `getFileStatus(filePath)` / `clear()` / `setCollector(collector)`
 
 ```typescript
-// 使用例: ファイル変更時のステータス更新
-const manager = new StatusManager(workspaceRoot);
+// 使用例: activate時にCollectorをDI注入
+const manager = StatusManager.getInstance();
+manager.setCollector(new StatusCollector());
+// ファイル変更時のステータス更新
 await manager.refreshFileStatus(filePath);
 ```
 
-**実装**: [`src/core/status/`](../../src/core/status/)
+### StatusCollectorPort
+
+Core層に定義されたポートインターフェース。StatusManager（Core層）がCommands層のStatusCollectorに直接依存しないよう、DI境界を提供します（[architecture.md](../architecture.md) P5参照）。
+
+```typescript
+export interface StatusCollectorPort {
+  collectFileStatus(filePath: string): Promise<FileStatusItem>;
+  buildStatusItemTree(): Promise<StatusItemTree>;
+}
+```
+
+Commands層の`StatusCollector`がこのインターフェースを実装し、`extension.ts`のactivate時に`StatusManager.setCollector()`で注入します。collector未設定時はwarnログを出力してスキップします。
+
+**実装**: [`src/core/status/status-collector-port.ts`](../../src/core/status/status-collector-port.ts)、注入先: [`src/core/status/status-manager.ts`](../../src/core/status/status-manager.ts)
+
+**実装（StatusManager）**: [`src/core/status/`](../../src/core/status/)
 
 ## UnitRegistry管理
 
@@ -115,6 +132,23 @@ a2b5c7d8 <encoded_content>
 **GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリを削除します。
 
 **実装**: [`src/core/unit-registry/`](../../src/core/unit-registry/)
+
+## FileState管理
+
+非Markdownファイル（.txt, .csv等）の翻訳状態を `.mdait/file-state` で管理します。MDファイルのようにファイル内にHTMLコメントマーカーを埋め込めないため、外部ストアで状態を永続化します。
+
+**保存形式**: TSV（タブ区切り）。ターゲットファイルのパス・hash・翻訳元hash・needフラグの4カラム。パスで昇順ソートしgit diffを読みやすくします。
+
+```
+# mdait file-state
+# path	hash	from	need
+docs/en/data.csv	11223344	55667788	translate
+docs/en/readme.txt	a1b2c3d4	ff03a1b2	
+```
+
+**UnitRegistryとの関係**: FileStateStoreはパスベースのメタデータ管理（path→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。非MDファイルでもrevise時に旧コンテンツが必要なため、sync時にUnitRegistryに保存します。
+
+**実装**: [`src/core/file-state/file-state-store.ts`](../../src/core/file-state/file-state-store.ts)
 
 ## Diff生成
 
@@ -274,6 +308,8 @@ sequenceDiagram
 | FrontMatter | [`src/core/markdown/frontmatter-translation.ts`](../../src/core/markdown/frontmatter-translation.ts) | frontmatter翻訳状態の読み書き |
 | HashCalculator | [`src/core/hash/`](../../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
+| StatusCollectorPort | [`src/core/status/status-collector-port.ts`](../../src/core/status/status-collector-port.ts) | ステータス収集のDI境界インターフェース |
+| FileStateStore | [`src/core/file-state/file-state-store.ts`](../../src/core/file-state/file-state-store.ts) | 非MDファイルの翻訳状態管理（path→hash/from/need） |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |
 | TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |

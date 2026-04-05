@@ -1,5 +1,7 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { StatusCollector } from "./commands/file-handler/status-collector";
 import { createConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -21,6 +23,7 @@ import {
 	transCommand,
 	translateFrontmatterCommand,
 } from "./commands/trans/trans-command";
+import { FileStateStore } from "./core/file-state/file-state-store";
 import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
 import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
@@ -71,6 +74,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		await config.initialize();
 		configInitialized = true;
 		logger.info("config", "Configuration loaded successfully");
+
+		// FileStateStoreの起動時ロード（非MDファイルの翻訳状態を即座に利用可能にする）
+		const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (wsRoot) {
+			const mdaitDir = path.join(wsRoot, ".mdait");
+			if (fs.existsSync(mdaitDir)) {
+				FileStateStore.getInstance().ensureLoaded(mdaitDir);
+			}
+		}
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
 		logger.info("config", "Configuration not loaded", {
@@ -87,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// StatusManagerの初期化
 	const statusManager = StatusManager.getInstance();
+	statusManager.setCollector(new StatusCollector());
 
 	// mdaitHasStatusコンテキスト変数を初期化
 	await updateHasStatusContext(statusManager);
@@ -519,7 +532,19 @@ export async function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				if (!filePath.toLowerCase().endsWith(".md")) {
+				// 対象拡張子チェック（.md + config で指定された拡張子）
+				const ext = path.extname(filePath).toLowerCase();
+				const supportedExtensions = new Set([".md"]);
+				if (configInitialized) {
+					for (const pair of config.transPairs) {
+						if (pair.extensions) {
+							for (const e of pair.extensions) {
+								supportedExtensions.add(e.toLowerCase());
+							}
+						}
+					}
+				}
+				if (!supportedExtensions.has(ext)) {
 					return;
 				}
 
@@ -530,6 +555,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				if (!config.sync.autoSyncOnSave) {
 					return;
 				}
+
+				const isMdFile = ext === ".md";
 
 				let shouldSync = false;
 				try {
@@ -554,36 +581,53 @@ export async function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				// mdaitマーカーが存在するかチェック（まだ一度もsyncしていないファイルは除外）
+				// 初期化済みかチェック（まだ一度もsyncしていないファイルは除外）
 				try {
-					const fileDocument = await vscode.workspace.fs.readFile(
-						vscode.Uri.file(filePath),
-					);
-					const decoder = new TextDecoder("utf-8");
-					const content = decoder.decode(fileDocument);
-					const parsed = markdownParser.parse(content, config);
-
-					// ユニットにマーカーが存在するか確認
-					const hasUnitMarker = parsed.units.some(
-						(unit) => unit.marker.hash !== null,
-					);
-
-					// フロントマターにマーカーが存在するか確認
-					const hasFrontmatterMarker = parsed.frontMatter
-						? parseFrontmatterMarker(parsed.frontMatter) !== null
-						: false;
-
-					// いずれのマーカーも存在しない場合は除外
-					if (!hasUnitMarker && !hasFrontmatterMarker) {
-						logger.debug(
-							"extension",
-							"Skipping file save sync (no mdait markers)",
-							{ filePath },
+					if (isMdFile) {
+						// MDファイル: mdaitマーカーの存在チェック
+						const fileDocument = await vscode.workspace.fs.readFile(
+							vscode.Uri.file(filePath),
 						);
-						return;
+						const decoder = new TextDecoder("utf-8");
+						const content = decoder.decode(fileDocument);
+						const parsed = markdownParser.parse(content, config);
+
+						const hasUnitMarker = parsed.units.some(
+							(unit) => unit.marker.hash !== null,
+						);
+						const hasFrontmatterMarker = parsed.frontMatter
+							? parseFrontmatterMarker(parsed.frontMatter) !== null
+							: false;
+
+						if (!hasUnitMarker && !hasFrontmatterMarker) {
+							logger.debug(
+								"extension",
+								"Skipping file save sync (no mdait markers)",
+								{ filePath },
+							);
+							return;
+						}
+					} else {
+						// 非MDファイル: FileStateStoreにエントリがあるかチェック
+						const workspaceRoot =
+							vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+						if (workspaceRoot) {
+							const relPath = path
+								.relative(workspaceRoot, filePath)
+								.replace(/\\/g, "/");
+							const store = FileStateStore.getInstance();
+							if (!store.getEntry(relPath)) {
+								logger.debug(
+									"extension",
+									"Skipping file save sync (no file-state entry)",
+									{ filePath },
+								);
+								return;
+							}
+						}
 					}
 				} catch (error) {
-					logger.warn("extension", "Failed to check mdait markers on save", {
+					logger.warn("extension", "Failed to check initialization on save", {
 						error: (error as Error).message,
 					});
 					return;
@@ -671,9 +715,21 @@ export async function activate(context: vscode.ExtensionContext) {
 	// OutputChannelもdispose対象に追加
 	context.subscriptions.push(outputChannel);
 
-	if (process.env.MDAIT_DEBUG_IPC) {
-		const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (wsRoot) {
+	// デバッグIPCモード: 環境変数またはファイルトリガーで有効化
+	// ファイルトリガー (.mdait/debug/.ipc-enabled) を使うことで、
+	// 同バージョンのVS Codeが起動中でもmutex転送後にIPCが機能する
+	const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (wsRoot) {
+		const debugTriggerFile = vscode.Uri.file(
+			`${wsRoot}/.mdait/debug/.ipc-enabled`,
+		);
+		const ipcEnabled =
+			process.env.MDAIT_DEBUG_IPC ||
+			(await vscode.workspace.fs.stat(debugTriggerFile).then(
+				() => true,
+				() => false,
+			));
+		if (ipcEnabled) {
 			const { DebugCommandHandler } = await import(
 				"./infra/debug/debug-command-handler.js"
 			);
