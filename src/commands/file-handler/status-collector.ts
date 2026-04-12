@@ -508,17 +508,11 @@ export class StatusCollector implements StatusCollectorPort {
 	 */
 	private collectDirectoryExtensions(): Map<string, string[] | undefined> {
 		const result = new Map<string, string[] | undefined>();
+		const exts = this.config.trans.extensions;
 		for (const pair of this.config.transPairs) {
-			const exts = pair.extensions;
-			// 同一ディレクトリが複数pairで使われる場合はマージ
 			for (const dir of [pair.sourceDir, pair.targetDir]) {
-				const existing = result.get(dir);
-				if (existing === undefined && !result.has(dir)) {
+				if (!result.has(dir)) {
 					result.set(dir, exts);
-				} else if (exts && existing) {
-					// 両方ある場合はマージ
-					const merged = [...new Set([...existing, ...exts])];
-					result.set(dir, merged);
 				}
 			}
 		}

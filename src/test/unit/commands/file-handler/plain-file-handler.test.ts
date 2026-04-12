@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type * as vscode from "vscode";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import type { Translator } from "../../../../commands/trans/translator";
 import { FileStateStore } from "../../../../core/file-state/file-state-store";
@@ -347,8 +348,11 @@ suite("PlainFileHandler", () => {
 	suite("translate() 早期リターン", () => {
 		/** translate()の引数に使うダミーオブジェクト */
 		const dummyTranslator = {} as Translator;
-		const dummyProgress = { report: () => {} };
-		const dummyToken = {
+		const dummyProgress: vscode.Progress<{
+			message?: string;
+			increment?: number;
+		}> = { report: () => {} };
+		const dummyToken: vscode.CancellationToken = {
 			isCancellationRequested: false,
 			onCancellationRequested: () => ({ dispose: () => {} }),
 		};
@@ -378,8 +382,8 @@ suite("PlainFileHandler", () => {
 				targetFile,
 				dummyTranslator,
 				pair,
-				dummyProgress as any,
-				dummyToken as any,
+				dummyProgress,
+				dummyToken,
 			);
 
 			assert.ok(result);
@@ -405,8 +409,8 @@ suite("PlainFileHandler", () => {
 				targetFile,
 				dummyTranslator,
 				pair,
-				dummyProgress as any,
-				dummyToken as any,
+				dummyProgress,
+				dummyToken,
 			);
 
 			assert.strictEqual(result, undefined);
@@ -436,11 +440,165 @@ suite("PlainFileHandler", () => {
 				targetFile,
 				dummyTranslator,
 				pair,
-				dummyProgress as any,
-				dummyToken as any,
+				dummyProgress,
+				dummyToken,
 			);
 
 			assert.strictEqual(result, undefined);
+		});
+	});
+
+	suite("translate() reviseパッチモード", () => {
+		const dummyProgress: vscode.Progress<{
+			message?: string;
+			increment?: number;
+		}> = { report: () => {} };
+		const dummyToken: vscode.CancellationToken = {
+			isCancellationRequested: false,
+			onCancellationRequested: () => ({ dispose: () => {} }),
+		};
+
+		/** reviseテスト用のソース・ターゲットファイルを準備 */
+		function setupReviseFiles(opts: {
+			oldSource: string;
+			newSource: string;
+			previousTranslation: string;
+		}): {
+			targetFile: string;
+			pair: {
+				sourceDir: string;
+				targetDir: string;
+				sourceLang: string;
+				targetLang: string;
+			};
+		} {
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			fs.writeFileSync(sourceFile, opts.newSource, "utf-8");
+			fs.writeFileSync(targetFile, opts.previousTranslation, "utf-8");
+
+			const oldHash = calculateHash(opts.oldSource, false);
+
+			// UnitRegistryに旧ソースを保存（loadUnitRegistryで取得できるようにする）
+			const urm = UnitRegistryManager.getInstance();
+			urm.saveUnitRegistry(oldHash, opts.oldSource);
+
+			const store = FileStateStore.getInstance();
+			store.setEntry({
+				targetPath: "target/test.txt",
+				hash: calculateHash(opts.previousTranslation, false),
+				fromHash: oldHash,
+				need: `revise@${oldHash}`,
+			});
+
+			return {
+				targetFile,
+				pair: {
+					sourceDir: "source",
+					targetDir: "target",
+					sourceLang: "ja",
+					targetLang: "en",
+				},
+			};
+		}
+
+		test("パッチ適用成功時、patchedCount=1で返ること", async () => {
+			const { targetFile, pair } = setupReviseFiles({
+				oldSource: "line1\nline2\nline3",
+				newSource: "line1\nline2 changed\nline3",
+				previousTranslation: "translated1\ntranslated2\ntranslated3",
+			});
+
+			const mockTranslator = {
+				translateRevisionPatch: async () => ({
+					targetPatch:
+						"=translated1\n-translated2\n+translated2 updated\n=translated3",
+					termSuggestions: [],
+					warnings: [],
+				}),
+				translate: async () => {
+					throw new Error("translate() should not be called in patch mode");
+				},
+			} as unknown as Translator;
+
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
+
+			assert.ok(result);
+			assert.strictEqual(result.patchedCount, 1);
+			assert.strictEqual(result.translatedCount, 0);
+		});
+
+		test("パッチ適用失敗時、全文翻訳にフォールバックしtranslatedCount=1で返ること", async () => {
+			const { targetFile, pair } = setupReviseFiles({
+				oldSource: "line1\nline2\nline3",
+				newSource: "line1\nline2 changed\nline3",
+				previousTranslation: "translated1\ntranslated2\ntranslated3",
+			});
+
+			const mockTranslator = {
+				translateRevisionPatch: async () => ({
+					// コンテキスト行が一致しない不正なパッチ → applySimplePatch が null を返す
+					targetPatch:
+						"=WRONG_CONTEXT\n-translated2\n+translated2 updated\n=WRONG",
+					termSuggestions: [],
+					warnings: [],
+				}),
+				translate: async () => ({
+					translatedText: "full translation fallback",
+					termSuggestions: [],
+				}),
+			} as unknown as Translator;
+
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
+
+			assert.ok(result);
+			assert.strictEqual(result.translatedCount, 1);
+			assert.strictEqual(result.patchedCount, 0);
+		});
+
+		test("パッチ翻訳で例外発生時、全文翻訳にフォールバックすること", async () => {
+			const { targetFile, pair } = setupReviseFiles({
+				oldSource: "line1\nline2\nline3",
+				newSource: "line1\nline2 changed\nline3",
+				previousTranslation: "translated1\ntranslated2\ntranslated3",
+			});
+
+			const mockTranslator = {
+				translateRevisionPatch: async () => {
+					throw new Error("LLM API error");
+				},
+				translate: async () => ({
+					translatedText: "full translation after error",
+					termSuggestions: [],
+				}),
+			} as unknown as Translator;
+
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
+
+			assert.ok(result);
+			assert.strictEqual(result.translatedCount, 1);
+			assert.strictEqual(result.patchedCount, 0);
 		});
 	});
 });

@@ -4,8 +4,7 @@
       "sourceLang": "ja",
       "sourceDir": "content/ja",
       "targetLang": "en",
-      "targetDir": "content/en",
-      "extensions": [".txt", ".csv"]
+      "targetDir": "content/en"
     },
     {
       "sourceLang": "en",
@@ -28,7 +27,8 @@
     "retryLimit": 1,
     "frontmatter": {
       "keys": ["title", "description"]
-    }
+    },
+    "extensions": [".txt", ".csv"]
   },
   "primaryLang": "en",
   "sync": {

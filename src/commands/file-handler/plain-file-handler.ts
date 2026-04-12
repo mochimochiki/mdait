@@ -1,7 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
+import {
+	applySimplePatch,
+	createUnifiedDiff,
+	hasDiff,
+} from "../../core/diff/diff-generator";
 import { FileStateStore } from "../../core/file-state/file-state-store";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import {
@@ -292,27 +296,70 @@ export class PlainFileHandler implements FileHandler {
 			message: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
 		});
 
-		// 10. 翻訳実行（reviseも全文翻訳。非MDではパッチモードは使用しない）
-		const result = await translator.translate(
-			sourceContent,
-			pair.sourceLang,
-			pair.targetLang,
-			context,
-			token,
-		);
+		// 10. 翻訳実行
+		let translatedText: string | undefined;
+		let termSuggestions:
+			| { source: string; target: string; context: string; reason?: string }[]
+			| undefined;
+		let usedPatchMode = false;
+
+		if (isRevise && previousTranslation && sourceDiff) {
+			try {
+				const patchResult = await translator.translateRevisionPatch(
+					sourceContent,
+					pair.sourceLang,
+					pair.targetLang,
+					context,
+					token,
+				);
+				const patched = applySimplePatch(
+					previousTranslation,
+					patchResult.targetPatch,
+				);
+				if (patched) {
+					translatedText = patched;
+					termSuggestions = patchResult.termSuggestions;
+					usedPatchMode = true;
+				} else {
+					logger.warn(
+						"trans",
+						"Patch apply failed for plain file, falling back to full translation",
+						{ file: targetRelPath },
+					);
+				}
+			} catch (error) {
+				logger.warn(
+					"trans",
+					"Patch translation failed for plain file, falling back",
+					{ file: targetRelPath, ...formatError(error) },
+				);
+			}
+		}
+
+		if (!translatedText) {
+			const result = await translator.translate(
+				sourceContent,
+				pair.sourceLang,
+				pair.targetLang,
+				context,
+				token,
+			);
+			translatedText = result.translatedText;
+			termSuggestions = result.termSuggestions;
+		}
 
 		// 11. 結果書き込み
 		const encoder = new TextEncoder();
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(targetFilePath),
-			encoder.encode(result.translatedText),
+			encoder.encode(translatedText),
 		);
 
 		// 12. FileStateStore更新してディスクに保存
 		const sourceHash = calculateHash(sourceContent, false);
 		store.setEntry({
 			targetPath: targetRelPath,
-			hash: calculateHash(result.translatedText, false),
+			hash: calculateHash(translatedText, false),
 			fromHash: sourceHash,
 			need: "",
 		});
@@ -325,8 +372,8 @@ export class PlainFileHandler implements FileHandler {
 		unitRegistryManager.saveUnitRegistry(sourceHash, sourceContent);
 
 		return {
-			translatedCount: 1,
-			patchedCount: 0,
+			translatedCount: usedPatchMode ? 0 : 1,
+			patchedCount: usedPatchMode ? 1 : 0,
 			skippedCount: 0,
 			tmHits: tmHit ? 1 : 0,
 		};
@@ -349,7 +396,7 @@ export class PlainFileHandler implements FileHandler {
 				translatedUnits: 0,
 				totalUnits: 1,
 				children: [],
-				contextValue: "mdaitFileSource",
+				contextValue: "mdaitPlainFileSource",
 			};
 		}
 
@@ -383,8 +430,8 @@ export class PlainFileHandler implements FileHandler {
 			tooltip,
 			contextValue:
 				status === Status.Translated
-					? "mdaitFileTargetComplete"
-					: "mdaitFileTarget",
+					? "mdaitPlainFileTargetComplete"
+					: "mdaitPlainFileTarget",
 		};
 	}
 

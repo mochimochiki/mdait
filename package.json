@@ -226,7 +226,7 @@
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
           "group": "inline"
         },
         {

@@ -830,49 +830,109 @@ Important Notes:
  * }
  * ```
  */
-export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source {{fileExtension}} file has been modified. Update the existing translation to reflect the changes.
+export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source {{fileExtension}} file has been modified. Update the existing translation by returning ONLY a patch.
 
-SOURCE DIFF (unified format):
+ABSOLUTE LANGUAGE CONSTRAINT:
+- All updated text MUST be written in LANGUAGE: {{targetLang}}.
+
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
+
+Previous Translation (target to patch):
+{{previousTranslation}}
+{{#tmReferences}}
+
+Translation Memory References:
+{{tmReferences}}
+{{/tmReferences}}
+
+Source Text Changes:
 \`\`\`diff
 {{sourceDiff}}
 \`\`\`
-
-EXISTING TRANSLATION:
-{{previousTranslation}}
 
 CRITICAL RULES:
 - Apply changes corresponding to the source diff to the existing translation.
 - Do NOT modify parts of the translation that are unaffected by the source changes.
 - Preserve the original file format and structure EXACTLY.
 - For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
-{{#terms}}
+- Do NOT output the full translated text. Output ONLY the patch.
 
-TERMINOLOGY:
-{{terms}}
-{{/terms}}
-{{#tmReferences}}
+PATCH FORMAT (read every rule carefully):
+This PATCH FORMAT is a custom, prefix-based format specifically for this task.
+It is NOT a standard unified diff or any other existing diff format.
+Do NOT use unified diff syntax here; always follow the = / - / + rules below.
 
-TRANSLATION MEMORY REFERENCES:
-{{tmReferences}}
-{{/tmReferences}}
+Each line in the patch MUST start with exactly one of these prefixes:
+  "="  = context line — copied verbatim from the previous translation
+  "-"  = old line to remove
+  "+"  = new line to insert
+
+Rules:
+1. Show 3 lines of context before and after each change. If fewer than 3 lines exist, show as many as available.
+2. Context lines MUST start with "=" immediately followed by the content (no space between "=" and content).
+3. Old lines start with "-" immediately followed by the content to remove.
+4. New lines start with "+" immediately followed by the content to insert.
+5. If multiple changes are within 3 lines of each other, merge them into one block.
+6. Empty lines in the original text become context lines containing only "=" (just the prefix, no content).
+7. For insert-only changes (no lines removed), use only "+" lines between context lines.
+8. For delete-only changes (no lines added), use only "-" lines between context lines.
+
+EXAMPLE 1 — Simple text change:
+Previous Translation:
+  header1,header2
+  value1,value2
+  old data,info
+
+Patch (source changed "old data"):
+=header1,header2
+=value1,value2
+-old data,info
++new data,info
+
+EXAMPLE 2 — Insert-only (adding a new row):
+Previous Translation:
+  header1,header2
+  row1,data1
+
+Patch:
+=header1,header2
+=row1,data1
++row2,data2
+
+Self-Check (MANDATORY before responding):
+1. Every context line starts with "=".
+2. Every old line starts with "-" and matches the previous translation exactly.
+3. Every new line starts with "+".
+4. No line is left without a prefix (=, -, or +).
+5. File format structure is preserved in the "+" lines.
+
+CRITICAL OUTPUT FORMAT RULES:
+
+1. The "targetPatch" field must contain ONLY the patch text.
+2. Do NOT wrap the patch in code blocks or add extra formatting.
+3. Do NOT escape quotes or add backslashes.
 
 Response Format:
-Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "translation": "the complete updated translation (LANGUAGE:{{targetLang}}) with file format preserved",
+  "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
   "termSuggestions": [
     {
       "source": "original term in {{sourceLang}}",
       "target": "translated term in {{targetLang}}",
-      "context": "an actual phrase from the text including the term",
+      "context": "an actual phrase from the text including the term (LANGUAGE: {{contextLang}})",
       "reason": "(optional) brief explanation"
     }
-  ]
+  ],
+  "warnings": ["(optional) patch risk or ambiguity"]
 }
 
 Important Notes:
-- The "translation" field must contain the COMPLETE updated file content, not just the changed parts.
+- The "context" field in termSuggestions MUST quote the original text verbatim.
 - Return ONLY valid JSON. Any extra text invalidates the response.`;
 
 /**

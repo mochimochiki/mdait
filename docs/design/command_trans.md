@@ -98,7 +98,9 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用。失敗時はユーザーに確認ダイアログを表示し、「スキップ」で手修正を保持、「続行」で全文再翻訳にフォールバック（[architecture.md](../architecture.md) P4参照）
+- **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用（[architecture.md](../architecture.md) P4参照）。失敗時の挙動はファイルタイプで異なる:
+  - **MD**: ユーザーに確認ダイアログを表示し、「スキップ」で手修正を保持、「続行」で全文再翻訳にフォールバック
+  - **非MD**: サイレントに全文再翻訳へフォールバック（バッチ処理での中断回避のため）
 - **パッチ補完**: LLMが`@@`ハンク行なしのパッチを返すケースに対応し、`applyUnifiedPatch`内で自動補完する
 - **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
 - **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
@@ -111,7 +113,7 @@ sequenceDiagram
 |---|---|
 | [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transCommand()` → `TransCommandResult`, `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()`。FileHandler dispatch化済み: ファイルタイプに応じて`MdFileHandler`/`PlainFileHandler`に委譲 |
 | [`file-handler-factory.ts`](../../src/commands/file-handler/file-handler-factory.ts) | `getFileHandler()` - 拡張子に基づくFileHandler振り分け（分岐の唯一の集約点） |
-| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。FileStateStore + UnitRegistryベース |
+| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。FileStateStore + UnitRegistryベース。revise時はパッチモード（`translateRevisionPatch` + `applySimplePatch`）を使用し、失敗時はサイレントに全文翻訳へフォールバック |
 | [`translator.ts`](../../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース。`TranslatorPromptConfig`でMD/非MD用プロンプトIDを切り替え |
 | [`translator-builder.ts`](../../src/commands/trans/translator-builder.ts) | `TranslatorBuilder` - `build()`でMD用、`buildPlain()`で非MD用Translatorを構築 |
 | [`translation-context.ts`](../../src/commands/trans/translation-context.ts) | `TranslationContext` - 翻訳コンテキスト（用語集・TM参照・`fileExtension`等） |

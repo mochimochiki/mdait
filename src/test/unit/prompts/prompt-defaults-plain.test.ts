@@ -82,8 +82,8 @@ suite("非MDファイル用デフォルトプロンプト", () => {
 			"translate用プロンプトにtranslationフィールドが含まれること",
 		);
 		assert.ok(
-			revisePlain.includes('"translation"'),
-			"revise用プロンプトにtranslationフィールドが含まれること",
+			revisePlain.includes('"targetPatch"'),
+			"revise用プロンプトにtargetPatchフィールドが含まれること",
 		);
 	});
 });

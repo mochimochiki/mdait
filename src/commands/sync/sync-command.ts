@@ -98,7 +98,7 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			const files = await fileExplorer.getSourceFiles(
 				pair.sourceDir,
 				config,
-				pair.extensions,
+				config.trans.extensions,
 			);
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(

@@ -42,6 +42,8 @@ export interface TransConfig {
 	retryLimit: number;
 	/** 非MDファイルの最大サイズ（バイト）。超過時はスキップ */
 	maxFileSize: number;
+	/** 追加の翻訳対象拡張子（.mdは常に含まれる） */
+	extensions?: string[];
 	// 翻訳固有設定の拡張用
 	[key: string]: unknown;
 }
@@ -67,7 +69,6 @@ export interface TransPair {
 	targetDir: string;
 	sourceLang: string;
 	targetLang: string;
-	extensions?: string[];
 }
 
 /**
@@ -110,6 +111,7 @@ interface MdaitConfig {
 		contextSize?: number;
 		retryLimit?: number;
 		maxFileSize?: number;
+		extensions?: string[];
 	};
 	terms?: {
 		filename?: string;
@@ -445,6 +447,11 @@ export class Configuration {
 			}
 			if (config.trans?.maxFileSize !== undefined) {
 				this.trans.maxFileSize = Math.max(1024, config.trans.maxFileSize);
+			}
+			if (config.trans?.extensions !== undefined) {
+				if (Array.isArray(config.trans.extensions)) {
+					this.trans.extensions = config.trans.extensions;
+				}
 			}
 
 			// 用語集設定の読み込み

@@ -535,13 +535,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				// 対象拡張子チェック（.md + config で指定された拡張子）
 				const ext = path.extname(filePath).toLowerCase();
 				const supportedExtensions = new Set([".md"]);
-				if (configInitialized) {
-					for (const pair of config.transPairs) {
-						if (pair.extensions) {
-							for (const e of pair.extensions) {
-								supportedExtensions.add(e.toLowerCase());
-							}
-						}
+				if (configInitialized && config.trans.extensions) {
+					for (const e of config.trans.extensions) {
+						supportedExtensions.add(e.toLowerCase());
 					}
 				}
 				if (!supportedExtensions.has(ext)) {
