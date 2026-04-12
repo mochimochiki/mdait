@@ -74,8 +74,13 @@ export class PlainFileHandler implements FileHandler {
 				},
 			);
 		} else if (existing.fromHash !== sourceHash) {
-			// ソース変更あり → need:revise@{旧fromHash}
-			need = `${NEED_REVISE_PREFIX}${existing.fromHash}`;
+			// ソース変更あり
+			if (existing.need.startsWith(NEED_REVISE_PREFIX)) {
+				// 既にrevise中 → 旧基準ハッシュを保持（上書きしない）
+				need = existing.need;
+			} else {
+				need = `${NEED_REVISE_PREFIX}${existing.fromHash}`;
+			}
 			revisionsNeeded = 1;
 			modified = 1;
 		} else {
@@ -296,6 +301,16 @@ export class PlainFileHandler implements FileHandler {
 			message: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
 		});
 
+		// キャンセルチェック（LLM呼び出し前）
+		if (token.isCancellationRequested) {
+			return {
+				translatedCount: 0,
+				patchedCount: 0,
+				skippedCount: 1,
+				tmHits: 0,
+			};
+		}
+
 		// 10. 翻訳実行
 		let translatedText: string | undefined;
 		let termSuggestions:
@@ -346,6 +361,16 @@ export class PlainFileHandler implements FileHandler {
 			);
 			translatedText = result.translatedText;
 			termSuggestions = result.termSuggestions;
+		}
+
+		// キャンセルチェック（書き込み前）
+		if (token.isCancellationRequested) {
+			return {
+				translatedCount: 0,
+				patchedCount: 0,
+				skippedCount: 1,
+				tmHits: 0,
+			};
 		}
 
 		// 11. 結果書き込み

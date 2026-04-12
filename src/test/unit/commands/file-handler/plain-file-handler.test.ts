@@ -143,6 +143,55 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(entry.fromHash, calculateHash("source text", false));
 		});
 
+		test("複数回のソース更新で最初のrevise基準ハッシュが保持されること", async () => {
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const originalContent = "original content";
+			const secondContent = "second content";
+			const thirdContent = "third content";
+			const originalHash = calculateHash(originalContent, false);
+			const secondHash = calculateHash(secondContent, false);
+
+			fs.writeFileSync(targetFile, "translated content", "utf-8");
+
+			// 初回: originalHash → secondContent でrevise@originalHash
+			const store = FileStateStore.getInstance();
+			store.setEntry({
+				targetPath: "target/test.txt",
+				hash: calculateHash("translated content", false),
+				fromHash: originalHash,
+				need: "",
+			});
+
+			fs.writeFileSync(sourceFile, secondContent, "utf-8");
+			await handler.sync(sourceFile, targetFile);
+
+			const entryAfterFirst = store.getEntry("target/test.txt");
+			assert.ok(entryAfterFirst);
+			assert.strictEqual(entryAfterFirst.need, `revise@${originalHash}`);
+
+			// 2回目: secondHash → thirdContent だが、既にrevise@originalHash
+			// fromHashはsecondHashに更新されるが、needの基準ハッシュはoriginalHashのまま
+			fs.writeFileSync(sourceFile, thirdContent, "utf-8");
+			await handler.sync(sourceFile, targetFile);
+
+			const entryAfterSecond = store.getEntry("target/test.txt");
+			assert.ok(entryAfterSecond);
+			assert.strictEqual(
+				entryAfterSecond.need,
+				`revise@${originalHash}`,
+				"2回目のソース更新で基準ハッシュが上書きされてはならない",
+			);
+			assert.strictEqual(
+				entryAfterSecond.fromHash,
+				calculateHash(thirdContent, false),
+				"fromHashは最新のソースハッシュに更新される",
+			);
+		});
+
 		test("ソース未変更でneed:translate保持中の場合、needが維持されること", async () => {
 			const sourceFile = path.join(tempDir, "source", "data.csv");
 			const targetFile = path.join(tempDir, "target", "data.csv");
@@ -218,7 +267,7 @@ suite("PlainFileHandler", () => {
 			const status = await handler.collectStatus(filePath);
 
 			assert.strictEqual(status.status, Status.Source);
-			assert.strictEqual(status.contextValue, "mdaitFileSource");
+			assert.strictEqual(status.contextValue, "mdaitPlainFileSource");
 			assert.strictEqual(status.translatedUnits, 0);
 			assert.strictEqual(status.totalUnits, 1);
 		});
@@ -239,7 +288,7 @@ suite("PlainFileHandler", () => {
 			const status = await handler.collectStatus(filePath);
 
 			assert.strictEqual(status.status, Status.Translated);
-			assert.strictEqual(status.contextValue, "mdaitFileTargetComplete");
+			assert.strictEqual(status.contextValue, "mdaitPlainFileTargetComplete");
 			assert.strictEqual(status.translatedUnits, 1);
 		});
 
@@ -259,7 +308,7 @@ suite("PlainFileHandler", () => {
 			const status = await handler.collectStatus(filePath);
 
 			assert.strictEqual(status.status, Status.NeedsTranslation);
-			assert.strictEqual(status.contextValue, "mdaitFileTarget");
+			assert.strictEqual(status.contextValue, "mdaitPlainFileTarget");
 			assert.strictEqual(status.translatedUnits, 0);
 		});
 
@@ -445,6 +494,50 @@ suite("PlainFileHandler", () => {
 			);
 
 			assert.strictEqual(result, undefined);
+		});
+
+		test("翻訳前にキャンセルされた場合、skipped=1が返ること", async () => {
+			const sourceFile = path.join(tempDir, "source", "cancel.txt");
+			const targetFile = path.join(tempDir, "target", "cancel.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const content = "source content";
+			fs.writeFileSync(sourceFile, content, "utf-8");
+			fs.writeFileSync(targetFile, content, "utf-8");
+
+			const store = FileStateStore.getInstance();
+			store.setEntry({
+				targetPath: "target/cancel.txt",
+				hash: calculateHash(content, false),
+				fromHash: calculateHash(content, false),
+				need: "translate",
+			});
+
+			const pair = {
+				sourceDir: "source",
+				targetDir: "target",
+				sourceLang: "ja",
+				targetLang: "en",
+			};
+
+			const cancelledToken: vscode.CancellationToken = {
+				isCancellationRequested: true,
+				onCancellationRequested: () => ({ dispose: () => {} }),
+			};
+
+			const result = await handler.translate(
+				targetFile,
+				dummyTranslator,
+				pair,
+				dummyProgress,
+				cancelledToken,
+			);
+
+			assert.ok(result);
+			assert.strictEqual(result.skippedCount, 1);
+			assert.strictEqual(result.translatedCount, 0);
+			assert.strictEqual(result.patchedCount, 0);
 		});
 	});
 
