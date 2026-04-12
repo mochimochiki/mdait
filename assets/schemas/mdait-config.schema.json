@@ -233,7 +233,7 @@
             "type": "string",
             "pattern": "^\\.[a-zA-Z0-9]+$"
           },
-          "examples": [["  .txt"], [".csv", ".tsv"]]
+          "examples": [[".txt"], [".csv", ".tsv"]]
         }
       },
       "additionalProperties": false

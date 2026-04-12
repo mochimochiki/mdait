@@ -2,8 +2,10 @@ import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
+import { Configuration } from "../../infra/config/configuration";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import {
 	type TransCommandResult,
 	type TranslateUnitMetrics,
@@ -56,13 +58,20 @@ export class StatusTreeTranslationHandler {
 		const statusManager = StatusManager.getInstance();
 
 		try {
-			// ディレクトリ配下のMarkdownファイルを取得
-			const pattern = new vscode.RelativePattern(directoryPath, "**/*.md");
+			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）
+			const config = Configuration.getInstance();
+			const globPattern = FileExplorer.buildExtensionGlob(
+				config.trans.extensions,
+			);
+			const pattern = new vscode.RelativePattern(directoryPath, globPattern);
 			const files = await vscode.workspace.findFiles(pattern);
 
 			if (files.length === 0) {
 				vscode.window.showInformationMessage(
-					vscode.l10n.t("No Markdown files found in directory '{0}'", directoryPath),
+					vscode.l10n.t(
+						"No translatable files found in directory '{0}'",
+						directoryPath,
+					),
 				);
 				return;
 			}
@@ -76,7 +85,9 @@ export class StatusTreeTranslationHandler {
 				},
 				async (progress, token) => {
 					// ディレクトリの翻訳状態を設定
-					await statusManager.changeDirectoryStatus(directoryPath, { isTranslating: true });
+					await statusManager.changeDirectoryStatus(directoryPath, {
+						isTranslating: true,
+					});
 
 					try {
 						// 各ファイルに対して翻訳を順次実行（キャンセルチェック付き）
@@ -86,7 +97,9 @@ export class StatusTreeTranslationHandler {
 						for (let i = 0; i < files.length; i++) {
 							// ディレクトリのキャンセルチェック
 							if (token.isCancellationRequested) {
-								console.log(`Directory translation cancelled, skipping remaining files`);
+								console.log(
+									`Directory translation cancelled, skipping remaining files`,
+								);
 								vscode.window.showInformationMessage(
 									vscode.l10n.t(
 										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
@@ -126,14 +139,19 @@ export class StatusTreeTranslationHandler {
 						}
 					} finally {
 						// ディレクトリの翻訳状態をクリア
-						await statusManager.changeDirectoryStatus(directoryPath, { isTranslating: false });
+						await statusManager.changeDirectoryStatus(directoryPath, {
+							isTranslating: false,
+						});
 					}
 				},
 			);
 		} catch (error) {
 			console.error("Error during directory translation:", error);
 			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error during directory translation: {0}", (error as Error).message),
+				vscode.l10n.t(
+					"Error during directory translation: {0}",
+					(error as Error).message,
+				),
 			);
 		}
 	}
@@ -141,7 +159,9 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * 単一ファイルを翻訳する
 	 */
-	public async translateFile(item: StatusItem): Promise<TransCommandResult | undefined> {
+	public async translateFile(
+		item: StatusItem,
+	): Promise<TransCommandResult | undefined> {
 		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
@@ -167,22 +187,36 @@ export class StatusTreeTranslationHandler {
 			await vscode.window.withProgress(
 				{
 					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t("Translating {0}", vscode.Uri.file(filePath).fsPath.split(/[\\/]/).pop() || filePath),
+					title: vscode.l10n.t(
+						"Translating {0}",
+						vscode.Uri.file(filePath).fsPath.split(/[\\/]/).pop() || filePath,
+					),
 					cancellable: true,
 				},
 				async (progress, token) => {
 					try {
 						// 内部実装を直接呼び出し（二重のwithProgressを回避）
-						result = await transFile_CoreProc(vscode.Uri.file(filePath), progress, token);
+						result = await transFile_CoreProc(
+							vscode.Uri.file(filePath),
+							progress,
+							token,
+						);
 					} finally {
 						// StatusManagerを通じてisTranslatingを解除
-						await statusManager.changeFileStatus(filePath, { isTranslating: false });
+						await statusManager.changeFileStatus(filePath, {
+							isTranslating: false,
+						});
 					}
 				},
 			);
 		} catch (error) {
 			console.error("Error during file translation:", error);
-			vscode.window.showErrorMessage(vscode.l10n.t("Error during file translation: {0}", (error as Error).message));
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					"Error during file translation: {0}",
+					(error as Error).message,
+				),
+			);
 		}
 
 		return result;
@@ -191,7 +225,9 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * 単一ユニットを翻訳する
 	 */
-	public async translateUnit(item: StatusItem): Promise<TranslateUnitMetrics | undefined> {
+	public async translateUnit(
+		item: StatusItem,
+	): Promise<TranslateUnitMetrics | undefined> {
 		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
@@ -202,14 +238,27 @@ export class StatusTreeTranslationHandler {
 
 		try {
 			// StatusManagerを通じてisTranslatingを設定（これにより親ファイル・ディレクトリも自動更新される）
-			statusManager.changeUnitStatus(item.unitHash, { isTranslating: true }, item.filePath);
+			statusManager.changeUnitStatus(
+				item.unitHash,
+				{ isTranslating: true },
+				item.filePath,
+			);
 			result = await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			console.error("Error during unit translation:", error);
-			vscode.window.showErrorMessage(vscode.l10n.t("Error during unit translation: {0}", (error as Error).message));
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					"Error during unit translation: {0}",
+					(error as Error).message,
+				),
+			);
 		} finally {
 			// StatusManagerを通じてisTranslatingを解除（これにより親ファイル・ディレクトリも自動更新される）
-			statusManager.changeUnitStatus(item.unitHash, { isTranslating: false }, item.filePath);
+			statusManager.changeUnitStatus(
+				item.unitHash,
+				{ isTranslating: false },
+				item.filePath,
+			);
 		}
 
 		return result;
