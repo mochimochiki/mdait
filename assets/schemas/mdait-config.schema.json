@@ -19,7 +19,7 @@
           "sourceLang": {
             "type": "string",
             "description": "Source language code (e.g., 'ja', 'en')",
-            "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+            "pattern": "^[a-z]{2}(-[A-Z]{2,4})?$",
             "examples": ["ja", "en", "de", "fr", "zh-CN"]
           },
           "sourceDir": {
@@ -30,8 +30,8 @@
           "targetLang": {
             "type": "string",
             "description": "Target language code (e.g., 'en', 'ja')",
-            "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
-            "examples": ["ja", "en", "de", "fr", "zh-CN"]
+            "pattern": "^[a-z]{2}(-[A-Z]{2,4})?$",
+            "examples": ["ja", "en", "de", "fr", "zh-hans"]
           },
           "targetDir": {
             "type": "string",

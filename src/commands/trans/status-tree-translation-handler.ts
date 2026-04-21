@@ -74,7 +74,7 @@ export class StatusTreeTranslationHandler {
 				config.trans.extensions,
 			);
 			const pattern = new vscode.RelativePattern(directoryPath, globPattern);
-			const files = await vscode.workspace.findFiles(pattern);
+			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
 			if (files.length === 0) {
 				vscode.window.showInformationMessage(

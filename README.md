@@ -76,6 +76,7 @@ Create `.mdait/mdait.json` in your workspace root:
 | `trans.retryLimit` | Max retries on translation failure (1–5). |
 | `tm.maxReferences` | Max TM entries referenced per translation. |
 | `terms.filename` | Glossary filename (`terms.csv` or `terms.yaml`). |
+| `ignoredPatterns` | Glob pattern(s) for files/directories to exclude from all processing. Accepts a string or array of strings. Default: `"**/node_modules/**"`. |
 
 ---
 

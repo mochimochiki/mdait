@@ -67,7 +67,7 @@ export class StatusTreeTermHandler {
 		try {
 			// ディレクトリ配下のMarkdownを列挙
 			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
-			const files = await vscode.workspace.findFiles(pattern);
+			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
 			// ソースファイルのみに絞り込み
 			const sourceFiles = files.filter((f) => fileExplorer.isSourceFile(f.fsPath, config));
@@ -279,7 +279,7 @@ export class StatusTreeTermHandler {
 		try {
 			// ディレクトリ配下のMarkdownを列挙
 			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
-			const files = await vscode.workspace.findFiles(pattern);
+			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
 			// ターゲットファイルのみに絞り込み
 			const targetFiles = files.filter((f) => fileExplorer.isTargetFile(f.fsPath, config));
