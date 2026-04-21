@@ -10,3 +10,11 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 .tasks/**
+out/**
+docs/**
+design-keeper.md
+hooks.md
+.github/**
+node_modules/**
+esbuild.mjs
+.config/**

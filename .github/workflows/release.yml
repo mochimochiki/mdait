@@ -39,6 +39,9 @@ jobs:
     - name: Compile TypeScript
       run: npm run compile
       
+    - name: Bundle extension
+      run: npm run bundle
+      
     - name: Package extension
       run: npx @vscode/vsce package
       

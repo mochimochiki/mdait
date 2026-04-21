@@ -16,7 +16,7 @@
     "Other"
   ],
   "activationEvents": [],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -365,11 +365,13 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "bundle": "node esbuild.mjs --production",
+    "bundle:dev": "node esbuild.mjs",
     "lint": "biome lint --config-path .config ./src",
     "test": "npm run test:unit",
     "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/unit/core/**/*.test.js\" \"out/test/unit/utils/**/*.test.js\" \"out/test/unit/commands/**/*.test.js\" \"out/test/unit/prompts/prompt-defaults-plain.test.js\"",
     "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
-    "watch": "tsc -watch -p ./",
+    "watch": "node esbuild.mjs --watch",
     "copy-test-files": "rimraf ./src/test/unit/workspace/content && node -e \"require('node:fs').cpSync('./src/test/unit/sample-content', './src/test/unit/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
     "l10n-validate": "npx @vscode/l10n-dev validate ./l10n"
@@ -396,6 +398,8 @@
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.28.0",
     "madge": "^8.0.0",
     "mocha": "^11.3.0",
     "rimraf": "^6.0.1",

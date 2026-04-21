@@ -36,6 +36,9 @@ jobs:
     - name: Run tests
       run: npm test
       
+    - name: Bundle extension
+      run: npm run bundle
+      
     - name: Package extension
       run: npx @vscode/vsce package
       
