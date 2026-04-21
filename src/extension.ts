@@ -81,12 +81,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		logger.info("config", "Configuration loaded successfully");
 
 		// FileStateStoreの起動時ロード（非MDファイルの翻訳状態を即座に利用可能にする）
-		const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (wsRoot) {
-			const mdaitDir = path.join(wsRoot, ".mdait");
-			if (fs.existsSync(mdaitDir)) {
-				FileStateStore.getInstance().ensureLoaded(mdaitDir);
-			}
+		const mdaitDir = config.getMdaitDir();
+		if (fs.existsSync(mdaitDir)) {
+			FileStateStore.getInstance().ensureLoaded(mdaitDir);
 		}
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行

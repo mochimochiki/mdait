@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { Configuration } from "../config/configuration";
 import { Logger, formatError } from "../logging/logger";
 
 /**
@@ -16,7 +17,7 @@ export async function ensureMdaitDir(): Promise<string | null> {
 		return null;
 	}
 
-	const mdaitDir = path.join(workspaceRoot, ".mdait");
+	const mdaitDir = Configuration.getInstance().getMdaitDir();
 	const gitignorePath = path.join(mdaitDir, ".gitignore");
 
 	try {

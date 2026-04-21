@@ -1383,7 +1383,7 @@ export function lookupTmReferences(
 		return undefined;
 	}
 
-	const tmxFilePath = path.join(workspaceRoot, ".mdait", "translations.tmx");
+	const tmxFilePath = path.join(config.getMdaitDir(), "translations.tmx");
 
 	const store = TmxStore.getInstance(tmxFilePath);
 	if (store.getEntryCount() === 0) {

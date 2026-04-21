@@ -1,9 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { Configuration } from "../../infra/config/configuration";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
-import { decodeUnitRegistry, encodeUnitRegistry } from "./unit-registry-encoder";
-import { UnitRegistryParseError, UnitRegistryStore } from "./unit-registry-store";
+import {
+	decodeUnitRegistry,
+	encodeUnitRegistry,
+} from "./unit-registry-encoder";
+import {
+	UnitRegistryParseError,
+	UnitRegistryStore,
+} from "./unit-registry-store";
 
 /**
  * ユニットレジストリマネージャー
@@ -57,7 +64,10 @@ export class UnitRegistryManager {
 		if (!workspaceRoot) {
 			return null;
 		}
-		return path.join(workspaceRoot, ".mdait", "unit-registry");
+		return path.join(
+			Configuration.getInstance().getMdaitDir(),
+			"unit-registry",
+		);
 	}
 
 	/**
@@ -101,7 +111,10 @@ export class UnitRegistryManager {
 
 		// 正規形でファイルに書き込み
 		const content = store.serialize();
-		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(content));
+		await vscode.workspace.fs.writeFile(
+			vscode.Uri.file(filePath),
+			new TextEncoder().encode(content),
+		);
 
 		// バッファをクリア
 		this.writeBuffer.clear();
@@ -120,12 +133,17 @@ export class UnitRegistryManager {
 
 		if (filePath && fs.existsSync(filePath)) {
 			try {
-				const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+				const fileContent = await vscode.workspace.fs.readFile(
+					vscode.Uri.file(filePath),
+				);
 				const content = new TextDecoder().decode(fileContent);
 				this.store.parse(content);
 			} catch (error) {
 				if (error instanceof UnitRegistryParseError) {
-					console.warn("Unit-registry file is in invalid format (possibly v1). Starting fresh:", error.message);
+					console.warn(
+						"Unit-registry file is in invalid format (possibly v1). Starting fresh:",
+						error.message,
+					);
 				} else {
 					console.warn("Failed to load unit-registry file:", error);
 				}
@@ -177,7 +195,9 @@ export class UnitRegistryManager {
 			return;
 		}
 
-		console.log(`Running unit-registry GC (file size: ${Math.round(stats.size / 1024)}KB)`);
+		console.log(
+			`Running unit-registry GC (file size: ${Math.round(stats.size / 1024)}KB)`,
+		);
 
 		// ストアを取得
 		const store = await this.getOrLoadStore();
@@ -202,9 +222,14 @@ export class UnitRegistryManager {
 
 		// 正規形でファイルに書き込み
 		const content = store.serialize();
-		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(content));
+		await vscode.workspace.fs.writeFile(
+			vscode.Uri.file(filePath),
+			new TextEncoder().encode(content),
+		);
 
-		console.log(`GC completed: ${beforeSize} -> ${store.size()} unit-registry entries`);
+		console.log(
+			`GC completed: ${beforeSize} -> ${store.size()} unit-registry entries`,
+		);
 	}
 
 	/**

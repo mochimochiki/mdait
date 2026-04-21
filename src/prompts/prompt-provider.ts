@@ -80,7 +80,10 @@ export class PromptProvider {
 	 * @param variables 変数置換用のマッピング
 	 * @returns 変数置換済みのプロンプト文字列
 	 */
-	public getPrompt(promptId: PromptId, variables: PromptVariables = {}): string {
+	public getPrompt(
+		promptId: PromptId,
+		variables: PromptVariables = {},
+	): string {
 		// プロンプトテンプレートを取得
 		let template = this.getPromptTemplate(promptId);
 
@@ -116,7 +119,10 @@ export class PromptProvider {
 				this.promptCache.set(promptId, customPrompt);
 				return customPrompt;
 			} catch (error) {
-				console.warn(`Failed to load custom prompt for ${promptId} from ${customPath}, using default:`, error);
+				console.warn(
+					`Failed to load custom prompt for ${promptId} from ${customPath}, using default:`,
+					error,
+				);
 			}
 		}
 
@@ -151,13 +157,7 @@ export class PromptProvider {
 			return undefined;
 		}
 
-		// ワークスペースルートからの相対パスを絶対パスに変換
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			return undefined;
-		}
-
-		return path.join(workspaceRoot, relativePath);
+		return path.join(config.getConfigBaseDir(), relativePath);
 	}
 
 	/**
@@ -185,7 +185,10 @@ export class PromptProvider {
 			return undefined;
 		}
 
-		return path.join(workspaceRoot, ".mdait", "mdait-instructions.md");
+		return path.join(
+			Configuration.getInstance().getMdaitDir(),
+			"mdait-instructions.md",
+		);
 	}
 
 	/**
@@ -253,19 +256,25 @@ export class PromptProvider {
 	 * @param variables 変数マッピング
 	 * @returns 置換済みプロンプト
 	 */
-	private replaceVariables(template: string, variables: PromptVariables): string {
+	private replaceVariables(
+		template: string,
+		variables: PromptVariables,
+	): string {
 		let result = template;
 
 		// 条件ブロックを処理: {{#variable}}...{{/variable}}
 		// 変数が存在する場合はブロック内容を展開、なければブロック全体を削除
-		result = result.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
-			const value = variables[key];
-			if (value !== undefined && value !== "") {
-				// ブロック内容を展開し、内部の変数も置換
-				return content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-			}
-			return "";
-		});
+		result = result.replace(
+			/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
+			(_, key, content) => {
+				const value = variables[key];
+				if (value !== undefined && value !== "") {
+					// ブロック内容を展開し、内部の変数も置換
+					return content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+				}
+				return "";
+			},
+		);
 
 		// 単純変数置換: {{variable}}
 		result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => {

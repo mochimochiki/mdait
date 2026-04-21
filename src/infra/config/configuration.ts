@@ -289,6 +289,14 @@ export class Configuration {
 	}
 
 	/**
+	 * .mdaitディレクトリの絶対パスを取得する。
+	 * カスタムコンフィグパス使用時はそのディレクトリ配下の .mdait を返す。
+	 */
+	public getMdaitDir(): string {
+		return path.join(this.getConfigBaseDir(), ".mdait");
+	}
+
+	/**
 	 * mdait.jsonが存在し、設定が有効かどうかをチェックする
 	 * @returns true: 設定済み、false: 未設定または無効
 	 */
