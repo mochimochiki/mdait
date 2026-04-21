@@ -3,6 +3,7 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
@@ -12,6 +13,15 @@ import {
 	transFile_CoreProc,
 	transUnitCommand,
 } from "./trans-command";
+
+export interface DirectoryTranslationResult {
+	totalFiles: number;
+	successful: number;
+	failed: number;
+	skipped: number;
+}
+
+const logger = Logger.getInstance();
 
 /**
  * ステータスツリーアイテムの翻訳アクションハンドラ
@@ -29,7 +39,7 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * ディレクトリ内の全ファイルを翻訳する
 	 */
-	public async translateDirectory(item: StatusItem): Promise<void> {
+	public async translateDirectory(item: StatusItem): Promise<DirectoryTranslationResult | undefined> {
 		if (item.type !== StatusItemType.Directory || !item.directoryPath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
 			return;
@@ -73,11 +83,11 @@ export class StatusTreeTranslationHandler {
 						directoryPath,
 					),
 				);
-				return;
+				return { totalFiles: 0, successful: 0, failed: 0, skipped: 0 };
 			}
 
 			// withProgressで進捗表示とキャンセル機能を統合管理
-			await vscode.window.withProgress(
+			return await vscode.window.withProgress(
 				{
 					location: vscode.ProgressLocation.Notification,
 					title: vscode.l10n.t("Translating directory '{0}'", directoryPath),
@@ -97,18 +107,20 @@ export class StatusTreeTranslationHandler {
 						for (let i = 0; i < files.length; i++) {
 							// ディレクトリのキャンセルチェック
 							if (token.isCancellationRequested) {
-								console.log(
-									`Directory translation cancelled, skipping remaining files`,
+								logger.info(
+									"trans",
+									"Directory translation cancelled, skipping remaining files",
 								);
+								const skipped = files.length - successful - failed;
 								vscode.window.showInformationMessage(
 									vscode.l10n.t(
 										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
 										successful,
 										failed,
-										files.length - successful - failed,
+										skipped,
 									),
 								);
-								break; // finallyでクリーンアップされる
+								return { totalFiles: files.length, successful, failed, skipped };
 							}
 
 							const file = files[i]; // 進捗報告
@@ -122,7 +134,10 @@ export class StatusTreeTranslationHandler {
 								await transFile_CoreProc(file, progress, token);
 								successful++;
 							} catch (error) {
-								console.error(`Error translating file ${file.fsPath}:`, error);
+								logger.error("trans", "Error translating file", {
+									file: file.fsPath,
+									...formatError(error),
+								});
 								failed++;
 							}
 						}
@@ -137,6 +152,7 @@ export class StatusTreeTranslationHandler {
 								),
 							);
 						}
+						return { totalFiles: files.length, successful, failed, skipped: 0 };
 					} finally {
 						// ディレクトリの翻訳状態をクリア
 						await statusManager.changeDirectoryStatus(directoryPath, {
@@ -146,13 +162,14 @@ export class StatusTreeTranslationHandler {
 				},
 			);
 		} catch (error) {
-			console.error("Error during directory translation:", error);
+			logger.error("trans", "Error during directory translation", formatError(error));
 			vscode.window.showErrorMessage(
 				vscode.l10n.t(
 					"Error during directory translation: {0}",
 					(error as Error).message,
 				),
 			);
+			return undefined;
 		}
 	}
 
@@ -210,7 +227,7 @@ export class StatusTreeTranslationHandler {
 				},
 			);
 		} catch (error) {
-			console.error("Error during file translation:", error);
+			logger.error("trans", "Error during file translation", formatError(error));
 			vscode.window.showErrorMessage(
 				vscode.l10n.t(
 					"Error during file translation: {0}",
@@ -245,7 +262,7 @@ export class StatusTreeTranslationHandler {
 			);
 			result = await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
-			console.error("Error during unit translation:", error);
+			logger.error("trans", "Error during unit translation", formatError(error));
 			vscode.window.showErrorMessage(
 				vscode.l10n.t(
 					"Error during unit translation: {0}",

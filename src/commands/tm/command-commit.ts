@@ -200,6 +200,10 @@ async function executeTmCommitForFile(
 	const targetUnits = markdown.units.filter(isTmCommitTarget);
 
 	if (targetUnits.length === 0) {
+		logger.debug("tm.commit", "No commit target units found", {
+			file: path.basename(filePath),
+			totalUnits: markdown.units.length,
+		});
 		return {
 			processedUnits: 0,
 			skippedUnits: markdown.units.length,

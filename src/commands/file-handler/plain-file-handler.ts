@@ -396,6 +396,12 @@ export class PlainFileHandler implements FileHandler {
 		// 13. UnitRegistry保存
 		unitRegistryManager.saveUnitRegistry(sourceHash, sourceContent);
 
+		logger.info("trans", "Plain file translation completed", {
+			file: path.basename(targetFilePath),
+			mode: usedPatchMode ? "patch" : "full",
+			tmHit,
+		});
+
 		return {
 			translatedCount: usedPatchMode ? 0 : 1,
 			patchedCount: usedPatchMode ? 1 : 0,

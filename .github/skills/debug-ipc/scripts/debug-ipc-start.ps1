@@ -5,10 +5,10 @@
   VS Code バイナリを直接起動（既存インスタンスの干渉を回避）し、
   DebugCommandHandler の ready シグナルをポーリングする。
 .PARAMETER Timeout
-  ready 待ちのタイムアウト秒数（デフォルト: 60）
+  ready 待ちのタイムアウト秒数（デフォルト: 90）
 #>
 param(
-  [int]$Timeout = 60
+  [int]$Timeout = 90
 )
 
 $ErrorActionPreference = "Stop"

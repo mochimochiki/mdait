@@ -281,7 +281,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				if (!fs.existsSync(this.commandFilePath)) {
 					return null;
 				}
-				const raw = fs.readFileSync(this.commandFilePath, "utf-8");
+				const raw = fs.readFileSync(this.commandFilePath, "utf-8").replace(/^\uFEFF/, "");
 				const parsed = JSON.parse(raw);
 				if (this.isValidPayload(parsed)) {
 					return parsed;
