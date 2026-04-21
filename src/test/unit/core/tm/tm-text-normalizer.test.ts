@@ -14,9 +14,14 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown("Visit [Google](https://google.com) now"), "Visit Google now");
 		});
 
-		test("画像を除去してalt部分のみ抽出", () => {
-			assert.equal(stripMarkdown("![alt text](image.png)"), "alt text");
-			assert.equal(stripMarkdown("See ![diagram](url) here"), "See diagram here");
+		test("画像はalt含めて完全にスキップ", () => {
+			assert.equal(stripMarkdown("![alt text](image.png)"), "");
+			assert.equal(stripMarkdown("See ![diagram](url) here"), "See here");
+			// 前行テキスト＋次行画像がTMに混入しないことを確認（ソフトブレーク対策）
+			assert.equal(
+				stripMarkdown("Absolute path image links should work\n![Caption](/path/to/image.png)"),
+				"Absolute path image links should work",
+			);
 		});
 
 		test("太字を除去してテキストのみ抽出", () => {
@@ -60,9 +65,9 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown(input), expected);
 		});
 
-		test("ネスト構造のケース", () => {
+		test("ネスト構造のケース（画像はaltを含めてスキップ）", () => {
 			const input = "![image **with bold**](url)";
-			const expected = "image with bold";
+			const expected = "";
 			assert.equal(stripMarkdown(input), expected);
 		});
 
@@ -178,7 +183,7 @@ suite("core/tm/tm-text-normalizer", () => {
 				const input =
 					'# Test File 2\n\n> This is a quote.\n\nCode block:\n\n```\nconsole.log("Hello, World!");\n```\n\nImage:\n\n![Sample Image](https://via.placeholder.com/150)\n\n---\n\nTable:\n\n| Heading 1 | Heading 2 |\n| -------- | -------- |\n| Data 1 | Data 2 |\n| Data 3 | Data 4 |';
 				const expected =
-					"Test File 2\n\nThis is a quote.\n\nCode block:\n\nImage:\n\nSample Image\n\nTable:\n\nHeading 1\nHeading 2\nData 1\nData 2\nData 3\nData 4";
+					"Test File 2\n\nThis is a quote.\n\nCode block:\n\nImage:\n\nTable:\n\nHeading 1\nHeading 2\nData 1\nData 2\nData 3\nData 4";
 				assert.equal(stripMarkdown(input), expected);
 			});
 		});

@@ -149,6 +149,11 @@ function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): s
 			continue;
 		}
 
+		// 画像はalt textも含めてスキップ（TM登録には不要）
+		if (token.type === "image") {
+			continue;
+		}
+
 		// テキストトークン
 		if (token.type === "text") {
 			textParts.push(token.content);
