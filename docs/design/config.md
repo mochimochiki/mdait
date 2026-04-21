@@ -12,8 +12,8 @@ Config層は、`.mdait/mdait.json`の読み込み、バリデーション、フ�
 
 ### 基本設計
 
-- **シングルトン**: `initialize()`でロード、`getInstance()`で提供
-- **ソース**: `.mdait/mdait.json`（ワークスペースルート配下の`.mdait`ディレクトリ）
+- **シングルトン**: `initialize(customPath?)`でロード、`getInstance()`で提供
+- **ソース**: `workspaceState` に `mdait.configPath` が保存されている場合はそのパスを優先、なければワークスペースルートの `.mdait/mdait.json`
 - **スキーマ**: `schemas/mdait-config.schema.json`による補完と検証
 
 **実装**: [`src/infra/config/configuration.ts`](../../src/infra/config/configuration.ts)
@@ -22,10 +22,11 @@ Config層は、`.mdait/mdait.json`の読み込み、バリデーション、フ�
 
 初回セットアップを支援する仕組みを提供します：
 
-1. `isConfigured()`メソッドで`.mdait/mdait.json`の存在と`validate()`結果をチェック
+1. `isConfigured()`メソッドで設定ファイルの存在と`validate()`結果をチェック
 2. 初期セットアップ時は`mdait.setup.createConfig`コマンドで`mdait.template.json`から設定ファイルを生成
-3. `mdaitConfigured`コンテキスト変数でUI表示を制御し、未設定時はWelcome Viewを表示
-4. `package.json`の`jsonValidation`でJSON Schemaを関連付け、IDE上でIntelliSenseと検証が機能
+3. 既存設定がサブフォルダ等にある場合は`mdait.setup.openExistingConfig`コマンドでパスを選択（`workspaceState` に保存）
+4. `mdaitConfigured`コンテキスト変数でUI表示を制御し、未設定時はWelcome Viewを表示
+5. `package.json`の`jsonValidation`でJSON Schemaを関連付け、IDE上でIntelliSenseと検証が機能
 
 **設計意図**: ユーザーが設定ファイルを手動で作成する負担を軽減し、テンプレートから開始することでスムーズなセットアップを実現します。詳細な必須項目チェックは`validate()`が担います。
 
@@ -40,8 +41,9 @@ sequenceDiagram
 		participant FS as File System
 		participant Caller as Commands/Core/API
 
-		VS->>Cfg: initialize(context)
-		Cfg->>FS: .mdait/mdait.jsonの読み込み
+		VS->>Cfg: initialize(customPath?)
+		Note right of Cfg: customPath あり → そのパスを使用<br/>なし → workspaceRoot/.mdait/mdait.json
+		Cfg->>FS: 設定ファイルの読み込み
 		FS-->>Cfg: JSON内容
 		Cfg->>Cfg: パース+型チェック
 		Cfg->>FS: ファイル変更監視の開始
@@ -110,7 +112,7 @@ sequenceDiagram
 
 | フィールド | デフォルト | 説明 |
 |-----------|-----------|------|
-| `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応 |
+| `transPairs`（必須） | — | ソース・ターゲットのディレクトリペアと言語。複数指定で多言語展開に対応。`sourceDir`/`targetDir` は **`mdait.json` の親ディレクトリ（`.mdait` フォルダの親）相対**で記述する。例: `/project/sub/.mdait/mdait.json` なら `/project/sub/` が基準。ルートに配置した場合はワークスペースルート相対と同一 |
 | `trans.extensions` | `[]` | 追加の翻訳対象拡張子（例: `[".txt", ".csv"]`）。`.md`は常に含まれる。全翻訳ペアに共通適用 |
 | `primaryLang` | — | 用語集と TM で共有する基準言語。設定上の正準言語として扱う |
 | `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |

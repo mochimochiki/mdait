@@ -2,7 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { StatusCollector } from "./commands/file-handler/status-collector";
-import { createConfigCommand } from "./commands/setup/setup-command";
+import {
+	createConfigCommand,
+	openExistingConfigCommand,
+} from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -71,7 +74,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	let configInitialized = false;
 
 	try {
-		await config.initialize();
+		const customConfigPath =
+			context.workspaceState.get<string>("mdait.configPath");
+		await config.initialize(customConfigPath);
 		configInitialized = true;
 		logger.info("config", "Configuration loaded successfully");
 
@@ -153,6 +158,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const createConfigDisposable = vscode.commands.registerCommand(
 		"mdait.setup.createConfig",
 		() => createConfigCommand(context),
+	);
+
+	// setup.openExistingConfig command
+	const openExistingConfigDisposable = vscode.commands.registerCommand(
+		"mdait.setup.openExistingConfig",
+		() => openExistingConfigCommand(context),
 	);
 
 	// sync command
@@ -656,6 +667,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 初回データ読み込み
 	context.subscriptions.push(
 		createConfigDisposable,
+		openExistingConfigDisposable,
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,

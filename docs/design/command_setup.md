@@ -6,9 +6,15 @@
 
 ## 機能
 
-### 何をするか
+### createConfigCommand — 新規設定ファイルを作成
 
 拡張機能にバンドルされたテンプレート（`mdait.template.json`）をワークスペースの`.mdait/mdait.json`としてコピーし（`.mdait`ディレクトリが存在しない場合は自動作成）、エディタで開きます。保存・バリデーション成功後、StatusTreeが自動表示されてワークフローを開始できます。
+
+### openExistingConfigCommand — 既存の設定ファイルを選択
+
+モノレポや大きなプロジェクトのサブフォルダにある既存の `mdait.json` をファイルピッカーで選択し、そのパスをカスタム設定パスとして登録します。選択後は `workspaceState` にパスを保存し、次回起動時も同じパスを使用します。
+
+> **注意:** `transPairs` の `sourceDir`/`targetDir` は常に**ワークスペースルート相対**で記述してください（サブフォルダのコンフィグを指定した場合も同様）。
 
 ### before/after
 
@@ -26,7 +32,9 @@
 | 操作 | 対象 | トリガー |
 |---|---|---|
 | コマンドパレット `mdait.setup.createConfig` | ワークスペースルート | ユーザー操作 |
-| Welcome View の「Create Config」ボタン | ワークスペースルート | ユーザー操作 |
+| Welcome View の「mdait.json を作成」ボタン | ワークスペースルート | ユーザー操作 |
+| コマンドパレット `mdait.setup.openExistingConfig` | 任意のパス | ユーザー操作 |
+| Welcome View の「設定ファイルを指定...」ボタン | 任意のパス | ユーザー操作 |
 
 ### 結果
 
@@ -35,6 +43,8 @@
 | `.mdait/mdait.json`が存在しない | ファイル作成・エディタ表示 | 正常フロー |
 | `.mdait/mdait.json`が既に存在する | 警告ダイアログ表示 | 上書き保護 |
 | 保存後バリデーション成功 | `mdaitConfigured`コンテキスト更新 | Welcome View非表示、StatusTree表示 |
+| ファイルピッカーでキャンセル | 何もしない | — |
+| 選択ファイルがバリデーション失敗 | エラーメッセージ表示・保存しない | Welcome View継続表示 |
 
 ### エラー処理
 
@@ -95,5 +105,54 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`setup-command.ts`](../../src/commands/setup/setup-command.ts) | `createConfigCommand()` - テンプレートコピーとエディタ表示 |
+| [`setup-command.ts`](../../src/commands/setup/setup-command.ts) | `createConfigCommand()` - テンプレートコピーとエディタ表示。`openExistingConfigCommand()` - 既存設定の選択と登録 |
 | [`configuration.ts`](../../src/infra/config/configuration.ts) | `Configuration` - 設定ファイル変更・リロード・バリデーション |
+
+---
+
+## openExistingConfigCommand
+
+### 何をするか
+
+ファイルピッカーでユーザーが選択した `mdait.json` のパスを `workspaceState`（キー: `mdait.configPath`）に保存し、`Configuration.initialize(selectedPath)` でその設定をロードします。ロード成功後に `mdaitConfigured` コンテキストを更新し、StatusTree を表示します。
+
+### 操作
+
+| 操作 | 対象 | トリガー |
+|---|---|---|
+| Welcome View の「設定ファイルを指定...」ボタン | 任意パスの `mdait.json` | ユーザー操作 |
+
+### 処理フロー
+
+```mermaid
+sequenceDiagram
+    participant User as UI/Command
+    participant Cmd as openExistingConfigCommand
+    participant WS as workspaceState
+    participant Cfg as Configuration
+
+    User->>Cmd: mdait.setup.openExistingConfig 実行
+    Cmd->>User: ファイルピッカー表示（JSON フィルタ）
+    alt キャンセル
+        Cmd-->>User: 何もしない
+    end
+    User->>Cmd: mdait.json を選択
+
+    rect rgb(240, 255, 240)
+        Note over Cmd,Cfg: コンフィグロード・バリデーション・パス保存
+        Cmd->>Cfg: initialize(selectedPath)
+        Cfg->>Cfg: customConfigPath 設定・旧ウォッチャーリセット・load()
+        alt バリデーション失敗
+            Cmd-->>User: エラーメッセージ表示（保存しない）
+        end
+        Cmd->>WS: update('mdait.configPath', selectedPath)
+    end
+
+    Cmd->>User: setContext('mdaitConfigured', true)
+```
+
+### 設計ノート
+
+- **永続化**: `workspaceState` に保存するためリポジトリに含まれない（個人の作業環境設定）
+- **起動時復元**: `extension.ts` が起動時に `workspaceState.get('mdait.configPath')` を読み出し `config.initialize(customPath)` に渡す。次回 VS Code 起動後も同じコンフィグが参照される
+- **後方互換**: `customConfigPath` が未設定の場合はワークスペースルートの `.mdait/mdait.json` にフォールバック（既存動作を変えない）

@@ -527,13 +527,13 @@ export class StatusCollector implements StatusCollectorPort {
 		config: Configuration,
 		extensions?: string[],
 	): Promise<FileStatusItem[]> {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
+		const configBaseDir = config.getConfigBaseDir();
+		if (!configBaseDir) {
 			return [];
 		}
 
 		const startTime = performance.now();
-		const absoluteTargetDir = path.resolve(workspaceRoot, targetDir);
+		const absoluteTargetDir = path.resolve(configBaseDir, targetDir);
 
 		try {
 			// ディレクトリが存在するかチェック（非同期I/O）

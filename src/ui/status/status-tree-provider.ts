@@ -1,7 +1,12 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { SelectionState } from "../../core/status/selection-state";
-import { Status, type StatusItem, StatusItemType, isFrontmatterStatusItem } from "../../core/status/status-item";
+import {
+	Status,
+	type StatusItem,
+	StatusItemType,
+	isFrontmatterStatusItem,
+} from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -10,10 +15,11 @@ import { Logger, formatError } from "../../infra/logging/logger";
  * ステータスツリービューのデータプロバイダ
  */
 export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
-	private _onDidChangeTreeData: vscode.EventEmitter<StatusItem | undefined | null> = new vscode.EventEmitter<
+	private _onDidChangeTreeData: vscode.EventEmitter<
 		StatusItem | undefined | null
-	>();
-	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> = this._onDidChangeTreeData.event;
+	> = new vscode.EventEmitter<StatusItem | undefined | null>();
+	readonly onDidChangeTreeData: vscode.Event<StatusItem | undefined | null> =
+		this._onDidChangeTreeData.event;
 
 	private readonly statusManager: StatusManager;
 	private readonly configuration: Configuration;
@@ -50,11 +56,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * StatusItemのcollapsibleStateを動的に判定する
 	 * VSCodeのTreeViewがUI状態を管理できるよう、getTreeItem呼び出し時に毎回子要素の有無で判定する
 	 */
-	private determineCollapsibleState(element: StatusItem): vscode.TreeItemCollapsibleState {
+	private determineCollapsibleState(
+		element: StatusItem,
+	): vscode.TreeItemCollapsibleState {
 		switch (element.type) {
 			case StatusItemType.Directory:
 				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
-				return this.statusItemTree.getDirectoryChildren(element.directoryPath).length > 0
+				return this.statusItemTree.getDirectoryChildren(element.directoryPath)
+					.length > 0
 					? vscode.TreeItemCollapsibleState.Collapsed
 					: vscode.TreeItemCollapsibleState.None;
 			case StatusItemType.File:
@@ -76,7 +85,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * @param filePath ファイルの絶対パス
 	 * @param treeView TreeViewインスタンス
 	 */
-	public async revealActiveFile(filePath: string, treeView: vscode.TreeView<StatusItem>): Promise<void> {
+	public async revealActiveFile(
+		filePath: string,
+		treeView: vscode.TreeView<StatusItem>,
+	): Promise<void> {
 		// 設定が完了していない、またはステータスが初期化されていない場合は何もしない
 		if (!this.configuration.isConfigured() || !this.isStatusInitialized) {
 			return;
@@ -113,10 +125,17 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 各StatusItem更新ではAssignを使用しているため、最新の状態を反映する
 	 */
 	public getTreeItem(element: StatusItem): vscode.TreeItem {
-		const treeItem = new vscode.TreeItem(element.label, this.determineCollapsibleState(element));
+		const treeItem = new vscode.TreeItem(
+			element.label,
+			this.determineCollapsibleState(element),
+		);
 
 		// ステータスに応じたアイコンを設定
-		treeItem.iconPath = this.getStatusIcon(element.status, element.isTranslating, element);
+		treeItem.iconPath = this.getStatusIcon(
+			element.status,
+			element.isTranslating,
+			element,
+		);
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
@@ -138,13 +157,20 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			} else {
 				treeItem.id = element.filePath;
 			}
-		} else if (element.type === StatusItemType.Unit && element.filePath && element.unitHash) {
+		} else if (
+			element.type === StatusItemType.Unit &&
+			element.filePath &&
+			element.unitHash
+		) {
 			if (workspaceFolder) {
 				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#${element.unitHash}`;
 			} else {
 				treeItem.id = `${element.filePath}#${element.unitHash}`;
 			}
-		} else if (element.type === StatusItemType.Frontmatter && element.filePath) {
+		} else if (
+			element.type === StatusItemType.Frontmatter &&
+			element.filePath
+		) {
 			if (workspaceFolder) {
 				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#frontmatter`;
 			} else {
@@ -227,7 +253,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (!this.isStatusInitialized && !this.isStatusLoading) {
 			this.isStatusLoading = true;
 			try {
-				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+				const workspaceFolder =
+					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (workspaceFolder) {
 					// StatusManagerから最新のStatusItemを取得・ツリーに反映
 					if (!this.statusManager.isInitialized()) {
@@ -237,7 +264,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				}
 				this.isStatusInitialized = true;
 			} catch (e) {
-				Logger.getInstance().warn("status-tree", "failed to initialize status", formatError(e));
+				Logger.getInstance().warn(
+					"status-tree",
+					"failed to initialize status",
+					formatError(e),
+				);
 			} finally {
 				this.isStatusLoading = false;
 			}
@@ -248,7 +279,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 		if (element.type === StatusItemType.Directory) {
 			// ディレクトリの場合はファイル一覧を返す
-			return Promise.resolve(this.getStatusItemsRecursive(element.directoryPath));
+			return Promise.resolve(
+				this.getStatusItemsRecursive(element.directoryPath),
+			);
 		}
 		if (element.type === StatusItemType.File) {
 			// ファイルの場合はfrontmatter + 翻訳ユニット一覧を返す
@@ -263,13 +296,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
 		// 選択中の target のみに絞ってディレクトリ一覧を作成
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const pairs = SelectionState.getInstance().filterTransPairs(this.configuration.transPairs);
+		const configBaseDir = this.configuration.getConfigBaseDir();
+		const pairs = SelectionState.getInstance().filterTransPairs(
+			this.configuration.transPairs,
+		);
 		const dirsAbs = Array.from(
 			new Set(
 				pairs.flatMap((pair) => [
-					workspaceFolder ? path.resolve(workspaceFolder, pair.sourceDir) : pair.sourceDir,
-					workspaceFolder ? path.resolve(workspaceFolder, pair.targetDir) : pair.targetDir,
+					path.resolve(configBaseDir, pair.sourceDir),
+					path.resolve(configBaseDir, pair.targetDir),
 				]),
 			),
 		);
@@ -297,7 +332,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * 指定ファイルの子要素（frontmatter + ユニット）を返す
 	 */
-	private getFileChildren(fileItem: import("../../core/status/status-item").FileStatusItem): StatusItem[] {
+	private getFileChildren(
+		fileItem: import("../../core/status/status-item").FileStatusItem,
+	): StatusItem[] {
 		// 非MDファイルはユニット分割されないため子要素なし
 		if (!fileItem.filePath.toLowerCase().endsWith(".md")) {
 			return [];
@@ -358,7 +395,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * ステータスに応じたアイコンを取得する
 	 */
-	private getStatusIcon(status: Status, isProgress?: boolean, element?: StatusItem): vscode.ThemeIcon {
+	private getStatusIcon(
+		status: Status,
+		isProgress?: boolean,
+		element?: StatusItem,
+	): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
 		}
@@ -367,13 +408,22 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (element?.type === StatusItemType.Frontmatter) {
 			switch (status) {
 				case Status.Translated:
-					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.green"));
+					return new vscode.ThemeIcon(
+						"book",
+						new vscode.ThemeColor("charts.green"),
+					);
 				case Status.NeedsTranslation:
 					return new vscode.ThemeIcon("book");
 				case Status.Source:
-					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.blue"));
+					return new vscode.ThemeIcon(
+						"book",
+						new vscode.ThemeColor("charts.blue"),
+					);
 				default:
-					return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.gray"));
+					return new vscode.ThemeIcon(
+						"book",
+						new vscode.ThemeColor("charts.gray"),
+					);
 			}
 		}
 
@@ -382,41 +432,74 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			// needFlagを優先してアイコンを決定
 			if (element.needFlag) {
 				if (element.needFlag === "review") {
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.yellow"));
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.yellow"),
+					);
 				}
 			}
 
 			// ステータスに応じてアイコンを決定
 			switch (status) {
 				case Status.Translated:
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.green"));
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.green"),
+					);
 				case Status.NeedsTranslation:
 					return new vscode.ThemeIcon("circle-small");
 				case Status.Source:
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.blue"));
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.blue"),
+					);
 				case Status.Empty:
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.yellow"));
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.yellow"),
+					);
 				case Status.Error:
-					return new vscode.ThemeIcon("circle-small-filled", new vscode.ThemeColor("charts.red"));
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.red"),
+					);
 				default:
-					return new vscode.ThemeIcon("circle-small", new vscode.ThemeColor("charts.gray"));
+					return new vscode.ThemeIcon(
+						"circle-small",
+						new vscode.ThemeColor("charts.gray"),
+					);
 			}
 		}
 
 		// ファイル・ディレクトリ階層は従来のアイコンを使用
 		switch (status) {
 			case Status.Translated:
-				return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
+				return new vscode.ThemeIcon(
+					"pass",
+					new vscode.ThemeColor("charts.green"),
+				);
 			case Status.NeedsTranslation:
 				return new vscode.ThemeIcon("circle");
 			case Status.Source:
-				return new vscode.ThemeIcon("symbol-constant", new vscode.ThemeColor("charts.blue"));
+				return new vscode.ThemeIcon(
+					"symbol-constant",
+					new vscode.ThemeColor("charts.blue"),
+				);
 			case Status.Empty:
-				return new vscode.ThemeIcon("symbol-variable", new vscode.ThemeColor("charts.yellow"));
+				return new vscode.ThemeIcon(
+					"symbol-variable",
+					new vscode.ThemeColor("charts.yellow"),
+				);
 			case Status.Error:
-				return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
+				return new vscode.ThemeIcon(
+					"error",
+					new vscode.ThemeColor("charts.red"),
+				);
 			default:
-				return new vscode.ThemeIcon("question", new vscode.ThemeColor("charts.gray"));
+				return new vscode.ThemeIcon(
+					"question",
+					new vscode.ThemeColor("charts.gray"),
+				);
 		}
 	}
 }

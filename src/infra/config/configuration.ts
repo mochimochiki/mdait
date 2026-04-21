@@ -138,6 +138,7 @@ export class Configuration {
 	private static instance: Configuration | undefined;
 	private configurationWatcher: fs.FSWatcher | undefined;
 	private configFilePath: string | undefined;
+	private customConfigPath: string | undefined;
 	private changeCallbacks: Array<() => void> = [];
 
 	/**
@@ -227,9 +228,23 @@ export class Configuration {
 
 	/**
 	 * 初期化処理（設定のロードと監視の開始）
+	 * @param customPath カスタム設定ファイルパス。指定がない場合はワークスペースルートの .mdait/mdait.json を使用
 	 */
-	public async initialize(): Promise<Configuration> {
-		await this.load();
+	public async initialize(customPath?: string): Promise<Configuration> {
+		const previousCustomConfigPath = this.customConfigPath;
+		if (customPath !== undefined && customPath !== this.customConfigPath) {
+			if (this.configurationWatcher) {
+				this.configurationWatcher.close();
+				this.configurationWatcher = undefined;
+			}
+			this.customConfigPath = customPath;
+		}
+		try {
+			await this.load();
+		} catch (error) {
+			this.customConfigPath = previousCustomConfigPath;
+			throw error;
+		}
 		return this;
 	}
 
@@ -244,14 +259,33 @@ export class Configuration {
 	}
 
 	/**
-	 * 設定ファイルのパスを取得
+	 * 設定ファイルのパスを取得。
+	 * カスタムパスが設定されている場合はそれを返し、なければワークスペースルートの .mdait/mdait.json を返す
 	 */
 	public getConfigFilePath(): string | undefined {
+		if (this.customConfigPath) {
+			return this.customConfigPath;
+		}
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			return undefined;
 		}
 		return path.join(workspaceRoot, ".mdait", "mdait.json");
+	}
+
+	/**
+	 * 設定ファイルのベースディレクトリを取得。
+	 * .mdait の親ディレクトリ（ユーザーが管理するフォルダ）を返す。
+	 * transPairs の sourceDir/targetDir のパス解決基準として使用する。
+	 * カスタムパスなしの場合はワークスペースルートと同一になるため後方互換あり。
+	 */
+	public getConfigBaseDir(): string {
+		const configFilePath = this.getConfigFilePath();
+		if (configFilePath) {
+			return path.dirname(path.dirname(configFilePath));
+		}
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		return workspaceRoot ?? "";
 	}
 
 	/**
@@ -581,13 +615,11 @@ export class Configuration {
 	 * @returns 用語集ファイルの絶対パス
 	 */
 	public getTermsFilePath(): string {
-		// ワークスペースルートを取得
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			throw new Error("Workspace not found");
+		const configFilePath = this.getConfigFilePath();
+		if (!configFilePath) {
+			throw new Error("Configuration file not found");
 		}
-
-		return path.join(workspaceRoot, ".mdait", this.terms.filename);
+		return path.join(path.dirname(configFilePath), this.terms.filename);
 	}
 
 	/**
@@ -595,11 +627,11 @@ export class Configuration {
 	 * @returns TMファイルの絶対パス
 	 */
 	public getTmFilePath(): string {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			throw new Error("Workspace not found");
+		const configFilePath = this.getConfigFilePath();
+		if (!configFilePath) {
+			throw new Error("Configuration file not found");
 		}
-		return path.join(workspaceRoot, ".mdait", "translations.tmx");
+		return path.join(path.dirname(configFilePath), "translations.tmx");
 	}
 
 	/**

@@ -4,6 +4,37 @@
 
 ---
 
+## ADR-260421-02: FileExplorer のパス基準を configBaseDir ゲッターで動的解決
+
+### 背景
+`FileExplorer` の `workspaceRoot` フィールドがコンストラクタで固定されていたため、`new FileExplorer()` 後にカスタムコンフィグパスを設定しても `sourceDir`/`targetDir` の解決がワークスペースルート基準のままになる問題があった。`new FileExplorer()` が多数の場所で引数なしで呼ばれており、コンストラクタシグネチャを変更すると波及が大きかった。
+
+### 決定
+`workspaceRoot` フィールドをプライベートゲッター `configBaseDir` に変更し、毎回 `Configuration.getInstance().getConfigBaseDir()` を呼んで動的に解決する。
+
+### 理由
+`FileExplorer` はステートレスなユーティリティとして使われており、毎回の `getConfigBaseDir()` 呼び出しは軽量な計算のみ。コンストラクタシグネチャを変えずに全ての呼び出し箇所を変更できる。`Configuration` との循環依存も発生しない。
+
+### 備考
+- 却下案: コンストラクタに `configBaseDir?: string` を追加 → 多数の `new FileExplorer()` 呼び出し箇所を全て修正する必要がある
+- 詳細: [.tasks/done/260421-02_transPairsパス解決基準をmdait.json相対に変更.md](.tasks/done/260421-02_transPairsパス解決基準をmdait.json相対に変更.md)
+
+## ADR-260421-01: カスタムコンフィグパスの注入方式 — initialize(customPath?) を採用
+
+### 背景
+モノレポ対応でユーザーが指定したコンフィグパスを `Configuration` に渡す必要が生じた。`Configuration` は `ExtensionContext` を持たない設計のため、`workspaceState` に保存したパスをどう渡すか選択が必要だった。
+
+### 決定
+`Configuration.initialize(customPath?: string)` にオプション引数を追加する。`extension.ts` が `workspaceState` からパスを取り出して `initialize()` に渡す唯一の橋渡し役となる。
+
+### 理由
+`initialize()` が唯一のエントリポイントである現状を維持できる。`Configuration` が `ExtensionContext` に依存しないという既存設計を守れる。`extension.ts` が `workspaceState` と `Configuration` の境界を担うことで責務が明確になる。
+
+### 備考
+- 却下案: `setConfigFilePath(path)` 追加 → set後にinitialize()を呼ぶ2ステップ操作でエントリポイントが2つになる
+- 却下案: `getInstance(context)` シグネチャ変更 → 全呼び出し箇所への波及が大きく設計コストが高い
+- 詳細: [.tasks/done/260421-01_既存コンフィグをサブフォルダから選択.md](.tasks/done/260421-01_既存コンフィグをサブフォルダから選択.md)
+
 ## ADR-260404-01: infra層新設とservices層の見送り
 
 ### 背景

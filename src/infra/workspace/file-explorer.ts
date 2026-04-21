@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { Configuration, TransPair } from "../config/configuration";
+import { Configuration } from "../config/configuration";
+import type { TransPair } from "../config/configuration";
 
 /**
  * ファイル探索とファイル種別解決を統合的に行うクラス
@@ -11,17 +12,29 @@ import type { Configuration, TransPair } from "../config/configuration";
  * - ファイルパスからソース/ターゲットの判定
  * - 翻訳ペア設定の取得
  * - パスの正規化と変換
- * - ワークスペース相対パス管理
+ * - 設定ファイル相対パス管理
  */
 export class FileExplorer {
-	private readonly workspaceRoot: string;
+	/**
+	 * パス解決の基準ディレクトリ。
+	 * .mdait/mdait.json の親ディレクトリ（ユーザーが管理するフォルダ）を返す。
+	 * カスタムパスなしの場合はワークスペースルートと同一。
+	 */
+	private get configBaseDir(): string {
+		try {
+			return Configuration.getInstance().getConfigBaseDir();
+		} catch {
+			// Configuration 未初期化時はワークスペースルートにフォールバック
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			return workspaceFolders?.[0]?.uri.fsPath ?? "";
+		}
+	}
 
 	constructor() {
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (!workspaceFolders || workspaceFolders.length === 0) {
 			throw new Error("No workspace folder found");
 		}
-		this.workspaceRoot = workspaceFolders[0].uri.fsPath;
 	}
 
 	/**
@@ -157,7 +170,7 @@ export class FileExplorer {
 	): Promise<string[]> {
 		let sourceDir = sourceDirConfig;
 		if (!path.isAbsolute(sourceDir)) {
-			sourceDir = path.resolve(this.workspaceRoot, sourceDir);
+			sourceDir = path.resolve(this.configBaseDir, sourceDir);
 		}
 
 		// ディレクトリの存在を確認
@@ -258,17 +271,17 @@ export class FileExplorer {
 	}
 
 	/**
-	 * パスを正規化（スラッシュ統一、ワークスペース相対パス化）
+	 * パスを正規化（スラッシュ統一、設定ベースディレクトリ相対パス化）
 	 */
 	public normalizePath(inputPath: string): string {
 		let normalizedPath = inputPath.replace(/\\/g, "/");
 
-		// 絶対パスの場合はワークスペース相対パスに変換
+		// 絶対パスの場合は設定ベースディレクトリ相対パスに変換
 		if (path.isAbsolute(normalizedPath)) {
-			const workspaceNormalized = this.workspaceRoot.replace(/\\/g, "/");
-			if (normalizedPath.startsWith(workspaceNormalized)) {
+			const baseDirNormalized = this.configBaseDir.replace(/\\/g, "/");
+			if (normalizedPath.startsWith(baseDirNormalized)) {
 				normalizedPath = path
-					.relative(workspaceNormalized, normalizedPath)
+					.relative(baseDirNormalized, normalizedPath)
 					.replace(/\\/g, "/");
 			}
 		}
@@ -286,7 +299,7 @@ export class FileExplorer {
 			return normalizedPath;
 		}
 
-		return path.resolve(this.workspaceRoot, normalizedPath);
+		return path.resolve(this.configBaseDir, normalizedPath);
 	}
 
 	/**

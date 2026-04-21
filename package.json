@@ -124,6 +124,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.setup.openExistingConfig",
+        "title": "%mdait.setup.openExistingConfig.title%",
+        "icon": "$(folder-open)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.translateSelection",
         "title": "%mdait.translateSelection.title%",
         "category": "mdait"
