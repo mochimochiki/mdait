@@ -2,7 +2,6 @@
 description: '設計の意図・方向性・境界との整合性を確認する。Use when: m.reviewer の並列レビューで呼ばれる。'
 tools: [read, search]
 user-invocable: false
-model: Claude Opus 4.6 (copilot)
 ---
 
 # Architecture Keeper

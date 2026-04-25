@@ -23,10 +23,10 @@ tools: [vscode/vscodeAPI, execute/getTerminalOutput, read/terminalLastCommand, r
 
 | Agent | 観点 |
 |---|---|
-| `m.review-regression-hunter` | 変更による既存コードへの波及・リグレッション |
-| `m.review-fault-hunter` | 変更自体のバグ・障害シナリオ |
-| `m.review-clean-code-keeper` | コードの可読性・品質・ベストプラクティス |
-| `m.review-architecture-keeper` | 設計の整合性・方向性・境界 |
+| `m.reviewer.hunt.regression` | 変更による既存コードへの波及・リグレッション |
+| `m.reviewer.hunt.bug` | 変更自体のバグ・障害シナリオ |
+| `m.reviewer.keep.cleancode` | コードの可読性・品質・ベストプラクティス |
+| `m.reviewer.keep.architecture` | 設計の整合性・方向性・境界 |
 
 5. **統合**: 全結果を受け取り、統合レビューを出力する
 6. **メインチケットの`## レビュー`セクションに結果を記入**（後述のフォーマット参照）

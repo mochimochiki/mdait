@@ -2,7 +2,6 @@
 description: '変更による既存コードへの波及・リグレッションを検出する。Use when: m.reviewer の並列レビューで呼ばれる。'
 tools: [read, search]
 user-invocable: false
-model: Claude Opus 4.6 (copilot)
 ---
 
 # Regression Hunter
