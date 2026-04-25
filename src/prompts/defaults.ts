@@ -752,7 +752,8 @@ CRITICAL RULES:
 - Preserve the original file format and structure EXACTLY.
 - Do NOT add, remove, or reorder lines unless the translation requires it.
 - For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
-- Translate only human-readable text content. Do not translate code, variable names, or technical identifiers.
+- Translate ALL human-readable text cells, including the HEADER ROW (first row) and all data rows. Do NOT skip translating any row or cell because it looks like a header or column name.
+- Preserve without translating: empty cells, the literal value "||" (inherit-from-above marker), and any [[...]] bracket markers (structural metadata).
 {{#terms}}
 
 TERMINOLOGY:
@@ -859,6 +860,8 @@ CRITICAL RULES:
 - Preserve the original file format and structure EXACTLY.
 - For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
 - Do NOT output the full translated text. Output ONLY the patch.
+- Translate ALL human-readable text cells, including the HEADER ROW. Do NOT skip any cell because it looks like a header or column name.
+- Preserve without translating: empty cells, the literal value "||", and any [[...]] bracket markers.
 
 PATCH FORMAT (read every rule carefully):
 This PATCH FORMAT is a custom, prefix-based format specifically for this task.
