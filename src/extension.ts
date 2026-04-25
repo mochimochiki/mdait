@@ -656,10 +656,9 @@ export async function activate(context: vscode.ExtensionContext) {
 								.relative(workspaceRoot, filePath)
 								.replace(/\\/g, "/");
 							if (fe.isSourceFile(filePath, config)) {
-								const pairs =
-									SelectionState.getInstance().filterTransPairs(
-										config.transPairs,
-									);
+								const pairs = SelectionState.getInstance().filterTransPairs(
+									config.transPairs,
+								);
 								for (const pair of pairs) {
 									const tgtPath = fe.getTargetPath(filePath, pair);
 									if (tgtPath) {
