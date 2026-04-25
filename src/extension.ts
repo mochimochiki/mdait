@@ -337,6 +337,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		{ scheme: "file" },
 		codeLensProvider,
 	);
+	// ステータスツリー変更時にCodelensを更新（plainファイルはファイル本体が変わらないため明示的にrefreshが必要）
+	statusManager.onStatusTreeChanged(() => {
+		codeLensProvider.refresh();
+	});
 
 	// 非Markdownファイル用CodeLensコマンド（プレーンファイル単位）
 	const codeLensTranslateFileDisposable = vscode.commands.registerCommand(
@@ -645,11 +649,28 @@ export async function activate(context: vscode.ExtensionContext) {
 						const workspaceRoot =
 							vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 						if (workspaceRoot) {
-							const relPath = path
+							const store = FileStateStore.getInstance();
+							const fe = new FileExplorer();
+							// ソースファイルの場合は対応するターゲットパスで検索
+							let lookupRelPath = path
 								.relative(workspaceRoot, filePath)
 								.replace(/\\/g, "/");
-							const store = FileStateStore.getInstance();
-							if (!store.getEntry(relPath)) {
+							if (fe.isSourceFile(filePath, config)) {
+								const pairs =
+									SelectionState.getInstance().filterTransPairs(
+										config.transPairs,
+									);
+								for (const pair of pairs) {
+									const tgtPath = fe.getTargetPath(filePath, pair);
+									if (tgtPath) {
+										lookupRelPath = path
+											.relative(workspaceRoot, tgtPath)
+											.replace(/\\/g, "/");
+										break;
+									}
+								}
+							}
+							if (!store.getEntry(lookupRelPath)) {
 								logger.debug(
 									"extension",
 									"Skipping file save sync (no file-state entry)",
