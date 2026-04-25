@@ -125,3 +125,4 @@ sequenceDiagram
 | [`diff-detector.ts`](../../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
 | [`marker-sync.ts`](../../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |
 | [`level-validator.ts`](../../src/commands/sync/level-validator.ts) | `validateAndSyncLevel()` - level設定の検証と同期 |
+| [`asset-copier.ts`](../../src/commands/sync/asset-copier.ts) | `AssetPathExtractor`（拡張ポイント）・`MarkdownAssetPathExtractor`・`copyDiffAssets()` - 差分に応じたアセットファイルのsourceDir→targetDirコピー |

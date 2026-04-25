@@ -117,6 +117,7 @@ sequenceDiagram
 | `primaryLang` | — | 用語集と TM で共有する基準言語。設定上の正準言語として扱う |
 | `sync.level` | `2` | ユニット境界の見出しレベル（`##`=2、`###`=3） |
 | `sync.autoSyncOnSave` | `true` | 保存時に自動同期。原文編集直後に差分を即座に可視化 |
+| `sync.copyAssets` | `true` | sync時に差分ユニット内の相対パスアセット（画像・ファイル等）をsourceDirからtargetDirへコピー。`transPairs[].copyAssets` で上書き可能 |
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
 | `trans.retryLimit` | `1` | trans の再試行上限 |
 | `trans.maxFileSize` | `51200` | 非MDファイルの翻訳時ファイルサイズ上限（バイト）。超過時はスキップ＋警告 |
