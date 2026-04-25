@@ -16,6 +16,7 @@ import {
 	hasDiff,
 } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
 	calculateFrontmatterHash,
@@ -1203,8 +1204,9 @@ async function updateAndSaveUnit(
 /**
  * マーカーに基づき、文字範囲を返す
  * 元の改行を保持するため、範囲に含まれる末尾の改行情報も返す
+ * コードブロック内のマーカーは次の境界として選択しない
  */
-function getUnitPosition(
+export function getUnitPosition(
 	text: string,
 	markerText: string,
 ): { start: number; end: number; trailingNewlines: string } | null {
@@ -1214,9 +1216,22 @@ function getUnitPosition(
 	}
 	const markerLen = markerText.length;
 	const after = text.slice(startIdx + markerLen);
-	const nextMatch = after.match(MdaitMarker.MARKER_REGEX);
-	const endIdx = nextMatch
-		? startIdx + markerLen + (nextMatch.index ?? 0)
+
+	const codeBlockLines = getCodeBlockLineSet(text);
+	const globalRegex = new RegExp(MdaitMarker.MARKER_REGEX.source, "g");
+	let chosenIndex: number | null = null;
+	for (const m of after.matchAll(globalRegex)) {
+		const absCharPos = startIdx + markerLen + (m.index ?? 0);
+		const lineNo = text.slice(0, absCharPos).split("\n").length - 1; // 0-indexed
+		if (codeBlockLines.has(lineNo)) {
+			continue; // コードブロック内はスキップ
+		}
+		chosenIndex = m.index ?? 0;
+		break;
+	}
+
+	const endIdx = chosenIndex !== null
+		? startIdx + markerLen + chosenIndex
 		: text.length;
 
 	// 末尾の改行を検出（次のマーカーまたはファイル末尾までの改行を保持）
