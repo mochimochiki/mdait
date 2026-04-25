@@ -6,6 +6,7 @@
  * @module ui/hover/summary-decorator
  */
 import * as vscode from "vscode";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { SummaryManager } from "./summary-manager";
 
@@ -53,8 +54,14 @@ export class SummaryDecorator {
 		const document = editor.document;
 		const decorations: vscode.DecorationOptions[] = [];
 
+		// コードブロック内の行はマーカー検出対象外
+		const codeBlockLines = getCodeBlockLineSet(document.getText());
+
 		// 各行をスキャンしてmdaitマーカーを検出
 		for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+			if (codeBlockLines.has(lineIndex)) {
+				continue;
+			}
 			const line = document.lineAt(lineIndex);
 			const marker = MdaitMarker.parse(line.text);
 

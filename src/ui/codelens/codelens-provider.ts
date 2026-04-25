@@ -10,6 +10,7 @@
  */
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
@@ -70,10 +71,17 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			}
 		}
 
+		// コードブロック内の行はマーカー検出対象外
+		const codeBlockLines = getCodeBlockLineSet(content);
+
 		// 各行をスキャンしてmdaitマーカーを検出
 		for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
 			if (token.isCancellationRequested) {
 				return [];
+			}
+
+			if (codeBlockLines.has(lineIndex)) {
+				continue;
 			}
 
 			const line = document.lineAt(lineIndex);
