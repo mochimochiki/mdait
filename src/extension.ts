@@ -43,12 +43,16 @@ import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
 import { MdaitSyncTool } from "./lm-tools/sync-tool";
 import { MdaitTranslateTool } from "./lm-tools/translate-tool";
 import {
+	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
 	codeLensJumpToSourceCommand,
+	codeLensJumpToSourceFileCommand,
 	codeLensJumpToSourceFrontmatterCommand,
 	codeLensJumpToTargetCommand,
+	codeLensJumpToTargetFileCommand,
 	codeLensTranslateCommand,
+	codeLensTranslateFileCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
@@ -329,8 +333,33 @@ export async function activate(context: vscode.ExtensionContext) {
 	// CodeLensProvider登録
 	const codeLensProvider = new MdaitCodeLensProvider();
 	const codeLensDisposable = vscode.languages.registerCodeLensProvider(
-		{ scheme: "file", language: "markdown" },
+		// 全ファイル対象。実際の絞り込みは provider 内で languageId/拡張子で行う
+		{ scheme: "file" },
 		codeLensProvider,
+	);
+
+	// 非Markdownファイル用CodeLensコマンド（プレーンファイル単位）
+	const codeLensTranslateFileDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.translateFile",
+		async (uri: vscode.Uri) => {
+			await codeLensTranslateFileCommand(uri);
+			codeLensProvider.refresh();
+		},
+	);
+	const codeLensClearFileNeedDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.clearFileNeed",
+		async (uri: vscode.Uri) => {
+			await codeLensClearFileNeedCommand(uri);
+			codeLensProvider.refresh();
+		},
+	);
+	const codeLensJumpToSourceFileDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.jumpToSourceFile",
+		codeLensJumpToSourceFileCommand,
+	);
+	const codeLensJumpToTargetFileDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.jumpToTargetFile",
+		codeLensJumpToTargetFileCommand,
 	);
 
 	// HoverProvider登録
@@ -689,6 +718,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,
 		codeLensJumpToSourceFrontmatterDisposable,
+		codeLensTranslateFileDisposable,
+		codeLensClearFileNeedDisposable,
+		codeLensJumpToSourceFileDisposable,
+		codeLensJumpToTargetFileDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
 		tmOptimizeDisposable,

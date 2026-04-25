@@ -6,8 +6,10 @@
  *   - 既存のtransUnitCommandとの連携により、コア機能を再利用する
  * @module ui/codelens/codelens-command
  */
+import * as path from "node:path";
 import * as vscode from "vscode";
-import { transUnitCommand } from "../../commands/trans/trans-command";
+import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
+import { FileStateStore } from "../../core/file-state/file-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
@@ -15,6 +17,7 @@ import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 /**
  * CodeLensから翻訳を実行するコマンド
@@ -643,4 +646,183 @@ export async function codeLensJumpToSourceFrontmatterCommand(range: vscode.Range
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Jump to source frontmatter failed: {0}", errorMessage));
 	}
+}
+
+/** 絶対パスをワークスペース相対パス（/区切り）に変換 */
+function toWorkspaceRelativePath(absolutePath: string): string | null {
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!workspaceRoot) {
+		return null;
+	}
+	return path.relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
+}
+
+/**
+ * 非Markdownファイル全体を翻訳するCodeLensコマンド。
+ * 既存の transCommand に委譲し、PlainFileHandler に自動ディスパッチされる。
+ */
+export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<void> {
+	try {
+		await transCommand(uri);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Translation failed: {0}", errorMessage));
+	}
+}
+
+/**
+ * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
+ * FileStateStore のエントリを need:"" に更新して保存する。
+ */
+export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
+	try {
+		const targetRelPath = toWorkspaceRelativePath(uri.fsPath);
+		if (!targetRelPath) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No workspace folder found"));
+			return;
+		}
+
+		const store = FileStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath);
+		if (!entry || !entry.need) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
+			return;
+		}
+
+		store.setEntry({ ...entry, need: "" });
+
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			store.save(mdaitDir);
+		}
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/**
+ * 非Markdownファイルからソースファイルへジャンプするコマンド。
+ * Beside で開き、双方をハイライトしてスクロール同期する（.md と同等の挙動）。
+ */
+export async function codeLensJumpToSourceFileCommand(uri: vscode.Uri): Promise<void> {
+	try {
+		const config = Configuration.getInstance();
+		const explorer = new FileExplorer();
+
+		const pair = explorer.getTransPairFromTarget(uri.fsPath, config);
+		const sourceFilePath = pair ? explorer.getSourcePath(uri.fsPath, pair) : null;
+		if (!sourceFilePath) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Source file not found."));
+			return;
+		}
+
+		await openSideBySideAndSync(uri, vscode.Uri.file(sourceFilePath), "source");
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Jump to source failed: {0}", errorMessage));
+	}
+}
+
+/**
+ * 非Markdownファイルからターゲットファイルへジャンプするコマンド。
+ * 設定順で最初に実在するターゲットを選択する（.md の jumpToTarget と同じポリシー）。
+ */
+export async function codeLensJumpToTargetFileCommand(uri: vscode.Uri): Promise<void> {
+	try {
+		const config = Configuration.getInstance();
+		const explorer = new FileExplorer();
+
+		const pairs = explorer.getTransPairsFromSource(uri.fsPath, config);
+		let targetFilePath: string | null = null;
+		for (const pair of pairs) {
+			const candidate = explorer.getTargetPath(uri.fsPath, pair);
+			if (candidate) {
+				try {
+					const stat = await vscode.workspace.fs.stat(vscode.Uri.file(candidate));
+					if (stat.type === vscode.FileType.File) {
+						targetFilePath = candidate;
+						break;
+					}
+				} catch {
+					// 存在しないターゲットはスキップ
+				}
+			}
+		}
+
+		if (!targetFilePath) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Target file not found."));
+			return;
+		}
+
+		await openSideBySideAndSync(uri, vscode.Uri.file(targetFilePath), "target");
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Jump to target failed: {0}", errorMessage));
+	}
+}
+
+/**
+ * 左側エディタの隣に右側ファイルを開き、両方をハイライト＋スクロール同期する。
+ * @param leftUri 現在開いているファイル
+ * @param rightUri 隣に開くファイル
+ * @param rightSide 右側のハイライト種別
+ */
+async function openSideBySideAndSync(
+	leftUri: vscode.Uri,
+	rightUri: vscode.Uri,
+	rightSide: "source" | "target",
+): Promise<void> {
+	const activeEditor = vscode.window.activeTextEditor;
+	if (!activeEditor || activeEditor.document.uri.fsPath !== leftUri.fsPath) {
+		// アクティブでなければハイライト無しで開くだけ
+		const doc = await vscode.workspace.openTextDocument(rightUri);
+		await vscode.window.showTextDocument(doc, {
+			viewColumn: vscode.ViewColumn.Beside,
+			preview: true,
+			preserveFocus: true,
+		});
+		return;
+	}
+
+	const leftVisible = activeEditor.visibleRanges[0];
+	const rightDoc = await vscode.workspace.openTextDocument(rightUri);
+	const jumpLine = 0;
+	const position = new vscode.Position(jumpLine, 0);
+	const selection = new vscode.Selection(position, position);
+
+	const rightEditor = await vscode.window.showTextDocument(rightDoc, {
+		viewColumn: vscode.ViewColumn.Beside,
+		preview: true,
+		preserveFocus: true,
+		selection,
+	});
+
+	const clickedLine = 0;
+	if (leftVisible) {
+		const offset = Math.max(0, clickedLine - leftVisible.start.line);
+		const desiredTop = Math.max(0, Math.min(jumpLine - offset, rightDoc.lineCount - 1));
+		const topPos = new vscode.Position(desiredTop, 0);
+		rightEditor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+	} else {
+		rightEditor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+	}
+
+	const leftSide: "source" | "target" = rightSide === "source" ? "target" : "source";
+	const leftStart = 0;
+	const leftEnd = Math.max(0, activeEditor.document.lineCount - 1);
+	const rightStart = 0;
+	const rightEnd = Math.max(0, rightDoc.lineCount - 1);
+
+	highlightUnit(activeEditor, leftStart, leftEnd, leftSide);
+	highlightUnit(rightEditor, rightStart, rightEnd, rightSide);
+
+	_highlightInfo = {
+		leftEditor: activeEditor,
+		rightEditor,
+		leftRange: new vscode.Range(leftStart, 0, leftEnd, Number.MAX_SAFE_INTEGER),
+		rightRange: new vscode.Range(rightStart, 0, rightEnd, Number.MAX_SAFE_INTEGER),
+	};
+
+	startOneWayScrollSync(activeEditor, rightEditor, clickedLine, jumpLine);
 }

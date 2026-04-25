@@ -8,7 +8,9 @@
  *   - VS CodeのCodeLens機能を利用して、テスト実行ボタンのような直感的なUIを提供
  * @module ui/codelens/codelens-provider
  */
+import * as path from "node:path";
 import * as vscode from "vscode";
+import { FileStateStore } from "../../core/file-state/file-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
@@ -40,9 +42,13 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		document: vscode.TextDocument,
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<vscode.CodeLens[]> {
-		// Markdownファイル以外は対象外
-		if (document.languageId !== "markdown") {
+		if (document.uri.scheme !== "file") {
 			return [];
+		}
+
+		// Markdown以外は config.trans.extensions で管理されたファイル単位のCodeLensを返す
+		if (document.languageId !== "markdown") {
+			return this.providePlainFileCodeLenses(document);
 		}
 
 		const codeLenses: vscode.CodeLens[] = [];
@@ -227,6 +233,88 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
+		}
+
+		return codeLenses;
+	}
+
+	/**
+	 * 非Markdownファイル（config.trans.extensions 対象）の1行目にCodeLensを提供する。
+	 * - ターゲット側: Source（常時） + need があれば Translate / Mark as ...
+	 * - ソース側: Target
+	 */
+	private providePlainFileCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+		const config = Configuration.getInstance();
+		const ext = path.extname(document.uri.fsPath).toLowerCase();
+		const allowedExtensions = new Set((config.trans.extensions ?? []).map((e) => e.toLowerCase()));
+		if (!allowedExtensions.has(ext)) {
+			return [];
+		}
+
+		// 1行目（空ファイルでも range は (0,0,0,0) で許容される）
+		const firstLineLength = document.lineCount > 0 ? document.lineAt(0).text.length : 0;
+		const range = new vscode.Range(0, 0, 0, firstLineLength);
+
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			return [];
+		}
+		const targetRelPath = path.relative(workspaceRoot, document.uri.fsPath).replace(/\\/g, "/");
+
+		const store = FileStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath);
+
+		const codeLenses: vscode.CodeLens[] = [];
+
+		if (entry) {
+			// ターゲット側: Source は常に表示
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(symbol-reference) Source"),
+					tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
+					command: "mdait.codelens.jumpToSourceFile",
+					arguments: [document.uri],
+				}),
+			);
+
+			if (entry.need) {
+				codeLenses.push(
+					new vscode.CodeLens(range, {
+						title: vscode.l10n.t("$(play) Translate"),
+						tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+						command: "mdait.codelens.translateFile",
+						arguments: [document.uri],
+					}),
+				);
+
+				const { title, tooltip } = this.getCompletionButtonLabel(entry.need);
+				codeLenses.push(
+					new vscode.CodeLens(range, {
+						title,
+						tooltip,
+						command: "mdait.codelens.clearFileNeed",
+						arguments: [document.uri],
+					}),
+				);
+			}
+			return codeLenses;
+		}
+
+		// ソース側判定（FileStateStoreにエントリが無く、設定上のソースディレクトリに含まれる）
+		try {
+			const explorer = new FileExplorer();
+			if (explorer.isSourceFile(document.uri.fsPath, config)) {
+				codeLenses.push(
+					new vscode.CodeLens(range, {
+						title: vscode.l10n.t("$(symbol-reference) Target"),
+						tooltip: vscode.l10n.t("Tooltip: Jump to target translation unit"),
+						command: "mdait.codelens.jumpToTargetFile",
+						arguments: [document.uri],
+					}),
+				);
+			}
+		} catch {
+			// ワークスペース未設定等は無視
 		}
 
 		return codeLenses;
