@@ -29,6 +29,10 @@ npm run copy-test-files --silent 2>$null
 Write-Host "[debug-ipc] Compiling..."
 npm run compile --silent 2>$null
 
+# バンドル（Extension Host は dist/extension.js を使うため必須）
+Write-Host "[debug-ipc] Bundling..."
+npm run bundle:dev --silent 2>$null
+
 # VS Code バイナリパスを解決
 # @vscode/test-electron のキャッシュを探す → バージョン番号でソートして選択 → なければシステムインストール
 # 重要: システムインストールと同バージョンを避ける。
