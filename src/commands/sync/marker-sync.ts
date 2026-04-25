@@ -39,7 +39,10 @@ export interface MarkerSyncResult {
  * @param existingMarker 既存のマーカー（ない場合はnull）
  * @returns 同期結果
  */
-export function syncSourceMarker(currentHash: string, existingMarker: MdaitMarker | null): MarkerSyncResult {
+export function syncSourceMarker(
+	currentHash: string,
+	existingMarker: MdaitMarker | null,
+): MarkerSyncResult {
 	if (!existingMarker) {
 		// 新規マーカー作成
 		return {
@@ -90,7 +93,8 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 
 	// 変更検出
 	const isSourceChanged = existingMarker.from !== sourceHash;
-	const isTargetChanged = targetHash !== null && existingMarker.hash !== targetHash;
+	const isTargetChanged =
+		targetHash !== null && existingMarker.hash !== targetHash;
 
 	// ソースが変更された場合: revise または translate（両方変更時も同様に処理）
 	if (isSourceChanged) {
@@ -102,8 +106,11 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 		if (existingReviseHash) {
 			// すでにrevise待ち状態なので、スナップショットハッシュを保持
 			existingMarker.setReviseNeed(existingReviseHash);
+		} else if (existingMarker.need === "translate") {
+			// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
+			existingMarker.setNeed("translate");
 		} else if (oldSourceHash) {
-			// 新規revise設定
+			// 翻訳済みでソースが変更された場合は新規revise設定
 			existingMarker.setReviseNeed(oldSourceHash);
 		} else {
 			existingMarker.setNeed("translate");
@@ -171,7 +178,8 @@ export function syncMarkerPair(
 
 	// ソースマーカーを作成/更新
 	const sourceMarker = existingSourceMarker ?? new MdaitMarker(sourceHash);
-	const targetMarker = existingTargetMarker ?? new MdaitMarker(targetHash, sourceMarker.hash);
+	const targetMarker =
+		existingTargetMarker ?? new MdaitMarker(targetHash, sourceMarker.hash);
 
 	const isSourceChanged = sourceMarker.hash !== sourceHash;
 	const isTargetChanged = targetMarker.hash !== targetHash;
@@ -213,6 +221,7 @@ export function syncMarkerPair(
 	return {
 		sourceMarker,
 		targetMarker,
-		changed: isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash,
+		changed:
+			isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash,
 	};
 }
