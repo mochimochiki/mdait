@@ -6,6 +6,7 @@
  * @module ui/hover/translation-summary-hover-provider
  */
 import * as vscode from "vscode";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { SummaryManager, TranslationSummary } from "./summary-manager";
 
@@ -37,6 +38,12 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 	): vscode.ProviderResult<vscode.Hover> {
 		// Markdownファイル以外は対象外
 		if (document.languageId !== "markdown") {
+			return null;
+		}
+
+		// コードブロック内の行ではマーカー判定を行わない
+		const codeBlockLines = getCodeBlockLineSet(document.getText());
+		if (codeBlockLines.has(position.line)) {
 			return null;
 		}
 

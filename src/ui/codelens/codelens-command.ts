@@ -9,6 +9,7 @@
 import * as vscode from "vscode";
 import { transUnitCommand } from "../../commands/trans/trans-command";
 import { Configuration } from "../../infra/config/configuration";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
@@ -311,13 +312,19 @@ let _highlightInfo:
 
 /**
  * ユニットの終了行を見つける（次のマーカーまたはファイル末尾）
+ * コードブロック内のマーカーは無視する。
  * @param document 対象ドキュメント
  * @param startLine ユニットの開始行
  * @returns ユニットの終了行
  */
 function findUnitEndLine(document: vscode.TextDocument, startLine: number): number {
+	const codeBlockLines = getCodeBlockLineSet(document.getText());
+
 	// 次の行から次のマーカーを探す
 	for (let i = startLine + 1; i < document.lineCount; i++) {
+		if (codeBlockLines.has(i)) {
+			continue;
+		}
 		const lineText = document.lineAt(i).text;
 		if (MdaitMarker.parse(lineText)) {
 			return i - 1; // マーカーの前の行がユニットの終了

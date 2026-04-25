@@ -7,6 +7,10 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot\..\..\
 
 try {
+    Write-Host "==> Cleaning old artifacts..." -ForegroundColor Cyan
+    Get-ChildItem *.vsix -ErrorAction SilentlyContinue | Remove-Item -Force
+    if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+
     Write-Host "==> Bundling..." -ForegroundColor Cyan
     npm run bundle
     if ($LASTEXITCODE -ne 0) { throw "compile failed" }
