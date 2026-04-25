@@ -128,6 +128,43 @@ Follow these steps.
 
 ---
 
+<!-- mdait 4a947322 -->
+## アセット（画像・添付ファイル）の自動コピー
+
+Sync 時、**新規ユニット**または**原文が変更されたユニット**に含まれる相対パスの画像・添付ファイルを、sourceDir から targetDir に自動コピーします。原文に挿入した画像を手動でコピーし直す手間をなくすための機能です。
+
+- 対象: `![alt](./img.png)` / `[file](./data.csv)` のような相対パス
+- 対象外: 外部URL（http/https）、絶対パス、sourceDir の外、存在しないファイル、`.md` など翻訳対象の拡張子（`trans.extensions` で追加した拡張子も対象外）
+- 原文が変更されたユニットでは、**新旧原文の差分で新規に追加されたパスだけ**コピー（unit-registry に残る旧原文スナップショットと比較）
+- 注意: targetDir に同名ファイルがある場合は上書きされます
+
+<!-- mdait 0255066c -->
+### `sync.copyAssets` の指定方法
+
+3 通りの書き方を受け付けます:
+
+```json
+// (1) すべてコピー（デフォルト）
+"sync": { "copyAssets": true }
+
+// (2) コピーしない
+"sync": { "copyAssets": false }
+
+// (3) 拡張子ホワイトリスト — この拡張子だけコピー
+"sync": { "copyAssets": [".png", ".jpg", ".svg"] }
+```
+
+特定のペアだけ挙動を変えたい場合は `transPairs[].copyAssets` で同じ型の値を指定すれば上書きできます（例: 多言語展開のうち画像差し替えが必要なペアだけ `true`、他は `false` 等）。
+
+```json
+"transPairs": [
+  { "sourceDir": "docs/ja", "targetDir": "docs/en", "copyAssets": [".png"] },
+  { "sourceDir": "docs/ja", "targetDir": "docs/de", "copyAssets": false }
+]
+```
+
+---
+
 <!-- mdait 2b361076 -->
 ## FrontMatter の同期
 

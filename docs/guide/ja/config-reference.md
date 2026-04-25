@@ -5,7 +5,7 @@
 
 ---
 
-<!-- mdait 9c482f84 -->
+<!-- mdait 8dede788 -->
 ## 早見表
 
 | フィールド | 型 | デフォルト | 概要 |
@@ -16,7 +16,7 @@
 | `sync.level` | 数値 | `3` | ユニット境界の見出しレベル（h1〜hN） |
 | `sync.autoSyncOnSave` | 真偽値 | `true` | 保存時に自動同期 |
 | `sync.autoDelete` | 真偽値 | `true` | 孤立ユニット自動削除 |
-| `sync.copyAssets` | 真偽値 | `true` | sync 時に差分ユニット内の画像等をターゲットにコピー |
+| `sync.copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`/`false` または拡張子ホワイトリスト |
 | `ai.provider` | 文字列 | — | `vscode-lm` / `openai` / `ollama` |
 | `ai.model` | 文字列 | — | 使用するモデル名 |
 | `trans.contextSize` | 数値 | `1` | 翻訳プロンプトに渡す周辺ユニット数 |
@@ -33,7 +33,7 @@
 
 ---
 
-<!-- mdait 5e092066 -->
+<!-- mdait 720896cf -->
 ## transPairs
 
 翻訳の対象ディレクトリと言語のペアを定義します。**必須項目。**  
@@ -45,7 +45,7 @@
 | `sourceDir` | 文字列 | ソースディレクトリのパス |
 | `targetLang` | 文字列 | ターゲット言語コード（例: `"en"`） |
 | `targetDir` | 文字列 | ターゲットディレクトリのパス |
-| `copyAssets` | 真偽値 | `sync.copyAssets` のペア単位上書き（省略時はグローバル設定を参照） |
+| `copyAssets` | 真偽値 \| 文字列[] | `sync.copyAssets` のペア単位上書き（省略時はグローバル設定を参照）。型は `sync.copyAssets` と同じ |
 
 ```json
 "transPairs": [
@@ -103,7 +103,7 @@
 
 ---
 
-<!-- mdait 45c640b7 -->
+<!-- mdait d6ce507f -->
 ## sync
 
 ファイルの構造同期に関する設定です。
@@ -113,7 +113,7 @@
 | `level` | 数値 | `3` | ユニット境界とする見出しの最大レベル（例: `3` = h1〜h3） |
 | `autoSyncOnSave` | 真偽値 | `true` | ファイル保存時に自動で同期を実行 |
 | `autoDelete` | 真偽値 | `true` | ソースに存在しない孤立ユニットを自動削除 |
-| `copyAssets` | 真偽値 | `true` | sync 時に差分ユニット内の画像等をターゲットにコピー |
+| `copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`=全コピー / `false`=コピーしない / `[".png", ".jpg"]` のような拡張子ホワイトリスト |
 
 ```json
 "sync": {
@@ -123,6 +123,8 @@
   "copyAssets": true
 }
 ```
+
+`copyAssets` を拡張子ホワイトリストにすると、画像だけ自動コピーして CSV や PDF は手動管理にする等の運用ができます（[guide/ja/sync.md](sync.md) 参照）。
 
 `level: 2` にすると h1〜h2 のみをユニット境界とし、h3以下はまとめて1ユニットとして扱います。
 

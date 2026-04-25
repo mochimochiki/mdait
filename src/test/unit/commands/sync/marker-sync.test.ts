@@ -211,6 +211,28 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.targetMarker.need, "revise@src123");
 		});
 
+		test("未翻訳状態（need:translate）でソースが変更された場合、need:translateが維持されること", () => {
+			// sync済みだがまだ翻訳していない状態（from値あり、need:translate）
+			const existingSource = new MdaitMarker("src123");
+			const existingTarget = new MdaitMarker("tgt456", "src123");
+			existingTarget.setNeed("translate");
+
+			const result = syncMarkerPair(
+				"src789",
+				"tgt456",
+				existingSource,
+				existingTarget,
+			);
+
+			// 未翻訳なのでreviseではなくtranslateのまま維持されるべき
+			assert.strictEqual(result.targetMarker.from, "src789");
+			assert.strictEqual(
+				result.targetMarker.need,
+				"translate",
+				"未翻訳ファイルはneed:reviseにならないこと",
+			);
+		});
+
 		test("両方変更時、ターゲットにneed:revise@{oldhash}が設定されハッシュも更新されること", () => {
 			const existingSource = new MdaitMarker("src123");
 			const existingTarget = new MdaitMarker("tgt456", "src123");

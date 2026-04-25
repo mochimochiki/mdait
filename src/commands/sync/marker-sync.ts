@@ -210,8 +210,11 @@ export function syncMarkerPair(
 		if (existingReviseHash) {
 			// すでにrevise待ち状態なので、スナップショットハッシュを保持
 			targetMarker.setReviseNeed(existingReviseHash);
+		} else if (targetMarker.need === "translate") {
+			// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
+			targetMarker.setNeed("translate");
 		} else if (oldSourceHash) {
-			// 新規revise設定
+			// 翻訳済みでソースが変更された場合は新規revise設定
 			targetMarker.setReviseNeed(oldSourceHash);
 		} else {
 			targetMarker.setNeed("translate");

@@ -113,6 +113,37 @@ sequenceDiagram
 - **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除
 
+### アセットコピー
+
+差分検出後、`sync_CoreProc` / `syncNew_CoreProc` の末尾で [`copyDiffAssets()`](../../src/commands/sync/asset-copier.ts) を呼び、**ユニット単位の原文側 diff**に基づいて相対パスのアセットを sourceDir から targetDir へコピーする。
+
+| 条件 | コピー範囲 |
+|---|---|
+| ADDED（新規ユニット） | 新原文ユニット内の全相対パスアセット |
+| UNCHANGED + `need:revise@{oldhash}` | unit-registry から旧原文（oldhash）を取得し、新原文パスに対して旧原文パスを差し引いた**新規追加パスのみ** |
+| UNCHANGED + `need:translate`（`@` なし） | 旧原文が未知のため新原文の全パス（ADDED と同等扱い） |
+| それ以外（`need` なし / `verify-deletion` / `review` / DELETED / MODIFIED） | コピーしない |
+
+旧原文が unit-registry に無い場合は「差分不明として全コピー」の安全フォールバックを取る。
+
+**除外フィルタ**:
+- 外部URL（`http://` / `https://` / `//`）
+- 絶対パス
+- sourceDir 外（パストラバーサル）
+- 存在しないファイル
+- 翻訳対象拡張子（`.md` + `config.trans.extensions`、大文字小文字非依存）— これらは sync 自身の管理対象なので上書きしない
+- `copyAssets` が拡張子ホワイトリストの場合、リスト外の拡張子
+
+**制御設定** ([config.md](config.md) 参照):
+
+| 値の型 | 解釈 |
+|---|---|
+| `true`（デフォルト） | 除外フィルタ通過後の全アセットをコピー |
+| `false` / `[]` | コピーしない |
+| `string[]`（例: `[".png", ".jpg"]`） | リストの拡張子だけをコピー（大文字小文字非依存） |
+
+`transPairs[].copyAssets` が定義されていればペア単位で `sync.copyAssets` を上書き。解決ロジックは [`resolveCopyAssets()`](../../src/commands/sync/asset-copier.ts) に集約。
+
 ### 主要コンポーネント
 
 | ファイル | 責務 |

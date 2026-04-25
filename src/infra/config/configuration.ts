@@ -62,6 +62,14 @@ export interface TmConfig {
 }
 
 /**
+ * アセットコピー設定の型。
+ * - `true`: 翻訳対象拡張子以外を全てコピー
+ * - `false`: コピーしない
+ * - `string[]`: 拡張子ホワイトリスト（例: `[".png", ".jpg"]`）。空配列は `false` と等価
+ */
+export type CopyAssetsConfig = boolean | string[];
+
+/**
  * 翻訳ペア設定の型定義
  */
 export interface TransPair {
@@ -69,6 +77,8 @@ export interface TransPair {
 	targetDir: string;
 	sourceLang: string;
 	targetLang: string;
+	/** アセットコピー設定（省略時はグローバル設定 sync.copyAssets を継承） */
+	copyAssets?: CopyAssetsConfig;
 }
 
 /**
@@ -82,6 +92,7 @@ interface MdaitConfig {
 		level?: number;
 		autoDelete?: boolean;
 		autoSyncOnSave?: boolean;
+		copyAssets?: CopyAssetsConfig;
 	};
 	ai?: {
 		provider?: string;
@@ -156,10 +167,16 @@ export class Configuration {
 	/**
 	 * sync設定
 	 */
-	public sync = {
+	public sync: {
+		level: number;
+		autoDelete: boolean;
+		autoSyncOnSave: boolean;
+		copyAssets: CopyAssetsConfig;
+	} = {
 		level: 3,
 		autoDelete: true,
 		autoSyncOnSave: true,
+		copyAssets: true,
 	};
 	/**
 	 * AI設定
@@ -406,6 +423,9 @@ export class Configuration {
 				}
 				if (config.sync.autoSyncOnSave !== undefined) {
 					this.sync.autoSyncOnSave = config.sync.autoSyncOnSave;
+				}
+				if (config.sync.copyAssets !== undefined) {
+					this.sync.copyAssets = config.sync.copyAssets;
 				}
 			}
 

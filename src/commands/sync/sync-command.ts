@@ -24,7 +24,8 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
-import { DiffDetector, type DiffResult, DiffType } from "./diff-detector";
+import { copyDiffAssets } from "./asset-copier";
+import { DiffDetector, type DiffResult, type UnitDiff, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
@@ -506,17 +507,28 @@ export async function syncNew_CoreProc(
 	);
 
 	// 6. DiffResultを返す
-	return {
-		diffs: source.units.map((u) => ({
-			type: DiffType.ADDED,
-			source: u,
-			target: null,
-		})),
+	const diffs: UnitDiff[] = source.units.map((u) => ({
+		type: DiffType.ADDED,
+		source: u,
+		target: null,
+	}));
+	const diffResult: DiffResult = {
+		diffs,
 		added: source.units.length,
 		modified: 0,
 		deleted: 0,
 		unchanged: 0,
 	};
+
+	// 差分に応じたアセットコピー（有効/無効・ホワイトリストの解決は asset-copier 側で実施）
+	await copyDiffAssets({
+		diffs: diffResult.diffs,
+		sourceUnits: source.units,
+		sourceFile,
+		config,
+	});
+
+	return diffResult;
 }
 
 /**
@@ -657,6 +669,14 @@ export async function sync_CoreProc(
 		vscode.Uri.file(sourceFile),
 		encoder.encode(updatedSourceContent),
 	);
+
+	// 差分に応じたアセットコピー（有効/無効・ホワイトリストの解決は asset-copier 側で実施）
+	await copyDiffAssets({
+		diffs: diffResult.diffs,
+		sourceUnits: source.units,
+		sourceFile,
+		config,
+	});
 
 	return diffResult;
 }
