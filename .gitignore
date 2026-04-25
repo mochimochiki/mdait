@@ -12,3 +12,4 @@ src/test/unit/workspace/.mdait/unit-registry
 src/test/unit/workspace/.mdait/translations.tmx
 src/test/unit/workspace/.mdait/file-state
 src/test/unit/workspace/.mdait/unit-registry
+.claude/worktrees/
