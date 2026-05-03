@@ -95,7 +95,7 @@ export class StatusCollector implements StatusCollectorPort {
 			}
 
 			const allDirs = [...sourceDirs, ...targetDirs];
-			statusItemTree.buildTree(files, allDirs);
+			statusItemTree.buildTree(files, allDirs, this.config.getConfigBaseDir());
 		} catch (error) {
 			console.error("Error collecting file statuses:", error);
 			vscode.window.showErrorMessage(

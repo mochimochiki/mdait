@@ -66,9 +66,26 @@ const vscodeMock = {
 		}),
 	},
 	EventEmitter: class {
-		fire() {}
-		event() {}
-		dispose() {}
+		constructor() {
+			this._listeners = [];
+			this.event = (listener) => {
+				this._listeners.push(listener);
+				return {
+					dispose: () => {
+						const idx = this._listeners.indexOf(listener);
+						if (idx >= 0) this._listeners.splice(idx, 1);
+					},
+				};
+			};
+		}
+		fire(data) {
+			for (const listener of this._listeners) {
+				listener(data);
+			}
+		}
+		dispose() {
+			this._listeners = [];
+		}
 	},
 	CancellationTokenSource: class {
 		constructor() {

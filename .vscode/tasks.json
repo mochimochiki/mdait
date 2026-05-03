@@ -13,13 +13,14 @@
       }
     },
     {
-      "label": "npm-watch",
+      "label": "npm-build",
       "type": "npm",
-      "script": "watch",
-      "problemMatcher": "$tsc-watch",
-      "isBackground": true,
+      "script": "bundle:dev",
+      "problemMatcher": [],
       "presentation": {
-        "reveal": "never"
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true
       },
       "group": {
         "kind": "build",
@@ -31,7 +32,7 @@
       "dependsOrder": "sequence",
       "dependsOn": [
         "copy-test-content",
-        "npm-watch"
+        "npm-build"
       ],
       "group": {
         "kind": "build",

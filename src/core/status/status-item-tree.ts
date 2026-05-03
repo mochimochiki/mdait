@@ -20,14 +20,18 @@ import {
 export class StatusItemTree {
 	// ========== event ==========
 	// Event
-	private readonly _onTreeChanged = new vscode.EventEmitter<StatusItem | undefined>();
-	public readonly onTreeChanged: vscode.Event<StatusItem | undefined> = this._onTreeChanged.event;
+	private readonly _onTreeChanged = new vscode.EventEmitter<
+		StatusItem | undefined
+	>();
+	public readonly onTreeChanged: vscode.Event<StatusItem | undefined> =
+		this._onTreeChanged.event;
 
 	// ========== member ==========
 	private readonly fileItemMap = new Map<string, FileStatusItem>(); // ファイルパスをキーとする
 	private readonly directoryItemMap = new Map<string, DirectoryStatusItem>(); // ディレクトリパスをキーとする
 	private readonly unitItemMapWithPath = new Map<string, UnitStatusItem>(); // ファイルパス+ユニットハッシュをキーとする
 	private rootDirectories: string[] = [];
+	private configBaseDir: string | undefined = undefined;
 
 	// ========== 取得 ==========
 
@@ -57,7 +61,9 @@ export class StatusItemTree {
 	 * 全ソースファイルStatusItemを取得
 	 */
 	public getSourceFilesAll(): FileStatusItem[] {
-		return Array.from(this.fileItemMap.values()).filter((file) => file.status === Status.Source);
+		return Array.from(this.fileItemMap.values()).filter(
+			(file) => file.status === Status.Source,
+		);
 	}
 
 	/**
@@ -91,7 +97,10 @@ export class StatusItemTree {
 	/**
 	 * 指定ハッシュのユニットを取得
 	 */
-	public getUnit(unitHash: string, filePath: string): UnitStatusItem | undefined {
+	public getUnit(
+		unitHash: string,
+		filePath: string,
+	): UnitStatusItem | undefined {
 		// 特定ファイル内から検索
 		const key = `${filePath}#${unitHash}`;
 		if (this.unitItemMapWithPath.has(key)) {
@@ -136,7 +145,10 @@ export class StatusItemTree {
 	 *   - 優先ファイルで見つからなかった場合は、全ファイルを対象にした検索で最初に見つかったユニット
 	 *   - 上記いずれの検索でも見つからなかった場合は `undefined`
 	 */
-	public getTargetUnitByFromHash(fromHash: string, preferredFilePaths?: string[]): UnitStatusItem | undefined {
+	public getTargetUnitByFromHash(
+		fromHash: string,
+		preferredFilePaths?: string[],
+	): UnitStatusItem | undefined {
 		// 優先ファイルパスがある場合は順番に検索
 		if (preferredFilePaths) {
 			for (const filePath of preferredFilePaths) {
@@ -283,6 +295,7 @@ export class StatusItemTree {
 		this.directoryItemMap.clear();
 		this.unitItemMapWithPath.clear();
 		this.rootDirectories = [];
+		this.configBaseDir = undefined;
 	}
 
 	public dispose(): void {
@@ -294,9 +307,14 @@ export class StatusItemTree {
 	 * ツリーを構築
 	 * @param files - FileStatusItemの配列
 	 */
-	public buildTree(files: FileStatusItem[], rootDirs: string[]): void {
+	public buildTree(
+		files: FileStatusItem[],
+		rootDirs: string[],
+		configBaseDir?: string,
+	): void {
 		this.clear();
 		this.rootDirectories = rootDirs;
+		this.configBaseDir = configBaseDir;
 
 		console.log("=>build");
 		const startTime = performance.now();
@@ -314,7 +332,9 @@ export class StatusItemTree {
 	public addOrUpdateFile(fileItem: FileStatusItem): void {
 		fileItem.isTranslating = false; // 翻訳中フラグをリセット
 		if (fileItem.children) {
-			fileItem.isTranslating = fileItem.children.some((unit) => unit.isTranslating === true);
+			fileItem.isTranslating = fileItem.children.some(
+				(unit) => unit.isTranslating === true,
+			);
 		}
 		// frontmatterの翻訳中フラグも考慮
 		if (fileItem.frontmatter?.isTranslating) {
@@ -348,7 +368,10 @@ export class StatusItemTree {
 		this.addOrUpdateDirectory(fileItem);
 	}
 
-	public updateFilePartial(filePath: string, updates: Partial<FileStatusItem>): FileStatusItem | undefined {
+	public updateFilePartial(
+		filePath: string,
+		updates: Partial<FileStatusItem>,
+	): FileStatusItem | undefined {
 		const existingItem = this.fileItemMap.get(filePath);
 		if (!existingItem) {
 			return undefined;
@@ -385,7 +408,11 @@ export class StatusItemTree {
 	/**
 	 * UnitItemを部分更新
 	 */
-	public updateUnit(filePath: string, unitHash: string, updates: Partial<UnitStatusItem>): UnitStatusItem | undefined {
+	public updateUnit(
+		filePath: string,
+		unitHash: string,
+		updates: Partial<UnitStatusItem>,
+	): UnitStatusItem | undefined {
 		const key = `${filePath}#${unitHash}`;
 		const unit = this.unitItemMapWithPath.get(key);
 		if (!unit) {
@@ -398,7 +425,9 @@ export class StatusItemTree {
 		// 親ファイルの子要素も更新
 		const fileItem = this.fileItemMap.get(filePath);
 		if (fileItem?.children) {
-			const unitIndex = fileItem.children.findIndex((child) => child.unitHash === unitHash);
+			const unitIndex = fileItem.children.findIndex(
+				(child) => child.unitHash === unitHash,
+			);
 			if (unitIndex >= 0) {
 				Object.assign(fileItem.children[unitIndex], unit);
 				this.addOrUpdateFile(fileItem);
@@ -426,7 +455,9 @@ export class StatusItemTree {
 		const directoryItem = this.directoryItemMap.get(dirPath);
 		if (directoryItem) {
 			directoryItem.children = directoryItem.children || [];
-			const index = directoryItem.children.findIndex((f) => isFileStatusItem(f) && f.filePath === fileItem.filePath);
+			const index = directoryItem.children.findIndex(
+				(f) => isFileStatusItem(f) && f.filePath === fileItem.filePath,
+			);
 			if (index >= 0) {
 				Object.assign(directoryItem.children[index], fileItem);
 			} else {
@@ -441,12 +472,17 @@ export class StatusItemTree {
 	/**
 	 * 指定ディレクトリから親方向へ集計を再帰更新する（最上位でイベント発火）
 	 */
-	private updateDirectoryAggregatesUpward(dirPath: string, stopRoot?: string): void {
+	private updateDirectoryAggregatesUpward(
+		dirPath: string,
+		stopRoot?: string,
+	): void {
 		const effectiveStopRoot = stopRoot ?? this.getRootDir(dirPath);
 		let directoryItem = this.directoryItemMap.get(dirPath);
 		if (!directoryItem) {
 			// 直下ファイルを fileItemMap から収集して作成
-			const directFiles = Array.from(this.fileItemMap.values()).filter((f) => path.dirname(f.filePath) === dirPath);
+			const directFiles = Array.from(this.fileItemMap.values()).filter(
+				(f) => path.dirname(f.filePath) === dirPath,
+			);
 			directoryItem = this.createDirectoryStatusItem(dirPath, directFiles);
 			this.directoryItemMap.set(dirPath, directoryItem);
 		}
@@ -467,43 +503,63 @@ export class StatusItemTree {
 	 * 再帰の停止ルートを判定する
 	 */
 	private getRootDir(dirPath: string): string {
-		const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const baseDir =
+			this.configBaseDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		try {
 			// rootDirectoriesのいずれかの子孫か（ディレクトリ階層で比較）
 			for (const rootDir of this.rootDirectories) {
-				const absoluteRootDir = wsFolder ? path.resolve(wsFolder, rootDir) : rootDir;
+				const absoluteRootDir = baseDir
+					? path.resolve(baseDir, rootDir)
+					: rootDir;
 				const absoluteDirPath = path.resolve(dirPath);
 				// ディレクトリ階層で比較
-				if (absoluteDirPath === absoluteRootDir || absoluteDirPath.startsWith(absoluteRootDir + path.sep)) {
+				if (
+					absoluteDirPath === absoluteRootDir ||
+					absoluteDirPath.startsWith(absoluteRootDir + path.sep)
+				) {
 					return absoluteRootDir;
 				}
 			}
 		} catch {
 			// FileExplorer 初期化不可などは無視してフォールバック
 		}
-		// フォールバック：ワークスペース、なければドライブルート
-		if (wsFolder) return path.resolve(wsFolder);
+		// フォールバック：configBaseDir（またはワークスペース）、なければドライブルート
+		if (baseDir) return path.resolve(baseDir);
 		return path.parse(path.resolve(dirPath)).root;
 	}
 
 	/**
 	 * ディレクトリの集計・表示情報を更新（共通処理）
 	 */
-	private recalcDirectoryAggregate(dirPath: string, directoryItem: DirectoryStatusItem): void {
+	private recalcDirectoryAggregate(
+		dirPath: string,
+		directoryItem: DirectoryStatusItem,
+	): void {
 		// 再帰的に配下すべてのファイルから集計
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
 		directoryItem.status = this.determineMergedStatus(allFiles);
 
 		// ディレクトリのisTranslatingフラグを決定（再帰）
-		directoryItem.isTranslating = allFiles.some((file) => file.isTranslating === true);
+		directoryItem.isTranslating = allFiles.some(
+			(file) => file.isTranslating === true,
+		);
 
 		// ディレクトリのラベル/集計値を更新（ターゲットファイルのみ）
 		const targetFiles = this.getTargetFiles(allFiles);
-		const totalUnits = targetFiles.reduce((sum, file) => sum + file.totalUnits, 0);
-		const translatedUnits = targetFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
-		const dirName = path.basename(directoryItem.directoryPath) || directoryItem.directoryPath;
+		const totalUnits = targetFiles.reduce(
+			(sum, file) => sum + file.totalUnits,
+			0,
+		);
+		const translatedUnits = targetFiles.reduce(
+			(sum, file) => sum + file.translatedUnits,
+			0,
+		);
+		const dirName =
+			path.basename(directoryItem.directoryPath) || directoryItem.directoryPath;
 		directoryItem.label =
-			directoryItem.status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
+			directoryItem.status === Status.Source
+				? `${dirName}`
+				: `${dirName} (${translatedUnits}/${totalUnits})`;
 
 		directoryItem.totalUnits = totalUnits;
 		directoryItem.translatedUnits = translatedUnits;
@@ -512,14 +568,23 @@ export class StatusItemTree {
 	/**
 	 * ディレクトリStatusItemを作成
 	 */
-	private createDirectoryStatusItem(dirPath: string, files: FileStatusItem[]): DirectoryStatusItem {
+	private createDirectoryStatusItem(
+		dirPath: string,
+		files: FileStatusItem[],
+	): DirectoryStatusItem {
 		const dirName = path.basename(dirPath) || dirPath;
 
 		// 再帰的に配下すべてのファイルから集計（ターゲットファイルのみ）
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
 		const targetFiles = this.getTargetFiles(allFiles);
-		const totalUnits = targetFiles.reduce((sum, file) => sum + file.totalUnits, 0);
-		const translatedUnits = targetFiles.reduce((sum, file) => sum + file.translatedUnits, 0);
+		const totalUnits = targetFiles.reduce(
+			(sum, file) => sum + file.totalUnits,
+			0,
+		);
+		const translatedUnits = targetFiles.reduce(
+			(sum, file) => sum + file.translatedUnits,
+			0,
+		);
 
 		// ディレクトリの全体ステータスを決定（再帰）
 		const status = this.determineMergedStatus(allFiles);
@@ -528,7 +593,10 @@ export class StatusItemTree {
 		const isTranslating = allFiles.some((file) => file.isTranslating === true);
 
 		// sourceディレクトリの場合は翻訳ユニット数を表示しない
-		const label = status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
+		const label =
+			status === Status.Source
+				? `${dirName}`
+				: `${dirName} (${translatedUnits}/${totalUnits})`;
 
 		// contextValueにステータスを反映（翻訳完了状態を識別）
 		let contextValue: string;
@@ -582,11 +650,16 @@ export class StatusItemTree {
 		const hasError = files.some((f) => f.status === Status.Error);
 		if (hasError) return Status.Error;
 
-		const allSource = files.every((f) => f.status === Status.Source || f.status === Status.Empty);
+		const allSource = files.every(
+			(f) => f.status === Status.Source || f.status === Status.Empty,
+		);
 		if (allSource) return Status.Source;
 
 		const totalUnits = files.reduce((sum, f) => sum + f.totalUnits, 0);
-		const translatedUnits = files.reduce((sum, f) => sum + f.translatedUnits, 0);
+		const translatedUnits = files.reduce(
+			(sum, f) => sum + f.translatedUnits,
+			0,
+		);
 
 		if (totalUnits === 0) return Status.Unknown;
 		if (translatedUnits === totalUnits) return Status.Translated;

@@ -10,7 +10,7 @@
   "mdait.setup.createConfig.title": "設定ファイルを作成",
   "mdait.setup.openExistingConfig.title": "設定ファイルを指定...",
   "mdait.translateSelection.title": "✨選択範囲を翻訳",
-  "mdait.welcome.message": "mdaitはまだ設定されていません。\n\n設定ファイルを作成して開始してください。\n\n[$(gear) mdait.jsonを作成](command:mdait.setup.createConfig)\n\n[$(folder-open) 設定ファイルを指定...](command:mdait.setup.openExistingConfig)。",
+  "mdait.welcome.message": "mdaitはまだ設定されていません。\n\n設定ファイルを作成して開始してください。\n\n[$(gear) mdait.jsonを作成](command:mdait.setup.createConfig)\n\n[$(folder-opened) 設定ファイルを指定...](command:mdait.setup.openExistingConfig)。",
   "mdait.translate.directory.title": "✨ディレクトリを翻訳",
   "mdait.translate.file.title": "✨ファイルを翻訳",
   "mdait.translate.unit.title": "✨ユニットを翻訳",

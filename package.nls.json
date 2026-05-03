@@ -10,7 +10,7 @@
   "mdait.setup.createConfig.title": "Create Configuration File",
   "mdait.setup.openExistingConfig.title": "Open Config File...",
   "mdait.translateSelection.title": "✨Translate Selection",
-  "mdait.welcome.message": "mdait is not configured yet.\n\nCreate a configuration file to get started.\n\n[$(gear) Create mdait.json](command:mdait.setup.createConfig)\n\n[$(folder-open) Open Config File...](command:mdait.setup.openExistingConfig).",
+  "mdait.welcome.message": "mdait is not configured yet.\n\nCreate a configuration file to get started.\n\n[$(gear) Create mdait.json](command:mdait.setup.createConfig)\n\n[$(folder-opened) Open Config File...](command:mdait.setup.openExistingConfig).",
   "mdait.translate.directory.title": "✨Translate Directory",
   "mdait.translate.file.title": "✨Translate File",
   "mdait.translate.unit.title": "✨Translate Unit",

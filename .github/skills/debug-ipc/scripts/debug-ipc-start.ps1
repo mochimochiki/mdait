@@ -84,12 +84,42 @@ if ($codeBinary -match 'archive-(\d+\.\d+\.\d+)') {
   Write-Host "[debug-ipc] VS Code version: $($Matches[1])"
 }
 
-# 既存の Extension Development Host プロセスを終了
-$staleProcs = Get-Process | Where-Object { $_.Path -like "*\.vscode-test\*" } -ErrorAction SilentlyContinue
-if ($staleProcs) {
-  Write-Host "[debug-ipc] Stopping $($staleProcs.Count) stale Extension Host process(es)..."
+# 既存の Extension Development Host プロセスを終了（リトライ付き）
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+  $staleProcs = Get-Process -Name Code -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and ($_.Path -like "*\.vscode-test\*") }
+  if (-not $staleProcs) { break }
+  Write-Host "[debug-ipc] Stopping $($staleProcs.Count) stale Extension Host process(es) (attempt $attempt)..."
   $staleProcs | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Milliseconds 1000
+  Start-Sleep -Seconds 3
+}
+
+# 専用ユーザーデータディレクトリを用意してシステムVS Codeとのmutex競合を回避
+# (両者がデフォルトの %APPDATA%\Code を共有するとmutexが衝突する)
+$userDataDir = "$PWD\.vscode-test\user-data"
+
+# 初回セットアップ: Copilot AI同意データとプロファイルを既存VSCodeからコピー
+# (空の user-data-dir だとAI同意ダイアログで拡張機能がreadyにならないため)
+if (-not (Test-Path "$userDataDir\User\globalStorage")) {
+  Write-Host "[debug-ipc] Initializing test user data dir (one-time setup)..."
+  New-Item -ItemType Directory -Path "$userDataDir\User\globalStorage" -Force | Out-Null
+
+  $srcGlobalStorage = "$env:APPDATA\Code\User\globalStorage"
+  if (Test-Path $srcGlobalStorage) {
+    Get-ChildItem $srcGlobalStorage -Directory |
+      Where-Object { $_.Name -like "github.copilot*" } |
+      ForEach-Object {
+        Copy-Item $_.FullName -Destination "$userDataDir\User\globalStorage" -Recurse -Force -ErrorAction SilentlyContinue
+      }
+  }
+
+  $srcProfiles = "$env:APPDATA\Code\User\profiles"
+  if (Test-Path $srcProfiles) {
+    New-Item -ItemType Directory -Path "$userDataDir\User\profiles" -Force | Out-Null
+    Copy-Item "$srcProfiles\*" -Destination "$userDataDir\User\profiles" -Recurse -Force -ErrorAction SilentlyContinue
+  }
+
+  Write-Host "[debug-ipc] User data dir initialized."
 }
 
 # Extension Development Host を直接起動（code CLIを経由しない）
@@ -99,13 +129,10 @@ $codeArgs = @(
   "--new-window",
   "--extensionDevelopmentPath=$PWD",
   "$PWD/$workspace",
-  "--profile=mdait-debug"
+  "--profile=mdait-debug",
+  "--user-data-dir=$userDataDir",
+  "--disable-workspace-trust"
 )
-# NOTE: --user-data-dir は指定しない。
-# 指定すると AI 同意が未設定のプロファイルになり Extension Host が ready にならない。
-# 同バージョンの VS Code が起動中の場合は mutex 競合が発生するが
-# 既存プロセスの新ウィンドウで Extension Host が起動されるため通常は動作する。
-# 起動しない場合は F5 (launch.json Run Extension) で起動すること。
 $env:MDAIT_DEBUG_IPC = "1"
 
 # ファイルベースIPCトリガーを作成
