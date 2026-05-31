@@ -7,6 +7,8 @@ import * as vscode from "vscode";
  */
 export interface AIConfig {
 	provider: string;
+	/** VS Code Language Model API の vendor 識別子（既定: "copilot"） */
+	vendor?: string;
 	model: string;
 	ollama: {
 		endpoint: string;
@@ -96,6 +98,7 @@ interface MdaitConfig {
 	};
 	ai?: {
 		provider?: string;
+		vendor?: string;
 		model?: string;
 		ollama?: {
 			endpoint?: string;
@@ -183,6 +186,7 @@ export class Configuration {
 	 */
 	public ai: AIConfig = {
 		provider: "default",
+		vendor: "copilot",
 		model: "gpt-4o",
 		ollama: {
 			endpoint: "http://localhost:11434",
@@ -433,6 +437,9 @@ export class Configuration {
 			if (config.ai) {
 				if (config.ai.provider) {
 					this.ai.provider = config.ai.provider;
+				}
+				if (config.ai.vendor) {
+					this.ai.vendor = config.ai.vendor;
 				}
 				if (config.ai.model) {
 					this.ai.model = config.ai.model;

@@ -134,11 +134,12 @@ export class VSCodeLanguageModelProvider implements AIService {
 	 * 適切な言語モデルを選択
 	 */
 	private async selectLanguageModel(): Promise<vscode.LanguageModelChat | undefined> {
+		const vendor = this.config.vendor ?? "copilot";
 		try {
 			// 設定されたモデルがある場合はそれを優先
 			if (this.config.model) {
 				const models = await vscode.lm.selectChatModels({
-					vendor: "copilot",
+					vendor,
 					family: this.config.model,
 				});
 				if (models.length > 0) {
@@ -148,7 +149,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 
 			// gpt-4o
 			const defaultModels = await vscode.lm.selectChatModels({
-				vendor: "copilot",
+				vendor,
 				family: "gpt-4o",
 			});
 			if (defaultModels.length > 0) {
@@ -157,7 +158,7 @@ export class VSCodeLanguageModelProvider implements AIService {
 
 			// どのモデルも利用できない場合は、vendor のみで選択
 			const fallbackModels = await vscode.lm.selectChatModels({
-				vendor: "copilot",
+				vendor,
 			});
 
 			return fallbackModels.length > 0 ? fallbackModels[0] : undefined;

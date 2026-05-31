@@ -95,6 +95,12 @@
           "enum": ["default", "vscode-lm", "ollama", "openai"],
           "default": "vscode-lm"
         },
+        "vendor": {
+          "type": "string",
+          "description": "VS Code Language Model API vendor identifier (used by 'default'/'vscode-lm' provider)",
+          "default": "copilot",
+          "examples": ["copilot"]
+        },
         "model": {
           "type": "string",
           "description": "AI model name to use with the selected provider",
