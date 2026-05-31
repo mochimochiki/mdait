@@ -4,7 +4,40 @@
 
 ---
 
-## ADR-260421-02: FileExplorer のパス基準を configBaseDir ゲッターで動的解決
+## ADR-260531-02: パス相対化をドライブレター非依存にし、コマンド失敗を Logger 表出する
+
+### 背景
+debug-ipc 翻訳系シナリオ実機実行で `tm.commit` が `result=null`(No translation pair found)で失敗。原因は IPC が渡す大文字 `C:` と VS Code workspace の小文字 `c:` のドライブレター差で、`normalizePath` の `startsWith` 相対化が一致せず絶対パスのまま翻訳ペア検索に渡っていた。`translate` は別経路で耐性があり成功するため `tm.commit` だけ顕在化し、しかも失敗が `console.error`/`showErrorMessage` 止まりでログにも IPC 結果にも出ず観測困難だった。
+
+### 決定
+パス相対化を `path.relative` ベースに置換しドライブレター大小差・兄弟ディレクトリ誤一致(`/ws/ja`→`/ws/ja-backup`)を解消。あわせて `tm.commit`/`term.detect`/`term.expand` の握り潰しを `Logger.error/warn` に統一して IPC 結果・出力チャネルに表出させた。
+
+### 理由
+`startsWith` 文字列前方一致はドライブレター大小と区切り境界に脆弱で、`path.relative` なら OS 規約に従い堅牢。失敗を Logger に出すことで自律デバッグが result.json から異常を機械検出でき、今回のような「別経路は成功するため気づけない」バグの再発を観測可能にする。
+
+### 備考
+- 回帰テスト5件追加、634 passing。term 系は `Promise<void>` 設計で検出件数が機械可読でない点はフォローアップ課題として記録
+- 詳細: [.agent/tasks/260531-01_自律デバッグ翻訳シナリオ検証.md](../.agent/tasks/260531-01_自律デバッグ翻訳シナリオ検証.md)
+
+---
+
+## ADR-260531-01: ステータス同期ズレ観測を fire 履歴タイムライン方式で行う
+
+### 背景
+「コマンドは成功するが UI が同期されない」事象を debug-ipc で観測したいが、コマンド前後の最終状態スナップショット差分だけでは「途中で更新されない/一瞬出て戻る/個別 fire が飛ばない」系を見逃す。観測のために本番の fire 経路を改変するのは厳禁（リグレッション・性能影響）という制約があった。
+
+### 決定
+`_onTreeChanged`/`_onDidChangeTreeData.fire()` の各箇所に `DebugFireRecorder.record()` を挟み、発火を seq 付きタイムラインとして記録する。コマンド前後の状態スナップショット差分と突合し「状態は変わったのに個別 fire が飛んでいない」ギャップを機械検出して result.json に埋め込む。recorder は `enable()`（DebugCommandHandler 構築時のみ）まで全操作 no-op とし本番経路を一切変えない。
+
+### 理由
+タイムラインがあれば最終状態では消える中間挙動を時系列で復元でき、自律デバッグが「いつ・何回・どの引数で」発火したかを根拠に判断できる。fire 箇所を `fireTreeChanged()` ヘルパに集約することで回数/引数/順序の等価性を保ちつつ記録点を一元化できる。enable ゲートにより本番は no-op で性能影響ゼロ。
+
+### 備考
+- 却下案: 最終状態スナップショット差分のみ → 中間の取りこぼし・スピナー残留を観測できない
+- 却下案: VS Code イベントを外側で傍受 → 発火元の引数（どの item か）が取れず粒度が落ちる
+- 詳細: [.agent/tasks/260531-01_自律デバッグ翻訳シナリオ検証.md](../.agent/tasks/260531-01_自律デバッグ翻訳シナリオ検証.md)
+
+
 
 ### 背景
 `FileExplorer` の `workspaceRoot` フィールドがコンストラクタで固定されていたため、`new FileExplorer()` 後にカスタムコンフィグパスを設定しても `sourceDir`/`targetDir` の解決がワークスペースルート基準のままになる問題があった。`new FileExplorer()` が多数の場所で引数なしで呼ばれており、コンストラクタシグネチャを変更すると波及が大きかった。

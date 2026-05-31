@@ -6,8 +6,12 @@
 
 import * as vscode from "vscode";
 
-import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import {
+	Configuration,
+	type TransPair,
+} from "../../infra/config/configuration";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
@@ -26,9 +30,14 @@ const MAX_BATCH_CHARS = 8000;
  * @param units 対象のMDaitUnit配列（ソース言語）
  * @param transPair 翻訳ペア設定
  */
-export async function detectTermCommand(units: readonly MdaitUnit[], transPair: TransPair): Promise<void> {
+export async function detectTermCommand(
+	units: readonly MdaitUnit[],
+	transPair: TransPair,
+): Promise<void> {
 	if (units.length === 0) {
-		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("No content found for term detection."),
+		);
 		return;
 	}
 
@@ -59,16 +68,28 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 		},
 		async (progress, token) => {
 			try {
-				const entries = await detectTerm_CoreProc(pairs, transPair, progress, token);
+				const entries = await detectTerm_CoreProc(
+					pairs,
+					transPair,
+					progress,
+					token,
+				);
 
 				if (!token.isCancellationRequested) {
-					vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+					vscode.window.showInformationMessage(
+						vscode.l10n.t("Term detection completed successfully."),
+					);
 				}
 				return entries;
 			} catch (error) {
-				console.error("用語検出エラー:", error);
+				Logger.getInstance().error("term.detect", "Term detection failed", {
+					...formatError(error),
+				});
 				vscode.window.showErrorMessage(
-					vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
+					vscode.l10n.t(
+						"Term detection failed: {0}",
+						error instanceof Error ? error.message : String(error),
+					),
 				);
 				return [];
 			}
@@ -126,7 +147,10 @@ export async function detectTerm_CoreProc(
 	try {
 		termsRepository = await TermsRepository.load(termsPath);
 	} catch {
-		termsRepository = await TermsRepository.create(termsPath, config.transPairs);
+		termsRepository = await TermsRepository.create(
+			termsPath,
+			config.transPairs,
+		);
 	}
 
 	// 既存用語を読み込み
@@ -137,7 +161,10 @@ export async function detectTerm_CoreProc(
 			.map((entry) => entry.languages[sourceLang].term.toLowerCase()),
 	);
 
-	progress.report({ message: vscode.l10n.t("Preparing batches..."), increment: 0 });
+	progress.report({
+		message: vscode.l10n.t("Preparing batches..."),
+		increment: 0,
+	});
 
 	// Phase 1: バッチ分割
 	const batches = createBatches(pairs);
@@ -153,7 +180,11 @@ export async function detectTerm_CoreProc(
 		}
 
 		progress.report({
-			message: vscode.l10n.t("Processing batch {0} of {1}", processedBatches + 1, totalBatches),
+			message: vscode.l10n.t(
+				"Processing batch {0} of {1}",
+				processedBatches + 1,
+				totalBatches,
+			),
 			increment: 100 / totalBatches,
 		});
 
@@ -189,7 +220,9 @@ export async function detectTerm_CoreProc(
 				existingTerms = [...existingTerms, ...newTerms];
 			}
 		} catch (error) {
-			console.warn(`Batch term detection failed:`, error);
+			Logger.getInstance().warn("term.detect", "Batch term detection failed", {
+				...formatError(error),
+			});
 		}
 
 		processedBatches++;
@@ -204,7 +237,9 @@ export async function detectTerm_CoreProc(
 		await termsRepository.Merge(allDetectedTerms, config.transPairs);
 		await termsRepository.save();
 
-		console.log(`用語検出完了: ${allDetectedTerms.length}個の新しい用語を追加しました`);
+		console.log(
+			`用語検出完了: ${allDetectedTerms.length}個の新しい用語を追加しました`,
+		);
 	} else {
 		console.log("新しい用語は検出されませんでした");
 	}

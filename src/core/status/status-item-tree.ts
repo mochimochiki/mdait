@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import {
 	type DirectoryStatusItem,
 	type FileStatusItem,
@@ -25,6 +26,15 @@ export class StatusItemTree {
 	>();
 	public readonly onTreeChanged: vscode.Event<StatusItem | undefined> =
 		this._onTreeChanged.event;
+
+	/**
+	 * _onTreeChanged.fire のラッパー。デバッグ計装（fire履歴記録）を挟む。
+	 * デバッグIPC無効時はレコーダーが no-op のため本番挙動は変わらない。
+	 */
+	private fireTreeChanged(item: StatusItem | undefined): void {
+		DebugFireRecorder.getInstance().record("tree", item);
+		this._onTreeChanged.fire(item);
+	}
 
 	// ========== member ==========
 	private readonly fileItemMap = new Map<string, FileStatusItem>(); // ファイルパスをキーとする
@@ -401,7 +411,7 @@ export class StatusItemTree {
 		Object.assign(existingItem, updates);
 
 		// イベント通知
-		this._onTreeChanged.fire(existingItem);
+		this.fireTreeChanged(existingItem);
 		return existingItem;
 	}
 
@@ -495,7 +505,7 @@ export class StatusItemTree {
 		if (dirPath !== effectiveStopRoot) {
 			this.updateDirectoryAggregatesUpward(parentDir, effectiveStopRoot);
 		} else {
-			this._onTreeChanged.fire(directoryItem);
+			this.fireTreeChanged(directoryItem);
 		}
 	}
 

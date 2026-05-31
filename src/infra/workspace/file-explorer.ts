@@ -279,10 +279,20 @@ export class FileExplorer {
 		// 絶対パスの場合は設定ベースディレクトリ相対パスに変換
 		if (path.isAbsolute(normalizedPath)) {
 			const baseDirNormalized = this.configBaseDir.replace(/\\/g, "/");
-			if (normalizedPath.startsWith(baseDirNormalized)) {
-				normalizedPath = path
-					.relative(baseDirNormalized, normalizedPath)
-					.replace(/\\/g, "/");
+			// path.relative を用いることで Windows のドライブレター大文字小文字差や
+			// 兄弟ディレクトリのプレフィックス誤一致に左右されず判定できる。
+			const relative = path
+				.relative(baseDirNormalized, normalizedPath)
+				.replace(/\\/g, "/");
+			// ベースディレクトリ配下にある場合のみ相対パス化（外部・別ドライブは絶対のまま）。
+			// relative==="" はベース自身を指すため配下外扱い（相対化せず絶対のまま残す）。
+			if (
+				relative !== "" &&
+				relative !== ".." &&
+				!relative.startsWith("../") &&
+				!path.isAbsolute(relative)
+			) {
+				normalizedPath = relative;
 			}
 		}
 

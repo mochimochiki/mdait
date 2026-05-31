@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
+import { Logger } from "../../infra/logging/logger";
 import type { StatusCollectorPort } from "./status-collector-port";
 import {
 	type DirectoryStatusItem,
@@ -17,8 +18,11 @@ import { StatusItemTree } from "./status-item-tree";
  */
 export class StatusManager {
 	// Event
-	private readonly _onStatusTreeChanged = new vscode.EventEmitter<StatusItem | undefined>();
-	public readonly onStatusTreeChanged: vscode.Event<StatusItem | undefined> = this._onStatusTreeChanged.event;
+	private readonly _onStatusTreeChanged = new vscode.EventEmitter<
+		StatusItem | undefined
+	>();
+	public readonly onStatusTreeChanged: vscode.Event<StatusItem | undefined> =
+		this._onStatusTreeChanged.event;
 
 	// Singletonインスタンス
 	private static instance: StatusManager;
@@ -74,7 +78,9 @@ export class StatusManager {
 
 		try {
 			if (!this.statusCollector) {
-				console.warn("StatusManager: buildStatusItemTree() - collector not set, skipping");
+				console.warn(
+					"StatusManager: buildStatusItemTree() - collector not set, skipping",
+				);
 				return;
 			}
 			this.initialize();
@@ -93,7 +99,9 @@ export class StatusManager {
 			this._onStatusTreeChanged.fire(undefined);
 
 			const endTime = performance.now();
-			console.log(`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`);
+			console.log(
+				`StatusManager: buildAllStatusItem() - finish (${Math.round(endTime - startTime)}ms)`,
+			);
 			return;
 		} catch (error) {
 			console.error("StatusManager: buildAllStatusItem() - error", error);
@@ -108,7 +116,9 @@ export class StatusManager {
 	public async refreshFileStatus(filePath: string): Promise<void> {
 		try {
 			if (!this.statusCollector) {
-				console.warn("StatusManager: refreshFileStatus() - collector not set, skipping");
+				console.warn(
+					"StatusManager: refreshFileStatus() - collector not set, skipping",
+				);
 				return;
 			}
 			const newStatus = await this.statusCollector.collectFileStatus(filePath);
@@ -116,7 +126,18 @@ export class StatusManager {
 			// 該当ファイルのStatusItemを再構築
 			this.statusItemTree.addOrUpdateFile(newStatus);
 		} catch (error) {
-			console.error(`StatusManager: updateFileStatus() - Error: ${filePath}`, error);
+			// エラーを握り潰さず Logger に出す（IPC structuredLogs / 出力チャネルに表出させ、
+			// 「コマンドは成功扱いだが UI に最終状態が反映されない」事象を観測可能にする）
+			const message = error instanceof Error ? error.message : String(error);
+			Logger.getInstance().error(
+				"status",
+				`refreshFileStatus failed: ${filePath}`,
+				{ error: message },
+			);
+			console.error(
+				`StatusManager: refreshFileStatus() - Error: ${filePath}`,
+				error,
+			);
 		}
 	}
 
@@ -124,11 +145,17 @@ export class StatusManager {
 	 * changeFileStatus
 	 * 指定ファイルのステータスを変更
 	 */
-	public async changeFileStatus(filePath: string, modifications: Partial<FileStatusItem>): Promise<void> {
+	public async changeFileStatus(
+		filePath: string,
+		modifications: Partial<FileStatusItem>,
+	): Promise<void> {
 		try {
 			this.statusItemTree.updateFilePartial(filePath, modifications);
 		} catch (error) {
-			console.error(`StatusManager: applyFileStatus() - error: ${filePath}`, error);
+			console.error(
+				`StatusManager: applyFileStatus() - error: ${filePath}`,
+				error,
+			);
 		}
 	}
 
@@ -143,7 +170,10 @@ export class StatusManager {
 		try {
 			this.statusItemTree.updateDirectoryPartial(directoryPath, modifications);
 		} catch (error) {
-			console.error(`StatusManager: changeDirectoryStatus() - error: ${directoryPath}`, error);
+			console.error(
+				`StatusManager: changeDirectoryStatus() - error: ${directoryPath}`,
+				error,
+			);
 		}
 	}
 
@@ -151,18 +181,28 @@ export class StatusManager {
 	 * changeUnitStatus
 	 * ユニットのステータスをmodificationsの値に変更
 	 */
-	public changeUnitStatus(unitHash: string, modifications: Partial<UnitStatusItem>, filePath: string): void {
+	public changeUnitStatus(
+		unitHash: string,
+		modifications: Partial<UnitStatusItem>,
+		filePath: string,
+	): void {
 		try {
 			this.statusItemTree.updateUnit(filePath, unitHash, modifications);
 		} catch (error) {
-			console.error(`StatusManager: updateUnitStatus() - error: ${unitHash}`, error);
+			console.error(
+				`StatusManager: updateUnitStatus() - error: ${unitHash}`,
+				error,
+			);
 		}
 	}
 
 	/**
 	 * エラー発生時のStatusItem更新
 	 */
-	public async changeFileStatusWithError(filePath: string, error: Error): Promise<void> {
+	public async changeFileStatusWithError(
+		filePath: string,
+		error: Error,
+	): Promise<void> {
 		console.log(`StatusManager: changeFileStatusWithError() - ${filePath}`);
 		await this.changeFileStatus(filePath, { errorMessage: error.message });
 	}

@@ -3,6 +3,14 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Logger } from "../logging/logger";
 import type { StructuredLogEntry } from "../logging/logger";
+import { DebugFireRecorder, type FireEvent } from "./debug-fire-recorder";
+import {
+	type StateDiffEntry,
+	type SyncAnalysis,
+	analyzeSync,
+	diffSnapshots,
+	snapshotState,
+} from "./debug-sync-analyzer";
 
 const DEBUG_DIR = ".mdait/debug";
 const COMMAND_FILE = "command.json";
@@ -29,6 +37,12 @@ interface ResultPayload {
 	structuredLogs: StructuredLogEntry[];
 	startedAt: string | null;
 	completedAt: string | null;
+	/** デバッグ計装: コマンド実行中に発火した fire イベント履歴 */
+	fireTimeline?: FireEvent[];
+	/** デバッグ計装: コマンド前後の状態差分 */
+	stateDiff?: StateDiffEntry[];
+	/** デバッグ計装: 状態差分 vs fire 履歴の突合結果（同期ギャップ検出） */
+	syncAnalysis?: SyncAnalysis;
 }
 
 type ArgTransformer = (args: unknown[]) => unknown[];
@@ -138,6 +152,8 @@ export class DebugCommandHandler implements vscode.Disposable {
 		this.logger.info("debug", "DebugCommandHandler initialized", {
 			debugDir: this.debugDirPath,
 		});
+		// fire イベント計装を有効化（ここで初めて record が機能する）
+		DebugFireRecorder.getInstance().enable();
 		fs.writeFileSync(this.readyFilePath, new Date().toISOString(), "utf-8");
 	}
 
@@ -228,11 +244,22 @@ export class DebugCommandHandler implements vscode.Disposable {
 				args = transformer(args);
 			}
 
+			// デバッグ計装: 実行前の状態スナップ + fire 記録開始
+			const beforeState = snapshotState();
+			const recorder = DebugFireRecorder.getInstance();
+			recorder.start();
+
 			const result = await vscode.commands.executeCommand(
 				payload.command,
 				...args,
 			);
 			const completedAt = new Date().toISOString();
+
+			// デバッグ計装: 実行後の状態スナップ + fire 履歴取得 + 突合
+			const fireTimeline = recorder.stop();
+			const afterState = snapshotState();
+			const stateDiff = diffSnapshots(beforeState, afterState);
+			const syncAnalysis = analyzeSync(stateDiff, fireTimeline);
 
 			const hasErrors =
 				result != null &&
@@ -251,9 +278,14 @@ export class DebugCommandHandler implements vscode.Disposable {
 				structuredLogs: capturedStructuredLogs,
 				startedAt,
 				completedAt,
+				fireTimeline,
+				stateDiff,
+				syncAnalysis,
 			});
 		} catch (error) {
 			const completedAt = new Date().toISOString();
+			// エラー時も fire 記録を閉じる（リーク防止）
+			const fireTimeline = DebugFireRecorder.getInstance().stop();
 			await this.writeResult({
 				id: payload.id,
 				command: payload.command,
@@ -264,6 +296,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				structuredLogs: capturedStructuredLogs,
 				startedAt,
 				completedAt,
+				fireTimeline,
 			});
 		} finally {
 			logDisposable.dispose();
@@ -281,7 +314,9 @@ export class DebugCommandHandler implements vscode.Disposable {
 				if (!fs.existsSync(this.commandFilePath)) {
 					return null;
 				}
-				const raw = fs.readFileSync(this.commandFilePath, "utf-8").replace(/^\uFEFF/, "");
+				const raw = fs
+					.readFileSync(this.commandFilePath, "utf-8")
+					.replace(/^\uFEFF/, "");
 				const parsed = JSON.parse(raw);
 				if (this.isValidPayload(parsed)) {
 					return parsed;

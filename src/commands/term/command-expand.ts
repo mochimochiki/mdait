@@ -6,11 +6,15 @@
 
 import * as vscode from "vscode";
 
-import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import {
+	Configuration,
+	type TransPair,
+} from "../../infra/config/configuration";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "./term-entry";
@@ -31,7 +35,9 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	const config = Configuration.getInstance();
 
 	if (!item) {
-		vscode.window.showErrorMessage(vscode.l10n.t("No target directory selected for term expansion."));
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("No target directory selected for term expansion."),
+		);
 		return;
 	}
 
@@ -45,7 +51,9 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	const transPair = config.getTransPairForTargetFile(targetDir);
 
 	if (!transPair) {
-		vscode.window.showErrorMessage(vscode.l10n.t("No translation pair found for target: {0}", targetDir));
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("No translation pair found for target: {0}", targetDir),
+		);
 		return;
 	}
 
@@ -60,7 +68,11 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
-			title: vscode.l10n.t("Expanding terms ({0} → {1})", transPair.sourceLang, transPair.targetLang),
+			title: vscode.l10n.t(
+				"Expanding terms ({0} → {1})",
+				transPair.sourceLang,
+				transPair.targetLang,
+			),
 			cancellable: true,
 		},
 		async (progress, token) => {
@@ -69,12 +81,24 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 
 				if (!token.isCancellationRequested) {
 					vscode.window.showInformationMessage(
-						vscode.l10n.t("Term expansion completed ({0} → {1})", transPair.sourceLang, transPair.targetLang),
+						vscode.l10n.t(
+							"Term expansion completed ({0} → {1})",
+							transPair.sourceLang,
+							transPair.targetLang,
+						),
 					);
 				}
 			} catch (error) {
-				const message = error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");
-				vscode.window.showErrorMessage(vscode.l10n.t("Error during term expansion: {0}", message));
+				const message =
+					error instanceof Error
+						? error.message
+						: vscode.l10n.t("Unknown error during term expansion");
+				Logger.getInstance().error("term.expand", "Term expansion failed", {
+					...formatError(error),
+				});
+				vscode.window.showErrorMessage(
+					vscode.l10n.t("Error during term expansion: {0}", message),
+				);
 			}
 		},
 	);
@@ -110,7 +134,9 @@ export async function expandTerm_CoreProc(
 	try {
 		termsRepository = await TermsRepository.load(termsPath);
 	} catch {
-		throw new Error(vscode.l10n.t("Terms file not found. Please run term detection first."));
+		throw new Error(
+			vscode.l10n.t("Terms file not found. Please run term detection first."),
+		);
 	}
 
 	// 全用語を取得し未展開用語を抽出
@@ -120,13 +146,20 @@ export async function expandTerm_CoreProc(
 	});
 	if (termsToExpand.length === 0) {
 		vscode.window.showInformationMessage(
-			vscode.l10n.t("All terms are already expanded for {0} → {1}", sourceLang, targetLang),
+			vscode.l10n.t(
+				"All terms are already expanded for {0} → {1}",
+				sourceLang,
+				targetLang,
+			),
 		);
 		return;
 	}
 
 	// 用語を含むファイルの事前フィルタリング
-	progress.report({ message: vscode.l10n.t("Scanning source files..."), increment: 0 });
+	progress.report({
+		message: vscode.l10n.t("Scanning source files..."),
+		increment: 0,
+	});
 	let filesToProcess: Set<string>;
 	if (sourceFileFilter && sourceFileFilter.length > 0) {
 		// フィルタリング指定がある場合は、その中から用語を含むファイルを抽出
@@ -139,7 +172,11 @@ export async function expandTerm_CoreProc(
 		filesToProcess = filteredFiles;
 	} else {
 		// フィルタリング指定がない場合は全ファイルを対象
-		filesToProcess = await filterFilesContainingTerms(transPair, termsToExpand, cancellationToken);
+		filesToProcess = await filterFilesContainingTerms(
+			transPair,
+			termsToExpand,
+			cancellationToken,
+		);
 	}
 	if (cancellationToken.isCancellationRequested) {
 		return;
@@ -158,7 +195,12 @@ export async function expandTerm_CoreProc(
 	}
 
 	// グローバルバッチ分割と一括抽出
-	const extractResults = await extractFromBatches(transPair, contexts, progress, cancellationToken);
+	const extractResults = await extractFromBatches(
+		transPair,
+		contexts,
+		progress,
+		cancellationToken,
+	);
 	if (cancellationToken.isCancellationRequested) {
 		return;
 	}
@@ -167,7 +209,9 @@ export async function expandTerm_CoreProc(
 	const allResults = extractResults;
 
 	if (allResults.size === 0) {
-		vscode.window.showInformationMessage(vscode.l10n.t("No terms could be expanded"));
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("No terms could be expanded"),
+		);
 		return;
 	}
 
@@ -207,7 +251,10 @@ async function collectExpansionContexts(
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 ): Promise<TermExpansionContext[]> {
-	progress?.report({ message: vscode.l10n.t("Phase 1: Collecting translation contexts..."), increment: 0 });
+	progress?.report({
+		message: vscode.l10n.t("Phase 1: Collecting translation contexts..."),
+		increment: 0,
+	});
 
 	const contexts: TermExpansionContext[] = [];
 	const { sourceLang, targetLang } = transPair;
@@ -225,7 +272,10 @@ async function collectExpansionContexts(
 			const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
 			const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), config);
 
-			const targetFilePath = fileExplorer.getTargetPath(sourceFilePath, transPair);
+			const targetFilePath = fileExplorer.getTargetPath(
+				sourceFilePath,
+				transPair,
+			);
 			if (!targetFilePath) {
 				continue;
 			}
@@ -262,7 +312,11 @@ async function collectExpansionContexts(
 
 				const relevantTerms = termsToExpand.filter((term) => {
 					const termText = term.languages[sourceLang]?.term;
-					return termText && !collectedTerms.has(termText) && sourceUnit.content.includes(termText);
+					return (
+						termText &&
+						!collectedTerms.has(termText) &&
+						sourceUnit.content.includes(termText)
+					);
 				});
 
 				if (relevantTerms.length > 0) {
@@ -306,7 +360,10 @@ async function extractFromBatches(
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 ): Promise<Map<string, string>> {
-	progress?.report({ message: vscode.l10n.t("Phase 2: Extracting terms from translations..."), increment: 0 });
+	progress?.report({
+		message: vscode.l10n.t("Phase 2: Extracting terms from translations..."),
+		increment: 0,
+	});
 
 	const results = new Map<string, string>();
 	const { sourceLang, targetLang } = transPair;
@@ -358,7 +415,10 @@ async function extractFromBatches(
 	}
 
 	progress?.report({
-		message: vscode.l10n.t("Phase 2 completed: {0} terms resolved", results.size),
+		message: vscode.l10n.t(
+			"Phase 2 completed: {0} terms resolved",
+			results.size,
+		),
 		increment: 50,
 	});
 
@@ -369,15 +429,21 @@ async function extractFromBatches(
  * グローバルバッチ分割
  * 文字数閾値でコンテキストをバッチに分割
  */
-function splitIntoBatches(contexts: TermExpansionContext[]): TermExpansionContext[][] {
+function splitIntoBatches(
+	contexts: TermExpansionContext[],
+): TermExpansionContext[][] {
 	const batches: TermExpansionContext[][] = [];
 	let currentBatch: TermExpansionContext[] = [];
 	let currentCharCount = 0;
 
 	for (const context of contexts) {
-		const contextSize = context.sourceUnit.content.length + context.targetUnit.content.length;
+		const contextSize =
+			context.sourceUnit.content.length + context.targetUnit.content.length;
 
-		if (currentCharCount + contextSize > MAX_BATCH_CHARS && currentBatch.length > 0) {
+		if (
+			currentCharCount + contextSize > MAX_BATCH_CHARS &&
+			currentBatch.length > 0
+		) {
 			batches.push(currentBatch);
 			currentBatch = [];
 			currentCharCount = 0;
@@ -406,7 +472,9 @@ async function filterFilesContainingTerms(
 	const statusManager = StatusManager.getInstance();
 	const tree = statusManager.getStatusItemTree();
 	const allSourceFiles = tree.getSourceFilesAll();
-	const filePaths = allSourceFiles.map((f) => f.filePath).filter((p): p is string => p !== undefined);
+	const filePaths = allSourceFiles
+		.map((f) => f.filePath)
+		.filter((p): p is string => p !== undefined);
 
 	// 用語リストを構築
 	const termList = terms
@@ -431,7 +499,11 @@ async function filterFilesContainingTermsFromList(
 		.filter((entry) => entry.languages[sourceLang])
 		.map((entry) => entry.languages[sourceLang].term);
 
-	return filterFilesContainingTermsCore(sourceFiles, termList, cancellationToken);
+	return filterFilesContainingTermsCore(
+		sourceFiles,
+		termList,
+		cancellationToken,
+	);
 }
 
 /**
@@ -489,6 +561,9 @@ async function filterFilesContainingTermsCore(
 /**
  * fromHashで対応するターゲットUnitを検索
  */
-function findTargetUnit(targetUnits: readonly MdaitUnit[], sourceHash: string): MdaitUnit | undefined {
+function findTargetUnit(
+	targetUnits: readonly MdaitUnit[],
+	sourceHash: string,
+): MdaitUnit | undefined {
 	return targetUnits.find((unit) => unit.marker?.from === sourceHash);
 }

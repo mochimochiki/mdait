@@ -9,6 +9,7 @@ import {
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
+import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
 
 /**
@@ -40,6 +41,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		this.statusManager.onStatusTreeChanged((updatedItem) => {
 			if (updatedItem !== null) {
 				// 該当ファイルアイテムのみツリー更新
+				DebugFireRecorder.getInstance().record("provider", updatedItem);
 				this._onDidChangeTreeData.fire(updatedItem);
 			}
 		});
@@ -49,6 +51,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 外部から手動更新したい場合に使用
 	 */
 	public refresh(): void {
+		DebugFireRecorder.getInstance().record("provider", undefined);
 		this._onDidChangeTreeData.fire(undefined);
 	}
 
