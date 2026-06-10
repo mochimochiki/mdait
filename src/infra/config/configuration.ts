@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { Logger, formatError } from "../logging/logger";
 
 /**
  * AI設定の型定義
@@ -345,12 +346,27 @@ export class Configuration {
 			this.configurationWatcher = fs.watch(this.configFilePath, (eventType) => {
 				if (eventType === "change") {
 					this.load().catch((error) => {
-						console.error("Failed to reload configuration:", error);
+						// 古い設定のまま動き続けるため、ユーザーにも通知する
+						Logger.getInstance().error(
+							"config",
+							"Failed to reload configuration",
+							formatError(error),
+						);
+						vscode.window.showErrorMessage(
+							vscode.l10n.t(
+								"Failed to reload mdait.json: {0}",
+								(error as Error).message,
+							),
+						);
 					});
 				}
 			});
 		} catch (error) {
-			console.error("Failed to setup configuration watcher:", error);
+			Logger.getInstance().error(
+				"config",
+				"Failed to setup configuration watcher",
+				formatError(error),
+			);
 		}
 	}
 
@@ -369,7 +385,11 @@ export class Configuration {
 			try {
 				callback();
 			} catch (error) {
-				console.error("Error in configuration change callback:", error);
+				Logger.getInstance().error(
+					"config",
+					"Error in configuration change callback",
+					formatError(error),
+				);
 			}
 		}
 	}

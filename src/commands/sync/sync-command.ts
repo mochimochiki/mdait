@@ -20,7 +20,9 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import type { TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
@@ -143,14 +145,21 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 						}
 
 						// FileHandlerを取得してdispatch
+						// 翻訳・自動syncと同一ファイルへの書き込みが交錯しないよう排他する
 						const handler = getFileHandler(sourceFile);
-						let syncResult: FileSyncResult;
-						const isExistingTarget = fs.existsSync(targetFile);
-						if (isExistingTarget) {
-							syncResult = await handler.sync(sourceFile, targetFile);
-						} else {
-							syncResult = await handler.syncNew(sourceFile, targetFile);
-						}
+						const syncResult: FileSyncResult =
+							await FileMutex.getInstance().runExclusive(
+								[sourceFile, targetFile],
+								async () => {
+									// 未保存のエディタ変更をディスクへ反映してから同期する
+									await flushDirtyDocument(sourceFile);
+									await flushDirtyDocument(targetFile);
+									if (fs.existsSync(targetFile)) {
+										return handler.sync(sourceFile, targetFile);
+									}
+									return handler.syncNew(sourceFile, targetFile);
+								},
+							);
 
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
@@ -353,13 +362,19 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		}
 
 		// FileHandlerを使って同期処理を実行
-		let syncResult: FileSyncResult;
-		const isExistingFile = fs.existsSync(targetFile);
-		if (isExistingFile) {
-			syncResult = await handler.sync(sourceFile, targetFile);
-		} else {
-			syncResult = await handler.syncNew(sourceFile, targetFile);
-		}
+		// 翻訳・他のsyncと同一ファイルへの書き込みが交錯しないよう排他する
+		const src = sourceFile;
+		const tgt = targetFile;
+		const syncResult: FileSyncResult =
+			await FileMutex.getInstance().runExclusive([src, tgt], async () => {
+				// ペアファイル側の未保存変更もディスクへ反映してから同期する
+				await flushDirtyDocument(src);
+				await flushDirtyDocument(tgt);
+				if (fs.existsSync(tgt)) {
+					return handler.sync(src, tgt);
+				}
+				return handler.syncNew(src, tgt);
+			});
 
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
