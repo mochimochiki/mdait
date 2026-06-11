@@ -190,5 +190,6 @@
   "File size limit exceeded, translation skipped": "File size limit exceeded, translation skipped",
   "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.": "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.",
   "Failed to reload mdait.json: {0}": "Failed to reload mdait.json: {0}",
-  "Failed to load mdait.json: {0}": "Failed to load mdait.json: {0}"
+  "Failed to load mdait.json: {0}": "Failed to load mdait.json: {0}",
+  "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.": "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits."
 }

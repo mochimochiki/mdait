@@ -191,5 +191,6 @@
   "File size limit exceeded, translation skipped": "ファイルサイズ上限超過のためスキップ",
   "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.": "ユニット「{0}」のマーカーが見つからないため、翻訳結果を書き戻せませんでした（ファイルが変更された可能性があります）。Syncを実行してから再度翻訳してください。",
   "Failed to reload mdait.json: {0}": "mdait.jsonの再読み込みに失敗しました: {0}",
-  "Failed to load mdait.json: {0}": "mdait.jsonの読み込みに失敗しました: {0}"
+  "Failed to load mdait.json: {0}": "mdait.jsonの読み込みに失敗しました: {0}",
+  "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.": "{0} の未保存の変更を保存できなかったため、編集内容の上書きを避けるために処理を中断しました。"
 }

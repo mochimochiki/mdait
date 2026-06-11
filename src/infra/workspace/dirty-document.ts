@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Logger, formatError } from "../logging/logger";
+import { normalizeFileKey } from "./file-key";
 
 const logger = Logger.getInstance();
 
@@ -13,30 +14,38 @@ const logger = Logger.getInstance();
  * 翻訳結果やマーカーが消失する。処理前にバッファをディスクへ反映させる
  * ことで両者を一致させる。
  *
+ * 保存に失敗した場合は例外を投げる。不整合のまま処理を続けると結局
+ * 上書き消失を防げないため、呼び出し側の操作ごと中断させる。
+ *
  * @param filePath 対象ファイルの絶対パス
- * @returns 保存に失敗した場合のみ false（未オープン・クリーンな場合は true）
+ * @throws 未保存の変更をディスクへ保存できなかった場合
  */
-export async function flushDirtyDocument(filePath: string): Promise<boolean> {
-	const resolved = path.resolve(filePath);
+export async function flushDirtyDocument(filePath: string): Promise<void> {
+	const key = normalizeFileKey(filePath);
 	const document = vscode.workspace.textDocuments.find(
-		(doc) => doc.uri.scheme === "file" && path.resolve(doc.uri.fsPath) === resolved,
+		(doc) => doc.uri.scheme === "file" && normalizeFileKey(doc.uri.fsPath) === key,
 	);
 	if (!document || !document.isDirty) {
-		return true;
+		return;
 	}
+	let saved = false;
 	try {
-		const saved = await document.save();
-		if (!saved) {
-			logger.warn("workspace", "Failed to save dirty document before write", {
-				filePath,
-			});
-		}
-		return saved;
+		saved = await document.save();
 	} catch (error) {
 		logger.warn("workspace", "Error saving dirty document before write", {
 			filePath,
 			...formatError(error),
 		});
-		return false;
+	}
+	if (!saved) {
+		logger.warn("workspace", "Failed to save dirty document before write", {
+			filePath,
+		});
+		throw new Error(
+			vscode.l10n.t(
+				"Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.",
+				path.basename(filePath),
+			),
+		);
 	}
 }

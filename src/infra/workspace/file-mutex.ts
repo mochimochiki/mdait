@@ -1,4 +1,4 @@
-import * as path from "node:path";
+import { normalizeFileKey } from "./file-key";
 
 /**
  * ファイルパス単位の非同期排他制御（キー付きミューテックス）。
@@ -38,7 +38,7 @@ export class FileMutex {
 	 * @param task ロック保持中に実行する処理
 	 */
 	async runExclusive<T>(keys: string[], task: () => Promise<T>): Promise<T> {
-		const normalized = [...new Set(keys.map((k) => path.resolve(k)))];
+		const normalized = [...new Set(keys.map((k) => normalizeFileKey(k)))];
 		const prior = Promise.all(normalized.map((k) => this.tails.get(k) ?? Promise.resolve()));
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
