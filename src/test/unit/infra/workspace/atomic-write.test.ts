@@ -72,6 +72,18 @@ suite("atomicWriteFileSync", () => {
 		assert.deepStrictEqual(listTmpFiles(tempDir), []);
 	});
 
+	test("既存ファイルのパーミッションが維持されること", function () {
+		if (process.platform === "win32") {
+			this.skip();
+		}
+		const filePath = path.join(tempDir, "perms.txt");
+		fs.writeFileSync(filePath, "old", "utf-8");
+		fs.chmodSync(filePath, 0o600);
+
+		atomicWriteFileSync(filePath, "new", "utf-8");
+		assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+	});
+
 	test("EncodingオプションなしでもUTF-8文字列を書き込めること", () => {
 		const filePath = path.join(tempDir, "default.txt");
 		atomicWriteFileSync(filePath, "日本語テキスト");

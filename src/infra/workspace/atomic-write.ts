@@ -23,6 +23,14 @@ export function atomicWriteFileSync(
 	const dir = path.dirname(filePath);
 	fs.mkdirSync(dir, { recursive: true });
 
+	// 既存ファイルのパーミッションを引き継ぐ（renameはumask由来のmodeになるため）
+	let existingMode: number | undefined;
+	try {
+		existingMode = fs.statSync(filePath).mode;
+	} catch {
+		// 新規ファイルの場合はデフォルトのmodeを使用
+	}
+
 	const tmpPath = path.join(
 		dir,
 		`.tmp-${path.basename(filePath)}-${crypto.randomBytes(6).toString("hex")}`,
@@ -30,6 +38,9 @@ export function atomicWriteFileSync(
 
 	try {
 		fs.writeFileSync(tmpPath, data, options);
+		if (existingMode !== undefined) {
+			fs.chmodSync(tmpPath, existingMode);
+		}
 		fs.renameSync(tmpPath, filePath);
 	} catch (error) {
 		try {

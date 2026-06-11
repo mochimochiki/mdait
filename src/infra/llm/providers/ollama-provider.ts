@@ -39,7 +39,7 @@ export class OllamaProvider implements AIService {
 				}
 				reject(
 					new Error(
-						`Ollama request timed out after ${this.timeoutMs / 1000}s (no response received)`,
+						`Ollama request timed out after ${this.timeoutMs / 1000}s (no response or stalled stream)`,
 					),
 				);
 			}, this.timeoutMs);

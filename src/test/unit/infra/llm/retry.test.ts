@@ -213,6 +213,37 @@ suite("withTransportRetry", () => {
 		assert.strictEqual(calls, 1);
 	});
 
+	test("maxRetriesが負数でも必ず1回は試行され実際のエラーがthrowされる", async () => {
+		let calls = 0;
+		await assert.rejects(
+			withTransportRetry(
+				async () => {
+					calls++;
+					throw new Error("actual failure");
+				},
+				{ policy: { ...FAST_POLICY, maxRetries: -1 } },
+			),
+			/actual failure/,
+		);
+		assert.strictEqual(calls, 1);
+	});
+
+	test("maxRetriesがNaNの場合はデフォルト値で動作する", async () => {
+		let calls = 0;
+		const result = await withTransportRetry(
+			async () => {
+				calls++;
+				if (calls === 1) {
+					throw new TransientHttpError("transient", 503, 0);
+				}
+				return "ok";
+			},
+			{ policy: { ...FAST_POLICY, maxRetries: Number.NaN } },
+		);
+		assert.strictEqual(result, "ok");
+		assert.strictEqual(calls, 2);
+	});
+
 	test("Retry-Afterが指定されていればmaxDelayMsでクランプされる", async () => {
 		let calls = 0;
 		const start = Date.now();

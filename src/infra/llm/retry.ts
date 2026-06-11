@@ -126,7 +126,14 @@ export async function withTransportRetry<T>(
 	operation: (attempt: number) => Promise<T>,
 	options?: WithRetryOptions,
 ): Promise<T> {
-	const policy: RetryPolicy = { ...DEFAULT_RETRY_POLICY, ...options?.policy };
+	const merged: RetryPolicy = { ...DEFAULT_RETRY_POLICY, ...options?.policy };
+	// maxRetriesが負数・NaNでもループが必ず1回は回るよう0以上に正規化する
+	const policy: RetryPolicy = {
+		...merged,
+		maxRetries: Number.isFinite(merged.maxRetries)
+			? Math.max(0, Math.floor(merged.maxRetries))
+			: DEFAULT_RETRY_POLICY.maxRetries,
+	};
 	const isRetryable =
 		options?.isRetryable ??
 		((error: unknown) => error instanceof TransientHttpError || isNetworkError(error));
