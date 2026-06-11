@@ -1,7 +1,15 @@
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
+import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
+import {
+	type RetryPolicy,
+	TransientHttpError,
+	isRetryableStatus,
+	parseRetryAfterMs,
+	withTransportRetry,
+} from "../retry";
 
 /**
  * OpenAI Chat Completions API 非ストリーミングレスポンスの型
@@ -26,8 +34,10 @@ export class OpenAIProvider implements AIService {
 	private model: string;
 	private maxOutputTokens: number;
 	private timeoutMs: number;
+	private retryPolicy: Partial<RetryPolicy> | undefined;
 
-	constructor(config: AIConfig) {
+	constructor(config: AIConfig, retryPolicy?: Partial<RetryPolicy>) {
+		this.retryPolicy = retryPolicy;
 		// OpenAI固有設定を取得
 		this.apiKey = (config.openai?.apiKey as string) || process.env.OPENAI_API_KEY || "";
 		this.baseURL = (config.openai?.baseURL as string) || "https://api.openai.com/v1";
@@ -82,61 +92,24 @@ export class OpenAIProvider implements AIService {
 			});
 		}
 
-		const url = `${this.baseURL.replace(/\/$/, "")}/chat/completions`;
-
-		// AbortControllerを使用してキャンセル処理を実装
-		const controller = new AbortController();
-		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
-			controller.abort();
-			console.log("OpenAIProvider request was cancelled");
-		});
-
 		try {
-			const response = await fetch(url, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${this.apiKey}`,
+			// 429/5xx・ネットワークエラー・タイムアウトは指数バックオフでリトライする
+			responseContent = await withTransportRetry(
+				() => this.performRequest(openaiMessages, cancellationToken),
+				{
+					policy: this.retryPolicy,
+					cancellationToken,
+					logContext: { provider: "openai", model: this.model },
 				},
-				body: JSON.stringify({
-					model: this.model,
-					messages: openaiMessages,
-					stream: false,
-					store: false,
-					max_completion_tokens: this.maxOutputTokens,
-				}),
-				signal: controller.signal,
-			});
-
-			if (!response.ok) {
-				const text = await response.text().catch(() => "");
-				status = "error";
-				errorMessage = text || `HTTP error ${response.status} ${response.statusText}`;
-				throw new Error(`OpenAI API error: ${errorMessage}`);
-			}
-
-			// 非ストリーミング応答の処理
-			const data = (await response.json()) as OpenAIChatCompletionResponse;
-			const content = data.choices?.[0]?.message?.content ?? "";
-
-			responseContent = content;
-			outputChars = content.length;
+			);
+			outputChars = responseContent.length;
 
 			return responseContent;
 		} catch (error) {
 			status = "error";
-
-			// エラーの種類に応じた詳細メッセージを生成
-			const unknownErr = error as { name?: string; message?: string };
-			if (unknownErr?.name === "AbortError" || controller.signal.aborted) {
-				errorMessage = "Request aborted";
-			} else {
-				errorMessage = (error as Error)?.message ?? String(error);
-			}
-
+			errorMessage = (error as Error)?.message ?? String(error);
 			throw new Error(`OpenAI provider error: ${errorMessage}`);
 		} finally {
-			cancelSubscription?.dispose();
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
 			const logger = AIStatsLogger.getInstance();
@@ -169,6 +142,80 @@ export class OpenAIProvider implements AIService {
 				status,
 				errorMessage,
 			});
+		}
+	}
+
+	/**
+	 * Chat Completions APIへの1試行分のリクエストを実行する
+	 * リトライ可能な失敗（429/5xx/タイムアウト）は TransientHttpError としてthrowする
+	 */
+	private async performRequest(
+		openaiMessages: { role: string; content: string }[],
+		cancellationToken?: vscode.CancellationToken,
+	): Promise<string> {
+		const url = `${this.baseURL.replace(/\/$/, "")}/chat/completions`;
+
+		// AbortControllerは再利用できないため試行ごとに生成する
+		const controller = new AbortController();
+		let timedOut = false;
+		const timeoutTimer = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, this.timeoutMs);
+		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
+			controller.abort();
+			Logger.getInstance().debug("llm", "OpenAI request was cancelled");
+		});
+
+		try {
+			const response = await fetch(url, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+				body: JSON.stringify({
+					model: this.model,
+					messages: openaiMessages,
+					stream: false,
+					store: false,
+					max_completion_tokens: this.maxOutputTokens,
+				}),
+				signal: controller.signal,
+			});
+
+			if (!response.ok) {
+				const text = await response.text().catch(() => "");
+				const message = text || `HTTP error ${response.status} ${response.statusText}`;
+				if (isRetryableStatus(response.status)) {
+					throw new TransientHttpError(
+						`OpenAI API error: ${message}`,
+						response.status,
+						parseRetryAfterMs(response.headers.get("retry-after")),
+					);
+				}
+				throw new Error(`OpenAI API error: ${message}`);
+			}
+
+			// 非ストリーミング応答の処理
+			const data = (await response.json()) as OpenAIChatCompletionResponse;
+			return data.choices?.[0]?.message?.content ?? "";
+		} catch (error) {
+			const unknownErr = error as { name?: string; message?: string };
+			if (unknownErr?.name === "AbortError" || controller.signal.aborted) {
+				if (timedOut) {
+					// タイムアウト起因のabortは一時的エラーとしてリトライ対象にする
+					throw new TransientHttpError(
+						`Request timed out after ${this.timeoutMs / 1000}s`,
+					);
+				}
+				// ユーザーキャンセル起因のabortはリトライしない
+				throw new Error("Request aborted");
+			}
+			throw error;
+		} finally {
+			clearTimeout(timeoutTimer);
+			cancelSubscription?.dispose();
 		}
 	}
 }
