@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import type { TransPair } from "../../infra/config/configuration";
+import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { extractLanguagesFromTransPairs } from "./term-utils";
@@ -145,7 +146,7 @@ export class YamlTermsRepository implements TermsRepository {
 		});
 
 		// ファイルに書き込み（UTF-8、BOM無し）
-		fs.writeFileSync(this.path, yamlContent, { encoding: "utf8" });
+		atomicWriteFileSync(this.path, yamlContent, { encoding: "utf8" });
 	}
 
 	/**

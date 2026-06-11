@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
+import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 
 const logger = Logger.getInstance();
 
@@ -121,7 +122,7 @@ export class FileStateStore {
 
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
-		fs.writeFileSync(filePath, content, "utf-8");
+		atomicWriteFileSync(filePath, content, "utf-8");
 		this.dirty = false;
 	}
 

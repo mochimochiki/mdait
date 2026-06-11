@@ -14,6 +14,8 @@ export interface AIConfig {
 	ollama: {
 		endpoint: string;
 		model: string;
+		/** リクエスト/ストリーミングチャンク間のタイムアウト（秒） */
+		timeoutSec?: number;
 	};
 	openai?: {
 		apiKey?: string;
@@ -104,6 +106,7 @@ interface MdaitConfig {
 		ollama?: {
 			endpoint?: string;
 			model?: string;
+			timeoutSec?: number;
 		};
 		openai?: {
 			apiKey?: string;
@@ -470,6 +473,9 @@ export class Configuration {
 					}
 					if (config.ai.ollama.model) {
 						this.ai.ollama.model = config.ai.ollama.model;
+					}
+					if (config.ai.ollama.timeoutSec !== undefined) {
+						this.ai.ollama.timeoutSec = Math.max(1, config.ai.ollama.timeoutSec);
 					}
 				}
 				if (config.ai.openai) {

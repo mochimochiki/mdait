@@ -1,6 +1,7 @@
 import { Ollama } from "ollama";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
+import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
@@ -9,17 +10,53 @@ import { AIStatsLogger } from "../ai-stats-logger";
  * ローカルで実行されるOllamaサーバーと通信してテキスト生成を行います
  */
 export class OllamaProvider implements AIService {
-	private ollama: Ollama;
+	private ollama: Pick<Ollama, "generate" | "abort">;
 	private model: string;
+	private timeoutMs: number;
 
-	constructor(config: AIConfig) {
+	constructor(config: AIConfig, ollamaClient?: Pick<Ollama, "generate" | "abort">) {
 		// Ollama固有設定を優先、フォールバックとして汎用設定を使用
 		const endpoint = (config.ollama?.endpoint as string) || "http://localhost:11434";
 		this.model = (config.ollama?.model as string) || (config.model as string) || "llama2";
+		const timeoutSec = (config.ollama?.timeoutSec as number) ?? 120;
+		this.timeoutMs = timeoutSec * 1000;
 
-		// Ollama クライアントを初期化
-		this.ollama = new Ollama({ host: endpoint });
+		// Ollama クライアントを初期化（テスト用に外部注入可能）
+		this.ollama = ollamaClient ?? new Ollama({ host: endpoint });
 	}
+
+	/**
+	 * Promiseにタイムアウトを適用する
+	 * 時間内に解決しなければonTimeoutで進行中のリクエストを中断し、rejectする
+	 */
+	private raceWithTimeout<T>(promise: Promise<T>, onTimeout: () => void): Promise<T> {
+		return new Promise<T>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				try {
+					onTimeout();
+				} catch {
+					// abort失敗は無視（タイムアウトエラーを優先）
+				}
+				reject(
+					new Error(
+						`Ollama request timed out after ${this.timeoutMs / 1000}s (no response or stalled stream)`,
+					),
+				);
+			}, this.timeoutMs);
+
+			promise.then(
+				(value) => {
+					clearTimeout(timer);
+					resolve(value);
+				},
+				(error) => {
+					clearTimeout(timer);
+					reject(error);
+				},
+			);
+		});
+	}
+
 	/**
 	 * Ollamaサーバーに対してメッセージを送信し、応答を受け取ります。
 	 *
@@ -50,7 +87,7 @@ export class OllamaProvider implements AIService {
 		// キャンセル処理の設定
 		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
 			this.ollama.abort();
-			console.log("Ollama request was cancelled (abort())");
+			Logger.getInstance().debug("llm", "Ollama request was cancelled");
 		});
 
 		try {
@@ -62,18 +99,29 @@ export class OllamaProvider implements AIService {
 			}
 
 			// Ollama-js パッケージを使用してストリーミング生成
-			const response = await this.ollama.generate({
-				model: this.model,
-				prompt: prompt,
-				stream: true,
-				options: {
-					temperature: 0.7,
-					top_p: 0.9,
-				},
-			});
+			// サーバー無応答による無限待機を防ぐため初回応答にタイムアウトを適用
+			const response = await this.raceWithTimeout(
+				this.ollama.generate({
+					model: this.model,
+					prompt: prompt,
+					stream: true,
+					options: {
+						temperature: 0.7,
+						top_p: 0.9,
+					},
+				}),
+				() => this.ollama.abort(),
+			);
 
 			// ストリーミングレスポンスを受信して結合
-			for await (const part of response) {
+			// チャンク間にもタイムアウトを適用（途中でサーバーが固まった場合に中断）
+			const iterator = response[Symbol.asyncIterator]();
+			while (true) {
+				const result = await this.raceWithTimeout(iterator.next(), () => response.abort());
+				if (result.done) {
+					break;
+				}
+				const part = result.value;
 				if (part.response) {
 					responseContent += part.response;
 				}

@@ -10,6 +10,7 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 
 import type { TransPair } from "../../infra/config/configuration";
+import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { TermEntryConverter } from "./term-entry-converter";
@@ -359,7 +360,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 		// BOM付きUTF-8で保存
 		const bom = Buffer.from([0xef, 0xbb, 0xbf]);
 		const contentBuffer = Buffer.from(csvContent, "utf8");
-		fs.writeFileSync(this.path, Buffer.concat([bom, contentBuffer]));
+		atomicWriteFileSync(this.path, Buffer.concat([bom, contentBuffer]));
 	}
 
 	/**

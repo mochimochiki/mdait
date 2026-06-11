@@ -123,6 +123,12 @@
               "description": "Ollama model name to use",
               "default": "llama2",
               "examples": ["llama2", "llama3", "mistral", "codellama"]
+            },
+            "timeoutSec": {
+              "type": "number",
+              "description": "Timeout in seconds for the initial response and between streaming chunks",
+              "minimum": 1,
+              "default": 120
             }
           },
           "additionalProperties": false
@@ -150,7 +156,7 @@
               "default": 16384
             },
             "timeoutSec": {
-              "type": "integer",
+              "type": "number",
               "description": "Request timeout in seconds.",
               "minimum": 1,
               "default": 120

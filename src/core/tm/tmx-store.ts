@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
+import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import { calculateHash } from "../hash/hash-calculator";
 import { computeTrigrams, normalizeForTm } from "./tm-text-normalizer";
 import type { ExistingTmEntriesItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
@@ -335,7 +336,7 @@ export class TmxStore {
 		}
 
 		const xml = serializeTmx(this.index);
-		fs.writeFileSync(filePath, xml, "utf-8");
+		atomicWriteFileSync(filePath, xml, "utf-8");
 
 		// save後のファイルmtimeを記録（次回getInstanceでリロードを回避）
 		this.loadedFilePath = filePath;
