@@ -43,6 +43,29 @@ sequenceDiagram
 
 ---
 
+## FileMutex
+
+ファイルパス単位の非同期排他制御を担当します。
+
+### 解決する問題
+
+sync・trans・保存時自動syncはいずれも同一ファイルを read-modify-write します。これらが並行実行されると後勝ちの上書きが起き、マーカーや翻訳結果が失われます。FileMutexは同じファイルへの操作を獲得順（FIFO）に直列化し、異なるファイルへの操作は並行のまま許可します。
+
+### 主要API
+
+- `runExclusive(keys, task)`: 指定パス群のロックを獲得してタスクを実行。先行タスクの完了を待ち、例外時もロックを解放する
+
+### 設計方針
+
+- 複数キーの獲得は同期的に一括登録するため、部分獲得によるデッドロックは構造的に発生しない
+- 再入非対応（ロック保持中の処理から同一キーで再獲得しない設計を呼び出し側が守る）。現在の獲得点は `transFile_CoreProc` / `transUnit_CoreProc` / `translateFrontmatter_CoreProc` / syncコマンドのファイルワーカー / `syncSingleFile` で、互いに入れ子にならない
+- ロック獲得直後に `flushDirtyDocument` で未保存のエディタバッファをディスクへ反映し、バッファ/ディスクの不整合による処理結果の消失を防ぐ。保存に失敗した場合は例外で操作ごと中断する（不整合のまま続行すると結局上書き消失を防げないため）
+- ロックキーとパス比較は `normalizeFileKey` で正規化する（win32では大文字小文字を無視）
+
+**実装**: [`src/infra/workspace/file-mutex.ts`](../../src/infra/workspace/file-mutex.ts), [`src/infra/workspace/dirty-document.ts`](../../src/infra/workspace/dirty-document.ts), [`src/infra/workspace/file-key.ts`](../../src/infra/workspace/file-key.ts)
+
+---
+
 ## Logger
 
 構造化ログによる診断情報の記録を担当します。

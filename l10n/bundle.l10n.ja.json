@@ -56,7 +56,8 @@
   "No hash found in marker.": "マーカーにハッシュが見つかりませんでした。",
   "Target unit not found for hash: {0}": "ハッシュ {0} に対応する訳文ユニットが見つかりませんでした",
   "Jump to target failed: {0}": "訳文へのジャンプに失敗しました: {0}",
-  "Run translation": "翻訳を実行",  "Translate directory": "ディレクトリを翻訳",
+  "Run translation": "翻訳を実行",
+  "Translate directory": "ディレクトリを翻訳",
   "Translate file": "ファイルを翻訳",
   "Translate unit": "ユニットを翻訳",
   "Invalid directory item": "無効なディレクトリアイテムです",
@@ -187,5 +188,9 @@
   "Patch application failed. Full re-translation may overwrite manual edits. Continue?": "パッチ適用に失敗しました。全文再翻訳を行うと手修正が失われる可能性があります。続行しますか？",
   "Continue": "続行",
   "Skip": "スキップ",
-  "File size limit exceeded, translation skipped": "ファイルサイズ上限超過のためスキップ"
+  "File size limit exceeded, translation skipped": "ファイルサイズ上限超過のためスキップ",
+  "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.": "ユニット「{0}」のマーカーが見つからないため、翻訳結果を書き戻せませんでした（ファイルが変更された可能性があります）。Syncを実行してから再度翻訳してください。",
+  "Failed to reload mdait.json: {0}": "mdait.jsonの再読み込みに失敗しました: {0}",
+  "Failed to load mdait.json: {0}": "mdait.jsonの読み込みに失敗しました: {0}",
+  "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.": "{0} の未保存の変更を保存できなかったため、編集内容の上書きを避けるために処理を中断しました。"
 }

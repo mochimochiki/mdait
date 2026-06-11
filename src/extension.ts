@@ -94,6 +94,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		logger.info("config", "Configuration not loaded", {
 			reason: (error as Error).message,
 		});
+		// 設定ファイルが存在するのに読み込めない場合（JSON構文エラー等）は
+		// Welcome View だけでは原因が分からないため、ユーザーに通知する
+		const configFilePath = config.getConfigFilePath();
+		if (configFilePath && fs.existsSync(configFilePath)) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					"Failed to load mdait.json: {0}",
+					(error as Error).message,
+				),
+			);
+		}
 	}
 
 	// AIOnboarding の初期化
@@ -119,10 +130,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// SelectionState 初期化（前回復元→先頭フォールバック）
 	const selectionState = SelectionState.getInstance();
-	selectionState.initialize(context).then(() => {
-		// 初期化後に transPairs と整合
-		selectionState.reconcileWith(config.transPairs);
-	});
+	selectionState
+		.initialize(context)
+		.then(() => {
+			// 初期化後に transPairs と整合
+			selectionState.reconcileWith(config.transPairs);
+		})
+		.catch((error) => {
+			logger.warn("extension", "Failed to initialize selection state", {
+				error: (error as Error).message,
+			});
+		});
 
 	// 選択変更時はツリー更新
 	selectionState.onChanged(() => {
@@ -384,7 +402,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				summaryDecorator.updateDecorations(editor);
 
 				const filePath = editor.document.uri.fsPath;
-				statusTreeProvider.revealActiveFile(filePath, treeView);
+				statusTreeProvider.revealActiveFile(filePath, treeView).catch(() => {
+					// reveal失敗はUI上致命的でないため無視（詳細はprovider内でログ済み）
+				});
 			}
 		},
 		null,

@@ -39,7 +39,9 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { FileMutex } from "../../infra/workspace/file-mutex";
 import {
 	SummaryManager,
 	type TmReferenceInfo,
@@ -150,8 +152,22 @@ export async function transFile_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<TransCommandResult | undefined> {
+	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
+	return FileMutex.getInstance().runExclusive([uri.fsPath], () =>
+		transFile_Exclusive(uri, progress, token),
+	);
+}
+
+async function transFile_Exclusive(
+	uri: vscode.Uri,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<TransCommandResult | undefined> {
 	const config = Configuration.getInstance();
 	const targetFilePath = uri.fsPath;
+
+	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
+	await flushDirtyDocument(targetFilePath);
 
 	// FileHandlerファクトリ経由でファイルタイプ別にディスパッチ
 	const handler = getFileHandler(targetFilePath);
@@ -1025,8 +1041,23 @@ export async function transUnit_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<TranslateUnitMetrics | undefined> {
+	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
+	return FileMutex.getInstance().runExclusive([targetPath], () =>
+		transUnit_Exclusive(targetPath, unitHash, progress, token),
+	);
+}
+
+async function transUnit_Exclusive(
+	targetPath: string,
+	unitHash: string,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<TranslateUnitMetrics | undefined> {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
+
+	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
+	await flushDirtyDocument(targetPath);
 
 	// 各種初期化
 	const fileExplorer = new FileExplorer();
@@ -1186,9 +1217,16 @@ async function updateAndSaveUnit(
 	const content = decoder.decode(document);
 	const offsets = getUnitPosition(content, markerText);
 	if (!offsets) {
+		// 翻訳結果が破棄されるため、ログだけでなくユーザーにも通知する
 		logger.warn("trans", "mdait marker not found, skipped unit replacement", {
 			unitTitle: unit.title,
 		});
+		vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.",
+				unit.title ?? "",
+			),
+		);
 		return;
 	}
 	// 元のユニットの末尾改行を保持
@@ -1306,9 +1344,23 @@ async function translateFrontmatter_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<void> {
+	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
+	return FileMutex.getInstance().runExclusive([uri.fsPath], () =>
+		translateFrontmatter_Exclusive(uri, progress, token),
+	);
+}
+
+async function translateFrontmatter_Exclusive(
+	uri: vscode.Uri,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<void> {
 	const targetFilePath = uri.fsPath;
 	const config = Configuration.getInstance();
 	const statusManager = StatusManager.getInstance();
+
+	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
+	await flushDirtyDocument(targetFilePath);
 
 	// ファイル探索クラスを初期化
 	const fileExplorer = new FileExplorer();

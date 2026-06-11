@@ -118,7 +118,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			});
 		} catch (error) {
 			// エラーが発生しても処理を中断しない（ログのみ出力）
-			console.debug("Failed to reveal file in status tree:", error);
+			Logger.getInstance().debug(
+				"status-tree",
+				"Failed to reveal file in status tree",
+				formatError(error),
+			);
 		}
 	}
 
