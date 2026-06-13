@@ -26,7 +26,7 @@ export type PromptVariables = Record<string, string | undefined>;
  * system はユニット間で固定となり、プロバイダーのプレフィックスキャッシュが効く
  */
 export interface PromptParts {
-	/** 静的なシステムプロンプト（変数置換済み。言語ペア×プロンプト種別ごとに固定） */
+	/** 静的なシステムプロンプト（デフォルトの翻訳系テンプレートでは変数を含まず、プロンプト種別ごとに固定） */
 	system: string;
 	/** ユニットごとの可変コンテキスト（変数置換済み。user message の先頭に配置する） */
 	userContext: string;

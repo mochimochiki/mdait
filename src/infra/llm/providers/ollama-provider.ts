@@ -88,7 +88,7 @@ export class OllamaProvider implements AIService {
 			chatMessages.push({ role: "system", content: systemPrompt });
 		}
 		for (const msg of messages) {
-			const content = Array.isArray(msg.content) ? msg.content.join("\n") : msg.content;
+			const content = Array.isArray(msg.content) ? msg.content.join("") : msg.content;
 			chatMessages.push({ role: msg.role, content });
 		}
 		const inputChars = chatMessages.reduce((sum, msg) => sum + msg.content.length, 0);

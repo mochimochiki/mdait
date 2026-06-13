@@ -93,8 +93,9 @@ export class OpenAIProvider implements AIService {
 		let usage: OpenAIUsage | undefined;
 
 		// プロンプトキャッシュのルーティングを安定させるキー
-		// system prompt はテンプレート×言語ペア単位で固定のため、そのハッシュが自然な単位になる
-		const promptCacheKey = `mdait-${calculateHash(systemPrompt)}`;
+		// system prompt はテンプレート単位で固定（言語指定はuser message側）のため、そのハッシュが自然な単位になる
+		// 正規化なしでハッシュ化し、異なるsystem promptが同一キーに畳まれないようにする
+		const promptCacheKey = `mdait-${calculateHash(systemPrompt, false)}`;
 
 		// OpenAI Chat API の messages 配列に変換
 		const openaiMessages: { role: string; content: string }[] = [];

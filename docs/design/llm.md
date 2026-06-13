@@ -79,8 +79,8 @@ interface AIService {
 - **`store`: false固定（プライバシー重視、コード内ハードコーディング）**
 
 #### プロンプトキャッシュ
-- リクエストに `prompt_cache_key`（`mdait-{system promptのCRC32}`）を付与し、同一system promptのリクエストが同じ推論ノードへルーティングされやすくする
-- system prompt はテンプレート×言語ペア単位で静的（[prompt.md](prompt.md) の system / user-section 分割参照）なため、1024トークン以上の共通プレフィックスに対してOpenAIの自動プロンプトキャッシュが効く
+- リクエストに `prompt_cache_key`（`mdait-{system promptのCRC32（8桁hex、正規化なし）}`）を付与し、同一system promptのリクエストが同じ推論ノードへルーティングされやすくする
+- system prompt はテンプレート単位で静的（言語指定はuser message側のため言語ペアに依存しない。[prompt.md](prompt.md) の system / user-section 分割参照）。1024トークン以上の共通プレフィックスに対してOpenAIの自動プロンプトキャッシュが効く
 - 応答の `usage`（`prompt_tokens` / `prompt_tokens_details.cached_tokens` / `completion_tokens`）を `ai-stats.log` に記録し、キャッシュヒット率を実測で確認できる（`store: false` はキャッシュとは無関係で維持）
 
 #### セキュリティ
