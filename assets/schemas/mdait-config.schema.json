@@ -129,6 +129,11 @@
               "description": "Timeout in seconds for the initial response and between streaming chunks",
               "minimum": 1,
               "default": 120
+            },
+            "keepAlive": {
+              "type": ["string", "number"],
+              "description": "How long the model stays loaded in memory after the request (e.g. \"10m\", or seconds as a number). When omitted, the Ollama server default (5 minutes) applies",
+              "examples": ["10m", "1h", 600]
             }
           },
           "additionalProperties": false

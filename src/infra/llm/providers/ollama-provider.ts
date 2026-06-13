@@ -10,16 +10,18 @@ import { AIStatsLogger } from "../ai-stats-logger";
  * ローカルで実行されるOllamaサーバーと通信してテキスト生成を行います
  */
 export class OllamaProvider implements AIService {
-	private ollama: Pick<Ollama, "generate" | "abort">;
+	private ollama: Pick<Ollama, "chat" | "abort">;
 	private model: string;
 	private timeoutMs: number;
+	private keepAlive?: string | number;
 
-	constructor(config: AIConfig, ollamaClient?: Pick<Ollama, "generate" | "abort">) {
+	constructor(config: AIConfig, ollamaClient?: Pick<Ollama, "chat" | "abort">) {
 		// Ollama固有設定を優先、フォールバックとして汎用設定を使用
 		const endpoint = (config.ollama?.endpoint as string) || "http://localhost:11434";
 		this.model = (config.ollama?.model as string) || (config.model as string) || "llama2";
 		const timeoutSec = (config.ollama?.timeoutSec as number) ?? 120;
 		this.timeoutMs = timeoutSec * 1000;
+		this.keepAlive = config.ollama?.keepAlive;
 
 		// Ollama クライアントを初期化（テスト用に外部注入可能）
 		this.ollama = ollamaClient ?? new Ollama({ host: endpoint });
@@ -75,14 +77,21 @@ export class OllamaProvider implements AIService {
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
 		let responseContent = "";
+		let promptTokens: number | undefined;
+		let completionTokens: number | undefined;
 
-		// ユーザーメッセージを取得
-		const userMessage = messages.find((msg) => msg.role === "user");
-		const userContent = (userMessage?.content as string) || "";
-
-		// システムプロンプトとユーザーメッセージを結合
-		const prompt = systemPrompt ? `${systemPrompt}\n\n${userContent}` : userContent;
-		const inputChars = prompt.length;
+		// chat API 用のメッセージ配列を構築
+		// systemロールを分離することでモデルのchatテンプレートが正しく適用され、
+		// 静的なsystem prompt部分のkv-cacheがリクエスト間で再利用される
+		const chatMessages: { role: string; content: string }[] = [];
+		if (systemPrompt) {
+			chatMessages.push({ role: "system", content: systemPrompt });
+		}
+		for (const msg of messages) {
+			const content = Array.isArray(msg.content) ? msg.content.join("\n") : msg.content;
+			chatMessages.push({ role: msg.role, content });
+		}
+		const inputChars = chatMessages.reduce((sum, msg) => sum + msg.content.length, 0);
 
 		// キャンセル処理の設定
 		const cancelSubscription = cancellationToken?.onCancellationRequested(() => {
@@ -101,10 +110,12 @@ export class OllamaProvider implements AIService {
 			// Ollama-js パッケージを使用してストリーミング生成
 			// サーバー無応答による無限待機を防ぐため初回応答にタイムアウトを適用
 			const response = await this.raceWithTimeout(
-				this.ollama.generate({
+				this.ollama.chat({
 					model: this.model,
-					prompt: prompt,
+					messages: chatMessages,
 					stream: true,
+					// 設定がある場合のみ送信し、未指定時はサーバー既定値（5分）に従う
+					...(this.keepAlive !== undefined ? { keep_alive: this.keepAlive } : {}),
 					options: {
 						temperature: 0.7,
 						top_p: 0.9,
@@ -122,11 +133,13 @@ export class OllamaProvider implements AIService {
 					break;
 				}
 				const part = result.value;
-				if (part.response) {
-					responseContent += part.response;
+				if (part.message?.content) {
+					responseContent += part.message.content;
 				}
-				// done フラグで終了判定
+				// done フラグで終了判定（最終チャンクにトークン使用量が含まれる）
 				if (part.done) {
+					promptTokens = part.prompt_eval_count;
+					completionTokens = part.eval_count;
 					break;
 				}
 			}
@@ -165,6 +178,8 @@ export class OllamaProvider implements AIService {
 				durationMs,
 				status,
 				errorMessage,
+				promptTokens,
+				completionTokens,
 			});
 
 			// 詳細ログを記録（プロンプトと応答）

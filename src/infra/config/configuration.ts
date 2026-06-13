@@ -16,6 +16,11 @@ export interface AIConfig {
 		model: string;
 		/** リクエスト/ストリーミングチャンク間のタイムアウト（秒） */
 		timeoutSec?: number;
+		/**
+		 * モデルをメモリに保持する時間（例: "10m"、秒数指定も可）。
+		 * 未指定時はリクエストに含めず、Ollamaサーバーの既定値（5分）に従う
+		 */
+		keepAlive?: string | number;
 	};
 	openai?: {
 		apiKey?: string;
@@ -107,6 +112,7 @@ interface MdaitConfig {
 			endpoint?: string;
 			model?: string;
 			timeoutSec?: number;
+			keepAlive?: string | number;
 		};
 		openai?: {
 			apiKey?: string;
@@ -476,6 +482,9 @@ export class Configuration {
 					}
 					if (config.ai.ollama.timeoutSec !== undefined) {
 						this.ai.ollama.timeoutSec = Math.max(1, config.ai.ollama.timeoutSec);
+					}
+					if (config.ai.ollama.keepAlive !== undefined) {
+						this.ai.ollama.keepAlive = config.ai.ollama.keepAlive;
 					}
 				}
 				if (config.ai.openai) {

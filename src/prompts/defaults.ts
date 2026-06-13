@@ -35,6 +35,20 @@ export const PromptIds = {
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
 
 /**
+ * プロンプトテンプレートを system 部と user-section 部に分割するマーカー。
+ * マーカーより前は静的な system prompt（プロバイダーのプレフィックスキャッシュが効く部分）、
+ * 後はユニットごとの可変コンテキストとして user message の先頭に配置される。
+ * マーカーを含まないテンプレート（既存のカスタムプロンプト等）は従来通り全体が system prompt になる。
+ */
+export const USER_SECTION_MARKER = "<!-- mdait:user-section -->";
+
+/**
+ * user message 内で可変コンテキストと翻訳対象本文を区切る行。
+ * この行の意味は各 system prompt の USER MESSAGE STRUCTURE で説明される。
+ */
+export const SOURCE_TEXT_SEPARATOR = "=== SOURCE TEXT ===";
+
+/**
  * trans.translate - Markdown翻訳プロンプト
  *
  * @description
@@ -77,45 +91,9 @@ ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
 
 - The entire "translation" output MUST be written in LANGUAGE: {{targetLang}}, including Headings.
 
-Context:
-{{#surroundingText}}
-Surrounding Text (for reference only, do NOT translate unless included in the target text):
-{{surroundingText}}
-{{/surroundingText}}
-{{#terms}}
-Terminology (preferred translations):
-{{terms}}
-{{/terms}}
-{{#previousTranslation}}
-Previous Translation (for reference - the source text was revised):
-{{previousTranslation}}
-
-IMPORTANT: The source text has been revised. Please refer to the previous translation and:
-- Keep sentences/phrases that don't need to be changed (respect the existing translation)
-- Only modify the parts that need to be updated based on the source text changes
-- Maintain consistency with the unchanged parts of the previous translation
-{{/previousTranslation}}
-{{#sourceDiff}}
-Source Text Changes (unified diff format):
-\`\`\`diff
-{{sourceDiff}}
-\`\`\`
-
-IMPORTANT: The diff above shows exactly what changed in the source text.
-- Lines starting with "-" were removed from the original
-- Lines starting with "+" were added in the revision
-- Focus your translation updates on the changed portions
-- Unchanged lines should generally keep the same translation
-{{/sourceDiff}}
-{{#tmReferences}}
-
-## Translation Memory Reference
-
-The following are past translations of similar sentences.
-Use them as reference for consistency, but prioritize accuracy and context.
-
-{{tmReferences}}
-{{/tmReferences}}
+USER MESSAGE STRUCTURE:
+The user message may begin with optional reference sections (Surrounding Text, Terminology, Previous Translation, Source Text Changes, Translation Memory Reference). They are for reference only — do NOT translate them.
+A line containing only "=== SOURCE TEXT ===" marks the start of the text to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
 
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
@@ -192,7 +170,45 @@ Return ONLY valid JSON in the following format. Do NOT include markdown code blo
 
 Important Notes:
 - The "context" field MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.`;
+- Return ONLY valid JSON. Any extra text invalidates the response.
+<!-- mdait:user-section -->
+{{#surroundingText}}
+Surrounding Text (for reference only, do NOT translate unless included in the target text):
+{{surroundingText}}
+{{/surroundingText}}
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
+{{#previousTranslation}}
+Previous Translation (for reference - the source text was revised):
+{{previousTranslation}}
+
+IMPORTANT: The source text has been revised. Please refer to the previous translation and:
+- Keep sentences/phrases that don't need to be changed (respect the existing translation)
+- Only modify the parts that need to be updated based on the source text changes
+- Maintain consistency with the unchanged parts of the previous translation
+{{/previousTranslation}}
+{{#sourceDiff}}
+Source Text Changes (unified diff format):
+\`\`\`diff
+{{sourceDiff}}
+\`\`\`
+
+IMPORTANT: The diff above shows exactly what changed in the source text.
+- Lines starting with "-" were removed from the original
+- Lines starting with "+" were added in the revision
+- Focus your translation updates on the changed portions
+- Unchanged lines should generally keep the same translation
+{{/sourceDiff}}
+{{#tmReferences}}
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}`;
 
 /**
  * trans.revisePatch - 改訂パッチ翻訳プロンプト
@@ -236,32 +252,9 @@ CRITICAL RULE (HIGHEST PRIORITY):
 ABSOLUTE LANGUAGE CONSTRAINT:
 - All updated text MUST be written in LANGUAGE: {{targetLang}}.
 
-Context:
-{{#surroundingText}}
-Surrounding Text (for reference only, do NOT translate):
-{{surroundingText}}
-{{/surroundingText}}
-{{#terms}}
-Terminology (preferred translations):
-{{terms}}
-{{/terms}}
-
-Previous Translation (target to patch):
-{{previousTranslation}}
-{{#tmReferences}}
-
-## Translation Memory Reference
-
-The following are past translations of similar sentences.
-Use them as reference for consistency, but prioritize accuracy and context.
-
-{{tmReferences}}
-{{/tmReferences}}
-
-Source Text Changes:
-\`\`\`diff
-{{sourceDiff}}
-\`\`\`
+USER MESSAGE STRUCTURE:
+The user message begins with reference sections (optionally Surrounding Text, Terminology, Translation Memory Reference, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
+A line containing only "=== SOURCE TEXT ===" marks the start of the current (revised) source text.
 
 Instructions:
 1. Produce a patch that transforms the PREVIOUS TRANSLATION to reflect the source changes.
@@ -380,7 +373,32 @@ Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outs
 
 Important Notes:
 - The "context" field in termSuggestions MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.`;
+- Return ONLY valid JSON. Any extra text invalidates the response.
+<!-- mdait:user-section -->
+{{#surroundingText}}
+Surrounding Text (for reference only, do NOT translate):
+{{surroundingText}}
+{{/surroundingText}}
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
+Previous Translation (target to patch):
+{{previousTranslation}}
+{{#tmReferences}}
+
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}
+
+Source Text Changes:
+\`\`\`diff
+{{sourceDiff}}
+\`\`\``;
 
 /**
  * term.detectPairs - 対訳ペアからの用語検出プロンプト
@@ -754,8 +772,31 @@ CRITICAL RULES:
 - For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
 - Translate ALL human-readable text cells, including the HEADER ROW (first row) and all data rows. Do NOT skip translating any row or cell because it looks like a header or column name.
 - Preserve without translating: empty cells, the literal value "||" (inherit-from-above marker), and any [[...]] bracket markers (structural metadata).
-{{#terms}}
 
+USER MESSAGE STRUCTURE:
+The user message may begin with optional reference sections (TERMINOLOGY, Previous Translation, Source Changes, TRANSLATION MEMORY REFERENCES). They are for reference only — do NOT translate them.
+A line containing only "=== SOURCE TEXT ===" marks the start of the content to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
+
+Response Format:
+Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
+
+{
+  "translation": "the translated content (LANGUAGE:{{targetLang}}) with file format perfectly preserved",
+  "termSuggestions": [
+    {
+      "source": "original term in {{sourceLang}}",
+      "target": "translated term in {{targetLang}}",
+      "context": "an actual phrase from the text including the term",
+      "reason": "(optional) brief explanation"
+    }
+  ]
+}
+
+Important Notes:
+- The "translation" field must contain the complete translated file content.
+- Return ONLY valid JSON. Any extra text invalidates the response.
+<!-- mdait:user-section -->
+{{#terms}}
 TERMINOLOGY:
 Use the following terms consistently:
 {{terms}}
@@ -786,26 +827,7 @@ IMPORTANT: The diff above shows exactly what changed in the source.
 
 TRANSLATION MEMORY REFERENCES:
 {{tmReferences}}
-{{/tmReferences}}
-
-Response Format:
-Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
-
-{
-  "translation": "the translated content (LANGUAGE:{{targetLang}}) with file format perfectly preserved",
-  "termSuggestions": [
-    {
-      "source": "original term in {{sourceLang}}",
-      "target": "translated term in {{targetLang}}",
-      "context": "an actual phrase from the text including the term",
-      "reason": "(optional) brief explanation"
-    }
-  ]
-}
-
-Important Notes:
-- The "translation" field must contain the complete translated file content.
-- Return ONLY valid JSON. Any extra text invalidates the response.`;
+{{/tmReferences}}`;
 
 /**
  * trans.revisePatchPlain - 非MDファイル改訂翻訳プロンプト
@@ -836,23 +858,9 @@ export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translat
 ABSOLUTE LANGUAGE CONSTRAINT:
 - All updated text MUST be written in LANGUAGE: {{targetLang}}.
 
-{{#terms}}
-Terminology (preferred translations):
-{{terms}}
-{{/terms}}
-
-Previous Translation (target to patch):
-{{previousTranslation}}
-{{#tmReferences}}
-
-Translation Memory References:
-{{tmReferences}}
-{{/tmReferences}}
-
-Source Text Changes:
-\`\`\`diff
-{{sourceDiff}}
-\`\`\`
+USER MESSAGE STRUCTURE:
+The user message begins with reference sections (optionally Terminology and Translation Memory References, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
+A line containing only "=== SOURCE TEXT ===" marks the start of the current (revised) source content.
 
 CRITICAL RULES:
 - Apply changes corresponding to the source diff to the existing translation.
@@ -936,7 +944,24 @@ Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outs
 
 Important Notes:
 - The "context" field in termSuggestions MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.`;
+- Return ONLY valid JSON. Any extra text invalidates the response.
+<!-- mdait:user-section -->
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
+Previous Translation (target to patch):
+{{previousTranslation}}
+{{#tmReferences}}
+
+Translation Memory References:
+{{tmReferences}}
+{{/tmReferences}}
+
+Source Text Changes:
+\`\`\`diff
+{{sourceDiff}}
+\`\`\``;
 
 /**
  * デフォルトプロンプトのマッピング

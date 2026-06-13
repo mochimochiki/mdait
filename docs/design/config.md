@@ -122,6 +122,7 @@ sequenceDiagram
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
 | `trans.retryLimit` | `1` | trans の再試行上限 |
 | `trans.maxFileSize` | `51200` | 非MDファイルの翻訳時ファイルサイズ上限（バイト）。超過時はスキップ＋警告 |
+| `ai.ollama.keepAlive` | （未送信） | Ollamaモデルをメモリに保持する時間（例: `"10m"`、秒数指定も可）。未指定時はOllamaサーバー既定（5分）。連続翻訳時のモデル再ロード防止用 |
 
 `primaryLang` は必須設定であり、未設定時は設定不備として扱う。
 

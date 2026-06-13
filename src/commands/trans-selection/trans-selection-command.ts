@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptIds } from "../../prompts/defaults";
-import { PromptProvider } from "../../prompts/prompt-provider";
+import { PromptProvider, buildUserMessage } from "../../prompts/prompt-provider";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
@@ -102,14 +102,18 @@ export async function translateSelectionCommand(): Promise<void> {
 				const aiService = await aiServiceBuilder.build();
 
 				// プロンプト構築（既存のtrans.translateを再利用）
+				// system部を静的に保ちプレフィックスキャッシュを効かせるため分割形式で取得する
 				const promptProvider = PromptProvider.getInstance();
-				const prompt = promptProvider.getPrompt(PromptIds.TRANS_TRANSLATE, {
-					sourceLang: pair.sourceLang,
-					targetLang: pair.targetLang,
-					contextLang: config.getTermsPrimaryLang(),
-					terms: termsJson,
-					// surroundingText、previousTranslation、sourceDiffは指定しない（オンデマンド翻訳では不要）
-				});
+				const promptParts = promptProvider.getPromptParts(
+					PromptIds.TRANS_TRANSLATE,
+					{
+						sourceLang: pair.sourceLang,
+						targetLang: pair.targetLang,
+						contextLang: config.getTermsPrimaryLang(),
+						terms: termsJson,
+						// surroundingText、previousTranslation、sourceDiffは指定しない（オンデマンド翻訳では不要）
+					},
+				);
 
 				// キャンセルチェック
 				if (cancellationToken.isCancellationRequested) {
@@ -118,8 +122,8 @@ export async function translateSelectionCommand(): Promise<void> {
 
 				// AI翻訳実行
 				const responseText = await aiService.sendMessage(
-					prompt,
-					[{ role: "user", content: sourceText }],
+					promptParts.system,
+					[{ role: "user", content: buildUserMessage(promptParts, sourceText) }],
 					cancellationToken,
 				);
 

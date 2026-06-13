@@ -129,6 +129,61 @@ suite("OpenAIProvider", () => {
 		assert.strictEqual(fetchCalls, 0);
 	});
 
+	test("リクエストボディに安定したprompt_cache_keyが含まれること", async () => {
+		const bodies: string[] = [];
+		globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+			fetchCalls++;
+			bodies.push(String(init?.body));
+			return okResponse("ok");
+		}) as typeof globalThis.fetch;
+
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+		await provider.sendMessage("system prompt", [{ role: "user", content: "unit 1" }]);
+		await provider.sendMessage("system prompt", [{ role: "user", content: "unit 2" }]);
+
+		const body1 = JSON.parse(bodies[0]) as { prompt_cache_key?: string };
+		const body2 = JSON.parse(bodies[1]) as { prompt_cache_key?: string };
+		assert.ok(body1.prompt_cache_key?.startsWith("mdait-"));
+		// 同一system promptなら異なるユニットでも同じキーになる（キャッシュルーティングの安定性）
+		assert.strictEqual(body1.prompt_cache_key, body2.prompt_cache_key);
+	});
+
+	test("system promptが異なればprompt_cache_keyも異なること", async () => {
+		const bodies: string[] = [];
+		globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+			fetchCalls++;
+			bodies.push(String(init?.body));
+			return okResponse("ok");
+		}) as typeof globalThis.fetch;
+
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+		await provider.sendMessage("system prompt A", [{ role: "user", content: "hi" }]);
+		await provider.sendMessage("system prompt B", [{ role: "user", content: "hi" }]);
+
+		const body1 = JSON.parse(bodies[0]) as { prompt_cache_key?: string };
+		const body2 = JSON.parse(bodies[1]) as { prompt_cache_key?: string };
+		assert.notStrictEqual(body1.prompt_cache_key, body2.prompt_cache_key);
+	});
+
+	test("usage付き応答でもcontentが正しく返ること", async () => {
+		stubFetch(() =>
+			new Response(
+				JSON.stringify({
+					choices: [{ message: { role: "assistant", content: "with usage" } }],
+					usage: {
+						prompt_tokens: 1200,
+						completion_tokens: 80,
+						prompt_tokens_details: { cached_tokens: 1024 },
+					},
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			),
+		);
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+		const result = await provider.sendMessage("system", [{ role: "user", content: "hello" }]);
+		assert.strictEqual(result, "with usage");
+	});
+
 	test("APIキー未設定ではコンストラクタで失敗すること", () => {
 		const config = createConfig();
 		config.openai = {};

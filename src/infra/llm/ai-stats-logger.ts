@@ -17,6 +17,12 @@ export interface AIStatsRecord {
 	durationMs: number;
 	status: "success" | "error";
 	errorMessage?: string;
+	/** 入力トークン数（プロバイダーが usage を返す場合のみ） */
+	promptTokens?: number;
+	/** プレフィックスキャッシュにヒットした入力トークン数（プロバイダーが usage を返す場合のみ） */
+	cachedTokens?: number;
+	/** 出力トークン数（プロバイダーが usage を返す場合のみ） */
+	completionTokens?: number;
 }
 
 /**
@@ -121,7 +127,7 @@ export class AIStatsLogger {
 			} catch {
 				// ファイルが存在しない場合
 				const header =
-					"timestamp\tprovider\tmodel\tinput_chars\toutput_chars\tduration_ms\tstatus\terror_message";
+					"timestamp\tprovider\tmodel\tinput_chars\toutput_chars\tduration_ms\tstatus\terror_message\tprompt_tokens\tcached_tokens\tcompletion_tokens";
 				await fs.writeFile(this.logFilePath, `${header}\n`, "utf-8");
 			}
 		} catch (error) {
@@ -146,6 +152,9 @@ export class AIStatsLogger {
 			record.durationMs.toString(),
 			record.status,
 			errorMsg,
+			record.promptTokens?.toString() ?? "",
+			record.cachedTokens?.toString() ?? "",
+			record.completionTokens?.toString() ?? "",
 		].join("\t");
 	}
 

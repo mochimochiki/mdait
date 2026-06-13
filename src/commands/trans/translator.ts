@@ -2,7 +2,11 @@ import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
-import type { PromptVariables } from "../../prompts/prompt-provider";
+import type {
+	PromptParts,
+	PromptVariables,
+} from "../../prompts/prompt-provider";
+import { buildUserMessage } from "../../prompts/prompt-provider";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
@@ -134,10 +138,10 @@ export const PLAIN_PROMPT_CONFIG: TranslatorPromptConfig = {
 export class AITranslator implements Translator {
 	private readonly aiService: AIService;
 	private readonly primaryLang: string;
-	private readonly getPrompt: (
+	private readonly getPromptParts: (
 		id: PromptId,
 		variables?: PromptVariables,
-	) => string;
+	) => PromptParts;
 	private readonly promptConfig: TranslatorPromptConfig;
 	/** 最大リトライ回数 */
 	private readonly maxRetries = 2;
@@ -145,12 +149,12 @@ export class AITranslator implements Translator {
 	constructor(
 		aiService: AIService,
 		primaryLang: string,
-		getPrompt: (id: PromptId, variables?: PromptVariables) => string,
+		getPromptParts: (id: PromptId, variables?: PromptVariables) => PromptParts,
 		promptConfig?: TranslatorPromptConfig,
 	) {
 		this.aiService = aiService;
 		this.primaryLang = primaryLang;
-		this.getPrompt = getPrompt;
+		this.getPromptParts = getPromptParts;
 		this.promptConfig = promptConfig ?? DEFAULT_MD_PROMPT_CONFIG;
 	}
 
@@ -191,29 +195,32 @@ export class AITranslator implements Translator {
 				? primaryLang
 				: sourceLang;
 
-		// systemPrompt と AIMessage[] の構築
-		const systemPrompt = this.getPrompt(this.promptConfig.translatePromptId, {
-			sourceLang,
-			targetLang,
-			contextLang,
-			surroundingText: context.surroundingText,
-			terms: context.terms,
-			previousTranslation: context.previousTranslation,
-			sourceDiff: context.sourceDiff,
-			tmReferences: context.tmReferences,
-			fileExtension: context.fileExtension,
-		});
+		// systemPrompt（静的）と user message（可変コンテキスト＋本文）の構築
+		const promptParts = this.getPromptParts(
+			this.promptConfig.translatePromptId,
+			{
+				sourceLang,
+				targetLang,
+				contextLang,
+				surroundingText: context.surroundingText,
+				terms: context.terms,
+				previousTranslation: context.previousTranslation,
+				sourceDiff: context.sourceDiff,
+				tmReferences: context.tmReferences,
+				fileExtension: context.fileExtension,
+			},
+		);
 
 		const messages: AIMessage[] = [
 			{
 				role: "user",
-				content: textWithoutCodeBlocks,
+				content: buildUserMessage(promptParts, textWithoutCodeBlocks),
 			},
 		];
 
 		// リトライ付きでAI呼び出し
 		return await this.executeTranslationWithRetry(
-			systemPrompt,
+			promptParts.system,
 			messages,
 			codeBlocks,
 			placeholders,
@@ -252,28 +259,31 @@ export class AITranslator implements Translator {
 				? primaryLang
 				: sourceLang;
 
-		const systemPrompt = this.getPrompt(this.promptConfig.revisePatchPromptId, {
-			sourceLang,
-			targetLang,
-			contextLang,
-			surroundingText: context.surroundingText,
-			terms: context.terms,
-			previousTranslation: context.previousTranslation,
-			sourceDiff: context.sourceDiff,
-			tmReferences: context.tmReferences,
-			fileExtension: context.fileExtension,
-		});
+		const promptParts = this.getPromptParts(
+			this.promptConfig.revisePatchPromptId,
+			{
+				sourceLang,
+				targetLang,
+				contextLang,
+				surroundingText: context.surroundingText,
+				terms: context.terms,
+				previousTranslation: context.previousTranslation,
+				sourceDiff: context.sourceDiff,
+				tmReferences: context.tmReferences,
+				fileExtension: context.fileExtension,
+			},
+		);
 
 		const messages: AIMessage[] = [
 			{
 				role: "user",
-				content: textWithoutCodeBlocks,
+				content: buildUserMessage(promptParts, textWithoutCodeBlocks),
 			},
 		];
 
 		// リトライ付きでAI呼び出し
 		return await this.executeRevisionPatchWithRetry(
-			systemPrompt,
+			promptParts.system,
 			messages,
 			codeBlocks,
 			placeholders,
@@ -302,16 +312,19 @@ export class AITranslator implements Translator {
 				throw new Error("Translation cancelled");
 			}
 
-			// リトライ時は補足プロンプトを追加
+			// リトライ時は補足プロンプトを user message 側に追加する
+			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
 			const retryPromptSuffix =
 				attempt > 0 && lastError
 					? this.buildRetryPromptSuffix(lastError, attempt)
 					: "";
-			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
+			const attemptMessages = retryPromptSuffix
+				? this.appendToLastUserMessage(messages, retryPromptSuffix)
+				: messages;
 
 			lastRawResponse = await this.aiService.sendMessage(
-				finalSystemPrompt,
-				messages,
+				systemPrompt,
+				attemptMessages,
 				cancellationToken,
 			);
 			const validation = validateTranslationResponse(lastRawResponse);
@@ -386,16 +399,19 @@ export class AITranslator implements Translator {
 				throw new Error("Translation cancelled");
 			}
 
-			// リトライ時は補足プロンプトを追加
+			// リトライ時は補足プロンプトを user message 側に追加する
+			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
 			const retryPromptSuffix =
 				attempt > 0 && lastError
 					? this.buildRetryPromptSuffix(lastError, attempt)
 					: "";
-			const finalSystemPrompt = systemPrompt + retryPromptSuffix;
+			const attemptMessages = retryPromptSuffix
+				? this.appendToLastUserMessage(messages, retryPromptSuffix)
+				: messages;
 
 			lastRawResponse = await this.aiService.sendMessage(
-				finalSystemPrompt,
-				messages,
+				systemPrompt,
+				attemptMessages,
 				cancellationToken,
 			);
 			const validation = validateRevisionPatchResponse(lastRawResponse);
@@ -554,6 +570,23 @@ export class AITranslator implements Translator {
 				...sanitized.warnings,
 			],
 		};
+	}
+
+	/**
+	 * 末尾のuserメッセージにリトライ補足を連結した新しいメッセージ配列を返す
+	 */
+	private appendToLastUserMessage(
+		messages: AIMessage[],
+		suffix: string,
+	): AIMessage[] {
+		if (messages.length === 0) {
+			return messages;
+		}
+		const last = messages[messages.length - 1];
+		const content = Array.isArray(last.content)
+			? last.content.join("")
+			: last.content;
+		return [...messages.slice(0, -1), { ...last, content: content + suffix }];
 	}
 
 	/**

@@ -9,12 +9,46 @@ import * as path from "node:path";
 import matter from "gray-matter";
 import * as vscode from "vscode";
 import { Configuration } from "../infra/config/configuration";
-import { DEFAULT_PROMPTS, type PromptId } from "./defaults";
+import {
+	DEFAULT_PROMPTS,
+	type PromptId,
+	SOURCE_TEXT_SEPARATOR,
+	USER_SECTION_MARKER,
+} from "./defaults";
 
 /**
  * プロンプト内の変数を表す型
  */
 export type PromptVariables = Record<string, string | undefined>;
+
+/**
+ * system / user-section に分割されたプロンプト
+ * system はユニット間で固定となり、プロバイダーのプレフィックスキャッシュが効く
+ */
+export interface PromptParts {
+	/** 静的なシステムプロンプト（変数置換済み。言語ペア×プロンプト種別ごとに固定） */
+	system: string;
+	/** ユニットごとの可変コンテキスト（変数置換済み。user message の先頭に配置する） */
+	userContext: string;
+	/** user-section マーカーを持たないレガシーテンプレートかどうか */
+	isLegacy: boolean;
+}
+
+/**
+ * PromptParts と翻訳対象本文から user message を構築する
+ * レガシーテンプレートの場合は本文のみを返す（従来挙動を維持）
+ *
+ * @param parts 分割済みプロンプト
+ * @param sourceText 翻訳対象の本文
+ * @returns user message 文字列
+ */
+export function buildUserMessage(parts: PromptParts, sourceText: string): string {
+	if (parts.isLegacy) {
+		return sourceText;
+	}
+	const context = parts.userContext ? `${parts.userContext}\n\n` : "";
+	return `${context}${SOURCE_TEXT_SEPARATOR}\n${sourceText}`;
+}
 
 /**
  * インストラクションファイルのフロントマター
@@ -84,17 +118,56 @@ export class PromptProvider {
 		promptId: PromptId,
 		variables: PromptVariables = {},
 	): string {
-		// プロンプトテンプレートを取得
-		let template = this.getPromptTemplate(promptId);
+		const parts = this.getPromptParts(promptId, variables);
+		if (parts.isLegacy || !parts.userContext) {
+			return parts.system;
+		}
+		return `${parts.system}\n\n${parts.userContext}`;
+	}
 
-		// インストラクションを追加
+	/**
+	 * プロンプトを system / user-section に分割して取得
+	 * テンプレート内の USER_SECTION_MARKER より前を system、後を userContext として
+	 * それぞれ変数置換する。マーカーがないテンプレート（既存カスタムプロンプト等）は
+	 * 従来の getPrompt と同一の結果を system に格納し、isLegacy: true を返す。
+	 *
+	 * @param promptId プロンプトID
+	 * @param variables 変数置換用のマッピング
+	 * @returns 分割済みプロンプト
+	 */
+	public getPromptParts(
+		promptId: PromptId,
+		variables: PromptVariables = {},
+	): PromptParts {
+		const template = this.getPromptTemplate(promptId);
 		const instruction = this.getInstruction(promptId);
-		if (instruction) {
-			template = `${template}\n\n${instruction}`;
+		const markerIndex = template.indexOf(USER_SECTION_MARKER);
+
+		if (markerIndex === -1) {
+			// レガシーテンプレート: 全体を system として扱う（従来挙動）
+			let fullTemplate = template;
+			if (instruction) {
+				fullTemplate = `${fullTemplate}\n\n${instruction}`;
+			}
+			return {
+				system: this.replaceVariables(fullTemplate, variables),
+				userContext: "",
+				isLegacy: true,
+			};
 		}
 
-		// 変数を置換して返す
-		return this.replaceVariables(template, variables);
+		// インストラクションは system 側の末尾に付与する（プレフィックスはセッション内で安定）
+		let systemTemplate = template.slice(0, markerIndex).trimEnd();
+		if (instruction) {
+			systemTemplate = `${systemTemplate}\n\n${instruction}`;
+		}
+		const userTemplate = template.slice(markerIndex + USER_SECTION_MARKER.length);
+
+		return {
+			system: this.replaceVariables(systemTemplate, variables),
+			userContext: this.replaceVariables(userTemplate, variables).trim(),
+			isLegacy: false,
+		};
 	}
 
 	/**
