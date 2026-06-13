@@ -1,4 +1,5 @@
 import type * as vscode from "vscode";
+import { calculateHash } from "../../../core/hash/hash-calculator";
 import type { AIConfig } from "../../config/configuration";
 import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
@@ -22,6 +23,25 @@ interface OpenAIChatCompletionResponse {
 		};
 		finish_reason?: string | null;
 	}>;
+	usage?: OpenAIUsage;
+}
+
+/**
+ * OpenAI API の usage フィールドの型
+ * cached_tokens でプロンプトキャッシュのヒット状況を確認できる
+ */
+interface OpenAIUsage {
+	prompt_tokens?: number;
+	completion_tokens?: number;
+	prompt_tokens_details?: {
+		cached_tokens?: number;
+	};
+}
+
+/** performRequest の戻り値（応答本文とトークン使用量） */
+interface OpenAIRequestResult {
+	content: string;
+	usage?: OpenAIUsage;
 }
 
 /**
@@ -70,6 +90,12 @@ export class OpenAIProvider implements AIService {
 		let status: "success" | "error" = "success";
 		let errorMessage: string | undefined;
 		let responseContent = "";
+		let usage: OpenAIUsage | undefined;
+
+		// プロンプトキャッシュのルーティングを安定させるキー
+		// system prompt はテンプレート単位で固定（言語指定はuser message側）のため、そのハッシュが自然な単位になる
+		// 正規化なしでハッシュ化し、異なるsystem promptが同一キーに畳まれないようにする
+		const promptCacheKey = `mdait-${calculateHash(systemPrompt, false)}`;
 
 		// OpenAI Chat API の messages 配列に変換
 		const openaiMessages: { role: string; content: string }[] = [];
@@ -94,15 +120,26 @@ export class OpenAIProvider implements AIService {
 
 		try {
 			// 429/5xx・ネットワークエラー・タイムアウトは指数バックオフでリトライする
-			responseContent = await withTransportRetry(
-				() => this.performRequest(openaiMessages, cancellationToken),
+			const result = await withTransportRetry(
+				() =>
+					this.performRequest(openaiMessages, promptCacheKey, cancellationToken),
 				{
 					policy: this.retryPolicy,
 					cancellationToken,
 					logContext: { provider: "openai", model: this.model },
 				},
 			);
+			responseContent = result.content;
+			usage = result.usage;
 			outputChars = responseContent.length;
+
+			if (usage) {
+				Logger.getInstance().debug("llm", "OpenAI token usage", {
+					promptTokens: usage.prompt_tokens,
+					cachedTokens: usage.prompt_tokens_details?.cached_tokens,
+					completionTokens: usage.completion_tokens,
+				});
+			}
 
 			return responseContent;
 		} catch (error) {
@@ -124,6 +161,9 @@ export class OpenAIProvider implements AIService {
 				durationMs,
 				status,
 				errorMessage,
+				promptTokens: usage?.prompt_tokens,
+				cachedTokens: usage?.prompt_tokens_details?.cached_tokens,
+				completionTokens: usage?.completion_tokens,
 			});
 
 			// 詳細ログを記録（プロンプトと応答）
@@ -151,8 +191,9 @@ export class OpenAIProvider implements AIService {
 	 */
 	private async performRequest(
 		openaiMessages: { role: string; content: string }[],
+		promptCacheKey: string,
 		cancellationToken?: vscode.CancellationToken,
-	): Promise<string> {
+	): Promise<OpenAIRequestResult> {
 		const url = `${this.baseURL.replace(/\/$/, "")}/chat/completions`;
 
 		// AbortControllerは再利用できないため試行ごとに生成する
@@ -180,6 +221,9 @@ export class OpenAIProvider implements AIService {
 					stream: false,
 					store: false,
 					max_completion_tokens: this.maxOutputTokens,
+					// 安定したキーを渡すことでプロンプトキャッシュのヒット率を高める
+					// （同一プレフィックスのリクエストが同じ推論ノードへルーティングされやすくなる）
+					prompt_cache_key: promptCacheKey,
 				}),
 				signal: controller.signal,
 			});
@@ -199,7 +243,10 @@ export class OpenAIProvider implements AIService {
 
 			// 非ストリーミング応答の処理
 			const data = (await response.json()) as OpenAIChatCompletionResponse;
-			return data.choices?.[0]?.message?.content ?? "";
+			return {
+				content: data.choices?.[0]?.message?.content ?? "",
+				usage: data.usage,
+			};
 		} catch (error) {
 			const unknownErr = error as { name?: string; message?: string };
 			if (unknownErr?.name === "AbortError" || controller.signal.aborted) {

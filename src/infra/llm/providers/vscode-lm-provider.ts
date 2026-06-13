@@ -204,11 +204,11 @@ export class VSCodeLanguageModelProvider implements AIService {
 	): vscode.LanguageModelChatMessage[] {
 		const vscodeMessages: vscode.LanguageModelChatMessage[] = [];
 
-		// システムプロンプトをAssistantに追加（VS Code LM API はSystemをサポートしていないため）
+		// システムプロンプトを先頭のUserメッセージとして追加
+		// （VS Code LM API はSystemロールをサポートしていない。Assistantロールだと
+		// モデルが指示を「自身の過去の発話」として解釈するためUserロールで送る）
 		if (systemPrompt) {
-			vscodeMessages.push(
-				vscode.LanguageModelChatMessage.Assistant(systemPrompt),
-			);
+			vscodeMessages.push(vscode.LanguageModelChatMessage.User(systemPrompt));
 		}
 
 		// その他のメッセージを変換

@@ -38,8 +38,12 @@ class MockAIService implements AIService {
 
 suite("DefaultTranslator リトライ機構", () => {
 	const defaultContext = new TranslationContext();
-	const stubGetPrompt = (_id: string, _vars?: Record<string, string | undefined>) => "stub-prompt";
-	const createTranslator = (service: AIService) => new AITranslator(service, "en", stubGetPrompt);
+	const stubGetPromptParts = (_id: string, _vars?: Record<string, string | undefined>) => ({
+		system: "stub-prompt",
+		userContext: "",
+		isLegacy: true,
+	});
+	const createTranslator = (service: AIService) => new AITranslator(service, "en", stubGetPromptParts);
 
 	suite("translate", () => {
 		test("正常なレスポンスは1回で成功する", async () => {

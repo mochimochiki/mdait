@@ -48,6 +48,23 @@ mdaitが各コマンドでAIに送信するプロンプトの設計と、カス�
 ```
 変数が存在する場合のみブロック内容を展開します。
 
+### system / user-section 分割（プレフィックスキャッシュ対応）
+
+翻訳系プロンプト（`trans.translate` / `trans.revisePatch` / `trans.translatePlain` / `trans.revisePatchPlain`）は、テンプレート内の分割マーカーで **system部** と **user-section部** に分かれます。
+
+```
+（静的な指示・出力フォーマット仕様 — system prompt になる）
+<!-- mdait:user-section -->
+（可変データの条件ブロック — user message の先頭に配置される）
+```
+
+- **system部**: マーカーより前。**変数を一切含まない完全静的なテキスト**であり、プロンプト種別ごとに全ワークスペース共通の単一プレフィックスとなる（言語ペアやファイル拡張子が違ってもキャッシュを共有できる）。AIプロバイダーのプロンプトキャッシュ（OpenAIの自動プロンプトキャッシュ、Ollamaのkv-cache再利用など）が効く
+- **user-section部**: マーカーより後。先頭の `Translation Direction`（`{{sourceLang}}`・`{{targetLang}}`・`{{contextLang}}`・`{{fileExtension}}`）と、ユニットごとに変わる可変データ（`{{terms}}`・`{{tmReferences}}`・`{{surroundingText}}`・`{{previousTranslation}}`・`{{sourceDiff}}`）の条件ブロックを置く。言語指定もここに含まれるため、system部は翻訳方向に依存しない
+- user message は「user-sectionのレンダリング結果 + 区切り行 `=== SOURCE TEXT ===` + 翻訳対象本文」の形に組み立てられる（`buildUserMessage`）。区切り行の意味はsystem部の `USER MESSAGE STRUCTURE` で説明される
+- リトライ時の補足プロンプトも user message 側に付与され、system部はセッションを通じて不変
+
+**カスタムプロンプトとの後方互換**: マーカーを含まないテンプレート（既存のカスタム上書きプロンプト）は**レガシーモード**として従来通り全体が system prompt になり、user message は本文のみとなる。挙動は従来と完全に同一（キャッシュ最適化の恩恵がないだけ）。カスタムプロンプトをキャッシュ対応させるには、可変ブロックの直前に `<!-- mdait:user-section -->` の行を追加する。
+
 ### 追加指示（Instruction）
 
 `.mdait/mdait-instructions.md`にフロントマター付きのMarkdownを配置することで、プロンプトに追加情報を挿入できます。

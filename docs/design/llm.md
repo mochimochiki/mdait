@@ -78,6 +78,11 @@ interface AIService {
 - `temperature`: 0.7固定（コード内設定）
 - **`store`: false固定（プライバシー重視、コード内ハードコーディング）**
 
+#### プロンプトキャッシュ
+- リクエストに `prompt_cache_key`（`mdait-{system promptのCRC32（8桁hex、正規化なし）}`）を付与し、同一system promptのリクエストが同じ推論ノードへルーティングされやすくする
+- system prompt はテンプレート単位で静的（言語指定はuser message側のため言語ペアに依存しない。[prompt.md](prompt.md) の system / user-section 分割参照）。1024トークン以上の共通プレフィックスに対してOpenAIの自動プロンプトキャッシュが効く
+- 応答の `usage`（`prompt_tokens` / `prompt_tokens_details.cached_tokens` / `completion_tokens`）を `ai-stats.log` に記録し、キャッシュヒット率を実測で確認できる（`store: false` はキャッシュとは無関係で維持）
+
 #### セキュリティ
 - APIキーは`${env:VARIABLE_NAME}`形式で環境変数から読み込み
 - 設定ファイルには平文で記載しない
@@ -101,13 +106,19 @@ interface AIService {
     "provider": "ollama",
     "ollama": {
       "endpoint": "http://localhost:11434",
-      "model": "llama2"
+      "model": "llama2",
+      "keepAlive": "10m"
     }
   }
 }
 ```
 
 **用途**: ネットワーク外部にデータを送信したくない場合や、オフライン環境での翻訳に適しています。
+
+#### chat API と kv-cache
+- `chat` API を使用し、systemロールを分離して送信する（モデルのchatテンプレートが正しく適用され、静的なsystem部分のkv-cacheがリクエスト間で再利用される）
+- `keepAlive`: モデルをメモリに保持する時間（例: `"10m"`）。未指定時はリクエストに含めず、Ollamaサーバーの既定値（5分）に従う。連続翻訳時のモデル再ロードを防ぎたい場合に設定する
+- 最終チャンクの `prompt_eval_count` / `eval_count` をトークン使用量として `ai-stats.log` に記録する
 
 **実装**: [`src/infra/llm/providers/ollama-provider.ts`](../../src/infra/llm/providers/ollama-provider.ts)
 
@@ -122,6 +133,8 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 **特徴**:
 - 内部でストリーミング応答をバッファリングし、完全な応答を返す
 - VS Code環境に統合されたLMを利用するため、追加の認証設定が不要
+- VS Code LM API はsystemロールをサポートしないため、system prompt は**先頭のUserメッセージ**として送信する（Assistantロールだとモデルが指示を自身の過去発話として解釈するため）
+- キャッシュ制御APIは存在しないが、system promptの静的化（[prompt.md](prompt.md)参照）によりバックエンド側のキャッシュが効きやすい構造を維持する
 
 **実装**: [`src/infra/llm/providers/vscode-lm-provider.ts`](../../src/infra/llm/providers/vscode-lm-provider.ts)
 

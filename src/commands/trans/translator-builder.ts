@@ -25,7 +25,7 @@ export class TranslatorBuilder {
 		return new AITranslator(
 			aiService,
 			config.getTermsPrimaryLang(),
-			(id, variables) => promptProvider.getPrompt(id, variables),
+			(id, variables) => promptProvider.getPromptParts(id, variables),
 		);
 	}
 
@@ -42,7 +42,7 @@ export class TranslatorBuilder {
 		return new AITranslator(
 			aiService,
 			config.getTermsPrimaryLang(),
-			(id, variables) => promptProvider.getPrompt(id, variables),
+			(id, variables) => promptProvider.getPromptParts(id, variables),
 			PLAIN_PROMPT_CONFIG,
 		);
 	}

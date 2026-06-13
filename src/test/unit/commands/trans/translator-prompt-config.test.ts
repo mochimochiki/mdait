@@ -36,7 +36,7 @@ suite("AITranslator プロンプト設定", () => {
 
 		const translator = new AITranslator(mockService, "en", (id, _vars) => {
 			capturedPromptId = id;
-			return "stub-prompt";
+			return { system: "stub-prompt", userContext: "", isLegacy: true };
 		});
 
 		await translator.translate("Hello", "en", "ja", new TranslationContext());
@@ -52,7 +52,7 @@ suite("AITranslator プロンプト設定", () => {
 			"en",
 			(id, _vars) => {
 				capturedPromptId = id;
-				return "stub-prompt";
+				return { system: "stub-prompt", userContext: "", isLegacy: true };
 			},
 			PLAIN_PROMPT_CONFIG,
 		);
@@ -76,7 +76,7 @@ suite("AITranslator プロンプト設定", () => {
 			"en",
 			(id, _vars) => {
 				capturedPromptId = id;
-				return "stub-prompt";
+				return { system: "stub-prompt", userContext: "", isLegacy: true };
 			},
 			PLAIN_PROMPT_CONFIG,
 		);
@@ -98,7 +98,7 @@ suite("AITranslator プロンプト設定", () => {
 			"en",
 			(id, vars) => {
 				capturedVars = vars;
-				return "stub-prompt";
+				return { system: "stub-prompt", userContext: "", isLegacy: true };
 			},
 			PLAIN_PROMPT_CONFIG,
 		);
@@ -116,7 +116,7 @@ suite("AITranslator プロンプト設定", () => {
 
 		const translator = new AITranslator(mockService, "en", (id, vars) => {
 			capturedVars = vars;
-			return "stub-prompt";
+			return { system: "stub-prompt", userContext: "", isLegacy: true };
 		});
 
 		await translator.translate("data", "en", "ja", new TranslationContext());
