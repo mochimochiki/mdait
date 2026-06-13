@@ -65,7 +65,7 @@ suite("プロンプトのsystem/user-section分割", () => {
 		assert.ok(!parts.system.includes("SURROUNDING-TEXT-123"));
 	});
 
-	test("異なる可変データで2回レンダリングしてもsystem部が完全一致する", () => {
+	test("可変データ・言語ペア・拡張子が異なってもsystem部が完全一致する", () => {
 		const provider = PromptProvider.getInstance();
 		for (const promptId of TRANS_PROMPT_IDS) {
 			const parts1 = provider.getPromptParts(promptId, {
@@ -79,10 +79,10 @@ suite("プロンプトのsystem/user-section分割", () => {
 				sourceDiff: "-a\n+b",
 			});
 			const parts2 = provider.getPromptParts(promptId, {
-				sourceLang: "ja",
-				targetLang: "en",
-				contextLang: "en",
-				fileExtension: ".csv",
+				sourceLang: "de",
+				targetLang: "fr",
+				contextLang: "de",
+				fileExtension: ".txt",
 				surroundingText: "totally different context",
 				previousTranslation: "old translation 2",
 				sourceDiff: "-x\n+y",
@@ -90,9 +90,34 @@ suite("プロンプトのsystem/user-section分割", () => {
 			assert.strictEqual(
 				parts1.system,
 				parts2.system,
-				`${promptId} のsystem部が可変データに依存しないこと`,
+				`${promptId} のsystem部が可変データ・言語ペアに依存しないこと`,
 			);
 		}
+	});
+
+	test("テンプレートのsystem部に変数プレースホルダーが含まれない", () => {
+		// system部が完全静的であること（プロンプト種別ごとに全ワークスペース共通の
+		// 単一キャッシュエントリになる）をテンプレートレベルで保証する
+		for (const promptId of TRANS_PROMPT_IDS) {
+			const systemTemplate =
+				DEFAULT_PROMPTS[promptId].split(USER_SECTION_MARKER)[0];
+			assert.ok(
+				!systemTemplate.includes("{{"),
+				`${promptId} のsystem部に {{...}} が残っていないこと`,
+			);
+		}
+	});
+
+	test("言語指定はuserContextのTranslation Directionに入る", () => {
+		const provider = PromptProvider.getInstance();
+		const parts = provider.getPromptParts(PromptIds.TRANS_TRANSLATE, {
+			sourceLang: "ja",
+			targetLang: "en",
+			contextLang: "en",
+		});
+		assert.ok(parts.userContext.includes("Translation Direction:"));
+		assert.ok(parts.userContext.includes("Source language: ja"));
+		assert.ok(parts.userContext.includes("Target language: en"));
 	});
 
 	test("system部とuserContextにマーカー文字列が残らない", () => {

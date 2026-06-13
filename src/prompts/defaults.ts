@@ -81,7 +81,7 @@ export const SOURCE_TEXT_SEPARATOR = "=== SOURCE TEXT ===";
  */
 export const DEFAULT_TRANS_TRANSLATE = `You are a professional translator specializing in Markdown documents.
 
-Your task is to translate the given text from LANGUAGE:{{sourceLang}} to LANGUAGE:{{targetLang}}.
+Your task is to translate the given text into the target language specified in the "Translation Direction" section of the user message.
 
 CRITICAL RULE (HIGHEST PRIORITY):
 - You MUST preserve the original Markdown structure EXACTLY.
@@ -89,10 +89,10 @@ CRITICAL RULE (HIGHEST PRIORITY):
 
 ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
 
-- The entire "translation" output MUST be written in LANGUAGE: {{targetLang}}, including Headings.
+- The entire "translation" output MUST be written in the target language specified in the user message, including Headings.
 
 USER MESSAGE STRUCTURE:
-The user message may begin with optional reference sections (Surrounding Text, Terminology, Previous Translation, Source Text Changes, Translation Memory Reference). They are for reference only — do NOT translate them.
+The user message begins with a "Translation Direction" section (source / target / context languages), followed by optional reference sections (Surrounding Text, Terminology, Previous Translation, Source Text Changes, Translation Memory Reference). These sections are instructions and reference material — do NOT translate them.
 A line containing only "=== SOURCE TEXT ===" marks the start of the text to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
 
 Markdown Preservation Rules:
@@ -157,12 +157,12 @@ Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "translation": "the translated text (LANGUAGE:{{targetLang}}) with Markdown structure perfectly preserved",
+  "translation": "the translated text (in the target language) with Markdown structure perfectly preserved",
   "termSuggestions": [
     {
-      "source": "original term in {{sourceLang}}",
-      "target": "translated term in {{targetLang}}",
-      "context": "an actual sentence or phrase quoted directly from the text including the term (LANGUAGE: {{contextLang}})",
+      "source": "original term in the source language",
+      "target": "translated term in the target language",
+      "context": "an actual sentence or phrase quoted directly from the text including the term (in the context language specified in Translation Direction)",
       "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ]
@@ -172,6 +172,10 @@ Important Notes:
 - The "context" field MUST quote the original text verbatim.
 - Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+- Context language (for termSuggestions "context" quotes): {{contextLang}}
 {{#surroundingText}}
 Surrounding Text (for reference only, do NOT translate unless included in the target text):
 {{surroundingText}}
@@ -250,10 +254,10 @@ CRITICAL RULE (HIGHEST PRIORITY):
 - Breaking Markdown structure is strictly forbidden.
 
 ABSOLUTE LANGUAGE CONSTRAINT:
-- All updated text MUST be written in LANGUAGE: {{targetLang}}.
+- All updated text MUST be written in the target language specified in the user message.
 
 USER MESSAGE STRUCTURE:
-The user message begins with reference sections (optionally Surrounding Text, Terminology, Translation Memory Reference, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
+The user message begins with a "Translation Direction" section (source / target / context languages), followed by reference sections (optionally Surrounding Text, Terminology, Translation Memory Reference, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
 A line containing only "=== SOURCE TEXT ===" marks the start of the current (revised) source text.
 
 Instructions:
@@ -362,9 +366,9 @@ Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outs
   "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
   "termSuggestions": [
     {
-      "source": "original term in {{sourceLang}}",
-      "target": "translated term in {{targetLang}}",
-      "context": "an actual sentence or phrase quoted directly from the text including the term (LANGUAGE: {{contextLang}})",
+      "source": "original term in the source language",
+      "target": "translated term in the target language",
+      "context": "an actual sentence or phrase quoted directly from the text including the term (in the context language specified in Translation Direction)",
       "reason": "(optional) brief explanation why this term should be added to glossary"
     }
   ],
@@ -375,6 +379,10 @@ Important Notes:
 - The "context" field in termSuggestions MUST quote the original text verbatim.
 - Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+- Context language (for termSuggestions "context" quotes): {{contextLang}}
 {{#surroundingText}}
 Surrounding Text (for reference only, do NOT translate):
 {{surroundingText}}
@@ -764,7 +772,7 @@ CRITICAL:
  * }
  * ```
  */
-export const DEFAULT_TRANS_TRANSLATE_PLAIN = `You are a professional translator. Translate the following {{fileExtension}} file content from {{sourceLang}} to {{targetLang}}.
+export const DEFAULT_TRANS_TRANSLATE_PLAIN = `You are a professional translator. Translate the given file content into the target language specified in the "Translation Direction" section of the user message.
 
 CRITICAL RULES:
 - Preserve the original file format and structure EXACTLY.
@@ -774,18 +782,18 @@ CRITICAL RULES:
 - Preserve without translating: empty cells, the literal value "||" (inherit-from-above marker), and any [[...]] bracket markers (structural metadata).
 
 USER MESSAGE STRUCTURE:
-The user message may begin with optional reference sections (TERMINOLOGY, Previous Translation, Source Changes, TRANSLATION MEMORY REFERENCES). They are for reference only — do NOT translate them.
+The user message begins with a "Translation Direction" section (source / target languages and file type), followed by optional reference sections (TERMINOLOGY, Previous Translation, Source Changes, TRANSLATION MEMORY REFERENCES). These sections are instructions and reference material — do NOT translate them.
 A line containing only "=== SOURCE TEXT ===" marks the start of the content to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
 
 Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
 
 {
-  "translation": "the translated content (LANGUAGE:{{targetLang}}) with file format perfectly preserved",
+  "translation": "the translated content (in the target language) with file format perfectly preserved",
   "termSuggestions": [
     {
-      "source": "original term in {{sourceLang}}",
-      "target": "translated term in {{targetLang}}",
+      "source": "original term in the source language",
+      "target": "translated term in the target language",
       "context": "an actual phrase from the text including the term",
       "reason": "(optional) brief explanation"
     }
@@ -796,6 +804,12 @@ Important Notes:
 - The "translation" field must contain the complete translated file content.
 - Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+{{#fileExtension}}
+- File type: {{fileExtension}}
+{{/fileExtension}}
 {{#terms}}
 TERMINOLOGY:
 Use the following terms consistently:
@@ -853,13 +867,13 @@ TRANSLATION MEMORY REFERENCES:
  * }
  * ```
  */
-export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source {{fileExtension}} file has been modified. Update the existing translation by returning ONLY a patch.
+export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source file has been modified. Update the existing translation by returning ONLY a patch.
 
 ABSOLUTE LANGUAGE CONSTRAINT:
-- All updated text MUST be written in LANGUAGE: {{targetLang}}.
+- All updated text MUST be written in the target language specified in the user message.
 
 USER MESSAGE STRUCTURE:
-The user message begins with reference sections (optionally Terminology and Translation Memory References, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
+The user message begins with a "Translation Direction" section (source / target languages and file type), followed by reference sections (optionally Terminology and Translation Memory References, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
 A line containing only "=== SOURCE TEXT ===" marks the start of the current (revised) source content.
 
 CRITICAL RULES:
@@ -933,9 +947,9 @@ Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outs
   "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
   "termSuggestions": [
     {
-      "source": "original term in {{sourceLang}}",
-      "target": "translated term in {{targetLang}}",
-      "context": "an actual phrase from the text including the term (LANGUAGE: {{contextLang}})",
+      "source": "original term in the source language",
+      "target": "translated term in the target language",
+      "context": "an actual phrase from the text including the term (in the context language specified in Translation Direction)",
       "reason": "(optional) brief explanation"
     }
   ],
@@ -946,6 +960,13 @@ Important Notes:
 - The "context" field in termSuggestions MUST quote the original text verbatim.
 - Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+- Context language (for termSuggestions "context" quotes): {{contextLang}}
+{{#fileExtension}}
+- File type: {{fileExtension}}
+{{/fileExtension}}
 {{#terms}}
 Terminology (preferred translations):
 {{terms}}
