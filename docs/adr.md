@@ -4,6 +4,23 @@
 
 ---
 
+## ADR-260618-01: 本文ヘッダマーカーの外部ファイル化をオプションとして導入する（足場）
+
+### 背景
+ユニット追跡用マーカー `<!-- mdait {hash} from:{hash} need:{flag} -->` の本文埋め込みは ADR-251214-02 で自己完結性・冪等性・git親和性を理由に意図的に選択された中核設計である。一方で「本文にコメントが残るのが煩わしい」「レンダリング以外のツールに見えてほしくない」というニーズがあり、マーカーを外部ファイルに退避する選択肢を後から安全に足せる余地が必要になった。
+
+### 決定
+マーカーの保管方式（永続化）を `MarkerProvider` Strategy として抽象化し、`parse`/`stringify` にオプション注入する。`EmbeddedMarkerProvider`（既定）は attach/detach が no-op で、埋め込みは従来どおり `MdaitUnit.toString()` が担う。今回のスコープはこの注入点（seam）の導入のみ（フェーズ0・振る舞い完全不変）。外部ストア本体（フェーズ1以降）は設計のみ記録する。外部ストアは**集約TSV1ファイル** `.mdait/unit-state` とし、`(path, order)` キー＋`titleHash` 補助で再対応付けする。**非MDファイルは「ファイル＝単一ユニット」= MDユニットの N=1 特殊形**と捉え、既存 `file-state` を名称ごと廃止して `unit-state`（`UnitStateStore`）に統合する（互換性は切る／旧痕跡を残さない）。`unit-registry` は全文スナップショットのため統合対象外。
+
+### 理由
+`parse`/`stringify` 内に external 分岐を直書きすると密結合が悪化する。Strategy 注入なら embedded を既定維持でき、呼び出し側（約20箇所）を一切変更せず既存テストが無改変で通る＝「振る舞い不変の足場」を最小コストで用意できる。external は P2 の自己完結原則からは逸脱するが、非MD file-state と同じ論法（sync 冪等再構築・git 追跡・rebuild 時 review）で正当化でき、非MDとMD外部ユニットを単一モデルで扱える。external では手動サブ境界マーカーを非対応とする割り切りを許容する。
+
+### 備考
+- フェーズ0で `src/core/markdown/marker-provider.ts` 追加、`parser.ts` に provider/ctx をオプション注入、`collectBoundaries` に `markersFormBoundaries` 引数を追加（external 分岐は TODO のみ）。
+- 詳細・全フェーズ設計: [.tasks の 260618-01 チケット](../.tasks/)
+
+---
+
 ## ADR-260613-02: vscode-lm の system prompt 送信ロールを Assistant から User に変更する
 
 ### 背景

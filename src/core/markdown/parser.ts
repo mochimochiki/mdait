@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type { Configuration } from "../../infra/config/configuration";
 import { FrontMatter } from "./front-matter";
+import { type MarkerFileContext, type MarkerProvider, embeddedMarkerProvider } from "./marker-provider";
 import type { Markdown } from "./mdait-markdown";
 import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
@@ -34,16 +35,20 @@ export interface IMarkdownParser {
 	 * Markdownテキストをユニットに分割してパースする
 	 * @param markdown Markdownテキスト
 	 * @param config 拡張機能の設定
+	 * @param provider マーカーの出し入れ口（省略時は埋め込み=現状維持）
+	 * @param ctx マーカー保管先を解決するためのファイルコンテキスト（external で使用）
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string, config?: Configuration): Markdown;
+	parse(markdown: string, config?: Configuration, provider?: MarkerProvider, ctx?: MarkerFileContext): Markdown;
 
 	/**
 	 * ユニットをMarkdownテキストに変換
 	 * @param doc Markdownドキュメント
+	 * @param provider マーカーの出し入れ口（省略時は埋め込み=現状維持）
+	 * @param ctx マーカー保管先を解決するためのファイルコンテキスト（external で使用）
 	 * @returns Markdownテキスト
 	 */
-	stringify(doc: Markdown): string;
+	stringify(doc: Markdown, provider?: MarkerProvider, ctx?: MarkerFileContext): string;
 }
 
 /**
@@ -108,7 +113,12 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param config 拡張機能の設定
 	 * @returns パースされたMarkdownユニットの配列
 	 */
-	parse(markdown: string, config: Configuration): Markdown {
+	parse(
+		markdown: string,
+		config: Configuration,
+		provider: MarkerProvider = embeddedMarkerProvider,
+		ctx?: MarkerFileContext,
+	): Markdown {
 		const { frontMatter, content, frontMatterLineOffset } = FrontMatter.parse(markdown);
 
 		const fontMaterlevel = frontMatter?.get("mdait.sync.level");
@@ -124,10 +134,18 @@ export class MarkdownItParser implements IMarkdownParser {
 		const htmlCommentRanges = this.collectHtmlCommentRanges(parsedMdTokens);
 
 		// 第1パス: 境界トークンを収集
-		const boundaries = this.collectBoundaries(parsedMdTokens, mdaitMarkerLevel, htmlCommentRanges);
+		const boundaries = this.collectBoundaries(
+			parsedMdTokens,
+			mdaitMarkerLevel,
+			htmlCommentRanges,
+			provider.markersFormBoundaries,
+		);
 
 		// 第2パス: 境界からユニットを構築
 		const units = this.buildUnitsFromBoundaries(boundaries, lines, frontMatterLineOffset);
+
+		// 外部由来マーカーをユニットに後付けする（embedded は no-op）
+		provider.attachMarkers(units, ctx);
 
 		return { frontMatter, units: units };
 	}
@@ -196,13 +214,20 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param tokens markdown-itのトークン配列
 	 * @param mdaitMarkerLevel 検知する見出しレベル（境界として扱うレベル）
 	 * @param htmlCommentRanges HTMLコメント範囲の配列
+	 * @param markersFormBoundaries マーカー単独で境界を形成するか（embedded=true）。
+	 *   external（false）ではマーカー単独境界を作らない分岐がフェーズ1で必要になる。
 	 * @returns ソート済みの境界配列
 	 */
 	private collectBoundaries(
 		tokens: MarkdownIt.Token[],
 		mdaitMarkerLevel: number,
 		htmlCommentRanges: HtmlCommentRange[],
+		markersFormBoundaries = true,
 	): UnitBoundary[] {
+		// TODO(phase1): markersFormBoundaries === false のとき、マーカー単独境界（見出しを伴わない
+		// 手動サブ境界）を作らないようにする。external では境界は「見出しレベル≤閾値」＋「先頭本文ユニット」
+		// のみとし、マーカーは ExternalMarkerProvider.attachMarkers が order/titleHash で後付けする。
+		// 現状（embedded=true）は到達しないため、振る舞いを変えない。
 		const boundaries: UnitBoundary[] = [];
 		const markers: Map<number, MdaitMarker> = new Map(); // 行番号 -> マーカー
 		const headings: Map<number, { level: number; title: string }> = new Map(); // 行番号 -> 見出し
@@ -503,7 +528,10 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param doc Markdownドキュメント
 	 * @returns Markdownテキスト
 	 */
-	stringify(doc: Markdown): string {
+	stringify(doc: Markdown, provider: MarkerProvider = embeddedMarkerProvider, ctx?: MarkerFileContext): string {
+		// ユニットからマーカーを引き取り永続化する（embedded は no-op）
+		provider.detachMarkers(doc.units, ctx);
+
 		if (doc.units.length === 0) {
 			// ユニットがない場合はfrontmatterのみ
 			if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
