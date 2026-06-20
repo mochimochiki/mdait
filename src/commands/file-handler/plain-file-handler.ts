@@ -21,6 +21,7 @@ import {
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
 import { lookupTmReferences } from "../trans/trans-command";
@@ -50,7 +51,7 @@ export class PlainFileHandler implements FileHandler {
 		const sourceHash = calculateHash(sourceContent, false);
 
 		// 2. ターゲットのワークスペース相対パスを算出
-		const targetRelPath = this.toWorkspaceRelativePath(targetFile);
+		const targetRelPath = toWorkspaceRelativePath(targetFile);
 
 		// 3. UnitStateStoreからターゲットのエントリを取得（非MD=order:0）
 		const store = UnitStateStore.getInstance();
@@ -132,7 +133,7 @@ export class PlainFileHandler implements FileHandler {
 		fs.writeFileSync(targetFile, sourceContent, "utf-8");
 
 		// 3. UnitStateStoreにエントリ登録（hash=ソースhash, from=ソースhash, need=translate）
-		const targetRelPath = this.toWorkspaceRelativePath(targetFile);
+		const targetRelPath = toWorkspaceRelativePath(targetFile);
 		const store = UnitStateStore.getInstance();
 		store.setEntry({
 			path: targetRelPath,
@@ -168,7 +169,7 @@ export class PlainFileHandler implements FileHandler {
 		const config = Configuration.getInstance();
 		const store = UnitStateStore.getInstance();
 		const unitRegistryManager = UnitRegistryManager.getInstance();
-		const targetRelPath = this.toWorkspaceRelativePath(targetFilePath);
+		const targetRelPath = toWorkspaceRelativePath(targetFilePath);
 
 		// 1. ファイルサイズチェック
 		const stats = fs.statSync(targetFilePath);
@@ -421,7 +422,7 @@ export class PlainFileHandler implements FileHandler {
 
 	async collectStatus(filePath: string): Promise<FileStatusItem> {
 		const fileName = path.basename(filePath);
-		const targetRelPath = this.toWorkspaceRelativePath(filePath);
+		const targetRelPath = toWorkspaceRelativePath(filePath);
 		const store = UnitStateStore.getInstance();
 		const entry = store.getEntry(targetRelPath, 0);
 
@@ -476,17 +477,8 @@ export class PlainFileHandler implements FileHandler {
 	}
 
 	async isInitialized(filePath: string): Promise<boolean> {
-		const targetRelPath = this.toWorkspaceRelativePath(filePath);
+		const targetRelPath = toWorkspaceRelativePath(filePath);
 		const store = UnitStateStore.getInstance();
 		return store.getEntry(targetRelPath, 0) !== undefined;
-	}
-
-	/** 絶対パスをワークスペース相対パス（/区切り）に変換 */
-	private toWorkspaceRelativePath(absolutePath: string): string {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			throw new Error("No workspace folder found");
-		}
-		return path.relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
 	}
 }

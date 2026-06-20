@@ -85,6 +85,19 @@
       },
       "additionalProperties": false
     },
+    "markers": {
+      "type": "object",
+      "description": "Marker storage settings",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "Where mdait unit markers are stored. 'embedded' (default) keeps markers as HTML comments in the document body. 'external' moves them to .mdait/unit-state.",
+          "enum": ["embedded", "external"],
+          "default": "embedded"
+        }
+      },
+      "additionalProperties": false
+    },
     "ai": {
       "type": "object",
       "description": "AI provider configuration for translation and term processing",

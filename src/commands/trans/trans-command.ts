@@ -26,6 +26,7 @@ import {
 	setFrontmatterMarker,
 } from "../../core/markdown/frontmatter-translation";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
+import type { MarkerFileContext, MarkerProvider } from "../../core/markdown/marker-provider";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -36,12 +37,15 @@ import { searchTmByLines } from "../../core/tm/tm-line-search";
 import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import {
 	SummaryManager,
 	type TmReferenceInfo,
@@ -222,10 +226,21 @@ async function transFile_Exclusive(
 	const targetLang = transPair.targetLang;
 	const translator = await new TranslatorBuilder().build();
 
+	// マーカー保管方式に応じた provider/ctx を解決
+	const io = resolveMarkerIO(config, targetFilePath, "target");
+	const external = config.isExternalMarkers();
+	if (external) {
+		// external では本文にマーカーが無いため、store から need 等を attach する
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+		}
+	}
+
 	// Markdown ファイルの読み込みとパース
 	const document = await vscode.workspace.openTextDocument(uri);
 	const content = document.getText();
-	const markdown = markdownParser.parse(content, config);
+	const markdown = markdownParser.parse(content, config, io.provider, io.ctx);
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const frontmatterMarker = parseFrontmatterMarker(markdown.frontMatter);
 	const needsFrontmatterTranslation =
@@ -261,7 +276,7 @@ async function transFile_Exclusive(
 			);
 			if (updated) {
 				const encoder = new TextEncoder();
-				const updatedContent = markdownParser.stringify(markdown);
+				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
 				await vscode.workspace.fs.writeFile(
 					uri,
 					encoder.encode(updatedContent),
@@ -369,8 +384,15 @@ async function transFile_Exclusive(
 				throw error;
 			}
 
-			// 翻訳済みユニットをファイルに保存
-			await updateAndSaveUnit(uri, oldMarkerText, unit);
+			// 翻訳済みユニットをファイルに保存（external は本文書き込みできないためループ後に一括）
+			if (!external) {
+				await updateAndSaveUnit(uri, oldMarkerText, unit);
+			}
+		}
+
+		// external: 翻訳結果を全文書き戻し＋ store 保存（マーカーは本文に出力されない）
+		if (external) {
+			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
 		}
 
 		// ファイル全体の状態をStatusManagerで更新
@@ -527,9 +549,12 @@ async function translateUnit(
 					const currentDoc =
 						await vscode.workspace.openTextDocument(currentUri);
 					const currentFileContent = currentDoc.getText();
+					const currentIo = resolveMarkerIO(config, currentStatusUnit.filePath, "target");
 					const currentMarkdown = markdownParser.parse(
 						currentFileContent,
 						config,
+						currentIo.provider,
+						currentIo.ctx,
 					);
 
 					const currentIndex = currentMarkdown.units.findIndex(
@@ -585,9 +610,12 @@ async function translateUnit(
 							const sourceDoc =
 								await vscode.workspace.openTextDocument(sourceUri);
 							const sourceFileContent = sourceDoc.getText();
+							const sourceIo = resolveMarkerIO(config, sourceUnit.filePath, "source");
 							const sourceMarkdown = markdownParser.parse(
 								sourceFileContent,
 								config,
+								sourceIo.provider,
+								sourceIo.ctx,
 							);
 							// unitHashでユニットを特定
 							const sourceUnitData = sourceMarkdown.units.find(
@@ -1072,13 +1100,23 @@ async function transUnit_Exclusive(
 	const targetLang = transPair.targetLang;
 	const translator = await new TranslatorBuilder().build();
 
+	// マーカー保管方式に応じた provider/ctx を解決
+	const io = resolveMarkerIO(config, targetPath, "target");
+	const external = config.isExternalMarkers();
+	if (external) {
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+		}
+	}
+
 	// 翻訳対象ユニットの読込
 	const uri = vscode.Uri.file(targetPath);
 	const document = await vscode.workspace.openTextDocument(uri, {
 		encoding: "utf-8",
 	});
 	const content = document.getText();
-	const markdown = markdownParser.parse(content, config);
+	const markdown = markdownParser.parse(content, config, io.provider, io.ctx);
 
 	const targetUnit = findUnitByHash(markdown.units, unitHash);
 	if (!targetUnit) {
@@ -1155,12 +1193,16 @@ async function transUnit_Exclusive(
 			targetPath,
 		);
 
-		// 翻訳済みユニットをファイルに保存
-		await updateAndSaveUnit(
-			vscode.Uri.file(targetPath),
-			oldMarkerText,
-			targetUnit,
-		);
+		// 翻訳済みユニットをファイルに保存（external は全文書き戻し＋ store 保存）
+		if (external) {
+			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
+		} else {
+			await updateAndSaveUnit(
+				vscode.Uri.file(targetPath),
+				oldMarkerText,
+				targetUnit,
+			);
+		}
 
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.refreshFileStatus(targetPath);
@@ -1200,6 +1242,28 @@ async function transUnit_Exclusive(
  */
 function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
 	return units.find((unit) => unit.marker?.hash === hash) || null;
+}
+
+/**
+ * external マーカーモードで、翻訳後の Markdown 全体を書き戻し UnitStateStore を保存する。
+ *
+ * embedded ではマーカーが本文に埋め込まれているため `updateAndSaveUnit` による
+ * ユニット単位の部分書き込みを使うが、external では本文にマーカーが無く位置特定できないため、
+ * 全文 stringify（マーカーは store へ detach・本文には出力しない）で書き戻す。
+ */
+async function saveExternalDocument(
+	uri: vscode.Uri,
+	markdown: Markdown,
+	provider: MarkerProvider,
+	ctx: MarkerFileContext | undefined,
+): Promise<void> {
+	const updatedContent = markdownParser.stringify(markdown, provider, ctx);
+	const encoder = new TextEncoder();
+	await vscode.workspace.fs.writeFile(uri, encoder.encode(updatedContent));
+	const mdaitDir = await ensureMdaitDir();
+	if (mdaitDir) {
+		UnitStateStore.getInstance().save(mdaitDir);
+	}
 }
 
 /**
@@ -1390,11 +1454,20 @@ async function translateFrontmatter_Exclusive(
 		return;
 	}
 
+	// マーカー保管方式に応じた provider/ctx を解決
+	const io = resolveMarkerIO(config, targetFilePath, "target");
+	if (config.isExternalMarkers()) {
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+		}
+	}
+
 	// Markdownファイルを読み込み＆パース
 	const decoder = new TextDecoder("utf-8");
 	const targetDoc = await vscode.workspace.fs.readFile(uri);
 	const targetContent = decoder.decode(targetDoc);
-	const markdown = markdownParser.parse(targetContent, config);
+	const markdown = markdownParser.parse(targetContent, config, io.provider, io.ctx);
 
 	// frontmatter翻訳を実行
 	const translated = await translateFrontmatterIfNeeded(
@@ -1412,10 +1485,14 @@ async function translateFrontmatter_Exclusive(
 	}
 
 	if (translated) {
-		// 翻訳結果をファイルに保存
-		const updatedContent = markdownParser.stringify(markdown);
-		const encoder = new TextEncoder();
-		await vscode.workspace.fs.writeFile(uri, encoder.encode(updatedContent));
+		// 翻訳結果をファイルに保存（external は本文にマーカーを出力せず store へ保存）
+		if (config.isExternalMarkers()) {
+			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
+		} else {
+			const updatedContent = markdownParser.stringify(markdown);
+			const encoder = new TextEncoder();
+			await vscode.workspace.fs.writeFile(uri, encoder.encode(updatedContent));
+		}
 
 		// StatusManagerでファイルステータス更新
 		await statusManager.refreshFileStatus(targetFilePath);

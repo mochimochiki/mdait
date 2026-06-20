@@ -19,11 +19,13 @@ import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import type { TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
 import { copyDiffAssets } from "./asset-copier";
@@ -114,12 +116,23 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 				continue;
 			}
 
-			// 有効ターゲットパスを収集（非MDファイルのorphanクリーンアップ用）
+			// 有効パスを収集（unit-state の orphan クリーンアップ用）
+			// - 非MD: ターゲットパス（order:0 の1エントリ）
+			// - MD-external: ソース・ターゲット両方（複数 order エントリ）。entry キーと一致させるため
+			//   toWorkspaceRelativePath で正規化する
+			const externalMarkers = config.isExternalMarkers();
 			for (const file of files) {
-				if (path.extname(file).toLowerCase() !== ".md") {
+				const isMd = path.extname(file).toLowerCase() === ".md";
+				if (!isMd) {
 					const tgt = fileExplorer.getTargetPath(file, pair);
 					if (tgt) {
 						validTargetPaths.add(fileExplorer.normalizePath(tgt));
+					}
+				} else if (externalMarkers) {
+					validTargetPaths.add(toWorkspaceRelativePath(file));
+					const tgt = fileExplorer.getTargetPath(file, pair);
+					if (tgt) {
+						validTargetPaths.add(toWorkspaceRelativePath(tgt));
 					}
 				}
 			}
@@ -352,9 +365,10 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 			return;
 		}
 
-		// UnitStateStoreの遅延ロード（非MDファイル対応）
+		// UnitStateStoreの遅延ロード（非MDファイル + MD-external 対応）
 		const handler = getFileHandler(sourceFile);
-		if (handler.fileType === "plain") {
+		const needsUnitState = handler.fileType === "plain" || config.isExternalMarkers();
+		if (needsUnitState) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
@@ -379,8 +393,8 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
 
-		// 非MDファイルの場合はUnitStateStoreを保存
-		if (handler.fileType === "plain") {
+		// 非MDファイル + MD-external の場合はUnitStateStoreを保存
+		if (needsUnitState) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().save(mdaitDir);
@@ -442,7 +456,12 @@ export async function syncNew_CoreProc(
 	);
 	const decoder = new TextDecoder("utf-8");
 	const sourceContent = decoder.decode(document);
-	const source = markdownParser.parse(sourceContent, config);
+
+	// マーカー保管方式に応じた provider/ctx を解決
+	const sourceIO = resolveMarkerIO(config, sourceFile, "source");
+	const targetIO = resolveMarkerIO(config, targetFile, "target");
+
+	const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const sourceFrontHash = calculateFrontmatterHash(
@@ -493,7 +512,7 @@ export async function syncNew_CoreProc(
 
 	// 4. ターゲットファイルとして保存
 	const encoder = new TextEncoder();
-	const targetContent = markdownParser.stringify(targetDoc);
+	const targetContent = markdownParser.stringify(targetDoc, targetIO.provider, targetIO.ctx);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
 	await vscode.workspace.fs.writeFile(
 		vscode.Uri.file(targetFile),
@@ -512,10 +531,14 @@ export async function syncNew_CoreProc(
 	}
 
 	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
-	const updatedSourceContent = markdownParser.stringify({
-		frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
-		units: source.units,
-	});
+	const updatedSourceContent = markdownParser.stringify(
+		{
+			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
+			units: source.units,
+		},
+		sourceIO.provider,
+		sourceIO.ctx,
+	);
 	await vscode.workspace.fs.writeFile(
 		vscode.Uri.file(sourceFile),
 		encoder.encode(updatedSourceContent),
@@ -587,9 +610,22 @@ export async function sync_CoreProc(
 	const sourceContent = decoder.decode(sourceDoc);
 	const targetContent = decoder.decode(targetDoc);
 
+	// マーカー保管方式（embedded/external）に応じた provider/ctx を解決
+	const sourceIO = resolveMarkerIO(config, sourceFile, "source");
+	const targetIO = resolveMarkerIO(config, targetFile, "target");
+
+	// external で target に unit-state エントリが無い＝store喪失/手動作成の「rebuild」検知。
+	// 既存訳文を need:translate で上書きしないよう、後段で need:review に倒す安全網。
+	const targetRel = targetIO.ctx?.filePath;
+	const isExternalRebuild =
+		config.isExternalMarkers() &&
+		targetContent.trim() !== "" &&
+		targetRel !== undefined &&
+		UnitStateStore.getInstance().getEntriesByPath(targetRel).length === 0;
+
 	// Markdownのユニット分割
-	const source = markdownParser.parse(sourceContent, config);
-	const target = markdownParser.parse(targetContent, config);
+	const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
+	const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const frontmatterSync = syncFrontmatterMarkers(
@@ -633,6 +669,16 @@ export async function sync_CoreProc(
 		targetFile,
 	);
 
+	// external rebuild 安全網: 既存targetユニットが（fromロストにより）need:translateに
+	// なった場合、自動上書きを避けるため need:review に倒す（非MDのrebuild挙動と整合）。
+	if (isExternalRebuild) {
+		for (const unit of target.units) {
+			if (unit.marker?.need === "translate") {
+				unit.marker.setNeed("review");
+			}
+		}
+	}
+
 	// sourceのスナップショット保存
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
@@ -660,8 +706,8 @@ export async function sync_CoreProc(
 		units: syncedUnits,
 	};
 
-	// 同期結果を文字列に変換
-	const syncedContent = markdownParser.stringify(syncedDoc);
+	// 同期結果を文字列に変換（external では本文にマーカーを出力せず store へ detach）
+	const syncedContent = markdownParser.stringify(syncedDoc, targetIO.provider, targetIO.ctx);
 
 	// 出力先ディレクトリが存在するか確認し、なければ作成
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
@@ -675,10 +721,14 @@ export async function sync_CoreProc(
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
-	const updatedSourceContent = markdownParser.stringify({
-		frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
-		units: source.units,
-	});
+	const updatedSourceContent = markdownParser.stringify(
+		{
+			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
+			units: source.units,
+		},
+		sourceIO.provider,
+		sourceIO.ctx,
+	);
 
 	await vscode.workspace.fs.writeFile(
 		vscode.Uri.file(sourceFile),

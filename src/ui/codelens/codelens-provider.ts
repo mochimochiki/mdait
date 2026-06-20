@@ -16,7 +16,10 @@ import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { markdownParser } from "../../core/markdown/parser";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
 /**
  * mdaitマーカーのCodeLensを提供するプロバイダー
@@ -75,6 +78,34 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, frontMatter.startLine, document);
 				codeLenses.push(...frontmatterCodeLenses);
 			}
+		}
+
+		// external: 本文にマーカーが無いため、パースしてユニットの開始行に CodeLens を配置する
+		if (config.isExternalMarkers()) {
+			const io = resolveMarkerIO(config, document.uri.fsPath, isSourceFile ? "source" : "target");
+			const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
+			for (const unit of parsed.units) {
+				if (token.isCancellationRequested) {
+					return [];
+				}
+				// store 未登録（マーカー hash なし）のユニットは CodeLens 対象外
+				if (!unit.marker?.hash) {
+					continue;
+				}
+				const range = new vscode.Range(unit.startLine, 0, unit.startLine, 0);
+				const unitCodeLenses = this.createCodeLensesForMarker(
+					unit.marker,
+					range,
+					"mdait.codelens.jumpToSource",
+					"mdait.codelens.jumpToTarget",
+					"mdait.codelens.translate",
+					"mdait.codelens.clearNeed",
+					[range],
+					isSourceFile,
+				);
+				codeLenses.push(...unitCodeLenses);
+			}
+			return codeLenses;
 		}
 
 		// コードブロック内の行はマーカー検出対象外
@@ -259,7 +290,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		if (!workspaceRoot) {
 			return [];
 		}
-		const targetRelPath = path.relative(workspaceRoot, document.uri.fsPath).replace(/\\/g, "/");
+		const targetRelPath = toWorkspaceRelativePath(document.uri.fsPath);
 
 		const store = UnitStateStore.getInstance();
 		const entry = store.getEntry(targetRelPath, 0);

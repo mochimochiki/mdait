@@ -8,6 +8,11 @@
 import * as vscode from "vscode";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { markdownParser } from "../../core/markdown/parser";
+import { findUnitAtLine } from "../../core/markdown/unit-locator";
+import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { SummaryManager, TranslationSummary } from "./summary-manager";
 
 /**
@@ -41,17 +46,25 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			return null;
 		}
 
-		// コードブロック内の行ではマーカー判定を行わない
-		const codeBlockLines = getCodeBlockLineSet(document.getText());
-		if (codeBlockLines.has(position.line)) {
-			return null;
+		const config = Configuration.getInstance();
+
+		// マーカーを取得（external では行範囲からユニットを特定）
+		let marker: MdaitMarker | null;
+		if (config.isExternalMarkers()) {
+			const explorer = new FileExplorer();
+			const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
+			const io = resolveMarkerIO(config, document.uri.fsPath, role);
+			const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+			marker = findUnitAtLine(parsed.units, position.line)?.marker ?? null;
+		} else {
+			// コードブロック内の行ではマーカー判定を行わない
+			const codeBlockLines = getCodeBlockLineSet(document.getText());
+			if (codeBlockLines.has(position.line)) {
+				return null;
+			}
+			// カーソル位置の行から mdait マーカーをパース
+			marker = MdaitMarker.parse(document.lineAt(position.line).text);
 		}
-
-		// カーソル位置の行を取得
-		const line = document.lineAt(position.line);
-
-		// mdaitマーカーをパース
-		const marker = MdaitMarker.parse(line.text);
 		if (!marker || !marker.hash) {
 			return null;
 		}
