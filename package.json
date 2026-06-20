@@ -24,6 +24,16 @@
         "title": "%mdait.sync.title%"
       },
       {
+        "command": "mdait.markers.externalize",
+        "title": "%mdait.markers.externalize.title%",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.markers.embed",
+        "title": "%mdait.markers.embed.title%",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.translate.directory",
         "title": "%mdait.translate.directory.title%",
         "icon": "$(play)",

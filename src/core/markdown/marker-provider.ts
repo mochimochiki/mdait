@@ -77,7 +77,16 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	readonly mode = "external" as const;
 	readonly markersFormBoundaries = false;
 
-	constructor(private readonly store: UnitStateStore = UnitStateStore.getInstance()) {}
+	/**
+	 * @param storeOverride テスト用に注入するストア。未指定時は呼び出しごとに
+	 *   `UnitStateStore.getInstance()` を解決する（dispose 後の差し替えにも追従する）。
+	 */
+	constructor(private readonly storeOverride?: UnitStateStore) {}
+
+	/** 実際に使用するストア（注入があればそれ、無ければ現行シングルトン） */
+	private get store(): UnitStateStore {
+		return this.storeOverride ?? UnitStateStore.getInstance();
+	}
 
 	attachMarkers(units: MdaitUnit[], ctx?: MarkerFileContext): void {
 		const filePath = ctx?.filePath;

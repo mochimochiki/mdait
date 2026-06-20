@@ -192,5 +192,17 @@
   "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.": "ユニット「{0}」のマーカーが見つからないため、翻訳結果を書き戻せませんでした（ファイルが変更された可能性があります）。Syncを実行してから再度翻訳してください。",
   "Failed to reload mdait.json: {0}": "mdait.jsonの再読み込みに失敗しました: {0}",
   "Failed to load mdait.json: {0}": "mdait.jsonの読み込みに失敗しました: {0}",
-  "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.": "{0} の未保存の変更を保存できなかったため、編集内容の上書きを避けるために処理を中断しました。"
+  "Could not save unsaved changes in {0}. The operation was aborted to avoid overwriting your edits.": "{0} の未保存の変更を保存できなかったため、編集内容の上書きを避けるために処理を中断しました。",
+  "{0}/{1} files": "{0}/{1} ファイル",
+  "mdait is not configured in this workspace.": "このワークスペースで mdait が設定されていません。",
+  "Externalize markers": "マーカーを外部化",
+  "Embed markers": "マーカーを埋め込み",
+  "This will move mdait markers out of all managed Markdown files into .mdait/unit-state. Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost. Continue?": "管理下のすべての Markdown ファイルから mdait マーカーを .mdait/unit-state へ移動します。手動のサブユニット境界マーカー（見出しを伴わないマーカー）は external モードでは非対応で、失われます。続行しますか？",
+  "This will write mdait markers from .mdait/unit-state back into all managed Markdown files. Continue?": ".mdait/unit-state の mdait マーカーを管理下のすべての Markdown ファイル本文へ書き戻します。続行しますか？",
+  "Externalizing mdait markers...": "mdait マーカーを外部化しています...",
+  "Embedding mdait markers...": "mdait マーカーを本文へ埋め込んでいます...",
+  "Marker conversion cancelled. Some files may already be converted; re-run to finish.": "マーカー変換をキャンセルしました。一部のファイルは変換済みの可能性があります。完了するには再実行してください。",
+  "Marker conversion failed: {0}": "マーカー変換に失敗しました: {0}",
+  "Markers externalized. Run Sync to verify the result.": "マーカーを外部化しました。結果を確認するには Sync を実行してください。",
+  "Markers embedded. Run Sync to verify the result.": "マーカーを本文へ埋め込みました。結果を確認するには Sync を実行してください。"
 }

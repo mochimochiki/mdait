@@ -153,6 +153,12 @@ docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 
 > 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（非MDの rebuild は `need:review` 付与で安全網）。旧ファイルは手動削除して構いません。
 
+### MD-external モードの配線
+
+保管方式はグローバル設定 `markers.mode: "embedded"|"external"`（既定 embedded、`Configuration.isExternalMarkers()`/`getMarkerProvider()`）で決まります。「管理下ファイルの読み書き」経路（sync / trans / status-collector / md-file-handler の `isInitialized` / CodeLens / Hover / Decorator / migration）でのみ [`resolveMarkerIO(config, absPath, role)`](../../src/infra/config/marker-io.ts) が provider と ctx（`toWorkspaceRelativePath` によるワークスペースルート相対パス + role）を解決して `parse`/`stringify` に注入します。external では本文にマーカーが無いため、trans は全文 stringify で書き戻し（`saveExternalDocument`）、UI は [`findUnitAtLine`](../../src/core/markdown/unit-locator.ts) でユニット行範囲からマーカーを特定します。TM/term など非対象経路は embedded 既定のまま据え置きます。
+
+embedded↔external の一括変換は [`markers-migration.ts`](../../src/commands/markers/markers-migration.ts)（コマンド `mdait.markers.externalize` / `mdait.markers.embed`）が担い、「現モード provider で parse → 反対 provider で stringify」で全 MD を変換し、完了後に `markers.mode` を mdait.json へ書き戻します。frontmatter マーカーは両モードとも in-file（対象外）、手動サブ境界マーカーは external 非対応です。
+
 ## Diff生成
 
 trans実行時、旧レジストリと現在のコンテンツから差分を生成します。LLMには`=`/`-`/`+`プレフィックス形式のパッチを入出力フォーマットとして用い、機械的に適用可能な変更指示をやり取りすることで、変更箇所以外の既存訳文を維持します（[architecture.md](../architecture.md) P4参照）。一方で、ユーザーが確認するための差分ビュー（例: VS Code上のdiff表示やログ・レビュー用のdiff）にはunified diff形式を用い、その生成には`diff`パッケージを使用します。

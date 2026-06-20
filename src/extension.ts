@@ -3,6 +3,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { StatusCollector } from "./commands/file-handler/status-collector";
 import {
+	embedMarkersCommand,
+	externalizeMarkersCommand,
+} from "./commands/markers/markers-migration";
+import {
 	createConfigCommand,
 	openExistingConfigCommand,
 } from "./commands/setup/setup-command";
@@ -195,6 +199,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	const transDisposable = vscode.commands.registerCommand(
 		"mdait.trans",
 		transCommand,
+	);
+
+	// マーカー外部化 / 埋め込み戻し コマンド
+	const externalizeMarkersDisposable = vscode.commands.registerCommand(
+		"mdait.markers.externalize",
+		externalizeMarkersCommand,
+	);
+	const embedMarkersDisposable = vscode.commands.registerCommand(
+		"mdait.markers.embed",
+		embedMarkersCommand,
 	);
 
 	// Trans handler
@@ -737,6 +751,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,
+		externalizeMarkersDisposable,
+		embedMarkersDisposable,
 		termDetectDisposable,
 		termExpandDisposable,
 		termOpenDisposable,
