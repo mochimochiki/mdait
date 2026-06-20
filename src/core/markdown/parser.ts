@@ -224,10 +224,9 @@ export class MarkdownItParser implements IMarkdownParser {
 		htmlCommentRanges: HtmlCommentRange[],
 		markersFormBoundaries = true,
 	): UnitBoundary[] {
-		// TODO(phase1): markersFormBoundaries === false のとき、マーカー単独境界（見出しを伴わない
-		// 手動サブ境界）を作らないようにする。external では境界は「見出しレベル≤閾値」＋「先頭本文ユニット」
-		// のみとし、マーカーは ExternalMarkerProvider.attachMarkers が order/titleHash で後付けする。
-		// 現状（embedded=true）は到達しないため、振る舞いを変えない。
+		// external（markersFormBoundaries === false）では、マーカー単独境界（見出しを伴わない
+		// 手動サブ境界）を作らない。境界は「見出しレベル≤閾値」＋「先頭本文ユニット」のみとし、
+		// マーカーは ExternalMarkerProvider.attachMarkers が order/titleHash で後付けする。
 		const boundaries: UnitBoundary[] = [];
 		const markers: Map<number, MdaitMarker> = new Map(); // 行番号 -> マーカー
 		const headings: Map<number, { level: number; title: string }> = new Map(); // 行番号 -> 見出し
@@ -243,8 +242,11 @@ export class MarkdownItParser implements IMarkdownParser {
 
 		// まず、マーカーと見出しを別々に収集
 		for (const token of tokens) {
-			// mdaitMarker検出
+			// mdaitMarker検出（external ではマーカーを境界収集しない＝防御的に無視して継続）
 			if ((token.type === "inline" || token.type === "html_block") && token.content.includes("<!-- mdait")) {
+				if (!markersFormBoundaries) {
+					continue;
+				}
 				const marker = MdaitMarker.parse(token.content);
 				if (marker !== null && token.map) {
 					// HTMLコメント範囲内の場合はスキップ
@@ -550,8 +552,13 @@ export class MarkdownItParser implements IMarkdownParser {
 			}
 		}
 
-		// ユニット間は2つの改行で連結し、余分な改行増加を防ぐ
-		const unitStrings = doc.units.map((section) => section.toString().replace(/\n+$/g, ""));
+		// ユニット間は2つの改行で連結し、余分な改行増加を防ぐ。
+		// external ではマーカーを本文に埋め込まない（detach で外部ストアに退避済み）ため、
+		// マーカー行を含まない純本文（unit.content）を出力する。
+		const emitMarkers = provider.mode !== "external";
+		const unitStrings = doc.units.map((section) =>
+			(emitMarkers ? section.toString() : section.content).replace(/\n+$/g, ""),
+		);
 
 		if (result) {
 			// frontmatterがある場合、最初のユニットは直後に配置（空白行なし）

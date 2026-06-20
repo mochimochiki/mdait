@@ -10,6 +10,6 @@ src/test/unit/workspace/.mdait/terms.csv
 src/test/unit/workspace/.mdait/logs/*
 src/test/unit/workspace/.mdait/unit-registry
 src/test/unit/workspace/.mdait/translations.tmx
-src/test/unit/workspace/.mdait/file-state
+src/test/unit/workspace/.mdait/unit-state
 src/test/unit/workspace/.mdait/unit-registry
 .claude/worktrees/

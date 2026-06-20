@@ -113,7 +113,7 @@ sequenceDiagram
 |---|---|
 | [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transCommand()` → `TransCommandResult`, `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()`。FileHandler dispatch化済み: ファイルタイプに応じて`MdFileHandler`/`PlainFileHandler`に委譲 |
 | [`file-handler-factory.ts`](../../src/commands/file-handler/file-handler-factory.ts) | `getFileHandler()` - 拡張子に基づくFileHandler振り分け（分岐の唯一の集約点） |
-| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。FileStateStore + UnitRegistryベース。revise時はパッチモード（`translateRevisionPatch` + `applySimplePatch`）を使用し、失敗時はサイレントに全文翻訳へフォールバック |
+| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。UnitStateStore + UnitRegistryベース。revise時はパッチモード（`translateRevisionPatch` + `applySimplePatch`）を使用し、失敗時はサイレントに全文翻訳へフォールバック |
 | [`translator.ts`](../../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース。`TranslatorPromptConfig`でMD/非MD用プロンプトIDを切り替え |
 | [`translator-builder.ts`](../../src/commands/trans/translator-builder.ts) | `TranslatorBuilder` - `build()`でMD用、`buildPlain()`で非MD用Translatorを構築 |
 | [`translation-context.ts`](../../src/commands/trans/translation-context.ts) | `TranslationContext` - 翻訳コンテキスト（用語集・TM参照・`fileExtension`等） |

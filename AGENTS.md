@@ -34,7 +34,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 
 層構造（下位層は上位層に依存しない）:
 
-- **`src/core/`** — 純粋な翻訳ロジック。**VS Code API に非依存**: Markdownパース（markdown-it）、ハッシュ/正規化、ステータス、unit-registry、diff、TM、file-state。完全に単体テスト可能。
+- **`src/core/`** — 純粋な翻訳ロジック。**VS Code API に非依存**: Markdownパース（markdown-it）、ハッシュ/正規化、ステータス、unit-registry、diff、TM、unit-state。完全に単体テスト可能。
 - **`src/commands/`** — core の関数を組み合わせたワークフロー: `sync`・`trans`・`term`・`tm`・`setup`・`trans-selection`、および `file-handler/` Strategy（MD/非MD分岐の集約点）。進捗表示・エラーハンドリング・キャンセル対応も責務。
 - **`src/infra/`** — config（`Configuration` シングルトン経由の `.mdait/mdait.json`）、llm（vscode-lm / OpenAI / Ollama プロバイダーを持つ `AIService` 抽象化）、logging、ワークスペースファイル探索、デバッグIPC、オンボーディング。
 - **`src/ui/`** — StatusTreeProvider・CodeLens・Hover・Welcomeビュー。VS Code 標準 UI パターンに準拠する。

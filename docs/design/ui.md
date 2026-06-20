@@ -54,7 +54,7 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 
 **非MDファイルの表示**:
 - ユニット分割されないため、**リーフノード（子ノードなし、collapsibleState: None）** として表示
-- ステータスは `FileStateStore` のneedフィールドから直接決定（`need:''` → Translated、`need:translate` → NeedsTranslation等）
+- ステータスは `UnitStateStore` のneedフィールドから直接決定（`need:''` → Translated、`need:translate` → NeedsTranslation等）
 - ファイルサイズが `trans.maxFileSize` を超過する場合、tooltipに超過理由を表示
 - CodeLens・Hover・SummaryDecoratorの非MD対応は将来の拡張スコープ
 

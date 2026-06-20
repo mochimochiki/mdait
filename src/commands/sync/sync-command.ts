@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FileStateStore } from "../../core/file-state/file-state-store";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
@@ -85,10 +85,10 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
 
-		// FileStateStoreをロード
+		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
 		if (mdaitDir) {
-			FileStateStore.getInstance().load(mdaitDir);
+			UnitStateStore.getInstance().load(mdaitDir);
 		}
 
 		// orphanクリーンアップ用: 全pairの有効ターゲットパスを収集
@@ -228,16 +228,16 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			await unitRegistryManager.flushBuffer();
 		}
 
-		// FileStateStoreのorphanクリーンアップ＋保存
+		// UnitStateStoreのorphanクリーンアップ＋保存
 		if (mdaitDir) {
-			const fileStateStore = FileStateStore.getInstance();
-			const orphansRemoved = fileStateStore.cleanupOrphans(validTargetPaths);
+			const unitStateStore = UnitStateStore.getInstance();
+			const orphansRemoved = unitStateStore.cleanupOrphans(validTargetPaths);
 			if (orphansRemoved > 0) {
-				logger.info("sync", "Cleaned up orphan file-state entries", {
+				logger.info("sync", "Cleaned up orphan unit-state entries", {
 					orphansRemoved,
 				});
 			}
-			fileStateStore.save(mdaitDir);
+			unitStateStore.save(mdaitDir);
 		}
 
 		// 全ファイル処理完了後、GC処理
@@ -352,12 +352,12 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 			return;
 		}
 
-		// FileStateStoreの遅延ロード（非MDファイル対応）
+		// UnitStateStoreの遅延ロード（非MDファイル対応）
 		const handler = getFileHandler(sourceFile);
 		if (handler.fileType === "plain") {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
-				FileStateStore.getInstance().ensureLoaded(mdaitDir);
+				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
 			}
 		}
 
@@ -379,11 +379,11 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
 
-		// 非MDファイルの場合はFileStateStoreを保存
+		// 非MDファイルの場合はUnitStateStoreを保存
 		if (handler.fileType === "plain") {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
-				FileStateStore.getInstance().save(mdaitDir);
+				UnitStateStore.getInstance().save(mdaitDir);
 			}
 		}
 

@@ -10,7 +10,7 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FileStateStore } from "../../core/file-state/file-state-store";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
@@ -261,8 +261,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		}
 		const targetRelPath = path.relative(workspaceRoot, document.uri.fsPath).replace(/\\/g, "/");
 
-		const store = FileStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath);
+		const store = UnitStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath, 0);
 
 		const codeLenses: vscode.CodeLens[] = [];
 
@@ -300,7 +300,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			return codeLenses;
 		}
 
-		// ソース側判定（FileStateStoreにエントリが無く、設定上のソースディレクトリに含まれる）
+		// ソース側判定（UnitStateStoreにエントリが無く、設定上のソースディレクトリに含まれる）
 		try {
 			const explorer = new FileExplorer();
 			if (explorer.isSourceFile(document.uri.fsPath, config)) {

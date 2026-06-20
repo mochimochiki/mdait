@@ -328,6 +328,13 @@ export class Configuration {
 	}
 
 	/**
+	 * unit-state ファイル（翻訳ユニットの状態管理TSV）の絶対パスを取得する。
+	 */
+	public getUnitStateFilePath(): string {
+		return path.join(this.getMdaitDir(), "unit-state");
+	}
+
+	/**
 	 * mdait.jsonが存在し、設定が有効かどうかをチェックする
 	 * @returns true: 設定済み、false: 未設定または無効
 	 */

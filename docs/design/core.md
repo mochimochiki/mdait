@@ -133,22 +133,25 @@ a2b5c7d8 <encoded_content>
 
 **実装**: [`src/core/unit-registry/`](../../src/core/unit-registry/)
 
-## FileState管理
+## UnitState管理
 
-非Markdownファイル（.txt, .csv等）の翻訳状態を `.mdait/file-state` で管理します。MDファイルのようにファイル内にHTMLコメントマーカーを埋め込めないため、外部ストアで状態を永続化します。
+翻訳ユニットの状態を `.mdait/unit-state` で管理します。非Markdownファイル（.txt, .csv等）はファイル内にHTMLコメントマーカーを埋め込めないため、また MD-external モード（マーカー外部化）でも本文にマーカーを残さないため、外部ストアで状態を永続化します。**非MDファイルは「ファイル＝単一ユニット」= MDユニットの N=1 特殊形**として同じストアで扱います。
 
-**保存形式**: TSV（タブ区切り）。ターゲットファイルのパス・hash・翻訳元hash・needフラグの4カラム。パスで昇順ソートしgit diffを読みやすくします。
+**保存形式**: TSV（タブ区切り）。`path・order・level・titleHash・hash・from・need` の7カラム。複合キー `(path, order)` でユニットを識別し、`path → order` の二段で昇順ソートしてgit diffを読みやすくします。非MDファイルは `order=0, level=0, titleHash=""` の1行、MD-external は同一 path に複数 order 行を持ちます。
 
 ```
-# mdait file-state
-# path	hash	from	need
-docs/en/data.csv	11223344	55667788	translate
-docs/en/readme.txt	a1b2c3d4	ff03a1b2	
+# mdait unit-state — 翻訳ユニットの状態管理
+# path	order	level	titleHash	hash	from	need
+docs/en/data.csv	0	0		11223344	55667788	translate
+docs/en/guide.md	0	1	aa11bb22	a1b2c3d4	ff03a1b2	
+docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 ```
 
-**UnitRegistryとの関係**: FileStateStoreはパスベースのメタデータ管理（path→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。非MDファイルでもrevise時に旧コンテンツが必要なため、sync時にUnitRegistryに保存します。
+**UnitRegistryとの関係**: UnitStateStoreはパス＋順序ベースのメタデータ管理（(path,order)→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。revise時に旧コンテンツが必要なため、sync時にUnitRegistryへ保存します。両者は役割が異なるため統合しません。
 
-**実装**: [`src/core/file-state/file-state-store.ts`](../../src/core/file-state/file-state-store.ts)
+**実装**: [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts)
+
+> 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（非MDの rebuild は `need:review` 付与で安全網）。旧ファイルは手動削除して構いません。
 
 ## Diff生成
 
@@ -309,7 +312,7 @@ sequenceDiagram
 | HashCalculator | [`src/core/hash/`](../../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
 | StatusCollectorPort | [`src/core/status/status-collector-port.ts`](../../src/core/status/status-collector-port.ts) | ステータス収集のDI境界インターフェース |
-| FileStateStore | [`src/core/file-state/file-state-store.ts`](../../src/core/file-state/file-state-store.ts) | 非MDファイルの翻訳状態管理（path→hash/from/need） |
+| UnitStateStore | [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts) | 翻訳ユニットの状態管理（(path,order)→level/titleHash/hash/from/need）。非MD＝N=1特殊形 |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |
 | TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |

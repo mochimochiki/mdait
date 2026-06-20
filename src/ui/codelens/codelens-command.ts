@@ -9,7 +9,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
-import { FileStateStore } from "../../core/file-state/file-state-store";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
@@ -672,7 +672,7 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
 
 /**
  * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
- * FileStateStore のエントリを need:"" に更新して保存する。
+ * UnitStateStore のエントリを need:"" に更新して保存する。
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
@@ -682,8 +682,8 @@ export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<voi
 			return;
 		}
 
-		const store = FileStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath);
+		const store = UnitStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath, 0);
 		if (!entry || !entry.need) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
 			return;

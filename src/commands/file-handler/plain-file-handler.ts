@@ -6,7 +6,6 @@ import {
 	createUnifiedDiff,
 	hasDiff,
 } from "../../core/diff/diff-generator";
-import { FileStateStore } from "../../core/file-state/file-state-store";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import {
 	type FileStatusItem,
@@ -14,6 +13,7 @@ import {
 	StatusItemType,
 } from "../../core/status/status-item";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import {
 	Configuration,
 	type TransPair,
@@ -39,7 +39,7 @@ const NEED_REVISE_PREFIX = "revise@";
 
 /**
  * 非Markdownファイル（.txt, .csv, .tsv等）用のFileHandler実装。
- * FileStateStoreで翻訳状態を管理し、ファイル全体を1ユニットとして扱う。
+ * UnitStateStoreで翻訳状態を管理し、ファイル全体を1ユニットとして扱う。
  */
 export class PlainFileHandler implements FileHandler {
 	readonly fileType = "plain" as const;
@@ -52,9 +52,9 @@ export class PlainFileHandler implements FileHandler {
 		// 2. ターゲットのワークスペース相対パスを算出
 		const targetRelPath = this.toWorkspaceRelativePath(targetFile);
 
-		// 3. FileStateStoreからターゲットのエントリを取得
-		const store = FileStateStore.getInstance();
-		const existing = store.getEntry(targetRelPath);
+		// 3. UnitStateStoreからターゲットのエントリを取得（非MD=order:0）
+		const store = UnitStateStore.getInstance();
+		const existing = store.getEntry(targetRelPath, 0);
 
 		// 4. need判定
 		let need: string;
@@ -62,7 +62,7 @@ export class PlainFileHandler implements FileHandler {
 		let modified = 0;
 
 		if (!existing) {
-			// rebuild時: file-state未登録 + ターゲットファイル存在 → need:review
+			// rebuild時: unit-state未登録 + ターゲットファイル存在 → need:review
 			need = "review";
 			revisionsNeeded = 1;
 			modified = 1;
@@ -73,13 +73,13 @@ export class PlainFileHandler implements FileHandler {
 					targetFile: targetRelPath,
 				},
 			);
-		} else if (existing.fromHash !== sourceHash) {
+		} else if (existing.from !== sourceHash) {
 			// ソース変更あり
 			if (existing.need.startsWith(NEED_REVISE_PREFIX)) {
 				// 既にrevise中 → 旧基準ハッシュを保持（上書きしない）
 				need = existing.need;
 			} else {
-				need = `${NEED_REVISE_PREFIX}${existing.fromHash}`;
+				need = `${NEED_REVISE_PREFIX}${existing.from}`;
 			}
 			revisionsNeeded = 1;
 			modified = 1;
@@ -96,11 +96,14 @@ export class PlainFileHandler implements FileHandler {
 		const unitRegistryManager = UnitRegistryManager.getInstance();
 		unitRegistryManager.saveUnitRegistry(sourceHash, sourceContent);
 
-		// 7. FileStateStoreのエントリ更新
+		// 7. UnitStateStoreのエントリ更新（非MD=ファイル1ユニット: order:0, level:0, titleHash:""）
 		store.setEntry({
-			targetPath: targetRelPath,
+			path: targetRelPath,
+			order: 0,
+			level: 0,
+			titleHash: "",
 			hash: targetHash,
-			fromHash: sourceHash,
+			from: sourceHash,
 			need,
 		});
 
@@ -128,13 +131,16 @@ export class PlainFileHandler implements FileHandler {
 		fileExplorer.ensureTargetDirectoryExists(targetFile);
 		fs.writeFileSync(targetFile, sourceContent, "utf-8");
 
-		// 3. FileStateStoreにエントリ登録（hash=ソースhash, from=ソースhash, need=translate）
+		// 3. UnitStateStoreにエントリ登録（hash=ソースhash, from=ソースhash, need=translate）
 		const targetRelPath = this.toWorkspaceRelativePath(targetFile);
-		const store = FileStateStore.getInstance();
+		const store = UnitStateStore.getInstance();
 		store.setEntry({
-			targetPath: targetRelPath,
+			path: targetRelPath,
+			order: 0,
+			level: 0,
+			titleHash: "",
 			hash: sourceHash,
-			fromHash: sourceHash,
+			from: sourceHash,
 			need: "translate",
 		});
 
@@ -160,7 +166,7 @@ export class PlainFileHandler implements FileHandler {
 		token: vscode.CancellationToken,
 	): Promise<FileTranslateResult | undefined> {
 		const config = Configuration.getInstance();
-		const store = FileStateStore.getInstance();
+		const store = UnitStateStore.getInstance();
 		const unitRegistryManager = UnitRegistryManager.getInstance();
 		const targetRelPath = this.toWorkspaceRelativePath(targetFilePath);
 
@@ -180,8 +186,8 @@ export class PlainFileHandler implements FileHandler {
 			};
 		}
 
-		// 2. FileStateStoreからエントリ取得
-		const entry = store.getEntry(targetRelPath);
+		// 2. UnitStateStoreからエントリ取得（非MD=order:0）
+		const entry = store.getEntry(targetRelPath, 0);
 		if (!entry || !entry.need) {
 			// 翻訳不要
 			return undefined;
@@ -380,12 +386,15 @@ export class PlainFileHandler implements FileHandler {
 			encoder.encode(translatedText),
 		);
 
-		// 12. FileStateStore更新してディスクに保存
+		// 12. UnitStateStore更新してディスクに保存
 		const sourceHash = calculateHash(sourceContent, false);
 		store.setEntry({
-			targetPath: targetRelPath,
+			path: targetRelPath,
+			order: 0,
+			level: 0,
+			titleHash: "",
 			hash: calculateHash(translatedText, false),
-			fromHash: sourceHash,
+			from: sourceHash,
 			need: "",
 		});
 		const mdaitDir = await ensureMdaitDir();
@@ -413,11 +422,11 @@ export class PlainFileHandler implements FileHandler {
 	async collectStatus(filePath: string): Promise<FileStatusItem> {
 		const fileName = path.basename(filePath);
 		const targetRelPath = this.toWorkspaceRelativePath(filePath);
-		const store = FileStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath);
+		const store = UnitStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath, 0);
 
 		if (!entry) {
-			// file-stateに未登録 → Source扱い
+			// unit-stateに未登録 → Source扱い
 			return {
 				type: StatusItemType.File,
 				label: fileName,
@@ -468,8 +477,8 @@ export class PlainFileHandler implements FileHandler {
 
 	async isInitialized(filePath: string): Promise<boolean> {
 		const targetRelPath = this.toWorkspaceRelativePath(filePath);
-		const store = FileStateStore.getInstance();
-		return store.getEntry(targetRelPath) !== undefined;
+		const store = UnitStateStore.getInstance();
+		return store.getEntry(targetRelPath, 0) !== undefined;
 	}
 
 	/** 絶対パスをワークスペース相対パス（/区切り）に変換 */
