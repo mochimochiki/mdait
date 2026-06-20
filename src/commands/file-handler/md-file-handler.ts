@@ -2,8 +2,11 @@ import * as vscode from "vscode";
 import { parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { markdownParser } from "../../core/markdown/parser";
 import type { FileStatusItem } from "../../core/status/status-item";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import type { TransPair } from "../../infra/config/configuration";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { syncNew_CoreProc, sync_CoreProc } from "../sync/sync-command";
 import { transFile_CoreProc } from "../trans/trans-command";
 import type { Translator } from "../trans/translator";
@@ -83,12 +86,25 @@ export class MdFileHandler implements FileHandler {
 		const content = decoder.decode(document);
 		const parsed = markdownParser.parse(content, config);
 
-		const hasUnitMarker = parsed.units.some(
-			(unit) => unit.marker.hash !== null,
-		);
+		// frontmatter マーカーは両モードとも本文内に存在する
 		const hasFrontmatterMarker = parsed.frontMatter
 			? parseFrontmatterMarker(parsed.frontMatter) !== null
 			: false;
+
+		// external では unit マーカーは本文ではなく unit-state に退避されるため、store を参照する
+		if (config.isExternalMarkers()) {
+			const mdaitDir = await ensureMdaitDir();
+			if (mdaitDir) {
+				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+			}
+			const rel = toWorkspaceRelativePath(filePath);
+			const hasUnitState = UnitStateStore.getInstance().getEntriesByPath(rel).length > 0;
+			return hasUnitState || hasFrontmatterMarker;
+		}
+
+		const hasUnitMarker = parsed.units.some(
+			(unit) => unit.marker.hash !== null,
+		);
 
 		return hasUnitMarker || hasFrontmatterMarker;
 	}

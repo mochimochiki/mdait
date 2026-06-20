@@ -1,6 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {
+	type MarkerProvider,
+	embeddedMarkerProvider,
+	externalMarkerProvider,
+} from "../../core/markdown/marker-provider";
 import { Logger, formatError } from "../logging/logger";
 
 /**
@@ -104,6 +109,9 @@ interface MdaitConfig {
 		autoSyncOnSave?: boolean;
 		copyAssets?: CopyAssetsConfig;
 	};
+	markers?: {
+		mode?: "embedded" | "external";
+	};
 	ai?: {
 		provider?: string;
 		vendor?: string;
@@ -190,6 +198,16 @@ export class Configuration {
 		autoDelete: true,
 		autoSyncOnSave: true,
 		copyAssets: true,
+	};
+	/**
+	 * マーカー保管方式設定
+	 * - embedded（既定）: マーカーを本文に埋め込む
+	 * - external: マーカーを `.mdait/unit-state` に退避する
+	 */
+	public markers: {
+		mode: "embedded" | "external";
+	} = {
+		mode: "embedded",
 	};
 	/**
 	 * AI設定
@@ -328,6 +346,28 @@ export class Configuration {
 	}
 
 	/**
+	 * unit-state ファイル（翻訳ユニットの状態管理TSV）の絶対パスを取得する。
+	 */
+	public getUnitStateFilePath(): string {
+		return path.join(this.getMdaitDir(), "unit-state");
+	}
+
+	/**
+	 * マーカー保管方式が external かどうかを返す。
+	 */
+	public isExternalMarkers(): boolean {
+		return this.markers.mode === "external";
+	}
+
+	/**
+	 * 現在のマーカー保管方式に対応する MarkerProvider を返す。
+	 * external なら外部ストア Provider、それ以外は埋め込み Provider（既定）。
+	 */
+	public getMarkerProvider(): MarkerProvider {
+		return this.isExternalMarkers() ? externalMarkerProvider : embeddedMarkerProvider;
+	}
+
+	/**
 	 * mdait.jsonが存在し、設定が有効かどうかをチェックする
 	 * @returns true: 設定済み、false: 未設定または無効
 	 */
@@ -460,6 +500,11 @@ export class Configuration {
 				if (config.sync.copyAssets !== undefined) {
 					this.sync.copyAssets = config.sync.copyAssets;
 				}
+			}
+
+			// markers設定の読み込み
+			if (config.markers?.mode === "embedded" || config.markers?.mode === "external") {
+				this.markers.mode = config.markers.mode;
 			}
 
 			// AI設定の読み込み

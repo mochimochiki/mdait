@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FileStateStore } from "../../core/file-state/file-state-store";
 import {
 	getFrontmatterTranslationKeys,
 	parseFrontmatterMarker,
@@ -19,6 +18,7 @@ import {
 } from "../../core/status/status-item";
 import { StatusItemTree } from "../../core/status/status-item-tree";
 import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { getFileHandler } from "./file-handler-factory";
 
@@ -124,7 +124,7 @@ export class StatusCollector implements StatusCollectorPort {
 
 		try {
 			const content = await this.readFileContent(filePath);
-			const markdown = this.parseMarkdown(content);
+			const markdown = this.parseMarkdown(content, filePath);
 			const frontmatterKeys = getFrontmatterTranslationKeys(this.config);
 			const frontmatterItem = this.collectFrontmatterStatus(
 				markdown.frontMatter,
@@ -168,10 +168,13 @@ export class StatusCollector implements StatusCollectorPort {
 	}
 
 	/**
-	 * Markdownをパースする
+	 * Markdownをパースする。
+	 * external マーカーモードでは provider/ctx を渡してユニットに状態を attach する。
 	 */
-	private parseMarkdown(content: string) {
-		return this.parser.parse(content, this.config);
+	private parseMarkdown(content: string, filePath: string) {
+		const role = this.fileExplorer.isSourceFile(filePath, this.config) ? "source" : "target";
+		const io = resolveMarkerIO(this.config, filePath, role);
+		return this.parser.parse(content, this.config, io.provider, io.ctx);
 	}
 
 	/**

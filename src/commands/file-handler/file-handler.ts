@@ -45,6 +45,6 @@ export interface FileHandler {
 	/** ステータス収集 */
 	collectStatus(filePath: string): Promise<FileStatusItem>;
 
-	/** mdait管理下にあるか（マーカー or file-state登録あり） */
+	/** mdait管理下にあるか（マーカー or unit-state登録あり） */
 	isInitialized(filePath: string): Promise<boolean>;
 }

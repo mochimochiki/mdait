@@ -3,6 +3,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { StatusCollector } from "./commands/file-handler/status-collector";
 import {
+	embedMarkersCommand,
+	externalizeMarkersCommand,
+} from "./commands/markers/markers-migration";
+import {
 	createConfigCommand,
 	openExistingConfigCommand,
 } from "./commands/setup/setup-command";
@@ -26,7 +30,7 @@ import {
 	transCommand,
 	translateFrontmatterCommand,
 } from "./commands/trans/trans-command";
-import { FileStateStore } from "./core/file-state/file-state-store";
+import { UnitStateStore } from "./core/unit-state/unit-state-store";
 import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
 import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
@@ -84,10 +88,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		configInitialized = true;
 		logger.info("config", "Configuration loaded successfully");
 
-		// FileStateStoreの起動時ロード（非MDファイルの翻訳状態を即座に利用可能にする）
+		// UnitStateStoreの起動時ロード（非MDファイルの翻訳状態を即座に利用可能にする）
 		const mdaitDir = config.getMdaitDir();
 		if (fs.existsSync(mdaitDir)) {
-			FileStateStore.getInstance().ensureLoaded(mdaitDir);
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
 		}
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
@@ -195,6 +199,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	const transDisposable = vscode.commands.registerCommand(
 		"mdait.trans",
 		transCommand,
+	);
+
+	// マーカー外部化 / 埋め込み戻し コマンド
+	const externalizeMarkersDisposable = vscode.commands.registerCommand(
+		"mdait.markers.externalize",
+		externalizeMarkersCommand,
+	);
+	const embedMarkersDisposable = vscode.commands.registerCommand(
+		"mdait.markers.embed",
+		embedMarkersCommand,
 	);
 
 	// Trans handler
@@ -665,11 +679,11 @@ export async function activate(context: vscode.ExtensionContext) {
 							return;
 						}
 					} else {
-						// 非MDファイル: FileStateStoreにエントリがあるかチェック
+						// 非MDファイル: UnitStateStoreにエントリがあるかチェック
 						const workspaceRoot =
 							vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 						if (workspaceRoot) {
-							const store = FileStateStore.getInstance();
+							const store = UnitStateStore.getInstance();
 							const fe = new FileExplorer();
 							// ソースファイルの場合は対応するターゲットパスで検索
 							let lookupRelPath = path
@@ -689,10 +703,10 @@ export async function activate(context: vscode.ExtensionContext) {
 									}
 								}
 							}
-							if (!store.getEntry(lookupRelPath)) {
+							if (!store.getEntry(lookupRelPath, 0)) {
 								logger.debug(
 									"extension",
-									"Skipping file save sync (no file-state entry)",
+									"Skipping file save sync (no unit-state entry)",
 									{ filePath },
 								);
 								return;
@@ -737,6 +751,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,
+		externalizeMarkersDisposable,
+		embedMarkersDisposable,
 		termDetectDisposable,
 		termExpandDisposable,
 		termOpenDisposable,

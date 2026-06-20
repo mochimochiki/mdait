@@ -3,6 +3,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Configuration } from "../../../infra/config/configuration";
+import {
+	embeddedMarkerProvider,
+	externalMarkerProvider,
+} from "../../../core/markdown/marker-provider";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -141,5 +145,40 @@ suite("Configuration", () => {
 
 		// /tempDir/subproject/.mdait/mdait.json → /tempDir/subproject
 		assert.strictEqual(config.getConfigBaseDir(), subDir);
+	});
+
+	/** markers.mode を含むコンフィグを customPath に書いて初期化する */
+	async function initWithMarkerMode(mode?: string): Promise<Configuration> {
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+		const obj: Record<string, unknown> = JSON.parse(minimalConfig());
+		if (mode !== undefined) {
+			obj.markers = { mode };
+		}
+		fs.writeFileSync(customPath, JSON.stringify(obj), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		return config;
+	}
+
+	test("markers.mode 未指定の場合は既定で embedded になること", async () => {
+		const config = await initWithMarkerMode(undefined);
+		assert.strictEqual(config.markers.mode, "embedded");
+		assert.strictEqual(config.isExternalMarkers(), false);
+		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
+	});
+
+	test("markers.mode が external の場合に external Provider を返すこと", async () => {
+		const config = await initWithMarkerMode("external");
+		assert.strictEqual(config.markers.mode, "external");
+		assert.strictEqual(config.isExternalMarkers(), true);
+		assert.strictEqual(config.getMarkerProvider(), externalMarkerProvider);
+	});
+
+	test("markers.mode が不正値の場合は embedded のままになること", async () => {
+		const config = await initWithMarkerMode("invalid");
+		assert.strictEqual(config.markers.mode, "embedded");
+		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
 	});
 });

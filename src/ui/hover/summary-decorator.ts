@@ -8,6 +8,10 @@
 import * as vscode from "vscode";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { markdownParser } from "../../core/markdown/parser";
+import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { SummaryManager } from "./summary-manager";
 
 /**
@@ -53,6 +57,35 @@ export class SummaryDecorator {
 	public updateDecorations(editor: vscode.TextEditor): void {
 		const document = editor.document;
 		const decorations: vscode.DecorationOptions[] = [];
+		const config = Configuration.getInstance();
+
+		const addDecoration = (lineIndex: number, hash: string, need: string | null): void => {
+			const summary = this.summaryManager.getSummary(hash);
+			if (!summary) {
+				return;
+			}
+			const summaryText = this.buildSummaryText(summary.stats.duration, summary.stats.tokens, need);
+			const lineLength = document.lineAt(lineIndex).text.length;
+			decorations.push({
+				range: new vscode.Range(lineIndex, lineLength, lineIndex, lineLength),
+				renderOptions: { after: { contentText: summaryText } },
+			});
+		};
+
+		if (config.isExternalMarkers()) {
+			// external: 本文にマーカーが無いため、パースしてユニット開始行に装飾を置く
+			const explorer = new FileExplorer();
+			const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
+			const io = resolveMarkerIO(config, document.uri.fsPath, role);
+			const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+			for (const unit of parsed.units) {
+				if (unit.marker?.hash) {
+					addDecoration(unit.startLine, unit.marker.hash, unit.marker.need);
+				}
+			}
+			editor.setDecorations(this.decorationType, decorations);
+			return;
+		}
 
 		// コードブロック内の行はマーカー検出対象外
 		const codeBlockLines = getCodeBlockLineSet(document.getText());
@@ -69,25 +102,7 @@ export class SummaryDecorator {
 				continue;
 			}
 
-			// サマリデータを取得
-			const summary = this.summaryManager.getSummary(marker.hash);
-			if (!summary) {
-				continue;
-			}
-
-			// サマリの概要テキストを生成（needフラグも考慮）
-			const summaryText = this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need);
-
-			// Decorationを追加
-			const range = new vscode.Range(lineIndex, line.text.length, lineIndex, line.text.length);
-			decorations.push({
-				range,
-				renderOptions: {
-					after: {
-						contentText: summaryText,
-					},
-				},
-			});
+			addDecoration(lineIndex, marker.hash, marker.need);
 		}
 
 		// Decorationを適用

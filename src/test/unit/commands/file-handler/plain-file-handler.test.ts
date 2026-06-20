@@ -5,7 +5,7 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import type { Translator } from "../../../../commands/trans/translator";
-import { FileStateStore } from "../../../../core/file-state/file-state-store";
+import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { Status, StatusItemType } from "../../../../core/status/status-item";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
@@ -35,22 +35,22 @@ suite("PlainFileHandler", () => {
 	let handler: PlainFileHandler;
 
 	setup(() => {
-		FileStateStore.dispose();
+		UnitStateStore.dispose();
 		UnitRegistryManager.resetInstance();
 		Configuration.dispose();
 
 		tempDir = createTempDir();
 		__vscodeMockWorkspaceRoot = tempDir;
 
-		// FileStateStoreを空の状態でロード
-		const store = FileStateStore.getInstance();
+		// UnitStateStoreを空の状態でロード
+		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
 
 		handler = new PlainFileHandler();
 	});
 
 	teardown(() => {
-		FileStateStore.dispose();
+		UnitStateStore.dispose();
 		UnitRegistryManager.resetInstance();
 		Configuration.dispose();
 		cleanupTempDir(tempDir);
@@ -68,11 +68,14 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(targetFile, "translated content", "utf-8");
 
 			const sourceHash = calculateHash(sourceContent, false);
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: calculateHash("translated content", false),
-				fromHash: sourceHash,
+				from: sourceHash,
 				need: "",
 			});
 
@@ -82,7 +85,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.modified, 0);
 			assert.strictEqual(result.revisionsNeeded, 0);
 
-			const entry = store.getEntry("target/test.txt");
+			const entry = store.getEntry("target/test.txt", 0);
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "");
 		});
@@ -101,11 +104,14 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, newContent, "utf-8");
 			fs.writeFileSync(targetFile, "translated content", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: calculateHash("translated content", false),
-				fromHash: oldHash,
+				from: oldHash,
 				need: "",
 			});
 
@@ -115,7 +121,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.revisionsNeeded, 1);
 			assert.strictEqual(result.unchanged, 0);
 
-			const entry = store.getEntry("target/test.txt");
+			const entry = store.getEntry("target/test.txt", 0);
 			assert.ok(entry);
 			assert.strictEqual(entry.need, `revise@${oldHash}`);
 		});
@@ -129,18 +135,18 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, "source text", "utf-8");
 			fs.writeFileSync(targetFile, "existing translation", "utf-8");
 
-			// FileStateStoreにエントリを登録しない（rebuild状態）
+			// UnitStateStoreにエントリを登録しない（rebuild状態）
 
 			const result = await handler.sync(sourceFile, targetFile);
 
 			assert.strictEqual(result.modified, 1);
 			assert.strictEqual(result.revisionsNeeded, 1);
 
-			const store = FileStateStore.getInstance();
-			const entry = store.getEntry("target/test.txt");
+			const store = UnitStateStore.getInstance();
+			const entry = store.getEntry("target/test.txt", 0);
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "review");
-			assert.strictEqual(entry.fromHash, calculateHash("source text", false));
+			assert.strictEqual(entry.from, calculateHash("source text", false));
 		});
 
 		test("複数回のソース更新で最初のrevise基準ハッシュが保持されること", async () => {
@@ -158,18 +164,21 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(targetFile, "translated content", "utf-8");
 
 			// 初回: originalHash → secondContent でrevise@originalHash
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: calculateHash("translated content", false),
-				fromHash: originalHash,
+				from: originalHash,
 				need: "",
 			});
 
 			fs.writeFileSync(sourceFile, secondContent, "utf-8");
 			await handler.sync(sourceFile, targetFile);
 
-			const entryAfterFirst = store.getEntry("target/test.txt");
+			const entryAfterFirst = store.getEntry("target/test.txt", 0);
 			assert.ok(entryAfterFirst);
 			assert.strictEqual(entryAfterFirst.need, `revise@${originalHash}`);
 
@@ -178,7 +187,7 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, thirdContent, "utf-8");
 			await handler.sync(sourceFile, targetFile);
 
-			const entryAfterSecond = store.getEntry("target/test.txt");
+			const entryAfterSecond = store.getEntry("target/test.txt", 0);
 			assert.ok(entryAfterSecond);
 			assert.strictEqual(
 				entryAfterSecond.need,
@@ -186,7 +195,7 @@ suite("PlainFileHandler", () => {
 				"2回目のソース更新で基準ハッシュが上書きされてはならない",
 			);
 			assert.strictEqual(
-				entryAfterSecond.fromHash,
+				entryAfterSecond.from,
 				calculateHash(thirdContent, false),
 				"fromHashは最新のソースハッシュに更新される",
 			);
@@ -203,11 +212,14 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(targetFile, content, "utf-8");
 
 			const hash = calculateHash(content, false);
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/data.csv",
+				path: "target/data.csv",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash,
-				fromHash: hash,
+				from: hash,
 				need: "translate",
 			});
 
@@ -216,7 +228,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.unchanged, 1);
 			assert.strictEqual(result.modified, 0);
 
-			const entry = store.getEntry("target/data.csv");
+			const entry = store.getEntry("target/data.csv", 0);
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "translate");
 		});
@@ -239,7 +251,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), content);
 		});
 
-		test("FileStateStoreにneed:translateでエントリが登録されること", async () => {
+		test("UnitStateStoreにneed:translateでエントリが登録されること", async () => {
 			const sourceFile = path.join(tempDir, "source", "new.txt");
 			const targetFile = path.join(tempDir, "target", "new.txt");
 			mkdirp(path.dirname(sourceFile));
@@ -249,11 +261,11 @@ suite("PlainFileHandler", () => {
 
 			await handler.syncNew(sourceFile, targetFile);
 
-			const store = FileStateStore.getInstance();
-			const entry = store.getEntry("target/new.txt");
+			const store = UnitStateStore.getInstance();
+			const entry = store.getEntry("target/new.txt", 0);
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "translate");
-			assert.strictEqual(entry.fromHash, calculateHash(content, false));
+			assert.strictEqual(entry.from, calculateHash(content, false));
 			assert.strictEqual(entry.hash, calculateHash(content, false));
 		});
 	});
@@ -277,11 +289,14 @@ suite("PlainFileHandler", () => {
 			mkdirp(path.dirname(filePath));
 			fs.writeFileSync(filePath, "translated", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "",
 			});
 
@@ -297,11 +312,14 @@ suite("PlainFileHandler", () => {
 			mkdirp(path.dirname(filePath));
 			fs.writeFileSync(filePath, "content", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "translate",
 			});
 
@@ -317,11 +335,14 @@ suite("PlainFileHandler", () => {
 			mkdirp(path.dirname(filePath));
 			fs.writeFileSync(filePath, "content", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "revise@cccc",
 			});
 
@@ -335,11 +356,14 @@ suite("PlainFileHandler", () => {
 			mkdirp(path.dirname(filePath));
 			fs.writeFileSync(filePath, "content", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "review",
 			});
 
@@ -355,11 +379,14 @@ suite("PlainFileHandler", () => {
 			const largeContent = "x".repeat(52000);
 			fs.writeFileSync(filePath, largeContent, "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/large.txt",
+				path: "target/large.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "",
 			});
 
@@ -371,14 +398,17 @@ suite("PlainFileHandler", () => {
 	});
 
 	suite("isInitialized()", () => {
-		test("FileStateStoreにエントリがある場合、trueを返すこと", async () => {
+		test("UnitStateStoreにエントリがある場合、trueを返すこと", async () => {
 			const filePath = path.join(tempDir, "target", "test.txt");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "",
 			});
 
@@ -386,7 +416,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result, true);
 		});
 
-		test("FileStateStoreにエントリがない場合、falseを返すこと", async () => {
+		test("UnitStateStoreにエントリがない場合、falseを返すこと", async () => {
 			const filePath = path.join(tempDir, "target", "unknown.txt");
 
 			const result = await handler.isInitialized(filePath);
@@ -412,11 +442,14 @@ suite("PlainFileHandler", () => {
 			// デフォルトmaxFileSize(51200)より大きいファイルを作成
 			fs.writeFileSync(targetFile, "x".repeat(52000), "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/large.txt",
+				path: "target/large.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "translate",
 			});
 
@@ -440,12 +473,12 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.translatedCount, 0);
 		});
 
-		test("FileStateStoreにエントリがない場合、undefinedを返すこと", async () => {
+		test("UnitStateStoreにエントリがない場合、undefinedを返すこと", async () => {
 			const targetFile = path.join(tempDir, "target", "noentry.txt");
 			mkdirp(path.dirname(targetFile));
 			fs.writeFileSync(targetFile, "content", "utf-8");
 
-			// FileStateStoreにエントリを登録しない
+			// UnitStateStoreにエントリを登録しない
 
 			const pair = {
 				sourceDir: "source",
@@ -470,11 +503,14 @@ suite("PlainFileHandler", () => {
 			mkdirp(path.dirname(targetFile));
 			fs.writeFileSync(targetFile, "translated content", "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/done.txt",
+				path: "target/done.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: "aaaa",
-				fromHash: "bbbb",
+				from: "bbbb",
 				need: "",
 			});
 
@@ -506,11 +542,14 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, content, "utf-8");
 			fs.writeFileSync(targetFile, content, "utf-8");
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/cancel.txt",
+				path: "target/cancel.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: calculateHash(content, false),
-				fromHash: calculateHash(content, false),
+				from: calculateHash(content, false),
 				need: "translate",
 			});
 
@@ -579,11 +618,14 @@ suite("PlainFileHandler", () => {
 			const urm = UnitRegistryManager.getInstance();
 			urm.saveUnitRegistry(oldHash, opts.oldSource);
 
-			const store = FileStateStore.getInstance();
+			const store = UnitStateStore.getInstance();
 			store.setEntry({
-				targetPath: "target/test.txt",
+				path: "target/test.txt",
+				order: 0,
+				level: 0,
+				titleHash: "",
 				hash: calculateHash(opts.previousTranslation, false),
-				fromHash: oldHash,
+				from: oldHash,
 				need: `revise@${oldHash}`,
 			});
 

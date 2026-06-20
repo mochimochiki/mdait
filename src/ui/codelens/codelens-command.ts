@@ -9,15 +9,71 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
-import { FileStateStore } from "../../core/file-state/file-state-store";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
+import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { StatusManager } from "../../core/status/status-manager";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+
+/**
+ * 指定行のマーカーを取得する。
+ * - embedded: その行のテキストから直接パース
+ * - external: ドキュメント全体をパースし、行を含むユニットのマーカーを返す
+ */
+function getMarkerAtLine(document: vscode.TextDocument, line: number): MdaitMarker | null {
+	const config = Configuration.getInstance();
+	if (config.isExternalMarkers()) {
+		const explorer = new FileExplorer();
+		const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
+		const io = resolveMarkerIO(config, document.uri.fsPath, role);
+		const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+		return findUnitAtLine(parsed.units, line)?.marker ?? null;
+	}
+	return MdaitMarker.parse(document.lineAt(line).text);
+}
+
+/**
+ * external マーカーモードで、指定行を含むユニットの need を unit-state からクリアする。
+ * 本文を書き換えず store エントリの need を "" にして保存し、ステータスを更新する。
+ */
+async function clearNeedExternal(document: vscode.TextDocument, line: number): Promise<void> {
+	const config = Configuration.getInstance();
+	const explorer = new FileExplorer();
+	const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
+	const io = resolveMarkerIO(config, document.uri.fsPath, role);
+	const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+	const unit = findUnitAtLine(parsed.units, line);
+	const order = unit ? parsed.units.indexOf(unit) : -1;
+	if (!unit || order < 0) {
+		vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
+		return;
+	}
+
+	const rel = toWorkspaceRelativePath(document.uri.fsPath);
+	if (!rel) {
+		vscode.window.showErrorMessage(vscode.l10n.t("No workspace folder found"));
+		return;
+	}
+	const store = UnitStateStore.getInstance();
+	const entry = store.getEntry(rel, order);
+	if (!entry || !entry.need) {
+		vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
+		return;
+	}
+	store.setEntry({ ...entry, need: "" });
+	const mdaitDir = await ensureMdaitDir();
+	if (mdaitDir) {
+		store.save(mdaitDir);
+	}
+	// ステータス更新 → onStatusTreeChanged 経由で CodeLens もリフレッシュされる
+	await StatusManager.getInstance().refreshFileStatus(document.uri.fsPath);
+}
 
 /**
  * CodeLensから翻訳を実行するコマンド
@@ -35,11 +91,8 @@ export async function codeLensTranslateCommand(range: vscode.Range): Promise<voi
 		const document = activeEditor.document;
 		const targetPath = document.uri.fsPath;
 
-		// 指定された行のテキストを取得
-		const lineText = document.lineAt(range.start.line).text;
-
-		// マーカーからunitHashを抽出
-		const marker = MdaitMarker.parse(lineText);
+		// マーカーからunitHashを抽出（external では本文ではなくユニット行範囲から特定）
+		const marker = getMarkerAtLine(document, range.start.line);
 		const unitHash = marker?.hash;
 		if (!unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Could not extract unit hash from marker."));
@@ -69,6 +122,14 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 		}
 
 		const document = activeEditor.document;
+		const config = Configuration.getInstance();
+
+		// external: 本文ではなく unit-state のエントリの need をクリアする
+		if (config.isExternalMarkers()) {
+			await clearNeedExternal(document, range.start.line);
+			return;
+		}
+
 		const lineText = document.lineAt(range.start.line).text;
 
 		// マーカーをパースしてneedを削除
@@ -125,8 +186,7 @@ export async function codeLensJumpToTargetCommand(range: vscode.Range): Promise<
 		const clickedPos = new vscode.Position(range.start.line, 0);
 		const leftVisible = activeEditor.visibleRanges[0];
 		const document = activeEditor.document;
-		const lineText = document.lineAt(range.start.line).text;
-		const marker = MdaitMarker.parse(lineText);
+		const marker = getMarkerAtLine(document, range.start.line);
 		if (!marker?.hash) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No hash found in marker."));
 			return;
@@ -221,8 +281,7 @@ export async function codeLensJumpToSourceCommand(range: vscode.Range): Promise<
 		const clickedPos = new vscode.Position(range.start.line, 0);
 		const leftVisible = activeEditor.visibleRanges[0];
 		const document = activeEditor.document;
-		const lineText = document.lineAt(range.start.line).text;
-		const marker = MdaitMarker.parse(lineText);
+		const marker = getMarkerAtLine(document, range.start.line);
 		if (!marker?.from) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No source hash found in marker."));
 			return;
@@ -672,7 +731,7 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
 
 /**
  * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
- * FileStateStore のエントリを need:"" に更新して保存する。
+ * UnitStateStore のエントリを need:"" に更新して保存する。
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
@@ -682,8 +741,8 @@ export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<voi
 			return;
 		}
 
-		const store = FileStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath);
+		const store = UnitStateStore.getInstance();
+		const entry = store.getEntry(targetRelPath, 0);
 		if (!entry || !entry.need) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
 			return;

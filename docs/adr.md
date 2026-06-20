@@ -4,6 +4,41 @@
 
 ---
 
+## ADR-260620-01: マーカー外部化を `markers.mode` で live 配線し一括マイグレーションを提供する
+
+### 背景
+ADR-260618-01（足場）・フェーズ1（`UnitStateStore` と parser external 経路）でコアは揃ったが、実コマンド・UI は embedded 前提のままだった。ユーザーが external を実際に使えるよう、保管方式の切替手段と既存ドキュメントの変換手段が必要になった。
+
+### 決定
+保管方式は **グローバル設定 `markers.mode: "embedded"|"external"`（既定 embedded）** を `.mdait/mdait.json` に追加して切り替える。「管理下ファイルの読み書き」経路（sync/trans/status/CodeLens/Hover/Decorator/isInitialized/migration）にのみ `resolveMarkerIO(config, absPath, role)` で解決した provider/ctx を通す。external では本文にマーカーが無いため、trans は **全文 stringify で書き戻し**（`saveExternalDocument`）、UI は `findUnitAtLine` でユニット行範囲からマーカーを特定する。embedded は既定 provider で完全現状維持。embedded↔external の一括変換は **`mdait.markers.externalize` / `mdait.markers.embed`**（現モード provider で parse → 反対 provider で stringify、完了後に `markers.mode` を書き戻し）で提供する。
+
+### 理由
+モードを1つのグローバル設定に集約することで、source/target をまたいだ一貫した挙動と単純なメンタルモデルを保てる。provider/ctx 注入を「読み書き経路のみ」に限定することで TM/term など非対象を embedded 既定のまま据え置け、回帰面を最小化できる（既存テストは無改変で green）。external の store 喪失時は非MDと同じ `need:review` 安全網で既存訳文の上書きを防ぐ。`ExternalMarkerProvider` はストアを遅延解決（`getInstance()` を呼び出しごとに参照）し、シングルトン差し替えにも追従させて堅牢化した。
+
+### 備考
+- store キーは全経路で `toWorkspaceRelativePath`（ワークスペースルート相対・`/`区切り）に統一。full-sync の orphan クリーンアップは external の MD source/target パスを whitelist して保護する。
+- frontmatter マーカーは両モードとも in-file（外部化対象外）。手動サブ境界マーカーは external 非対応（externalize 時に失われ得るため確認ダイアログで警告）。
+- 詳細: [.tasks の 260620-02 チケット](../.tasks/)
+
+---
+
+## ADR-260618-01: 本文ヘッダマーカーの外部ファイル化をオプションとして導入する（足場）
+
+### 背景
+ユニット追跡用マーカー `<!-- mdait {hash} from:{hash} need:{flag} -->` の本文埋め込みは ADR-251214-02 で自己完結性・冪等性・git親和性を理由に意図的に選択された中核設計である。一方で「本文にコメントが残るのが煩わしい」「レンダリング以外のツールに見えてほしくない」というニーズがあり、マーカーを外部ファイルに退避する選択肢を後から安全に足せる余地が必要になった。
+
+### 決定
+マーカーの保管方式（永続化）を `MarkerProvider` Strategy として抽象化し、`parse`/`stringify` にオプション注入する。`EmbeddedMarkerProvider`（既定）は attach/detach が no-op で、埋め込みは従来どおり `MdaitUnit.toString()` が担う。今回のスコープはこの注入点（seam）の導入のみ（フェーズ0・振る舞い完全不変）。外部ストア本体（フェーズ1以降）は設計のみ記録する。外部ストアは**集約TSV1ファイル** `.mdait/unit-state` とし、`(path, order)` キー＋`titleHash` 補助で再対応付けする。**非MDファイルは「ファイル＝単一ユニット」= MDユニットの N=1 特殊形**と捉え、既存 `file-state` を名称ごと廃止して `unit-state`（`UnitStateStore`）に統合する（互換性は切る／旧痕跡を残さない）。`unit-registry` は全文スナップショットのため統合対象外。
+
+### 理由
+`parse`/`stringify` 内に external 分岐を直書きすると密結合が悪化する。Strategy 注入なら embedded を既定維持でき、呼び出し側（約20箇所）を一切変更せず既存テストが無改変で通る＝「振る舞い不変の足場」を最小コストで用意できる。external は P2 の自己完結原則からは逸脱するが、非MD file-state と同じ論法（sync 冪等再構築・git 追跡・rebuild 時 review）で正当化でき、非MDとMD外部ユニットを単一モデルで扱える。external では手動サブ境界マーカーを非対応とする割り切りを許容する。
+
+### 備考
+- フェーズ0で `src/core/markdown/marker-provider.ts` 追加、`parser.ts` に provider/ctx をオプション注入、`collectBoundaries` に `markersFormBoundaries` 引数を追加（external 分岐は TODO のみ）。
+- 詳細・全フェーズ設計: [.tasks の 260618-01 チケット](../.tasks/)
+
+---
+
 ## ADR-260613-02: vscode-lm の system prompt 送信ロールを Assistant から User に変更する
 
 ### 背景
