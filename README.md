@@ -8,7 +8,7 @@
 
 ## Key Features
 
-- **Unit-based Sync** — Splits Markdown by heading level, tracks changes with CRC32 hashes, and manages state via HTML comment markers. No external DB; fully git-friendly.
+- **Unit-based Sync** — Splits Markdown by heading level and tracks changes with CRC32 hashes. State lives in in-document HTML comment markers by default, or can be externalized to a single `.mdait/unit-state` file. No external DB; fully git-friendly.
 - **AI Translation with Consistency** — Glossary + surrounding context injected into every prompt. Diff-Aware Revision sends only the changed diff to the LLM when the source has minor edits, preserving existing translations.
 - **Translation Status Visualization** — Sidebar tree showing translation progress per directory, file, and unit. CodeLens and Hover for inline result inspection.
 - **Terminology Management** — AI-powered term detection from source, expansion to target language, CSV/YAML glossary formats. Automatically injected during translation.
@@ -76,6 +76,7 @@ Create `.mdait/mdait.json` in your workspace root:
 | `trans.retryLimit` | Max retries on translation failure (1–5). |
 | `tm.maxReferences` | Max TM entries referenced per translation. |
 | `terms.filename` | Glossary filename (`terms.csv` or `terms.yaml`). |
+| `markers.mode` | Marker storage: `"embedded"` (default, in-document HTML comments) or `"external"` (`.mdait/unit-state`). |
 | `ignoredPatterns` | Glob pattern(s) for files/directories to exclude from all processing. Accepts a string or array of strings. Default: `"**/node_modules/**"`. |
 
 ---
@@ -143,7 +144,7 @@ Omit the `prompts` field to apply instructions to all prompts.
 
 ## How It Works
 
-mdait embeds lightweight HTML comment markers into Markdown files during Sync:
+By default, mdait embeds lightweight HTML comment markers into Markdown files during Sync:
 
 ```html
 <!-- mdait {content-hash} from:{source-hash} need:{action} -->
@@ -155,7 +156,18 @@ mdait embeds lightweight HTML comment markers into Markdown files during Sync:
 | `from:{source-hash}` | Hash of the corresponding source unit. Detects source-side changes. |
 | `need:{action}` | `need:translate` (new), `need:revise@{oldhash}` (changed), or omitted (up-to-date). |
 
-All state lives inside the Markdown files themselves — no sidecar files, no database. Changes appear naturally in `git diff`.
+State is fully git-tracked — changes appear naturally in `git diff` — with no external database.
+
+### Embedded vs. externalized markers
+
+Set `markers.mode` in `mdait.json` to choose where this state lives:
+
+- **`embedded`** (default) — markers stay inline in each Markdown file. Self-contained, no sidecar files.
+- **`external`** — markers are kept out of the document body and stored in a single `.mdait/unit-state` file (TSV: `path / order / level / titleHash / hash / from / need`, sorted by `path` then `order`). This also unifies state management for non-Markdown files (`.txt`, `.csv`, …) that cannot host inline comments.
+
+Convert existing documents in place with the **`mdait: Externalize Markers`** and **`mdait: Embed Markers`** commands.
+
+`.mdait/unit-state` is a single aggregated file, so concurrent translation of different documents could otherwise collide on it. mdait auto-generates `.mdait/.gitattributes` with `unit-state merge=union` and writes per-file blocks separated by blank-line anchors, so independent edits merge automatically and the next Sync re-normalizes the file.
 
 ---
 
