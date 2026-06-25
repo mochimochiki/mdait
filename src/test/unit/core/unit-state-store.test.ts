@@ -268,13 +268,15 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(fs.existsSync(filePath), false);
 	});
 
-	test("冪等性: load→save→loadで内容が同一であること", () => {
+	test("冪等性: load→save→loadで内容が同一であること（path境界の空行アンカー込み）", () => {
 		const filePath = path.join(tempDir, "unit-state");
+		// 正準形: path が変わる境界（a.md → b.csv）に空行アンカーが入る
 		const originalContent = `${[
 			"# mdait unit-state — 翻訳ユニットの状態管理",
 			"# path\torder\tlevel\ttitleHash\thash\tfrom\tneed",
 			"docs/en/a.md\t0\t1\tth0\taaaa\tbbbb\t",
 			"docs/en/a.md\t1\t2\tth1\tcccc\tdddd\ttranslate",
+			"",
 			"docs/en/b.csv\t0\t0\t\teeee\tffff\t",
 		].join("\n")}\n`;
 		fs.writeFileSync(filePath, originalContent, "utf-8");
@@ -291,5 +293,36 @@ suite("UnitStateStore", () => {
 
 		const savedContent = fs.readFileSync(filePath, "utf-8");
 		assert.strictEqual(savedContent, originalContent);
+	});
+
+	test("path境界に空行アンカーが挿入され、同一path内には挿入されないこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		// a.md（複数order）→ b.md → c.csv の3グループ
+		store.setEntry({ path: "a.md", order: 0, level: 1, titleHash: "h", hash: "a0", from: "f", need: "" });
+		store.setEntry({ path: "a.md", order: 1, level: 2, titleHash: "h", hash: "a1", from: "f", need: "" });
+		store.setEntry({ path: "b.md", order: 0, level: 1, titleHash: "h", hash: "b0", from: "f", need: "" });
+		store.setEntry(plainEntry("c.csv", "c0", "f", "translate"));
+		store.save(tempDir);
+
+		const content = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
+		const bodyLines = content.split("\n").slice(2); // ヘッダー2行を除く
+
+		// 先頭グループの前には空行が無いこと
+		assert.notStrictEqual(bodyLines[0], "");
+		// 同一path内（a.md の order 0→1）に空行が無いこと
+		assert.ok(bodyLines[0].startsWith("a.md\t0\t"));
+		assert.ok(bodyLines[1].startsWith("a.md\t1\t"));
+		// path 境界ごとに空行が1行入ること
+		const blankCount = bodyLines.filter((l) => l === "").length;
+		// a→b, b→c の2境界 + 末尾改行由来の1行 = 3
+		assert.strictEqual(blankCount, 3);
+
+		// 空行込みでも再ロードで全エントリが復元されること
+		UnitStateStore.dispose();
+		const store2 = UnitStateStore.getInstance();
+		store2.load(tempDir);
+		assert.strictEqual(store2.getAllEntries().length, 4);
 	});
 });

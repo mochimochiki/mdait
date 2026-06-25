@@ -143,15 +143,20 @@ a2b5c7d8 <encoded_content>
 # mdait unit-state — 翻訳ユニットの状態管理
 # path	order	level	titleHash	hash	from	need
 docs/en/data.csv	0	0		11223344	55667788	translate
+
 docs/en/guide.md	0	1	aa11bb22	a1b2c3d4	ff03a1b2	
 docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 ```
+
+（path 境界に空行アンカーを入れてファイルごとのブロックを分離する。下記「git 競合回避」を参照）
 
 **UnitRegistryとの関係**: UnitStateStoreはパス＋順序ベースのメタデータ管理（(path,order)→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。revise時に旧コンテンツが必要なため、sync時にUnitRegistryへ保存します。両者は役割が異なるため統合しません。
 
 **実装**: [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts)
 
 > 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（非MDの rebuild は `need:review` 付与で安全網）。旧ファイルは手動削除して構いません。
+
+**git 競合回避（ADR-260624-01）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `ensureMdaitDir()` が `.mdait/.gitattributes` に `unit-state merge=union` を冪等生成し（別ファイル/別ユニットの編集を自動マージ）、(2) `save()` が path 境界に空行アンカーを挿入してファイルごとのブロックを分離する（ローダーは空行スキップ済みで読み込み不変）。union が生む重複行は次 `load()` の Map デデュープ（後勝ち）＋ `save()` 正準化で畳まれ、最終的に sync のハッシュ再計算とストア欠落時の `need:review` で吸収される（unit-state は派生キャッシュ）。
 
 ### MD-external モードの配線
 
