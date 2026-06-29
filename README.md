@@ -42,6 +42,7 @@ Create `.mdait/mdait.json` in your workspace root:
       "targetDir": "docs/en"
     }
   ],
+  "primaryLang": "ja",
   "ai": {
     "provider": "vscode-lm",
     "model": "gpt-4.1"
@@ -70,6 +71,7 @@ Create `.mdait/mdait.json` in your workspace root:
 | Key | Purpose |
 |---|---|
 | `transPairs` | Source/target language and directory pairs. |
+| `primaryLang` | **Required.** Base language for glossary/TM (usually the source language). |
 | `ai.provider` / `ai.model` | AI provider and model selection. |
 | `sync.level` | Heading depth for unit splitting (e.g., `3` = h1–h3). |
 | `trans.contextSize` | Number of surrounding units sent as context. |

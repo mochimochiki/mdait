@@ -267,3 +267,4 @@ prompts: ["trans.translate"]
 - [用語集管理（Term）](term.md) — ドメイン用語を登録して翻訳精度を上げる
 - [翻訳メモリ（TM）](tm.md) — 過去の翻訳を蓄積・再利用する
 - [設定リファレンス](config-reference.md) — 全設定オプションの詳細
+- [トラブルシューティング](troubleshooting.md) — よくある落とし穴と対処

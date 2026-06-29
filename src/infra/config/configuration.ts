@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { isLiteralApiKey } from "../../core/diagnostics/setup-doctor";
 import {
 	type MarkerProvider,
 	embeddedMarkerProvider,
@@ -172,6 +173,8 @@ export class Configuration {
 	private configFilePath: string | undefined;
 	private customConfigPath: string | undefined;
 	private changeCallbacks: Array<() => void> = [];
+	/** 直書きAPIキー警告の重複抑制（直近に警告した生値を記録） */
+	private lastLeakWarnedKey: string | undefined;
 
 	/**
 	 * 翻訳ペア設定
@@ -537,6 +540,11 @@ export class Configuration {
 						this.ai.openai = {};
 					}
 					if (config.ai.openai.apiKey) {
+						// 展開前の生値で直書き（漏洩）を検知し警告する: P5
+						this.warnIfApiKeyLiteral(
+							config.ai.provider,
+							config.ai.openai.apiKey,
+						);
 						this.ai.openai.apiKey = this.expandEnvironmentVariables(
 							config.ai.openai.apiKey,
 						);
@@ -652,6 +660,40 @@ export class Configuration {
 		} catch (error) {
 			throw new Error(`Failed to load configuration: ${error}`);
 		}
+	}
+
+	/**
+	 * openai プロバイダで apiKey が直書き（${env:} 参照でない）なら漏洩警告を表示する。
+	 * 同じ生値に対する連続再ロードでは重複警告しない。
+	 */
+	private warnIfApiKeyLiteral(
+		provider: string | undefined,
+		rawApiKey: string,
+	): void {
+		if (provider !== "openai" || !isLiteralApiKey(rawApiKey)) {
+			return;
+		}
+		if (this.lastLeakWarnedKey === rawApiKey) {
+			return;
+		}
+		this.lastLeakWarnedKey = rawApiKey;
+		const useEnv = vscode.l10n.t("How to use ${env:}");
+		vscode.window
+			.showWarningMessage(
+				vscode.l10n.t(
+					"OpenAI apiKey is written directly in mdait.json. Since this file is tracked by git, the key may leak. Use the ${env:OPENAI_API_KEY} syntax instead.",
+				),
+				useEnv,
+			)
+			.then((choice) => {
+				if (choice === useEnv) {
+					vscode.env.openExternal(
+						vscode.Uri.parse(
+							"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
+						),
+					);
+				}
+			});
 	}
 
 	/**

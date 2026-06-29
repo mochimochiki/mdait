@@ -252,3 +252,4 @@ mdait:
 
 - [翻訳を実行する → translate.md](translate.md)
 - [設定リファレンス → config-reference.md](config-reference.md)
+- [よくある落とし穴と対処 → troubleshooting.md](troubleshooting.md)

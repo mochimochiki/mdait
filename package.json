@@ -136,6 +136,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.setup.diagnose",
+        "title": "%mdait.setup.diagnose.title%",
+        "icon": "$(checklist)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.translateSelection",
         "title": "%mdait.translateSelection.title%",
         "category": "mdait"
