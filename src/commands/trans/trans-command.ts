@@ -52,6 +52,10 @@ import {
 } from "../../ui/hover/summary-manager";
 import { getFileHandler } from "../file-handler/file-handler-factory";
 import {
+	showNeedSyncError,
+	showTranslationError,
+} from "../shared/guidance";
+import {
 	type TranslationTerm,
 	extractRelevantTerms,
 	termsToJson,
@@ -123,12 +127,7 @@ export async function transCommand(
 			try {
 				result = await transFile_CoreProc(uri, progress, token);
 			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Error during translation: {0}",
-						(error as Error).message,
-					),
-				);
+				await showTranslationError(error);
 			}
 		},
 	);
@@ -182,7 +181,7 @@ async function transFile_Exclusive(
 			config,
 		);
 		if (!transPair) {
-			vscode.window.showErrorMessage(
+			await showNeedSyncError(
 				vscode.l10n.t(
 					"No translation pair found for file: {0}",
 					targetFilePath,
@@ -216,7 +215,7 @@ async function transFile_Exclusive(
 	const fileExplorer = new FileExplorer();
 	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
 	if (!transPair) {
-		vscode.window.showErrorMessage(
+		await showNeedSyncError(
 			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
 		);
 		return;
@@ -1091,7 +1090,7 @@ async function transUnit_Exclusive(
 	const fileExplorer = new FileExplorer();
 	const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
 	if (!transPair) {
-		vscode.window.showErrorMessage(
+		await showNeedSyncError(
 			vscode.l10n.t("No translation pair found for file: {0}", targetPath),
 		);
 		return;
@@ -1285,12 +1284,17 @@ async function updateAndSaveUnit(
 		logger.warn("trans", "mdait marker not found, skipped unit replacement", {
 			unitTitle: unit.title,
 		});
-		vscode.window.showWarningMessage(
+		const runSync = vscode.l10n.t("Run Sync");
+		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
 				"Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.",
 				unit.title ?? "",
 			),
+			runSync,
 		);
+		if (choice === runSync) {
+			await vscode.commands.executeCommand("mdait.sync");
+		}
 		return;
 	}
 	// 元のユニットの末尾改行を保持
@@ -1385,12 +1389,7 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 			try {
 				await translateFrontmatter_CoreProc(uri, progress, token);
 			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Error during translation: {0}",
-						(error as Error).message,
-					),
-				);
+				await showTranslationError(error);
 			}
 		},
 	);
@@ -1430,7 +1429,7 @@ async function translateFrontmatter_Exclusive(
 	const fileExplorer = new FileExplorer();
 	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
 	if (!transPair) {
-		vscode.window.showErrorMessage(
+		await showNeedSyncError(
 			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
 		);
 		return;

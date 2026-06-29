@@ -6,6 +6,7 @@ import {
 	embedMarkersCommand,
 	externalizeMarkersCommand,
 } from "./commands/markers/markers-migration";
+import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
 import {
 	createConfigCommand,
 	openExistingConfigCommand,
@@ -187,6 +188,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const openExistingConfigDisposable = vscode.commands.registerCommand(
 		"mdait.setup.openExistingConfig",
 		() => openExistingConfigCommand(context),
+	);
+
+	// setup.diagnose command（セットアップ診断）
+	const diagnoseSetupDisposable = vscode.commands.registerCommand(
+		"mdait.setup.diagnose",
+		diagnoseSetupCommand,
 	);
 
 	// sync command
@@ -748,6 +755,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		createConfigDisposable,
 		openExistingConfigDisposable,
+		diagnoseSetupDisposable,
 		syncDisposable,
 		selectTargetsDisposable,
 		transDisposable,

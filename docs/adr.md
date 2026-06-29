@@ -4,6 +4,26 @@
 
 ---
 
+## ADR-260629-01: 初心者の落とし穴を「診断コマンド＋エラー導線＋破壊的操作ガード」で予防する
+
+### 背景
+初心者は予測可能な順序で同じ落とし穴に嵌まる（primaryLang 欠落、sync 後の空ファイルで混乱、原文/ターゲットの向き違い、Copilot 前提の誤解、API キー直書き漏洩、autoDelete による訳文消失）。コードトレースで再現を確認した。これらを「そもそも進ませない（最善）／早期検知して直せる（次善）」の2層で仕組み化したい。
+
+### 決定
+- **診断 core を VS Code 非依存に分離**: `src/core/diagnostics/setup-doctor.ts` の `runStaticChecks(snapshot, probe)` が設定・ディレクトリ・primaryLang 整合・API キー直書きを純粋関数で検査し、IO は `DoctorProbe` として注入する。UI（`mdait.setup.diagnose`）は静的診断＋AI 到達性を合成し、レポート文書とアクション付き通知で提示する。
+- **エラーに次アクション導線**: `src/commands/shared/guidance.ts` の `showConfigError`/`showNeedSyncError`/`showTranslationError` で、設定エラー→診断/設定を開く、未 sync→Sync 実行、AI 不達→診断、へ誘導する。sync 完了時は翻訳待ちがあれば「今すぐ翻訳」を出す。
+- **破壊的操作ガード**: `sync.autoDelete` を実際に設定値で尊重し（従来ハードコード `true` を是正）、孤立削除時は復旧導線を提示。API キー直書きはロード時に生値で検知して一度だけ警告する。
+
+### 理由
+診断ロジックを core に置くことで単体テストで各落とし穴を「実際に発生させて」検証でき（VS Code 非依存・プローブ注入）、メッセージの l10n は UI 層に閉じる。エラー導線は既存 `showErrorMessage` をヘルパー置換するだけで侵襲が小さい。autoDelete 是正はドキュメント記載の挙動（`false`→`verify-deletion`）に実装を一致させる純粋なバグ修正でもある。API キー検知は展開前の生値が必要なため、設定ファイルの再パース／ロード時フックで判定する。
+
+### 備考
+- 手動 sync での「削除前モーダル確認」と `sync.level` 変更検知は、並列ワーカー構造・状態保持の都合で本 ADR では後続課題とし、当面は autoDelete 設定尊重＋削除後の復旧導線で代替する。
+- ドキュメント側は getting-started/README の primaryLang 欠落例を是正し、`docs/guide/ja/troubleshooting.md` を新設して根本原因（誤った例の丸写し）を断つ。
+- 詳細: [.tasks の 260629-01 チケット](../.tasks/)
+
+---
+
 ## ADR-260624-01: `.mdait/unit-state` の git 競合を union merge ＋ グループ区切りで最小化する
 
 ### 背景

@@ -48,6 +48,7 @@ mdait を5分でセットアップし、最初の翻訳を完成させるため�
       "targetDir": "docs/en"
     }
   ],
+  "primaryLang": "ja",
   "ai": {
     "provider": "vscode-lm",
     "model": "gpt-4.1"
@@ -65,6 +66,9 @@ mdait を5分でセットアップし、最初の翻訳を完成させるため�
 | `sourceDir` | 原文ディレクトリ（ワークスペースルートからの相対パス） |
 | `targetLang` | 訳文の言語コード（例: `en`） |
 | `targetDir` | 訳文ディレクトリ（ワークスペースルートからの相対パス） |
+| `primaryLang` | 用語集・翻訳メモリの基準言語（**必須**。通常は原文の言語）|
+
+> `primaryLang` は省略できません。指定しないと Sync 時に「Primary language (primaryLang) is not configured.」エラーになります。「Create mdait.json」ボタンで生成したテンプレートには既定値が入っています。
 
 > `sourceDir` / `targetDir` は `.mdait/mdait.json` と同じワークスペースルートからの相対パスです。
 
@@ -132,3 +136,4 @@ Sync は原文 Markdown を走査し、翻訳管理用の **マーカー** を�
 - [concepts.md](concepts.md) — マーカー・ユニット・Sync の仕組みを理解する
 - [sync.md](sync.md) — Sync の詳細設定とオプション
 - [translate.md](translate.md) — 翻訳オプション・用語集・翻訳メモリの活用
+- [troubleshooting.md](troubleshooting.md) — よくある落とし穴と対処（うまく動かないとき）

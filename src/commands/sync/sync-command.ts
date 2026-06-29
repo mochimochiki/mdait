@@ -28,6 +28,7 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { showConfigError } from "../shared/guidance";
 import { copyDiffAssets } from "./asset-copier";
 import { DiffDetector, type DiffResult, type UnitDiff, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
@@ -65,9 +66,7 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
 		if (validationError) {
-			vscode.window.showErrorMessage(
-				vscode.l10n.t("Configuration error: {0}", validationError),
-			);
+			await showConfigError(validationError);
 			return;
 		}
 
@@ -271,13 +270,50 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			durationMs,
 		});
 
-		vscode.window.showInformationMessage(
-			vscode.l10n.t(
-				"Synchronization completed: {0} succeeded, {1} failed",
-				successCount,
-				errorCount,
-			),
-		);
+		// 翻訳すべきユニットがある場合は「今すぐ翻訳」導線を出す（空ファイルで戸惑わせない: P2）
+		const translatableCount = totalAdded + totalRevisionsNeeded;
+		if (translatableCount > 0) {
+			const translateNow = vscode.l10n.t("Translate now");
+			const choice = await vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.",
+					successCount,
+					errorCount,
+					translatableCount,
+				),
+				translateNow,
+			);
+			if (choice === translateNow) {
+				await vscode.commands.executeCommand("mdait.trans");
+			}
+		} else {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"Synchronization completed: {0} succeeded, {1} failed",
+					successCount,
+					errorCount,
+				),
+			);
+		}
+
+		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
+		if (config.sync.autoDelete && totalDeleted > 0) {
+			const restoreHelp = vscode.l10n.t("How to restore");
+			const choice = await vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+					totalDeleted,
+				),
+				restoreHelp,
+			);
+			if (choice === restoreHelp) {
+				await vscode.env.openExternal(
+					vscode.Uri.parse(
+						"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
+					),
+				);
+			}
+		}
 
 		return {
 			totalFileCount,
@@ -690,10 +726,11 @@ export async function sync_CoreProc(
 		}
 	}
 
-	// 同期結果の生成
+	// 同期結果の生成（孤立ユニットの自動削除は設定に従う。
+	// autoDelete:false なら削除せず need:verify-deletion を付与し、手動確認に委ねる: P6 対策）
 	const syncedUnits = sectionMatcher.createSyncedTargets(
 		matchResult,
-		true, // auto-delete (設定から取得するようにする予定)
+		config.sync.autoDelete,
 	);
 
 	// 差分検出
