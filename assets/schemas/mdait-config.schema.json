@@ -74,8 +74,13 @@
         },
         "autoDelete": {
           "type": "boolean",
-          "description": "Automatically delete units on target side when deleted on source side during sync",
+          "description": "Automatically delete units on target side when deleted on source side during sync. Superseded by orphanTargetPolicy (true maps to \"delete\", false maps to \"verify\"); ignored when orphanTargetPolicy is set.",
           "default": true
+        },
+        "orphanTargetPolicy": {
+          "type": "string",
+          "enum": ["delete", "verify", "keep"],
+          "description": "How to handle orphan target units (target-side units whose source unit no longer exists). \"delete\": remove automatically. \"verify\": keep with need:verify-deletion for manual confirmation. \"keep\": keep permanently with need:keep (sync/trans never touch them; excluded from translation progress). Takes precedence over autoDelete."
         },
         "autoSyncOnSave": {
           "type": "boolean",

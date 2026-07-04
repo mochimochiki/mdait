@@ -159,12 +159,25 @@ export interface PairSyncResult {
 }
 
 /**
+ * ペア同期のオプション
+ */
+export interface PairSyncOptions {
+	/**
+	 * 採用（adopt）モード: マーカーなし・本文ありの既存訳文を翻訳済みとして採用する。
+	 * from を新規確立するユニット（need 未設定）に need:translate の代わりに need:review を付与し、
+	 * trans による既訳の上書きを防ぐ。呼び出し側は「ターゲット本文が空でない」ことを確認して渡すこと。
+	 */
+	adoptTarget?: boolean;
+}
+
+/**
  * ソース・ターゲットペアのマーカーを同期する
  *
  * @param sourceHash ソースコンテンツのハッシュ
  * @param targetHash ターゲットコンテンツのハッシュ
  * @param existingSourceMarker 既存のソースマーカー
  * @param existingTargetMarker 既存のターゲットマーカー
+ * @param options ペア同期のオプション
  * @returns ペア同期結果
  */
 export function syncMarkerPair(
@@ -172,6 +185,7 @@ export function syncMarkerPair(
 	targetHash: string,
 	existingSourceMarker: MdaitMarker | null,
 	existingTargetMarker: MdaitMarker | null,
+	options?: PairSyncOptions,
 ): PairSyncResult {
 	// 新規作成かどうかを判定
 	const isNewTarget = existingTargetMarker === null;
@@ -216,6 +230,9 @@ export function syncMarkerPair(
 		} else if (oldSourceHash) {
 			// 翻訳済みでソースが変更された場合は新規revise設定
 			targetMarker.setReviseNeed(oldSourceHash);
+		} else if (options?.adoptTarget) {
+			// adopt: from新規確立＋本文ありの既存訳文はレビューに倒す（既訳のtrans上書きを防ぐ）
+			targetMarker.setNeed("review");
 		} else {
 			targetMarker.setNeed("translate");
 		}

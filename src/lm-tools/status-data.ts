@@ -87,6 +87,11 @@ function addNeedFlag(breakdown: NeedBreakdown, needFlag: string): void {
 export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 	const breakdown = emptyBreakdown();
 	for (const unit of units) {
+		// need:keep の独自ユニットはステータス上ソース扱い（分母除外）だが、内訳には計上する
+		if (unit.needFlag === "keep") {
+			breakdown.keep++;
+			continue;
+		}
 		if (unit.status === Status.Source) {
 			continue;
 		}

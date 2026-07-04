@@ -15,6 +15,7 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
  * - need:translate でない（翻訳済み）
  * - need:revise@ でない（旧版訳文）
  * - need:review でない（レビュー待ち）
+ * - need:keep でない（独自ユニット。対訳が存在しない）
  */
 export function isTmCommitTarget(unit: MdaitUnit): boolean {
 	if (!unit.marker?.from) {
@@ -27,6 +28,9 @@ export function isTmCommitTarget(unit: MdaitUnit): boolean {
 		return false;
 	}
 	if (unit.marker.need === "review") {
+		return false;
+	}
+	if (unit.marker.need === "keep") {
 		return false;
 	}
 	return true;

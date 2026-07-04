@@ -1,6 +1,7 @@
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../core/markdown/mdait-unit";
+import type { OrphanTargetPolicy } from "../../infra/config/configuration";
 
 /**
  * ユニット対応の結果インターフェース（source/targetペアの配列。unmatchedはどちらかがnull）
@@ -10,6 +11,19 @@ export type SectionPair = {
 	target: MdaitUnit | null;
 };
 export type MatchResult = SectionPair[];
+
+/**
+ * createSyncedTargetsの結果（同期後ユニットと孤立ターゲット処理の内訳）
+ */
+export interface SyncedTargetsResult {
+	units: MdaitUnit[];
+	/** このsyncで削除した孤立ターゲット数 */
+	orphanDeleted: number;
+	/** need:verify-deletion を付与した（または維持した）孤立ターゲット数 */
+	orphanVerified: number;
+	/** need:keep で保持した孤立ターゲット数（既存keepのパススルー含む） */
+	orphanKept: number;
+}
 
 /**
  * ユニット対応処理を行うクラス
@@ -24,6 +38,16 @@ export class SectionMatcher {
 		const result: SectionPair[] = [];
 		const matchedTargetIndexes = new Set<number>();
 		const matchedSourceIndexes = new Set<number>();
+
+		// 0. need:keep のターゲット（独自ユニット）は対応付け対象から除外し、
+		//    孤立ターゲットとしてパススルーする（sourceと誤対応させない）
+		const keepTargetIndexes = new Set<number>();
+		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
+			if (targetUnits[tIdx].marker?.need === "keep") {
+				keepTargetIndexes.add(tIdx);
+				matchedTargetIndexes.add(tIdx);
+			}
+		}
 
 		// 1. targetのfromとsourceのhashが一致する組をマッチ済みペアとして対応付け
 		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
@@ -114,6 +138,11 @@ export class SectionMatcher {
 			}
 		}
 
+		// 3b. need:keep のターゲットを孤立ターゲットとしてパススルー
+		for (const tIdx of keepTargetIndexes) {
+			result.push({ source: null, target: targetUnits[tIdx] });
+		}
+
 		// source基準でソート
 		const ordered: SectionPair[] = [];
 		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
@@ -130,10 +159,16 @@ export class SectionMatcher {
 	/**
 	 * 統一ペア配列からターゲットユニットの配列を生成
 	 * @param matchResult ユニット対応の結果
-	 * @param autoDeleteOrphans 孤立ユニットを自動削除するかどうか
+	 * @param orphanPolicy 孤立ターゲットの処理ポリシー（delete/verify/keep）
 	 */
-	createSyncedTargets(matchResult: MatchResult, autoDeleteOrphans = true): MdaitUnit[] {
+	createSyncedTargets(
+		matchResult: MatchResult,
+		orphanPolicy: OrphanTargetPolicy = "delete",
+	): SyncedTargetsResult {
 		const result: MdaitUnit[] = [];
+		let orphanDeleted = 0;
+		let orphanVerified = 0;
+		let orphanKept = 0;
 		for (const pair of matchResult) {
 			if (pair.source && pair.target) {
 				// マッチ
@@ -145,7 +180,16 @@ export class SectionMatcher {
 				result.push(newTarget);
 			} else if (!pair.source && pair.target) {
 				// 孤立target
-				if (!autoDeleteOrphans) {
+				// 既に need:keep のユニットはポリシーに関わらず不変で保持する（恒久保持の保証）
+				if (pair.target.marker?.need === "keep") {
+					result.push(pair.target);
+					orphanKept++;
+					continue;
+				}
+				if (orphanPolicy === "delete") {
+					// 何もしない（削除）
+					orphanDeleted++;
+				} else if (orphanPolicy === "verify") {
 					if (pair.target.marker) {
 						pair.target.marker.need = "verify-deletion";
 					} else {
@@ -153,10 +197,16 @@ export class SectionMatcher {
 						pair.target.marker = new MdaitMarker(hash, null, "verify-deletion");
 					}
 					result.push(pair.target);
+					orphanVerified++;
+				} else {
+					// keep: need:keep を付与して恒久保持（独自ユニット。from は持たない）
+					const hash = pair.target.marker?.hash ?? calculateHash(pair.target.content);
+					pair.target.marker = new MdaitMarker(hash, null, "keep");
+					result.push(pair.target);
+					orphanKept++;
 				}
-				// autoDeleteOrphans=true の場合は何もしない（削除）
 			}
 		}
-		return result;
+		return { units: result, orphanDeleted, orphanVerified, orphanKept };
 	}
 }

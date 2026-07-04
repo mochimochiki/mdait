@@ -12,7 +12,13 @@ const logger = Logger.getInstance();
 /**
  * 入力パラメータ: 同期ツール
  */
-type SyncInput = Record<string, never>; // 入力パラメータなし
+interface SyncInput {
+	/**
+	 * 採用（adopt）モード: マーカーなし・本文ありの既存訳文を from 確立＋need:review で採用する。
+	 * 既存対訳サイトの取り込み用の一度きりの操作。
+	 */
+	adopt?: boolean;
+}
 
 /** mdait_sync の data 形式 */
 interface SyncData {
@@ -27,6 +33,10 @@ interface SyncData {
 		deleted: number;
 		unchanged: number;
 		revisionsNeeded: number;
+		/** adoptで採用（need:review付与）したユニット数 */
+		adopted: number;
+		/** need:keep で保持している孤立ターゲット数 */
+		kept: number;
 	};
 	durationMs: number;
 	/** 同期後の全体ステータス */
@@ -40,14 +50,15 @@ interface SyncData {
  */
 export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 	async invoke(
-		_options: vscode.LanguageModelToolInvocationOptions<SyncInput>,
+		options: vscode.LanguageModelToolInvocationOptions<SyncInput>,
 		_token: vscode.CancellationToken,
 	): Promise<vscode.LanguageModelToolResult> {
 		try {
-			logger.info("LanguageModelTool", "Sync tool invoked");
+			const adopt = options.input.adopt === true;
+			logger.info("LanguageModelTool", "Sync tool invoked", { adopt });
 
 			// 同期コマンドを実行
-			const syncResult = await syncCommand();
+			const syncResult = await syncCommand({ adopt });
 			if (!syncResult) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(
@@ -74,22 +85,39 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					deleted: syncResult.totalDeleted,
 					unchanged: syncResult.totalUnchanged,
 					revisionsNeeded: syncResult.revisionsNeeded,
+					adopted: syncResult.totalAdopted,
+					kept: syncResult.totalKept,
 				},
 				durationMs: syncResult.durationMs,
 				status,
 			};
 
-			const summary = vscode.l10n.t(
-				"Synchronization completed: {0} file(s) processed, {1} failed. Units: {2} added, {3} modified, {4} deleted, {5} need revision.",
-				syncResult.totalFileCount,
-				syncResult.errorCount,
-				syncResult.totalAdded,
-				syncResult.totalModified,
-				syncResult.totalDeleted,
-				syncResult.revisionsNeeded,
-			);
+			const summary = adopt
+				? vscode.l10n.t(
+						"Synchronization (adopt) completed: {0} file(s) processed, {1} failed. Units: {2} adopted for review, {3} added, {4} deleted, {5} kept.",
+						syncResult.totalFileCount,
+						syncResult.errorCount,
+						syncResult.totalAdopted,
+						syncResult.totalAdded,
+						syncResult.totalDeleted,
+						syncResult.totalKept,
+					)
+				: vscode.l10n.t(
+						"Synchronization completed: {0} file(s) processed, {1} failed. Units: {2} added, {3} modified, {4} deleted, {5} need revision.",
+						syncResult.totalFileCount,
+						syncResult.errorCount,
+						syncResult.totalAdded,
+						syncResult.totalModified,
+						syncResult.totalDeleted,
+						syncResult.revisionsNeeded,
+					);
 
 			const nextActions = buildNextActions(status.needs, status.errorUnits);
+			if (adopt && syncResult.totalAdopted > 0) {
+				nextActions.unshift(
+					`${syncResult.totalAdopted} existing translation unit(s) were adopted with need:review. Review them (spot-check the pairing is correct), remove the need:review flags to approve, then run mdait_sync again before committing them to the TM.`,
+				);
+			}
 			return toToolResult(createOkEnvelope(summary, data, nextActions));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in sync tool", { error });
@@ -101,17 +129,22 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 	}
 
 	async prepareInvocation(
-		_options: vscode.LanguageModelToolInvocationPrepareOptions<SyncInput>,
+		options: vscode.LanguageModelToolInvocationPrepareOptions<SyncInput>,
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
 		// 同期はマーカーを書き換えるため確認が必要
+		const adopt = options.input.adopt === true;
 		return {
 			invocationMessage: vscode.l10n.t("Synchronizing translation markers..."),
 			confirmationMessages: {
 				title: vscode.l10n.t("Confirm Synchronization"),
-				message: vscode.l10n.t(
-					"This will update translation markers in your Markdown files. Do you want to proceed?",
-				),
+				message: adopt
+					? vscode.l10n.t(
+							"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
+						)
+					: vscode.l10n.t(
+							"This will update translation markers in your Markdown files. Do you want to proceed?",
+						),
 			},
 		};
 	}

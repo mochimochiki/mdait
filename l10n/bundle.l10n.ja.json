@@ -236,5 +236,7 @@
   "Translation cancelled: {0} file(s) processed before cancellation.": "翻訳がキャンセルされました: キャンセル前に {0} ファイルを処理しました。",
   "Translation completed for {0}: {1} file(s) succeeded, {2} failed, {3} unit(s) translated.": "{0} の翻訳が完了しました: {1} ファイル成功、{2} 件失敗、{3} ユニットを翻訳。",
   "Translating...": "翻訳中...",
-  "Translate directory: {0}?\n\nThis will translate {1} units across {2} files using AI.": "ディレクトリ {0} を翻訳しますか？\n\n{2} ファイルの {1} ユニットをAIで翻訳します。"
+  "Translate directory: {0}?\n\nThis will translate {1} units across {2} files using AI.": "ディレクトリ {0} を翻訳しますか？\n\n{2} ファイルの {1} ユニットをAIで翻訳します。",
+  "Synchronization (adopt) completed: {0} file(s) processed, {1} failed. Units: {2} adopted for review, {3} added, {4} deleted, {5} kept.": "同期（adopt）完了: {0} ファイル処理、{1} 件失敗。ユニット: {2} 件を採用（レビュー待ち）、追加 {3}、削除 {4}、保持 {5}。",
+  "This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?": "既存の訳文を採用（need:review を付与）し、Markdownファイルの翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。続行しますか？"
 }

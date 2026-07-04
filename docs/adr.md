@@ -4,6 +4,27 @@
 
 ---
 
+## ADR-260704-02: 既存対訳の取り込みを adopt モード＋orphanTargetPolicy で安全化する
+
+### 背景
+既存の日英対訳サイト（マーカーなし既訳）を mdait 管理下に置くと、初回 sync で既訳に一律 `need:translate` が付き、trans 実行で既訳が AI 翻訳に上書きされる（G3）。また訳文側にしかないセクションは `autoDelete: true` で削除され、「意図的に保持する」状態を表現できない（G4）。
+
+### 決定
+- **adopt モード**: `syncCommand({ adopt: true })` / `mdait_sync (adopt: true)`。from 新規確立・need 未設定・本文ありのターゲットユニットに `need:translate` の代わりに **`need:review`** を付与する（`syncMarkerPair` のオプション）。既訳本文は不変で、trans の対象にもならない。adopt は sync の引数であり永続設定にしない（取り込みは一度きりの操作）。
+- **`sync.orphanTargetPolicy: "delete" | "verify" | "keep"`**: `autoDelete` を置き換える孤立ターゲットポリシー（`true`→`delete`、`false`→`verify` の後方互換。両指定時は orphanTargetPolicy 優先）。`keep` は `need:keep`（from なし）を付与して恒久保持し、SectionMatcher の対応付けから除外・trans 対象外・status 分母除外（独自ユニット）・tm.commit 対象外とする。
+- **need 語彙の追加**: `keep` を追加（`review` は既存語彙の用途拡張）。マーカー形式 `<!-- mdait hash from:xxx need:yyy -->` の範囲内であり互換性を壊さない。need 語彙×コマンド経路の期待動作はマトリクステスト（`need-command-matrix.test.ts`）で固定する。
+- **バグ修正**: `MdaitMarker.MARKER_REGEX` の need 文字クラスを `[\w@]+`→`[\w@-]+` に修正。従来 `need:verify-deletion` がパース不能でマーカー往復消失していた（マトリクステストで発見）。受理範囲の拡大のみで既存マーカーの解釈は不変。
+
+### 理由
+adopt の誤対応リスク（順序ベース対応付けの限界）は「必ず `need:review` を経由する」ことを安全網とし、レビュー承認（need 除去）→sync→tm.commit の順序依存は commit-filter の `need:review` 除外により機械的に強制される。keep を「from を持たない独自ユニット」としてモデル化することで、status の分母除外・TM 対象外が既存の from ベース判定と自然に整合する。
+
+### 備考
+- 対応率閾値による adopt 保留（低品質対応の警告強化）は将来課題。
+- 逆方向埋め戻し（`orphanTargetPolicy: "backfill"`）は M5 で追加予定。
+- 詳細: [.tasks の 260704-02 チケット](../.tasks/)
+
+---
+
 ## ADR-260704-01: LM Tools の出力を共通JSONエンベロープで構造化する
 
 ### 背景

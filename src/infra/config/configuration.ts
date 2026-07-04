@@ -98,6 +98,14 @@ export interface TransPair {
 }
 
 /**
+ * 孤立ターゲット（ソース側に対応ユニットがない訳文側ユニット）の処理ポリシー
+ * - delete: 自動削除（旧 autoDelete: true 相当）
+ * - verify: need:verify-deletion を付与して手動確認に委ねる（旧 autoDelete: false 相当）
+ * - keep: need:keep を付与して恒久保持（独自ユニット。sync/trans が触れない）
+ */
+export type OrphanTargetPolicy = "delete" | "verify" | "keep";
+
+/**
  * mdait.yamlファイルの型定義
  */
 interface MdaitConfig {
@@ -109,6 +117,7 @@ interface MdaitConfig {
 		autoDelete?: boolean;
 		autoSyncOnSave?: boolean;
 		copyAssets?: CopyAssetsConfig;
+		orphanTargetPolicy?: OrphanTargetPolicy;
 	};
 	markers?: {
 		mode?: "embedded" | "external";
@@ -196,12 +205,26 @@ export class Configuration {
 		autoDelete: boolean;
 		autoSyncOnSave: boolean;
 		copyAssets: CopyAssetsConfig;
+		/** 未指定時は autoDelete から解決する（getOrphanTargetPolicy() を使用すること） */
+		orphanTargetPolicy?: OrphanTargetPolicy;
 	} = {
 		level: 3,
 		autoDelete: true,
 		autoSyncOnSave: true,
 		copyAssets: true,
 	};
+
+	/**
+	 * 孤立ターゲットポリシーを解決して返す。
+	 * orphanTargetPolicy が明示されていればそれを優先し、
+	 * 未指定なら autoDelete から後方互換マッピングする（true→delete、false→verify）。
+	 */
+	public getOrphanTargetPolicy(): OrphanTargetPolicy {
+		if (this.sync.orphanTargetPolicy) {
+			return this.sync.orphanTargetPolicy;
+		}
+		return this.sync.autoDelete ? "delete" : "verify";
+	}
 	/**
 	 * マーカー保管方式設定
 	 * - embedded（既定）: マーカーを本文に埋め込む
@@ -502,6 +525,13 @@ export class Configuration {
 				}
 				if (config.sync.copyAssets !== undefined) {
 					this.sync.copyAssets = config.sync.copyAssets;
+				}
+				if (
+					config.sync.orphanTargetPolicy === "delete" ||
+					config.sync.orphanTargetPolicy === "verify" ||
+					config.sync.orphanTargetPolicy === "keep"
+				) {
+					this.sync.orphanTargetPolicy = config.sync.orphanTargetPolicy;
 				}
 			}
 

@@ -319,7 +319,7 @@
         "name": "mdait_sync",
         "displayName": "mdait: Sync Translation Markers",
         "toolReferenceName": "mdaitSync",
-        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Pass adopt:true ONLY when onboarding an existing bilingual site whose target files already contain translations but no mdait markers: matched existing translations are adopted with need:review instead of need:translate so they are never overwritten by translation. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded/adopted/kept), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -328,7 +328,12 @@
         ],
         "inputSchema": {
           "type": "object",
-          "properties": {}
+          "properties": {
+            "adopt": {
+              "type": "boolean",
+              "description": "One-time onboarding mode for existing bilingual sites. Adopts marker-less target units that already have content: establishes the from link and flags them need:review instead of need:translate, so existing translations are never overwritten."
+            }
+          }
         }
       },
       {
