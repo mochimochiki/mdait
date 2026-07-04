@@ -1,4 +1,4 @@
-import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeTmCommitForFile } from "../commands/tm/command-commit";
@@ -61,7 +61,7 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 
 			if (action !== "commit" && action !== "optimize") {
 				const message = vscode.l10n.t("Unknown action: {0}", String(action));
-				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidPath, message));
+				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
 
 			const config = Configuration.getInstance();

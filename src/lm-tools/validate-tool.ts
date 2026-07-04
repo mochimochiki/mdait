@@ -39,7 +39,7 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 					: ["structure", "terms"];
 			if (checks.length === 0) {
 				const message = vscode.l10n.t("No valid checks specified. Use \"structure\" and/or \"terms\".");
-				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidPath, message));
+				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
 
 			logger.info("LanguageModelTool", "Validate tool invoked", { inputPath, checks });

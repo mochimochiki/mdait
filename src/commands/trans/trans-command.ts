@@ -7,7 +7,7 @@
  *   - Markdownユニットのパース・更新・保存、翻訳進捗やエラーの通知も含む。
  * @module commands/trans/trans-command
  */
-import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {

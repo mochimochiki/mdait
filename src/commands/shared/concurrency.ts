@@ -24,8 +24,8 @@ export function clampConcurrency(value: number | undefined, defaultValue = 3): n
  * items を同時実行数 limit で並列処理する。
  * - 結果は items と同じ順序で返す
  * - shouldStop が true を返した時点で新規タスクの着手を止める（実行中タスクは完走）
- * - worker が投げた例外は結果に含めず呼び出し側へ伝播させない（worker 側でハンドリングする契約）
- *   ため、worker は例外を投げずに結果型で成否を表現すること
+ * - worker が例外を投げると全体が reject し呼び出し側へ伝播する。個々の失敗で
+ *   全体を落としたくない場合は、worker 側で例外を捕捉し結果型で成否を表現すること
  *
  * @param items 処理対象
  * @param limit 同時実行数（1で逐次実行）

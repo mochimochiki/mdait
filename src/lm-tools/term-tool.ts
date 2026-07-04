@@ -1,4 +1,4 @@
-import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { detectTerm_CoreProc } from "../commands/term/command-detect";
@@ -65,7 +65,7 @@ export class MdaitTermTool implements vscode.LanguageModelTool<TermInput> {
 
 			if (action !== "detect" && action !== "expand") {
 				const message = vscode.l10n.t("Unknown action: {0}", String(action));
-				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidPath, message));
+				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
 
 			const config = Configuration.getInstance();

@@ -1,4 +1,4 @@
-import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { clampConcurrency, runWithConcurrency } from "../commands/shared/concurrency";

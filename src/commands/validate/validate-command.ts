@@ -5,7 +5,7 @@
  *   読取専用・AI不使用。mdait_validate ツールから呼び出される。
  * @module commands/validate/validate-command
  */
-import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";

@@ -39,6 +39,7 @@ export interface ToolEnvelope<TData = unknown> {
 export const ToolErrorCode = {
 	NoWorkspace: "no_workspace",
 	InvalidPath: "invalid_path",
+	InvalidInput: "invalid_input",
 	NotTargetFile: "not_target_file",
 	UserDeclined: "user_declined",
 	Cancelled: "cancelled",

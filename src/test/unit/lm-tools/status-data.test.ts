@@ -114,6 +114,25 @@ suite("status-data（need内訳集計）", () => {
 			assert.strictEqual(data.filesTranslated, 0);
 		});
 
+		test("detailのファイル別totalUnitsはSource扱いユニット（keep等）を分母から除外する", () => {
+			// keepユニットはStatusCollectorでSource扱いになる（分母除外）
+			const files = [
+				file("/ws/docs/en/a.md", [
+					unit({ needFlag: "translate" }),
+					unit({ status: Status.Translated }),
+					unit({ needFlag: "keep", status: Status.Source }),
+				]),
+			];
+			const data = buildStatusData(files, true);
+			assert.ok(data.files);
+			// 全体集計と同じ基準: keep(Source)は分母に入らない
+			assert.strictEqual(data.files[0].totalUnits, 2);
+			assert.strictEqual(data.files[0].translatedUnits, 1);
+			assert.strictEqual(data.totalUnits, 2);
+			// keepは内訳には計上される
+			assert.strictEqual(data.files[0].needs.keep, 1);
+		});
+
 		test("keepのみのファイルは完訳側に数える（独自ユニットは分母から除外）", () => {
 			const files = [file("/ws/docs/en/a.md", [unit({ needFlag: "keep" })])];
 			const data = buildStatusData(files, true);

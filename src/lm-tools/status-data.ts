@@ -151,10 +151,12 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		if (totalActionableNeeds(needs) > 0) {
 			filesWithNeeds++;
 			if (detail) {
+				// 全体集計と同じ基準（Status.Sourceは分母から除外。keep/backfillもSource扱い）
+				const countableUnits = units.filter((u) => u.status !== Status.Source);
 				fileDetails.push({
 					path: file.filePath,
-					totalUnits: units.length,
-					translatedUnits: units.filter((u) => u.status === Status.Translated).length,
+					totalUnits: countableUnits.length,
+					translatedUnits: countableUnits.filter((u) => u.status === Status.Translated).length,
 					needs,
 				});
 			}
