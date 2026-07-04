@@ -183,7 +183,7 @@ GitHub Copilot Chatでのコマンド例:
 
 ## 今後の拡張可能性
 
-追加ツールの候補: Term Detection、TM Commit、Validate、Search。
+追加ツールの候補: Term Detection、TM Commit、Validate、Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
 追加手順: `src/lm-tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
 ---
