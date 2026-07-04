@@ -188,6 +188,29 @@ interface TmInput {
 
 **実装**: [`src/lm-tools/tm-tool.ts`](../../src/lm-tools/tm-tool.ts)
 
+### 6. Validate Tool (`mdait_validate`)
+
+**機能**: 翻訳済みペアユニットの検証（構造チェック＋用語一貫性 term-lint）
+
+**入力パラメータ**:
+```typescript
+interface ValidateInput {
+  path?: string;                          // ターゲットファイル/ディレクトリ。省略時は全transPair
+  checks?: ("structure" | "terms")[];     // 省略時は両方
+}
+```
+
+**実装**:
+- `validate_CoreProc`（`src/commands/validate/validate-command.ts`）に委譲
+- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較
+- `terms`: `src/core/term/term-lint.ts` の機械照合（AI不使用・保守的閾値・コードブロック/インラインコード除外）
+- 検証対象は「翻訳済み」（from あり・need なし）ユニットのみ。need 残りはスキップ件数として報告
+- 違反は警告であり自動修正しない。`nextActions` で「訳文を直す／variants に追加する」の二択を提示
+
+**確認UI**: なし（読取専用・AI不使用。ループ内で何度呼んでも副作用ゼロ）
+
+**実装**: [`src/lm-tools/validate-tool.ts`](../../src/lm-tools/validate-tool.ts)
+
 ---
 
 ## ファイル構成
@@ -202,7 +225,8 @@ src/lm-tools/
 ├── sync-tool.ts          # 同期ツール
 ├── translate-tool.ts     # 翻訳ツール
 ├── term-tool.ts          # 用語集ツール（detect/expand）
-└── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
+├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
+└── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ```
 
 ---
@@ -249,13 +273,14 @@ GitHub Copilot Chatでのコマンド例:
 #mdaitTranslate docs/en → mdait_translate 呼び出し（ファイル/ディレクトリ翻訳）
 #mdaitTerm    → mdait_term 呼び出し（用語検出・展開）
 #mdaitTm      → mdait_tm 呼び出し（TMコミット・最適化）
+#mdaitValidate → mdait_validate 呼び出し（構造・用語一貫性の検証）
 ```
 
 ---
 
 ## 今後の拡張可能性
 
-追加ツールの候補: Validate（M4）、Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
+追加ツールの候補: Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
 追加手順: `src/lm-tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
 ---

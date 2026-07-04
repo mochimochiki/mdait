@@ -427,6 +427,38 @@
             }
           }
         }
+      },
+      {
+        "name": "mdait_validate",
+        "displayName": "mdait: Validate Translations",
+        "toolReferenceName": "mdaitValidate",
+        "modelDescription": "Validate translated units in mdait-managed documents. Read-only, uses no AI, and requires no confirmation, so it is free to call repeatedly inside a translate->validate->fix loop. checks:\"structure\" compares Markdown structure (headings/lists/code blocks/tables/links/images) between source and target; checks:\"terms\" mechanically verifies that when a glossary term appears in the source unit, one of its expected target terms (term + variants) appears in the target unit (code blocks and inline code are excluded; conservative matching to avoid false positives). Only fully translated units (from link present, no need flags) are validated. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data.violations lists { file, unitHash, check, term?, expected?, severity, message }. Violations are warnings, never auto-fixed: for terms violations decide per case whether to fix the translation or add the deviation to the glossary variants.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "validation"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Optional target file or directory to scope the validation. Omit to validate all translation pairs."
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "structure",
+                  "terms"
+                ]
+              },
+              "description": "Which checks to run. Omit to run both structure and terms."
+            }
+          }
+        }
       }
     ],
     "jsonValidation": [

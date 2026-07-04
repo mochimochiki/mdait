@@ -258,5 +258,9 @@
   "Expanding terms...": "用語を展開中...",
   "Confirm Term Operation": "用語操作の確認",
   "Expand glossary terms for {0}? This uses AI to resolve target-language terms from existing translations and updates the terms file.": "{0} の用語を展開しますか？既存の訳文からターゲット言語の用語をAIで解決し、用語集ファイルを更新します。",
-  "Detect glossary terms for {0}? This uses AI (batched by content size) and updates the terms file.": "{0} の用語を検出しますか？AIを使用し（コンテンツ量でバッチ分割）、用語集ファイルを更新します。"
+  "Detect glossary terms for {0}? This uses AI (batched by content size) and updates the terms file.": "{0} の用語を検出しますか？AIを使用し（コンテンツ量でバッチ分割）、用語集ファイルを更新します。",
+  "No valid checks specified. Use \"structure\" and/or \"terms\".": "有効な検証種別が指定されていません。\"structure\" と \"terms\" を指定してください。",
+  "Validation completed: {0} violation(s) ({1} structure, {2} terms) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).": "検証完了: 違反 {0} 件（構造 {1}、用語 {2}）。{3} ファイル・翻訳済み {4} ユニットを検証、{5} ユニットは need 残りのためスキップ。",
+  "Validation failed: {0}": "検証に失敗しました: {0}",
+  "Validating translations...": "翻訳を検証中..."
 }

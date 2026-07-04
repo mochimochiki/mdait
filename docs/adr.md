@@ -4,6 +4,26 @@
 
 ---
 
+## ADR-260704-04: 用語一貫性検証（term-lint）を core 層の機械照合として実装し mdait_validate で公開する
+
+### 背景
+用語集は翻訳プロンプトへの「Follow the provided terminology list strictly」というソフトな指示止まりで、逸脱の検出・レポート手段がなかった（ロードマップM4・G5）。またterm照合ロジックがcommands層にあり、VS Code非依存化されていなかった（G9）。
+
+### 決定
+- `src/core/term/` を新設: `term-matcher.ts`（部分一致＋variants照合、コードブロック行＋インラインコード除去 `stripCodeSegments`）と `term-lint.ts`（`lintUnitPair` 純関数）。core は commands の `TermEntry` に依存せず、独自の `TermLintTerm` 型へ呼び出し側でマップする（層構造の維持）。
+- 保守的閾値: 「原文に用語（正規形＋variants）が出現し、かつ訳文に期待訳語（正規形＋variants）が全く出現しない」場合のみ違反。偽陽性が多い検証はエージェントに無視されるため。活用形による偽陽性は variants 追加で運用回避する（既知の限界）。
+- `mdait_validate { path?, checks?: ["structure","terms"] }` を新設。既存 `TranslationChecker`（構造カウント比較）と term-lint を束ね、読取専用・AI不使用・確認UIなし。違反は `{ file, unitHash, check, term?, expected?, severity, message }` で返し、**自動修正しない**（revise / variants追加の判断はエージェントに委ねる）。
+- `term-extractor.ts`（翻訳時の関連用語抽出）の照合を core の `anyTermVariantAppears` に共通化し、翻訳時とlint時の判定を一致させた。
+
+### 理由
+検証がAI不使用・読取専用であることで、エージェントの翻訳→検証→修正ループ内で何度呼んでもコスト・副作用ゼロになり、完成状態の定義2（`mdait_validate` 違反0件）を機械的に判定できる。core移設はMCP/CLI化（将来展望）の布石でもある。
+
+### 備考
+- 検証対象は「翻訳済み（fromあり・needなし）」ユニットのみ。need残りはスキップ件数として報告し、nextActionsで翻訳/レビュー先行を案内する。
+- 詳細: [.tasks の 260704-04 チケット](../.tasks/)
+
+---
+
 ## ADR-260704-03: 用語集・TMを LM Tools として公開しスキップ理由を構造化する
 
 ### 背景

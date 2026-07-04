@@ -49,6 +49,7 @@ import { MdaitSyncTool } from "./lm-tools/sync-tool";
 import { MdaitTermTool } from "./lm-tools/term-tool";
 import { MdaitTmTool } from "./lm-tools/tm-tool";
 import { MdaitTranslateTool } from "./lm-tools/translate-tool";
+import { MdaitValidateTool } from "./lm-tools/validate-tool";
 import {
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
@@ -760,6 +761,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait_tm",
 		new MdaitTmTool(),
 	);
+	const validateToolDisposable = vscode.lm.registerTool(
+		"mdait_validate",
+		new MdaitValidateTool(),
+	);
 
 	// 初回データ読み込み
 	context.subscriptions.push(
@@ -815,6 +820,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateToolDisposable,
 		termToolDisposable,
 		tmToolDisposable,
+		validateToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる
