@@ -7,6 +7,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
+import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
 import {
 	type TransCommandResult,
 	type TranslateUnitMetrics,
@@ -100,46 +101,53 @@ export class StatusTreeTranslationHandler {
 					});
 
 					try {
-						// 各ファイルに対して翻訳を順次実行（キャンセルチェック付き）
+						// 各ファイルをtrans.concurrencyの同時実行数で並列翻訳（キャンセルチェック付き）。
+						// 異なるファイルペアは独立で、同一ファイルはFileMutexが排他するため競合しない
 						let successful = 0;
 						let failed = 0;
+						let completed = 0;
+						const concurrency = clampConcurrency(config.trans.concurrency);
 
-						for (let i = 0; i < files.length; i++) {
-							// ディレクトリのキャンセルチェック
-							if (token.isCancellationRequested) {
-								logger.info(
-									"trans",
-									"Directory translation cancelled, skipping remaining files",
-								);
-								const skipped = files.length - successful - failed;
-								vscode.window.showInformationMessage(
-									vscode.l10n.t(
-										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
-										successful,
-										failed,
-										skipped,
-									),
-								);
-								return { totalFiles: files.length, successful, failed, skipped };
-							}
-
-							const file = files[i]; // 進捗報告
-							progress.report({
-								message: vscode.l10n.t("{0}/{1} files", i + 1, files.length),
-								increment: 100 / files.length,
-							});
-
-							try {
-								// 内部実装を直接呼び出し（二重のwithProgressを回避）
-								await transFile_CoreProc(file, progress, token);
-								successful++;
-							} catch (error) {
-								logger.error("trans", "Error translating file", {
-									file: file.fsPath,
-									...formatError(error),
+						await runWithConcurrency(
+							files,
+							concurrency,
+							async (file) => {
+								try {
+									// 内部実装を直接呼び出し（二重のwithProgressを回避）
+									await transFile_CoreProc(file, progress, token);
+									successful++;
+								} catch (error) {
+									logger.error("trans", "Error translating file", {
+										file: file.fsPath,
+										...formatError(error),
+									});
+									failed++;
+								}
+								completed++;
+								progress.report({
+									message: vscode.l10n.t("{0}/{1} files", completed, files.length),
+									increment: 100 / files.length,
 								});
-								failed++;
-							}
+							},
+							() => token.isCancellationRequested,
+						);
+
+						// キャンセル時は未着手ファイル数を報告
+						if (token.isCancellationRequested) {
+							logger.info(
+								"trans",
+								"Directory translation cancelled, skipping remaining files",
+							);
+							const skipped = files.length - successful - failed;
+							vscode.window.showInformationMessage(
+								vscode.l10n.t(
+									"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
+									successful,
+									failed,
+									skipped,
+								),
+							);
+							return { totalFiles: files.length, successful, failed, skipped };
 						}
 
 						// 結果を通知

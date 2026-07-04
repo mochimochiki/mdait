@@ -51,14 +51,33 @@ export interface SyncResult {
 	totalUnchanged: number;
 	/** need:revise付与件数 */
 	revisionsNeeded: number;
+	/** adoptで採用（need:review付与）したユニット数 */
+	totalAdopted: number;
+	/** need:keep で保持している孤立ターゲット数 */
+	totalKept: number;
+	/** backfillプレースホルダを生成した孤立ターゲット数 */
+	totalBackfilled: number;
 	durationMs: number;
+}
+
+/**
+ * syncコマンドのオプション
+ */
+export interface SyncCommandOptions {
+	/**
+	 * 採用（adopt）モード: マーカーなし・本文ありの既存訳文を from 確立＋need:review で採用する。
+	 * 既存対訳サイトの取り込み用の一度きりの操作であり、永続設定にはしない。
+	 */
+	adopt?: boolean;
 }
 
 /**
  * sync command
  * Markdownユニットの同期を行う
  */
-export async function syncCommand(): Promise<SyncResult | undefined> {
+export async function syncCommand(
+	options?: SyncCommandOptions,
+): Promise<SyncResult | undefined> {
 	const startTime = Date.now();
 	try {
 		// 準備
@@ -85,6 +104,9 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		let totalDeleted = 0;
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
+		let totalAdopted = 0;
+		let totalKept = 0;
+		let totalBackfilled = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -167,7 +189,7 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 									await flushDirtyDocument(sourceFile);
 									await flushDirtyDocument(targetFile);
 									if (fs.existsSync(targetFile)) {
-										return handler.sync(sourceFile, targetFile);
+										return handler.sync(sourceFile, targetFile, options);
 									}
 									return handler.syncNew(sourceFile, targetFile);
 								},
@@ -213,6 +235,9 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 						totalDeleted += syncResult.deleted;
 						totalUnchanged += syncResult.unchanged;
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
+						totalAdopted += syncResult.adopted ?? 0;
+						totalKept += syncResult.kept ?? 0;
+						totalBackfilled += syncResult.backfilled ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -267,6 +292,9 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			totalDeleted,
 			totalUnchanged,
 			revisionsNeeded: totalRevisionsNeeded,
+			totalAdopted,
+			totalKept,
+			totalBackfilled,
 			durationMs,
 		});
 
@@ -297,7 +325,7 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 		}
 
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
-		if (config.sync.autoDelete && totalDeleted > 0) {
+		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
 			const restoreHelp = vscode.l10n.t("How to restore");
 			const choice = await vscode.window.showWarningMessage(
 				vscode.l10n.t(
@@ -324,6 +352,9 @@ export async function syncCommand(): Promise<SyncResult | undefined> {
 			totalDeleted,
 			totalUnchanged,
 			revisionsNeeded: totalRevisionsNeeded,
+			totalAdopted,
+			totalKept,
+			totalBackfilled,
 			durationMs,
 		};
 	} catch (error) {
@@ -627,6 +658,7 @@ export async function sync_CoreProc(
 	sourceFile: string,
 	targetFile: string,
 	config: Configuration,
+	options?: SyncCommandOptions,
 ): Promise<DiffResult> {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
@@ -698,11 +730,12 @@ export async function sync_CoreProc(
 	const matchResult = sectionMatcher.match(source.units, target.units);
 
 	// ユニットのハッシュを更新
-	const revisionsNeeded = updateSectionHashes(
+	const { revisionsNeeded, adopted } = updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
 		targetFile,
+		options?.adopt === true,
 	);
 
 	// external rebuild 安全網: 既存targetユニットが（fromロストにより）need:translateに
@@ -726,16 +759,32 @@ export async function sync_CoreProc(
 		}
 	}
 
-	// 同期結果の生成（孤立ユニットの自動削除は設定に従う。
-	// autoDelete:false なら削除せず need:verify-deletion を付与し、手動確認に委ねる: P6 対策）
-	const syncedUnits = sectionMatcher.createSyncedTargets(
+	// 同期結果の生成（孤立ターゲットの処理はポリシーに従う。
+	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）/ keep=need:keepで恒久保持）
+	const syncedResult = sectionMatcher.createSyncedTargets(
 		matchResult,
-		config.sync.autoDelete,
+		config.getOrphanTargetPolicy(),
 	);
+	const syncedUnits = syncedResult.units;
+
+	// backfill: 孤立ターゲットに対応する原文側プレースホルダを生成（need:backfill）
+	let backfilled = 0;
+	if (syncedResult.backfillTargets.length > 0) {
+		backfilled = sectionMatcher.insertBackfillPlaceholders(
+			source.units,
+			target.units,
+			matchResult,
+			syncedResult.backfillTargets,
+		);
+	}
 
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
 	diffResult.revisionsNeeded = revisionsNeeded;
+	diffResult.adopted = adopted;
+	diffResult.kept = syncedResult.orphanKept;
+	diffResult.orphanVerified = syncedResult.orphanVerified;
+	diffResult.backfilled = backfilled;
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {
@@ -805,15 +854,18 @@ export { syncFrontmatterMarkers } from "./sync-frontmatter";
 /**
  * ユニットのハッシュを更新する
  * @param matchResult ユニットのマッチ結果
- * @returns need:revise付与件数
+ * @param adopt adoptモード（マーカーなし既訳を need:review で採用）
+ * @returns need:revise付与件数とadopt採用件数
  */
 function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 	config: Configuration,
 	sourceFilePath: string,
 	targetFilePath: string,
-): number {
+	adopt = false,
+): { revisionsNeeded: number; adopted: number } {
 	let revisionsNeeded = 0;
+	let adopted = 0;
 	for (const pair of matchResult) {
 		const source = pair.source;
 		const target = pair.target;
@@ -823,17 +875,25 @@ function updateSectionHashes(
 			const sourceHash = calculateHash(source.content);
 			const targetHash = calculateHash(target.content);
 
+			// adopt判定: from未確立かつ本文のある既存targetのみが採用候補
+			const hadFrom = !!target.marker?.from;
+			const adoptTarget = adopt && !hadFrom && target.content.trim() !== "";
+
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(
 				sourceHash,
 				targetHash,
 				source.marker,
 				target.marker,
+				{ adoptTarget },
 			);
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
 			if (result.targetMarker.needsRevision()) {
 				revisionsNeeded++;
+			}
+			if (adoptTarget && result.targetMarker.need === "review") {
+				adopted++;
 			}
 			continue;
 		}
@@ -847,13 +907,14 @@ function updateSectionHashes(
 		}
 
 		// targetのみ存在: 孤立targetの処理
+		// need:keep の独自ユニットもハッシュのみ最新化する（syncSourceMarkerはneed/fromに触れない）
 		if (!source && target) {
 			const targetHash = calculateHash(target.content);
 			const result = syncSourceMarker(targetHash, target.marker);
 			target.marker = result.marker;
 		}
 	}
-	return revisionsNeeded;
+	return { revisionsNeeded, adopted };
 }
 
 /**

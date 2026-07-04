@@ -46,7 +46,10 @@ import { AIOnboarding } from "./infra/onboarding/ai-onboarding";
 import { FileExplorer } from "./infra/workspace/file-explorer";
 import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
 import { MdaitSyncTool } from "./lm-tools/sync-tool";
+import { MdaitTermTool } from "./lm-tools/term-tool";
+import { MdaitTmTool } from "./lm-tools/tm-tool";
 import { MdaitTranslateTool } from "./lm-tools/translate-tool";
+import { MdaitValidateTool } from "./lm-tools/validate-tool";
 import {
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
@@ -196,10 +199,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		diagnoseSetupCommand,
 	);
 
-	// sync command
+	// sync command（オプションはdebug-ipc/E2Eからの adopt 指定などに使う）
 	const syncDisposable = vscode.commands.registerCommand(
 		"mdait.sync",
-		syncCommand,
+		(options?: Parameters<typeof syncCommand>[0]) => syncCommand(options),
 	);
 
 	// trans command
@@ -750,6 +753,18 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait_translate",
 		new MdaitTranslateTool(),
 	);
+	const termToolDisposable = vscode.lm.registerTool(
+		"mdait_term",
+		new MdaitTermTool(),
+	);
+	const tmToolDisposable = vscode.lm.registerTool(
+		"mdait_tm",
+		new MdaitTmTool(),
+	);
+	const validateToolDisposable = vscode.lm.registerTool(
+		"mdait_validate",
+		new MdaitValidateTool(),
+	);
 
 	// 初回データ読み込み
 	context.subscriptions.push(
@@ -803,6 +818,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		getStatusToolDisposable,
 		syncToolDisposable,
 		translateToolDisposable,
+		termToolDisposable,
+		tmToolDisposable,
+		validateToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる

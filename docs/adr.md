@@ -4,6 +4,128 @@
 
 ---
 
+## ADR-260704-06: ディレクトリ翻訳をファイル単位セマフォで並列化する
+
+### 背景
+architecture.md の意図的制約「並列実行: 順次実行」により、数百ファイル規模のサイト翻訳が実用時間で完走しない（ロードマップM6・G9）。順次実行の理由はキャンセル即応性とAI APIレート制限だった。
+
+### 決定
+- ディレクトリ翻訳（`mdait_translate` ツール・StatusTree ▶ の2経路）を**ファイル単位**のセマフォ方式で並列化する（`runWithConcurrency`、`src/commands/shared/concurrency.ts`）。ユニット単位の並列はマーカー書換の競合リスクに対して利得が薄いため行わない。
+- 同時実行数は `trans.concurrency`（デフォルト3、1〜8にクランプ）。1で従来の逐次実行に戻る。レート制限はプロバイダー依存（vscode-lm は Copilot クォータ）のためユーザー調整に委ねる。
+- キャンセルは「新規着手を止め、実行中ファイルは既存のユニット単位チェックで停止」。順序保証: 結果配列は入力順を保持。
+- 同一ファイルの競合は既存 `FileMutex` が排他する（backfill はターゲット・ソース両ロック済み）。異なるファイルペアは独立で、設計上の書き込み競合はない。external モードの UnitStateStore はプロセス内シングルトンの全量書き出しで最終状態が一貫する。
+- 用語集・TMのmtimeキャッシュ整合性は「知識構築→翻訳」の実行順序をプレイブック（`docs/guide/ja/agent-playbook.md`）で規定して回避する。
+
+### 理由
+翻訳の律速はAI応答待ちであり、ファイル単位の並列は既存の排他機構にそのまま乗る最小の変更で最大の効果を得る。デフォルト3は Copilot の実用的なクォータ内に収まる保守的な値。
+
+### 備考
+- 100ファイル規模の逐次比計測と debug-ipc E2E（P11/P12）はVS Code実環境での手動ゲート（チケット260704-06）。
+- 詳細: [.tasks の 260704-06 チケット](../.tasks/)
+
+---
+
+## ADR-260704-05: backfill を「同一内容プレースホルダ＋即時fromリンク」でモデル化する
+
+### 背景
+訳文側にしかないセクションを原文側へ逆翻訳して対称化する backfill（ロードマップM5・G4残り/G6）。当初設計はプレースホルダに `from` 逆参照を持たせる案だったが、ソースユニットが from を持つのは既存の意味論（from=翻訳元）と衝突する。
+
+### 決定
+- `orphanTargetPolicy: "backfill"`: sync が孤立ターゲット T の**本文をそのまま**持つ原文側プレースホルダ S を生成する。内容が同一なので `S.hash == T.hash` となり、`T.from = T.hash` を設定するだけで通常の from リンクが即座に成立する（S は `<!-- mdait {hash} need:backfill -->` の正規ソースユニット。逆参照 from は不要）。
+- 挿入位置は順序推定（直前の対応済みターゲットに対応するソースユニットの直後。先頭孤立は先頭）。同一ハッシュのソースユニットが既存ならスキップ（冪等）。
+- trans はターゲットファイル翻訳時に対応ソースの `need:backfill` を検出し、言語逆転（targetLang→sourceLang）で T 本文を翻訳して S へ書き込む。S のハッシュを再計算し `T.from` を更新、S に **`need:review`** を残す（逆生成原文の品質確認）。ターゲット・ソース両ファイルをロックする（FileMutex は複数キー一括登録でデッドロックなし）。ソースは embedded/external 共通の全文書き戻し。
+- 次の sync は `T.from == S.hash` で無変更（冪等な定常状態）。
+
+### 理由
+「同一内容→同一ハッシュ」により、中間状態（backfill待ち）も含めて全状態が既存の from マッチング・冪等性の枠組みに乗る。翻訳前の原文ファイルに訳文言語の本文が見える過渡状態は、プレースホルダの実体（未翻訳の原文相当）を正直に表現しており、`need:backfill` マーカーで機械的に識別できる。
+
+### 備考
+- keep と backfill のファイル単位・frontmatter単位ポリシー上書きはスコープ外（必要になった時点で別ADR）。
+- backfillペアのTM登録: S の `need:review` 解消後は通常ペアとして tm.commit 対象。E2E 検証は M6。
+- 詳細: [.tasks の 260704-05 チケット](../.tasks/)
+
+---
+
+## ADR-260704-04: 用語一貫性検証（term-lint）を core 層の機械照合として実装し mdait_validate で公開する
+
+### 背景
+用語集は翻訳プロンプトへの「Follow the provided terminology list strictly」というソフトな指示止まりで、逸脱の検出・レポート手段がなかった（ロードマップM4・G5）。またterm照合ロジックがcommands層にあり、VS Code非依存化されていなかった（G9）。
+
+### 決定
+- `src/core/term/` を新設: `term-matcher.ts`（部分一致＋variants照合、コードブロック行＋インラインコード除去 `stripCodeSegments`）と `term-lint.ts`（`lintUnitPair` 純関数）。core は commands の `TermEntry` に依存せず、独自の `TermLintTerm` 型へ呼び出し側でマップする（層構造の維持）。
+- 保守的閾値: 「原文に用語（正規形＋variants）が出現し、かつ訳文に期待訳語（正規形＋variants）が全く出現しない」場合のみ違反。偽陽性が多い検証はエージェントに無視されるため。活用形による偽陽性は variants 追加で運用回避する（既知の限界）。
+- `mdait_validate { path?, checks?: ["structure","terms"] }` を新設。既存 `TranslationChecker`（構造カウント比較）と term-lint を束ね、読取専用・AI不使用・確認UIなし。違反は `{ file, unitHash, check, term?, expected?, severity, message }` で返し、**自動修正しない**（revise / variants追加の判断はエージェントに委ねる）。
+- `term-extractor.ts`（翻訳時の関連用語抽出）の照合を core の `anyTermVariantAppears` に共通化し、翻訳時とlint時の判定を一致させた。
+
+### 理由
+検証がAI不使用・読取専用であることで、エージェントの翻訳→検証→修正ループ内で何度呼んでもコスト・副作用ゼロになり、完成状態の定義2（`mdait_validate` 違反0件）を機械的に判定できる。core移設はMCP/CLI化（将来展望）の布石でもある。
+
+### 備考
+- 検証対象は「翻訳済み（fromあり・needなし）」ユニットのみ。need残りはスキップ件数として報告し、nextActionsで翻訳/レビュー先行を案内する。
+- 詳細: [.tasks の 260704-04 チケット](../.tasks/)
+
+---
+
+## ADR-260704-03: 用語集・TMを LM Tools として公開しスキップ理由を構造化する
+
+### 背景
+エージェント主導のサイト全体翻訳（ロードマップM3・G1）では、既訳からの知識構築（用語集・TM）をチャットから駆動できる必要がある。また tm.commit は need フラグの残るユニットを黙ってスキップするため、エージェントが「なぜコミットされないか」を診断できなかった。
+
+### 決定
+- `mdait_term { action: detect|expand, path? }` / `mdait_tm { action: commit|optimize, path? }` を新設。既存 CoreProc（`detectTerm_CoreProc` / `expandTerm_CoreProc` / `executeTmCommitForFile` / `tmOptimizeCommand`）の薄いラップとし、path はソース/ターゲットどちらの側でも受理してスコープ解決する。
+- CoreProc の戻り値を拡張（expand: 展開数/残数、optimize: エントリ数、commit: `skipReasons`）。呼び出し側互換の追加のみ。
+- スキップ理由の分類は `commit-filter.ts` の純関数 `classifyTmSkipReason`（noFrom / needTranslate / needRevise / needReview / needKeep）とし、`isTmCommitTarget` との整合を単体テストで固定する。`nextActions` は理由に応じて「先に mdait_translate / review 解消」を案内し、M2 の順序依存（レビュー承認→tm.commit）をツール自身が誘導する。
+
+### 理由
+判断・反復はエージェントに委ね、mdait は冪等なプリミティブと診断可能な構造化出力を返すのが方針（agent-orchestration.md）。detect/expand/commit はいずれも既存実装が重複除外・未展開のみ処理・既存TU検出を持ち、2回目実行が差分0件になる冪等性を備えるため、そのまま定常状態判定（完成状態の定義3・4）に使える。
+
+### 備考
+- AI 依存経路の冪等性 E2E は M6 の debug-ipc シナリオで検証する。
+- 詳細: [.tasks の 260704-03 チケット](../.tasks/)
+
+---
+
+## ADR-260704-02: 既存対訳の取り込みを adopt モード＋orphanTargetPolicy で安全化する
+
+### 背景
+既存の日英対訳サイト（マーカーなし既訳）を mdait 管理下に置くと、初回 sync で既訳に一律 `need:translate` が付き、trans 実行で既訳が AI 翻訳に上書きされる（G3）。また訳文側にしかないセクションは `autoDelete: true` で削除され、「意図的に保持する」状態を表現できない（G4）。
+
+### 決定
+- **adopt モード**: `syncCommand({ adopt: true })` / `mdait_sync (adopt: true)`。from 新規確立・need 未設定・本文ありのターゲットユニットに `need:translate` の代わりに **`need:review`** を付与する（`syncMarkerPair` のオプション）。既訳本文は不変で、trans の対象にもならない。adopt は sync の引数であり永続設定にしない（取り込みは一度きりの操作）。
+- **`sync.orphanTargetPolicy: "delete" | "verify" | "keep"`**: `autoDelete` を置き換える孤立ターゲットポリシー（`true`→`delete`、`false`→`verify` の後方互換。両指定時は orphanTargetPolicy 優先）。`keep` は `need:keep`（from なし）を付与して恒久保持し、SectionMatcher の対応付けから除外・trans 対象外・status 分母除外（独自ユニット）・tm.commit 対象外とする。
+- **need 語彙の追加**: `keep` を追加（`review` は既存語彙の用途拡張）。マーカー形式 `<!-- mdait hash from:xxx need:yyy -->` の範囲内であり互換性を壊さない。need 語彙×コマンド経路の期待動作はマトリクステスト（`need-command-matrix.test.ts`）で固定する。
+- **バグ修正**: `MdaitMarker.MARKER_REGEX` の need 文字クラスを `[\w@]+`→`[\w@-]+` に修正。従来 `need:verify-deletion` がパース不能でマーカー往復消失していた（マトリクステストで発見）。受理範囲の拡大のみで既存マーカーの解釈は不変。
+
+### 理由
+adopt の誤対応リスク（順序ベース対応付けの限界）は「必ず `need:review` を経由する」ことを安全網とし、レビュー承認（need 除去）→sync→tm.commit の順序依存は commit-filter の `need:review` 除外により機械的に強制される。keep を「from を持たない独自ユニット」としてモデル化することで、status の分母除外・TM 対象外が既存の from ベース判定と自然に整合する。
+
+### 備考
+- 対応率閾値による adopt 保留（低品質対応の警告強化）は将来課題。
+- 逆方向埋め戻し（`orphanTargetPolicy: "backfill"`）は M5 で追加予定。
+- 詳細: [.tasks の 260704-02 チケット](../.tasks/)
+
+---
+
+## ADR-260704-01: LM Tools の出力を共通JSONエンベロープで構造化する
+
+### 背景
+エージェント主導のサイト全体翻訳（[agent-orchestration.md](design/agent-orchestration.md)）では、エージェントがツール出力から状態を観測して次アクションを計画する。現行の非構造化テキスト出力では、ファイル別need一覧・失敗原因・次アクションが機械的に取れない（G2）。また `mdait_translate` がファイル単位のみで、サイト規模では呼び出し回数が爆発する（G7）。
+
+### 決定
+- 全 LM Tools は `LanguageModelTextPart` に共通エンベロープ `{ schemaVersion, ok, summary, data, nextActions, error? }` の JSON 文字列を返す（`src/lm-tools/envelope.ts`）。`summary` は l10n 経由の人間向け1行サマリ、`nextActions` は英語固定文言のエージェント向け案内。エンベロープはエージェントとの契約であり、破壊的変更は `schemaVersion` インクリメント＋全ツール一斉更新を伴う。
+- `nextActions` の生成（状態→推奨アクション対応表 `next-actions.ts`）は lm-tools 層に閉じる。「薄いラッパー」原則の明示的例外（ビジネスロジックではなく案内文の生成のため）。
+- `mdait_translate` は `path` でファイル/ディレクトリ両対応。ディレクトリは配下のターゲットファイルを順次翻訳し、確認UIはスコープ単位1回（対象ユニット総数を提示）。キャンセル時は処理済み件数を返し、同一呼び出しの再実行で残りを処理できる（冪等な再開）。
+
+### 理由
+JSON化してもエンベロープに `summary` を必須で含めることで、JSONを解釈しない単純なエージェント/ユーザーへの可読性を現行同等に保てる。need内訳集計（`status-data.ts`）・nextActions は VS Code 非依存の純関数とし、スキーマを単体テストで検証可能にした。承認回数の削減はスコープの拡大（ディレクトリ単位1回）で実現し、承認の省略では実現しない（Tools層の確認UI原則は維持）。
+
+### 備考
+- 入力パラメータは `path` に統一しつつ旧 `filePath` も後方互換で受理する。
+- need語彙の内訳は将来のM2以降の語彙（keep/backfill）も先行してカテゴリ化済み（存在しない間は0件）。
+- 詳細: [.tasks の 260704-01 チケット](../.tasks/)
+
+---
+
 ## ADR-260629-01: 初心者の落とし穴を「診断コマンド＋エラー導線＋破壊的操作ガード」で予防する
 
 ### 背景

@@ -12,6 +12,7 @@ import { transFile_CoreProc } from "../trans/trans-command";
 import type { Translator } from "../trans/translator";
 import type {
 	FileHandler,
+	FileSyncOptions,
 	FileSyncResult,
 	FileTranslateResult,
 } from "./file-handler";
@@ -25,15 +26,22 @@ import { StatusCollector } from "./status-collector";
 export class MdFileHandler implements FileHandler {
 	readonly fileType = "md" as const;
 
-	async sync(sourceFile: string, targetFile: string): Promise<FileSyncResult> {
+	async sync(
+		sourceFile: string,
+		targetFile: string,
+		options?: FileSyncOptions,
+	): Promise<FileSyncResult> {
 		const config = Configuration.getInstance();
-		const diffResult = await sync_CoreProc(sourceFile, targetFile, config);
+		const diffResult = await sync_CoreProc(sourceFile, targetFile, config, options);
 		return {
 			added: diffResult.added,
 			modified: diffResult.modified,
 			deleted: diffResult.deleted,
 			unchanged: diffResult.unchanged,
 			revisionsNeeded: diffResult.revisionsNeeded ?? 0,
+			adopted: diffResult.adopted ?? 0,
+			kept: diffResult.kept ?? 0,
+			backfilled: diffResult.backfilled ?? 0,
 		};
 	}
 

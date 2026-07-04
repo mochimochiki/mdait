@@ -1,6 +1,12 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { StatusManager } from "../core/status/status-manager";
+import type { FileStatusItem } from "../core/status/status-item";
 import { Logger } from "../infra/logging/logger";
+import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
+import { buildNextActions } from "./next-actions";
+import { buildStatusData } from "./status-data";
+import { toToolResult } from "./tool-result";
 
 const logger = Logger.getInstance();
 
@@ -8,12 +14,18 @@ const logger = Logger.getInstance();
  * 入力パラメータ: ステータス取得ツール
  */
 interface GetStatusInput {
-	filePath?: string; // オプション: 特定ファイルのステータスのみ
+	/** ファイルまたはディレクトリのパス。省略時はワークスペース全体 */
+	path?: string;
+	/** 後方互換用の旧パラメータ名（path と同義） */
+	filePath?: string;
+	/** true のときファイル別の need 内訳を含める */
+	detail?: boolean;
 }
 
 /**
  * mdaitのステータス取得ツール
  * GitHub Copilot Chatから翻訳状況を取得するためのツール
+ * 出力は共通エンベロープのJSON文字列（docs/design/agent-orchestration.md 参照）
  */
 export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInput> {
 	async invoke(
@@ -30,50 +42,54 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 				await statusManager.buildStatusItemTree();
 			}
 
-			const { filePath } = options.input;
+			const scopePath = options.input.path ?? options.input.filePath;
+			const detail = options.input.detail === true;
 
-			// 特定ファイルのステータスを取得
-			if (filePath) {
-				const fileItem = tree.getFile(filePath);
-				if (!fileItem) {
-					const message = vscode.l10n.t("File not found in status tree: {0}", filePath);
-					return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(message)]);
+			// スコープのファイル群を解決（ファイル / ディレクトリ / 全体）
+			let files: FileStatusItem[];
+			let scopeLabel: string;
+			if (scopePath) {
+				const resolved = resolveScopePath(scopePath);
+				const fileItem = tree.getFile(resolved);
+				if (fileItem) {
+					files = [fileItem];
+				} else {
+					files = tree.getFilesInDirectoryRecursive(resolved);
 				}
-
-				const units = tree.getUnitsInFile(filePath);
-				const translatedUnits = units.filter((u) => u.needFlag === undefined || u.needFlag === null).length;
-				const needTranslateUnits = units.filter((u) => u.needFlag === "translate").length;
-				const needReviseUnits = units.filter((u) => u.needFlag?.startsWith("revise")).length;
-
-				const resultText = vscode.l10n.t(
-					"Translation status for {0}:\n- Total units: {1}\n- Translated: {2}\n- Needs translation: {3}\n- Needs revision: {4}",
-					filePath,
-					units.length,
-					translatedUnits,
-					needTranslateUnits,
-					needReviseUnits,
-				);
-
-				return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(resultText)]);
+				scopeLabel = scopePath;
+				if (files.length === 0) {
+					const message = vscode.l10n.t("File not found in status tree: {0}", scopePath);
+					return toToolResult(
+						createErrorEnvelope(message, ToolErrorCode.InvalidPath, message, [
+							"Run mdait_sync first to build markers, or check the path.",
+						]),
+					);
+				}
+			} else {
+				files = tree.getFilesAll();
+				scopeLabel = "workspace";
 			}
 
-			// 全体サマリを取得
-			const progress = tree.aggregateProgress();
-			const untranslatedUnits = progress.totalUnits - progress.translatedUnits;
-
-			const resultText = vscode.l10n.t(
-				"Overall translation status:\n- Total units: {0}\n- Translated: {1}\n- Untranslated: {2}\n- Error: {3}",
-				progress.totalUnits,
-				progress.translatedUnits,
-				untranslatedUnits,
-				progress.errorUnits,
+			const data = buildStatusData(files, detail);
+			const untranslated = data.totalUnits - data.translatedUnits;
+			const summary = vscode.l10n.t(
+				"Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.",
+				scopeLabel,
+				data.totalUnits,
+				data.translatedUnits,
+				untranslated,
+				data.errorUnits,
+				data.filesWithNeeds,
 			);
 
-			return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(resultText)]);
+			const nextActions = buildNextActions(data.needs, data.errorUnits);
+			return toToolResult(createOkEnvelope(summary, data, nextActions));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in getStatus tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to get translation status: {0}", (error as Error).message);
-			return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(errorMessage)]);
+			return toToolResult(
+				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
+			);
 		}
 	}
 
@@ -86,4 +102,15 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 			invocationMessage: vscode.l10n.t("Getting translation status..."),
 		};
 	}
+}
+
+/**
+ * 入力パスをステータスツリーのキー（絶対パス）へ解決する
+ */
+function resolveScopePath(inputPath: string): string {
+	if (path.isAbsolute(inputPath)) {
+		return inputPath;
+	}
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	return workspaceRoot ? path.resolve(workspaceRoot, inputPath) : inputPath;
 }

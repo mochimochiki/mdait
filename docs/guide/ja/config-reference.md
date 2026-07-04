@@ -15,7 +15,8 @@
 | `ignoredPatterns` | 文字列[] | `"**/node_modules/**"` | 翻訳・同期を除外するglobパターン |
 | `sync.level` | 数値 | `3` | ユニット境界の見出しレベル（h1〜hN） |
 | `sync.autoSyncOnSave` | 真偽値 | `true` | 保存時に自動同期 |
-| `sync.autoDelete` | 真偽値 | `true` | 孤立ユニット自動削除 |
+| `sync.autoDelete` | 真偽値 | `true` | 孤立ユニット自動削除（旧設定。`orphanTargetPolicy` 推奨） |
+| `sync.orphanTargetPolicy` | 文字列 | `"delete"` | 孤立ユニットの処理（`delete`/`verify`/`keep`/`backfill`） |
 | `sync.copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`/`false` または拡張子ホワイトリスト |
 | `ai.provider` | 文字列 | — | `vscode-lm` / `openai` / `ollama` |
 | `ai.model` | 文字列 | — | 使用するモデル名 |
@@ -24,6 +25,7 @@
 | `trans.markdown.skipCodeBlocks` | 真偽値 | `true` | コードブロックを翻訳除外 |
 | `trans.frontmatter.keys` | 文字列[] | `["title", "description"]` | 翻訳対象のFrontmatterキー |
 | `trans.extensions` | 文字列[] | `[]` | 追加翻訳対象の拡張子 |
+| `trans.concurrency` | 整数 | `3` | ディレクトリ翻訳のファイル単位同時実行数（1〜8） |
 | `trans.maxFileSize` | 数値 | `51200` | 非MDファイルのサイズ上限（バイト） |
 | `tm.enabled` | 真偽値 | `true` | TM機能の有効/無効 |
 | `tm.maxReferences` | 数値 | `5` | プロンプトに含めるTM参照の最大数 |
@@ -112,7 +114,8 @@
 |---|---|---|---|
 | `level` | 数値 | `3` | ユニット境界とする見出しの最大レベル（例: `3` = h1〜h3） |
 | `autoSyncOnSave` | 真偽値 | `true` | ファイル保存時に自動で同期を実行 |
-| `autoDelete` | 真偽値 | `true` | ソースに存在しない孤立ユニットを自動削除 |
+| `autoDelete` | 真偽値 | `true` | ソースに存在しない孤立ユニットを自動削除（`true`→`delete`、`false`→`verify` に対応する旧設定） |
+| `orphanTargetPolicy` | 文字列 | `"delete"` | 孤立ユニットの処理ポリシー: `"delete"`（自動削除）/ `"verify"`（`need:verify-deletion` 付与）/ `"keep"`（`need:keep` で恒久保持）/ `"backfill"`（原文側へ逆翻訳で埋め戻し）。`autoDelete` より優先 |
 | `copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`=全コピー / `false`=コピーしない / `[".png", ".jpg"]` のような拡張子ホワイトリスト |
 
 ```json
@@ -207,6 +210,7 @@ OpenAI API または互換エンドポイントを利用します。
 | `markdown.skipCodeBlocks` | 真偽値 | `true` | コードブロックを翻訳対象から除外 |
 | `frontmatter.keys` | 文字列[] | `["title", "description"]` | 翻訳するFrontmatterキー（空配列 `[]` で翻訳しない） |
 | `extensions` | 文字列[] | `[]` | MD以外で翻訳対象とする拡張子（例: `[".txt"]`） |
+| `concurrency` | 整数 | `3` | ディレクトリ翻訳のファイル単位同時実行数（1〜8。1で逐次実行。プロバイダーのレート制限に応じて調整） |
 | `maxFileSize` | 数値 | `51200` | 非MDファイルの翻訳サイズ上限（バイト） |
 
 ```json

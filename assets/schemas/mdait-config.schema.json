@@ -74,8 +74,13 @@
         },
         "autoDelete": {
           "type": "boolean",
-          "description": "Automatically delete units on target side when deleted on source side during sync",
+          "description": "Automatically delete units on target side when deleted on source side during sync. Superseded by orphanTargetPolicy (true maps to \"delete\", false maps to \"verify\"); ignored when orphanTargetPolicy is set.",
           "default": true
+        },
+        "orphanTargetPolicy": {
+          "type": "string",
+          "enum": ["delete", "verify", "keep", "backfill"],
+          "description": "How to handle orphan target units (target-side units whose source unit no longer exists). \"delete\": remove automatically. \"verify\": keep with need:verify-deletion for manual confirmation. \"keep\": keep permanently with need:keep (sync/trans never touch them; excluded from translation progress). \"backfill\": generate a placeholder unit on the source side flagged need:backfill; translation then reverse-translates the target content into the source document. Takes precedence over autoDelete."
         },
         "autoSyncOnSave": {
           "type": "boolean",
@@ -255,6 +260,14 @@
           "minimum": 1024,
           "default": 51200,
           "examples": [51200, 102400, 204800]
+        },
+        "concurrency": {
+          "type": "integer",
+          "description": "Number of files translated in parallel during directory translation (1-8). 1 means sequential. Tune according to your AI provider's rate limits (vscode-lm depends on your Copilot quota).",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "examples": [1, 3, 5]
         },
         "extensions": {
           "type": "array",

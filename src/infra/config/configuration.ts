@@ -58,6 +58,8 @@ export interface TransConfig {
 	retryLimit: number;
 	/** 非MDファイルの最大サイズ（バイト）。超過時はスキップ */
 	maxFileSize: number;
+	/** ディレクトリ翻訳のファイル単位同時実行数（1〜8。1で逐次実行） */
+	concurrency: number;
 	/** 追加の翻訳対象拡張子（.mdは常に含まれる） */
 	extensions?: string[];
 	// 翻訳固有設定の拡張用
@@ -98,6 +100,15 @@ export interface TransPair {
 }
 
 /**
+ * 孤立ターゲット（ソース側に対応ユニットがない訳文側ユニット）の処理ポリシー
+ * - delete: 自動削除（旧 autoDelete: true 相当）
+ * - verify: need:verify-deletion を付与して手動確認に委ねる（旧 autoDelete: false 相当）
+ * - keep: need:keep を付与して恒久保持（独自ユニット。sync/trans が触れない）
+ * - backfill: 原文側にプレースホルダを生成し need:backfill を付与（transが逆方向翻訳で埋め戻す）
+ */
+export type OrphanTargetPolicy = "delete" | "verify" | "keep" | "backfill";
+
+/**
  * mdait.yamlファイルの型定義
  */
 interface MdaitConfig {
@@ -109,6 +120,7 @@ interface MdaitConfig {
 		autoDelete?: boolean;
 		autoSyncOnSave?: boolean;
 		copyAssets?: CopyAssetsConfig;
+		orphanTargetPolicy?: OrphanTargetPolicy;
 	};
 	markers?: {
 		mode?: "embedded" | "external";
@@ -144,6 +156,7 @@ interface MdaitConfig {
 		contextSize?: number;
 		retryLimit?: number;
 		maxFileSize?: number;
+		concurrency?: number;
 		extensions?: string[];
 	};
 	terms?: {
@@ -196,12 +209,26 @@ export class Configuration {
 		autoDelete: boolean;
 		autoSyncOnSave: boolean;
 		copyAssets: CopyAssetsConfig;
+		/** 未指定時は autoDelete から解決する（getOrphanTargetPolicy() を使用すること） */
+		orphanTargetPolicy?: OrphanTargetPolicy;
 	} = {
 		level: 3,
 		autoDelete: true,
 		autoSyncOnSave: true,
 		copyAssets: true,
 	};
+
+	/**
+	 * 孤立ターゲットポリシーを解決して返す。
+	 * orphanTargetPolicy が明示されていればそれを優先し、
+	 * 未指定なら autoDelete から後方互換マッピングする（true→delete、false→verify）。
+	 */
+	public getOrphanTargetPolicy(): OrphanTargetPolicy {
+		if (this.sync.orphanTargetPolicy) {
+			return this.sync.orphanTargetPolicy;
+		}
+		return this.sync.autoDelete ? "delete" : "verify";
+	}
 	/**
 	 * マーカー保管方式設定
 	 * - embedded（既定）: マーカーを本文に埋め込む
@@ -241,6 +268,7 @@ export class Configuration {
 		contextSize: 1,
 		retryLimit: 1,
 		maxFileSize: 51200,
+		concurrency: 3,
 	};
 	/**
 	 * 用語集設定
@@ -503,6 +531,14 @@ export class Configuration {
 				if (config.sync.copyAssets !== undefined) {
 					this.sync.copyAssets = config.sync.copyAssets;
 				}
+				if (
+					config.sync.orphanTargetPolicy === "delete" ||
+					config.sync.orphanTargetPolicy === "verify" ||
+					config.sync.orphanTargetPolicy === "keep" ||
+					config.sync.orphanTargetPolicy === "backfill"
+				) {
+					this.sync.orphanTargetPolicy = config.sync.orphanTargetPolicy;
+				}
 			}
 
 			// markers設定の読み込み
@@ -604,6 +640,10 @@ export class Configuration {
 			}
 			if (config.trans?.maxFileSize !== undefined) {
 				this.trans.maxFileSize = Math.max(1024, config.trans.maxFileSize);
+			}
+			if (config.trans?.concurrency !== undefined) {
+				// ファイル単位並列翻訳の同時実行数（1〜8にクランプ。1で逐次実行）
+				this.trans.concurrency = Math.min(8, Math.max(1, Math.floor(config.trans.concurrency)));
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {

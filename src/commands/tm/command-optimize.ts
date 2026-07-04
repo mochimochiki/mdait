@@ -11,7 +11,13 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 const logger = Logger.getInstance();
 
-export async function tmOptimizeCommand(): Promise<void> {
+/** TM最適化の結果 */
+export interface TmOptimizeResult {
+	/** 再重み付けしたTMエントリ数 */
+	entryCount: number;
+}
+
+export async function tmOptimizeCommand(): Promise<TmOptimizeResult | undefined> {
 	const config = Configuration.getInstance();
 	const validationError = config.validate();
 	if (validationError) {
@@ -26,7 +32,7 @@ export async function tmOptimizeCommand(): Promise<void> {
 	}
 
 	try {
-		await vscode.window.withProgress(
+		return await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
 				title: vscode.l10n.t("TM Optimize"),
@@ -40,7 +46,7 @@ export async function tmOptimizeCommand(): Promise<void> {
 					vscode.window.showInformationMessage(
 						vscode.l10n.t("TM optimize skipped: no entries found."),
 					);
-					return;
+					return { entryCount: 0 };
 				}
 
 				const fileExplorer = new FileExplorer();
@@ -92,6 +98,7 @@ export async function tmOptimizeCommand(): Promise<void> {
 						entries.length,
 					),
 				);
+				return { entryCount: entries.length };
 			},
 		);
 	} catch (error) {
@@ -99,5 +106,6 @@ export async function tmOptimizeCommand(): Promise<void> {
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("TM optimize failed: {0}", (error as Error).message),
 		);
+		return undefined;
 	}
 }

@@ -20,7 +20,8 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { PromptProvider } from "../../prompts";
-import { isTmCommitTarget } from "./commit-filter";
+import { isTmCommitTarget, summarizeTmSkipReasons } from "./commit-filter";
+import type { TmSkipReasonBreakdown } from "./commit-filter";
 import {
 	TmCommitProcessor,
 	type TmCommitResolvedUnit,
@@ -231,8 +232,9 @@ export async function tmCommitDirectoryCommand(
 
 /**
  * ファイル内の全対象ユニットにtm-commitを実行する。
+ * lm-tools（mdait_tm）からも再利用される。
  */
-async function executeTmCommitForFile(
+export async function executeTmCommitForFile(
 	filePath: string,
 	config: Configuration,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
@@ -244,6 +246,7 @@ async function executeTmCommitForFile(
 	const content = document.getText();
 	const markdown = markdownParser.parse(content, config);
 	const targetUnits = markdown.units.filter(isTmCommitTarget);
+	const skipReasons = summarizeTmSkipReasons(markdown.units);
 
 	if (targetUnits.length === 0) {
 		logger.debug("tm.commit", "No commit target units found", {
@@ -259,16 +262,20 @@ async function executeTmCommitForFile(
 			errorUnits: 0,
 			newItems: [],
 			updatedItems: [],
+			skipReasons,
 		};
 	}
 
-	return executeTmCommitForUnits(
+	const result = await executeTmCommitForUnits(
 		targetUnits,
 		filePath,
 		config,
 		progress,
 		token,
 	);
+	result.skipReasons = skipReasons;
+	result.skippedUnits += markdown.units.length - targetUnits.length;
+	return result;
 }
 
 /**

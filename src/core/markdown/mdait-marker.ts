@@ -20,9 +20,11 @@ export class MdaitMarker {
 	 * MdaitMarkerの正規表現パターン
 	 * ハッシュは省略可能（<!-- mdait --> のみも許容）
 	 * needフィールドは revise@{hash} 形式もサポート
+	 * needの文字クラスにはハイフンを含む（verify-deletion などの既定語彙のため。
+	 * 従来の [\w@]+ では need:verify-deletion がパース不能で往復消失するバグがあった）
 	 */
 	static readonly MARKER_REGEX =
-		/<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:([\w@]+))?\s*-->/;
+		/<!-- mdait(?:\s+([a-zA-Z0-9]+))?(?:\s+from:([a-zA-Z0-9]+))?(?:\s+need:([\w@-]+))?\s*-->/;
 
 	/**
 	 * コメントをMarkdown形式の文字列として出力

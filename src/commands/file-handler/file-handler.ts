@@ -13,6 +13,18 @@ export interface FileSyncResult {
 	deleted: number;
 	unchanged: number;
 	revisionsNeeded: number;
+	/** adoptで採用（need:review付与）したユニット数 */
+	adopted?: number;
+	/** need:keep で保持している孤立ターゲット数 */
+	kept?: number;
+	/** backfillプレースホルダを生成した孤立ターゲット数 */
+	backfilled?: number;
+}
+
+/** syncのオプション（コマンド層のSyncCommandOptionsと同義。循環依存回避のためここで定義） */
+export interface FileSyncOptions {
+	/** 採用（adopt）モード: マーカーなし・本文ありの既存訳文を need:review で採用する */
+	adopt?: boolean;
 }
 
 /** translate結果 */
@@ -28,7 +40,7 @@ export interface FileHandler {
 	readonly fileType: FileType;
 
 	/** 既存ターゲットとの同期 */
-	sync(sourceFile: string, targetFile: string): Promise<FileSyncResult>;
+	sync(sourceFile: string, targetFile: string, options?: FileSyncOptions): Promise<FileSyncResult>;
 
 	/** 新規ターゲット作成 */
 	syncNew(sourceFile: string, targetFile: string): Promise<FileSyncResult>;

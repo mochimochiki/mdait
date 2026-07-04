@@ -15,7 +15,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -294,7 +296,7 @@
         "name": "mdait_getStatus",
         "displayName": "mdait: Get Translation Status",
         "toolReferenceName": "mdaitStatus",
-        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a summary of translation progress including total units, translated units, and files needing translation. Optionally pass a filePath to get status for a specific file.",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/keep). Pass detail:true to include a per-file breakdown of files that still need work. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -304,9 +306,13 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "filePath": {
+            "path": {
               "type": "string",
-              "description": "Optional file path to get status for a specific file. If omitted, returns overall status."
+              "description": "Optional file or directory path to scope the status. If omitted, returns workspace-wide status."
+            },
+            "detail": {
+              "type": "boolean",
+              "description": "If true, include per-file need breakdown (only files that still need work are listed)."
             }
           }
         }
@@ -315,7 +321,7 @@
         "name": "mdait_sync",
         "displayName": "mdait: Sync Translation Markers",
         "toolReferenceName": "mdaitSync",
-        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers.",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Pass adopt:true ONLY when onboarding an existing bilingual site whose target files already contain translations but no mdait markers: matched existing translations are adopted with need:review instead of need:translate so they are never overwritten by translation. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded/adopted/kept), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -324,14 +330,19 @@
         ],
         "inputSchema": {
           "type": "object",
-          "properties": {}
+          "properties": {
+            "adopt": {
+              "type": "boolean",
+              "description": "One-time onboarding mode for existing bilingual sites. Adopts marker-less target units that already have content: establishes the from link and flags them need:review instead of need:translate, so existing translations are never overwritten."
+            }
+          }
         }
       },
       {
         "name": "mdait_translate",
-        "displayName": "mdait: Translate File",
+        "displayName": "mdait: Translate",
         "toolReferenceName": "mdaitTranslate",
-        "modelDescription": "Translate a Markdown file using AI. Translates units that have need:translate or need:revise flags. The file must be a target file managed by mdait. Uses diff-aware revision for changed content to preserve existing translations.",
+        "modelDescription": "Translate mdait-managed target files using AI. Accepts a single target file or a directory (translates every target file under it, sequentially, with one confirmation for the whole scope). Only units flagged need:translate or need:revise are processed; already-translated units are skipped, so re-running after a failure or cancellation resumes the remaining work. Uses diff-aware revision for changed content to preserve existing translations. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data lists per-file success/failure with error causes and the remaining need breakdown for the scope.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -341,12 +352,110 @@
         "inputSchema": {
           "type": "object",
           "required": [
-            "filePath"
+            "path"
           ],
           "properties": {
-            "filePath": {
+            "path": {
               "type": "string",
-              "description": "The file path of the target Markdown file to translate."
+              "description": "Path of the target Markdown file or a directory containing target files to translate."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_term",
+        "displayName": "mdait: Glossary Terms",
+        "toolReferenceName": "mdaitTerm",
+        "modelDescription": "Manage the mdait glossary (terms file) using AI. action:\"detect\" extracts important terms from source documents (and their translations when available) and adds them to the glossary. action:\"expand\" resolves target-language translations for terms that lack them, using existing translated documents. Pass an optional path (file or directory) to scope the operation; omit it to process all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data lists per-pair new/expanded term counts and the remaining unexpanded count. Idempotent: re-running detect/expand on unchanged content reports zero additions. For onboarding an existing bilingual site, run detect and expand BEFORE translating so new translations follow the established terminology.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "terms",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "detect",
+                "expand"
+              ],
+              "description": "\"detect\": extract new glossary terms from source content. \"expand\": resolve target-language terms for unexpanded glossary entries."
+            },
+            "path": {
+              "type": "string",
+              "description": "Optional file or directory to scope the operation. Source or target paths are both accepted. Omit to process all translation pairs."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_tm",
+        "displayName": "mdait: Translation Memory",
+        "toolReferenceName": "mdaitTm",
+        "modelDescription": "Manage the mdait translation memory (translations.tmx). action:\"commit\" registers sentence pairs from translated units (units with a from link and no need flag) using AI sentence alignment; units that still have need flags are skipped and reported in data.skipped with reasons, so resolve translation/review first. action:\"optimize\" recomputes TM entry weights from current source content (no AI). Pass an optional path (target file or directory) to scope a commit; omit it to commit all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains new/updated entry counts and the skip-reason breakdown. Idempotent: re-running commit on an unchanged workspace reports zero new entries.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "tm",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "commit",
+                "optimize"
+              ],
+              "description": "\"commit\": register translated units into the TM. \"optimize\": recompute TM entry weights."
+            },
+            "path": {
+              "type": "string",
+              "description": "Optional target file or directory to scope a commit. Omit to process all translation pairs. Ignored for optimize."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_validate",
+        "displayName": "mdait: Validate Translations",
+        "toolReferenceName": "mdaitValidate",
+        "modelDescription": "Validate translated units in mdait-managed documents. Read-only, uses no AI, and requires no confirmation, so it is free to call repeatedly inside a translate->validate->fix loop. checks:\"structure\" compares Markdown structure (headings/lists/code blocks/tables/links/images) between source and target; checks:\"terms\" mechanically verifies that when a glossary term appears in the source unit, one of its expected target terms (term + variants) appears in the target unit (code blocks and inline code are excluded; conservative matching to avoid false positives). Only fully translated units (from link present, no need flags) are validated. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data.violations lists { file, unitHash, check, term?, expected?, severity, message }. Violations are warnings, never auto-fixed: for terms violations decide per case whether to fix the translation or add the deviation to the glossary variants.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "validation"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Optional target file or directory to scope the validation. Omit to validate all translation pairs."
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "structure",
+                  "terms"
+                ]
+              },
+              "description": "Which checks to run. Omit to run both structure and terms."
             }
           }
         }
@@ -381,7 +490,7 @@
     "bundle:dev": "node esbuild.mjs",
     "lint": "biome lint --config-path .config ./src",
     "test": "npm run test:unit",
-    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/unit/core/**/*.test.js\" \"out/test/unit/utils/**/*.test.js\" \"out/test/unit/commands/**/*.test.js\" \"out/test/unit/infra/**/*.test.js\" \"out/test/unit/prompts/**/*.test.js\"",
+    "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/unit/core/**/*.test.js\" \"out/test/unit/utils/**/*.test.js\" \"out/test/unit/commands/**/*.test.js\" \"out/test/unit/infra/**/*.test.js\" \"out/test/unit/prompts/**/*.test.js\" \"out/test/unit/lm-tools/**/*.test.js\"",
     "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
     "watch": "node esbuild.mjs --watch",
     "copy-test-files": "rimraf ./src/test/unit/workspace/content && node -e \"require('node:fs').cpSync('./src/test/unit/sample-content', './src/test/unit/workspace/content', { recursive: true, force: true })\"",

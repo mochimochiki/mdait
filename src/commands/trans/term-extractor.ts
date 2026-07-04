@@ -3,6 +3,7 @@
  * @description ユニット内容から用語を抽出し、翻訳コンテキスト用の形式に変換
  */
 
+import { anyTermVariantAppears } from "../../core/term/term-matcher";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
 
@@ -69,33 +70,8 @@ function isTermRelevant(content: string, entry: TermEntry, lang: string): boolea
 		return false;
 	}
 
-	// 正規形のチェック
-	if (containsTerm(content, term)) {
-		return true;
-	}
-
-	// 表記揺れのチェック
-	const variants = TermEntryUtils.getvariants(entry, lang);
-	for (const variant of variants) {
-		if (containsTerm(content, variant)) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/**
- * テキスト内に用語が含まれるかチェック（単語境界を考慮）
- * @param text 検索対象テキスト
- * @param term 検索する用語
- * @returns 含まれる場合true
- */
-function containsTerm(text: string, term: string): boolean {
-	// 簡易的な単語境界チェック（完全一致優先、部分一致も許容）
-	// より厳密にする場合は正規表現の単語境界(\b)を使用するが、
-	// 日本語など境界が不明確な言語では単純な文字列検索で十分
-	return text.includes(term);
+	// 照合ロジックは core/term/term-matcher に共通化（term-lint と同一の判定）
+	return anyTermVariantAppears(content, term, TermEntryUtils.getvariants(entry, lang));
 }
 
 /**

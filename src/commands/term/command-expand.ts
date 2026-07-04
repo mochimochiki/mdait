@@ -104,6 +104,14 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 	);
 }
 
+/** 用語展開処理の結果 */
+export interface TermExpandResult {
+	/** 今回展開できた用語数 */
+	expanded: number;
+	/** 展開対象だが今回解決できなかった残数 */
+	remaining: number;
+}
+
 /**
  * 用語展開処理（中核プロセス）
  *
@@ -124,7 +132,7 @@ export async function expandTerm_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken: vscode.CancellationToken,
 	sourceFileFilter?: readonly string[],
-): Promise<void> {
+): Promise<TermExpandResult> {
 	const config = Configuration.getInstance();
 	const { sourceDir, targetDir, sourceLang, targetLang } = transPair;
 
@@ -152,7 +160,7 @@ export async function expandTerm_CoreProc(
 				targetLang,
 			),
 		);
-		return;
+		return { expanded: 0, remaining: 0 };
 	}
 
 	// 用語を含むファイルの事前フィルタリング
@@ -179,7 +187,7 @@ export async function expandTerm_CoreProc(
 		);
 	}
 	if (cancellationToken.isCancellationRequested) {
-		return;
+		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
 	// 用語展開コンテキストの収集
@@ -191,7 +199,7 @@ export async function expandTerm_CoreProc(
 		cancellationToken,
 	);
 	if (cancellationToken.isCancellationRequested) {
-		return;
+		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
 	// グローバルバッチ分割と一括抽出
@@ -202,7 +210,7 @@ export async function expandTerm_CoreProc(
 		cancellationToken,
 	);
 	if (cancellationToken.isCancellationRequested) {
-		return;
+		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
 	// 用語集を更新
@@ -212,7 +220,7 @@ export async function expandTerm_CoreProc(
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("No terms could be expanded"),
 		);
-		return;
+		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
 	// 用語エントリを更新
@@ -238,6 +246,11 @@ export async function expandTerm_CoreProc(
 	await termsRepository.save();
 
 	progress.report({ increment: 20 });
+
+	return {
+		expanded: updatedTerms.length,
+		remaining: termsToExpand.length - updatedTerms.length,
+	};
 }
 
 /**

@@ -314,6 +314,12 @@ export class StatusCollector implements StatusCollectorPort {
 	 * 個別ユニットの翻訳状態を決定する
 	 */
 	private determineUnitStatus(unit: MdaitUnit): Status {
+		// need:keep は独自ユニット（訳文側にのみ存在する保持ユニット）。
+		// 翻訳率の分母から除外するためソース扱いにする
+		if (unit.marker?.need === "keep") {
+			return Status.Source;
+		}
+
 		// fromHashがない場合はソースユニット
 		if (!unit.marker?.from) {
 			return Status.Source;

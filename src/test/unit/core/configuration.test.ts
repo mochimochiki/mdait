@@ -182,3 +182,57 @@ suite("Configuration", () => {
 		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
 	});
 });
+
+suite("Configuration orphanTargetPolicy", () => {
+	let tempDir: string;
+
+	setup(() => {
+		Configuration.dispose();
+		tempDir = createTempDir();
+		__vscodeMockWorkspaceRoot = tempDir;
+	});
+
+	teardown(() => {
+		Configuration.dispose();
+		cleanupTempDir(tempDir);
+	});
+
+	async function initWithSync(sync: Record<string, unknown> | undefined): Promise<Configuration> {
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+		const obj: Record<string, unknown> = JSON.parse(minimalConfig());
+		if (sync !== undefined) {
+			obj.sync = sync;
+		}
+		fs.writeFileSync(customPath, JSON.stringify(obj), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		return config;
+	}
+
+	test("未指定の場合は autoDelete:true 既定から delete に解決されること", async () => {
+		const config = await initWithSync(undefined);
+		assert.strictEqual(config.getOrphanTargetPolicy(), "delete");
+	});
+
+	test("autoDelete:false は verify に後方互換マッピングされること", async () => {
+		const config = await initWithSync({ autoDelete: false });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+	});
+
+	test("orphanTargetPolicy:keep が読み込まれること", async () => {
+		const config = await initWithSync({ orphanTargetPolicy: "keep" });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "keep");
+	});
+
+	test("autoDelete と orphanTargetPolicy の両方指定時は orphanTargetPolicy が優先されること", async () => {
+		const config = await initWithSync({ autoDelete: true, orphanTargetPolicy: "verify" });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+	});
+
+	test("不正な orphanTargetPolicy 値は無視され autoDelete から解決されること", async () => {
+		const config = await initWithSync({ autoDelete: false, orphanTargetPolicy: "invalid" });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+	});
+});

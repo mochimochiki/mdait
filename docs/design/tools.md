@@ -17,6 +17,27 @@ Tools層は、GitHub Copilot ChatなどのLanguageModel向けにmdaitの機能�
 
 **設計意図**: 既存のCommands/Core層の薄いラッパーとして設計することで、Copilot Chat連携機能の追加によるビジネスロジックの二重管理を防ぎます。
 
+例外として、`nextActions`（推奨次アクション）の生成ロジックはlm-tools層に置きます。これはビジネスロジックではなく案内文の生成であり、エージェント・オーケストレーション（[agent-orchestration.md](agent-orchestration.md)）のための誘導装置です。
+
+### 共通エンベロープ（構造化出力）
+
+全ツールは `LanguageModelTextPart` に**JSON文字列**を返します。共通エンベロープ:
+
+```jsonc
+{
+  "schemaVersion": 1,        // 出力スキーマのバージョン。破壊的変更時にインクリメント
+  "ok": true,                // 実行自体の成否
+  "summary": "…",            // 人間向け1行サマリ（l10n経由）
+  "data": { … },             // ツール固有の構造化データ
+  "nextActions": ["…"],      // 推奨される次アクション（英語固定文言・エージェント向け）
+  "error": { "code": "…", "message": "…" }  // ok:false のとき
+}
+```
+
+実装: [`src/lm-tools/envelope.ts`](../../src/lm-tools/envelope.ts)（型とシリアライザ）、[`src/lm-tools/next-actions.ts`](../../src/lm-tools/next-actions.ts)（状態→推奨アクション対応表）、[`src/lm-tools/status-data.ts`](../../src/lm-tools/status-data.ts)（need内訳集計）。いずれもVS Code非依存・単体テスト対象。
+
+**エンベロープはエージェントとの契約**です。フィールドの削除・意味変更は `schemaVersion` のインクリメントと全ツール一斉更新を伴います。`data` の中身はツールごとに自由です。
+
 ---
 
 ## LanguageModelTool APIの基本
@@ -65,14 +86,15 @@ Tools層は既存のCommands層やCore層の機能を呼び出し、結果をLan
 **入力パラメータ**:
 ```typescript
 interface GetStatusInput {
-  filePath?: string;  // オプション: 特定ファイルのステータスのみ
+  path?: string;    // オプション: ファイルまたはディレクトリでスコープ指定（旧filePathも受理）
+  detail?: boolean; // true でファイル別のneed内訳を含める
 }
 ```
 
 **実装**:
 - `StatusManager.getStatusItemTree()` から情報を取得
-- `filePath` が指定されている場合、そのファイルの詳細を返す
-- 指定なしの場合、`tree.aggregateProgress()` で全体サマリを返す
+- `data` に全体集計（総/翻訳済/エラーユニット数、needフラグ内訳）を格納
+- `detail:true` のとき、needのあるファイルのみの内訳一覧を `data.files` に格納（出力爆発防止）
 - StatusManagerが初期化されていない場合は `buildStatusItemTree()` を実行
 
 **確認UI**: なし（読み取り専用）
@@ -90,7 +112,8 @@ type SyncInput = Record<string, never>;  // パラメータなし
 
 **実装**:
 - `syncCommand()` を呼び出して同期を実行
-- 実行後に `StatusManager` から最新のステータスを取得して返す
+- `SyncResult`（ファイル数・追加/変更/削除/改訂必要ユニット数）を `data` に構造化
+- 同期後の全体ステータス内訳を `data.status` に格納
 
 **確認UI**: あり（マーカーを書き換えるため）
 - タイトル: "Confirm Synchronization"
@@ -100,29 +123,93 @@ type SyncInput = Record<string, never>;  // パラメータなし
 
 ### 3. Translate Tool (`mdait_translate`)
 
-**機能**: ファイルの翻訳
+**機能**: ファイル/ディレクトリの翻訳
 
 **入力パラメータ**:
 ```typescript
 interface TranslateInput {
-  filePath: string;  // 翻訳対象ファイルの相対パスまたは絶対パス
+  path?: string;     // 翻訳対象ファイルまたはディレクトリのパス（旧filePathも受理）
 }
 ```
 
 **実装**:
-- `filePath` からURIを解決
-- ファイルがターゲットファイルか確認（`FileExplorer.getTransPairFromTarget()`）
+- パスを絶対パスに解決し、ファイル/ディレクトリを判定
+- ディレクトリの場合、配下の翻訳対象ファイルを列挙（`FileExplorer.buildExtensionGlob` + `findFiles`）し、非ターゲットはスキップ件数として報告
 - AI初回チェック（`AIOnboarding.checkAndShowFirstUseDialog()`）
-- `transFile_CoreProc()` を呼び出して翻訳を実行
-- Tool APIでは `vscode.window.withProgress` が使えないため、ダミーのprogressオブジェクトを作成
-- 翻訳後に `StatusManager` でファイルステータスを更新
+- 各ファイルに `transFile_CoreProc()` を順次実行（`CancellationToken` を配線。キャンセル時は処理済み件数を返し、同じ呼び出しの再実行で残りを処理できる）
+- `data` にファイルごとの成功/失敗・失敗原因、スコープ内の残need内訳を格納
 
 **確認UI**: あり（AIを使用するため）
-- タイトル: "Confirm Translation"
-- メッセージ: "Translate file: {filePath}?\n\nThis will translate {n} units using AI."
-- 翻訳対象ユニット数を表示してユーザーの意思決定を支援
+- スコープ単位で1回。ディレクトリの場合は対象ファイル数・ユニット総数を表示
+- メッセージ例: "Translate directory: {path}?\n\nThis will translate {n} units across {m} files using AI."
 
 **実装**: [`src/lm-tools/translate-tool.ts`](../../src/lm-tools/translate-tool.ts)
+
+### 4. Term Tool (`mdait_term`)
+
+**機能**: 用語集の検出・展開
+
+**入力パラメータ**:
+```typescript
+interface TermInput {
+  action: "detect" | "expand";
+  path?: string;  // ファイル/ディレクトリでスコープ指定。省略時は全transPair
+}
+```
+
+**実装**:
+- `detect`: `UnitPairCollector` でソース・ターゲットペアを収集し `detectTerm_CoreProc` を実行
+- `expand`: `expandTerm_CoreProc` を実行（path指定時はソースファイルフィルタ）
+- path はソース側・ターゲット側どちらのパスでも受理し、ソースファイル群へ正規化する
+- `data`: transPairごとの新規/展開用語数と実行後の未展開残数、detect時は追加用語一覧（上限100件）
+
+**確認UI**: あり（AIを使用し terms ファイルを書き換えるため）
+
+**実装**: [`src/lm-tools/term-tool.ts`](../../src/lm-tools/term-tool.ts)
+
+### 5. TM Tool (`mdait_tm`)
+
+**機能**: 翻訳メモリのコミット・最適化
+
+**入力パラメータ**:
+```typescript
+interface TmInput {
+  action: "commit" | "optimize";
+  path?: string;  // ターゲットファイル/ディレクトリ。省略時は全transPair（commitのみ）
+}
+```
+
+**実装**:
+- `commit`: ターゲットMDファイルを列挙し `executeTmCommitForFile` を実行
+- `optimize`: `tmOptimizeCommand` を実行（AI不使用・重み再計算）
+- `data`: 新規/更新TU数と**スキップ理由内訳**（`commit-filter.ts` の `classifyTmSkipReason` による need別・from欠落の集計）。エージェントが「なぜコミットされないか」を診断し、`nextActions` が「先に translate / review解消」を案内する
+
+**確認UI**: あり（commit: AI使用＋tmx書換 / optimize: tmx書換）
+
+**実装**: [`src/lm-tools/tm-tool.ts`](../../src/lm-tools/tm-tool.ts)
+
+### 6. Validate Tool (`mdait_validate`)
+
+**機能**: 翻訳済みペアユニットの検証（構造チェック＋用語一貫性 term-lint）
+
+**入力パラメータ**:
+```typescript
+interface ValidateInput {
+  path?: string;                          // ターゲットファイル/ディレクトリ。省略時は全transPair
+  checks?: ("structure" | "terms")[];     // 省略時は両方
+}
+```
+
+**実装**:
+- `validate_CoreProc`（`src/commands/validate/validate-command.ts`）に委譲
+- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較
+- `terms`: `src/core/term/term-lint.ts` の機械照合（AI不使用・保守的閾値・コードブロック/インラインコード除外）
+- 検証対象は「翻訳済み」（from あり・need なし）ユニットのみ。need 残りはスキップ件数として報告
+- 違反は警告であり自動修正しない。`nextActions` で「訳文を直す／variants に追加する」の二択を提示
+
+**確認UI**: なし（読取専用・AI不使用。ループ内で何度呼んでも副作用ゼロ）
+
+**実装**: [`src/lm-tools/validate-tool.ts`](../../src/lm-tools/validate-tool.ts)
 
 ---
 
@@ -130,9 +217,16 @@ interface TranslateInput {
 
 ```
 src/lm-tools/
+├── envelope.ts           # 共通エンベロープ（型・シリアライザ、VS Code非依存）
+├── status-data.ts        # need内訳集計（VS Code非依存）
+├── next-actions.ts       # 状態→推奨アクション対応表（VS Code非依存）
+├── tool-result.ts        # エンベロープ→LanguageModelToolResult 変換
 ├── get-status-tool.ts    # ステータス取得ツール
 ├── sync-tool.ts          # 同期ツール
-└── translate-tool.ts     # 翻訳ツール
+├── translate-tool.ts     # 翻訳ツール
+├── term-tool.ts          # 用語集ツール（detect/expand）
+├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
+└── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ```
 
 ---
@@ -165,7 +259,7 @@ const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new Md
 
 ## エラーハンドリング
 
-全てのツールは`try/catch`でエラーをキャッチし、`logger.error()`でログ記録後、`vscode.l10n.t()`でローカライズしたメッセージを`LanguageModelToolResult`で返します。
+全てのツールは`try/catch`でエラーをキャッチし、`logger.error()`でログ記録後、`ok:false` ＋ `error.code`/`error.message` のエンベロープで返します。`summary` は `vscode.l10n.t()` でローカライズします。エラー時も可能なら `nextActions` でリカバリ手順（再sync・再実行など）を案内します。
 
 ---
 
@@ -176,14 +270,17 @@ GitHub Copilot Chatでのコマンド例:
 ```
 #mdaitStatus  → mdait_getStatus 呼び出し（翻訳状況を取得）
 #mdaitSync    → mdait_sync 呼び出し（マーカー同期）
-#mdaitTranslate README.ja.md → mdait_translate 呼び出し（ファイル翻訳）
+#mdaitTranslate docs/en → mdait_translate 呼び出し（ファイル/ディレクトリ翻訳）
+#mdaitTerm    → mdait_term 呼び出し（用語検出・展開）
+#mdaitTm      → mdait_tm 呼び出し（TMコミット・最適化）
+#mdaitValidate → mdait_validate 呼び出し（構造・用語一貫性の検証）
 ```
 
 ---
 
 ## 今後の拡張可能性
 
-追加ツールの候補: Term Detection、TM Commit、Validate、Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
+追加ツールの候補: Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
 追加手順: `src/lm-tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
 ---
