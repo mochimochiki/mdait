@@ -15,7 +15,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -356,6 +358,72 @@
             "path": {
               "type": "string",
               "description": "Path of the target Markdown file or a directory containing target files to translate."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_term",
+        "displayName": "mdait: Glossary Terms",
+        "toolReferenceName": "mdaitTerm",
+        "modelDescription": "Manage the mdait glossary (terms file) using AI. action:\"detect\" extracts important terms from source documents (and their translations when available) and adds them to the glossary. action:\"expand\" resolves target-language translations for terms that lack them, using existing translated documents. Pass an optional path (file or directory) to scope the operation; omit it to process all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data lists per-pair new/expanded term counts and the remaining unexpanded count. Idempotent: re-running detect/expand on unchanged content reports zero additions. For onboarding an existing bilingual site, run detect and expand BEFORE translating so new translations follow the established terminology.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "terms",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "detect",
+                "expand"
+              ],
+              "description": "\"detect\": extract new glossary terms from source content. \"expand\": resolve target-language terms for unexpanded glossary entries."
+            },
+            "path": {
+              "type": "string",
+              "description": "Optional file or directory to scope the operation. Source or target paths are both accepted. Omit to process all translation pairs."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_tm",
+        "displayName": "mdait: Translation Memory",
+        "toolReferenceName": "mdaitTm",
+        "modelDescription": "Manage the mdait translation memory (translations.tmx). action:\"commit\" registers sentence pairs from translated units (units with a from link and no need flag) using AI sentence alignment; units that still have need flags are skipped and reported in data.skipped with reasons, so resolve translation/review first. action:\"optimize\" recomputes TM entry weights from current source content (no AI). Pass an optional path (target file or directory) to scope a commit; omit it to commit all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains new/updated entry counts and the skip-reason breakdown. Idempotent: re-running commit on an unchanged workspace reports zero new entries.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "tm",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "commit",
+                "optimize"
+              ],
+              "description": "\"commit\": register translated units into the TM. \"optimize\": recompute TM entry weights."
+            },
+            "path": {
+              "type": "string",
+              "description": "Optional target file or directory to scope a commit. Omit to process all translation pairs. Ignored for optimize."
             }
           }
         }

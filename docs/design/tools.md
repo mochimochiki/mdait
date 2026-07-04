@@ -145,6 +145,49 @@ interface TranslateInput {
 
 **実装**: [`src/lm-tools/translate-tool.ts`](../../src/lm-tools/translate-tool.ts)
 
+### 4. Term Tool (`mdait_term`)
+
+**機能**: 用語集の検出・展開
+
+**入力パラメータ**:
+```typescript
+interface TermInput {
+  action: "detect" | "expand";
+  path?: string;  // ファイル/ディレクトリでスコープ指定。省略時は全transPair
+}
+```
+
+**実装**:
+- `detect`: `UnitPairCollector` でソース・ターゲットペアを収集し `detectTerm_CoreProc` を実行
+- `expand`: `expandTerm_CoreProc` を実行（path指定時はソースファイルフィルタ）
+- path はソース側・ターゲット側どちらのパスでも受理し、ソースファイル群へ正規化する
+- `data`: transPairごとの新規/展開用語数と実行後の未展開残数、detect時は追加用語一覧（上限100件）
+
+**確認UI**: あり（AIを使用し terms ファイルを書き換えるため）
+
+**実装**: [`src/lm-tools/term-tool.ts`](../../src/lm-tools/term-tool.ts)
+
+### 5. TM Tool (`mdait_tm`)
+
+**機能**: 翻訳メモリのコミット・最適化
+
+**入力パラメータ**:
+```typescript
+interface TmInput {
+  action: "commit" | "optimize";
+  path?: string;  // ターゲットファイル/ディレクトリ。省略時は全transPair（commitのみ）
+}
+```
+
+**実装**:
+- `commit`: ターゲットMDファイルを列挙し `executeTmCommitForFile` を実行
+- `optimize`: `tmOptimizeCommand` を実行（AI不使用・重み再計算）
+- `data`: 新規/更新TU数と**スキップ理由内訳**（`commit-filter.ts` の `classifyTmSkipReason` による need別・from欠落の集計）。エージェントが「なぜコミットされないか」を診断し、`nextActions` が「先に translate / review解消」を案内する
+
+**確認UI**: あり（commit: AI使用＋tmx書換 / optimize: tmx書換）
+
+**実装**: [`src/lm-tools/tm-tool.ts`](../../src/lm-tools/tm-tool.ts)
+
 ---
 
 ## ファイル構成
@@ -157,7 +200,9 @@ src/lm-tools/
 ├── tool-result.ts        # エンベロープ→LanguageModelToolResult 変換
 ├── get-status-tool.ts    # ステータス取得ツール
 ├── sync-tool.ts          # 同期ツール
-└── translate-tool.ts     # 翻訳ツール
+├── translate-tool.ts     # 翻訳ツール
+├── term-tool.ts          # 用語集ツール（detect/expand）
+└── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
 ```
 
 ---
@@ -201,14 +246,16 @@ GitHub Copilot Chatでのコマンド例:
 ```
 #mdaitStatus  → mdait_getStatus 呼び出し（翻訳状況を取得）
 #mdaitSync    → mdait_sync 呼び出し（マーカー同期）
-#mdaitTranslate README.ja.md → mdait_translate 呼び出し（ファイル翻訳）
+#mdaitTranslate docs/en → mdait_translate 呼び出し（ファイル/ディレクトリ翻訳）
+#mdaitTerm    → mdait_term 呼び出し（用語検出・展開）
+#mdaitTm      → mdait_tm 呼び出し（TMコミット・最適化）
 ```
 
 ---
 
 ## 今後の拡張可能性
 
-追加ツールの候補: Term Detection、TM Commit、Validate、Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
+追加ツールの候補: Validate（M4）、Search。エージェント主導のサイト全体翻訳シナリオに向けたツール拡張の設計とロードマップは [agent-orchestration.md](agent-orchestration.md) を参照。
 追加手順: `src/lm-tools/`にファイル作成 → `package.json`に定義追加 → `extension.ts`で登録 → l10nリソース追加 → 本ドキュメント更新。
 
 ---

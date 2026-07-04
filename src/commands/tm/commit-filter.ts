@@ -35,3 +35,63 @@ export function isTmCommitTarget(unit: MdaitUnit): boolean {
 	}
 	return true;
 }
+
+/** TM登録スキップの理由 */
+export type TmSkipReason =
+	| "noFrom"
+	| "needTranslate"
+	| "needRevise"
+	| "needReview"
+	| "needKeep";
+
+/** スキップ理由の内訳（エージェントが「なぜコミットされないか」を診断するための集計） */
+export interface TmSkipReasonBreakdown {
+	noFrom: number;
+	needTranslate: number;
+	needRevise: number;
+	needReview: number;
+	needKeep: number;
+}
+
+/**
+ * ユニットのTM登録スキップ理由を分類する。
+ * 登録対象（スキップしない）の場合は null を返す。
+ */
+export function classifyTmSkipReason(unit: MdaitUnit): TmSkipReason | null {
+	if (!unit.marker?.from) {
+		return "noFrom";
+	}
+	if (unit.marker.need === "translate") {
+		return "needTranslate";
+	}
+	if (unit.marker.need?.startsWith("revise@")) {
+		return "needRevise";
+	}
+	if (unit.marker.need === "review") {
+		return "needReview";
+	}
+	if (unit.marker.need === "keep") {
+		return "needKeep";
+	}
+	return null;
+}
+
+/**
+ * ユニット群のスキップ理由内訳を集計する
+ */
+export function summarizeTmSkipReasons(units: readonly MdaitUnit[]): TmSkipReasonBreakdown {
+	const breakdown: TmSkipReasonBreakdown = {
+		noFrom: 0,
+		needTranslate: 0,
+		needRevise: 0,
+		needReview: 0,
+		needKeep: 0,
+	};
+	for (const unit of units) {
+		const reason = classifyTmSkipReason(unit);
+		if (reason) {
+			breakdown[reason]++;
+		}
+	}
+	return breakdown;
+}

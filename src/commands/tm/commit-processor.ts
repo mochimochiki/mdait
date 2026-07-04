@@ -41,6 +41,8 @@ export interface TmCommitUnitResult {
 	newItems: TmResultItem[];
 	/** 更新された文ペア */
 	updatedItems: TmResultItem[];
+	/** スキップ理由の内訳（need別・from欠落）。エージェント診断用 */
+	skipReasons?: import("./commit-filter").TmSkipReasonBreakdown;
 }
 
 /** tm-commitの処理結果（全体） */
@@ -61,6 +63,8 @@ export interface TmCommitResult {
 	newItems: TmResultItem[];
 	/** 更新された文ペア */
 	updatedItems: TmResultItem[];
+	/** スキップ理由の内訳（need別・from欠落）。エージェント診断用 */
+	skipReasons?: import("./commit-filter").TmSkipReasonBreakdown;
 }
 
 interface GuardResult {

@@ -4,6 +4,25 @@
 
 ---
 
+## ADR-260704-03: 用語集・TMを LM Tools として公開しスキップ理由を構造化する
+
+### 背景
+エージェント主導のサイト全体翻訳（ロードマップM3・G1）では、既訳からの知識構築（用語集・TM）をチャットから駆動できる必要がある。また tm.commit は need フラグの残るユニットを黙ってスキップするため、エージェントが「なぜコミットされないか」を診断できなかった。
+
+### 決定
+- `mdait_term { action: detect|expand, path? }` / `mdait_tm { action: commit|optimize, path? }` を新設。既存 CoreProc（`detectTerm_CoreProc` / `expandTerm_CoreProc` / `executeTmCommitForFile` / `tmOptimizeCommand`）の薄いラップとし、path はソース/ターゲットどちらの側でも受理してスコープ解決する。
+- CoreProc の戻り値を拡張（expand: 展開数/残数、optimize: エントリ数、commit: `skipReasons`）。呼び出し側互換の追加のみ。
+- スキップ理由の分類は `commit-filter.ts` の純関数 `classifyTmSkipReason`（noFrom / needTranslate / needRevise / needReview / needKeep）とし、`isTmCommitTarget` との整合を単体テストで固定する。`nextActions` は理由に応じて「先に mdait_translate / review 解消」を案内し、M2 の順序依存（レビュー承認→tm.commit）をツール自身が誘導する。
+
+### 理由
+判断・反復はエージェントに委ね、mdait は冪等なプリミティブと診断可能な構造化出力を返すのが方針（agent-orchestration.md）。detect/expand/commit はいずれも既存実装が重複除外・未展開のみ処理・既存TU検出を持ち、2回目実行が差分0件になる冪等性を備えるため、そのまま定常状態判定（完成状態の定義3・4）に使える。
+
+### 備考
+- AI 依存経路の冪等性 E2E は M6 の debug-ipc シナリオで検証する。
+- 詳細: [.tasks の 260704-03 チケット](../.tasks/)
+
+---
+
 ## ADR-260704-02: 既存対訳の取り込みを adopt モード＋orphanTargetPolicy で安全化する
 
 ### 背景
