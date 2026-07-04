@@ -199,10 +199,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		diagnoseSetupCommand,
 	);
 
-	// sync command
+	// sync command（オプションはdebug-ipc/E2Eからの adopt 指定などに使う）
 	const syncDisposable = vscode.commands.registerCommand(
 		"mdait.sync",
-		syncCommand,
+		(options?: Parameters<typeof syncCommand>[0]) => syncCommand(options),
 	);
 
 	// trans command

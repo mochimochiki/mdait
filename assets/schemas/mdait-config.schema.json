@@ -261,6 +261,14 @@
           "default": 51200,
           "examples": [51200, 102400, 204800]
         },
+        "concurrency": {
+          "type": "integer",
+          "description": "Number of files translated in parallel during directory translation (1-8). 1 means sequential. Tune according to your AI provider's rate limits (vscode-lm depends on your Copilot quota).",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "examples": [1, 3, 5]
+        },
         "extensions": {
           "type": "array",
           "description": "Additional file extensions to include for translation across all translation pairs. Markdown (.md) is always included.",

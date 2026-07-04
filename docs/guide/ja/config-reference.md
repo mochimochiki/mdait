@@ -25,6 +25,7 @@
 | `trans.markdown.skipCodeBlocks` | 真偽値 | `true` | コードブロックを翻訳除外 |
 | `trans.frontmatter.keys` | 文字列[] | `["title", "description"]` | 翻訳対象のFrontmatterキー |
 | `trans.extensions` | 文字列[] | `[]` | 追加翻訳対象の拡張子 |
+| `trans.concurrency` | 整数 | `3` | ディレクトリ翻訳のファイル単位同時実行数（1〜8） |
 | `trans.maxFileSize` | 数値 | `51200` | 非MDファイルのサイズ上限（バイト） |
 | `tm.enabled` | 真偽値 | `true` | TM機能の有効/無効 |
 | `tm.maxReferences` | 数値 | `5` | プロンプトに含めるTM参照の最大数 |
@@ -209,6 +210,7 @@ OpenAI API または互換エンドポイントを利用します。
 | `markdown.skipCodeBlocks` | 真偽値 | `true` | コードブロックを翻訳対象から除外 |
 | `frontmatter.keys` | 文字列[] | `["title", "description"]` | 翻訳するFrontmatterキー（空配列 `[]` で翻訳しない） |
 | `extensions` | 文字列[] | `[]` | MD以外で翻訳対象とする拡張子（例: `[".txt"]`） |
+| `concurrency` | 整数 | `3` | ディレクトリ翻訳のファイル単位同時実行数（1〜8。1で逐次実行。プロバイダーのレート制限に応じて調整） |
 | `maxFileSize` | 数値 | `51200` | 非MDファイルの翻訳サイズ上限（バイト） |
 
 ```json

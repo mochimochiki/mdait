@@ -58,6 +58,8 @@ export interface TransConfig {
 	retryLimit: number;
 	/** 非MDファイルの最大サイズ（バイト）。超過時はスキップ */
 	maxFileSize: number;
+	/** ディレクトリ翻訳のファイル単位同時実行数（1〜8。1で逐次実行） */
+	concurrency: number;
 	/** 追加の翻訳対象拡張子（.mdは常に含まれる） */
 	extensions?: string[];
 	// 翻訳固有設定の拡張用
@@ -154,6 +156,7 @@ interface MdaitConfig {
 		contextSize?: number;
 		retryLimit?: number;
 		maxFileSize?: number;
+		concurrency?: number;
 		extensions?: string[];
 	};
 	terms?: {
@@ -265,6 +268,7 @@ export class Configuration {
 		contextSize: 1,
 		retryLimit: 1,
 		maxFileSize: 51200,
+		concurrency: 3,
 	};
 	/**
 	 * 用語集設定
@@ -636,6 +640,10 @@ export class Configuration {
 			}
 			if (config.trans?.maxFileSize !== undefined) {
 				this.trans.maxFileSize = Math.max(1024, config.trans.maxFileSize);
+			}
+			if (config.trans?.concurrency !== undefined) {
+				// ファイル単位並列翻訳の同時実行数（1〜8にクランプ。1で逐次実行）
+				this.trans.concurrency = Math.min(8, Math.max(1, Math.floor(config.trans.concurrency)));
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {

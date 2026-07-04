@@ -1,6 +1,7 @@
 import * as fs from "node:fs"; // @important Node.jsのbuildinモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { clampConcurrency, runWithConcurrency } from "../commands/shared/concurrency";
 import { transFile_CoreProc } from "../commands/trans/trans-command";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
@@ -139,45 +140,47 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 				},
 			};
 
-			// 各ファイルを順次翻訳（キャンセルチェック付き）
-			const fileResults: TranslateFileResult[] = [];
-			let succeeded = 0;
-			let failed = 0;
-			let translatedUnits = 0;
-			let backfilledUnits = 0;
-			let cancelled = false;
-			for (const file of targetFiles) {
-				if (token.isCancellationRequested) {
-					cancelled = true;
-					break;
-				}
-				try {
-					const result = await transFile_CoreProc(vscode.Uri.file(file), dummyProgress, token);
-					succeeded++;
-					translatedUnits += result?.translatedCount ?? 0;
-					backfilledUnits += result?.backfilledCount ?? 0;
-					fileResults.push({
-						path: file,
-						ok: true,
-						translatedUnits: result?.translatedCount ?? 0,
-						patchedUnits: result?.patchedCount ?? 0,
-						skippedUnits: result?.skippedCount ?? 0,
-						tmHits: result?.tmHits ?? 0,
-						backfilledUnits: result?.backfilledCount ?? 0,
-					});
-				} catch (error) {
-					failed++;
-					logger.error("LanguageModelTool", "Error translating file", {
-						file,
-						...formatError(error),
-					});
-					fileResults.push({
-						path: file,
-						ok: false,
-						error: (error as Error).message,
-					});
-				}
-			}
+			// 各ファイルを並列翻訳（trans.concurrency、キャンセルチェック付き）。
+			// 異なるファイルペアは独立で、同一ファイルはFileMutexが排他するため競合しない
+			const concurrency = clampConcurrency(config.trans.concurrency);
+			const outcomes = await runWithConcurrency(
+				targetFiles,
+				concurrency,
+				async (file): Promise<TranslateFileResult> => {
+					try {
+						const result = await transFile_CoreProc(vscode.Uri.file(file), dummyProgress, token);
+						return {
+							path: file,
+							ok: true,
+							translatedUnits: result?.translatedCount ?? 0,
+							patchedUnits: result?.patchedCount ?? 0,
+							skippedUnits: result?.skippedCount ?? 0,
+							tmHits: result?.tmHits ?? 0,
+							backfilledUnits: result?.backfilledCount ?? 0,
+						};
+					} catch (error) {
+						logger.error("LanguageModelTool", "Error translating file", {
+							file,
+							...formatError(error),
+						});
+						return {
+							path: file,
+							ok: false,
+							error: (error as Error).message,
+						};
+					}
+				},
+				() => token.isCancellationRequested,
+			);
+
+			const fileResults: TranslateFileResult[] = outcomes.filter(
+				(r): r is TranslateFileResult => r !== undefined,
+			);
+			const succeeded = fileResults.filter((r) => r.ok).length;
+			const failed = fileResults.filter((r) => !r.ok).length;
+			const translatedUnits = fileResults.reduce((sum, r) => sum + (r.translatedUnits ?? 0), 0);
+			const backfilledUnits = fileResults.reduce((sum, r) => sum + (r.backfilledUnits ?? 0), 0);
+			const cancelled = token.isCancellationRequested && fileResults.length < targetFiles.length;
 
 			// 翻訳後のスコープ内ステータスを集計
 			const statusManager = StatusManager.getInstance();
