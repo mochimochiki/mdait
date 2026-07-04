@@ -25,7 +25,12 @@ suite("need語彙×コマンドのマトリクス", () => {
 		{ need: "review", expectTranslatable: false, expectTmCommit: false },
 		{ need: "verify-deletion", expectTranslatable: false, expectTmCommit: true },
 		{ need: "keep", expectTranslatable: false, expectTmCommit: false },
+		{ need: "backfill", expectTranslatable: false, expectTmCommit: true },
 	];
+
+	// NOTE: need:backfill は原文側プレースホルダ（fromなし）に付くフラグであり、
+	// from付きで現れることは通常ない。上の expectTmCommit:true は「from付きなら対象」という
+	// フィルタ実装の事実を固定するもので、実運用ではfromなし＝noFromスキップになる。
 
 	for (const row of matrix) {
 		const label = row.need ?? "(なし)";
@@ -60,6 +65,16 @@ suite("need語彙×コマンドのマトリクス", () => {
 		const parsed = MdaitMarker.parse(text);
 		assert.ok(parsed);
 		assert.strictEqual(parsed.need, "keep");
+		assert.strictEqual(parsed.from, null);
+	});
+
+	test("need:backfill はfromなしマーカー形式（<!-- mdait hash need:backfill -->）で往復できる", () => {
+		const marker = new MdaitMarker("hash1", null, "backfill");
+		const text = marker.toString();
+		assert.strictEqual(text, "<!-- mdait hash1 need:backfill -->");
+		const parsed = MdaitMarker.parse(text);
+		assert.ok(parsed);
+		assert.strictEqual(parsed.need, "backfill");
 		assert.strictEqual(parsed.from, null);
 	});
 });

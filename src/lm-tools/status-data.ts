@@ -92,6 +92,11 @@ export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 			breakdown.keep++;
 			continue;
 		}
+		// need:backfill はソース側プレースホルダ（fromなし＝Source分類）だが、内訳には計上する
+		if (unit.needFlag === "backfill") {
+			breakdown.backfill++;
+			continue;
+		}
 		if (unit.status === Status.Source) {
 			continue;
 		}
@@ -117,11 +122,13 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 	const fileDetails: FileNeedDetail[] = [];
 
 	for (const file of files) {
-		if (file.status === Status.Source) {
-			continue;
-		}
 		const units = file.children ?? [];
 		const needs = countNeeds(units);
+		if (file.status === Status.Source) {
+			// ソースファイルは進捗集計の対象外だが、backfillプレースホルダ（原文側）は内訳に計上する
+			totals.backfill += needs.backfill;
+			continue;
+		}
 		for (const unit of units) {
 			if (unit.status === Status.Source) {
 				continue;

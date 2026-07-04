@@ -23,6 +23,8 @@ export interface SyncedTargetsResult {
 	orphanVerified: number;
 	/** need:keep で保持した孤立ターゲット数（既存keepのパススルー含む） */
 	orphanKept: number;
+	/** backfill対象として処理した孤立ターゲット（原文側プレースホルダの生成対象） */
+	backfillTargets: MdaitUnit[];
 }
 
 /**
@@ -169,6 +171,7 @@ export class SectionMatcher {
 		let orphanDeleted = 0;
 		let orphanVerified = 0;
 		let orphanKept = 0;
+		const backfillTargets: MdaitUnit[] = [];
 		for (const pair of matchResult) {
 			if (pair.source && pair.target) {
 				// マッチ
@@ -189,6 +192,14 @@ export class SectionMatcher {
 				if (orphanPolicy === "delete") {
 					// 何もしない（削除）
 					orphanDeleted++;
+				} else if (orphanPolicy === "backfill") {
+					// backfill: 訳文ユニットを保持し、from を自ユニットのハッシュにする。
+					// 原文側プレースホルダ（同一内容＝同一ハッシュ）の生成は呼び出し側が
+					// insertBackfillPlaceholders で行い、fromリンクが即座に成立する。
+					const hash = pair.target.marker?.hash ?? calculateHash(pair.target.content);
+					pair.target.marker = new MdaitMarker(hash, hash, null);
+					result.push(pair.target);
+					backfillTargets.push(pair.target);
 				} else if (orphanPolicy === "verify") {
 					if (pair.target.marker) {
 						pair.target.marker.need = "verify-deletion";
@@ -207,6 +218,72 @@ export class SectionMatcher {
 				}
 			}
 		}
-		return { units: result, orphanDeleted, orphanVerified, orphanKept };
+		return { units: result, orphanDeleted, orphanVerified, orphanKept, backfillTargets };
+	}
+
+	/**
+	 * backfill対象の孤立ターゲットに対応する原文側プレースホルダユニットを生成し、
+	 * sourceUnits の推定位置に挿入する。
+	 *
+	 * - プレースホルダの内容はターゲット本文をそのまま置く（ハッシュが一致するため
+	 *   `target.from = placeholder.hash` の通常のfromリンクが即座に成立する）
+	 * - マーカーは `<!-- mdait {hash} need:backfill -->`（fromなしの正規ソースユニット）
+	 * - 挿入位置: ターゲット順で直前にある「対応済みターゲット」に対応するソースユニットの直後。
+	 *   先頭の孤立ターゲットは先頭に挿入する。
+	 *
+	 * @param sourceUnits 原文側ユニット配列（この配列を直接変更する）
+	 * @param targetUnits ターゲット側ユニット配列（位置推定用の元順序）
+	 * @param matchResult 対応付け結果
+	 * @param backfillTargets backfill対象の孤立ターゲット
+	 * @returns 挿入したプレースホルダ数
+	 */
+	insertBackfillPlaceholders(
+		sourceUnits: MdaitUnit[],
+		targetUnits: readonly MdaitUnit[],
+		matchResult: MatchResult,
+		backfillTargets: readonly MdaitUnit[],
+	): number {
+		let inserted = 0;
+		for (const target of backfillTargets) {
+			const hash = target.marker?.hash ?? calculateHash(target.content);
+
+			// 既に同一ハッシュのソースユニットが存在する場合はスキップ（冪等性）
+			if (sourceUnits.some((u) => u.marker?.hash === hash)) {
+				continue;
+			}
+
+			const placeholder = new MdaitUnit(
+				new MdaitMarker(hash, null, "backfill"),
+				target.title,
+				target.headingLevel,
+				target.content,
+				target.startLine,
+				target.endLine,
+			);
+
+			// 挿入位置の推定: ターゲット順で直前の対応済みターゲットのソース位置の直後
+			let insertIndex = 0;
+			const tIdx = targetUnits.indexOf(target);
+			for (let i = tIdx - 1; i >= 0; i--) {
+				const prevPair = matchResult.find((p) => p.target === targetUnits[i] && p.source);
+				if (prevPair?.source) {
+					insertIndex = sourceUnits.indexOf(prevPair.source) + 1;
+					break;
+				}
+				// 直前のターゲットがbackfill済みプレースホルダを持つ場合はその直後
+				const prevHash = targetUnits[i].marker?.hash;
+				const prevPlaceholderIdx = prevHash
+					? sourceUnits.findIndex((u) => u.marker?.hash === prevHash)
+					: -1;
+				if (prevPlaceholderIdx >= 0) {
+					insertIndex = prevPlaceholderIdx + 1;
+					break;
+				}
+			}
+
+			sourceUnits.splice(insertIndex, 0, placeholder);
+			inserted++;
+		}
+		return inserted;
 	}
 }

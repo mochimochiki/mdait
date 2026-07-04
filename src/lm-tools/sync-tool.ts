@@ -37,6 +37,8 @@ interface SyncData {
 		adopted: number;
 		/** need:keep で保持している孤立ターゲット数 */
 		kept: number;
+		/** backfillプレースホルダを生成した孤立ターゲット数 */
+		backfilled: number;
 	};
 	durationMs: number;
 	/** 同期後の全体ステータス */
@@ -87,6 +89,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					revisionsNeeded: syncResult.revisionsNeeded,
 					adopted: syncResult.totalAdopted,
 					kept: syncResult.totalKept,
+					backfilled: syncResult.totalBackfilled,
 				},
 				durationMs: syncResult.durationMs,
 				status,

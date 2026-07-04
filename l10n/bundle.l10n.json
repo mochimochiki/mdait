@@ -147,6 +147,7 @@
   "Unit {0} does not need translation": "Unit {0} does not need translation",
   "Translation cancelled for unit: {0}": "Translation cancelled for unit: {0}",
   "Unit translation completed: {0}": "Unit translation completed: {0}",
+  "Backfilling {0}/{1} units": "Backfilling {0}/{1} units",
   "Run Sync": "Run Sync",
   "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.": "Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.",
   "No frontmatter keys configured for translation.": "No frontmatter keys configured for translation.",

@@ -46,6 +46,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import {
 	SummaryManager,
 	type TmReferenceInfo,
@@ -55,6 +56,7 @@ import {
 	showNeedSyncError,
 	showTranslationError,
 } from "../shared/guidance";
+import { applyBackfillTranslation, collectBackfillPairs } from "./backfill";
 import {
 	type TranslationTerm,
 	extractRelevantTerms,
@@ -82,6 +84,8 @@ export interface TransCommandResult {
 	skippedCount: number;
 	/** TM参照ヒット数 */
 	tmHits: number;
+	/** backfill（逆方向埋め戻し）したユニット数 */
+	backfilledCount?: number;
 }
 
 /**
@@ -155,8 +159,24 @@ export async function transFile_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<TransCommandResult | undefined> {
-	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
-	return FileMutex.getInstance().runExclusive([uri.fsPath], () =>
+	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する。
+	// backfill はソースファイルにも書き込むため、ソースも同時にロックする
+	// （FileMutex は複数キーを同期的に一括登録するため部分獲得デッドロックは起きない）
+	const lockPaths = [uri.fsPath];
+	try {
+		const config = Configuration.getInstance();
+		const fileExplorer = new FileExplorer();
+		const transPair = fileExplorer.getTransPairFromTarget(uri.fsPath, config);
+		const sourcePath = transPair
+			? fileExplorer.getSourcePath(uri.fsPath, transPair)
+			: null;
+		if (sourcePath) {
+			lockPaths.push(sourcePath);
+		}
+	} catch {
+		// ワークスペース未初期化などはtransFile_Exclusive側のエラー処理に委ねる
+	}
+	return FileMutex.getInstance().runExclusive(lockPaths, () =>
 		transFile_Exclusive(uri, progress, token),
 	);
 }
@@ -250,7 +270,18 @@ async function transFile_Exclusive(
 	const unitsToTranslate = markdown.units.filter((unit) =>
 		unit.needsTranslation(),
 	);
-	if (!needsFrontmatterTranslation && unitsToTranslate.length === 0) {
+
+	// backfill（逆方向埋め戻し）の有無を確認（ソースファイルに need:backfill があるか）
+	const sourceFilePathForBackfill = fileExplorer.getSourcePath(
+		targetFilePath,
+		transPair,
+	);
+	const hasBackfill = detectBackfillPresence(
+		sourceFilePathForBackfill,
+		config,
+	);
+
+	if (!needsFrontmatterTranslation && unitsToTranslate.length === 0 && !hasBackfill) {
 		return;
 	}
 
@@ -389,6 +420,22 @@ async function transFile_Exclusive(
 			}
 		}
 
+		// backfill（逆方向埋め戻し）: ソース側 need:backfill ユニットを言語逆転で翻訳して埋め戻す
+		let backfilledCount = 0;
+		if (hasBackfill && sourceFilePathForBackfill && !token.isCancellationRequested) {
+			backfilledCount = await processBackfillUnits(
+				uri,
+				markdown,
+				sourceFilePathForBackfill,
+				translator,
+				sourceLang,
+				targetLang,
+				external,
+				progress,
+				token,
+			);
+		}
+
 		// external: 翻訳結果を全文書き戻し＋ store 保存（マーカーは本文に出力されない）
 		if (external) {
 			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
@@ -396,6 +443,9 @@ async function transFile_Exclusive(
 
 		// ファイル全体の状態をStatusManagerで更新
 		await statusManager.refreshFileStatus(targetFilePath);
+		if (backfilledCount > 0) {
+			await statusManager.refreshFileStatus(sourceFilePathForBackfill ?? targetFilePath);
+		}
 
 		logger.info("trans", "Translation completed", {
 			file: path.basename(targetFilePath),
@@ -407,6 +457,7 @@ async function transFile_Exclusive(
 			patchedCount,
 			skippedCount,
 			tmHits,
+			backfilledCount,
 		};
 	} finally {
 		// isTranslatingフラグをクリア
@@ -1241,6 +1292,165 @@ async function transUnit_Exclusive(
  */
 function findUnitByHash(units: MdaitUnit[], hash: string): MdaitUnit | null {
 	return units.find((unit) => unit.marker?.hash === hash) || null;
+}
+
+/**
+ * ソースファイルに need:backfill ユニットが存在するかを軽量に判定する。
+ * embedded ではマーカー文字列の存在チェック、external では unit-state エントリを参照する。
+ */
+function detectBackfillPresence(
+	sourceFilePath: string | null,
+	config: Configuration,
+): boolean {
+	if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
+		return false;
+	}
+	try {
+		if (config.isExternalMarkers()) {
+			const rel = toWorkspaceRelativePath(sourceFilePath);
+			return UnitStateStore.getInstance()
+				.getEntriesByPath(rel)
+				.some((entry) => entry.need === "backfill");
+		}
+		const content = fs.readFileSync(sourceFilePath, "utf-8");
+		return content.includes("need:backfill");
+	} catch (error) {
+		logger.warn("trans", "Failed to detect backfill presence", {
+			sourceFilePath,
+			...formatError(error),
+		});
+		return false;
+	}
+}
+
+/**
+ * backfill（逆方向埋め戻し）処理。
+ *
+ * ソースファイルの need:backfill プレースホルダに対応する訳文ユニット本文を
+ * transPair の言語を逆転（targetLang→sourceLang）して翻訳し、原文側へ書き込む。
+ * 原文プレースホルダには need:review を残し（逆生成原文の品質確認）、
+ * 訳文ユニットの from を新しい原文ハッシュへ更新する（fromリンクの確立）。
+ *
+ * 呼び出し前提: ターゲット・ソース両ファイルのロックを保持していること。
+ *
+ * @returns 埋め戻したユニット数
+ */
+async function processBackfillUnits(
+	targetUri: vscode.Uri,
+	targetMarkdown: Markdown,
+	sourceFilePath: string,
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	external: boolean,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	token: vscode.CancellationToken,
+): Promise<number> {
+	const config = Configuration.getInstance();
+	const sourceIo = resolveMarkerIO(config, sourceFilePath, "source");
+
+	// ソースファイルをパース
+	const decoder = new TextDecoder("utf-8");
+	const sourceRaw = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFilePath));
+	const sourceMarkdown = markdownParser.parse(
+		decoder.decode(sourceRaw),
+		config,
+		sourceIo.provider,
+		sourceIo.ctx,
+	);
+
+	const pairs = collectBackfillPairs(sourceMarkdown.units, targetMarkdown.units);
+	if (pairs.length === 0) {
+		return 0;
+	}
+
+	// 用語集（逆方向: targetLang→sourceLang で引く）
+	const termEntries = await (async () => {
+		try {
+			const cacheManager = TermsCacheManager.getInstance();
+			return await cacheManager.getTerms(config.getTermsFilePath(), config.transPairs);
+		} catch {
+			return [];
+		}
+	})();
+
+	let backfilled = 0;
+	const updatedTargets: Array<{ oldMarkerText: string; unit: MdaitUnit }> = [];
+
+	for (let i = 0; i < pairs.length; i++) {
+		if (token.isCancellationRequested) {
+			break;
+		}
+		const pair = pairs[i];
+		progress.report({
+			message: vscode.l10n.t("Backfilling {0}/{1} units", i + 1, pairs.length),
+		});
+
+		let termsJson: string | undefined;
+		if (termEntries.length > 0) {
+			// 言語を逆転して関連用語を抽出（訳文言語→原文言語）
+			const relevantTerms = extractRelevantTerms(
+				pair.target.content,
+				termEntries,
+				targetLang,
+				sourceLang,
+			);
+			if (relevantTerms.length > 0) {
+				termsJson = termsToJson(relevantTerms);
+			}
+		}
+		const context = new TranslationContext([], [], termsJson, undefined);
+
+		const oldTargetMarkerText = pair.target.marker.toString();
+		const result = await translator.translate(
+			pair.target.content,
+			targetLang, // 言語逆転: 訳文言語が翻訳元
+			sourceLang, // 原文言語が翻訳先
+			context,
+			token,
+			{ unitHash: pair.source.marker.hash, title: pair.source.title },
+		);
+
+		applyBackfillTranslation(pair, result.translatedText);
+		updatedTargets.push({ oldMarkerText: oldTargetMarkerText, unit: pair.target });
+		backfilled++;
+
+		logger.info("trans", "Backfill unit completed", {
+			sourceHash: pair.source.marker.hash,
+			title: pair.source.title,
+		});
+	}
+
+	if (backfilled === 0) {
+		return 0;
+	}
+
+	// ソースファイルを全文書き戻し（embedded/external 共通。ロック保持中）
+	const updatedSourceContent = markdownParser.stringify(
+		sourceMarkdown,
+		sourceIo.provider,
+		sourceIo.ctx,
+	);
+	const encoder = new TextEncoder();
+	await vscode.workspace.fs.writeFile(
+		vscode.Uri.file(sourceFilePath),
+		encoder.encode(updatedSourceContent),
+	);
+	if (external) {
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().save(mdaitDir);
+		}
+	}
+
+	// ターゲット側の from 更新を書き戻し（embedded のみ。external は呼び出し元の全文保存が反映する）
+	if (!external) {
+		for (const { oldMarkerText, unit } of updatedTargets) {
+			await updateAndSaveUnit(targetUri, oldMarkerText, unit);
+		}
+	}
+
+	return backfilled;
 }
 
 /**

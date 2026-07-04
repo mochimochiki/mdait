@@ -17,6 +17,8 @@ export interface FileSyncResult {
 	adopted?: number;
 	/** need:keep で保持している孤立ターゲット数 */
 	kept?: number;
+	/** backfillプレースホルダを生成した孤立ターゲット数 */
+	backfilled?: number;
 }
 
 /** syncのオプション（コマンド層のSyncCommandOptionsと同義。循環依存回避のためここで定義） */

@@ -48,6 +48,8 @@ export interface DiffResult {
 	kept?: number;
 	/** need:verify-deletion を付与した孤立ターゲット数 */
 	orphanVerified?: number;
+	/** backfillプレースホルダを生成した孤立ターゲット数 */
+	backfilled?: number;
 }
 
 /**

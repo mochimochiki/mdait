@@ -55,6 +55,8 @@ export interface SyncResult {
 	totalAdopted: number;
 	/** need:keep で保持している孤立ターゲット数 */
 	totalKept: number;
+	/** backfillプレースホルダを生成した孤立ターゲット数 */
+	totalBackfilled: number;
 	durationMs: number;
 }
 
@@ -104,6 +106,7 @@ export async function syncCommand(
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
 		let totalKept = 0;
+		let totalBackfilled = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -186,7 +189,7 @@ export async function syncCommand(
 									await flushDirtyDocument(sourceFile);
 									await flushDirtyDocument(targetFile);
 									if (fs.existsSync(targetFile)) {
-										return handler.sync(sourceFile, targetFile);
+										return handler.sync(sourceFile, targetFile, options);
 									}
 									return handler.syncNew(sourceFile, targetFile);
 								},
@@ -234,6 +237,7 @@ export async function syncCommand(
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
 						totalKept += syncResult.kept ?? 0;
+						totalBackfilled += syncResult.backfilled ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -290,6 +294,7 @@ export async function syncCommand(
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalKept,
+			totalBackfilled,
 			durationMs,
 		});
 
@@ -349,6 +354,7 @@ export async function syncCommand(
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalKept,
+			totalBackfilled,
 			durationMs,
 		};
 	} catch (error) {
@@ -761,12 +767,24 @@ export async function sync_CoreProc(
 	);
 	const syncedUnits = syncedResult.units;
 
+	// backfill: 孤立ターゲットに対応する原文側プレースホルダを生成（need:backfill）
+	let backfilled = 0;
+	if (syncedResult.backfillTargets.length > 0) {
+		backfilled = sectionMatcher.insertBackfillPlaceholders(
+			source.units,
+			target.units,
+			matchResult,
+			syncedResult.backfillTargets,
+		);
+	}
+
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
 	diffResult.revisionsNeeded = revisionsNeeded;
 	diffResult.adopted = adopted;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
+	diffResult.backfilled = backfilled;
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {

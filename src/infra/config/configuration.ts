@@ -102,8 +102,9 @@ export interface TransPair {
  * - delete: 自動削除（旧 autoDelete: true 相当）
  * - verify: need:verify-deletion を付与して手動確認に委ねる（旧 autoDelete: false 相当）
  * - keep: need:keep を付与して恒久保持（独自ユニット。sync/trans が触れない）
+ * - backfill: 原文側にプレースホルダを生成し need:backfill を付与（transが逆方向翻訳で埋め戻す）
  */
-export type OrphanTargetPolicy = "delete" | "verify" | "keep";
+export type OrphanTargetPolicy = "delete" | "verify" | "keep" | "backfill";
 
 /**
  * mdait.yamlファイルの型定義
@@ -529,7 +530,8 @@ export class Configuration {
 				if (
 					config.sync.orphanTargetPolicy === "delete" ||
 					config.sync.orphanTargetPolicy === "verify" ||
-					config.sync.orphanTargetPolicy === "keep"
+					config.sync.orphanTargetPolicy === "keep" ||
+					config.sync.orphanTargetPolicy === "backfill"
 				) {
 					this.sync.orphanTargetPolicy = config.sync.orphanTargetPolicy;
 				}

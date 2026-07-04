@@ -91,6 +91,7 @@ Follow these steps.
 | `review` | 翻訳実行後に構造不一致を検出、または adopt で既訳を採用 | 訳文を手動で確認が必要 |
 | `verify-deletion` | 対応する原文が削除された（`orphanTargetPolicy: "verify"` 時） | 原文削除済み。訳文を削除してよいか確認 |
 | `keep` | 孤立ユニットを恒久保持（`orphanTargetPolicy: "keep"` 時） | 訳文側の独自コンテンツ。sync/trans は触れない |
+| `backfill` | 原文側プレースホルダ（`orphanTargetPolicy: "backfill"` 時） | 訳文のみのコンテンツを原文へ逆翻訳待ち |
 
 `need` フラグがないユニットは「同期済み・翻訳不要」の状態です。`need:keep` のユニットは「独自ユニット」として翻訳率の分母から除外されます。
 
@@ -125,9 +126,11 @@ Follow these steps.
 | `"delete"`（デフォルト） | 孤立ユニットを自動削除 |
 | `"verify"` | `need:verify-deletion` を付与して残す（手動確認待ち） |
 | `"keep"` | `need:keep` を付与して恒久保持（独自ユニット化） |
+| `"backfill"` | 原文側にプレースホルダを生成し `need:backfill` を付与（逆翻訳で埋め戻し） |
 
 - `"verify"` は削除判断を手動で行いたい場合に使います。確認後、ユニットを削除するか、残す場合は `need` を外します。
 - `"keep"` は訳文側にしか存在しないセクション（例: 英語版限定のお知らせ）を意図的に保持する場合に使います。`need:keep` が付いたユニットは以後の sync の対応付け・削除の対象外になり、trans も翻訳しません。マーカーは `<!-- mdait {hash} need:keep -->` の形（`from` なし）になります。
+- `"backfill"` は訳文側にしかないセクションを**原文側へ逆翻訳して対称化**します。sync が原文側に訳文と同内容のプレースホルダ（`need:backfill`）を挿入し、次の翻訳実行（対象はターゲットファイル/ディレクトリ）が言語を逆転して原文言語に翻訳・埋め戻します。生成された原文ユニットには `need:review` が残るため、内容を確認してからフラグを外してください。**原文ファイルへの書き込みを伴う**点に注意してください。
 - 旧設定 `autoDelete` も引き続き有効です（`true`→`delete`、`false`→`verify`）。`orphanTargetPolicy` と両方指定した場合は `orphanTargetPolicy` が優先されます。
 
 ---
