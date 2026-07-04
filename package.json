@@ -294,7 +294,7 @@
         "name": "mdait_getStatus",
         "displayName": "mdait: Get Translation Status",
         "toolReferenceName": "mdaitStatus",
-        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a summary of translation progress including total units, translated units, and files needing translation. Optionally pass a filePath to get status for a specific file.",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/keep). Pass detail:true to include a per-file breakdown of files that still need work. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -304,9 +304,13 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "filePath": {
+            "path": {
               "type": "string",
-              "description": "Optional file path to get status for a specific file. If omitted, returns overall status."
+              "description": "Optional file or directory path to scope the status. If omitted, returns workspace-wide status."
+            },
+            "detail": {
+              "type": "boolean",
+              "description": "If true, include per-file need breakdown (only files that still need work are listed)."
             }
           }
         }
@@ -315,7 +319,7 @@
         "name": "mdait_sync",
         "displayName": "mdait: Sync Translation Markers",
         "toolReferenceName": "mdaitSync",
-        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers.",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -329,9 +333,9 @@
       },
       {
         "name": "mdait_translate",
-        "displayName": "mdait: Translate File",
+        "displayName": "mdait: Translate",
         "toolReferenceName": "mdaitTranslate",
-        "modelDescription": "Translate a Markdown file using AI. Translates units that have need:translate or need:revise flags. The file must be a target file managed by mdait. Uses diff-aware revision for changed content to preserve existing translations.",
+        "modelDescription": "Translate mdait-managed target files using AI. Accepts a single target file or a directory (translates every target file under it, sequentially, with one confirmation for the whole scope). Only units flagged need:translate or need:revise are processed; already-translated units are skipped, so re-running after a failure or cancellation resumes the remaining work. Uses diff-aware revision for changed content to preserve existing translations. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data lists per-file success/failure with error causes and the remaining need breakdown for the scope.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -341,12 +345,12 @@
         "inputSchema": {
           "type": "object",
           "required": [
-            "filePath"
+            "path"
           ],
           "properties": {
-            "filePath": {
+            "path": {
               "type": "string",
-              "description": "The file path of the target Markdown file to translate."
+              "description": "Path of the target Markdown file or a directory containing target files to translate."
             }
           }
         }
