@@ -174,9 +174,9 @@ const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new Md
 GitHub Copilot Chatでのコマンド例:
 
 ```
-@mdaitStatus  → mdait_getStatus 呼び出し（翻訳状況を取得）
-@mdaitSync    → mdait_sync 呼び出し（マーカー同期）
-@mdaitTranslate README.ja.md → mdait_translate 呼び出し（ファイル翻訳）
+#mdaitStatus  → mdait_getStatus 呼び出し（翻訳状況を取得）
+#mdaitSync    → mdait_sync 呼び出し（マーカー同期）
+#mdaitTranslate README.ja.md → mdait_translate 呼び出し（ファイル翻訳）
 ```
 
 ---

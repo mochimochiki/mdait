@@ -49,7 +49,7 @@
 | G5 | 用語一貫性の事後検証がない。`TranslationChecker` はMarkdown構造カウント比較のみ。用語集はプロンプトへの「Follow the provided terminology list strictly」というソフトな指示止まりで、逸脱の検出・レポート手段がない | `src/commands/trans/translation-checker.ts`、`src/prompts/defaults.ts` | M4 |
 | G6 | 翻訳方向がtransPair単位で固定（常にsource→target）。「訳文側にしかないセクションを原文側へ埋め戻す」ユニット単位の方向反転は未モデル化 | `src/commands/trans-selection/direction-picker.ts`、`assets/schemas/mdait-config.schema.json`（transPairs） | M5 |
 | G7 | `mdait_translate` はファイル単位のみ＋都度確認ダイアログ。数百ファイルのサイトでは呼び出し回数・承認回数が爆発する | `src/lm-tools/translate-tool.ts` | M1 |
-| G8 | エージェント向けの手順書（どの状態で・どの順に・何を呼ぶか、失敗時のリカバリ）が存在しない | `docs/guide/` に該当ページなし | M6 |
+| G8 | エージェント向けの手順書が「ツールの個別説明」止まりで、サイト全体オーケストレーションの手順（どの状態で・どの順に・何を呼ぶか）、ゴール判定基準、失敗時のリカバリが未整備 | `docs/guide/ja/copilot-chat.md`（個別ツールの使い方と単発の推奨フローのみ） | M6 |
 | G9 | （副次）termロジックがcore層でなくcommands層にありVS Code非依存化されていない（TMとの非対称）。翻訳の並列実行なし | `src/commands/term/`、[architecture.md](../architecture.md)「意図的制約」 | M4, M6 |
 
 ---
