@@ -236,3 +236,66 @@ suite("Configuration orphanTargetPolicy", () => {
 		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
 	});
 });
+
+suite("Configuration aiSync.review", () => {
+	let tempDir: string;
+
+	setup(() => {
+		Configuration.dispose();
+		tempDir = createTempDir();
+		__vscodeMockWorkspaceRoot = tempDir;
+	});
+
+	teardown(() => {
+		Configuration.dispose();
+		cleanupTempDir(tempDir);
+	});
+
+	async function initWithAiSyncReview(review: Record<string, unknown> | undefined): Promise<Configuration> {
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+		const obj: Record<string, unknown> = JSON.parse(minimalConfig());
+		if (review !== undefined) {
+			obj.aiSync = { review };
+		}
+		fs.writeFileSync(customPath, JSON.stringify(obj), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		return config;
+	}
+
+	test("未指定の場合はデフォルト値（autoApprove:true, 閾値0.9, 上限200）になること", async () => {
+		const config = await initWithAiSyncReview(undefined);
+		assert.strictEqual(config.aiSync.review.autoApprove, true);
+		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 0.9);
+		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 200);
+	});
+
+	test("有効な値が読み込まれ、範囲外はクランプされること", async () => {
+		const config = await initWithAiSyncReview({
+			autoApprove: false,
+			autoApproveThreshold: 1.5,
+			maxUnitsPerRun: 5000,
+		});
+		assert.strictEqual(config.aiSync.review.autoApprove, false);
+		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 1);
+		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 1000);
+	});
+
+	test("autoApprove が boolean 以外（文字列）の場合は無視されデフォルトが維持されること", async () => {
+		const config = await initWithAiSyncReview({ autoApprove: "yes" });
+		assert.strictEqual(config.aiSync.review.autoApprove, true);
+	});
+
+	test("autoApproveThreshold が数値以外の場合は無視されNaNにならないこと", async () => {
+		const config = await initWithAiSyncReview({ autoApproveThreshold: "high" });
+		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 0.9);
+		assert.ok(Number.isFinite(config.aiSync.review.autoApproveThreshold));
+	});
+
+	test("maxUnitsPerRun が数値以外の場合は無視されデフォルトが維持されること", async () => {
+		const config = await initWithAiSyncReview({ maxUnitsPerRun: "many" });
+		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 200);
+	});
+});

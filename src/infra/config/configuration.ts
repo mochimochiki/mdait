@@ -722,20 +722,23 @@ export class Configuration {
 			}
 
 			// aiSync設定の読み込み
+			// autoApprove は need:review 自動解除のゲートのため、型不正（文字列等）を
+			// truthy として拾わないよう厳密に型チェックする（threshold の NaN 化は
+			// confidence < NaN が常に false になり低確信でも自動承認される）
 			if (config.aiSync?.review) {
-				if (config.aiSync.review.autoApprove !== undefined) {
+				if (typeof config.aiSync.review.autoApprove === "boolean") {
 					this.aiSync.review.autoApprove = config.aiSync.review.autoApprove;
 				}
-				if (config.aiSync.review.autoApproveThreshold !== undefined) {
+				if (Number.isFinite(config.aiSync.review.autoApproveThreshold)) {
 					this.aiSync.review.autoApproveThreshold = Math.min(
 						1,
-						Math.max(0, config.aiSync.review.autoApproveThreshold),
+						Math.max(0, config.aiSync.review.autoApproveThreshold as number),
 					);
 				}
-				if (config.aiSync.review.maxUnitsPerRun !== undefined) {
+				if (Number.isFinite(config.aiSync.review.maxUnitsPerRun)) {
 					this.aiSync.review.maxUnitsPerRun = Math.min(
 						1000,
-						Math.max(1, Math.floor(config.aiSync.review.maxUnitsPerRun)),
+						Math.max(1, Math.floor(config.aiSync.review.maxUnitsPerRun as number)),
 					);
 				}
 			}
