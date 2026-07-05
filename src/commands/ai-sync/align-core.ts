@@ -96,8 +96,8 @@ export async function alignMatchResult(
 	}
 
 	// スケルトン・対応表を生成して AI に審査させる
-	const sourceSkeletons = buildUnitSkeletons(sourceUnits);
-	const targetSkeletons = buildUnitSkeletons(targetUnits);
+	const sourceSkeletons = buildUnitSkeletons(sourceUnits, lockedSourceIndexes);
+	const targetSkeletons = buildUnitSkeletons(targetUnits, lockedTargetIndexes);
 	const correspondence = buildCorrespondence(matchResult, sourceUnits, targetUnits);
 
 	const aiResult = await aligner.align(

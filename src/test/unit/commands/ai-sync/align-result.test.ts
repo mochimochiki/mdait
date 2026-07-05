@@ -77,6 +77,13 @@ suite("buildUnitSkeletons（スケルトン生成）", () => {
 		assert.strictEqual(skeletons[0].title, "Intro");
 		assert.strictEqual(skeletons[1].length, units[1].content.length);
 	});
+
+	test("lockedIndexes に含まれるユニットは locked=true になる", () => {
+		const units = [unit("h0", "A", "## A\n\na"), unit("h1", "B", "## B\n\nb")];
+		const skeletons = buildUnitSkeletons(units, new Set([1]));
+		assert.strictEqual(skeletons[0].locked, false);
+		assert.strictEqual(skeletons[1].locked, true);
+	});
 });
 
 suite("buildCorrespondence（位置ベース対応表）", () => {
@@ -116,6 +123,12 @@ suite("validateCorrections（1件ずつ独立バリデーション）", () => {
 	test("confidence 不足は棄却する", () => {
 		const result = validateCorrections([{ sourceIndex: 1, targetIndex: 1, confidence: 0.3 }], ctx());
 		assert.strictEqual(result.accepted.length, 0);
+	});
+
+	test("confidence が範囲外（>1）は棄却する", () => {
+		const result = validateCorrections([{ sourceIndex: 1, targetIndex: 1, confidence: 1.5 }], ctx());
+		assert.strictEqual(result.accepted.length, 0);
+		assert.strictEqual(result.rejected.length, 1);
 	});
 
 	test("locked に触れる提案は棄却する", () => {

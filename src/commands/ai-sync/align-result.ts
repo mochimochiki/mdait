@@ -23,6 +23,8 @@ export interface UnitSkeleton {
 	digest: string;
 	/** 本文の文字数 */
 	length: number;
+	/** 審査対象外（from アンカー済み / need:keep）。true の場合 AI は参照禁止 */
+	locked?: boolean;
 }
 
 /** 位置ベース対応表の1エントリ */
@@ -129,14 +131,20 @@ export function buildBodyDigest(content: string, maxLen = 80): string {
 
 /**
  * ユニット配列からスケルトン配列を生成する（index は配列位置）。
+ * lockedIndexes に含まれるユニットは審査対象外として locked=true を付与する。
  */
-export function buildUnitSkeletons(units: readonly MdaitUnit[], digestLen = 80): UnitSkeleton[] {
+export function buildUnitSkeletons(
+	units: readonly MdaitUnit[],
+	lockedIndexes: ReadonlySet<number> = new Set(),
+	digestLen = 80,
+): UnitSkeleton[] {
 	return units.map((unit, index) => ({
 		index,
 		level: unit.headingLevel,
 		title: unit.title,
 		digest: buildBodyDigest(unit.content, digestLen),
 		length: unit.content.length,
+		locked: lockedIndexes.has(index),
 	}));
 }
 
@@ -199,6 +207,10 @@ export function validateCorrections(
 		}
 		if (typeof confidence !== "number" || Number.isNaN(confidence)) {
 			rejected.push({ correction, reason: "confidence is not a number" });
+			continue;
+		}
+		if (confidence < 0 || confidence > 1) {
+			rejected.push({ correction, reason: `confidence out of range [0,1]: ${confidence}` });
 			continue;
 		}
 		if (confidence < ctx.minConfidence) {

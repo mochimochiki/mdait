@@ -14,6 +14,18 @@ suite("validateAlignResponse（アライン応答のバリデーション）", (
 		assert.strictEqual(result.parsed?.kind, "ok");
 	});
 
+	test('{"ok": false} は no-op で握り潰さずリトライ可能エラーにする', () => {
+		const result = validateAlignResponse('{"ok": false}');
+		assert.strictEqual(result.valid, false);
+		assert.strictEqual(result.error?.retryable, true);
+	});
+
+	test("corrections/needBodies も ok:true も無いオブジェクトはリトライ可能エラー", () => {
+		const result = validateAlignResponse('{"error": "something went wrong"}');
+		assert.strictEqual(result.valid, false);
+		assert.strictEqual(result.error?.retryable, true);
+	});
+
 	test("corrections を配列として解釈する", () => {
 		const result = validateAlignResponse(
 			'{"corrections": [{"sourceIndex": 5, "targetIndex": 4, "confidence": 0.9}]}',

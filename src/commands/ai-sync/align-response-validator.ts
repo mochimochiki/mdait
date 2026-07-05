@@ -120,6 +120,17 @@ export function validateAlignResponse(rawResponse: string): ValidationResult<Par
 		return { valid: true, parsed: { kind: "needBodies", refs } };
 	}
 
-	// corrections も needBodies も無ければ ok 扱い（{ "ok": true } / {}）
-	return { valid: true, parsed: { kind: "ok" } };
+	// corrections も needBodies も無い場合、ok は ok===true または空オブジェクトに限定する。
+	// {"ok": false} や {"error": ...} 等は no-op で握り潰さず、不正応答としてリトライさせる。
+	if (parsed.ok === true || Object.keys(parsed).length === 0) {
+		return { valid: true, parsed: { kind: "ok" } };
+	}
+	return {
+		valid: false,
+		error: {
+			code: "INVALID_FIELD_TYPE",
+			message: 'Response must be one of {"ok": true} | {"corrections": [...]} | {"needBodies": [...]}',
+			retryable: true,
+		},
+	};
 }

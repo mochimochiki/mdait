@@ -226,7 +226,10 @@ export class SectionAligner {
 /** スケルトンを1行ずつ整形する */
 export function formatSkeletons(skeletons: readonly UnitSkeleton[]): string {
 	return skeletons
-		.map((s) => `[${s.index}] L${s.level} "${s.title}" (${s.length} chars): ${s.digest}`)
+		.map(
+			(s) =>
+				`[${s.index}] L${s.level} "${s.title}" (${s.length} chars)${s.locked ? " [locked]" : ""}: ${s.digest}`,
+		)
 		.join("\n");
 }
 

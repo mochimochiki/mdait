@@ -1101,7 +1101,7 @@ The alignment was produced by pairing units purely by document position — it n
 You are given, in the user message:
 - SOURCE UNITS and TARGET UNITS: one line per unit, formatted as
   [index] L{level} "{title}" ({length} chars): {body digest}
-  where "index" is the unit's position (use it in your output), "level" is the heading level, and the digest is the code-stripped first ~80 characters.
+  where "index" is the unit's position (use it in your output), "level" is the heading level, and the digest is the code-stripped first ~80 characters. A unit whose line ends with "[locked]" before the digest is already confirmed (from-anchored or kept) — you MUST NOT reference it in corrections or needBodies.
 - POSITION-BASED CORRESPONDENCE: lines "sN <-> tM" meaning source unit N was paired with target unit M. Entries marked "[locked]" are already confirmed by an existing link — you MUST NOT touch, re-pair, or reference them.
 
 CASCADE PATTERN (READ CAREFULLY — anti-confirmation-bias):
@@ -1120,7 +1120,7 @@ OUTPUT — return EXACTLY ONE of these JSON objects and NOTHING else (no markdow
 RULES:
 - "sourceIndex" and "targetIndex" are integers from the skeleton "index" values.
 - Each sourceIndex and each targetIndex may appear AT MOST ONCE across all corrections (an injective re-pairing).
-- Never reference a "[locked]" unit in corrections or needBodies.
+- Never reference a "[locked]" unit (in the correspondence table OR in the SOURCE/TARGET UNITS lists) in corrections or needBodies.
 - "confidence" is your certainty in the correction, from 0.0 (guess) to 1.0 (certain).
 - Ignore differences in Markdown syntax, code blocks, anchors, and link URLs — compare topics and coverage.
 - When in doubt and not requesting bodies, prefer {"ok": true}. A wrong correction is worse than leaving the deterministic guess in place.
