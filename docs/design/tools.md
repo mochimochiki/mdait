@@ -211,6 +211,28 @@ interface ValidateInput {
 
 **実装**: [`src/lm-tools/validate-tool.ts`](../../src/lm-tools/validate-tool.ts)
 
+### 7. AI Review Tool (`mdait_aiReview`)
+
+**機能**: adopt 済みペア（from + need:review）のAIペアリング検証（トリアージ）
+
+**入力パラメータ**:
+```typescript
+interface AiReviewInput {
+  path?: string;    // ターゲットファイル/ディレクトリ。省略時は全transPair
+  dryRun?: boolean; // true でマーカー無変更のレポートのみ
+}
+```
+
+**実装**:
+- `executeAiReviewForFiles`（`src/commands/ai-sync/review-command.ts`）に委譲
+- verdict `{match, mismatch, partial, uncertain}` を判定し、高確信 match の `need:review` を自動解除（`aiSync.review` 設定で制御、ADR-260704-07）
+- `data`: verdict別ユニット集計と **escalations 一覧**（file/unitHash/title/verdict/confidence/reason/issues、上限50件）。`nextActions` が mismatch→構造修正+再sync / partial→再翻訳 / approved→tm.commit を案内する
+- 冪等: 承認済みユニットは次回実行で列挙されない
+
+**確認UI**: あり（AI使用＋マーカー書換。dryRun でもAI使用のため確認あり）
+
+**実装**: [`src/lm-tools/ai-review-tool.ts`](../../src/lm-tools/ai-review-tool.ts)、設計: [command_ai-sync.md](command_ai-sync.md)
+
 ---
 
 ## ファイル構成
@@ -226,7 +248,8 @@ src/lm-tools/
 ├── translate-tool.ts     # 翻訳ツール
 ├── term-tool.ts          # 用語集ツール（detect/expand）
 ├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
-└── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
+├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
+└── ai-review-tool.ts     # AIペアリング検証ツール（need:reviewのトリアージ）
 ```
 
 ---
@@ -274,6 +297,7 @@ GitHub Copilot Chatでのコマンド例:
 #mdaitTerm    → mdait_term 呼び出し（用語検出・展開）
 #mdaitTm      → mdait_tm 呼び出し（TMコミット・最適化）
 #mdaitValidate → mdait_validate 呼び出し（構造・用語一貫性の検証）
+#mdaitAiReview → mdait_aiReview 呼び出し（adopt済みペアのAIトリアージ）
 ```
 
 ---

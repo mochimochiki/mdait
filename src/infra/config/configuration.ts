@@ -175,6 +175,25 @@ interface MdaitConfig {
 		"term.extractFromTranslations"?: string;
 		"term.translateTerms"?: string;
 	};
+	aiSync?: {
+		review?: {
+			autoApprove?: boolean;
+			autoApproveThreshold?: number;
+			maxUnitsPerRun?: number;
+		};
+	};
+}
+
+/**
+ * AIペアリング検証（aiSync.review）設定の型定義
+ */
+export interface AiSyncReviewConfig {
+	/** 高確信 match の need:review を自動解除するか（false でレポートのみのセーフモード） */
+	autoApprove: boolean;
+	/** 自動承認の confidence 閾値（0..1） */
+	autoApproveThreshold: number;
+	/** 1実行あたりの検証ユニット上限（コスト暴走防止） */
+	maxUnitsPerRun: number;
 }
 
 /**
@@ -288,6 +307,18 @@ export class Configuration {
 		maxReferences: 5,
 		retryLimit: 1,
 		minQueryLength: 10,
+	};
+	/**
+	 * AIペアリング検証（aiSync.review）設定
+	 */
+	public aiSync: {
+		review: AiSyncReviewConfig;
+	} = {
+		review: {
+			autoApprove: true,
+			autoApproveThreshold: 0.9,
+			maxUnitsPerRun: 200,
+		},
 	};
 
 	/**
@@ -686,6 +717,25 @@ export class Configuration {
 					this.tm.minQueryLength = Math.max(
 						1,
 						Math.min(100, config.tm.minQueryLength),
+					);
+				}
+			}
+
+			// aiSync設定の読み込み
+			if (config.aiSync?.review) {
+				if (config.aiSync.review.autoApprove !== undefined) {
+					this.aiSync.review.autoApprove = config.aiSync.review.autoApprove;
+				}
+				if (config.aiSync.review.autoApproveThreshold !== undefined) {
+					this.aiSync.review.autoApproveThreshold = Math.min(
+						1,
+						Math.max(0, config.aiSync.review.autoApproveThreshold),
+					);
+				}
+				if (config.aiSync.review.maxUnitsPerRun !== undefined) {
+					this.aiSync.review.maxUnitsPerRun = Math.min(
+						1000,
+						Math.max(1, Math.floor(config.aiSync.review.maxUnitsPerRun)),
 					);
 				}
 			}

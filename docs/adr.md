@@ -4,6 +4,28 @@
 
 ---
 
+## ADR-260704-07: AIペアリング検証の verdict 語彙と need:review 自動解除ポリシー
+
+### 背景
+adopt（ADR-260704-02）の対応付けは位置ベースであり、誤対応・翻訳漏れの安全網が `need:review` の人手全件レビューしかない。大規模サイトの取り込みでは非現実的なため、LLM がペアの妥当性を判定してレビューをトリアージする「AIペアリング検証」を導入する（[command_ai-sync.md](design/command_ai-sync.md)）。
+
+### 決定
+- verdict は `{match, mismatch, partial, uncertain}` + `confidence(0..1)` + `issues[]` + `reason` の4値固定。
+- **mismatch / partial に新しい need 語彙は導入しない**。理由: (a) `isTmCommitTarget`（commit-filter.ts）は列挙式除外で未知の need 値を登録対象として素通しするため、新語彙は TM 汚染の穴になる、(b) CodeLens / StatusTree / ドキュメントの語彙拡張コスト、(c) 人間ゲートを `need:review` 一本に保つ方が状態機械が単純。差別化はレポートと hover（`SummaryManager.reviewReasons`）で行う。
+- 自動承認は `verdict === "match" && issues.length === 0 && confidence >= aiSync.review.autoApproveThreshold && aiSync.review.autoApprove` の場合のみ `removeNeedTag()` を実行する。マーカー変異はこの1種類だけで、`hash`・`from`・本文には触れない（CodeLens「Mark as Reviewed」と同じ結果状態）。
+- 自動承認されたユニットは必ずレポートに列挙する（tm.commit 可能状態への昇格の可視化）。
+- 応答のリトライ枯渇は `uncertain / confidence:0` 相当として扱い、自動承認されない安全側に倒す。
+
+### 理由
+「need:review の解除＝人間の承認行為」という既存セマンティクスを AI が代行する形にすることで、trans / tm.commit / StatusTree との相互作用が既存の枠組みだけで完結する。LLM の自己申告 confidence は校正されていないため、承認は三重条件（match ∧ issues空 ∧ 閾値以上）とし、TM 品質を最優先する運用向けに `autoApprove: false`（レポートのみ）を残す。
+
+### 備考
+- 誤承認 → tm.commit 昇格の残余リスクはレポート必須列挙とデフォルト閾値 0.9 で緩和。
+- `isTmCommitTarget` の未知 need 素通しは本機能と独立の潜在バグとして別途修正候補（既知 need のみ通過へ反転）。
+- 詳細: [.tasks の 260704-07〜09 チケット](../.tasks/)
+
+---
+
 ## ADR-260704-06: ディレクトリ翻訳をファイル単位セマフォで並列化する
 
 ### 背景

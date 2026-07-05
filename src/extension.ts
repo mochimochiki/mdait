@@ -11,6 +11,11 @@ import {
 	createConfigCommand,
 	openExistingConfigCommand,
 } from "./commands/setup/setup-command";
+import {
+	aiReviewDirectoryCommand,
+	aiReviewFileCommand,
+} from "./commands/ai-sync/review-command";
+import { AiReviewResultContentProvider } from "./commands/ai-sync/review-result-provider";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -44,6 +49,7 @@ import { Configuration } from "./infra/config/configuration";
 import { Logger, parseLogLevel } from "./infra/logging/logger";
 import { AIOnboarding } from "./infra/onboarding/ai-onboarding";
 import { FileExplorer } from "./infra/workspace/file-explorer";
+import { MdaitAiReviewTool } from "./lm-tools/ai-review-tool";
 import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
 import { MdaitSyncTool } from "./lm-tools/sync-tool";
 import { MdaitTermTool } from "./lm-tools/term-tool";
@@ -304,6 +310,24 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait.tm.optimize",
 		tmOptimizeCommand,
 	);
+
+	// AI Review commands
+	const aiReviewFileDisposable = vscode.commands.registerCommand(
+		"mdait.aiSync.review.file",
+		(item?: StatusItem) => aiReviewFileCommand(item),
+	);
+	const aiReviewDirectoryDisposable = vscode.commands.registerCommand(
+		"mdait.aiSync.review.directory",
+		(item?: StatusItem) => aiReviewDirectoryCommand(item),
+	);
+
+	// AI Review Result ContentProvider登録
+	const aiReviewResultProvider = AiReviewResultContentProvider.getInstance();
+	const aiReviewResultProviderDisposable =
+		vscode.workspace.registerTextDocumentContentProvider(
+			"mdait-ai-review",
+			aiReviewResultProvider,
+		);
 
 	// TM Result ContentProvider登録
 	const tmResultProvider = TmResultContentProvider.getInstance();
@@ -765,6 +789,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait_validate",
 		new MdaitValidateTool(),
 	);
+	const aiReviewToolDisposable = vscode.lm.registerTool(
+		"mdait_aiReview",
+		new MdaitAiReviewTool(),
+	);
 
 	// 初回データ読み込み
 	context.subscriptions.push(
@@ -804,6 +832,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
 		tmOptimizeDisposable,
+		aiReviewFileDisposable,
+		aiReviewDirectoryDisposable,
+		aiReviewResultProviderDisposable,
+		aiReviewResultProvider,
 		tmResultProviderDisposable,
 		tmResultProvider,
 		termResultProviderDisposable,
@@ -821,6 +853,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		termToolDisposable,
 		tmToolDisposable,
 		validateToolDisposable,
+		aiReviewToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる

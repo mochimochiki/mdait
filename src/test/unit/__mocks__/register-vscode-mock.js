@@ -11,6 +11,7 @@
  *   global.__vscodeMockWorkspaceRoot = tempDir;
  * });
  */
+const fs = require("node:fs");
 const Module = require("node:module");
 const path = require("node:path");
 
@@ -24,9 +25,19 @@ const vscodeMock = {
 			if (!root) return undefined;
 			return [{ uri: { fsPath: root }, name: "mock-workspace", index: 0 }];
 		},
+		// エディタの未保存ドキュメント一覧（flushDirtyDocument 用。テストでは常に空）
+		textDocuments: [],
+		// CoreProc（ファイルの read-modify-write）をテスト可能にするため実ファイルI/Oに委譲する
 		fs: {
-			writeFile: async () => {},
-			readFile: async () => new Uint8Array(),
+			writeFile: async (uri, content) => {
+				const target = uri.fsPath ?? String(uri);
+				fs.mkdirSync(path.dirname(target), { recursive: true });
+				fs.writeFileSync(target, Buffer.from(content));
+			},
+			readFile: async (uri) => {
+				const target = uri.fsPath ?? String(uri);
+				return new Uint8Array(fs.readFileSync(target));
+			},
 		},
 		getConfiguration: () => ({
 			get: () => undefined,

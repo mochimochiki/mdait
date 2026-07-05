@@ -118,7 +118,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 			const nextActions = buildNextActions(status.needs, status.errorUnits);
 			if (adopt && syncResult.totalAdopted > 0) {
 				nextActions.unshift(
-					`${syncResult.totalAdopted} existing translation unit(s) were adopted with need:review. Review them (spot-check the pairing is correct), remove the need:review flags to approve, then run mdait_sync again before committing them to the TM.`,
+					`${syncResult.totalAdopted} existing translation unit(s) were adopted with need:review. Run mdait_aiReview to triage them with AI (auto-approves high-confidence matches, escalates suspected mis-pairings), or review and remove the need:review flags manually, then run mdait_sync again before committing them to the TM.`,
 				);
 			}
 			return toToolResult(createOkEnvelope(summary, data, nextActions));
