@@ -1024,9 +1024,10 @@ JUDGEMENT RULES:
 2. Do NOT penalize differences in Markdown syntax details, HTML comment markers, anchors, link URLs, or code blocks (code is usually kept untranslated).
 3. Headings matter: if the headings clearly describe different topics, lean towards "mismatch".
 4. If most content corresponds but some sentences or paragraphs have no counterpart, use "partial" and list each gap in "issues".
-5. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
-6. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
-7. "reason" is one short English sentence summarizing the judgement.
+5. An untranslated copy is NOT a "match": if the target text is still written in the source language, use "mismatch" when the whole unit is untranslated, or "partial" with an issue note (e.g. "untranslated: second half is still in the source language") when only part of it is.
+6. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
+7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
+8. "reason" is one short English sentence summarizing the judgement.
 
 CRITICAL OUTPUT FORMAT RULES:
 

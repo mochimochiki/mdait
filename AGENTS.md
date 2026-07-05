@@ -50,6 +50,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 - ファイルパス構築は `Configuration` クラスに一元化 — コマンド層で `.mdait/` パスを直接構築しないこと
 - 生の正規表現によるマーカー境界探索は `getCodeBlockLineSet` でコードブロック行を除外すること（コードブロック内のサンプルマーカーへの誤マッチを防ぐ）
 - テキスト正規化（`normalizeForTm` など）はそれを必要とするモジュールの内部に閉じ込める。呼び出し側は生テキストを渡す
+- 定常 sync（autoSyncOnSave 含む）は AI 不使用・決定的・冪等を維持する。AI を使う処理（trans・term・tm・ai-sync 系）は必ず明示的な起動＋確認UIを経由する（ADR-260705-01）
 
 ## テスト
 
