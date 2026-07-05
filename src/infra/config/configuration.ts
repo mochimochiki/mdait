@@ -181,6 +181,12 @@ interface MdaitConfig {
 			autoApproveThreshold?: number;
 			maxUnitsPerRun?: number;
 		};
+		align?: {
+			minConfidence?: number;
+			maxUnitsPerFile?: number;
+			maxNeedBodies?: number;
+			maxRounds?: number;
+		};
 	};
 }
 
@@ -194,6 +200,20 @@ export interface AiSyncReviewConfig {
 	autoApproveThreshold: number;
 	/** 1実行あたりの検証ユニット上限（コスト暴走防止） */
 	maxUnitsPerRun: number;
+}
+
+/**
+ * AIアライン（aiSync.align）設定の型定義
+ */
+export interface AiSyncAlignConfig {
+	/** 修正提案を受理する confidence の下限（0..1） */
+	minConfidence: number;
+	/** 1ファイルあたりの審査ユニット上限（超過時は位置ベースへフォールバック） */
+	maxUnitsPerFile: number;
+	/** needBodies で要求できる本文の上限件数（K） */
+	maxNeedBodies: number;
+	/** 二段トリアージの上限ラウンド数（1..2） */
+	maxRounds: number;
 }
 
 /**
@@ -313,11 +333,18 @@ export class Configuration {
 	 */
 	public aiSync: {
 		review: AiSyncReviewConfig;
+		align: AiSyncAlignConfig;
 	} = {
 		review: {
 			autoApprove: true,
 			autoApproveThreshold: 0.9,
 			maxUnitsPerRun: 200,
+		},
+		align: {
+			minConfidence: 0.6,
+			maxUnitsPerFile: 300,
+			maxNeedBodies: 8,
+			maxRounds: 2,
 		},
 	};
 
@@ -739,6 +766,34 @@ export class Configuration {
 					this.aiSync.review.maxUnitsPerRun = Math.min(
 						1000,
 						Math.max(1, Math.floor(config.aiSync.review.maxUnitsPerRun as number)),
+					);
+				}
+			}
+
+			// AIアライン（aiSync.align）設定の読み込み
+			if (config.aiSync?.align) {
+				if (Number.isFinite(config.aiSync.align.minConfidence)) {
+					this.aiSync.align.minConfidence = Math.min(
+						1,
+						Math.max(0, config.aiSync.align.minConfidence as number),
+					);
+				}
+				if (Number.isFinite(config.aiSync.align.maxUnitsPerFile)) {
+					this.aiSync.align.maxUnitsPerFile = Math.min(
+						2000,
+						Math.max(1, Math.floor(config.aiSync.align.maxUnitsPerFile as number)),
+					);
+				}
+				if (Number.isFinite(config.aiSync.align.maxNeedBodies)) {
+					this.aiSync.align.maxNeedBodies = Math.min(
+						50,
+						Math.max(0, Math.floor(config.aiSync.align.maxNeedBodies as number)),
+					);
+				}
+				if (Number.isFinite(config.aiSync.align.maxRounds)) {
+					this.aiSync.align.maxRounds = Math.min(
+						2,
+						Math.max(1, Math.floor(config.aiSync.align.maxRounds as number)),
 					);
 				}
 			}

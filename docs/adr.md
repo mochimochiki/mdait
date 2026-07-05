@@ -4,6 +4,27 @@
 
 ---
 
+## ADR-260705-03: AIアラインは sync_CoreProc に aligner を注入し matchResult を再配線する
+
+### 背景
+AIアライン（ADR-260705-02 で差分審査型に決定）を実装するにあたり、位置ベース対応付けの結果（`SectionMatcher.match()` の Phase 2）を AI が審査した修正提案を、既存の adopt 経路（from 確立・need:review 付与）を壊さずどこに差し込むか、AIService をどの層で構築・注入するかを決める必要があった。
+
+### 決定
+- **統合点**: `sync_CoreProc` の `match()` と `updateSectionHashes()` の間で `matchResult` を再配線する。from リンク書き込み前に再ペア化するため、以降の adopt 処理（`syncMarkerPair` の `adoptTarget`）がそのまま from 確立と `need:review` 付与を行う。align 自体は本文を書き換えず need も付けない。
+- **aligner 注入**: AIService を内包する `SectionAligner` は `syncCommand` で AIOnboarding ゲート通過後に1回だけ構築し、ワーカー → `handler.sync(...)` → `sync_CoreProc(...)` の追加引数として渡す。`syncSingleFile`（autoSyncOnSave）は aligner を渡さないため、定常 sync は構造的に AI 非実行（ADR-260705-01 を実装で担保）。オンボーディング拒否時は aligner 未構築で決定的 adopt を継続する。
+- **再配線の意味論**（`applyCorrections`）: 受理修正で `source[si]↔target[ti]` を再ペア化し、修正に消費されなかった元ペアは維持、消費で片側を失ったユニットは未対応化する（source→新規空ユニット、target→孤立ターゲット）。受理修正が空なら matchResult を恒等で返す（＝位置ベースへのフォールバック）。
+- **審査対象と locked**: 審査対象は「both-present かつ target が from を持たない」位置ベースペアのみ。from 済み（Phase 1）ペアと need:keep ターゲットは locked とし、修正提案がそれらに触れる場合はバリデーションで棄却する。候補が0なら AI を呼ばず no-op（管理済みサイトで冪等）。
+- **逐次化**: align 有効時はワーカー並列度を1に落とす（AI レート制限への配慮。review 経路と整合）。
+- **設定**: `aiSync.align`（minConfidence / maxUnitsPerFile / maxNeedBodies=K / maxRounds）を追加。ユニット過多ファイルは審査せず位置ベースのままとする。
+
+### 理由
+matchResult の再配線という最小の介入で、既存の from 確立・need:review・孤立ターゲット処理・diff 検出のすべてが無改修で乗る。AIService を core（sync_CoreProc）で構築せず注入することで、スタブ AIService による単体テストが AIペアリング検証と同水準で可能になる。フォールバックが常に「現行の位置ベース挙動」であることは applyCorrections の恒等性で保証される。
+
+### 備考
+- 詳細は [command_ai-sync.md](design/command_ai-sync.md)。v1 ではユニット単位キャンセルの細粒度対応と align 結果の仮想ドキュメントレポートは見送り（誤りは後段の mdait_aiReview が mismatch として拾う）。
+
+---
+
 ## ADR-260705-02: AIアラインは差分審査型とし、AI同期はプリミティブの合成コマンドとする
 
 ### 背景

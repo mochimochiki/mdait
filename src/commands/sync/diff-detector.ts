@@ -50,6 +50,8 @@ export interface DiffResult {
 	orphanVerified?: number;
 	/** backfillプレースホルダを生成した孤立ターゲット数 */
 	backfilled?: number;
+	/** AIアラインが適用した修正提案数 */
+	alignCorrections?: number;
 }
 
 /**

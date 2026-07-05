@@ -18,6 +18,11 @@ interface SyncInput {
 	 * 既存対訳サイトの取り込み用の一度きりの操作。
 	 */
 	adopt?: boolean;
+	/**
+	 * AIアライン: adopt 時の位置ベース対応付けを AI で差分審査して誤ペアを修正する。
+	 * adopt=true のときのみ有効。定常 sync では AI を動かさない（ADR-260705-01）。
+	 */
+	align?: boolean;
 }
 
 /** mdait_sync の data 形式 */
@@ -39,6 +44,8 @@ interface SyncData {
 		kept: number;
 		/** backfillプレースホルダを生成した孤立ターゲット数 */
 		backfilled: number;
+		/** AIアラインが適用した修正提案数 */
+		alignCorrections: number;
 	};
 	durationMs: number;
 	/** 同期後の全体ステータス */
@@ -57,10 +64,12 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 	): Promise<vscode.LanguageModelToolResult> {
 		try {
 			const adopt = options.input.adopt === true;
-			logger.info("LanguageModelTool", "Sync tool invoked", { adopt });
+			// align は adopt 時のみ有効（adopt でなければ無視する）
+			const align = adopt && options.input.align === true;
+			logger.info("LanguageModelTool", "Sync tool invoked", { adopt, align });
 
 			// 同期コマンドを実行
-			const syncResult = await syncCommand({ adopt });
+			const syncResult = await syncCommand({ adopt, align });
 			if (!syncResult) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(
@@ -90,6 +99,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					adopted: syncResult.totalAdopted,
 					kept: syncResult.totalKept,
 					backfilled: syncResult.totalBackfilled,
+					alignCorrections: syncResult.totalAlignCorrections,
 				},
 				durationMs: syncResult.durationMs,
 				status,
@@ -116,6 +126,11 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					);
 
 			const nextActions = buildNextActions(status.needs, status.errorUnits);
+			if (align && syncResult.totalAlignCorrections > 0) {
+				nextActions.unshift(
+					`AI align re-paired ${syncResult.totalAlignCorrections} unit(s) whose position-based mapping was wrong. All adopted pairs remain need:review; run mdait_aiReview to verify the (re)aligned pairs — any residual mis-pairing surfaces as a mismatch.`,
+				);
+			}
 			if (adopt && syncResult.totalAdopted > 0) {
 				nextActions.unshift(
 					`${syncResult.totalAdopted} existing translation unit(s) were adopted with need:review. Run mdait_aiReview to triage them with AI (auto-approves high-confidence matches, escalates suspected mis-pairings), or review and remove the need:review flags manually, then run mdait_sync again before committing them to the TM.`,
@@ -137,17 +152,26 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 	): Promise<vscode.PreparedToolInvocation> {
 		// 同期はマーカーを書き換えるため確認が必要
 		const adopt = options.input.adopt === true;
+		const align = adopt && options.input.align === true;
+		let message: string;
+		if (align) {
+			message = vscode.l10n.t(
+				"This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
+			);
+		} else if (adopt) {
+			message = vscode.l10n.t(
+				"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
+			);
+		} else {
+			message = vscode.l10n.t(
+				"This will update translation markers in your Markdown files. Do you want to proceed?",
+			);
+		}
 		return {
 			invocationMessage: vscode.l10n.t("Synchronizing translation markers..."),
 			confirmationMessages: {
 				title: vscode.l10n.t("Confirm Synchronization"),
-				message: adopt
-					? vscode.l10n.t(
-							"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
-						)
-					: vscode.l10n.t(
-							"This will update translation markers in your Markdown files. Do you want to proceed?",
-						),
+				message,
 			},
 		};
 	}

@@ -22,7 +22,7 @@
 
 | 系列 | 機能 | 概要 | 状態 |
 |------|------|------|------|
-| アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | 未着手 |
+| アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
 | レビュー | **AIペアリング検証** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
 | レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化 | 未着手 |
 | 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | 未着手 |
@@ -36,9 +36,9 @@
 | # | パターン | 現行の挙動（adopt + AIペアリング検証） | 完全解消する機能（状態） |
 |---|---------|--------------------------------------|------------------------|
 | 1 | ja/en 同一構造・内容も対応 | 全ペアが正しく `from` 確立 → 検証がほぼ全件を自動承認（低確信のみ kept で人間へ） | **実装済みで完結** |
-| 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。検証が **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide/ja/adopt.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（未着手） |
-| 3 | ja に無い章が en に存在（独自セクション） | その位置以降が誤ペア化＋余った en 章は `orphanTargetPolicy` 適用。**デフォルト `delete` は削除の罠** — 取り込み前に `verify`/`keep`/`backfill` の設定が必須（adopt.md 手順2） | AIアライン（unmatchedTarget の識別で誤ペア・誤削除とも防止） |
-| 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン |
+| 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。検証が **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide/ja/adopt.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（**実装済み**） |
+| 3 | ja に無い章が en に存在（独自セクション） | その位置以降が誤ペア化＋余った en 章は `orphanTargetPolicy` 適用。**デフォルト `delete` は削除の罠** — 取り込み前に `verify`/`keep`/`backfill` の設定が必須（adopt.md 手順2） | AIアライン（**実装済み**。unmatchedTarget の識別で誤ペア・誤削除とも防止） |
+| 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン（**実装済み**） |
 | 5 | ペアは正しいが訳抜け・原文改訂に未追随 | 検証が **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化） |
 | 6 | en が原文コピーのまま（未翻訳） | 検証プロンプトの verdict 定義で match を禁止 — 全文未翻訳は mismatch、部分残留は partial に倒す | **実装済み** |
 | 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
@@ -61,8 +61,15 @@ src/commands/ai-sync/
   review-core.ts               # executeAiReviewForFile: 1ファイル分の検証→マーカー変異→書き戻し
   review-command.ts            # VS Code コマンド（file/directory）
   review-result-provider.ts    # 仮想ドキュメントレポート
+  align-result.ts              # 純関数: スケルトン/ダイジェスト・修正提案バリデーション・matchResult 再配線
+  align-response-validator.ts  # アライン応答（ok/corrections/needBodies）のJSONバリデーション
+  section-aligner.ts           # AIService 呼び出し + 二段トリアージ2ラウンド + リトライ + buildSectionAligner
+  align-core.ts                # alignMatchResult: 候補抽出→審査→検証→再配線（sync_CoreProc から adopt+align 時のみ）
 src/lm-tools/ai-review-tool.ts # mdait_aiReview
+src/lm-tools/sync-tool.ts      # mdait_sync（align パラメータ）
 ```
+
+AIアラインは独立コマンドを持たず、`sync_CoreProc` の `match()`〜`updateSectionHashes()` 間に `SectionAligner` を注入する形で動く（ADR-260705-03）。aligner は `syncCommand` が AIOnboarding 通過後に1回構築し、`syncSingleFile`（定常 sync）へは渡さないため AI 非実行が構造的に保証される。設定は `aiSync.align`（minConfidence / maxUnitsPerFile / maxNeedBodies / maxRounds）。
 
 ## AIペアリング検証（レビュー系・第一形態）
 
@@ -176,7 +183,7 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 
 ### AIアライン（差分審査型・ADR-260705-02）
 
-adopt 時のみ・明示指定でのみ発動する（定常 sync では絶対に動かない）。`SectionMatcher.match()` の Phase 2 結果を AI が審査する形:
+**実装済み**（`syncCommand({ adopt: true, align: true })` / `mdait_sync` の `align` パラメータ・ADR-260705-03）。adopt 時のみ・明示指定でのみ発動する（定常 sync では絶対に動かない）。`SectionMatcher.match()` の Phase 2 結果を AI が審査する形:
 
 - **入力**: 両言語のユニットスケルトン `{index, level, 見出し, 本文ダイジェスト（コード除去済み先頭~80字）, 長さ}` ＋ 位置ベースの対応表
 - **出力**: `{ok | corrections: [{sourceIndex, targetIndex, confidence}] | needBodies: [index...]}`。大半のページは構造一致なので応答は「ok」で終わる（出力サイズが問題の数に比例）
