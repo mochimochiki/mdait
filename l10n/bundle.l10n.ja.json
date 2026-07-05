@@ -263,5 +263,20 @@
   "Validation completed: {0} violation(s) ({1} structure, {2} terms) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).": "検証完了: 違反 {0} 件（構造 {1}、用語 {2}）。{3} ファイル・翻訳済み {4} ユニットを検証、{5} ユニットは need 残りのためスキップ。",
   "Validation failed: {0}": "検証に失敗しました: {0}",
   "Validating translations...": "翻訳を検証中...",
-  "Backfilling {0}/{1} units": "逆方向埋め戻し {0}/{1} ユニット"
+  "Backfilling {0}/{1} units": "逆方向埋め戻し {0}/{1} ユニット",
+  "AI pairing review completed: {0} verified, {1} approved, {2} escalated ({3} mismatch / {4} partial), {5} kept, {6} errors across {7} file(s).": "AIペアリング検証完了: 検証 {0}、自動承認 {1}、エスカレーション {2}（不一致 {3} / 部分一致 {4}）、保留 {5}、エラー {6}（{7} ファイル）。",
+  "AI review failed: {0}": "AIレビューに失敗しました: {0}",
+  "Reviewing translation pairings with AI (dry run)...": "AIで対訳ペアを検証中（ドライラン）...",
+  "Confirm AI Pairing Review (Dry Run)": "AIペアリング検証の確認（ドライラン）",
+  "Verify adopted translation pairings for {0} with AI? Dry run: no markers are changed, only a report is returned.": "{0} の取り込み済み対訳ペアをAIで検証しますか？ドライラン: マーカーは変更されず、レポートのみ返されます。",
+  "Reviewing translation pairings with AI...": "AIで対訳ペアを検証中...",
+  "Confirm AI Pairing Review": "AIペアリング検証の確認",
+  "Verify adopted translation pairings for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiSync.review settings).": "{0} の取り込み済み対訳ペアをAIで検証しますか？高確信で一致と判定されたユニットは need:review フラグが解除されます（aiSync.review 設定で制御）。",
+  "Source file not found for: {0}": "対応するソースファイルが見つかりません: {0}",
+  "Run AI pairing review for all files in directory '{0}'?": "ディレクトリ '{0}' 内の全ファイルにAIペアリング検証を実行しますか？",
+  "No target files found in directory.": "ディレクトリ内にターゲットファイルが見つかりません。",
+  "AI Pairing Review: {0}": "AIペアリング検証: {0}",
+  "AI review error: {0}": "AIレビューエラー: {0}",
+  "AI review: no units with need:review were found.": "AIレビュー: need:review のユニットは見つかりませんでした。",
+  "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AIレビュー完了: 自動承認 {0}、エスカレーション {1}、保留 {2}、エラー {3}"
 }

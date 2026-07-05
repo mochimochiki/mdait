@@ -171,6 +171,18 @@
         "title": "%mdait.tm.optimize.title%",
         "icon": "$(sparkle)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.aiSync.review.file",
+        "title": "%mdait.aiSync.review.file.title%",
+        "icon": "$(verified)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.aiSync.review.directory",
+        "title": "%mdait.aiSync.review.directory.title%",
+        "icon": "$(verified)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -288,6 +300,16 @@
           "command": "mdait.tm.commit.file",
           "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
           "group": "inline@3"
+        },
+        {
+          "command": "mdait.aiSync.review.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "group": "inline@4"
+        },
+        {
+          "command": "mdait.aiSync.review.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "group": "inline@4"
         }
       ]
     },
@@ -456,6 +478,32 @@
                 ]
               },
               "description": "Which checks to run. Omit to run both structure and terms."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_aiReview",
+        "displayName": "mdait: AI Pairing Review",
+        "toolReferenceName": "mdaitAiReview",
+        "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above aiSync.review.autoApproveThreshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts and an escalations list (file, unitHash, title, verdict, confidence, reason, issues). Idempotent: approved units are not re-verified on the next run. Pass dryRun:true to get the report without changing any markers. Uses AI and rewrites markers, so a confirmation is shown.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "review",
+          "adopt"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Optional target file or directory to scope the review. Omit to review all translation pairs."
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "If true, only report verdicts without changing any markers."
             }
           }
         }

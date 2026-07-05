@@ -368,6 +368,44 @@
           "type": "string",
           "description": "Path to custom TM sentence alignment prompt file",
           "examples": [".mdait/prompts/tm-split-sentences.txt"]
+        },
+        "aiSync.verifyPairing": {
+          "type": "string",
+          "description": "Path to custom AI pairing verification prompt file",
+          "examples": [".mdait/prompts/ai-sync-verify-pairing.txt"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "aiSync": {
+      "type": "object",
+      "description": "AI-assisted sync settings",
+      "properties": {
+        "review": {
+          "type": "object",
+          "description": "AI pairing verification (triage of need:review units created by adopt)",
+          "properties": {
+            "autoApprove": {
+              "type": "boolean",
+              "description": "Automatically remove need:review from units the AI judges as a faithful and complete translation with high confidence. Set to false for report-only mode (no marker changes).",
+              "default": true
+            },
+            "autoApproveThreshold": {
+              "type": "number",
+              "description": "Minimum AI confidence (0..1) required for auto-approval. Only verdict=match with no issues and confidence at or above this value is approved.",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.9
+            },
+            "maxUnitsPerRun": {
+              "type": "integer",
+              "description": "Maximum number of units verified per run (cost guard). Remaining units stay need:review and are picked up by the next run.",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 200
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

@@ -141,6 +141,18 @@ sequenceDiagram
 
 ---
 
+### aiSync.review（AIペアリング検証）
+
+| 設定 | デフォルト | 動作 |
+|------|-----------|------|
+| `aiSync.review.autoApprove` | `true` | 高確信 match の `need:review` を自動解除。`false` でレポートのみ（マーカー無変更）のセーフモード |
+| `aiSync.review.autoApproveThreshold` | `0.9` | 自動承認に必要な confidence 閾値（0..1 クランプ） |
+| `aiSync.review.maxUnitsPerRun` | `200` | 1実行あたりの検証ユニット上限（1..1000 クランプ）。超過分は次回実行で処理 |
+
+**設計意図**: 自動承認は「match ∧ issues空 ∧ 閾値以上」の三重条件でのみ発動する（ADR-260704-07）。詳細: [command_ai-sync.md](command_ai-sync.md)
+
+---
+
 ## バリデーション
 
 ### validate()メソッド

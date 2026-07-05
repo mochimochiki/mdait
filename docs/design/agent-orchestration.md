@@ -124,6 +124,7 @@ sequenceDiagram
 | `mdait_term` | `{ action: "detect"\|"expand", path? }` | 追加/更新された用語一覧、未展開残数 | terms.csv書換・AI使用 | あり |
 | `mdait_tm` | `{ action: "commit"\|"optimize", path? }` | 追加/更新TU数、スキップ理由内訳（needあり等） | translations.tmx書換・AI使用 | あり |
 | `mdait_validate` | `{ path?, checks?: ["structure","terms"] }` | 違反一覧（ファイル/ユニット/種別/期待値/実際値） | なし | なし（AI不使用・読取専用） |
+| `mdait_aiReview` | `{ path?, dryRun? }` | need:review ペアの verdict 集計（approved/mismatch/partial等）とエスカレーション一覧 | マーカー書換（need:review 解除）・AI使用 | あり |
 
 設計原則は [tools.md](tools.md) に従う: Commands/Core層の薄いラップ、確認UI、l10n、エラーの構造化返却（`ok:false` ＋ `error.code`/`error.message`）。
 
@@ -131,7 +132,7 @@ sequenceDiagram
 
 `mdait_sync` / syncコマンドのオプション。初回syncで「マーカーなしだが本文のある既存訳文」を翻訳済みとして採用する。
 
-- **対応付け**: `SectionMatcher` の順序ベース対応（既存ロジック）をそのまま使う。対応が取れたペアは `from` を確立し、`need:translate` の代わりに **`need:review`** を付与する（人間/エージェントによる確認を経て `need` を外す運用。即時に翻訳済み扱いしたい場合はレビュー承認をエージェントに委任できる）。
+- **対応付け**: `SectionMatcher` の順序ベース対応（既存ロジック）をそのまま使う。対応が取れたペアは `from` を確立し、`need:translate` の代わりに **`need:review`** を付与する（人間/エージェントによる確認を経て `need` を外す運用。即時に翻訳済み扱いしたい場合はレビュー承認をエージェントに委任できる）。adopt 後の `need:review` の一括トリアージは `mdait_aiReview`（AIペアリング検証、[command_ai-sync.md](command_ai-sync.md)・ADR-260704-07）で行える。
 - **実装位置**: `marker-sync.ts` の新規ターゲット分岐に「本文が空でなければreviewに倒す」判定を追加する。externalモード再構築（`sync-command.ts` の `isExternalRebuild`）と非MD（`plain-file-handler.ts`）に既にある同種ロジックを共通化して流用する。
 - **adoptはsyncの引数であり永続設定にしない**（取り込みは一度きりの操作。定常運用のsyncが誤ってadopt動作をしない）。
 
