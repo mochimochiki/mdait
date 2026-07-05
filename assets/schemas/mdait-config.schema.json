@@ -373,6 +373,11 @@
           "type": "string",
           "description": "Path to custom AI pairing verification prompt file",
           "examples": [".mdait/prompts/ai-sync-verify-pairing.txt"]
+        },
+        "aiSync.align": {
+          "type": "string",
+          "description": "Path to custom AI align (differential review) prompt file",
+          "examples": [".mdait/prompts/ai-sync-align.txt"]
         }
       },
       "additionalProperties": false
@@ -403,6 +408,41 @@
               "minimum": 1,
               "maximum": 1000,
               "default": 200
+            }
+          },
+          "additionalProperties": false
+        },
+        "align": {
+          "type": "object",
+          "description": "AI align (differential review of the position-based unit mapping during adopt)",
+          "properties": {
+            "minConfidence": {
+              "type": "number",
+              "description": "Minimum AI confidence (0..1) for a correction to be accepted. Lower-confidence corrections are rejected and the position-based pairing is kept.",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.6
+            },
+            "maxUnitsPerFile": {
+              "type": "integer",
+              "description": "Maximum units per file to audit. Files larger than this skip AI align and keep the position-based mapping (cost/token guard).",
+              "minimum": 1,
+              "maximum": 2000,
+              "default": 300
+            },
+            "maxNeedBodies": {
+              "type": "integer",
+              "description": "Maximum number of unit bodies the AI may request in the second triage round (K).",
+              "minimum": 0,
+              "maximum": 50,
+              "default": 8
+            },
+            "maxRounds": {
+              "type": "integer",
+              "description": "Maximum triage rounds (1 disables the needBodies second round).",
+              "minimum": 1,
+              "maximum": 2,
+              "default": 2
             }
           },
           "additionalProperties": false

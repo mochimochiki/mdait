@@ -356,6 +356,10 @@
             "adopt": {
               "type": "boolean",
               "description": "One-time onboarding mode for existing bilingual sites. Adopts marker-less target units that already have content: establishes the from link and flags them need:review instead of need:translate, so existing translations are never overwritten."
+            },
+            "align": {
+              "type": "boolean",
+              "description": "AI-assisted alignment, only effective together with adopt:true. Before adoption, an LLM audits the position-based source-to-target unit mapping (heading skeletons + digests) and corrects mis-pairings caused by inserted/removed/reordered sections. Deterministic position-based mapping is always the fallback; adopted pairs stay need:review. Uses AI and shows a confirmation."
             }
           }
         }

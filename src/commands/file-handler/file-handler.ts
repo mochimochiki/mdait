@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import type { FileStatusItem } from "../../core/status/status-item";
 import type { TransPair } from "../../infra/config/configuration";
+import type { SectionAligner } from "../ai-sync/section-aligner";
 import type { Translator } from "../trans/translator";
 
 /** ファイルタイプ識別子 */
@@ -19,12 +20,16 @@ export interface FileSyncResult {
 	kept?: number;
 	/** backfillプレースホルダを生成した孤立ターゲット数 */
 	backfilled?: number;
+	/** AIアラインが適用した修正提案数 */
+	alignCorrections?: number;
 }
 
 /** syncのオプション（コマンド層のSyncCommandOptionsと同義。循環依存回避のためここで定義） */
 export interface FileSyncOptions {
 	/** 採用（adopt）モード: マーカーなし・本文ありの既存訳文を need:review で採用する */
 	adopt?: boolean;
+	/** AIアライン: adopt 時の位置ベース対応付けを AI で差分審査する（明示指定時のみ） */
+	align?: boolean;
 }
 
 /** translate結果 */
@@ -39,8 +44,13 @@ export interface FileTranslateResult {
 export interface FileHandler {
 	readonly fileType: FileType;
 
-	/** 既存ターゲットとの同期 */
-	sync(sourceFile: string, targetFile: string, options?: FileSyncOptions): Promise<FileSyncResult>;
+	/** 既存ターゲットとの同期（aligner は adopt+align 時のみ MD ハンドラが使用） */
+	sync(
+		sourceFile: string,
+		targetFile: string,
+		options?: FileSyncOptions,
+		aligner?: SectionAligner,
+	): Promise<FileSyncResult>;
 
 	/** 新規ターゲット作成 */
 	syncNew(sourceFile: string, targetFile: string): Promise<FileSyncResult>;

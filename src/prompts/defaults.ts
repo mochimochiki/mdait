@@ -32,6 +32,8 @@ export const PromptIds = {
 	TM_SPLIT_SENTENCES: "tm.splitSentences",
 	/** AIペアリング検証（adopt済みペアの妥当性判定） */
 	AI_SYNC_VERIFY_PAIRING: "aiSync.verifyPairing",
+	/** AIアライン（差分審査型・位置ベース対応付けの審査） */
+	AI_SYNC_ALIGN: "aiSync.align",
 } as const;
 
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
@@ -1066,6 +1068,86 @@ Verification Task:
 </targetUnit>`;
 
 /**
+ * aiSync.align - AIアライン（差分審査型）プロンプト
+ *
+ * @description
+ * adopt 取り込み時の位置ベース対応付け（見出しスケルトン＋対応表）を審査し、
+ * 誤ペアの修正提案を返します。全面生成には委ねず、位置ベース結果の差分審査に徹します。
+ *
+ * @input
+ * - {{sourceLang}}: ソース言語コード (例: "ja")
+ * - {{targetLang}}: ターゲット言語コード (例: "en")
+ * - {{sourceSkeletons}}: ソースユニットのスケルトン（1行/ユニット）
+ * - {{targetSkeletons}}: ターゲットユニットのスケルトン（1行/ユニット）
+ * - {{correspondence}}: 位置ベース対応表（sN <-> tM、[locked] は確定済み）
+ *
+ * @output
+ * ```json
+ * { "ok": true }
+ * ```
+ * または
+ * ```json
+ * { "corrections": [ { "sourceIndex": 5, "targetIndex": 4, "confidence": 0.9 } ] }
+ * ```
+ * または
+ * ```json
+ * { "needBodies": [ { "side": "source", "index": 5 } ] }
+ * ```
+ */
+export const DEFAULT_AI_SYNC_ALIGN = `You are an auditor of an automatic, POSITION-BASED alignment between a source document and its translation.
+
+The alignment was produced by pairing units purely by document position — it never looked at titles or content. Your job is to AUDIT that position-based guess and propose corrections ONLY where it paired units that actually describe different sections.
+
+You are given, in the user message:
+- SOURCE UNITS and TARGET UNITS: one line per unit, formatted as
+  [index] L{level} "{title}" ({length} chars): {body digest}
+  where "index" is the unit's position (use it in your output), "level" is the heading level, and the digest is the code-stripped first ~80 characters. A unit whose line ends with "[locked]" before the digest is already confirmed (from-anchored or kept) — you MUST NOT reference it in corrections or needBodies.
+- POSITION-BASED CORRESPONDENCE: lines "sN <-> tM" meaning source unit N was paired with target unit M. Entries marked "[locked]" are already confirmed by an existing link — you MUST NOT touch, re-pair, or reference them.
+
+CASCADE PATTERN (READ CAREFULLY — anti-confirmation-bias):
+A single INSERTED or DELETED chapter shifts EVERY following pair by one, cascading to the end of the document. So when titles/topics stop lining up from some point onward, the most likely cause is ONE insertion or deletion — not many independent mismatches. Suspect this cascade signature first: find where the drift starts and correct the run of pairs after it, rather than assuming isolated errors.
+
+DECISION:
+- If the position-based correspondence already pairs matching sections, respond with {"ok": true}.
+- If some non-locked pairs are wrong, respond with a "corrections" array. Each correction re-pairs source unit sourceIndex with target unit targetIndex. Include ONLY the pairs you want to CHANGE.
+- If you cannot decide from the skeletons alone, you may request the full body of up to a few specific units with "needBodies" (this costs one extra round; prefer {"ok": true} when the risk is low).
+
+OUTPUT — return EXACTLY ONE of these JSON objects and NOTHING else (no markdown fences, no prose):
+1) {"ok": true}
+2) {"corrections": [{"sourceIndex": 5, "targetIndex": 4, "confidence": 0.9}]}
+3) {"needBodies": [{"side": "source", "index": 5}, {"side": "target", "index": 5}]}
+
+RULES:
+- "sourceIndex" and "targetIndex" are integers from the skeleton "index" values.
+- Each sourceIndex and each targetIndex may appear AT MOST ONCE across all corrections (an injective re-pairing).
+- Never reference a "[locked]" unit (in the correspondence table OR in the SOURCE/TARGET UNITS lists) in corrections or needBodies.
+- "confidence" is your certainty in the correction, from 0.0 (guess) to 1.0 (certain).
+- Ignore differences in Markdown syntax, code blocks, anchors, and link URLs — compare topics and coverage.
+- When in doubt and not requesting bodies, prefer {"ok": true}. A wrong correction is worse than leaving the deterministic guess in place.
+
+❌ BAD (touching a locked pair, or reusing an index):
+{"corrections": [{"sourceIndex": 2, "targetIndex": 2, "confidence": 0.5}, {"sourceIndex": 2, "targetIndex": 3, "confidence": 0.5}]}
+
+✅ GOOD (a clean cascade shift after a deleted chapter):
+{"corrections": [{"sourceIndex": 5, "targetIndex": 4, "confidence": 0.92}, {"sourceIndex": 6, "targetIndex": 5, "confidence": 0.9}]}
+<!-- mdait:user-section -->
+Alignment Audit:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+
+SOURCE UNITS:
+{{sourceSkeletons}}
+
+TARGET UNITS:
+{{targetSkeletons}}
+
+POSITION-BASED CORRESPONDENCE (audit the non-locked entries):
+{{correspondence}}
+
+Return exactly one JSON object: {"ok": true} | {"corrections": [...]} | {"needBodies": [...]}.`;
+
+
+/**
  * デフォルトプロンプトのマッピング
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
@@ -1080,4 +1162,5 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 	[PromptIds.AI_SYNC_VERIFY_PAIRING]: DEFAULT_AI_SYNC_VERIFY_PAIRING,
+	[PromptIds.AI_SYNC_ALIGN]: DEFAULT_AI_SYNC_ALIGN,
 };

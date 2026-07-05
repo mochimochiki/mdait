@@ -278,5 +278,6 @@
   "AI Pairing Review: {0}": "AIペアリング検証: {0}",
   "AI review error: {0}": "AIレビューエラー: {0}",
   "AI review: no units with need:review were found.": "AIレビュー: need:review のユニットは見つかりませんでした。",
-  "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AIレビュー完了: 自動承認 {0}、エスカレーション {1}、保留 {2}、エラー {3}"
+  "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AIレビュー完了: 自動承認 {0}、エスカレーション {1}、保留 {2}、エラー {3}",
+  "This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?": "既存の訳文を採用（need:review を付与）し、AI で位置ベースのユニット対応付けを審査して誤ペアを修正します。Markdownファイルの翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。続行しますか？"
 }

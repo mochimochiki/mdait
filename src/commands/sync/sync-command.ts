@@ -28,6 +28,9 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { alignMatchResult } from "../ai-sync/align-core";
+import { type SectionAligner, buildSectionAligner } from "../ai-sync/section-aligner";
 import { showConfigError } from "../shared/guidance";
 import { copyDiffAssets } from "./asset-copier";
 import { DiffDetector, type DiffResult, type UnitDiff, DiffType } from "./diff-detector";
@@ -57,6 +60,8 @@ export interface SyncResult {
 	totalKept: number;
 	/** backfillプレースホルダを生成した孤立ターゲット数 */
 	totalBackfilled: number;
+	/** AIアラインが適用した修正提案数 */
+	totalAlignCorrections: number;
 	durationMs: number;
 }
 
@@ -69,6 +74,11 @@ export interface SyncCommandOptions {
 	 * 既存対訳サイトの取り込み用の一度きりの操作であり、永続設定にはしない。
 	 */
 	adopt?: boolean;
+	/**
+	 * AIアライン: adopt 時の位置ベース対応付けを AI で差分審査して誤ペアを修正する。
+	 * adopt かつ明示指定時のみ発動し、定常 sync では動かない（ADR-260705-01）。
+	 */
+	align?: boolean;
 }
 
 /**
@@ -96,6 +106,21 @@ export async function syncCommand(
 			pairCount: pairs.length,
 		});
 
+		// AIアライン準備: adopt + align 指定時のみ AI を使う。
+		// 定常 sync（syncSingleFile 経由）は aligner を作らないため構造的に AI 非実行（ADR-260705-01）。
+		let aligner: SectionAligner | undefined;
+		if (options?.adopt === true && options?.align === true) {
+			const proceed = await AIOnboarding.getInstance().checkAndShowFirstUseDialog();
+			if (proceed) {
+				aligner = await buildSectionAligner(config);
+			} else {
+				logger.info(
+					"sync",
+					"AI align skipped (onboarding declined); continuing with deterministic adopt",
+				);
+			}
+		}
+
 		let successCount = 0;
 		let errorCount = 0;
 		let totalFileCount = 0;
@@ -107,6 +132,7 @@ export async function syncCommand(
 		let totalAdopted = 0;
 		let totalKept = 0;
 		let totalBackfilled = 0;
+		let totalAlignCorrections = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -160,6 +186,8 @@ export async function syncCommand(
 
 			// CPUコア数に基づく並列処理制限
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
+			// align 有効時は AI レート制限に配慮して逐次実行する（review 経路と整合）
+			const effectiveParallel = aligner ? 1 : parallelCpuLimit;
 			let index = 0;
 
 			// ワーカー関数（並列実行処理）
@@ -189,7 +217,7 @@ export async function syncCommand(
 									await flushDirtyDocument(sourceFile);
 									await flushDirtyDocument(targetFile);
 									if (fs.existsSync(targetFile)) {
-										return handler.sync(sourceFile, targetFile, options);
+										return handler.sync(sourceFile, targetFile, options, aligner);
 									}
 									return handler.syncNew(sourceFile, targetFile);
 								},
@@ -238,6 +266,7 @@ export async function syncCommand(
 						totalAdopted += syncResult.adopted ?? 0;
 						totalKept += syncResult.kept ?? 0;
 						totalBackfilled += syncResult.backfilled ?? 0;
+						totalAlignCorrections += syncResult.alignCorrections ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -255,7 +284,7 @@ export async function syncCommand(
 
 			// ワーカー起動と完了待機
 			const workers = Array.from(
-				{ length: Math.min(parallelCpuLimit, files.length) },
+				{ length: Math.min(effectiveParallel, files.length) },
 				() => worker(),
 			);
 			await Promise.all(workers);
@@ -295,6 +324,7 @@ export async function syncCommand(
 			totalAdopted,
 			totalKept,
 			totalBackfilled,
+			totalAlignCorrections,
 			durationMs,
 		});
 
@@ -355,6 +385,7 @@ export async function syncCommand(
 			totalAdopted,
 			totalKept,
 			totalBackfilled,
+			totalAlignCorrections,
 			durationMs,
 		};
 	} catch (error) {
@@ -659,6 +690,7 @@ export async function sync_CoreProc(
 	targetFile: string,
 	config: Configuration,
 	options?: SyncCommandOptions,
+	aligner?: SectionAligner,
 ): Promise<DiffResult> {
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
@@ -727,7 +759,28 @@ export async function sync_CoreProc(
 	ensureMdaitMarkerHash(target.units);
 
 	// ユニットの対応付け
-	const matchResult = sectionMatcher.match(source.units, target.units);
+	// ユニットの対応付け（位置ベース）
+	let matchResult = sectionMatcher.match(source.units, target.units);
+
+	// AIアライン: adopt + align 指定かつ aligner 注入時のみ、位置ベース結果を AI で差分審査する。
+	// 応答不正・候補なし・上限超過は matchResult をそのまま使う（位置ベースへフォールバック）。
+	let alignCorrections = 0;
+	if (options?.adopt === true && options?.align === true && aligner) {
+		const transPair = fileExplorer.getTransPairFromTarget(targetFile, config);
+		if (transPair) {
+			const aligned = await alignMatchResult(
+				source.units,
+				target.units,
+				matchResult,
+				aligner,
+				config,
+				{ sourceLang: transPair.sourceLang, targetLang: transPair.targetLang },
+				targetFile,
+			);
+			matchResult = aligned.matchResult;
+			alignCorrections = aligned.summary.accepted;
+		}
+	}
 
 	// ユニットのハッシュを更新
 	const { revisionsNeeded, adopted } = updateSectionHashes(
@@ -785,6 +838,7 @@ export async function sync_CoreProc(
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.backfilled = backfilled;
+	diffResult.alignCorrections = alignCorrections;
 
 	// 同期結果をMarkdownオブジェクトとして構築
 	const syncedDoc = {

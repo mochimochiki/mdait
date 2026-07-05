@@ -7,6 +7,7 @@ import { Configuration } from "../../infra/config/configuration";
 import type { TransPair } from "../../infra/config/configuration";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import type { SectionAligner } from "../ai-sync/section-aligner";
 import { syncNew_CoreProc, sync_CoreProc } from "../sync/sync-command";
 import { transFile_CoreProc } from "../trans/trans-command";
 import type { Translator } from "../trans/translator";
@@ -30,9 +31,10 @@ export class MdFileHandler implements FileHandler {
 		sourceFile: string,
 		targetFile: string,
 		options?: FileSyncOptions,
+		aligner?: SectionAligner,
 	): Promise<FileSyncResult> {
 		const config = Configuration.getInstance();
-		const diffResult = await sync_CoreProc(sourceFile, targetFile, config, options);
+		const diffResult = await sync_CoreProc(sourceFile, targetFile, config, options, aligner);
 		return {
 			added: diffResult.added,
 			modified: diffResult.modified,
@@ -42,6 +44,7 @@ export class MdFileHandler implements FileHandler {
 			adopted: diffResult.adopted ?? 0,
 			kept: diffResult.kept ?? 0,
 			backfilled: diffResult.backfilled ?? 0,
+			alignCorrections: diffResult.alignCorrections ?? 0,
 		};
 	}
 
