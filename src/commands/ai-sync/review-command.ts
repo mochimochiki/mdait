@@ -16,6 +16,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { PromptProvider } from "../../prompts";
+import type { ReviewCollectMode } from "./pair-collector";
 import { PairVerifier } from "./pair-verifier";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
 import type { AiReviewFileResult } from "./review-result";
@@ -69,6 +70,8 @@ export async function executeAiReviewForFiles(
 				verified: 0,
 				approved: 0,
 				escalated: 0,
+				flagged: 0,
+				audited: 0,
 				kept: 0,
 				skipped: 0,
 				errors: 1,
@@ -118,15 +121,6 @@ export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiRev
 		return;
 	}
 
-	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t("Run AI pairing review for all files in directory '{0}'?", path.basename(dirPath)),
-		vscode.l10n.t("Yes"),
-		vscode.l10n.t("No"),
-	);
-	if (confirm !== vscode.l10n.t("Yes")) {
-		return;
-	}
-
 	const fileExplorer = new FileExplorer();
 	const files = (await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns)).filter(
 		(file) => fileExplorer.isTargetFile(file, config),
@@ -139,6 +133,31 @@ export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiRev
 }
 
 /**
+ * レビュー範囲（pending / audit）を選ばせる QuickPick。
+ * audit はマーカーへ need:review を付与し得るため、明示起動ゲートを兼ねる。
+ * キャンセル（Escape）時は undefined を返す。
+ */
+async function pickReviewMode(): Promise<ReviewCollectMode | undefined> {
+	const pendingItem = {
+		label: vscode.l10n.t("Review pending pairs only"),
+		detail: vscode.l10n.t("Verify only units marked need:review (adopted, not yet confirmed)."),
+		mode: "pending" as ReviewCollectMode,
+	};
+	const auditItem = {
+		label: vscode.l10n.t("Audit all translated pairs"),
+		detail: vscode.l10n.t(
+			"Also verify confirmed pairs to detect drift (source revisions / manual edits). Drifted units get need:review added.",
+		),
+		mode: "audit" as ReviewCollectMode,
+	};
+	const picked = await vscode.window.showQuickPick([pendingItem, auditItem], {
+		title: vscode.l10n.t("AI Review Scope"),
+		placeHolder: vscode.l10n.t("Select which translation pairs to review with AI"),
+	});
+	return picked?.mode;
+}
+
+/**
  * バリデーション・AIオンボーディング・進捗表示つきでAIペアリング検証を実行する共通経路。
  */
 async function runAiReviewWithProgress(files: string[], scopeLabel: string): Promise<AiReviewFileResult[] | undefined> {
@@ -146,6 +165,11 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 	const validationError = config.validate();
 	if (validationError) {
 		vscode.window.showErrorMessage(validationError);
+		return;
+	}
+
+	const mode = await pickReviewMode();
+	if (!mode) {
 		return;
 	}
 
@@ -163,7 +187,7 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 		},
 		async (progress, token) => {
 			try {
-				const results = await executeAiReviewForFiles(files, config, {}, progress, token);
+				const results = await executeAiReviewForFiles(files, config, { mode }, progress, token);
 				showAiReviewResult(results);
 				await showAiReviewPreview(results);
 				return results;
@@ -185,23 +209,25 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 function showAiReviewResult(results: AiReviewFileResult[]): void {
 	const approved = results.reduce((sum, r) => sum + r.approved, 0);
 	const escalated = results.reduce((sum, r) => sum + r.escalated, 0);
+	const flagged = results.reduce((sum, r) => sum + r.flagged, 0);
 	const kept = results.reduce((sum, r) => sum + r.kept, 0);
 	const errors = results.reduce((sum, r) => sum + r.errors, 0);
 	const verified = results.reduce((sum, r) => sum + r.verified, 0);
 
 	if (verified === 0 && errors === 0) {
-		vscode.window.showInformationMessage(vscode.l10n.t("AI review: no units with need:review were found."));
+		vscode.window.showInformationMessage(vscode.l10n.t("AI review: no pairs matched the selected scope."));
 		return;
 	}
 
 	const message = vscode.l10n.t(
-		"AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors",
+		"AI review completed: {0} approved, {1} flagged, {2} escalated, {3} kept, {4} errors",
 		approved,
+		flagged,
 		escalated,
 		kept,
 		errors,
 	);
-	if (escalated > 0 || errors > 0) {
+	if (flagged > 0 || escalated > 0 || errors > 0) {
 		vscode.window.showWarningMessage(message);
 	} else {
 		vscode.window.showInformationMessage(message);

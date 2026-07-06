@@ -4,6 +4,24 @@
 
 ---
 
+## ADR-260706-03: AIレビュー拡張（対象拡張モード）はドリフト検出で need:review を付与する
+
+### 背景
+AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-sync.md)）の第一項目「対象拡張モード」を実装するにあたり、対象を `need:review` 限定から確定済みペア（`from` あり・`need` なし）へ広げたとき、監査でドリフト（原文改訂の取りこぼし・手修正劣化）を検出した確定済みペアをどう扱うかを決める必要があった。既存のペアリング検証はマーカー変異が `removeNeedTag()` の1種類のみで、need を付与したことはない。
+
+### 決定
+- **`mode: "audit"` を追加**する（既定は従来の `"pending"`）。audit は `from` あり ∧（`need:review` **または** `need` なし）を列挙対象にする。`translate`/`revise@`/`isolate`/`keep`/`backfill`/`verify-deletion` 等の in-flight 状態は「確定した対訳ではない」ため対象外。
+- **ドリフト検出時は `setNeed("review")` で need:review を付与してフラグ**する。確定済みペア（need なし）が `partial`/`mismatch` と判定されたら need:review を付ける（新カウンタ flagged）。`match`/`uncertain` は無変更（新カウンタ audited）。need:review だった既存ユニットの挙動（approve→removeNeedTag / escalate / keep）は不変。
+- **既訳本文は不変**。マーカー変異は need の付与/解除のみで、hash・from・本文には触れない。dryRun ではフラグを付与しない。書き戻しゲートは「変異総数（removeNeed + setNeed）> 0」に一般化する。
+
+### 理由
+need 付与はファミリー不変条件（[command_ai-sync.md](design/command_ai-sync.md)「マーカー変異は need の付与/解除のみ」）が許容している。フラグされたユニットは adopt 生成の need:review と同一状態に収束するため、StatusTree・hover・tm.commit 除外・後続の trans/sync フローにそのまま乗り、検出が可視・永続・actionable になる（レポートのみだと検出が揮発する）。定常運用の健全性監査というロードマップの目的に合致する。
+
+### 備考
+- audit は need:review を付与し得るため、コマンド層は QuickPick（pending/audit 選択）を明示起動ゲートとし、LM tool（`mdait_aiReview` の `mode`）は確認UIでその旨を明示する（ADR-260705-01 と整合）。
+- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[orphan-model.md](design/orphan-model.md) #3、`need:isolate` に依存）。`mdait_aiSync` 合成は pending のまま。
+- 詳細: [command_ai-sync.md](design/command_ai-sync.md)。
+
 ## ADR-260706-02: 孤立ユニットの統合モデル（isolate 導入・判断サーフェス）
 
 ### 背景

@@ -83,16 +83,19 @@ function fileResult(units: UnitReviewResult[], overrides: Partial<AiReviewFileRe
 	const skipped = units.filter((u) => u.action === "skipped").length;
 	const errors = units.filter((u) => u.action === "error").length;
 	const verified = units.filter((u) => u.action !== "skipped").length;
+	const flagged = units.filter((u) => u.action === "flagged").length;
 	return {
 		filePath: "en/doc.md",
 		verified,
 		approved,
 		escalated: units.filter((u) => u.action === "escalated").length,
+		flagged,
+		audited: units.filter((u) => u.action === "audited").length,
 		kept: units.filter((u) => u.action === "kept").length,
 		skipped,
 		errors,
 		unitResults: units,
-		markersChanged: approved > 0,
+		markersChanged: approved > 0 || flagged > 0,
 		...overrides,
 	};
 }
@@ -137,5 +140,22 @@ suite("aggregateReviewResults（複数ファイルの集計・純関数）", () 
 		assert.strictEqual(agg.verified, 0);
 		assert.strictEqual(agg.escalated, 0);
 		assert.strictEqual(agg.kept, 0);
+	});
+
+	test("audit の flagged / audited を集計する", () => {
+		const results = [
+			fileResult([
+				unit("flagged", "mismatch"),
+				unit("flagged", "partial"),
+				unit("audited", "match"),
+				unit("approved", "match"),
+			]),
+		];
+		const agg = aggregateReviewResults(results);
+		assert.strictEqual(agg.flagged, 2);
+		assert.strictEqual(agg.audited, 1);
+		assert.strictEqual(agg.approved, 1);
+		// flagged は escalated（need:review 維持）とは別集計で、mismatch/partial には積まれない
+		assert.strictEqual(agg.escalated, 0);
 	});
 });

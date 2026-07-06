@@ -54,3 +54,36 @@ suite("collectReviewPairs（検証対象ペアの列挙）", () => {
 		assert.strictEqual(pairs[1].sourceUnit, srcB);
 	});
 });
+
+suite("collectReviewPairs（audit モードの対象拡張）", () => {
+	test("audit では確定済みペア（from あり・need なし）も need:review も列挙される", () => {
+		const srcA = unitOf("## A\n\n本文A", new MdaitMarker("srcA"), "A");
+		const srcB = unitOf("## B\n\n本文B", new MdaitMarker("srcB"), "B");
+		const reviewTarget = unitOf("## A(en)\n\nContent A", new MdaitMarker("tgtA", "srcA", "review"), "A(en)");
+		const settledTarget = unitOf("## B(en)\n\nContent B", new MdaitMarker("tgtB", "srcB", null), "B(en)");
+
+		const pending = collectReviewPairs([srcA, srcB], [reviewTarget, settledTarget], "pending");
+		assert.strictEqual(pending.length, 1, "pending は need:review のみ");
+
+		const audit = collectReviewPairs([srcA, srcB], [reviewTarget, settledTarget], "audit");
+		assert.strictEqual(audit.length, 2, "audit は確定済みペアも含む");
+		assert.strictEqual(audit[0].targetUnit, reviewTarget);
+		assert.strictEqual(audit[1].targetUnit, settledTarget);
+		assert.strictEqual(audit[1].sourceUnit, srcB);
+	});
+
+	test("audit でも from が無いユニットは対象外（ペアリング検証は from リンクが前提）", () => {
+		const src = unitOf("## A\n\n本文", new MdaitMarker("srcA"), "A");
+		const noFrom = unitOf("## Extra(en)\n\nLocal", new MdaitMarker("orphanEn", null, null), "Extra");
+		assert.deepStrictEqual(collectReviewPairs([src], [noFrom], "audit"), []);
+	});
+
+	test("audit でも in-flight な need 状態（translate/revise/isolate/keep）は対象外", () => {
+		const src = unitOf("## A\n\n本文", new MdaitMarker("srcA"), "A");
+		const translate = unitOf("## T\n\n", new MdaitMarker("t1", "srcA", "translate"), "T");
+		const revise = unitOf("## R\n\nx", new MdaitMarker("r1", "srcA", "revise@old"), "R");
+		const isolate = unitOf("## I\n\nx", new MdaitMarker("i1", "srcA", "isolate"), "I");
+		const keep = unitOf("## K\n\nx", new MdaitMarker("k1", "srcA", "keep"), "K");
+		assert.deepStrictEqual(collectReviewPairs([src], [translate, revise, isolate, keep], "audit"), []);
+	});
+});

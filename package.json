@@ -501,7 +501,7 @@
         "name": "mdait_aiReview",
         "displayName": "mdait: AI Pairing Review",
         "toolReferenceName": "mdaitAiReview",
-        "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above aiSync.review.autoApproveThreshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts and an escalations list (file, unitHash, title, verdict, confidence, reason, issues). Idempotent: approved units are not re-verified on the next run. Pass dryRun:true to get the report without changing any markers. Uses AI and rewrites markers, so a confirmation is shown.",
+        "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above aiSync.review.autoApproveThreshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Pass mode:\"audit\" to also verify already-confirmed pairs (from present, no need flag) and detect drift from source revisions or manual edits: drifted pairs (partial/mismatch) get need:review added (counted as 'flagged'), healthy pairs are left unchanged (counted as 'audited'). The default mode:\"pending\" reviews only need:review units. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts (including flagged/audited) and an escalations list (file, unitHash, title, verdict, confidence, reason, issues) that lists both escalated and flagged units. Idempotent: approved units are not re-verified on the next pending run. Pass dryRun:true to get the report without changing any markers. Uses AI and rewrites markers, so a confirmation is shown.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -519,6 +519,14 @@
             "dryRun": {
               "type": "boolean",
               "description": "If true, only report verdicts without changing any markers."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "audit"
+              ],
+              "description": "Review scope. 'pending' (default) verifies only need:review units. 'audit' also verifies confirmed pairs (from present, no need flag) to detect drift; drifted pairs get need:review added."
             }
           }
         }

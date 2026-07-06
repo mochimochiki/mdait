@@ -21,7 +21,7 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { SummaryManager } from "../../ui/hover/summary-manager";
-import { collectReviewPairs } from "./pair-collector";
+import { type ReviewCollectMode, collectReviewPairs } from "./pair-collector";
 import type { PairVerifier } from "./pair-verifier";
 import {
 	type AiReviewFileResult,
@@ -37,6 +37,12 @@ const logger = Logger.getInstance();
 export interface AiReviewOptions {
 	/** true の場合はマーカーを一切変更しない（レポートのみ） */
 	dryRun?: boolean;
+	/**
+	 * 検証対象の範囲（既定 "pending"）。
+	 * - "pending": need:review ユニットのみ（AIペアリング検証・従来挙動）
+	 * - "audit": 確定済みペア（from あり・need なし）も監査し、ドリフト検出時に need:review を付与
+	 */
+	mode?: ReviewCollectMode;
 }
 
 /**
@@ -96,7 +102,8 @@ export async function executeAiReviewForFile(
 		const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
 		const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
-		const allPairs = collectReviewPairs(source.units, target.units);
+		const mode = options.mode ?? "pending";
+		const allPairs = collectReviewPairs(source.units, target.units, mode);
 		if (allPairs.length === 0) {
 			return;
 		}
@@ -107,7 +114,8 @@ export async function executeAiReviewForFile(
 			threshold: config.aiSync.review.autoApproveThreshold,
 		};
 		const summaryManager = SummaryManager.getInstance();
-		let approvedCount = 0;
+		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
+		let mutationCount = 0;
 
 		for (let i = 0; i < pairs.length; i++) {
 			if (token?.isCancellationRequested) {
@@ -160,17 +168,35 @@ export async function executeAiReviewForFile(
 					result.errors++;
 				} else {
 					const action = decideReviewAction(parsed, policy);
-					if (action === "approve") {
-						marker?.removeNeedTag();
-						unitResult.action = "approved";
-						approvedCount++;
-						result.approved++;
+					// 元が need:review（pending）か、確定済みペア（audit で拾った need なし）かで
+					// マーカー変異の意味が変わる。settled は removeNeedTag する対象が無いため、
+					// ドリフト（escalate）検出時のみ need:review を付与してフラグする。
+					const isPending = marker?.need === "review";
+					if (isPending) {
+						if (action === "approve") {
+							marker?.removeNeedTag();
+							unitResult.action = "approved";
+							mutationCount++;
+							result.approved++;
+						} else if (action === "escalate") {
+							unitResult.action = "escalated";
+							result.escalated++;
+						} else {
+							unitResult.action = "kept";
+							result.kept++;
+						}
 					} else if (action === "escalate") {
-						unitResult.action = "escalated";
-						result.escalated++;
+						// 確定済みペアにドリフト（partial/mismatch）を検出 → need:review を付与
+						if (!options.dryRun) {
+							marker?.setNeed("review");
+							mutationCount++;
+						}
+						unitResult.action = "flagged";
+						result.flagged++;
 					} else {
-						unitResult.action = "kept";
-						result.kept++;
+						// 確定済みペアがクリーン（match/uncertain）→ 変更なし
+						unitResult.action = "audited";
+						result.audited++;
 					}
 				}
 
@@ -200,8 +226,8 @@ export async function executeAiReviewForFile(
 			result.unitResults.push(unitResult);
 		}
 
-		// キャンセル時も完了分の承認は書き込む（冪等なので再実行で残りを処理できる）
-		if (approvedCount > 0 && !options.dryRun) {
+		// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
+		if (mutationCount > 0 && !options.dryRun) {
 			const encoder = new TextEncoder();
 			const updatedContent = markdownParser.stringify(
 				{ frontMatter: target.frontMatter, units: target.units },
@@ -227,9 +253,12 @@ export async function executeAiReviewForFile(
 
 	logger.info("aiSync", "AI review completed", {
 		file: targetFile,
+		mode: options.mode ?? "pending",
 		verified: result.verified,
 		approved: result.approved,
 		escalated: result.escalated,
+		flagged: result.flagged,
+		audited: result.audited,
 		kept: result.kept,
 		skipped: result.skipped,
 		errors: result.errors,
