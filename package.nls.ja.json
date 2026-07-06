@@ -46,6 +46,7 @@
   "mdait.tm.commit.directory.title": "✨ TM登録（ディレクトリ）",
   "mdait.aiSync.review.file.title": "✨ AIペアリング検証（ファイル）",
   "mdait.aiSync.review.directory.title": "✨ AIペアリング検証（ディレクトリ）",
+  "mdait.aiSync.run.title": "✨ AI同期",
   "TM Commit": "TM登録",
   "Term Expansion": "用語集展開",
   "The following actions will also be performed:": "また、以下も行います。",

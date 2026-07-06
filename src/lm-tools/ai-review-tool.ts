@@ -1,8 +1,8 @@
-import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAiReviewForFiles } from "../commands/ai-sync/review-command";
-import type { AiReviewFileResult, PairVerdict } from "../commands/ai-sync/review-result";
+import { resolveReviewTargets } from "../commands/ai-sync/review-targets";
+import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
@@ -184,20 +184,21 @@ function buildAiReviewData(
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	const toRelative = (filePath: string) => path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 
+	const agg = aggregateReviewResults(results);
 	const data: AiReviewData = {
 		files: {
 			scanned: scannedFiles,
-			withReviewUnits: results.filter((r) => r.unitResults.length > 0).length,
+			withReviewUnits: agg.filesWithUnits,
 		},
 		units: {
-			verified: 0,
-			approved: 0,
-			mismatch: 0,
-			partial: 0,
-			uncertain: 0,
-			keptBelowThreshold: 0,
-			errors: 0,
-			skipped: 0,
+			verified: agg.verified,
+			approved: agg.approved,
+			mismatch: agg.mismatch,
+			partial: agg.partial,
+			uncertain: agg.uncertain,
+			keptBelowThreshold: agg.keptBelowThreshold,
+			errors: agg.errors,
+			skipped: agg.skipped,
 		},
 		autoApprove: {
 			enabled: config.aiSync.review.autoApprove,
@@ -209,34 +210,17 @@ function buildAiReviewData(
 	};
 
 	for (const fileResult of results) {
-		data.units.verified += fileResult.verified;
-		data.units.approved += fileResult.approved;
-		data.units.errors += fileResult.errors;
-		data.units.skipped += fileResult.skipped;
 		for (const unit of fileResult.unitResults) {
-			if (unit.action === "escalated") {
-				if (unit.verdict === "mismatch") {
-					data.units.mismatch++;
-				} else {
-					data.units.partial++;
-				}
-				if (data.escalations.length < MAX_ESCALATIONS) {
-					data.escalations.push({
-						file: toRelative(unit.filePath),
-						unitHash: unit.unitHash,
-						title: unit.title,
-						verdict: unit.verdict ?? "uncertain",
-						confidence: unit.confidence ?? 0,
-						reason: unit.reason ?? "",
-						issues: unit.issues,
-					});
-				}
-			} else if (unit.action === "kept") {
-				if (unit.verdict === "uncertain") {
-					data.units.uncertain++;
-				} else {
-					data.units.keptBelowThreshold++;
-				}
+			if (unit.action === "escalated" && data.escalations.length < MAX_ESCALATIONS) {
+				data.escalations.push({
+					file: toRelative(unit.filePath),
+					unitHash: unit.unitHash,
+					title: unit.title,
+					verdict: unit.verdict ?? "uncertain",
+					confidence: unit.confidence ?? 0,
+					reason: unit.reason ?? "",
+					issues: unit.issues,
+				});
 			}
 		}
 	}
@@ -279,56 +263,4 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 		);
 	}
 	return nextActions;
-}
-
-/**
- * レビュー対象のターゲットMDファイル群を解決する。
- * - path省略: 全transPairのターゲットディレクトリ配下
- * - pathがファイル: そのファイル（ターゲットであること）
- * - pathがディレクトリ: 配下のターゲットMDファイル
- */
-async function resolveReviewTargets(
-	inputPath: string | undefined,
-	config: Configuration,
-	fileExplorer: FileExplorer,
-): Promise<string[]> {
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	const configBase = config.getConfigBaseDir() ?? workspaceRoot ?? "";
-
-	const collectFromDir = async (dir: string): Promise<string[]> => {
-		const pattern = new vscode.RelativePattern(dir, "**/*.md");
-		const found = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
-		return found.map((f) => f.fsPath).filter((f) => fileExplorer.isTargetFile(f, config));
-	};
-
-	if (!inputPath) {
-		const results: string[] = [];
-		const seen = new Set<string>();
-		for (const pair of config.transPairs) {
-			const dir = path.isAbsolute(pair.targetDir) ? pair.targetDir : path.resolve(configBase, pair.targetDir);
-			if (!fs.existsSync(dir)) {
-				continue;
-			}
-			for (const file of await collectFromDir(dir)) {
-				if (!seen.has(file)) {
-					seen.add(file);
-					results.push(file);
-				}
-			}
-		}
-		return results;
-	}
-
-	const absPath = path.isAbsolute(inputPath)
-		? inputPath
-		: workspaceRoot
-			? path.resolve(workspaceRoot, inputPath)
-			: inputPath;
-	if (!fs.existsSync(absPath)) {
-		return [];
-	}
-	if (fs.statSync(absPath).isDirectory()) {
-		return collectFromDir(absPath);
-	}
-	return fileExplorer.isTargetFile(absPath, config) ? [absPath] : [];
 }

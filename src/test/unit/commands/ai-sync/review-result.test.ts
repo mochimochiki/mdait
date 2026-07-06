@@ -1,6 +1,9 @@
 import * as assert from "node:assert";
 import {
+	type AiReviewFileResult,
 	type ParsedVerifyResponse,
+	type UnitReviewResult,
+	aggregateReviewResults,
 	decideReviewAction,
 	formatReviewReason,
 } from "../../../../commands/ai-sync/review-result";
@@ -68,5 +71,71 @@ suite("formatReviewReason（hover向け判定サマリ）", () => {
 	test("issues がある場合は末尾に列挙される", () => {
 		const text = formatReviewReason(response({ issues: ["omission: intro", "extra: footer"] }));
 		assert.ok(text.includes("omission: intro; extra: footer"));
+	});
+});
+
+function unit(action: UnitReviewResult["action"], verdict?: UnitReviewResult["verdict"]): UnitReviewResult {
+	return { filePath: "en/doc.md", unitHash: "h", fromHash: "f", issues: [], action, verdict };
+}
+
+function fileResult(units: UnitReviewResult[], overrides: Partial<AiReviewFileResult> = {}): AiReviewFileResult {
+	const approved = units.filter((u) => u.action === "approved").length;
+	const skipped = units.filter((u) => u.action === "skipped").length;
+	const errors = units.filter((u) => u.action === "error").length;
+	const verified = units.filter((u) => u.action !== "skipped").length;
+	return {
+		filePath: "en/doc.md",
+		verified,
+		approved,
+		escalated: units.filter((u) => u.action === "escalated").length,
+		kept: units.filter((u) => u.action === "kept").length,
+		skipped,
+		errors,
+		unitResults: units,
+		markersChanged: approved > 0,
+		...overrides,
+	};
+}
+
+suite("aggregateReviewResults（複数ファイルの集計・純関数）", () => {
+	test("mismatch/partial を escalated に、uncertain/閾値未満を kept に分類する", () => {
+		const results = [
+			fileResult([
+				unit("approved", "match"),
+				unit("escalated", "mismatch"),
+				unit("escalated", "partial"),
+				unit("kept", "uncertain"),
+				unit("kept", "match"),
+			]),
+		];
+		const agg = aggregateReviewResults(results);
+		assert.strictEqual(agg.approved, 1);
+		assert.strictEqual(agg.mismatch, 1);
+		assert.strictEqual(agg.partial, 1);
+		assert.strictEqual(agg.escalated, 2);
+		assert.strictEqual(agg.uncertain, 1);
+		assert.strictEqual(agg.keptBelowThreshold, 1);
+		assert.strictEqual(agg.kept, 2);
+	});
+
+	test("複数ファイルを合算し unitResults を持つファイル数を数える", () => {
+		const results = [
+			fileResult([unit("approved", "match")]),
+			fileResult([unit("skipped"), unit("error")]),
+			fileResult([]),
+		];
+		const agg = aggregateReviewResults(results);
+		assert.strictEqual(agg.filesWithUnits, 2);
+		assert.strictEqual(agg.skipped, 1);
+		assert.strictEqual(agg.errors, 1);
+		assert.strictEqual(agg.verified, 2);
+	});
+
+	test("空入力は全カウント0（冪等な no-op の集計）", () => {
+		const agg = aggregateReviewResults([]);
+		assert.strictEqual(agg.filesWithUnits, 0);
+		assert.strictEqual(agg.verified, 0);
+		assert.strictEqual(agg.escalated, 0);
+		assert.strictEqual(agg.kept, 0);
 	});
 });

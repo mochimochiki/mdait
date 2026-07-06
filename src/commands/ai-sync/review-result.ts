@@ -101,6 +101,76 @@ export function decideReviewAction(
 	return "approve";
 }
 
+/** 複数ファイルの検証結果を集計した内訳（VS Code 非依存・純関数の出力） */
+export interface ReviewAggregate {
+	/** need:review ユニットを持っていたファイル数 */
+	filesWithUnits: number;
+	verified: number;
+	approved: number;
+	/** escalated のうち verdict:mismatch */
+	mismatch: number;
+	/** escalated のうち verdict:partial */
+	partial: number;
+	/** kept のうち verdict:uncertain */
+	uncertain: number;
+	/** kept のうち match だが閾値未満/issuesあり/autoApprove無効 */
+	keptBelowThreshold: number;
+	/** escalated 合計（mismatch + partial） */
+	escalated: number;
+	/** kept 合計（uncertain + keptBelowThreshold） */
+	kept: number;
+	skipped: number;
+	errors: number;
+}
+
+/**
+ * 複数ファイルの検証結果を集計する（純関数）。
+ * mdait_aiReview / mdait_aiSync のエンベロープ・レポートが共有する。
+ * kept は verdict:uncertain と「match だが未承認」を区別して数える（ADR-260704-07）。
+ */
+export function aggregateReviewResults(results: AiReviewFileResult[]): ReviewAggregate {
+	const agg: ReviewAggregate = {
+		filesWithUnits: 0,
+		verified: 0,
+		approved: 0,
+		mismatch: 0,
+		partial: 0,
+		uncertain: 0,
+		keptBelowThreshold: 0,
+		escalated: 0,
+		kept: 0,
+		skipped: 0,
+		errors: 0,
+	};
+	for (const fileResult of results) {
+		if (fileResult.unitResults.length > 0) {
+			agg.filesWithUnits++;
+		}
+		agg.verified += fileResult.verified;
+		agg.approved += fileResult.approved;
+		agg.errors += fileResult.errors;
+		agg.skipped += fileResult.skipped;
+		for (const unit of fileResult.unitResults) {
+			if (unit.action === "escalated") {
+				if (unit.verdict === "mismatch") {
+					agg.mismatch++;
+				} else {
+					agg.partial++;
+				}
+			} else if (unit.action === "kept") {
+				if (unit.verdict === "uncertain") {
+					agg.uncertain++;
+				} else {
+					agg.keptBelowThreshold++;
+				}
+			}
+		}
+	}
+	agg.escalated = agg.mismatch + agg.partial;
+	agg.kept = agg.uncertain + agg.keptBelowThreshold;
+	return agg;
+}
+
 /**
  * hover（SummaryManager.reviewReasons）向けの判定サマリ文字列を生成する。
  */
