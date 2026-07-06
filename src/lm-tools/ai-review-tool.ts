@@ -273,7 +273,9 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 	}
 	if (data.units.flagged > 0) {
 		nextActions.push(
-			`${data.units.flagged} confirmed pair(s) drifted (source revised or manually edited) and were flagged with need:review by the audit. Inspect the escalations list; re-translate with mdait_translate or fix the translation manually, then run mdait_sync.`,
+			data.dryRun
+				? `${data.units.flagged} confirmed pair(s) drifted (source revised or manually edited) and would be flagged with need:review by the audit. This was a dry run: no markers were changed. Re-run mdait_aiReview with mode:"audit" (without dryRun) to apply the flags. Inspect the escalations list to review the drift.`
+				: `${data.units.flagged} confirmed pair(s) drifted (source revised or manually edited) and were flagged with need:review by the audit. Inspect the escalations list; re-translate with mdait_translate or fix the translation manually, then run mdait_sync.`,
 		);
 	}
 	if (data.units.uncertain + data.units.keptBelowThreshold > 0) {
