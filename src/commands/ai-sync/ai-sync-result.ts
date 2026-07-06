@@ -8,7 +8,7 @@
  */
 
 import type { SyncResult } from "../sync/sync-command";
-import { generateReviewTableSection } from "./review-result-provider";
+import { generateReviewTableSection } from "./review-table";
 import { type AiReviewFileResult, type ReviewAggregate, aggregateReviewResults } from "./review-result";
 
 /** AI同期1回分の結果（各段の生結果を保持する薄い集約） */

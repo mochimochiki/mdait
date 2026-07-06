@@ -36,6 +36,7 @@ class StubStages implements AiSyncStages {
 		private readonly sync: SyncResult | undefined,
 		private readonly targets: string[],
 		private readonly afterSync?: () => void,
+		private readonly afterCollect?: () => void,
 	) {}
 
 	async runSync(): Promise<SyncResult | undefined> {
@@ -45,6 +46,7 @@ class StubStages implements AiSyncStages {
 	}
 	async collectTargets(): Promise<string[]> {
 		this.calls.push("collect");
+		this.afterCollect?.();
 		return this.targets;
 	}
 	async runReview(files: string[], _config: Configuration, options: { dryRun?: boolean }) {
@@ -91,6 +93,18 @@ suite("executeAiSync（合成オーケストレーター）", () => {
 		assert.ok(outcome.sync);
 		assert.deepStrictEqual(outcome.review, []);
 		assert.deepStrictEqual(stages.calls, ["sync"]);
+	});
+
+	test("ターゲット列挙後にキャンセル済みならレビュー段を呼ばない（AIService の無駄な構築を回避）", async () => {
+		const cts = new vscode.CancellationTokenSource();
+		const stages = new StubStages(syncResult(), ["/ws/en/a.md"], undefined, () => cts.cancel());
+
+		const outcome = await executeAiSync(CONFIG, {}, NOOP_PROGRESS, cts.token, stages);
+
+		assert.strictEqual(outcome.aborted, false);
+		assert.ok(outcome.sync);
+		assert.deepStrictEqual(outcome.review, []);
+		assert.deepStrictEqual(stages.calls, ["sync", "collect"]);
 	});
 
 	test("対象ターゲットが0件ならレビュー段を呼ばず空結果（no-op）", async () => {

@@ -82,7 +82,12 @@ export async function executeAiSync(
 	// Phase 2: AIペアリング検証
 	progress.report({ message: vscode.l10n.t("AI pairing review...") });
 	const files = await stages.collectTargets(config);
-	const review = files.length > 0 ? await stages.runReview(files, config, { dryRun }, progress, token) : [];
+	// ターゲット列挙後に再度キャンセルを確認する。ここで抜けることで AIService の
+	// 無駄な構築（buildPairVerifier）や API 呼び出しを避け、キャンセル応答性を保つ。
+	if (token.isCancellationRequested || files.length === 0) {
+		return { sync, review: [], dryRun, aborted: false };
+	}
+	const review = await stages.runReview(files, config, { dryRun }, progress, token);
 
 	return { sync, review, dryRun, aborted: false };
 }
