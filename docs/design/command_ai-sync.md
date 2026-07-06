@@ -25,7 +25,7 @@
 | アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
 | レビュー | **AIペアリング検証** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
 | レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化 | 未着手 |
-| 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | 未着手 |
+| 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | **実装済み**（ADR-260706-01） |
 
 レビューを同期に埋め込まないのは意図的な分離である: レビューは取り込み直後だけでなく定常運用（定期監査・翻訳品質チェック）で価値を持ち、バッチ化・スケジュール実行の最適化は独立機能でこそ設計できる（ADR-260705-02）。
 
@@ -54,18 +54,24 @@ CoreProc を `src/commands/ai-sync/` に置き、VS Code コマンドと LM tool
 
 ```
 src/commands/ai-sync/
-  review-result.ts             # 型定義 + decideReviewAction 純関数
+  review-result.ts             # 型定義 + decideReviewAction / aggregateReviewResults 純関数
   pair-collector.ts            # 純関数: 検証対象ペア列挙
   verify-response-validator.ts # AI応答のJSONバリデーション
   pair-verifier.ts             # AIService 呼び出し + リトライ
   review-core.ts               # executeAiReviewForFile: 1ファイル分の検証→マーカー変異→書き戻し
   review-command.ts            # VS Code コマンド（file/directory）
-  review-result-provider.ts    # 仮想ドキュメントレポート
+  review-result-provider.ts    # 仮想ドキュメントレポート（generateReviewTableSection を AI同期と共有）
+  review-targets.ts            # レビュー対象ターゲット解決（mdait_aiReview / AI同期で共有）
   align-result.ts              # 純関数: スケルトン/ダイジェスト・修正提案バリデーション・matchResult 再配線
   align-response-validator.ts  # アライン応答（ok/corrections/needBodies）のJSONバリデーション
   section-aligner.ts           # AIService 呼び出し + 二段トリアージ2ラウンド + リトライ + buildSectionAligner
   align-core.ts                # alignMatchResult: 候補抽出→審査→検証→再配線（sync_CoreProc から adopt+align 時のみ）
+  ai-sync-core.ts              # executeAiSync: 各段（sync(adopt+align)→review）を注入合成する薄いオーケストレーター
+  ai-sync-result.ts            # 純関数: 合成集計・レポート・nextActions
+  ai-sync-command.ts           # VS Code コマンド（mdait.aiSync.run・ワークスペース全体）
+  ai-sync-result-provider.ts   # 合成レポートの仮想ドキュメント（mdait-ai-sync スキーム）
 src/lm-tools/ai-review-tool.ts # mdait_aiReview
+src/lm-tools/ai-sync-tool.ts   # mdait_aiSync（合成コマンド）
 src/lm-tools/sync-tool.ts      # mdait_sync（align パラメータ）
 ```
 
@@ -204,12 +210,16 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 
 ### AI同期（合成コマンド）
 
-`sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる薄いオーケストレーター:
+**実装済み**（`mdait.aiSync.run` コマンド / `mdait_aiSync` ツール・ADR-260706-01）。`sync(adopt+align) → AIレビュー呼び出し → レポート` を束ねる薄いオーケストレーター（`executeAiSync`）:
 
-- 各段は独立機能（冪等）のまま。合成側は **AI を使う段を列挙した確認UIを冒頭に1回**出す
-- 各段が冪等なので途中キャンセル→再実行で残りから再開できる
+- 各段は独立機能（冪等）のまま。採用・アライン・検証・マーカー変異のロジックは一切再実装せず、既存プリミティブ（`syncCommand({adopt,align})` / `executeAiReviewForFiles`）へ配線するだけ
+- 合成側は **AI を使う3段を列挙した確認UIを冒頭に1回**出す（＋AIオンボーディング）。sync の align 段は内部でオンボーディングを再確認するが冪等
+- 各段が冪等なので途中キャンセル→再実行で残りから再開できる。sync が undefined（設定不正等）なら `aborted` で安全に中断しレビューは行わない
 - **取り込み専用ではない**: 管理済みサイトで実行するとアラインは no-op（全ユニット from アンカー済み）となりレビューだけが走る＝「サイトが色々ごちゃごちゃして大丈夫かな」の健全性監査ボタンとして同じ機能が使える
-- エージェント側は既存ツール（mdait_sync → mdait_aiReview → mdait_tm）の組み合わせで先行実現できるため、プレイブック（docs/guide/ja/agent-playbook.md）の手順追記から始める
+- **各段を注入可能**（`AiSyncStages`）にし、合成層のテストはスタブ各段で「順序・sync undefined フォールバック・段間キャンセル・dryRun 伝播・冪等 no-op」を検証する。AI に触れる段は各モジュールでスタブ AIService により検証済み
+- スコープは v1 ではワークスペース全体のみ（sync 全体・レビュー全体の整合を優先。path スコープは将来課題）
+- レポートは `mdait-ai-sync` スキームの仮想ドキュメント（sync サマリ→レビューサマリ→ファイル別レビュー表）。レビュー表は `generateReviewTableSection` を mdait_aiReview と共有
+- エージェント側は `mdait_aiSync`（または `mdait_sync → mdait_aiReview → mdait_tm` の手動組み合わせ）で駆動する。プレイブック（docs/guide/ja/agent-playbook.md）参照
 
 ## テスト戦略
 

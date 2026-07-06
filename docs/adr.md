@@ -4,6 +4,24 @@
 
 ---
 
+## ADR-260706-01: AI同期は既存プリミティブを注入合成する薄いオーケストレーターとする
+
+### 背景
+AI同期ロードマップ（ADR-260705-02 で合成コマンドと決定）の実装にあたり、`sync(adopt+align) → AIレビュー → レポート` をどう束ねるか、どこまでを新規ロジックとし、テストをどの層で担保するかを決める必要があった。各段（AIアライン=ADR-260705-03、AIペアリング検証=ADR-260704-07）は独立機能・冪等として既に存在する。
+
+### 決定
+- **薄い合成に徹する**: `executeAiSync` は `syncCommand({adopt:true, align:true})` → 全ターゲット列挙 → `executeAiReviewForFiles` を順に呼ぶだけで、採用・アライン・検証・マーカー変異のロジックを一切再実装しない。合成側は新しい need 語彙・新しいマーカー変異を導入しない（ADR-260704-07 を維持）。
+- **確認UIは冒頭に1回**（ADR-260705-01）: コマンド層／LM tool（`mdait_aiSync`）の入口で「AI を使う3段」を列挙したモーダル確認＋AIオンボーディングを1回だけ出す。sync の align 段は内部でオンボーディングを再確認するが冪等（受諾済みなら無ダイアログ）。
+- **各段を注入可能にする**: `executeAiSync` は `AiSyncStages`（runSync / collectTargets / runReview）を引数で受け取り、既定は本番配線。AI に触れる段は各モジュールでスタブ AIService により検証済みのため、合成層のテストはスタブ各段で「順序・sync undefined フォールバック・段間キャンセル・dryRun 伝播・冪等 no-op」を純粋に検証する。
+- **スコープは v1 ではワークスペース全体のみ**: sync がワークスペース全体で動くため、レビュー段も全 transPair のターゲットを対象にする。sync だけ全体・レビューだけ部分という不整合を避ける（path スコープは将来課題）。
+- **集計・レポート・nextActions は純関数**に閉じる（`ai-sync-result.ts` / `review-result.ts` の `aggregateReviewResults`）。レビュー表描画・ターゲット解決は既存モジュールから共有関数を切り出して再利用（`generateReviewTableSection` / `review-targets.ts`）。
+
+### 理由
+「決定的な仕組みが提案し AI が審査する」パイプラインをそのまま合成に持ち上げることで、取り込み（adopt+align）と健全性監査（review）を1操作で回しつつ、各段の冪等性・フォールバック・キャンセル再開性がそのまま保たれる。管理済みサイトでは align が no-op・review のみとなり、同一機能が「サイトが健全か」の監査ボタンとして働く。注入合成はスタブ各段による単体テストを AIアライン／AIペアリング検証と同水準で可能にする。
+
+### 備考
+- 詳細は [command_ai-sync.md](design/command_ai-sync.md)。v1 では path スコープと段間の細粒度進捗集約は見送り。
+
 ## ADR-260705-03: AIアラインは sync_CoreProc に aligner を注入し matchResult を再配線する
 
 ### 背景

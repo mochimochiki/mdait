@@ -183,6 +183,12 @@
         "title": "%mdait.aiSync.review.directory.title%",
         "icon": "$(verified)",
         "category": "mdait"
+      },
+      {
+        "command": "mdait.aiSync.run",
+        "title": "%mdait.aiSync.run.title%",
+        "icon": "$(sparkle)",
+        "category": "mdait"
       }
     ],
     "viewsContainers": {
@@ -237,6 +243,11 @@
         {
           "command": "mdait.status.sync.processing",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && mdaitSyncProcessing",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.aiSync.run",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {
@@ -508,6 +519,30 @@
             "dryRun": {
               "type": "boolean",
               "description": "If true, only report verdicts without changing any markers."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_aiSync",
+        "displayName": "mdait: AI Sync",
+        "toolReferenceName": "mdaitAiSync",
+        "modelDescription": "Composite onboarding-and-audit command that runs three mdait steps in order over the whole workspace: (1) sync with adopt+align (adopts marker-less existing translations as need:review and uses an LLM to correct position-based unit mis-pairings), (2) AI pairing review of every adopted pair (auto-removes need:review from high-confidence faithful translations, escalates suspected mis-pairings/incomplete translations). Not onboarding-only: on an already-managed site the align step is a no-op (all units are from-anchored) and only the review runs, so this doubles as a health-audit button. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains the sync counts (adopted/alignCorrections/added/deleted/kept), the per-verdict review counts, an escalations list, and the post-run status. Idempotent: re-running on a clean workspace reports zero adoptions, zero corrections, and zero units to review. Pass dryRun:true to skip marker changes in the review step (adopt still updates markers). Uses AI and rewrites markers, so a confirmation is shown.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "sync",
+          "review",
+          "adopt",
+          "ai"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "dryRun": {
+              "type": "boolean",
+              "description": "If true, the AI pairing review step reports verdicts without changing markers; the adopt step still updates markers."
             }
           }
         }

@@ -279,5 +279,18 @@
   "AI review error: {0}": "AIレビューエラー: {0}",
   "AI review: no units with need:review were found.": "AIレビュー: need:review のユニットは見つかりませんでした。",
   "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AIレビュー完了: 自動承認 {0}、エスカレーション {1}、保留 {2}、エラー {3}",
-  "This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?": "既存の訳文を採用（need:review を付与）し、AI で位置ベースのユニット対応付けを審査して誤ペアを修正します。Markdownファイルの翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。続行しますか？"
+  "This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?": "既存の訳文を採用（need:review を付与）し、AI で位置ベースのユニット対応付けを審査して誤ペアを修正します。Markdownファイルの翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。続行しますか？",
+  "AI Sync": "AI同期",
+  "Confirm AI Sync": "AI同期の確認",
+  "Running AI sync (adopt, align, review)...": "AI同期を実行中（採用・アライン・レビュー）...",
+  "Sync (adopt + AI align)...": "同期（採用 + AIアライン）...",
+  "AI pairing review...": "AIペアリング検証...",
+  "AI sync error: {0}": "AI同期エラー: {0}",
+  "AI sync failed: {0}": "AI同期に失敗しました: {0}",
+  "AI sync: synchronization did not run. Check the mdait configuration.": "AI同期: 同期が実行されませんでした。mdait の設定を確認してください。",
+  "Run AI Sync? This performs three steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.": "AI同期を実行しますか？次の3段を順に実行します: (1) 既存訳文の採用（need:review）、(2) 誤ペアのAIアライン、(3) AIペアリング検証（高確信の一致を自動承認）。翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。",
+  "Run AI Sync? Steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.": "AI同期を実行しますか？順に: (1) 既存訳文の採用（need:review）、(2) 誤ペアのAIアライン、(3) AIペアリング検証（高確信の一致を自動承認）。翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。",
+  "Run AI Sync (dry run)? Steps: (1) adopt existing translations, (2) AI-align mis-paired units, (3) AI pairing review. The review step changes no markers in dry run, but adopt still updates markers. Committing your workspace to git beforehand is recommended.": "AI同期を実行しますか（ドライラン）？段: (1) 既存訳文の採用、(2) 誤ペアのAIアライン、(3) AIペアリング検証。ドライランではレビュー段はマーカーを変更しませんが、採用段はマーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。",
+  "AI sync completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "AI同期完了: 採用 {0}、アライン補正 {1}; レビュー 自動承認 {2}、エスカレーション {3}、保留 {4}、エラー {5}。",
+  "AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.": "AI同期完了: 採用 {0}、アライン補正 {1}; レビュー 検証 {2}、自動承認 {3}、エスカレーション {4}（不一致 {5} / 部分 {6}）、保留 {7}、エラー {8}。"
 }

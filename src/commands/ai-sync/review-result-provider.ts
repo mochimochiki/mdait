@@ -45,7 +45,18 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
 		`verified: ${totals.verified} | approved: ${totals.approved} | escalated: ${totals.escalated} | kept: ${totals.kept} | skipped: ${totals.skipped} | errors: ${totals.errors}`,
 		"",
 	);
+	lines.push(generateReviewTableSection(results));
 
+	return lines.join("\n");
+}
+
+/**
+ * ファイルごとの検証結果テーブルを生成する（純関数・テスト可能）。
+ * AI同期の合成レポート（ai-sync-result-provider）からも再利用する。
+ * unitResults が空のファイルはスキップし、mismatch/partial を先頭に並べる。
+ */
+export function generateReviewTableSection(results: AiReviewFileResult[]): string {
+	const lines: string[] = [];
 	for (const fileResult of results) {
 		if (fileResult.unitResults.length === 0) {
 			continue;
@@ -62,7 +73,6 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
 		}
 		lines.push("");
 	}
-
 	return lines.join("\n");
 }
 

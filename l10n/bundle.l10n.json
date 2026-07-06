@@ -108,6 +108,12 @@
   "Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.": "Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.",
   "Failed to get translation status: {0}": "Failed to get translation status: {0}",
   "Getting translation status...": "Getting translation status...",
+  "AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.": "AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.",
+  "AI sync failed: {0}": "AI sync failed: {0}",
+  "Run AI Sync (dry run)? Steps: (1) adopt existing translations, (2) AI-align mis-paired units, (3) AI pairing review. The review step changes no markers in dry run, but adopt still updates markers. Committing your workspace to git beforehand is recommended.": "Run AI Sync (dry run)? Steps: (1) adopt existing translations, (2) AI-align mis-paired units, (3) AI pairing review. The review step changes no markers in dry run, but adopt still updates markers. Committing your workspace to git beforehand is recommended.",
+  "Run AI Sync? Steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.": "Run AI Sync? Steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.",
+  "Running AI sync (adopt, align, review)...": "Running AI sync (adopt, align, review)...",
+  "Confirm AI Sync": "Confirm AI Sync",
   "AI pairing review completed: {0} verified, {1} approved, {2} escalated ({3} mismatch / {4} partial), {5} kept, {6} errors across {7} file(s).": "AI pairing review completed: {0} verified, {1} approved, {2} escalated ({3} mismatch / {4} partial), {5} kept, {6} errors across {7} file(s).",
   "AI review failed: {0}": "AI review failed: {0}",
   "Reviewing translation pairings with AI (dry run)...": "Reviewing translation pairings with AI (dry run)...",
@@ -287,5 +293,12 @@
   "AI Pairing Review: {0}": "AI Pairing Review: {0}",
   "AI review error: {0}": "AI review error: {0}",
   "AI review: no units with need:review were found.": "AI review: no units with need:review were found.",
-  "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors"
+  "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors": "AI review completed: {0} approved, {1} escalated, {2} kept, {3} errors",
+  "Sync (adopt + AI align)...": "Sync (adopt + AI align)...",
+  "AI pairing review...": "AI pairing review...",
+  "Run AI Sync? This performs three steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.": "Run AI Sync? This performs three steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.",
+  "AI Sync": "AI Sync",
+  "AI sync error: {0}": "AI sync error: {0}",
+  "AI sync: synchronization did not run. Check the mdait configuration.": "AI sync: synchronization did not run. Check the mdait configuration.",
+  "AI sync completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "AI sync completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors."
 }
