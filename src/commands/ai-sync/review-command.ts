@@ -146,7 +146,7 @@ async function pickReviewMode(): Promise<ReviewCollectMode | undefined> {
 	const auditItem = {
 		label: vscode.l10n.t("Audit all translated pairs"),
 		detail: vscode.l10n.t(
-			"Also verify confirmed pairs to detect drift (source revisions / manual edits). Drifted units get need:review added.",
+			"Also check confirmed pairs for unfaithful/incomplete translations (report only — markers are not changed).",
 		),
 		mode: "audit" as ReviewCollectMode,
 	};

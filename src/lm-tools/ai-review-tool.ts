@@ -178,7 +178,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm AI Pairing Audit"),
 					message: vscode.l10n.t(
-						"Audit all confirmed translation pairings for {0} with AI? Drifted pairs (source revised / manually edited) will get need:review added; high-confidence matches with need:review will have it removed (controlled by aiSync.review settings).",
+						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiSync.review settings).",
 						scopeLabel,
 					),
 				},
@@ -273,9 +273,7 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 	}
 	if (data.units.flagged > 0) {
 		nextActions.push(
-			data.dryRun
-				? `${data.units.flagged} confirmed pair(s) drifted (source revised or manually edited) and would be flagged with need:review by the audit. This was a dry run: no markers were changed. Re-run mdait_aiReview with mode:"audit" (without dryRun) to apply the flags. Inspect the escalations list to review the drift.`
-				: `${data.units.flagged} confirmed pair(s) drifted (source revised or manually edited) and were flagged with need:review by the audit. Inspect the escalations list; re-translate with mdait_translate or fix the translation manually, then run mdait_sync.`,
+			`${data.units.flagged} confirmed pair(s) no longer look like a faithful and complete translation of their source (adopted mis-pairing or hand-edited degradation). The audit reports these but does NOT change their markers. Inspect the escalations list; if a pair is genuinely off, fix the translation manually or remove the translated body and set need:translate to re-translate with mdait_translate. (Source revisions are already caught deterministically by mdait_sync as need:revise and are not audited here.)`,
 		);
 	}
 	if (data.units.uncertain + data.units.keptBelowThreshold > 0) {

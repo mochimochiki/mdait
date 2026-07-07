@@ -277,7 +277,7 @@ Content A.
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 		});
 
-		test("audit で確定済みペアのドリフト（partial/mismatch）に need:review が付与される", async () => {
+		test("audit で確定済みペアのドリフト（partial/mismatch）は報告のみ・マーカー不変", async () => {
 			const config = await initConfig();
 			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
 			// tgtA=partial（ドリフト）, tgtB=match（健全）
@@ -292,12 +292,9 @@ Content A.
 			assert.strictEqual(result.flagged, 1);
 			assert.strictEqual(result.audited, 1);
 			assert.strictEqual(result.approved, 0);
-			assert.strictEqual(result.markersChanged, true);
-
-			const written = fs.readFileSync(targetFile, "utf-8");
-			assert.ok(written.includes("<!-- mdait tgtA from:srcA need:review -->"), "ドリフトに need:review 付与");
-			assert.ok(written.includes("<!-- mdait tgtB from:srcB -->"), "健全ペアは無変更");
-			assert.ok(written.includes("Content A."), "本文は不変");
+			// 確定済みペアはドリフト検出しても一切マーカーを変えない（報告のみ）
+			assert.strictEqual(result.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT, "need:review は付与されない");
 		});
 
 		test("audit で全ペアが健全（match/uncertain）なら無変更（audited のみ）", async () => {
@@ -316,7 +313,7 @@ Content A.
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 		});
 
-		test("audit の dryRun ではフラグを付与しない", async () => {
+		test("audit は報告のみなので dryRun でもマーカー不変（挙動は同じ）", async () => {
 			const config = await initConfig();
 			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
 			const result = await executeAiReviewForFile(
@@ -331,28 +328,33 @@ Content A.
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 		});
 
-		test("audit はフラグ付与後も安定（2回目でドリフトは既に need:review、健全は無変更）", async () => {
+		test("audit は再実行しても確定済みペアを書き換えず、毎回同じ flagged を報告（マーカー安定）", async () => {
 			const config = await initConfig();
 			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
-			// 1回目: tgtA ドリフト→flag, tgtB 健全
-			await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MISMATCH, MATCH])), {
-				mode: "audit",
-			});
-			const afterFirst = fs.readFileSync(targetFile, "utf-8");
-			assert.ok(afterFirst.includes("<!-- mdait tgtA from:srcA need:review -->"));
+			// 1回目: tgtA ドリフト→flagged（報告のみ）, tgtB 健全→audited
+			const first = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([MISMATCH, MATCH])),
+				{ mode: "audit" },
+			);
+			assert.strictEqual(first.flagged, 1);
+			assert.strictEqual(first.audited, 1);
+			assert.strictEqual(first.markersChanged, false);
+			// マーカーは一切変わらない（need:review は付与されない）
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 
-			// 2回目 audit: tgtA は need:review として承認条件を満たさない mismatch のまま escalated、
-			// tgtB は健全のまま audited。ファイル内容は安定。
+			// 2回目 audit: マーカーが変わっていないので同じ結果を再報告する（蒸し返しの churn は無し）
 			const second = await executeAiReviewForFile(
 				targetFile,
 				config,
 				buildVerifier(new StubAIService([MISMATCH, MATCH])),
 				{ mode: "audit" },
 			);
-			assert.strictEqual(second.escalated, 1, "既に need:review の tgtA は escalated 扱い");
-			assert.strictEqual(second.audited, 1, "健全な tgtB は audited");
+			assert.strictEqual(second.flagged, 1);
+			assert.strictEqual(second.audited, 1);
 			assert.strictEqual(second.markersChanged, false);
-			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), afterFirst);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 		});
 	});
 });

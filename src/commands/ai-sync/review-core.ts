@@ -186,11 +186,10 @@ export async function executeAiReviewForFile(
 							result.kept++;
 						}
 					} else if (action === "escalate") {
-						// 確定済みペアにドリフト（partial/mismatch）を検出 → need:review を付与
-						if (!options.dryRun) {
-							marker?.setNeed("review");
-							mutationCount++;
-						}
+						// 確定済みペアにドリフト（partial/mismatch）を検出 → レポートのみ（マーカー不変）。
+						// audit は確定済みペアを毎回再スキャンするため、ここで need:review を書き戻すと
+						// 意図的な単文乖離を毎回蒸し返し、人間の「承認（need:review 解除）」判断を上書き
+						// してしまう。受理を記憶する仕組み（受理台帳）が入るまでは報告に留める。
 						unitResult.action = "flagged";
 						result.flagged++;
 					} else {
