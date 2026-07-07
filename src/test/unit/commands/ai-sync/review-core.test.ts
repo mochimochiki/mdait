@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { PairVerifier } from "../../../../commands/ai-sync/pair-verifier";
 import { executeAiReviewForFile } from "../../../../commands/ai-sync/review-core";
+import { AuditLedgerStore } from "../../../../core/audit-ledger/audit-ledger-store";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
@@ -117,6 +118,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	setup(() => {
 		Configuration.dispose();
 		PromptProvider.dispose();
+		AuditLedgerStore.dispose();
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-ai-review-"));
 		__vscodeMockWorkspaceRoot = tempDir;
 		sourceFile = path.join(tempDir, "ja", "doc.md");
@@ -126,8 +128,20 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	teardown(() => {
 		Configuration.dispose();
 		PromptProvider.dispose();
+		AuditLedgerStore.dispose();
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
+
+	/** 受理台帳に (targetHash, fromHash) を受理済みとして登録する */
+	function acceptInLedger(targetHash: string, fromHash: string, note = "intentional"): void {
+		const mdaitDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(mdaitDir, { recursive: true });
+		const store = AuditLedgerStore.getInstance();
+		store.load(mdaitDir);
+		store.setEntry({ targetHash, fromHash, verdict: "partial", acceptedAt: "2026-07-07T00:00:00.000Z", note });
+		store.save(mdaitDir);
+		// review-core は ensureLoaded で読むため、ここでロード済み状態のまま渡す
+	}
 
 	test("承認されたユニットの need:review だけが除去され hash / from / 本文は不変", async () => {
 		const config = await initConfig();
@@ -355,6 +369,52 @@ Content A.
 			assert.strictEqual(second.audited, 1);
 			assert.strictEqual(second.markersChanged, false);
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
+
+		suite("受理台帳（accept ledger）連携", () => {
+			test("受理済み＆ハッシュ一致なら AI を呼ばず accepted・再報告なし", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				acceptInLedger("tgtA", "srcA", "A は意図的に要約している");
+				// tgtA は受理済みで AI 未呼び出し。tgtB のみ MATCH で検証される
+				const stub = new StubAIService([MATCH]);
+				const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.strictEqual(result.accepted, 1, "受理済みペアは accepted");
+				assert.strictEqual(result.flagged, 0, "受理済みは再報告されない");
+				assert.strictEqual(result.audited, 1, "tgtB は健全で audited");
+				assert.strictEqual(result.verified, 1, "AI 検証は tgtB の1件のみ");
+				assert.strictEqual(stub.callCount, 1, "受理済みペアでは AI が呼ばれない");
+				assert.strictEqual(result.markersChanged, false);
+				assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+			});
+
+			test("訳文が変わり targetHash 不一致なら受理は失効し再検証→flagged", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				// 旧訳文のハッシュで受理していた（現在の tgtA とはキーが一致しない）
+				acceptInLedger("staleHashOfOldTranslation", "srcA");
+				const stub = new StubAIService([PARTIAL, MATCH]);
+				const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.strictEqual(result.accepted, 0, "ハッシュ不一致で受理は無効");
+				assert.strictEqual(result.flagged, 1, "受理失効したペアは通常どおり flagged");
+				assert.strictEqual(result.audited, 1);
+				assert.strictEqual(result.verified, 2, "両ペアとも AI 検証される");
+				assert.strictEqual(stub.callCount, 2);
+			});
+
+			test("未受理なら従来どおり flagged（受理台帳が空）", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				const stub = new StubAIService([PARTIAL, MATCH]);
+				const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.strictEqual(result.accepted, 0);
+				assert.strictEqual(result.flagged, 1);
+				assert.strictEqual(result.audited, 1);
+				assert.strictEqual(stub.callCount, 2);
+			});
 		});
 	});
 });

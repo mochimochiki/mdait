@@ -16,7 +16,8 @@ export const PAIR_VERDICTS: readonly PairVerdict[] = ["match", "mismatch", "part
 export type ReviewAction =
 	| "approved" // need:review を自動解除した
 	| "escalated" // mismatch/partial として人間レビューへエスカレーション（need:review 維持）
-	| "flagged" // audit モードで確定済みペアにドリフトを検出し need:review を付与した
+	| "flagged" // audit モードで確定済みペアにドリフトを検出し報告した（マーカー不変）
+	| "accepted" // audit モードで受理台帳に「意図的な乖離」として受理済み → AI 検証をスキップ
 	| "audited" // audit モードで確定済みペアを検証しクリーン（変更なし）
 	| "kept" // uncertain / 閾値未満 / autoApprove 無効（need:review 維持）
 	| "skipped" // 検証不能（ソースユニット未解決など）
@@ -60,8 +61,10 @@ export interface AiReviewFileResult {
 	verified: number;
 	approved: number;
 	escalated: number;
-	/** audit: 確定済みペアにドリフトを検出し need:review を付与した数 */
+	/** audit: 確定済みペアにドリフトを検出し報告した数（マーカー不変） */
 	flagged: number;
+	/** audit: 受理台帳に受理済みで AI 検証をスキップした数 */
+	accepted: number;
 	/** audit: 確定済みペアを検証しクリーンだった数（変更なし） */
 	audited: number;
 	kept: number;
@@ -80,6 +83,7 @@ export function createEmptyFileResult(filePath: string): AiReviewFileResult {
 		approved: 0,
 		escalated: 0,
 		flagged: 0,
+		accepted: 0,
 		audited: 0,
 		kept: 0,
 		skipped: 0,
@@ -125,8 +129,10 @@ export interface ReviewAggregate {
 	keptBelowThreshold: number;
 	/** escalated 合計（mismatch + partial） */
 	escalated: number;
-	/** audit: 確定済みペアにドリフトを検出し need:review を付与した数 */
+	/** audit: 確定済みペアにドリフトを検出し報告した数（マーカー不変） */
 	flagged: number;
+	/** audit: 受理台帳に受理済みで AI 検証をスキップした数 */
+	accepted: number;
 	/** audit: 確定済みペアを検証しクリーンだった数（変更なし） */
 	audited: number;
 	/** kept 合計（uncertain + keptBelowThreshold） */
@@ -151,6 +157,7 @@ export function aggregateReviewResults(results: AiReviewFileResult[]): ReviewAgg
 		keptBelowThreshold: 0,
 		escalated: 0,
 		flagged: 0,
+		accepted: 0,
 		audited: 0,
 		kept: 0,
 		skipped: 0,
@@ -163,6 +170,7 @@ export function aggregateReviewResults(results: AiReviewFileResult[]): ReviewAgg
 		agg.verified += fileResult.verified;
 		agg.approved += fileResult.approved;
 		agg.flagged += fileResult.flagged;
+		agg.accepted += fileResult.accepted;
 		agg.audited += fileResult.audited;
 		agg.errors += fileResult.errors;
 		agg.skipped += fileResult.skipped;

@@ -49,8 +49,10 @@ interface AiReviewData {
 		uncertain: number;
 		/** match だが閾値未満/issuesあり/autoApprove無効で保留されたユニット数 */
 		keptBelowThreshold: number;
-		/** audit: 確定済みペアにドリフトを検出し need:review を付与した数 */
+		/** audit: 確定済みペアにドリフトを検出し報告した数（マーカー不変） */
 		flagged: number;
+		/** audit: 受理台帳に受理済みで AI 検証をスキップした数 */
+		accepted: number;
 		/** audit: 確定済みペアを検証しクリーンだった数（変更なし） */
 		audited: number;
 		errors: number;
@@ -223,6 +225,7 @@ function buildAiReviewData(
 			uncertain: agg.uncertain,
 			keptBelowThreshold: agg.keptBelowThreshold,
 			flagged: agg.flagged,
+			accepted: agg.accepted,
 			audited: agg.audited,
 			errors: agg.errors,
 			skipped: agg.skipped,
@@ -273,7 +276,12 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 	}
 	if (data.units.flagged > 0) {
 		nextActions.push(
-			`${data.units.flagged} confirmed pair(s) no longer look like a faithful and complete translation of their source (adopted mis-pairing or hand-edited degradation). The audit reports these but does NOT change their markers. Inspect the escalations list; if a pair is genuinely off, fix the translation manually or remove the translated body and set need:translate to re-translate with mdait_translate. (Source revisions are already caught deterministically by mdait_sync as need:revise and are not audited here.)`,
+			`${data.units.flagged} confirmed pair(s) no longer look like a faithful and complete translation of their source (adopted mis-pairing or hand-edited degradation). The audit reports these but does NOT change their markers. Inspect the escalations list; if a pair is genuinely off, fix the translation manually or remove the translated body and set need:translate to re-translate with mdait_translate. If the deviation is intentional (a deliberate omission/addition), accept it as intentional with the "Accept as intentional" CodeLens so the audit stops re-reporting it (recorded in .mdait/audit-ledger keyed by targetHash+fromHash; editing the translation revokes it automatically). (Source revisions are already caught deterministically by mdait_sync as need:revise and are not audited here.)`,
+		);
+	}
+	if (data.units.accepted > 0) {
+		nextActions.push(
+			`${data.units.accepted} confirmed pair(s) were previously accepted as intentional deviations (audit ledger) and were not re-verified. No action needed unless you edit the translation.`,
 		);
 	}
 	if (data.units.uncertain + data.units.keptBelowThreshold > 0) {

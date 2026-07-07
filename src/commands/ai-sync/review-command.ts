@@ -71,6 +71,7 @@ export async function executeAiReviewForFiles(
 				approved: 0,
 				escalated: 0,
 				flagged: 0,
+				accepted: 0,
 				audited: 0,
 				kept: 0,
 				skipped: 0,

@@ -77,12 +77,40 @@ suite("TMスキップ理由の分類（mdait_tm 診断用）", () => {
 				needRevise: 1,
 				needReview: 1,
 				needKeep: 0,
+				audited: 0,
 			});
 		});
 
 		test("from付きのneed:keepはneedKeepに分類される", () => {
 			const breakdown = summarizeTmSkipReasons([unitWith("keep", "src1")]);
 			assert.strictEqual(breakdown.needKeep, 1);
+		});
+	});
+
+	suite("受理台帳による除外（audit の意図的乖離）", () => {
+		test("受理済みペアは audited に分類され TM 対象外になる", () => {
+			const unit = unitWith(null, "src1"); // 確定済みペア（need なし）
+			const accepted = (targetHash: string, fromHash: string) => targetHash === "hash1" && fromHash === "src1";
+			assert.strictEqual(classifyTmSkipReason(unit, accepted), "audited");
+			assert.strictEqual(isTmCommitTarget(unit, accepted), false);
+		});
+
+		test("述語を渡さなければ従来どおり登録対象（後方互換）", () => {
+			const unit = unitWith(null, "src1");
+			assert.strictEqual(classifyTmSkipReason(unit), null);
+			assert.strictEqual(isTmCommitTarget(unit), true);
+		});
+
+		test("need が付いたユニットは受理判定より need のスキップ理由が優先される", () => {
+			const unit = unitWith("review", "src1");
+			const acceptAll = () => true;
+			assert.strictEqual(classifyTmSkipReason(unit, acceptAll), "needReview");
+		});
+
+		test("summarizeTmSkipReasons が受理済みを audited に数える", () => {
+			const acceptAll = () => true;
+			const breakdown = summarizeTmSkipReasons([unitWith(null, "src1"), unitWith(null, "src1")], acceptAll);
+			assert.strictEqual(breakdown.audited, 2);
 		});
 	});
 });

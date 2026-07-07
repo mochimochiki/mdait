@@ -20,6 +20,7 @@ import { markdownParser } from "../../core/markdown/parser";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import { SummaryManager } from "../hover/summary-manager";
 
 /**
  * mdaitマーカーのCodeLensを提供するプロバイダー
@@ -264,6 +265,24 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
+		}
+
+		// audit で flagged になった確定済みペア（from あり・need なし）に「意図的として受理」ボタンを出す。
+		// flagged 状態はマーカーに残らないため、直近の audit 結果を保持する SummaryManager から判定する。
+		if (!isSourceFile && marker.from && !marker.need && marker.hash) {
+			const summary = SummaryManager.getInstance().getSummary(marker.hash);
+			if (summary?.reviewAction === "flagged") {
+				codeLenses.push(
+					new vscode.CodeLens(range, {
+						title: vscode.l10n.t("$(check-all) Accept as intentional"),
+						tooltip: vscode.l10n.t(
+							"Tooltip: Record this flagged pair as an intentional deviation so the audit stops reporting it",
+						),
+						command: "mdait.audit.accept",
+						arguments: [range],
+					}),
+				);
+			}
 		}
 
 		return codeLenses;

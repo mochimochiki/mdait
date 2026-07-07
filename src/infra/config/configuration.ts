@@ -442,6 +442,13 @@ export class Configuration {
 	}
 
 	/**
+	 * audit-ledger ファイル（audit の「意図的な乖離」受理台帳TSV）の絶対パスを取得する。
+	 */
+	public getAuditLedgerFilePath(): string {
+		return path.join(this.getMdaitDir(), "audit-ledger");
+	}
+
+	/**
 	 * マーカー保管方式が external かどうかを返す。
 	 */
 	public isExternalMarkers(): boolean {

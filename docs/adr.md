@@ -4,6 +4,30 @@
 
 ---
 
+## ADR-260707-01: audit の「意図的な乖離」は hash キーの受理台帳（accept ledger）で永続受理する
+
+### 背景
+ADR-260706-03 で audit（確定済みペアの監査）は不備（partial/mismatch）を `flagged`（報告のみ・マーカー不変）とした。その代償として **意図的な単文/段落乖離（翻訳で意図的に省略・追記した確定済みペア）は audit のたびに再報告される**（既知の限界）。`need:isolate`（[orphan-model.md](design/orphan-model.md)）は**章＝ユニット単位**の孤立であり、この**ペア内の単文粒度**は解決しない。人間の「これは意図的なので受理する」という判断を記録する語彙が無いことが根本原因だった。
+
+### 決定
+- **専用の受理台帳（accept ledger）を新設する**。`(targetHash, fromHash)` をキーに「意図的な乖離としての受理＋コメント」を永続化する。
+  - 場所: `.mdait/audit-ledger`（パスは `Configuration.getAuditLedgerFilePath()` に一元化）。
+  - 形式: TSV（`targetHash \t fromHash \t verdict \t acceptedAt \t note`）。決定的順序（targetHash→fromHash 昇順）でシリアライズし git フレンドリー。`atomicWriteFileSync` で書き込み。シングルトンストア（`AuditLedgerStore`、`UnitStateStore` に倣う）。純パース/シリアライズは `audit-ledger-encoder.ts` に分離し VS Code 非依存で単体テスト可能。
+  - **unit-state は使わない**（external 専用・path キー）。台帳は hash キーの独立ストアで、埋め込み/外部いずれのマーカーでも効く。
+- **受理の記録（UI）**: audit で `flagged` になった確定済みペアに CodeLens「意図的として受理」を出す。flagged 状態はマーカーに残らないため、直近 audit 結果を保持する `SummaryManager`（セッションメモリ）の `reviewAction === "flagged"` を条件にする。受理コメントは `showInputBox` で取得し、`(targetHash, fromHash)` を台帳へ記録する（マーカー・本文・hash・from は不変）。
+- **audit 読み取り**: `executeAiReviewForFile` の settled 分岐で **AI を呼ぶ前に台帳を引く**。`(marker.hash, marker.from)` が受理済みなら AI 検証をスキップし新アクション `accepted` にする（再報告なし・決定的・AI 不使用）。
+- **無効化はハッシュで自動**: 受理は `(targetHash, fromHash)` の“その内容”に対してのみ有効。訳文を直せば targetHash が変わり失効し再検証→再 flag。原文改訂は sync が `need:revise` を付け（in-flight として）audit 対象外になる＝台帳キーの整合と一致する。GC は `retainOnly` で提供。
+- **TM 連携は「載せない（除外）」**: 受理済みペア（need なし）は現状 TM 対象だが、`commit-filter.ts` に受理判定述語を注入して除外する（新スキップ理由 `audited`）。受理は「AI が partial/mismatch と判定した訳を人間が意図的と認めた」ものであり、TM に載せると他文書へ**意図的乖離が汚染**する（ADR-260704-07 の未知 need 素通り＝TM 汚染と同種の危険）。安全側で除外する。
+
+### 理由
+「状態は文書内にあり sync で復帰可能」の原則に対し、**人間の受理判断は sync では再構築できない**ため unit-state 導入と同格の例外を置く。キーに `fromHash` を含めることで「原文が変われば受理が自動失効」が hash-sync の決定論と自然に整合し、受理は内容不変の間だけ有効という最小の意味論になる。報告のみ（ADR-260706-03）を維持したまま churn（毎回の蒸し返し）だけを解消できる。
+
+### 備考
+- **ADR-260706-03 の既知の限界（毎回再報告）はこれで解消**（[command_ai-sync.md](design/command_ai-sync.md) に反映）。
+- 決定的（AI 不使用）で記録・読み取りする。audit の AI 判定のみ明示起動＋確認UI（ADR-260705-01 と整合）。
+- スコープ外（将来増分）: `aiSync.review.auditFlag`（true で flagged に need:review 付与。受理済みは再フラグされないので churn なし）は受理台帳が入って初めて安全に足せるが今回は見送り。受理の「意図的乖離 / AI 誤検知（TM 適格）」二分も将来課題（v1 は一律 TM 除外）。GC の sync への配線も将来課題（メソッドのみ提供）。
+- 却下案: unit-state に相乗り → external 専用・path キーでインラインマーカーに効かず不採用。marker に受理 need を足す → 確定済みマーカーの機械書き換え（ADR-260706-03 が避けた副作用）に戻るため不採用。
+
 ## ADR-260706-03: AIレビュー拡張（対象拡張モード）は確定済みペアを「報告のみ」で監査する
 
 ### 背景

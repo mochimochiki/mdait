@@ -135,6 +135,7 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 					needRevise: 0,
 					needReview: 0,
 					needKeep: 0,
+					audited: 0,
 				},
 			};
 
@@ -155,6 +156,7 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 						data.skipped.needRevise += result.skipReasons.needRevise;
 						data.skipped.needReview += result.skipReasons.needReview;
 						data.skipped.needKeep += result.skipReasons.needKeep;
+						data.skipped.audited += result.skipReasons.audited;
 					}
 				} catch (error) {
 					logger.warn("LanguageModelTool", "TM commit file error", {

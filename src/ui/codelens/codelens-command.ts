@@ -9,6 +9,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
+import { AuditLedgerStore } from "../../core/audit-ledger/audit-ledger-store";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
@@ -20,6 +21,7 @@ import { StatusManager } from "../../core/status/status-manager";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { SummaryManager } from "../hover/summary-manager";
 
 /**
  * 指定行のマーカーを取得する。
@@ -159,6 +161,76 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/**
+ * audit で flagged になった確定済みペアを「意図的な乖離」として受理台帳へ記録するコマンド。
+ * コメント（受理理由）を入力させ、`(targetHash, fromHash)` キーで `.mdait/audit-ledger` に永続化する。
+ * 以降の audit は内容（訳文/原文の hash）が変わらない限りこのペアを AI 検証せず再報告しない。
+ * マーカー・本文・hash・from は一切変更しない（受理は台帳側のみの状態）。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function auditAcceptCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash || !marker.from) {
+			vscode.window.showWarningMessage(
+				vscode.l10n.t("This unit is not a confirmed translation pair, so it cannot be accepted."),
+			);
+			return;
+		}
+
+		const note = await vscode.window.showInputBox({
+			title: vscode.l10n.t("Accept as Intentional Deviation"),
+			prompt: vscode.l10n.t(
+				"Explain why this pair is intentionally not a literal/complete translation. The audit will stop reporting it until the translation or source changes.",
+			),
+			placeHolder: vscode.l10n.t("e.g. This section is deliberately summarized for the target audience."),
+		});
+		// Escape（undefined）はキャンセル。空文字での受理は許容する。
+		if (note === undefined) {
+			return;
+		}
+
+		const mdaitDir = await ensureMdaitDir();
+		if (!mdaitDir) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No workspace folder found"));
+			return;
+		}
+
+		const summary = SummaryManager.getInstance().getSummary(marker.hash);
+		const ledger = AuditLedgerStore.getInstance();
+		ledger.ensureLoaded(mdaitDir);
+		ledger.setEntry({
+			targetHash: marker.hash,
+			fromHash: marker.from,
+			verdict: summary?.reviewVerdict ?? "flagged",
+			acceptedAt: new Date().toISOString(),
+			note,
+		});
+		ledger.save(mdaitDir);
+
+		// hover 表示を「受理済み」に更新し、CodeLens の受理ボタンを消す
+		SummaryManager.getInstance().saveSummary(marker.hash, {
+			...(summary ?? { unitHash: marker.hash, stats: { duration: 0 } }),
+			reviewAction: "accepted",
+			reviewReasons: [note ? `Accepted as intentional: ${note}` : "Accepted as intentional"],
+		});
+		await StatusManager.getInstance().refreshFileStatus(document.uri.fsPath);
+
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Accepted as intentional. The audit will no longer report this pair."),
+		);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to accept audit finding: {0}", errorMessage));
 	}
 }
 
