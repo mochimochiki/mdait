@@ -25,6 +25,12 @@ interface AiReviewInput {
 	path?: string;
 	/** true の場合はマーカーを一切変更せずレポートのみ返す */
 	dryRun?: boolean;
+	/**
+	 * 検証範囲（既定 "pending"）。
+	 * - "pending": need:review ユニットのみ
+	 * - "audit": 確定済みペア（from あり・need なし）も監査し、ドリフト検出時に need:review を付与
+	 */
+	mode?: "pending" | "audit";
 }
 
 /** mdait_aiReview の data 形式 */
@@ -43,6 +49,10 @@ interface AiReviewData {
 		uncertain: number;
 		/** match だが閾値未満/issuesあり/autoApprove無効で保留されたユニット数 */
 		keptBelowThreshold: number;
+		/** audit: 確定済みペアにドリフトを検出し need:review を付与した数 */
+		flagged: number;
+		/** audit: 確定済みペアを検証しクリーンだった数（変更なし） */
+		audited: number;
 		errors: number;
 		skipped: number;
 	};
@@ -78,7 +88,8 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		try {
 			const inputPath = options.input.path;
 			const dryRun = options.input.dryRun === true;
-			logger.info("LanguageModelTool", "AI review tool invoked", { inputPath, dryRun });
+			const mode = options.input.mode === "audit" ? "audit" : "pending";
+			logger.info("LanguageModelTool", "AI review tool invoked", { inputPath, dryRun, mode });
 
 			const config = Configuration.getInstance();
 			const validationError = config.validate();
@@ -116,18 +127,20 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 				},
 			};
 
-			const results = await executeAiReviewForFiles(targetFiles, config, { dryRun }, dummyProgress, token);
+			const results = await executeAiReviewForFiles(targetFiles, config, { dryRun, mode }, dummyProgress, token);
 			const data = buildAiReviewData(results, targetFiles.length, dryRun, config);
 
 			const summary = vscode.l10n.t(
-				"AI pairing review completed: {0} verified, {1} approved, {2} escalated ({3} mismatch / {4} partial), {5} kept, {6} errors across {7} file(s).",
+				"AI pairing review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",
 				data.units.verified,
 				data.units.approved,
+				data.units.flagged,
 				data.units.mismatch + data.units.partial,
 				data.units.mismatch,
 				data.units.partial,
 				data.units.keptBelowThreshold + data.units.uncertain,
 				data.units.errors,
+				mode,
 				targetFiles.length,
 			);
 
@@ -154,6 +167,18 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 					title: vscode.l10n.t("Confirm AI Pairing Review (Dry Run)"),
 					message: vscode.l10n.t(
 						"Verify adopted translation pairings for {0} with AI? Dry run: no markers are changed, only a report is returned.",
+						scopeLabel,
+					),
+				},
+			};
+		}
+		if (options.input.mode === "audit") {
+			return {
+				invocationMessage: vscode.l10n.t("Auditing all translation pairings with AI..."),
+				confirmationMessages: {
+					title: vscode.l10n.t("Confirm AI Pairing Audit"),
+					message: vscode.l10n.t(
+						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiSync.review settings).",
 						scopeLabel,
 					),
 				},
@@ -197,6 +222,8 @@ function buildAiReviewData(
 			partial: agg.partial,
 			uncertain: agg.uncertain,
 			keptBelowThreshold: agg.keptBelowThreshold,
+			flagged: agg.flagged,
+			audited: agg.audited,
 			errors: agg.errors,
 			skipped: agg.skipped,
 		},
@@ -211,7 +238,9 @@ function buildAiReviewData(
 
 	for (const fileResult of results) {
 		for (const unit of fileResult.unitResults) {
-			if (unit.action === "escalated" && data.escalations.length < MAX_ESCALATIONS) {
+			// escalated（need:review 維持）と flagged（audit で need:review を付与）はどちらも
+			// ドリフト検出であり、エージェントが確認すべき対象なのでまとめて列挙する。
+			if ((unit.action === "escalated" || unit.action === "flagged") && data.escalations.length < MAX_ESCALATIONS) {
 				data.escalations.push({
 					file: toRelative(unit.filePath),
 					unitHash: unit.unitHash,
@@ -242,6 +271,11 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 			`${data.units.partial} unit(s) look like incomplete translations (verdict:partial). Check the issues in the escalations list; either fix the translation manually or remove the translated body and set need:translate to re-translate with mdait_translate.`,
 		);
 	}
+	if (data.units.flagged > 0) {
+		nextActions.push(
+			`${data.units.flagged} confirmed pair(s) no longer look like a faithful and complete translation of their source (adopted mis-pairing or hand-edited degradation). The audit reports these but does NOT change their markers. Inspect the escalations list; if a pair is genuinely off, fix the translation manually or remove the translated body and set need:translate to re-translate with mdait_translate. (Source revisions are already caught deterministically by mdait_sync as need:revise and are not audited here.)`,
+		);
+	}
 	if (data.units.uncertain + data.units.keptBelowThreshold > 0) {
 		nextActions.push(
 			`${data.units.uncertain + data.units.keptBelowThreshold} unit(s) were kept as need:review (uncertain or below the auto-approve threshold). Review them manually and remove the need:review flag to approve.`,
@@ -258,9 +292,15 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 		);
 	}
 	if (nextActions.length === 0) {
-		nextActions.push(
-			"No units with need:review were found. Run mdait_getStatus to confirm the overall state, or mdait_sync (adopt:true) first if you are onboarding an existing translated site.",
-		);
+		if (data.units.audited > 0) {
+			nextActions.push(
+				`Audit complete: all ${data.units.audited} confirmed pair(s) look healthy (no drift). Run mdait_getStatus to confirm the overall state.`,
+			);
+		} else {
+			nextActions.push(
+				"No pairs matched the selected scope. Run mdait_getStatus to confirm the overall state, or mdait_sync (adopt:true) first if you are onboarding an existing translated site.",
+			);
+		}
 	}
 	return nextActions;
 }

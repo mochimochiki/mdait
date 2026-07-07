@@ -24,7 +24,7 @@
 |------|------|------|------|
 | アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
 | レビュー | **AIペアリング検証** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
-| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきの isolate/漏れ 分類エスカレーション**（[orphan-model.md](orphan-model.md) #3） | 未着手 |
+| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきの isolate/漏れ 分類エスカレーション**（[orphan-model.md](orphan-model.md) #3） | 対象拡張のみ実装済み・他は未着手 |
 | 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | **実装済み**（ADR-260706-01） |
 | 孤立 | **孤立の統合モデル（isolate・判断サーフェス）** | 原文/訳文の意図的な独自章を一貫表現。`need:isolate`（伝播停止）導入、穴あきを need:review で一次受け→レポートを人間の判断の場に | 未着手（[orphan-model.md](orphan-model.md)・ADR-260706-02） |
 
@@ -205,10 +205,33 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 
 現行のペアリング検証を独立機能ファミリーとして発展させる（同期には埋め込まない）:
 
-- **対象拡張**: `need:review` ユニットだけでなく翻訳済みペア全般（from あり・need なし）を監査対象にできるモード。定常運用での原文改訂の取りこぼし・手修正での劣化の検出
+- **対象拡張（実装済み・ADR-260706-03）**: 下記「対象拡張モード（audit）」参照。
 - **バッチ検証**: 複数ペアを1コールにまとめる／ファイル単位で粗く判定し、AI が「個別に見たい」と要求したユニットだけ現行の1ユニット精査に落とす（アラインと同じ二段トリアージプロトコルを共有）
 - **定期実行**: 「ユーザーが明示的にスケジュール設定した」ことを起動要件として ADR-260705-01 と両立させる
 - **修正提案化**: partial の issues を構造化（欠落文の位置・種別）し、revise 風の修正パッチ提案へ。非MD（PlainFileHandler の1ユニット全文）はトークン上限設計とあわせてここで対象化
+
+#### 対象拡張モード（audit・実装済み・ADR-260706-03）
+
+`collectReviewPairs` に列挙モードを追加し、`AiReviewOptions.mode` / `mdait_aiReview` の `mode` / コマンドの QuickPick で選択する:
+
+- **`mode: "pending"`（既定・従来挙動）**: `from` あり ∧ `need === "review"` のみ。
+- **`mode: "audit"`**: `from` あり ∧（`need === "review"` **または** `need` なし）＝確定済みペアも監査。**非冗長な価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」**。原文改訂は hash-sync が `need:revise` で決定的に検出し（かつ in-flight として）audit 対象外なので、audit は「原文改訂の検出器」ではない。`translate`/`revise@`/`isolate`/`keep`/`backfill`/`verify-deletion` 等の in-flight 状態は対象外。
+
+検証対象の**元の状態**（`need:review` か確定済みか）で意味が分岐する。**確定済みペアの不備は「報告のみ」でマーカーを一切変更しない**（ADR-260706-03）:
+
+| 元状態 | verdict | 処理 | action |
+|--------|---------|------|--------|
+| pending（need:review） | match（承認条件） | `removeNeedTag()` | approved |
+| pending | partial/mismatch | 変更なし | escalated |
+| pending | uncertain/閾値未満 | 変更なし | kept |
+| settled（need なし・audit のみ） | match / uncertain | 変更なし（クリーン確認） | audited |
+| settled（audit のみ） | partial/mismatch | **変更なし（報告のみ）** | flagged |
+
+`decideReviewAction`（純関数）は不変。マーカー変異は pending 承認時の `removeNeedTag()` のみで、audit は確定済みペアに新たな need を付与しない。flagged/audited はレポート・エンベロープ（`aggregateReviewResults`）で独立カウントし、flagged ユニットは hover と escalations 一覧に載せて可視化する。
+
+**なぜ報告のみか**: audit は確定済みペアを毎回再スキャンするため、need:review を書き戻すと「意図的な単文乖離」を毎回蒸し返し、人間の承認（need:review 解除）を上書きする churn が起きる。これを抑制する「ペア単位の受理」の語彙が無いため、現段階は報告に留める。
+
+**既知の限界**: 意図的な単文/段落レベルの乖離を持つ確定済みペアは audit のたびに flagged として再報告される（マーカー不変なので害は無いがノイズは残る）。`need:isolate`（[orphan-model.md](orphan-model.md)）は**章＝ユニット単位**の孤立であり、この単文粒度は解決しない。恒久解は受理台帳（人間の受理判断＋コメントを hash キーで永続化し、内容不変の間は再報告しない仕組み・別ADR/別PR）。
 
 ### AI同期（合成コマンド）
 

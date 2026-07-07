@@ -9,13 +9,15 @@
 import * as path from "node:path";
 import type { AiReviewFileResult, ReviewAction, UnitReviewResult } from "./review-result";
 
-/** アクションの表示順（mismatch/partial のエスカレーションを先頭に出す） */
+/** アクションの表示順（ドリフト検出＝flagged/escalated を先頭に出す） */
 const ACTION_ORDER: Record<ReviewAction, number> = {
-	escalated: 0,
-	error: 1,
-	skipped: 2,
-	kept: 3,
-	approved: 4,
+	flagged: 0,
+	escalated: 1,
+	error: 2,
+	skipped: 3,
+	kept: 4,
+	audited: 5,
+	approved: 6,
 };
 
 /**
@@ -29,16 +31,18 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
 		(acc, r) => {
 			acc.verified += r.verified;
 			acc.approved += r.approved;
+			acc.flagged += r.flagged;
+			acc.audited += r.audited;
 			acc.escalated += r.escalated;
 			acc.kept += r.kept;
 			acc.skipped += r.skipped;
 			acc.errors += r.errors;
 			return acc;
 		},
-		{ verified: 0, approved: 0, escalated: 0, kept: 0, skipped: 0, errors: 0 },
+		{ verified: 0, approved: 0, flagged: 0, audited: 0, escalated: 0, kept: 0, skipped: 0, errors: 0 },
 	);
 	lines.push(
-		`verified: ${totals.verified} | approved: ${totals.approved} | escalated: ${totals.escalated} | kept: ${totals.kept} | skipped: ${totals.skipped} | errors: ${totals.errors}`,
+		`verified: ${totals.verified} | approved: ${totals.approved} | flagged: ${totals.flagged} | escalated: ${totals.escalated} | audited: ${totals.audited} | kept: ${totals.kept} | skipped: ${totals.skipped} | errors: ${totals.errors}`,
 		"",
 	);
 	lines.push(generateReviewTableSection(results));
@@ -74,6 +78,8 @@ export function generateReviewTableSection(results: AiReviewFileResult[]): strin
 
 function formatAction(unit: UnitReviewResult): string {
 	switch (unit.action) {
+		case "flagged":
+			return unit.verdict === "mismatch" ? "⚠️ flagged" : "🔶 flagged";
 		case "escalated":
 			return unit.verdict === "mismatch" ? "⚠️ escalated" : "🔶 escalated";
 		case "error":
@@ -82,6 +88,8 @@ function formatAction(unit: UnitReviewResult): string {
 			return "⏭️ skipped";
 		case "kept":
 			return "⏸️ kept";
+		case "audited":
+			return "🔍 audited";
 		case "approved":
 			return "✅ approved";
 	}

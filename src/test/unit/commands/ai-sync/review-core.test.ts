@@ -39,7 +39,21 @@ class StubAIService implements AIService {
 
 const MATCH = '{"verdict": "match", "confidence": 0.95, "issues": [], "reason": "Complete."}';
 const MISMATCH = '{"verdict": "mismatch", "confidence": 0.9, "issues": [], "reason": "Different topics."}';
+const PARTIAL = '{"verdict": "partial", "confidence": 0.8, "issues": ["omission"], "reason": "Incomplete."}';
+const UNCERTAIN = '{"verdict": "uncertain", "confidence": 0.3, "issues": [], "reason": "Not sure."}';
 const LOW_CONFIDENCE_MATCH = '{"verdict": "match", "confidence": 0.5, "issues": [], "reason": "Probably fine."}';
+
+/** 両ユニットが確定済み（from あり・need なし）のターゲット */
+const SETTLED_TARGET_CONTENT = `<!-- mdait tgtA from:srcA -->
+## Section A
+
+Content A.
+
+<!-- mdait tgtB from:srcB -->
+## Section B
+
+Content B.
+`;
 
 const SOURCE_CONTENT = `<!-- mdait srcA -->
 ## セクションA
@@ -248,5 +262,99 @@ Content A.
 		assert.strictEqual(result.verified, 0);
 		assert.strictEqual(stub.callCount, 0);
 		assert.ok(fs.readFileSync(targetFile, "utf-8").includes("need:review"));
+	});
+
+	suite("audit モード（対象拡張・確定済みペアの監査）", () => {
+		test("pending では確定済みペアは列挙されず無変更", async () => {
+			const config = await initConfig();
+			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+			const stub = new StubAIService([MATCH]);
+			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "pending" });
+
+			assert.strictEqual(result.verified, 0);
+			assert.strictEqual(stub.callCount, 0);
+			assert.strictEqual(result.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
+
+		test("audit で確定済みペアのドリフト（partial/mismatch）は報告のみ・マーカー不変", async () => {
+			const config = await initConfig();
+			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+			// tgtA=partial（ドリフト）, tgtB=match（健全）
+			const result = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([PARTIAL, MATCH])),
+				{ mode: "audit" },
+			);
+
+			assert.strictEqual(result.verified, 2);
+			assert.strictEqual(result.flagged, 1);
+			assert.strictEqual(result.audited, 1);
+			assert.strictEqual(result.approved, 0);
+			// 確定済みペアはドリフト検出しても一切マーカーを変えない（報告のみ）
+			assert.strictEqual(result.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT, "need:review は付与されない");
+		});
+
+		test("audit で全ペアが健全（match/uncertain）なら無変更（audited のみ）", async () => {
+			const config = await initConfig();
+			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+			const result = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([MATCH, UNCERTAIN])),
+				{ mode: "audit" },
+			);
+
+			assert.strictEqual(result.audited, 2);
+			assert.strictEqual(result.flagged, 0);
+			assert.strictEqual(result.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
+
+		test("audit は報告のみなので dryRun でもマーカー不変（挙動は同じ）", async () => {
+			const config = await initConfig();
+			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+			const result = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([MISMATCH, PARTIAL])),
+				{ mode: "audit", dryRun: true },
+			);
+
+			assert.strictEqual(result.flagged, 2);
+			assert.strictEqual(result.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
+
+		test("audit は再実行しても確定済みペアを書き換えず、毎回同じ flagged を報告（マーカー安定）", async () => {
+			const config = await initConfig();
+			writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+			// 1回目: tgtA ドリフト→flagged（報告のみ）, tgtB 健全→audited
+			const first = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([MISMATCH, MATCH])),
+				{ mode: "audit" },
+			);
+			assert.strictEqual(first.flagged, 1);
+			assert.strictEqual(first.audited, 1);
+			assert.strictEqual(first.markersChanged, false);
+			// マーカーは一切変わらない（need:review は付与されない）
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+
+			// 2回目 audit: マーカーが変わっていないので同じ結果を再報告する（蒸し返しの churn は無し）
+			const second = await executeAiReviewForFile(
+				targetFile,
+				config,
+				buildVerifier(new StubAIService([MISMATCH, MATCH])),
+				{ mode: "audit" },
+			);
+			assert.strictEqual(second.flagged, 1);
+			assert.strictEqual(second.audited, 1);
+			assert.strictEqual(second.markersChanged, false);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
 	});
 });

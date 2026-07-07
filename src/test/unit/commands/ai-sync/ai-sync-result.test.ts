@@ -37,6 +37,8 @@ function reviewFile(units: UnitReviewResult[]): AiReviewFileResult {
 		verified: units.filter((u) => u.action !== "skipped").length,
 		approved: units.filter((u) => u.action === "approved").length,
 		escalated: units.filter((u) => u.action === "escalated").length,
+		flagged: units.filter((u) => u.action === "flagged").length,
+		audited: units.filter((u) => u.action === "audited").length,
 		kept: units.filter((u) => u.action === "kept").length,
 		skipped: units.filter((u) => u.action === "skipped").length,
 		errors: units.filter((u) => u.action === "error").length,

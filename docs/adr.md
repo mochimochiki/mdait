@@ -4,6 +4,29 @@
 
 ---
 
+## ADR-260706-03: AIレビュー拡張（対象拡張モード）は確定済みペアを「報告のみ」で監査する
+
+### 背景
+AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-sync.md)）の第一項目「対象拡張モード」を実装するにあたり、対象を `need:review` 限定から確定済みペア（`from` あり・`need` なし）へ広げたとき、監査で不備を検出した確定済みペアをどう扱うかを決める必要があった。当初は `setNeed("review")` で need:review を付与する案だったが、以下の理由で「報告のみ」に決定した:
+
+1. **原文改訂は既に hash-sync が決定的に検出**している（原文 hash 変化 → target の `from` 不一致 → `need:revise@{旧hash}` 付与）。しかも `need:revise` は in-flight として audit の列挙対象外。よって「原文改訂ドリフトの検出」は audit の非冗長価値ではない。audit の非冗長価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」に限られる。
+2. audit は確定済みペアを**毎回再スキャン**する。need:review を書き戻すと、意図的な単文/段落レベルの乖離（翻訳で意図的に省略・追記した箇所）を毎回 `partial` として蒸し返し、人間の「承認（need:review 解除）」判断を上書きしてしまう（churn）。これを抑制する「ペア単位の受理」を記録する語彙は現状無い。`need:isolate`（[orphan-model.md](design/orphan-model.md)）は**章＝ユニット単位**の孤立であり、**ペア内の単文乖離には粒度が合わず解決しない**。
+
+### 決定
+- **`mode: "audit"` を追加**する（既定は従来の `"pending"`）。audit は `from` あり ∧（`need:review` **または** `need` なし）を列挙対象にする。`translate`/`revise@`/`isolate`/`keep`/`backfill`/`verify-deletion` 等の in-flight 状態は対象外。
+- **確定済みペア（need なし）の不備検出は「報告のみ」**。`partial`/`mismatch` は `flagged` として集計・レポート・hover に出すが、**マーカーは一切変更しない**。`match`/`uncertain` は `audited`（無変更）。
+- **need:review だった既存ユニット（pending）の挙動は不変**（approve→removeNeedTag / escalate / keep）。すなわちマーカー変異は従来どおり pending 承認時の `removeNeedTag()` のみで、audit で新たな need 付与は行わない。
+- 既訳本文・hash・from は不変。
+
+### 理由
+報告のみとすることで、churn（毎回の蒸し返し）と「人間の承認判断を上書きする」副作用を避けられる。監査の本質は「気づき（検出）」であり、確定済みの既訳マーカーを機械が書き換えるのは、受理を記憶する仕組みが無い現段階では過剰。need:review 付与を pending（adopt 直後の未確定）に限ることで、状態機械としても一貫する。
+
+### 備考
+- コマンド層は QuickPick（pending/audit 選択）を明示起動ゲートとし、LM tool（`mdait_aiReview` の `mode`）は確認UIで「確定済みペアは報告のみ」を明示する（ADR-260705-01 と整合）。
+- **既知の限界**: 意図的な単文乖離を持つ確定済みペアは audit のたびに `flagged` として再報告される（マーカーは変わらないので害は無いが、レポートにノイズが残る）。恒久解は「受理台帳」= 人間の受理判断とコメントを hash キー（targetHash・fromHash）で永続化し、内容が変わらない限り audit が再報告しない仕組み（別ADR/別PRで設計）。isolate では解決しない。
+- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[orphan-model.md](design/orphan-model.md) #3）。`mdait_aiSync` 合成は pending のまま。
+- 詳細: [command_ai-sync.md](design/command_ai-sync.md)。
+
 ## ADR-260706-02: 孤立ユニットの統合モデル（isolate 導入・判断サーフェス）
 
 ### 背景
