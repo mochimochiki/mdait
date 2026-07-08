@@ -20,7 +20,6 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { PromptProvider } from "../../prompts";
-import { AuditLedgerStore } from "../../core/audit-ledger/audit-ledger-store";
 import { isTmCommitTarget, summarizeTmSkipReasons } from "./commit-filter";
 import type { TmSkipReasonBreakdown } from "./commit-filter";
 import {
@@ -246,12 +245,8 @@ export async function executeTmCommitForFile(
 	);
 	const content = document.getText();
 	const markdown = markdownParser.parse(content, config);
-	// audit の受理台帳で「意図的な乖離」として受理されたペアは TM から除外する（安全側・汚染防止）
-	const ledger = AuditLedgerStore.getInstance();
-	ledger.ensureLoaded(config.getMdaitDir());
-	const isAccepted = (targetHash: string, fromHash: string) => ledger.isAccepted(targetHash, fromHash);
-	const targetUnits = markdown.units.filter((unit) => isTmCommitTarget(unit, isAccepted));
-	const skipReasons = summarizeTmSkipReasons(markdown.units, isAccepted);
+	const targetUnits = markdown.units.filter(isTmCommitTarget);
+	const skipReasons = summarizeTmSkipReasons(markdown.units);
 
 	if (targetUnits.length === 0) {
 		logger.debug("tm.commit", "No commit target units found", {

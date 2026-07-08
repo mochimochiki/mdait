@@ -17,8 +17,7 @@ const ACTION_ORDER: Record<ReviewAction, number> = {
 	skipped: 3,
 	kept: 4,
 	audited: 5,
-	accepted: 6,
-	approved: 7,
+	approved: 6,
 };
 
 /**
@@ -33,7 +32,6 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
 			acc.verified += r.verified;
 			acc.approved += r.approved;
 			acc.flagged += r.flagged;
-			acc.accepted += r.accepted;
 			acc.audited += r.audited;
 			acc.escalated += r.escalated;
 			acc.kept += r.kept;
@@ -41,10 +39,10 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
 			acc.errors += r.errors;
 			return acc;
 		},
-		{ verified: 0, approved: 0, flagged: 0, accepted: 0, audited: 0, escalated: 0, kept: 0, skipped: 0, errors: 0 },
+		{ verified: 0, approved: 0, flagged: 0, audited: 0, escalated: 0, kept: 0, skipped: 0, errors: 0 },
 	);
 	lines.push(
-		`verified: ${totals.verified} | approved: ${totals.approved} | flagged: ${totals.flagged} | accepted: ${totals.accepted} | escalated: ${totals.escalated} | audited: ${totals.audited} | kept: ${totals.kept} | skipped: ${totals.skipped} | errors: ${totals.errors}`,
+		`verified: ${totals.verified} | approved: ${totals.approved} | flagged: ${totals.flagged} | escalated: ${totals.escalated} | audited: ${totals.audited} | kept: ${totals.kept} | skipped: ${totals.skipped} | errors: ${totals.errors}`,
 		"",
 	);
 	lines.push(generateReviewTableSection(results));
@@ -92,8 +90,6 @@ function formatAction(unit: UnitReviewResult): string {
 			return "⏸️ kept";
 		case "audited":
 			return "🔍 audited";
-		case "accepted":
-			return "🤝 accepted";
 		case "approved":
 			return "✅ approved";
 	}

@@ -76,16 +76,6 @@ export interface TranslationSummary {
 
 	/** レビュー推奨理由（need:reviewが設定された理由） */
 	reviewReasons?: string[];
-
-	/**
-	 * 直近の AI レビュー/監査で取ったアクション（"flagged" / "accepted" 等）。
-	 * CodeLens が flagged 確定済みペアに「意図的として受理」ボタンを出すために参照する。
-	 * セッション内メモリのみで永続化しない。
-	 */
-	reviewAction?: string;
-
-	/** 直近の AI レビュー/監査の verdict（受理時に台帳へ記録する情報） */
-	reviewVerdict?: string;
 }
 
 /**

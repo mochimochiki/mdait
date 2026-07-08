@@ -10,7 +10,6 @@
 
 import * as fs from "node:fs";
 import * as vscode from "vscode";
-import { AuditLedgerStore } from "../../core/audit-ledger/audit-ledger-store";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -89,11 +88,6 @@ export async function executeAiReviewForFile(
 		}
 	}
 
-	// 受理台帳を読み込む（audit で確定済みペアの「受理済み」を判定して AI 呼び出しをスキップする）。
-	// マーカー方式に依存しない独立ストア（hash キー）。ここでは読み取りのみ。
-	const ledger = AuditLedgerStore.getInstance();
-	ledger.ensureLoaded(config.getMdaitDir());
-
 	// 読み取り〜書き戻しの間に sync/trans がファイルを変更しないよう、ペア単位で排他する
 	await FileMutex.getInstance().runExclusive([sourceFile, targetFile], async () => {
 		await flushDirtyDocument(sourceFile);
@@ -146,27 +140,6 @@ export async function executeAiReviewForFile(
 				unitResult.action = "skipped";
 				unitResult.reason = "Source unit not found for from hash";
 				result.skipped++;
-				result.unitResults.push(unitResult);
-				continue;
-			}
-
-			// audit: 確定済みペア（need なし）が受理台帳に「意図的な乖離」として受理済みなら
-			// AI を呼ばず accepted にする（再報告なし・決定的）。受理は (targetHash, fromHash) の
-			// “その内容”に対してのみ有効なので、訳文を直せば marker.hash が変わり自動失効する
-			// （原文改訂は sync が need:revise を付け audit 対象外になる）。
-			const isSettled = marker?.need !== "review";
-			if (isSettled && marker?.hash && marker?.from && ledger.isAccepted(marker.hash, marker.from)) {
-				const accepted = ledger.getEntry(marker.hash, marker.from);
-				unitResult.action = "accepted";
-				unitResult.reason = accepted?.note ? `Accepted as intentional: ${accepted.note}` : "Accepted as intentional";
-				result.accepted++;
-				// hover に「受理: {note}」を出すためサマリを保存する
-				summaryManager.saveSummary(marker.hash, {
-					unitHash: marker.hash,
-					stats: { duration: 0 },
-					reviewReasons: [unitResult.reason],
-					reviewAction: "accepted",
-				});
 				result.unitResults.push(unitResult);
 				continue;
 			}
@@ -226,17 +199,13 @@ export async function executeAiReviewForFile(
 					}
 				}
 
-				// hover 表示用に判定理由を保存（approved も含めて可視化する）。
-				// reviewAction/reviewVerdict は CodeLens が flagged 確定済みペアに
-				// 「意図的として受理」ボタンを出すために参照する。
+				// hover 表示用に判定理由を保存（approved も含めて可視化する）
 				if (marker?.hash) {
 					summaryManager.saveSummary(marker.hash, {
 						unitHash: marker.hash,
 						stats: { duration: (Date.now() - startedAt) / 1000 },
 						reviewReasons: [formatReviewReason(parsed)],
 						warnings: parsed.issues.length > 0 ? parsed.issues : undefined,
-						reviewAction: unitResult.action,
-						reviewVerdict: parsed.verdict,
 					});
 				}
 			} catch (error) {
@@ -288,7 +257,6 @@ export async function executeAiReviewForFile(
 		approved: result.approved,
 		escalated: result.escalated,
 		flagged: result.flagged,
-		accepted: result.accepted,
 		audited: result.audited,
 		kept: result.kept,
 		skipped: result.skipped,

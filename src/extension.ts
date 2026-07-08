@@ -60,7 +60,6 @@ import { MdaitTmTool } from "./lm-tools/tm-tool";
 import { MdaitTranslateTool } from "./lm-tools/translate-tool";
 import { MdaitValidateTool } from "./lm-tools/validate-tool";
 import {
-	auditAcceptCommand,
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
@@ -425,15 +424,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	statusManager.onStatusTreeChanged(() => {
 		codeLensProvider.refresh();
 	});
-
-	// audit の flagged 確定済みペアを「意図的として受理」して受理台帳へ記録するコマンド
-	const auditAcceptDisposable = vscode.commands.registerCommand(
-		"mdait.audit.accept",
-		async (range: vscode.Range) => {
-			await auditAcceptCommand(range);
-			codeLensProvider.refresh();
-		},
-	);
 
 	// 非Markdownファイル用CodeLensコマンド（プレーンファイル単位）
 	const codeLensTranslateFileDisposable = vscode.commands.registerCommand(
@@ -847,7 +837,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
-		auditAcceptDisposable,
 		codeLensDisposable,
 		hoverDisposable,
 		translateDirectoryDisposable,

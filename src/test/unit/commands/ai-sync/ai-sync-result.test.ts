@@ -38,7 +38,6 @@ function reviewFile(units: UnitReviewResult[]): AiReviewFileResult {
 		approved: units.filter((u) => u.action === "approved").length,
 		escalated: units.filter((u) => u.action === "escalated").length,
 		flagged: units.filter((u) => u.action === "flagged").length,
-		accepted: units.filter((u) => u.action === "accepted").length,
 		audited: units.filter((u) => u.action === "audited").length,
 		kept: units.filter((u) => u.action === "kept").length,
 		skipped: units.filter((u) => u.action === "skipped").length,

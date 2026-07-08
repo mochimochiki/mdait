@@ -90,7 +90,6 @@ function fileResult(units: UnitReviewResult[], overrides: Partial<AiReviewFileRe
 		approved,
 		escalated: units.filter((u) => u.action === "escalated").length,
 		flagged,
-		accepted: units.filter((u) => u.action === "accepted").length,
 		audited: units.filter((u) => u.action === "audited").length,
 		kept: units.filter((u) => u.action === "kept").length,
 		skipped,
@@ -157,18 +156,6 @@ suite("aggregateReviewResults（複数ファイルの集計・純関数）", () 
 		assert.strictEqual(agg.audited, 1);
 		assert.strictEqual(agg.approved, 1);
 		// flagged は escalated（need:review 維持）とは別集計で、mismatch/partial には積まれない
-		assert.strictEqual(agg.escalated, 0);
-	});
-
-	test("audit の accepted（受理台帳スキップ）を集計する", () => {
-		const results = [
-			fileResult([unit("accepted"), unit("accepted"), unit("flagged", "partial"), unit("audited", "match")]),
-		];
-		const agg = aggregateReviewResults(results);
-		assert.strictEqual(agg.accepted, 2);
-		assert.strictEqual(agg.flagged, 1);
-		assert.strictEqual(agg.audited, 1);
-		// accepted は AI 検証をスキップするので verified/escalated/kept には積まれない
 		assert.strictEqual(agg.escalated, 0);
 	});
 });

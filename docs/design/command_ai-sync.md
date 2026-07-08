@@ -224,24 +224,14 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 | pending（need:review） | match（承認条件） | `removeNeedTag()` | approved |
 | pending | partial/mismatch | 変更なし | escalated |
 | pending | uncertain/閾値未満 | 変更なし | kept |
-| settled（need なし・audit のみ） | 受理台帳に受理済み | **AI を呼ばずスキップ** | accepted |
 | settled（need なし・audit のみ） | match / uncertain | 変更なし（クリーン確認） | audited |
 | settled（audit のみ） | partial/mismatch | **変更なし（報告のみ）** | flagged |
 
-`decideReviewAction`（純関数）は不変。マーカー変異は pending 承認時の `removeNeedTag()` のみで、audit は確定済みペアに新たな need を付与しない。accepted/flagged/audited はレポート・エンベロープ（`aggregateReviewResults`）で独立カウントし、flagged ユニットは hover と escalations 一覧に載せて可視化する。
+`decideReviewAction`（純関数）は不変。マーカー変異は pending 承認時の `removeNeedTag()` のみで、audit は確定済みペアに新たな need を付与しない。flagged/audited はレポート・エンベロープ（`aggregateReviewResults`）で独立カウントし、flagged ユニットは hover と escalations 一覧に載せて可視化する。
 
-**なぜ報告のみか**: audit は確定済みペアを毎回再スキャンするため、need:review を書き戻すと「意図的な単文乖離」を毎回蒸し返し、人間の承認（need:review 解除）を上書きする churn が起きる。これを抑制する「ペア単位の受理」を受理台帳（下記）で表現し、報告は残す。
+**なぜ報告のみか**: audit は確定済みペアを毎回再スキャンするため、need:review を書き戻すと「意図的な単文乖離」を毎回蒸し返し、人間の承認（need:review 解除）を上書きする churn が起きる。これを抑制する「ペア単位の受理」の語彙が無いため、現段階は報告に留める。
 
-#### 受理台帳（accept ledger・実装済み・ADR-260707-01）
-
-ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたびに flagged として再報告される）を解消する恒久解。
-
-- **専用ストア（hash キー）**: `.mdait/audit-ledger`（パスは `Configuration.getAuditLedgerFilePath()`）。`(targetHash, fromHash)` をキーに「意図的な乖離としての受理＋コメント（note）」を TSV で永続化する（決定的順序・`atomicWriteFileSync`・シングルトン `AuditLedgerStore`、純パース/シリアライズは `audit-ledger-encoder.ts`）。unit-state（external 専用・path キー）とは別に、埋め込み/外部いずれのマーカーでも効く独立ストア。
-- **受理UI**: audit で `flagged` になった確定済みペア（need なし）に CodeLens「意図的として受理」を出す。flagged 状態はマーカーに残らないため、直近 audit 結果を保持する `SummaryManager`（セッションメモリ）の `reviewAction === "flagged"` を表示条件にする。受理コメントは `showInputBox` で取得し `(targetHash, fromHash)` を台帳へ記録する（マーカー・本文・hash・from は不変）。
-- **audit 読み取り**: settled 分岐で **AI を呼ぶ前に台帳を引き**、`(marker.hash, marker.from)` が受理済みなら AI 検証をスキップして `accepted` にする（再報告なし・決定的・AI 不使用）。
-- **無効化はハッシュで自動**: 訳文を直せば targetHash が変わり受理が失効（再検証→再 flag）、原文改訂は sync が `need:revise` を付け audit 対象外になる。GC は `retainOnly` を提供（sync への配線は将来課題）。
-- **TM 連携は除外**: 受理済みペアは `commit-filter.ts` の受理判定述語で TM から除外する（新スキップ理由 `audited`）。AI が partial/mismatch と判定した訳を人間が意図的と認めたものであり、TM に載せると意図的乖離が他文書へ汚染するため安全側で除外する（ADR-260704-07 と整合）。
-- スコープ外（将来増分）: `aiSync.review.auditFlag`（flagged に need:review を付与するオプション。受理済みは再フラグされない）、受理の「意図的乖離 / AI 誤検知（TM 適格）」二分。
+**既知の限界**: 意図的な単文/段落レベルの乖離を持つ確定済みペアは audit のたびに flagged として再報告される（マーカー不変なので害は無いがノイズは残る）。`need:isolate`（[orphan-model.md](orphan-model.md)）は**章＝ユニット単位**の孤立であり、この単文粒度は解決しない。恒久解は受理台帳（人間の受理判断＋コメントを hash キーで永続化し、内容不変の間は再報告しない仕組み・別ADR/別PR）。
 
 ### AI同期（合成コマンド）
 
