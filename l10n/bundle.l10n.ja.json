@@ -310,5 +310,7 @@
   "e.g. This section is intentionally omitted from the source.": "例: この節は意図的に原文へは含めていない。",
   "Note removed.": "ノートを削除しました。",
   "Note saved. It will be shown to the AI during audit.": "ノートを保存しました。audit 時に AI へ渡されます。",
-  "Failed to save note: {0}": "ノートの保存に失敗しました: {0}"
+  "Failed to save note: {0}": "ノートの保存に失敗しました: {0}",
+  "$(comment) Add / edit note": "$(comment) ノートを追加/編集",
+  "Tooltip: Jump to this unit and edit its note (shown to the AI during audit)": "ヒント: このユニットへ移動してノートを編集します（audit 時に AI へ渡されます）"
 }

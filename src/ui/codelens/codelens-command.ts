@@ -164,10 +164,41 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 }
 
 /**
- * ユニットに紐づく note（人間のメタ情報）を CodeLens から編集するコマンド。
+ * ユニット hash に対する note 入力ダイアログを開き、保存する共通処理。
  * note は `.mdait/unit-registry` にユニットの hash キーで保存され、audit 実行時に
- * AI へ文脈として渡される（意図的な乖離の説明など）。本文・マーカーは変更しない。
- * 空文字で保存すると note を削除する。
+ * AI へ文脈として渡される。本文・マーカーは変更しない。空文字で削除。
+ * @param hash 対象ユニットの hash
+ * @param refreshFsPath 保存後に status/CodeLens を更新するファイルパス
+ */
+async function promptAndSaveNote(hash: string, refreshFsPath: string): Promise<void> {
+	const registry = UnitRegistryManager.getInstance();
+	const existing = await registry.loadNote(hash);
+	const input = await vscode.window.showInputBox({
+		title: vscode.l10n.t("Unit note"),
+		prompt: vscode.l10n.t(
+			"Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.",
+		),
+		value: existing ?? "",
+		placeHolder: vscode.l10n.t("e.g. This section is intentionally omitted from the source."),
+	});
+	// Escape（undefined）はキャンセル。空文字は削除。
+	if (input === undefined) {
+		return;
+	}
+
+	await registry.saveNote(hash, input.trim() === "" ? null : input);
+	// hover は registry から note を直接読むため、status/CodeLens のリフレッシュのみ行う
+	await StatusManager.getInstance().refreshFileStatus(refreshFsPath);
+
+	vscode.window.showInformationMessage(
+		input.trim() === ""
+			? vscode.l10n.t("Note removed.")
+			: vscode.l10n.t("Note saved. It will be shown to the AI during audit."),
+	);
+}
+
+/**
+ * ユニットに紐づく note（人間のメタ情報）を CodeLens から編集するコマンド。
  * @param range CodeLensが表示されている行の範囲
  */
 export async function codeLensEditNoteCommand(range: vscode.Range): Promise<void> {
@@ -183,35 +214,55 @@ export async function codeLensEditNoteCommand(range: vscode.Range): Promise<void
 			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
 			return;
 		}
-
-		const registry = UnitRegistryManager.getInstance();
-		const existing = await registry.loadNote(marker.hash);
-		const input = await vscode.window.showInputBox({
-			title: vscode.l10n.t("Unit note"),
-			prompt: vscode.l10n.t(
-				"Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.",
-			),
-			value: existing ?? "",
-			placeHolder: vscode.l10n.t("e.g. This section is intentionally omitted from the source."),
-		});
-		// Escape（undefined）はキャンセル。空文字は削除。
-		if (input === undefined) {
-			return;
-		}
-
-		await registry.saveNote(marker.hash, input.trim() === "" ? null : input);
-		// hover は registry から note を直接読むため、CodeLens のリフレッシュのみ行う
-		await StatusManager.getInstance().refreshFileStatus(document.uri.fsPath);
-
-		vscode.window.showInformationMessage(
-			input.trim() === ""
-				? vscode.l10n.t("Note removed.")
-				: vscode.l10n.t("Note saved. It will be shown to the AI during audit."),
-		);
+		await promptAndSaveNote(marker.hash, document.uri.fsPath);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to save note: {0}", errorMessage));
 	}
+}
+
+/**
+ * ファイルパスとユニット hash から note 編集へジャンプするコマンド。
+ * AIレビューのレポート（仮想ドキュメント）の CodeLens から呼ばれ、
+ * 対象ファイルを開いて該当ユニットへスクロールし、note 入力を開く。
+ * @param filePath 対象ターゲットファイルの絶対パス
+ * @param unitHash 対象ユニットの hash
+ */
+export async function editNoteForUnitCommand(filePath: string, unitHash: string): Promise<void> {
+	try {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+		const editor = await vscode.window.showTextDocument(document, { preview: false });
+
+		// hash から該当ユニットの行を特定してスクロール（見つからなくても note 編集は続行）
+		const line = findUnitLineByHash(document, unitHash);
+		if (line !== null) {
+			const position = new vscode.Position(line, 0);
+			editor.selection = new vscode.Selection(position, position);
+			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+		}
+
+		await promptAndSaveNote(unitHash, filePath);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to save note: {0}", errorMessage));
+	}
+}
+
+/**
+ * ドキュメント内で hash が一致するユニットの開始行を返す（埋め込み/外部いずれも対応）。
+ */
+function findUnitLineByHash(document: vscode.TextDocument, hash: string): number | null {
+	const config = Configuration.getInstance();
+	let role: "source" | "target" = "target";
+	try {
+		role = new FileExplorer().isSourceFile(document.uri.fsPath, config) ? "source" : "target";
+	} catch {
+		// ワークスペース未設定等は target 扱い
+	}
+	const io = resolveMarkerIO(config, document.uri.fsPath, role);
+	const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+	const unit = parsed.units.find((u) => u.marker?.hash === hash);
+	return unit ? unit.startLine : null;
 }
 
 /**
