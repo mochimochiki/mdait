@@ -266,6 +266,19 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
+		// 対訳ユニット（from あり）に note 編集ボタンを出す。
+		// note は audit 実行時に AI へ渡され、意図的な乖離の説明として判定に織り込まれる。
+		if (!isSourceFile && marker.from && marker.hash) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(comment) Note"),
+					tooltip: vscode.l10n.t("Tooltip: Add or edit a note for this unit (shown to the AI during audit)"),
+					command: "mdait.unit.editNote",
+					arguments: [range],
+				}),
+			);
+		}
+
 		return codeLenses;
 	}
 

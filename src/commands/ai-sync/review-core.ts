@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
@@ -146,12 +147,18 @@ export async function executeAiReviewForFile(
 
 			try {
 				const startedAt = Date.now();
+				// ユニットに紐づく note（人間が記録した意図的乖離の説明など）を AI へ渡す。
+				// AI が note を織り込んで判定するので、意図的な乖離は match/audited になり再報告されない。
+				const humanNote = marker?.hash
+					? ((await UnitRegistryManager.getInstance().loadNote(marker.hash)) ?? undefined)
+					: undefined;
 				const verifyResult = await verifier.verify(
 					{
 						sourceLang: transPair.sourceLang,
 						targetLang: transPair.targetLang,
 						sourceText: pair.sourceUnit.content,
 						targetText: pair.targetUnit.content,
+						humanNote,
 						unitContext: { unitHash: marker?.hash, title: pair.targetUnit.title },
 					},
 					token,

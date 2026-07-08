@@ -337,4 +337,89 @@ fff12345 contentF`;
 			assert.ok(elapsed < 100, `Elapsed: ${elapsed}ms should be < 100ms`);
 		});
 	});
+
+	suite("note（ユニットメタ情報）", () => {
+		test("setNote/getNote で note を保存・取得できる", () => {
+			const store = new UnitRegistryStore();
+			store.upsert("abc12345", "content1");
+			store.setNote("abc12345", "encnote");
+			assert.equal(store.getNote("abc12345"), "encnote");
+			// content は保持される
+			assert.equal(store.get("abc12345"), "content1");
+		});
+
+		test("upsert（content 更新）は既存 note を保持する", () => {
+			const store = new UnitRegistryStore();
+			store.setNote("abc12345", "encnote");
+			store.upsert("abc12345", "content2");
+			assert.equal(store.getNote("abc12345"), "encnote");
+			assert.equal(store.get("abc12345"), "content2");
+		});
+
+		test("content 無しでも note のみのエントリを作れる", () => {
+			const store = new UnitRegistryStore();
+			store.setNote("abc12345", "encnote");
+			assert.equal(store.getNote("abc12345"), "encnote");
+			// content は falsy（"" or null）で content 無しとして扱える
+			assert.ok(!store.get("abc12345"));
+		});
+
+		test("note を null で削除する。content が無ければエントリごと消える", () => {
+			const store = new UnitRegistryStore();
+			store.setNote("abc12345", "encnote");
+			store.setNote("abc12345", null);
+			assert.equal(store.getNote("abc12345"), null);
+			assert.equal(store.size(), 0);
+		});
+
+		test("note を削除しても content は残る", () => {
+			const store = new UnitRegistryStore();
+			store.upsert("abc12345", "content1");
+			store.setNote("abc12345", "encnote");
+			store.setNote("abc12345", null);
+			assert.equal(store.getNote("abc12345"), null);
+			assert.equal(store.get("abc12345"), "content1");
+		});
+
+		test("parse → serialize ラウンドトリップで note が保持される（3列目）", () => {
+			const store = new UnitRegistryStore();
+			store.upsert("abc12345", "enccontent");
+			store.setNote("abc12345", "encnote");
+			const serialized = store.serialize();
+			assert.ok(serialized.includes("abc12345 enccontent encnote"), serialized.match(/abc12345.*/)?.[0]);
+
+			const store2 = new UnitRegistryStore();
+			store2.parse(serialized);
+			assert.equal(store2.get("abc12345"), "enccontent");
+			assert.equal(store2.getNote("abc12345"), "encnote");
+		});
+
+		test("note 無しの旧形式（2列）ファイルも従来どおりパースできる（後方互換）", () => {
+			const store = new UnitRegistryStore();
+			store.parse("abc12345 enccontent");
+			assert.equal(store.get("abc12345"), "enccontent");
+			assert.equal(store.getNote("abc12345"), null);
+		});
+
+		test("content 空・note ありの行（2スペース）もラウンドトリップする", () => {
+			const store = new UnitRegistryStore();
+			store.setNote("abc12345", "encnote");
+			const serialized = store.serialize();
+			const store2 = new UnitRegistryStore();
+			store2.parse(serialized);
+			assert.equal(store2.getNote("abc12345"), "encnote");
+			assert.ok(!store2.get("abc12345"));
+		});
+
+		test("retainOnly は note ごとエントリを残す/GC する", () => {
+			const store = new UnitRegistryStore();
+			store.upsert("abc12345", "c1");
+			store.setNote("abc12345", "n1");
+			store.upsert("def67890", "c2");
+			store.setNote("def67890", "n2");
+			store.retainOnly(new Set(["abc12345"]));
+			assert.equal(store.getNote("abc12345"), "n1");
+			assert.equal(store.getNote("def67890"), null);
+		});
+	});
 });

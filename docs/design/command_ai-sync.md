@@ -229,9 +229,19 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 
 `decideReviewAction`（純関数）は不変。マーカー変異は pending 承認時の `removeNeedTag()` のみで、audit は確定済みペアに新たな need を付与しない。flagged/audited はレポート・エンベロープ（`aggregateReviewResults`）で独立カウントし、flagged ユニットは hover と escalations 一覧に載せて可視化する。
 
-**なぜ報告のみか**: audit は確定済みペアを毎回再スキャンするため、need:review を書き戻すと「意図的な単文乖離」を毎回蒸し返し、人間の承認（need:review 解除）を上書きする churn が起きる。これを抑制する「ペア単位の受理」の語彙が無いため、現段階は報告に留める。
+**なぜ報告のみか**: audit は確定済みペアを毎回再スキャンするため、need:review を書き戻すと「意図的な単文乖離」を毎回蒸し返し、人間の承認（need:review 解除）を上書きする churn が起きる。マーカーは変えず、意図的乖離の説明は下記のユニット note で AI に伝える。
 
-**既知の限界**: 意図的な単文/段落レベルの乖離を持つ確定済みペアは audit のたびに flagged として再報告される（マーカー不変なので害は無いがノイズは残る）。`need:isolate`（[orphan-model.md](orphan-model.md)）は**章＝ユニット単位**の孤立であり、この単文粒度は解決しない。恒久解は受理台帳（人間の受理判断＋コメントを hash キーで永続化し、内容不変の間は再報告しない仕組み・別ADR/別PR）。
+#### ユニット note（意図的乖離の説明・実装済み・ADR-260708-01）
+
+ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたびに flagged として再報告される）を解消する。**受理を決定論的に記録してスキップするのではなく、人間の説明（note）を AI へ渡して判定に織り込ませる**（audit は本質的に AI 判定なので）。
+
+- **保存先は `unit-registry` に統合**（1ファイル）。エントリを `hash → { content, note? }` に拡張（行 `<hash> <encContent>[ <encNote>]`、旧2列と後方互換）。note は「hash キーのユニットメタ」。
+- **同一性はユニットに追従**: content は content-addressed で不変（revise 用に旧 hash に残す）。note だけ、本文編集で hash が変わったとき **sync が旧→新 hash へ移送**する（`updateSectionHashes` が hash 差分を集め `migrateNotes` で付け替え。決定的・冪等・AI 不使用）。削除ユニットの note は GC（`retainOnly`）で消える。
+- **編集 UI は CodeLens**「Note」（対訳ユニット）→ `showInputBox`。本文・マーカー・hash・from は不変。hover は registry から note を直接読んで表示。
+- **audit は note を verify プロンプトに `<humanNote>` として添える**（`PairVerifier`）。AI は note が説明する乖離を意図的とみなし match/audited を返す。**決定論的な抑止はしない**（毎回 AI を呼ぶ）。churn は「AI が note を見て flagged にしない」形で消える。
+- **TM 連携は不変**: note は機械的な受理フラグではないため TM 登録可否（need ベース）に影響させない。
+
+**残る限界**: audit は対象ペアに毎回 AI を呼ぶ（決定論的な短絡はしない）。コストが問題になれば将来 `(contentHash, noteHash)` での verdict キャッシュを検討する。`need:isolate`（[orphan-model.md](orphan-model.md)）は**章＝ユニット単位**の孤立で、この単文粒度とは別レイヤ。
 
 ### AI同期（合成コマンド）
 

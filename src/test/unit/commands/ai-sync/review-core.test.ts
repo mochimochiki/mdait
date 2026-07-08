@@ -5,6 +5,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { PairVerifier } from "../../../../commands/ai-sync/pair-verifier";
 import { executeAiReviewForFile } from "../../../../commands/ai-sync/review-core";
+import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
@@ -16,6 +17,8 @@ class StubAIService implements AIService {
 	public callCount = 0;
 	private readonly responses: string[];
 	public afterResponse?: () => void;
+	/** 受け取った全 user メッセージ本文（note 注入の検証用） */
+	public userMessages: string[] = [];
 
 	constructor(responses: string[]) {
 		this.responses = responses;
@@ -26,6 +29,7 @@ class StubAIService implements AIService {
 		_messages: AIMessage[],
 		_cancellationToken?: vscode.CancellationToken,
 	): Promise<string> {
+		this.userMessages.push(String(_messages[_messages.length - 1]?.content ?? ""));
 		const index = Math.min(this.callCount, this.responses.length - 1);
 		this.callCount++;
 		const response = this.responses[index];
@@ -117,6 +121,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	setup(() => {
 		Configuration.dispose();
 		PromptProvider.dispose();
+		UnitRegistryManager.resetInstance();
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-ai-review-"));
 		__vscodeMockWorkspaceRoot = tempDir;
 		sourceFile = path.join(tempDir, "ja", "doc.md");
@@ -126,6 +131,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	teardown(() => {
 		Configuration.dispose();
 		PromptProvider.dispose();
+		UnitRegistryManager.resetInstance();
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
@@ -355,6 +361,31 @@ Content A.
 			assert.strictEqual(second.audited, 1);
 			assert.strictEqual(second.markersChanged, false);
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
+		});
+
+		suite("ユニット note を AI へ渡す（意図的乖離の説明）", () => {
+			test("registry の note が verify の user メッセージに <humanNote> として渡る", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				// tgtA に note を保存（audit 対象の確定済みペア）
+				await UnitRegistryManager.getInstance().saveNote("tgtA", "Section A is intentionally condensed.");
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				// tgtA の検証メッセージに note が <humanNote> として含まれる
+				assert.ok(
+					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("intentionally condensed")),
+				);
+			});
+
+			test("note が無いユニットには <humanNote> を付けない", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+				assert.ok(stub.userMessages.every((m) => !m.includes("<humanNote>")));
+			});
 		});
 	});
 });

@@ -118,18 +118,21 @@ Commands層の`StatusCollector`がこのインターフェースを実装し、`
 
 ## UnitRegistry管理
 
-ユニット内容を`.mdait/unit-registry`ファイルで永続化します。原文変更時、旧コンテンツとの差分生成に使用します。
+ユニット内容を`.mdait/unit-registry`ファイルで永続化します。原文変更時、旧コンテンツとの差分生成に使用します。あわせて、ユニットに紐づく**note**（人間/ツールのメタ情報。audit 時に AI へ渡される意図的乖離の説明など）を同一 hash キーで保持します（ADR-260708-01）。
 
-**保存形式**: gzip圧縮 + base64エンコード。CRC32先頭3桁でバケット化（ハッシュ先頭3桁ごとに分割管理）し、バケット昇順でgit競合を軽減。
+**保存形式**: 1エントリ `<hash> <encContent>[ <encNote>]`（3列目=note は任意。旧2列ファイルと後方互換）。content・note とも gzip圧縮 + base64エンコード。CRC32先頭3桁でバケット化し、バケット昇順でgit競合を軽減。
 
 ```
 3f7
 3f7c8a1b <encoded_content>
 a2b
-a2b5c7d8 <encoded_content>
+a2b5c7d8 <encoded_content> <encoded_note>
 ```
 
-**GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリを削除します。
+- **content**: content-addressed で不変（旧内容は revise の差分生成に必要なので残す）
+- **note**: ユニットに追従する恒久メタ。本文編集で hash が変わると sync（`updateSectionHashes`→`migrateNotes`）が旧→新 hash へ移送する（決定的・冪等・AI 不使用）
+
+**GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリ（content・note とも）を削除します。
 
 **実装**: [`src/core/unit-registry/`](../../src/core/unit-registry/)
 

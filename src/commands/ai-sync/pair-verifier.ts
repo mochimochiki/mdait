@@ -23,6 +23,11 @@ export interface VerifyRequest {
 	targetLang: string;
 	sourceText: string;
 	targetText: string;
+	/**
+	 * ユニットに紐づく人間の note（意図的な乖離の説明など）。
+	 * 与えられた場合は user メッセージに <humanNote> として添え、AI が意図的乖離として織り込む。
+	 */
+	humanNote?: string;
 	/** ログ用コンテキスト */
 	unitContext?: { unitHash?: string; title?: string };
 }
@@ -67,9 +72,15 @@ export class PairVerifier {
 
 		// user-section 分割テンプレートでは userContext に全変数が展開される。
 		// レガシー（マーカーなしカスタムプロンプト）では system に全展開されるため簡潔な指示のみ送る。
-		const baseUserMessage = promptParts.isLegacy
+		const baseUserMessageRaw = promptParts.isLegacy
 			? "Judge the pairing and return ONLY the JSON verdict object."
 			: promptParts.userContext;
+		// 人間の note はプロンプトテンプレートに依存せず user メッセージ末尾に添える
+		// （標準/レガシー/カスタムのいずれでも意図的乖離の説明が AI に届く）。
+		const noteBlock = request.humanNote?.trim()
+			? `\n\n<humanNote>\n${request.humanNote.trim()}\n</humanNote>`
+			: "";
+		const baseUserMessage = `${baseUserMessageRaw}${noteBlock}`;
 
 		let lastError: ValidationError | undefined;
 

@@ -783,7 +783,7 @@ export async function sync_CoreProc(
 	}
 
 	// ユニットのハッシュを更新
-	const { revisionsNeeded, adopted } = updateSectionHashes(
+	const { revisionsNeeded, adopted, noteMigrations } = updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
@@ -811,6 +811,8 @@ export async function sync_CoreProc(
 			);
 		}
 	}
+	// 本文編集で hash が変わったユニットの note を旧→新 hash へ移送する
+	await unitRegistryManager.migrateNotes(noteMigrations);
 
 	// 同期結果の生成（孤立ターゲットの処理はポリシーに従う。
 	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）/ keep=need:keepで恒久保持）
@@ -917,9 +919,17 @@ function updateSectionHashes(
 	sourceFilePath: string,
 	targetFilePath: string,
 	adopt = false,
-): { revisionsNeeded: number; adopted: number } {
+): { revisionsNeeded: number; adopted: number; noteMigrations: Array<{ from: string; to: string }> } {
 	let revisionsNeeded = 0;
 	let adopted = 0;
+	// 本文編集で hash が変わったユニットは、紐づく note を旧→新 hash へ移送する（unit-registry）。
+	// content は content-addressed で不変。note だけがユニットに追従する（決定的・AI 不使用）。
+	const noteMigrations: Array<{ from: string; to: string }> = [];
+	const recordMigration = (oldHash: string | null | undefined, newHash: string): void => {
+		if (oldHash && oldHash !== newHash) {
+			noteMigrations.push({ from: oldHash, to: newHash });
+		}
+	};
 	for (const pair of matchResult) {
 		const source = pair.source;
 		const target = pair.target;
@@ -928,6 +938,8 @@ function updateSectionHashes(
 		if (source && target) {
 			const sourceHash = calculateHash(source.content);
 			const targetHash = calculateHash(target.content);
+			recordMigration(source.marker?.hash, sourceHash);
+			recordMigration(target.marker?.hash, targetHash);
 
 			// adopt判定: from未確立かつ本文のある既存targetのみが採用候補
 			const hadFrom = !!target.marker?.from;
@@ -955,6 +967,7 @@ function updateSectionHashes(
 		// sourceのみ存在: 孤立sourceの処理
 		if (source && !target) {
 			const sourceHash = calculateHash(source.content);
+			recordMigration(source.marker?.hash, sourceHash);
 			const result = syncSourceMarker(sourceHash, source.marker);
 			source.marker = result.marker;
 			continue;
@@ -964,11 +977,12 @@ function updateSectionHashes(
 		// need:keep の独自ユニットもハッシュのみ最新化する（syncSourceMarkerはneed/fromに触れない）
 		if (!source && target) {
 			const targetHash = calculateHash(target.content);
+			recordMigration(target.marker?.hash, targetHash);
 			const result = syncSourceMarker(targetHash, target.marker);
 			target.marker = result.marker;
 		}
 	}
-	return { revisionsNeeded, adopted };
+	return { revisionsNeeded, adopted, noteMigrations };
 }
 
 /**

@@ -63,6 +63,7 @@ import {
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
+	codeLensEditNoteCommand,
 	codeLensJumpToSourceCommand,
 	codeLensJumpToSourceFileCommand,
 	codeLensJumpToSourceFrontmatterCommand,
@@ -424,6 +425,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	statusManager.onStatusTreeChanged(() => {
 		codeLensProvider.refresh();
 	});
+
+	// ユニット note 編集コマンド（audit 時に AI へ渡すメタ情報）
+	const editNoteDisposable = vscode.commands.registerCommand(
+		"mdait.unit.editNote",
+		async (range: vscode.Range) => {
+			await codeLensEditNoteCommand(range);
+			codeLensProvider.refresh();
+		},
+	);
 
 	// 非Markdownファイル用CodeLensコマンド（プレーンファイル単位）
 	const codeLensTranslateFileDisposable = vscode.commands.registerCommand(
@@ -837,6 +847,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
+		editNoteDisposable,
 		codeLensDisposable,
 		hoverDisposable,
 		translateDirectoryDisposable,

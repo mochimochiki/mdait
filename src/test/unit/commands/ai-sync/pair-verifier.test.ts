@@ -61,6 +61,21 @@ suite("PairVerifier（AI呼び出しとリトライ）", () => {
 		assert.ok(!stub.calls[0].system.includes(request.sourceText));
 	});
 
+	test("humanNote があると user message に <humanNote> として添付される", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify({ ...request, humanNote: "This section is intentionally summarized." });
+		assert.ok(stub.calls[0].user.includes("<humanNote>"));
+		assert.ok(stub.calls[0].user.includes("This section is intentionally summarized."));
+		// note は system（キャッシュ対象）ではなく user 側に載る
+		assert.ok(!stub.calls[0].system.includes("This section is intentionally summarized."));
+	});
+
+	test("humanNote が空/未指定なら <humanNote> は付かない", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify({ ...request, humanNote: "   " });
+		assert.ok(!stub.calls[0].user.includes("<humanNote>"));
+	});
+
 	test("不正JSONの後のリトライで RETRY INSTRUCTION が付与され成功する", async () => {
 		const stub = new StubAIService(["not a json", validMatch]);
 		const result = await buildVerifier(stub).verify(request);

@@ -9,6 +9,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
@@ -159,6 +160,57 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/**
+ * ユニットに紐づく note（人間のメタ情報）を CodeLens から編集するコマンド。
+ * note は `.mdait/unit-registry` にユニットの hash キーで保存され、audit 実行時に
+ * AI へ文脈として渡される（意図的な乖離の説明など）。本文・マーカーは変更しない。
+ * 空文字で保存すると note を削除する。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensEditNoteCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
+			return;
+		}
+
+		const registry = UnitRegistryManager.getInstance();
+		const existing = await registry.loadNote(marker.hash);
+		const input = await vscode.window.showInputBox({
+			title: vscode.l10n.t("Unit note"),
+			prompt: vscode.l10n.t(
+				"Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.",
+			),
+			value: existing ?? "",
+			placeHolder: vscode.l10n.t("e.g. This section is intentionally omitted from the source."),
+		});
+		// Escape（undefined）はキャンセル。空文字は削除。
+		if (input === undefined) {
+			return;
+		}
+
+		await registry.saveNote(marker.hash, input.trim() === "" ? null : input);
+		// hover は registry から note を直接読むため、CodeLens のリフレッシュのみ行う
+		await StatusManager.getInstance().refreshFileStatus(document.uri.fsPath);
+
+		vscode.window.showInformationMessage(
+			input.trim() === ""
+				? vscode.l10n.t("Note removed.")
+				: vscode.l10n.t("Note saved. It will be shown to the AI during audit."),
+		);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to save note: {0}", errorMessage));
 	}
 }
 
