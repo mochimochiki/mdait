@@ -32,6 +32,8 @@ export const PromptIds = {
 	TM_SPLIT_SENTENCES: "tm.splitSentences",
 	/** AIペアリング検証（adopt済みペアの妥当性判定） */
 	AI_SYNC_VERIFY_PAIRING: "aiSync.verifyPairing",
+	/** AIペアリング検証（バッチ・複数ペアを1コールで判定） */
+	AI_SYNC_VERIFY_PAIRING_BATCH: "aiSync.verifyPairingBatch",
 	/** AIアライン（差分審査型・位置ベース対応付けの審査） */
 	AI_SYNC_ALIGN: "aiSync.align",
 } as const;
@@ -1031,6 +1033,8 @@ JUDGEMENT RULES:
 7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
 8. "reason" is one short English sentence summarizing the judgement.
 9. If a <humanNote> block is provided, it is the document author's own explanation of this unit (e.g. "this section is intentionally summarized" or "this part is intentionally omitted from the source"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
+10. If a <terms> block is provided, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
+11. If a <tmReferences> block is provided, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
 
 CRITICAL OUTPUT FORMAT RULES:
 
@@ -1066,7 +1070,105 @@ Verification Task:
 
 <targetUnit>
 {{targetText}}
-</targetUnit>`;
+</targetUnit>
+{{#terms}}
+
+<terms>
+{{terms}}
+</terms>
+{{/terms}}
+{{#tmReferences}}
+
+<tmReferences>
+{{tmReferences}}
+</tmReferences>
+{{/tmReferences}}`;
+
+/**
+ * aiSync.verifyPairingBatch - AIペアリング検証（バッチ）プロンプト
+ *
+ * @description
+ * 複数のソース・ターゲットユニットペアを1回のLLM呼び出しで検証します。
+ * 各ペアは独立に判定され、ペア内の <terms>（用語集）・<tmReferences>（TM参照）・
+ * <humanNote>（意図的乖離の説明）はそのペアのみに適用されます。
+ * aiSync.review.batchSize が 2 以上のとき使用されます（1 のときは aiSync.verifyPairing）。
+ *
+ * @input
+ * - {{sourceLang}}: ソース言語コード (例: "ja")
+ * - {{targetLang}}: ターゲット言語コード (例: "en")
+ * - {{pairCount}}: ペア数
+ * - {{pairs}}: <pair index="N"> ブロック列（buildPairsBlock で組み立て）
+ *
+ * @output
+ * ```json
+ * {
+ *   "results": [
+ *     { "index": 1, "verdict": "match", "confidence": 0.95, "issues": [], "reason": "..." }
+ *   ]
+ * }
+ * ```
+ */
+export const DEFAULT_AI_SYNC_VERIFY_PAIRING_BATCH = `You are a bilingual translation QA reviewer.
+
+You will receive several INDEPENDENT source/target unit pairs. For EACH pair, judge whether the target unit is a faithful and COMPLETE translation of the source unit. Each pair was linked automatically by document position, so a pairing itself may be wrong.
+
+VERDICT DEFINITIONS (choose exactly one per pair):
+- "match": The target is a faithful and complete translation of the source. Minor stylistic differences are acceptable.
+- "partial": The units correspond to each other, but the translation is incomplete — e.g. missing sentences or paragraphs (omission), extra content not in the source, or the source was revised and the translation is outdated.
+- "mismatch": The units cover a DIFFERENT topic or section — the pairing itself is likely wrong.
+- "uncertain": You cannot make a reliable judgement (e.g. content too short or too ambiguous).
+
+JUDGEMENT RULES:
+1. Compare MEANING and COVERAGE, not wording. A free but complete translation is still "match".
+2. Do NOT penalize differences in Markdown syntax details, HTML comment markers, anchors, link URLs, or code blocks (code is usually kept untranslated).
+3. Headings matter: if the headings clearly describe different topics, lean towards "mismatch".
+4. If most content corresponds but some sentences or paragraphs have no counterpart, use "partial" and list each gap in "issues".
+5. An untranslated copy is NOT a "match": if the target text is still written in the source language, use "mismatch" when the whole unit is untranslated, or "partial" with an issue note (e.g. "untranslated: second half is still in the source language") when only part of it is.
+6. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
+7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
+8. "reason" is one short English sentence summarizing the judgement.
+9. If a <humanNote> block is provided inside a pair, it is the document author's own explanation of that unit (e.g. "this section is intentionally summarized"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
+10. If a <terms> block is provided inside a pair, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
+11. If a <tmReferences> block is provided inside a pair, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
+
+BATCH RULES:
+- Judge each <pair> INDEPENDENTLY. Do not let one pair influence another.
+- <terms>, <tmReferences>, and <humanNote> inside a <pair> apply ONLY to that pair.
+- Return EXACTLY one result entry per pair, echoing each pair's "index" attribute.
+
+CRITICAL OUTPUT FORMAT RULES:
+
+1. Return ONLY a valid JSON object of the form {"results": [...]}. No markdown code blocks, no explanations outside JSON.
+2. "results" MUST contain exactly one entry per pair, each with the pair's "index" as a number.
+3. "verdict" MUST be exactly one of: "match", "partial", "mismatch", "uncertain".
+4. "confidence" MUST be a number between 0.0 and 1.0.
+5. "issues" MUST be an array of strings (empty array if none).
+
+❌ BAD (bare array, missing index):
+[ { "verdict": "match", "confidence": 0.9, "issues": [], "reason": "..." } ]
+
+✅ GOOD:
+{ "results": [ { "index": 1, "verdict": "match", "confidence": 0.95, "issues": [], "reason": "Faithful and complete." }, { "index": 2, "verdict": "partial", "confidence": 0.8, "issues": ["omission: final note is missing"], "reason": "Content corresponds but the last note is untranslated." } ] }
+
+Response Format:
+{
+  "results": [
+    {
+      "index": 1,
+      "verdict": "match | partial | mismatch | uncertain",
+      "confidence": 0.0,
+      "issues": ["short English note per problem"],
+      "reason": "one short English sentence"
+    }
+  ]
+}
+<!-- mdait:user-section -->
+Verification Task:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+- Number of pairs: {{pairCount}}
+
+{{pairs}}`;
 
 /**
  * aiSync.align - AIアライン（差分審査型）プロンプト
@@ -1163,5 +1265,6 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 	[PromptIds.AI_SYNC_VERIFY_PAIRING]: DEFAULT_AI_SYNC_VERIFY_PAIRING,
+	[PromptIds.AI_SYNC_VERIFY_PAIRING_BATCH]: DEFAULT_AI_SYNC_VERIFY_PAIRING_BATCH,
 	[PromptIds.AI_SYNC_ALIGN]: DEFAULT_AI_SYNC_ALIGN,
 };

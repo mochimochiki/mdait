@@ -98,13 +98,14 @@ sequenceDiagram
     Col-->>Core: from + need:review のペア列挙（0件なら即終了=冪等）
     end
     rect rgb(255, 250, 240)
-    Note over Core,AI: ユニット逐次検証
-    loop 各ペア（maxUnitsPerRun 上限・キャンセル可）
-        Core->>Ver: verify(sourceText, targetText)
-        Ver->>AI: sendMessage(system固定, user)
-        AI-->>Ver: JSON応答（不正時は RETRY INSTRUCTION 付きで再試行）
-        Ver-->>Core: verdict + confidence + issues + reason
-        Core->>Core: decideReviewAction → approve なら removeNeedTag()
+    Note over Core,AI: バッチ検証（batchSize 件/コール・batchSize:1 は単ペア経路）
+    loop 各バッチ（maxUnitsPerRun 上限・キャンセル可）
+        Core->>Core: ペア毎に humanNote＋用語集・TM（双方向マッチ）を収集
+        Core->>Ver: verifyBatch(pairs[{index, texts, terms, tm, note}])
+        Ver->>AI: sendMessage(system固定, user=&lt;pair index&gt;ブロック列)
+        AI-->>Ver: {"results":[...]}（欠落index時は RETRY INSTRUCTION 付き再試行→部分受理）
+        Ver-->>Core: Map&lt;index, verdict + confidence + issues + reason&gt;
+        Core->>Core: applyVerifyOutcome → approve なら removeNeedTag()
     end
     end
     rect rgb(240, 255, 240)
@@ -135,20 +136,43 @@ sequenceDiagram
 
 - approve されたユニットは `need:review` が消えるため次回実行で列挙されない（2回目実行は無変更）
 - escalated/kept は `need:review` のまま残るため再実行で再検証される（判定が揺れる場合は human レビューへ）
-- キャンセル時は完了分の approve のみ書き込む（冪等なので再実行で残りを処理できる）
-- 1ユニットの失敗（リトライ枯渇・例外）はファイル全体を止めない（tm.commit と同方針）
+- キャンセル時は完了分（処理済みバッチ）の approve のみ書き込む（冪等なので再実行で残りを処理できる）
+- バッチ単位の失敗（リトライ枯渇・例外）はバッチ内全ペアを error にしてファイル全体は止めない（tm.commit と同方針）
 
-### プロンプト契約（aiSync.verifyPairing）
+### バッチ検証（batchSize・実装済み・ADR-260709-01)
 
-`PromptIds.AI_SYNC_VERIFY_PAIRING = "aiSync.verifyPairing"`。system 部は変数なし（プレフィックスキャッシュ有効、[prompt.md](prompt.md) の user-section 分割）。`prompts["aiSync.verifyPairing"]` による外部ファイル上書き・`mdait-instructions.md` 注入は既存機構で自動対応。
+`aiSync.review.batchSize`（既定 **3**、1..10 クランプ）件のペアを1回の LLM コールにまとめる。`chunk()` で固定サイズに分割し、`PairVerifier.verifyBatch()` が `aiSync.verifyPairingBatch` プロンプトで `{"results": [{index, verdict, ...}]}` を要求する（index echo で対応付け）。
 
-期待レスポンス:
+- **batchSize: 1 は従来の単ペア経路**（`verify()` ＋ `aiSync.verifyPairing`）に完全後方互換。既存の単ペアカスタムプロンプト利用者は batchSize: 1 を設定する
+- **バリデーション**: `{"results": [...]}` に全 index の有効エントリが揃わなければ retryable エラーとしてバッチ全体をリトライ（欠落 index を RETRY INSTRUCTION に列挙）。重複 index は最初を採用、範囲外は無視
+- **部分受理フォールバック**: リトライ枯渇時、最後に有効だったエントリはそのまま採用し、欠落・不正の index のみ `uncertain / confidence 0`（fallback）で埋める。単ペアの「不正応答→安全側 uncertain」をペア粒度に拡張した形
+- ペア本文は `<pair index="N">` ブロックに単ペア版と同様エスケープなしで埋め込む（境界崩れは index echo 検証→retry→fallback で概ね検出される。humanNote のみ外部データとしてエスケープ）
+
+### 用語集・TM注入（訳揺れ検知・実装済み・ADR-260709-01)
+
+検証プロンプトに用語集と TM 参照をペア毎に注入し、確立訳語との不整合（訳揺れ）を LLM の判定ルールに乗せる。pending / audit 両モード共通。
+
+- **双方向マッチが要点**: 用語集は「原文に原語（＋variants）が出現」**または**「訳文に訳語（＋variants）が出現」したエントリをすべて注入する（`extractBidirectionalTerms`、コード除去後に照合）。原文側だけのヒットは「訳語不使用」、訳文側だけのヒットは「別訳語・原文に無い用語の混入」の兆候で、判定は用語集を受け取った AI に委ねる
+- **TM も双方向**: `searchTmBidirectional` が原文→TM原文の既存検索に加え、言語を入れ替えて訳文→TM訳文を検索し（結果の source/target を戻す）、tuid で重複排除して合計 `tm.maxReferences` 件に cap する。対訳が揃ったエントリのみ返る
+- **注入粒度は per-pair**（`<pair>` ブロック内の `<terms>` / `<tmReferences>`）。バッチレベルで union すると用語の帰属が曖昧になり無関係ペアへの偽 issue を誘発するため
+- 判定ルール: 用語集と異なる訳語は terminology inconsistency として `partial` + issue（`<humanNote>` が説明する場合を除く）。TM 参照との文体差は減点せず、同一表現の確立訳と明確に矛盾する場合のみ issue
+- ロードは `ReviewContextProvider` がファイル単位で1回（用語集は `TermsCacheManager`、TM は `tm.enabled` とエントリ有無でガード）。ペア毎の抽出・検索は同期の純計算
+
+### プロンプト契約（aiSync.verifyPairing / aiSync.verifyPairingBatch）
+
+`PromptIds.AI_SYNC_VERIFY_PAIRING = "aiSync.verifyPairing"`（単ペア・batchSize:1）と `PromptIds.AI_SYNC_VERIFY_PAIRING_BATCH = "aiSync.verifyPairingBatch"`（batchSize>=2）。system 部は変数なし（プレフィックスキャッシュ有効、[prompt.md](prompt.md) の user-section 分割）。`prompts["aiSync.verifyPairing"]` / `prompts["aiSync.verifyPairingBatch"]` による外部ファイル上書き・`mdait-instructions.md` 注入は既存機構で自動対応。
+
+期待レスポンス（単ペア / バッチ）:
 
 ```json
 { "verdict": "match", "confidence": 0.95, "issues": [], "reason": "Faithful and complete translation." }
 ```
 
-バリデーション: verdict が4値 enum・confidence が number（0..1 クランプ）でなければ retryable エラーとしてリトライ（system 固定・user message 末尾に RETRY INSTRUCTION 追記、`trans.retryLimit` と同じ最大2回）。リトライ枯渇時は `verdict: uncertain, confidence: 0` 相当（自動承認されない安全側）。
+```json
+{ "results": [ { "index": 1, "verdict": "match", "confidence": 0.95, "issues": [], "reason": "..." } ] }
+```
+
+バリデーション: verdict が4値 enum・confidence が number（0..1 クランプ）でなければ retryable エラーとしてリトライ（system 固定・user message 末尾に RETRY INSTRUCTION 追記、`trans.retryLimit` と同じ最大2回）。リトライ枯渇時は `verdict: uncertain, confidence: 0` 相当（自動承認されない安全側。バッチは部分受理）。
 
 ### 設定（aiSync.review）
 
@@ -157,7 +181,8 @@ sequenceDiagram
   "review": {
     "autoApprove": true,          // false = レポートのみ（need:review を一切変更しないセーフモード）
     "autoApproveThreshold": 0.9,  // 自動承認の confidence 閾値（0..1 クランプ）
-    "maxUnitsPerRun": 200         // 1実行あたりの検証ユニット上限（コスト暴走防止、1..1000 クランプ）
+    "maxUnitsPerRun": 200,        // 1実行あたりの検証ユニット上限（コスト暴走防止、1..1000 クランプ）
+    "batchSize": 3                // 1コールあたりの検証ペア数（1..10 クランプ。1 = 従来の単ペアプロンプト）
   }
 }
 ```
@@ -206,7 +231,7 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 現行のペアリング検証を独立機能ファミリーとして発展させる（同期には埋め込まない）:
 
 - **対象拡張（実装済み・ADR-260706-03）**: 下記「対象拡張モード（audit）」参照。
-- **バッチ検証**: 複数ペアを1コールにまとめる／ファイル単位で粗く判定し、AI が「個別に見たい」と要求したユニットだけ現行の1ユニット精査に落とす（アラインと同じ二段トリアージプロトコルを共有）
+- **バッチ検証（実装済み・ADR-260709-01）**: 上記「バッチ検証（batchSize）」参照。二段トリアージ（ファイル粗判定→個別精査）ではなく固定サイズバッチ＋部分受理を採用した（プロトコルが単純で、部分受理により1コール失敗の影響がペア粒度に留まるため）
 - **定期実行**: 「ユーザーが明示的にスケジュール設定した」ことを起動要件として ADR-260705-01 と両立させる
 - **修正提案化**: partial の issues を構造化（欠落文の位置・種別）し、revise 風の修正パッチ提案へ。非MD（PlainFileHandler の1ユニット全文）はトークン上限設計とあわせてここで対象化
 

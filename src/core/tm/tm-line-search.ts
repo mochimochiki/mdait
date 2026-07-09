@@ -126,3 +126,51 @@ export function searchTmByLines(
 
 	return matches;
 }
+
+/**
+ * 原文・訳文の両方向でTM検索を行い、統合結果を返す。
+ *
+ * - forward: 原文 → TM原文側の類似検索（searchTmByLines そのまま）
+ * - reverse: 訳文 → TM訳文側の類似検索（言語を入れ替えて検索し、source/target を戻す。
+ *   searchTmByLines の「相手言語 variant 必須」フィルタにより対訳が揃ったエントリのみ返る）
+ *
+ * どちらか一方だけがヒットする参照は「同じ原文が別の訳になっている」「同じ訳が別の原文に
+ * 使われている」兆候であり、訳揺れ検知の材料として AIペアリング検証プロンプトに注入する。
+ *
+ * @param sourceContent 原文ユニット本文（Markdown含む生テキスト）
+ * @param targetContent 訳文ユニット本文（Markdown含む生テキスト）
+ * @param store TmxStoreインスタンス
+ * @param options 検索オプション（sourceLang/targetLang は文書の向きで指定）
+ * @returns TmMatch配列（tuid で重複排除、合計 maxReferences 件以内）
+ */
+export function searchTmBidirectional(
+	sourceContent: string,
+	targetContent: string,
+	store: TmxStore,
+	options: TmLineSearchOptions,
+): TmMatch[] {
+	const forward = searchTmByLines(sourceContent, store, options);
+	const reverse = searchTmByLines(targetContent, store, {
+		...options,
+		sourceLang: options.targetLang,
+		targetLang: options.sourceLang,
+	}).map((m) => ({ ...m, source: m.target, target: m.source }));
+
+	// forward/reverse を交互にマージ（両方向の代表が残るように）、tuid で重複排除
+	const merged: TmMatch[] = [];
+	const seen = new Set<string>();
+	const maxLength = Math.max(forward.length, reverse.length);
+	for (let i = 0; i < maxLength && merged.length < options.maxReferences; i++) {
+		for (const match of [forward[i], reverse[i]]) {
+			if (!match || seen.has(match.sentenceHash)) {
+				continue;
+			}
+			seen.add(match.sentenceHash);
+			merged.push(match);
+			if (merged.length >= options.maxReferences) {
+				break;
+			}
+		}
+	}
+	return merged;
+}

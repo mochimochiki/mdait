@@ -148,8 +148,9 @@ sequenceDiagram
 | `aiSync.review.autoApprove` | `true` | 高確信 match の `need:review` を自動解除。`false` でレポートのみ（マーカー無変更）のセーフモード |
 | `aiSync.review.autoApproveThreshold` | `0.9` | 自動承認に必要な confidence 閾値（0..1 クランプ） |
 | `aiSync.review.maxUnitsPerRun` | `200` | 1実行あたりの検証ユニット上限（1..1000 クランプ）。超過分は次回実行で処理 |
+| `aiSync.review.batchSize` | `3` | 1回のLLMコールで検証するペア数（1..10 クランプ）。`1` で従来の単ペアプロンプト（`aiSync.verifyPairing`）、`2` 以上でバッチプロンプト（`aiSync.verifyPairingBatch`） |
 
-**設計意図**: 自動承認は「match ∧ issues空 ∧ 閾値以上」の三重条件でのみ発動する（ADR-260704-07）。詳細: [command_ai-sync.md](command_ai-sync.md)
+**設計意図**: 自動承認は「match ∧ issues空 ∧ 閾値以上」の三重条件でのみ発動する（ADR-260704-07）。バッチ検証と用語集・TM注入（訳揺れ検知）は ADR-260709-01。詳細: [command_ai-sync.md](command_ai-sync.md)
 
 ---
 
