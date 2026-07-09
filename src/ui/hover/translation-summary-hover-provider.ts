@@ -109,10 +109,13 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
 		}
 
-		// ユニット note（人間が残した意図的乖離の説明など。audit で AI に渡される）
+		// ユニット note（人間が残した意図的乖離の説明など。audit で AI に渡される）。
+		// note は .mdait/unit-registry 由来の外部データなので、Markdown/コマンドリンクの
+		// 注入を防ぐため appendText（エスケープ）で本文として描画する。
 		if (note && note.trim() !== "") {
 			md.appendMarkdown(`**📝 ${vscode.l10n.t("Note")}:**\n`);
-			md.appendMarkdown(`${note}\n\n`);
+			md.appendText(note);
+			md.appendMarkdown("\n\n");
 		}
 
 		// サマリが無ければ（note のみの hover）ここで終了

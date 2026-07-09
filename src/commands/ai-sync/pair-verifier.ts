@@ -17,6 +17,11 @@ import type { ValidationError } from "../trans/response-validator";
 import type { ParsedVerifyResponse } from "./review-result";
 import { validateVerifyResponse } from "./verify-response-validator";
 
+/** 山括弧をエスケープして note を `<humanNote>` ラッパー内の「データ」に閉じ込める */
+function escapeForTag(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** 検証要求 */
 export interface VerifyRequest {
 	sourceLang: string;
@@ -77,8 +82,10 @@ export class PairVerifier {
 			: promptParts.userContext;
 		// 人間の note はプロンプトテンプレートに依存せず user メッセージ末尾に添える
 		// （標準/レガシー/カスタムのいずれでも意図的乖離の説明が AI に届く）。
+		// note は外部データなので山括弧をエスケープし、</humanNote> 等でラッパーを
+		// 突破してプロンプトを注入されないよう「データ」として閉じ込める。
 		const noteBlock = request.humanNote?.trim()
-			? `\n\n<humanNote>\n${request.humanNote.trim()}\n</humanNote>`
+			? `\n\n<humanNote>\n${escapeForTag(request.humanNote.trim())}\n</humanNote>`
 			: "";
 		const baseUserMessage = `${baseUserMessageRaw}${noteBlock}`;
 

@@ -61,23 +61,48 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 
 	test("migrateNotes で note を旧→新 hash へ移送し、旧 hash からは消える", async () => {
 		const mgr = UnitRegistryManager.getInstance();
-		await mgr.saveNote("old11111", "carry me");
-		await mgr.migrateNotes([{ from: "old11111", to: "new22222" }]);
+		await mgr.saveNote("a0b01111", "carry me");
+		await mgr.migrateNotes([{ from: "a0b01111", to: "a0b02222" }]);
 
-		assert.equal(await mgr.loadNote("new22222"), "carry me");
-		assert.equal(await mgr.loadNote("old11111"), null);
+		assert.equal(await mgr.loadNote("a0b02222"), "carry me");
+		assert.equal(await mgr.loadNote("a0b01111"), null);
 	});
 
 	test("migrateNotes は note の無い hash では何もしない", async () => {
 		const mgr = UnitRegistryManager.getInstance();
-		await mgr.migrateNotes([{ from: "old11111", to: "new22222" }]);
-		assert.equal(await mgr.loadNote("new22222"), null);
+		await mgr.migrateNotes([{ from: "a0b01111", to: "a0b02222" }]);
+		assert.equal(await mgr.loadNote("a0b02222"), null);
 	});
 
 	test("migrateNotes は from===to をスキップする", async () => {
 		const mgr = UnitRegistryManager.getInstance();
-		await mgr.saveNote("same1111", "keep");
-		await mgr.migrateNotes([{ from: "same1111", to: "same1111" }]);
-		assert.equal(await mgr.loadNote("same1111"), "keep");
+		await mgr.saveNote("5a3e1111", "keep");
+		await mgr.migrateNotes([{ from: "5a3e1111", to: "5a3e1111" }]);
+		assert.equal(await mgr.loadNote("5a3e1111"), "keep");
+	});
+
+	test("未 flush の content バッファがある状態で saveNote しても content が失われない", async () => {
+		const mgr = UnitRegistryManager.getInstance();
+		// saveUnitRegistry はバッファに積むだけ（flushBuffer 前）
+		mgr.saveUnitRegistry("aaaa1111", "buffered content");
+		// saveNote は persistStore で即時書き込み → バッファ内容も一緒に永続化されるべき
+		await mgr.saveNote("bbbb2222", "a note");
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry("aaaa1111"), "buffered content", "バッファ content が取りこぼされている");
+		assert.equal(await reloaded.loadNote("bbbb2222"), "a note");
+	});
+
+	test("migrateNotes も未 flush の content バッファを取りこぼさない", async () => {
+		const mgr = UnitRegistryManager.getInstance();
+		await mgr.saveNote("a0b01111", "carry");
+		mgr.saveUnitRegistry("cccc3333", "buffered");
+		await mgr.migrateNotes([{ from: "a0b01111", to: "a0b02222" }]);
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry("cccc3333"), "buffered");
+		assert.equal(await reloaded.loadNote("a0b02222"), "carry");
 	});
 });

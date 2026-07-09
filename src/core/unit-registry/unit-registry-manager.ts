@@ -94,32 +94,18 @@ export class UnitRegistryManager {
 		if (this.writeBuffer.size === 0) {
 			return;
 		}
+		const store = await this.getOrLoadStore();
+		await this.persistStore(store);
+	}
 
-		// .mdaitディレクトリを初期化（.gitignoreも自動生成）
-		const mdaitDir = await ensureMdaitDir();
-		if (!mdaitDir) {
-			console.warn("Workspace not found, cannot flush unit-registry");
+	/** 保留中の writeBuffer（content スナップショット）をストアへマージしてクリアする */
+	private mergeWriteBufferInto(store: UnitRegistryStore): void {
+		if (this.writeBuffer.size === 0) {
 			return;
 		}
-
-		const filePath = path.join(mdaitDir, "unit-registry");
-
-		// ストアを取得または作成
-		const store = await this.getOrLoadStore();
-
-		// バッファの内容をマージ
 		for (const [hash, encoded] of this.writeBuffer) {
 			store.upsert(hash, encoded);
 		}
-
-		// 正規形でファイルに書き込み
-		const content = store.serialize();
-		await vscode.workspace.fs.writeFile(
-			vscode.Uri.file(filePath),
-			new TextEncoder().encode(content),
-		);
-
-		// バッファをクリア
 		this.writeBuffer.clear();
 	}
 
@@ -243,12 +229,17 @@ export class UnitRegistryManager {
 		}
 	}
 
-	/** ストアを正規形でファイルへ書き込む（note 系の即時永続化に使用） */
+	/**
+	 * ストアを正規形でファイルへ書き込む（flushBuffer / note 系の即時永続化で共有）。
+	 * 保留中の writeBuffer（content スナップショット）も必ずマージしてから書くため、
+	 * saveNote/migrateNotes が flushBuffer 前に走ってもバッファ内容を取りこぼさない。
+	 */
 	private async persistStore(store: UnitRegistryStore): Promise<void> {
 		const mdaitDir = await ensureMdaitDir();
 		if (!mdaitDir) {
 			return;
 		}
+		this.mergeWriteBufferInto(store);
 		const filePath = path.join(mdaitDir, "unit-registry");
 		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(store.serialize()));
 	}
