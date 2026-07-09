@@ -1030,6 +1030,7 @@ JUDGEMENT RULES:
 6. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
 7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
 8. "reason" is one short English sentence summarizing the judgement.
+9. If a <humanNote> block is provided, it is the document author's own explanation of this unit (e.g. "this section is intentionally summarized" or "this part is intentionally omitted from the source"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
 
 CRITICAL OUTPUT FORMAT RULES:
 

@@ -15,7 +15,10 @@ import {
 	aiReviewDirectoryCommand,
 	aiReviewFileCommand,
 } from "./commands/ai-sync/review-command";
-import { AiReviewResultContentProvider } from "./commands/ai-sync/review-result-provider";
+import {
+	AiReviewResultCodeLensProvider,
+	AiReviewResultContentProvider,
+} from "./commands/ai-sync/review-result-provider";
 import { aiSyncCommand } from "./commands/ai-sync/ai-sync-command";
 import { AiSyncResultContentProvider } from "./commands/ai-sync/ai-sync-result-provider";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
@@ -63,6 +66,7 @@ import {
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
+	codeLensEditNoteCommand,
 	codeLensJumpToSourceCommand,
 	codeLensJumpToSourceFileCommand,
 	codeLensJumpToSourceFrontmatterCommand,
@@ -70,6 +74,7 @@ import {
 	codeLensJumpToTargetFileCommand,
 	codeLensTranslateCommand,
 	codeLensTranslateFileCommand,
+	editNoteForUnitCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
@@ -337,6 +342,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			"mdait-ai-review",
 			aiReviewResultProvider,
 		);
+	// レポート（仮想ドキュメント）の flagged 行に「note を編集」CodeLens を出す
+	const aiReviewResultCodeLensDisposable = vscode.languages.registerCodeLensProvider(
+		{ scheme: "mdait-ai-review" },
+		new AiReviewResultCodeLensProvider(),
+	);
 
 	// AI Sync Result ContentProvider登録
 	const aiSyncResultProvider = AiSyncResultContentProvider.getInstance();
@@ -424,6 +434,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	statusManager.onStatusTreeChanged(() => {
 		codeLensProvider.refresh();
 	});
+
+	// ユニット note 編集コマンド（audit 時に AI へ渡すメタ情報）
+	const editNoteDisposable = vscode.commands.registerCommand(
+		"mdait.unit.editNote",
+		async (range: vscode.Range) => {
+			await codeLensEditNoteCommand(range);
+			codeLensProvider.refresh();
+		},
+	);
+	// レポート（仮想ドキュメント）の CodeLens から、対象ファイルの該当ユニットへ飛んで note を編集
+	const editNoteForUnitDisposable = vscode.commands.registerCommand(
+		"mdait.unit.editNoteForUnit",
+		async (filePath: string, unitHash: string) => {
+			await editNoteForUnitCommand(filePath, unitHash);
+			codeLensProvider.refresh();
+		},
+	);
 
 	// 非Markdownファイル用CodeLensコマンド（プレーンファイル単位）
 	const codeLensTranslateFileDisposable = vscode.commands.registerCommand(
@@ -837,6 +864,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
+		editNoteDisposable,
+		editNoteForUnitDisposable,
 		codeLensDisposable,
 		hoverDisposable,
 		translateDirectoryDisposable,
@@ -857,6 +886,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		aiReviewDirectoryDisposable,
 		aiSyncDisposable,
 		aiReviewResultProviderDisposable,
+		aiReviewResultCodeLensDisposable,
 		aiReviewResultProvider,
 		aiSyncResultProviderDisposable,
 		aiSyncResultProvider,

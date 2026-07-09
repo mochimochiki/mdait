@@ -25,6 +25,9 @@ export class UnitRegistryManager {
 	/** インメモリキャッシュ: hash -> decoded content */
 	private cache = new Map<string, string>();
 
+	/** note キャッシュ: hash -> decoded note（null は「note 無し」を記録） */
+	private noteCache = new Map<string, string | null>();
+
 	/** バッチ書き込み用バッファ: hash -> encoded content */
 	private writeBuffer = new Map<string, string>();
 
@@ -91,32 +94,18 @@ export class UnitRegistryManager {
 		if (this.writeBuffer.size === 0) {
 			return;
 		}
+		const store = await this.getOrLoadStore();
+		await this.persistStore(store);
+	}
 
-		// .mdaitディレクトリを初期化（.gitignoreも自動生成）
-		const mdaitDir = await ensureMdaitDir();
-		if (!mdaitDir) {
-			console.warn("Workspace not found, cannot flush unit-registry");
+	/** 保留中の writeBuffer（content スナップショット）をストアへマージしてクリアする */
+	private mergeWriteBufferInto(store: UnitRegistryStore): void {
+		if (this.writeBuffer.size === 0) {
 			return;
 		}
-
-		const filePath = path.join(mdaitDir, "unit-registry");
-
-		// ストアを取得または作成
-		const store = await this.getOrLoadStore();
-
-		// バッファの内容をマージ
 		for (const [hash, encoded] of this.writeBuffer) {
 			store.upsert(hash, encoded);
 		}
-
-		// 正規形でファイルに書き込み
-		const content = store.serialize();
-		await vscode.workspace.fs.writeFile(
-			vscode.Uri.file(filePath),
-			new TextEncoder().encode(content),
-		);
-
-		// バッファをクリア
 		this.writeBuffer.clear();
 	}
 
@@ -180,6 +169,82 @@ export class UnitRegistryManager {
 	}
 
 	/**
+	 * ユニットに紐づく note（人間/ツールのメタ情報）を保存する。
+	 * content とは独立に同一 hash キーへ書き、即座にファイルへ永続化する
+	 * （CodeLens 等の直接操作からの呼び出しを想定）。
+	 * @param hash ユニットのハッシュ
+	 * @param note note 本文。null/空文字で削除
+	 */
+	async saveNote(hash: string, note: string | null): Promise<void> {
+		const store = await this.getOrLoadStore();
+		const trimmed = note && note.trim() !== "" ? note : null;
+		store.setNote(hash, trimmed ? encodeUnitRegistry(trimmed) : null);
+		this.noteCache.set(hash, trimmed);
+		await this.persistStore(store);
+	}
+
+	/**
+	 * ユニットに紐づく note を読み込む。
+	 * @param hash ユニットのハッシュ
+	 * @returns note 本文、無い場合は null
+	 */
+	async loadNote(hash: string): Promise<string | null> {
+		if (this.noteCache.has(hash)) {
+			return this.noteCache.get(hash) ?? null;
+		}
+		const store = await this.getOrLoadStore();
+		const encoded = store.getNote(hash);
+		const note = encoded ? decodeUnitRegistry(encoded) : null;
+		this.noteCache.set(hash, note);
+		return note;
+	}
+
+	/**
+	 * note を旧ハッシュから新ハッシュへ移送する（sync が本文編集を検出したとき）。
+	 * content は content-addressed で不変なので移送しない（note だけがユニットに追従する）。
+	 * @param migrations {from, to} の配列（from に note があれば to へ移し、from の note は消す）
+	 */
+	async migrateNotes(migrations: Array<{ from: string; to: string }>): Promise<void> {
+		if (migrations.length === 0) {
+			return;
+		}
+		const store = await this.getOrLoadStore();
+		let changed = false;
+		for (const { from, to } of migrations) {
+			if (from === to) {
+				continue;
+			}
+			const encoded = store.getNote(from);
+			if (!encoded) {
+				continue;
+			}
+			store.setNote(to, encoded);
+			store.setNote(from, null);
+			this.noteCache.set(to, decodeUnitRegistry(encoded));
+			this.noteCache.set(from, null);
+			changed = true;
+		}
+		if (changed) {
+			await this.persistStore(store);
+		}
+	}
+
+	/**
+	 * ストアを正規形でファイルへ書き込む（flushBuffer / note 系の即時永続化で共有）。
+	 * 保留中の writeBuffer（content スナップショット）も必ずマージしてから書くため、
+	 * saveNote/migrateNotes が flushBuffer 前に走ってもバッファ内容を取りこぼさない。
+	 */
+	private async persistStore(store: UnitRegistryStore): Promise<void> {
+		const mdaitDir = await ensureMdaitDir();
+		if (!mdaitDir) {
+			return;
+		}
+		this.mergeWriteBufferInto(store);
+		const filePath = path.join(mdaitDir, "unit-registry");
+		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(store.serialize()));
+	}
+
+	/**
 	 * 不要なユニットレジストリを削除（GC）
 	 * @param activeHashes 現在使用中のハッシュセット
 	 */
@@ -219,6 +284,11 @@ export class UnitRegistryManager {
 				this.cache.delete(hash);
 			}
 		}
+		for (const hash of this.noteCache.keys()) {
+			if (!activeHashes.has(hash)) {
+				this.noteCache.delete(hash);
+			}
+		}
 
 		// 正規形でファイルに書き込み
 		const content = store.serialize();
@@ -249,6 +319,7 @@ export class UnitRegistryManager {
 	 */
 	clearCache(): void {
 		this.cache.clear();
+		this.noteCache.clear();
 		this.writeBuffer.clear();
 		this.store = null;
 		this.storeLoaded = false;

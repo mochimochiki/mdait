@@ -4,6 +4,32 @@
 
 ---
 
+## ADR-260708-01: ユニット note を unit-registry に統合し、audit は note を AI へ渡して判定させる
+
+### 背景
+ADR-260706-03 で audit（確定済みペアの監査）は不備を `flagged`（報告のみ）とし、その代償として「意図的な単文/段落乖離」は毎回再報告される既知の限界が残った。当初この恒久解として「受理台帳（`(targetHash, fromHash)` キーで受理を永続化し、決定論的に audit をスキップする）」を実装したが、設計レビューの結果これを撤回した。理由:
+
+1. **audit は本質的に AI が判定する処理**である。ならば「人間の説明（note）を verify プロンプトに文脈として渡し、AI に織り込ませて判定させる」方が、決定論的なスキップゲートより自然かつ安全。
+2. 決定論ゲートは (a) 「note があれば抑止」だと汎用コメント（TODO 等）まで audit を黙らせる、(b) 受理を運ぶと訳文を書き換えても黙ったままになる stale vouch の穴、を生む。AI に現在の内容＋note を毎回読ませれば、AI が note と内容の整合を判断するのでこれらは消える。
+3. 管理ファイルは少ないほど運用が楽。note は「hash キーのユニットメタ」であり、既存の `unit-registry`（hash→content のコンテンツアドレスストア）と**キー空間が一致する**ため、別ストアを新設せず統合できる。
+
+### 決定
+- **`unit-registry` を `hash → { content, note? }` に拡張する**（1ファイルに統合）。行フォーマットは `<hash> <encContent>[ <encNote>]` の後方互換拡張（3列目=note。旧2列ファイルはそのまま読める）。note は content と同じく encoded。
+- **note の同一性はユニットに追従する**。content は content-addressed で不変（revise の旧内容 diff に必要なので旧 hash に残す）。**note だけ**、本文編集で hash が変わったとき sync が旧→新 hash へ**移送**する（`updateSectionHashes` が hash 差分を集め、`migrateNotes` で付け替え。決定的・AI 不使用・冪等）。ユニット削除で移送先が無ければ GC（`retainOnly`、全文書に現存する hash のみ保持）で消える。
+- **note 編集 UI は CodeLens**（対訳ユニットに「Note」ボタン → `showInputBox`）。決定的な人間操作で、本文・マーカー・hash・from は不変。hover は registry から note を直接読んで表示する。
+- **audit は note を verify プロンプトに `<humanNote>` として添える**。AI は「意図的な乖離の説明があり、観測した差分をそれが説明するなら match」と判断する（プロンプトに判定ルールを追加）。**決定論的な抑止は行わない**（audit は対象ペアに毎回 AI を呼ぶ）。churn は「AI が note を見て match/audited を返す＝そもそも flagged にならない」形で解消する。
+- **TM 連携は変更しない**。note はメタ情報であり機械的な受理フラグではないため、TM 登録可否（need ベース）に影響させない。汎用 note と「受理」を区別する必要が出たら将来 typed フィールドで対応する。
+
+### 理由
+audit の判定主体は AI なので、人間の意図は「AI への文脈」として渡すのが最小で一貫する。決定論ゲートが抱える「汎用コメントの誤抑止」「stale vouch」「pair キーの冗長な失効」を、AI が現在の内容と note を毎回突き合わせることで一掃できる。note を content と同じ hash キーで持てば、content-addressed の自動失効（編集で hash が変われば lookup が外れる）をそのまま享受しつつ、移送で「編集を跨いで note が生き残る」恒久メタも実現できる。ファイルも増えない。
+
+### 備考
+- **これは「状態は文書内にあり sync で復帰可能」の例外**（人間が書いた note は sync で再構築できない）。unit-state 導入と同格。
+- sync に増える「note 移送」ステップは hash 差分に基づく純粋なキー付け替えで、決定的・冪等（AGENTS.md の「定常 sync は AI 不使用・決定的・冪等」を維持）。
+- 却下: 受理台帳（別ストア・pair キー・決定論スキップ）。→ audit が AI 判定である以上、決定論ゲートは過剰かつ穴が多い。
+- ADR-260706-03 の既知の限界（毎回再報告）はこの note 機構で解消（[command_ai-sync.md](design/command_ai-sync.md) に反映）。
+- スコープ外（将来増分）: note 以外の typed メタフィールド、ソース側ユニットへの note UI、note の TM 除外用途、sync migration の GUI 統合テスト。
+
 ## ADR-260706-03: AIレビュー拡張（対象拡張モード）は確定済みペアを「報告のみ」で監査する
 
 ### 背景

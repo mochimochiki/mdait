@@ -10,6 +10,7 @@ import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -36,11 +37,11 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 	 * @param token キャンセレーショントークン
 	 * @returns Hoverオブジェクト（サマリが存在しない場合はnull）
 	 */
-	public provideHover(
+	public async provideHover(
 		document: vscode.TextDocument,
 		position: vscode.Position,
 		token: vscode.CancellationToken,
-	): vscode.ProviderResult<vscode.Hover> {
+	): Promise<vscode.Hover | null> {
 		// Markdownファイル以外は対象外
 		if (document.languageId !== "markdown") {
 			return null;
@@ -69,14 +70,18 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			return null;
 		}
 
+		// ユニットに紐づく note（registry に永続化・audit で AI へ渡す）を取得
+		const note = await UnitRegistryManager.getInstance().loadNote(marker.hash);
+
 		// サマリデータを取得
 		const summary = this.summaryManager.getSummary(marker.hash);
-		if (!summary) {
+		// サマリも note も無ければ hover を出さない
+		if (!summary && !note) {
 			return null;
 		}
 
-		// MarkdownStringを生成（needフラグも考慮）
-		const markdown = this.buildMarkdownString(summary, marker.need);
+		// MarkdownStringを生成（needフラグ・note も考慮）
+		const markdown = this.buildMarkdownString(summary, marker.need, note);
 
 		// Hoverオブジェクトを返す
 		return new vscode.Hover(markdown);
@@ -88,7 +93,11 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 	 * @param needFlag ユニットのneedフラグ
 	 * @returns MarkdownString
 	 */
-	private buildMarkdownString(summary: TranslationSummary, needFlag?: string | null): vscode.MarkdownString {
+	private buildMarkdownString(
+		summary: TranslationSummary | undefined,
+		needFlag?: string | null,
+		note?: string | null,
+	): vscode.MarkdownString {
 		const md = new vscode.MarkdownString();
 		md.isTrusted = true; // commandリンクを有効化
 		md.supportHtml = true; // HTML埋め込みを有効化
@@ -98,6 +107,20 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown(`### ${vscode.l10n.t("Needs Review")}\n\n`);
 		} else {
 			md.appendMarkdown(`### ✅ ${vscode.l10n.t("Translation Completed")}\n\n`);
+		}
+
+		// ユニット note（人間が残した意図的乖離の説明など。audit で AI に渡される）。
+		// note は .mdait/unit-registry 由来の外部データなので、Markdown/コマンドリンクの
+		// 注入を防ぐため appendText（エスケープ）で本文として描画する。
+		if (note && note.trim() !== "") {
+			md.appendMarkdown(`**📝 ${vscode.l10n.t("Note")}:**\n`);
+			md.appendText(note);
+			md.appendMarkdown("\n\n");
+		}
+
+		// サマリが無ければ（note のみの hover）ここで終了
+		if (!summary) {
+			return md;
 		}
 
 		// 統計情報

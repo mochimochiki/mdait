@@ -300,5 +300,17 @@
   "Run AI Sync? Steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.": "AI同期を実行しますか？順に: (1) 既存訳文の採用（need:review）、(2) 誤ペアのAIアライン、(3) AIペアリング検証（高確信の一致を自動承認）。翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。",
   "Run AI Sync (dry run)? Steps: (1) adopt existing translations, (2) AI-align mis-paired units, (3) AI pairing review. The review step changes no markers in dry run, but adopt still updates markers. Committing your workspace to git beforehand is recommended.": "AI同期を実行しますか（ドライラン）？段: (1) 既存訳文の採用、(2) 誤ペアのAIアライン、(3) AIペアリング検証。ドライランではレビュー段はマーカーを変更しませんが、採用段はマーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。",
   "AI sync completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "AI同期完了: 採用 {0}、アライン補正 {1}; レビュー 自動承認 {2}、エスカレーション {3}、保留 {4}、エラー {5}。",
-  "AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.": "AI同期完了: 採用 {0}、アライン補正 {1}; レビュー 検証 {2}、自動承認 {3}、エスカレーション {4}（不一致 {5} / 部分 {6}）、保留 {7}、エラー {8}。"
+  "AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.": "AI同期完了: 採用 {0}、アライン補正 {1}; レビュー 検証 {2}、自動承認 {3}、エスカレーション {4}（不一致 {5} / 部分 {6}）、保留 {7}、エラー {8}。",
+  "Note": "ノート",
+  "$(comment) Note": "$(comment) ノート",
+  "Tooltip: Add or edit a note for this unit (shown to the AI during audit)": "ヒント: このユニットのノートを追加/編集します（audit 時に AI へ渡されます）",
+  "Could not find a unit at this position.": "この位置にユニットが見つかりませんでした。",
+  "Unit note": "ユニットのノート",
+  "Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.": "このユニットについてのノートを入力してください。audit 時に AI へ渡されます — 意図的な乖離をここで説明すると、audit がそれを意図的なものとして扱います。空にすると削除します。",
+  "e.g. This section is intentionally omitted from the source.": "例: この節は意図的に原文へは含めていない。",
+  "Note removed.": "ノートを削除しました。",
+  "Note saved. It will be shown to the AI during audit.": "ノートを保存しました。audit 時に AI へ渡されます。",
+  "Failed to save note: {0}": "ノートの保存に失敗しました: {0}",
+  "$(comment) Add / edit note": "$(comment) ノートを追加/編集",
+  "Tooltip: Jump to this unit and edit its note (shown to the AI during audit)": "ヒント: このユニットへ移動してノートを編集します（audit 時に AI へ渡されます）"
 }

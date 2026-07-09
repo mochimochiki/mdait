@@ -17,12 +17,22 @@ import type { ValidationError } from "../trans/response-validator";
 import type { ParsedVerifyResponse } from "./review-result";
 import { validateVerifyResponse } from "./verify-response-validator";
 
+/** 山括弧をエスケープして note を `<humanNote>` ラッパー内の「データ」に閉じ込める */
+function escapeForTag(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** 検証要求 */
 export interface VerifyRequest {
 	sourceLang: string;
 	targetLang: string;
 	sourceText: string;
 	targetText: string;
+	/**
+	 * ユニットに紐づく人間の note（意図的な乖離の説明など）。
+	 * 与えられた場合は user メッセージに <humanNote> として添え、AI が意図的乖離として織り込む。
+	 */
+	humanNote?: string;
 	/** ログ用コンテキスト */
 	unitContext?: { unitHash?: string; title?: string };
 }
@@ -67,9 +77,17 @@ export class PairVerifier {
 
 		// user-section 分割テンプレートでは userContext に全変数が展開される。
 		// レガシー（マーカーなしカスタムプロンプト）では system に全展開されるため簡潔な指示のみ送る。
-		const baseUserMessage = promptParts.isLegacy
+		const baseUserMessageRaw = promptParts.isLegacy
 			? "Judge the pairing and return ONLY the JSON verdict object."
 			: promptParts.userContext;
+		// 人間の note はプロンプトテンプレートに依存せず user メッセージ末尾に添える
+		// （標準/レガシー/カスタムのいずれでも意図的乖離の説明が AI に届く）。
+		// note は外部データなので山括弧をエスケープし、</humanNote> 等でラッパーを
+		// 突破してプロンプトを注入されないよう「データ」として閉じ込める。
+		const noteBlock = request.humanNote?.trim()
+			? `\n\n<humanNote>\n${escapeForTag(request.humanNote.trim())}\n</humanNote>`
+			: "";
+		const baseUserMessage = `${baseUserMessageRaw}${noteBlock}`;
 
 		let lastError: ValidationError | undefined;
 
