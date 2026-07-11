@@ -76,13 +76,16 @@ export class PairVerifier {
 	 * （自動承認されない安全側。1ユニットの失敗でファイル全体を止めない）。
 	 */
 	async verify(request: VerifyRequest, cancellationToken?: vscode.CancellationToken): Promise<VerifyResult> {
+		// terms / tmReferences は外部データ（terms.csv・TMX 由来）。テンプレートの変数置換は
+		// エスケープしないため、ここでエスケープして <terms>/<tmReferences> ラッパー内の
+		// 「データ」として閉じ込める（humanNote と同じタグブレイク対策）。
 		const promptParts = this.getPromptParts(PromptIds.AI_SYNC_VERIFY_PAIRING, {
 			sourceLang: request.sourceLang,
 			targetLang: request.targetLang,
 			sourceText: request.sourceText,
 			targetText: request.targetText,
-			terms: request.termsJson ?? "",
-			tmReferences: request.tmReferences ?? "",
+			terms: request.termsJson ? escapeForTag(request.termsJson) : "",
+			tmReferences: request.tmReferences ? escapeForTag(request.tmReferences) : "",
 		});
 
 		// user-section 分割テンプレートでは userContext に全変数が展開される。

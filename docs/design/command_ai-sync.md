@@ -146,7 +146,7 @@ sequenceDiagram
 - **batchSize: 1 は従来の単ペア経路**（`verify()` ＋ `aiSync.verifyPairing`）に完全後方互換。既存の単ペアカスタムプロンプト利用者は batchSize: 1 を設定する
 - **バリデーション**: `{"results": [...]}` に全 index の有効エントリが揃わなければ retryable エラーとしてバッチ全体をリトライ（欠落 index を RETRY INSTRUCTION に列挙）。重複 index は最初を採用、範囲外は無視
 - **部分受理フォールバック**: リトライ枯渇時、最後に有効だったエントリはそのまま採用し、欠落・不正の index のみ `uncertain / confidence 0`（fallback）で埋める。単ペアの「不正応答→安全側 uncertain」をペア粒度に拡張した形
-- ペア本文は `<pair index="N">` ブロックに単ペア版と同様エスケープなしで埋め込む（境界崩れは index echo 検証→retry→fallback で概ね検出される。humanNote のみ外部データとしてエスケープ）
+- ペア本文は `<pair index="N">` ブロックに単ペア版と同様エスケープなしで埋め込む（境界崩れは index echo 検証→retry→fallback で概ね検出される。humanNote・terms・tmReferences は外部データとして山括弧をエスケープ）
 
 ### 用語集・TM注入（訳揺れ検知・実装済み・ADR-260709-01)
 

@@ -20,7 +20,7 @@ AIペアリング検証（pending / audit）は1ユニット=1LLMコールの完
 
 ### 備考
 - pending モードでも用語/TM 不整合が `partial` → escalated になり得る（従来自動承認されたペアの承認率が下がる可能性）。これは訳揺れをレビューに乗せる機能目的そのもの。
-- ペア本文は `<pair index>` ブロックにエスケープなしで埋め込む（単ペア版の `<sourceUnit>` と同じ既知リスクの拡大）。境界崩れによる誤マッピングは index echo 検証→retry→部分受理で概ね検出される。humanNote のみ外部データとしてエスケープ。
+- ペア本文は `<pair index>` ブロックにエスケープなしで埋め込む（単ペア版の `<sourceUnit>` と同じ既知リスクの拡大）。境界崩れによる誤マッピングは index echo 検証→retry→部分受理で概ね検出される。humanNote・terms・tmReferences は外部データ（note・terms.csv・TMX 由来）として山括弧をエスケープし、タグブレイクを防ぐ。
 - TM の per-pair 上限は既存 `tm.maxReferences`（既定 5）を流用（batchSize 3 なら最大 15 参照/コール）。問題になれば review 専用 cap を将来追加。
 - レガシー（マーカーなし）カスタムプロンプトでは単ペア経路に terms/TM が届かない既知の制限（従来から note のみコード側で添付）。バッチ経路はペアブロックを user 側に連結するため届く。
 

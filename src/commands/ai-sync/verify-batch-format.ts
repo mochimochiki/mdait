@@ -44,7 +44,8 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
  *
  * - unit 本文は単ペア版の <sourceUnit>/<targetUnit> と同様エスケープしない
  *   （Markdown をそのまま見せる。境界崩れは index echo 検証で検出される）
- * - humanNote は外部データなのでエスケープして「データ」として閉じ込める
+ * - humanNote / terms / tmReferences は外部データ（note・terms.csv・TMX 由来）なので
+ *   エスケープして「データ」として閉じ込め、タグブレイクによる境界崩れを防ぐ
  * - humanNote / terms / tmReferences は存在時のみタグを出力する
  */
 export function buildPairsBlock(pairs: readonly VerifyBatchPair[]): string {
@@ -58,10 +59,10 @@ export function buildPairsBlock(pairs: readonly VerifyBatchPair[]): string {
 				blocks.push(`<humanNote>\n${escapeForTag(pair.humanNote.trim())}\n</humanNote>`);
 			}
 			if (pair.termsJson?.trim()) {
-				blocks.push(`<terms>\n${pair.termsJson.trim()}\n</terms>`);
+				blocks.push(`<terms>\n${escapeForTag(pair.termsJson.trim())}\n</terms>`);
 			}
 			if (pair.tmReferences?.trim()) {
-				blocks.push(`<tmReferences>\n${pair.tmReferences.trim()}\n</tmReferences>`);
+				blocks.push(`<tmReferences>\n${escapeForTag(pair.tmReferences.trim())}\n</tmReferences>`);
 			}
 			return `<pair index="${pair.index}">\n${blocks.join("\n")}\n</pair>`;
 		})
