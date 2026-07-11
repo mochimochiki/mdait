@@ -37,7 +37,7 @@ export async function adoptCommand(): Promise<AdoptOutcome | undefined> {
 	}
 
 	// 確認UIを冒頭に1回（AI を使う段を列挙する。ADR-260705-01）
-	const steps = buildStepList(options);
+	const steps = buildAdoptStepList(options, config.aiReview.autoApprove);
 	const confirm = await vscode.window.showInformationMessage(
 		vscode.l10n.t(
 			"Adopt existing translations? Steps: {0}. This updates translation markers{1}. Committing your workspace to git beforehand is recommended.",
@@ -110,12 +110,17 @@ async function pickAdoptOptions(config: Configuration): Promise<AdoptOptions | u
 	};
 }
 
-/** 確認ダイアログに列挙する実行段のリストを組み立てる。 */
-function buildStepList(options: AdoptOptions): string[] {
+/**
+ * 確認ダイアログに列挙する実行段のリストを組み立てる（mdait_adopt の確認UIと共有）。
+ * レビュー段の表記は aiReview.autoApprove に追従させる（無効時に「自動承認」と謳わない）。
+ */
+export function buildAdoptStepList(options: AdoptOptions, autoApprove: boolean): string[] {
 	const steps = [
 		vscode.l10n.t("adopt existing translations (need:review)"),
 		vscode.l10n.t("AI-align mis-paired units"),
-		vscode.l10n.t("AI translation review (auto-approves high-confidence matches)"),
+		autoApprove
+			? vscode.l10n.t("AI translation review (auto-approves high-confidence matches)")
+			: vscode.l10n.t("AI translation review (report only: autoApprove is off)"),
 	];
 	if (options.buildGlossary) {
 		steps.push(vscode.l10n.t("build glossary"));

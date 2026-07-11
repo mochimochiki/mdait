@@ -369,7 +369,6 @@
   "build glossary": "用語集の構築",
   "build translation memory": "翻訳メモリの構築",
   "Adopt existing translations (dry run)? Steps: adopt existing translations, AI-align mis-paired units, AI translation review. The review step changes no markers in dry run and the glossary/TM steps are skipped, but adopt still updates markers. Committing your workspace to git beforehand is recommended.": "既存翻訳を取り込みますか？（ドライラン）実行段: 既存翻訳の採用、誤ペアのAIアライン、AI翻訳レビュー。ドライランではレビュー段はマーカーを変更せず、用語集/TM 段はスキップされます（採用はマーカーを更新します）。事前にワークスペースを git にコミットしておくことを推奨します。",
-  "Adopt existing translations? Steps: adopt existing translations (need:review), AI-align mis-paired units, AI translation review (auto-approves high-confidence matches){0}. It updates translation markers. Committing your workspace to git beforehand is recommended.": "既存翻訳を取り込みますか？実行段: 既存翻訳の採用（need:review）、誤ペアのAIアライン、AI翻訳レビュー（高確信一致を自動承認）{0}。翻訳マーカーが更新されます。事前にワークスペースを git にコミットしておくことを推奨します。",
   "Adopting existing translations...": "既存翻訳を取り込み中...",
   "Confirm Adopt Existing Translations": "既存翻訳の取り込みの確認",
   "Review unconfirmed translations only": "未確認の訳のみレビュー",
@@ -399,13 +398,14 @@
   "Adoption did not run. Check the mdait configuration.": "取り込みが実行されませんでした。mdait の設定を確認してください。",
   "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "取り込み完了: 採用 {0}・アライン補正 {1}。レビュー: 承認 {2}・エスカレーション {3}・保留 {4}・エラー {5}。",
   "{0} step error(s) — see the report.": "{0} 件の段エラー — レポートを確認してください。",
-  "AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).": "AI翻訳レビュー完了（{8}）: 検証 {0}・承認 {1}・flagged {2}・エスカレーション {3}（mismatch {4} / partial {5}）・保留 {6}・エラー {7}（{9} ファイル）。",
+  "AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).": "AI翻訳レビュー完了（{8}）: 検証 {0}・承認 {1}・フラグ付与 {2}・エスカレーション {3}（mismatch {4} / partial {5}）・保留 {6}・エラー {7}（{9} ファイル）。",
   "Reviewing translations with AI (dry run)...": "AIで訳をレビュー中（ドライラン）...",
   "Confirm AI Translation Review (Dry Run)": "AI翻訳レビューの確認（ドライラン）",
   "Auditing all translations with AI...": "AIですべての訳を監査中...",
   "Confirm AI Translation Audit": "AI翻訳監査の確認",
   "Reviewing translations with AI...": "AIで訳をレビュー中...",
   "Confirm AI Translation Review": "AI翻訳レビューの確認",
-  "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.": "1 ファイルの処理で扱うユニット数の上限（全般コストガード）です。翻訳・AI ペアリング検証・AI アラインが**ファイル単位で**適用するため、ディレクトリ実行ではファイル数ぶん積み上がります。上限を超えた場合、翻訳とレビューは超過ユニットの need フラグを保持して次回実行で処理し、AI アラインは該当ファイルをスキップして位置ベースの対応付けを維持します。0 で上限なしになります。",
-  "Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.": "mdait.json を作成しました。transPairs を設定して保存してください。その後、初回同期を実行するか、すでに翻訳済みの文書がある場合は「既存翻訳の取り込み」へ進んでください。"
+  "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.": "1 ファイルの処理で扱うユニット数の上限（全般コストガード）です。翻訳・AI 翻訳レビュー・AI アラインが**ファイル単位で**適用するため、ディレクトリ実行ではファイル数ぶん積み上がります。上限を超えた場合、翻訳とレビューは超過ユニットの need フラグを保持して次回実行で処理し、AI アラインは該当ファイルをスキップして位置ベースの対応付けを維持します。0 で上限なしになります。",
+  "Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.": "mdait.json を作成しました。transPairs を設定して保存してください。その後、初回同期を実行するか、すでに翻訳済みの文書がある場合は「既存翻訳の取り込み」へ進んでください。",
+  "AI translation review (report only: autoApprove is off)": "AI翻訳レビュー（レポートのみ: autoApprove 無効）"
 }

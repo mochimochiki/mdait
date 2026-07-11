@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAdopt } from "../commands/adopt/adopt-core";
+import { buildAdoptStepList } from "../commands/adopt/adopt-command";
 import { type AdoptOutcome, type AdoptStageError, buildAdoptNextActions } from "../commands/adopt/adopt-result";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
 import { type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
@@ -184,21 +185,20 @@ export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
 		const dryRun = options.input.dryRun === true;
-		const optional: string[] = [];
-		if (options.input.buildGlossary === true) {
-			optional.push(vscode.l10n.t("build glossary"));
-		}
-		if (options.input.buildTm === true) {
-			optional.push(vscode.l10n.t("build translation memory"));
-		}
-		const optionalSuffix = optional.length > 0 ? `, ${optional.join(", ")}` : "";
+		const adoptOptions = {
+			buildGlossary: options.input.buildGlossary === true,
+			buildTm: options.input.buildTm === true,
+		};
+		// レビュー段の表記を aiReview.autoApprove に追従させる（コマンド側の確認UIと共通のステップ列挙）
+		const steps = buildAdoptStepList(adoptOptions, Configuration.getInstance().aiReview.autoApprove);
 		const message = dryRun
 			? vscode.l10n.t(
 					"Adopt existing translations (dry run)? Steps: adopt existing translations, AI-align mis-paired units, AI translation review. The review step changes no markers in dry run and the glossary/TM steps are skipped, but adopt still updates markers. Committing your workspace to git beforehand is recommended.",
 				)
 			: vscode.l10n.t(
-					"Adopt existing translations? Steps: adopt existing translations (need:review), AI-align mis-paired units, AI translation review (auto-approves high-confidence matches){0}. It updates translation markers. Committing your workspace to git beforehand is recommended.",
-					optionalSuffix,
+					"Adopt existing translations? Steps: {0}. This updates translation markers{1}. Committing your workspace to git beforehand is recommended.",
+					steps.join(", "),
+					adoptOptions.buildGlossary || adoptOptions.buildTm ? vscode.l10n.t(" and writes to the glossary/TM") : "",
 				);
 		return {
 			invocationMessage: vscode.l10n.t("Adopting existing translations..."),
