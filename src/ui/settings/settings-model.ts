@@ -85,7 +85,7 @@ const CATEGORY_ORDER = [
 	"trans",
 	"terms",
 	"tm",
-	"aiSync",
+	"aiReview",
 	"prompts",
 ];
 

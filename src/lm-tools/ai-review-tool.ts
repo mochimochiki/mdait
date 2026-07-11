@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { executeAiReviewForFiles } from "../commands/ai-sync/review-command";
-import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-constants";
-import { resolveReviewTargets } from "../commands/ai-sync/review-targets";
-import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
+import { executeAiReviewForFiles } from "../commands/ai-review/review-command";
+import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
+import { resolveReviewTargets } from "../commands/ai-review/review-targets";
+import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
@@ -179,7 +179,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm AI Pairing Audit"),
 					message: vscode.l10n.t(
-						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiSync.review settings).",
+						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiReview settings).",
 						scopeLabel,
 					),
 				},
@@ -190,7 +190,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			confirmationMessages: {
 				title: vscode.l10n.t("Confirm AI Pairing Review"),
 				message: vscode.l10n.t(
-					"Verify adopted translation pairings for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiSync.review settings).",
+					"Verify adopted translation pairings for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiReview settings).",
 					scopeLabel,
 				),
 			},
@@ -229,7 +229,7 @@ function buildAiReviewData(
 			skipped: agg.skipped,
 		},
 		autoApprove: {
-			enabled: config.aiSync.review.autoApprove,
+			enabled: config.aiReview.autoApprove,
 			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun,

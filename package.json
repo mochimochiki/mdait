@@ -191,20 +191,20 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.review.file",
-        "title": "%mdait.aiSync.review.file.title%",
+        "command": "mdait.aiReview.file",
+        "title": "%mdait.aiReview.file.title%",
         "icon": "$(verified)",
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.review.directory",
-        "title": "%mdait.aiSync.review.directory.title%",
+        "command": "mdait.aiReview.directory",
+        "title": "%mdait.aiReview.directory.title%",
         "icon": "$(verified)",
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.run",
-        "title": "%mdait.aiSync.run.title%",
+        "command": "mdait.adopt.run",
+        "title": "%mdait.adopt.run.title%",
         "icon": "$(sparkle)",
         "category": "mdait"
       }
@@ -288,7 +288,7 @@
           "group": "navigation"
         },
         {
-          "command": "mdait.aiSync.run",
+          "command": "mdait.adopt.run",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && !mdaitSyncProcessing",
           "group": "navigation"
         },
@@ -360,12 +360,12 @@
           "group": "inline@3"
         },
         {
-          "command": "mdait.aiSync.review.directory",
+          "command": "mdait.aiReview.directory",
           "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
           "group": "inline@4"
         },
         {
-          "command": "mdait.aiSync.review.file",
+          "command": "mdait.aiReview.file",
           "when": "view == mdait.status && viewItem == mdaitFileTarget",
           "group": "inline@4"
         }

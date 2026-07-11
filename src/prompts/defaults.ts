@@ -31,11 +31,11 @@ export const PromptIds = {
 	/** 対訳文の文単位アライメント */
 	TM_SPLIT_SENTENCES: "tm.splitSentences",
 	/** AIペアリング検証（adopt済みペアの妥当性判定） */
-	AI_SYNC_VERIFY_PAIRING: "aiSync.verifyPairing",
+	AI_REVIEW_VERIFY_PAIRING: "aiReview.verifyPairing",
 	/** AIペアリング検証（バッチ・複数ペアを1コールで判定） */
-	AI_SYNC_VERIFY_PAIRING_BATCH: "aiSync.verifyPairingBatch",
+	AI_REVIEW_VERIFY_PAIRING_BATCH: "aiReview.verifyPairingBatch",
 	/** AIアライン（差分審査型・位置ベース対応付けの審査） */
-	AI_SYNC_ALIGN: "aiSync.align",
+	ADOPT_ALIGN: "adopt.align",
 } as const;
 
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
@@ -1017,7 +1017,7 @@ Source Text Changes:
 \`\`\``;
 
 /**
- * aiSync.verifyPairing - AIペアリング検証プロンプト
+ * aiReview.verifyPairing - AI翻訳レビュー検証プロンプト
  *
  * @description
  * adopt で紐付けられたソース・ターゲットユニットのペアについて、
@@ -1039,7 +1039,7 @@ Source Text Changes:
  * }
  * ```
  */
-export const DEFAULT_AI_SYNC_VERIFY_PAIRING = `You are a bilingual translation QA reviewer.
+export const DEFAULT_AI_REVIEW_VERIFY_PAIRING = `You are a bilingual translation QA reviewer.
 
 Your task is to judge whether the target unit is a faithful and COMPLETE translation of the source unit. The pair was linked automatically by document position, so the pairing itself may be wrong.
 
@@ -1111,13 +1111,13 @@ Verification Task:
 {{/tmReferences}}`;
 
 /**
- * aiSync.verifyPairingBatch - AIペアリング検証（バッチ）プロンプト
+ * aiReview.verifyPairingBatch - AI翻訳レビュー検証（バッチ）プロンプト
  *
  * @description
  * 複数のソース・ターゲットユニットペアを1回のLLM呼び出しで検証します。
  * 各ペアは独立に判定され、ペア内の <terms>（用語集）・<tmReferences>（TM参照）・
  * <humanNote>（意図的乖離の説明）はそのペアのみに適用されます。
- * aiSync.review.batchSize が 2 以上のとき使用されます（1 のときは aiSync.verifyPairing）。
+ * aiReview.batchSize が 2 以上のとき使用されます（1 のときは aiReview.verifyPairing）。
  *
  * @input
  * - {{sourceLang}}: ソース言語コード (例: "ja")
@@ -1134,7 +1134,7 @@ Verification Task:
  * }
  * ```
  */
-export const DEFAULT_AI_SYNC_VERIFY_PAIRING_BATCH = `You are a bilingual translation QA reviewer.
+export const DEFAULT_AI_REVIEW_VERIFY_PAIRING_BATCH = `You are a bilingual translation QA reviewer.
 
 You will receive several INDEPENDENT source/target unit pairs. For EACH pair, judge whether the target unit is a faithful and COMPLETE translation of the source unit. Each pair was linked automatically by document position, so a pairing itself may be wrong.
 
@@ -1197,7 +1197,7 @@ Verification Task:
 {{pairs}}`;
 
 /**
- * aiSync.align - AIアライン（差分審査型）プロンプト
+ * adopt.align - AIアライン（差分審査型）プロンプト
  *
  * @description
  * adopt 取り込み時の位置ベース対応付け（見出しスケルトン＋対応表）を審査し、
@@ -1223,7 +1223,7 @@ Verification Task:
  * { "needBodies": [ { "side": "source", "index": 5 } ] }
  * ```
  */
-export const DEFAULT_AI_SYNC_ALIGN = `You are an auditor of an automatic, POSITION-BASED alignment between a source document and its translation.
+export const DEFAULT_ADOPT_ALIGN = `You are an auditor of an automatic, POSITION-BASED alignment between a source document and its translation.
 
 The alignment was produced by pairing units purely by document position — it never looked at titles or content. Your job is to AUDIT that position-based guess and propose corrections ONLY where it paired units that actually describe different sections.
 
@@ -1290,7 +1290,7 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 		DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
-	[PromptIds.AI_SYNC_VERIFY_PAIRING]: DEFAULT_AI_SYNC_VERIFY_PAIRING,
-	[PromptIds.AI_SYNC_VERIFY_PAIRING_BATCH]: DEFAULT_AI_SYNC_VERIFY_PAIRING_BATCH,
-	[PromptIds.AI_SYNC_ALIGN]: DEFAULT_AI_SYNC_ALIGN,
+	[PromptIds.AI_REVIEW_VERIFY_PAIRING]: DEFAULT_AI_REVIEW_VERIFY_PAIRING,
+	[PromptIds.AI_REVIEW_VERIFY_PAIRING_BATCH]: DEFAULT_AI_REVIEW_VERIFY_PAIRING_BATCH,
+	[PromptIds.ADOPT_ALIGN]: DEFAULT_ADOPT_ALIGN,
 };

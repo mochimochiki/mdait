@@ -14,13 +14,13 @@ import {
 import {
 	aiReviewDirectoryCommand,
 	aiReviewFileCommand,
-} from "./commands/ai-sync/review-command";
+} from "./commands/ai-review/review-command";
 import {
 	AiReviewResultCodeLensProvider,
 	AiReviewResultContentProvider,
-} from "./commands/ai-sync/review-result-provider";
-import { aiSyncCommand } from "./commands/ai-sync/ai-sync-command";
-import { AiSyncResultContentProvider } from "./commands/ai-sync/ai-sync-result-provider";
+} from "./commands/ai-review/review-result-provider";
+import { adoptCommand } from "./commands/adopt/adopt-command";
+import { AdoptResultContentProvider } from "./commands/adopt/adopt-result-provider";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -353,18 +353,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// AI Review commands
 	const aiReviewFileDisposable = vscode.commands.registerCommand(
-		"mdait.aiSync.review.file",
+		"mdait.aiReview.file",
 		(item?: StatusItem) => aiReviewFileCommand(item),
 	);
 	const aiReviewDirectoryDisposable = vscode.commands.registerCommand(
-		"mdait.aiSync.review.directory",
+		"mdait.aiReview.directory",
 		(item?: StatusItem) => aiReviewDirectoryCommand(item),
 	);
 
-	// AI Sync command（合成コマンド。ワークスペース全体）
-	const aiSyncDisposable = vscode.commands.registerCommand(
-		"mdait.aiSync.run",
-		() => aiSyncCommand(),
+	// Adopt command（取り込みウィザード。ワークスペース全体）
+	const adoptDisposable = vscode.commands.registerCommand(
+		"mdait.adopt.run",
+		() => adoptCommand(),
 	);
 
 	// AI Review Result ContentProvider登録
@@ -380,12 +380,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		new AiReviewResultCodeLensProvider(),
 	);
 
-	// AI Sync Result ContentProvider登録
-	const aiSyncResultProvider = AiSyncResultContentProvider.getInstance();
-	const aiSyncResultProviderDisposable =
+	// Adopt Result ContentProvider登録
+	const adoptResultProvider = AdoptResultContentProvider.getInstance();
+	const adoptResultProviderDisposable =
 		vscode.workspace.registerTextDocumentContentProvider(
-			AiSyncResultContentProvider.scheme,
-			aiSyncResultProvider,
+			AdoptResultContentProvider.scheme,
+			adoptResultProvider,
 		);
 
 	// TM Result ContentProvider登録
@@ -920,12 +920,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmOptimizeDisposable,
 		aiReviewFileDisposable,
 		aiReviewDirectoryDisposable,
-		aiSyncDisposable,
+		adoptDisposable,
 		aiReviewResultProviderDisposable,
 		aiReviewResultCodeLensDisposable,
 		aiReviewResultProvider,
-		aiSyncResultProviderDisposable,
-		aiSyncResultProvider,
+		adoptResultProviderDisposable,
+		adoptResultProvider,
 		tmResultProviderDisposable,
 		tmResultProvider,
 		termResultProviderDisposable,

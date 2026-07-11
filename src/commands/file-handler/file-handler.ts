@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import type { FileStatusItem } from "../../core/status/status-item";
 import type { TransPair } from "../../infra/config/configuration";
-import type { SectionAligner } from "../ai-sync/section-aligner";
+import type { SectionAligner } from "../adopt/section-aligner";
 import type { Translator } from "../trans/translator";
 
 /** ファイルタイプ識別子 */

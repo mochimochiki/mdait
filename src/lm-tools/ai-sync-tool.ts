@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { executeAiSync } from "../commands/ai-sync/ai-sync-core";
-import { type AiSyncOutcome, buildAiSyncNextActions } from "../commands/ai-sync/ai-sync-result";
-import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-constants";
-import { type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
+import { executeAdopt } from "../commands/adopt/adopt-core";
+import { type AdoptOutcome, buildAdoptNextActions } from "../commands/adopt/adopt-result";
+import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
+import { type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
@@ -111,7 +111,7 @@ export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
 				},
 			};
 
-			const outcome = await executeAiSync(config, { dryRun }, dummyProgress, token);
+			const outcome = await executeAdopt(config, { dryRun }, dummyProgress, token);
 			if (outcome.aborted || !outcome.sync) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(
@@ -135,7 +135,7 @@ export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
 				data.review.errors,
 			);
 
-			return toToolResult(createOkEnvelope(summary, data, buildAiSyncNextActions(outcome)));
+			return toToolResult(createOkEnvelope(summary, data, buildAdoptNextActions(outcome)));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in AI sync tool", formatError(error));
 			const errorMessage = vscode.l10n.t("AI sync failed: {0}", (error as Error).message);
@@ -168,7 +168,7 @@ export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
 /**
  * AI同期結果からエンベロープの data を構築する。
  */
-function buildAiSyncData(outcome: AiSyncOutcome, config: Configuration): AiSyncData {
+function buildAiSyncData(outcome: AdoptOutcome, config: Configuration): AiSyncData {
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	const toRelative = (filePath: string) => path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 	const sync = outcome.sync;
@@ -214,7 +214,7 @@ function buildAiSyncData(outcome: AiSyncOutcome, config: Configuration): AiSyncD
 			skipped: agg.skipped,
 		},
 		autoApprove: {
-			enabled: config.aiSync.review.autoApprove,
+			enabled: config.aiReview.autoApprove,
 			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun: outcome.dryRun,
