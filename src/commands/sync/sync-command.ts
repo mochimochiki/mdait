@@ -350,6 +350,13 @@ export async function syncCommand(
 						return vscode.commands.executeCommand("mdait.trans");
 					}
 					return undefined;
+				})
+				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
+				.then(undefined, (error) => {
+					logger.error("sync", "Post-sync translate guidance failed", {
+						...formatError(error),
+					});
 				});
 		} else {
 			void vscode.window.showInformationMessage(
@@ -382,6 +389,13 @@ export async function syncCommand(
 						);
 					}
 					return undefined;
+				})
+				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
+				.then(undefined, (error) => {
+					logger.error("sync", "Orphan restore guidance failed", {
+						...formatError(error),
+					});
 				});
 		}
 
