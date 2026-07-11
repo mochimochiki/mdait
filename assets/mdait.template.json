@@ -21,7 +21,7 @@
       "keys": ["title", "description"]
     }
   },
-  "primaryLang": "en",
+  "primaryLang": "ja",
   "sync": {
     "level": 3,
     "autoDelete": true,

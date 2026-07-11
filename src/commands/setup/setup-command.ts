@@ -124,10 +124,11 @@ export async function createConfigCommand(
 		// コンテキスト変数を更新（設定ファイルが作成されたことを通知）
 		await vscode.commands.executeCommand("setContext", "mdaitConfigured", true);
 
-		// 成功メッセージを表示
+		// 成功メッセージを表示（保存前の誤操作を防ぐため実行ボタンは付けず、
+		// 状態駆動の Welcome ビューが次の一歩（初回同期 / 取り込み）へ誘導する）
 		vscode.window.showInformationMessage(
 			vscode.l10n.t(
-				"Created mdait.json. Please configure your translation settings.",
+				"Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.",
 			),
 		);
 	} catch (error) {

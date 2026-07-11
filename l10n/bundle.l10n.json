@@ -349,7 +349,7 @@
   "Open": "Open",
   "Cancel": "Cancel",
   "Template file not found in extension. Please reinstall the extension.": "Template file not found in extension. Please reinstall the extension.",
-  "Created mdait.json. Please configure your translation settings.": "Created mdait.json. Please configure your translation settings.",
+  "Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.": "Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.",
   "Failed to create mdait.json: {0}": "Failed to create mdait.json: {0}",
   "mdait is not configured in this workspace.": "mdait is not configured in this workspace.",
   "Externalize markers": "Externalize markers",
