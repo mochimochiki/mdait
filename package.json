@@ -150,6 +150,18 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.settings.openAsJson",
+        "title": "%mdait.settings.openAsJson.title%",
+        "icon": "$(code)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.settings.openAsUi",
+        "title": "%mdait.settings.openAsUi.title%",
+        "icon": "$(settings-gear)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.translateSelection",
         "title": "%mdait.translateSelection.title%",
         "category": "mdait"
@@ -222,12 +234,36 @@
         "when": "workspaceFolderCount != 0 && !mdaitConfigured"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "mdait.settingsEditor",
+        "displayName": "%mdait.settingsEditor.displayName%",
+        "selector": [
+          {
+            "filenamePattern": "**/.mdait/mdait.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "menus": {
       "editor/context": [
         {
           "command": "mdait.translateSelection",
           "when": "editorHasSelection && mdaitConfigured",
           "group": "mdait@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mdait.settings.openAsJson",
+          "when": "resourceFilename == mdait.json && activeCustomEditorId == mdait.settingsEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.settings.openAsUi",
+          "when": "resourceFilename == mdait.json && activeCustomEditorId != mdait.settingsEditor",
+          "group": "navigation"
         }
       ],
       "view/title": [
