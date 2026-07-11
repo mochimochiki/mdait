@@ -10,7 +10,7 @@ import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
-import { TermEntry as TermEntryUtils } from "./term-entry";
+import { LangTerm, TermEntry as TermEntryUtils } from "./term-entry";
 import { UnitPair } from "./unit-pair";
 
 /**
@@ -271,17 +271,17 @@ ${pair.target?.content || "(no translation)"}`;
 			}
 
 			return parsed
-				.filter((item) => item.sourceTerm && item.targetTerm && item.context)
+				.filter(
+					(item) =>
+						this.isNonEmptyString(item?.sourceTerm) &&
+						this.isNonEmptyString(item?.targetTerm) &&
+						this.isNonEmptyString(item?.context),
+				)
 				.map((item) => {
-					const languages: Record<string, { term: string; variants: readonly string[] }> = {
-						[sourceLang]: {
-							term: item.sourceTerm,
-							variants: [],
-						},
-						[targetLang]: {
-							term: item.targetTerm,
-							variants: [],
-						},
+					// variantsはソース言語のみに付与（ソース言語中心）
+					const languages: Record<string, LangTerm> = {
+						[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
+						[targetLang]: LangTerm.create(item.targetTerm),
 					};
 
 					return TermEntryUtils.create(item.context, languages);
@@ -308,13 +308,10 @@ ${pair.target?.content || "(no translation)"}`;
 			}
 
 			return parsed
-				.filter((item) => item.sourceTerm && item.context)
+				.filter((item) => this.isNonEmptyString(item?.sourceTerm) && this.isNonEmptyString(item?.context))
 				.map((item) => {
-					const languages: Record<string, { term: string; variants: readonly string[] }> = {
-						[sourceLang]: {
-							term: item.sourceTerm,
-							variants: [],
-						},
+					const languages: Record<string, LangTerm> = {
+						[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
 					};
 
 					return TermEntryUtils.create(item.context, languages);
@@ -323,6 +320,54 @@ ${pair.target?.content || "(no translation)"}`;
 			console.warn("ソース単独用語検出のパースに失敗しました:", error);
 			return [];
 		}
+	}
+
+	/**
+	 * 値が空でない文字列かを判定する型ガード
+	 * LLMが number など string 以外を返した場合に trim() で例外→バッチ全滅するのを防ぐ。
+	 * item 自体が null/undefined でも `item?.field` 経由で安全に false になる。
+	 */
+	private isNonEmptyString(value: unknown): value is string {
+		return typeof value === "string" && value.trim().length > 0;
+	}
+
+	/**
+	 * AI応答のvariantsを整形する
+	 * - 配列でなければ空配列
+	 * - 文字列要素のみをtrim・空除去
+	 * - 正規形（canonical）と完全一致するものを除外
+	 * - 完全一致の重複を除去
+	 *
+	 * 照合（term-matcher の textContainsTerm）は大文字小文字を区別する部分一致のため、
+	 * 大小のみ異なる表記（例: "API endpoint" と "api endpoint"）は別々に意味を持つ。
+	 * よって除外・重複判定はいずれも大小を区別する（正規形そのものだけを取り除く）。
+	 *
+	 * @param raw AI応答のvariants値（型不明）
+	 * @param canonical 正規形の用語（variantsから除外する）
+	 * @returns 整形済みvariantsリスト
+	 */
+	private sanitizeVariants(raw: unknown, canonical: string): string[] {
+		if (!Array.isArray(raw)) {
+			return [];
+		}
+
+		const canonicalTrimmed = canonical.trim();
+		const seen = new Set<string>();
+		const result: string[] = [];
+
+		for (const item of raw) {
+			if (typeof item !== "string") {
+				continue;
+			}
+			const trimmed = item.trim();
+			if (!trimmed || trimmed === canonicalTrimmed || seen.has(trimmed)) {
+				continue;
+			}
+			seen.add(trimmed);
+			result.push(trimmed);
+		}
+
+		return result;
 	}
 }
 

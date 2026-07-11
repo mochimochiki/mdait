@@ -34,15 +34,10 @@ function throwingAligner(): SectionAligner {
 	} as unknown as SectionAligner;
 }
 
-function fakeConfig(overrides: Partial<{ minConfidence: number; maxUnitsPerFile: number }> = {}): Configuration {
+function fakeConfig(overrides: Partial<{ maxUnitsPerRun: number }> = {}): Configuration {
 	return {
-		aiSync: {
-			align: {
-				minConfidence: overrides.minConfidence ?? 0.6,
-				maxUnitsPerFile: overrides.maxUnitsPerFile ?? 300,
-				maxNeedBodies: 8,
-				maxRounds: 2,
-			},
+		trans: {
+			maxUnitsPerRun: overrides.maxUnitsPerRun ?? 300,
 		},
 	} as unknown as Configuration;
 }
@@ -134,7 +129,7 @@ suite("alignMatchResult（アライン適用のコア）", () => {
 			[t0, t1],
 			matchResult,
 			throwingAligner(),
-			fakeConfig({ maxUnitsPerFile: 1 }),
+			fakeConfig({ maxUnitsPerRun: 1 }),
 			langs,
 		);
 		assert.strictEqual(result.summary.fallback, true);

@@ -302,6 +302,13 @@
           "default": 3,
           "examples": [1, 3, 5]
         },
+        "maxUnitsPerRun": {
+          "type": "integer",
+          "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI pairing review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
+          "minimum": 0,
+          "default": 300,
+          "examples": [300, 500, 0]
+        },
         "extensions": {
           "type": "array",
           "description": "Additional file extensions to include for translation across all translation pairs. Markdown (.md) is always included.",
@@ -433,61 +440,12 @@
               "description": "Automatically remove need:review from units the AI judges as a faithful and complete translation with high confidence. Set to false for report-only mode (no marker changes).",
               "default": true
             },
-            "autoApproveThreshold": {
-              "type": "number",
-              "description": "Minimum AI confidence (0..1) required for auto-approval. Only verdict=match with no issues and confidence at or above this value is approved.",
-              "minimum": 0,
-              "maximum": 1,
-              "default": 0.9
-            },
-            "maxUnitsPerRun": {
-              "type": "integer",
-              "description": "Maximum number of units verified per run (cost guard). Remaining units stay need:review and are picked up by the next run.",
-              "minimum": 1,
-              "maximum": 1000,
-              "default": 200
-            },
             "batchSize": {
               "type": "integer",
               "description": "Number of pairs verified per LLM call. 1 uses the single-pair prompt (aiSync.verifyPairing); 2 or more uses the batch prompt (aiSync.verifyPairingBatch).",
               "minimum": 1,
               "maximum": 10,
               "default": 3
-            }
-          },
-          "additionalProperties": false
-        },
-        "align": {
-          "type": "object",
-          "description": "AI align (differential review of the position-based unit mapping during adopt)",
-          "properties": {
-            "minConfidence": {
-              "type": "number",
-              "description": "Minimum AI confidence (0..1) for a correction to be accepted. Lower-confidence corrections are rejected and the position-based pairing is kept.",
-              "minimum": 0,
-              "maximum": 1,
-              "default": 0.6
-            },
-            "maxUnitsPerFile": {
-              "type": "integer",
-              "description": "Maximum units per file to audit. Files larger than this skip AI align and keep the position-based mapping (cost/token guard).",
-              "minimum": 1,
-              "maximum": 2000,
-              "default": 300
-            },
-            "maxNeedBodies": {
-              "type": "integer",
-              "description": "Maximum number of unit bodies the AI may request in the second triage round (K).",
-              "minimum": 0,
-              "maximum": 50,
-              "default": 8
-            },
-            "maxRounds": {
-              "type": "integer",
-              "description": "Maximum triage rounds (1 disables the needBodies second round).",
-              "minimum": 1,
-              "maximum": 2,
-              "default": 2
             }
           },
           "additionalProperties": false

@@ -4,7 +4,7 @@
 
 ---
 
-## ADR-260711-03: 孤立モデルを isolate＋独立ユニットに統合し keep/backfill を廃止する
+## ADR-260711-05: 孤立モデルを isolate＋独立ユニットに統合し keep/backfill を廃止する
 
 ### 背景
 ADR-260706-02 の孤立モデルは `need:keep`（保持・伝播は hash 任せ）と `need:backfill`（原文への逆翻訳埋め戻し）を温存していたが、現実的な翻訳ワークフローで両者が必要になる場面は非常に限定的だった。keep は「from なし・need なしの素 hash」と意味的に等価で専用語彙が冗長、backfill は原文書き込みという非対称な危険を伴う。また列挙式の TM 除外（ADR-260704-07 の既知の穴）と「マーカーなし孤立 target をデフォルト delete で黙って削除する」挙動が残っていた。
@@ -24,6 +24,41 @@ ADR-260706-02 の孤立モデルは `need:keep`（保持・伝播は hash 任せ
 - 挙動変更: マーカーなし孤立 target は旧デフォルト（delete）で黙って削除されていたが、新モデルでは need:review 保護になる。
 - 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）と詳細は [orphan-model.md](design/orphan-model.md)。
 
+## ADR-260711-04: term.detect でソース言語の variants（表記揺れ）を検出・付与する
+
+### 背景
+用語データモデル（`LangTerm.variants`）と CSV/YAML の `variants_<lang>` 列、照合（`anyTermVariantAppears`）、trans への用語注入、AIレビューの訳揺れ検知（ADR-260709-01）は variants を消費する前提で配線済みだった。しかし唯一の供給源である `term.detect` が常に `variants: []` を返し（検出プロンプトも variants を要求しない）、人が CSV を手編集しない限り活用形・表記揺れを含む出現がマッチしなかった。
+
+### 決定
+1. **検出プロンプト2種（`TERM_DETECT_PAIRS` / `TERM_DETECT_SOURCE_ONLY`）の出力スキーマに source 言語の `variants` を追加**する。variants の基準（大小差・ハイフン/スペース差・活用形/複数形・よくある誤記）と、正規形そのもの・別概念・訳語を含めない旨、該当なしは `[]` を明記。
+2. **`term-detector.ts` のパーサで variants を読み取り、`sanitizeVariants()` で整形**して source の `LangTerm` にのみ付与する。ターゲット用語は `variants: []` を維持（**ソース言語中心**）。CSV の variants 列がソース言語向けにのみ自動生成される仕様と整合する。
+3. **サニタイズは大小を区別する**: 照合 `textContainsTerm` が `String.includes`（大小区別）であるため、"API endpoint" と "api endpoint" は別々に意味を持つ。よって除外は正規形との**完全一致**のみ、重複排除も**完全一致**で行い、大小のみ異なる表記は別 variant として保持する。非文字列・空白のみは除去。
+
+### 理由
+既存の variants パイプライン（照合・注入・訳揺れ検知）を実際に機能させるには供給源が必要で、検出時に併せて出させるのが最も自然（追加コールなし）。ソース中心に限定するのは CSV 列生成仕様との整合と過剰生成の抑制のため。判定を lint でなくプロンプト基準＋決定論サニタイズの二段で守ることで、AI が別概念や訳語を variants に混ぜる事故を防ぐ。
+
+### 備考
+- `MockTermDetector`（AI 不使用フォールバック）は決定的挙動維持のため `variants: []` のまま。
+- 既存エントリへの variants 追記は本 ADR の対象外（新規検出時の付与に限定）。既存 CSV に variants 列がなくても保存時に列追加されるのみで後方互換（`preservedHeaders` で手編集列も保持）。
+- 単体テスト: `src/test/unit/commands/term/term-detector.test.ts`（fake AIService 注入で付与・サニタイズ・ターゲット非付与を検証）。
+
+## ADR-260711-03: ユニット数上限を trans.maxUnitsPerRun に一本化し、調整困難な aiSync 詳細設定を最適値で固定・廃止する
+
+### 背景
+`aiSync.review.maxUnitsPerRun`（既定200）と `aiSync.align.maxUnitsPerFile`（既定300）は本質的に同じ「1回の処理で扱うユニット数の上限（コストガード）」であり、翻訳（trans）にも同様に当てはまる概念だが、trans には上限が無く、設定も機能ごとに分散して分かりづらかった。また `aiSync.review.autoApproveThreshold` / `aiSync.align.minConfidence` / `maxNeedBodies` / `maxRounds` はユーザーが適切値を判断しづらく、露出する価値が低かった。
+
+### 決定
+1. ユニット数上限を全般設定 **`trans.maxUnitsPerRun`（既定300・`0`で上限なし）** に統合する。**ファイル単位で適用**され、trans・aiSync.review・aiSync.align が共通で参照する（旧 `aiSync.review.maxUnitsPerRun` も `executeAiReviewForFile` 内で1ファイル単位に適用されていたため挙動は不変。ディレクトリ実行ではファイル数ぶん積み上がる）。超過時の挙動は経路ごとに異なる: trans / review は超過ユニットの need フラグを保持し次回実行で処理（冪等）、align は該当ファイルの AI align をスキップして位置ベース対応付けを維持する。trans も新たにこの上限を適用する。
+2. 調整困難な4設定を廃止し、コード内定数で最適値（＝従来の既定値）を固定する: `autoApproveThreshold`→0.9（`review-core.AUTO_APPROVE_THRESHOLD`）、`minConfidence`→0.6（`align-core.ALIGN_MIN_CONFIDENCE`）、`maxNeedBodies`→8・`maxRounds`→2（`section-aligner.DEFAULT_LIMITS`）。
+3. `aiSync.align` は全項目が移動・廃止となるためスキーマ・型・ロードから丸ごと削除する。`aiSync.review` は `autoApprove` / `batchSize` のみ残す。
+
+### 理由
+「1回で扱うユニット数の上限」はコスト暴走を防ぐ普遍的なガードであり、機能ごとに別設定を持つ必然性が無い。単一の全般設定に集約することで設定の見通しが良くなり、trans にも一貫した上限が効く。閾値・ラウンド数などの微調整パラメータは最適値が定まっており、設定として露出するより固定した方が誤設定リスクを避けられる（`align-result.ts` の `CorrectionValidationContext.minConfidence` は関数引数として残し、呼び出し側が定数を渡す）。
+
+### 備考
+- `trans.maxUnitsPerRun = 0` は「上限なし」を表す。ロード時に0以下は0へ正規化し、trans/review/align の3経路で `> 0` のときのみ上限を適用する。
+- 既存の `aiSync.review.autoApproveThreshold` / `aiSync.align.*` を書いた mdait.json は `additionalProperties: false` により検証エラーになるため、移行時は該当キーの削除が必要。
+
 ## ADR-260711-02: mdait.json を CustomTextEditorProvider のデフォルトエディタとし、JSON表示とのタブ内切り替えボタンを提供する
 
 ### 背景
@@ -41,6 +76,7 @@ CustomTextEditorProvider は本来「ドキュメントの内容を表示・編�
 ### 備考
 - `resourceFilename == mdait.json` という緩い条件のため、`.mdait/` 外に同名ファイルがあると切り替えボタンが誤表示される可能性があるが、実害は「押しても対象がその同名ファイルになるだけ」で軽微なため許容する。
 - `supportsMultipleEditorsPerDocument: false` により同一ファイルの多重タブは発生しない。
+
 
 ## ADR-260711-01: mdait.json 設定エディタとして Webview を導入する（P6 の例外）
 

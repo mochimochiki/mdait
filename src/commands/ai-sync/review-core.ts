@@ -24,6 +24,7 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
 import type { PairVerifier, VerifyResult } from "./pair-verifier";
+import { AUTO_APPROVE_THRESHOLD } from "./review-constants";
 import { ReviewContextProvider } from "./review-context";
 import {
 	type AiReviewFileResult,
@@ -193,11 +194,13 @@ export async function executeAiReviewForFile(
 		if (allPairs.length === 0) {
 			return;
 		}
-		const pairs = allPairs.slice(0, config.aiSync.review.maxUnitsPerRun);
+		// 1実行あたりの検証ユニット上限（全般設定 trans.maxUnitsPerRun。0 で上限なし）
+		const maxUnits = config.trans.maxUnitsPerRun;
+		const pairs = maxUnits > 0 ? allPairs.slice(0, maxUnits) : allPairs;
 
 		const policy = {
 			autoApprove: options.dryRun ? false : config.aiSync.review.autoApprove,
-			threshold: config.aiSync.review.autoApproveThreshold,
+			threshold: AUTO_APPROVE_THRESHOLD,
 		};
 		const summaryManager = SummaryManager.getInstance();
 		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う

@@ -311,24 +311,18 @@ suite("Configuration aiSync.review", () => {
 		return config;
 	}
 
-	test("未指定の場合はデフォルト値（autoApprove:true, 閾値0.9, 上限200, batchSize:3）になること", async () => {
+	test("未指定の場合はデフォルト値（autoApprove:true, batchSize:3）になること", async () => {
 		const config = await initWithAiSyncReview(undefined);
 		assert.strictEqual(config.aiSync.review.autoApprove, true);
-		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 0.9);
-		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 200);
 		assert.strictEqual(config.aiSync.review.batchSize, 3);
 	});
 
 	test("有効な値が読み込まれ、範囲外はクランプされること", async () => {
 		const config = await initWithAiSyncReview({
 			autoApprove: false,
-			autoApproveThreshold: 1.5,
-			maxUnitsPerRun: 5000,
 			batchSize: 99,
 		});
 		assert.strictEqual(config.aiSync.review.autoApprove, false);
-		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 1);
-		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 1000);
 		assert.strictEqual(config.aiSync.review.batchSize, 10);
 	});
 
@@ -349,15 +343,56 @@ suite("Configuration aiSync.review", () => {
 		const config = await initWithAiSyncReview({ autoApprove: "yes" });
 		assert.strictEqual(config.aiSync.review.autoApprove, true);
 	});
+});
 
-	test("autoApproveThreshold が数値以外の場合は無視されNaNにならないこと", async () => {
-		const config = await initWithAiSyncReview({ autoApproveThreshold: "high" });
-		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 0.9);
-		assert.ok(Number.isFinite(config.aiSync.review.autoApproveThreshold));
+suite("Configuration trans.maxUnitsPerRun", () => {
+	let tempDir: string;
+
+	setup(() => {
+		Configuration.dispose();
+		tempDir = createTempDir();
+		__vscodeMockWorkspaceRoot = tempDir;
 	});
 
-	test("maxUnitsPerRun が数値以外の場合は無視されデフォルトが維持されること", async () => {
-		const config = await initWithAiSyncReview({ maxUnitsPerRun: "many" });
-		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 200);
+	teardown(() => {
+		Configuration.dispose();
+		cleanupTempDir(tempDir);
+	});
+
+	async function initWithTrans(trans: Record<string, unknown> | undefined): Promise<Configuration> {
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+		const obj: Record<string, unknown> = JSON.parse(minimalConfig());
+		if (trans !== undefined) {
+			obj.trans = trans;
+		}
+		fs.writeFileSync(customPath, JSON.stringify(obj), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		return config;
+	}
+
+	test("未指定の場合はデフォルト値 300 になること", async () => {
+		const config = await initWithTrans(undefined);
+		assert.strictEqual(config.trans.maxUnitsPerRun, 300);
+	});
+
+	test("有効な正値が読み込まれ、小数は切り捨てられること", async () => {
+		const config = await initWithTrans({ maxUnitsPerRun: 500.9 });
+		assert.strictEqual(config.trans.maxUnitsPerRun, 500);
+	});
+
+	test("0 以下は上限なし（0）に正規化されること", async () => {
+		const zeroConfig = await initWithTrans({ maxUnitsPerRun: 0 });
+		assert.strictEqual(zeroConfig.trans.maxUnitsPerRun, 0);
+		Configuration.dispose();
+		const negativeConfig = await initWithTrans({ maxUnitsPerRun: -10 });
+		assert.strictEqual(negativeConfig.trans.maxUnitsPerRun, 0);
+	});
+
+	test("数値以外の場合は無視されデフォルトが維持されること", async () => {
+		const config = await initWithTrans({ maxUnitsPerRun: "many" });
+		assert.strictEqual(config.trans.maxUnitsPerRun, 300);
 	});
 });

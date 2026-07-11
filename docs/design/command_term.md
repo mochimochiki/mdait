@@ -8,7 +8,7 @@
 
 ### 何をするか
 
-`term.detect`はソースファイルをAI解析して新規用語候補を抽出し、`terms.csv`にマージします。`term.expand`は既存訳文ペアから未展開用語の訳語をAIで推定して補完します。蓄積された用語集は[trans](command_trans.md)実行時にプロンプトへ自動注入されます（`TranslationTermExtractor`）。
+`term.detect`はソースファイルをAI解析して新規用語候補を抽出し、`terms.csv`にマージします。このとき各用語の**ソース言語の表記揺れ（variants）**（大文字小文字差・ハイフン/スペース差・活用形・一般的な誤記）も同時に検出し、`variants_<source>`列に格納します。`term.expand`は既存訳文ペアから未展開用語の訳語をAIで推定して補完します。蓄積された用語集は[trans](command_trans.md)実行時にプロンプトへ自動注入されます（`TranslationTermExtractor`）。検出された variants は用語照合（`anyTermVariantAppears`）で正規形に加えて参照され、活用形・表記揺れを含む出現も拾えるようにします。
 
 ### before/after
 
@@ -20,9 +20,9 @@ term,en,ja,context
 ```
 
 ```csv
-# term.detect実行後: 新規用語が追加
-term,en,ja,context
-API endpoint,API endpoint,APIエンドポイント,An endpoint that accepts HTTP requests
+# term.detect実行後: 新規用語が追加（ソース言語=en の variants_en 列に表記揺れも格納）
+term,en,variants_en,ja,context
+API endpoint,API endpoint,"api endpoint,API end-point,endpoints",APIエンドポイント,An endpoint that accepts HTTP requests
 ```
 
 `term.expand`で訳語が未設定の用語を補完:
@@ -117,6 +117,7 @@ sequenceDiagram
 ### 設計ノート
 
 - **プロンプト切り替え**: `term.detect`では対訳ペアがある場合は`TERM_DETECT_PAIRS`（両言語から同時抽出）、ない場合は`TERM_DETECT_SOURCE_ONLY`を使用
+- **variants検出**: 両検出プロンプトはソース言語用語の表記揺れ（variants）も出力する。`term-detector.ts`の`sanitizeVariants()`が非文字列・空白・正規形との完全一致・完全重複を除去して`variants_<source>`列に格納する。照合（`textContainsTerm`）は大小区別の部分一致のため、大小のみ異なる表記も別variantとして保持する。variantsはソース言語のみに付与する（CSVのvariants列がソース言語向けに自動生成されるため。ターゲット用語のvariantsは空）
 - **contextLang**: `primaryLang`が`sourceLang/targetLang`に含まれる場合はその値、含まれなければ`sourceLang`を使用
 - **バッチサイズ**: 8000文字を上限としてバッチ分割。AI APIのトークン制限に対応
 - **用語注入との連携**: `terms.csv`が存在する場合、[trans](command_trans.md)実行時に`TranslationTermExtractor`が翻訳対象ユニット内の用語を自動検出してプロンプトに注入

@@ -280,12 +280,6 @@ CRITICAL REMINDER:
 export async function buildSectionAligner(config: Configuration): Promise<SectionAligner> {
 	const aiService = await new AIServiceBuilder().build(config.ai);
 	const promptProvider = PromptProvider.getInstance();
-	return new SectionAligner(
-		aiService,
-		(id, variables) => promptProvider.getPromptParts(id, variables),
-		{
-			maxNeedBodies: config.aiSync.align.maxNeedBodies,
-			maxRounds: config.aiSync.align.maxRounds,
-		},
-	);
+	// maxNeedBodies / maxRounds は DEFAULT_LIMITS の最適値で固定（設定廃止）
+	return new SectionAligner(aiService, (id, variables) => promptProvider.getPromptParts(id, variables));
 }
