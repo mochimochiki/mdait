@@ -26,6 +26,12 @@ import type { SectionAligner } from "./section-aligner";
 
 const logger = Logger.getInstance();
 
+/**
+ * 修正提案を受理する confidence の下限（最適値で固定・設定廃止）。
+ * これ未満の提案は棄却し、決定的な位置ベース対応付けを維持する。
+ */
+export const ALIGN_MIN_CONFIDENCE = 0.6;
+
 /** alignMatchResult の結果（再配線後の matchResult とサマリ） */
 export interface AlignMatchResult {
 	matchResult: MatchResult;
@@ -82,8 +88,9 @@ export async function alignMatchResult(
 	}
 
 	// ユニット過多はコスト・トークン暴走防止のためスキップ（位置ベースのまま）
-	const maxUnits = config.aiSync.align.maxUnitsPerFile;
-	if (Math.max(sourceUnits.length, targetUnits.length) > maxUnits) {
+	// 全般設定 trans.maxUnitsPerRun を1ファイル単位の上限として使用（0 で上限なし）
+	const maxUnits = config.trans.maxUnitsPerRun;
+	if (maxUnits > 0 && Math.max(sourceUnits.length, targetUnits.length) > maxUnits) {
 		summary.fallback = true;
 		summary.skippedReason = `too many units (> ${maxUnits})`;
 		logger.info("aiSync", "Align skipped: too many units", {
@@ -127,7 +134,7 @@ export async function alignMatchResult(
 		targetCount: targetUnits.length,
 		lockedSourceIndexes,
 		lockedTargetIndexes,
-		minConfidence: config.aiSync.align.minConfidence,
+		minConfidence: ALIGN_MIN_CONFIDENCE,
 	};
 	const validation = validateCorrections(aiResult.corrections, ctx);
 	summary.accepted = validation.accepted.length;
