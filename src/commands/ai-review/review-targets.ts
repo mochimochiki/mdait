@@ -2,7 +2,7 @@
  * @file review-targets.ts
  * @description
  *   レビュー対象のターゲットMDファイル解決を担う共有ヘルパー。
- *   mdait_aiReview（スコープ指定あり）と mdait_aiSync（ワークスペース全体）が共有する。
+ *   mdait_aiReview（スコープ指定あり）と mdait_adopt（ワークスペース全体）が共有する。
  * @module commands/ai-review/review-targets
  */
 import * as fs from "node:fs";
