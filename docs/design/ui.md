@@ -6,7 +6,7 @@
 
 UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、ユーザーに直感的な操作体験を提供します。
 
-**設計意図**: 独自のWebビューは使わず、VS Codeネイティブな体験を提供します（[architecture.md](../architecture.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。
+**設計意図**: VS Codeネイティブな体験を提供します（[architecture.md](../architecture.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。独自Webビューは原則使いませんが、mdait.json 設定エディタのみ例外として Webview を採用しています（ADR-260711-01。見た目・操作モデルはVS Code設定画面に準拠）。
 
 ---
 
@@ -70,6 +70,27 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 - `mdaitConfigured`コンテキスト変数で表示を制御
 
 **設計意図**: 初回利用時の「何をすればいいか分からない」状態を解消し、スムーズなオンボーディングを実現します。
+
+---
+
+### 設定エディタ（SettingsPanel）
+
+`mdait.settings.open` コマンドで開く、VS Code設定画面ライクな mdait.json 編集用 Webview です（P6 の例外、ADR-260711-01）。ステータスビューのツールバー（ギアアイコン）とコマンドパレットから起動できます。
+
+**スキーマ駆動生成**:
+- UI は `assets/schemas/mdait-config.schema.json` から実行時に自動生成（`settings-model.ts`、純粋ロジック）
+- カテゴリ = スキーマのトップレベルキー（スカラーは general に集約）。型に応じたウィジェット（boolean/enum/数値/文字列/文字列配列/transPairs 表エディタ）を割り当てる
+- 生成器が未対応の形（`copyAssets` のような boolean|array の oneOf 等）は「JSONで編集」フォールバック行として表示
+- 解説文は `settings-doc.ts` に集約し l10n で日英提供。未定義の設定はスキーマ description にフォールバックするため、スキーマへの設定追加だけでも UI は機能する
+
+**編集の仕組み**:
+- 検索・カテゴリナビ・変更済みインジケータ（modified バー）・既定値リセットを提供
+- 書き込みはキー単位の最小差分（`config-json-editor.ts`）。既存キーの順序・インデント・末尾改行を保持し、リセットはキー削除＋空になった親オブジェクトの刈り取り
+- 検証・型変換・パス解決（`Configuration` 経由）・ファイルI/Oはすべて拡張側（`settings-panel.ts`）。Webview は表示に徹する
+- 外部編集（エディタでの直接編集等）は `Configuration.onConfigurationChanged` 経由で UI に反映。入力中のウィジェットは上書きしない
+- mdait.json 未作成時はパネルを開かず `mdait.setup.createConfig` へ誘導
+
+**設計意図**: 50項目超の設定の発見可能性を高め、スキーマを唯一の真実源とすることで UI とスキーマの二重管理を避けます。
 
 ---
 

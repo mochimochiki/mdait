@@ -77,6 +77,7 @@ import {
 	editNoteForUnitCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
+import { SettingsPanel } from "./ui/settings/settings-panel";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
 import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
@@ -205,6 +206,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const openExistingConfigDisposable = vscode.commands.registerCommand(
 		"mdait.setup.openExistingConfig",
 		() => openExistingConfigCommand(context),
+	);
+
+	// settings.open command（mdait.json 設定エディタ）
+	const openSettingsDisposable = vscode.commands.registerCommand(
+		"mdait.settings.open",
+		() => SettingsPanel.createOrShow(context),
 	);
 
 	// setup.diagnose command（セットアップ診断）
@@ -846,6 +853,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		createConfigDisposable,
 		openExistingConfigDisposable,
+		openSettingsDisposable,
 		diagnoseSetupDisposable,
 		syncDisposable,
 		selectTargetsDisposable,
