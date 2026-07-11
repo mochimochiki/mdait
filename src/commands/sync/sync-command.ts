@@ -329,23 +329,37 @@ export async function syncCommand(
 		});
 
 		// 翻訳すべきユニットがある場合は「今すぐ翻訳」導線を出す（空ファイルで戸惑わせない: P2）
+		// 注: 導線の通知は fire-and-forget にする。ここで await すると通知をユーザーが
+		// 閉じるまで syncCommand が解決せず、呼び出し側の処理中フラグ（sync ボタンの
+		// くるくるアニメーション）が終わらないため（ADR-260705-01 の非AI sync は同期処理完結が前提）。
 		const translatableCount = totalAdded + totalRevisionsNeeded;
 		if (translatableCount > 0) {
 			const translateNow = vscode.l10n.t("Translate now");
-			const choice = await vscode.window.showInformationMessage(
-				vscode.l10n.t(
-					"Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.",
-					successCount,
-					errorCount,
-					translatableCount,
-				),
-				translateNow,
-			);
-			if (choice === translateNow) {
-				await vscode.commands.executeCommand("mdait.trans");
-			}
+			void vscode.window
+				.showInformationMessage(
+					vscode.l10n.t(
+						"Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.",
+						successCount,
+						errorCount,
+						translatableCount,
+					),
+					translateNow,
+				)
+				.then((choice) => {
+					if (choice === translateNow) {
+						return vscode.commands.executeCommand("mdait.trans");
+					}
+					return undefined;
+				})
+				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
+				.then(undefined, (error) => {
+					logger.error("sync", "Post-sync translate guidance failed", {
+						...formatError(error),
+					});
+				});
 		} else {
-			vscode.window.showInformationMessage(
+			void vscode.window.showInformationMessage(
 				vscode.l10n.t(
 					"Synchronization completed: {0} succeeded, {1} failed",
 					successCount,
@@ -355,22 +369,34 @@ export async function syncCommand(
 		}
 
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
+		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
 		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
 			const restoreHelp = vscode.l10n.t("How to restore");
-			const choice = await vscode.window.showWarningMessage(
-				vscode.l10n.t(
-					"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
-					totalDeleted,
-				),
-				restoreHelp,
-			);
-			if (choice === restoreHelp) {
-				await vscode.env.openExternal(
-					vscode.Uri.parse(
-						"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
+			void vscode.window
+				.showWarningMessage(
+					vscode.l10n.t(
+						"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+						totalDeleted,
 					),
-				);
-			}
+					restoreHelp,
+				)
+				.then((choice) => {
+					if (choice === restoreHelp) {
+						return vscode.env.openExternal(
+							vscode.Uri.parse(
+								"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
+							),
+						);
+					}
+					return undefined;
+				})
+				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
+				.then(undefined, (error) => {
+					logger.error("sync", "Orphan restore guidance failed", {
+						...formatError(error),
+					});
+				});
 		}
 
 		return {
