@@ -43,12 +43,12 @@ term,en,ja,context
 **detect 後（ソース「mdait は Markdown 翻訳ツールです」を解析）:**
 
 ```csv
-term,en,ja,context
-mdait,mdait,mdait,VS Code拡張機能の製品名
-Markdown,Markdown,Markdown,マークアップ言語
+term,en,variants_en,ja,context
+mdait,mdait,,mdait,VS Code拡張機能の製品名
+Markdown,Markdown,"markdown,Mark down",Markdown,マークアップ言語
 ```
 
-AI が抽出した用語が追加されます。`ja` や `context` が空の場合は次の `term.expand` で補完します。
+AI が抽出した用語が追加されます。あわせて、ソース言語の**表記揺れ（variants）**——大文字小文字差・ハイフンやスペースの有無・活用形・よくある誤記——も検出し、`variants_<ソース言語>` 列に格納します。これにより「Markdown」だけでなく「markdown」のような揺れを含む出現も用語照合で拾えるようになります。`ja` や `context` が空の場合は次の `term.expand` で補完します。
 
 ---
 

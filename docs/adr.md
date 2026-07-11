@@ -4,6 +4,24 @@
 
 ---
 
+## ADR-260711-04: term.detect でソース言語の variants（表記揺れ）を検出・付与する
+
+### 背景
+用語データモデル（`LangTerm.variants`）と CSV/YAML の `variants_<lang>` 列、照合（`anyTermVariantAppears`）、trans への用語注入、AIレビューの訳揺れ検知（ADR-260709-01）は variants を消費する前提で配線済みだった。しかし唯一の供給源である `term.detect` が常に `variants: []` を返し（検出プロンプトも variants を要求しない）、人が CSV を手編集しない限り活用形・表記揺れを含む出現がマッチしなかった。
+
+### 決定
+1. **検出プロンプト2種（`TERM_DETECT_PAIRS` / `TERM_DETECT_SOURCE_ONLY`）の出力スキーマに source 言語の `variants` を追加**する。variants の基準（大小差・ハイフン/スペース差・活用形/複数形・よくある誤記）と、正規形そのもの・別概念・訳語を含めない旨、該当なしは `[]` を明記。
+2. **`term-detector.ts` のパーサで variants を読み取り、`sanitizeVariants()` で整形**して source の `LangTerm` にのみ付与する。ターゲット用語は `variants: []` を維持（**ソース言語中心**）。CSV の variants 列がソース言語向けにのみ自動生成される仕様と整合する。
+3. **サニタイズは大小を区別する**: 照合 `textContainsTerm` が `String.includes`（大小区別）であるため、"API endpoint" と "api endpoint" は別々に意味を持つ。よって除外は正規形との**完全一致**のみ、重複排除も**完全一致**で行い、大小のみ異なる表記は別 variant として保持する。非文字列・空白のみは除去。
+
+### 理由
+既存の variants パイプライン（照合・注入・訳揺れ検知）を実際に機能させるには供給源が必要で、検出時に併せて出させるのが最も自然（追加コールなし）。ソース中心に限定するのは CSV 列生成仕様との整合と過剰生成の抑制のため。判定を lint でなくプロンプト基準＋決定論サニタイズの二段で守ることで、AI が別概念や訳語を variants に混ぜる事故を防ぐ。
+
+### 備考
+- `MockTermDetector`（AI 不使用フォールバック）は決定的挙動維持のため `variants: []` のまま。
+- 既存エントリへの variants 追記は本 ADR の対象外（新規検出時の付与に限定）。既存 CSV に variants 列がなくても保存時に列追加されるのみで後方互換（`preservedHeaders` で手編集列も保持）。
+- 単体テスト: `src/test/unit/commands/term/term-detector.test.ts`（fake AIService 注入で付与・サニタイズ・ターゲット非付与を検証）。
+
 ## ADR-260711-03: ユニット数上限を trans.maxUnitsPerRun に一本化し、調整困難な aiSync 詳細設定を最適値で固定・廃止する
 
 ### 背景
@@ -38,6 +56,7 @@ CustomTextEditorProvider は本来「ドキュメントの内容を表示・編�
 ### 備考
 - `resourceFilename == mdait.json` という緩い条件のため、`.mdait/` 外に同名ファイルがあると切り替えボタンが誤表示される可能性があるが、実害は「押しても対象がその同名ファイルになるだけ」で軽微なため許容する。
 - `supportsMultipleEditorsPerDocument: false` により同一ファイルの多重タブは発生しない。
+
 
 ## ADR-260711-01: mdait.json 設定エディタとして Webview を導入する（P6 の例外）
 
