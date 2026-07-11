@@ -434,6 +434,7 @@ Source Text Changes:
  *   {
  *     "sourceTerm": "ソース言語の用語",
  *     "targetTerm": "ターゲット言語の用語",
+ *     "variants": ["ソース言語の用語の表記揺れ・活用形・誤記"],
  *     "context": "用語を含む文（contextLangから抽出）"
  *   }
  * ]
@@ -459,6 +460,17 @@ Extract a term if it meets at least one of the following conditions:
 - Terms already in the existing terminology list
 - Duplicated or contextually trivial mentions
 
+### Variants (surface variations of sourceTerm)
+For each term, also list the surface variations of the **{{sourceLang}}** sourceTerm that denote the exact same concept, so that all occurrences can be matched consistently. Include:
+- Casing differences (e.g. "API endpoint" vs "api endpoint")
+- Hyphenation / spacing differences (e.g. "end-point" vs "endpoint" vs "end point")
+- Inflected or plural forms (e.g. "endpoints", or conjugations in inflected languages)
+- Common misspellings actually likely to appear in the text
+Do NOT include:
+- The canonical sourceTerm itself
+- Different concepts, synonyms with different meaning, or the target-language translation
+Return an empty array [] when there are no genuine variants. Do not invent variants.
+
 {{#existingTerms}}
 ### Existing Terms (skip these)
 {{existingTerms}}
@@ -474,6 +486,7 @@ Return a JSON array with this structure:
   {
     "sourceTerm": "term in {{sourceLang}}",
     "targetTerm": "term in {{targetLang}}",
+    "variants": ["surface variations of sourceTerm in {{sourceLang}} (casing/hyphenation/inflection/misspellings)"],
     "context": "sentence containing the term from {{contextLang}} text"
   }
 ]
@@ -482,7 +495,9 @@ Return a JSON array with this structure:
 - "context" MUST be a single line (no line breaks)
 - "context" MUST be extracted from the {{contextLang}} text
 - Verify the term actually appears in the context before including
-- Extract BOTH sourceTerm and targetTerm for each term`;
+- Extract BOTH sourceTerm and targetTerm for each term
+- "variants" MUST be surface variations of sourceTerm in {{sourceLang}} only — never a different concept and never the target-language translation
+- "variants" MUST NOT include the canonical sourceTerm itself; use [] when there are none`;
 
 /**
  * term.detectSourceOnly - ソース単独からの用語検出プロンプト
@@ -501,6 +516,7 @@ Return a JSON array with this structure:
  * [
  *   {
  *     "sourceTerm": "ソース言語の用語",
+ *     "variants": ["ソース言語の用語の表記揺れ・活用形・誤記"],
  *     "context": "用語を含む文"
  *   }
  * ]
@@ -524,6 +540,14 @@ Extract a term if it meets at least one of the following conditions:
 - Terms already in the existing terminology list
 - Duplicated or contextually trivial mentions
 
+### Variants (surface variations of sourceTerm)
+For each term, also list the surface variations of the **{{sourceLang}}** sourceTerm that denote the exact same concept, so that all occurrences can be matched consistently. Include:
+- Casing differences (e.g. "API endpoint" vs "api endpoint")
+- Hyphenation / spacing differences (e.g. "end-point" vs "endpoint" vs "end point")
+- Inflected or plural forms (e.g. "endpoints", or conjugations in inflected languages)
+- Common misspellings actually likely to appear in the text
+Do NOT include the canonical sourceTerm itself, different concepts, or synonyms with a different meaning. Return an empty array [] when there are no genuine variants. Do not invent variants.
+
 {{#existingTerms}}
 ### Existing Terms (skip these)
 {{existingTerms}}
@@ -537,13 +561,15 @@ Return a JSON array with this structure:
 [
   {
     "sourceTerm": "term in {{sourceLang}}",
+    "variants": ["surface variations of sourceTerm in {{sourceLang}} (casing/hyphenation/inflection/misspellings)"],
     "context": "sentence containing the term"
   }
 ]
 
 **CRITICAL VALIDATION**:
 - "context" MUST be a single line (no line breaks)
-- Verify the term actually appears in the context before including`;
+- Verify the term actually appears in the context before including
+- "variants" MUST be surface variations of sourceTerm in {{sourceLang}} only, and MUST NOT include the canonical sourceTerm itself; use [] when there are none`;
 
 /**
  * term.extractFromTranslations - 対訳ペアからの用語抽出プロンプト
