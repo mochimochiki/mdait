@@ -122,7 +122,7 @@ sequenceDiagram
 | `trans.frontmatter.keys` | — | 翻訳対象とするfrontmatterキー。指定キーのみが管理対象 |
 | `trans.retryLimit` | `1` | trans の再試行上限 |
 | `trans.maxFileSize` | `51200` | 非MDファイルの翻訳時ファイルサイズ上限（バイト）。超過時はスキップ＋警告 |
-| `trans.maxUnitsPerRun` | `300` | 1ファイルの処理で扱うユニット数の上限（全般コストガード）。**ファイル単位で適用**され、trans・aiSync.review・aiSync.align が共通で参照する（ディレクトリ実行ではファイル数ぶん積み上がる）。超過時の挙動は経路ごとに異なる: trans / review は超過ユニットの need フラグ（`need:translate` / `need:review`）を保持し次回実行で処理、align は該当ファイルの AI align をスキップして位置ベース対応付けを維持。`0` で上限なし |
+| `trans.maxUnitsPerRun` | `300` | 1ファイルの処理で扱うユニット数の上限（全般コストガード）。**ファイル単位で適用**され、trans・aiReview・AIアライン（adopt）が共通で参照する（ディレクトリ実行ではファイル数ぶん積み上がる）。超過時の挙動は経路ごとに異なる: trans / review は超過ユニットの need フラグ（`need:translate` / `need:review`）を保持し次回実行で処理、align は該当ファイルの AI align をスキップして位置ベース対応付けを維持。`0` で上限なし |
 | `ai.ollama.keepAlive` | （未送信） | Ollamaモデルをメモリに保持する時間（例: `"10m"`、秒数指定も可）。未指定時はOllamaサーバー既定（5分）。連続翻訳時のモデル再ロード防止用 |
 
 `primaryLang` は必須設定であり、未設定時は設定不備として扱う。
@@ -142,12 +142,14 @@ sequenceDiagram
 
 ---
 
-### aiSync.review（AIペアリング検証）
+### aiReview（AI翻訳レビュー）
 
 | 設定 | デフォルト | 動作 |
 |------|-----------|------|
-| `aiSync.review.autoApprove` | `true` | 高確信 match の `need:review` を自動解除。`false` でレポートのみ（マーカー無変更）のセーフモード |
-| `aiSync.review.batchSize` | `3` | 1回のLLMコールで検証するペア数（1..10 クランプ）。`1` で従来の単ペアプロンプト（`aiSync.verifyPairing`）、`2` 以上でバッチプロンプト（`aiSync.verifyPairingBatch`） |
+| `aiReview.autoApprove` | `true` | 高確信 match の `need:review` を自動解除。`false` でレポートのみ（マーカー無変更）のセーフモード |
+| `aiReview.batchSize` | `3` | 1回のLLMコールで検証するペア数（1..10 クランプ）。`1` で従来の単ペアプロンプト（`aiReview.verifyPairing`）、`2` 以上でバッチプロンプト（`aiReview.verifyPairingBatch`） |
+
+旧キー `aiSync.review.*` は廃止（フォールバック無し・ADR-260711-06）。
 
 検証ユニット数の上限は全般設定 `trans.maxUnitsPerRun`（既定300・`0`で上限なし・**1ファイル単位で適用**）で制御する。
 

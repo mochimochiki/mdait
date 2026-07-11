@@ -19,7 +19,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 | `mdait_term { action, path? }` | 用語集の検出/展開 | terms書換・AI使用 | ✅ 差分のみ処理 |
 | `mdait_tm { action, path? }` | TMコミット/最適化 | tmx書換・AI使用 | ✅ 既存TUはスキップ |
 | `mdait_aiReview { path?, dryRun? }` | 採用ペアのAIトリアージ（`need:review` の自動承認/エスカレーション） | マーカー書換・AI使用 | ✅ 承認済みは再検証しない |
-| `mdait_aiSync { dryRun? }` | 合成: `sync(adopt+align) → AIレビュー`（取り込み＋健全性監査） | マーカー書換・AI使用 | ✅ 冪等（管理済みサイトでは align no-op） |
+| `mdait_adopt { dryRun?, buildGlossary?, buildTm? }` | 取り込みウィザード: `sync(adopt+align) → AIレビュー`＋オプションで用語集/TM構築 | マーカー・terms・tmx書換・AI使用 | ✅ 冪等（管理済みサイトでは align no-op） |
 
 **基本ループ**: `mdait_getStatus` で観測 → ツールを1つ実行 → また観測。全コマンドは冪等なので、途中で失敗・中断してもループを再開するだけで復帰できる。
 
@@ -53,9 +53,9 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 1. git コミットを確認する（取り込みはマーカー書き込みを伴う）
 2. 訳文側にしかないセクション（マーカーなし）は sync が削除せず `need:review`（`from` なし）で保護するため、事前のポリシー設定は不要。取り込み後にユーザーへ「独立ユニット化（素 hash） / `need:isolate` / 削除」の判断を求める（[adopt.md](adopt.md)）
 3. 取り込みを実行する。次のいずれか:
-   - **AI支援（推奨・見出しズレのあるサイト）**: `mdait_aiSync` を1回呼ぶ。`sync(adopt+align)` で位置ズレをAI補正して採用し、続けてAIペアリング検証で高確信の一致を自動承認・誤ペア/訳抜けをエスカレーションする。`data.sync.adopted`/`alignCorrections` と `data.review.*`・`data.escalations` を観測する
+   - **AI支援（推奨・見出しズレのあるサイト）**: `mdait_adopt` を1回呼ぶ。`sync(adopt+align)` で位置ズレをAI補正して採用し、続けてAI翻訳レビューで高確信の一致を自動承認・誤ペア/訳抜けをエスカレーションする。`buildGlossary`/`buildTm` を渡せばフェーズ2（知識構築）も同時に実行できるが、エスカレーションが多い場合は TM がほぼ空になるため、レビュー解消後にフェーズ2を個別実行する方が確実。`data.sync.adopted`/`alignCorrections` と `data.review.*`・`data.escalations` を観測する
    - **決定的のみ**: `mdait_sync { adopt: true }` を実行する。`data.units.adopted` = 採用された既訳数（`need:review` 付与・本文は不変）、`data.units.kept` = 独立ユニットの保持数、`orphanReviewed` = マーカーなし孤立の一次受け（`need:review` 付与）数。任意で `mdait_aiReview` を後追いでかけてトリアージできる
-4. 残った `need:review` ユニットをレビューする。`mdait_getStatus { detail: true }` で対象ファイルを特定し、原文と訳文の対応が正しいか確認する（`mdait_aiSync`/`mdait_aiReview` の `data.escalations` は mismatch=誤ペア・partial=訳抜けの疑いとして先に見る）。問題なければマーカーの `need:review` を除去する（`hash`/`from` は変更しない）。ユーザーからレビューを委任されていない場合は、ユーザーに承認を求める
+4. 残った `need:review` ユニットをレビューする。`mdait_getStatus { detail: true }` で対象ファイルを特定し、原文と訳文の対応が正しいか確認する（`mdait_adopt`/`mdait_aiReview` の `data.escalations` は mismatch=誤ペア・partial=訳抜けの疑いとして先に見る）。問題なければマーカーの `need:review` を除去する（`hash`/`from` は変更しない）。ユーザーからレビューを委任されていない場合は、ユーザーに承認を求める
 5. `mdait_sync` を再実行し、`data.status.needs.review` が 0 であることを確認する
 
 ### フェーズ2: 知識構築（既訳から先に抽出）

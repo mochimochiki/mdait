@@ -121,7 +121,7 @@ interface AdoptOutcome {
   sync?: SyncResult;
   review: AiReviewFileResult[];
   term?: { detected: number; expanded: number; remaining: number };  // buildGlossary 時のみ
-  tm?: TmCommitResult;                                               // buildTm 時のみ（全ファイル加算集計）
+  tm?: { files; processedUnits; newEntries; existingEntries; warnedEntries; errorUnits };  // buildTm 時のみ（全ファイル加算集計）
   stageErrors: AdoptStageError[];
   dryRun: boolean;
   aborted: boolean;
@@ -138,7 +138,7 @@ interface AdoptOutcome {
 
 入力: `{ dryRun?: boolean, buildGlossary?: boolean, buildTm?: boolean }`（buildGlossary / buildTm 既定 false — エージェントは通常 `mdait_term` / `mdait_tm` を個別に計画するため。人間向け UI の既定 ON とは意図的に異なる）。マーカー・知識ストア書き込みを伴うため `prepareInvocation` で確認 UI を出し、`invoke` 内で AIオンボーディングを再確認する。
 
-data: 旧 mdait_aiSync の `{sync, files, units, autoApprove, escalations}` に `term?: { detected, expanded, remaining }`・`tm?: { added, updated, warnings }`・`stageErrors` を追加。
+data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` に `term?: { detected, expanded, remaining }`・`tm?: { files, processedUnits, newEntries, existingEntries, warnedEntries, errorUnits }`・`stageErrors` を追加。
 
 ## 設定
 

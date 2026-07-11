@@ -1,7 +1,7 @@
 /**
  * @file adopt-result-provider.ts
  * @description
- *   AI同期（合成コマンド）結果のプレビューを提供する TextDocumentContentProvider。
+ *   取り込みウィザードの統合レポートのプレビューを提供する TextDocumentContentProvider。
  *   固定 URI + onDidChange による上書き更新方式で既存タブを再利用する
  *   （review-result-provider.ts と同パターン）。
  * @module commands/adopt/adopt-result-provider
@@ -13,7 +13,7 @@ const SCHEME = "mdait-adopt";
 const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:adopt-result`);
 
 /**
- * AI同期結果の仮想ドキュメントを提供するシングルトン。
+ * 取り込み結果の仮想ドキュメントを提供するシングルトン。
  * extension.ts で `workspace.registerTextDocumentContentProvider` に登録して使用する。
  */
 export class AdoptResultContentProvider implements vscode.TextDocumentContentProvider {

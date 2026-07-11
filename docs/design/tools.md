@@ -213,7 +213,7 @@ interface ValidateInput {
 
 ### 7. AI Review Tool (`mdait_aiReview`)
 
-**機能**: adopt 済みペア（from + need:review）のAIペアリング検証（トリアージ）
+**機能**: adopt 済みペア（from + need:review）のAI翻訳レビュー（トリアージ）
 
 **入力パラメータ**:
 ```typescript
@@ -224,8 +224,8 @@ interface AiReviewInput {
 ```
 
 **実装**:
-- `executeAiReviewForFiles`（`src/commands/ai-sync/review-command.ts`）に委譲
-- verdict `{match, mismatch, partial, uncertain}` を判定し、高確信 match の `need:review` を自動解除（`aiSync.review` 設定で制御、ADR-260704-07）
+- `executeAiReviewForFiles`（`src/commands/ai-review/review-command.ts`）に委譲
+- verdict `{match, mismatch, partial, uncertain}` を判定し、高確信 match の `need:review` を自動解除（`aiReview` 設定で制御、ADR-260704-07）
 - `data`: verdict別ユニット集計と **escalations 一覧**（file/unitHash/title/verdict/confidence/reason/issues、上限50件）。`nextActions` が mismatch→構造修正+再sync / partial→再翻訳 / approved→tm.commit を案内する
 - 冪等: 承認済みユニットは次回実行で列挙されない
 
@@ -249,7 +249,8 @@ src/lm-tools/
 ├── term-tool.ts          # 用語集ツール（detect/expand）
 ├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
 ├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
-└── ai-review-tool.ts     # AIペアリング検証ツール（need:reviewのトリアージ）
+├── ai-review-tool.ts     # AI翻訳レビューツール（need:reviewのトリアージ）
+└── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）
 ```
 
 ---

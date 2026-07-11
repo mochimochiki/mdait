@@ -137,7 +137,7 @@ export interface ReviewAggregate {
 
 /**
  * 複数ファイルの検証結果を集計する（純関数）。
- * mdait_aiReview / mdait_aiSync のエンベロープ・レポートが共有する。
+ * mdait_aiReview / mdait_adopt のエンベロープ・レポートが共有する。
  * kept は verdict:uncertain と「match だが未承認」を区別して数える（ADR-260704-07）。
  */
 export function aggregateReviewResults(results: AiReviewFileResult[]): ReviewAggregate {

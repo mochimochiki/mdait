@@ -26,6 +26,8 @@
 5. Hover over a translated unit to inspect the result and glossary suggestions.
 6. Click **Source** to open a side-by-side comparison for review.
 
+**Already have translated documents?** Run **✨Adopt Existing Translations** from the sidebar instead of translating from scratch. The wizard adopts your existing translations without overwriting them, AI-reviews the pairings, and can build the glossary and translation memory in the same run.
+
 ---
 
 ## Configuration
@@ -120,6 +122,8 @@ The following tools are available in GitHub Copilot Chat:
 | `#mdaitStatus` | Check translation progress and status. |
 | `#mdaitSync` | Synchronize markers across documents. |
 | `#mdaitTranslate` | Translate a target file with AI. |
+| `#mdaitAdopt` | Adopt existing translations (onboarding wizard; optional glossary/TM build). |
+| `#mdaitAiReview` | AI-review translation pairs (triage need:review, audit quality). |
 
 ---
 
