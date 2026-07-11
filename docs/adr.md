@@ -4,6 +4,24 @@
 
 ---
 
+## ADR-260711-01: mdait.json 設定エディタとして Webview を導入する（P6 の例外）
+
+### 背景
+mdait.json の編集は raw JSON のみで、50 項目超の設定の全体像・意味・既定値の把握が難しくオンボーディングの障壁だった。VS Code 標準の設定 GUI は `contributes.configuration`（ワークスペース設定）専用で、プロジェクトファイルである mdait.json には適用できない。
+
+### 決定
+1. `mdait.settings.open` で開く WebviewPanel の設定エディタを追加する。P6（独自 UI 最小化）の明示的な例外とする。
+2. **スキーマ駆動**: UI は `assets/schemas/mdait-config.schema.json` から実行時に自動生成する。スキーマが唯一の真実源で、設定追加は原則スキーマ＋解説文（`settings-doc.ts`、l10n 日英）の追加のみ。生成器が未対応の形（boolean|array の oneOf 等）は「JSON で編集」フォールバック行として表示し、UI は壊れない。
+3. **Webview は表示に徹する**: 検証・型変換・パス解決（`Configuration` 経由）・ファイル I/O はすべて拡張側（`settings-panel.ts`）。書き込みはキー単位の最小差分（`config-json-editor.ts`。キー順序・インデント・末尾改行を保持）、リセットはキー削除＋空親オブジェクトの刈り取り。
+4. 見た目は `--vscode-*` CSS 変数でテーマ追従のネイティブ準拠。外部リソースなし、CSP は nonce 付き script のみ許可。
+
+### 理由
+設定の発見可能性を TreeView / QuickPick で提供するのは階層設定の規模的に無理があり、設定画面ライクな一覧・検索・型別ウィジェットが最適。スキーマ駆動生成により UI とスキーマの二重管理を避ける。P6 の趣旨（学習コスト低減・一貫した UX）は VS Code 設定画面の操作モデルと標準 CSS 変数の踏襲で維持する。
+
+### 備考
+- あわせてスキーマの欠落を修正: `sync.copyAssets` / `transPairs[].copyAssets`（実装に存在するが `additionalProperties: false` により検証エラーになっていた）
+- 設定エディタは AI 不使用・決定的（ADR-260705-01 と整合）。外部編集は `Configuration` の変更通知で UI へ反映する
+
 ## ADR-260709-01: AIレビューをバッチ検証化し、用語集・TM を双方向マッチで注入して訳揺れを検知する
 
 ### 背景

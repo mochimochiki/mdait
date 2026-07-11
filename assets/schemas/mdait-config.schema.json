@@ -38,6 +38,22 @@
             "description": "Path to the directory to store target language documents (relative to workspace root)",
             "examples": ["docs/en", "content/ja"]
 
+          },
+          "copyAssets": {
+            "description": "Per-pair override for asset copying. true: copy all non-translated files, false: do not copy, or an extension whitelist (e.g. [\".png\", \".jpg\"]). Falls back to sync.copyAssets when omitted.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\.[a-zA-Z0-9]+$"
+                }
+              }
+            ],
+            "examples": [true, false, [".png", ".jpg"]]
           }
         },
         "additionalProperties": false
@@ -86,6 +102,23 @@
           "type": "boolean",
           "description": "Automatically sync files when saved (only files with mdait markers)",
           "default": true
+        },
+        "copyAssets": {
+          "description": "Copy non-translated asset files (images etc.) from source to target directories during sync. true: copy all non-translated files, false: do not copy, or an extension whitelist (e.g. [\".png\", \".jpg\"]). Can be overridden per translation pair.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^\\.[a-zA-Z0-9]+$"
+              }
+            }
+          ],
+          "default": true,
+          "examples": [true, false, [".png", ".jpg"]]
         }
       },
       "additionalProperties": false
