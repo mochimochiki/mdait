@@ -167,7 +167,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm AI Pairing Review (Dry Run)"),
 					message: vscode.l10n.t(
-						"Verify adopted translation pairings for {0} with AI? Dry run: no markers are changed, only a report is returned.",
+						"Verify adopted translations for {0} with AI? Dry run: no markers are changed, only a report is returned.",
 						scopeLabel,
 					),
 				},
@@ -179,7 +179,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm AI Pairing Audit"),
 					message: vscode.l10n.t(
-						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiReview settings).",
+						"Audit all confirmed translations for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiReview settings).",
 						scopeLabel,
 					),
 				},
@@ -190,7 +190,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			confirmationMessages: {
 				title: vscode.l10n.t("Confirm AI Pairing Review"),
 				message: vscode.l10n.t(
-					"Verify adopted translation pairings for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiReview settings).",
+					"Verify adopted translations for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiReview settings).",
 					scopeLabel,
 				),
 			},

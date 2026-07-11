@@ -55,7 +55,7 @@ import { Logger, parseLogLevel } from "./infra/logging/logger";
 import { AIOnboarding } from "./infra/onboarding/ai-onboarding";
 import { FileExplorer } from "./infra/workspace/file-explorer";
 import { MdaitAiReviewTool } from "./lm-tools/ai-review-tool";
-import { MdaitAiSyncTool } from "./lm-tools/ai-sync-tool";
+import { MdaitAdoptTool } from "./lm-tools/adopt-tool";
 import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
 import { MdaitSyncTool } from "./lm-tools/sync-tool";
 import { MdaitTermTool } from "./lm-tools/term-tool";
@@ -869,9 +869,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait_aiReview",
 		new MdaitAiReviewTool(),
 	);
-	const aiSyncToolDisposable = vscode.lm.registerTool(
-		"mdait_aiSync",
-		new MdaitAiSyncTool(),
+	const adoptToolDisposable = vscode.lm.registerTool(
+		"mdait_adopt",
+		new MdaitAdoptTool(),
 	);
 
 	// 初回データ読み込み
@@ -944,7 +944,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		tmToolDisposable,
 		validateToolDisposable,
 		aiReviewToolDisposable,
-		aiSyncToolDisposable,
+		adoptToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる

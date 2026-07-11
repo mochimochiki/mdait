@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAdopt } from "../commands/adopt/adopt-core";
-import { type AdoptOutcome, buildAdoptNextActions } from "../commands/adopt/adopt-result";
+import { type AdoptOutcome, type AdoptStageError, buildAdoptNextActions } from "../commands/adopt/adopt-result";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
 import { type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
 import { StatusManager } from "../core/status/status-manager";
@@ -19,15 +19,19 @@ const logger = Logger.getInstance();
 const MAX_ESCALATIONS = 50;
 
 /**
- * 入力パラメータ: AI同期ツール
+ * 入力パラメータ: 取り込みウィザードツール
  */
-interface AiSyncInput {
-	/** true の場合はレビュー段でマーカーを変更しない（sync 段の adopt は行う） */
+interface AdoptInput {
+	/** true の場合はレビュー段でマーカーを変更せず、用語集・TM 段をスキップする（sync 段の adopt は行う） */
 	dryRun?: boolean;
+	/** 用語集構築段（term.detect → term.expand）を実行するか（既定 false） */
+	buildGlossary?: boolean;
+	/** TM構築段（tm.commit）を実行するか（既定 false） */
+	buildTm?: boolean;
 }
 
-/** mdait_aiSync の data 形式 */
-interface AiSyncData {
+/** mdait_adopt の data 形式 */
+interface AdoptData {
 	/** sync(adopt+align) 段の結果 */
 	sync: {
 		filesProcessed: number;
@@ -51,6 +55,23 @@ interface AiSyncData {
 		errors: number;
 		skipped: number;
 	};
+	/** 用語集構築段の結果（buildGlossary 時のみ） */
+	term?: {
+		detected: number;
+		expanded: number;
+		remaining: number;
+	};
+	/** TM構築段の結果（buildTm 時のみ） */
+	tm?: {
+		files: number;
+		processedUnits: number;
+		newEntries: number;
+		existingEntries: number;
+		warnedEntries: number;
+		errorUnits: number;
+	};
+	/** オプション段の失敗記録 */
+	stageErrors: AdoptStageError[];
 	autoApprove: {
 		enabled: boolean;
 		threshold: number;
@@ -71,19 +92,21 @@ interface AiSyncData {
 }
 
 /**
- * mdaitのAI同期ツール
- * sync(adopt+align) → AI翻訳レビュー → レポートを束ねる薄い合成コマンド。
- * 取り込みと健全性監査を同一機能で兼ねる（docs/design/command_ai-sync.md 参照）。
+ * mdaitの既存翻訳取り込みウィザードツール（旧 mdait_aiSync）。
+ * sync(adopt+align) → AI翻訳レビュー →（オプション）用語集構築 → TM構築 → レポートを
+ * 束ねる薄い合成コマンド（docs/design/command_adopt.md 参照）。
  * 出力は共通エンベロープのJSON文字列。
  */
-export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
+export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 	async invoke(
-		options: vscode.LanguageModelToolInvocationOptions<AiSyncInput>,
+		options: vscode.LanguageModelToolInvocationOptions<AdoptInput>,
 		token: vscode.CancellationToken,
 	): Promise<vscode.LanguageModelToolResult> {
 		try {
 			const dryRun = options.input.dryRun === true;
-			logger.info("LanguageModelTool", "AI sync tool invoked", { dryRun });
+			const buildGlossary = options.input.buildGlossary === true;
+			const buildTm = options.input.buildTm === true;
+			logger.info("LanguageModelTool", "Adopt tool invoked", { dryRun, buildGlossary, buildTm });
 
 			const config = Configuration.getInstance();
 			const validationError = config.validate();
@@ -111,54 +134,76 @@ export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
 				},
 			};
 
-			const outcome = await executeAdopt(config, { dryRun }, dummyProgress, token);
+			const outcome = await executeAdopt(config, { dryRun, buildGlossary, buildTm }, dummyProgress, token);
 			if (outcome.aborted || !outcome.sync) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(
 					createErrorEnvelope(message, ToolErrorCode.InternalError, message, [
-						"Check .mdait/mdait.json configuration (transPairs, primaryLang) and retry mdait_aiSync.",
+						"Check .mdait/mdait.json configuration (transPairs, primaryLang) and retry mdait_adopt.",
 					]),
 				);
 			}
 
-			const data = buildAiSyncData(outcome, config);
-			const summary = vscode.l10n.t(
-				"AI sync completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.",
-				data.sync.adopted,
-				data.sync.alignCorrections,
-				data.review.verified,
-				data.review.approved,
-				data.review.mismatch + data.review.partial,
-				data.review.mismatch,
-				data.review.partial,
-				data.review.keptBelowThreshold + data.review.uncertain,
-				data.review.errors,
-			);
+			const data = buildAdoptData(outcome, config);
+			const summaryParts = [
+				vscode.l10n.t(
+					"Adoption completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.",
+					data.sync.adopted,
+					data.sync.alignCorrections,
+					data.review.verified,
+					data.review.approved,
+					data.review.mismatch + data.review.partial,
+					data.review.mismatch,
+					data.review.partial,
+					data.review.keptBelowThreshold + data.review.uncertain,
+					data.review.errors,
+				),
+			];
+			if (data.term) {
+				summaryParts.push(
+					vscode.l10n.t("Glossary: {0} detected, {1} expanded.", data.term.detected, data.term.expanded),
+				);
+			}
+			if (data.tm) {
+				summaryParts.push(vscode.l10n.t("TM: {0} new, {1} updated.", data.tm.newEntries, data.tm.existingEntries));
+			}
+			if (data.stageErrors.length > 0) {
+				summaryParts.push(vscode.l10n.t("{0} step error(s).", data.stageErrors.length));
+			}
 
-			return toToolResult(createOkEnvelope(summary, data, buildAdoptNextActions(outcome)));
+			return toToolResult(createOkEnvelope(summaryParts.join(" "), data, buildAdoptNextActions(outcome)));
 		} catch (error) {
-			logger.error("LanguageModelTool", "Error in AI sync tool", formatError(error));
-			const errorMessage = vscode.l10n.t("AI sync failed: {0}", (error as Error).message);
+			logger.error("LanguageModelTool", "Error in adopt tool", formatError(error));
+			const errorMessage = vscode.l10n.t("Adoption failed: {0}", (error as Error).message);
 			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
 	async prepareInvocation(
-		options: vscode.LanguageModelToolInvocationPrepareOptions<AiSyncInput>,
+		options: vscode.LanguageModelToolInvocationPrepareOptions<AdoptInput>,
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
 		const dryRun = options.input.dryRun === true;
+		const optional: string[] = [];
+		if (options.input.buildGlossary === true) {
+			optional.push(vscode.l10n.t("build glossary"));
+		}
+		if (options.input.buildTm === true) {
+			optional.push(vscode.l10n.t("build translation memory"));
+		}
+		const optionalSuffix = optional.length > 0 ? `, ${optional.join(", ")}` : "";
 		const message = dryRun
 			? vscode.l10n.t(
-					"Run AI Sync (dry run)? Steps: (1) adopt existing translations, (2) AI-align mis-paired units, (3) AI pairing review. The review step changes no markers in dry run, but adopt still updates markers. Committing your workspace to git beforehand is recommended.",
+					"Adopt existing translations (dry run)? Steps: adopt existing translations, AI-align mis-paired units, AI translation review. The review step changes no markers in dry run and the glossary/TM steps are skipped, but adopt still updates markers. Committing your workspace to git beforehand is recommended.",
 				)
 			: vscode.l10n.t(
-					"Run AI Sync? Steps in order: (1) adopt existing translations (need:review), (2) AI-align mis-paired units, (3) AI pairing review (auto-approves high-confidence matches). It updates translation markers. Committing your workspace to git beforehand is recommended.",
+					"Adopt existing translations? Steps: adopt existing translations (need:review), AI-align mis-paired units, AI translation review (auto-approves high-confidence matches){0}. It updates translation markers. Committing your workspace to git beforehand is recommended.",
+					optionalSuffix,
 				);
 		return {
-			invocationMessage: vscode.l10n.t("Running AI sync (adopt, align, review)..."),
+			invocationMessage: vscode.l10n.t("Adopting existing translations..."),
 			confirmationMessages: {
-				title: vscode.l10n.t("Confirm AI Sync"),
+				title: vscode.l10n.t("Confirm Adopt Existing Translations"),
 				message,
 			},
 		};
@@ -166,15 +211,15 @@ export class MdaitAiSyncTool implements vscode.LanguageModelTool<AiSyncInput> {
 }
 
 /**
- * AI同期結果からエンベロープの data を構築する。
+ * 取り込み結果からエンベロープの data を構築する。
  */
-function buildAiSyncData(outcome: AdoptOutcome, config: Configuration): AiSyncData {
+function buildAdoptData(outcome: AdoptOutcome, config: Configuration): AdoptData {
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	const toRelative = (filePath: string) => path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 	const sync = outcome.sync;
 	const agg = aggregateReviewResults(outcome.review);
 
-	const escalations: AiSyncData["escalations"] = [];
+	const escalations: AdoptData["escalations"] = [];
 	for (const fileResult of outcome.review) {
 		for (const unit of fileResult.unitResults) {
 			if (unit.action === "escalated" && escalations.length < MAX_ESCALATIONS) {
@@ -213,6 +258,9 @@ function buildAiSyncData(outcome: AdoptOutcome, config: Configuration): AiSyncDa
 			errors: agg.errors,
 			skipped: agg.skipped,
 		},
+		term: outcome.term,
+		tm: outcome.tm,
+		stageErrors: outcome.stageErrors,
 		autoApprove: {
 			enabled: config.aiReview.autoApprove,
 			threshold: AUTO_APPROVE_THRESHOLD,
