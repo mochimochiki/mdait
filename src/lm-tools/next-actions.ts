@@ -28,11 +28,6 @@ export function buildNextActions(needs: NeedBreakdown, errorUnits = 0): string[]
 			`${needs.review} unit(s) are flagged need:review. Review the translated content; if acceptable, remove the need flag from the marker (or ask the user to approve), then run mdait_sync.`,
 		);
 	}
-	if (needs.backfill > 0) {
-		actions.push(
-			`${needs.backfill} source-side placeholder unit(s) are flagged need:backfill (target-only content awaiting reverse translation). Run mdait_translate on the target file/directory — it reverse-translates the target content into the source document and leaves need:review on the generated source units.`,
-		);
-	}
 	if (needs.verifyDeletion > 0) {
 		actions.push(
 			`${needs.verifyDeletion} unit(s) are flagged need:verify-deletion (their source unit was deleted). Verify whether each target unit should be removed, then delete the unit or its need flag manually.`,

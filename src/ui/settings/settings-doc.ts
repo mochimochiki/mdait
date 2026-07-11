@@ -133,7 +133,7 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		),
 	"sync.orphanTargetPolicy": () =>
 		vscode.l10n.t(
-			"What sync does with orphan target units — translated sections whose source section no longer exists. 'delete': remove them automatically. 'verify': keep them flagged need:verify-deletion so a human confirms each removal. 'keep': keep them permanently as target-only content that sync and translation never touch. 'backfill': create a placeholder in the source document and reverse-translate the target content into it. Takes precedence over Auto Delete.",
+			"What sync does with orphan target units — translated sections whose source section no longer exists. 'delete': remove them automatically. 'verify': keep them flagged need:verify-deletion so a human confirms each removal. To keep target-only content permanently, make it an independent unit (a marker with a hash but no 'from'); to keep a unit while stopping downstream propagation, flag it need:isolate. Both are always preserved by sync regardless of this policy. Takes precedence over Auto Delete.",
 		),
 	"sync.autoSyncOnSave": () =>
 		vscode.l10n.t(

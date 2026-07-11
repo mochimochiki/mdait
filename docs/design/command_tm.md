@@ -22,13 +22,17 @@ trans 実行時、TMX の対訳が LLM への参照情報として自動注入�
 2. 進捗通知付きでユニットを順次処理（途中キャンセル可）
 3. 完了後「新規 N 件 / 更新 M 件 / 警告 K 件」を通知、結果を仮想ドキュメントで表示
 
-**処理対象の条件:**
+**処理対象の条件**（包括方式: 「`from` あり ∧ `need` なし」のみ対象。need の列挙による除外ではないため、未知の need が素通りする穴がない）:
 
-| 状態 | 判定 |
+| 状態 | 判定（`TmSkipReason`） |
 |---|---|
-| `from` あり + `need` なし | **対象** |
-| `need:translate` / `need:revise` / `need:review` | スキップ（未完了） |
-| `from` なし | スキップ（ソースファイル） |
+| `from` あり + `need` なし（source 側も need なし） | **対象** |
+| `from` なし | スキップ `noFrom`（ソースファイル・独立ユニット） |
+| `need:translate` / `need:revise` / `need:review` / `need:isolate` | スキップ `needTranslate` / `needRevise` / `needReview` / `needIsolate` |
+| その他の `need`（`verify-deletion` 含む） | スキップ `needOther` |
+| **source 側ユニットに `need` が残っている** | スキップ `sourcePending`（isolate 凍結ペアやレガシー backfill→review プレースホルダのドリフトによる TM 汚染防止。ペア解決時に commit 側で判定） |
+
+孤立モデルとの整合（独立ユニット・isolate 凍結ペアの除外根拠）は [orphan-model.md](orphan-model.md) を参照。
 
 ### tm-optimize
 

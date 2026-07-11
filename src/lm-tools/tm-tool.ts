@@ -134,7 +134,9 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 					needTranslate: 0,
 					needRevise: 0,
 					needReview: 0,
-					needKeep: 0,
+					needIsolate: 0,
+					needOther: 0,
+					sourcePending: 0,
 				},
 			};
 
@@ -154,7 +156,9 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 						data.skipped.needTranslate += result.skipReasons.needTranslate;
 						data.skipped.needRevise += result.skipReasons.needRevise;
 						data.skipped.needReview += result.skipReasons.needReview;
-						data.skipped.needKeep += result.skipReasons.needKeep;
+						data.skipped.needIsolate += result.skipReasons.needIsolate;
+						data.skipped.needOther += result.skipReasons.needOther;
+						data.skipped.sourcePending += result.skipReasons.sourcePending;
 					}
 				} catch (error) {
 					logger.warn("LanguageModelTool", "TM commit file error", {
@@ -185,6 +189,11 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 				if (skipped.needReview > 0) {
 					nextActions.push(
 						`${skipped.needReview} unit(s) were skipped because they are flagged need:review. Resolve the reviews (remove the flag after checking), then re-run mdait_tm (action:"commit").`,
+					);
+				}
+				if (skipped.sourcePending > 0) {
+					nextActions.push(
+						`${skipped.sourcePending} unit(s) were skipped because their source unit has a pending need flag (e.g. a frozen need:isolate pair). Such pairs are not settled translations; no action is needed unless you expected them in the TM.`,
 					);
 				}
 			}

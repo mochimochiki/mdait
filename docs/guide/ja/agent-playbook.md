@@ -27,7 +27,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 
 以下がすべて成立したとき完了と判定する。各条件はツール出力から機械的に確認できる:
 
-1. `mdait_getStatus` の `data.needs` で `translate / revise / review / verifyDeletion / backfill / other` がすべて 0（`keep` は除外してよい）
+1. `mdait_getStatus` の `data.needs` で `translate / revise / review / verifyDeletion / other` がすべて 0（`isolate` は定常状態なので除外してよい）
 2. `mdait_validate` の `data.violations` が空配列
 3. `mdait_term (detect)` → `data.pairs[].newTerms` 合計 0 かつ `unexpanded` 合計 0
 4. `mdait_tm (commit)` → `data.newEntries` が 0（`data.skipped` の needTranslate/needRevise/needReview も 0）
@@ -51,10 +51,10 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 ### フェーズ1: 取り込み
 
 1. git コミットを確認する（取り込みはマーカー書き込みを伴う）
-2. 訳文側にしかないセクションがあるサイトでは、`sync.orphanTargetPolicy` を先に決める（`"keep"`=保持 / `"backfill"`=原文へ逆翻訳 / 未設定デフォルトの `"delete"` は独自セクションを削除するので注意）
+2. 訳文側にしかないセクション（マーカーなし）は sync が削除せず `need:review`（`from` なし）で保護するため、事前のポリシー設定は不要。取り込み後にユーザーへ「独立ユニット化（素 hash） / `need:isolate` / 削除」の判断を求める（[adopt.md](adopt.md)）
 3. 取り込みを実行する。次のいずれか:
    - **AI支援（推奨・見出しズレのあるサイト）**: `mdait_aiSync` を1回呼ぶ。`sync(adopt+align)` で位置ズレをAI補正して採用し、続けてAIペアリング検証で高確信の一致を自動承認・誤ペア/訳抜けをエスカレーションする。`data.sync.adopted`/`alignCorrections` と `data.review.*`・`data.escalations` を観測する
-   - **決定的のみ**: `mdait_sync { adopt: true }` を実行する。`data.units.adopted` = 採用された既訳数（`need:review` 付与・本文は不変）、`data.units.kept`/`backfilled` = 孤立ターゲットの処理結果。任意で `mdait_aiReview` を後追いでかけてトリアージできる
+   - **決定的のみ**: `mdait_sync { adopt: true }` を実行する。`data.units.adopted` = 採用された既訳数（`need:review` 付与・本文は不変）、`data.units.kept` = 独立ユニットの保持数、`orphanReviewed` = マーカーなし孤立の一次受け（`need:review` 付与）数。任意で `mdait_aiReview` を後追いでかけてトリアージできる
 4. 残った `need:review` ユニットをレビューする。`mdait_getStatus { detail: true }` で対象ファイルを特定し、原文と訳文の対応が正しいか確認する（`mdait_aiSync`/`mdait_aiReview` の `data.escalations` は mismatch=誤ペア・partial=訳抜けの疑いとして先に見る）。問題なければマーカーの `need:review` を除去する（`hash`/`from` は変更しない）。ユーザーからレビューを委任されていない場合は、ユーザーに承認を求める
 5. `mdait_sync` を再実行し、`data.status.needs.review` が 0 であることを確認する
 
@@ -66,7 +66,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 
 ### フェーズ3: 翻訳・検証ループ
 
-9. `mdait_translate { path: "<targetDir>" }` — 残りの `need:translate`（原文側にしかなかったセクション）と `need:backfill`（backfillポリシー時）を翻訳する
+9. `mdait_translate { path: "<targetDir>" }` — 残りの `need:translate`（原文側にしかなかったセクション）を翻訳する
 10. `mdait_validate` — 違反があれば「違反への対処」を行い、9〜10 を違反0件まで繰り返す
 11. 新規翻訳分を `mdait_tm { action: "commit" }` で登録する
 12. 完成状態の判定基準をすべて確認する

@@ -28,7 +28,7 @@ export interface ReviewPair {
  * 対象条件（いずれも target.marker.from が必須）:
  * - "pending": target.marker.need === "review"（既存挙動）
  * - "audit": target.marker.need === "review" または need なし（確定済みペア）。
- *   translate / revise@ / isolate / keep / backfill / verify-deletion 等の
+ *   translate / revise@ / isolate / verify-deletion 等の
  *   in-flight 状態は監査対象外（確定した対訳ではないため）。
  */
 export function collectReviewPairs(

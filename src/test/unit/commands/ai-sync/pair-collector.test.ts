@@ -14,9 +14,9 @@ suite("collectReviewPairs（検証対象ペアの列挙）", () => {
 		const reviewTarget = unitOf("## A(en)\n\nContent A", new MdaitMarker("tgtA", "srcA", "review"), "A(en)");
 		const cleanTarget = unitOf("## B(en)\n\nContent B", new MdaitMarker("tgtB", "srcB", null), "B(en)");
 		const translateTarget = unitOf("## C(en)\n\n", new MdaitMarker("tgtC", "srcC", "translate"), "C(en)");
-		const keepTarget = unitOf("## Extra\n\nKept", new MdaitMarker("keep1", null, "keep"), "Extra");
+		const isolateTarget = unitOf("## Extra\n\nKept", new MdaitMarker("iso1", null, "isolate"), "Extra");
 
-		const pairs = collectReviewPairs([srcA, srcB], [reviewTarget, cleanTarget, translateTarget, keepTarget]);
+		const pairs = collectReviewPairs([srcA, srcB], [reviewTarget, cleanTarget, translateTarget, isolateTarget]);
 
 		assert.strictEqual(pairs.length, 1);
 		assert.strictEqual(pairs[0].targetUnit, reviewTarget);
@@ -78,12 +78,12 @@ suite("collectReviewPairs（audit モードの対象拡張）", () => {
 		assert.deepStrictEqual(collectReviewPairs([src], [noFrom], "audit"), []);
 	});
 
-	test("audit でも in-flight な need 状態（translate/revise/isolate/keep）は対象外", () => {
+	test("audit でも in-flight な need 状態（translate/revise/isolate/verify-deletion）は対象外", () => {
 		const src = unitOf("## A\n\n本文", new MdaitMarker("srcA"), "A");
 		const translate = unitOf("## T\n\n", new MdaitMarker("t1", "srcA", "translate"), "T");
 		const revise = unitOf("## R\n\nx", new MdaitMarker("r1", "srcA", "revise@old"), "R");
 		const isolate = unitOf("## I\n\nx", new MdaitMarker("i1", "srcA", "isolate"), "I");
-		const keep = unitOf("## K\n\nx", new MdaitMarker("k1", "srcA", "keep"), "K");
-		assert.deepStrictEqual(collectReviewPairs([src], [translate, revise, isolate, keep], "audit"), []);
+		const verifyDeletion = unitOf("## V\n\nx", new MdaitMarker("v1", "srcA", "verify-deletion"), "V");
+		assert.deepStrictEqual(collectReviewPairs([src], [translate, revise, isolate, verifyDeletion], "audit"), []);
 	});
 });

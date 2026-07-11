@@ -272,6 +272,7 @@ export async function executeTmCommitForFile(
 		config,
 		progress,
 		token,
+		skipReasons,
 	);
 	result.skipReasons = skipReasons;
 	result.skippedUnits += markdown.units.length - targetUnits.length;
@@ -280,6 +281,7 @@ export async function executeTmCommitForFile(
 
 /**
  * 指定ユニット群にtm-commitを実行する。
+ * @param skipReasons ペア解決時の sourcePending スキップを加算する内訳（省略可）
  */
 async function executeTmCommitForUnits(
 	units: MdaitUnit[],
@@ -287,6 +289,7 @@ async function executeTmCommitForUnits(
 	config: Configuration,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
+	skipReasons?: TmSkipReasonBreakdown,
 ): Promise<TmCommitResult> {
 	const statusManager = StatusManager.getInstance();
 	const fileExplorer = new FileExplorer();
@@ -350,18 +353,31 @@ async function executeTmCommitForUnits(
 		}
 
 		try {
-			const preparedUnit = await prepareTmCommitUnit(unit, async () =>
-				resolveTmCommitUnits(
+			// source 側ユニットに need が付いている場合はペアが確定していない（isolate 凍結・
+			// review プレースホルダ等）ため、TM汚染防止としてスキップし sourcePending に集計する
+			let sourcePending = false;
+			const preparedUnit = await prepareTmCommitUnit(unit, async () => {
+				const outcome = await resolveTmCommitUnits(
 					unit,
 					filePath,
 					transPair.targetLang,
 					statusManager,
 					config,
 					fileExplorer,
-				),
-			);
+				);
+				sourcePending = outcome.sourcePending;
+				return outcome.resolution;
+			});
 			if (preparedUnit.shouldSkip) {
 				result.skippedUnits++;
+				continue;
+			}
+
+			if (sourcePending) {
+				result.skippedUnits++;
+				if (skipReasons) {
+					skipReasons.sourcePending++;
+				}
 				continue;
 			}
 
@@ -407,6 +423,12 @@ async function executeTmCommitForUnits(
 	return result;
 }
 
+/** ペア解決の結果。sourcePending は source 側ユニットに need が付いていたことを表す */
+interface TmCommitResolutionOutcome {
+	resolution: TmCommitResolutionResult | null;
+	sourcePending: boolean;
+}
+
 /**
  * tm-commit 用に primaryUnit / localUnit を解決する。
  */
@@ -417,7 +439,7 @@ async function resolveTmCommitUnits(
 	statusManager: StatusManager,
 	config: Configuration,
 	fileExplorer: FileExplorer,
-): Promise<TmCommitResolutionResult | null> {
+): Promise<TmCommitResolutionOutcome> {
 	const currentUnit: TmCommitResolvedUnit = {
 		content: unit.content,
 		lang: currentLang,
@@ -426,7 +448,7 @@ async function resolveTmCommitUnits(
 	};
 
 	if (!unit.marker?.from || !currentUnit.unitHash) {
-		return null;
+		return { resolution: null, sourcePending: false };
 	}
 
 	const tree = statusManager.getStatusItemTree();
@@ -442,7 +464,18 @@ async function resolveTmCommitUnits(
 			filePath: currentUnit.unitPath,
 			fromHash: unit.marker.from,
 		});
-		return null;
+		return { resolution: null, sourcePending: false };
+	}
+
+	// source 側に need が付いたペアは未確定（isolate 凍結・レガシー review プレースホルダ等）。
+	// ドリフトした対訳の TM 汚染を防ぐためスキップ対象として返す
+	if (sourceStatus.needFlag) {
+		logger.info("tm.commit", "Skipped: source unit has a pending need flag", {
+			filePath: currentUnit.unitPath,
+			fromHash: unit.marker.from,
+			sourceNeed: sourceStatus.needFlag,
+		});
+		return { resolution: null, sourcePending: true };
 	}
 
 	const sourceUnit = await readResolvedUnit(
@@ -452,7 +485,7 @@ async function resolveTmCommitUnits(
 		fileExplorer,
 	);
 	if (!sourceUnit) {
-		return null;
+		return { resolution: null, sourcePending: false };
 	}
 
 	const resolution = await buildTmCommitUnitResolution(
@@ -476,7 +509,7 @@ async function resolveTmCommitUnits(
 		});
 	}
 
-	return resolution;
+	return { resolution, sourcePending: false };
 }
 
 async function resolvePrimaryAncestor(

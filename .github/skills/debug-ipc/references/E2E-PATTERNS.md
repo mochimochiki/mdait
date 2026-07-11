@@ -32,7 +32,7 @@
 | エラーハンドリング、バリデーション | P8 |
 | 複数機能にまたがる変更、リファクタ | P9 |
 | UI関連（通知、進捗、キャンセル） | P10 |
-| エージェント・オーケストレーション（adopt/keep/backfill、LM Tools、並列翻訳） | P11, P12 |
+| エージェント・オーケストレーション（adopt/独立ユニット/isolate、LM Tools、並列翻訳） | P11, P12 |
 
 ---
 
@@ -229,7 +229,7 @@
 
 **アサーション（完成状態の定義に対応）**:
 - 手順7の `result.result.totalAdded === 0 && totalModified === 0 && totalDeleted === 0 && revisionsNeeded === 0`（条件5: 冪等な定常状態）
-- en側全ファイルのマーカーに `need:` が残っていない（条件1。`need:keep` は除外）
+- en側全ファイルのマーカーに `need:` が残っていない（条件1。`need:isolate` は除外）
 - 手順4-5 を再実行して新規用語0件・手順6を再実行して新規TU0件（条件3・4）
 - 手順3の `structuredLogs` で複数ファイルの翻訳開始が交互に出ている（並列実行の確認。trans.concurrency >= 2 のとき）
 
@@ -237,27 +237,28 @@
 
 ### P12: S2 既存対訳の取り込みオーケストレーション（adopt→知識構築→翻訳）
 
-**いつ使う**: adopt / orphanTargetPolicy（keep/backfill）/ 取り込みフローに変更があったとき
+**いつ使う**: adopt / 孤立ユニットモデル（独立ユニット・need:isolate・一次受け）/ 取り込みフローに変更があったとき
 
 **準備**: `40_structure_mismatch.md`（ja/en両方に存在・マーカーなし・構造ズレあり）がテストワークスペースにあることを確認。en側の既訳本文のスナップショットを取っておく。
 
 **手順**:
 1. `npm run copy-test-files` でリセット
-2. `.mdait/mdait.json` に `"sync": { "orphanTargetPolicy": "keep" }` を設定（backfill検証時は `"backfill"`）
-3. adopt sync: `{"id":"p12-1","command":"mdait.sync","args":[{"adopt":true}]}`
-4. en側 `40_structure_mismatch.md` を確認
-5. `need:review` を除去（レビュー承認相当）して再sync: `{"id":"p12-2","command":"mdait.sync","args":[]}`
-6. TMコミット: `{"id":"p12-3","command":"mdait.tm.commit.directory","args":["<workspace>/en"]}`
-7. 残りの翻訳: `{"id":"p12-4","command":"mdait.translate.directory","args":["<workspace>/en"]}`
-8. 再sync（定常状態確認）: `{"id":"p12-5","command":"mdait.sync","args":[]}`
+2. adopt sync: `{"id":"p12-1","command":"mdait.sync","args":[{"adopt":true}]}`
+3. en側 `40_structure_mismatch.md` を確認
+4. 「English-only Notice」ユニットの `need:review` を除去して素 hash 化（独立ユニット宣言）、対応ペアの `need:review` も除去（レビュー承認相当）して再sync: `{"id":"p12-2","command":"mdait.sync","args":[]}`
+5. TMコミット: `{"id":"p12-3","command":"mdait.tm.commit.directory","args":["<workspace>/en"]}`
+6. 残りの翻訳: `{"id":"p12-4","command":"mdait.translate.directory","args":["<workspace>/en"]}`
+7. 再sync（定常状態確認）: `{"id":"p12-5","command":"mdait.sync","args":[]}`
 
 **アサーション**:
-- 手順3後: 既訳ユニットの本文が**1文字も変わっていない**（スナップショット比較）。対応ペアに `from` + `need:review` が付く。`result.result.totalAdopted > 0`
-- 手順3後: 「日本語のみのセクション」に対応するen側ユニットに `need:translate` が付く
-- 手順3後: 「English-only Notice」ユニットが keep なら `need:keep` で保持 / backfill なら ja側にプレースホルダ（`need:backfill`）が挿入される
-- 手順6: `result.result.newEntries > 0`（既訳がTM登録される）。手順5より前に実行すると `need:review` スキップになることも確認できる
-- 手順7後（backfill時）: ja側プレースホルダが日本語に置換され `need:review` が付き、en側ユニットの `from` が新ハッシュを指す
-- 手順8: added/modified/deleted/revisionsNeeded/adopted すべて 0（冪等な定常状態）
+- 手順2後: 既訳ユニットの本文が**1文字も変わっていない**（スナップショット比較）。対応ペアに `from` + `need:review` が付く。`result.result.totalAdopted > 0`
+- 手順2後: 「日本語のみのセクション」に対応するen側ユニットに `need:translate` が付く
+- 手順2後: 「English-only Notice」ユニット（マーカーなしの訳文側独自章）が**削除されず** `need:review`（`from` なし）で一次受けされる（`totalOrphanReviewed > 0`）
+- 手順4後: 素 hash 化した独立ユニットが以後の sync で不変（パススルー・`kept` 集計。対応付けにも使われない）
+- 手順5: `result.result.newEntries > 0`（既訳がTM登録される）。手順4より前に実行すると `need:review` スキップ、独立ユニットは `noFrom` スキップになることも確認できる
+- 手順7: added/modified/deleted/revisionsNeeded/adopted すべて 0（冪等な定常状態）
+
+**isolate 検証（追加）**: ja側の任意ユニットに `need:isolate` を付けて再sync → en側に対応 target が生成されない（既存ペアがある場合は ja本文を変更しても en側に `need:revise` が付かず、hash/from のみ更新される＝凍結）。
 
 ---
 

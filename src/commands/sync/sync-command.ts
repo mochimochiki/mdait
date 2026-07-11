@@ -56,10 +56,10 @@ export interface SyncResult {
 	revisionsNeeded: number;
 	/** adoptで採用（need:review付与）したユニット数 */
 	totalAdopted: number;
-	/** need:keep で保持している孤立ターゲット数 */
+	/** 独立ユニットとして保持している孤立ターゲット数 */
 	totalKept: number;
-	/** backfillプレースホルダを生成した孤立ターゲット数 */
-	totalBackfilled: number;
+	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
+	totalOrphanReviewed: number;
 	/** AIアラインが適用した修正提案数 */
 	totalAlignCorrections: number;
 	durationMs: number;
@@ -131,7 +131,7 @@ export async function syncCommand(
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
 		let totalKept = 0;
-		let totalBackfilled = 0;
+		let totalOrphanReviewed = 0;
 		let totalAlignCorrections = 0;
 
 		// UnitStateStoreをロード
@@ -265,7 +265,7 @@ export async function syncCommand(
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
 						totalKept += syncResult.kept ?? 0;
-						totalBackfilled += syncResult.backfilled ?? 0;
+						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
@@ -323,7 +323,7 @@ export async function syncCommand(
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalKept,
-			totalBackfilled,
+			totalOrphanReviewed,
 			totalAlignCorrections,
 			durationMs,
 		});
@@ -410,7 +410,7 @@ export async function syncCommand(
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalKept,
-			totalBackfilled,
+			totalOrphanReviewed,
 			totalAlignCorrections,
 			durationMs,
 		};
@@ -587,6 +587,9 @@ export async function syncNew_CoreProc(
 
 	const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
 
+	// 廃止need（keep/backfill）を新モデルへ正規化する
+	normalizeLegacyNeeds(source.units);
+
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const sourceFrontHash = calculateFrontmatterHash(
 		source.frontMatter,
@@ -620,8 +623,10 @@ export async function syncNew_CoreProc(
 		frontmatterKeys,
 	);
 
-	// 3. target用ユニットを生成（from:hash, need:translateを付与）
-	const targetUnits = source.units.map((srcUnit) => {
+	// 3. target用ユニットを生成（from:hash, need:translateを付与）。
+	//    need:isolate の source は下流に出さない（伝播停止）
+	const exportedSourceUnits = source.units.filter((srcUnit) => srcUnit.marker?.need !== "isolate");
+	const targetUnits = exportedSourceUnits.map((srcUnit) => {
 		const hash = srcUnit.marker?.hash ?? calculateHash(srcUnit.content);
 		const tgtMarker = new MdaitMarker(hash, hash, "translate");
 		const tgtUnit = Object.create(Object.getPrototypeOf(srcUnit));
@@ -668,15 +673,15 @@ export async function syncNew_CoreProc(
 		encoder.encode(updatedSourceContent),
 	);
 
-	// 6. DiffResultを返す
-	const diffs: UnitDiff[] = source.units.map((u) => ({
+	// 6. DiffResultを返す（isolate で target 出力から除外したユニットは追加に数えない）
+	const diffs: UnitDiff[] = exportedSourceUnits.map((u) => ({
 		type: DiffType.ADDED,
 		source: u,
 		target: null,
 	}));
 	const diffResult: DiffResult = {
 		diffs,
-		added: source.units.length,
+		added: exportedSourceUnits.length,
 		modified: 0,
 		deleted: 0,
 		unchanged: 0,
@@ -753,6 +758,20 @@ export async function sync_CoreProc(
 	const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
 	const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
+	// 廃止need（keep/backfill）の正規化はパース直後に行う（独立ユニット判定にも影響するため）
+	normalizeLegacyNeeds(source.units);
+	normalizeLegacyNeeds(target.units);
+
+	// 独立ユニット（target側パススルー保護）の判定 Set。
+	// ensureMdaitMarkerHash がマーカーなしユニットへメモリ上で素hashを合成するため、
+	// 「ファイルに永続化されたマーカー」を区別できる ensure 前に作る必要がある
+	// （パーサーはマーカーなしユニットに hash 空のマーカーを付けるため hash の有無で判定する）。
+	// from 付き need:isolate は独立ユニットにしない: 上流ペアは Phase 1 で維持され、
+	// need の凍結（suppressNeed）で伝播だけが止まる
+	const independentTargets = new Set(
+		target.units.filter((u) => u.marker?.hash && !u.marker.from && u.marker.need !== "verify-deletion"),
+	);
+
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const frontmatterSync = syncFrontmatterMarkers(
 		source.frontMatter,
@@ -784,9 +803,8 @@ export async function sync_CoreProc(
 	ensureMdaitMarkerHash(source.units);
 	ensureMdaitMarkerHash(target.units);
 
-	// ユニットの対応付け
-	// ユニットの対応付け（位置ベース）
-	let matchResult = sectionMatcher.match(source.units, target.units);
+	// ユニットの対応付け（位置ベース。独立ユニットは対応付け対象外）
+	let matchResult = sectionMatcher.match(source.units, target.units, independentTargets);
 
 	// AIアライン: adopt + align 指定かつ aligner 注入時のみ、位置ベース結果を AI で差分審査する。
 	// 応答不正・候補なし・上限超過は matchResult をそのまま使う（位置ベースへフォールバック）。
@@ -802,6 +820,8 @@ export async function sync_CoreProc(
 				config,
 				{ sourceLang: transPair.sourceLang, targetLang: transPair.targetLang },
 				targetFile,
+				undefined,
+				independentTargets,
 			);
 			matchResult = aligned.matchResult;
 			alignCorrections = aligned.summary.accepted;
@@ -841,23 +861,14 @@ export async function sync_CoreProc(
 	await unitRegistryManager.migrateNotes(noteMigrations);
 
 	// 同期結果の生成（孤立ターゲットの処理はポリシーに従う。
-	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）/ keep=need:keepで恒久保持）
+	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）。
+	// 独立ユニットはポリシーに関わらず保持、マーカーなし孤立は need:review で一次受けする）
 	const syncedResult = sectionMatcher.createSyncedTargets(
 		matchResult,
 		config.getOrphanTargetPolicy(),
+		independentTargets,
 	);
 	const syncedUnits = syncedResult.units;
-
-	// backfill: 孤立ターゲットに対応する原文側プレースホルダを生成（need:backfill）
-	let backfilled = 0;
-	if (syncedResult.backfillTargets.length > 0) {
-		backfilled = sectionMatcher.insertBackfillPlaceholders(
-			source.units,
-			target.units,
-			matchResult,
-			syncedResult.backfillTargets,
-		);
-	}
 
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
@@ -865,7 +876,7 @@ export async function sync_CoreProc(
 	diffResult.adopted = adopted;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
-	diffResult.backfilled = backfilled;
+	diffResult.orphanReviewed = syncedResult.orphanReviewed;
 	diffResult.alignCorrections = alignCorrections;
 
 	// 同期結果をMarkdownオブジェクトとして構築
@@ -912,6 +923,23 @@ export async function sync_CoreProc(
 	});
 
 	return diffResult;
+}
+
+/**
+ * 廃止された need 語彙を新モデルへ正規化する（決定的・冪等・AI不使用）。
+ * - need:keep → need除去（fromなしの素hashマーカー＝独立ユニットとして意味的に等価）
+ * - need:backfill → need:review（原文側プレースホルダの整備/削除を人間の判断に委ねる）
+ * @param units ユニットの配列（source/target 両方に適用する）
+ */
+export function normalizeLegacyNeeds(units: MdaitUnit[]): void {
+	for (const unit of units) {
+		if (!unit.marker) continue;
+		if (unit.marker.need === "keep") {
+			unit.marker.removeNeedTag();
+		} else if (unit.marker.need === "backfill") {
+			unit.marker.setNeed("review");
+		}
+	}
 }
 
 /**
@@ -971,13 +999,17 @@ function updateSectionHashes(
 			const hadFrom = !!target.marker?.from;
 			const adoptTarget = adopt && !hadFrom && target.content.trim() !== "";
 
+			// ペアのどちらか一方が isolate の場合は need を凍結する（hash/from のみ最新化し、
+			// 新しい翻訳需要を流さない。target 側 isolate は revise による isolate 上書きも防ぐ）
+			const suppressNeed = source.marker?.need === "isolate" || target.marker?.need === "isolate";
+
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(
 				sourceHash,
 				targetHash,
 				source.marker,
 				target.marker,
-				{ adoptTarget },
+				{ adoptTarget, suppressNeed },
 			);
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
@@ -1000,7 +1032,7 @@ function updateSectionHashes(
 		}
 
 		// targetのみ存在: 孤立targetの処理
-		// need:keep の独自ユニットもハッシュのみ最新化する（syncSourceMarkerはneed/fromに触れない）
+		// 独立ユニットもハッシュのみ最新化する（syncSourceMarkerはneed/fromに触れない）
 		if (!source && target) {
 			const targetHash = calculateHash(target.content);
 			recordMigration(target.marker?.hash, targetHash);

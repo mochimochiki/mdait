@@ -290,5 +290,116 @@ suite("marker-sync", () => {
 				"改訂前の再変更時はneed:revise@src123が保持されるべき",
 			);
 		});
+
+		suite("adoptTarget オプション（既存対訳の採用）", () => {
+			test("from新規確立＋needなし＋adopt → need:review が付き既訳が採用される", () => {
+				// マーカーなし既訳のsync: ensureMdaitMarkerHashによりhashのみのマーカーが付いた状態
+				const tgtMarker = new MdaitMarker("tgt123");
+				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
+					adoptTarget: true,
+				});
+				assert.strictEqual(result.targetMarker.from, "src123");
+				assert.strictEqual(result.targetMarker.need, "review");
+			});
+
+			test("adoptなしの同条件では need:translate（従来動作の維持）", () => {
+				const tgtMarker = new MdaitMarker("tgt123");
+				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker);
+				assert.strictEqual(result.targetMarker.need, "translate");
+			});
+
+			test("adoptでも新規ターゲット（マーカーなし）は need:translate", () => {
+				const result = syncMarkerPair("src123", "src123", null, null, {
+					adoptTarget: true,
+				});
+				assert.strictEqual(result.targetMarker.need, "translate");
+			});
+
+			test("adoptでも既にfrom確立済みのユニットには影響しない", () => {
+				const tgtMarker = new MdaitMarker("tgt123", "src123", null);
+				const result = syncMarkerPair("src123", "tgt123", new MdaitMarker("src123"), tgtMarker, {
+					adoptTarget: true,
+				});
+				assert.strictEqual(result.targetMarker.need, null);
+			});
+
+			test("adopt済みユニットの2回目のsyncは無変更（冪等性）", () => {
+				const tgtMarker = new MdaitMarker("tgt123");
+				const first = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
+					adoptTarget: true,
+				});
+				// 2回目: from確立済み・need:review
+				const second = syncMarkerPair("src123", "tgt123", first.sourceMarker, first.targetMarker, {
+					adoptTarget: true,
+				});
+				assert.strictEqual(second.targetMarker.from, "src123");
+				assert.strictEqual(second.targetMarker.need, "review");
+				assert.strictEqual(second.targetMarker.hash, "tgt123");
+			});
+
+			test("adoptで採用されたユニットはtransの対象にならない（needsTranslation=false）", () => {
+				const tgtMarker = new MdaitMarker("tgt123");
+				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
+					adoptTarget: true,
+				});
+				assert.strictEqual(result.targetMarker.needsTranslation(), false);
+			});
+
+			test("adopt採用後にソースが変更されたら通常のreviseフローに乗る", () => {
+				const tgtMarker = new MdaitMarker("tgt123", "src123", null); // レビュー承認済み（need除去済み）
+				const result = syncMarkerPair("src456", "tgt123", new MdaitMarker("src456"), tgtMarker);
+				assert.strictEqual(result.targetMarker.need, "revise@src123");
+			});
+		});
+
+		suite("suppressNeed オプション（isolateペアの凍結）", () => {
+			test("ソース変更時、hashとfromは更新されるがneedが付かないこと（reviseを流さない）", () => {
+				const existingSource = new MdaitMarker("src123", null, "isolate");
+				const existingTarget = new MdaitMarker("tgt456", "src123", null);
+
+				const result = syncMarkerPair("src789", "tgt999", existingSource, existingTarget, {
+					suppressNeed: true,
+				});
+
+				assert.strictEqual(result.sourceMarker.hash, "src789");
+				assert.strictEqual(result.sourceMarker.need, "isolate", "source側のneedは変更されないこと");
+				assert.strictEqual(result.targetMarker.hash, "tgt999");
+				assert.strictEqual(result.targetMarker.from, "src789");
+				assert.strictEqual(result.targetMarker.need, null, "reviseが付かないこと");
+			});
+
+			test("既存のneedはそのまま維持されること（revise@のスナップショットも書き換えない）", () => {
+				const existingSource = new MdaitMarker("src789", null, "isolate");
+				const existingTarget = new MdaitMarker("tgt456", "src789");
+				existingTarget.setReviseNeed("src123");
+
+				const result = syncMarkerPair("src999", "tgt456", existingSource, existingTarget, {
+					suppressNeed: true,
+				});
+
+				assert.strictEqual(result.targetMarker.from, "src999");
+				assert.strictEqual(result.targetMarker.need, "revise@src123", "既存needは不変であること");
+			});
+
+			test("新規ターゲットにも need:translate を付与しないこと", () => {
+				const result = syncMarkerPair("src123", "tgt456", new MdaitMarker("src123", null, "isolate"), null, {
+					suppressNeed: true,
+				});
+				assert.strictEqual(result.targetMarker.from, "src123");
+				assert.strictEqual(result.targetMarker.need, null);
+			});
+
+			test("変更なし時は何も変わらないこと（冪等）", () => {
+				const existingSource = new MdaitMarker("src123", null, "isolate");
+				const existingTarget = new MdaitMarker("tgt456", "src123", null);
+
+				const result = syncMarkerPair("src123", "tgt456", existingSource, existingTarget, {
+					suppressNeed: true,
+				});
+
+				assert.strictEqual(result.changed, false);
+				assert.strictEqual(result.targetMarker.need, null);
+			});
+		});
 	});
 });

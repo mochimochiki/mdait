@@ -36,7 +36,7 @@ export interface AlignMatchResult {
  * 位置ベース matchResult を AI で差分審査し、修正提案を適用した matchResult を返す。
  *
  * - 審査対象は「both-present かつ target が from アンカーを持たない」位置ベースペア
- * - 既に from を持つ（Phase 1）ペア・need:keep ターゲットは審査対象外（locked）
+ * - 既に from を持つ（Phase 1）ペア・独立ユニット（need:isolate / independentTargets）は審査対象外（locked）
  * - 修正提案は1件ずつバリデーション（範囲・単射性・locked・confidence）し不正のみ棄却
  * - 応答不正・上限超過・候補なし・ユニット過多は matchResult をそのまま返す（位置ベースへフォールバック）
  */
@@ -49,16 +49,23 @@ export async function alignMatchResult(
 	langs: { sourceLang: string; targetLang: string },
 	fileContext?: string,
 	token?: vscode.CancellationToken,
+	independentTargets?: ReadonlySet<MdaitUnit>,
 ): Promise<AlignMatchResult> {
 	const summary = createEmptyAlignSummary();
 
-	// locked（審査対象外）の抽出: from アンカー済みペア（Phase 1）と need:keep ターゲット
+	// locked（審査対象外）の抽出: from アンカー済みペア（Phase 1）と独立ユニット
 	const lockedSourceIndexes = new Set<number>();
 	const lockedTargetIndexes = new Set<number>();
 	for (let i = 0; i < targetUnits.length; i++) {
 		const t = targetUnits[i];
-		if (t.marker?.from || t.marker?.need === "keep") {
+		if (t.marker?.from || t.marker?.need === "isolate" || independentTargets?.has(t)) {
 			lockedTargetIndexes.add(i);
+		}
+	}
+	// isolate の source は from 一致でのみマッチ可（伝播停止）のため AI の再対応付け対象にしない
+	for (let i = 0; i < sourceUnits.length; i++) {
+		if (sourceUnits[i].marker?.need === "isolate") {
+			lockedSourceIndexes.add(i);
 		}
 	}
 	// 位置ベースの both-present ペアのうち、target が from を持つものは source 側も locked

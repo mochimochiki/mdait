@@ -16,7 +16,7 @@
 | `sync.level` | 数値 | `3` | ユニット境界の見出しレベル（h1〜hN） |
 | `sync.autoSyncOnSave` | 真偽値 | `true` | 保存時に自動同期 |
 | `sync.autoDelete` | 真偽値 | `true` | 孤立ユニット自動削除（旧設定。`orphanTargetPolicy` 推奨） |
-| `sync.orphanTargetPolicy` | 文字列 | `"delete"` | 孤立ユニットの処理（`delete`/`verify`/`keep`/`backfill`） |
+| `sync.orphanTargetPolicy` | 文字列 | `"delete"` | 管理済み孤立ユニットの処理（`delete`/`verify`） |
 | `sync.copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`/`false` または拡張子ホワイトリスト |
 | `ai.provider` | 文字列 | — | `vscode-lm` / `openai` / `ollama` |
 | `ai.model` | 文字列 | — | 使用するモデル名 |
@@ -115,14 +115,14 @@
 | `level` | 数値 | `3` | ユニット境界とする見出しの最大レベル（例: `3` = h1〜h3） |
 | `autoSyncOnSave` | 真偽値 | `true` | ファイル保存時に自動で同期を実行 |
 | `autoDelete` | 真偽値 | `true` | ソースに存在しない孤立ユニットを自動削除（`true`→`delete`、`false`→`verify` に対応する旧設定） |
-| `orphanTargetPolicy` | 文字列 | `"delete"` | 孤立ユニットの処理ポリシー: `"delete"`（自動削除）/ `"verify"`（`need:verify-deletion` 付与）/ `"keep"`（`need:keep` で恒久保持）/ `"backfill"`（原文側へ逆翻訳で埋め戻し）。`autoDelete` より優先 |
+| `orphanTargetPolicy` | 文字列 | `"delete"` | 管理済み（`from` あり）孤立ユニットの処理ポリシー: `"delete"`（自動削除）/ `"verify"`（`need:verify-deletion` 付与）。`autoDelete` より優先。旧値 `"keep"`/`"backfill"` は警告のうえ `"verify"` として解釈。独立ユニット（`from` なし）・`need:isolate` ユニットはポリシーの対象外で常に保持（[sync.md](sync.md) 参照） |
 | `copyAssets` | 真偽値 \| 文字列[] | `true` | sync 時に差分ユニット内のアセットをターゲットにコピー。`true`=全コピー / `false`=コピーしない / `[".png", ".jpg"]` のような拡張子ホワイトリスト |
 
 ```json
 "sync": {
   "level": 3,
   "autoSyncOnSave": true,
-  "autoDelete": true,
+  "orphanTargetPolicy": "delete",
   "copyAssets": true
 }
 ```
@@ -327,7 +327,7 @@ prompts: ["trans.translate"]
   "sync": {
     "level": 3,
     "autoSyncOnSave": true,
-    "autoDelete": true
+    "orphanTargetPolicy": "delete"
   },
   "trans": {
     "contextSize": 1,

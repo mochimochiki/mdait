@@ -7,6 +7,7 @@ import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
  * need語彙 × コマンド経路のマトリクステスト。
  * 各needフラグに対する trans（needsTranslation）・tm.commit（isTmCommitTarget）・
  * マーカー往復（parse/toString）の期待動作を全組合せで固定する。
+ * tm.commit は「from あり ∧ need なし」のみ対象（包括除外）。
  * 新しいneed語彙を追加する際はこの表に行を追加すること。
  */
 suite("need語彙×コマンドのマトリクス", () => {
@@ -23,14 +24,9 @@ suite("need語彙×コマンドのマトリクス", () => {
 		{ need: "translate", expectTranslatable: true, expectTmCommit: false },
 		{ need: "revise@old123", expectTranslatable: true, expectTmCommit: false },
 		{ need: "review", expectTranslatable: false, expectTmCommit: false },
-		{ need: "verify-deletion", expectTranslatable: false, expectTmCommit: true },
-		{ need: "keep", expectTranslatable: false, expectTmCommit: false },
-		{ need: "backfill", expectTranslatable: false, expectTmCommit: true },
+		{ need: "verify-deletion", expectTranslatable: false, expectTmCommit: false },
+		{ need: "isolate", expectTranslatable: false, expectTmCommit: false },
 	];
-
-	// NOTE: need:backfill は原文側プレースホルダ（fromなし）に付くフラグであり、
-	// from付きで現れることは通常ない。上の expectTmCommit:true は「from付きなら対象」という
-	// フィルタ実装の事実を固定するもので、実運用ではfromなし＝noFromスキップになる。
 
 	for (const row of matrix) {
 		const label = row.need ?? "(なし)";
@@ -58,23 +54,19 @@ suite("need語彙×コマンドのマトリクス", () => {
 		});
 	}
 
-	test("need:keep はfromなしマーカー形式（<!-- mdait hash need:keep -->）で往復できる", () => {
-		const marker = new MdaitMarker("hash1", null, "keep");
+	test("need:isolate はfromなしマーカー形式（<!-- mdait hash need:isolate -->）で往復できる", () => {
+		const marker = new MdaitMarker("hash1", null, "isolate");
 		const text = marker.toString();
-		assert.strictEqual(text, "<!-- mdait hash1 need:keep -->");
+		assert.strictEqual(text, "<!-- mdait hash1 need:isolate -->");
 		const parsed = MdaitMarker.parse(text);
 		assert.ok(parsed);
-		assert.strictEqual(parsed.need, "keep");
+		assert.strictEqual(parsed.need, "isolate");
 		assert.strictEqual(parsed.from, null);
 	});
 
-	test("need:backfill はfromなしマーカー形式（<!-- mdait hash need:backfill -->）で往復できる", () => {
-		const marker = new MdaitMarker("hash1", null, "backfill");
-		const text = marker.toString();
-		assert.strictEqual(text, "<!-- mdait hash1 need:backfill -->");
-		const parsed = MdaitMarker.parse(text);
-		assert.ok(parsed);
-		assert.strictEqual(parsed.need, "backfill");
-		assert.strictEqual(parsed.from, null);
+	test("fromなしの素hashマーカー（独立ユニット）はtm.commit対象にならない", () => {
+		const marker = new MdaitMarker("hash1");
+		const unit = new MdaitUnit(marker, "", 0, "content", 0, 10);
+		assert.strictEqual(isTmCommitTarget(unit), false);
 	});
 });

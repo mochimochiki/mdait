@@ -1,8 +1,8 @@
-# 孤立ユニットの統合モデル（isolate と判断サーフェス）
+# 孤立ユニットの統合モデル（isolate と独立ユニット）
 
-原文・訳文どちらにも「相手のいない章」（孤立ユニット）は往々にして意図的に存在する（片方言語だけの補足・FAQ・ローカル告知など）。「en が多い＝訳漏れ」「ja が多い＝翻訳対象」と機械的に決めつけると、意図された独自章を削除したり、翻訳すべきでない章を翻訳してしまう。本書はこの孤立の扱いを**統合的な1つのモデル**として設計し、増分ロードマップに落とす。
+原文・訳文どちらにも「相手のいない章」（孤立ユニット）は往々にして意図的に存在する（片方言語だけの補足・FAQ・ローカル告知など）。「en が多い＝訳漏れ」「ja が多い＝翻訳対象」と機械的に決めつけると、意図された独自章を削除したり、翻訳すべきでない章を翻訳してしまう。本書はこの孤立の扱いを**統合的な1つのモデル**として定義する。
 
-> 本書は設計方針の基準文書。実装前に必ず参照する。決定は [adr.md](../adr.md) の ADR-260706-02。取り込みフロー全体は [command_ai-sync.md](command_ai-sync.md)。
+> 本書は設計方針の基準文書。実装前に必ず参照する。決定は [adr.md](../adr.md) の ADR-260711-03（ADR-260706-02 を更新）。取り込みフロー全体は [command_ai-sync.md](command_ai-sync.md)、sync の孤立処理は [command_sync.md](command_sync.md)。
 
 ## 中心原理: 孤立は「ユニットの属性」ではなく「ペア（方向）との関係」
 
@@ -13,7 +13,7 @@
 
 したがって孤立は unit の boolean 属性ではなく、**役割（原文役割 / 訳文役割）ごとに独立**して判定される関係である。
 
-## マーカーは既にこの大半を構造で表せている
+## マーカー構造への読み替え
 
 マーカーは `<!-- mdait {hash} from:{hash} need:{flag} -->`（形式は不変条件）。3枠の意味を関係モデルに読み替えると:
 
@@ -21,99 +21,104 @@
 - **`hash` の有無 = 下流アンカーになれるか**。hash があれば下流ペアが自動でそれを拾って `need:translate` を生成する（＝下流へ伝播する）。
 - 1マーカーが `hash`（下流用アンカー）と `from`（上流リンク）を**同時に持てる**ため、ピボットの「en は ja の訳文でありつつ他言語の原文」は既存構造で破綻しない（`ja→en→de` チェーンは実装・テスト済み）。
 
-この帰結として、**「訳文としてのみ孤立（ja には無いが下流には流す）」は素の `<!-- mdait {enHash} -->`（from なし・need なし）で自然に表現できる**（＝ユーザー洞察「from を消して hash だけなら孤立かつ必要」）。
+**「訳文としてのみ孤立（ja には無いが下流には流す）」は素の `<!-- mdait {enHash} -->`（from なし・need なし）で構造的に表現される。** 原文役割の孤立（＝下流に相手を作らない）だけが明示語彙 `need:isolate` を必要とする — 原文側は「hash のみ」が翻訳待ちの正常状態であり、そこに孤立の意味を載せられないため。
 
-## 非対称性: 原文役割の孤立だけが明示フラグを要る
-
-| 側 | 「hash のみ・from なし」の現行の意味 | 意図的孤立を構造で表せるか |
-|---|---|---|
-| 訳文（en） | 上流に origin が無い＝ここが起点 | ✅ 構造だけで表せる |
-| 原文（ja） | **これから翻訳せよ**（翻訳待ちの正常状態） | ❌ 明示フラグが必要 |
-
-原文側は「hash のみ」が翻訳待ちの正常状態なので、そこに孤立の意味を載せられない。**原文役割の孤立（＝下流に相手を作らない）だけが新しい明示マーカーを必要とする。**
-
-## `need:keep` は直交する2概念を混ぜている → `need:isolate` で分離
-
-いい仕様には、`need:keep` が今1語に押し込んでいる2つを分ける:
-
-1. **保持（Preservation）** — このユニットを削除しない
-2. **伝播（Propagation）** — このユニットは、ある方向のペアで相手（訳文/原文）を持つべきか
-
-伝播は**方向つき・ペアごと**。ピボットで決定的:
-
-- 「en 独自章を de/fr には流したい（訳文孤立）」→ 伝播 **ON**
-- 「en ローカル専用、どこにも出さない（真の孤立）」/「ja 独自章を en に出さない」→ 伝播 **OFF**
-
-`need:keep` はこれを区別できない。そこで**伝播停止を表す新語彙 `need:isolate` を導入する**（決定）。
-
-### need 語彙の整理（isolate 追加後）
-
-| need | 保持 | 下流伝播 | from | 役割・意味 |
-|------|:---:|:---:|:---:|------|
-| （なし・hashのみ） | ✅ | ✅ | 無 | 訳文役割の孤立（上流なし・下流へ流す）。＝素の起点ユニット |
-| （なし・hashのみ） | ✅ | ✅ | 有 | 通常の対訳（上流あり・下流アンカー） |
-| `translate` | — | — | — | 未翻訳。相手を作る |
-| `revise@{h}` | — | — | 有 | 原文改訂により再翻訳待ち |
-| `review` | ✅ | — | 有/無 | 採用/検証待ちの**人間ゲート**（対応の妥当性が未確定＝穴あきの一次受け） |
-| `keep` | ✅ | ✅ | 無 | 保持。伝播は hash に委ねる（訳文孤立だが下流展開は許す） |
-| **`isolate`** | ✅ | ❌ | 有/無 | **保持＋伝播停止**。原文役割の孤立 / 真のローカル。sync は source 側 isolate に `need:translate` を生成しない |
-| `backfill` | ✅ | — | 有(自hash) | 訳文孤立を原文側へ逆翻訳で埋め戻す途中状態 |
-| `verify-deletion` | ✅ | — | 有/無 | 原文削除に伴う削除確認 |
-
-### 役割の真理値表（(from有無) × (伝播停止 isolate)）
+### 役割の真理値表（from × isolate）
 
 | from | isolate | 役割 | 例 | マーカー |
 |:---:|:---:|------|------|------|
-| なし | OFF | 訳文としてのみ孤立（上流なし・下流あり） | グローバル版にはあるが ja に無い en 章 | `{hash}` |
-| 有/無 | **ON** | 原文としてのみ孤立（下流に出さない） | ja 独自の補足章 / en ローカル専用 | `{hash} [from:x] need:isolate` |
-| なし | ON | 両方孤立（真のローカル） | 本当に en だけの章 | `{hash} need:isolate` |
-| あり | OFF | 通常の対訳 | — | `{hash} from:x` |
+| なし | OFF | 訳文としてのみ孤立（上流なし・下流あり） | グローバル版にはあるが ja に無い en 章 | `<!-- mdait {hash} -->` |
+| 有/無 | **ON** | 原文としての孤立（下流に出さない） | ja 独自の補足章 | `<!-- mdait {hash} [from:x] need:isolate -->` |
+| なし | ON | 両方孤立（真のローカル） | 本当に en だけの章 | `<!-- mdait {hash} need:isolate -->` |
+| あり | OFF | 通常の対訳 | — | `<!-- mdait {hash} from:x -->` |
 
-**必要な新情報は「下流伝播を止めるか」の1ビット（＝isolate）だけ**。上流孤立は `from` 無しで既に表せている。
+必要な新情報は「下流伝播を止めるか」の1ビット（＝isolate）だけ。上流孤立は `from` 無しで既に表せている。
 
-## 穴あきパターンの二段処理: 決めつけず need:review、レポートで人間へ
+## need 語彙（最終形）
 
-AIアライン後も対応の付かなかったユニット（穴あき＝どちらかにしか無い章）は、**その場で isolate / delete / translate を機械が決めつけない**。理由: 「補足として意図的に孤立」なのか「単なる訳漏れ／翻訳対象」なのかは、多くの場合ドキュメントの意図を知る人間にしか判断できない。
+| need | from | 意味 | trans対象 | TM commit対象 |
+|---|---|---|:---:|:---:|
+| なし | あり | 通常の対訳（同期済み） | ✕ | ✅ |
+| なし | なし | **独立ユニット**（訳文役割の孤立。上流なし・下流へは伝播する起点） | ✕ | ✕（noFrom） |
+| `translate` | あり | 未翻訳 | ✅ | ✕ |
+| `revise@{h}` | あり | 原文改訂により再翻訳待ち | ✅ | ✕ |
+| `review` | あり/なし | 人間ゲート（adopt採用・穴あき一次受け） | ✕ | ✕ |
+| `isolate` | あり/なし | **保持＋下流伝播停止**（原文役割の孤立／真のローカル） | ✕ | ✕ |
+| `verify-deletion` | あり/なし | 原文削除に伴う削除確認 | ✕ | ✕ |
 
-処理は二段:
+`need:keep` と `need:backfill` は**廃止**（後述のマイグレーション参照）。
 
-1. **一次受け（決定的）**: align 後の未対応ユニットを **いったん `need:review`** にする（既訳・原文とも本文不変）。ここまでは AI 不使用・冪等（ADR-260705-01 整合）。
-2. **判断（人間）**: レポートで各ユニットを「**孤立(isolate) / 不要(delete) / 翻訳(translate)**」に分類させ、その選択を後処理が正しいマーカー変異へマッピングする。AIレビューは分類の**提案**（訳文孤立らしい/訳漏れらしい）まで行い、確定はしない。
+## 独立ユニット（target 側パススルー保護）
 
-## レポートは「報告」ではなく「判断の場」
+**パース時点でファイルに永続化されたマーカー**を持つ target ユニットのうち、**from なし かつ `need !== "verify-deletion"`** のものを**独立ユニット**とする（素 hash / from なし `need:isolate` / need:review の一次受け保留 / その他の異常系も安全側で保持）。
 
-現行のリンク付き仮想ドキュメント（`mdait-ai-sync` / `mdait-ai-review` スキーム）を、**人間の意思決定サーフェス**へ発展させる。単なる結果一覧ではなく、穴あき・低確信・mismatch の各ユニットに対して人間が選択肢を選ぶと、後処理が対応するマーカー変異を決定的に適用する:
+独立ユニットは SectionMatcher の対応付け対象外・孤立処理（orphanTargetPolicy）の対象外で、無条件にパススルー保持される（`kept` として集計・不変・冪等）。
 
-| 判断 | 後処理（決定的・AI不使用） |
-|------|------|
-| 孤立（意図的・下流に流す） | 素の hash 状態に整える（from除去、need除去） |
-| 孤立（意図的・ローカル／原文opt-out） | `need:isolate` を付与 |
-| 不要（削除してよい） | ユニット削除（or `need:verify-deletion`） |
-| 翻訳が必要 | `need:translate` を付与（訳漏れ→再翻訳フローへ） |
-| 採用（対応は正しい） | `need:review` 除去（承認） |
+**from 付き `need:isolate` は独立ユニットにしない**: isolate は「下流に出さない」であって上流リンクの切断ではないため、上流ペアは Phase 1（from 一致）で維持され、need の凍結（後述）で伝播だけが止まる。原文消失で孤立した場合は分岐2の手前で isolate 自体が保持を保証する（policy 対象外）。
 
-この後処理は決定的・冪等であり、AI を使わない（AI は提案まで）。判断サーフェス自体はコマンド確認UIと同じく明示起動の下に置く。
+実装上の要点: `sync_CoreProc` は `ensureMdaitMarkerHash` でマーカーなしユニットにメモリ上の素 hash マーカーを合成するため、「ファイルに書かれていた素 hash（＝ユーザーの意図的な独立宣言）」と区別する必要がある。判定 Set（`independentTargets`）は `normalizeLegacyNeeds` 適用後・ensure **前**に構築し、`SectionMatcher.match` と `createSyncedTargets` に渡す。
+
+## 孤立ターゲットの三分岐
+
+match 結果の `{source: null, target}` ペア（対応する原文が無い target）は3通りに分岐する:
+
+| # | 条件 | 処理 | 集計 |
+|---|------|------|------|
+| 1 | 独立ユニット（`independentTargets` に含まれる）または `need:isolate` | パススルー保持 | `kept` |
+| 2 | `from` が残っている（dangling）＝管理済みで原文を失った | `orphanTargetPolicy`: `delete`=削除 / `verify`=`need:verify-deletion` 付与 | `orphanVerified`（verify時） |
+| 3 | `from` なし かつ独立ユニットでない（＝マーカーなしで書かれた管理外コンテンツ） | **穴あき一次受け**: `setNeed("review")`（from は付けない） | `orphanReviewed` |
+
+分岐3の根拠は「**決めつけず人間へ**」: マーカーなしの訳文側コンテンツが「意図的な独自章」か「訳漏れの残骸」か「不要物」かは、ドキュメントの意図を知る人間にしか判断できない。sync は削除も翻訳も決めつけず `need:review` で保護し、人間が「素 hash 化（独自章宣言）/ `need:isolate` / 削除」を選ぶ。adopt・定常 sync 共通。次回 sync では「永続化された from なし need:review」として独立ユニット（分岐1）になるため冪等。
+
+旧モデルとの挙動差: 旧仕様ではマーカーなし孤立 target にも policy（デフォルト `delete`）が適用され黙って削除されていた。新モデルでは need:review 保護に変わる（安全側）。policy が適用されるのは分岐2（from dangling）のみ。
+
+## isolate の伝播停止セマンティクス（source 側）
+
+`need:isolate` の source ユニットは「下流に翻訳需要を流さない」:
+
+- **syncNew**: target 生成から除外される（target ファイルに出力されない）
+- **match**: Phase 1（from 一致）でのみマッチ可。Phase 2（順序ベース推定）の対象外。Phase 1 でマッチしなかった isolate source は `{source, target: null}` として hash 更新のみ行う
+- **空 target 非生成**: 未マッチの isolate source に対して `need:translate` の空 target ユニットを生成しない
+- **ペア済みは凍結**: ペアの**どちらか一方**が isolate なら、`syncMarkerPair` は `suppressNeed` オプションで hash と from のみ更新し、`need:translate` / `need:revise` を一切付与しない（既存 need もそのまま）。target 側 isolate（ピボット中間ファイルの「下流に出さない」宣言）では、これが revise による isolate 上書きも防ぐ
+
+**凍結ペアの注意点**: リンクは維持されるが新しい翻訳需要が流れないため、原文を改訂し続けると訳文が静かにドリフトする。isolate を解除（need を外す）すれば次回 sync が通常の revise 検出に復帰する。ドリフトした凍結ペアの TM 汚染は `sourcePending` スキップ（後述）で防ぐ。
+
+## keep / backfill の廃止とマイグレーション
+
+**廃止理由**: 現実的な翻訳ワークフローで必要になる場面が非常に限定的だった。
+
+- `keep`（保持＋伝播は hash 任せ）は「from なし・need なしの素 hash」＝独立ユニットと意味的に等価であり、専用語彙が不要（keep は常に from なしだった）
+- `backfill`（訳文孤立を原文側へ逆翻訳で埋め戻す）は、原文ファイルへの書き込みという非対称な危険を伴う割に用途が限定的で、フローごと削除
+
+**マイグレーション**（`normalizeLegacyNeeds`。sync / syncNew のパース直後に source/target 両方へ適用。決定的・冪等・AI 不使用）:
+
+| レガシー need | 変換 | 意味 |
+|---|---|---|
+| `keep` | need 除去（素 hash 化） | 独立ユニットとして意味的に等価な形へ |
+| `backfill` | `need:review` | source 側プレースホルダを人間ゲートへ。人間が「原文として整備して review 解除」か「ユニット削除」を判断（手順は [adopt.md](../guide/ja/adopt.md)） |
+
+設定ファイルのレガシー値 `orphanTargetPolicy: "keep"` / `"backfill"` は警告ログを出して `"verify"` として解釈する（安全側）。型は `"delete" | "verify"` に縮小（スキーマ enum も同様）。
+
+## TM 整合（包括除外・sourcePending）
+
+- **`isTmCommitTarget` は包括方式**: 「from あり ∧ need が null」のみ commit 対象。列挙式除外で未知 need を素通しする穴（ADR-260704-07 の既知の潜在バグ）を構造的に塞いだ
+- **`TmSkipReason`** = `noFrom | needTranslate | needRevise | needReview | needIsolate | needOther | sourcePending`。translate / revise@ / review / isolate は明示分類、その他の need は `needOther`
+- **`sourcePending`**: ペア解決時に **source 側ユニットの marker に need が付いている場合はスキップ**する（例: isolate 凍結ペア、レガシー backfill→review プレースホルダ）。ドリフトした凍結ペアや同一内容プレースホルダの TM 汚染を防ぐ。`classifyTmSkipReason` 自体は target 単体の純関数のままで、sourcePending は commit 側で付与する
+
+独立ユニットは from を持たないため `noFrom` で自然に除外される。
 
 ## 不変条件との整合・限界
 
-- **マーカー形式は不変**。新概念は need 語彙拡張のみで足す。parser は `need:([\w@-]+)` なので `isolate` は既にパース可能。
-- **TM 汚染対策（守ること）**: `isTmCommitTarget` / `classifyTmSkipReason`（commit-filter.ts）は**列挙式除外**で未知 need を素通しする。`need:isolate` を追加時は必ず両方の除外に加える（ADR-260704-07 の穴）。`need:isolate` を TM スキップ理由にも足す。
+- **マーカー形式は不変**。新概念は need 語彙のみで表す。parser は `need:([\w@-]+)` なので `isolate` はそのままパース可能。
+- **独立ユニットは AI アラインの修正提案対象にも出さない**: matchResult 上のパススルーペア（`{source: null, target}`）は align の unmatchedTarget 候補から除外する。
 - **per-pair 粒度の限界**: マーカーは per-file・single-`from`。「en→de には出すが en→fr には出さない」を1マーカーで表すのは無理。**v1 は「全下流に対して伝播ON/OFF」の粒度に割り切る**。方向別抑制が要るなら `.mdait` の unit-state に方向キーで持つ将来拡張。
-- **primary ancestor（ADR-593）との接続**: TM は翻訳方向相対でなく primary origin を追う。孤立ユニットの primary は「自分自身」とみなす（上流が無いため）。
-- **AI 明示起動（ADR-260705-01）**: 穴あきの一次受け（need:review 付与）と判断後の後処理は決定的・AI不使用。分類の提案のみ AI（明示起動のレビュー内）で行う。
+- **primary ancestor との接続**: TM は翻訳方向相対でなく primary origin を追う。孤立ユニットの primary は「自分自身」とみなす（上流が無いため）。
+- **AI 明示起動（ADR-260705-01）**: 穴あきの一次受け（need:review 付与）・マイグレーション・パススルーはすべて決定的・AI 不使用・冪等。分類の**提案**のみ AI（明示起動のレビュー内）が行い、確定はしない。
 
-## 増分ロードマップ（順序）
+## 将来増分
 
-| # | 増分 | 概要 | 依存 |
-|---|------|------|------|
-| 1 | **`need:isolate` 導入（原文 opt-out）** | 語彙追加、sync が source 側 isolate に need:translate を生成しない、commit-filter 除外＋skip理由追加、keep/isolate の意味整理、StatusTree/hover 表示、l10n | — |
-| 2 | **孤立ロール宣言 UI** | CodeLens/コマンドで「この章を孤立に（訳文孤立=素hash / 原文孤立=isolate / 両方）」を宣言。orphanTargetPolicy=delete の事前警告もここ | 1 |
-| 3 | **穴あきエスカレーション（AIレビュー拡張）** | align 後の未対応を need:review にし、レポートで isolate/delete/translate を分類提案。mismatch の誤リンク型/内容差し替え型の区別（`from` の diff 有無で推定）も | 1 |
-| 4 | **レポート＝判断サーフェス** | リンク付き md を対話化し、人間の選択→決定的後処理（isolate/delete/translate/approve のマーカー変異）にマッピング | 2,3 |
-| 5 | **ガイダンス強化（関連改善）** | 誤リンク復旧手順の nextActions 明示（空ループ防止）、orphanTargetPolicy delete 罠の確認UI警告 | — |
-
-## パターンマトリクス追補（[command_ai-sync.md](command_ai-sync.md) へ反映）
-
-- **新規行**: 「原文（ja）に原文のみの補足章」→ 現状: `need:translate` が付き翻訳される（opt-out 不可）→ 解消: `need:isolate`（未着手・本書 #1）
-- **既存 #3 行（訳文独自章）更新**: デフォルト delete の罠 → 事前警告（#5）＋判断サーフェス（#4）で意図確認可能に
-- **既存 #5 行（訳抜け）更新**: partial の修正提案化に加え、穴あきの isolate/漏れ 分類を判断サーフェスで確定（#3,#4）
+| 増分 | 概要 |
+|------|------|
+| 孤立ロール宣言 UI | CodeLens/コマンドで「この章を孤立に（訳文孤立=素hash / 原文孤立=isolate / 両方）」を宣言 |
+| AIレビューでの孤立分類提案 | 一次受け need:review のユニットに対し「独自章らしい / 訳漏れらしい」の分類を AI が提案（確定はしない） |
+| レポート＝判断サーフェス | リンク付き md を対話化し、人間の選択（素hash化 / isolate / 削除 / 翻訳 / 承認）→決定的後処理のマーカー変異にマッピング |

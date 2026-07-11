@@ -43,7 +43,7 @@ export class MdFileHandler implements FileHandler {
 			revisionsNeeded: diffResult.revisionsNeeded ?? 0,
 			adopted: diffResult.adopted ?? 0,
 			kept: diffResult.kept ?? 0,
-			backfilled: diffResult.backfilled ?? 0,
+			orphanReviewed: diffResult.orphanReviewed ?? 0,
 			alignCorrections: diffResult.alignCorrections ?? 0,
 		};
 	}

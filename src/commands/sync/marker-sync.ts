@@ -168,6 +168,12 @@ export interface PairSyncOptions {
 	 * trans による既訳の上書きを防ぐ。呼び出し側は「ターゲット本文が空でない」ことを確認して渡すこと。
 	 */
 	adoptTarget?: boolean;
+	/**
+	 * isolate ペア（source が need:isolate）の凍結: hash / from は最新化するが、
+	 * setNeed / setReviseNeed を一切呼ばず既存の need を変更しない
+	 * （ペアのリンクは維持しつつ、新しい翻訳需要を下流に流さない）。
+	 */
+	suppressNeed?: boolean;
 }
 
 /**
@@ -204,9 +210,11 @@ export function syncMarkerPair(
 	// ターゲットハッシュを常に最新に更新
 	targetMarker.hash = targetHash;
 
-	// 新規ターゲットの場合は need:translate を設定
+	// 新規ターゲットの場合は need:translate を設定（suppressNeed 時は need を触らない）
 	if (isNewTarget) {
-		targetMarker.setNeed("translate");
+		if (!options?.suppressNeed) {
+			targetMarker.setNeed("translate");
+		}
 		return {
 			sourceMarker,
 			targetMarker,
@@ -219,22 +227,24 @@ export function syncMarkerPair(
 	if (oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
 
-		// 既存のrevise@{hash}がある場合、そのhashを保持する
-		const existingReviseHash = targetMarker.getOldHashFromNeed();
-		if (existingReviseHash) {
-			// すでにrevise待ち状態なので、スナップショットハッシュを保持
-			targetMarker.setReviseNeed(existingReviseHash);
-		} else if (targetMarker.need === "translate") {
-			// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
-			targetMarker.setNeed("translate");
-		} else if (oldSourceHash) {
-			// 翻訳済みでソースが変更された場合は新規revise設定
-			targetMarker.setReviseNeed(oldSourceHash);
-		} else if (options?.adoptTarget) {
-			// adopt: from新規確立＋本文ありの既存訳文はレビューに倒す（既訳のtrans上書きを防ぐ）
-			targetMarker.setNeed("review");
-		} else {
-			targetMarker.setNeed("translate");
+		if (!options?.suppressNeed) {
+			// 既存のrevise@{hash}がある場合、そのhashを保持する
+			const existingReviseHash = targetMarker.getOldHashFromNeed();
+			if (existingReviseHash) {
+				// すでにrevise待ち状態なので、スナップショットハッシュを保持
+				targetMarker.setReviseNeed(existingReviseHash);
+			} else if (targetMarker.need === "translate") {
+				// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
+				targetMarker.setNeed("translate");
+			} else if (oldSourceHash) {
+				// 翻訳済みでソースが変更された場合は新規revise設定
+				targetMarker.setReviseNeed(oldSourceHash);
+			} else if (options?.adoptTarget) {
+				// adopt: from新規確立＋本文ありの既存訳文はレビューに倒す（既訳のtrans上書きを防ぐ）
+				targetMarker.setNeed("review");
+			} else {
+				targetMarker.setNeed("translate");
+			}
 		}
 	}
 

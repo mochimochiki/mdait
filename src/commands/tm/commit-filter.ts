@@ -10,30 +10,15 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 /**
  * ユニットがTM処理対象かどうか判定する。
  *
- * 対象条件:
- * - from属性あり（ターゲットファイルのユニット）
- * - need:translate でない（翻訳済み）
- * - need:revise@ でない（旧版訳文）
- * - need:review でない（レビュー待ち）
- * - need:keep でない（独自ユニット。対訳が存在しない）
+ * 包括方式（許可リスト）: 「from属性あり ∧ need が null」のみ登録対象。
+ * need が何であれ付いているユニットは確定した対訳ではないため対象外とし、
+ * 未知の need が素通りする列挙の穴を構造的に塞ぐ。
  */
 export function isTmCommitTarget(unit: MdaitUnit): boolean {
 	if (!unit.marker?.from) {
 		return false;
 	}
-	if (unit.marker.need === "translate") {
-		return false;
-	}
-	if (unit.marker.need?.startsWith("revise@")) {
-		return false;
-	}
-	if (unit.marker.need === "review") {
-		return false;
-	}
-	if (unit.marker.need === "keep") {
-		return false;
-	}
-	return true;
+	return unit.marker.need === null;
 }
 
 /** TM登録スキップの理由 */
@@ -42,7 +27,9 @@ export type TmSkipReason =
 	| "needTranslate"
 	| "needRevise"
 	| "needReview"
-	| "needKeep";
+	| "needIsolate"
+	| "needOther"
+	| "sourcePending";
 
 /** スキップ理由の内訳（エージェントが「なぜコミットされないか」を診断するための集計） */
 export interface TmSkipReasonBreakdown {
@@ -50,43 +37,59 @@ export interface TmSkipReasonBreakdown {
 	needTranslate: number;
 	needRevise: number;
 	needReview: number;
-	needKeep: number;
+	needIsolate: number;
+	needOther: number;
+	/** ペア解決時に source 側ユニットへ need が付いていたためスキップした数（commit 側で集計） */
+	sourcePending: number;
 }
 
 /**
  * ユニットのTM登録スキップ理由を分類する。
  * 登録対象（スキップしない）の場合は null を返す。
+ * target 単体の純関数であり "sourcePending" は返さない（source 側の need は commit 側で判定する）。
  */
 export function classifyTmSkipReason(unit: MdaitUnit): TmSkipReason | null {
 	if (!unit.marker?.from) {
 		return "noFrom";
 	}
-	if (unit.marker.need === "translate") {
+	const need = unit.marker.need;
+	if (need === null) {
+		return null;
+	}
+	if (need === "translate") {
 		return "needTranslate";
 	}
-	if (unit.marker.need?.startsWith("revise@")) {
+	if (need.startsWith("revise@")) {
 		return "needRevise";
 	}
-	if (unit.marker.need === "review") {
+	if (need === "review") {
 		return "needReview";
 	}
-	if (unit.marker.need === "keep") {
-		return "needKeep";
+	if (need === "isolate") {
+		return "needIsolate";
 	}
-	return null;
+	// verify-deletion やレガシー値を含む、その他すべての need
+	return "needOther";
+}
+
+/** 空のスキップ理由内訳を生成する */
+export function emptyTmSkipReasonBreakdown(): TmSkipReasonBreakdown {
+	return {
+		noFrom: 0,
+		needTranslate: 0,
+		needRevise: 0,
+		needReview: 0,
+		needIsolate: 0,
+		needOther: 0,
+		sourcePending: 0,
+	};
 }
 
 /**
  * ユニット群のスキップ理由内訳を集計する
  */
 export function summarizeTmSkipReasons(units: readonly MdaitUnit[]): TmSkipReasonBreakdown {
-	const breakdown: TmSkipReasonBreakdown = {
-		noFrom: 0,
-		needTranslate: 0,
-		needRevise: 0,
-		needReview: 0,
-		needKeep: 0,
-	};
+	const breakdown = emptyTmSkipReasonBreakdown();
 	for (const unit of units) {
 		const reason = classifyTmSkipReason(unit);
 		if (reason) {

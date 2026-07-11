@@ -95,8 +95,8 @@
         },
         "orphanTargetPolicy": {
           "type": "string",
-          "enum": ["delete", "verify", "keep", "backfill"],
-          "description": "How to handle orphan target units (target-side units whose source unit no longer exists). \"delete\": remove automatically. \"verify\": keep with need:verify-deletion for manual confirmation. \"keep\": keep permanently with need:keep (sync/trans never touch them; excluded from translation progress). \"backfill\": generate a placeholder unit on the source side flagged need:backfill; translation then reverse-translates the target content into the source document. Takes precedence over autoDelete."
+          "enum": ["delete", "verify"],
+          "description": "How to handle orphan target units (managed target-side units whose source unit no longer exists). \"delete\": remove automatically. \"verify\": keep with need:verify-deletion for manual confirmation. Independent units (need:isolate, or a marker without from:) are always preserved regardless of this policy. Legacy values \"keep\" and \"backfill\" are deprecated and interpreted as \"verify\" with a warning. Takes precedence over autoDelete."
         },
         "autoSyncOnSave": {
           "type": "boolean",

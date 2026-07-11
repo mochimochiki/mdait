@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Configuration } from "../../../infra/config/configuration";
+import { Logger } from "../../../infra/logging/logger";
 import {
 	embeddedMarkerProvider,
 	externalMarkerProvider,
@@ -221,9 +222,14 @@ suite("Configuration orphanTargetPolicy", () => {
 		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
 	});
 
-	test("orphanTargetPolicy:keep が読み込まれること", async () => {
-		const config = await initWithSync({ orphanTargetPolicy: "keep" });
-		assert.strictEqual(config.getOrphanTargetPolicy(), "keep");
+	test("orphanTargetPolicy:verify が読み込まれること", async () => {
+		const config = await initWithSync({ orphanTargetPolicy: "verify" });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+	});
+
+	test("orphanTargetPolicy:delete が読み込まれること", async () => {
+		const config = await initWithSync({ autoDelete: false, orphanTargetPolicy: "delete" });
+		assert.strictEqual(config.getOrphanTargetPolicy(), "delete");
 	});
 
 	test("autoDelete と orphanTargetPolicy の両方指定時は orphanTargetPolicy が優先されること", async () => {
@@ -234,6 +240,46 @@ suite("Configuration orphanTargetPolicy", () => {
 	test("不正な orphanTargetPolicy 値は無視され autoDelete から解決されること", async () => {
 		const config = await initWithSync({ autoDelete: false, orphanTargetPolicy: "invalid" });
 		assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+	});
+
+	test("レガシー値 keep は警告の上 verify として解釈されること", async () => {
+		const logger = Logger.getInstance();
+		const warnings: string[] = [];
+		const listener = logger.addLogListener((_line, entry) => {
+			if (entry.level === "WARN" && entry.scope === "config") {
+				warnings.push(entry.message);
+			}
+		});
+		try {
+			const config = await initWithSync({ autoDelete: true, orphanTargetPolicy: "keep" });
+			assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+			assert.ok(
+				warnings.some((m) => m.includes("keep")),
+				"警告ログが出力されること",
+			);
+		} finally {
+			listener.dispose();
+		}
+	});
+
+	test("レガシー値 backfill は警告の上 verify として解釈されること", async () => {
+		const logger = Logger.getInstance();
+		const warnings: string[] = [];
+		const listener = logger.addLogListener((_line, entry) => {
+			if (entry.level === "WARN" && entry.scope === "config") {
+				warnings.push(entry.message);
+			}
+		});
+		try {
+			const config = await initWithSync({ autoDelete: true, orphanTargetPolicy: "backfill" });
+			assert.strictEqual(config.getOrphanTargetPolicy(), "verify");
+			assert.ok(
+				warnings.some((m) => m.includes("backfill")),
+				"警告ログが出力されること",
+			);
+		} finally {
+			listener.dispose();
+		}
 	});
 });
 

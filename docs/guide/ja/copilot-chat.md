@@ -57,7 +57,7 @@ mdait は VS Code の **LanguageModelTool API** を使い、6 つのツールを
   "data": {
     "totalUnits": 42,
     "translatedUnits": 35,
-    "needs": { "translate": 5, "revise": 2, "review": 0, "verifyDeletion": 0, "keep": 0, "backfill": 0, "other": 0 },
+    "needs": { "translate": 5, "revise": 2, "review": 0, "verifyDeletion": 0, "isolate": 0, "other": 0 },
     "filesWithNeeds": 3,
     "filesTranslated": 9
   },
@@ -147,9 +147,9 @@ Current translation status:
   "summary": "Translation completed for docs/en: 12 file(s) succeeded, 0 failed, 34 unit(s) translated.",
   "data": {
     "scope": "directory",
-    "totals": { "files": 12, "succeeded": 12, "failed": 0, "skippedNonTarget": 0, "translatedUnits": 34, "backfilledUnits": 0 },
+    "totals": { "files": 12, "succeeded": 12, "failed": 0, "skippedNonTarget": 0, "translatedUnits": 34 },
     "files": [ { "path": "...", "ok": true, "translatedUnits": 3 } ],
-    "remainingNeeds": { "translate": 0, "revise": 0, "review": 1, "verifyDeletion": 0, "keep": 0, "backfill": 0, "other": 0 }
+    "remainingNeeds": { "translate": 0, "revise": 0, "review": 1, "verifyDeletion": 0, "isolate": 0, "other": 0 }
   }
 }
 ```

@@ -4,6 +4,26 @@
 
 ---
 
+## ADR-260711-03: 孤立モデルを isolate＋独立ユニットに統合し keep/backfill を廃止する
+
+### 背景
+ADR-260706-02 の孤立モデルは `need:keep`（保持・伝播は hash 任せ）と `need:backfill`（原文への逆翻訳埋め戻し）を温存していたが、現実的な翻訳ワークフローで両者が必要になる場面は非常に限定的だった。keep は「from なし・need なしの素 hash」と意味的に等価で専用語彙が冗長、backfill は原文書き込みという非対称な危険を伴う。また列挙式の TM 除外（ADR-260704-07 の既知の穴）と「マーカーなし孤立 target をデフォルト delete で黙って削除する」挙動が残っていた。
+
+### 決定
+- **`need:keep` / `need:backfill` を廃止**する。keep は素 hash の**独立ユニット**（from なし・need なし＝訳文役割の孤立。パススルー保持・対応付け対象外）で代替し、backfill はフローごと削除する（`src/commands/trans/backfill.ts` 削除）。
+- **マイグレーションは決定的・冪等・AI不使用**: sync のパース直後に `normalizeLegacyNeeds` が `keep`→need 除去（素 hash 化）、`backfill`→`need:review`（人間が原文整備か削除を判断）に変換する。
+- **`need:isolate`（保持＋下流伝播停止）は ADR-260706-02 から継承して実装**: syncNew の target 生成から除外・未マッチ isolate source に空 target を生成しない・ペア済みは `suppressNeed` で凍結（hash/from のみ更新、revise を流さない）。
+- **マーカーなし孤立 target は「穴あき一次受け」**: policy を適用せず `need:review`（from なし）を付与して保護する（`orphanReviewed` 集計）。削除も翻訳も決めつけず人間へ。policy 適用は from dangling（管理済みで原文を失った）に限る。
+- **`orphanTargetPolicy` を `"delete" | "verify"` に縮小**。レガシー値 `keep`/`backfill` は警告して `verify` と解釈。`autoDelete` 後方互換は維持。
+- **TM commit-filter を包括方式に反転**: `isTmCommitTarget` は「from あり ∧ need null」のみ true（未知 need 素通しの穴を構造的に閉鎖）。source 側に need が残るペアは `sourcePending` としてスキップ（凍結ペア・プレースホルダの TM 汚染防止）。`verify-deletion` も commit 対象外に変更。
+
+### 理由
+「訳文役割の孤立＝from なし」は構造で自明であり、語彙は伝播停止の1ビット（isolate）だけで足りる。keep/backfill を落とすことで need 語彙と orphanTargetPolicy が最小になり、包括除外により TM 保護が列挙の更新漏れに依存しなくなる。マーカーなしコンテンツの一次受けは「機械が決めつけず人間へ」（ADR-260706-02 の判断サーフェス原則）を定常 sync にも一貫させ、黙った削除より安全側。
+
+### 備考
+- 挙動変更: マーカーなし孤立 target は旧デフォルト（delete）で黙って削除されていたが、新モデルでは need:review 保護になる。
+- 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）と詳細は [orphan-model.md](design/orphan-model.md)。
+
 ## ADR-260711-02: mdait.json を CustomTextEditorProvider のデフォルトエディタとし、JSON表示とのタブ内切り替えボタンを提供する
 
 ### 背景
@@ -110,6 +130,8 @@ AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-
 - 詳細: [command_ai-sync.md](design/command_ai-sync.md)。
 
 ## ADR-260706-02: 孤立ユニットの統合モデル（isolate 導入・判断サーフェス）
+
+> **更新**: ADR-260711-03 により更新（isolate 部分は継承、keep 温存と判断サーフェス前提を変更。keep/backfill は廃止）。
 
 ### 背景
 原文・訳文どちらにも意図的な独自章（片方言語だけの補足・FAQ）が存在しうるが、現行は「訳文孤立→orphanTargetPolicy（デフォルト delete）」「原文孤立→表現手段なしで need:translate が付き翻訳される」と非対称かつ意図を反映できない。ピボット翻訳（ja→en→de）では孤立が「原文役割/訳文役割」で別々に立つため、単純な boolean 属性では表せない。

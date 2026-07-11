@@ -19,3 +19,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Selection translation from editor context menu
 - Frontmatter translation support
 - Auto-sync on file save
+- `need:isolate` flag: preserve a unit and stop downstream propagation (no target generation, no translate/revise on paired targets; hash/from still tracked)
+- Independent units: target units with a persisted `from`-less marker are kept as-is, excluded from matching, orphan handling, translation, and TM commit
+
+### Changed
+
+- Unmarked orphan target content is no longer deleted by the orphan policy; sync now flags it with `need:review` (no `from`) so a human decides between declaring it independent, isolating it, or deleting it
+- `sync.orphanTargetPolicy` is narrowed to `"delete" | "verify"` and now applies only to managed orphans (units with a dangling `from`); legacy values `"keep"`/`"backfill"` are interpreted as `"verify"` with a warning
+- TM commit filter is now inclusive: only units with `from` and no `need` are committed (unknown `need` values no longer slip through); pairs whose source unit still carries a `need` are skipped as `sourcePending`, and `need:verify-deletion` units are no longer committed
+
+### Removed
+
+- `need:keep` and `need:backfill` flags and the backfill translation flow; sync migrates legacy markers deterministically (`keep` → plain-hash independent unit, `backfill` → `need:review` placeholder for manual resolution)
