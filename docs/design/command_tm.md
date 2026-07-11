@@ -32,7 +32,12 @@ trans 実行時、TMX の対訳が LLM への参照情報として自動注入�
 | その他の `need`（`verify-deletion` 含む） | スキップ `needOther` |
 | **source 側ユニットに `need` が残っている** | スキップ `sourcePending`（isolate 凍結ペアやレガシー backfill→review プレースホルダのドリフトによる TM 汚染防止。ペア解決時に commit 側で判定） |
 
-孤立モデルとの整合（独立ユニット・isolate 凍結ペアの除外根拠）は [orphan-model.md](orphan-model.md) を参照。
+孤立モデルとの整合（[command_sync.md](command_sync.md) の「孤立ユニットモデル」参照）:
+
+- **包括方式の由来**: 列挙式除外では未知の need が素通しされる穴があった（ADR-260704-07 の既知の潜在バグ）。「from あり ∧ need なし」のみ対象とする包括方式で構造的に塞いだ（ADR-260711-05）
+- **独立ユニット**（from なし）は `noFrom` で自然に除外される
+- **`sourcePending`** はペア解決時に source 側ユニットの marker に need が付いている場合のスキップ。ドリフトした isolate 凍結ペアや、レガシー backfill→review の同一内容プレースホルダによる TM 汚染を防ぐ。`classifyTmSkipReason` 自体は target 単体の純関数のままで、sourcePending は commit 側で付与する
+- **primary ancestor との接続**: TM は翻訳方向相対でなく primary origin を追う。孤立ユニットの primary は「自分自身」とみなす（上流が無いため）
 
 ### tm-optimize
 

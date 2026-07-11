@@ -22,7 +22,8 @@ ADR-260706-02 の孤立モデルは `need:keep`（保持・伝播は hash 任せ
 
 ### 備考
 - 挙動変更: マーカーなし孤立 target は旧デフォルト（delete）で黙って削除されていたが、新モデルでは need:review 保護になる。
-- 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）と詳細は [orphan-model.md](design/orphan-model.md)。
+- 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）は [command_ai-sync.md](design/command_ai-sync.md) の「孤立ユニットの判断支援」、モデルの正準定義は [command_sync.md](design/command_sync.md) の「孤立ユニットモデル」。
+- 本 ADR の基準文書だった `design/orphan-model.md` は 2026-07-11 に各設計文書（command_sync / core / command_tm / command_ai-sync / architecture）へ統合し廃止した。
 
 ## ADR-260711-04: term.detect でソース言語の variants（表記揺れ）を検出・付与する
 
@@ -148,7 +149,7 @@ audit の判定主体は AI なので、人間の意図は「AI への文脈」�
 AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-sync.md)）の第一項目「対象拡張モード」を実装するにあたり、対象を `need:review` 限定から確定済みペア（`from` あり・`need` なし）へ広げたとき、監査で不備を検出した確定済みペアをどう扱うかを決める必要があった。当初は `setNeed("review")` で need:review を付与する案だったが、以下の理由で「報告のみ」に決定した:
 
 1. **原文改訂は既に hash-sync が決定的に検出**している（原文 hash 変化 → target の `from` 不一致 → `need:revise@{旧hash}` 付与）。しかも `need:revise` は in-flight として audit の列挙対象外。よって「原文改訂ドリフトの検出」は audit の非冗長価値ではない。audit の非冗長価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」に限られる。
-2. audit は確定済みペアを**毎回再スキャン**する。need:review を書き戻すと、意図的な単文/段落レベルの乖離（翻訳で意図的に省略・追記した箇所）を毎回 `partial` として蒸し返し、人間の「承認（need:review 解除）」判断を上書きしてしまう（churn）。これを抑制する「ペア単位の受理」を記録する語彙は現状無い。`need:isolate`（[orphan-model.md](design/orphan-model.md)）は**章＝ユニット単位**の孤立であり、**ペア内の単文乖離には粒度が合わず解決しない**。
+2. audit は確定済みペアを**毎回再スキャン**する。need:review を書き戻すと、意図的な単文/段落レベルの乖離（翻訳で意図的に省略・追記した箇所）を毎回 `partial` として蒸し返し、人間の「承認（need:review 解除）」判断を上書きしてしまう（churn）。これを抑制する「ペア単位の受理」を記録する語彙は現状無い。`need:isolate`（[command_sync.md](design/command_sync.md) 孤立ユニットモデル）は**章＝ユニット単位**の孤立であり、**ペア内の単文乖離には粒度が合わず解決しない**。
 
 ### 決定
 - **`mode: "audit"` を追加**する（既定は従来の `"pending"`）。audit は `from` あり ∧（`need:review` **または** `need` なし）を列挙対象にする。`translate`/`revise@`/`isolate`/`keep`/`backfill`/`verify-deletion` 等の in-flight 状態は対象外。
@@ -162,12 +163,12 @@ AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-
 ### 備考
 - コマンド層は QuickPick（pending/audit 選択）を明示起動ゲートとし、LM tool（`mdait_aiReview` の `mode`）は確認UIで「確定済みペアは報告のみ」を明示する（ADR-260705-01 と整合）。
 - **既知の限界**: 意図的な単文乖離を持つ確定済みペアは audit のたびに `flagged` として再報告される（マーカーは変わらないので害は無いが、レポートにノイズが残る）。恒久解は「受理台帳」= 人間の受理判断とコメントを hash キー（targetHash・fromHash）で永続化し、内容が変わらない限り audit が再報告しない仕組み（別ADR/別PRで設計）。isolate では解決しない。
-- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[orphan-model.md](design/orphan-model.md) #3）。`mdait_aiSync` 合成は pending のまま。
+- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[command_ai-sync.md](design/command_ai-sync.md) 将来増分）。`mdait_aiSync` 合成は pending のまま。
 - 詳細: [command_ai-sync.md](design/command_ai-sync.md)。
 
 ## ADR-260706-02: 孤立ユニットの統合モデル（isolate 導入・判断サーフェス）
 
-> **更新**: ADR-260711-03 により更新（isolate 部分は継承、keep 温存と判断サーフェス前提を変更。keep/backfill は廃止）。
+> **更新**: ADR-260711-05 により更新（isolate 部分は継承、keep 温存と判断サーフェス前提を変更。keep/backfill は廃止）。
 
 ### 背景
 原文・訳文どちらにも意図的な独自章（片方言語だけの補足・FAQ）が存在しうるが、現行は「訳文孤立→orphanTargetPolicy（デフォルト delete）」「原文孤立→表現手段なしで need:translate が付き翻訳される」と非対称かつ意図を反映できない。ピボット翻訳（ja→en→de）では孤立が「原文役割/訳文役割」で別々に立つため、単純な boolean 属性では表せない。
@@ -185,7 +186,7 @@ AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-
 - 却下案: orphanTargetPolicy の値を増やして対応 → 方向・役割を表せず、原文側 opt-out も表現不能なため不採用。
 - 守ること: `need:isolate` は `isTmCommitTarget`/`classifyTmSkipReason`（commit-filter.ts）の**列挙式除外に必ず追加**（未知 need は素通り＝TM 汚染。ADR-260704-07）。
 - 影響: per-pair 粒度は marker（single-from）で表せないため v1 は「全下流一律」に割り切る。方向別は unit-state の将来拡張。
-- 詳細: [orphan-model.md](design/orphan-model.md)。
+- 詳細: [command_sync.md](design/command_sync.md) の「孤立ユニットモデル」（旧 orphan-model.md は各設計文書へ統合し廃止）。
 
 ## ADR-260706-01: AI同期は既存プリミティブを注入合成する薄いオーケストレーターとする
 
