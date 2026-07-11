@@ -4,7 +4,7 @@
 
 ---
 
-## ADR-260711-02: term.detect でソース言語の variants（表記揺れ）を検出・付与する
+## ADR-260711-04: term.detect でソース言語の variants（表記揺れ）を検出・付与する
 
 ### 背景
 用語データモデル（`LangTerm.variants`）と CSV/YAML の `variants_<lang>` 列、照合（`anyTermVariantAppears`）、trans への用語注入、AIレビューの訳揺れ検知（ADR-260709-01）は variants を消費する前提で配線済みだった。しかし唯一の供給源である `term.detect` が常に `variants: []` を返し（検出プロンプトも variants を要求しない）、人が CSV を手編集しない限り活用形・表記揺れを含む出現がマッチしなかった。
@@ -21,6 +21,42 @@
 - `MockTermDetector`（AI 不使用フォールバック）は決定的挙動維持のため `variants: []` のまま。
 - 既存エントリへの variants 追記は本 ADR の対象外（新規検出時の付与に限定）。既存 CSV に variants 列がなくても保存時に列追加されるのみで後方互換（`preservedHeaders` で手編集列も保持）。
 - 単体テスト: `src/test/unit/commands/term/term-detector.test.ts`（fake AIService 注入で付与・サニタイズ・ターゲット非付与を検証）。
+
+## ADR-260711-03: ユニット数上限を trans.maxUnitsPerRun に一本化し、調整困難な aiSync 詳細設定を最適値で固定・廃止する
+
+### 背景
+`aiSync.review.maxUnitsPerRun`（既定200）と `aiSync.align.maxUnitsPerFile`（既定300）は本質的に同じ「1回の処理で扱うユニット数の上限（コストガード）」であり、翻訳（trans）にも同様に当てはまる概念だが、trans には上限が無く、設定も機能ごとに分散して分かりづらかった。また `aiSync.review.autoApproveThreshold` / `aiSync.align.minConfidence` / `maxNeedBodies` / `maxRounds` はユーザーが適切値を判断しづらく、露出する価値が低かった。
+
+### 決定
+1. ユニット数上限を全般設定 **`trans.maxUnitsPerRun`（既定300・`0`で上限なし）** に統合する。**ファイル単位で適用**され、trans・aiSync.review・aiSync.align が共通で参照する（旧 `aiSync.review.maxUnitsPerRun` も `executeAiReviewForFile` 内で1ファイル単位に適用されていたため挙動は不変。ディレクトリ実行ではファイル数ぶん積み上がる）。超過時の挙動は経路ごとに異なる: trans / review は超過ユニットの need フラグを保持し次回実行で処理（冪等）、align は該当ファイルの AI align をスキップして位置ベース対応付けを維持する。trans も新たにこの上限を適用する。
+2. 調整困難な4設定を廃止し、コード内定数で最適値（＝従来の既定値）を固定する: `autoApproveThreshold`→0.9（`review-core.AUTO_APPROVE_THRESHOLD`）、`minConfidence`→0.6（`align-core.ALIGN_MIN_CONFIDENCE`）、`maxNeedBodies`→8・`maxRounds`→2（`section-aligner.DEFAULT_LIMITS`）。
+3. `aiSync.align` は全項目が移動・廃止となるためスキーマ・型・ロードから丸ごと削除する。`aiSync.review` は `autoApprove` / `batchSize` のみ残す。
+
+### 理由
+「1回で扱うユニット数の上限」はコスト暴走を防ぐ普遍的なガードであり、機能ごとに別設定を持つ必然性が無い。単一の全般設定に集約することで設定の見通しが良くなり、trans にも一貫した上限が効く。閾値・ラウンド数などの微調整パラメータは最適値が定まっており、設定として露出するより固定した方が誤設定リスクを避けられる（`align-result.ts` の `CorrectionValidationContext.minConfidence` は関数引数として残し、呼び出し側が定数を渡す）。
+
+### 備考
+- `trans.maxUnitsPerRun = 0` は「上限なし」を表す。ロード時に0以下は0へ正規化し、trans/review/align の3経路で `> 0` のときのみ上限を適用する。
+- 既存の `aiSync.review.autoApproveThreshold` / `aiSync.align.*` を書いた mdait.json は `additionalProperties: false` により検証エラーになるため、移行時は該当キーの削除が必要。
+
+## ADR-260711-02: mdait.json を CustomTextEditorProvider のデフォルトエディタとし、JSON表示とのタブ内切り替えボタンを提供する
+
+### 背景
+ADR-260711-01 で導入した設定エディタ（SettingsPanel）は `mdait.settings.open` コマンド経由でのみ開けるWebviewPanelで、エディタから直接 `mdait.json` を開くと標準JSONエディタが表示されていた。設定UIの入口がステータスビューのギアアイコン／コマンドパレットに限られ、発見可能性が低かった。
+
+### 決定
+1. `mdait.json`（`**/.mdait/mdait.json`）を対象とする `customEditors` を `priority: "default"` で登録し、`vscode.CustomTextEditorProvider`（`SettingsEditorProvider`）が標準JSONエディタの代わりに設定UIをデフォルト表示する。
+2. **既存の `SettingsPanel` はそのまま流用**: `resolveCustomTextEditor` から渡される `WebviewPanel` に `SettingsPanel.bind()` でロジックをバインドするだけで、検証・パス解決・ファイルI/Oの実装（ADR-260711-01）は変更しない。ドキュメントバッファ（`TextDocument`）は使わず、従来どおり `Configuration` 経由のファイルパスへ直接読み書きする（mdait.json は単一固定パスのため、CustomTextEditorProvider の枠組みに乗せる目的は「デフォルトエディタとして横取りする」ことのみ）。
+3. **Markdownプレビュー同様のタブ内切り替え**: `mdait.settings.openAsJson` / `mdait.settings.openAsUi` の2コマンドを `editor/title` に `activeCustomEditorId` の真偽で排他配置し、`vscode.openWith` で同一タブのまま設定UI ⇔ 生JSONを切り替える（新規タブは開かない）。設定UI内の「JSONで編集」ボタンも `vscode.window.showTextDocument` から `vscode.openWith(uri, "default")` に変更し、同じタブ内切り替えに統一する。
+4. `mdait.settings.open` コマンドは `vscode.open` で `mdait.json` を開くだけの薄いラッパーに変更し、既存の「未作成時は setup へ誘導」ガードは維持する（customEditor はドキュメントの存在を前提とするため、存在チェックはこのコマンド側にのみ残す）。
+
+### 理由
+CustomTextEditorProvider は本来「ドキュメントの内容を表示・編集するUI」を提供する仕組みだが、mdait.json は常に単一の既知パスであり、既存実装（fs直接読み書き・`Configuration.onConfigurationChanged` による外部編集反映）が既にこの用途に十分機能していたため、`TextDocument` 経由の編集モデル（`WorkspaceEdit`・dirty管理）へ移行する必要はない。「デフォルトエディタとして横取りする」薄い統合に留めることで、ADR-260711-01 のロジックを一切変更せずに発見可能性だけを改善できる。
+
+### 備考
+- `resourceFilename == mdait.json` という緩い条件のため、`.mdait/` 外に同名ファイルがあると切り替えボタンが誤表示される可能性があるが、実害は「押しても対象がその同名ファイルになるだけ」で軽微なため許容する。
+- `supportsMultipleEditorsPerDocument: false` により同一ファイルの多重タブは発生しない。
+
 
 ## ADR-260711-01: mdait.json 設定エディタとして Webview を導入する（P6 の例外）
 

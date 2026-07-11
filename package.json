@@ -150,6 +150,18 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.settings.openAsJson",
+        "title": "%mdait.settings.openAsJson.title%",
+        "icon": "$(code)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.settings.openAsUi",
+        "title": "%mdait.settings.openAsUi.title%",
+        "icon": "$(settings-gear)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.translateSelection",
         "title": "%mdait.translateSelection.title%",
         "category": "mdait"
@@ -222,12 +234,36 @@
         "when": "workspaceFolderCount != 0 && !mdaitConfigured"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "mdait.settingsEditor",
+        "displayName": "%mdait.settingsEditor.displayName%",
+        "selector": [
+          {
+            "filenamePattern": "**/.mdait/mdait.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "menus": {
       "editor/context": [
         {
           "command": "mdait.translateSelection",
           "when": "editorHasSelection && mdaitConfigured",
           "group": "mdait@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mdait.settings.openAsJson",
+          "when": "resourceFilename == mdait.json && activeCustomEditorId == mdait.settingsEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "mdait.settings.openAsUi",
+          "when": "resourceFilename == mdait.json && activeCustomEditorId != mdait.settingsEditor",
+          "group": "navigation"
         }
       ],
       "view/title": [
@@ -512,7 +548,7 @@
         "name": "mdait_aiReview",
         "displayName": "mdait: AI Pairing Review",
         "toolReferenceName": "mdaitAiReview",
-        "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above aiSync.review.autoApproveThreshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Pass mode:\"audit\" to also verify already-confirmed pairs (from present, no need flag) as a health check: pairs that no longer look faithful/complete (adopted mis-pairing or hand-edited degradation) are REPORTED ONLY as 'flagged' - their markers are NOT changed - and healthy pairs are counted as 'audited'. (Source revisions are already caught deterministically by mdait_sync as need:revise and are excluded from the audit.) The default mode:\"pending\" reviews only need:review units. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts (including flagged/audited) and an escalations list (file, unitHash, title, verdict, confidence, reason, issues) that lists both escalated and flagged units. Idempotent: approved units are not re-verified on the next pending run. Pass dryRun:true to get the report without changing any markers. Uses AI and may rewrite markers (need:review triage), so a confirmation is shown.",
+        "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above a fixed high-confidence threshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Pass mode:\"audit\" to also verify already-confirmed pairs (from present, no need flag) as a health check: pairs that no longer look faithful/complete (adopted mis-pairing or hand-edited degradation) are REPORTED ONLY as 'flagged' - their markers are NOT changed - and healthy pairs are counted as 'audited'. (Source revisions are already caught deterministically by mdait_sync as need:revise and are excluded from the audit.) The default mode:\"pending\" reviews only need:review units. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts (including flagged/audited) and an escalations list (file, unitHash, title, verdict, confidence, reason, issues) that lists both escalated and flagged units. Idempotent: approved units are not re-verified on the next pending run. Pass dryRun:true to get the report without changing any markers. Uses AI and may rewrite markers (need:review triage), so a confirmation is shown.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",

@@ -267,9 +267,14 @@ async function transFile_Exclusive(
 		(frontmatterMarker?.needsTranslation() ?? false);
 
 	// need:translate フラグを持つユニットを抽出
-	const unitsToTranslate = markdown.units.filter((unit) =>
+	// 全般コストガード trans.maxUnitsPerRun で1ファイルあたりの翻訳件数を制限する（0 で上限なし）。
+	// 超過分は need:translate のまま残り、次回実行で処理される（冪等）。
+	const allUnitsToTranslate = markdown.units.filter((unit) =>
 		unit.needsTranslation(),
 	);
+	const maxUnitsPerRun = config.trans.maxUnitsPerRun;
+	const unitsToTranslate =
+		maxUnitsPerRun > 0 ? allUnitsToTranslate.slice(0, maxUnitsPerRun) : allUnitsToTranslate;
 
 	// backfill（逆方向埋め戻し）の有無を確認（ソースファイルに need:backfill があるか）
 	const sourceFilePathForBackfill = fileExplorer.getSourcePath(
