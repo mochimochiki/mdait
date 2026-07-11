@@ -78,6 +78,11 @@ import {
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
+import {
+	SettingsEditorProvider,
+	openSettingsAsJsonCommand,
+	openSettingsAsUiCommand,
+} from "./ui/settings/settings-editor-provider";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
 import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
@@ -211,7 +216,27 @@ export async function activate(context: vscode.ExtensionContext) {
 	// settings.open command（mdait.json 設定エディタ）
 	const openSettingsDisposable = vscode.commands.registerCommand(
 		"mdait.settings.open",
-		() => SettingsPanel.createOrShow(context),
+		() => SettingsPanel.open(),
+	);
+
+	// mdait.json をエディタで開いたとき、デフォルトで設定UIを表示するプロバイダー
+	const settingsEditorProviderDisposable = vscode.window.registerCustomEditorProvider(
+		SettingsPanel.viewType,
+		new SettingsEditorProvider(context.extensionUri),
+		{
+			webviewOptions: { retainContextWhenHidden: true },
+			supportsMultipleEditorsPerDocument: false,
+		},
+	);
+
+	// 設定UI ⇔ JSON のエディタ表示切り替えボタン（editor/title）
+	const openSettingsAsJsonDisposable = vscode.commands.registerCommand(
+		"mdait.settings.openAsJson",
+		openSettingsAsJsonCommand,
+	);
+	const openSettingsAsUiDisposable = vscode.commands.registerCommand(
+		"mdait.settings.openAsUi",
+		openSettingsAsUiCommand,
 	);
 
 	// setup.diagnose command（セットアップ診断）
@@ -854,6 +879,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		createConfigDisposable,
 		openExistingConfigDisposable,
 		openSettingsDisposable,
+		settingsEditorProviderDisposable,
+		openSettingsAsJsonDisposable,
+		openSettingsAsUiDisposable,
 		diagnoseSetupDisposable,
 		syncDisposable,
 		selectTargetsDisposable,

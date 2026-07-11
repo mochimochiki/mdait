@@ -73,9 +73,14 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 
 ---
 
-### 設定エディタ（SettingsPanel）
+### 設定エディタ（SettingsPanel / SettingsEditorProvider）
 
-`mdait.settings.open` コマンドで開く、VS Code設定画面ライクな mdait.json 編集用 Webview です（P6 の例外、ADR-260711-01）。ステータスビューのツールバー（ギアアイコン）とコマンドパレットから起動できます。
+VS Code設定画面ライクな mdait.json 編集用 Webview です（P6 の例外、ADR-260711-01・ADR-260711-02）。`mdait.json` を直接エディタで開いた場合も、`CustomTextEditorProvider`（`SettingsEditorProvider`、`priority: "default"`）により標準JSONエディタの代わりにこの設定UIがデフォルト表示されます。ステータスビューのツールバー（ギアアイコン）・コマンドパレット・エディタで直接開く、のいずれからも同じ設定UIに到達します。
+
+**JSON表示との切り替え**:
+- Markdownプレビューの表示切り替えボタンと同様に、エディタタイトルバーのボタンで設定UI ⇔ 生JSONを切り替えられる（`mdait.settings.openAsJson` / `mdait.settings.openAsUi`、`when: activeCustomEditorId == mdait.settingsEditor` で排他表示）
+- 内部的には同一タブ上で `vscode.openWith` によりエディタ種別を切り替える（新規タブは開かない）
+- 設定UI内の「JSONで編集」ボタンも同じ仕組みで生JSONへ切り替わる
 
 **スキーマ駆動生成**:
 - UI は `assets/schemas/mdait-config.schema.json` から実行時に自動生成（`settings-model.ts`、純粋ロジック）

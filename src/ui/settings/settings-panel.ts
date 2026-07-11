@@ -56,47 +56,42 @@ export class SettingsPanel {
 	private disposed = false;
 
 	/**
-	 * 設定エディタを開く（既に開いていれば手前に表示する）。
-	 * mdait.json が存在しない場合はパネルを開かず setup へ誘導する。
+	 * mdait.json をデフォルトエディタ（設定UI、SettingsEditorProvider）で開く。
+	 * mdait.json が存在しない場合はエディタを開かず setup へ誘導する。
 	 */
-	public static createOrShow(context: vscode.ExtensionContext): void {
+	public static async open(): Promise<void> {
 		const configPath = Configuration.getInstance().getConfigFilePath();
 		if (!configPath || !fs.existsSync(configPath)) {
 			const create = vscode.l10n.t("Create mdait.json");
-			vscode.window
-				.showInformationMessage(
-					vscode.l10n.t(
-						"mdait.json does not exist yet. Create it first to use the settings editor.",
-					),
-					create,
-				)
-				.then((choice) => {
-					if (choice === create) {
-						vscode.commands.executeCommand("mdait.setup.createConfig");
-					}
-				});
+			const choice = await vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"mdait.json does not exist yet. Create it first to use the settings editor.",
+				),
+				create,
+			);
+			if (choice === create) {
+				vscode.commands.executeCommand("mdait.setup.createConfig");
+			}
 			return;
 		}
-
-		if (SettingsPanel.current) {
-			SettingsPanel.current.panel.reveal();
-			return;
-		}
-
-		const panel = vscode.window.createWebviewPanel(
+		// 既に mdait.json が JSON 表示で開かれていても確実に設定UIへ切り替える
+		await vscode.commands.executeCommand(
+			"vscode.openWith",
+			vscode.Uri.file(configPath),
 			SettingsPanel.viewType,
-			vscode.l10n.t("mdait Settings"),
-			vscode.ViewColumn.Active,
-			{
-				enableScripts: true,
-				localResourceRoots: [
-					vscode.Uri.joinPath(context.extensionUri, "assets"),
-				],
-				// スクロール位置・検索状態を保持する
-				retainContextWhenHidden: true,
-			},
 		);
-		SettingsPanel.current = new SettingsPanel(panel, context.extensionUri);
+	}
+
+	/**
+	 * SettingsEditorProvider（CustomTextEditorProvider）から渡される既存の
+	 * WebviewPanel にこのクラスのロジックをバインドする。
+	 */
+	public static bind(
+		panel: vscode.WebviewPanel,
+		extensionUri: vscode.Uri,
+	): SettingsPanel {
+		const instance = new SettingsPanel(panel, extensionUri);
+		SettingsPanel.current = instance;
 
 		// 外部編集（エディタでの直接編集・別コマンドによる書換）を反映する。
 		// Configuration のコールバックは解除できないため、一度だけ登録して
@@ -107,6 +102,7 @@ export class SettingsPanel {
 				SettingsPanel.current?.postValues();
 			});
 		}
+		return instance;
 	}
 
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -178,7 +174,11 @@ export class SettingsPanel {
 					break;
 				case "openJson": {
 					const configPath = this.getConfigFilePath();
-					vscode.window.showTextDocument(vscode.Uri.file(configPath));
+					vscode.commands.executeCommand(
+						"vscode.openWith",
+						vscode.Uri.file(configPath),
+						"default",
+					);
 					break;
 				}
 			}

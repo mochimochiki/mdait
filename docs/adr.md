@@ -4,6 +4,24 @@
 
 ---
 
+## ADR-260711-02: mdait.json を CustomTextEditorProvider のデフォルトエディタとし、JSON表示とのタブ内切り替えボタンを提供する
+
+### 背景
+ADR-260711-01 で導入した設定エディタ（SettingsPanel）は `mdait.settings.open` コマンド経由でのみ開けるWebviewPanelで、エディタから直接 `mdait.json` を開くと標準JSONエディタが表示されていた。設定UIの入口がステータスビューのギアアイコン／コマンドパレットに限られ、発見可能性が低かった。
+
+### 決定
+1. `mdait.json`（`**/.mdait/mdait.json`）を対象とする `customEditors` を `priority: "default"` で登録し、`vscode.CustomTextEditorProvider`（`SettingsEditorProvider`）が標準JSONエディタの代わりに設定UIをデフォルト表示する。
+2. **既存の `SettingsPanel` はそのまま流用**: `resolveCustomTextEditor` から渡される `WebviewPanel` に `SettingsPanel.bind()` でロジックをバインドするだけで、検証・パス解決・ファイルI/Oの実装（ADR-260711-01）は変更しない。ドキュメントバッファ（`TextDocument`）は使わず、従来どおり `Configuration` 経由のファイルパスへ直接読み書きする（mdait.json は単一固定パスのため、CustomTextEditorProvider の枠組みに乗せる目的は「デフォルトエディタとして横取りする」ことのみ）。
+3. **Markdownプレビュー同様のタブ内切り替え**: `mdait.settings.openAsJson` / `mdait.settings.openAsUi` の2コマンドを `editor/title` に `activeCustomEditorId` の真偽で排他配置し、`vscode.openWith` で同一タブのまま設定UI ⇔ 生JSONを切り替える（新規タブは開かない）。設定UI内の「JSONで編集」ボタンも `vscode.window.showTextDocument` から `vscode.openWith(uri, "default")` に変更し、同じタブ内切り替えに統一する。
+4. `mdait.settings.open` コマンドは `vscode.open` で `mdait.json` を開くだけの薄いラッパーに変更し、既存の「未作成時は setup へ誘導」ガードは維持する（customEditor はドキュメントの存在を前提とするため、存在チェックはこのコマンド側にのみ残す）。
+
+### 理由
+CustomTextEditorProvider は本来「ドキュメントの内容を表示・編集するUI」を提供する仕組みだが、mdait.json は常に単一の既知パスであり、既存実装（fs直接読み書き・`Configuration.onConfigurationChanged` による外部編集反映）が既にこの用途に十分機能していたため、`TextDocument` 経由の編集モデル（`WorkspaceEdit`・dirty管理）へ移行する必要はない。「デフォルトエディタとして横取りする」薄い統合に留めることで、ADR-260711-01 のロジックを一切変更せずに発見可能性だけを改善できる。
+
+### 備考
+- `resourceFilename == mdait.json` という緩い条件のため、`.mdait/` 外に同名ファイルがあると切り替えボタンが誤表示される可能性があるが、実害は「押しても対象がその同名ファイルになるだけ」で軽微なため許容する。
+- `supportsMultipleEditorsPerDocument: false` により同一ファイルの多重タブは発生しない。
+
 ## ADR-260711-01: mdait.json 設定エディタとして Webview を導入する（P6 の例外）
 
 ### 背景
