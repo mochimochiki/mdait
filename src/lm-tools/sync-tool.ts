@@ -40,10 +40,10 @@ interface SyncData {
 		revisionsNeeded: number;
 		/** adoptで採用（need:review付与）したユニット数 */
 		adopted: number;
-		/** need:keep で保持している孤立ターゲット数 */
+		/** 独立ユニット（from なし素 hash / need:isolate）として保持した孤立ターゲット数 */
 		kept: number;
-		/** backfillプレースホルダを生成した孤立ターゲット数 */
-		backfilled: number;
+		/** マーカーなし孤立ターゲットに一次受け need:review を付与した数 */
+		orphanReviewed: number;
 		/** AIアラインが適用した修正提案数 */
 		alignCorrections: number;
 	};
@@ -98,7 +98,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					revisionsNeeded: syncResult.revisionsNeeded,
 					adopted: syncResult.totalAdopted,
 					kept: syncResult.totalKept,
-					backfilled: syncResult.totalBackfilled,
+					orphanReviewed: syncResult.totalOrphanReviewed,
 					alignCorrections: syncResult.totalAlignCorrections,
 				},
 				durationMs: syncResult.durationMs,
@@ -126,6 +126,11 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					);
 
 			const nextActions = buildNextActions(status.needs, status.errorUnits);
+			if (syncResult.totalOrphanReviewed > 0) {
+				nextActions.unshift(
+					`${syncResult.totalOrphanReviewed} unmarked target-only unit(s) received need:review (no source counterpart found). For each, either remove the need flag to keep it as an independent unit, or delete the unit.`,
+				);
+			}
 			if (align && syncResult.totalAlignCorrections > 0) {
 				nextActions.unshift(
 					`AI align re-paired ${syncResult.totalAlignCorrections} unit(s) whose position-based mapping was wrong. All adopted pairs remain need:review; run mdait_aiReview to verify the (re)aligned pairs — any residual mis-pairing surfaces as a mismatch.`,

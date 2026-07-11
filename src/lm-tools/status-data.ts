@@ -2,7 +2,7 @@
  * @file status-data.ts
  * @description
  *   StatusItemTree の情報を LM Tools のエンベロープ `data` 向けに集計する純関数群。
- *   need フラグの語彙（translate/revise/review/verify-deletion/keep/backfill）ごとの
+ *   need フラグの語彙（translate/revise/review/verify-deletion/isolate）ごとの
  *   内訳集計と、ファイル別内訳の生成を行う。VS Code API 非依存。
  * @module lm-tools/status-data
  */
@@ -15,14 +15,13 @@ export interface NeedBreakdown {
 	revise: number;
 	review: number;
 	verifyDeletion: number;
-	keep: number;
-	backfill: number;
+	isolate: number;
 	other: number;
 }
 
-/** need内訳の合計（keepを除く実作業対象数） */
+/** need内訳の合計（isolateを除く実作業対象数。isolateは定常状態） */
 export function totalActionableNeeds(needs: NeedBreakdown): number {
-	return needs.translate + needs.revise + needs.review + needs.verifyDeletion + needs.backfill + needs.other;
+	return needs.translate + needs.revise + needs.review + needs.verifyDeletion + needs.other;
 }
 
 /** ファイル別のステータス内訳 */
@@ -53,8 +52,7 @@ function emptyBreakdown(): NeedBreakdown {
 		revise: 0,
 		review: 0,
 		verifyDeletion: 0,
-		keep: 0,
-		backfill: 0,
+		isolate: 0,
 		other: 0,
 	};
 }
@@ -71,10 +69,8 @@ function addNeedFlag(breakdown: NeedBreakdown, needFlag: string): void {
 		breakdown.review++;
 	} else if (needFlag === "verify-deletion") {
 		breakdown.verifyDeletion++;
-	} else if (needFlag === "keep") {
-		breakdown.keep++;
-	} else if (needFlag === "backfill") {
-		breakdown.backfill++;
+	} else if (needFlag === "isolate") {
+		breakdown.isolate++;
 	} else {
 		breakdown.other++;
 	}
@@ -87,14 +83,9 @@ function addNeedFlag(breakdown: NeedBreakdown, needFlag: string): void {
 export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 	const breakdown = emptyBreakdown();
 	for (const unit of units) {
-		// need:keep の独自ユニットはステータス上ソース扱い（分母除外）だが、内訳には計上する
-		if (unit.needFlag === "keep") {
-			breakdown.keep++;
-			continue;
-		}
-		// need:backfill はソース側プレースホルダ（fromなし＝Source分類）だが、内訳には計上する
-		if (unit.needFlag === "backfill") {
-			breakdown.backfill++;
+		// need:isolate の孤立ユニットはステータス上ソース扱い（分母除外）だが、内訳には計上する
+		if (unit.needFlag === "isolate") {
+			breakdown.isolate++;
 			continue;
 		}
 		if (unit.status === Status.Source) {
@@ -125,8 +116,7 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		const units = file.children ?? [];
 		const needs = countNeeds(units);
 		if (file.status === Status.Source) {
-			// ソースファイルは進捗集計の対象外だが、backfillプレースホルダ（原文側）は内訳に計上する
-			totals.backfill += needs.backfill;
+			// ソースファイルは進捗集計の対象外
 			continue;
 		}
 		for (const unit of units) {
@@ -144,14 +134,13 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		totals.revise += needs.revise;
 		totals.review += needs.review;
 		totals.verifyDeletion += needs.verifyDeletion;
-		totals.keep += needs.keep;
-		totals.backfill += needs.backfill;
+		totals.isolate += needs.isolate;
 		totals.other += needs.other;
 
 		if (totalActionableNeeds(needs) > 0) {
 			filesWithNeeds++;
 			if (detail) {
-				// 全体集計と同じ基準（Status.Sourceは分母から除外。keep/backfillもSource扱い）
+				// 全体集計と同じ基準（Status.Sourceは分母から除外。isolateもSource扱い）
 				const countableUnits = units.filter((u) => u.status !== Status.Source);
 				fileDetails.push({
 					path: file.filePath,

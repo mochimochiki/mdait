@@ -23,7 +23,7 @@ export interface UnitSkeleton {
 	digest: string;
 	/** 本文の文字数 */
 	length: number;
-	/** 審査対象外（from アンカー済み / need:keep）。true の場合 AI は参照禁止 */
+	/** 審査対象外（from アンカー済み / 独立ユニット / need:isolate）。true の場合 AI は参照禁止 */
 	locked?: boolean;
 }
 
@@ -60,7 +60,7 @@ export interface CorrectionValidationContext {
 	targetCount: number;
 	/** 審査対象外（Phase 1）のソースインデックス */
 	lockedSourceIndexes: ReadonlySet<number>;
-	/** 審査対象外（Phase 1・need:keep）のターゲットインデックス */
+	/** 審査対象外（Phase 1・独立ユニット・need:isolate）のターゲットインデックス */
 	lockedTargetIndexes: ReadonlySet<number>;
 	/** 受理する confidence の下限（0..1） */
 	minConfidence: number;

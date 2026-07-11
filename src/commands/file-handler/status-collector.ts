@@ -314,10 +314,16 @@ export class StatusCollector implements StatusCollectorPort {
 	 * 個別ユニットの翻訳状態を決定する
 	 */
 	private determineUnitStatus(unit: MdaitUnit): Status {
-		// need:keep は独自ユニット（訳文側にのみ存在する保持ユニット）。
+		// need:isolate は孤立ユニット（保持＋下流伝播停止）。
 		// 翻訳率の分母から除外するためソース扱いにする
-		if (unit.marker?.need === "keep") {
+		if (unit.marker?.need === "isolate") {
 			return Status.Source;
+		}
+
+		// 人間の判断待ちは from の有無に関わらず作業対象として可視化する
+		// （穴あき一次受けの need:review は from を持たないため、fromなし判定より先に評価する）
+		if (unit.marker?.need === "review" || unit.marker?.need === "verify-deletion") {
+			return Status.NeedsTranslation;
 		}
 
 		// fromHashがない場合はソースユニット

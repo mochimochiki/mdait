@@ -49,10 +49,18 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
 | ターゲットのみ変更 | なし | hash更新のみ |
 | 両方変更 | `revise` | 原文優先で改訂扱い（[architecture.md](../architecture.md) 哲学3参照） |
+| ソースが `need:isolate` | 付与しない（凍結） | 伝播停止。hash/fromのみ更新し、target生成・translate/revise付与を行わない |
+| レガシー `need:keep` / `need:backfill` | need除去 / `review` に変換 | `normalizeLegacyNeeds` による決定的マイグレーション |
 
 FrontMatterも同一ルールで管理されます（`mdait.front`マーカー、ソース側にも付与）。
 
-**孤立ターゲット**（対応する原文がないユニット）: `sync.autoDelete`が`true`（デフォルト）なら自動削除、`false`なら`need:verify-deletion`を付与して保持。
+**孤立ターゲット**（対応する原文がないユニット）は三分岐で処理されます（[orphan-model.md](orphan-model.md) 参照）:
+
+| 条件 | 処理 |
+|---|---|
+| **独立ユニット**（永続化マーカーで `from` なし）または `need:isolate` | 無条件保持（独立ユニットは対応付け対象外。from 付き isolate は上流ペアを維持したまま凍結） |
+| `from` が残っている（原文を失った管理済みユニット） | `sync.orphanTargetPolicy`: `"delete"`（デフォルト・削除）/ `"verify"`（`need:verify-deletion` 付与） |
+| マーカーなしの管理外コンテンツ | `need:review` を付与して一次受け（削除も翻訳も決めつけず人間の判断へ） |
 
 ### エラー処理
 
@@ -109,7 +117,8 @@ sequenceDiagram
 
 - **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[architecture.md](../architecture.md) P4参照）
 - **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
-- **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出
+- **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可（②の対象外）
+- **レガシーneedの正規化**: パース直後に `normalizeLegacyNeeds` が `keep`→need除去・`backfill`→`review` へ決定的に変換する（[orphan-model.md](orphan-model.md)）
 - **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除
 

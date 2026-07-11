@@ -30,7 +30,7 @@ export function formatSyncLine(sync: SyncResult): string {
 	return (
 		`adopted: ${sync.totalAdopted} | align-corrected: ${sync.totalAlignCorrections} | ` +
 		`added: ${sync.totalAdded} | deleted: ${sync.totalDeleted} | kept: ${sync.totalKept} | ` +
-		`backfilled: ${sync.totalBackfilled}`
+		`orphan-reviewed: ${sync.totalOrphanReviewed}`
 	);
 }
 

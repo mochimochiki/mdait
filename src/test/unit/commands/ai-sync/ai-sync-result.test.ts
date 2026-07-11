@@ -20,7 +20,7 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 		revisionsNeeded: 0,
 		totalAdopted: 0,
 		totalKept: 0,
-		totalBackfilled: 0,
+		totalOrphanReviewed: 0,
 		totalAlignCorrections: 0,
 		durationMs: 10,
 		...overrides,
@@ -117,11 +117,11 @@ suite("buildAiSyncNextActions（合成 nextActions・純関数）", () => {
 });
 
 suite("formatSyncLine（sync サマリ行・純関数）", () => {
-	test("採用・アライン補正・追加・削除・保持・backfill を含む", () => {
-		const line = formatSyncLine(syncResult({ totalAdopted: 5, totalAlignCorrections: 2, totalKept: 1, totalBackfilled: 3 }));
+	test("採用・アライン補正・追加・削除・保持・一次受けレビューを含む", () => {
+		const line = formatSyncLine(syncResult({ totalAdopted: 5, totalAlignCorrections: 2, totalKept: 1, totalOrphanReviewed: 3 }));
 		assert.ok(line.includes("adopted: 5"));
 		assert.ok(line.includes("align-corrected: 2"));
 		assert.ok(line.includes("kept: 1"));
-		assert.ok(line.includes("backfilled: 3"));
+		assert.ok(line.includes("orphan-reviewed: 3"));
 	});
 });

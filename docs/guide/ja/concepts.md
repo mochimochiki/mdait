@@ -41,12 +41,13 @@ Sync 実行後、各ユニットの直前に HTML コメント形式の **マー
 <!-- mdait be2760e0 -->
 ### need フラグ
 
-`need` フィールドには 4 種類の値があり、ユニットに必要なアクションを示します。
+`need` フィールドには 5 種類の値があり、ユニットに必要なアクションや状態を示します。
 
 - `translate` — 未翻訳（新規ユニット）
 - `revise` — 原文が変更された（要改訂）
-- `review` — 翻訳済みだが構造不一致（要確認）
-- `verify-deletion` — 原文が削除された（`autoDelete: false` 時）
+- `review` — 人間の確認待ち（構造不一致・adopt 採用・管理外コンテンツの検出）
+- `verify-deletion` — 原文が削除された（`orphanTargetPolicy: "verify"` 時）
+- `isolate` — 保持＋下流への伝播停止（独自コンテンツの opt-out）
 
 各フラグの発生条件と対処方法は [sync.md](sync.md) で詳しく説明しています。
 

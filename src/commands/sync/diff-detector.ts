@@ -44,12 +44,12 @@ export interface DiffResult {
 	revisionsNeeded?: number;
 	/** adoptで採用（need:review付与）したユニット数 */
 	adopted?: number;
-	/** need:keep で保持している孤立ターゲット数 */
+	/** 独立ユニットとして保持している孤立ターゲット数 */
 	kept?: number;
 	/** need:verify-deletion を付与した孤立ターゲット数 */
 	orphanVerified?: number;
-	/** backfillプレースホルダを生成した孤立ターゲット数 */
-	backfilled?: number;
+	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
+	orphanReviewed?: number;
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
 }

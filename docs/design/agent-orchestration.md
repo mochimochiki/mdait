@@ -28,7 +28,7 @@
 
 エージェントが以下をすべて満たしたとき「完璧なmdaitサイト」とみなす。ゴール判定はエージェント自身がツール出力から機械的に行えなければならない。
 
-1. 全ターゲットユニットが翻訳済み（`need` フラグなし。ただし `keep` ユニットは除外）
+1. 全ターゲットユニットが翻訳済み（`need` フラグなし。ただし `need:isolate` と独立ユニット（`from` なし）は除外）
 2. 構造検証・用語一貫性検証にパス（`mdait_validate` が違反0件を返す）
 3. 用語集が対訳から抽出・全言語展開済み（`term.detect`/`term.expand` の再実行が差分0件）
 4. 翻訳済みユニットがTMにコミット済み（`tm.commit` の再実行が差分0件）
@@ -118,7 +118,7 @@ sequenceDiagram
 
 | ツール | 入力 | 主なdata | 副作用 | 確認UI |
 |---|---|---|---|---|
-| `mdait_getStatus` | `{ path?, detail? }` | 全体集計。`detail:true` でファイル別のneed内訳（translate/revise/review/verify-deletion/keep件数） | なし | なし |
+| `mdait_getStatus` | `{ path?, detail? }` | 全体集計。`detail:true` でファイル別のneed内訳（translate/revise/review/verify-deletion/isolate件数） | なし | なし |
 | `mdait_sync` | `{ path?, adopt? }` | 変更ファイル数、付与needの内訳、孤立ターゲットと適用ポリシー、adopt採用件数 | マーカー書換 | あり |
 | `mdait_translate` | `{ path }`（ファイル/ディレクトリ） | ファイルごとの成功/失敗、needの遷移、チェッカー違反、失敗原因 | 訳文書換・AI使用 | あり（スコープ単位で1回、対象ユニット総数を表示） |
 | `mdait_term` | `{ action: "detect"\|"expand", path? }` | 追加/更新された用語一覧、未展開残数 | terms.csv書換・AI使用 | あり |
@@ -137,6 +137,8 @@ sequenceDiagram
 - **adoptはsyncの引数であり永続設定にしない**（取り込みは一度きりの操作。定常運用のsyncが誤ってadopt動作をしない）。
 
 ### 孤立ターゲットポリシー — G4
+
+> **更新（2026-07-11）**: `keep` / `backfill` は ADR-260711-03 で廃止された（独立ユニット・`need:isolate` の統合モデルに置換。[orphan-model.md](orphan-model.md)）。本節と下記「逆方向埋め戻し（backfill）」・M2・M5 の該当記述は歴史的記録として残す。
 
 `sync.autoDelete: boolean` を `sync.orphanTargetPolicy: "delete" | "verify" | "keep" | "backfill"` に拡張する（`autoDelete: true`→`delete`、`false`→`verify` として後方互換を維持。両方指定時は `orphanTargetPolicy` 優先）。
 

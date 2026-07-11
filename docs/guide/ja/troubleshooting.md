@@ -79,13 +79,14 @@ mdait を使い始めた直後に嵌まりやすい点を「症状 → 原因 �
 
 **症状:** 原文のセクションを削除/改名して Sync したら、対応する訳文（手修正済みでも）が消えた。
 
-**原因:** `sync.autoDelete`（既定 `true`）が、原文に対応の無い「孤立ユニット」を自動削除します。
+**原因:** `sync.orphanTargetPolicy`（既定 `"delete"`）が、原文に対応の無い管理済み（`from` あり）の「孤立ユニット」を自動削除します。マーカーのない訳文側コンテンツや独立ユニット（`from` なし・`need:isolate`）は削除されません。
 
 **対処:**
 
 - 手動 Sync では、翻訳済みの孤立ユニットを削除する前に**確認ダイアログ**が出ます（保存時の自動 Sync では出ません）。意図しない場合はキャンセルしてください。
 - 消えても Git で復旧できます（`git diff` / `git checkout`）。
-- 削除判断を常に手動にしたい場合は `"sync": { "autoDelete": false }` にします。`need:verify-deletion` が付き、確認後に手動削除できます。
+- 削除判断を常に手動にしたい場合は `"sync": { "orphanTargetPolicy": "verify" }` にします（旧設定 `"autoDelete": false` も同じ意味）。`need:verify-deletion` が付き、確認後に手動削除できます。
+- 訳文側の独自セクションを意図的に残したい場合は、`from` なしの素 hash マーカー（独立ユニット）または `need:isolate` にします（[sync.md](sync.md) 参照）。
 
 ---
 

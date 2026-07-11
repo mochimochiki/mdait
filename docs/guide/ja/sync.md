@@ -88,12 +88,15 @@ Follow these steps.
 |---|---|---|
 | `translate` | ターゲットユニットが存在しない | 未翻訳。新規翻訳が必要 |
 | `revise@{旧hash}` | 原文の CRC32 ハッシュが変化した | 原文が変わった。訳文の改訂が必要 |
-| `review` | 翻訳実行後に構造不一致を検出、または adopt で既訳を採用 | 訳文を手動で確認が必要 |
+| `review` | 翻訳実行後に構造不一致を検出、adopt で既訳を採用、またはマーカーなしの訳文側コンテンツを検出 | 訳文を手動で確認が必要 |
 | `verify-deletion` | 対応する原文が削除された（`orphanTargetPolicy: "verify"` 時） | 原文削除済み。訳文を削除してよいか確認 |
-| `keep` | 孤立ユニットを恒久保持（`orphanTargetPolicy: "keep"` 時） | 訳文側の独自コンテンツ。sync/trans は触れない |
-| `backfill` | 原文側プレースホルダ（`orphanTargetPolicy: "backfill"` 時） | 訳文のみのコンテンツを原文へ逆翻訳待ち |
+| `isolate` | ユーザーが手動で付与 | 保持＋下流への伝播停止。sync/trans は触れない（原文側の独自コンテンツや、どこにも展開しないローカル専用の章に使う） |
 
-`need` フラグがないユニットは「同期済み・翻訳不要」の状態です。`need:keep` のユニットは「独自ユニット」として翻訳率の分母から除外されます。
+`need` フラグがないユニットは「同期済み・翻訳不要」の状態です。
+
+**独立ユニット**: `from` のないマーカー（例: `<!-- mdait a1b2c3d4 -->`）を持つ訳文側ユニットは「独立ユニット」として扱われます。原文に対応相手を持たない訳文側の独自コンテンツで、sync は対応付け・削除の対象にせず常に保持し、trans も翻訳しません（翻訳率の分母からも除外）。`need:isolate` のユニットも同様に保持されます。詳細は設計文書 [orphan-model.md](../../design/orphan-model.md) を参照してください。
+
+なお、旧フラグ `need:keep` / `need:backfill` は廃止されました。sync 実行時に自動で移行されます（`keep` → `from` なしの独立ユニット、`backfill` → `need:review`）。
 
 ---
 
@@ -113,7 +116,7 @@ Follow these steps.
 <!-- mdait 80632c0a -->
 ## 孤立ユニットの処理（orphanTargetPolicy）
 
-原文からユニットが削除されると、訳文側に「孤立ユニット」が発生します。処理方法は `sync.orphanTargetPolicy` で選択します。
+原文からユニットが削除されると、訳文側に「孤立ユニット」が発生します。**管理済み（`from` を持つ）の孤立ユニット**の処理方法を `sync.orphanTargetPolicy` で選択します。
 
 ```json
 "sync": {
@@ -125,13 +128,10 @@ Follow these steps.
 |---|---|
 | `"delete"`（デフォルト） | 孤立ユニットを自動削除 |
 | `"verify"` | `need:verify-deletion` を付与して残す（手動確認待ち） |
-| `"keep"` | `need:keep` を付与して恒久保持（独自ユニット化） |
-| `"backfill"` | 原文側にプレースホルダを生成し `need:backfill` を付与（逆翻訳で埋め戻し） |
 
 - `"verify"` は削除判断を手動で行いたい場合に使います。確認後、ユニットを削除するか、残す場合は `need` を外します。
-- `"keep"` は訳文側にしか存在しないセクション（例: 英語版限定のお知らせ）を意図的に保持する場合に使います。`need:keep` が付いたユニットは以後の sync の対応付け・削除の対象外になり、trans も翻訳しません。マーカーは `<!-- mdait {hash} need:keep -->` の形（`from` なし）になります。
-- `"backfill"` は訳文側にしかないセクションを**原文側へ逆翻訳して対称化**します。sync が原文側に訳文と同内容のプレースホルダ（`need:backfill`）を挿入し、次の翻訳実行（対象はターゲットファイル/ディレクトリ）が言語を逆転して原文言語に翻訳・埋め戻します。生成された原文ユニットには `need:review` が残るため、内容を確認してからフラグを外してください。**原文ファイルへの書き込みを伴う**点に注意してください。
-- 旧設定 `autoDelete` も引き続き有効です（`true`→`delete`、`false`→`verify`）。`orphanTargetPolicy` と両方指定した場合は `orphanTargetPolicy` が優先されます。
+- **ポリシーの対象外となるユニット**: 独立ユニット（`from` なしマーカー・`need:isolate`）は常に保持されます。マーカーのない訳文側コンテンツには `need:review` が付き、削除されずに人間の判断に委ねられます（「素 hash 化して独立ユニットにする / `need:isolate` を付ける / 削除する」から選択。詳細は [adopt.md](adopt.md)）。
+- 旧設定 `autoDelete` も引き続き有効です（`true`→`delete`、`false`→`verify`）。`orphanTargetPolicy` と両方指定した場合は `orphanTargetPolicy` が優先されます。旧値 `"keep"` / `"backfill"` は警告のうえ `"verify"` として解釈されます。
 
 ---
 
@@ -211,7 +211,7 @@ mdait:
 |---|---|---|---|
 | `level` | integer | `3` | ユニット境界とする見出しレベル（h1〜hN）|
 | `autoSyncOnSave` | boolean | `true` | 保存時の自動 Sync |
-| `autoDelete` | boolean | `true` | 孤立ユニットの自動削除 |
+| `orphanTargetPolicy` | string | `"delete"` | 管理済み孤立ユニットの処理（`"delete"` / `"verify"`） |
 
 <!-- mdait 11247ab5 -->
 ### sync.level の詳細

@@ -37,7 +37,7 @@ interface AiSyncData {
 		added: number;
 		deleted: number;
 		kept: number;
-		backfilled: number;
+		orphanReviewed: number;
 	};
 	/** AIペアリング検証段の結果 */
 	review: {
@@ -200,7 +200,7 @@ function buildAiSyncData(outcome: AiSyncOutcome, config: Configuration): AiSyncD
 			added: sync?.totalAdded ?? 0,
 			deleted: sync?.totalDeleted ?? 0,
 			kept: sync?.totalKept ?? 0,
-			backfilled: sync?.totalBackfilled ?? 0,
+			orphanReviewed: sync?.totalOrphanReviewed ?? 0,
 		},
 		review: {
 			filesWithReviewUnits: agg.filesWithUnits,

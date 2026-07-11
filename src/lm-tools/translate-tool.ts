@@ -37,8 +37,6 @@ interface TranslateFileResult {
 	skippedUnits?: number;
 	/** TM参照ヒット数 */
 	tmHits?: number;
-	/** backfill（逆方向埋め戻し）したユニット数 */
-	backfilledUnits?: number;
 	/** 失敗時の原因 */
 	error?: string;
 }
@@ -54,7 +52,6 @@ interface TranslateData {
 		/** 翻訳ペア対象外のためスキップしたファイル数 */
 		skippedNonTarget: number;
 		translatedUnits: number;
-		backfilledUnits: number;
 	};
 	files: TranslateFileResult[];
 	/** 翻訳後のスコープ内 need 内訳 */
@@ -156,7 +153,6 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 							patchedUnits: result?.patchedCount ?? 0,
 							skippedUnits: result?.skippedCount ?? 0,
 							tmHits: result?.tmHits ?? 0,
-							backfilledUnits: result?.backfilledCount ?? 0,
 						};
 					} catch (error) {
 						logger.error("LanguageModelTool", "Error translating file", {
@@ -179,7 +175,6 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 			const succeeded = fileResults.filter((r) => r.ok).length;
 			const failed = fileResults.filter((r) => !r.ok).length;
 			const translatedUnits = fileResults.reduce((sum, r) => sum + (r.translatedUnits ?? 0), 0);
-			const backfilledUnits = fileResults.reduce((sum, r) => sum + (r.backfilledUnits ?? 0), 0);
 			const cancelled = token.isCancellationRequested && fileResults.length < targetFiles.length;
 
 			// 翻訳後のスコープ内ステータスを集計
@@ -199,7 +194,6 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 					failed,
 					skippedNonTarget,
 					translatedUnits,
-					backfilledUnits,
 				},
 				files: fileResults,
 				remainingNeeds: scopeStatus.needs,
@@ -259,7 +253,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 		let fileCount = 0;
 		for (const file of files) {
 			const needs = countNeeds(file.children ?? []);
-			const fileNeedCount = needs.translate + needs.revise + needs.backfill;
+			const fileNeedCount = needs.translate + needs.revise;
 			if (fileNeedCount > 0) {
 				fileCount++;
 				needCount += fileNeedCount;

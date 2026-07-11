@@ -8,8 +8,7 @@ function needs(overrides: Partial<NeedBreakdown> = {}): NeedBreakdown {
 		revise: 0,
 		review: 0,
 		verifyDeletion: 0,
-		keep: 0,
-		backfill: 0,
+		isolate: 0,
 		other: 0,
 		...overrides,
 	};
@@ -47,8 +46,8 @@ suite("buildNextActions（状態→推奨アクション対応表）", () => {
 		assert.ok(actions[0].includes("All units are translated"));
 	});
 
-	test("keepのみのユニットは定常状態とみなす", () => {
-		const actions = buildNextActions(needs({ keep: 5 }));
+	test("isolateのみのユニットは定常状態とみなす（アクションなし）", () => {
+		const actions = buildNextActions(needs({ isolate: 5 }));
 		assert.ok(actions[0].includes("All units are translated"));
 	});
 });

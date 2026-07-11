@@ -376,7 +376,7 @@
         "name": "mdait_getStatus",
         "displayName": "mdait: Get Translation Status",
         "toolReferenceName": "mdaitStatus",
-        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/keep). Pass detail:true to include a per-file breakdown of files that still need work. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/isolate). Pass detail:true to include a per-file breakdown of files that still need work. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",

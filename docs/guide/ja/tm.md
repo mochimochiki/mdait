@@ -75,7 +75,10 @@ trans（翻訳） → レビュー → tm-commit（TM 登録） → 次回 trans
 | `need:translate`（未翻訳） | ✗ スキップ |
 | `need:revise`（要改訂） | ✗ スキップ |
 | `need:review`（要確認） | ✗ スキップ |
-| `need` なし（翻訳済み） | ✓ 登録対象 |
+| `need:isolate` などその他の `need` | ✗ スキップ |
+| `from` なし（独立ユニット・原文側） | ✗ スキップ |
+| 対応する原文側ユニットに `need` が残っている | ✗ スキップ（`sourcePending`） |
+| `from` あり・`need` なし（翻訳済み） | ✓ 登録対象 |
 
 ---
 

@@ -109,10 +109,11 @@ export interface TransPair {
  * 孤立ターゲット（ソース側に対応ユニットがない訳文側ユニット）の処理ポリシー
  * - delete: 自動削除（旧 autoDelete: true 相当）
  * - verify: need:verify-deletion を付与して手動確認に委ねる（旧 autoDelete: false 相当）
- * - keep: need:keep を付与して恒久保持（独自ユニット。sync/trans が触れない）
- * - backfill: 原文側にプレースホルダを生成し need:backfill を付与（transが逆方向翻訳で埋め戻す）
+ *
+ * 独立ユニット（need:isolate / fromなしの永続マーカー）はポリシーに関わらず常に保持される。
+ * レガシー値 keep / backfill は廃止（読み込み時に警告の上 verify として解釈する）。
  */
-export type OrphanTargetPolicy = "delete" | "verify" | "keep" | "backfill";
+export type OrphanTargetPolicy = "delete" | "verify";
 
 /**
  * mdait.yamlファイルの型定義
@@ -126,7 +127,8 @@ interface MdaitConfig {
 		autoDelete?: boolean;
 		autoSyncOnSave?: boolean;
 		copyAssets?: CopyAssetsConfig;
-		orphanTargetPolicy?: OrphanTargetPolicy;
+		/** 未検証の入力値（レガシー値 keep/backfill を含む）。読み込み時にバリデーションする */
+		orphanTargetPolicy?: string;
 	};
 	markers?: {
 		mode?: "embedded" | "external";
@@ -566,13 +568,16 @@ export class Configuration {
 				if (config.sync.copyAssets !== undefined) {
 					this.sync.copyAssets = config.sync.copyAssets;
 				}
-				if (
-					config.sync.orphanTargetPolicy === "delete" ||
-					config.sync.orphanTargetPolicy === "verify" ||
-					config.sync.orphanTargetPolicy === "keep" ||
-					config.sync.orphanTargetPolicy === "backfill"
-				) {
-					this.sync.orphanTargetPolicy = config.sync.orphanTargetPolicy;
+				const rawPolicy = config.sync.orphanTargetPolicy;
+				if (rawPolicy === "delete" || rawPolicy === "verify") {
+					this.sync.orphanTargetPolicy = rawPolicy;
+				} else if (rawPolicy === "keep" || rawPolicy === "backfill") {
+					// 廃止されたレガシー値は安全側（保持して確認に委ねる）の verify として解釈する
+					Logger.getInstance().warn(
+						"config",
+						`orphanTargetPolicy "${rawPolicy}" is no longer supported; interpreting as "verify"`,
+					);
+					this.sync.orphanTargetPolicy = "verify";
 				}
 			}
 

@@ -24,31 +24,31 @@
 |------|------|------|------|
 | アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
 | レビュー | **AIペアリング検証** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
-| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきの isolate/漏れ 分類エスカレーション**（[orphan-model.md](orphan-model.md) #3） | 対象拡張のみ実装済み・他は未着手 |
+| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきユニットの孤立/漏れ 分類提案**（[orphan-model.md](orphan-model.md) 将来増分） | 対象拡張のみ実装済み・他は未着手 |
 | 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | **実装済み**（ADR-260706-01） |
-| 孤立 | **孤立の統合モデル（isolate・判断サーフェス）** | 原文/訳文の意図的な独自章を一貫表現。`need:isolate`（伝播停止）導入、穴あきを need:review で一次受け→レポートを人間の判断の場に | 未着手（[orphan-model.md](orphan-model.md)・ADR-260706-02） |
+| 孤立 | **孤立の統合モデル（isolate・独立ユニット）** | 原文/訳文の意図的な独自章を一貫表現。`need:isolate`（伝播停止）・独立ユニット（from なし＝訳文役割の孤立）・マーカーなし孤立の need:review 一次受け。keep/backfill は廃止 | **実装済み**（[orphan-model.md](orphan-model.md)・ADR-260711-03）。判断サーフェスは将来増分 |
 
 レビューを同期に埋め込まないのは意図的な分離である: レビューは取り込み直後だけでなく定常運用（定期監査・翻訳品質チェック）で価値を持ち、バッチ化・スケジュール実行の最適化は独立機能でこそ設計できる（ADR-260705-02）。
 
 ## 取り込みパターン網羅マトリクス
 
-「既存サイトを mdait 管理下に置く」際に起こりうるパターンと、それぞれがどの仕組みでどう扱われるかの正準一覧。**共通保証: どのパターンでも既存訳文の本文は1文字も変更されない**（唯一の例外は `orphanTargetPolicy: "delete"` による孤立ユニット削除 — パターン3参照）。
+「既存サイトを mdait 管理下に置く」際に起こりうるパターンと、それぞれがどの仕組みでどう扱われるかの正準一覧。**共通保証: どのパターンでも既存訳文の本文は1文字も変更されない**（唯一の例外は `from` が残った管理済み孤立ユニットへの `orphanTargetPolicy: "delete"`。マーカーなしの独自セクションは削除されず `need:review` で保護される — パターン3参照）。
 
 | # | パターン | 現行の挙動（adopt + AIペアリング検証） | 完全解消する機能（状態） |
 |---|---------|--------------------------------------|------------------------|
 | 1 | ja/en 同一構造・内容も対応 | 全ペアが正しく `from` 確立 → 検証がほぼ全件を自動承認（低確信のみ kept で人間へ） | **実装済みで完結** |
 | 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。検証が **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide/ja/adopt.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（**実装済み**） |
-| 3 | ja に無い章が en に存在（訳文側の独自セクション） | その位置以降が誤ペア化＋余った en 章は `orphanTargetPolicy` 適用。**デフォルト `delete` は削除の罠** — 取り込み前に `verify`/`keep`/`backfill` の設定が必須（adopt.md 手順2） | AIアライン（**実装済み**。unmatchedTarget の識別で誤ペア・誤削除とも防止）＋孤立の統合モデル（判断サーフェスで意図確認・[orphan-model.md](orphan-model.md) #3,#4） |
+| 3 | ja に無い章が en に存在（訳文側の独自セクション） | マーカーなしの独自章は **`need:review` 一次受け**で保護される（削除も翻訳も決めつけず人間が「素hash化 / `need:isolate` / 削除」を選ぶ・[adopt.md](../guide/ja/adopt.md)）。誤ペア化は AIアラインの unmatchedTarget 識別で防止 | **実装済み**（一次受け＋AIアライン）。判断サーフェスは将来増分（[orphan-model.md](orphan-model.md)） |
 | 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン（**実装済み**） |
-| 5 | ペアは正しいが訳抜け・原文改訂に未追随 | 検証が **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで isolate/漏れ 確定（[orphan-model.md](orphan-model.md) #3,#4） |
+| 5 | ペアは正しいが訳抜け・原文改訂に未追随 | 検証が **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで孤立/漏れ 確定（[orphan-model.md](orphan-model.md) 将来増分） |
 | 6 | en が原文コピーのまま（未翻訳） | 検証プロンプトの verdict 定義で match を禁止 — 全文未翻訳は mismatch、部分残留は partial に倒す | **実装済み** |
 | 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
 | 8 | ja に無いファイルが en にある | **sync はソースファイル起点のため触らない＝管理外のまま放置**（削除も検出もされない）。既知の限界 | 将来課題（未計画） |
 | 9 | 見出しレベル設定の不一致 | `validateAndSyncLevel` が target の `mdait.sync.level` をソースに自動同期 | **実装済みで完結** |
 | 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AIペアリング検証は対象外のため解除は手動 | AIレビュー拡張 |
-| 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | **opt-out する状態が無く `need:translate` が付いて翻訳される**（「ja が多い＝翻訳対象」と機械的に扱う）。既知の限界 | 孤立の統合モデル（`need:isolate` で伝播停止・[orphan-model.md](orphan-model.md) #1） |
+| 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[orphan-model.md](orphan-model.md)）。宣言 CodeLens UI は将来増分 |
 
-パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [adopt.md](../guide/ja/adopt.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は [orphan-model.md](orphan-model.md) #3。孤立（原文/訳文/両方）の統合モデルは [orphan-model.md](orphan-model.md) を参照。
+パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [adopt.md](../guide/ja/adopt.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [orphan-model.md](orphan-model.md) を参照。
 
 ## アーキテクチャ
 
@@ -240,7 +240,7 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 `collectReviewPairs` に列挙モードを追加し、`AiReviewOptions.mode` / `mdait_aiReview` の `mode` / コマンドの QuickPick で選択する:
 
 - **`mode: "pending"`（既定・従来挙動）**: `from` あり ∧ `need === "review"` のみ。
-- **`mode: "audit"`**: `from` あり ∧（`need === "review"` **または** `need` なし）＝確定済みペアも監査。**非冗長な価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」**。原文改訂は hash-sync が `need:revise` で決定的に検出し（かつ in-flight として）audit 対象外なので、audit は「原文改訂の検出器」ではない。`translate`/`revise@`/`isolate`/`keep`/`backfill`/`verify-deletion` 等の in-flight 状態は対象外。
+- **`mode: "audit"`**: `from` あり ∧（`need === "review"` **または** `need` なし）＝確定済みペアも監査。**非冗長な価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」**。原文改訂は hash-sync が `need:revise` で決定的に検出し（かつ in-flight として）audit 対象外なので、audit は「原文改訂の検出器」ではない。`translate`/`revise@`/`isolate`/`verify-deletion` 等の need 残り状態は対象外。
 
 検証対象の**元の状態**（`need:review` か確定済みか）で意味が分岐する。**確定済みペアの不備は「報告のみ」でマーカーを一切変更しない**（ADR-260706-03）:
 

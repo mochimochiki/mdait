@@ -66,7 +66,7 @@ suite("settings-model: スキーマから設定モデルを生成する", () => 
 		const policy = findSetting(categories, "sync.orphanTargetPolicy");
 		assert.ok(policy);
 		assert.strictEqual(policy.type, "enum");
-		assert.deepStrictEqual(policy.enum, ["delete", "verify", "keep", "backfill"]);
+		assert.deepStrictEqual(policy.enum, ["delete", "verify"]);
 	});
 
 	test("transPairs は objectArray として抽出され文字列フィールドを列に持つ", () => {

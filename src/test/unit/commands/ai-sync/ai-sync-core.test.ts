@@ -20,7 +20,7 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 		revisionsNeeded: 0,
 		totalAdopted: 0,
 		totalKept: 0,
-		totalBackfilled: 0,
+		totalOrphanReviewed: 0,
 		totalAlignCorrections: 0,
 		durationMs: 1,
 		...overrides,

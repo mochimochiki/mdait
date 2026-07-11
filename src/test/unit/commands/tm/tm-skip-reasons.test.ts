@@ -34,8 +34,23 @@ suite("TMスキップ理由の分類（mdait_tm 診断用）", () => {
 			assert.strictEqual(classifyTmSkipReason(unitWith("review")), "needReview");
 		});
 
-		test("need:keep は needKeep", () => {
-			assert.strictEqual(classifyTmSkipReason(unitWith("keep")), "needKeep");
+		test("need:isolate は needIsolate", () => {
+			assert.strictEqual(classifyTmSkipReason(unitWith("isolate")), "needIsolate");
+		});
+
+		test("need:verify-deletion は needOther（包括除外）", () => {
+			assert.strictEqual(classifyTmSkipReason(unitWith("verify-deletion")), "needOther");
+		});
+
+		test("未知の need は needOther（列挙の穴なし）", () => {
+			assert.strictEqual(classifyTmSkipReason(unitWith("custom-flag")), "needOther");
+		});
+
+		test("sourcePending は target 単体の分類では返さない（commit 側で付与）", () => {
+			// need の付いた target はすべて need系理由に分類され、sourcePending にはならない
+			for (const need of [null, "translate", "revise@x", "review", "isolate", "verify-deletion", "custom"]) {
+				assert.notStrictEqual(classifyTmSkipReason(unitWith(need)), "sourcePending");
+			}
 		});
 
 		test("分類は isTmCommitTarget と整合する（null ⇔ 登録対象）", () => {
@@ -44,8 +59,10 @@ suite("TMスキップ理由の分類（mdait_tm 診断用）", () => {
 				["translate", "src1"],
 				["revise@x", "src1"],
 				["review", "src1"],
-				["keep", null],
+				["isolate", "src1"],
+				["isolate", null],
 				["verify-deletion", "src1"],
+				["custom", "src1"],
 				[null, null],
 			];
 			for (const [need, from] of cases) {
@@ -68,21 +85,25 @@ suite("TMスキップ理由の分類（mdait_tm 診断用）", () => {
 				unitWith("translate"),
 				unitWith("revise@x"),
 				unitWith("review"),
-				unitWith("keep", null),
+				unitWith("isolate"),
+				unitWith("verify-deletion"),
+				unitWith("isolate", null),
 				unitWith(null, null),
 			]);
 			assert.deepStrictEqual(breakdown, {
-				noFrom: 2, // fromなし + keep(fromなし)はnoFrom判定が先
+				noFrom: 2, // fromなし + isolate(fromなし)はnoFrom判定が先
 				needTranslate: 2,
 				needRevise: 1,
 				needReview: 1,
-				needKeep: 0,
+				needIsolate: 1,
+				needOther: 1,
+				sourcePending: 0,
 			});
 		});
 
-		test("from付きのneed:keepはneedKeepに分類される", () => {
-			const breakdown = summarizeTmSkipReasons([unitWith("keep", "src1")]);
-			assert.strictEqual(breakdown.needKeep, 1);
+		test("from付きのneed:isolateはneedIsolateに分類される", () => {
+			const breakdown = summarizeTmSkipReasons([unitWith("isolate", "src1")]);
+			assert.strictEqual(breakdown.needIsolate, 1);
 		});
 	});
 });
