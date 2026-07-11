@@ -77,7 +77,7 @@ src/lm-tools/ai-sync-tool.ts   # mdait_aiSync（合成コマンド）
 src/lm-tools/sync-tool.ts      # mdait_sync（align パラメータ）
 ```
 
-AIアラインは独立コマンドを持たず、`sync_CoreProc` の `match()`〜`updateSectionHashes()` 間に `SectionAligner` を注入する形で動く（ADR-260705-03）。aligner は `syncCommand` が AIOnboarding 通過後に1回構築し、`syncSingleFile`（定常 sync）へは渡さないため AI 非実行が構造的に保証される。設定は `aiSync.align`（minConfidence / maxUnitsPerFile / maxNeedBodies / maxRounds）。
+AIアラインは独立コマンドを持たず、`sync_CoreProc` の `match()`〜`updateSectionHashes()` 間に `SectionAligner` を注入する形で動く（ADR-260705-03）。aligner は `syncCommand` が AIOnboarding 通過後に1回構築し、`syncSingleFile`（定常 sync）へは渡さないため AI 非実行が構造的に保証される。1ファイルの審査ユニット上限は全般設定 `trans.maxUnitsPerRun`（既定300・`0`で上限なし）で制御し、受理 confidence 下限（0.6）・needBodies 上限（8）・トリアージ上限ラウンド（2）はコード内定数で固定（ADR-260711-03）。
 
 ## AIペアリング検証（レビュー系・第一形態）
 
@@ -99,7 +99,7 @@ sequenceDiagram
     end
     rect rgb(255, 250, 240)
     Note over Core,AI: バッチ検証（batchSize 件/コール・batchSize:1 は単ペア経路）
-    loop 各バッチ（maxUnitsPerRun 上限・キャンセル可）
+    loop 各バッチ（trans.maxUnitsPerRun 上限・キャンセル可）
         Core->>Core: ペア毎に humanNote＋用語集・TM（双方向マッチ）を収集
         Core->>Ver: verifyBatch(pairs[{index, texts, terms, tm, note}])
         Ver->>AI: sendMessage(system固定, user=&lt;pair index&gt;ブロック列)
@@ -180,11 +180,11 @@ sequenceDiagram
 "aiSync": {
   "review": {
     "autoApprove": true,          // false = レポートのみ（need:review を一切変更しないセーフモード）
-    "autoApproveThreshold": 0.9,  // 自動承認の confidence 閾値（0..1 クランプ）
-    "maxUnitsPerRun": 200,        // 1実行あたりの検証ユニット上限（コスト暴走防止、1..1000 クランプ）
     "batchSize": 3                // 1コールあたりの検証ペア数（1..10 クランプ。1 = 従来の単ペアプロンプト）
   }
 }
+// 検証ユニット数の上限は全般設定 trans.maxUnitsPerRun（既定300・0で上限なし）。
+// 自動承認閾値（0.9）はコード内定数で固定（設定廃止）。
 ```
 
 ### UI・レポート
@@ -286,7 +286,7 @@ ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたび�
 
 - 純関数（decideReviewAction / collectReviewPairs / validator）を単体テストの中心に置く
 - pair-verifier / review-core はスタブ AIService（応答列を返す・呼び出しを記録）で検証
-- 重点エッジケース: 冪等性（2回目無変更）、dryRun、途中キャンセルで完了分のみ書き込み、リトライ枯渇 → uncertain、autoApprove off、maxUnitsPerRun 上限
+- 重点エッジケース: 冪等性（2回目無変更）、dryRun、途中キャンセルで完了分のみ書き込み、リトライ枯渇 → uncertain、autoApprove off、trans.maxUnitsPerRun 上限
 - 構造ズレの実サンプルは `src/test/unit/sample-content/{ja,en}/40_structure_mismatch.md` を利用
 
 ## 制約・既知のリスク

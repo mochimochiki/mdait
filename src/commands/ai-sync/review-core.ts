@@ -36,6 +36,12 @@ import { type VerifyBatchPair, chunk } from "./verify-batch-format";
 
 const logger = Logger.getInstance();
 
+/**
+ * 自動承認に必要な confidence の閾値（最適値で固定・設定廃止）。
+ * 自動承認は「verdict=match ∧ issues空 ∧ confidence >= この値」の三重条件でのみ発動する。
+ */
+export const AUTO_APPROVE_THRESHOLD = 0.9;
+
 /** 検証パイプライン内で1ペア分の状態を追跡するエントリ */
 interface ReviewEntry {
 	pair: ReviewPair;
@@ -193,11 +199,13 @@ export async function executeAiReviewForFile(
 		if (allPairs.length === 0) {
 			return;
 		}
-		const pairs = allPairs.slice(0, config.aiSync.review.maxUnitsPerRun);
+		// 1実行あたりの検証ユニット上限（全般設定 trans.maxUnitsPerRun。0 で上限なし）
+		const maxUnits = config.trans.maxUnitsPerRun;
+		const pairs = maxUnits > 0 ? allPairs.slice(0, maxUnits) : allPairs;
 
 		const policy = {
 			autoApprove: options.dryRun ? false : config.aiSync.review.autoApprove,
-			threshold: config.aiSync.review.autoApproveThreshold,
+			threshold: AUTO_APPROVE_THRESHOLD,
 		};
 		const summaryManager = SummaryManager.getInstance();
 		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う

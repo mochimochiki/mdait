@@ -230,6 +230,10 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		vscode.l10n.t(
 			"Additional file extensions to translate besides Markdown, e.g. '.txt' or '.csv'. These files are translated as a whole (no unit splitting) and tracked in .mdait/unit-state.",
 		),
+	"trans.maxUnitsPerRun": () =>
+		vscode.l10n.t(
+			"General cost guard for the maximum number of units processed in one pass. Shared by translation, AI pairing review, and AI align. Units beyond the limit keep their need flag and are handled by the next run. Set to 0 for no limit.",
+		),
 	// --- terms ---
 	"terms.filename": () =>
 		vscode.l10n.t(
@@ -286,33 +290,9 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		vscode.l10n.t(
 			"Let the AI review clear need:review automatically for pairs it judges to be faithful, complete translations with high confidence. Turn off for report-only mode where no markers are changed.",
 		),
-	"aiSync.review.autoApproveThreshold": () =>
-		vscode.l10n.t(
-			"Minimum AI confidence (0-1) required before need:review is cleared automatically. Higher values are safer but leave more pairs for manual review.",
-		),
-	"aiSync.review.maxUnitsPerRun": () =>
-		vscode.l10n.t(
-			"Cost guard: maximum number of units verified in one review run. Remaining units keep need:review and are picked up by the next run.",
-		),
 	"aiSync.review.batchSize": () =>
 		vscode.l10n.t(
 			"How many pairs are verified per AI call. 1 uses the single-pair prompt; larger batches reduce the number of calls and the cost of a run.",
-		),
-	"aiSync.align.minConfidence": () =>
-		vscode.l10n.t(
-			"Minimum AI confidence (0-1) for a pairing correction to be accepted during adopt. Corrections below this keep the deterministic position-based pairing.",
-		),
-	"aiSync.align.maxUnitsPerFile": () =>
-		vscode.l10n.t(
-			"Cost guard: files with more units than this skip AI align and keep the position-based mapping.",
-		),
-	"aiSync.align.maxNeedBodies": () =>
-		vscode.l10n.t(
-			"Maximum number of unit bodies the AI may request in the second triage round when it needs more evidence.",
-		),
-	"aiSync.align.maxRounds": () =>
-		vscode.l10n.t(
-			"Maximum triage rounds for AI align. 1 disables the second round where the AI can request unit bodies.",
 		),
 };
 

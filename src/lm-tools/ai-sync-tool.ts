@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAiSync } from "../commands/ai-sync/ai-sync-core";
 import { type AiSyncOutcome, buildAiSyncNextActions } from "../commands/ai-sync/ai-sync-result";
+import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-core";
 import { type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
@@ -214,7 +215,7 @@ function buildAiSyncData(outcome: AiSyncOutcome, config: Configuration): AiSyncD
 		},
 		autoApprove: {
 			enabled: config.aiSync.review.autoApprove,
-			threshold: config.aiSync.review.autoApproveThreshold,
+			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun: outcome.dryRun,
 		escalations,

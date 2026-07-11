@@ -86,7 +86,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	let sourceFile: string;
 	let targetFile: string;
 
-	function writeConfig(aiSyncReview: Record<string, unknown> = {}): void {
+	function writeConfig(aiSyncReview: Record<string, unknown> = {}, trans: Record<string, unknown> = {}): void {
 		const mdaitDir = path.join(tempDir, ".mdait");
 		fs.mkdirSync(mdaitDir, { recursive: true });
 		fs.writeFileSync(
@@ -95,6 +95,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
 				primaryLang: "ja",
 				ai: { provider: "default" },
+				trans,
 				// 本スイートは単ペア検証（従来挙動）の回帰テストのため batchSize: 1 を既定にする。
 				// バッチ検証は後続の「バッチ検証」スイートで扱う。
 				aiSync: { review: { batchSize: 1, ...aiSyncReview } },
@@ -103,8 +104,11 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 		);
 	}
 
-	async function initConfig(aiSyncReview: Record<string, unknown> = {}): Promise<Configuration> {
-		writeConfig(aiSyncReview);
+	async function initConfig(
+		aiSyncReview: Record<string, unknown> = {},
+		trans: Record<string, unknown> = {},
+	): Promise<Configuration> {
+		writeConfig(aiSyncReview, trans);
 		return await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
 	}
 
@@ -197,7 +201,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	});
 
 	test("閾値未満の confidence は承認されない", async () => {
-		const config = await initConfig({ autoApproveThreshold: 0.9 });
+		const config = await initConfig();
 		writePair();
 		const result = await executeAiReviewForFile(
 			targetFile,
@@ -228,7 +232,7 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 	});
 
 	test("maxUnitsPerRun を超えるユニットは処理されない", async () => {
-		const config = await initConfig({ maxUnitsPerRun: 1 });
+		const config = await initConfig({}, { maxUnitsPerRun: 1 });
 		writePair();
 		const stub = new StubAIService([MATCH]);
 		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub));

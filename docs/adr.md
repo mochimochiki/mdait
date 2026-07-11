@@ -4,6 +4,23 @@
 
 ---
 
+## ADR-260711-03: ユニット数上限を trans.maxUnitsPerRun に一本化し、調整困難な aiSync 詳細設定を最適値で固定・廃止する
+
+### 背景
+`aiSync.review.maxUnitsPerRun`（既定200）と `aiSync.align.maxUnitsPerFile`（既定300）は本質的に同じ「1回の処理で扱うユニット数の上限（コストガード）」であり、翻訳（trans）にも同様に当てはまる概念だが、trans には上限が無く、設定も機能ごとに分散して分かりづらかった。また `aiSync.review.autoApproveThreshold` / `aiSync.align.minConfidence` / `maxNeedBodies` / `maxRounds` はユーザーが適切値を判断しづらく、露出する価値が低かった。
+
+### 決定
+1. ユニット数上限を全般設定 **`trans.maxUnitsPerRun`（既定300・`0`で上限なし）** に統合する。trans（1ファイル単位）・aiSync.review（1実行単位）・aiSync.align（1ファイル単位）が共通で参照する。trans も新たにこの上限を適用し、超過分は need フラグを保持したまま次回実行で処理する（既存の冪等性を維持）。
+2. 調整困難な4設定を廃止し、コード内定数で最適値（＝従来の既定値）を固定する: `autoApproveThreshold`→0.9（`review-core.AUTO_APPROVE_THRESHOLD`）、`minConfidence`→0.6（`align-core.ALIGN_MIN_CONFIDENCE`）、`maxNeedBodies`→8・`maxRounds`→2（`section-aligner.DEFAULT_LIMITS`）。
+3. `aiSync.align` は全項目が移動・廃止となるためスキーマ・型・ロードから丸ごと削除する。`aiSync.review` は `autoApprove` / `batchSize` のみ残す。
+
+### 理由
+「1回で扱うユニット数の上限」はコスト暴走を防ぐ普遍的なガードであり、機能ごとに別設定を持つ必然性が無い。単一の全般設定に集約することで設定の見通しが良くなり、trans にも一貫した上限が効く。閾値・ラウンド数などの微調整パラメータは最適値が定まっており、設定として露出するより固定した方が誤設定リスクを避けられる（`align-result.ts` の `CorrectionValidationContext.minConfidence` は関数引数として残し、呼び出し側が定数を渡す）。
+
+### 備考
+- `trans.maxUnitsPerRun = 0` は「上限なし」を表す。ロード時に0以下は0へ正規化し、trans/review/align の3経路で `> 0` のときのみ上限を適用する。
+- 既存の `aiSync.review.autoApproveThreshold` / `aiSync.align.*` を書いた mdait.json は `additionalProperties: false` により検証エラーになるため、移行時は該当キーの削除が必要。
+
 ## ADR-260711-02: mdait.json を CustomTextEditorProvider のデフォルトエディタとし、JSON表示とのタブ内切り替えボタンを提供する
 
 ### 背景
