@@ -138,7 +138,7 @@ sequenceDiagram
 
 ### 孤立ターゲットポリシー — G4
 
-> **更新（2026-07-11）**: `keep` / `backfill` は ADR-260711-03 で廃止された（独立ユニット・`need:isolate` の統合モデルに置換。[orphan-model.md](orphan-model.md)）。本節と下記「逆方向埋め戻し（backfill）」・M2・M5 の該当記述は歴史的記録として残す。
+> **更新（2026-07-11）**: `keep` / `backfill` は ADR-260711-05 で廃止された（独立ユニット・`need:isolate` の統合モデルに置換。[command_sync.md](command_sync.md) の「孤立ユニットモデル」）。本節と下記「逆方向埋め戻し（backfill）」・M2・M5 の該当記述は歴史的記録として残す。
 
 `sync.autoDelete: boolean` を `sync.orphanTargetPolicy: "delete" | "verify" | "keep" | "backfill"` に拡張する（`autoDelete: true`→`delete`、`false`→`verify` として後方互換を維持。両方指定時は `orphanTargetPolicy` 優先）。
 

@@ -20,7 +20,7 @@ mdaitUnitは以下の要素で構成されます：
 |---|---|
 | `{hash}` | ユニット本文のCRC32ハッシュ（8文字）（巡回冗長検査による高速ハッシュ関数） |
 | `from:{hash}` | 訳文の翻訳元ユニットのハッシュ（訳文ファイルのみ） |
-| `need:{flag}` | 翻訳が必要な場合の要求フラグ（`translate`/`review`） |
+| `need:{flag}` | 要求フラグ（下記の need 語彙表参照） |
 
 **例**（before/after）:
 
@@ -36,6 +36,22 @@ after（sync後）:
 ## 概要
 This is the introduction section.
 ```
+
+### need 語彙
+
+need と from の組み合わせがユニットの状態を表す（正準表。孤立関連の背景は [command_sync.md](command_sync.md) の「孤立ユニットモデル」、TM commit 可否の根拠は [command_tm.md](command_tm.md)）:
+
+| need | from | 意味 | trans対象 | TM commit対象 |
+|---|---|---|:---:|:---:|
+| なし | あり | 通常の対訳（同期済み） | ✕ | ✅ |
+| なし | なし | **独立ユニット**（訳文役割の孤立。上流なし・下流へは伝播する起点） | ✕ | ✕（noFrom） |
+| `translate` | あり | 未翻訳 | ✅ | ✕ |
+| `revise@{h}` | あり | 原文改訂により再翻訳待ち | ✅ | ✕ |
+| `review` | あり/なし | 人間ゲート（adopt採用・穴あき一次受け） | ✕ | ✕ |
+| `isolate` | あり/なし | **保持＋下流伝播停止**（原文役割の孤立／真のローカル） | ✕ | ✕ |
+| `verify-deletion` | あり/なし | 原文削除に伴う削除確認 | ✕ | ✕ |
+
+レガシーの `need:keep` / `need:backfill` は廃止済みで、sync 時に `normalizeLegacyNeeds` が決定的に移行する（keep→need除去、backfill→review。ADR-260711-05）。
 
 ### ユニット境界の決定
 
