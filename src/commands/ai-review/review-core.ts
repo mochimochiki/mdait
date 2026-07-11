@@ -1,7 +1,7 @@
 /**
  * @file review-core.ts
  * @description
- *   AIペアリング検証のコア処理（1ファイル単位）。
+ *   AI翻訳レビューのコア処理（1ファイル単位）。
  *   VS Code コマンドと LM tool（mdait_aiReview）の双方から再利用される。
  *   マーカー変異は「自動承認時の removeNeedTag()」のみで、hash / from / 本文には触れない
  *   （ADR-260704-07）。
@@ -120,20 +120,20 @@ function applyVerifyOutcome(
 	return mutationDelta;
 }
 
-/** AIペアリング検証のオプション */
+/** AI翻訳レビューのオプション */
 export interface AiReviewOptions {
 	/** true の場合はマーカーを一切変更しない（レポートのみ） */
 	dryRun?: boolean;
 	/**
 	 * 検証対象の範囲（既定 "pending"）。
-	 * - "pending": need:review ユニットのみ（AIペアリング検証・従来挙動）
+	 * - "pending": need:review ユニットのみ（AI翻訳レビュー・従来挙動）
 	 * - "audit": 確定済みペア（from あり・need なし）も監査し、ドリフト検出時に need:review を付与
 	 */
 	mode?: ReviewCollectMode;
 }
 
 /**
- * 1ファイル分のAIペアリング検証を実行する。
+ * 1ファイル分のAI翻訳レビューを実行する。
  *
  * - 対象: ターゲット側の「from あり ∧ need:review」ユニット（0件なら即終了＝冪等）
  * - 自動承認されたユニットのみ need:review を解除しファイルへ書き戻す

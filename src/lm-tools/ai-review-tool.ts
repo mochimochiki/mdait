@@ -19,7 +19,7 @@ const logger = Logger.getInstance();
 const MAX_ESCALATIONS = 50;
 
 /**
- * 入力パラメータ: AIペアリング検証ツール
+ * 入力パラメータ: AI翻訳レビューツール
  */
 interface AiReviewInput {
 	/** 対象スコープ（ファイル/ディレクトリ）。省略時は全ターゲットディレクトリ */
@@ -77,7 +77,7 @@ interface AiReviewData {
 }
 
 /**
- * mdaitのAIペアリング検証ツール
+ * mdaitのAI翻訳レビューツール
  * adopt 済みペア（from + need:review）を GitHub Copilot Chat から AI でトリアージする。
  * 出力は共通エンベロープのJSON文字列（docs/design/agent-orchestration.md 参照）
  */

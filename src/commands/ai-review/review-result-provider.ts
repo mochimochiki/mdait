@@ -1,7 +1,7 @@
 /**
  * @file review-result-provider.ts
  * @description
- *   AIペアリング検証結果のプレビューを提供する TextDocumentContentProvider。
+ *   AI翻訳レビュー結果のプレビューを提供する TextDocumentContentProvider。
  *   固定 URI + onDidChange による上書き更新方式で既存タブを再利用する
  *   （tm-result-provider.ts と同パターン）。レポート本文の生成は VS Code 非依存の
  *   review-table.ts に委譲する。
@@ -17,7 +17,7 @@ const SCHEME = "mdait-ai-review";
 const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:ai-review-result`);
 
 /**
- * AIペアリング検証結果の仮想ドキュメントを提供するシングルトン。
+ * AI翻訳レビュー結果の仮想ドキュメントを提供するシングルトン。
  * extension.ts で `workspace.registerTextDocumentContentProvider` に登録して使用する。
  */
 export class AiReviewResultContentProvider implements vscode.TextDocumentContentProvider {

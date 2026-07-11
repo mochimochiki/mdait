@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 import { validateVerifyResponse } from "../../../../commands/ai-review/verify-response-validator";
 
-suite("validateVerifyResponse（AIペアリング検証応答のバリデーション）", () => {
+suite("validateVerifyResponse（AI翻訳レビュー応答のバリデーション）", () => {
 	test("正しいJSON応答をパースして verdict と confidence を返す", () => {
 		const result = validateVerifyResponse(
 			'{"verdict": "match", "confidence": 0.95, "issues": [], "reason": "Complete translation."}',

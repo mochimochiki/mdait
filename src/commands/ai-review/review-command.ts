@@ -1,7 +1,7 @@
 /**
  * @file review-command.ts
  * @description
- *   AIペアリング検証コマンドのエントリーポイント。
+ *   AI翻訳レビューコマンドのエントリーポイント。
  *   StatusTree のファイル/ディレクトリから呼び出され、adopt 済みペア
  *   （from + need:review）を AI で検証して自動承認/エスカレーションする。
  *   withProgress パターンで進捗表示・キャンセル対応（tm/command-commit.ts と同構成）。
@@ -35,7 +35,7 @@ export async function buildPairVerifier(config: Configuration): Promise<PairVeri
 }
 
 /**
- * 複数ファイルに対してAIペアリング検証を実行する。
+ * 複数ファイルに対してAI翻訳レビューを実行する。
  * 1ファイルの失敗は記録して続行する（tm.commit と同方針）。
  */
 export async function executeAiReviewForFiles(
@@ -93,7 +93,7 @@ export async function executeAiReviewForFiles(
 }
 
 /**
- * ファイル単位のAIペアリング検証コマンド（StatusTreeから呼び出し）
+ * ファイル単位のAI翻訳レビューコマンド（StatusTreeから呼び出し）
  */
 export async function aiReviewFileCommand(item?: StatusItem): Promise<AiReviewFileResult[] | undefined> {
 	if (!item || !("filePath" in item)) {
@@ -105,7 +105,7 @@ export async function aiReviewFileCommand(item?: StatusItem): Promise<AiReviewFi
 }
 
 /**
- * ディレクトリ単位のAIペアリング検証コマンド（StatusTreeから呼び出し）
+ * ディレクトリ単位のAI翻訳レビューコマンド（StatusTreeから呼び出し）
  */
 export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiReviewFileResult[] | undefined> {
 	if (!item || !("dirPath" in item)) {
@@ -139,26 +139,26 @@ export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiRev
  */
 async function pickReviewMode(): Promise<ReviewCollectMode | undefined> {
 	const pendingItem = {
-		label: vscode.l10n.t("Review pending pairs only"),
+		label: vscode.l10n.t("Review unconfirmed translations only"),
 		detail: vscode.l10n.t("Verify only units marked need:review (adopted, not yet confirmed)."),
 		mode: "pending" as ReviewCollectMode,
 	};
 	const auditItem = {
-		label: vscode.l10n.t("Audit all translated pairs"),
+		label: vscode.l10n.t("Audit all translations (report only)"),
 		detail: vscode.l10n.t(
-			"Also check confirmed pairs for unfaithful/incomplete translations (report only — markers are not changed).",
+			"Also check confirmed translations for unfaithful or incomplete content. Markers are not changed.",
 		),
 		mode: "audit" as ReviewCollectMode,
 	};
 	const picked = await vscode.window.showQuickPick([pendingItem, auditItem], {
-		title: vscode.l10n.t("AI Review Scope"),
-		placeHolder: vscode.l10n.t("Select which translation pairs to review with AI"),
+		title: vscode.l10n.t("AI Translation Review Scope"),
+		placeHolder: vscode.l10n.t("Select which translations to review with AI"),
 	});
 	return picked?.mode;
 }
 
 /**
- * バリデーション・AIオンボーディング・進捗表示つきでAIペアリング検証を実行する共通経路。
+ * バリデーション・AIオンボーディング・進捗表示つきでAI翻訳レビューを実行する共通経路。
  */
 async function runAiReviewWithProgress(files: string[], scopeLabel: string): Promise<AiReviewFileResult[] | undefined> {
 	const config = Configuration.getInstance();
@@ -182,7 +182,7 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 	return await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
-			title: vscode.l10n.t("AI Pairing Review: {0}", scopeLabel),
+			title: vscode.l10n.t("AI Translation Review: {0}", scopeLabel),
 			cancellable: true,
 		},
 		async (progress, token) => {
@@ -204,7 +204,7 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 }
 
 /**
- * AIペアリング検証結果を通知表示する。
+ * AI翻訳レビュー結果を通知表示する。
  */
 function showAiReviewResult(results: AiReviewFileResult[]): void {
 	const approved = results.reduce((sum, r) => sum + r.approved, 0);

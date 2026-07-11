@@ -30,9 +30,9 @@ export const PromptIds = {
 	TERM_TRANSLATE_TERMS: "term.translateTerms",
 	/** 対訳文の文単位アライメント */
 	TM_SPLIT_SENTENCES: "tm.splitSentences",
-	/** AIペアリング検証（adopt済みペアの妥当性判定） */
+	/** AI翻訳レビュー（adopt済みペアの妥当性判定） */
 	AI_REVIEW_VERIFY_PAIRING: "aiReview.verifyPairing",
-	/** AIペアリング検証（バッチ・複数ペアを1コールで判定） */
+	/** AI翻訳レビュー（バッチ・複数ペアを1コールで判定） */
 	AI_REVIEW_VERIFY_PAIRING_BATCH: "aiReview.verifyPairingBatch",
 	/** AIアライン（差分審査型・位置ベース対応付けの審査） */
 	ADOPT_ALIGN: "adopt.align",

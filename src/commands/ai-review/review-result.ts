@@ -1,7 +1,7 @@
 /**
  * @file review-result.ts
  * @description
- *   AIペアリング検証の結果型と判定→アクションの純関数。
+ *   AI翻訳レビューの結果型と判定→アクションの純関数。
  *   VS Code API 非依存（単体テストの中心）。
  * @module commands/ai-review/review-result
  */
@@ -192,7 +192,7 @@ export function aggregateReviewResults(results: AiReviewFileResult[]): ReviewAgg
  */
 export function formatReviewReason(parsed: ParsedVerifyResponse): string {
 	const confidence = parsed.confidence.toFixed(2);
-	const base = `AI pairing review: ${parsed.verdict} (${confidence}) — ${parsed.reason}`;
+	const base = `AI translation review: ${parsed.verdict} (${confidence}) — ${parsed.reason}`;
 	if (parsed.issues.length === 0) {
 		return base;
 	}

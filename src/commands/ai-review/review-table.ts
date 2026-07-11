@@ -1,7 +1,7 @@
 /**
  * @file review-table.ts
  * @description
- *   AIペアリング検証結果の Markdown レポート/表を生成する純関数群。
+ *   AI翻訳レビュー結果の Markdown レポート/表を生成する純関数群。
  *   **VS Code API 非依存**（node:path のみ）。仮想ドキュメント（review-result-provider）と
  *   取り込みウィザードの統合レポート（adopt-result）の両方から再利用され、単体テストも VS Code 抜きで行える。
  * @module commands/ai-review/review-table
@@ -49,7 +49,7 @@ export function generateReviewReportContent(results: AiReviewFileResult[]): stri
  * アンカーは仮想ドキュメントの CodeLens が「note 編集へジャンプ」を出すために使う。
  */
 export function buildReviewReport(results: AiReviewFileResult[]): { content: string; anchors: ReportAnchor[] } {
-	const lines: string[] = ["# mdait AI Pairing Review", ""];
+	const lines: string[] = ["# mdait AI Translation Review", ""];
 
 	const totals = results.reduce(
 		(acc, r) => {

@@ -1,7 +1,7 @@
 /**
  * @file verify-response-validator.ts
  * @description
- *   AIペアリング検証レスポンスのバリデーション。
+ *   AI翻訳レビューレスポンスのバリデーション。
  *   JSON抽出・型検証は trans/response-validator.ts のパターンを踏襲する。
  *   VS Code API 非依存。
  * @module commands/ai-review/verify-response-validator
@@ -79,7 +79,7 @@ function validateVerdictObject(parsed: unknown): ValidationResult<ParsedVerifyRe
 }
 
 /**
- * AIペアリング検証レスポンス（単ペア）をバリデートする。
+ * AI翻訳レビューレスポンス（単ペア）をバリデートする。
  * verdict 語彙外・confidence 欠落はリトライ可能エラーとして返す。
  */
 export function validateVerifyResponse(rawResponse: string): ValidationResult<ParsedVerifyResponse> {
@@ -111,7 +111,7 @@ export interface BatchValidationResult {
 }
 
 /**
- * AIペアリング検証レスポンス（バッチ）をバリデートする。
+ * AI翻訳レビューレスポンス（バッチ）をバリデートする。
  *
  * - 応答は `{"results": [{"index": 1, "verdict": ...}, ...]}` 形式を要求する
  *   （extractJsonFromResponse がオブジェクト `{...}` のみ抽出するため配列にはしない）

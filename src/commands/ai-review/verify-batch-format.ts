@@ -1,7 +1,7 @@
 /**
  * @file verify-batch-format.ts
  * @description
- *   AIペアリング検証のバッチ整形純関数群。ペア配列の分割と、バッチプロンプトに埋め込む
+ *   AI翻訳レビューのバッチ整形純関数群。ペア配列の分割と、バッチプロンプトに埋め込む
  *   <pair> ブロック列の組み立てを行う。VS Code API 非依存。
  * @module commands/ai-review/verify-batch-format
  */

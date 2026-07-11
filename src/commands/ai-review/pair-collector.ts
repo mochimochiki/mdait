@@ -4,7 +4,7 @@
  *   AIレビューの対象ペア列挙。
  *   ターゲット側のユニットを from ハッシュでソースユニットに対応付ける純関数。
  *   VS Code API 非依存。
- *   - mode="pending": 「from あり ∧ need:review」のみ（AIペアリング検証・既定）
+ *   - mode="pending": 「from あり ∧ need:review」のみ（AI翻訳レビュー・既定）
  *   - mode="audit": 「from あり ∧（need:review または need なし）」＝確定済みペアも監査対象
  * @module commands/ai-review/pair-collector
  */

@@ -39,7 +39,7 @@ interface AiSyncData {
 		kept: number;
 		orphanReviewed: number;
 	};
-	/** AIペアリング検証段の結果 */
+	/** AI翻訳レビュー段の結果 */
 	review: {
 		filesWithReviewUnits: number;
 		verified: number;
@@ -72,7 +72,7 @@ interface AiSyncData {
 
 /**
  * mdaitのAI同期ツール
- * sync(adopt+align) → AIペアリング検証 → レポートを束ねる薄い合成コマンド。
+ * sync(adopt+align) → AI翻訳レビュー → レポートを束ねる薄い合成コマンド。
  * 取り込みと健全性監査を同一機能で兼ねる（docs/design/command_ai-sync.md 参照）。
  * 出力は共通エンベロープのJSON文字列。
  */

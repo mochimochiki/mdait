@@ -135,7 +135,7 @@ export function searchTmByLines(
  *   searchTmByLines の「相手言語 variant 必須」フィルタにより対訳が揃ったエントリのみ返る）
  *
  * どちらか一方だけがヒットする参照は「同じ原文が別の訳になっている」「同じ訳が別の原文に
- * 使われている」兆候であり、訳揺れ検知の材料として AIペアリング検証プロンプトに注入する。
+ * 使われている」兆候であり、訳揺れ検知の材料として AI翻訳レビュープロンプトに注入する。
  *
  * @param sourceContent 原文ユニット本文（Markdown含む生テキスト）
  * @param targetContent 訳文ユニット本文（Markdown含む生テキスト）

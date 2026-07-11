@@ -81,7 +81,7 @@ Content A.
 Content B.
 `;
 
-suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
+suite("executeAiReviewForFile（AI翻訳レビューコア）", () => {
 	let tempDir: string;
 	let sourceFile: string;
 	let targetFile: string;

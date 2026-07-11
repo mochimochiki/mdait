@@ -1,7 +1,7 @@
 /**
  * @file pair-verifier.ts
  * @description
- *   AIペアリング検証のAI呼び出し層。
+ *   AI翻訳レビューのAI呼び出し層。
  *   system prompt を不変に保ち、リトライ時は user message 側に
  *   RETRY INSTRUCTION を追記する（translator.ts と同じキャッシュ維持パターン）。
  * @module commands/ai-review/pair-verifier
