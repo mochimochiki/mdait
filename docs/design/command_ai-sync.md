@@ -99,7 +99,7 @@ sequenceDiagram
     end
     rect rgb(255, 250, 240)
     Note over Core,AI: バッチ検証（batchSize 件/コール・batchSize:1 は単ペア経路）
-    loop 各バッチ（trans.maxUnitsPerRun 上限・キャンセル可）
+    loop 各バッチ（trans.maxUnitsPerRun 上限・1ファイル単位・キャンセル可）
         Core->>Core: ペア毎に humanNote＋用語集・TM（双方向マッチ）を収集
         Core->>Ver: verifyBatch(pairs[{index, texts, terms, tm, note}])
         Ver->>AI: sendMessage(system固定, user=&lt;pair index&gt;ブロック列)
@@ -183,7 +183,7 @@ sequenceDiagram
     "batchSize": 3                // 1コールあたりの検証ペア数（1..10 クランプ。1 = 従来の単ペアプロンプト）
   }
 }
-// 検証ユニット数の上限は全般設定 trans.maxUnitsPerRun（既定300・0で上限なし）。
+// 検証ユニット数の上限は全般設定 trans.maxUnitsPerRun（既定300・0で上限なし・1ファイル単位で適用）。
 // 自動承認閾値（0.9）はコード内定数で固定（設定廃止）。
 ```
 

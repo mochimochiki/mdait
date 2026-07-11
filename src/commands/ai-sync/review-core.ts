@@ -24,6 +24,7 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
 import type { PairVerifier, VerifyResult } from "./pair-verifier";
+import { AUTO_APPROVE_THRESHOLD } from "./review-constants";
 import { ReviewContextProvider } from "./review-context";
 import {
 	type AiReviewFileResult,
@@ -35,12 +36,6 @@ import {
 import { type VerifyBatchPair, chunk } from "./verify-batch-format";
 
 const logger = Logger.getInstance();
-
-/**
- * 自動承認に必要な confidence の閾値（最適値で固定・設定廃止）。
- * 自動承認は「verdict=match ∧ issues空 ∧ confidence >= この値」の三重条件でのみ発動する。
- */
-export const AUTO_APPROVE_THRESHOLD = 0.9;
 
 /** 検証パイプライン内で1ペア分の状態を追跡するエントリ */
 interface ReviewEntry {

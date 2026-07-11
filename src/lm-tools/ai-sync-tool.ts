@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAiSync } from "../commands/ai-sync/ai-sync-core";
 import { type AiSyncOutcome, buildAiSyncNextActions } from "../commands/ai-sync/ai-sync-result";
-import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-core";
+import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-constants";
 import { type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
