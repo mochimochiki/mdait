@@ -180,6 +180,7 @@ interface MdaitConfig {
 			autoApprove?: boolean;
 			autoApproveThreshold?: number;
 			maxUnitsPerRun?: number;
+			batchSize?: number;
 		};
 		align?: {
 			minConfidence?: number;
@@ -200,6 +201,8 @@ export interface AiSyncReviewConfig {
 	autoApproveThreshold: number;
 	/** 1実行あたりの検証ユニット上限（コスト暴走防止） */
 	maxUnitsPerRun: number;
+	/** 1回のLLM呼び出しで検証するペア数（1で従来の単ペアプロンプト） */
+	batchSize: number;
 }
 
 /**
@@ -339,6 +342,7 @@ export class Configuration {
 			autoApprove: true,
 			autoApproveThreshold: 0.9,
 			maxUnitsPerRun: 200,
+			batchSize: 3,
 		},
 		align: {
 			minConfidence: 0.6,
@@ -766,6 +770,12 @@ export class Configuration {
 					this.aiSync.review.maxUnitsPerRun = Math.min(
 						1000,
 						Math.max(1, Math.floor(config.aiSync.review.maxUnitsPerRun as number)),
+					);
+				}
+				if (Number.isFinite(config.aiSync.review.batchSize)) {
+					this.aiSync.review.batchSize = Math.min(
+						10,
+						Math.max(1, Math.floor(config.aiSync.review.batchSize as number)),
 					);
 				}
 			}

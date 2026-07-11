@@ -22,8 +22,9 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { SummaryManager } from "../../ui/hover/summary-manager";
-import { type ReviewCollectMode, collectReviewPairs } from "./pair-collector";
-import type { PairVerifier } from "./pair-verifier";
+import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
+import type { PairVerifier, VerifyResult } from "./pair-verifier";
+import { ReviewContextProvider } from "./review-context";
 import {
 	type AiReviewFileResult,
 	type UnitReviewResult,
@@ -31,8 +32,92 @@ import {
 	decideReviewAction,
 	formatReviewReason,
 } from "./review-result";
+import { type VerifyBatchPair, chunk } from "./verify-batch-format";
 
 const logger = Logger.getInstance();
+
+/** 検証パイプライン内で1ペア分の状態を追跡するエントリ */
+interface ReviewEntry {
+	pair: ReviewPair;
+	unitResult: UnitReviewResult;
+	/** 結果へ反映済みか（未処理ペアはキャンセル時に結果へ現れない） */
+	processed: boolean;
+}
+
+/**
+ * 1ペア分の判定結果を unitResult・ファイル集計・summary へ反映する。
+ * 単ペア経路（batchSize=1）とバッチ経路の共通処理。
+ *
+ * @returns マーカー変異数（自動承認で removeNeedTag した場合 1、それ以外 0）
+ */
+function applyVerifyOutcome(
+	entry: ReviewEntry,
+	verifyResult: VerifyResult,
+	policy: { autoApprove: boolean; threshold: number },
+	result: AiReviewFileResult,
+	summaryManager: SummaryManager,
+	durationSec: number,
+): number {
+	const marker = entry.pair.targetUnit.marker;
+	const unitResult = entry.unitResult;
+	const parsed = verifyResult.parsed;
+	let mutationDelta = 0;
+
+	result.verified++;
+	unitResult.verdict = parsed.verdict;
+	unitResult.confidence = parsed.confidence;
+	unitResult.issues = parsed.issues;
+	unitResult.reason = parsed.reason;
+
+	if (verifyResult.fallback) {
+		unitResult.action = "error";
+		result.errors++;
+	} else {
+		const action = decideReviewAction(parsed, policy);
+		// 元が need:review（pending）か、確定済みペア（audit で拾った need なし）かで
+		// マーカー変異の意味が変わる。settled は removeNeedTag する対象が無いため、
+		// ドリフト（escalate）検出時のみ need:review を付与してフラグする。
+		const isPending = marker?.need === "review";
+		if (isPending) {
+			if (action === "approve") {
+				marker?.removeNeedTag();
+				unitResult.action = "approved";
+				mutationDelta = 1;
+				result.approved++;
+			} else if (action === "escalate") {
+				unitResult.action = "escalated";
+				result.escalated++;
+			} else {
+				unitResult.action = "kept";
+				result.kept++;
+			}
+		} else if (action === "escalate") {
+			// 確定済みペアにドリフト（partial/mismatch）を検出 → レポートのみ（マーカー不変）。
+			// audit は確定済みペアを毎回再スキャンするため、ここで need:review を書き戻すと
+			// 意図的な単文乖離を毎回蒸し返し、人間の「承認（need:review 解除）」判断を上書き
+			// してしまう。受理を記憶する仕組み（受理台帳）が入るまでは報告に留める。
+			unitResult.action = "flagged";
+			result.flagged++;
+		} else {
+			// 確定済みペアがクリーン（match/uncertain）→ 変更なし
+			unitResult.action = "audited";
+			result.audited++;
+		}
+	}
+
+	// hover 表示用に判定理由を保存（approved も含めて可視化する）
+	// duration はバッチ全体の経過秒をバッチ内の各ユニットにそのまま記録する
+	if (marker?.hash) {
+		summaryManager.saveSummary(marker.hash, {
+			unitHash: marker.hash,
+			stats: { duration: durationSec },
+			reviewReasons: [formatReviewReason(parsed)],
+			warnings: parsed.issues.length > 0 ? parsed.issues : undefined,
+		});
+	}
+
+	return mutationDelta;
+}
 
 /** AIペアリング検証のオプション */
 export interface AiReviewOptions {
@@ -118,118 +203,144 @@ export async function executeAiReviewForFile(
 		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
 		let mutationCount = 0;
 
-		for (let i = 0; i < pairs.length; i++) {
+		// 第1パス: 全ペアの unitResult を順序どおり用意し、ソース未解決は skipped として確定する。
+		// 未処理ペアは結果に現れない（キャンセル時の現行挙動を維持）ため processed フラグで管理する。
+		const entries: ReviewEntry[] = pairs.map((pair) => {
+			const marker = pair.targetUnit.marker;
+			return {
+				pair,
+				unitResult: {
+					filePath: targetFile,
+					unitHash: marker?.hash ?? "",
+					fromHash: marker?.from ?? "",
+					title: pair.targetUnit.title,
+					issues: [],
+					action: "kept",
+				},
+				processed: false,
+			};
+		});
+		for (const entry of entries) {
+			if (!entry.pair.sourceUnit) {
+				entry.unitResult.action = "skipped";
+				entry.unitResult.reason = "Source unit not found for from hash";
+				result.skipped++;
+				entry.processed = true;
+			}
+		}
+		const verifiable = entries.filter((entry) => !entry.processed);
+
+		// 用語集・TM をファイル単位で1回ロード（ペア毎の双方向抽出・検索は同期の純計算）
+		const reviewContext = await ReviewContextProvider.create(config, transPair.sourceLang, transPair.targetLang);
+
+		const batchSize = config.aiSync.review.batchSize;
+		const batches = chunk(verifiable, batchSize);
+		let processedCount = 0;
+
+		for (const batch of batches) {
 			if (token?.isCancellationRequested) {
-				logger.info("aiSync", "AI review cancelled", { file: targetFile, processed: i });
+				logger.info("aiSync", "AI review cancelled", { file: targetFile, processed: processedCount });
 				break;
 			}
-			const pair = pairs[i];
-			const marker = pair.targetUnit.marker;
-			const unitResult: UnitReviewResult = {
-				filePath: targetFile,
-				unitHash: marker?.hash ?? "",
-				fromHash: marker?.from ?? "",
-				title: pair.targetUnit.title,
-				issues: [],
-				action: "kept",
-			};
 			progress?.report({
-				message: vscode.l10n.t("{0}/{1} units", i + 1, pairs.length),
+				message: vscode.l10n.t("{0}/{1} units", processedCount + batch.length, verifiable.length),
 			});
-
-			if (!pair.sourceUnit) {
-				unitResult.action = "skipped";
-				unitResult.reason = "Source unit not found for from hash";
-				result.skipped++;
-				result.unitResults.push(unitResult);
-				continue;
-			}
 
 			try {
 				const startedAt = Date.now();
-				// ユニットに紐づく note（人間が記録した意図的乖離の説明など）を AI へ渡す。
-				// AI が note を織り込んで判定するので、意図的な乖離は match/audited になり再報告されない。
-				const humanNote = marker?.hash
-					? ((await UnitRegistryManager.getInstance().loadNote(marker.hash)) ?? undefined)
-					: undefined;
-				const verifyResult = await verifier.verify(
-					{
-						sourceLang: transPair.sourceLang,
-						targetLang: transPair.targetLang,
-						sourceText: pair.sourceUnit.content,
-						targetText: pair.targetUnit.content,
+				// ユニットに紐づく note（人間が記録した意図的乖離の説明など）と、
+				// 原文・訳文どちらかにヒットした用語集・TM参照をペア毎に集めて AI へ渡す。
+				const batchPairs: VerifyBatchPair[] = [];
+				for (let j = 0; j < batch.length; j++) {
+					const entry = batch[j];
+					const marker = entry.pair.targetUnit.marker;
+					const sourceText = entry.pair.sourceUnit?.content ?? "";
+					const targetText = entry.pair.targetUnit.content;
+					const humanNote = marker?.hash
+						? ((await UnitRegistryManager.getInstance().loadNote(marker.hash)) ?? undefined)
+						: undefined;
+					const pairContext = reviewContext.getContextForPair(sourceText, targetText);
+					batchPairs.push({
+						index: j + 1,
+						sourceText,
+						targetText,
 						humanNote,
-						unitContext: { unitHash: marker?.hash, title: pair.targetUnit.title },
-					},
-					token,
-				);
-				const parsed = verifyResult.parsed;
-				result.verified++;
-				unitResult.verdict = parsed.verdict;
-				unitResult.confidence = parsed.confidence;
-				unitResult.issues = parsed.issues;
-				unitResult.reason = parsed.reason;
-
-				if (verifyResult.fallback) {
-					unitResult.action = "error";
-					result.errors++;
-				} else {
-					const action = decideReviewAction(parsed, policy);
-					// 元が need:review（pending）か、確定済みペア（audit で拾った need なし）かで
-					// マーカー変異の意味が変わる。settled は removeNeedTag する対象が無いため、
-					// ドリフト（escalate）検出時のみ need:review を付与してフラグする。
-					const isPending = marker?.need === "review";
-					if (isPending) {
-						if (action === "approve") {
-							marker?.removeNeedTag();
-							unitResult.action = "approved";
-							mutationCount++;
-							result.approved++;
-						} else if (action === "escalate") {
-							unitResult.action = "escalated";
-							result.escalated++;
-						} else {
-							unitResult.action = "kept";
-							result.kept++;
-						}
-					} else if (action === "escalate") {
-						// 確定済みペアにドリフト（partial/mismatch）を検出 → レポートのみ（マーカー不変）。
-						// audit は確定済みペアを毎回再スキャンするため、ここで need:review を書き戻すと
-						// 意図的な単文乖離を毎回蒸し返し、人間の「承認（need:review 解除）」判断を上書き
-						// してしまう。受理を記憶する仕組み（受理台帳）が入るまでは報告に留める。
-						unitResult.action = "flagged";
-						result.flagged++;
-					} else {
-						// 確定済みペアがクリーン（match/uncertain）→ 変更なし
-						unitResult.action = "audited";
-						result.audited++;
-					}
+						termsJson: pairContext.termsJson,
+						tmReferences: pairContext.tmReferences,
+						unitContext: { unitHash: marker?.hash, title: entry.pair.targetUnit.title },
+					});
 				}
 
-				// hover 表示用に判定理由を保存（approved も含めて可視化する）
-				if (marker?.hash) {
-					summaryManager.saveSummary(marker.hash, {
-						unitHash: marker.hash,
-						stats: { duration: (Date.now() - startedAt) / 1000 },
-						reviewReasons: [formatReviewReason(parsed)],
-						warnings: parsed.issues.length > 0 ? parsed.issues : undefined,
-					});
+				// batchSize=1 は従来の単ペアプロンプト（aiSync.verifyPairing）を使い完全後方互換とする。
+				// 2以上はバッチプロンプト（aiSync.verifyPairingBatch）で1コールにまとめる。
+				let verifyResults: Map<number, VerifyResult>;
+				if (batchSize === 1) {
+					const single = batchPairs[0];
+					const verifyResult = await verifier.verify(
+						{
+							sourceLang: transPair.sourceLang,
+							targetLang: transPair.targetLang,
+							sourceText: single.sourceText,
+							targetText: single.targetText,
+							humanNote: single.humanNote,
+							termsJson: single.termsJson,
+							tmReferences: single.tmReferences,
+							unitContext: single.unitContext,
+						},
+						token,
+					);
+					verifyResults = new Map([[1, verifyResult]]);
+				} else {
+					verifyResults = await verifier.verifyBatch(
+						{
+							sourceLang: transPair.sourceLang,
+							targetLang: transPair.targetLang,
+							pairs: batchPairs,
+						},
+						token,
+					);
+				}
+				const durationSec = (Date.now() - startedAt) / 1000;
+
+				for (let j = 0; j < batch.length; j++) {
+					const entry = batch[j];
+					const verifyResult = verifyResults.get(j + 1);
+					if (!verifyResult) {
+						entry.unitResult.action = "error";
+						entry.unitResult.reason = "No verdict returned for pair";
+						result.errors++;
+						entry.processed = true;
+						continue;
+					}
+					mutationCount += applyVerifyOutcome(entry, verifyResult, policy, result, summaryManager, durationSec);
+					entry.processed = true;
 				}
 			} catch (error) {
 				if (token?.isCancellationRequested) {
 					logger.info("aiSync", "AI review cancelled during verification", { file: targetFile });
 					break;
 				}
-				logger.warn("aiSync", "Unit verification error", {
-					unitHash: marker?.hash,
-					title: pair.targetUnit.title,
+				// バッチ呼び出しの失敗はバッチ内全ペアを error として続行する
+				// （現行の「1ユニットの失敗でファイルを止めない」をバッチ粒度に拡張）
+				logger.warn("aiSync", "Batch verification error", {
+					pairCount: batch.length,
 					...formatError(error),
 				});
-				unitResult.action = "error";
-				unitResult.reason = (error as Error).message;
-				result.errors++;
+				for (const entry of batch) {
+					entry.unitResult.action = "error";
+					entry.unitResult.reason = (error as Error).message;
+					result.errors++;
+					entry.processed = true;
+				}
 			}
-			result.unitResults.push(unitResult);
+			processedCount += batch.length;
+		}
+
+		// 第1パスの順序どおりに、処理済みペアのみ結果へ反映する
+		for (const entry of entries) {
+			if (entry.processed) {
+				result.unitResults.push(entry.unitResult);
+			}
 		}
 
 		// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）

@@ -371,8 +371,13 @@
         },
         "aiSync.verifyPairing": {
           "type": "string",
-          "description": "Path to custom AI pairing verification prompt file",
+          "description": "Path to custom AI pairing verification prompt file (single-pair, used when aiSync.review.batchSize is 1)",
           "examples": [".mdait/prompts/ai-sync-verify-pairing.txt"]
+        },
+        "aiSync.verifyPairingBatch": {
+          "type": "string",
+          "description": "Path to custom AI pairing verification batch prompt file (used when aiSync.review.batchSize is 2 or more)",
+          "examples": [".mdait/prompts/ai-sync-verify-pairing-batch.txt"]
         },
         "aiSync.align": {
           "type": "string",
@@ -408,6 +413,13 @@
               "minimum": 1,
               "maximum": 1000,
               "default": 200
+            },
+            "batchSize": {
+              "type": "integer",
+              "description": "Number of pairs verified per LLM call. 1 uses the single-pair prompt (aiSync.verifyPairing); 2 or more uses the batch prompt (aiSync.verifyPairingBatch).",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 3
             }
           },
           "additionalProperties": false

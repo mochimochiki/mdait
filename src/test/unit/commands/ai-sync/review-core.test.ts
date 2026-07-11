@@ -95,7 +95,9 @@ suite("executeAiReviewForFile（AIペアリング検証コア）", () => {
 				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
 				primaryLang: "ja",
 				ai: { provider: "default" },
-				aiSync: { review: aiSyncReview },
+				// 本スイートは単ペア検証（従来挙動）の回帰テストのため batchSize: 1 を既定にする。
+				// バッチ検証は後続の「バッチ検証」スイートで扱う。
+				aiSync: { review: { batchSize: 1, ...aiSyncReview } },
 			}),
 			"utf-8",
 		);
@@ -386,6 +388,214 @@ Content A.
 				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
 				assert.ok(stub.userMessages.every((m) => !m.includes("<humanNote>")));
 			});
+		});
+	});
+
+	suite("バッチ検証（batchSize >= 2）", () => {
+		/** バッチ応答 {"results":[...]} を組み立てる */
+		function batchResponse(
+			...entries: Array<{ index: number; verdict: string; confidence?: number; issues?: string[] }>
+		): string {
+			return JSON.stringify({
+				results: entries.map((e) => ({
+					index: e.index,
+					verdict: e.verdict,
+					confidence: e.confidence ?? 0.95,
+					issues: e.issues ?? [],
+					reason: "batch",
+				})),
+			});
+		}
+
+		const SOURCE_CONTENT_4 = `<!-- mdait srcA -->
+## セクションA
+
+本文A。
+
+<!-- mdait srcB -->
+## セクションB
+
+本文B。
+
+<!-- mdait srcC -->
+## セクションC
+
+本文C。
+
+<!-- mdait srcD -->
+## セクションD
+
+本文D。
+`;
+
+		const TARGET_CONTENT_4 = `<!-- mdait tgtA from:srcA need:review -->
+## Section A
+
+Content A.
+
+<!-- mdait tgtB from:srcB need:review -->
+## Section B
+
+Content B.
+
+<!-- mdait tgtC from:srcC need:review -->
+## Section C
+
+Content C.
+
+<!-- mdait tgtD from:srcD need:review -->
+## Section D
+
+Content D.
+`;
+
+		test("デフォルト batchSize=3 で2ユニットが1回のLLMコールにまとまり index で対応付く", async () => {
+			// batchSize 未指定 → デフォルト 3
+			const config = await initConfig({ batchSize: undefined });
+			writePair();
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "mismatch", confidence: 0.9 }),
+			]);
+			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			assert.strictEqual(stub.callCount, 1, "2ユニットが1コールにまとまること");
+			assert.strictEqual(result.verified, 2);
+			assert.strictEqual(result.approved, 1);
+			assert.strictEqual(result.escalated, 1);
+			const written = fs.readFileSync(targetFile, "utf-8");
+			assert.ok(written.includes("<!-- mdait tgtA from:srcA -->"), "index 1 = tgtA が承認されること");
+			assert.ok(written.includes("<!-- mdait tgtB from:srcB need:review -->"), "index 2 = tgtB は維持されること");
+		});
+
+		test("user message に <pair index> ブロックで両ユニット本文が含まれる", async () => {
+			const config = await initConfig({ batchSize: 3 });
+			writePair();
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
+			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			const user = stub.userMessages[0];
+			assert.ok(user.includes('<pair index="1">'));
+			assert.ok(user.includes('<pair index="2">'));
+			assert.ok(user.includes("本文A。"));
+			assert.ok(user.includes("本文B。"));
+		});
+
+		test("batchSize=2 で4ユニットが2バッチに分かれ、1バッチ目後のキャンセルで完了分のみ反映", async () => {
+			const config = await initConfig({ batchSize: 2 });
+			writePair(SOURCE_CONTENT_4, TARGET_CONTENT_4);
+			const cts = new vscode.CancellationTokenSource();
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
+			stub.afterResponse = () => cts.cancel();
+
+			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), {}, undefined, cts.token);
+
+			assert.strictEqual(stub.callCount, 1);
+			assert.strictEqual(result.verified, 2);
+			assert.strictEqual(result.approved, 2);
+			assert.strictEqual(result.markersChanged, true);
+			const written = fs.readFileSync(targetFile, "utf-8");
+			assert.ok(written.includes("<!-- mdait tgtA from:srcA -->"));
+			assert.ok(written.includes("<!-- mdait tgtB from:srcB -->"));
+			assert.ok(written.includes("<!-- mdait tgtC from:srcC need:review -->"), "未処理バッチは維持されること");
+			assert.ok(written.includes("<!-- mdait tgtD from:srcD need:review -->"), "未処理バッチは維持されること");
+		});
+
+		test("バッチ呼び出しの例外はバッチ内全ユニットを error にして後続バッチを続行する", async () => {
+			const config = await initConfig({ batchSize: 2 });
+			writePair(SOURCE_CONTENT_4, TARGET_CONTENT_4);
+			const stub = new StubAIService([
+				"__THROW__",
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
+			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			assert.strictEqual(result.errors, 2, "1バッチ目の2ユニットが error になること");
+			assert.strictEqual(result.approved, 2, "2バッチ目は処理されること");
+			const written = fs.readFileSync(targetFile, "utf-8");
+			assert.ok(written.includes("<!-- mdait tgtA from:srcA need:review -->"), "error ユニットは維持されること");
+			assert.ok(written.includes("<!-- mdait tgtC from:srcC -->"));
+		});
+
+		test("用語集にヒットしたエントリが <terms> としてペア内に注入される（原文側ヒット）", async () => {
+			writeConfig({ batchSize: 3 });
+			// 原文の「本文A」を含む用語エントリ（en 訳語つき）
+			fs.writeFileSync(
+				path.join(tempDir, ".mdait", "terms.csv"),
+				"context,ja,en\ntest term,本文A,Body A\n",
+				"utf-8",
+			);
+			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
+			writePair();
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
+			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			const user = stub.userMessages[0];
+			assert.ok(user.includes("<terms>"), "terms ブロックが注入されること");
+			assert.ok(user.includes("Body A"), "訳語が含まれること");
+			// ヒットしないペア（Section B）の <pair> には terms が付かない
+			const pair2 = user.slice(user.indexOf('<pair index="2">'));
+			assert.ok(!pair2.includes("<terms>"), "ヒットしないペアには terms が付かないこと");
+		});
+
+		test("batchSize=1 の単ペア経路でも用語集が <terms> として注入される", async () => {
+			writeConfig({ batchSize: 1 });
+			fs.writeFileSync(
+				path.join(tempDir, ".mdait", "terms.csv"),
+				"context,ja,en\ntest term,本文A,Body A\n",
+				"utf-8",
+			);
+			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
+			writePair();
+			const stub = new StubAIService([MATCH, MATCH]);
+			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			assert.strictEqual(stub.callCount, 2, "単ペア経路は1ユニット1コール");
+			assert.ok(stub.userMessages[0].includes("<terms>"), "ヒットしたユニットに terms が注入されること");
+			assert.ok(stub.userMessages[0].includes("Body A"));
+			assert.ok(!stub.userMessages[1].includes("<terms>"), "ヒットしないユニットには注入されないこと");
+		});
+
+		test("訳文側だけにヒットした用語も注入される（訳揺れ検知の材料）", async () => {
+			writeConfig({ batchSize: 3 });
+			// 原文には現れず、訳文 "Content A." にだけヒットするエントリ
+			fs.writeFileSync(
+				path.join(tempDir, ".mdait", "terms.csv"),
+				"context,ja,en\ntarget only,存在しない用語,Content A\n",
+				"utf-8",
+			);
+			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
+			writePair();
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
+			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			const user = stub.userMessages[0];
+			const pair1 = user.slice(user.indexOf('<pair index="1">'), user.indexOf('<pair index="2">'));
+			assert.ok(pair1.includes("<terms>"), "訳文側ヒットでも terms が注入されること");
+			assert.ok(pair1.includes("存在しない用語"), "原語が含まれること");
+		});
+
+		test("バッチ応答の一部欠落はリトライされ、部分受理で欠落分のみ error になる", async () => {
+			const config = await initConfig({ batchSize: 3 });
+			writePair();
+			// 常に index 1 のみ返す → index 2 が揃わずリトライ枯渇 → 部分受理
+			const incomplete = batchResponse({ index: 1, verdict: "match" });
+			const stub = new StubAIService([incomplete, incomplete, incomplete]);
+			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+			assert.strictEqual(stub.callCount, 3, "初回 + リトライ2回");
+			assert.strictEqual(result.approved, 1, "有効だった index 1 は採用されること");
+			assert.strictEqual(result.errors, 1, "欠落した index 2 は安全側フォールバックで error になること");
+			const written = fs.readFileSync(targetFile, "utf-8");
+			assert.ok(written.includes("<!-- mdait tgtA from:srcA -->"));
+			assert.ok(written.includes("<!-- mdait tgtB from:srcB need:review -->"));
 		});
 	});
 });

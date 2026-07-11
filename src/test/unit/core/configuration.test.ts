@@ -265,11 +265,12 @@ suite("Configuration aiSync.review", () => {
 		return config;
 	}
 
-	test("未指定の場合はデフォルト値（autoApprove:true, 閾値0.9, 上限200）になること", async () => {
+	test("未指定の場合はデフォルト値（autoApprove:true, 閾値0.9, 上限200, batchSize:3）になること", async () => {
 		const config = await initWithAiSyncReview(undefined);
 		assert.strictEqual(config.aiSync.review.autoApprove, true);
 		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 0.9);
 		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 200);
+		assert.strictEqual(config.aiSync.review.batchSize, 3);
 	});
 
 	test("有効な値が読み込まれ、範囲外はクランプされること", async () => {
@@ -277,10 +278,25 @@ suite("Configuration aiSync.review", () => {
 			autoApprove: false,
 			autoApproveThreshold: 1.5,
 			maxUnitsPerRun: 5000,
+			batchSize: 99,
 		});
 		assert.strictEqual(config.aiSync.review.autoApprove, false);
 		assert.strictEqual(config.aiSync.review.autoApproveThreshold, 1);
 		assert.strictEqual(config.aiSync.review.maxUnitsPerRun, 1000);
+		assert.strictEqual(config.aiSync.review.batchSize, 10);
+	});
+
+	test("batchSize は 1 未満が 1 にクランプされ、小数は切り捨てられること", async () => {
+		const floorConfig = await initWithAiSyncReview({ batchSize: 2.9 });
+		assert.strictEqual(floorConfig.aiSync.review.batchSize, 2);
+		Configuration.dispose();
+		const minConfig = await initWithAiSyncReview({ batchSize: 0 });
+		assert.strictEqual(minConfig.aiSync.review.batchSize, 1);
+	});
+
+	test("batchSize が数値以外の場合は無視されデフォルトが維持されること", async () => {
+		const config = await initWithAiSyncReview({ batchSize: "big" });
+		assert.strictEqual(config.aiSync.review.batchSize, 3);
 	});
 
 	test("autoApprove が boolean 以外（文字列）の場合は無視されデフォルトが維持されること", async () => {
