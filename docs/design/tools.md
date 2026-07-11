@@ -231,7 +231,7 @@ interface AiReviewInput {
 
 **確認UI**: あり（AI使用＋マーカー書換。dryRun でもAI使用のため確認あり）
 
-**実装**: [`src/lm-tools/ai-review-tool.ts`](../../src/lm-tools/ai-review-tool.ts)、設計: [command_ai-sync.md](command_ai-sync.md)
+**実装**: [`src/lm-tools/ai-review-tool.ts`](../../src/lm-tools/ai-review-tool.ts)、設計: [command_ai-review.md](command_ai-review.md)
 
 ---
 

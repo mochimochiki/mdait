@@ -151,7 +151,7 @@ sequenceDiagram
 
 検証ユニット数の上限は全般設定 `trans.maxUnitsPerRun`（既定300・`0`で上限なし・**1ファイル単位で適用**）で制御する。
 
-**設計意図**: 自動承認は「match ∧ issues空 ∧ 閾値（固定値 0.9）以上」の三重条件でのみ発動する（ADR-260704-07）。自動承認閾値・アライン詳細（minConfidence=0.6 / maxNeedBodies=8 / maxRounds=2）は調整困難なためコード内定数で最適値固定・設定廃止（ADR-260711-03）。バッチ検証と用語集・TM注入（訳揺れ検知）は ADR-260709-01。詳細: [command_ai-sync.md](command_ai-sync.md)
+**設計意図**: 自動承認は「match ∧ issues空 ∧ 閾値（固定値 0.9）以上」の三重条件でのみ発動する（ADR-260704-07）。自動承認閾値・アライン詳細（minConfidence=0.6 / maxNeedBodies=8 / maxRounds=2）は調整困難なためコード内定数で最適値固定・設定廃止（ADR-260711-03）。バッチ検証と用語集・TM注入（訳揺れ検知）は ADR-260709-01。詳細: [command_ai-review.md](command_ai-review.md)
 
 ---
 

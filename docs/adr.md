@@ -4,6 +4,26 @@
 
 ---
 
+## ADR-260711-06: AI同期を「既存翻訳の取り込み」ウィザードへ再設計し aiSync 語彙を廃止する
+
+### 背景
+合成コマンド「AI同期（`mdait.aiSync.run`）」の実利用は既存対訳サイトの初回取り込みにほぼ集中しているが、名称と配置（Sync ボタンの隣）が「定期的に押す sync の AI 版」という誤ったメンタルモデルを誘発し、初回ユーザーに取り込み機能として発見されなかった。また推奨フロー adopt → review → term → tm（[adopt.md](guide/ja/adopt.md)）は部品と手順書が揃っているのに、ユーザーが複数操作を手動オーケストレーションする必要があった。「AIペアリング検証」も実装視点の語彙で、押す瞬間のメンタルモデル（「この訳が合っているか確認して」）と乖離していた。
+
+### 決定
+1. **改称（aiSync 語彙の完全廃止）**: `mdait.aiSync.run` → **`mdait.adopt.run`「✨既存翻訳の取り込み / Adopt Existing Translations」**、`mdait.aiSync.review.*` → **`mdait.aiReview.*`「✨AI翻訳レビュー / AI Translation Review」**。LM tool `mdait_aiSync` → `mdait_adopt`。config は `aiSync.review.autoApprove/batchSize` → **`aiReview.*`**、`aiSync.align.*` → **`adopt.align.*`**（align は取り込みの一部）。プレリリース段階（既存ユーザー実質ゼロ）につき**互換 alias・config フォールバックは設けない**（破壊的変更を許容）。ソースは `src/commands/adopt/`（合成＋align系）と `src/commands/ai-review/`（review系）に再編。
+2. **統合ウィザード化**: 合成オーケストレーター（`executeAdopt`・旧 `executeAiSync`）に **term.detect → term.expand（用語集構築）と tm.commit（TM構築）をオプション段として追加**する。UI は起動時 QuickPick（canSelectMany・既定 ON）で先にまとめてオプトインし、以後は段番号付き進捗で自動実行。確認 UI は冒頭1回で選択段を動的列挙（ADR-260705-01 維持）。追加段は既存 CoreProc（`detectTerm_CoreProc` / `expandTerm_CoreProc` / `executeTmCommitForFile`）への薄い配線のみ（ADR-260706-01 踏襲）。
+3. **review → tm の順序による TM 汚染なしの構造保証**: `isTmCommitTarget` の包括方式（from あり ∧ need なし・ADR-260711-05）により、レビュー通過ペアだけが TM に登録され、エスカレーション残り（`need:review`）は構造的にスキップされる。
+4. **オンボーディング動線**: viewsWelcome に「設定済み・初回同期前」の2択導線（初回同期 / 既存翻訳の取り込み）を追加し、取り込みボタンの `when` から `mdaitHasStatus` を外す（取り込みは初回同期前にこそ使う）。同梱で `assets/mdait.template.json` の `primaryLang: "en"` を `"ja"` に修正（sourceLang:"ja"・ガイド推奨「primary=原文言語」との矛盾解消）。
+
+### 理由
+名前は機能のメンタルモデルを決める。実利用が取り込みに集中している以上、「取り込み」を主語にした命名・配置・導線が発見可能性と使い始めの敷居を最も下げる。定期用途（訳質監査）は AI翻訳レビューの audit モードが独立コマンドとして残るため役割分担も明確になる。term/tm の統合は「使い始めに知識ストアまで整う」体験を1操作で提供し、部品の再利用のみで実現できる。互換を切るのは、v0.0.1 で互換負債が実質ゼロのうちに ID・設定・語彙を最良の形に揃えるほうが、恒久的な乖離（ID とタイトルの不一致等）を抱えるより総コストが低いため。
+
+### 備考
+- 却下案: タイトルのみ変更（ID `aiSync` 残置）は語彙の恒久乖離を生むため却下。段ごと逐次確認 UI は ADR-260705-01 の「確認は明示起動時」を満たしつつも操作回数が増えオンボーディングの敷居を上げるため却下。config 語彙残置（`aiSync.review` のまま）はプレリリースで互換を守る価値がないため却下。
+- dryRun は term/tm 段をスキップする（知識ストアへ書き込まない）。term/tm 段の失敗は stageErrors として記録し他段は続行（tm は term に非依存）。
+- 既知のリスク: tm.commit 段にユニット数上限がなく大規模サイトで長時間化しうる（ファイル単位進捗＋キャンセル→冪等再開で緩和。`trans.maxUnitsPerRun` の適用は将来課題）。escalated 多数時は TM がほぼ空になるため、nextActions で「レビュー解消後の tm.commit 再実行」を案内する。
+- 詳細: [command_adopt.md](design/command_adopt.md)（ウィザード正典）、[command_ai-review.md](design/command_ai-review.md)（旧 command_ai-sync.md を改名。align・review ファミリーの正典）。
+
 ## ADR-260711-05: 孤立モデルを isolate＋独立ユニットに統合し keep/backfill を廃止する
 
 ### 背景
@@ -22,8 +42,8 @@ ADR-260706-02 の孤立モデルは `need:keep`（保持・伝播は hash 任せ
 
 ### 備考
 - 挙動変更: マーカーなし孤立 target は旧デフォルト（delete）で黙って削除されていたが、新モデルでは need:review 保護になる。
-- 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）は [command_ai-sync.md](design/command_ai-sync.md) の「孤立ユニットの判断支援」、モデルの正準定義は [command_sync.md](design/command_sync.md) の「孤立ユニットモデル」。
-- 本 ADR の基準文書だった `design/orphan-model.md` は 2026-07-11 に各設計文書（command_sync / core / command_tm / command_ai-sync / architecture）へ統合し廃止した。
+- 将来増分（孤立ロール宣言 CodeLens・AI分類提案・判断サーフェス）は [command_ai-review.md](design/command_ai-review.md) の「孤立ユニットの判断支援」、モデルの正準定義は [command_sync.md](design/command_sync.md) の「孤立ユニットモデル」。
+- 本 ADR の基準文書だった `design/orphan-model.md` は 2026-07-11 に各設計文書（command_sync / core / command_tm / command_ai-review（旧 command_ai-sync） / architecture）へ統合し廃止した。
 
 ## ADR-260711-04: term.detect でソース言語の variants（表記揺れ）を検出・付与する
 
@@ -140,13 +160,13 @@ audit の判定主体は AI なので、人間の意図は「AI への文脈」�
 - **これは「状態は文書内にあり sync で復帰可能」の例外**（人間が書いた note は sync で再構築できない）。unit-state 導入と同格。
 - sync に増える「note 移送」ステップは hash 差分に基づく純粋なキー付け替えで、決定的・冪等（AGENTS.md の「定常 sync は AI 不使用・決定的・冪等」を維持）。
 - 却下: 受理台帳（別ストア・pair キー・決定論スキップ）。→ audit が AI 判定である以上、決定論ゲートは過剰かつ穴が多い。
-- ADR-260706-03 の既知の限界（毎回再報告）はこの note 機構で解消（[command_ai-sync.md](design/command_ai-sync.md) に反映）。
+- ADR-260706-03 の既知の限界（毎回再報告）はこの note 機構で解消（[command_ai-review.md](design/command_ai-review.md) に反映）。
 - スコープ外（将来増分）: note 以外の typed メタフィールド、ソース側ユニットへの note UI、note の TM 除外用途、sync migration の GUI 統合テスト。
 
 ## ADR-260706-03: AIレビュー拡張（対象拡張モード）は確定済みペアを「報告のみ」で監査する
 
 ### 背景
-AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-sync.md)）の第一項目「対象拡張モード」を実装するにあたり、対象を `need:review` 限定から確定済みペア（`from` あり・`need` なし）へ広げたとき、監査で不備を検出した確定済みペアをどう扱うかを決める必要があった。当初は `setNeed("review")` で need:review を付与する案だったが、以下の理由で「報告のみ」に決定した:
+AIレビュー拡張ロードマップ（[command_ai-review.md](design/command_ai-review.md)）の第一項目「対象拡張モード」を実装するにあたり、対象を `need:review` 限定から確定済みペア（`from` あり・`need` なし）へ広げたとき、監査で不備を検出した確定済みペアをどう扱うかを決める必要があった。当初は `setNeed("review")` で need:review を付与する案だったが、以下の理由で「報告のみ」に決定した:
 
 1. **原文改訂は既に hash-sync が決定的に検出**している（原文 hash 変化 → target の `from` 不一致 → `need:revise@{旧hash}` 付与）。しかも `need:revise` は in-flight として audit の列挙対象外。よって「原文改訂ドリフトの検出」は audit の非冗長価値ではない。audit の非冗長価値は「①採用（位置ベース adopt）コンテンツの意味的対応検証」「②原文不変のまま訳文が手修正で劣化したケースの検出」に限られる。
 2. audit は確定済みペアを**毎回再スキャン**する。need:review を書き戻すと、意図的な単文/段落レベルの乖離（翻訳で意図的に省略・追記した箇所）を毎回 `partial` として蒸し返し、人間の「承認（need:review 解除）」判断を上書きしてしまう（churn）。これを抑制する「ペア単位の受理」を記録する語彙は現状無い。`need:isolate`（[command_sync.md](design/command_sync.md) 孤立ユニットモデル）は**章＝ユニット単位**の孤立であり、**ペア内の単文乖離には粒度が合わず解決しない**。
@@ -163,8 +183,8 @@ AIレビュー拡張ロードマップ（[command_ai-sync.md](design/command_ai-
 ### 備考
 - コマンド層は QuickPick（pending/audit 選択）を明示起動ゲートとし、LM tool（`mdait_aiReview` の `mode`）は確認UIで「確定済みペアは報告のみ」を明示する（ADR-260705-01 と整合）。
 - **既知の限界**: 意図的な単文乖離を持つ確定済みペアは audit のたびに `flagged` として再報告される（マーカーは変わらないので害は無いが、レポートにノイズが残る）。恒久解は「受理台帳」= 人間の受理判断とコメントを hash キー（targetHash・fromHash）で永続化し、内容が変わらない限り audit が再報告しない仕組み（別ADR/別PRで設計）。isolate では解決しない。
-- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[command_ai-sync.md](design/command_ai-sync.md) 将来増分）。`mdait_aiSync` 合成は pending のまま。
-- 詳細: [command_ai-sync.md](design/command_ai-sync.md)。
+- スコープ外（将来増分）: バッチ検証・定期実行・partial の修正提案化・非MD/frontmatter 対象化・穴あき isolate/漏れ分類（[command_ai-review.md](design/command_ai-review.md) 将来増分）。`mdait_aiSync` 合成は pending のまま。
+- 詳細: [command_ai-review.md](design/command_ai-review.md)。
 
 ## ADR-260706-02: 孤立ユニットの統合モデル（isolate 導入・判断サーフェス）
 
@@ -204,7 +224,7 @@ AI同期ロードマップ（ADR-260705-02 で合成コマンドと決定）の�
 「決定的な仕組みが提案し AI が審査する」パイプラインをそのまま合成に持ち上げることで、取り込み（adopt+align）と健全性監査（review）を1操作で回しつつ、各段の冪等性・フォールバック・キャンセル再開性がそのまま保たれる。管理済みサイトでは align が no-op・review のみとなり、同一機能が「サイトが健全か」の監査ボタンとして働く。注入合成はスタブ各段による単体テストを AIアライン／AIペアリング検証と同水準で可能にする。
 
 ### 備考
-- 詳細は [command_ai-sync.md](design/command_ai-sync.md)。v1 では path スコープと段間の細粒度進捗集約は見送り。
+- 詳細は [command_ai-review.md](design/command_ai-review.md)。v1 では path スコープと段間の細粒度進捗集約は見送り。
 
 ## ADR-260705-03: AIアラインは sync_CoreProc に aligner を注入し matchResult を再配線する
 
@@ -223,14 +243,14 @@ AIアライン（ADR-260705-02 で差分審査型に決定）を実装するに�
 matchResult の再配線という最小の介入で、既存の from 確立・need:review・孤立ターゲット処理・diff 検出のすべてが無改修で乗る。AIService を core（sync_CoreProc）で構築せず注入することで、スタブ AIService による単体テストが AIペアリング検証と同水準で可能になる。フォールバックが常に「現行の位置ベース挙動」であることは applyCorrections の恒等性で保証される。
 
 ### 備考
-- 詳細は [command_ai-sync.md](design/command_ai-sync.md)。v1 ではユニット単位キャンセルの細粒度対応と align 結果の仮想ドキュメントレポートは見送り（誤りは後段の mdait_aiReview が mismatch として拾う）。
+- 詳細は [command_ai-review.md](design/command_ai-review.md)。v1 ではユニット単位キャンセルの細粒度対応と align 結果の仮想ドキュメントレポートは見送り（誤りは後段の mdait_aiReview が mismatch として拾う）。
 
 ---
 
 ## ADR-260705-02: AIアラインは差分審査型とし、AI同期はプリミティブの合成コマンドとする
 
 ### 背景
-既存対訳サイト取り込みの誤対応（位置ベースマッチングのズレ）を根本解決する AIアライン（[command_ai-sync.md](design/command_ai-sync.md)）の実現形として、「AI にマッピングを全面生成させる」案と「機械の結果を AI が審査する」案を比較した。
+既存対訳サイト取り込みの誤対応（位置ベースマッチングのズレ）を根本解決する AIアライン（[command_ai-review.md](design/command_ai-review.md)）の実現形として、「AI にマッピングを全面生成させる」案と「機械の結果を AI が審査する」案を比較した。
 
 ### 決定
 - **差分審査型**: adopt 時の位置ベースマッチング結果（見出しスケルトン＋対応表）を AI に渡し、`{ok | corrections[] | needBodies[]}` で応答させる。AI の全面生成には委ねない。修正提案は1件ずつ独立にバリデーションし、不正な提案のみ棄却。フォールバックは常に現行の位置ベース挙動。
@@ -242,7 +262,7 @@ matchResult の再配線という最小の介入で、既存の from 確立・ne
 大半のページは構造一致であり、審査型は出力サイズと故障モードが「問題の数」に比例する（全生成型は1個の幻覚で全体が壊れる）。「決定的な仕組みが提案し、AI が審査する」形は adopt+aiReview と同じパターンで、sync の決定性・冪等性という不変条件（ADR-260705-01）とも整合する。追認バイアスは「1章の挿入・削除は以降を連鎖的にズラす」という位置ズレの署名をプロンプトで明示して緩和する。
 
 ### 備考
-- 詳細設計・パターン別の解決対応は [command_ai-sync.md](design/command_ai-sync.md) のロードマップとパターンマトリクスを参照。
+- 詳細設計・パターン別の解決対応は [command_ai-review.md](design/command_ai-review.md) のロードマップと [command_adopt.md](design/command_adopt.md) のパターンマトリクスを参照。
 
 ---
 
@@ -267,7 +287,7 @@ sync が「いつ何度実行しても安全・無料・同一結果」である
 ## ADR-260704-07: AIペアリング検証の verdict 語彙と need:review 自動解除ポリシー
 
 ### 背景
-adopt（ADR-260704-02）の対応付けは位置ベースであり、誤対応・翻訳漏れの安全網が `need:review` の人手全件レビューしかない。大規模サイトの取り込みでは非現実的なため、LLM がペアの妥当性を判定してレビューをトリアージする「AIペアリング検証」を導入する（[command_ai-sync.md](design/command_ai-sync.md)）。
+adopt（ADR-260704-02）の対応付けは位置ベースであり、誤対応・翻訳漏れの安全網が `need:review` の人手全件レビューしかない。大規模サイトの取り込みでは非現実的なため、LLM がペアの妥当性を判定してレビューをトリアージする「AIペアリング検証」を導入する（[command_ai-review.md](design/command_ai-review.md)）。
 
 ### 決定
 - verdict は `{match, mismatch, partial, uncertain}` + `confidence(0..1)` + `issues[]` + `reason` の4値固定。

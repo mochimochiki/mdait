@@ -1,6 +1,6 @@
-# command: ai-sync（AI支援同期）
+# command: ai-review（AI翻訳レビュー・AIアライン）
 
-既存対訳サイトの取り込み（adopt）を LLM で支援する機能ファミリー。位置ベースマッチングの限界（誤対応・翻訳漏れ・全件人手レビューの負荷）を、紐付け検証・内容レビュー・修正提案・エスカレーションの個別機能として段階的に解消する。
+翻訳ペアの妥当性を LLM で検証する機能ファミリー。位置ベースマッチングの限界（誤対応・翻訳漏れ・全件人手レビューの負荷）を、紐付け審査（AIアライン）・内容レビュー（AI翻訳レビュー）・エスカレーションで解消する。旧称「AIペアリング検証 / AI同期」（aiSync 語彙は ADR-260711-06 で廃止。取り込みウィザードの正典は [command_adopt.md](command_adopt.md)）。
 
 ## 目的と全体像
 
@@ -13,7 +13,7 @@
 
 ### 設計原則（不変条件）
 
-- **AI は明示起動時のみ**（ADR-260705-01）: 定常 sync（autoSyncOnSave 含む）は AI 不使用・決定的・冪等を維持する。AI を使う経路（アライン・レビュー・合成コマンド）は必ず明示的な起動と確認UIを経由する。
+- **AI は明示起動時のみ**（ADR-260705-01）: 定常 sync（autoSyncOnSave 含む）は AI 不使用・決定的・冪等を維持する。AI を使う経路（アライン・レビュー・取り込みウィザード）は必ず明示的な起動と確認UIを経由する。
 - **決定的な仕組みが提案し、AI が審査する**（ADR-260705-02）: アラインは位置ベースマッチングの結果を AI が差分審査する形を取り、AI の全面生成には委ねない。フォールバックは常に「現行の決定的挙動」。
 - **既訳の不可侵**: どのパターン・どの機能でも既存訳文の本文は変更しない。マーカー変異は need の付与/解除のみで、`need:review` が残る限り trans / tm.commit への流出はない。
 - すべて既存の状態機械（マーカー・`need:` 語彙・冪等 sync）の上に乗る。新しい need 状態は導入しない（ADR-260704-07）。
@@ -23,63 +23,41 @@
 | 系列 | 機能 | 概要 | 状態 |
 |------|------|------|------|
 | アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
-| レビュー | **AIペアリング検証** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
+| レビュー | **AI翻訳レビュー** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
 | レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきユニットの孤立/漏れ 分類提案**（need:review 一次受けユニットに対し「独自章らしい / 訳漏れらしい」を AI が提案。確定はしない・将来増分） | 対象拡張のみ実装済み・他は未着手 |
-| 合成 | **AI同期** | `sync(adopt) → AIアライン → AIレビュー呼び出し → レポート` を束ねる合成コマンド。取り込みと健全性監査を兼ねる | **実装済み**（ADR-260706-01） |
+| 合成 | **既存翻訳の取り込みウィザード** | `sync(adopt+align) → AI翻訳レビュー → 用語集構築 → TM構築 → レポート` を束ねるオンボーディングウィザード | **実装済み**（正典: [command_adopt.md](command_adopt.md)・ADR-260711-06） |
 | 孤立 | **孤立の統合モデル（isolate・独立ユニット）** | 原文/訳文の意図的な独自章を一貫表現。`need:isolate`（伝播停止）・独立ユニット（from なし＝訳文役割の孤立）・マーカーなし孤立の need:review 一次受け。keep/backfill は廃止 | **実装済み**（[command_sync.md](command_sync.md) 孤立ユニットモデル・ADR-260711-05）。判断サーフェスは将来増分 |
 
-レビューを同期に埋め込まないのは意図的な分離である: レビューは取り込み直後だけでなく定常運用（定期監査・翻訳品質チェック）で価値を持ち、バッチ化・スケジュール実行の最適化は独立機能でこそ設計できる（ADR-260705-02）。
-
-## 取り込みパターン網羅マトリクス
-
-「既存サイトを mdait 管理下に置く」際に起こりうるパターンと、それぞれがどの仕組みでどう扱われるかの正準一覧。**共通保証: どのパターンでも既存訳文の本文は1文字も変更されない**（唯一の例外は `from` が残った管理済み孤立ユニットへの `orphanTargetPolicy: "delete"`。マーカーなしの独自セクションは削除されず `need:review` で保護される — パターン3参照）。
-
-| # | パターン | 現行の挙動（adopt + AIペアリング検証） | 完全解消する機能（状態） |
-|---|---------|--------------------------------------|------------------------|
-| 1 | ja/en 同一構造・内容も対応 | 全ペアが正しく `from` 確立 → 検証がほぼ全件を自動承認（低確信のみ kept で人間へ） | **実装済みで完結** |
-| 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。検証が **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide/ja/adopt.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（**実装済み**） |
-| 3 | ja に無い章が en に存在（訳文側の独自セクション） | マーカーなしの独自章は **`need:review` 一次受け**で保護される（削除も翻訳も決めつけず人間が「素hash化 / `need:isolate` / 削除」を選ぶ・[adopt.md](../guide/ja/adopt.md)）。誤ペア化は AIアラインの unmatchedTarget 識別で防止 | **実装済み**（一次受け＋AIアライン）。判断サーフェスは将来増分（後述） |
-| 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン（**実装済み**） |
-| 5 | ペアは正しいが訳抜け・原文改訂に未追随 | 検証が **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで孤立/漏れ 確定（将来増分・後述） |
-| 6 | en が原文コピーのまま（未翻訳） | 検証プロンプトの verdict 定義で match を禁止 — 全文未翻訳は mismatch、部分残留は partial に倒す | **実装済み** |
-| 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
-| 8 | ja に無いファイルが en にある | **sync はソースファイル起点のため触らない＝管理外のまま放置**（削除も検出もされない）。既知の限界 | 将来課題（未計画） |
-| 9 | 見出しレベル設定の不一致 | `validateAndSyncLevel` が target の `mdait.sync.level` をソースに自動同期 | **実装済みで完結** |
-| 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AIペアリング検証は対象外のため解除は手動 | AIレビュー拡張 |
-| 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[command_sync.md](command_sync.md) 孤立ユニットモデル）。宣言 CodeLens UI は将来増分 |
-
-パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [adopt.md](../guide/ja/adopt.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [command_sync.md](command_sync.md) の「孤立ユニットモデル」を参照。
+レビューを取り込みウィザードに固定で埋め込まないのは意図的な分離である: レビューは取り込み直後だけでなく定常運用（定期監査・翻訳品質チェック）で価値を持ち、バッチ化・スケジュール実行の最適化は独立機能でこそ設計できる（ADR-260705-02）。取り込み時のパターン別の挙動一覧（取り込みパターン網羅マトリクス）は [command_adopt.md](command_adopt.md) に移設した。
 
 ## アーキテクチャ
 
-CoreProc を `src/commands/ai-sync/` に置き、VS Code コマンドと LM tool の両面から呼ぶ（tm.commit と同構造、エンベロープは ADR-260704-01 準拠）。判定ロジック（verdict→action）は VS Code 非依存の純関数。
+CoreProc を `src/commands/ai-review/` に置き、VS Code コマンドと LM tool の両面から呼ぶ（tm.commit と同構造、エンベロープは ADR-260704-01 準拠）。判定ロジック（verdict→action）は VS Code 非依存の純関数。アライン系と取り込みウィザードの実装は `src/commands/adopt/`（[command_adopt.md](command_adopt.md)）。
 
 ```
-src/commands/ai-sync/
+src/commands/ai-review/
   review-result.ts             # 型定義 + decideReviewAction / aggregateReviewResults 純関数
   pair-collector.ts            # 純関数: 検証対象ペア列挙
   verify-response-validator.ts # AI応答のJSONバリデーション
   pair-verifier.ts             # AIService 呼び出し + リトライ
   review-core.ts               # executeAiReviewForFile: 1ファイル分の検証→マーカー変異→書き戻し
-  review-command.ts            # VS Code コマンド（file/directory）
-  review-result-provider.ts    # 仮想ドキュメントレポート（generateReviewTableSection を AI同期と共有）
-  review-targets.ts            # レビュー対象ターゲット解決（mdait_aiReview / AI同期で共有）
+  review-command.ts            # VS Code コマンド（mdait.aiReview.file / .directory）
+  review-result-provider.ts    # 仮想ドキュメントレポート（generateReviewTableSection を adopt と共有）
+  review-targets.ts            # レビュー対象ターゲット解決（mdait_aiReview / adopt で共有）
+src/commands/adopt/
   align-result.ts              # 純関数: スケルトン/ダイジェスト・修正提案バリデーション・matchResult 再配線
   align-response-validator.ts  # アライン応答（ok/corrections/needBodies）のJSONバリデーション
   section-aligner.ts           # AIService 呼び出し + 二段トリアージ2ラウンド + リトライ + buildSectionAligner
   align-core.ts                # alignMatchResult: 候補抽出→審査→検証→再配線（sync_CoreProc から adopt+align 時のみ）
-  ai-sync-core.ts              # executeAiSync: 各段（sync(adopt+align)→review）を注入合成する薄いオーケストレーター
-  ai-sync-result.ts            # 純関数: 合成集計・レポート・nextActions
-  ai-sync-command.ts           # VS Code コマンド（mdait.aiSync.run・ワークスペース全体）
-  ai-sync-result-provider.ts   # 合成レポートの仮想ドキュメント（mdait-ai-sync スキーム）
+  （取り込みウィザード本体は command_adopt.md 参照）
 src/lm-tools/ai-review-tool.ts # mdait_aiReview
-src/lm-tools/ai-sync-tool.ts   # mdait_aiSync（合成コマンド）
+src/lm-tools/adopt-tool.ts     # mdait_adopt（取り込みウィザード）
 src/lm-tools/sync-tool.ts      # mdait_sync（align パラメータ）
 ```
 
 AIアラインは独立コマンドを持たず、`sync_CoreProc` の `match()`〜`updateSectionHashes()` 間に `SectionAligner` を注入する形で動く（ADR-260705-03）。aligner は `syncCommand` が AIOnboarding 通過後に1回構築し、`syncSingleFile`（定常 sync）へは渡さないため AI 非実行が構造的に保証される。1ファイルの審査ユニット上限は全般設定 `trans.maxUnitsPerRun`（既定300・`0`で上限なし）で制御し、受理 confidence 下限（0.6）・needBodies 上限（8）・トリアージ上限ラウンド（2）はコード内定数で固定（ADR-260711-03）。
 
-## AIペアリング検証（レビュー系・第一形態）
+## AI翻訳レビュー（レビュー系・第一形態）
 
 ### データフロー
 
@@ -141,9 +119,9 @@ sequenceDiagram
 
 ### バッチ検証（batchSize・実装済み・ADR-260709-01)
 
-`aiSync.review.batchSize`（既定 **3**、1..10 クランプ）件のペアを1回の LLM コールにまとめる。`chunk()` で固定サイズに分割し、`PairVerifier.verifyBatch()` が `aiSync.verifyPairingBatch` プロンプトで `{"results": [{index, verdict, ...}]}` を要求する（index echo で対応付け）。
+`aiReview.batchSize`（既定 **3**、1..10 クランプ）件のペアを1回の LLM コールにまとめる。`chunk()` で固定サイズに分割し、`PairVerifier.verifyBatch()` が `aiReview.verifyPairingBatch` プロンプトで `{"results": [{index, verdict, ...}]}` を要求する（index echo で対応付け）。
 
-- **batchSize: 1 は従来の単ペア経路**（`verify()` ＋ `aiSync.verifyPairing`）に完全後方互換。既存の単ペアカスタムプロンプト利用者は batchSize: 1 を設定する
+- **batchSize: 1 は従来の単ペア経路**（`verify()` ＋ `aiReview.verifyPairing`）に完全後方互換。既存の単ペアカスタムプロンプト利用者は batchSize: 1 を設定する
 - **バリデーション**: `{"results": [...]}` に全 index の有効エントリが揃わなければ retryable エラーとしてバッチ全体をリトライ（欠落 index を RETRY INSTRUCTION に列挙）。重複 index は最初を採用、範囲外は無視
 - **部分受理フォールバック**: リトライ枯渇時、最後に有効だったエントリはそのまま採用し、欠落・不正の index のみ `uncertain / confidence 0`（fallback）で埋める。単ペアの「不正応答→安全側 uncertain」をペア粒度に拡張した形
 - ペア本文は `<pair index="N">` ブロックに単ペア版と同様エスケープなしで埋め込む（境界崩れは index echo 検証→retry→fallback で概ね検出される。humanNote・terms・tmReferences は外部データとして山括弧をエスケープ）
@@ -158,9 +136,9 @@ sequenceDiagram
 - 判定ルール: 用語集と異なる訳語は terminology inconsistency として `partial` + issue（`<humanNote>` が説明する場合を除く）。TM 参照との文体差は減点せず、同一表現の確立訳と明確に矛盾する場合のみ issue
 - ロードは `ReviewContextProvider` がファイル単位で1回（用語集は `TermsCacheManager`、TM は `tm.enabled` とエントリ有無でガード）。ペア毎の抽出・検索は同期の純計算
 
-### プロンプト契約（aiSync.verifyPairing / aiSync.verifyPairingBatch）
+### プロンプト契約（aiReview.verifyPairing / aiReview.verifyPairingBatch）
 
-`PromptIds.AI_SYNC_VERIFY_PAIRING = "aiSync.verifyPairing"`（単ペア・batchSize:1）と `PromptIds.AI_SYNC_VERIFY_PAIRING_BATCH = "aiSync.verifyPairingBatch"`（batchSize>=2）。system 部は変数なし（プレフィックスキャッシュ有効、[prompt.md](prompt.md) の user-section 分割）。`prompts["aiSync.verifyPairing"]` / `prompts["aiSync.verifyPairingBatch"]` による外部ファイル上書き・`mdait-instructions.md` 注入は既存機構で自動対応。
+`PromptIds.AI_REVIEW_VERIFY_PAIRING = "aiReview.verifyPairing"`（単ペア・batchSize:1）と `PromptIds.AI_REVIEW_VERIFY_PAIRING_BATCH = "aiReview.verifyPairingBatch"`（batchSize>=2）。system 部は変数なし（プレフィックスキャッシュ有効、[prompt.md](prompt.md) の user-section 分割）。`prompts["aiReview.verifyPairing"]` / `prompts["aiReview.verifyPairingBatch"]` による外部ファイル上書き・`mdait-instructions.md` 注入は既存機構で自動対応（旧キー `aiSync.*` からのフォールバックは無し・ADR-260711-06）。
 
 期待レスポンス（単ペア / バッチ）:
 
@@ -174,25 +152,24 @@ sequenceDiagram
 
 バリデーション: verdict が4値 enum・confidence が number（0..1 クランプ）でなければ retryable エラーとしてリトライ（system 固定・user message 末尾に RETRY INSTRUCTION 追記、`trans.retryLimit` と同じ最大2回）。リトライ枯渇時は `verdict: uncertain, confidence: 0` 相当（自動承認されない安全側。バッチは部分受理）。
 
-### 設定（aiSync.review）
+### 設定（aiReview）
 
 ```jsonc
-"aiSync": {
-  "review": {
-    "autoApprove": true,          // false = レポートのみ（need:review を一切変更しないセーフモード）
-    "batchSize": 3                // 1コールあたりの検証ペア数（1..10 クランプ。1 = 従来の単ペアプロンプト）
-  }
+"aiReview": {
+  "autoApprove": true,          // false = レポートのみ（need:review を一切変更しないセーフモード）
+  "batchSize": 3                // 1コールあたりの検証ペア数（1..10 クランプ。1 = 従来の単ペアプロンプト）
 }
-// 検証ユニット数の上限は全般設定 trans.maxUnitsPerRun（既定300・0で上限なし・1ファイル単位で適用）。
-// 自動承認閾値（0.9）はコード内定数で固定（設定廃止）。
 ```
+
+検証ユニット数の上限は全般設定 `trans.maxUnitsPerRun`（既定300・0で上限なし・1ファイル単位で適用）。自動承認閾値（0.9）はコード内定数で固定（設定廃止）。旧キー `aiSync.review.*` は廃止（フォールバック無し・ADR-260711-06）。
 
 ### UI・レポート
 
+- コマンド: StatusTree のファイル/ディレクトリ行のインラインボタン `$(verified)`「✨AI翻訳レビュー」。QuickPick で範囲を選ぶ: 「未確認の訳のみレビュー」（pending）/「すべての訳を監査（レポートのみ・マーカー変更なし）」（audit）
 - 進捗: `withProgress`（cancellable）。AI 初回利用は AIOnboarding ゲート
 - 結果通知: escalated > 0 なら warning、それ以外は info
 - レポート: `mdait-ai-review:` スキームの仮想ドキュメント（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）
-- hover: `SummaryManager.reviewReasons` に `AI pairing review: {verdict} ({confidence}) — {reason}` を保存
+- hover: `SummaryManager.reviewReasons` に `AI translation review: {verdict} ({confidence}) — {reason}` を保存
 - StatusTree: 変更なし（need:review 数の減少が自然に反映される）
 
 ### LM tool 契約（mdait_aiReview）
@@ -225,11 +202,12 @@ nextActions: mismatch あり →「見出し対応を目視確認し、必要な
 - **追認バイアス対策**: プロンプトで「1章の挿入・削除は以降の全ペアを連鎖的にズラす。この連鎖パターンを特に疑え」と位置ズレの署名を明示
 - 既に `from` アンカーを持つユニットは審査対象外（Phase 1 が優先）。unmatchedTarget の識別により orphanTargetPolicy の誤爆（独自セクションの誤削除・誤ペア）も防ぐ
 - **独立ユニット・`need:isolate` は locked**: 独立ユニット（`independentTargets`）と isolate の source/target はスケルトンから除外され、修正提案（再対応付け）の候補にならない（[command_sync.md](command_sync.md) 孤立ユニットモデルの不変条件）
-- アラインの誤りは後段のペアリング検証が mismatch として拾うため、アライン→検証のパイプラインは自己検証的になる
+- アラインの誤りは後段の AI翻訳レビューが mismatch として拾うため、アライン→レビューのパイプラインは自己検証的になる
+- プロンプト上書きキーは `prompts["adopt.align"]`（旧 `aiSync.align`・フォールバック無し）
 
 ### AIレビュー拡張
 
-現行のペアリング検証を独立機能ファミリーとして発展させる（同期には埋め込まない）:
+現行の AI翻訳レビューを独立機能ファミリーとして発展させる（取り込みウィザードには固定で埋め込まない）:
 
 - **対象拡張（実装済み・ADR-260706-03）**: 下記「対象拡張モード（audit）」参照。
 - **バッチ検証（実装済み・ADR-260709-01）**: 上記「バッチ検証（batchSize）」参照。二段トリアージ（ファイル粗判定→個別精査）ではなく固定サイズバッチ＋部分受理を採用した（プロトコルが単純で、部分受理により1コール失敗の影響がペア粒度に留まるため）
@@ -280,18 +258,9 @@ ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたび�
 | AIレビューでの孤立分類提案 | 一次受け need:review のユニットに対し「独自章らしい / 訳漏れらしい」の分類を AI が提案（確定はしない。ADR-260705-01 と整合） |
 | レポート＝判断サーフェス | リンク付き md を対話化し、人間の選択（素hash化 / isolate / 削除 / 翻訳 / 承認）→決定的後処理のマーカー変異にマッピング |
 
-### AI同期（合成コマンド）
+### 既存翻訳の取り込みウィザード（合成）
 
-**実装済み**（`mdait.aiSync.run` コマンド / `mdait_aiSync` ツール・ADR-260706-01）。`sync(adopt+align) → AIレビュー呼び出し → レポート` を束ねる薄いオーケストレーター（`executeAiSync`）:
-
-- 各段は独立機能（冪等）のまま。採用・アライン・検証・マーカー変異のロジックは一切再実装せず、既存プリミティブ（`syncCommand({adopt,align})` / `executeAiReviewForFiles`）へ配線するだけ
-- 合成側は **AI を使う3段を列挙した確認UIを冒頭に1回**出す（＋AIオンボーディング）。sync の align 段は内部でオンボーディングを再確認するが冪等
-- 各段が冪等なので途中キャンセル→再実行で残りから再開できる。sync が undefined（設定不正等）なら `aborted` で安全に中断しレビューは行わない
-- **取り込み専用ではない**: 管理済みサイトで実行するとアラインは no-op（全ユニット from アンカー済み）となりレビューだけが走る＝「サイトが色々ごちゃごちゃして大丈夫かな」の健全性監査ボタンとして同じ機能が使える
-- **各段を注入可能**（`AiSyncStages`）にし、合成層のテストはスタブ各段で「順序・sync undefined フォールバック・段間キャンセル・dryRun 伝播・冪等 no-op」を検証する。AI に触れる段は各モジュールでスタブ AIService により検証済み
-- スコープは v1 ではワークスペース全体のみ（sync 全体・レビュー全体の整合を優先。path スコープは将来課題）
-- レポートは `mdait-ai-sync` スキームの仮想ドキュメント（sync サマリ→レビューサマリ→ファイル別レビュー表）。レビュー表は `generateReviewTableSection` を mdait_aiReview と共有
-- エージェント側は `mdait_aiSync`（または `mdait_sync → mdait_aiReview → mdait_tm` の手動組み合わせ）で駆動する。プレイブック（docs/guide/ja/agent-playbook.md）参照
+旧「AI同期（合成コマンド）」は**既存翻訳の取り込みウィザード**（`mdait.adopt.run` / `mdait_adopt`）として再設計された。段構成（sync(adopt+align) → AI翻訳レビュー → 用語集構築 → TM構築）・オプトイン UX・レポート・LM tool 契約の正典は [command_adopt.md](command_adopt.md) を参照（ADR-260711-06・ADR-260706-01）。
 
 ## テスト戦略
 

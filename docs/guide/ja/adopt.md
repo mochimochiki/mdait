@@ -67,11 +67,12 @@
 ## 注意事項
 
 - adopt は **取り込み時に一度だけ使う操作**です。定常運用の sync では指定しないでください（`adopt` は sync の引数であり、設定ファイルには保存されません）。
-- 対応付けは見出しの順序ベースです。原文と訳文で見出しの数や順序が大きくズレているファイルでは誤対応が起こりえます。誤対応も `need:review` のレビューで検出できますが、ズレの大きいファイルは取り込み前に構造を揃えておくと確実です。**サイトの状態パターン別に何が起きるか・どの仕組みが守るかの網羅一覧は [command_ai-sync.md の取り込みパターン網羅マトリクス](../../design/command_ai-sync.md)を参照してください。**
+- 対応付けは見出しの順序ベースです。原文と訳文で見出しの数や順序が大きくズレているファイルでは誤対応が起こりえます。誤対応も `need:review` のレビューで検出できますが、ズレの大きいファイルは取り込み前に構造を揃えておくと確実です。**サイトの状態パターン別に何が起きるか・どの仕組みが守るかの網羅一覧は [command_adopt.md の取り込みパターン網羅マトリクス](../../design/command_adopt.md)を参照してください。**
 - マーカー保管方式が `external` の場合、unit-state が存在しないファイルは rebuild 安全網により自動的に同じ動作（既訳を `need:review` に倒す）になります。
 
 ## 関連
 
 - [sync.md](sync.md) — need フラグ一覧・orphanTargetPolicy
 - [tm.md](tm.md) — 翻訳メモリへのコミット
-- [command_ai-sync.md](../../design/command_ai-sync.md) — AIペアリング検証（need:review のAIトリアージ）の設計
+- [command_ai-review.md](../../design/command_ai-review.md) — AI翻訳レビュー（need:review のAIトリアージ）の設計
+- [command_adopt.md](../../design/command_adopt.md) — 取り込みウィザードの設計
