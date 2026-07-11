@@ -460,13 +460,21 @@
 					// 未完成行（必須欠け・パターン不一致）が残っている間は保存しない
 					return;
 				}
+				// __origIndex: この行が描画時に対応していた既存配列のインデックス。
+				// 拡張側が UI 列に無いキー（copyAssets 等）の引き継ぎ元を特定するために使う
+				if (tr.dataset.origIndex !== undefined && tr.dataset.origIndex !== "") {
+					result.data.__origIndex = Number(tr.dataset.origIndex);
+				}
 				items.push(result.data);
 			}
 			post("update", { id: setting.id, value: items });
 		}
 
-		function buildRow(item) {
+		function buildRow(item, origIndex) {
 			const tr = el("tr");
+			if (typeof origIndex === "number") {
+				tr.dataset.origIndex = String(origIndex);
+			}
 			for (const field of fields) {
 				const td = el("td");
 				const input = /** @type {HTMLInputElement} */ (el("input"));
@@ -494,7 +502,7 @@
 		}
 
 		addButton.addEventListener("click", () => {
-			const tr = buildRow(null);
+			const tr = buildRow(null, undefined);
 			tbody.appendChild(tr);
 			tr.querySelector("input").focus();
 		});
@@ -502,9 +510,10 @@
 		return () => {
 			tbody.textContent = "";
 			const value = effectiveValue(setting);
-			for (const item of Array.isArray(value) ? value : []) {
-				tbody.appendChild(buildRow(item));
-			}
+			const items = Array.isArray(value) ? value : [];
+			items.forEach((item, index) => {
+				tbody.appendChild(buildRow(item, index));
+			});
 		};
 	}
 

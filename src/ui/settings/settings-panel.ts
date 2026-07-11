@@ -276,37 +276,50 @@ export class SettingsPanel {
 	): unknown {
 		switch (descriptor.type) {
 			case "boolean":
-				return rawValue === true || rawValue === "true";
-			case "integer":
-			case "number": {
-				const num = Number(rawValue);
-				if (!Number.isFinite(num)) {
+				if (typeof rawValue !== "boolean") {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
-				const value = descriptor.type === "integer" ? Math.floor(num) : num;
+				return rawValue;
+			case "integer":
+			case "number": {
+				// webview 由来の入力は信頼せず、型と範囲を厳密に検証する（黙った丸めはしない）
+				if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+					throw new Error(vscode.l10n.t("Invalid value"));
+				}
+				if (descriptor.type === "integer" && !Number.isInteger(rawValue)) {
+					throw new Error(vscode.l10n.t("Invalid value"));
+				}
 				if (
-					(descriptor.minimum !== undefined && value < descriptor.minimum) ||
-					(descriptor.maximum !== undefined && value > descriptor.maximum)
+					(descriptor.minimum !== undefined && rawValue < descriptor.minimum) ||
+					(descriptor.maximum !== undefined && rawValue > descriptor.maximum)
 				) {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
-				return value;
+				return rawValue;
 			}
 			case "enum": {
-				const value = String(rawValue);
-				if (!descriptor.enum?.includes(value)) {
+				if (
+					typeof rawValue !== "string" ||
+					!descriptor.enum?.includes(rawValue)
+				) {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
-				return value;
+				return rawValue;
 			}
 			case "string":
-				return String(rawValue);
+				if (typeof rawValue !== "string") {
+					throw new Error(vscode.l10n.t("Invalid value"));
+				}
+				return rawValue;
 			case "stringArray": {
-				if (!Array.isArray(rawValue)) {
+				if (
+					!Array.isArray(rawValue) ||
+					rawValue.some((item) => typeof item !== "string")
+				) {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
 				return rawValue
-					.map((item) => String(item).trim())
+					.map((item) => (item as string).trim())
 					.filter((item) => item.length > 0);
 			}
 			case "objectArray":
@@ -318,7 +331,10 @@ export class SettingsPanel {
 
 	/**
 	 * objectArray（transPairs）の行データを検証しつつ、
-	 * UI 列に無いキー（copyAssets 等）を既存の同一行から引き継ぐ。
+	 * UI 列に無いキー（copyAssets 等）を既存行から引き継ぐ。
+	 * 引き継ぎ元は行の並び位置ではなく、webview が保持する元行番号（__origIndex。
+	 * 描画時の配列インデックス）で特定する。行の削除・追加が起きても
+	 * 別の行の hidden キーを誤って引き継がない。
 	 */
 	private coerceObjectArray(
 		descriptor: SettingDescriptor,
@@ -343,18 +359,27 @@ export class SettingsPanel {
 			// 既存値が読めない場合は引き継ぎなしで続行
 		}
 
-		return rawValue.map((row, index) => {
+		return rawValue.map((row) => {
 			if (row === null || typeof row !== "object" || Array.isArray(row)) {
 				throw new Error(vscode.l10n.t("Invalid value"));
 			}
 			const source = row as Record<string, unknown>;
-			const base = existing[index];
+			// __origIndex は「この行が描画時にどの既存行だったか」。UI で追加された行には無い
+			const origIndex = source.__origIndex;
+			const base =
+				typeof origIndex === "number" && Number.isInteger(origIndex)
+					? existing[origIndex]
+					: undefined;
 			const result: Record<string, unknown> =
 				base !== null && typeof base === "object" && !Array.isArray(base)
 					? { ...(base as Record<string, unknown>) }
 					: {};
 			for (const field of fields) {
-				const value = String(source[field.key] ?? "").trim();
+				const raw = source[field.key];
+				if (raw !== undefined && typeof raw !== "string") {
+					throw new Error(vscode.l10n.t("Invalid value"));
+				}
+				const value = (raw ?? "").trim();
 				if (value.length === 0) {
 					if (field.required) {
 						throw new Error(vscode.l10n.t("Invalid value"));
@@ -399,8 +424,12 @@ export class SettingsPanel {
 			vscode.Uri.joinPath(this.extensionUri, "assets", "settings-ui", "main.js"),
 		);
 		const nonce = generateNonce();
+		// スクリーンリーダー等が表示言語を正しく扱えるよう VS Code の表示言語を反映する
+		const displayLanguage = /^[a-zA-Z][a-zA-Z-]*$/.test(vscode.env.language)
+			? vscode.env.language
+			: "en";
 		return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${displayLanguage}">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
