@@ -74,9 +74,11 @@ export class SettingsPanel {
 			}
 			return;
 		}
+		// 既に mdait.json が JSON 表示で開かれていても確実に設定UIへ切り替える
 		await vscode.commands.executeCommand(
-			"vscode.open",
+			"vscode.openWith",
 			vscode.Uri.file(configPath),
+			SettingsPanel.viewType,
 		);
 	}
 
