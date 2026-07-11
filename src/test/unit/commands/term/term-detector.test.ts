@@ -121,6 +121,24 @@ suite("AITermDetector - variants検出", () => {
 		assert.deepStrictEqual([...TermEntry.getvariants(terms[0], "en")], ["endpoints", "Endpoints"]);
 	});
 
+	test("string以外の用語を含む不正アイテムはスキップされ、正当なアイテムは残る", async () => {
+		// 1件目: sourceTerm が number（不正）、2件目: context が null（不正）、3件目: 正当
+		const response = JSON.stringify([
+			{ sourceTerm: 123, targetTerm: "エンドポイント", variants: ["endpoint"], context: "Endpoint content" },
+			{ sourceTerm: "Payload", targetTerm: "ペイロード", variants: [], context: null },
+			{ sourceTerm: "Marker", targetTerm: "マーカー", variants: ["markers"], context: "Marker content" },
+		]);
+		const detector = new AITermDetector(new FakeAIService(response));
+		const pair = UnitPair.create(sourceUnit, targetUnit);
+
+		const terms = await detector.detectTerms([pair], "en", "ja", "en");
+
+		// 不正アイテムでバッチ全滅せず、正当な1件だけが残る
+		assert.strictEqual(terms.length, 1);
+		assert.strictEqual(TermEntry.getTerm(terms[0], "en"), "Marker");
+		assert.deepStrictEqual([...TermEntry.getvariants(terms[0], "en")], ["markers"]);
+	});
+
 	test("variants が配列でない・欠落している場合は空配列になる", async () => {
 		const response = JSON.stringify([
 			{ sourceTerm: "Endpoint", targetTerm: "エンドポイント", context: "Endpoint content" },

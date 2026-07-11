@@ -271,7 +271,12 @@ ${pair.target?.content || "(no translation)"}`;
 			}
 
 			return parsed
-				.filter((item) => item.sourceTerm && item.targetTerm && item.context)
+				.filter(
+					(item) =>
+						this.isNonEmptyString(item?.sourceTerm) &&
+						this.isNonEmptyString(item?.targetTerm) &&
+						this.isNonEmptyString(item?.context),
+				)
 				.map((item) => {
 					// variantsはソース言語のみに付与（ソース言語中心）
 					const languages: Record<string, LangTerm> = {
@@ -303,7 +308,7 @@ ${pair.target?.content || "(no translation)"}`;
 			}
 
 			return parsed
-				.filter((item) => item.sourceTerm && item.context)
+				.filter((item) => this.isNonEmptyString(item?.sourceTerm) && this.isNonEmptyString(item?.context))
 				.map((item) => {
 					const languages: Record<string, LangTerm> = {
 						[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
@@ -315,6 +320,15 @@ ${pair.target?.content || "(no translation)"}`;
 			console.warn("ソース単独用語検出のパースに失敗しました:", error);
 			return [];
 		}
+	}
+
+	/**
+	 * 値が空でない文字列かを判定する型ガード
+	 * LLMが number など string 以外を返した場合に trim() で例外→バッチ全滅するのを防ぐ。
+	 * item 自体が null/undefined でも `item?.field` 経由で安全に false になる。
+	 */
+	private isNonEmptyString(value: unknown): value is string {
+		return typeof value === "string" && value.trim().length > 0;
 	}
 
 	/**
