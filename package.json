@@ -205,7 +205,7 @@
       {
         "command": "mdait.adopt.run",
         "title": "%mdait.adopt.run.title%",
-        "icon": "$(sparkle)",
+        "icon": "$(cloud-download)",
         "category": "mdait"
       }
     ],
@@ -232,6 +232,11 @@
         "view": "mdait.status",
         "contents": "%mdait.welcome.message%",
         "when": "workspaceFolderCount != 0 && !mdaitConfigured"
+      },
+      {
+        "view": "mdait.status",
+        "contents": "%mdait.welcome.start.message%",
+        "when": "workspaceFolderCount != 0 && mdaitConfigured && !mdaitHasStatus"
       }
     ],
     "customEditors": [
@@ -289,7 +294,7 @@
         },
         {
           "command": "mdait.adopt.run",
-          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && !mdaitSyncProcessing",
+          "when": "view == mdait.status && mdaitConfigured && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {

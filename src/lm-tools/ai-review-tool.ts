@@ -132,7 +132,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			const data = buildAiReviewData(results, targetFiles.length, dryRun, config);
 
 			const summary = vscode.l10n.t(
-				"AI pairing review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",
+				"AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",
 				data.units.verified,
 				data.units.approved,
 				data.units.flagged,
@@ -163,9 +163,9 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		if (options.input.dryRun === true) {
 			// dryRun はマーカーを変更しないが AI を使用するため確認を出す
 			return {
-				invocationMessage: vscode.l10n.t("Reviewing translation pairings with AI (dry run)..."),
+				invocationMessage: vscode.l10n.t("Reviewing translations with AI (dry run)..."),
 				confirmationMessages: {
-					title: vscode.l10n.t("Confirm AI Pairing Review (Dry Run)"),
+					title: vscode.l10n.t("Confirm AI Translation Review (Dry Run)"),
 					message: vscode.l10n.t(
 						"Verify adopted translations for {0} with AI? Dry run: no markers are changed, only a report is returned.",
 						scopeLabel,
@@ -175,9 +175,9 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		}
 		if (options.input.mode === "audit") {
 			return {
-				invocationMessage: vscode.l10n.t("Auditing all translation pairings with AI..."),
+				invocationMessage: vscode.l10n.t("Auditing all translations with AI..."),
 				confirmationMessages: {
-					title: vscode.l10n.t("Confirm AI Pairing Audit"),
+					title: vscode.l10n.t("Confirm AI Translation Audit"),
 					message: vscode.l10n.t(
 						"Audit all confirmed translations for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiReview settings).",
 						scopeLabel,
@@ -186,9 +186,9 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			};
 		}
 		return {
-			invocationMessage: vscode.l10n.t("Reviewing translation pairings with AI..."),
+			invocationMessage: vscode.l10n.t("Reviewing translations with AI..."),
 			confirmationMessages: {
-				title: vscode.l10n.t("Confirm AI Pairing Review"),
+				title: vscode.l10n.t("Confirm AI Translation Review"),
 				message: vscode.l10n.t(
 					"Verify adopted translations for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiReview settings).",
 					scopeLabel,

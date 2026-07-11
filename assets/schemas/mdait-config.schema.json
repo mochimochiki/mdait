@@ -304,7 +304,7 @@
         },
         "maxUnitsPerRun": {
           "type": "integer",
-          "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI pairing review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
+          "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
           "minimum": 0,
           "default": 300,
           "examples": [300, 500, 0]

@@ -232,7 +232,7 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		),
 	"trans.maxUnitsPerRun": () =>
 		vscode.l10n.t(
-			"General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI pairing review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.",
+			"General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.",
 		),
 	// --- terms ---
 	"terms.filename": () =>
