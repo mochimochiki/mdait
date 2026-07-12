@@ -54,6 +54,30 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.unit.keep",
+        "title": "%mdait.unit.keep.title%",
+        "icon": "$(check)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.unit.delete",
+        "title": "%mdait.unit.delete.title%",
+        "icon": "$(trash)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.unit.markIsolated",
+        "title": "%mdait.unit.markIsolated.title%",
+        "icon": "$(circle-slash)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.unit.unisolate",
+        "title": "%mdait.unit.unisolate.title%",
+        "icon": "$(circle-slash)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.term.detect",
         "title": "%mdait.term.detect.title%",
         "icon": "$(repo)",
@@ -266,6 +290,22 @@
           "when": "false"
         },
         {
+          "command": "mdait.unit.keep",
+          "when": "false"
+        },
+        {
+          "command": "mdait.unit.delete",
+          "when": "false"
+        },
+        {
+          "command": "mdait.unit.markIsolated",
+          "when": "false"
+        },
+        {
+          "command": "mdait.unit.unisolate",
+          "when": "false"
+        },
+        {
           "command": "mdait.translate.frontmatter",
           "when": "false"
         },
@@ -405,6 +445,26 @@
         {
           "command": "mdait.translate.unit",
           "when": "view == mdait.status && viewItem == mdaitUnitTarget",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.unit.keep",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetVerifyDeletion",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdait.unit.delete",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetVerifyDeletion",
+          "group": "inline@2"
+        },
+        {
+          "command": "mdait.unit.markIsolated",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetCompletePaired",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.unit.unisolate",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetIsolated",
           "group": "inline"
         },
         {
@@ -699,7 +759,7 @@
         "name": "mdait_resolve",
         "displayName": "mdait: Resolve Need Flags",
         "toolReferenceName": "mdaitResolve",
-        "modelDescription": "Resolve (remove) need flags from unit markers in a single mdait-managed file - the programmatic equivalent of the 'Mark as Reviewed' CodeLens. Use this to complete a review approval (need:review - after you or the user verified the translation pair is correct) or a deletion verification (need:verify-deletion - resolving the flag means the target unit is KEPT; to accept the deletion instead, remove the unit's section from the document). Never hand-edit marker comments to clear need flags; call this tool. By default only review and verify-deletion flags are resolved; translate/revise are cleared only when explicitly listed in needs (normally let mdait_translate process them). Pass unitHashes (from mdait_getStatus detail:true) to resolve specific units, or omit to resolve every matching unit in the file. Marker hashes and from links are never changed and no AI is used, but markers are rewritten so a confirmation is shown. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains resolved [{hash,title,need}], skipped [{hash,reason}] (reasons: not-found / already-resolved / need-not-selected), and the remaining need breakdown of the file. Idempotent: re-running with the same input resolves 0 unit(s) and reports already-resolved.",
+        "modelDescription": "Adjudicate need flags on unit markers in a single mdait-managed file - the programmatic equivalent of the StatusTree/CodeLens judgment actions (Mark as Reviewed, Keep/Delete Unit, Mark as Isolated/Un-isolate). Three actions, selected via the action parameter: action:\"resolve\" (default) removes need flags - use it to approve a review (need:review) or KEEP a unit under deletion verification (need:verify-deletion resolves to kept). By default only review and verify-deletion are resolved; translate/revise are cleared only when explicitly listed in needs (normally let mdait_translate process them), and \"isolate\" undeclares an isolation. action:\"declare-isolate\" declares need:isolate on the given unitHashes (required), freezing them so sync stops propagating revise - units that already have a pending need are skipped. action:\"delete\" permanently removes the given unitHashes (required) from the document - only units flagged need:verify-deletion can be deleted this way. Never hand-edit marker comments; always call this tool. Pass unitHashes (from mdait_getStatus detail:true) to target specific units; omit only for action:\"resolve\" to resolve every matching unit in the file (declare-isolate/delete require unitHashes). Marker hashes and from links are never changed by resolve/declare-isolate, and delete only removes the targeted unit's own content. No AI is used, but markers/content are rewritten so a confirmation is shown. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } whose data shape depends on action: resolve -> resolved/skipped/remainingNeeds; declare-isolate -> declared/skipped; delete -> deleted/skipped. Idempotent: re-running with the same input affects 0 unit(s) on the second run.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -715,14 +775,23 @@
           "properties": {
             "path": {
               "type": "string",
-              "description": "Path (relative or absolute) of the mdait-managed file whose need flags should be resolved."
+              "description": "Path (relative or absolute) of the mdait-managed file whose need flags should be adjudicated."
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "resolve",
+                "declare-isolate",
+                "delete"
+              ],
+              "description": "\"resolve\" (default): remove need flags (review/verify-deletion approval, or undeclare isolate). \"declare-isolate\": declare need:isolate on unitHashes (required). \"delete\": permanently remove unitHashes (required) that are flagged need:verify-deletion."
             },
             "unitHashes": {
               "type": "array",
               "items": {
                 "type": "string"
               },
-              "description": "Marker hashes of the units to resolve. Omit to resolve every unit in the file whose need flag matches the needs filter. Get current hashes from mdait_getStatus (detail:true)."
+              "description": "Marker hashes of the target units. Required for action:\"declare-isolate\" and action:\"delete\". For action:\"resolve\", omit to resolve every unit in the file whose need flag matches the needs filter. Get current hashes from mdait_getStatus (detail:true)."
             },
             "needs": {
               "type": "array",
@@ -736,7 +805,7 @@
                   "isolate"
                 ]
               },
-              "description": "Need flag kinds to resolve. Defaults to [\"review\", \"verify-deletion\"]. translate/revise flags are cleared only when explicitly listed here (\"revise\" also matches revise@{oldhash})."
+              "description": "action:\"resolve\" only. Need flag kinds to resolve. Defaults to [\"review\", \"verify-deletion\"]. translate/revise flags are cleared only when explicitly listed here (\"revise\" also matches revise@{oldhash}); \"isolate\" undeclares an isolation."
             }
           }
         }

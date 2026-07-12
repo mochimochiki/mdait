@@ -258,25 +258,30 @@ interface AdoptInput {
 
 ### 9. Resolve Tool (`mdait_resolve`)
 
-**機能**: need フラグの解決（除去）。CodeLens「Mark as Reviewed」（`mdait.codelens.clearNeed`）のLM Tool版で、エージェントがレビュー承認（`need:review`）・削除確認（`need:verify-deletion` の除去＝保持の判断）をマーカー手編集なしで完了するための手段
+**機能**: need フラグの裁定。StatusTree/CodeLens の判断アクション（Mark as Reviewed・Keep/Delete Unit・Mark as Isolated/Un-isolate、UX-R1: [ux.md](../ux.md) §8）のLM Tool版で、エージェントがレビュー承認・削除確認・isolate宣言/解除をマーカー手編集なしで完了するための手段。`action` パラメータで3つの操作系統を切り替える（ADR-260712-03）
 
 **入力パラメータ**:
 ```typescript
 interface ResolveInput {
   path: string;          // 対象ファイル（相対/絶対）。ディレクトリは不可
-  unitHashes?: string[]; // 対象ユニットのhash。省略時はファイル内のneedsフィルタ一致全ユニット
-  needs?: string[];      // 解決対象のneed種別。省略時は ["review", "verify-deletion"]。
-                         // translate/revise の解決は明示指定時のみ（"revise" は revise@{oldhash} にも一致）
+  action?: "resolve" | "declare-isolate" | "delete"; // 省略時 "resolve"
+  unitHashes?: string[]; // 対象ユニットのhash。
+                         // resolve: 省略時はファイル内のneedsフィルタ一致全ユニット
+                         // declare-isolate / delete: 必須（bulk操作による誤爆を防ぐ安全弁）
+  needs?: string[];      // action:"resolve" のみ。解決対象のneed種別。省略時は ["review", "verify-deletion"]。
+                         // translate/revise の解決は明示指定時のみ（"revise" は revise@{oldhash} にも一致）。
+                         // "isolate" を指定すると isolate 宣言の解除（undeclare）になる
 }
 ```
 
-**実装**:
-- `resolveNeedForFile`（`src/commands/markers/resolve-need.ts`）に委譲。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**
-- ai-review の `review-core.ts` と同じ書換経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる（external は unit-state ストアが更新される）。マーカー境界はパーサーに委譲するのでコードブロック内のサンプルマーカーには誤マッチしない
-- `data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳。全解決後の `nextActions` は `mdait_tm (commit)` を案内する
-- 冪等: 同入力の2回目は resolved 0件（unitHashes 指定時は `already-resolved` でスキップ）
+**実装（action別）**:
+- **`resolve`（既定）**: `resolveNeedForFile`（`src/commands/markers/resolve-need.ts`）に委譲。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**。`data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳
+- **`declare-isolate`**: `declareIsolateForFile`（`src/commands/markers/declare-isolate.ts`）に委譲。指定ユニットに `need:isolate` を設定する（凍結。以後 sync は revise を伝播しない）。既に何らかの need が付いているユニットはスキップする（安全弁）。`data`: `declared: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `need-already-set`）
+- **`delete`**: `deleteUnitFromFile`（`src/commands/markers/delete-unit.ts`）に委譲。指定ユニットをドキュメントから完全に除去する（hash/fromの書き換えではなくユニット自体の削除）。`need:verify-deletion` 以外は削除不可（安全弁）。external モードでは unit-state ストアの order を詰め直す。`data`: `deleted: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `not-verify-deletion`）
+- 3系統とも ai-review の `review-core.ts` と同じ書換経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる。マーカー境界はパーサーに委譲するのでコードブロック内のサンプルマーカーには誤マッチしない
+- 冪等: 同入力の2回目は対象0件（`resolve`/`declare-isolate` の unitHashes 指定時は該当 reason でスキップ、`delete` は `not-found`）
 
-**確認UI**: あり（AI不使用だがマーカー書換のため。解除件数と対象ユニット一覧を上限付きで提示）
+**確認UI**: あり（AI不使用だがマーカー・本文書換のため。action別に対象件数を提示。`delete` は「mdaitではやり直せない・git復旧可能」の注記付き）
 
 **実装**: [`src/lm-tools/resolve-tool.ts`](../../src/lm-tools/resolve-tool.ts)
 
@@ -298,7 +303,7 @@ src/lm-tools/
 ├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ├── ai-review-tool.ts     # AI翻訳レビューツール（need:reviewのトリアージ）
 ├── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）
-└── resolve-tool.ts       # needフラグ解決ツール（review/verify-deletion等の除去）
+└── resolve-tool.ts       # need裁定ツール（resolve除去・declare-isolate宣言・delete削除）
 ```
 
 ---
@@ -356,7 +361,7 @@ GitHub Copilot Chatでのコマンド例:
 #mdaitValidate → mdait_validate 呼び出し（構造・用語一貫性の検証）
 #mdaitAiReview → mdait_aiReview 呼び出し（adopt済みペアのAIトリアージ）
 #mdaitAdopt   → mdait_adopt 呼び出し（既存対訳の取り込みウィザード）
-#mdaitResolve → mdait_resolve 呼び出し（needフラグの解決＝レビュー承認・削除確認の完了）
+#mdaitResolve → mdait_resolve 呼び出し（needの裁定＝レビュー承認・削除確認の完了/削除・isolate宣言/解除）
 ```
 
 ---

@@ -110,6 +110,16 @@ export class StatusManager {
 	}
 
 	/**
+	 * notifyRootChanged
+	 * ツリーは再構築せず、ルート直下の集約表示（StatusTreeProvider の Needs Attention 仮想ノード等）
+	 * だけを再評価させる軽量通知。need フラグの解決/宣言（review・verify-deletion・isolate）など、
+	 * ルート集計に影響しうるが高頻度ではない操作の直後に呼ぶ。
+	 */
+	public notifyRootChanged(): void {
+		this._onStatusTreeChanged.fire(undefined);
+	}
+
+	/**
 	 * updateFileStatus
 	 * 指定ファイルのステータスを再構築し、イベント通知
 	 */

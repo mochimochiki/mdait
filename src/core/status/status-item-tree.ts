@@ -129,6 +129,23 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * review / verify-deletion 待ちのユニットを全ファイル横断で集める。
+	 * StatusTreeProvider の「Needs Attention」仮想ノード（UX-R1: 判断サーフェスの完成）の
+	 * データソース。escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
+	 */
+	public getNeedsAttentionUnits(): UnitStatusItem[] {
+		const matches: UnitStatusItem[] = [];
+		for (const file of this.getFilesAll()) {
+			for (const unit of this.getUnitsInFile(file.filePath)) {
+				if (unit.needFlag === "review" || unit.needFlag === "verify-deletion") {
+					matches.push(unit);
+				}
+			}
+		}
+		return matches;
+	}
+
+	/**
 	 * 指定ハッシュのユニットを検索（ファイルパスなしでスキャン）
 	 * 全ファイルから検索するため、どのファイルか不定であることに注意
 	 */

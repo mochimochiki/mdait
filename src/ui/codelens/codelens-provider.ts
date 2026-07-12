@@ -100,6 +100,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.jumpToTarget",
 					"mdait.codelens.translate",
 					"mdait.codelens.clearNeed",
+					"mdait.codelens.deleteUnit",
+					"mdait.codelens.markIsolated",
 					[range],
 					isSourceFile,
 				);
@@ -135,6 +137,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.jumpToTarget",
 					"mdait.codelens.translate",
 					"mdait.codelens.clearNeed",
+					"mdait.codelens.deleteUnit",
+					"mdait.codelens.markIsolated",
 					[range],
 					isSourceFile,
 				);
@@ -212,6 +216,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		jumpToTargetCommand: string,
 		translateCommand: string,
 		clearNeedCommand: string,
+		deleteUnitCommand: string,
+		markIsolatedCommand: string,
 		translateArgs: (vscode.Range | vscode.Uri)[],
 		isSourceFile: boolean,
 	): vscode.CodeLens[] {
@@ -253,14 +259,42 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
-		// needマーカーがある場合は完了ボタン
-		if (marker.need) {
+		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）
+		if (marker.need === "verify-deletion") {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(check) Keep"),
+					tooltip: vscode.l10n.t("Tooltip: Keep this unit and clear the deletion review flag"),
+					command: clearNeedCommand,
+					arguments: [range],
+				}),
+			);
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(trash) Delete Unit"),
+					tooltip: vscode.l10n.t("Tooltip: Delete this unit from the document"),
+					command: deleteUnitCommand,
+					arguments: [range],
+				}),
+			);
+		} else if (marker.need) {
+			// needマーカーがある場合は完了ボタン（isolate 解除もここで生値に応じたラベルになる）
 			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title,
 					tooltip,
 					command: clearNeedCommand,
+					arguments: [range],
+				}),
+			);
+		} else if (!isSourceFile && marker.from) {
+			// 完了済み訳文ユニット（対訳あり）に isolate 宣言ボタンを出す（UX-R1: isolate 宣言UI）
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
+					tooltip: vscode.l10n.t("Tooltip: Freeze this unit and stop following source updates"),
+					command: markIsolatedCommand,
 					arguments: [range],
 				}),
 			);
@@ -400,6 +434,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Reviewed"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
+			};
+		}
+		if (need === "isolate") {
+			return {
+				title: vscode.l10n.t("$(circle-slash) Un-isolate"),
+				tooltip: vscode.l10n.t("Tooltip: Resume following source updates for this unit"),
 			};
 		}
 		// デフォルト
