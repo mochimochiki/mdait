@@ -266,7 +266,7 @@ export class Configuration {
 	 * AI設定
 	 */
 	public ai: AIConfig = {
-		provider: "default",
+		provider: "vscode-lm",
 		vendor: "copilot",
 		model: "gpt-4o",
 		ollama: {
@@ -426,7 +426,9 @@ export class Configuration {
 	 * external なら外部ストア Provider、それ以外は埋め込み Provider（既定）。
 	 */
 	public getMarkerProvider(): MarkerProvider {
-		return this.isExternalMarkers() ? externalMarkerProvider : embeddedMarkerProvider;
+		return this.isExternalMarkers()
+			? externalMarkerProvider
+			: embeddedMarkerProvider;
 	}
 
 	/**
@@ -576,7 +578,10 @@ export class Configuration {
 			}
 
 			// markers設定の読み込み
-			if (config.markers?.mode === "embedded" || config.markers?.mode === "external") {
+			if (
+				config.markers?.mode === "embedded" ||
+				config.markers?.mode === "external"
+			) {
 				this.markers.mode = config.markers.mode;
 			}
 
@@ -599,7 +604,10 @@ export class Configuration {
 						this.ai.ollama.model = config.ai.ollama.model;
 					}
 					if (config.ai.ollama.timeoutSec !== undefined) {
-						this.ai.ollama.timeoutSec = Math.max(1, config.ai.ollama.timeoutSec);
+						this.ai.ollama.timeoutSec = Math.max(
+							1,
+							config.ai.ollama.timeoutSec,
+						);
 					}
 					if (config.ai.ollama.keepAlive !== undefined) {
 						this.ai.ollama.keepAlive = config.ai.ollama.keepAlive;
@@ -677,7 +685,10 @@ export class Configuration {
 			}
 			if (config.trans?.concurrency !== undefined) {
 				// ファイル単位並列翻訳の同時実行数（1〜8にクランプ。1で逐次実行）
-				this.trans.concurrency = Math.min(8, Math.max(1, Math.floor(config.trans.concurrency)));
+				this.trans.concurrency = Math.min(
+					8,
+					Math.max(1, Math.floor(config.trans.concurrency)),
+				);
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {

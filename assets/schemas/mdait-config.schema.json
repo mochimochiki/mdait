@@ -142,13 +142,13 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "AI provider to use for translation",
+          "description": "AI backend for translation and terminology. 'vscode-lm' (default) uses the VS Code Language Model API and GitHub Copilot subscription without an API key. 'openai' uses the OpenAI-compatible API configured below. 'ollama' uses the local Ollama server configured below. 'default' is a test-only mock provider that does not call an external LLM.",
           "enum": ["default", "vscode-lm", "ollama", "openai"],
           "default": "vscode-lm"
         },
         "vendor": {
           "type": "string",
-          "description": "VS Code Language Model API vendor identifier (used by 'default'/'vscode-lm' provider)",
+          "description": "VS Code Language Model API vendor identifier (used by the 'vscode-lm' provider)",
           "default": "copilot",
           "examples": ["copilot"]
         },

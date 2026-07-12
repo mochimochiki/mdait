@@ -1,6 +1,6 @@
 import { type AIConfig, Configuration } from "../config/configuration";
 import type { AIMessage, AIService } from "./ai-service";
-import { DefaultAIProvider } from "./providers/default-ai-provider"; // Placeholder for actual provider
+import { DefaultAIProvider } from "./providers/default-ai-provider";
 import { OllamaProvider } from "./providers/ollama-provider";
 import { OpenAIProvider } from "./providers/openai-provider";
 import { VSCodeLanguageModelProvider } from "./providers/vscode-lm-provider";

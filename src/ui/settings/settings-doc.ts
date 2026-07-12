@@ -141,7 +141,7 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		),
 	"sync.copyAssets": () =>
 		vscode.l10n.t(
-			"Whether sync copies non-translated files (images and other assets) from source to target directories. true copies everything that is not a translation target, false disables copying, or provide an extension whitelist such as [\".png\", \".jpg\"]. Because the value can be a boolean or a list, edit this key directly in mdait.json.",
+			'Whether sync copies non-translated files (images and other assets) from source to target directories. true copies everything that is not a translation target, false disables copying, or provide an extension whitelist such as [".png", ".jpg"]. Because the value can be a boolean or a list, edit this key directly in mdait.json.',
 		),
 	// --- markers ---
 	"markers.mode": () =>
@@ -151,11 +151,11 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 	// --- ai ---
 	"ai.provider": () =>
 		vscode.l10n.t(
-			"The AI backend used for translation and terminology. 'vscode-lm' (default) uses the VS Code Language Model API — your GitHub Copilot subscription, no API key needed. 'openai' calls an OpenAI-compatible API configured below. 'ollama' uses a local Ollama server configured below. 'default' behaves like 'vscode-lm'.",
+			"The AI backend used for translation and terminology. 'vscode-lm' (default) uses the VS Code Language Model API — your GitHub Copilot subscription, no API key needed. 'openai' calls an OpenAI-compatible API configured below. 'ollama' uses a local Ollama server configured below. 'default' is a test-only mock provider that does not call an external LLM.",
 		),
 	"ai.vendor": () =>
 		vscode.l10n.t(
-			"Vendor identifier for the VS Code Language Model API, used with the 'vscode-lm'/'default' provider. Normally leave this as 'copilot'.",
+			"Vendor identifier for the VS Code Language Model API, used with the 'vscode-lm' provider. Normally leave this as 'copilot'.",
 		),
 	"ai.model": () =>
 		vscode.l10n.t(

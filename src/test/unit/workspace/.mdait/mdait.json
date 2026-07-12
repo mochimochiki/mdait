@@ -19,5 +19,6 @@
     "debug": {
       "logPromptAndResponse": true
     }
-  }
+  },
+  "primaryLang": "en"
 }
