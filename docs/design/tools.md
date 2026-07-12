@@ -94,7 +94,7 @@ interface GetStatusInput {
 **実装**:
 - `StatusManager.getStatusItemTree()` から情報を取得
 - `data` に全体集計（総/翻訳済/エラーユニット数、needフラグ内訳）を格納
-- `detail:true` のとき、needのあるファイルのみの内訳一覧を `data.files` に格納（出力爆発防止）
+- `detail:true` のとき、needのあるファイルのみの内訳一覧を `data.files` に格納（出力爆発防止）。各ファイルには need のあるユニットの一覧 `units: [{hash, title?, need}]` を含める（need なしユニットは含めない・isolate は含める・1ファイル上限50件、超過時 `unitsTruncated: true`）。エージェントはこの hash を `mdait_resolve` の `unitHashes` にそのまま渡せる
 - StatusManagerが初期化されていない場合は `buildStatusItemTree()` を実行
 
 **確認UI**: なし（読み取り専用）
@@ -220,6 +220,7 @@ interface ValidateInput {
 interface AiReviewInput {
   path?: string;    // ターゲットファイル/ディレクトリ。省略時は全transPair
   dryRun?: boolean; // true でマーカー無変更のレポートのみ
+  mode?: "pending" | "audit"; // 既定 "pending"。"audit" は確定済みペア（fromあり・needなし）も監査（報告のみ・マーカー不変）
 }
 ```
 
@@ -232,6 +233,52 @@ interface AiReviewInput {
 **確認UI**: あり（AI使用＋マーカー書換。dryRun でもAI使用のため確認あり）
 
 **実装**: [`src/lm-tools/ai-review-tool.ts`](../../src/lm-tools/ai-review-tool.ts)、設計: [command_ai-review.md](command_ai-review.md)
+
+### 8. Adopt Tool (`mdait_adopt`)
+
+**機能**: 既存対訳サイトの取り込みウィザード（`sync(adopt+align)` → AI翻訳レビュー →（オプション）用語集構築 → TM構築）
+
+**入力パラメータ**:
+```typescript
+interface AdoptInput {
+  dryRun?: boolean;        // true でレビュー段のマーカー無変更＋用語集/TM段スキップ（adopt段のマーカー更新は行う）
+  buildGlossary?: boolean; // true で用語集構築段（term.detect → term.expand）も実行
+  buildTm?: boolean;       // true でTM構築段（tm.commit）も実行
+}
+```
+
+**実装**:
+- `executeAdopt`（`src/commands/adopt/adopt-core.ts`）に委譲する薄い合成コマンド
+- `data`: sync段の集計（adopted/alignCorrections/added/deleted/kept/orphanReviewed）、レビュー段のverdict別集計、オプション段のterm/tm集計、`stageErrors`、escalations一覧（上限50件）、実行後ステータス
+- 冪等: 管理済みサイトへの再実行は採用0件・補正0件・レビュー対象0件を報告する
+
+**確認UI**: あり（AI使用＋マーカー・terms・tmx書換）
+
+**実装**: [`src/lm-tools/adopt-tool.ts`](../../src/lm-tools/adopt-tool.ts)、設計: [command_adopt.md](command_adopt.md)
+
+### 9. Resolve Tool (`mdait_resolve`)
+
+**機能**: need フラグの解決（除去）。CodeLens「Mark as Reviewed」（`mdait.codelens.clearNeed`）のLM Tool版で、エージェントがレビュー承認（`need:review`）・削除確認（`need:verify-deletion` の除去＝保持の判断）をマーカー手編集なしで完了するための手段
+
+**入力パラメータ**:
+```typescript
+interface ResolveInput {
+  path: string;          // 対象ファイル（相対/絶対）。ディレクトリは不可
+  unitHashes?: string[]; // 対象ユニットのhash。省略時はファイル内のneedsフィルタ一致全ユニット
+  needs?: string[];      // 解決対象のneed種別。省略時は ["review", "verify-deletion"]。
+                         // translate/revise の解決は明示指定時のみ（"revise" は revise@{oldhash} にも一致）
+}
+```
+
+**実装**:
+- `resolveNeedForFile`（`src/commands/markers/resolve-need.ts`）に委譲。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**
+- ai-review の `review-core.ts` と同じ書換経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる（external は unit-state ストアが更新される）。マーカー境界はパーサーに委譲するのでコードブロック内のサンプルマーカーには誤マッチしない
+- `data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳。全解決後の `nextActions` は `mdait_tm (commit)` を案内する
+- 冪等: 同入力の2回目は resolved 0件（unitHashes 指定時は `already-resolved` でスキップ）
+
+**確認UI**: あり（AI不使用だがマーカー書換のため。解除件数と対象ユニット一覧を上限付きで提示）
+
+**実装**: [`src/lm-tools/resolve-tool.ts`](../../src/lm-tools/resolve-tool.ts)
 
 ---
 
@@ -250,7 +297,8 @@ src/lm-tools/
 ├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
 ├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ├── ai-review-tool.ts     # AI翻訳レビューツール（need:reviewのトリアージ）
-└── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）
+├── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）
+└── resolve-tool.ts       # needフラグ解決ツール（review/verify-deletion等の除去）
 ```
 
 ---
@@ -277,7 +325,15 @@ src/lm-tools/
 const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
 const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
 const translateToolDisposable = vscode.lm.registerTool("mdait_translate", new MdaitTranslateTool());
+const termToolDisposable = vscode.lm.registerTool("mdait_term", new MdaitTermTool());
+const tmToolDisposable = vscode.lm.registerTool("mdait_tm", new MdaitTmTool());
+const validateToolDisposable = vscode.lm.registerTool("mdait_validate", new MdaitValidateTool());
+const aiReviewToolDisposable = vscode.lm.registerTool("mdait_aiReview", new MdaitAiReviewTool());
+const adoptToolDisposable = vscode.lm.registerTool("mdait_adopt", new MdaitAdoptTool());
+const resolveToolDisposable = vscode.lm.registerTool("mdait_resolve", new MdaitResolveTool());
 ```
+
+登録した Disposable はすべて `context.subscriptions` に追加する。
 
 ---
 
@@ -299,6 +355,8 @@ GitHub Copilot Chatでのコマンド例:
 #mdaitTm      → mdait_tm 呼び出し（TMコミット・最適化）
 #mdaitValidate → mdait_validate 呼び出し（構造・用語一貫性の検証）
 #mdaitAiReview → mdait_aiReview 呼び出し（adopt済みペアのAIトリアージ）
+#mdaitAdopt   → mdait_adopt 呼び出し（既存対訳の取り込みウィザード）
+#mdaitResolve → mdait_resolve 呼び出し（needフラグの解決＝レビュー承認・削除確認の完了）
 ```
 
 ---

@@ -198,12 +198,29 @@ export class StatusCollector implements StatusCollectorPort {
 				needFlag: unit.marker?.need || undefined,
 				startLine: unit.startLine,
 				endLine: unit.endLine,
-				contextValue:
-					unitStatus === Status.Source ? "mdaitUnitSource" : "mdaitUnitTarget",
+				contextValue: this.determineUnitContextValue(unit, unitStatus),
 				filePath,
 				fileName,
 			};
 		});
+	}
+
+	/**
+	 * ユニットのcontextValueを決定する。
+	 * ▶（Translate Unit）は trans が実際に処理するユニット（translate/revise）にのみ表示し、
+	 * 人間の判断待ち（review/verify-deletion）や翻訳済みユニットでのデッドエンドを防ぐ。
+	 */
+	private determineUnitContextValue(unit: MdaitUnit, unitStatus: Status): string {
+		if (unitStatus === Status.Source) {
+			return "mdaitUnitSource";
+		}
+		if (unit.marker?.needsTranslation()) {
+			return "mdaitUnitTarget";
+		}
+		if (unit.marker?.need === "review" || unit.marker?.need === "verify-deletion") {
+			return "mdaitUnitTargetAttention";
+		}
+		return "mdaitUnitTargetComplete";
 	}
 
 	/**

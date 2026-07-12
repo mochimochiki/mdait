@@ -24,12 +24,29 @@ export function totalActionableNeeds(needs: NeedBreakdown): number {
 	return needs.translate + needs.revise + needs.review + needs.verifyDeletion + needs.other;
 }
 
+/** detail 出力に含めるユニット別 need 情報（need のあるユニットのみ列挙する） */
+export interface UnitNeedDetail {
+	/** マーカーのユニット hash */
+	hash: string;
+	/** ユニットの見出しタイトル */
+	title?: string;
+	/** need フラグの生値（translate / revise@{hash} / review / verify-deletion / isolate / ...） */
+	need: string;
+}
+
+/** 1ファイルあたりの units 列挙上限（出力肥大防止） */
+export const MAX_UNIT_DETAILS_PER_FILE = 50;
+
 /** ファイル別のステータス内訳 */
 export interface FileNeedDetail {
 	path: string;
 	totalUnits: number;
 	translatedUnits: number;
 	needs: NeedBreakdown;
+	/** need のあるユニット一覧（isolate 含む。上限 MAX_UNIT_DETAILS_PER_FILE 件） */
+	units: UnitNeedDetail[];
+	/** units が上限で切り詰められたとき true */
+	unitsTruncated?: boolean;
 }
 
 /** 全体ステータスの構造化データ */
@@ -77,6 +94,18 @@ function addNeedFlag(breakdown: NeedBreakdown, needFlag: string): void {
 }
 
 /**
+ * need フラグ文字列の一覧から内訳を集計する。
+ * ステータスによるフィルタは行わない（呼び出し側が対象を選別する）。
+ */
+export function countNeedFlags(needFlags: string[]): NeedBreakdown {
+	const breakdown = emptyBreakdown();
+	for (const flag of needFlags) {
+		addNeedFlag(breakdown, flag);
+	}
+	return breakdown;
+}
+
+/**
  * ユニット一覧から need 内訳を集計する。
  * ソースユニット（Status.Source）は集計対象外。
  */
@@ -96,6 +125,34 @@ export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 		}
 	}
 	return breakdown;
+}
+
+/**
+ * need のあるユニットのみを UnitNeedDetail として列挙する。
+ * countNeeds と同じ基準で対象を選ぶ（isolate は Source 扱いでも列挙し、その他の Source は除外）。
+ * 上限 MAX_UNIT_DETAILS_PER_FILE 件で切り詰め、超過時は truncated を返す。
+ */
+function buildUnitNeedDetails(units: UnitStatusItem[]): { units: UnitNeedDetail[]; truncated: boolean } {
+	const details: UnitNeedDetail[] = [];
+	let truncated = false;
+	for (const unit of units) {
+		if (!unit.needFlag) {
+			continue;
+		}
+		if (unit.needFlag !== "isolate" && unit.status === Status.Source) {
+			continue;
+		}
+		if (details.length >= MAX_UNIT_DETAILS_PER_FILE) {
+			truncated = true;
+			break;
+		}
+		const detail: UnitNeedDetail = { hash: unit.unitHash, need: unit.needFlag };
+		if (unit.title) {
+			detail.title = unit.title;
+		}
+		details.push(detail);
+	}
+	return { units: details, truncated };
 }
 
 /**
@@ -142,12 +199,18 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 			if (detail) {
 				// 全体集計と同じ基準（Status.Sourceは分母から除外。isolateもSource扱い）
 				const countableUnits = units.filter((u) => u.status !== Status.Source);
-				fileDetails.push({
+				const unitDetails = buildUnitNeedDetails(units);
+				const fileDetail: FileNeedDetail = {
 					path: file.filePath,
 					totalUnits: countableUnits.length,
 					translatedUnits: countableUnits.filter((u) => u.status === Status.Translated).length,
 					needs,
-				});
+					units: unitDetails.units,
+				};
+				if (unitDetails.truncated) {
+					fileDetail.unitsTruncated = true;
+				}
+				fileDetails.push(fileDetail);
 			}
 		} else {
 			filesTranslated++;

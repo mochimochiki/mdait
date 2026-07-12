@@ -1,14 +1,14 @@
 <!-- mdait c06cdf20 -->
 # Copilot Chat 統合 — チャットから翻訳を操作する
 
-GitHub Copilot Chat のツール呼び出し（`#mdaitStatus` / `#mdaitSync` / `#mdaitTranslate` / `#mdaitTerm` / `#mdaitTm` / `#mdaitValidate`）を使って、エディタを離れずに翻訳の確認・同期・実行・検証を行うガイドです。
+GitHub Copilot Chat のツール呼び出し（`#mdaitStatus` / `#mdaitSync` / `#mdaitTranslate` / `#mdaitTerm` / `#mdaitTm` / `#mdaitValidate` / `#mdaitResolve` / `#mdaitAiReview` / `#mdaitAdopt`）を使って、エディタを離れずに翻訳の確認・同期・実行・検証を行うガイドです。
 
 ---
 
 <!-- mdait 6beb76f9 -->
 ## 概要
 
-mdait は VS Code の **LanguageModelTool API** を使い、6 つのツールを Copilot Chat に公開しています。
+mdait は VS Code の **LanguageModelTool API** を使い、9 つのツールを Copilot Chat に公開しています。
 コマンドパレットを開かなくても、チャット画面から自然な言葉で翻訳ワークフローを動かせます。
 
 全ツールの出力は共通の JSON エンベロープ `{ schemaVersion, ok, summary, data, nextActions }` です。`summary` が人間向けの1行サマリ、`data` が機械可読な詳細、`nextActions` がエージェント向けの推奨次アクションです。サイト全体を任せる場合の手順は [agent-playbook.md](agent-playbook.md) を参照してください。
@@ -28,6 +28,9 @@ mdait は VS Code の **LanguageModelTool API** を使い、6 つのツールを
 | `#mdaitTerm` | 用語集の検出・展開 | terms 書き換えあり（確認UI） | `mdait.term.*` 相当 |
 | `#mdaitTm` | TM コミット・最適化 | tmx 書き換えあり（確認UI） | `mdait.tm.*` 相当 |
 | `#mdaitValidate` | 構造・用語一貫性の検証 | なし（読み取り専用・AI不使用） | （新規） |
+| `#mdaitResolve` | need フラグの解決（レビュー承認・削除確認の完了。AI不使用） | ファイル書き換えあり（確認UI） | CodeLens「Mark as Reviewed」相当 |
+| `#mdaitAiReview` | 採用ペアのAIトリアージ / 訳質監査（`mode: pending / audit`） | マーカー書き換えあり（確認UI） | `mdait.aiReview.*` 相当 |
+| `#mdaitAdopt` | 既存翻訳の取り込みウィザード（オプションで用語集/TM構築） | マーカー・terms・tmx 書き換えあり（確認UI） | `mdait.adopt.run` 相当 |
 
 ---
 
@@ -174,6 +177,7 @@ Current translation status:
 
 - 状況確認だけなら `#mdaitStatus`、検証だけなら `#mdaitValidate`（どちらも副作用なし）
 - 翻訳前に必ず `#mdaitSync` でマーカーを最新化する
+- レビュー承認（`need:review`）や削除確認（`need:verify-deletion` の保持確定）は `#mdaitResolve` で行う（マーカーを手編集しない）
 - サイト全体・数百ファイル規模の依頼は [agent-playbook.md](agent-playbook.md) の手順に従う
 - 既存の対訳サイトを取り込む場合は `#mdaitSync` に `adopt: true`（[adopt.md](adopt.md)）
 

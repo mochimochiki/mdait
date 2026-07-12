@@ -379,7 +379,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				return vscode.l10n.t("Review required");
 			}
 			if (element.needFlag.startsWith("revise@")) {
-				return vscode.l10n.t("Translation needed");
+				return vscode.l10n.t("Source changed — revision needed");
+			}
+			if (element.needFlag === "verify-deletion") {
+				return vscode.l10n.t("Source deleted — verify whether to delete this unit");
+			}
+			if (element.needFlag === "isolate") {
+				return vscode.l10n.t("Isolated — kept as-is, excluded from translation");
 			}
 		}
 
@@ -442,6 +448,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					return new vscode.ThemeIcon(
 						"circle-small-filled",
 						new vscode.ThemeColor("charts.yellow"),
+					);
+				}
+				if (element.needFlag === "verify-deletion") {
+					return new vscode.ThemeIcon(
+						"trash",
+						new vscode.ThemeColor("charts.orange"),
+					);
+				}
+				if (element.needFlag === "isolate") {
+					return new vscode.ThemeIcon(
+						"circle-slash",
+						new vscode.ThemeColor("charts.gray"),
 					);
 				}
 			}

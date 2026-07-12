@@ -279,7 +279,7 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 	}
 	if (data.units.uncertain + data.units.keptBelowThreshold > 0) {
 		nextActions.push(
-			`${data.units.uncertain + data.units.keptBelowThreshold} unit(s) were kept as need:review (uncertain or below the auto-approve threshold). Review them manually and remove the need:review flag to approve.`,
+			`${data.units.uncertain + data.units.keptBelowThreshold} unit(s) were kept as need:review (uncertain or below the auto-approve threshold). Review them manually and run mdait_resolve to remove the need:review flags of the verified units.`,
 		);
 	}
 	if (data.dryRun && data.units.approved === 0 && data.units.verified > 0) {

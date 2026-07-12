@@ -252,6 +252,84 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "mdait.translate.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.unit",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.frontmatter",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.tm.commit.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.tm.commit.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.aiReview.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.aiReview.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync.initial",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync.processing",
+          "when": "false"
+        },
+        {
+          "command": "mdait.settings.openAsJson",
+          "when": "false"
+        },
+        {
+          "command": "mdait.settings.openAsUi",
+          "when": "false"
+        }
+      ],
       "editor/context": [
         {
           "command": "mdait.translateSelection",
@@ -381,7 +459,7 @@
         "name": "mdait_getStatus",
         "displayName": "mdait: Get Translation Status",
         "toolReferenceName": "mdaitStatus",
-        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/isolate). Pass detail:true to include a per-file breakdown of files that still need work. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
+        "modelDescription": "Get the current translation status of the mdait-managed Markdown documents in the workspace. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains total/translated/error unit counts and a breakdown of need flags (translate/revise/review/verify-deletion/isolate). Pass detail:true to include a per-file breakdown of files that still need work, including a per-unit list of flagged units ({ hash, title, need }, up to 50 units per file with unitsTruncated:true when capped) - use these hashes to target mdait_resolve or to locate units. Read-only and free to call repeatedly; use it to observe state between other mdait tool calls and follow nextActions to reach the fully-translated steady state.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -613,6 +691,52 @@
             "buildTm": {
               "type": "boolean",
               "description": "If true, also commit review-approved pairs into the translation memory after the review (tm commit). Escalated need:review units are excluded structurally."
+            }
+          }
+        }
+      },
+      {
+        "name": "mdait_resolve",
+        "displayName": "mdait: Resolve Need Flags",
+        "toolReferenceName": "mdaitResolve",
+        "modelDescription": "Resolve (remove) need flags from unit markers in a single mdait-managed file - the programmatic equivalent of the 'Mark as Reviewed' CodeLens. Use this to complete a review approval (need:review - after you or the user verified the translation pair is correct) or a deletion verification (need:verify-deletion - resolving the flag means the target unit is KEPT; to accept the deletion instead, remove the unit's section from the document). Never hand-edit marker comments to clear need flags; call this tool. By default only review and verify-deletion flags are resolved; translate/revise are cleared only when explicitly listed in needs (normally let mdait_translate process them). Pass unitHashes (from mdait_getStatus detail:true) to resolve specific units, or omit to resolve every matching unit in the file. Marker hashes and from links are never changed and no AI is used, but markers are rewritten so a confirmation is shown. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains resolved [{hash,title,need}], skipped [{hash,reason}] (reasons: not-found / already-resolved / need-not-selected), and the remaining need breakdown of the file. Idempotent: re-running with the same input resolves 0 unit(s) and reports already-resolved.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "mdait",
+          "translation",
+          "review",
+          "resolve"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path (relative or absolute) of the mdait-managed file whose need flags should be resolved."
+            },
+            "unitHashes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Marker hashes of the units to resolve. Omit to resolve every unit in the file whose need flag matches the needs filter. Get current hashes from mdait_getStatus (detail:true)."
+            },
+            "needs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "review",
+                  "verify-deletion",
+                  "translate",
+                  "revise",
+                  "isolate"
+                ]
+              },
+              "description": "Need flag kinds to resolve. Defaults to [\"review\", \"verify-deletion\"]. translate/revise flags are cleared only when explicitly listed here (\"revise\" also matches revise@{oldhash})."
             }
           }
         }
