@@ -11,9 +11,27 @@ import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem } from "../../core/status/status-item";
 import { Configuration } from "../../infra/config/configuration";
-import { declareIsolateForFile } from "./declare-isolate";
-import { deleteUnitFromFile } from "./delete-unit";
+import { type DeclareIsolateResult, declareIsolateForFile } from "./declare-isolate";
+import { type DeleteUnitResult, deleteUnitFromFile } from "./delete-unit";
 import { resolveNeedForFile } from "./resolve-need";
+
+/** deleteUnitFromFile の失敗理由を人間可読なメッセージに変換する */
+function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
+	if (reason === "not-verify-deletion") {
+		return vscode.l10n.t(
+			"This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.",
+		);
+	}
+	return vscode.l10n.t("Unit not found.");
+}
+
+/** declareIsolateForFile の失敗理由を人間可読なメッセージに変換する */
+function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
+	if (reason === "need-already-set") {
+		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
+	}
+	return vscode.l10n.t("Unit not found.");
+}
 
 /**
  * StatusTreeのユニット行コンテキストメニューから呼び出す need 裁定アクションハンドラ
@@ -56,7 +74,7 @@ export class StatusTreeNeedHandler {
 		const config = Configuration.getInstance();
 		const result = await deleteUnitFromFile(item.filePath, item.unitHash, config);
 		if (!result.deleted) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Could not delete unit."));
+			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
 		}
 	}
 
@@ -69,7 +87,7 @@ export class StatusTreeNeedHandler {
 		const config = Configuration.getInstance();
 		const result = await declareIsolateForFile(item.filePath, item.unitHash, config);
 		if (!result.declared) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Could not mark unit as isolated."));
+			vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
 		}
 	}
 

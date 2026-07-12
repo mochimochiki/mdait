@@ -175,7 +175,8 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	}
 
 	/**
-	 * action:"declare-isolate" の実処理。unitHashes 必須（bulk宣言は非対応。意図せぬ大量凍結を防ぐ）。
+	 * action:"declare-isolate" の実処理。unitHashes 必須（省略してファイル内全件へ暗黙的に宣言する
+	 * 経路は提供しない。意図せぬ大量凍結を防ぐ安全弁。複数 hash を明示指定した一括宣言自体は対応する）。
 	 */
 	private async invokeDeclareIsolate(
 		inputPath: string,
@@ -233,7 +234,8 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	}
 
 	/**
-	 * action:"delete" の実処理。unitHashes 必須（bulk削除は非対応。誤った大量削除を防ぐ）。
+	 * action:"delete" の実処理。unitHashes 必須（省略してファイル内全件を暗黙的に削除する経路は
+	 * 提供しない。誤った大量削除を防ぐ安全弁。複数 hash を明示指定した一括削除自体は対応する）。
 	 * need:verify-deletion 以外のユニットは削除しない（deleteUnitFromFile の安全弁）。
 	 */
 	private async invokeDelete(

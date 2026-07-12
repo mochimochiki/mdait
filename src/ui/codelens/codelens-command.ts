@@ -8,8 +8,8 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { declareIsolateForFile } from "../../commands/markers/declare-isolate";
-import { deleteUnitFromFile } from "../../commands/markers/delete-unit";
+import { type DeclareIsolateResult, declareIsolateForFile } from "../../commands/markers/declare-isolate";
+import { type DeleteUnitResult, deleteUnitFromFile } from "../../commands/markers/delete-unit";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -165,6 +165,24 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	}
 }
 
+/** deleteUnitFromFile の失敗理由を人間可読なメッセージに変換する */
+function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
+	if (reason === "not-verify-deletion") {
+		return vscode.l10n.t(
+			"This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.",
+		);
+	}
+	return vscode.l10n.t("Unit not found.");
+}
+
+/** declareIsolateForFile の失敗理由を人間可読なメッセージに変換する */
+function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
+	if (reason === "need-already-set") {
+		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
+	}
+	return vscode.l10n.t("Unit not found.");
+}
+
 /**
  * CodeLensから verify-deletion ユニットを削除するコマンド。
  * modal 確認の上、hash/from ではなくユニット本体をドキュメントから除去する。
@@ -199,7 +217,7 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 		const config = Configuration.getInstance();
 		const result = await deleteUnitFromFile(document.uri.fsPath, marker.hash, config);
 		if (!result.deleted) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Could not delete unit."));
+			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
 			return;
 		}
 		vscode.window.showInformationMessage(vscode.l10n.t("Unit deleted."));
@@ -230,7 +248,7 @@ export async function codeLensMarkIsolatedCommand(range: vscode.Range): Promise<
 		const config = Configuration.getInstance();
 		const result = await declareIsolateForFile(document.uri.fsPath, marker.hash, config);
 		if (!result.declared) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Could not mark unit as isolated."));
+			vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
 			return;
 		}
 		vscode.window.showInformationMessage(

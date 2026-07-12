@@ -451,5 +451,8 @@
   "This will declare need:isolate on {0} unit(s) in {1}, freezing them so sync stops propagating revise. Units that already have a pending need are skipped. No AI is used.": "{1} の {0} 件のユニットに need:isolate を宣言し、以後 sync が revise を伝播しないよう凍結します。既に他の need が付いているユニットはスキップされます。AIは使用しません。",
   "Deleting unit(s)...": "ユニットを削除中...",
   "Confirm Unit Deletion": "ユニット削除の確認",
-  "This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.": "{1} から need:verify-deletion が付いた {0} 件のユニットを完全に削除します。mdait ではやり直せません — 必要であれば git の履歴から復元してください。AIは使用しません。"
+  "This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.": "{1} から need:verify-deletion が付いた {0} 件のユニットを完全に削除します。mdait ではやり直せません — 必要であれば git の履歴から復元してください。AIは使用しません。",
+  "This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.": "このユニットには need:verify-deletion が付いていません。削除確認が付いたユニットのみこの方法で削除できます。",
+  "Unit not found.": "ユニットが見つかりません。",
+  "This unit already has a pending need. Resolve it first, then retry.": "このユニットには既に別の need が付いています。先にそちらを解決してから再試行してください。"
 }
