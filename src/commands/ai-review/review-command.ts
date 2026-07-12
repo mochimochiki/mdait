@@ -108,7 +108,7 @@ export async function aiReviewFileCommand(item?: StatusItem): Promise<AiReviewFi
  * ディレクトリ単位のAI翻訳レビューコマンド（StatusTreeから呼び出し）
  */
 export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiReviewFileResult[] | undefined> {
-	// StatusTree は directoryPath、debug IPC は dirPath を渡す
+	// directoryPath が正（StatusTree・debug IPC とも）。dirPath は後方互換のみ
 	const dirPath =
 		item && "directoryPath" in item
 			? (item as { directoryPath: string }).directoryPath

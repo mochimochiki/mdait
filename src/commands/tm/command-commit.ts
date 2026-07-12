@@ -118,7 +118,7 @@ export async function tmCommitFileCommand(
 export async function tmCommitDirectoryCommand(
 	item?: StatusItem,
 ): Promise<TmCommitResult | undefined> {
-	// StatusTree は directoryPath、debug IPC は dirPath を渡す
+	// directoryPath が正（StatusTree・debug IPC とも）。dirPath は後方互換のみ
 	const dirPath =
 		item && "directoryPath" in item
 			? (item as { directoryPath: string }).directoryPath
