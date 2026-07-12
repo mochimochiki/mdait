@@ -1,7 +1,13 @@
 import * as assert from "node:assert";
 import { Status, StatusItemType } from "../../../core/status/status-item";
 import type { FileStatusItem, UnitStatusItem } from "../../../core/status/status-item";
-import { buildStatusData, countNeeds, totalActionableNeeds } from "../../../lm-tools/status-data";
+import {
+	MAX_UNIT_DETAILS_PER_FILE,
+	buildStatusData,
+	countNeedFlags,
+	countNeeds,
+	totalActionableNeeds,
+} from "../../../lm-tools/status-data";
 
 function unit(overrides: Partial<UnitStatusItem>): UnitStatusItem {
 	return {
@@ -138,6 +144,88 @@ suite("status-data（need内訳集計）", () => {
 			assert.strictEqual(data.filesTranslated, 1);
 			assert.deepStrictEqual(data.files, []);
 			assert.strictEqual(data.needs.isolate, 1);
+		});
+	});
+
+	suite("buildStatusData: detailのユニット別need一覧", () => {
+		test("needのあるユニットのみhash/title/needで列挙し、needなしユニットは含めない", () => {
+			const files = [
+				file("/ws/docs/en/a.md", [
+					unit({ unitHash: "h1", title: "Intro", needFlag: "translate" }),
+					unit({ unitHash: "h2", title: "Usage", needFlag: "revise@old1" }),
+					unit({ unitHash: "h3", title: "Done", status: Status.Translated }),
+					unit({ unitHash: "h4", title: "Review me", needFlag: "review" }),
+				]),
+			];
+			const data = buildStatusData(files, true);
+			assert.ok(data.files);
+			const units = data.files[0].units;
+			assert.deepStrictEqual(
+				units.map((u) => ({ hash: u.hash, title: u.title, need: u.need })),
+				[
+					{ hash: "h1", title: "Intro", need: "translate" },
+					{ hash: "h2", title: "Usage", need: "revise@old1" },
+					{ hash: "h4", title: "Review me", need: "review" },
+				],
+			);
+			assert.strictEqual(data.files[0].unitsTruncated, undefined);
+		});
+
+		test("isolateユニット（Source扱い）も列挙されるが、それ以外のSourceユニットは含めない", () => {
+			const files = [
+				file("/ws/docs/en/a.md", [
+					unit({ unitHash: "h1", needFlag: "translate" }),
+					unit({ unitHash: "h2", needFlag: "isolate", status: Status.Source }),
+					unit({ unitHash: "h3", needFlag: "translate", status: Status.Source }),
+				]),
+			];
+			const data = buildStatusData(files, true);
+			assert.ok(data.files);
+			assert.deepStrictEqual(
+				data.files[0].units.map((u) => u.hash),
+				["h1", "h2"],
+			);
+		});
+
+		test("titleが無いユニットはtitleフィールドを持たない", () => {
+			const files = [file("/ws/docs/en/a.md", [unit({ unitHash: "h1", needFlag: "review", title: undefined })])];
+			const data = buildStatusData(files, true);
+			assert.ok(data.files);
+			assert.strictEqual("title" in data.files[0].units[0], false);
+		});
+
+		test("1ファイルの上限を超えるユニットは切り詰められunitsTruncated:trueが付く", () => {
+			const manyUnits = Array.from({ length: MAX_UNIT_DETAILS_PER_FILE + 5 }, (_, i) =>
+				unit({ unitHash: `h${i}`, needFlag: "translate" }),
+			);
+			const data = buildStatusData([file("/ws/docs/en/a.md", manyUnits)], true);
+			assert.ok(data.files);
+			assert.strictEqual(data.files[0].units.length, MAX_UNIT_DETAILS_PER_FILE);
+			assert.strictEqual(data.files[0].unitsTruncated, true);
+			// need内訳の集計は切り詰めの影響を受けない
+			assert.strictEqual(data.files[0].needs.translate, MAX_UNIT_DETAILS_PER_FILE + 5);
+		});
+
+		test("上限ちょうどのユニット数ではunitsTruncatedが付かない", () => {
+			const exactUnits = Array.from({ length: MAX_UNIT_DETAILS_PER_FILE }, (_, i) =>
+				unit({ unitHash: `h${i}`, needFlag: "translate" }),
+			);
+			const data = buildStatusData([file("/ws/docs/en/a.md", exactUnits)], true);
+			assert.ok(data.files);
+			assert.strictEqual(data.files[0].units.length, MAX_UNIT_DETAILS_PER_FILE);
+			assert.strictEqual(data.files[0].unitsTruncated, undefined);
+		});
+	});
+
+	suite("countNeedFlags", () => {
+		test("needフラグ文字列一覧から内訳を集計する", () => {
+			const needs = countNeedFlags(["translate", "revise@abc", "review", "verify-deletion", "isolate", "custom"]);
+			assert.strictEqual(needs.translate, 1);
+			assert.strictEqual(needs.revise, 1);
+			assert.strictEqual(needs.review, 1);
+			assert.strictEqual(needs.verifyDeletion, 1);
+			assert.strictEqual(needs.isolate, 1);
+			assert.strictEqual(needs.other, 1);
 		});
 	});
 });

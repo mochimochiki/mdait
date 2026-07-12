@@ -25,12 +25,12 @@ export function buildNextActions(needs: NeedBreakdown, errorUnits = 0): string[]
 	}
 	if (needs.review > 0) {
 		actions.push(
-			`${needs.review} unit(s) are flagged need:review. Review the translated content; if acceptable, remove the need flag from the marker (or ask the user to approve), then run mdait_sync.`,
+			`${needs.review} unit(s) are flagged need:review. Review the translated content; if acceptable, run mdait_resolve to remove the need flags (or ask the user to approve), then run mdait_sync.`,
 		);
 	}
 	if (needs.verifyDeletion > 0) {
 		actions.push(
-			`${needs.verifyDeletion} unit(s) are flagged need:verify-deletion (their source unit was deleted). Verify whether each target unit should be removed, then delete the unit or its need flag manually.`,
+			`${needs.verifyDeletion} unit(s) are flagged need:verify-deletion (their source unit was deleted). Verify each target unit: delete the unit's section from the document to accept the deletion, or run mdait_resolve to remove the flag and keep the unit.`,
 		);
 	}
 	if (errorUnits > 0) {

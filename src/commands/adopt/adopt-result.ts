@@ -165,7 +165,7 @@ export function buildAdoptNextActions(
 	}
 	if (agg.uncertain + agg.keptBelowThreshold > 0) {
 		actions.push(
-			`${agg.uncertain + agg.keptBelowThreshold} unit(s) were kept as need:review (uncertain or below the auto-approve threshold). Review them manually and remove the need:review flag to approve.`,
+			`${agg.uncertain + agg.keptBelowThreshold} unit(s) were kept as need:review (uncertain or below the auto-approve threshold). Review them manually and run mdait_resolve to remove the need:review flags of the verified units.`,
 		);
 	}
 	if (outcome.dryRun && agg.verified > 0) {

@@ -20,6 +20,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 | `mdait_tm { action, path? }` | TMコミット/最適化 | tmx書換・AI使用 | ✅ 既存TUはスキップ |
 | `mdait_aiReview { path?, dryRun? }` | 採用ペアのAIトリアージ（`need:review` の自動承認/エスカレーション） | マーカー書換・AI使用 | ✅ 承認済みは再検証しない |
 | `mdait_adopt { dryRun?, buildGlossary?, buildTm? }` | 取り込みウィザード: `sync(adopt+align) → AIレビュー`＋オプションで用語集/TM構築 | マーカー・terms・tmx書換・AI使用 | ✅ 冪等（管理済みサイトでは align no-op） |
+| `mdait_resolve { path, unitHashes?, needs? }` | need フラグの解決（`need:review` の承認・`need:verify-deletion` の保持確定。AI不使用） | マーカー書換 | ✅ 冪等（解決済みは skipped） |
 
 **基本ループ**: `mdait_getStatus` で観測 → ツールを1つ実行 → また観測。全コマンドは冪等なので、途中で失敗・中断してもループを再開するだけで復帰できる。
 
@@ -55,7 +56,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 3. 取り込みを実行する。次のいずれか:
    - **AI支援（推奨・見出しズレのあるサイト）**: `mdait_adopt` を1回呼ぶ。`sync(adopt+align)` で位置ズレをAI補正して採用し、続けてAI翻訳レビューで高確信の一致を自動承認・誤ペア/訳抜けをエスカレーションする。`buildGlossary`/`buildTm` を渡せばフェーズ2（知識構築）も同時に実行できるが、エスカレーションが多い場合は TM がほぼ空になるため、レビュー解消後にフェーズ2を個別実行する方が確実。`data.sync.adopted`/`alignCorrections` と `data.review.*`・`data.escalations` を観測する
    - **決定的のみ**: `mdait_sync { adopt: true }` を実行する。`data.units.adopted` = 採用された既訳数（`need:review` 付与・本文は不変）、`data.units.kept` = 独立ユニットの保持数、`orphanReviewed` = マーカーなし孤立の一次受け（`need:review` 付与）数。任意で `mdait_aiReview` を後追いでかけてトリアージできる
-4. 残った `need:review` ユニットをレビューする。`mdait_getStatus { detail: true }` で対象ファイルを特定し、原文と訳文の対応が正しいか確認する（`mdait_adopt`/`mdait_aiReview` の `data.escalations` は mismatch=誤ペア・partial=訳抜けの疑いとして先に見る）。問題なければマーカーの `need:review` を除去する（`hash`/`from` は変更しない）。ユーザーからレビューを委任されていない場合は、ユーザーに承認を求める
+4. 残った `need:review` ユニットをレビューする。`mdait_getStatus { detail: true }` で対象ファイルと `data.files[].units` のユニット hash を特定し、原文と訳文の対応が正しいか確認する（`mdait_adopt`/`mdait_aiReview` の `data.escalations` は mismatch=誤ペア・partial=訳抜けの疑いとして先に見る）。問題なければ `mdait_resolve { path, unitHashes }` で `need:review` を解決する（`hash`/`from` は変更されない）。ユーザーからレビューを委任されていない場合は、ユーザーに承認を求める
 5. `mdait_sync` を再実行し、`data.status.needs.review` が 0 であることを確認する
 
 ### フェーズ2: 知識構築（既訳から先に抽出）
@@ -90,16 +91,16 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 
 ## やってはいけないこと
 
-- マーカー（`<!-- mdait ... -->`）の `hash`/`from` を手書きで編集・生成しない（`need` フラグの除去だけは正当な操作）
+- マーカー（`<!-- mdait ... -->`）を手書きで編集・生成しない（`need` フラグの解決は `mdait_resolve` で行う）
 - `.mdait/` 配下（`unit-state`・`unit-registry`・`translations.tmx`）を直接編集しない（`terms.csv` の variants 追加は正当な操作）
-- `need` フラグの意味を理解せずに削除しない（`need:verify-deletion` の除去は「削除しない」判断、ユニットごと削除は「削除する」判断）
+- `need` フラグの意味を理解せずに解決しない（`mdait_resolve` による `need:verify-deletion` の解決は「ユニットを保持する」判断、ユニットごと削除は「削除する」判断。`translate`/`revise` は `mdait_translate` に処理させ、`needs` で明示しない限り `mdait_resolve` は解決しない）
 - 承認UIをバイパスするために操作を細切れにしない（承認回数はディレクトリ単位のスコープ拡大で減らす）
 - 知識構築（term/tm）と翻訳を同時並行で走らせない（用語集・TMのキャッシュ整合性のため、知識構築→翻訳の順に行う）
 
 ## スケールに関する注意
 
 - ディレクトリ翻訳はファイル単位で並列実行される（`trans.concurrency`、デフォルト3）。レート制限エラーが出る場合は `1` に下げる
-- `mdait_getStatus { detail: true }` は need のあるファイルのみを返すため、数百ファイル規模でも出力は膨れない
+- `mdait_getStatus { detail: true }` は need のあるファイルのみを返すため、数百ファイル規模でも出力は膨れない。各ファイルの `units` 一覧は上限50件で切り詰められる（`unitsTruncated: true` が付いたら、そのファイルを解決してから再取得する）
 - `mdait_validate` は読取専用・AI不使用なのでループ内で何度呼んでもよい
 
 ## 関連

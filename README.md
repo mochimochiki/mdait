@@ -124,6 +124,7 @@ The following tools are available in GitHub Copilot Chat:
 | `#mdaitTranslate` | Translate a target file with AI. |
 | `#mdaitAdopt` | Adopt existing translations (onboarding wizard; optional glossary/TM build). |
 | `#mdaitAiReview` | AI-review translation pairs (triage need:review, audit quality). |
+| `#mdaitResolve` | Resolve need flags (approve reviews, confirm deletions; no AI). |
 
 ---
 

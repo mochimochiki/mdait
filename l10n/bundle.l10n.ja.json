@@ -168,6 +168,15 @@
   "Failed to get translation status: {0}": "翻訳ステータスの取得に失敗しました: {0}",
   "Synchronizing translation markers...": "翻訳マーカーを同期中...",
   "Confirm Synchronization": "同期の確認",
+  "No path specified for need resolution.": "needフラグ解決の対象パスが指定されていません。",
+  "Path must be a file, not a directory: {0}": "パスにはディレクトリではなくファイルを指定してください: {0}",
+  "Unknown need kind(s) in needs filter: {0}. Allowed values: {1}.": "needsフィルタに不明なneed種別があります: {0}。指定可能な値: {1}。",
+  "Resolved {0} need flag(s) in {1} ({2} skipped). {3} need flag(s) remain in the file.": "{1} の needフラグを {0} 件解決しました（スキップ {2} 件）。ファイル内の残り needフラグは {3} 件です。",
+  "Failed to resolve need flags: {0}": "needフラグの解決に失敗しました: {0}",
+  "...and {0} more unit(s)": "...ほか {0} ユニット",
+  "Resolving need flags...": "needフラグを解決中...",
+  "Confirm Need Flag Resolution": "needフラグ解決の確認",
+  "This will remove {0} need flag(s) from unit markers in {1}. Marker hashes and from links are not changed, and no AI is used.{2}": "{1} のユニットマーカーから {0} 件の needフラグを解除します。マーカーの hash / from は変更されず、AIも使用しません。{2}",
   "This will update translation markers in your Markdown files. Do you want to proceed?": "Markdownファイル内の翻訳マーカーを更新します。続行しますか？",
   "Failed to synchronize: {0}": "同期に失敗しました: {0}",
   "Confirm Translation": "翻訳の確認",
@@ -407,5 +416,8 @@
   "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.": "1 ファイルの処理で扱うユニット数の上限（全般コストガード）です。翻訳・AI 翻訳レビュー・AI アラインが**ファイル単位で**適用するため、ディレクトリ実行ではファイル数ぶん積み上がります。上限を超えた場合、翻訳とレビューは超過ユニットの need フラグを保持して次回実行で処理し、AI アラインは該当ファイルをスキップして位置ベースの対応付けを維持します。0 で上限なしになります。",
   "Created mdait.json. Configure transPairs and save — then run Initial Sync, or Adopt Existing Translations if your documents are already translated.": "mdait.json を作成しました。transPairs を設定して保存してください。その後、初回同期を実行するか、すでに翻訳済みの文書がある場合は「既存翻訳の取り込み」へ進んでください。",
   "AI translation review (report only: autoApprove is off)": "AI翻訳レビュー（レポートのみ: autoApprove 無効）",
-  "✨ Commands marked with the sparkle icon use AI.\n\n  • The AI service specified in mdait.json will be used\n  • AI usage statistics are recorded in .mdait/ai-stats.log\n\nDo you want to continue?": "✨️表示されているコマンドはAIを利用します。\n\n  • mdait.json で指定された AI サービスを使用します\n  • AI利用に関する統計情報は、 .mdait/ai-stats.log に記録されます。\n\n続行しますか？"
+  "✨ Commands marked with the sparkle icon use AI.\n\n  • The AI service specified in mdait.json will be used\n  • AI usage statistics are recorded in .mdait/ai-stats.log\n\nDo you want to continue?": "✨️表示されているコマンドはAIを利用します。\n\n  • mdait.json で指定された AI サービスを使用します\n  • AI利用に関する統計情報は、 .mdait/ai-stats.log に記録されます。\n\n続行しますか？",
+  "Source changed — revision needed": "原文が変更されました — 改訂が必要です",
+  "Source deleted — verify whether to delete this unit": "原文が削除されました — このユニットを削除するか確認してください",
+  "Isolated — kept as-is, excluded from translation": "孤立ユニット — そのまま保持され、翻訳対象外です"
 }

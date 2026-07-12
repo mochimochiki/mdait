@@ -57,6 +57,7 @@ import { FileExplorer } from "./infra/workspace/file-explorer";
 import { MdaitAiReviewTool } from "./lm-tools/ai-review-tool";
 import { MdaitAdoptTool } from "./lm-tools/adopt-tool";
 import { MdaitGetStatusTool } from "./lm-tools/get-status-tool";
+import { MdaitResolveTool } from "./lm-tools/resolve-tool";
 import { MdaitSyncTool } from "./lm-tools/sync-tool";
 import { MdaitTermTool } from "./lm-tools/term-tool";
 import { MdaitTmTool } from "./lm-tools/tm-tool";
@@ -873,6 +874,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait_adopt",
 		new MdaitAdoptTool(),
 	);
+	const resolveToolDisposable = vscode.lm.registerTool(
+		"mdait_resolve",
+		new MdaitResolveTool(),
+	);
 
 	// 初回データ読み込み
 	context.subscriptions.push(
@@ -945,6 +950,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		validateToolDisposable,
 		aiReviewToolDisposable,
 		adoptToolDisposable,
+		resolveToolDisposable,
 	);
 
 	// contextのsubscriptionsに追加することで、自動的にdisposeが呼ばれる
