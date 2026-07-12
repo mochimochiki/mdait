@@ -6,6 +6,7 @@ import {
 	embedMarkersCommand,
 	externalizeMarkersCommand,
 } from "./commands/markers/markers-migration";
+import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
 import {
 	createConfigCommand,
@@ -67,12 +68,14 @@ import {
 	codeLensClearFileNeedCommand,
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
+	codeLensDeleteUnitCommand,
 	codeLensEditNoteCommand,
 	codeLensJumpToSourceCommand,
 	codeLensJumpToSourceFileCommand,
 	codeLensJumpToSourceFrontmatterCommand,
 	codeLensJumpToTargetCommand,
 	codeLensJumpToTargetFileCommand,
+	codeLensMarkIsolatedCommand,
 	codeLensTranslateCommand,
 	codeLensTranslateFileCommand,
 	editNoteForUnitCommand,
@@ -285,6 +288,25 @@ export async function activate(context: vscode.ExtensionContext) {
 		(item) => translateItemCommand.translateUnit(item),
 	);
 
+	// StatusTree ユニット need 裁定ハンドラ（UX-R1: 判断サーフェスの完成）
+	const needHandler = new StatusTreeNeedHandler();
+	const unitKeepDisposable = vscode.commands.registerCommand(
+		"mdait.unit.keep",
+		(item?: StatusItem) => needHandler.keepUnit(item),
+	);
+	const unitDeleteDisposable = vscode.commands.registerCommand(
+		"mdait.unit.delete",
+		(item?: StatusItem) => needHandler.deleteUnit(item),
+	);
+	const unitMarkIsolatedDisposable = vscode.commands.registerCommand(
+		"mdait.unit.markIsolated",
+		(item?: StatusItem) => needHandler.markIsolated(item),
+	);
+	const unitUnisolateDisposable = vscode.commands.registerCommand(
+		"mdait.unit.unisolate",
+		(item?: StatusItem) => needHandler.unisolate(item),
+	);
+
 	// term.detect command
 	const termDetectDisposable = vscode.commands.registerCommand(
 		"mdait.term.detect",
@@ -427,6 +449,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensClearNeedDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.clearNeed",
 		codeLensClearNeedCommand,
+	);
+
+	// CodeLens verify-deletion 削除コマンド（UX-R1: 判断サーフェスの完成）
+	const codeLensDeleteUnitDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.deleteUnit",
+		codeLensDeleteUnitCommand,
+	);
+
+	// CodeLens isolate 宣言コマンド（UX-R1: isolate 宣言UI）
+	const codeLensMarkIsolatedDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.markIsolated",
+		codeLensMarkIsolatedCommand,
 	);
 
 	// Frontmatter翻訳コマンド（StatusTree/CodeLensから呼び出し）
@@ -905,6 +939,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
+		codeLensDeleteUnitDisposable,
+		codeLensMarkIsolatedDisposable,
 		editNoteDisposable,
 		editNoteForUnitDisposable,
 		codeLensDisposable,
@@ -912,6 +948,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
+		unitKeepDisposable,
+		unitDeleteDisposable,
+		unitMarkIsolatedDisposable,
+		unitUnisolateDisposable,
 		translateSelectionDisposable,
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,

@@ -4,6 +4,7 @@ import {
 	type FileStatusItem,
 	Status,
 	StatusItemType,
+	type UnitStatusItem,
 } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 
@@ -13,6 +14,7 @@ declare let __vscodeMockWorkspaceRoot: string;
 function makeFileItem(
 	filePath: string,
 	status: Status = Status.NeedsTranslation,
+	children?: UnitStatusItem[],
 ): FileStatusItem {
 	return {
 		type: StatusItemType.File,
@@ -21,6 +23,24 @@ function makeFileItem(
 		fileName: path.basename(filePath),
 		translatedUnits: 0,
 		totalUnits: 1,
+		status,
+		...(children ? { children } : {}),
+	};
+}
+
+/** テスト用 UnitStatusItem を生成 */
+function makeUnitItem(
+	filePath: string,
+	unitHash: string,
+	needFlag: string | undefined,
+	status: Status = Status.Translated,
+): UnitStatusItem {
+	return {
+		type: StatusItemType.Unit,
+		label: unitHash,
+		filePath,
+		unitHash,
+		needFlag,
 		status,
 	};
 }
@@ -131,6 +151,40 @@ suite("StatusItemTree", () => {
 				1,
 				"addOrUpdateFile後にonTreeChangedイベントが1回発火すること",
 			);
+		});
+	});
+
+	suite("getNeedsAttentionUnits（Needs Attention仮想ノードの集約ロジック）", () => {
+		test("review/verify-deletionのユニットのみを全ファイル横断で集める", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const fileA = makeFileItem(path.join(jaDir, "a.md"), Status.Translated, [
+				makeUnitItem(path.join(jaDir, "a.md"), "reviewUnit", "review"),
+				makeUnitItem(path.join(jaDir, "a.md"), "translateUnit", "translate"),
+				makeUnitItem(path.join(jaDir, "a.md"), "cleanUnit", undefined),
+			]);
+			const fileB = makeFileItem(path.join(jaDir, "b.md"), Status.Translated, [
+				makeUnitItem(path.join(jaDir, "b.md"), "deletionUnit", "verify-deletion"),
+				makeUnitItem(path.join(jaDir, "b.md"), "isolateUnit", "isolate"),
+			]);
+
+			tree.buildTree([fileA, fileB], ["ja"]);
+
+			const matches = tree.getNeedsAttentionUnits();
+			assert.deepStrictEqual(
+				matches.map((u) => u.unitHash).sort(),
+				["deletionUnit", "reviewUnit"],
+			);
+		});
+
+		test("該当ユニットが無ければ空配列を返す", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const fileA = makeFileItem(path.join(jaDir, "a.md"), Status.Translated, [
+				makeUnitItem(path.join(jaDir, "a.md"), "cleanUnit", undefined),
+			]);
+
+			tree.buildTree([fileA], ["ja"]);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
 		});
 	});
 });

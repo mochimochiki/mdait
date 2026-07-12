@@ -200,6 +200,7 @@ export async function resolveNeedForFile(
 			}
 		}
 		await StatusManager.getInstance().refreshFileStatus(absPath);
+		StatusManager.getInstance().notifyRootChanged();
 	}
 
 	logger.info("resolve", "Need flags resolved", {

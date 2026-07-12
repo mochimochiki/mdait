@@ -2,7 +2,7 @@
 
 > mdait の**ユーザー体験（UX）全体を俯瞰する基準ドキュメント**である。人間（翻訳運用者）と AI エージェントという2種類のユーザーのジャーニー・接点・状態可視化・体験原則をここに集約する。個々の UI 部品の設計は [design/ui.md](design/ui.md)、エージェント・オーケストレーションの設計とロードマップは [design/agent-orchestration.md](design/agent-orchestration.md)、アーキテクチャ原則は [architecture.md](architecture.md) を参照。UX に関わる機能追加・変更時は必ず本ドキュメントとの整合を確認すること。
 >
-> 調査基準日: 2026-07-12（コミット 949c309 時点の全数調査に基づく。§7 の課題台帳に同日の改修結果を反映済み）
+> 調査基準日: 2026-07-12（コミット 949c309 時点の全数調査に基づく。§7 の課題台帳に同日の改修結果を反映済み。同日中に UX-R1（ADR-260712-03）も実装しB-1〜B-3を解消）
 
 ---
 
@@ -102,13 +102,13 @@ graph TD
 
 ### J4: 判断のジャーニー（review / verify-deletion / isolate）
 
-mdait が「決めつけずに人間へ倒した」ものを人間が裁くフロー。**UX-P2 の後半（判断手段を同じ場所に）が最も弱い領域**であり、§8 のロードマップの中心。
+mdait が「決めつけずに人間へ倒した」ものを人間が裁くフロー。UX-R1（ADR-260712-03）で判断手段を同じ場所に揃えた。
 
-| 判断 | 発生条件 | 現在の操作手段 | あるべき姿（§8） |
-|---|---|---|---|
-| `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」（1件ずつ）/ AIレビュー委任 / エージェントは `mdait_resolve` | レビューキュー（未裁定一覧から連続処理） |
-| `need:verify-deletion` の裁定 | 原文削除（policy=verify） | 「保持」はCodeLensで可能だが、**「削除」は本文の手動編集のみ** | 保持/削除の2択をCodeLens・ツリーに |
-| `need:isolate` の宣言 | ユーザーの意思（独自コンテンツのopt-out） | **マーカーへの手打ちのみ** | CodeLens/コンテキストメニューから宣言 |
+| 判断 | 発生条件 | 操作手段 |
+|---|---|---|
+| `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
+| `need:verify-deletion` の裁定 | 原文削除（policy=verify） | CodeLens/ツリーの「Keep」「Delete Unit」2択 / エージェントは `mdait_resolve { action:"resolve" }`（保持）/ `{ action:"delete" }`（削除） |
+| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens/ツリーの「Mark as Isolated」「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
 
@@ -132,12 +132,13 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 状態観測 | StatusTree / Hover | `mdait_getStatus`（detail・ユニット一覧） |
 | 同期 | Sync ボタン / 保存時自動 | `mdait_sync` |
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
-| レビュー承認・need解決 | CodeLens「Mark as …」 | `mdait_resolve` |
+| レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
+| verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit | `mdait_resolve { action:"resolve" \| "delete" }` |
+| isolate宣言/解除 | CodeLens/ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
 | 検証 | （通知・レポート） | `mdait_validate` |
 | 取り込み | Adopt ウィザード | `mdait_adopt` |
-| isolate宣言 | ❌（手打ちのみ・§8 UX-R1） | ❌（同左） |
 
 ---
 
@@ -151,8 +152,8 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | `need:translate` | ✅ 白抜き | ✅ ▶ + Mark as Translated | — | ✅ |
 | `need:revise` | ✅ 白抜き＋専用ツールチップ | ✅ ▶ + Mark as Revised | — | ✅ |
 | `need:review` | ✅ 黄 | ✅ Mark as Reviewed | ✅ Needs Review | ✅ |
-| `need:verify-deletion` | ✅ trash/橙＋専用ツールチップ | ⚠️ 汎用「Mark as Completed」（§8 UX-R1で保持/削除の2択へ） | ❌ | ✅ |
-| `need:isolate` | ✅ circle-slash/灰＋専用ツールチップ | ❌ 宣言・解除とも手打ち | ❌ | ✅ |
+| `need:verify-deletion` | ✅ trash/橙＋専用ツールチップ | ✅ Keep / Delete Unit の2択 | ❌ | ✅ |
+| `need:isolate` | ✅ circle-slash/灰＋専用ツールチップ | ✅ Mark as Isolated / Un-isolate | ❌ | ✅ |
 | エラーユニット | ✅ 赤 | — | ✅ | ✅（件数） |
 | AIレビュー flagged | ❌（ツリーは need:review の有無のみ） | — | ✅ | ✅（escalations） |
 
@@ -177,10 +178,10 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 | # | 痛点 | 重大度 | 状態 |
 |---|---|---|---|
-| B-1 | `verify-deletion` の「削除」導線がなく、唯一のワンクリック操作（Mark as Completed）が「保持」方向で誤読を招く | 重大 | 🔜 UX-R1 |
-| B-2 | `isolate` を宣言するUIが存在しない（マーカー手打ちのみ）。設計docも「将来増分」と自認 | 重大 | 🔜 UX-R1 |
-| B-3 | review が溜まったときの一覧・連続処理手段がない（CodeLens で1件ずつ、または AI 委任のみ） | 中 | 🔜 UX-R1 |
-| B-4 | AIレビューの flagged/escalated が StatusTree 上で区別できない（レポート/Hover 限定） | 中 | 🔜 UX-R1 |
+| B-1 | `verify-deletion` の「削除」導線がなく、唯一のワンクリック操作（Mark as Completed）が「保持」方向で誤読を招く | 重大 | ✅ CodeLens/ツリーをKeep/Delete Unitの2択に分岐（ADR-260712-03） |
+| B-2 | `isolate` を宣言するUIが存在しない（マーカー手打ちのみ）。設計docも「将来増分」と自認 | 重大 | ✅ CodeLens/ツリーにMark as Isolated/Un-isolateを追加（ADR-260712-03） |
+| B-3 | review が溜まったときの一覧・連続処理手段がない（CodeLens で1件ずつ、または AI 委任のみ） | 中 | ✅ StatusTreeにNeeds Attention仮想ノードを追加（ADR-260712-03） |
+| B-4 | AIレビューの flagged/escalated が StatusTree 上で区別できない（レポート/Hover 限定） | 中 | 📋 Needs Attentionノードへの統合は将来課題（escalated状態の集約が未実装） |
 
 ### C. デッドエンド・破綻（UX-P7 違反）
 
@@ -217,18 +218,18 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 課題台帳の 🔜 を3つのまとまりに束ねる。各リリースは独立して出荷可能で、[design/agent-orchestration.md](design/agent-orchestration.md) のマイルストーン形式（着手前チェック・考慮事項・完了ゲート）に従って実装チケットを起こすこと。
 
-### UX-R1: 判断サーフェスの完成（B-1〜B-4）— 最優先
+### UX-R1: 判断サーフェスの完成（B-1〜B-4）— 実装済み（ADR-260712-03）
 
 **目的**: 「mdait が人間に倒した判断」をワンクリックで裁けるようにし、J4 を完成させる。UX-P2 の完全化。
 
-**実装方針**:
+**実装内容**（ADR-260712-03、詳細は同ADR参照）:
 
 1. **verify-deletion の2択化**: CodeLens を汎用「Mark as Completed」から「$(check) Keep（needを外して保持）/ $(trash) Delete Unit（ユニット削除）」の2ボタンに分岐。Delete は modal 確認＋git 復旧可能の注記。ツリーのユニット行にも同アクションをコンテキストメニューで提供。
-2. **isolate 宣言UI**: 訳文側ユニットの CodeLens／ツリーコンテキストメニューに「Mark as Isolated」（`need:isolate` 付与）と「Un-isolate」（解除）を追加。宣言は sync/trans/tm の全経路が既に対応済みなのでマーカー書換のみ。
-3. **レビューキュー**: StatusTree に「Needs Attention」仮想ノード（review / verify-deletion / escalated を横断集約）を追加し、クリックで該当ユニットへジャンプ→CodeLens で裁定→次へ、の連続処理を成立させる。flagged/escalated の可視化（B-4）はこのノードに集約する（ツリー全行のアイコン増殖を避ける）。
-4. エージェント側は `mdait_resolve` が既に対応済み（A-1）。isolate 宣言を `mdait_resolve` の `action` 拡張とするか別ツールにするかは実装時に ADR で判断する。
+2. **isolate 宣言UI**: 訳文側ユニットの CodeLens／ツリーコンテキストメニューに「Mark as Isolated」（`need:isolate` 付与）と「Un-isolate」（解除）を追加。
+3. **レビューキュー**: StatusTree に「Needs Attention」仮想ノード（review / verify-deletion を横断集約）を追加し、クリックで該当ユニットへジャンプ→CodeLens で裁定→次へ、の連続処理を成立させた。escalated（AIレビューflagged）の統合はB-4として📋見送り（データが未集計のため）。
+4. エージェント側は `mdait_resolve` を `action: "resolve" | "declare-isolate" | "delete"` に拡張し、新規ツールを増やさず判断サーフェスをエージェントにも開いた（ADR-260712-03で新規ツール分割ではなくaction拡張を選択）。
 
-**完了ゲート**: review/verify-deletion/isolate の全裁定が、本文の手動編集なしに GUI 2クリック以内で完了する（E2E: debug-ipc P12 拡張）。
+**完了ゲート**: review/verify-deletion/isolate の全裁定が、本文の手動編集なしに GUI 2クリック以内・エージェントは `mdait_resolve` 1呼び出しで完了する。E2E（debug-ipc P12 拡張・手動 `npm run test:vscode`）は今回未実施 — 単体テストで core ロジック（delete-unit.ts / declare-isolate.ts / getNeedsAttentionUnits）を担保した。
 
 ### UX-R2: 工程間の手渡しと気づき（D-1, D-2）
 

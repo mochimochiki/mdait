@@ -2,15 +2,24 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { SelectionState } from "../../core/status/selection-state";
 import {
+	type DirectoryStatusItem,
 	Status,
 	type StatusItem,
 	StatusItemType,
+	type UnitStatusItem,
 	isFrontmatterStatusItem,
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
+
+/**
+ * StatusTree ルート直下の「Needs Attention」仮想ノードの directoryPath に使う識別子。
+ * 実在するディレクトリパスと衝突しないよう非パス文字列を用いる（実ディレクトリ探索の対象外）。
+ * review / verify-deletion 待ちのユニットを横断集約し、連続裁定を可能にする（UX-R1 §8）。
+ */
+const NEEDS_ATTENTION_ID = "mdait:needs-attention";
 
 /**
  * ステータスツリービューのデータプロバイダ
@@ -64,6 +73,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	): vscode.TreeItemCollapsibleState {
 		switch (element.type) {
 			case StatusItemType.Directory:
+				// Needs Attention 仮想ノードは常にExpanded（0件時はそもそもツリーに出さない）
+				if (element.directoryPath === NEEDS_ATTENTION_ID) {
+					return vscode.TreeItemCollapsibleState.Expanded;
+				}
 				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
 				return this.statusItemTree.getDirectoryChildren(element.directoryPath)
 					.length > 0
@@ -153,7 +166,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// idを設定
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (element.type === StatusItemType.Directory && element.directoryPath) {
-			if (workspaceFolder) {
+			if (element.directoryPath === NEEDS_ATTENTION_ID) {
+				treeItem.id = NEEDS_ATTENTION_ID;
+			} else if (workspaceFolder) {
 				treeItem.id = path.relative(workspaceFolder, element.directoryPath);
 			} else {
 				treeItem.id = element.directoryPath;
@@ -169,11 +184,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			element.filePath &&
 			element.unitHash
 		) {
-			if (workspaceFolder) {
-				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#${element.unitHash}`;
-			} else {
-				treeItem.id = `${element.filePath}#${element.unitHash}`;
-			}
+			const baseId = workspaceFolder
+				? `${path.relative(workspaceFolder, element.filePath)}#${element.unitHash}`
+				: `${element.filePath}#${element.unitHash}`;
+			// Needs Attention 仮想ノード配下のクローンは、実ファイル配下の本体と同じ id にならないよう
+			// サフィックスを付与する（VS Code TreeView は id の一意性を前提とするため）。
+			treeItem.id = element.isVirtualCopy ? `${baseId}::needs-attention` : baseId;
 		} else if (
 			element.type === StatusItemType.Frontmatter &&
 			element.filePath
@@ -218,6 +234,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * TreeView.reveal()を使用するために必要
 	 */
 	public getParent(element: StatusItem): StatusItem | undefined {
+		// Needs Attention仮想ノード配下のクローンの場合、親は仮想ノード自身
+		if (element.type === StatusItemType.Unit && element.isVirtualCopy) {
+			return this.buildNeedsAttentionItem();
+		}
+
 		// Unitの場合、親はFile
 		if (element.type === StatusItemType.Unit && element.filePath) {
 			return this.statusItemTree.getFile(element.filePath);
@@ -285,6 +306,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return Promise.resolve(this.getRootDirectoryItems());
 		}
 		if (element.type === StatusItemType.Directory) {
+			// Needs Attention仮想ノードの場合は横断集約したユニットクローンを返す
+			if (element.directoryPath === NEEDS_ATTENTION_ID) {
+				return Promise.resolve(this.getNeedsAttentionChildren());
+			}
 			// ディレクトリの場合はファイル一覧を返す
 			return Promise.resolve(
 				this.getStatusItemsRecursive(element.directoryPath),
@@ -319,7 +344,42 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// StatusItemTreeからルートディレクトリアイテムを取得
 		const items = this.statusItemTree.getRootDirectoryItems(dirsAbs);
 		// Status.Emptyのアイテムを除外
-		return items.filter((item) => item.status !== Status.Empty);
+		const visibleItems = items.filter((item) => item.status !== Status.Empty);
+
+		// Needs Attention仮想ノードを先頭に追加する（0件時は追加しない＝デッドエンドを作らない）
+		const needsAttentionItem = this.buildNeedsAttentionItem();
+		return needsAttentionItem
+			? [needsAttentionItem, ...visibleItems]
+			: visibleItems;
+	}
+
+	/**
+	 * review / verify-deletion 待ちのユニットをクローン（isVirtualCopy: true）として返す。
+	 * 元のUnitStatusItemは実ファイル配下のツリーからも参照されているため、id衝突を避けるためクローンする。
+	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
+	 */
+	private getNeedsAttentionChildren(): UnitStatusItem[] {
+		return this.statusItemTree
+			.getNeedsAttentionUnits()
+			.map((unit) => ({ ...unit, isVirtualCopy: true }));
+	}
+
+	/**
+	 * Needs Attention仮想ノードを構築する。対象が0件の場合はundefined
+	 * （UX-P7: デッドエンドを置かない。空のノードをツリーに出さない）。
+	 */
+	private buildNeedsAttentionItem(): DirectoryStatusItem | undefined {
+		const count = this.statusItemTree.getNeedsAttentionUnits().length;
+		if (count === 0) {
+			return undefined;
+		}
+		return {
+			type: StatusItemType.Directory,
+			label: vscode.l10n.t("Needs Attention ({0})", count),
+			status: Status.NeedsTranslation,
+			directoryPath: NEEDS_ATTENTION_ID,
+			contextValue: "mdaitNeedsAttentionRoot",
+		};
 	}
 
 	/**
@@ -373,6 +433,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return element.tooltip;
 		}
 
+		if (
+			element.type === StatusItemType.Directory &&
+			element.directoryPath === NEEDS_ATTENTION_ID
+		) {
+			return vscode.l10n.t(
+				"Units waiting for a review or deletion decision. Click a unit to jump and resolve it.",
+			);
+		}
+
 		// ユニットのneedFlagを優先して表示
 		if (element.type === StatusItemType.Unit && element.needFlag) {
 			if (element.needFlag === "review") {
@@ -415,6 +484,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
+		}
+
+		// Needs Attention仮想ノードは専用アイコン
+		if (
+			element?.type === StatusItemType.Directory &&
+			element.directoryPath === NEEDS_ATTENTION_ID
+		) {
+			return new vscode.ThemeIcon("warning", new vscode.ThemeColor("charts.yellow"));
 		}
 
 		// Frontmatter階層の場合はbookアイコンを使用

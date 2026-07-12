@@ -4,6 +4,26 @@
 
 ---
 
+## ADR-260712-03: UX-R1（判断サーフェスの完成）を実装し mdait_resolve を action 分岐に拡張する
+
+### 背景
+[docs/ux.md](ux.md) §7/§8 で特定した B-1〜B-3（verify-deletion の削除導線欠如・isolate宣言UI皆無・レビュー溜まり時の連続処理手段なし）を解消するロードマップ UX-R1 を実装した。ADR-260712-02 の備考で「isolate 宣言（need 付与方向）は mdait_resolve の範囲外。UX-R1 で判断サーフェスと合わせて設計する」としていた判断を、本 ADR で確定する。
+
+### 決定
+1. **verify-deletion の2択化**: CodeLens/StatusTreeコンテキストメニューの汎用「Mark as Completed」を「Keep（`mdait.codelens.clearNeed` 相当・need除去）」と「Delete Unit（新規 `deleteUnitFromFile`・ユニット本体をドキュメントから除去）」に分岐した。Delete は modal 確認＋git復旧可能の注記を出す。安全弁として `need:verify-deletion` 以外は削除不可。
+2. **isolate 宣言/解除UI**: 訳文側の完了済みユニット（`from` あり・need なし）に CodeLens/ツリーで「Mark as Isolated」（新規 `declareIsolateForFile`。既に他の need があるユニットは踏み潰さずスキップ）を追加。解除は既存の `resolveNeedForFile(needs:["isolate"])` を再利用（新規実装しない）。
+3. **StatusTree の Needs Attention 仮想ノード**: ルート直下に review/verify-deletion ユニットを横断集約する仮想ディレクトリノードを追加（0件時は非表示＝デッドエンド回避）。集約ロジックは `StatusItemTree.getNeedsAttentionUnits()`（VS Code非依存・単体テスト対象）に置き、UI層（StatusTreeProvider）はクローン化とtree item id採番のみを担う。escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）として見送った。
+4. **`mdait_resolve` の action 分岐**: 新規ツールを増やさず、既存 `mdait_resolve` に `action: "resolve"（既定・従来動作） | "declare-isolate" | "delete"` を追加した。`declare-isolate`/`delete` は `unitHashes` 必須（bulk操作による誤爆防止の安全弁）。エージェント側のサーフェス対称性（ux.md 表）を人間側と揃え、マーカー手編集の必要性を完全になくした。
+
+### 理由
+- ツール増殖よりエンベロープ・確認UI・冪等性の実装済みインフラを再利用する方が保守コストが低い。`mdait_resolve` は既に「マーカー・本文を書き換えてneedを裁定する」ツールとして確立しており、declare/delete も同じ意味論（明示ターゲット・確認UI・冪等）に収まる。
+- Needs Attention の集約ロジックを core 層に切り出したのは、StatusTreeProvider は vscode.TreeItem/ThemeIcon 依存で単体テスト不能（既存の制約）なため、集約という純粋ロジックだけでもテスト対象に残すため。
+- escalated 集約や UX-R2/UX-R3（工程間の手渡し・操作一貫性）は本 ADR のスコープ外とし、ux.md のロードマップに 🔜 のまま残す。
+
+### 備考
+- 削除操作は「元に戻せない」体験だが、git 管理下での作業を前提とする mdait の設計（P3: いつでも復帰できる安心感）に則り、削除確認メッセージで復旧手段を明示する。
+- `isVirtualCopy` フィールドを `StatusItem` に追加した（tree item id 衝突回避専用。実体との等価判定には使わない）。
+
 ## ADR-260712-02: need フラグ解決をツール化する（mdait_resolve）
 
 ### 背景

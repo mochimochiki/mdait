@@ -20,7 +20,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 | `mdait_tm { action, path? }` | TMコミット/最適化 | tmx書換・AI使用 | ✅ 既存TUはスキップ |
 | `mdait_aiReview { path?, dryRun? }` | 採用ペアのAIトリアージ（`need:review` の自動承認/エスカレーション） | マーカー書換・AI使用 | ✅ 承認済みは再検証しない |
 | `mdait_adopt { dryRun?, buildGlossary?, buildTm? }` | 取り込みウィザード: `sync(adopt+align) → AIレビュー`＋オプションで用語集/TM構築 | マーカー・terms・tmx書換・AI使用 | ✅ 冪等（管理済みサイトでは align no-op） |
-| `mdait_resolve { path, unitHashes?, needs? }` | need フラグの解決（`need:review` の承認・`need:verify-deletion` の保持確定。AI不使用） | マーカー書換 | ✅ 冪等（解決済みは skipped） |
+| `mdait_resolve { path, action?, unitHashes?, needs? }` | need の裁定。`action:"resolve"`（既定）= `need:review` の承認・`need:verify-deletion` の保持確定。`action:"declare-isolate"` = 指定ユニットの凍結宣言（`unitHashes` 必須）。`action:"delete"` = `need:verify-deletion` ユニットの削除（`unitHashes` 必須）。AI不使用 | マーカー・本文書換 | ✅ 冪等（対象0件はskipped） |
 
 **基本ループ**: `mdait_getStatus` で観測 → ツールを1つ実行 → また観測。全コマンドは冪等なので、途中で失敗・中断してもループを再開するだけで復帰できる。
 
@@ -52,7 +52,7 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 ### フェーズ1: 取り込み
 
 1. git コミットを確認する（取り込みはマーカー書き込みを伴う）
-2. 訳文側にしかないセクション（マーカーなし）は sync が削除せず `need:review`（`from` なし）で保護するため、事前のポリシー設定は不要。取り込み後にユーザーへ「独立ユニット化（素 hash） / `need:isolate` / 削除」の判断を求める（[adopt.md](adopt.md)）
+2. 訳文側にしかないセクション（マーカーなし）は sync が削除せず `need:review`（`from` なし）で保護するため、事前のポリシー設定は不要。取り込み後にユーザーへ「独立ユニット化（素 hash） / `need:isolate` / 削除」の判断を求める（[adopt.md](adopt.md)）。ユーザーから委任されている場合、`need:isolate` は `mdait_resolve { action:"declare-isolate", unitHashes }` で宣言できる
 3. 取り込みを実行する。次のいずれか:
    - **AI支援（推奨・見出しズレのあるサイト）**: `mdait_adopt` を1回呼ぶ。`sync(adopt+align)` で位置ズレをAI補正して採用し、続けてAI翻訳レビューで高確信の一致を自動承認・誤ペア/訳抜けをエスカレーションする。`buildGlossary`/`buildTm` を渡せばフェーズ2（知識構築）も同時に実行できるが、エスカレーションが多い場合は TM がほぼ空になるため、レビュー解消後にフェーズ2を個別実行する方が確実。`data.sync.adopted`/`alignCorrections` と `data.review.*`・`data.escalations` を観測する
    - **決定的のみ**: `mdait_sync { adopt: true }` を実行する。`data.units.adopted` = 採用された既訳数（`need:review` 付与・本文は不変）、`data.units.kept` = 独立ユニットの保持数、`orphanReviewed` = マーカーなし孤立の一次受け（`need:review` 付与）数。任意で `mdait_aiReview` を後追いでかけてトリアージできる
@@ -91,9 +91,9 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 
 ## やってはいけないこと
 
-- マーカー（`<!-- mdait ... -->`）を手書きで編集・生成しない（`need` フラグの解決は `mdait_resolve` で行う）
+- マーカー（`<!-- mdait ... -->`）を手書きで編集・生成しない（`need` フラグの解決・宣言・ユニット削除はすべて `mdait_resolve` で行う）
 - `.mdait/` 配下（`unit-state`・`unit-registry`・`translations.tmx`）を直接編集しない（`terms.csv` の variants 追加は正当な操作）
-- `need` フラグの意味を理解せずに解決しない（`mdait_resolve` による `need:verify-deletion` の解決は「ユニットを保持する」判断、ユニットごと削除は「削除する」判断。`translate`/`revise` は `mdait_translate` に処理させ、`needs` で明示しない限り `mdait_resolve` は解決しない）
+- `need` フラグの意味を理解せずに裁定しない（`mdait_resolve { action:"resolve" }` による `need:verify-deletion` の解決は「ユニットを保持する」判断、`action:"delete"` は「削除する」判断で `unitHashes` 必須・元に戻せない（git復旧可能の注記あり）。`action:"declare-isolate"` は伝播停止の凍結宣言で `unitHashes` 必須。`translate`/`revise` は `mdait_translate` に処理させ、`needs` で明示しない限り `action:"resolve"` は解決しない）
 - 承認UIをバイパスするために操作を細切れにしない（承認回数はディレクトリ単位のスコープ拡大で減らす）
 - 知識構築（term/tm）と翻訳を同時並行で走らせない（用語集・TMのキャッシュ整合性のため、知識構築→翻訳の順に行う）
 

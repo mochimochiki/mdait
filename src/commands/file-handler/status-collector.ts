@@ -209,6 +209,9 @@ export class StatusCollector implements StatusCollectorPort {
 	 * ユニットのcontextValueを決定する。
 	 * ▶（Translate Unit）は trans が実際に処理するユニット（translate/revise）にのみ表示し、
 	 * 人間の判断待ち（review/verify-deletion）や翻訳済みユニットでのデッドエンドを防ぐ。
+	 * verify-deletion / isolate は review と別の contextValue を持たせ、ツリーの
+	 * コンテキストメニューから専用アクション（Keep/Delete・Mark as Isolated/Un-isolate）を
+	 * 出し分ける（UX-R1: 判断サーフェスの完成）。
 	 */
 	private determineUnitContextValue(unit: MdaitUnit, unitStatus: Status): string {
 		if (unitStatus === Status.Source) {
@@ -217,8 +220,17 @@ export class StatusCollector implements StatusCollectorPort {
 		if (unit.marker?.needsTranslation()) {
 			return "mdaitUnitTarget";
 		}
-		if (unit.marker?.need === "review" || unit.marker?.need === "verify-deletion") {
+		if (unit.marker?.need === "review") {
 			return "mdaitUnitTargetAttention";
+		}
+		if (unit.marker?.need === "verify-deletion") {
+			return "mdaitUnitTargetVerifyDeletion";
+		}
+		if (unit.marker?.need === "isolate") {
+			return "mdaitUnitTargetIsolated";
+		}
+		if (unit.marker?.from) {
+			return "mdaitUnitTargetCompletePaired";
 		}
 		return "mdaitUnitTargetComplete";
 	}

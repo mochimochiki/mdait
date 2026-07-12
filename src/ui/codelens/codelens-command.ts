@@ -8,6 +8,8 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { type DeclareIsolateResult, declareIsolateForFile } from "../../commands/markers/declare-isolate";
+import { type DeleteUnitResult, deleteUnitFromFile } from "../../commands/markers/delete-unit";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -160,6 +162,101 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/** deleteUnitFromFile の失敗理由を人間可読なメッセージに変換する */
+function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
+	if (reason === "not-verify-deletion") {
+		return vscode.l10n.t(
+			"This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.",
+		);
+	}
+	return vscode.l10n.t("Unit not found.");
+}
+
+/** declareIsolateForFile の失敗理由を人間可読なメッセージに変換する */
+function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
+	if (reason === "need-already-set") {
+		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
+	}
+	return vscode.l10n.t("Unit not found.");
+}
+
+/**
+ * CodeLensから verify-deletion ユニットを削除するコマンド。
+ * modal 確認の上、hash/from ではなくユニット本体をドキュメントから除去する。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
+			return;
+		}
+
+		const confirmLabel = vscode.l10n.t("Delete");
+		const choice = await vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Delete this unit from the document? This removes its content — recover via git history if needed.",
+			),
+			{ modal: true },
+			confirmLabel,
+		);
+		if (choice !== confirmLabel) {
+			return;
+		}
+
+		const config = Configuration.getInstance();
+		const result = await deleteUnitFromFile(document.uri.fsPath, marker.hash, config);
+		if (!result.deleted) {
+			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
+			return;
+		}
+		vscode.window.showInformationMessage(vscode.l10n.t("Unit deleted."));
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to delete unit: {0}", errorMessage));
+	}
+}
+
+/**
+ * CodeLensからユニットに need:isolate を宣言するコマンド（凍結して下流伝播を止める）。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensMarkIsolatedCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
+			return;
+		}
+
+		const config = Configuration.getInstance();
+		const result = await declareIsolateForFile(document.uri.fsPath, marker.hash, config);
+		if (!result.declared) {
+			vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
+			return;
+		}
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Unit marked as isolated. It will no longer follow source updates."),
+		);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to mark unit as isolated: {0}", errorMessage));
 	}
 }
 

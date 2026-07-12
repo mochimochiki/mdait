@@ -41,6 +41,12 @@ interface BaseStatusItem {
 	tooltip?: string;
 	contextValue?: string;
 	isTranslating?: boolean;
+
+	/**
+	 * StatusTree の集約仮想ノード（Needs Attention 等）に表示するクローンであることを示す。
+	 * 実体（実ファイル配下の本体）と区別するため tree item id にサフィックスを付与する用途のみに使う。
+	 */
+	isVirtualCopy?: boolean;
 }
 
 /**
