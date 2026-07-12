@@ -65,6 +65,7 @@ graph TD
 
 | 観点 | 内容 | ドキュメント |
 |---|---|---|
+| UX全体像 | 人間・エージェント双方のジャーニー・接点マップ・UX原則・課題台帳・改善ロードマップ | [ux.md](ux.md) |
 | プロンプト | プロンプトID一覧・変数・カスタマイズ | [prompt.md](design/prompt.md) |
 | ユーティリティ | FileExplorer・Logger使用方針（infra/配下） | [utils.md](design/utils.md) |
 | テスト | テスト戦略・実行方法 | [test.md](design/test.md) |
