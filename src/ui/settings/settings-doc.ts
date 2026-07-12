@@ -61,11 +61,11 @@ export function getCategoryDoc(id: string): CategoryDoc {
 					"Reuse of confirmed past translations stored in .mdait/translations.tmx.",
 				),
 			};
-		case "aiSync":
+		case "aiReview":
 			return {
-				label: vscode.l10n.t("AI Sync"),
+				label: vscode.l10n.t("AI Translation Review"),
 				description: vscode.l10n.t(
-					"AI-assisted onboarding and audits: pairing verification (review) and mapping correction (align).",
+					"AI-assisted review of translation pairs: verifies adopted pairs and audits translation quality.",
 				),
 			};
 		case "prompts":
@@ -232,7 +232,7 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		),
 	"trans.maxUnitsPerRun": () =>
 		vscode.l10n.t(
-			"General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI pairing review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.",
+			"General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the file count. When exceeded, translation and review keep the unit's need flag and process the rest on the next run, while AI align skips the file and keeps the position-based mapping. Set to 0 for no limit.",
 		),
 	// --- terms ---
 	"terms.filename": () =>
@@ -273,24 +273,24 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		vscode.l10n.t("Custom prompt file for translating glossary terms."),
 	"prompts.tm.splitSentences": () =>
 		vscode.l10n.t("Custom prompt file for TM sentence alignment."),
-	"prompts.aiSync.verifyPairing": () =>
+	"prompts.aiReview.verifyPairing": () =>
 		vscode.l10n.t(
-			"Custom prompt file for single-pair AI pairing verification (used when the review batch size is 1).",
+			"Custom prompt file for single-pair AI translation review (used when the review batch size is 1).",
 		),
-	"prompts.aiSync.verifyPairingBatch": () =>
+	"prompts.aiReview.verifyPairingBatch": () =>
 		vscode.l10n.t(
-			"Custom prompt file for batched AI pairing verification (used when the review batch size is 2 or more).",
+			"Custom prompt file for batched AI translation review (used when the review batch size is 2 or more).",
 		),
-	"prompts.aiSync.align": () =>
+	"prompts.adopt.align": () =>
 		vscode.l10n.t(
 			"Custom prompt file for the AI align step (differential review of the unit mapping during adopt).",
 		),
-	// --- aiSync ---
-	"aiSync.review.autoApprove": () =>
+	// --- aiReview ---
+	"aiReview.autoApprove": () =>
 		vscode.l10n.t(
 			"Let the AI review clear need:review automatically for pairs it judges to be faithful, complete translations with high confidence. Turn off for report-only mode where no markers are changed.",
 		),
-	"aiSync.review.batchSize": () =>
+	"aiReview.batchSize": () =>
 		vscode.l10n.t(
 			"How many pairs are verified per AI call. 1 uses the single-pair prompt; larger batches reduce the number of calls and the cost of a run.",
 		),

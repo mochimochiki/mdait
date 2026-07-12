@@ -57,6 +57,8 @@ graph TD
 | **term** | 用語検出（detect）・訳語展開（expand） | [command_term.md](design/command_term.md) |
 | **tm** | 翻訳ユニットを primaryLang 基準の sentence TU として guarded upsert し、将来の参照用 TM を構築 | [command_tm.md](design/command_tm.md) |
 | **setup** | mdait.template.jsonをワークスペースにコピー | [command_setup.md](design/command_setup.md) |
+| **adopt** | 既存翻訳の取り込みウィザード（sync(adopt+align) → AI翻訳レビュー → 用語集/TM構築の合成） | [command_adopt.md](design/command_adopt.md) |
+| **ai-review** | AI翻訳レビュー（adopt済みペアの検証・訳質監査）・AIアライン | [command_ai-review.md](design/command_ai-review.md) |
 | **translate-selection** | マーカーレスのオンデマンド翻訳 | [command_trans-selection.md](design/command_trans-selection.md) |
 
 ### 横断的関心事
@@ -72,7 +74,7 @@ graph TD
 ```
 src/
   extension.ts           # VS Code拡張機能のエントリーポイント
-  commands/              # sync/trans/term/setup/trans-selection/tm
+  commands/              # sync/trans/term/setup/trans-selection/tm/adopt/ai-review
     file-handler/        # FileHandler Strategy（MD/非MD分岐の集約点）
   core/                  # markdown/hash/status/unit-registry/diff/tm/unit-state
   infra/                 # 基盤層（config/llm/logging/workspace/debug/onboarding）

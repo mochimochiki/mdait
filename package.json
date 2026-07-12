@@ -191,21 +191,21 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.review.file",
-        "title": "%mdait.aiSync.review.file.title%",
+        "command": "mdait.aiReview.file",
+        "title": "%mdait.aiReview.file.title%",
         "icon": "$(verified)",
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.review.directory",
-        "title": "%mdait.aiSync.review.directory.title%",
+        "command": "mdait.aiReview.directory",
+        "title": "%mdait.aiReview.directory.title%",
         "icon": "$(verified)",
         "category": "mdait"
       },
       {
-        "command": "mdait.aiSync.run",
-        "title": "%mdait.aiSync.run.title%",
-        "icon": "$(sparkle)",
+        "command": "mdait.adopt.run",
+        "title": "%mdait.adopt.run.title%",
+        "icon": "$(cloud-download)",
         "category": "mdait"
       }
     ],
@@ -232,6 +232,11 @@
         "view": "mdait.status",
         "contents": "%mdait.welcome.message%",
         "when": "workspaceFolderCount != 0 && !mdaitConfigured"
+      },
+      {
+        "view": "mdait.status",
+        "contents": "%mdait.welcome.start.message%",
+        "when": "workspaceFolderCount != 0 && mdaitConfigured && !mdaitHasStatus"
       }
     ],
     "customEditors": [
@@ -288,8 +293,8 @@
           "group": "navigation"
         },
         {
-          "command": "mdait.aiSync.run",
-          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus && !mdaitSyncProcessing",
+          "command": "mdait.adopt.run",
+          "when": "view == mdait.status && mdaitConfigured && !mdaitSyncProcessing",
           "group": "navigation"
         },
         {
@@ -360,12 +365,12 @@
           "group": "inline@3"
         },
         {
-          "command": "mdait.aiSync.review.directory",
+          "command": "mdait.aiReview.directory",
           "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
           "group": "inline@4"
         },
         {
-          "command": "mdait.aiSync.review.file",
+          "command": "mdait.aiReview.file",
           "when": "view == mdait.status && viewItem == mdaitFileTarget",
           "group": "inline@4"
         }
@@ -546,7 +551,7 @@
       },
       {
         "name": "mdait_aiReview",
-        "displayName": "mdait: AI Pairing Review",
+        "displayName": "mdait: AI Translation Review",
         "toolReferenceName": "mdaitAiReview",
         "modelDescription": "Triage adopted translation pairs with AI. For every target unit flagged need:review (created by mdait_sync with adopt:true), an LLM judges whether the target is a faithful and complete translation of its linked source unit. Verdicts: match (auto-removes need:review when confidence is at or above a fixed high-confidence threshold and there are no issues), partial (incomplete translation - kept as need:review and escalated), mismatch (suspected wrong pairing - kept and escalated), uncertain (kept). Pass mode:\"audit\" to also verify already-confirmed pairs (from present, no need flag) as a health check: pairs that no longer look faithful/complete (adopted mis-pairing or hand-edited degradation) are REPORTED ONLY as 'flagged' - their markers are NOT changed - and healthy pairs are counted as 'audited'. (Source revisions are already caught deterministically by mdait_sync as need:revise and are excluded from the audit.) The default mode:\"pending\" reviews only need:review units. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains per-verdict unit counts (including flagged/audited) and an escalations list (file, unitHash, title, verdict, confidence, reason, issues) that lists both escalated and flagged units. Idempotent: approved units are not re-verified on the next pending run. Pass dryRun:true to get the report without changing any markers. Uses AI and may rewrite markers (need:review triage), so a confirmation is shown.",
         "canBeReferencedInPrompt": true,
@@ -579,10 +584,10 @@
         }
       },
       {
-        "name": "mdait_aiSync",
-        "displayName": "mdait: AI Sync",
-        "toolReferenceName": "mdaitAiSync",
-        "modelDescription": "Composite onboarding-and-audit command that runs three mdait steps in order over the whole workspace: (1) sync with adopt+align (adopts marker-less existing translations as need:review and uses an LLM to correct position-based unit mis-pairings), (2) AI pairing review of every adopted pair (auto-removes need:review from high-confidence faithful translations, escalates suspected mis-pairings/incomplete translations). Not onboarding-only: on an already-managed site the align step is a no-op (all units are from-anchored) and only the review runs, so this doubles as a health-audit button. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains the sync counts (adopted/alignCorrections/added/deleted/kept), the per-verdict review counts, an escalations list, and the post-run status. Idempotent: re-running on a clean workspace reports zero adoptions, zero corrections, and zero units to review. Pass dryRun:true to skip marker changes in the review step (adopt still updates markers). Uses AI and rewrites markers, so a confirmation is shown.",
+        "name": "mdait_adopt",
+        "displayName": "mdait: Adopt Existing Translations",
+        "toolReferenceName": "mdaitAdopt",
+        "modelDescription": "Onboarding wizard for bringing an existing bilingual site under mdait management (replaces mdait_aiSync). Runs mdait steps in order over the whole workspace: (1) sync with adopt+align (adopts marker-less existing translations as need:review and uses an LLM to correct position-based unit mis-pairings), (2) AI translation review of every adopted pair (auto-removes need:review from high-confidence faithful translations, escalates suspected mis-pairings/incomplete translations), then optionally (3) buildGlossary:true - detect glossary terms from the adopted pairs and expand their translations, and (4) buildTm:true - commit review-approved pairs into the translation memory (only units with a from link and no need flag are committed, so escalated pairs never pollute the TM). Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains the sync counts (adopted/alignCorrections/added/deleted/kept), the per-verdict review counts, optional term/tm summaries, stageErrors, an escalations list, and the post-run status. Idempotent: re-running on a clean workspace reports zero adoptions, zero corrections, and zero units to review. Pass dryRun:true to skip marker changes in the review step and skip the glossary/TM steps (adopt still updates markers). Uses AI and rewrites markers, so a confirmation is shown.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -590,6 +595,8 @@
           "sync",
           "review",
           "adopt",
+          "term",
+          "tm",
           "ai"
         ],
         "inputSchema": {
@@ -597,7 +604,15 @@
           "properties": {
             "dryRun": {
               "type": "boolean",
-              "description": "If true, the AI pairing review step reports verdicts without changing markers; the adopt step still updates markers."
+              "description": "If true, the AI translation review step reports verdicts without changing markers and the glossary/TM steps are skipped; the adopt step still updates markers."
+            },
+            "buildGlossary": {
+              "type": "boolean",
+              "description": "If true, also build the glossary after the review: detect terms from the adopted pairs and expand their translations (term detect + expand)."
+            },
+            "buildTm": {
+              "type": "boolean",
+              "description": "If true, also commit review-approved pairs into the translation memory after the review (tm commit). Escalated need:review units are excluded structurally."
             }
           }
         }

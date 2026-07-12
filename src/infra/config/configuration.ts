@@ -60,7 +60,7 @@ export interface TransConfig {
 	maxFileSize: number;
 	/**
 	 * 1回の処理で扱うユニット数の上限（全般コストガード）。
-	 * trans・aiSync.review・aiSync.align が共通で参照する。
+	 * trans・aiReview・AIアライン（adopt）が共通で参照する。
 	 * `0` で上限なし。
 	 */
 	maxUnitsPerRun: number;
@@ -184,18 +184,16 @@ interface MdaitConfig {
 		"term.extractFromTranslations"?: string;
 		"term.translateTerms"?: string;
 	};
-	aiSync?: {
-		review?: {
-			autoApprove?: boolean;
-			batchSize?: number;
-		};
+	aiReview?: {
+		autoApprove?: boolean;
+		batchSize?: number;
 	};
 }
 
 /**
- * AIペアリング検証（aiSync.review）設定の型定義
+ * AI翻訳レビュー（aiReview）設定の型定義
  */
-export interface AiSyncReviewConfig {
+export interface AiReviewConfig {
 	/** 高確信 match の need:review を自動解除するか（false でレポートのみのセーフモード） */
 	autoApprove: boolean;
 	/** 1回のLLM呼び出しで検証するペア数（1で従来の単ペアプロンプト） */
@@ -316,15 +314,11 @@ export class Configuration {
 		minQueryLength: 10,
 	};
 	/**
-	 * AIペアリング検証（aiSync.review）設定
+	 * AI翻訳レビュー（aiReview）設定
 	 */
-	public aiSync: {
-		review: AiSyncReviewConfig;
-	} = {
-		review: {
-			autoApprove: true,
-			batchSize: 3,
-		},
+	public aiReview: AiReviewConfig = {
+		autoApprove: true,
+		batchSize: 3,
 	};
 
 	/**
@@ -736,18 +730,18 @@ export class Configuration {
 				}
 			}
 
-			// aiSync設定の読み込み
+			// aiReview設定の読み込み
 			// autoApprove は need:review 自動解除のゲートのため、型不正（文字列等）を
 			// truthy として拾わないよう厳密に型チェックする。
 			// （confidence 閾値・align 詳細はコード内定数で最適値固定・設定廃止）
-			if (config.aiSync?.review) {
-				if (typeof config.aiSync.review.autoApprove === "boolean") {
-					this.aiSync.review.autoApprove = config.aiSync.review.autoApprove;
+			if (config.aiReview) {
+				if (typeof config.aiReview.autoApprove === "boolean") {
+					this.aiReview.autoApprove = config.aiReview.autoApprove;
 				}
-				if (Number.isFinite(config.aiSync.review.batchSize)) {
-					this.aiSync.review.batchSize = Math.min(
+				if (Number.isFinite(config.aiReview.batchSize)) {
+					this.aiReview.batchSize = Math.min(
 						10,
-						Math.max(1, Math.floor(config.aiSync.review.batchSize as number)),
+						Math.max(1, Math.floor(config.aiReview.batchSize as number)),
 					);
 				}
 			}

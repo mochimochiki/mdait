@@ -7,7 +7,7 @@ import { Configuration } from "../../infra/config/configuration";
 import type { TransPair } from "../../infra/config/configuration";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
-import type { SectionAligner } from "../ai-sync/section-aligner";
+import type { SectionAligner } from "../adopt/section-aligner";
 import { syncNew_CoreProc, sync_CoreProc } from "../sync/sync-command";
 import { transFile_CoreProc } from "../trans/trans-command";
 import type { Translator } from "../trans/translator";

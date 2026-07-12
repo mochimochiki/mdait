@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { executeAiReviewForFiles } from "../commands/ai-sync/review-command";
-import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-sync/review-constants";
-import { resolveReviewTargets } from "../commands/ai-sync/review-targets";
-import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-sync/review-result";
+import { executeAiReviewForFiles } from "../commands/ai-review/review-command";
+import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
+import { resolveReviewTargets } from "../commands/ai-review/review-targets";
+import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
@@ -19,7 +19,7 @@ const logger = Logger.getInstance();
 const MAX_ESCALATIONS = 50;
 
 /**
- * 入力パラメータ: AIペアリング検証ツール
+ * 入力パラメータ: AI翻訳レビューツール
  */
 interface AiReviewInput {
 	/** 対象スコープ（ファイル/ディレクトリ）。省略時は全ターゲットディレクトリ */
@@ -77,7 +77,7 @@ interface AiReviewData {
 }
 
 /**
- * mdaitのAIペアリング検証ツール
+ * mdaitのAI翻訳レビューツール
  * adopt 済みペア（from + need:review）を GitHub Copilot Chat から AI でトリアージする。
  * 出力は共通エンベロープのJSON文字列（docs/design/agent-orchestration.md 参照）
  */
@@ -132,7 +132,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			const data = buildAiReviewData(results, targetFiles.length, dryRun, config);
 
 			const summary = vscode.l10n.t(
-				"AI pairing review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",
+				"AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",
 				data.units.verified,
 				data.units.approved,
 				data.units.flagged,
@@ -163,11 +163,11 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		if (options.input.dryRun === true) {
 			// dryRun はマーカーを変更しないが AI を使用するため確認を出す
 			return {
-				invocationMessage: vscode.l10n.t("Reviewing translation pairings with AI (dry run)..."),
+				invocationMessage: vscode.l10n.t("Reviewing translations with AI (dry run)..."),
 				confirmationMessages: {
-					title: vscode.l10n.t("Confirm AI Pairing Review (Dry Run)"),
+					title: vscode.l10n.t("Confirm AI Translation Review (Dry Run)"),
 					message: vscode.l10n.t(
-						"Verify adopted translation pairings for {0} with AI? Dry run: no markers are changed, only a report is returned.",
+						"Verify adopted translations for {0} with AI? Dry run: no markers are changed, only a report is returned.",
 						scopeLabel,
 					),
 				},
@@ -175,22 +175,22 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		}
 		if (options.input.mode === "audit") {
 			return {
-				invocationMessage: vscode.l10n.t("Auditing all translation pairings with AI..."),
+				invocationMessage: vscode.l10n.t("Auditing all translations with AI..."),
 				confirmationMessages: {
-					title: vscode.l10n.t("Confirm AI Pairing Audit"),
+					title: vscode.l10n.t("Confirm AI Translation Audit"),
 					message: vscode.l10n.t(
-						"Audit all confirmed translation pairings for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiSync.review settings).",
+						"Audit all confirmed translations for {0} with AI? Confirmed pairs whose translation is not faithful/complete are reported only (their markers are NOT changed); need:review units are triaged as usual (high-confidence matches are cleared, per aiReview settings).",
 						scopeLabel,
 					),
 				},
 			};
 		}
 		return {
-			invocationMessage: vscode.l10n.t("Reviewing translation pairings with AI..."),
+			invocationMessage: vscode.l10n.t("Reviewing translations with AI..."),
 			confirmationMessages: {
-				title: vscode.l10n.t("Confirm AI Pairing Review"),
+				title: vscode.l10n.t("Confirm AI Translation Review"),
 				message: vscode.l10n.t(
-					"Verify adopted translation pairings for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiSync.review settings).",
+					"Verify adopted translations for {0} with AI? High-confidence matches will have their need:review flag removed (controlled by aiReview settings).",
 					scopeLabel,
 				),
 			},
@@ -229,7 +229,7 @@ function buildAiReviewData(
 			skipped: agg.skipped,
 		},
 		autoApprove: {
-			enabled: config.aiSync.review.autoApprove,
+			enabled: config.aiReview.autoApprove,
 			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun,

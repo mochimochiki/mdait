@@ -25,6 +25,13 @@
 【実行後】.mdait/mdait.json 作成 → エディタで開く → 保存後 StatusTree 表示
 ```
 
+保存・バリデーション成功後（`mdaitConfigured ∧ !mdaitHasStatus`）、Welcome View は「次の一歩」の2択導線に切り替わる（ADR-260711-06）:
+
+- **これから翻訳を始める** → 初回同期（`mdait.status.sync.initial`）
+- **すでに翻訳済みの文書がある** → 既存翻訳の取り込み（`mdait.adopt.run`・[command_adopt.md](command_adopt.md)）
+
+createConfig の成功メッセージも同じ2択を文言で案内する（実行ボタンは付けない: transPairs の保存・バリデーション前に取り込みを走らせる誤操作を防ぎ、誘導は状態駆動の Welcome View に委ねる）。
+
 ### 前提・操作
 
 **前提:** VS Codeでワークスペースフォルダーがオープンされていること。

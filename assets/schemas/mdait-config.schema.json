@@ -304,7 +304,7 @@
         },
         "maxUnitsPerRun": {
           "type": "integer",
-          "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI pairing review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
+          "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
           "minimum": 0,
           "default": 300,
           "examples": [300, 500, 0]
@@ -409,46 +409,39 @@
           "description": "Path to custom TM sentence alignment prompt file",
           "examples": [".mdait/prompts/tm-split-sentences.txt"]
         },
-        "aiSync.verifyPairing": {
+        "aiReview.verifyPairing": {
           "type": "string",
-          "description": "Path to custom AI pairing verification prompt file (single-pair, used when aiSync.review.batchSize is 1)",
-          "examples": [".mdait/prompts/ai-sync-verify-pairing.txt"]
+          "description": "Path to custom AI translation review prompt file (single-pair, used when aiReview.batchSize is 1)",
+          "examples": [".mdait/prompts/ai-review-verify-pairing.txt"]
         },
-        "aiSync.verifyPairingBatch": {
+        "aiReview.verifyPairingBatch": {
           "type": "string",
-          "description": "Path to custom AI pairing verification batch prompt file (used when aiSync.review.batchSize is 2 or more)",
-          "examples": [".mdait/prompts/ai-sync-verify-pairing-batch.txt"]
+          "description": "Path to custom AI translation review batch prompt file (used when aiReview.batchSize is 2 or more)",
+          "examples": [".mdait/prompts/ai-review-verify-pairing-batch.txt"]
         },
-        "aiSync.align": {
+        "adopt.align": {
           "type": "string",
           "description": "Path to custom AI align (differential review) prompt file",
-          "examples": [".mdait/prompts/ai-sync-align.txt"]
+          "examples": [".mdait/prompts/adopt-align.txt"]
         }
       },
       "additionalProperties": false
     },
-    "aiSync": {
+    "aiReview": {
       "type": "object",
-      "description": "AI-assisted sync settings",
+      "description": "AI translation review settings (triage of need:review units created by adopt, and audits of translated pairs)",
       "properties": {
-        "review": {
-          "type": "object",
-          "description": "AI pairing verification (triage of need:review units created by adopt)",
-          "properties": {
-            "autoApprove": {
-              "type": "boolean",
-              "description": "Automatically remove need:review from units the AI judges as a faithful and complete translation with high confidence. Set to false for report-only mode (no marker changes).",
-              "default": true
-            },
-            "batchSize": {
-              "type": "integer",
-              "description": "Number of pairs verified per LLM call. 1 uses the single-pair prompt (aiSync.verifyPairing); 2 or more uses the batch prompt (aiSync.verifyPairingBatch).",
-              "minimum": 1,
-              "maximum": 10,
-              "default": 3
-            }
-          },
-          "additionalProperties": false
+        "autoApprove": {
+          "type": "boolean",
+          "description": "Automatically remove need:review from units the AI judges as a faithful and complete translation with high confidence. Set to false for report-only mode (no marker changes).",
+          "default": true
+        },
+        "batchSize": {
+          "type": "integer",
+          "description": "Number of pairs verified per LLM call. 1 uses the single-pair prompt (aiReview.verifyPairing); 2 or more uses the batch prompt (aiReview.verifyPairingBatch).",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
         }
       },
       "additionalProperties": false
