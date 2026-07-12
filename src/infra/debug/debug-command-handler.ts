@@ -56,13 +56,15 @@ const FILE_ITEM_COMMANDS = new Set([
 	"mdait.tm.commit.file",
 	"mdait.term.detect.file",
 	"mdait.term.expand.file",
+	"mdait.aiReview.file",
 ]);
 const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.translate.directory",
 	"mdait.term.detect.directory",
 	"mdait.term.expand.directory",
+	"mdait.tm.commit.directory",
+	"mdait.aiReview.directory",
 ]);
-const TM_DIRECTORY_COMMANDS = new Set(["mdait.tm.commit.directory"]);
 
 function buildArgTransformer(command: string): ArgTransformer | undefined {
 	if (URI_FILE_COMMANDS.has(command)) {
@@ -95,23 +97,6 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 				return [
 					{
 						type: "directory",
-						directoryPath: args[0],
-						label: args[0].split(/[\\/]/).pop() ?? "",
-					},
-					...args.slice(1),
-				];
-			}
-			return args;
-		};
-	}
-	// tmCommitDirectoryCommand uses "dirPath" in item check
-	if (TM_DIRECTORY_COMMANDS.has(command)) {
-		return (args) => {
-			if (args.length > 0 && typeof args[0] === "string") {
-				return [
-					{
-						type: "directory",
-						dirPath: args[0],
 						directoryPath: args[0],
 						label: args[0].split(/[\\/]/).pop() ?? "",
 					},

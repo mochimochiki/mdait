@@ -252,6 +252,84 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "mdait.translate.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.unit",
+          "when": "false"
+        },
+        {
+          "command": "mdait.translate.frontmatter",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.detect.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.term.expand.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.tm.commit.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.tm.commit.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.aiReview.file",
+          "when": "false"
+        },
+        {
+          "command": "mdait.aiReview.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync.initial",
+          "when": "false"
+        },
+        {
+          "command": "mdait.status.sync.processing",
+          "when": "false"
+        },
+        {
+          "command": "mdait.settings.openAsJson",
+          "when": "false"
+        },
+        {
+          "command": "mdait.settings.openAsUi",
+          "when": "false"
+        }
+      ],
       "editor/context": [
         {
           "command": "mdait.translateSelection",

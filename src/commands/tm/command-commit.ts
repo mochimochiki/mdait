@@ -118,7 +118,14 @@ export async function tmCommitFileCommand(
 export async function tmCommitDirectoryCommand(
 	item?: StatusItem,
 ): Promise<TmCommitResult | undefined> {
-	if (!item || !("dirPath" in item)) {
+	// StatusTree は directoryPath、debug IPC は dirPath を渡す
+	const dirPath =
+		item && "directoryPath" in item
+			? (item as { directoryPath: string }).directoryPath
+			: item && "dirPath" in item
+				? (item as { dirPath: string }).dirPath
+				: undefined;
+	if (!dirPath) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
 		return;
 	}
@@ -141,8 +148,6 @@ export async function tmCommitDirectoryCommand(
 	if (!shouldProceed) {
 		return;
 	}
-
-	const dirPath = (item as { dirPath: string }).dirPath;
 
 	const confirm = await vscode.window.showInformationMessage(
 		vscode.l10n.t(

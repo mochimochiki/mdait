@@ -64,7 +64,9 @@ export class AIOnboarding {
 		}
 
 		// 初回利用の場合、説明ダイアログを表示
-		const message = vscode.l10n.t("AI_Usage_Confirmation");
+		const message = vscode.l10n.t(
+			"✨ Commands marked with the sparkle icon use AI.\n\n  • The AI service specified in mdait.json will be used\n  • AI usage statistics are recorded in .mdait/ai-stats.log\n\nDo you want to continue?",
+		);
 
 		const proceedButton = vscode.l10n.t("Proceed");
 

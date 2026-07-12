@@ -108,11 +108,17 @@ export async function aiReviewFileCommand(item?: StatusItem): Promise<AiReviewFi
  * ディレクトリ単位のAI翻訳レビューコマンド（StatusTreeから呼び出し）
  */
 export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiReviewFileResult[] | undefined> {
-	if (!item || !("dirPath" in item)) {
+	// StatusTree は directoryPath、debug IPC は dirPath を渡す
+	const dirPath =
+		item && "directoryPath" in item
+			? (item as { directoryPath: string }).directoryPath
+			: item && "dirPath" in item
+				? (item as { dirPath: string }).dirPath
+				: undefined;
+	if (!dirPath) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Invalid directory item"));
 		return;
 	}
-	const dirPath = (item as { dirPath: string }).dirPath;
 
 	const config = Configuration.getInstance();
 	const validationError = config.validate();

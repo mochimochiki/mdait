@@ -35,10 +35,10 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 層構造（下位層は上位層に依存しない）:
 
 - **`src/core/`** — 純粋な翻訳ロジック。**VS Code API に非依存**: Markdownパース（markdown-it）、ハッシュ/正規化、ステータス、unit-registry、diff、TM、unit-state。完全に単体テスト可能。
-- **`src/commands/`** — core の関数を組み合わせたワークフロー: `sync`・`trans`・`term`・`tm`・`setup`・`trans-selection`、および `file-handler/` Strategy（MD/非MD分岐の集約点）。進捗表示・エラーハンドリング・キャンセル対応も責務。
+- **`src/commands/`** — core の関数を組み合わせたワークフロー: `sync`・`trans`・`term`・`tm`・`setup`・`adopt`・`ai-review`・`trans-selection`、および `file-handler/` Strategy（MD/非MD分岐の集約点）。進捗表示・エラーハンドリング・キャンセル対応も責務。
 - **`src/infra/`** — config（`Configuration` シングルトン経由の `.mdait/mdait.json`）、llm（vscode-lm / OpenAI / Ollama プロバイダーを持つ `AIService` 抽象化）、logging、ワークスペースファイル探索、デバッグIPC、オンボーディング。
 - **`src/ui/`** — StatusTreeProvider・CodeLens・Hover・Welcomeビュー。VS Code 標準 UI パターンに準拠する。
-- **`src/lm-tools/`** — Copilot Chat 向け LanguageModelTool API ラッパー（`mdait_getStatus` / `mdait_sync` / `mdait_translate`）。
+- **`src/lm-tools/`** — Copilot Chat 向け LanguageModelTool API ラッパー（`mdait_getStatus` / `mdait_sync` / `mdait_translate` / `mdait_term` / `mdait_tm` / `mdait_validate` / `mdait_aiReview` / `mdait_adopt` の8ツール。共通JSONエンベロープ）。
 - **`src/prompts/`** — AIプロンプト定義。すべてのシステムプロンプトは外部ファイルで上書き可能。
 
 コアのデータフロー: 原文変更 → `sync` がハッシュ差分を検出してユニットに `need:translate` / `need:revise@{oldhash}` を付与 → `trans` が翻訳（diff-aware revise は差分と前回訳文のみを LLM に送り、手修正を保持する）→ `sync` 再実行で `need` をクリア。すべてのコマンドは冪等である。

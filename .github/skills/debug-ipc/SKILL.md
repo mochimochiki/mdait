@@ -10,7 +10,7 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
 - Extension Host が起動済みであること（下記いずれかの方法）
 - `MDAIT_DEBUG_IPC=1` 環境変数が設定されている（自動設定）
 - プロファイルは `mdait-debug`（AI同意ダイアログが記憶される）
-- テストワークスペース: `src/test/workspace`
+- テストワークスペース: `src/test/unit/workspace`
 
 ### 起動方法
 
@@ -18,7 +18,7 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
 ```powershell
 pwsh -File .github/skills/debug-ipc/scripts/debug-ipc-start.ps1
 ```
-code CLIでExtension Development Hostを起動し、readyシグナル（`src/test/workspace/.mdait/debug/ready`）を自動検知する。ready後にIPC送信可能。
+code CLIでExtension Development Hostを起動し、readyシグナル（`src/test/unit/workspace/.mdait/debug/ready`）を自動検知する。ready後にIPC送信可能。
 
 **方法2: F5（手動）**
 VS Codeで F5（launch.json の `Run Extension`）を実行。
@@ -31,9 +31,9 @@ VS Codeで F5（launch.json の `Run Extension`）を実行。
 
 | ファイル | パス | 役割 |
 |---------|------|------|
-| ready | `src/test/workspace/.mdait/debug/ready` | Extension Host ready シグナル |
-| command.json | `src/test/workspace/.mdait/debug/command.json` | コマンド発行（Agent → Extension Host） |
-| result.json | `src/test/workspace/.mdait/debug/result.json` | 結果返却（Extension Host → Agent） |
+| ready | `src/test/unit/workspace/.mdait/debug/ready` | Extension Host ready シグナル |
+| command.json | `src/test/unit/workspace/.mdait/debug/command.json` | コマンド発行（Agent → Extension Host） |
+| result.json | `src/test/unit/workspace/.mdait/debug/result.json` | 結果返却（Extension Host → Agent） |
 
 ### command.json スキーマ
 
@@ -82,17 +82,17 @@ VS Codeで F5（launch.json の `Run Extension`）を実行。
 ### 1. 前回の結果をクリア
 
 ```powershell
-Remove-Item "src/test/workspace/.mdait/debug/result.json" -ErrorAction SilentlyContinue
+Remove-Item "src/test/unit/workspace/.mdait/debug/result.json" -ErrorAction SilentlyContinue
 ```
 
 ### 2. command.json を書き込む
 
-`create_file` ツールで `src/test/workspace/.mdait/debug/command.json` に書き込む。
+`create_file` ツールで `src/test/unit/workspace/.mdait/debug/command.json` に書き込む。
 
 ### 3. 結果をポーリング
 
 ```powershell
-$rp = "<workspace>/src/test/workspace/.mdait/debug/result.json"
+$rp = "<workspace>/src/test/unit/workspace/.mdait/debug/result.json"
 while (-not (Test-Path $rp) -or ((Get-Content $rp -Raw | ConvertFrom-Json).status -eq 'running')) {
   Start-Sleep -Milliseconds 500
 }
@@ -113,6 +113,7 @@ Get-Content $rp -Raw
 |---------|------|
 | `mdait.sync` | ステータス同期 |
 | `mdait.setup.createConfig` | 設定作成 |
+| `mdait.adopt.run` | 既存翻訳の取り込みウィザード（ワークスペース全体） |
 
 ### URI変換（第1引数: 絶対ファイルパス文字列 → vscode.Uri）
 
@@ -129,6 +130,8 @@ Get-Content $rp -Raw
 |---------|------|
 | `mdait.translate.file` | ファイル翻訳 |
 | `mdait.tm.commit.file` | TMコミット（ファイル） |
+| `mdait.term.detect.file` / `mdait.term.expand.file` | 用語検出/展開（ファイル） |
+| `mdait.aiReview.file` | AI翻訳レビュー（ファイル） |
 
 例: `"args": ["C:\\path\\to\\file.md"]`
 
@@ -138,6 +141,8 @@ Get-Content $rp -Raw
 |---------|------|
 | `mdait.translate.directory` | フォルダ翻訳 |
 | `mdait.tm.commit.directory` | TMコミット（フォルダ） |
+| `mdait.term.detect.directory` / `mdait.term.expand.directory` | 用語検出/展開（フォルダ） |
+| `mdait.aiReview.directory` | AI翻訳レビュー（フォルダ） |
 
 例: `"args": ["C:\\path\\to\\directory"]`
 
@@ -181,7 +186,7 @@ Get-Content $rp -Raw
 ```powershell
 npm run copy-test-files
 ```
-これは `src/test/sample-content` → `src/test/workspace/content` にコピーする。
+これは `src/test/unit/sample-content` → `src/test/unit/workspace/content` にコピーする。
 リセット後は Extension Host を**再起動しなくても**、sync から始められる。
 
 ## トラブルシューティング
