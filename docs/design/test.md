@@ -53,6 +53,16 @@
 
 **設計意図**: エージェントが自律的にE2Eシナリオを実行・検証するための基盤。
 
+### 探索的スイープ（Extension Host 非依存 / `npm run test:explore`）
+
+**対象**: `sample-content` 全ファイルに対する commands 層の「機構」の決定的検証（マーカー整合・need フラグのライフサイクル・**sync 冪等性**・trans/revise の sync 側挙動）
+
+**実行**: `scripts/exploratory/run-sweep.js`。`out/` のコンパイル済みコマンドを、`src/test/unit/__mocks__` の vscode モックを増補した薄いシム（`scripts/exploratory/vscode-shim.js`）越しに Node から直接駆動する。LLM は決定的モック（sync は AI 非使用で完全決定的、trans/revise は構造化フェイク `fake-ai.js` で正常系のみ）。
+
+**設計意図**: VS Code をヘッドレス起動できない環境（クラウド等）でも、UX/挙動系のリグレッション（特に sync の冪等性）をエージェントが自律的に炙り出せるようにする。訳質や revise パッチ適用は実LLMが要るため対象外（INFO として記録）。
+
+> このスイープは frontmatter マーカー同期の非冪等バグ2件（末尾改行の無限増加 / front マーカーの1回遅れ）を検出した。根本修正の回帰は `src/test/unit/core/markdown/frontmatter-idempotency.test.ts` で単体固定している。
+
 ### サンプルワークスペース
 
 **場所**: `src/test/unit/sample-content/`
