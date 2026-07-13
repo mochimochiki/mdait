@@ -28,6 +28,7 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { reconcileMarkerModeForFile } from "../markers/markers-migration";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
@@ -726,6 +727,14 @@ export async function sync_CoreProc(
 	const sectionMatcher = new SectionMatcher();
 	const diffDetector = new DiffDetector();
 	const fileExplorer = new FileExplorer();
+
+	// マーカー保管方式の自己修復: 「本文マーカー運用のサイトを external に切り替えた（逆も）」
+	// 動線では markers.mode だけ書き換えて sync するため、物理表現が設定モードとずれ得る。
+	// sync 本処理の前に source/target の物理マーカーを設定モードへ寄せ、モード切替→sync を安全にする
+	// （目標モード済みなら no-op で低コスト・冪等）。
+	const reconcileStore = UnitStateStore.getInstance();
+	reconcileMarkerModeForFile(sourceFile, "source", config, reconcileStore);
+	reconcileMarkerModeForFile(targetFile, "target", config, reconcileStore);
 
 	// level設定の検証と同期
 	await validateAndSyncLevel(sourceFile, targetFile);

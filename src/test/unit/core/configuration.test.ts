@@ -183,6 +183,27 @@ suite("Configuration", () => {
 		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
 	});
 
+	test("external ロード後に markers を外して再ロードすると embedded へ戻る（stale が残らない）こと", async () => {
+		// external→embedded 切替動線: シングルトンを in-place 更新する load() が前回値を居残らせない
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+
+		const withExternal: Record<string, unknown> = JSON.parse(minimalConfig());
+		withExternal.markers = { mode: "external" };
+		fs.writeFileSync(customPath, JSON.stringify(withExternal), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		assert.strictEqual(config.isExternalMarkers(), true);
+
+		// markers を削除して再ロード（設定から external 指定を外す）
+		fs.writeFileSync(customPath, minimalConfig(), "utf-8");
+		await config.initialize(customPath);
+		assert.strictEqual(config.markers.mode, "embedded");
+		assert.strictEqual(config.isExternalMarkers(), false);
+		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
+	});
+
 	/** trans.extensions を含むコンフィグを customPath に書いて初期化する */
 	async function initWithExtensions(
 		extensions: unknown,

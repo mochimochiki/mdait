@@ -577,13 +577,13 @@ export class Configuration {
 				}
 			}
 
-			// markers設定の読み込み
-			if (
-				config.markers?.mode === "embedded" ||
-				config.markers?.mode === "external"
-			) {
-				this.markers.mode = config.markers.mode;
-			}
+			// markers設定の読み込み。
+			// 明示的に "external" のときのみ external とし、未指定・"embedded"・不正値は
+			// すべて既定の "embedded" へ倒す。load() はシングルトンを in-place 更新するため、
+			// 「設定から markers を削除して external→embedded に戻す」動線で前回値が居残る
+			// stale を防ぐ（値を毎回確定させることで再ロードを冪等にする）。
+			this.markers.mode =
+				config.markers?.mode === "external" ? "external" : "embedded";
 
 			// AI設定の読み込み
 			if (config.ai) {

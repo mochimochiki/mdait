@@ -29,6 +29,82 @@ interface MigrationTarget {
 }
 
 /**
+ * 単一 MD ファイルの物理マーカー表現を、設定中の `markers.mode` へ自己修復的に整合させる。
+ *
+ * 「本文マーカーで運用していたサイトを external に切り替える（またはその逆）」動線では、
+ * ユーザーは `markers.externalize`/`embed` コマンドを明示実行せず、mdait.json の
+ * `markers.mode` を書き換えて sync するだけの場合がある。その状態で sync すると、
+ * - embedded→external: 本文に埋め込みマーカーが残ったまま external parse され、
+ *   毎 sync ごとに先頭マーカー後へ空行が増える非冪等成長が起きる。
+ * - external→embedded: 本文にマーカーが無いため全ユニットが新規扱いになり、
+ *   from/need 状態を失って不要な再翻訳が誘発される。
+ * を防ぐため、sync の各ファイル処理前に本関数で物理表現をモードへ寄せる。
+ *
+ * 変換は per-file の migrate と同一（embedded parse ⇄ external parse + 反対 provider stringify）。
+ * 既に目標モードの表現ならファイルへ書き込まず `false` を返す（冪等・低コスト）。
+ * store の save は呼ばない（sync 完了時に1回まとめて保存される）。
+ *
+ * @returns 物理変換を行い書き込んだ場合 true、no-op なら false
+ */
+export function reconcileMarkerModeForFile(
+	absPath: string,
+	role: "source" | "target",
+	config: Configuration,
+	store: UnitStateStore,
+): boolean {
+	const content = fs.readFileSync(absPath, "utf-8");
+	const relPath = toWorkspaceRelativePath(absPath);
+
+	if (config.isExternalMarkers()) {
+		// 目標: 本文に unit マーカーが無い。埋め込み残存を検出したら externalize する。
+		// 安価な事前判定: 正しく外部化済みなら本文に "<!-- mdait" は一切現れない
+		// （frontmatter マーカーは YAML キーで、HTML コメントではない）。
+		if (!content.includes("<!-- mdait")) {
+			return false;
+		}
+		// コードブロック内のサンプルマーカーは境界にならないため、権威判定は parse 結果で行う。
+		const parsed = markdownParser.parse(content, config, embeddedMarkerProvider);
+		if (!parsed.units.some((u) => Boolean(u.marker?.hash))) {
+			return false;
+		}
+		const out = markdownParser.stringify(parsed, externalMarkerProvider, {
+			filePath: relPath,
+			role,
+		});
+		fs.writeFileSync(absPath, out, "utf-8");
+		logger.info("markers", "Reconciled file to external mode during sync", {
+			file: relPath,
+		});
+		return true;
+	}
+
+	// 目標: 本文に unit マーカーがある（embedded）。
+	// store に本ファイルのエントリが在る＝直前まで external だった痕跡。
+	// かつ本文にマーカーが無い場合のみ embed（本文にマーカーが在れば既に embedded 済み）。
+	const entries = store.getEntriesByPath(relPath);
+	if (entries.length === 0) {
+		return false;
+	}
+	const embeddedParse = markdownParser.parse(content, config, embeddedMarkerProvider);
+	if (embeddedParse.units.some((u) => Boolean(u.marker?.hash))) {
+		return false;
+	}
+	const externalParse = markdownParser.parse(content, config, externalMarkerProvider, {
+		filePath: relPath,
+		role,
+	});
+	const out = markdownParser.stringify(externalParse, embeddedMarkerProvider);
+	fs.writeFileSync(absPath, out, "utf-8");
+	for (const entry of entries) {
+		store.removeEntry(relPath, entry.order);
+	}
+	logger.info("markers", "Reconciled file to embedded mode during sync", {
+		file: relPath,
+	});
+	return true;
+}
+
+/**
  * 埋め込みマーカーを外部ストアへ退避する（embedded → external）。
  */
 export async function externalizeMarkersCommand(): Promise<void> {
