@@ -692,7 +692,20 @@ export class Configuration {
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {
-					this.trans.extensions = config.trans.extensions;
+					// 先頭ドットを正規化する。ファイル探索（buildExtensionGlob /
+					// findFilesInDirectory）とアセット除外（asset-copier）はいずれも
+					// `.txt` 形式（先頭ドットあり・小文字）を前提とするため、`txt` のような
+					// ドット無し指定が「対象拡張子として一切機能しない（＝翻訳されずアセット扱い）」
+					// サイレント無効化に陥るのを防ぐ。空文字・非文字列は除外する。
+					this.trans.extensions = config.trans.extensions
+						.filter(
+							(ext): ext is string =>
+								typeof ext === "string" && ext.trim() !== "",
+						)
+						.map((ext) => {
+							const trimmed = ext.trim().toLowerCase();
+							return trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
+						});
 				}
 			}
 			if (Number.isFinite(config.trans?.maxUnitsPerRun)) {
