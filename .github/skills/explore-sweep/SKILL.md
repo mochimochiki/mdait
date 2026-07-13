@@ -20,7 +20,7 @@ vscode モック越しに直接駆動し、「機構（挙動）」を決定的�
 
 ## 実行手順
 
-1. `npm ci && npm run compile`。まず `npm run test:explore` を回し、現状の緑/赤（FAIL/INFO）を把握する。
+1. `npm ci` の後、`npm run test:explore` を回して現状の緑/赤（FAIL/INFO）を把握する（`test:explore` は内部で `npm run compile` を実行するため別途コンパイルは不要）。
 2. カバレッジを能動的に広げる。既存 run-sweep.js は sync/trans/revise の骨格のみ。優先的に叩く未カバー領域:
    - 非MD（csv/txt）の file-handler 分岐（`PlainFileHandler`）
    - `term.detect` / `term.expand`、`tm.commit`、`ai-review` の各経路
