@@ -535,9 +535,11 @@ export class MarkdownItParser implements IMarkdownParser {
 		provider.detachMarkers(doc.units, ctx);
 
 		if (doc.units.length === 0) {
-			// ユニットがない場合はfrontmatterのみ
+			// ユニットがない場合はfrontmatterのみ。
+			// raw は frontmatter-only 時にパース元の末尾改行を含むことがあり（front-matter.ts parse 参照）、
+			// マーカー不変でsourceのrawが再生成されないと sync ごとに改行が積み上がるため、末尾を正規化する。
 			if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
-				return `${doc.frontMatter.raw}\n`;
+				return `${doc.frontMatter.raw.replace(/\n+$/, "")}\n`;
 			}
 			return "";
 		}
@@ -545,6 +547,9 @@ export class MarkdownItParser implements IMarkdownParser {
 		// frontmatterがある場合
 		let result = "";
 		if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
+			// 本文ありファイルでは、sync 中に _data のマーカーが更新されても _raw が古いまま残ることがあり、
+			// それが「frontマーカーが1回のsyncで確定しない」非冪等の原因になる。_data を正として整合させる。
+			doc.frontMatter.reconcileRaw();
 			result = doc.frontMatter.raw;
 			// frontmatter後の改行
 			if (!result.endsWith("\n")) {
