@@ -34,6 +34,14 @@ suite("frontmatter マーカー同期の冪等性", () => {
 			const out = markdownParser.stringify(markdownParser.parse(md, makeConfig(2)));
 			assert.ok(/mdait:\s*\n\s*front:\s*ca4c6cc1/.test(out), "front マーカーが失われた");
 		});
+
+		test("CRLF 入力でも末尾改行が増えず冪等になる", () => {
+			const crlf = md.replace(/\n/g, "\r\n");
+			const out1 = markdownParser.stringify(markdownParser.parse(crlf, makeConfig(2)));
+			const out2 = markdownParser.stringify(markdownParser.parse(out1, makeConfig(2)));
+			assert.strictEqual(out1, out2, "CRLF 入力で非冪等");
+			assert.ok(!/[\r\n]{3,}$/.test(out1), "末尾に余分な改行が残っている");
+		});
 	});
 
 	suite("Bug A: _data と _raw のマーカー不整合", () => {

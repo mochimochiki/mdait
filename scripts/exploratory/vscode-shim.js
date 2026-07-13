@@ -64,12 +64,24 @@ function walk(dir, out) {
 		}
 	}
 }
+// パターン（**/*.md / **/*.{md,txt} など）から拡張子集合を解釈する。実 VS Code の findFiles に近づけ、
+// buildExtensionGlob が生成する拡張子グロブを尊重して不要ファイルの走査ノイズを避ける。
+function extsFromPattern(pattern) {
+	if (typeof pattern !== "string") return null;
+	const brace = pattern.match(/\.\{([^}]+)\}\s*$/);
+	if (brace) return brace[1].split(",").map((e) => `.${e.trim().toLowerCase()}`);
+	const single = pattern.match(/\.([A-Za-z0-9]+)\s*$/);
+	if (single) return [`.${single[1].toLowerCase()}`];
+	return null; // 拡張子を特定できないパターンは従来どおり全件返す
+}
 vscode.workspace.findFiles = async (include) => {
 	const base = include && (include.base || (include.baseUri && include.baseUri.fsPath));
 	const roots = base ? [base] : global.__vscodeMockWorkspaceRoot ? [global.__vscodeMockWorkspaceRoot] : [];
 	const files = [];
 	for (const r of roots) walk(r, files);
-	return files.map((f) => vscode.Uri.file(f));
+	const exts = extsFromPattern(include && include.pattern);
+	const filtered = exts ? files.filter((f) => exts.includes(path.extname(f).toLowerCase())) : files;
+	return filtered.map((f) => vscode.Uri.file(f));
 };
 
 // openTextDocument: 実ファイルから最小の TextDocument 相当を返す

@@ -538,8 +538,9 @@ export class MarkdownItParser implements IMarkdownParser {
 			// ユニットがない場合はfrontmatterのみ。
 			// raw は frontmatter-only 時にパース元の末尾改行を含むことがあり（front-matter.ts parse 参照）、
 			// マーカー不変でsourceのrawが再生成されないと sync ごとに改行が積み上がるため、末尾を正規化する。
+			// CRLF の \r も含めて末尾の改行類をまとめて除去し、改行種別に依存せず冪等にする。
 			if (doc.frontMatter && !doc.frontMatter.isEmpty()) {
-				return `${doc.frontMatter.raw.replace(/\n+$/, "")}\n`;
+				return `${doc.frontMatter.raw.replace(/[\r\n]+$/, "")}\n`;
 			}
 			return "";
 		}

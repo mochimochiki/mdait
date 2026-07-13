@@ -344,7 +344,8 @@ export class FrontMatter {
 	 * 出力（stringify）直前に呼ぶことで、_data を正としたシリアライズを保証する。
 	 *
 	 * ただし _updateRaw() は非mdaitキーの元フォーマット（空行など）を完全には再現できないため、
-	 * mdait マーカーについて _data と _raw が食い違うときだけ再生成する（不要な再フォーマットを避ける）。
+	 * mdait セクションの有無（存在）が _data と _raw で食い違うときだけ再生成する
+	 * （不要な再フォーマットを避ける。マーカー値そのものの差分は set() 経由で常に整合するため対象外）。
 	 */
 	reconcileRaw(): void {
 		const hasMarkerInData =
