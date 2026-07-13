@@ -842,6 +842,7 @@
     "test": "npm run test:unit",
     "test:unit": "npm run compile && npm run lint && mocha --config .config/.mocharc.json --ui tdd \"out/test/unit/core/**/*.test.js\" \"out/test/unit/utils/**/*.test.js\" \"out/test/unit/commands/**/*.test.js\" \"out/test/unit/infra/**/*.test.js\" \"out/test/unit/prompts/**/*.test.js\" \"out/test/unit/lm-tools/**/*.test.js\" \"out/test/unit/ui/**/*.test.js\"",
     "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
+    "test:explore": "npm run compile && node scripts/exploratory/run-sweep.js",
     "watch": "node esbuild.mjs --watch",
     "copy-test-files": "rimraf ./src/test/unit/workspace/content && node -e \"require('node:fs').cpSync('./src/test/unit/sample-content', './src/test/unit/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",

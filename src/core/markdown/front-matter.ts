@@ -339,6 +339,24 @@ export class FrontMatter {
 	}
 
 	/**
+	 * _raw を _data と整合させる。
+	 * set() を経由せず _data のマーカーが変化した場合など、_raw が古くなるケースの保険。
+	 * 出力（stringify）直前に呼ぶことで、_data を正としたシリアライズを保証する。
+	 *
+	 * ただし _updateRaw() は非mdaitキーの元フォーマット（空行など）を完全には再現できないため、
+	 * mdait セクションの有無（存在）が _data と _raw で食い違うときだけ再生成する
+	 * （不要な再フォーマットを避ける。マーカー値そのものの差分は set() 経由で常に整合するため対象外）。
+	 */
+	reconcileRaw(): void {
+		const hasMarkerInData =
+			typeof this._data === "object" && this._data !== null && "mdait" in this._data;
+		const hasMarkerInRaw = /(^|\n)\s*mdait:/.test(this._raw);
+		if (hasMarkerInData !== hasMarkerInRaw) {
+			this._updateRaw();
+		}
+	}
+
+	/**
 	 * Update raw string from data changes
 	 * Regenerates mdait portion and modified non-mdait keys from _data,
 	 * while preserving original format for unmodified non-mdait keys
