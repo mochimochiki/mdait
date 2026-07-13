@@ -212,6 +212,12 @@ suite("Configuration", () => {
 		const config = await initWithExtensions(["txt", "", "  ", 123, null]);
 		assert.deepStrictEqual(config.trans.extensions, [".txt"]);
 	});
+
+	test("trans.extensions の '.' のみ・空要素は壊れた glob を防ぐため除外されること", async () => {
+		// "." は buildExtensionGlob で e.slice(1)→"" となり `**/*.{md,}` を生むため弾く
+		const config = await initWithExtensions([".", " . ", "txt"]);
+		assert.deepStrictEqual(config.trans.extensions, [".txt"]);
+	});
 });
 
 suite("Configuration orphanTargetPolicy", () => {
