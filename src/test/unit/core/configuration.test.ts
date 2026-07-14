@@ -182,6 +182,63 @@ suite("Configuration", () => {
 		assert.strictEqual(config.markers.mode, "embedded");
 		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
 	});
+
+	test("external ロード後に markers を外して再ロードすると embedded へ戻る（stale が残らない）こと", async () => {
+		// external→embedded 切替動線: シングルトンを in-place 更新する load() が前回値を居残らせない
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+
+		const withExternal: Record<string, unknown> = JSON.parse(minimalConfig());
+		withExternal.markers = { mode: "external" };
+		fs.writeFileSync(customPath, JSON.stringify(withExternal), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		assert.strictEqual(config.isExternalMarkers(), true);
+
+		// markers を削除して再ロード（設定から external 指定を外す）
+		fs.writeFileSync(customPath, minimalConfig(), "utf-8");
+		await config.initialize(customPath);
+		assert.strictEqual(config.markers.mode, "embedded");
+		assert.strictEqual(config.isExternalMarkers(), false);
+		assert.strictEqual(config.getMarkerProvider(), embeddedMarkerProvider);
+	});
+
+	/** trans.extensions を含むコンフィグを customPath に書いて初期化する */
+	async function initWithExtensions(
+		extensions: unknown,
+	): Promise<Configuration> {
+		const customDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(customDir, { recursive: true });
+		const customPath = path.join(customDir, "mdait.json");
+		const obj: Record<string, unknown> = JSON.parse(minimalConfig());
+		obj.trans = { extensions };
+		fs.writeFileSync(customPath, JSON.stringify(obj), "utf-8");
+		const config = Configuration.getInstance();
+		await config.initialize(customPath);
+		return config;
+	}
+
+	test("trans.extensions のドット無し指定に先頭ドットが補完されること", async () => {
+		const config = await initWithExtensions(["txt", "csv"]);
+		assert.deepStrictEqual(config.trans.extensions, [".txt", ".csv"]);
+	});
+
+	test("trans.extensions のドット有り指定はそのまま（小文字化のみ）維持されること", async () => {
+		const config = await initWithExtensions([".TXT", ".Csv"]);
+		assert.deepStrictEqual(config.trans.extensions, [".txt", ".csv"]);
+	});
+
+	test("trans.extensions の空文字・非文字列要素が除外されること", async () => {
+		const config = await initWithExtensions(["txt", "", "  ", 123, null]);
+		assert.deepStrictEqual(config.trans.extensions, [".txt"]);
+	});
+
+	test("trans.extensions の '.' のみ・空要素は壊れた glob を防ぐため除外されること", async () => {
+		// "." は buildExtensionGlob で e.slice(1)→"" となり `**/*.{md,}` を生むため弾く
+		const config = await initWithExtensions([".", " . ", "txt"]);
+		assert.deepStrictEqual(config.trans.extensions, [".txt"]);
+	});
 });
 
 suite("Configuration orphanTargetPolicy", () => {

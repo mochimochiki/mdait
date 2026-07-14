@@ -21,7 +21,7 @@ npm run test:explore   # compile → scripts/exploratory/run-sweep.js
 |---------|------|
 | `vscode-shim.js` | `src/test/unit/__mocks__` の vscode モックを読み込み、commands 層が使う API（`withProgress`/`commands`/`findFiles` など）を実FS委譲で増補 |
 | `fake-ai.js` | trans が要求する JSON エンベロープ `{"translation": ...}` を返す構造化フェイク。`AIServiceBuilder.prototype.build` を差し替えて全 AI 経路へ注入 |
-| `run-sweep.js` | 総なめランナー（P1 sync 冪等/マーカー整合、P2 translate、P3 revise）。共有 `mdait.json` は snapshot/restore して汚さない |
+| `run-sweep.js` | 総なめランナー（P1 sync 冪等/マーカー整合、P2 translate、P3 revise、P4 非MD、P5 external 正規フロー、P6 モード切替→sync 自己修復）。共有 `mdait.json` は snapshot/restore して汚さない |
 
 ## 前提
 

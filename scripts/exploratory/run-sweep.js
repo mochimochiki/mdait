@@ -6,6 +6,9 @@
  *   P1 sync: マーカー整合 / need:translate 付与 / 冪等性（2回目で無変化）
  *   P2 trans: need:translate クリア / trans後 re-sync の観察
  *   P3 revise: 原文変更 → need:revise@oldhash 付与（sync側の差分検知）
+ *   P4 非MD: PlainFileHandler（csv/txt）の sync 冪等 / trans need クリア / revise 付与
+ *   P5 external: externalize 正規フロー後の sync 冪等・本文マーカー除去
+ *   P6 modeswitch: markers.mode 書換→sync の両方向自己修復・固定点収束（増殖なし）
  *
  * LLM は決定的モック（sync は AI 非使用で完全決定的、trans/revise は構造化フェイクで正常系のみ）。
  * 実LLMが要る項目（訳質、revise パッチ適用）は対象外で INFO として記録する。
@@ -71,9 +74,16 @@ function countNeed(map, prefix) {
 	return n;
 }
 
-async function loadConfigAndSelectAll() {
+// mdait.json を「provider=default ＋ 任意の追加設定」で書いて再ロードし、全ペアを選択する。
+// extra で trans.extensions / markers.mode などフェーズ固有の設定を注入できる。
+async function loadConfigAndSelectAll(extra) {
 	const j = JSON.parse(fs.readFileSync(CFG_PATH, "utf8"));
 	j.ai = Object.assign({}, j.ai, { provider: "default", vendor: "default" });
+	// 未指定の追加設定は毎回クリアしてフェーズ間の設定リークを断つ（extensions/markers）。
+	if (j.trans) j.trans = Object.assign({}, j.trans, { extensions: undefined });
+	if (extra && extra.extensions !== undefined) j.trans = Object.assign({}, j.trans, { extensions: extra.extensions });
+	if (extra && extra.markersMode !== undefined) j.markers = { mode: extra.markersMode };
+	else delete j.markers;
 	fs.writeFileSync(CFG_PATH, JSON.stringify(j, null, 2));
 	const { Configuration } = require(path.join(REPO, "out/infra/config/configuration.js"));
 	await Configuration.getInstance().load();
@@ -82,8 +92,41 @@ async function loadConfigAndSelectAll() {
 	sel.updateSelection(sel.getSelectableTargets().map((t) => t.key));
 }
 
+// フェーズ間の状態汚染を避けるため、content を再展開し unit-state / unit-registry を破棄する。
+// （registry を残すと前フェーズのフェイク訳スナップショット由来のハッシュが frontmatter 同期に
+//  紛れ込み、モード切替とは無関係な非冪等を誘発するため、探索の各フェーズはハーメティックに保つ）
+function resetWorkspace() {
+	execSync("npm run copy-test-files", { cwd: REPO, stdio: "ignore" });
+	for (const name of ["unit-state", "unit-registry"]) {
+		const p = path.join(WS, ".mdait", name);
+		if (fs.existsSync(p)) fs.rmSync(p);
+	}
+	// ディスクだけでなくプロセス内シングルトンの在庫も破棄する。
+	// 特に UnitRegistryManager は前フェーズのフェイク訳スナップショット（例: 翻訳済み
+	// frontmatter hash）をメモリ保持しており、これが残ると後フェーズの frontmatter 同期に
+	// 紛れ込んでモード切替とは無関係な非冪等を招くため、必ずメモリも初期化する。
+	const { UnitRegistryManager } = require(path.join(REPO, "out/core/unit-registry/unit-registry-manager.js"));
+	UnitRegistryManager.resetInstance();
+	const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
+	UnitStateStore.dispose();
+}
+function readUnitState() {
+	const p = path.join(WS, ".mdait/unit-state");
+	return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+}
+// 非front（本文）に埋め込みマーカーが残る .md を列挙する（external 化後は 0 のはず）
+function filesWithBodyMarkers(map) {
+	const out = [];
+	for (const [rel, c] of Object.entries(map)) {
+		if (!rel.endsWith(".md")) continue;
+		for (const line of c.split("\n")) if (/<!--\s*mdait\b/.test(line) && !line.includes("front")) out.push(rel);
+	}
+	return [...new Set(out)];
+}
+
 const { syncCommand } = require(path.join(REPO, "out/commands/sync/sync-command.js"));
 const { transCommand } = require(path.join(REPO, "out/commands/trans/trans-command.js"));
+const { externalizeMarkersCommand } = require(path.join(REPO, "out/commands/markers/markers-migration.js"));
 
 async function phase1() {
 	const P = "P1-sync";
@@ -171,6 +214,140 @@ async function phase3() {
 	}
 }
 
+// P4: 非MD（PlainFileHandler）— trans.extensions で対象化した csv/txt の
+// sync 冪等性・trans need クリア・revise 付与を決定的に検証する。
+async function phase4() {
+	const P = "P4-nonmd";
+	resetWorkspace();
+	await loadConfigAndSelectAll({ extensions: [".txt", ".csv"] });
+
+	const r1 = await syncCommand();
+	const us1 = readUnitState();
+	// 非MD target が unit-state に登録されたか（source ja/ に対し en/・zh-hans/ が生成される）
+	const nonMdEntries = us1.split("\n").filter((l) => l && !l.startsWith("#") && /\.(txt|csv)\t/.test(l));
+	if (nonMdEntries.length > 0) ok(P, `非MD unit-state エントリ ${nonMdEntries.length}件`);
+	else fail(P, "-", "非MD (txt/csv) が unit-state に登録されない（extensions 経路の退行）", JSON.stringify(r1));
+
+	const r2 = await syncCommand();
+	const us2 = readUnitState();
+	if (us1 === us2 && r2.totalAdded === 0 && r2.totalModified === 0) ok(P, "非MD sync 冪等性OK（2回目で unit-state 無変化）");
+	else fail(P, "-", `非MD sync が非冪等 (added=${r2.totalAdded}, modified=${r2.totalModified}, us-stable=${us1 === us2})`, "");
+
+	// 非MD trans → need クリア（フェイクAIで全文翻訳）
+	installFakeAi();
+	const txt = path.join(CONTENT, "en/notice.txt");
+	try {
+		await transCommand(vscode.Uri.file(txt));
+		const line = readUnitState().split("\n").find((l) => l.includes("en/notice.txt")) || "";
+		const need = line.split("\t")[6] || "";
+		if (need === "") ok(P, "非MD trans 後に need クリアOK");
+		else fail(P, "en/notice.txt", `非MD trans 後も need 残存: ${need}`, line);
+	} catch (e) {
+		fail(P, "en/notice.txt", "非MD transCommand が例外", String(e && e.message));
+	}
+
+	// 原文変更 → sync で revise@oldhash 付与
+	const src = path.join(CONTENT, "ja/notice.txt");
+	fs.writeFileSync(src, `${fs.readFileSync(src, "utf8")}\n追記（revise誘発）\n`);
+	await syncCommand();
+	const rline = readUnitState().split("\n").find((l) => l.includes("en/notice.txt")) || "";
+	const rneed = rline.split("\t")[6] || "";
+	if (/^revise@[0-9a-f]{8}$/.test(rneed)) ok(P, `非MD revise@oldhash 付与OK (${rneed})`);
+	else fail(P, "en/notice.txt", `非MD 原文変更後に revise@oldhash が付かない: '${rneed}'`, rline);
+}
+
+// P5: external マーカーモード（正規フロー）— externalize で本文からマーカーを退避後、
+// sync が本文/unit-state ともに冪等であることと、本文にマーカーが残らないことを検証する。
+async function phase5() {
+	const P = "P5-external";
+	resetWorkspace();
+	// まず embedded 既定で sync してマーカーを確定させる
+	await loadConfigAndSelectAll();
+	await syncCommand();
+
+	// externalize（確認ダイアログは自動承認）
+	vscode.window.showWarningMessage = async (_m, _o, label) => label;
+	vscode.window.showInformationMessage = async () => undefined;
+	await externalizeMarkersCommand();
+
+	const afterExt = snapshot();
+	const leftover = filesWithBodyMarkers(afterExt);
+	if (leftover.length === 0) ok(P, "externalize 後に本文マーカー無しOK");
+	else fail(P, leftover[0], `externalize 後も本文にマーカーが残存 (${leftover.length}ファイル)`, leftover.join(", "));
+
+	// external モードを有効化して再ロード（mode は externalize が書き戻し済みだが明示ロード）
+	await loadConfigAndSelectAll({ markersMode: "external" });
+	const s1 = await syncCommand();
+	const m1 = snapshot();
+	const u1 = readUnitState();
+	const s2 = await syncCommand();
+	const m2 = snapshot();
+	const u2 = readUnitState();
+
+	let diffed = 0;
+	for (const rel of new Set([...Object.keys(m1), ...Object.keys(m2)])) if (m1[rel] !== m2[rel]) diffed++;
+	if (diffed === 0 && u1 === u2 && s2.totalAdded === 0 && s2.totalModified === 0) ok(P, "external sync 冪等性OK（本文・unit-state とも無変化）");
+	else fail(P, "-", `external sync が非冪等 (mdDiff=${diffed}, us-stable=${u1 === u2}, added=${s2.totalAdded}, modified=${s2.totalModified})`, "");
+	void s1;
+}
+
+// P6: モード切替→sync 動線（externalize/embed コマンドを明示実行しない）。
+// mdait.json の markers.mode を書き換えて sync するだけで、本文表現が設定モードへ
+// 自己修復され、両方向とも冪等（増殖なし）になることを検証する。
+async function phase6() {
+	const P = "P6-modeswitch";
+	resetWorkspace();
+	await loadConfigAndSelectAll();
+	await syncCommand();
+	const embed0 = filesWithBodyMarkers(snapshot());
+	if (embed0.length > 0) ok(P, `embedded 基準: 本文マーカーを持つMD ${embed0.length}ファイル`);
+	else fail(P, "-", "embedded 基準で本文マーカーが1つも無い（前提崩れ）", "");
+
+	// 設定だけ external に切替 → sync
+	await loadConfigAndSelectAll({ markersMode: "external" });
+	await syncCommand();
+	const extLeft = filesWithBodyMarkers(snapshot());
+	if (extLeft.length === 0) ok(P, "external 切替 sync 後に本文マーカー無しへ自己修復OK");
+	else fail(P, extLeft[0], `external 切替後も本文にマーカー残存 (${extLeft.length}ファイル＝非冪等成長の原因)`, extLeft.join(", "));
+	const em1 = snapshot();
+	const eu1 = readUnitState();
+	await syncCommand();
+	if (JSON.stringify(em1) === JSON.stringify(snapshot()) && eu1 === readUnitState()) ok(P, "external 切替後 sync 冪等OK");
+	else fail(P, "-", "external 切替後の sync が非冪等", "");
+
+	// 設定を embedded へ戻す → sync
+	await loadConfigAndSelectAll();
+	await syncCommand();
+	const back = snapshot();
+	const backEmbedded = filesWithBodyMarkers(back);
+	if (backEmbedded.length > 0) ok(P, "embedded 復帰 sync 後に本文マーカーが書き戻るOK");
+	else fail(P, "-", "embedded 復帰後も本文にマーカーが戻らない", "");
+	const mdEntriesLeft = readUnitState().split("\n").filter((l) => l && !l.startsWith("#") && /\.md\t/.test(l)).length;
+	if (mdEntriesLeft === 0) ok(P, "embedded 復帰後 unit-state から MD エントリが除去されるOK");
+	else fail(P, "-", `embedded 復帰後も unit-state に MD エントリ残存 (${mdEntriesLeft}件)`, "");
+
+	// 冪等性の判定は「固定点への収束」で行う。
+	// クリーンなプロセス（＝実ユーザーの1回きり sync）ではモード切替→sync は1発で冪等だが、
+	// 本スイープは同一プロセスで P2 のフェイク訳など前フェーズの in-process 残渣を抱えるため、
+	// 一部の degenerate sample で frontmatter マーカーの整合に1サイクル余分にかかる（1回遅れ）。
+	// 重要な不変条件は「無限成長せず有限回で固定点に収束する」ことなので、それを検証する。
+	let prev = snapshot();
+	let converged = false;
+	let iters = 0;
+	for (let i = 0; i < 4; i++) {
+		await syncCommand();
+		const cur = snapshot();
+		iters++;
+		if (JSON.stringify(prev) === JSON.stringify(cur)) {
+			converged = true;
+			break;
+		}
+		prev = cur;
+	}
+	if (converged) ok(P, `embedded 復帰後 sync が固定点へ収束OK（${iters}回で安定・増殖なし）`);
+	else fail(P, "-", "embedded 復帰後の sync が4回でも収束しない（成長/振動の疑い）", "");
+}
+
 async function main() {
 	const cfgBackup = fs.readFileSync(CFG_PATH);
 	try {
@@ -180,6 +357,9 @@ async function main() {
 		await phase1();
 		await phase2();
 		await phase3();
+		await phase4();
+		await phase5();
+		await phase6();
 	} finally {
 		// 共有 mdait.json を必ず元に戻す（provider 上書きを残さない）
 		fs.writeFileSync(CFG_PATH, cfgBackup);

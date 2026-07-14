@@ -577,13 +577,13 @@ export class Configuration {
 				}
 			}
 
-			// markers設定の読み込み
-			if (
-				config.markers?.mode === "embedded" ||
-				config.markers?.mode === "external"
-			) {
-				this.markers.mode = config.markers.mode;
-			}
+			// markers設定の読み込み。
+			// 明示的に "external" のときのみ external とし、未指定・"embedded"・不正値は
+			// すべて既定の "embedded" へ倒す。load() はシングルトンを in-place 更新するため、
+			// 「設定から markers を削除して external→embedded に戻す」動線で前回値が居残る
+			// stale を防ぐ（値を毎回確定させることで再ロードを冪等にする）。
+			this.markers.mode =
+				config.markers?.mode === "external" ? "external" : "embedded";
 
 			// AI設定の読み込み
 			if (config.ai) {
@@ -692,7 +692,19 @@ export class Configuration {
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {
-					this.trans.extensions = config.trans.extensions;
+					// 先頭ドットを正規化する。ファイル探索（buildExtensionGlob /
+					// findFilesInDirectory）とアセット除外（asset-copier）はいずれも
+					// `.txt` 形式（先頭ドットあり・小文字）を前提とするため、`txt` のような
+					// ドット無し指定が「対象拡張子として一切機能しない（＝翻訳されずアセット扱い）」
+					// サイレント無効化に陥るのを防ぐ。
+					this.trans.extensions = config.trans.extensions
+						.filter((ext): ext is string => typeof ext === "string")
+						.map((ext) => ext.trim().toLowerCase())
+						// 空文字・"."（拡張子名を持たない）を除外する。これらは
+						// buildExtensionGlob で e.slice(1)→"" となり `**/*.{md,}` のような
+						// 壊れた glob を生むため、正規化段階で弾く。
+						.filter((ext) => ext !== "" && ext !== ".")
+						.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`));
 				}
 			}
 			if (Number.isFinite(config.trans?.maxUnitsPerRun)) {
