@@ -149,8 +149,8 @@
         "vendor": {
           "type": "string",
           "description": "VS Code Language Model API vendor identifier (used by the 'vscode-lm' provider)",
-          "default": "copilot",
-          "examples": ["copilot"]
+          "default": "customendpoint",
+          "examples": ["customendpoint", "copilot"]
         },
         "model": {
           "type": "string",

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { openConfigInSettingsEditor } from "../shared/open-config-editor";
 
 /**
  * 既存のmdait.jsonを選択してカスタムパスとして登録するコマンド
@@ -74,8 +75,7 @@ export async function createConfigCommand(
 			vscode.l10n.t("Cancel"),
 		);
 		if (overwrite === vscode.l10n.t("Open")) {
-			const document = await vscode.workspace.openTextDocument(configPath);
-			await vscode.window.showTextDocument(document);
+			await openConfigInSettingsEditor(configPath);
 		}
 		return;
 	}
@@ -106,11 +106,8 @@ export async function createConfigCommand(
 		// mdait.jsonを作成
 		fs.writeFileSync(configPath, templateContent, "utf8");
 
-		// 作成したファイルをエディタで開く
-		const document = await vscode.workspace.openTextDocument(configPath);
-		await vscode.window.showTextDocument(document);
-
 		// Configurationインスタンスを再初期化して設定を読み込む
+		// （設定UIは Configuration を参照するため、エディタを開く前に行う）
 		try {
 			await Configuration.getInstance().initialize();
 		} catch (error) {
@@ -120,6 +117,9 @@ export async function createConfigCommand(
 				(error as Error).message,
 			);
 		}
+
+		// 作成したファイルを設定UIで開く
+		await openConfigInSettingsEditor(configPath);
 
 		// コンテキスト変数を更新（設定ファイルが作成されたことを通知）
 		await vscode.commands.executeCommand("setContext", "mdaitConfigured", true);

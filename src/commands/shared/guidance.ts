@@ -4,23 +4,20 @@
  * showErrorMessage 等にアクションボタンを付与し、診断・Sync・ドキュメントへ誘導する。
  */
 
+import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
+import { openConfigInSettingsEditor } from "./open-config-editor";
 
 const TROUBLESHOOTING_URL =
 	"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
 
-/** 設定ファイルを開く（無ければ作成コマンドへ） */
+/** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
 async function openConfigFile(): Promise<void> {
 	const configPath = Configuration.getInstance().getConfigFilePath();
-	if (configPath) {
-		try {
-			const doc = await vscode.workspace.openTextDocument(configPath);
-			await vscode.window.showTextDocument(doc);
-			return;
-		} catch {
-			// 開けない場合は作成コマンドにフォールバック
-		}
+	if (configPath && fs.existsSync(configPath)) {
+		await openConfigInSettingsEditor(configPath);
+		return;
 	}
 	await vscode.commands.executeCommand("mdait.setup.createConfig");
 }

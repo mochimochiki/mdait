@@ -18,11 +18,11 @@
 
 ### before/after
 
-`.mdait/mdait.json`がない状態でコマンドを実行すると、テンプレートが作成されてエディタで開かれます:
+`.mdait/mdait.json`がない状態でコマンドを実行すると、テンプレートが作成されて設定UIで開かれます:
 
 ```
 【実行前】.mdait/mdait.json なし → Welcome View のみ表示
-【実行後】.mdait/mdait.json 作成 → エディタで開く → 保存後 StatusTree 表示
+【実行後】.mdait/mdait.json 作成 → 設定UIで開く → 保存後 StatusTree 表示
 ```
 
 保存・バリデーション成功後（`mdaitConfigured ∧ !mdaitHasStatus`）、Welcome View は「次の一歩」の2択導線に切り替わる（ADR-260711-06）:
@@ -65,7 +65,7 @@ createConfig の成功メッセージも同じ2択を文言で案内する（実
 
 ### 概要
 
-`createConfigCommand()`がバンドルの`mdait.template.json`をワークスペースの`.mdait/`配下にコピーし、`vscode.openTextDocument()`でエディタ表示します。その後`Configuration`がファイル変更イベントを検知してリロード・バリデーションし、`mdaitConfigured`コンテキスト変数を更新します。
+`createConfigCommand()`がバンドルの`mdait.template.json`をワークスペースの`.mdait/`配下にコピーし、`Configuration`を初期化したうえで`vscode.openWith`により設定UI（custom editor `mdait.settingsEditor`）で表示します。`showTextDocument()`は custom editor を迂回して生JSONを開いてしまうため使用しません。その後`Configuration`がファイル変更イベントを検知してリロード・バリデーションし、`mdaitConfigured`コンテキスト変数を更新します。
 
 ### 処理フロー
 
@@ -87,10 +87,11 @@ sequenceDiagram
     end
 
     rect rgb(240, 255, 240)
-        Note over Cmd,FS: 作成: テンプレートコピー・エディタ表示
+        Note over Cmd,FS: 作成: テンプレートコピー・設定UI表示
         Cmd->>FS: mdait.template.json 読み込み
         Cmd->>FS: .mdait/mdait.json 作成
-        Cmd-->>User: エディタで .mdait/mdait.json を表示
+        Cmd->>Cfg: initialize()（設定UIが参照するため先行）
+        Cmd-->>User: 設定UI（mdait.settingsEditor）で表示
     end
 
     rect rgb(255, 245, 230)
@@ -112,7 +113,8 @@ sequenceDiagram
 
 | ファイル | 責務 |
 |---|---|
-| [`setup-command.ts`](../../src/commands/setup/setup-command.ts) | `createConfigCommand()` - テンプレートコピーとエディタ表示。`openExistingConfigCommand()` - 既存設定の選択と登録 |
+| [`setup-command.ts`](../../src/commands/setup/setup-command.ts) | `createConfigCommand()` - テンプレートコピーと設定UI表示。`openExistingConfigCommand()` - 既存設定の選択と登録 |
+| [`settings-panel.ts`](../../src/ui/settings/settings-panel.ts) | `SettingsPanel` - 設定UI（custom editor `mdait.settingsEditor`）の実体 |
 | [`configuration.ts`](../../src/infra/config/configuration.ts) | `Configuration` - 設定ファイル変更・リロード・バリデーション |
 
 ---

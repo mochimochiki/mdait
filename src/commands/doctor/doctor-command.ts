@@ -17,6 +17,7 @@ import {
 } from "../../core/diagnostics/setup-doctor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
+import { openConfigInSettingsEditor } from "../shared/open-config-editor";
 
 const TROUBLESHOOTING_URL =
 	"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
@@ -388,12 +389,11 @@ async function openReport(
 	await vscode.window.showTextDocument(doc, { preview: true });
 }
 
-/** 設定ファイルを開く（無ければ作成コマンドへ） */
+/** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
 async function openConfigFile(config: Configuration): Promise<void> {
 	const configPath = config.getConfigFilePath();
 	if (configPath && fs.existsSync(configPath)) {
-		const doc = await vscode.workspace.openTextDocument(configPath);
-		await vscode.window.showTextDocument(doc);
+		await openConfigInSettingsEditor(configPath);
 	} else {
 		await vscode.commands.executeCommand("mdait.setup.createConfig");
 	}

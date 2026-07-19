@@ -5,20 +5,37 @@
       "sourceDir": "content/ja",
       "targetLang": "en",
       "targetDir": "content/en"
-    },
-    {
-      "sourceLang": "en",
-      "sourceDir": "content/en",
-      "targetLang": "zh-hans",
-      "targetDir": "content/zh-hans"
     }
   ],
   "ai": {
+    "provider": "vscode-lm",
     "vendor": "customendpoint",
-    "model": "qwen3.6-35B-A3B",
-    "debug": {
-      "logPromptAndResponse": true
+    "model": "gemma-4-E4B"
+  },
+  "trans": {
+    "contextSize": 1,
+    "retryLimit": 1,
+    "markdown": {
+      "skipCodeBlocks": true
+    },
+    "frontmatter": {
+      "keys": [
+        "title",
+        "description"
+      ]
     }
   },
-  "primaryLang": "en"
+  "primaryLang": "ja",
+  "sync": {
+    "level": 3,
+    "autoDelete": true,
+    "autoSyncOnSave": true
+  },
+  "tm": {
+    "retryLimit": 1,
+    "maxReferences": 5
+  },
+  "terms": {
+    "filename": "terms.csv"
+  }
 }
