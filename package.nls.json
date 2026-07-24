@@ -26,6 +26,7 @@
   "mdait.unit.delete.title": "Delete Unit",
   "mdait.unit.markIsolated.title": "Mark as Isolated",
   "mdait.unit.unisolate.title": "Un-isolate",
+  "mdait.needsAttention.next.title": "Go to Next Item Needing Attention",
   "mdait.translate.frontmatter.title": "✨Translate Frontmatter",
   "mdait.term.detect.title": "✨Detect Terms",
   "mdait.term.detect.directory.title": "✨Detect Terms for Directory",

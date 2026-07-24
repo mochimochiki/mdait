@@ -1,15 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { SelectionState } from "../../core/status/selection-state";
 import {
 	type DirectoryStatusItem,
 	Status,
 	type StatusItem,
 	StatusItemType,
 	type UnitStatusItem,
-	isFrontmatterStatusItem,
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { getSelectedScopeDirs } from "../../core/status/status-scope";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -20,6 +19,16 @@ import { Logger, formatError } from "../../infra/logging/logger";
  * review / verify-deletion 待ちのユニットを横断集約し、連続裁定を可能にする（UX-R1 §8）。
  */
 const NEEDS_ATTENTION_ID = "mdait:needs-attention";
+
+/**
+ * need フラグの人間向けラベル（要対応キューの副題・ツールチップ用）
+ */
+function getNeedLabel(needFlag: string | undefined): string {
+	if (needFlag === "verify-deletion") {
+		return vscode.l10n.t("Deletion check");
+	}
+	return vscode.l10n.t("Review");
+}
 
 /**
  * ステータスツリービューのデータプロバイダ
@@ -38,21 +47,24 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		return this.statusManager.getStatusItemTree();
 	}
 
-	// ステータス初期化済みフラグと排他制御
-	private isStatusInitialized = false;
-	private isStatusLoading = false;
+	// ステータス初期化の進行中Promise（全呼び出しが同じ完了を待つ）
+	private initPromise: Promise<void> | undefined;
+
+	/**
+	 * 直近にルートを構築したときの Needs Attention ノード実体。
+	 * getParent が毎回新しいインスタンスを返すと reveal が不安定になるため保持する。
+	 */
+	private needsAttentionItem: DirectoryStatusItem | undefined;
 
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
 		this.configuration = Configuration.getInstance();
 
-		// Eventリスナーを登録
-		this.statusManager.onStatusTreeChanged((updatedItem) => {
-			if (updatedItem !== null) {
-				// 該当ファイルアイテムのみツリー更新
-				DebugFireRecorder.getInstance().record("provider", updatedItem);
-				this._onDidChangeTreeData.fire(updatedItem);
-			}
+		// ツリーに変更があれば全体を描き直す。
+		// どのノードを描き直すかは判定しない（ADR-260724-01）。可視ノードの再取得は
+		// メモリ参照のみで安価であり、treeItem.id が安定しているため展開状態も維持される。
+		this.statusManager.onStatusTreeChanged(() => {
+			this.refresh();
 		});
 	}
 
@@ -106,7 +118,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		treeView: vscode.TreeView<StatusItem>,
 	): Promise<void> {
 		// 設定が完了していない、またはステータスが初期化されていない場合は何もしない
-		if (!this.configuration.isConfigured() || !this.isStatusInitialized) {
+		if (!this.configuration.isConfigured() || !this.statusManager.isInitialized()) {
 			return;
 		}
 
@@ -159,6 +171,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
+
+		// 副題（ラベル右の薄字）を設定
+		if (element.description) {
+			treeItem.description = element.description;
+		}
 
 		// contextValueを設定（StatusItemから）
 		treeItem.contextValue = element.contextValue;
@@ -234,9 +251,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * TreeView.reveal()を使用するために必要
 	 */
 	public getParent(element: StatusItem): StatusItem | undefined {
-		// Needs Attention仮想ノード配下のクローンの場合、親は仮想ノード自身
+		// Needs Attention仮想ノード配下のクローンの場合、親は仮想ノード自身。
+		// reveal を安定させるため、直近にルートを構築したときの実体を返す。
 		if (element.type === StatusItemType.Unit && element.isVirtualCopy) {
-			return this.buildNeedsAttentionItem();
+			return this.needsAttentionItem ?? this.buildNeedsAttentionItem();
 		}
 
 		// Unitの場合、親はFile
@@ -278,29 +296,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return [];
 		}
 
-		if (!this.isStatusInitialized && !this.isStatusLoading) {
-			this.isStatusLoading = true;
-			try {
-				const workspaceFolder =
-					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-				if (workspaceFolder) {
-					// StatusManagerから最新のStatusItemを取得・ツリーに反映
-					if (!this.statusManager.isInitialized()) {
-						// 初期化されていない場合は全体再構築
-						await this.statusManager.buildStatusItemTree();
-					}
-				}
-				this.isStatusInitialized = true;
-			} catch (e) {
-				Logger.getInstance().warn(
-					"status-tree",
-					"failed to initialize status",
-					formatError(e),
-				);
-			} finally {
-				this.isStatusLoading = false;
-			}
-		}
+		// 初期化は1回だけ行い、その間に来た他ノードの getChildren も同じ完了を待つ。
+		// 待たずに空配列を返すと、復元された展開状態が空のまま焼き付く。
+		await this.ensureStatusInitialized();
 		if (!element) {
 			// ルート要素の場合はディレクトリ一覧を返す
 			return Promise.resolve(this.getRootDirectoryItems());
@@ -324,25 +322,39 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
+	 * ステータスツリーの初期化を1回だけ実行する。
+	 * 並行呼び出しは同じPromiseを共有し、全員が初期化完了を待ってから結果を返す。
+	 */
+	private ensureStatusInitialized(): Promise<void> {
+		if (!this.initPromise) {
+			this.initPromise = (async () => {
+				try {
+					const workspaceFolder =
+						vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+					if (workspaceFolder && !this.statusManager.isInitialized()) {
+						// 初期化されていない場合は全体再構築
+						await this.statusManager.buildStatusItemTree();
+					}
+				} catch (e) {
+					Logger.getInstance().warn(
+						"status-tree",
+						"failed to initialize status",
+						formatError(e),
+					);
+				}
+			})();
+		}
+		return this.initPromise;
+	}
+
+	/**
 	 * ディレクトリ一覧のStatusItemを作成する
 	 */
 	private getRootDirectoryItems(): StatusItem[] {
-		// 選択中の target のみに絞ってディレクトリ一覧を作成
-		const configBaseDir = this.configuration.getConfigBaseDir();
-		const pairs = SelectionState.getInstance().filterTransPairs(
-			this.configuration.transPairs,
-		);
-		const dirsAbs = Array.from(
-			new Set(
-				pairs.flatMap((pair) => [
-					path.resolve(configBaseDir, pair.sourceDir),
-					path.resolve(configBaseDir, pair.targetDir),
-				]),
-			),
-		);
-
 		// StatusItemTreeからルートディレクトリアイテムを取得
-		const items = this.statusItemTree.getRootDirectoryItems(dirsAbs);
+		const items = this.statusItemTree.getRootDirectoryItems(
+			getSelectedScopeDirs(this.configuration),
+		);
 		// Status.Emptyのアイテムを除外
 		const visibleItems = items.filter((item) => item.status !== Status.Empty);
 
@@ -357,29 +369,60 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * review / verify-deletion 待ちのユニットをクローン（isVirtualCopy: true）として返す。
 	 * 元のUnitStatusItemは実ファイル配下のツリーからも参照されているため、id衝突を避けるためクローンする。
 	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
+	 *
+	 * 見出しタイトルだけでは同名の見出しが区別できないため、副題にファイル名と種類を出す。
 	 */
 	private getNeedsAttentionChildren(): UnitStatusItem[] {
-		return this.statusItemTree
-			.getNeedsAttentionUnits()
-			.map((unit) => ({ ...unit, isVirtualCopy: true }));
+		return this.collectNeedsAttentionUnits().map((unit) => ({
+			...unit,
+			isVirtualCopy: true,
+			description: `${path.basename(unit.filePath)} · ${getNeedLabel(unit.needFlag)}`,
+			tooltip: this.formatNeedsAttentionTooltip(unit),
+		}));
+	}
+
+	/**
+	 * 要対応ユニットを選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
+	 */
+	private collectNeedsAttentionUnits(): UnitStatusItem[] {
+		return this.statusItemTree.getNeedsAttentionUnits(
+			getSelectedScopeDirs(this.configuration),
+		);
+	}
+
+	/**
+	 * 要対応項目のツールチップ（ワークスペース相対パス＋種類）を組み立てる
+	 */
+	private formatNeedsAttentionTooltip(unit: UnitStatusItem): string {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const displayPath = workspaceFolder
+			? path.relative(workspaceFolder, unit.filePath)
+			: unit.filePath;
+		return `${displayPath}\n${getNeedLabel(unit.needFlag)}`;
 	}
 
 	/**
 	 * Needs Attention仮想ノードを構築する。対象が0件の場合はundefined
 	 * （UX-P7: デッドエンドを置かない。空のノードをツリーに出さない）。
+	 *
+	 * 件数ラベルと子リストは同じ集約結果から作られ、ツリー更新のたびに作り直される。
+	 * 以前は件数だけがルート構築時のスナップショットで固まり、子リストと食い違っていた
+	 * （ADR-260724-01）。
 	 */
 	private buildNeedsAttentionItem(): DirectoryStatusItem | undefined {
-		const count = this.statusItemTree.getNeedsAttentionUnits().length;
+		const count = this.collectNeedsAttentionUnits().length;
 		if (count === 0) {
+			this.needsAttentionItem = undefined;
 			return undefined;
 		}
-		return {
+		this.needsAttentionItem = {
 			type: StatusItemType.Directory,
 			label: vscode.l10n.t("Needs Attention ({0})", count),
 			status: Status.NeedsTranslation,
 			directoryPath: NEEDS_ATTENTION_ID,
 			contextValue: "mdaitNeedsAttentionRoot",
 		};
+		return this.needsAttentionItem;
 	}
 
 	/**

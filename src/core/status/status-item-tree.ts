@@ -15,31 +15,83 @@ import {
 } from "./status-item";
 
 /**
+ * 2つのパスが同一、または child が parent の配下かを判定する。
+ * 単純な前方一致は `/docs/en` と `/docs/en-US` を取り違えるため、
+ * 必ずパス区切り境界で比較する（ADR-260724-01）。
+ */
+function isSameOrUnder(child: string, parent: string): boolean {
+	if (child === parent) {
+		return true;
+	}
+	const prefix = parent.endsWith(path.sep) ? parent : parent + path.sep;
+	return child.startsWith(prefix);
+}
+
+/**
+ * 要対応ユニットの表示順を決める比較関数（ファイルパス昇順→開始行昇順→ハッシュ昇順）。
+ *
+ * ロケール依存の比較（localeCompare）は環境によって結果が変わりうるため使わない。
+ * 「同じ状態なら常に同じ並び」を保証することが目的であり、これは見た目の問題ではなく
+ * 表示の信頼に関わる（ADR-260724-01）。「次の要対応へ」コマンドもこの順序に従う。
+ */
+export function compareNeedsAttentionUnits(
+	a: UnitStatusItem,
+	b: UnitStatusItem,
+): number {
+	if (a.filePath !== b.filePath) {
+		return a.filePath < b.filePath ? -1 : 1;
+	}
+	const lineDiff = (a.startLine ?? 0) - (b.startLine ?? 0);
+	if (lineDiff !== 0) {
+		return lineDiff;
+	}
+	if (a.unitHash === b.unitHash) {
+		return 0;
+	}
+	return a.unitHash < b.unitHash ? -1 : 1;
+}
+
+/**
  * StatusItemのファーストクラスコレクション
  * ディレクトリ・ファイル・ユニットの階層構造を効率的に管理する
+ *
+ * 更新通知の方針（ADR-260724-01）:
+ * 変更の宛先（どのノードを描き直すべきか）は一切判定せず、「変更があった」ことだけを
+ * 1本のイベントで通知する。宛先の判定は「要対応ノードだけ更新されない」不具合の発生源
+ * であったため、設計から削除した。束ねと再描画は StatusManager 側が担う。
  */
 export class StatusItemTree {
 	// ========== event ==========
 	// Event
-	private readonly _onTreeChanged = new vscode.EventEmitter<
-		StatusItem | undefined
-	>();
-	public readonly onTreeChanged: vscode.Event<StatusItem | undefined> =
+	private readonly _onTreeChanged = new vscode.EventEmitter<void>();
+	public readonly onTreeChanged: vscode.Event<void> =
 		this._onTreeChanged.event;
 
 	/**
-	 * _onTreeChanged.fire のラッパー。デバッグ計装（fire履歴記録）を挟む。
+	 * 「ツリーに変更があった」ことを通知する。デバッグ計装（fire履歴記録）を挟む。
 	 * デバッグIPC無効時はレコーダーが no-op のため本番挙動は変わらない。
 	 */
-	private fireTreeChanged(item: StatusItem | undefined): void {
-		DebugFireRecorder.getInstance().record("tree", item);
-		this._onTreeChanged.fire(item);
+	private notifyChanged(): void {
+		if (this.suppressNotify) {
+			return;
+		}
+		DebugFireRecorder.getInstance().record("tree", undefined);
+		this._onTreeChanged.fire();
 	}
+
+	/** buildTree など、多数の変更をまとめて行う間の通知を抑止するフラグ */
+	private suppressNotify = false;
 
 	// ========== member ==========
 	private readonly fileItemMap = new Map<string, FileStatusItem>(); // ファイルパスをキーとする
 	private readonly directoryItemMap = new Map<string, DirectoryStatusItem>(); // ディレクトリパスをキーとする
-	private readonly unitItemMapWithPath = new Map<string, UnitStatusItem>(); // ファイルパス+ユニットハッシュをキーとする
+	/**
+	 * ユニット検索用の索引（ファイルパス+ユニットハッシュをキーとする）。
+	 * ユニットの本体は FileStatusItem.children であり、本マップはそこへの参照を持つだけの
+	 * 索引である。ファイル更新のたびに当該ファイル分を丸ごと張り直すため、ハッシュが変わって
+	 * 消えたユニットが残留することはない（ADR-260724-01）。
+	 */
+	private readonly unitItemMapWithPath = new Map<string, UnitStatusItem>();
 	private rootDirectories: string[] = [];
 	private configBaseDir: string | undefined = undefined;
 
@@ -83,7 +135,7 @@ export class StatusItemTree {
 		const result: FileStatusItem[] = [];
 
 		for (const file of this.fileItemMap.values()) {
-			if (path.dirname(file.filePath).startsWith(dirPath)) {
+			if (isSameOrUnder(path.dirname(file.filePath), dirPath)) {
 				result.push(file);
 			}
 		}
@@ -129,20 +181,37 @@ export class StatusItemTree {
 	}
 
 	/**
-	 * review / verify-deletion 待ちのユニットを全ファイル横断で集める。
+	 * review / verify-deletion 待ちのユニットをファイル横断で集める。
 	 * StatusTreeProvider の「Needs Attention」仮想ノード（UX-R1: 判断サーフェスの完成）の
 	 * データソース。escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
+	 *
+	 * @param scopeDirs 集約対象を限定するディレクトリ（絶対パス）の集合。
+	 *   ツリー本体が選択中の transPair だけを表示するため、要対応も同じ範囲に揃える
+	 *   （未指定なら全ファイルが対象。ADR-260724-01）。
+	 * @returns ファイルパス昇順→開始行昇順で安定ソートされたユニット列。
+	 *   同じ状態なら常に同じ並びになることを保証する（並びの揺れは表示上の信頼を損なうため）。
 	 */
-	public getNeedsAttentionUnits(): UnitStatusItem[] {
+	public getNeedsAttentionUnits(scopeDirs?: string[]): UnitStatusItem[] {
 		const matches: UnitStatusItem[] = [];
 		for (const file of this.getFilesAll()) {
+			if (scopeDirs && !this.isInScope(file.filePath, scopeDirs)) {
+				continue;
+			}
 			for (const unit of this.getUnitsInFile(file.filePath)) {
 				if (unit.needFlag === "review" || unit.needFlag === "verify-deletion") {
 					matches.push(unit);
 				}
 			}
 		}
-		return matches;
+		return matches.sort(compareNeedsAttentionUnits);
+	}
+
+	/**
+	 * ファイルが対象ディレクトリ集合のいずれかの配下にあるかを判定する
+	 */
+	private isInScope(filePath: string, scopeDirs: string[]): boolean {
+		const dir = path.dirname(filePath);
+		return scopeDirs.some((scopeDir) => isSameOrUnder(dir, scopeDir));
 	}
 
 	/**
@@ -345,9 +414,16 @@ export class StatusItemTree {
 
 		console.log("=>build");
 		const startTime = performance.now();
-		for (const file of files) {
-			this.addOrUpdateFile(file);
+		// 構築中はファイルごとの通知を抑止し、完了後に1回だけ通知する
+		this.suppressNotify = true;
+		try {
+			for (const file of files) {
+				this.addOrUpdateFile(file);
+			}
+		} finally {
+			this.suppressNotify = false;
 		}
+		this.notifyChanged();
 
 		const endTime = performance.now();
 		console.log(`<=build (${Math.round(endTime - startTime)}ms)`);
@@ -357,16 +433,7 @@ export class StatusItemTree {
 	 * FileItemを更新
 	 */
 	public addOrUpdateFile(fileItem: FileStatusItem): void {
-		fileItem.isTranslating = false; // 翻訳中フラグをリセット
-		if (fileItem.children) {
-			fileItem.isTranslating = fileItem.children.some(
-				(unit) => unit.isTranslating === true,
-			);
-		}
-		// frontmatterの翻訳中フラグも考慮
-		if (fileItem.frontmatter?.isTranslating) {
-			fileItem.isTranslating = true;
-		}
+		this.recalcFileTranslating(fileItem);
 
 		const existingItem = this.fileItemMap.get(fileItem.filePath);
 		if (existingItem) {
@@ -377,22 +444,94 @@ export class StatusItemTree {
 			this.fileItemMap.set(fileItem.filePath, fileItem);
 		}
 
-		// 子ユニットも登録（ファイルパス + ハッシュで一意性確保）
-		if (fileItem.children) {
-			for (const unit of fileItem.children) {
-				const key = `${fileItem.filePath}#${unit.unitHash}`;
-				// 既存のユニットを更新
-				const existingUnit = this.unitItemMapWithPath.get(key);
-				if (existingUnit) {
-					Object.assign(existingUnit, unit);
-				} else {
-					this.unitItemMapWithPath.set(key, unit);
-				}
-			}
-		}
+		// ユニット索引を当該ファイル分だけ張り直す。
+		// 「値だけ上書き」だと、消えたユニット（ハッシュ変更・ユニット削除）が索引に残り続け、
+		// getUnitByHash / getTargetUnitByFromHash が実在しないユニットを返しうる。
+		this.rebuildUnitIndexForFile(this.fileItemMap.get(fileItem.filePath));
 
 		// ディレクトリ更新
 		this.addOrUpdateDirectory(fileItem);
+
+		this.notifyChanged();
+	}
+
+	/**
+	 * 指定ファイルをツリーから取り除く（削除・リネーム・対象外化に対応）。
+	 * ファイル・ユニット索引・親ディレクトリの子要素から除去し、祖先の集計を更新する。
+	 * ファイルが無くなり空になったディレクトリは、ルートディレクトリを除いて併せて取り除く。
+	 * @returns 実際に除去した場合 true（元から存在しなければ false）
+	 */
+	public removeFile(filePath: string): boolean {
+		if (!this.fileItemMap.has(filePath)) {
+			return false;
+		}
+		this.fileItemMap.delete(filePath);
+		this.clearUnitIndexForFile(filePath);
+
+		const dirPath = path.dirname(filePath);
+		const directoryItem = this.directoryItemMap.get(dirPath);
+		if (directoryItem?.children) {
+			directoryItem.children = directoryItem.children.filter(
+				(child) => !(isFileStatusItem(child) && child.filePath === filePath),
+			);
+		}
+
+		// 集計更新が先。逆順にすると updateDirectoryAggregatesUpward が
+		// 取り除いたディレクトリを作り直してしまう。
+		const stopRoot = this.getRootDir(dirPath);
+		this.updateDirectoryAggregatesUpward(dirPath, stopRoot);
+		this.pruneEmptyDirectories(dirPath, stopRoot);
+
+		this.notifyChanged();
+		return true;
+	}
+
+	/**
+	 * 指定ファイルのユニット索引を張り直す（既存エントリを全削除してから登録）
+	 */
+	private rebuildUnitIndexForFile(fileItem: FileStatusItem | undefined): void {
+		if (!fileItem) {
+			return;
+		}
+		this.clearUnitIndexForFile(fileItem.filePath);
+		for (const unit of fileItem.children ?? []) {
+			this.unitItemMapWithPath.set(
+				`${fileItem.filePath}#${unit.unitHash}`,
+				unit,
+			);
+		}
+	}
+
+	/**
+	 * 指定ファイルに属する索引エントリを全て削除する
+	 */
+	private clearUnitIndexForFile(filePath: string): void {
+		const prefix = `${filePath}#`;
+		for (const key of this.unitItemMapWithPath.keys()) {
+			if (key.startsWith(prefix)) {
+				this.unitItemMapWithPath.delete(key);
+			}
+		}
+	}
+
+	/**
+	 * 配下にファイルが1つも無くなったディレクトリを、ルートに達するまで取り除く。
+	 * ルートディレクトリ（transPairs の source/target）は空でも残す（選択中の対象は
+	 * 常にツリーに出す）。
+	 */
+	private pruneEmptyDirectories(dirPath: string, stopRoot: string): void {
+		let current = dirPath;
+		while (current !== stopRoot) {
+			if (this.getFilesInDirectoryRecursive(current).length > 0) {
+				return;
+			}
+			this.directoryItemMap.delete(current);
+			const parent = path.dirname(current);
+			if (parent === current) {
+				return;
+			}
+			current = parent;
+		}
 	}
 
 	public updateFilePartial(
@@ -409,6 +548,7 @@ export class StatusItemTree {
 
 		// ディレクトリ更新
 		this.addOrUpdateDirectory(existingItem);
+		this.notifyChanged();
 		return existingItem;
 	}
 
@@ -428,7 +568,7 @@ export class StatusItemTree {
 		Object.assign(existingItem, updates);
 
 		// イベント通知
-		this.fireTreeChanged(existingItem);
+		this.notifyChanged();
 		return existingItem;
 	}
 
@@ -446,25 +586,35 @@ export class StatusItemTree {
 			return undefined;
 		}
 
-		// ユニットを更新
+		// ユニットを更新。
+		// 索引は children と同一インスタンスを指すため、子要素側への写し込みは不要。
 		Object.assign(unit, updates);
 
-		// 親ファイルの子要素も更新
+		// 親ファイルの翻訳中フラグとディレクトリ集計を追随させる
 		const fileItem = this.fileItemMap.get(filePath);
-		if (fileItem?.children) {
-			const unitIndex = fileItem.children.findIndex(
-				(child) => child.unitHash === unitHash,
-			);
-			if (unitIndex >= 0) {
-				Object.assign(fileItem.children[unitIndex], unit);
-				this.addOrUpdateFile(fileItem);
-			}
+		if (fileItem) {
+			this.recalcFileTranslating(fileItem);
+			this.addOrUpdateDirectory(fileItem);
 		}
 
+		this.notifyChanged();
 		return unit;
 	}
 
 	// ========== Private methods ==========
+
+	/**
+	 * ファイルの翻訳中フラグを子ユニット・frontmatterから再計算する
+	 */
+	private recalcFileTranslating(fileItem: FileStatusItem): void {
+		fileItem.isTranslating = (fileItem.children ?? []).some(
+			(unit) => unit.isTranslating === true,
+		);
+		// frontmatterの翻訳中フラグも考慮
+		if (fileItem.frontmatter?.isTranslating) {
+			fileItem.isTranslating = true;
+		}
+	}
 
 	/**
 	 * ソースファイルを除外したターゲットファイルのみ取得
@@ -517,12 +667,10 @@ export class StatusItemTree {
 		// 集計の更新（共通処理）
 		this.recalcDirectoryAggregate(dirPath, directoryItem);
 
-		// 親があれば継続。なければここでイベント発火。
+		// 親があれば継続（通知は呼び出し元の公開メソッドが1回だけ行う）
 		const parentDir = path.dirname(dirPath);
-		if (dirPath !== effectiveStopRoot) {
+		if (dirPath !== effectiveStopRoot && parentDir !== dirPath) {
 			this.updateDirectoryAggregatesUpward(parentDir, effectiveStopRoot);
-		} else {
-			this.fireTreeChanged(directoryItem);
 		}
 	}
 
@@ -655,7 +803,7 @@ export class StatusItemTree {
 		const subDirs = new Set<string>();
 
 		for (const dirPath of this.directoryItemMap.keys()) {
-			if (dirPath !== parentDir && dirPath.startsWith(parentDir)) {
+			if (dirPath !== parentDir && isSameOrUnder(dirPath, parentDir)) {
 				const rel = path.relative(parentDir, dirPath);
 				const parts = rel.split(path.sep);
 				if (parts.length > 0 && parts[0] !== "" && parts[0] !== ".") {

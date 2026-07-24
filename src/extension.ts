@@ -6,6 +6,7 @@ import {
 	embedMarkersCommand,
 	externalizeMarkersCommand,
 } from "./commands/markers/markers-migration";
+import { needsAttentionNextCommand } from "./commands/markers/needs-attention-next";
 import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
 import {
@@ -305,6 +306,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	const unitUnisolateDisposable = vscode.commands.registerCommand(
 		"mdait.unit.unisolate",
 		(item?: StatusItem) => needHandler.unisolate(item),
+	);
+	// 要対応キューの連続裁定（UX-R4: 裁定→次へ の往復をなくす）
+	const needsAttentionNextDisposable = vscode.commands.registerCommand(
+		"mdait.needsAttention.next",
+		needsAttentionNextCommand,
 	);
 
 	// term.detect command
@@ -952,6 +958,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		unitDeleteDisposable,
 		unitMarkIsolatedDisposable,
 		unitUnisolateDisposable,
+		needsAttentionNextDisposable,
 		translateSelectionDisposable,
 		translateFrontmatterDisposable,
 		codeLensClearFrontmatterNeedDisposable,

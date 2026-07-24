@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
@@ -12,16 +13,25 @@ import {
 import type { StatusItemType } from "./status-item";
 import { StatusItemTree } from "./status-item-tree";
 
+/** ツリー変更通知を束ねる既定の待ち時間（ミリ秒） */
+const DEFAULT_NOTIFY_DEBOUNCE_MS = 80;
+
 /**
  * statusItemTreeに全StatusItemをツリーとして保持し、状態管理を行います。
  * 全コマンド・UIから同一インスタンスにアクセスし、ステータスの管理およびUIの更新を担当します。
+ *
+ * 更新通知の方針（ADR-260724-01）:
+ * StatusItemTree からの「変更あり」シグナルをデバウンスで束ね、ツリー全体の再描画を
+ * 1回だけ通知する。どのノードを描き直すかは判定しない。部分通知は「要対応ノードだけ
+ * 更新されない」不具合の発生源であったため廃止した。
+ *
+ * デバウンスは束ねるためのものであり、遅らせるためのものではない。最後の変更から必ず
+ * 1回通知されること（取りこぼさないこと）が本方式の前提である。
  */
 export class StatusManager {
 	// Event
-	private readonly _onStatusTreeChanged = new vscode.EventEmitter<
-		StatusItem | undefined
-	>();
-	public readonly onStatusTreeChanged: vscode.Event<StatusItem | undefined> =
+	private readonly _onStatusTreeChanged = new vscode.EventEmitter<void>();
+	public readonly onStatusTreeChanged: vscode.Event<void> =
 		this._onStatusTreeChanged.event;
 
 	// Singletonインスタンス
@@ -29,6 +39,13 @@ export class StatusManager {
 
 	// StatusItemTree（ファーストクラスコレクション）
 	private statusItemTree: StatusItemTree;
+
+	// ツリー変更通知のデバウンス
+	private notifyTimer: ReturnType<typeof setTimeout> | undefined;
+	private notifyDebounceMs = DEFAULT_NOTIFY_DEBOUNCE_MS;
+
+	// StatusItemTree の購読（インスタンス差し替え時に張り直す）
+	private treeSubscription: vscode.Disposable | undefined;
 
 	// StatusCollectorPort（DI注入。ファイル状況の収集・更新を担当）
 	private statusCollector: StatusCollectorPort | undefined;
@@ -45,6 +62,18 @@ export class StatusManager {
 	private constructor() {
 		this.config = Configuration.getInstance();
 		this.statusItemTree = new StatusItemTree();
+		this.subscribeToTree();
+	}
+
+	/**
+	 * 現在の StatusItemTree の変更シグナルを購読する（インスタンス差し替え時に張り直す）。
+	 * 構築時から購読しておくことで、全体再構築より前の変更も通知が取りこぼされない。
+	 */
+	private subscribeToTree(): void {
+		this.treeSubscription?.dispose();
+		this.treeSubscription = this.statusItemTree.onTreeChanged(() => {
+			this.scheduleNotify();
+		});
 	}
 
 	/**
@@ -56,6 +85,42 @@ export class StatusManager {
 			StatusManager.instance = new StatusManager();
 		}
 		return StatusManager.instance;
+	}
+
+	/**
+	 * 通知デバウンスの待ち時間を設定する（テスト用。0 で即時通知）
+	 */
+	public setNotifyDebounceMs(ms: number): void {
+		this.notifyDebounceMs = Math.max(0, ms);
+	}
+
+	/**
+	 * 保留中の通知があれば即座に発行する（テスト・確実な反映が必要な箇所用）
+	 */
+	public flushPendingNotification(): void {
+		if (this.notifyTimer) {
+			clearTimeout(this.notifyTimer);
+			this.notifyTimer = undefined;
+			this._onStatusTreeChanged.fire();
+		}
+	}
+
+	/**
+	 * ツリー変更通知を予約する。待ち時間内の複数変更は1回にまとめられ、
+	 * 最後の変更から必ず1回発行される。
+	 */
+	private scheduleNotify(): void {
+		if (this.notifyDebounceMs === 0) {
+			this._onStatusTreeChanged.fire();
+			return;
+		}
+		if (this.notifyTimer) {
+			clearTimeout(this.notifyTimer);
+		}
+		this.notifyTimer = setTimeout(() => {
+			this.notifyTimer = undefined;
+			this._onStatusTreeChanged.fire();
+		}, this.notifyDebounceMs);
 	}
 
 	/**
@@ -91,12 +156,15 @@ export class StatusManager {
 				this.statusItemTree.dispose();
 			}
 			this.statusItemTree = await this.statusCollector.buildStatusItemTree();
-			this.statusItemTree.onTreeChanged((item) => {
-				this._onStatusTreeChanged.fire(item);
-			});
+			// 差し替え前のツリーへの購読を破棄してから張り直す
+			this.subscribeToTree();
 
-			// イベントを発火（ツリー全体更新を通知、undefinedはツリー全体更新の意味）
-			this._onStatusTreeChanged.fire(undefined);
+			// 全体再構築の完了を即時通知する（保留中の予約があれば破棄して重複を防ぐ）
+			if (this.notifyTimer) {
+				clearTimeout(this.notifyTimer);
+				this.notifyTimer = undefined;
+			}
+			this._onStatusTreeChanged.fire();
 
 			const endTime = performance.now();
 			console.log(
@@ -110,18 +178,9 @@ export class StatusManager {
 	}
 
 	/**
-	 * notifyRootChanged
-	 * ツリーは再構築せず、ルート直下の集約表示（StatusTreeProvider の Needs Attention 仮想ノード等）
-	 * だけを再評価させる軽量通知。need フラグの解決/宣言（review・verify-deletion・isolate）など、
-	 * ルート集計に影響しうるが高頻度ではない操作の直後に呼ぶ。
-	 */
-	public notifyRootChanged(): void {
-		this._onStatusTreeChanged.fire(undefined);
-	}
-
-	/**
 	 * updateFileStatus
-	 * 指定ファイルのステータスを再構築し、イベント通知
+	 * 指定ファイルのステータスを再構築し、イベント通知。
+	 * ファイルが既に存在しない場合はツリーから取り除く（削除・リネームの自己修復）。
 	 */
 	public async refreshFileStatus(filePath: string): Promise<void> {
 		try {
@@ -131,6 +190,18 @@ export class StatusManager {
 				);
 				return;
 			}
+
+			if (!fs.existsSync(filePath)) {
+				if (this.statusItemTree.removeFile(filePath)) {
+					Logger.getInstance().debug(
+						"status",
+						"Removed missing file from status tree",
+						{ filePath },
+					);
+				}
+				return;
+			}
+
 			const newStatus = await this.statusCollector.collectFileStatus(filePath);
 
 			// 該当ファイルのStatusItemを再構築
@@ -236,6 +307,12 @@ export class StatusManager {
 	 * 拡張機能の無効化時に呼び出される
 	 */
 	public dispose(): void {
+		if (this.notifyTimer) {
+			clearTimeout(this.notifyTimer);
+			this.notifyTimer = undefined;
+		}
+		this.treeSubscription?.dispose();
+		this.treeSubscription = undefined;
 		this.statusItemTree.dispose();
 		this._onStatusTreeChanged.dispose();
 
