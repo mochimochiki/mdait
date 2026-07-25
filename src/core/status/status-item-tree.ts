@@ -522,6 +522,11 @@ export class StatusItemTree {
 	private pruneEmptyDirectories(dirPath: string, stopRoot: string): void {
 		let current = dirPath;
 		while (current !== stopRoot) {
+			// transPairs のルートディレクトリ自体は空でも消さない（選択中の対象は常に出す）。
+			// stopRoot の算出が想定外だった場合の安全弁も兼ねる。
+			if (this.isRootDirectory(current)) {
+				return;
+			}
 			if (this.getFilesInDirectoryRecursive(current).length > 0) {
 				return;
 			}
@@ -532,6 +537,19 @@ export class StatusItemTree {
 			}
 			current = parent;
 		}
+	}
+
+	/**
+	 * 指定パスが transPairs のルートディレクトリそのものかを判定する
+	 */
+	private isRootDirectory(dirPath: string): boolean {
+		const baseDir =
+			this.configBaseDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const absoluteDirPath = path.resolve(dirPath);
+		return this.rootDirectories.some((rootDir) => {
+			const absoluteRootDir = baseDir ? path.resolve(baseDir, rootDir) : rootDir;
+			return absoluteRootDir === absoluteDirPath;
+		});
 	}
 
 	public updateFilePartial(
@@ -545,6 +563,10 @@ export class StatusItemTree {
 
 		// 既存のファイルStatusItemを更新
 		Object.assign(existingItem, updates);
+
+		// updates に children が含まれていても索引が古い配列を指し続けないよう張り直す
+		// （索引と children の同一インスタンス性は updateUnit が依存する不変条件）
+		this.rebuildUnitIndexForFile(existingItem);
 
 		// ディレクトリ更新
 		this.addOrUpdateDirectory(existingItem);
@@ -681,19 +703,25 @@ export class StatusItemTree {
 		const baseDir =
 			this.configBaseDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		try {
-			// rootDirectoriesのいずれかの子孫か（ディレクトリ階層で比較）
+			// rootDirectoriesのうち最も深く一致するものを選ぶ。
+			// 最初の一致を返すと、source が target の祖先になる構成
+			// （例: sourceDir "docs" / targetDir "docs/ja"、sourceDir "."）で
+			// 停止ルートが浅くなり、集計や刈り取りがターゲットのルートを越えてしまう。
+			let best: string | undefined;
 			for (const rootDir of this.rootDirectories) {
 				const absoluteRootDir = baseDir
 					? path.resolve(baseDir, rootDir)
 					: rootDir;
 				const absoluteDirPath = path.resolve(dirPath);
 				// ディレクトリ階層で比較
-				if (
-					absoluteDirPath === absoluteRootDir ||
-					absoluteDirPath.startsWith(absoluteRootDir + path.sep)
-				) {
-					return absoluteRootDir;
+				if (isSameOrUnder(absoluteDirPath, absoluteRootDir)) {
+					if (!best || absoluteRootDir.length > best.length) {
+						best = absoluteRootDir;
+					}
 				}
+			}
+			if (best) {
+				return best;
 			}
 		} catch {
 			// FileExplorer 初期化不可などは無視してフォールバック

@@ -282,7 +282,7 @@
   "This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?": "既存の訳文を採用（need:review を付与）し、AI で位置ベースのユニット対応付けを審査して誤ペアを修正します。Markdownファイルの翻訳マーカーを更新します。事前にワークスペースをgitにコミットしておくことを推奨します。続行しますか？",
   "Note": "ノート",
   "$(arrow-right) Next": "$(arrow-right) 次へ",
-  "Tooltip: Jump to the next unit needing attention": "ツールチップ: 次の要対応ユニットへ移動します",
+  "Tooltip: Jump to the next unit needing attention": "次の要対応ユニットへ移動します",
   "$(comment) Note": "$(comment) ノート",
   "Tooltip: Add or edit a note for this unit (shown to the AI during audit)": "ヒント: このユニットのノートを追加/編集します（audit 時に AI へ渡されます）",
   "Could not find a unit at this position.": "この位置にユニットが見つかりませんでした。",

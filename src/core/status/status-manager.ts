@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
@@ -15,6 +14,13 @@ import { StatusItemTree } from "./status-item-tree";
 
 /** ツリー変更通知を束ねる既定の待ち時間（ミリ秒） */
 const DEFAULT_NOTIFY_DEBOUNCE_MS = 80;
+
+/**
+ * 変更が途切れずに続く場合でも、この時間を超えたら必ず通知する上限（ミリ秒）。
+ * これが無いと、ディレクトリ一括 sync のように短い間隔で更新が続く処理の最中は
+ * 通知が一度も出ず、終わるまでツリーが凍って見える。
+ */
+const DEFAULT_NOTIFY_MAX_WAIT_MS = 300;
 
 /**
  * statusItemTreeに全StatusItemをツリーとして保持し、状態管理を行います。
@@ -43,6 +49,9 @@ export class StatusManager {
 	// ツリー変更通知のデバウンス
 	private notifyTimer: ReturnType<typeof setTimeout> | undefined;
 	private notifyDebounceMs = DEFAULT_NOTIFY_DEBOUNCE_MS;
+	private notifyMaxWaitMs = DEFAULT_NOTIFY_MAX_WAIT_MS;
+	/** 保留中の通知のうち、最初の変更が起きた時刻（maxWait の起点） */
+	private pendingSince: number | undefined;
 
 	// StatusItemTree の購読（インスタンス差し替え時に張り直す）
 	private treeSubscription: vscode.Disposable | undefined;
@@ -89,38 +98,70 @@ export class StatusManager {
 
 	/**
 	 * 通知デバウンスの待ち時間を設定する（テスト用。0 で即時通知）
+	 * @param ms 束ねる待ち時間
+	 * @param maxWaitMs 変更が続く場合でも必ず通知する上限（省略時は既定値を維持）
 	 */
-	public setNotifyDebounceMs(ms: number): void {
+	public setNotifyDebounceMs(ms: number, maxWaitMs?: number): void {
 		this.notifyDebounceMs = Math.max(0, ms);
+		if (maxWaitMs !== undefined) {
+			this.notifyMaxWaitMs = Math.max(0, maxWaitMs);
+		}
 	}
 
 	/**
-	 * 保留中の通知があれば即座に発行する（テスト・確実な反映が必要な箇所用）
+	 * 保留中の通知があれば即座に発行する（テスト用）
 	 */
 	public flushPendingNotification(): void {
 		if (this.notifyTimer) {
-			clearTimeout(this.notifyTimer);
-			this.notifyTimer = undefined;
-			this._onStatusTreeChanged.fire();
+			this.fireNotifyNow();
 		}
 	}
 
 	/**
 	 * ツリー変更通知を予約する。待ち時間内の複数変更は1回にまとめられ、
 	 * 最後の変更から必ず1回発行される。
+	 *
+	 * 変更が待ち時間より短い間隔で続く場合も、最初の変更から maxWait を超えたら発行する。
+	 * これが無いと一括処理中はツリーが凍って見える。
 	 */
 	private scheduleNotify(): void {
 		if (this.notifyDebounceMs === 0) {
 			this._onStatusTreeChanged.fire();
 			return;
 		}
+
+		const now = Date.now();
+		if (this.pendingSince === undefined) {
+			this.pendingSince = now;
+		} else if (now - this.pendingSince >= this.notifyMaxWaitMs) {
+			// 上限に達した: 束ねるのをやめて即座に発行する
+			this.fireNotifyNow();
+			return;
+		}
+
 		if (this.notifyTimer) {
 			clearTimeout(this.notifyTimer);
 		}
-		this.notifyTimer = setTimeout(() => {
+		const remainingMaxWait = Math.max(
+			0,
+			this.notifyMaxWaitMs - (now - this.pendingSince),
+		);
+		this.notifyTimer = setTimeout(
+			() => this.fireNotifyNow(),
+			Math.min(this.notifyDebounceMs, remainingMaxWait),
+		);
+	}
+
+	/**
+	 * 保留状態をクリアして通知を発行する
+	 */
+	private fireNotifyNow(): void {
+		if (this.notifyTimer) {
+			clearTimeout(this.notifyTimer);
 			this.notifyTimer = undefined;
-			this._onStatusTreeChanged.fire();
-		}, this.notifyDebounceMs);
+		}
+		this.pendingSince = undefined;
+		this._onStatusTreeChanged.fire();
 	}
 
 	/**
@@ -149,22 +190,19 @@ export class StatusManager {
 				return;
 			}
 			this.initialize();
-			// StatusCollectorから直接StatusItemTreeを取得
-			if (this.statusItemTree) {
-				// 既存のツリーをクリア
-				this.statusItemTree.clear();
-				this.statusItemTree.dispose();
-			}
-			this.statusItemTree = await this.statusCollector.buildStatusItemTree();
+			// 新しいツリーを取得してから差し替える。
+			// 先に clear/dispose すると、収集が失敗したときに「空にされた上に
+			// EventEmitter が破棄済み」の壊れたツリーだけが残る。
+			const newTree = await this.statusCollector.buildStatusItemTree();
+			const previousTree = this.statusItemTree;
+			this.statusItemTree = newTree;
+			previousTree?.clear();
+			previousTree?.dispose();
 			// 差し替え前のツリーへの購読を破棄してから張り直す
 			this.subscribeToTree();
 
-			// 全体再構築の完了を即時通知する（保留中の予約があれば破棄して重複を防ぐ）
-			if (this.notifyTimer) {
-				clearTimeout(this.notifyTimer);
-				this.notifyTimer = undefined;
-			}
-			this._onStatusTreeChanged.fire();
+			// 全体再構築の完了を即時通知する（保留中の予約は破棄して重複を防ぐ）
+			this.fireNotifyNow();
 
 			const endTime = performance.now();
 			console.log(
@@ -191,7 +229,7 @@ export class StatusManager {
 				return;
 			}
 
-			if (!fs.existsSync(filePath)) {
+			if (!this.statusCollector.fileExists(filePath)) {
 				if (this.statusItemTree.removeFile(filePath)) {
 					Logger.getInstance().debug(
 						"status",
@@ -311,6 +349,7 @@ export class StatusManager {
 			clearTimeout(this.notifyTimer);
 			this.notifyTimer = undefined;
 		}
+		this.pendingSince = undefined;
 		this.treeSubscription?.dispose();
 		this.treeSubscription = undefined;
 		this.statusItemTree.dispose();

@@ -8,7 +8,7 @@ import {
 	type UnitStatusItem,
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { getSelectedScopeDirs } from "../../core/status/status-scope";
+import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -56,6 +56,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	private needsAttentionItem: DirectoryStatusItem | undefined;
 
+	/**
+	 * Needs Attention ノードを一度でも展開状態で返したか。
+	 * 全体再描画のたびに展開し直してユーザーの操作を打ち消さないためのフラグ。
+	 * ノードが0件で消えたらリセットし、次に現れたときは再び展開して見せる。
+	 */
+	private needsAttentionExpandedOnce = false;
+
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
 		this.configuration = Configuration.getInstance();
@@ -85,8 +92,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	): vscode.TreeItemCollapsibleState {
 		switch (element.type) {
 			case StatusItemType.Directory:
-				// Needs Attention 仮想ノードは常にExpanded（0件時はそもそもツリーに出さない）
+				// Needs Attention 仮想ノードは、現れた最初の1回だけ展開状態で返す。
+				// 全体再描画のたびに Expanded を返すと、ユーザーが畳んでも保存のたびに
+				// 勝手に開き直してしまう。2回目以降は Collapsed を返し、展開状態の管理は
+				// VS Code（treeItem.id 単位）に委ねる。
 				if (element.directoryPath === NEEDS_ATTENTION_ID) {
+					if (this.needsAttentionExpandedOnce) {
+						return vscode.TreeItemCollapsibleState.Collapsed;
+					}
+					this.needsAttentionExpandedOnce = true;
 					return vscode.TreeItemCollapsibleState.Expanded;
 				}
 				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
@@ -336,6 +350,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 						await this.statusManager.buildStatusItemTree();
 					}
 				} catch (e) {
+					// 失敗を記憶しない。記憶すると、一時的な失敗でツリーが空のまま固定され、
+					// VS Code を再読込するまで復帰できなくなる
+					this.initPromise = undefined;
 					Logger.getInstance().warn(
 						"status-tree",
 						"failed to initialize status",
@@ -413,6 +430,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		const count = this.collectNeedsAttentionUnits().length;
 		if (count === 0) {
 			this.needsAttentionItem = undefined;
+			// 次に要対応が現れたときは、また展開した状態で見せる
+			this.needsAttentionExpandedOnce = false;
 			return undefined;
 		}
 		this.needsAttentionItem = {

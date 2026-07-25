@@ -311,6 +311,9 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					title: vscode.l10n.t("$(arrow-right) Next"),
 					tooltip: vscode.l10n.t("Tooltip: Jump to the next unit needing attention"),
 					command: "mdait.needsAttention.next",
+					// CodeLens のクリックはカーソルを動かさないため、押した行を明示的に渡す。
+					// 渡さないとカーソル位置（多くは先頭行）が起点になり、前へ戻ってしまう。
+					arguments: [range],
 				}),
 			);
 		}

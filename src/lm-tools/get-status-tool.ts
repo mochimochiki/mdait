@@ -34,13 +34,15 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 	): Promise<vscode.LanguageModelToolResult> {
 		try {
 			const statusManager = StatusManager.getInstance();
-			const tree = statusManager.getStatusItemTree();
 
 			// StatusManagerが初期化されていない場合はビルド
-			if (tree.isEmpty()) {
+			if (statusManager.getStatusItemTree().isEmpty()) {
 				logger.info("LanguageModelTool", "Building status tree for the first time");
 				await statusManager.buildStatusItemTree();
 			}
+			// buildStatusItemTree はツリーをインスタンスごと差し替えるため、
+			// ビルド後に取り直す（ビルド前に掴むと常に空のツリーを見てしまう）
+			const tree = statusManager.getStatusItemTree();
 
 			const scopePath = options.input.path ?? options.input.filePath;
 			const detail = options.input.detail === true;

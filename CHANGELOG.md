@@ -35,9 +35,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Unmarked orphan target content is no longer deleted by the orphan policy; sync now flags it with `need:review` (no `from`) so a human decides between declaring it independent, isolating it, or deleting it
 - `sync.orphanTargetPolicy` is narrowed to `"delete" | "verify"` and now applies only to managed orphans (units with a dangling `from`); legacy values `"keep"`/`"backfill"` are interpreted as `"verify"` with a warning
 - TM commit filter is now inclusive: only units with `from` and no `need` are committed (unknown `need` values no longer slip through); pairs whose source unit still carries a `need` are skipped as `sourcePending`, and `need:verify-deletion` units are no longer committed
-- StatusTree updates are now a single "something changed" signal, debounced and applied as one full refresh, instead of per-node partial notifications (expanded/selected state is preserved via stable tree item ids)
+- StatusTree updates are now a single "something changed" signal, debounced (80ms, with a 300ms cap so long batches still paint) and applied as one full refresh, instead of per-node partial notifications (expanded/selected state is preserved via stable tree item ids)
 - Needs Attention is now scoped to the selected translation pairs, matching the rest of the tree (items from unselected languages no longer appear)
-- Files deleted or renamed on disk are now removed from the status tree instead of lingering until a full rebuild
+- When a command refreshes a file that no longer exists on disk, it is now removed from the status tree instead of lingering until a full rebuild (there is still no file watcher, so deleting a file outside mdait is not picked up until something touches it)
 
 ### Removed
 

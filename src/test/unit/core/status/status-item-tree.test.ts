@@ -389,6 +389,36 @@ suite("StatusItemTree", () => {
 			assert.ok(tree.isEmpty());
 		});
 
+		test("sourceがtargetの祖先である構成でも、targetのルートが消えないこと", () => {
+			// 例: sourceDir "docs" / targetDir "docs/ja"。停止ルートの判定が
+			// 「最初に一致したルート」だと docs/ja に達する前に停止せず、
+			// ターゲットのルートごと刈り取られてツリーから消える
+			const docsDir = path.resolve("/mock-workspace/docs");
+			const jaSubDir = path.join(docsDir, "ja");
+			const srcPath = path.join(docsDir, "a.md");
+			const tgtPath = path.join(jaSubDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(srcPath, Status.Source),
+					makeFileItem(tgtPath, Status.Translated),
+				],
+				["docs", "docs/ja"],
+				"/mock-workspace",
+			);
+
+			tree.removeFile(tgtPath);
+
+			assert.ok(
+				tree.getDirectory(jaSubDir),
+				"ターゲットのルートディレクトリは空になっても残ること",
+			);
+			assert.strictEqual(
+				tree.getRootDirectoryItems([jaSubDir]).length,
+				1,
+				"ツリーのルート一覧からも消えないこと",
+			);
+		});
+
 		test("配下が空になったサブディレクトリは取り除かれ、ルートは残ること", () => {
 			const jaDir = path.resolve("/mock-workspace/ja");
 			const subDir = path.join(jaDir, "guide");
