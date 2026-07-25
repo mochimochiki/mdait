@@ -1,5 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {
+	getSelectedScopeFiles,
+	getSelectedTargetLabels,
+} from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
 import type { FileStatusItem } from "../core/status/status-item";
 import { Logger } from "../infra/logging/logger";
@@ -68,8 +72,13 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 					);
 				}
 			} else {
-				files = tree.getFilesAll();
-				scopeLabel = "workspace";
+				// パス未指定の全体集計は、人間のステータスツリーと同じく選択中の
+				// transPair に絞る。範囲が分かるようラベルに対象言語を添える
+				// （明示的にパスを指定された場合はその指定を尊重し、絞り込まない）。
+				files = getSelectedScopeFiles(tree);
+				const targets = getSelectedTargetLabels();
+				scopeLabel =
+					targets.length > 0 ? `workspace (targets: ${targets.join(", ")})` : "workspace";
 			}
 
 			const data = buildStatusData(files, detail);

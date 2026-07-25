@@ -1,6 +1,8 @@
 import * as path from "node:path";
 import { SelectionState } from "../../core/status/selection-state";
-import type { TransPair } from "../../infra/config/configuration";
+import type { FileStatusItem } from "../../core/status/status-item";
+import type { StatusItemTree } from "../../core/status/status-item-tree";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 
 /** getSelectedScopeDirs が必要とする設定の最小形（テスト容易性のため構造で受ける） */
 export interface ScopeConfig {
@@ -11,8 +13,9 @@ export interface ScopeConfig {
 /**
  * 選択中の transPair に属するディレクトリ（source / target）の絶対パス集合を返す。
  *
- * ステータスツリー本体・要対応キュー・「次の要対応へ」が同じ範囲を見るための唯一の算出点。
- * 算出点が分かれていると、ツリーには出ていないファイルの項目が要対応にだけ並ぶ、といった
+ * ステータスツリー本体・要対応キュー・「次の要対応へ」・LM Tools の集計が
+ * 同じ範囲を見るための唯一の算出点。算出点が分かれていると、ツリーには出ていない
+ * ファイルの項目が要対応にだけ並ぶ、人間とエージェントで件数が食い違う、といった
  * 不整合が生まれる（ADR-260724-01）。
  *
  * core ではなく commands 層に置く。SelectionState は UI セッションの選択状態であり、
@@ -31,4 +34,28 @@ export function getSelectedScopeDirs(config: ScopeConfig): string[] {
 			]),
 		),
 	);
+}
+
+/**
+ * 選択中の transPair に属するファイルのみをステータスツリーから取得する。
+ *
+ * ワークスペース全体を対象にする集計（LM Tools のステータス要約など）は必ずこれを通す。
+ * sync / trans は元から選択中のペアだけを処理するため、集計だけが全ペアを数えると
+ * 「エージェントには見えるが誰も処理しない件数」が報告されることになる。
+ */
+export function getSelectedScopeFiles(tree: StatusItemTree): FileStatusItem[] {
+	return tree.getFilesInScope(
+		getSelectedScopeDirs(Configuration.getInstance()),
+	);
+}
+
+/**
+ * 選択中の対象言語（targetLang、無ければ targetDir）の一覧を返す。
+ * 集計結果がどの範囲のものかをエージェントに伝えるために使う。
+ */
+export function getSelectedTargetLabels(): string[] {
+	const config = Configuration.getInstance();
+	return SelectionState.getInstance()
+		.filterTransPairs(config.transPairs)
+		.map((pair) => pair.targetLang ?? pair.targetDir);
 }

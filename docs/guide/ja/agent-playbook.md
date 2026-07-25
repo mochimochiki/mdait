@@ -26,7 +26,9 @@ AIエージェント（Copilot Chat 等）が mdait の LM Tools を使ってサ
 
 ## 完成状態の判定基準（ゴール）
 
-以下がすべて成立したとき完了と判定する。各条件はツール出力から機械的に確認できる:
+以下がすべて成立したとき完了と判定する。各条件はツール出力から機械的に確認できる。
+
+> **判定範囲**: パスを指定しない観測・実行はすべて「選択中の対象言語（transPair）」に限られる。`mdait_getStatus` の summary に対象言語が出る（例: `workspace (targets: ja)`）ので、複数言語を運用している場合は**言語ごとに完成条件を確認する**こと。選択の切り替えはユーザーの操作（ステータスビューの対象言語選択）である。
 
 1. `mdait_getStatus` の `data.needs` で `translate / revise / review / verifyDeletion / other` がすべて 0（`isolate` は定常状態なので除外してよい）
 2. `mdait_validate` の `data.violations` が空配列

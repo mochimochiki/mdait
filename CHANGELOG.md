@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - TM commit filter is now inclusive: only units with `from` and no `need` are committed (unknown `need` values no longer slip through); pairs whose source unit still carries a `need` are skipped as `sourcePending`, and `need:verify-deletion` units are no longer committed
 - StatusTree updates are now a single "something changed" signal, debounced (80ms, with a 300ms cap so long batches still paint) and applied as one full refresh, instead of per-node partial notifications (expanded/selected state is preserved via stable tree item ids)
 - Needs Attention is now scoped to the selected translation pairs, matching the rest of the tree (items from unselected languages no longer appear)
+- Workspace-wide status reported by the Copilot Chat tools (`mdait_getStatus`, `mdait_sync`, `mdait_aiReview`, `mdait_adopt`) is now scoped to the selected translation pairs too, so humans and agents see the same counts; `mdait_getStatus` names the scope in its summary (`workspace (targets: ja)`). Passing an explicit path still reports exactly that path.
 - When a command refreshes a file that no longer exists on disk, it is now removed from the status tree instead of lingering until a full rebuild (there is still no file watcher, so deleting a file outside mdait is not picked up until something touches it)
 
 ### Removed

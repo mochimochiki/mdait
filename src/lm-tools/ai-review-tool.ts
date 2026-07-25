@@ -4,6 +4,7 @@ import { executeAiReviewForFiles } from "../commands/ai-review/review-command";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
 import { resolveReviewTargets } from "../commands/ai-review/review-targets";
 import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
+import { getSelectedScopeFiles } from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
@@ -234,7 +235,7 @@ function buildAiReviewData(
 		},
 		dryRun,
 		escalations: [],
-		status: buildStatusData(StatusManager.getInstance().getStatusItemTree().getFilesAll(), false),
+		status: buildStatusData(getSelectedScopeFiles(StatusManager.getInstance().getStatusItemTree()), false),
 	};
 
 	for (const fileResult of results) {

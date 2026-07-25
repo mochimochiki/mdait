@@ -6,6 +6,12 @@ import * as assert from "node:assert";
 import * as path from "node:path";
 import { getSelectedScopeDirs } from "../../../../commands/shared/status-scope";
 import { SelectionState } from "../../../../core/status/selection-state";
+import {
+	type FileStatusItem,
+	Status,
+	StatusItemType,
+} from "../../../../core/status/status-item";
+import { StatusItemTree } from "../../../../core/status/status-item-tree";
 import type { TransPair } from "../../../../infra/config/configuration";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -70,5 +76,57 @@ suite("getSelectedScopeDirs（表示範囲の算出）", () => {
 			path.join(BASE_DIR, "ja"),
 			path.join(BASE_DIR, "ko"),
 		]);
+	});
+});
+
+suite("StatusItemTree.getFilesInScope（集計範囲の絞り込み）", () => {
+	let tree: StatusItemTree;
+
+	function makeFile(filePath: string): FileStatusItem {
+		return {
+			type: StatusItemType.File,
+			label: path.basename(filePath),
+			filePath,
+			fileName: path.basename(filePath),
+			translatedUnits: 0,
+			totalUnits: 1,
+			status: Status.NeedsTranslation,
+		};
+	}
+
+	setup(() => {
+		__vscodeMockWorkspaceRoot = "/mock-workspace";
+		tree = new StatusItemTree();
+		tree.buildTree(
+			[
+				makeFile(path.join(BASE_DIR, "en", "a.md")),
+				makeFile(path.join(BASE_DIR, "ja", "a.md")),
+				makeFile(path.join(BASE_DIR, "ko", "a.md")),
+			],
+			["en", "ja", "ko"],
+			BASE_DIR,
+		);
+	});
+
+	teardown(() => {
+		tree.dispose();
+	});
+
+	test("対象ディレクトリ配下のファイルだけが返ること", () => {
+		// LM Tools の全体集計を人間のツリーと同じ範囲に揃えるための絞り込み。
+		// 範囲が食い違うと、エージェントだけが「誰も処理しない件数」を報告する
+		const files = tree.getFilesInScope([
+			path.join(BASE_DIR, "en"),
+			path.join(BASE_DIR, "ja"),
+		]);
+
+		assert.deepStrictEqual(
+			files.map((f) => path.basename(path.dirname(f.filePath))).sort(),
+			["en", "ja"],
+		);
+	});
+
+	test("未指定なら全ファイルが返ること", () => {
+		assert.strictEqual(tree.getFilesInScope().length, 3);
 	});
 });

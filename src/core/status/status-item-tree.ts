@@ -120,6 +120,19 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * 指定ディレクトリ集合の配下にあるファイルStatusItemのみを取得する。
+	 * 表示・集計を選択中の transPair に揃えるための絞り込み（未指定なら全件）。
+	 */
+	public getFilesInScope(scopeDirs?: string[]): FileStatusItem[] {
+		if (!scopeDirs) {
+			return this.getFilesAll();
+		}
+		return this.getFilesAll().filter((file) =>
+			this.isInScope(file.filePath, scopeDirs),
+		);
+	}
+
+	/**
 	 * 全ソースファイルStatusItemを取得
 	 */
 	public getSourceFilesAll(): FileStatusItem[] {
@@ -193,10 +206,7 @@ export class StatusItemTree {
 	 */
 	public getNeedsAttentionUnits(scopeDirs?: string[]): UnitStatusItem[] {
 		const matches: UnitStatusItem[] = [];
-		for (const file of this.getFilesAll()) {
-			if (scopeDirs && !this.isInScope(file.filePath, scopeDirs)) {
-				continue;
-			}
+		for (const file of this.getFilesInScope(scopeDirs)) {
 			for (const unit of this.getUnitsInFile(file.filePath)) {
 				if (unit.needFlag === "review" || unit.needFlag === "verify-deletion") {
 					matches.push(unit);
