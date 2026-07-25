@@ -110,6 +110,14 @@ export class StatusCollector implements StatusCollectorPort {
 	}
 
 	/**
+	 * ファイルが実在するかを返す（StatusCollectorPort）。
+	 * 消えたファイルをステータスツリーから取り除く判定に使う。
+	 */
+	public fileExists(filePath: string): boolean {
+		return fs.existsSync(filePath);
+	}
+
+	/**
 	 * 単一ファイルの翻訳状況を実際のファイルの状態に基づいて取得する
 	 * @param filePath - 対象ファイルのパス
 	 * @return FileStatusItem - ファイルのステータス

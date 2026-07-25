@@ -259,6 +259,11 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
+		// 裁定待ち（review / verify-deletion）には「次へ」を添え、裁定→次へ をその場で回せるようにする
+		// （UX-R4: ツリーへ戻る往復をなくす）
+		const isAwaitingDecision =
+			marker.need === "review" || marker.need === "verify-deletion";
+
 		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）
 		if (marker.need === "verify-deletion") {
 			codeLenses.push(
@@ -295,6 +300,19 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					title: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
 					tooltip: vscode.l10n.t("Tooltip: Freeze this unit and stop following source updates"),
 					command: markIsolatedCommand,
+					arguments: [range],
+				}),
+			);
+		}
+
+		if (isAwaitingDecision) {
+			codeLenses.push(
+				new vscode.CodeLens(range, {
+					title: vscode.l10n.t("$(arrow-right) Next"),
+					tooltip: vscode.l10n.t("Tooltip: Jump to the next unit needing attention"),
+					command: "mdait.needsAttention.next",
+					// CodeLens のクリックはカーソルを動かさないため、押した行を明示的に渡す。
+					// 渡さないとカーソル位置（多くは先頭行）が起点になり、前へ戻ってしまう。
 					arguments: [range],
 				}),
 			);

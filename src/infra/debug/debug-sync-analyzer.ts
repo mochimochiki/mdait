@@ -93,6 +93,12 @@ export function diffSnapshots(
  *   - path 完全一致の fire(file) があれば「通知済み」
  *   - ディレクトリ通知のみ（dir が path の親）なら「directory-only（ファイルノード未更新の懸念）」
  *   - いずれも無ければ「NOT-FIRED（同期ギャップ）」
+ *
+ * 補足（ADR-260724-01 以降）:
+ *   ステータスツリーの通知は全体再描画（kind==="all"）に一本化されたため、通常の実行では
+ *   1本目の判定で「通知済み」になる。本アナライザの実質的な役割は「状態が変わったのに
+ *   fire が1つも観測されない」ケース（ツリーの変更メソッドを経由しない書き換え等）の検出に
+ *   移った。path 一致・directory-only の判定は、部分通知を再導入した場合に備えて残している。
  */
 export function analyzeSync(
 	diffs: StateDiffEntry[],

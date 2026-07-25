@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { syncCommand } from "../commands/sync/sync-command";
+import { getSelectedScopeFiles } from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
 import { Logger } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
@@ -82,7 +83,8 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 			// 同期後のステータスを取得
 			const statusManager = StatusManager.getInstance();
 			const tree = statusManager.getStatusItemTree();
-			const status = buildStatusData(tree.getFilesAll(), false);
+			// 集計は選択中の transPair に揃える（sync 自体も選択中のペアだけを処理する）
+			const status = buildStatusData(getSelectedScopeFiles(tree), false);
 
 			const data: SyncData = {
 				files: {

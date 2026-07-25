@@ -78,6 +78,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.needsAttention.next",
+        "title": "%mdait.needsAttention.next.title%",
+        "icon": "$(arrow-right)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.term.detect",
         "title": "%mdait.term.detect.title%",
         "icon": "$(repo)",
@@ -275,6 +281,14 @@
         "priority": "default"
       }
     ],
+    "keybindings": [
+      {
+        "command": "mdait.needsAttention.next",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
+        "when": "mdaitConfigured && mdaitHasStatus"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
@@ -465,6 +479,11 @@
         {
           "command": "mdait.unit.unisolate",
           "when": "view == mdait.status && viewItem == mdaitUnitTargetIsolated",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.needsAttention.next",
+          "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
           "group": "inline"
         },
         {

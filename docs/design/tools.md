@@ -14,6 +14,7 @@ Tools層は、GitHub Copilot ChatなどのLanguageModel向けにmdaitの機能�
 2. **読み取り専用優先**: 副作用のある操作には適切な確認UIを提供
 3. **エラーハンドリング**: 全てのエラーをキャッチし、ユーザーフレンドリーなメッセージを返す
 4. **i18n対応**: `vscode.l10n.t()` を使用して国際化対応
+5. **観測範囲は人間と同じ**: パスを指定しない全体集計は、ステータスツリーと同じく**選択中の transPair のみ**を対象とする（範囲の算出は `getSelectedScopeFiles` に集約。ADR-260724-01）。sync・trans が選択中のペアだけを処理するため、集計だけが全ペアを数えると「誰も処理しない件数」を報告することになる。パスを明示指定された場合はその指定を尊重し、絞り込まない
 
 **設計意図**: 既存のCommands/Core層の薄いラッパーとして設計することで、Copilot Chat連携機能の追加によるビジネスロジックの二重管理を防ぎます。
 
@@ -94,6 +95,7 @@ interface GetStatusInput {
 **実装**:
 - `StatusManager.getStatusItemTree()` から情報を取得
 - `data` に全体集計（総/翻訳済/エラーユニット数、needフラグ内訳）を格納
+- パス未指定時の集計対象は選択中の transPair のみ。summary のスコープラベルに対象言語を明示する（例: `workspace (targets: ja)`）
 - `detail:true` のとき、needのあるファイルのみの内訳一覧を `data.files` に格納（出力爆発防止）。各ファイルには need のあるユニットの一覧 `units: [{hash, title?, need}]` を含める（need なしユニットは含めない・isolate は含める・1ファイル上限50件、超過時 `unitsTruncated: true`）。エージェントはこの hash を `mdait_resolve` の `unitHashes` にそのまま渡せる
 - StatusManagerが初期化されていない場合は `buildStatusItemTree()` を実行
 

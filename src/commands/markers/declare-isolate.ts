@@ -98,7 +98,6 @@ export async function declareIsolateForFile(
 			}
 		}
 		await StatusManager.getInstance().refreshFileStatus(absPath);
-		StatusManager.getInstance().notifyRootChanged();
 	}
 
 	logger.info("resolve", "Isolate declared", { file: absPath, hash: unitHash, declared: outcome.declared });
