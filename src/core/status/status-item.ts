@@ -43,6 +43,12 @@ interface BaseStatusItem {
 	isTranslating?: boolean;
 
 	/**
+	 * ラベルの右に薄字で添える副題（TreeItem.description）。
+	 * 要対応キューでファイル名と種類を示すなど、ラベルだけでは項目を識別できない場合に使う。
+	 */
+	description?: string;
+
+	/**
 	 * StatusTree の集約仮想ノード（Needs Attention 等）に表示するクローンであることを示す。
 	 * 実体（実ファイル配下の本体）と区別するため tree item id にサフィックスを付与する用途のみに使う。
 	 */

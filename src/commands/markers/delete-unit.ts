@@ -110,7 +110,6 @@ export async function deleteUnitFromFile(
 			}
 		}
 		await StatusManager.getInstance().refreshFileStatus(absPath);
-		StatusManager.getInstance().notifyRootChanged();
 	}
 
 	logger.info("resolve", "Unit deleted", { file: absPath, hash: unitHash, deleted: outcome.deleted });
