@@ -1,12 +1,12 @@
 ﻿# Core
 
-[architecture](../architecture.md) > **Core**
+[architecture](../design.md) > **Core**
 
 Core層は翻訳ドメインの純粋なロジック（ユニット解析・ハッシュ・ステータス・TM）をVS Code API非依存のモジュールとして提供します。
 
 ## mdaitUnit
 
-mdaitUnitとはMarkdown文書を翻訳管理単位（ユニット）に分割したものです。見出しまたはmdaitマーカーを境界とし、本文・マーカー・位置情報の3要素を持ちます（[architecture.md](../architecture.md) P1参照）。
+mdaitUnitとはMarkdown文書を翻訳管理単位（ユニット）に分割したものです。見出しまたはmdaitマーカーを境界とし、本文・マーカー・位置情報の3要素を持ちます（[design.md](../design.md) P1参照）。
 
 ### 構造
 
@@ -74,7 +74,7 @@ const units = parseMarkdown(markdownText, config);
 
 ## Hash & Normalizer
 
-行末空白・連続空行・コードフェンス言語指定・リンク参照順序の差異を吸収し、本質的な内容変更のみを検出します（[architecture.md](../architecture.md) P2参照）。
+行末空白・連続空行・コードフェンス言語指定・リンク参照順序の差異を吸収し、本質的な内容変更のみを検出します（[design.md](../design.md) P2参照）。
 
 ```mermaid
 graph LR
@@ -89,7 +89,7 @@ graph LR
 
 ## Status管理
 
-ディレクトリ/ファイル/ユニット階層をMap構造で保持し、O(1)（定数時間）検索を実現します（[architecture.md](../architecture.md) P3参照）。ファイルごとに再計算することで、個別ファイルの変更時に全体を走査する必要がありません。
+ディレクトリ/ファイル/ユニット階層をMap構造で保持し、O(1)（定数時間）検索を実現します（[design.md](../design.md) P3参照）。ファイルごとに再計算することで、個別ファイルの変更時に全体を走査する必要がありません。
 
 ### StatusItemTree
 
@@ -117,7 +117,7 @@ await manager.refreshFileStatus(filePath);
 
 ### StatusCollectorPort
 
-Core層に定義されたポートインターフェース。StatusManager（Core層）がCommands層のStatusCollectorに直接依存しないよう、DI境界を提供します（[architecture.md](../architecture.md) P5参照）。
+Core層に定義されたポートインターフェース。StatusManager（Core層）がCommands層のStatusCollectorに直接依存しないよう、DI境界を提供します（[design.md](../design.md) P5参照）。
 
 ```typescript
 export interface StatusCollectorPort {
@@ -185,7 +185,7 @@ embedded↔external の一括変換は [`markers-migration.ts`](../../src/comman
 
 ## Diff生成
 
-trans実行時、旧レジストリと現在のコンテンツから差分を生成します。LLMには`=`/`-`/`+`プレフィックス形式のパッチを入出力フォーマットとして用い、機械的に適用可能な変更指示をやり取りすることで、変更箇所以外の既存訳文を維持します（[architecture.md](../architecture.md) P4参照）。一方で、ユーザーが確認するための差分ビュー（例: VS Code上のdiff表示やログ・レビュー用のdiff）にはunified diff形式を用い、その生成には`diff`パッケージを使用します。
+trans実行時、旧レジストリと現在のコンテンツから差分を生成します。LLMには`=`/`-`/`+`プレフィックス形式のパッチを入出力フォーマットとして用い、機械的に適用可能な変更指示をやり取りすることで、変更箇所以外の既存訳文を維持します（[design.md](../design.md) P4参照）。一方で、ユーザーが確認するための差分ビュー（例: VS Code上のdiff表示やログ・レビュー用のdiff）にはunified diff形式を用い、その生成には`diff`パッケージを使用します。
 
 **実装**: [`src/core/diff/`](../../src/core/diff/)
 

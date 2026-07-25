@@ -1,6 +1,6 @@
 # mdait UX設計書 — 人間とエージェントの体験全体像
 
-> mdait の**ユーザー体験（UX）全体を俯瞰する基準ドキュメント**である。人間（翻訳運用者）と AI エージェントという2種類のユーザーのジャーニー・接点・状態可視化・体験原則をここに集約する。個々の UI 部品の設計は [design/ui.md](design/ui.md)、エージェント・オーケストレーションの設計とロードマップは [design/agent-orchestration.md](design/agent-orchestration.md)、アーキテクチャ原則は [architecture.md](architecture.md) を参照。UX に関わる機能追加・変更時は必ず本ドキュメントとの整合を確認すること。
+> mdait の**ユーザー体験（UX）全体を俯瞰する基準ドキュメント**である。人間（翻訳運用者）と AI エージェントという2種類のユーザーのジャーニー・接点・状態可視化・体験原則をここに集約する。個々の UI 部品の設計は [design/ui.md](design/ui.md)、エージェント・オーケストレーションの設計とロードマップは [design/agent-orchestration.md](design/agent-orchestration.md)、アーキテクチャ原則は [design.md](design.md) を参照。UX に関わる機能追加・変更時は必ず本ドキュメントとの整合を確認すること。
 >
 > 調査基準日: 2026-07-12（コミット 949c309 時点の全数調査に基づく。§7 の課題台帳に同日の改修結果を反映済み。同日中に UX-R1（ADR-260712-03）も実装しB-1〜B-3を解消）
 
@@ -23,7 +23,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 
 ## 2. UX原則
 
-アーキテクチャ原則（P1〜P9、[architecture.md](architecture.md)）から導かれる体験側の原則。番号は UX-P 系で振る。
+アーキテクチャ原則（P1〜P9、[design.md](design.md)）から導かれる体験側の原則。番号は UX-P 系で振る。
 
 - **UX-P1: 状態はすべて観測可能** — need フラグ・翻訳率・違反は、人間には StatusTree/CodeLens/Hover で、エージェントには `mdait_getStatus`/`mdait_validate` で、常に同じ真実（マーカー）から観測できる。片方のサーフェスにしか出ない状態を作らない。
 - **UX-P2: 判断は委ねる、決めつけない** — 構造不一致・削除・孤立などの曖昧ケースは `need:review`/`need:verify-deletion` として人間（または委任されたエージェント）の判断に倒す。そして**判断を求めるなら、判断を実行する操作手段を同じ場所に用意する**（判断サーフェスの原則）。
@@ -43,7 +43,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 |---|---|---|
 | **StatusTree**（アクティビティバー🌐） | ディレクトリ/ファイル/ユニットの翻訳状態と行内アクション（▶翻訳・用語・TM・AIレビュー）。運用のホーム画面 | [design/ui.md](design/ui.md) |
 | **Welcome View** | 未設定時: mdait.json 作成/選択/診断。未同期時: 「Initial Sync / Adopt」の2択導線 | [design/ui.md](design/ui.md)、ADR-260711-06 |
-| **CodeLens**（マーカー行） | ユニット単位の翻訳・原文/訳文ジャンプ・need解決（Mark as …）・note編集 | [design/ui.md](design/ui.md) |
+| **CodeLens**（マーカー行） | ユニット単位の翻訳・原文/訳文ジャンプ・need解決（Mark as …）・「その他」メニュー（isolate宣言・note編集。訳文/原文両対応） | [design/ui.md](design/ui.md) |
 | **Hover / Decoration** | 翻訳結果サマリ・用語候補・TM参照・レビュー状態のインライン確認 | [design/ui.md](design/ui.md) |
 | **通知・進捗・確認UI** | withProgress（キャンセル対応）、完了通知＋次アクションボタン、破壊的操作の modal 確認 | 本書 §7・[design/ui.md](design/ui.md) |
 | **設定エディタ**（mdait.json Webview） | スキーマ駆動の設定GUI。JSON⇔UI をタブ内切替 | ADR-260711-01/02 |
@@ -55,7 +55,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 | サーフェス | 提供するもの | 主な設計ドキュメント |
 |---|---|---|
 | **LM Tools（9種）** | `mdait_getStatus` / `mdait_sync` / `mdait_translate` / `mdait_term` / `mdait_tm` / `mdait_validate` / `mdait_aiReview` / `mdait_adopt` / `mdait_resolve`。共通JSONエンベロープ（`schemaVersion/ok/summary/data/nextActions`） | [design/tools.md](design/tools.md)、[design/agent-orchestration.md](design/agent-orchestration.md) |
-| **エージェント・プレイブック** | S1（新規翻訳）/S2（既存対訳取り込み）の手順・ゴール判定・リカバリ・禁止事項 | [guide/ja/agent-playbook.md](guide/ja/agent-playbook.md) |
+| **エージェント・プレイブック** | S1（新規翻訳）/S2（既存対訳取り込み）の手順・ゴール判定・リカバリ・禁止事項 | [guide-developer.md](guide-developer.md) |
 | **nextActions** | 各ツール出力に含まれる次アクション提案。状態→推奨アクションの誘導装置 | [design/tools.md](design/tools.md) |
 | **debug IPC** | 開発/E2E 検証用のファイルベースIPC（`MDAIT_DEBUG_IPC`）。全 `mdait.*` コマンドを機械実行 | `.github/skills/debug-ipc/` |
 
@@ -98,7 +98,7 @@ graph TD
 
 ### J3: 既存対訳の取り込み（Adopt）
 
-1回きりのオンボーディング操作。`sync(adopt+align)` → AI翻訳レビュー →（オプトイン）用語集/TM構築を1操作に統合し、既訳を**1文字も変えずに**管理下へ置く。エスカレーション（誤ペア・訳抜け疑い）は統合レポートで人間に渡される。詳細: [design/command_adopt.md](design/command_adopt.md)、[guide/ja/adopt.md](guide/ja/adopt.md)。
+1回きりのオンボーディング操作。`sync(adopt+align)` → AI翻訳レビュー →（オプトイン）用語集/TM構築を1操作に統合し、既訳を**1文字も変えずに**管理下へ置く。エスカレーション（誤ペア・訳抜け疑い）は統合レポートで人間に渡される。詳細: [design/command_adopt.md](design/command_adopt.md)、[guide-admin.md](guide-admin.md)。
 
 ### J4: 判断のジャーニー（review / verify-deletion / isolate）
 
@@ -108,7 +108,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 |---|---|---|
 | `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
 | `need:verify-deletion` の裁定 | 原文削除（policy=verify） | CodeLens/ツリーの「Keep」「Delete Unit」2択 / エージェントは `mdait_resolve { action:"resolve" }`（保持）/ `{ action:"delete" }`（削除） |
-| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens/ツリーの「Mark as Isolated」「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文/原文両対応）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
 
@@ -116,7 +116,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 ### 観測→行動ループ
 
-エージェントは `mdait_getStatus`（と `mdait_validate`）で観測し、ツールを1つ実行し、また観測する。全コマンド冪等なので失敗・中断してもループ再開で復帰する。ゴール（完成状態）は**ツール出力から機械的に判定できる**（needs 全0・violations 空・term/tm 再実行差分0・sync 再実行差分0）。シナリオ別手順・リカバリ・禁止事項の正準は [guide/ja/agent-playbook.md](guide/ja/agent-playbook.md)。
+エージェントは `mdait_getStatus`（と `mdait_validate`）で観測し、ツールを1つ実行し、また観測する。全コマンド冪等なので失敗・中断してもループ再開で復帰する。ゴール（完成状態）は**ツール出力から機械的に判定できる**（needs 全0・violations 空・term/tm 再実行差分0・sync 再実行差分0）。シナリオ別手順・リカバリ・禁止事項の正準は [guide-developer.md](guide-developer.md)。
 
 ### エージェントUXの成立条件
 
@@ -134,7 +134,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
 | レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
 | verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit | `mdait_resolve { action:"resolve" \| "delete" }` |
-| isolate宣言/解除 | CodeLens/ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文/原文）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
 | 検証 | （通知・レポート） | `mdait_validate` |
@@ -259,10 +259,10 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 ## 9. 関連ドキュメント
 
-- [architecture.md](architecture.md) — アーキテクチャ原則（P1〜P9）・層構造・固定不変条件
+- [design.md](design.md) — アーキテクチャ原則（P1〜P9）・層構造・固定不変条件
 - [design/ui.md](design/ui.md) — UI 部品カタログ（StatusTree・CodeLens・Hover・設定エディタ）
 - [design/agent-orchestration.md](design/agent-orchestration.md) — エージェント主導方針・M1〜M6 ロードマップ
 - [design/tools.md](design/tools.md) — LM Tools の設計原則・エンベロープ契約
-- [guide/ja/agent-playbook.md](guide/ja/agent-playbook.md) — エージェント向け運用手順の正準
-- [guide/ja/getting-started.md](guide/ja/getting-started.md) / [guide/ja/troubleshooting.md](guide/ja/troubleshooting.md) — 人間向け導入・トラブル対処
+- [guide-developer.md](guide-developer.md) — エージェント向け運用手順の正準
+- [guide-user.md](guide-user.md) / [guide-admin.md](guide-admin.md) — 人間向け（翻訳作業／導入・運用）
 - [adr.md](adr.md) — UX 関連の主要 ADR: 260629-01（落とし穴予防）、260711-01/02（設定エディタ）、260711-06（オンボーディング2択導線）、260712-01/02（本書と判断サーフェス・mdait_resolve）

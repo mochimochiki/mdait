@@ -1,6 +1,6 @@
 # Config
 
-[architecture](../architecture.md) > **Config**
+[architecture](../design.md) > **Config**
 
 ## このドキュメントの責務
 
@@ -231,4 +231,4 @@ mdait:
 ## 関連
 
 - [core.md](core.md) FrontMatter翻訳セクション参照
-- [architecture.md](../architecture.md) 「Config層」参照
+- [design.md](../design.md) 「Config層」参照

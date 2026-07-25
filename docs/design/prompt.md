@@ -1,6 +1,6 @@
 # プロンプト
 
-> [architecture](../architecture.md) > **Prompt**
+> [architecture](../design.md) > **Prompt**
 
 ## このドキュメントの責務
 
@@ -165,7 +165,7 @@ prompts: ["trans.translate", "term.detect"]
 原文差分がある改訂翻訳時に、**前回訳文へのパッチのみ**を返却させるプロンプトです。全文再生成を避け、差分外の文は維持します。
 
 #### 設計意図
-これが[architecture.md](../architecture.md) P4「LLMをdiff-aware reviseの主戦力とする」の中核です：
+これが[design.md](../design.md) P4「LLMをdiff-aware reviseの主戦力とする」の中核です：
 - 原文の変更差分（unified diff）と前回訳文をLLMに提示
 - 訳文への差分パッチのみを生成させる
 - 変更箇所以外は既存訳文を維持し、人間の修正を尊重

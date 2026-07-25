@@ -241,9 +241,9 @@ ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたび�
 
 - **保存先は `unit-registry` に統合**（1ファイル）。エントリを `hash → { content, note? }` に拡張（行 `<hash> <encContent>[ <encNote>]`、旧2列と後方互換）。note は「hash キーのユニットメタ」。
 - **同一性はユニットに追従**: content は content-addressed で不変（revise 用に旧 hash に残す）。note だけ、本文編集で hash が変わったとき **sync が旧→新 hash へ移送**する（`updateSectionHashes` が hash 差分を集め `migrateNotes` で付け替え。決定的・冪等・AI 不使用）。削除ユニットの note は GC（`retainOnly`）で消える。
-- **編集 UI は CodeLens**「Note」（対訳ユニット）→ `showInputBox`。本文・マーカー・hash・from は不変。hover は registry から note を直接読んで表示。
+- **編集 UI は CodeLens**「$(kebab-vertical) その他」メニュー内の「ノート」（対訳ユニット・原文ユニットの両方）→ `showInputBox`。本文・マーカー・hash・from は不変。hover は registry から note を直接読んで表示。
 - **レポート → note ジャンプ**: audit レポート（仮想ドキュメント）の flagged 行に「Add / edit note」CodeLens を出す（`AiReviewResultCodeLensProvider`）。クリックで該当ファイルの当該ユニットへスクロールし note 入力を開く（`mdait.unit.editNoteForUnit`）。レポート生成（`buildReviewReport`）が flagged 行の行番号アンカーを返す。
-- **audit は note を verify プロンプトに `<humanNote>` として添える**（`PairVerifier`）。AI は note が説明する乖離を意図的とみなし match/audited を返す。**決定論的な抑止はしない**（毎回 AI を呼ぶ）。churn は「AI が note を見て flagged にしない」形で消える。
+- **audit は note を verify プロンプトに `<humanNote>` として添える**（`PairVerifier`）。訳文ユニット（`hash`）と原文ユニット（`from`）の両方の note を集めて渡す（原文側の「その他」メニューで残した note も届く）。AI は note が説明する乖離を意図的とみなし match/audited を返す。**決定論的な抑止はしない**（毎回 AI を呼ぶ）。churn は「AI が note を見て flagged にしない」形で消える。
 - **TM 連携は不変**: note は機械的な受理フラグではないため TM 登録可否（need ベース）に影響させない。
 
 **残る限界**: audit は対象ペアに毎回 AI を呼ぶ（決定論的な短絡はしない）。コストが問題になれば将来 `(contentHash, noteHash)` での verdict キャッシュを検討する。`need:isolate`（[command_sync.md](command_sync.md) 孤立ユニットモデル）は**章＝ユニット単位**の孤立で、この単文粒度とは別レイヤ。

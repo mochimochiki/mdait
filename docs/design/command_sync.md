@@ -48,7 +48,7 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | ソース変更 | `revise@{oldhash}` | 原文が変わったので改訂が必要 |
 | revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
 | ターゲットのみ変更 | なし | hash更新のみ |
-| 両方変更 | `revise` | 原文優先で改訂扱い（[architecture.md](../architecture.md) 哲学3参照） |
+| 両方変更 | `revise` | 原文優先で改訂扱い（[design.md](../design.md) 哲学3参照） |
 | ソースが `need:isolate` | 付与しない（凍結） | 伝播停止。hash/fromのみ更新し、target生成・translate/revise付与を行わない |
 | レガシー `need:keep` / `need:backfill` | need除去 / `review` に変換 | `normalizeLegacyNeeds` による決定的マイグレーション |
 
@@ -115,7 +115,7 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[architecture.md](../architecture.md) P4参照）
+- **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[design.md](../design.md) P4参照）
 - **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
 - **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可（②の対象外）
 - **レガシーneedの正規化**: パース直後に `normalizeLegacyNeeds` が `keep`→need除去・`backfill`→`review` へ決定的に変換する（後述の「孤立ユニットモデル」節参照）
@@ -170,7 +170,7 @@ match 結果の `{source: null, target}` ペア（対応する原文が無い ta
 | 2 | `from` が残っている（dangling）＝管理済みで原文を失った。from なしの `need:verify-deletion`（レガシー）も含む | `orphanTargetPolicy`: `delete`=削除 / `verify`=`need:verify-deletion` 付与 | `orphanVerified`（verify時） |
 | 3 | `from` なし かつ独立ユニットでない（＝マーカーなしで書かれた管理外コンテンツ） | **穴あき一次受け**: `setNeed("review")`（from は付けない） | `orphanReviewed` |
 
-分岐3の根拠は「**決めつけず人間へ**」: マーカーなしの訳文側コンテンツが「意図的な独自章」か「訳漏れの残骸」か「不要物」かは、ドキュメントの意図を知る人間にしか判断できない。sync は削除も翻訳も決めつけず `need:review` で保護し、人間が「素 hash 化（独自章宣言）/ `need:isolate` / 削除」を選ぶ（手順は [adopt.md](../guide/ja/adopt.md)）。adopt・定常 sync 共通。次回 sync では「永続化された from なし need:review」として独立ユニット（分岐1）になるため冪等。
+分岐3の根拠は「**決めつけず人間へ**」: マーカーなしの訳文側コンテンツが「意図的な独自章」か「訳漏れの残骸」か「不要物」かは、ドキュメントの意図を知る人間にしか判断できない。sync は削除も翻訳も決めつけず `need:review` で保護し、人間が「素 hash 化（独自章宣言）/ `need:isolate` / 削除」を選ぶ（手順は [guide-admin.md](../guide-admin.md)）。adopt・定常 sync 共通。次回 sync では「永続化された from なし need:review」として独立ユニット（分岐1）になるため冪等。
 
 旧モデルとの挙動差: 旧仕様ではマーカーなし孤立 target にも policy（デフォルト `delete`）が適用され黙って削除されていた。新モデルでは need:review 保護に変わる（安全側）。policy が適用されるのは分岐2（from dangling）のみ。
 
@@ -197,7 +197,7 @@ match 結果の `{source: null, target}` ペア（対応する原文が無い ta
 | レガシー need | 変換 | 意味 |
 |---|---|---|
 | `keep` | need 除去（素 hash 化） | 独立ユニットとして意味的に等価な形へ |
-| `backfill` | `need:review` | source 側プレースホルダを人間ゲートへ。人間が「原文として整備して review 解除」か「ユニット削除」を判断（手順は [adopt.md](../guide/ja/adopt.md)） |
+| `backfill` | `need:review` | source 側プレースホルダを人間ゲートへ。人間が「原文として整備して review 解除」か「ユニット削除」を判断（手順は [guide-admin.md](../guide-admin.md)） |
 
 設定ファイルのレガシー値 `orphanTargetPolicy: "keep"` / `"backfill"` は警告ログを出して `"verify"` として解釈する（安全側）。型は `"delete" | "verify"` に縮小（スキーマ enum も同様）。
 

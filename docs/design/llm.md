@@ -1,6 +1,6 @@
 # LLM
 
-> [architecture](../architecture.md) > **LLM**
+> [architecture](../design.md) > **LLM**
 
 ## このドキュメントの責務
 
@@ -86,7 +86,7 @@ interface AIService {
 #### セキュリティ
 - APIキーは`${env:VARIABLE_NAME}`形式で環境変数から読み込み
 - 設定ファイルには平文で記載しない
-- **`store: false`でプロンプト・応答をOpenAIサーバーに保存しない**（[architecture.md](../architecture.md) 哲典5参照）
+- **`store: false`でプロンプト・応答をOpenAIサーバーに保存しない**（[design.md](../design.md) 哲典5参照）
 
 **実装**: [`src/infra/llm/providers/openai-provider.ts`](../../src/infra/llm/providers/openai-provider.ts)
 
@@ -200,4 +200,4 @@ sequenceDiagram
 
 ## 関連
 
-- [architecture.md](../architecture.md) 「LLM層」参照
+- [design.md](../design.md) 「LLM層」参照

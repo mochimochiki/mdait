@@ -1,6 +1,6 @@
 # Tools
 
-> [architecture](../architecture.md) > **Tools**
+> [architecture](../design.md) > **Tools**
 
 ## このドキュメントの責務
 
@@ -375,4 +375,4 @@ GitHub Copilot Chatでのコマンド例:
 
 ## 関連
 
-- [architecture.md](../architecture.md) 「Tools層」参照
+- [design.md](../design.md) 「Tools層」参照

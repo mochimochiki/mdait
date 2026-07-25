@@ -1,6 +1,6 @@
 # utils
 
-> [architecture](../architecture.md) > **Utils**
+> [architecture](../design.md) > **Utils**
 
 ## このドキュメントの責務
 
@@ -124,4 +124,4 @@ sync・trans・保存時自動syncはいずれも同一ファイルを read-modi
 
 - ファイル探索利用例: [command_sync.md](command_sync.md)
 - 設定での除外パターン: [config.md](config.md)
-- [architecture.md](../architecture.md) 「Utils層」参照
+- [design.md](../design.md) 「Utils層」参照

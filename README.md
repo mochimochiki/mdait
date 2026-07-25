@@ -30,6 +30,20 @@
 
 ---
 
+## Documentation
+
+Guides are written in Japanese.
+
+| Guide | Audience |
+|---|---|
+| [guide-user.md](docs/guide-user.md) | Translating and reviewing documents day to day. |
+| [guide-admin.md](docs/guide-admin.md) | Setting up `mdait.json`, adopting existing translations, running the glossary and TM. |
+| [guide-developer.md](docs/guide-developer.md) | Driving mdait from Copilot Chat or a coding agent. |
+
+Architecture and design decisions: [docs/design.md](docs/design.md) / [docs/adr.md](docs/adr.md).
+
+---
+
 ## Configuration
 
 Create `.mdait/mdait.json` in your workspace root:

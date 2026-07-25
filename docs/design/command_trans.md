@@ -98,7 +98,7 @@ sequenceDiagram
 
 ### 設計ノート
 
-- **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用（[architecture.md](../architecture.md) P4参照）。失敗時の挙動はファイルタイプで異なる:
+- **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用（[design.md](../design.md) P4参照）。失敗時の挙動はファイルタイプで異なる:
   - **MD**: ユーザーに確認ダイアログを表示し、「スキップ」で手修正を保持、「続行」で全文再翻訳にフォールバック
   - **非MD**: サイレントに全文再翻訳へフォールバック（バッチ処理での中断回避のため）
 - **パッチ補完**: LLMが`@@`ハンク行なしのパッチを返すケースに対応し、`applyUnifiedPatch`内で自動補完する

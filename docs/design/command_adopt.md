@@ -39,10 +39,10 @@ sequenceDiagram
     Core->>Prim: (4/5) expandTerm_CoreProc（transPair ごと）
     Core->>Prim: (5/5) executeTmCommitForFile（ターゲットファイルごと）
     end
-    Core-->>U: 結果通知 + 統合レポート（mdait-adopt）+ nextActions
+    Core-->>U: 結果通知 + 統合レポート（.mdait/adopt-report.md）+ nextActions
 ```
 
-- **オプトインは冒頭1回の QuickPick（canSelectMany）**: 「用語集も構築する（term.detect → term.expand）」「翻訳メモリも構築する（tm.commit）」。既定は両方 ON（推奨フロー = [adopt.md](../guide/ja/adopt.md) と一致）。TM 無効設定（`tm.enabled: false`）のときは TM 項目自体を出さない。
+- **オプトインは冒頭1回の QuickPick（canSelectMany）**: 「用語集も構築する（term.detect → term.expand）」「翻訳メモリも構築する（tm.commit）」。既定は両方 ON（推奨フロー = [guide-admin.md](../guide-admin.md) と一致）。TM 無効設定（`tm.enabled: false`）のときは TM 項目自体を出さない。
 - 段ごとの逐次確認はしない（オンボーディングの敷居を上げるため。ADR-260711-06 却下案）。
 - 進捗は総段数 n = 2 + (用語集?2:0) + (TM?1:0) の段番号付きメッセージ。tm 段はファイル単位（`{i}/{N} files`）で上書き報告。
 
@@ -61,8 +61,8 @@ sequenceDiagram
 src/commands/adopt/
   adopt-core.ts             # executeAdopt / AdoptStages / AdoptOptions（薄い注入合成）
   adopt-command.ts          # VS Code コマンド（mdait.adopt.run）: QuickPick→確認→withProgress
-  adopt-result.ts           # 純関数: AdoptOutcome 集計・レポート生成・nextActions
-  adopt-result-provider.ts  # 統合レポートの仮想ドキュメント（mdait-adopt スキーム）
+  adopt-result.ts           # 純関数: AdoptOutcome 集計・レポート生成（ラベル注入・行リンク）・nextActions
+  report-l10n.ts            # レポートラベルの l10n ファクトリ（VS Code 層）
   align-core.ts             # AIアライン（sync_CoreProc へ注入。設計は command_ai-review.md）
   section-aligner.ts        # 〃
   align-result.ts           # 〃
@@ -129,7 +129,7 @@ interface AdoptOutcome {
 ```
 
 - 結果通知: escalated / errors / stageErrors があれば warning、なければ info。adopted / align 修正 / 承認 / 用語 / TM 件数を1行で要約。
-- レポート（`mdait-adopt` スキーム仮想ドキュメント）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。
+- レポート（実ファイル `.mdait/adopt-report.md`、実行ごとに上書き）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有。ユニット列は該当箇所への行リンク `[title](<relpath#Lnn>)`）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。見出し・定型文は `report-l10n.ts` のラベル注入で表示言語化（純関数の既定は英語）。パスは `Configuration.getAdoptReportFilePath()`。
 - nextActions: escalated 残りあり → 「該当ユニットを確認し、解消後に AI翻訳レビュー / tm.commit を再実行」（**escalated 多数時に TM がほぼ空になるケースの受け皿**）。buildTm 未選択で承認あり → tm.commit を案内。全消化 → status 確認。
 
 ## LM tool 契約（mdait_adopt）
@@ -151,8 +151,8 @@ data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` �
 | # | パターン | 現行の挙動（adopt + AI翻訳レビュー） | 完全解消する機能（状態） |
 |---|---------|--------------------------------------|------------------------|
 | 1 | ja/en 同一構造・内容も対応 | 全ペアが正しく `from` 確立 → レビューがほぼ全件を自動承認（低確信のみ kept で人間へ） | **実装済みで完結** |
-| 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。レビューが **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide/ja/adopt.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（**実装済み**） |
-| 3 | ja に無い章が en に存在（訳文側の独自セクション） | マーカーなしの独自章は **`need:review` 一次受け**で保護される（削除も翻訳も決めつけず人間が「素hash化 / `need:isolate` / 削除」を選ぶ・[adopt.md](../guide/ja/adopt.md)）。誤ペア化は AIアラインの unmatchedTarget 識別で防止 | **実装済み**（一次受け＋AIアライン）。判断サーフェスは将来増分 |
+| 2 | ja の章が en で欠落（中間） | 欠落地点以降が誤ペア化し誤った `from` が書かれる。レビューが **mismatch でエスカレーション**（検出まで。修正は[復旧手順](../guide-admin.md)で手動）。末尾で余った ja 章は `need:translate` 空ユニット生成 | AIアライン（**実装済み**） |
+| 3 | ja に無い章が en に存在（訳文側の独自セクション） | マーカーなしの独自章は **`need:review` 一次受け**で保護される（削除も翻訳も決めつけず人間が「素hash化 / `need:isolate` / 削除」を選ぶ・[guide-admin.md](../guide-admin.md)）。誤ペア化は AIアラインの unmatchedTarget 識別で防止 | **実装済み**（一次受け＋AIアライン）。判断サーフェスは将来増分 |
 | 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン（**実装済み**） |
 | 5 | ペアは正しいが訳抜け・原文改訂に未追随 | レビューが **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで孤立/漏れ 確定（将来増分） |
 | 6 | en が原文コピーのまま（未翻訳） | 検証プロンプトの verdict 定義で match を禁止 — 全文未翻訳は mismatch、部分残留は partial に倒す | **実装済み** |
@@ -162,7 +162,7 @@ data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` �
 | 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AI翻訳レビューは対象外のため解除は手動 | AIレビュー拡張 |
 | 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[command_sync.md](command_sync.md) 孤立ユニットモデル）。宣言 CodeLens UI は将来増分 |
 
-パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [adopt.md](../guide/ja/adopt.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [command_sync.md](command_sync.md) の「孤立ユニットモデル」を参照。
+パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [guide-admin.md](../guide-admin.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [command_sync.md](command_sync.md) の「孤立ユニットモデル」を参照。
 
 ## テスト戦略
 

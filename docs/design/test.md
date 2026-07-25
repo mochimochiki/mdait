@@ -1,6 +1,6 @@
 # Test
 
-> [architecture](../architecture.md) > **Test**
+> [architecture](../design.md) > **Test**
 
 ## このドキュメントの責務
 
@@ -29,7 +29,7 @@
 
 **実行**: CIで常時実行（`npm run test`）
 
-**設計意図**: Core層とCommandビジネスロジック層をVS Code APIから独立させているため、副作用のない処理の入出力を高速に検証できます（[architecture.md](../architecture.md) P5参照）。
+**設計意図**: Core層とCommandビジネスロジック層をVS Code APIから独立させているため、副作用のない処理の入出力を高速に検証できます（[design.md](../design.md) P5参照）。
 
 - **パターンテスト**: fixture駆動でMarkdown特殊構文と見出しレベル分割を網羅的に検証（`src/test/unit/core/markdown/parser-patterns.test.ts`）
 

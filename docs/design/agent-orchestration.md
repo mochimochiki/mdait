@@ -1,6 +1,6 @@
 # エージェント・オーケストレーション設計とロードマップ
 
-> [architecture](../architecture.md) > **Agent Orchestration**
+> [architecture](../design.md) > **Agent Orchestration**
 
 ## このドキュメントの責務
 
@@ -50,7 +50,7 @@
 | G6 | 翻訳方向がtransPair単位で固定（常にsource→target）。「訳文側にしかないセクションを原文側へ埋め戻す」ユニット単位の方向反転は未モデル化 | `src/commands/trans-selection/direction-picker.ts`、`assets/schemas/mdait-config.schema.json`（transPairs） | M5 |
 | G7 | `mdait_translate` はファイル単位のみ＋都度確認ダイアログ。数百ファイルのサイトでは呼び出し回数・承認回数が爆発する | `src/lm-tools/translate-tool.ts` | M1 |
 | G8 | エージェント向けの手順書が「ツールの個別説明」止まりで、サイト全体オーケストレーションの手順（どの状態で・どの順に・何を呼ぶか）、ゴール判定基準、失敗時のリカバリが未整備 | `docs/guide/ja/copilot-chat.md`（個別ツールの使い方と単発の推奨フローのみ） | M6 |
-| G9 | （副次）termロジックがcore層でなくcommands層にありVS Code非依存化されていない（TMとの非対称）。翻訳の並列実行なし | `src/commands/term/`、[architecture.md](../architecture.md)「意図的制約」 | M4, M6 |
+| G9 | （副次）termロジックがcore層でなくcommands層にありVS Code非依存化されていない（TMとの非対称）。翻訳の並列実行なし | `src/commands/term/`、[design.md](../design.md)「意図的制約」 | M4, M6 |
 
 ---
 
@@ -197,7 +197,7 @@ sequenceDiagram
 実装者は各マイルストーンの完了時に以下をすべて確認すること（個別ゲートに加えて適用）:
 
 - [ ] `npm test`（compile + lint + 単体テスト）がパスする
-- [ ] 固定不変条件を変更していない: マーカー形式・CRC32・markdown-it・見出し境界（[architecture.md](../architecture.md)参照）
+- [ ] 固定不変条件を変更していない: マーカー形式・CRC32・markdown-it・見出し境界（[design.md](../design.md)参照）
 - [ ] マーカー境界探索を追加した場合、`getCodeBlockLineSet` でコードブロック行を除外している
 - [ ] ファイルパス構築を `Configuration` クラス以外で行っていない
 - [ ] ユーザー向け文字列はl10n経由（`l10n/bundle.l10n.json` + `.ja.json`、`npm run l10n` 実行済み）
@@ -380,14 +380,14 @@ sequenceDiagram
 
 **実装タスク**:
 
-1. transの並列実行（architecture.mdの「意図的制約」を解除。セマフォ方式・同時実行数設定。プロバイダーのレート制限考慮）
+1. transの並列実行（design.mdの「意図的制約」を解除。セマフォ方式・同時実行数設定。プロバイダーのレート制限考慮）
 2. ディレクトリ翻訳の進捗レポート（`data` に処理済み/残り/失敗件数。中断時の再開が「同じ呼び出しの再実行」で済むことの明文化）
 3. エージェント・プレイブック執筆（`docs/guide/`）: S1/S2手順・ゴール判定・リカバリ・禁止事項。各ツールの `modelDescription` にも要点を反映
 4. debug-ipc（`.github/skills/debug-ipc/`）でS1・S2のE2Eシナリオを構築し、「ひとこと依頼→完成状態」を通しで検証
 
 **着手前チェック**:
 
-- [ ] architecture.mdの並列実行制約の背景（順次実行にした理由）をADR・git履歴から確認し、解除の前提条件を洗い出す
+- [ ] design.mdの並列実行制約の背景（順次実行にした理由）をADR・git履歴から確認し、解除の前提条件を洗い出す
 - [ ] 各AIプロバイダー（vscode-lm/OpenAI/Ollama）のレート制限・同時実行の挙動を確認する（vscode-lmはCopilotのクォータに依存する点に注意）
 - [ ] S2のE2Eに使う「構造ズレ・用語逸脱を含む対訳サンプルサイト」をM2〜M5のテスト資産から組み上げられるか確認する
 
@@ -415,7 +415,7 @@ sequenceDiagram
 
 ## 関連
 
-- [architecture.md](../architecture.md) — 層構造・設計原則・固定不変条件
+- [design.md](../design.md) — 層構造・設計原則・固定不変条件
 - [tools.md](tools.md) — Tools層の設計原則と実装手順
 - [command_sync.md](command_sync.md) / [command_trans.md](command_trans.md) / [command_term.md](command_term.md) / [command_tm.md](command_tm.md)
 - [tm_theory.md](tm_theory.md) — TM retrievalの理論

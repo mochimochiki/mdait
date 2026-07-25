@@ -1,12 +1,12 @@
 # UI
 
-> [architecture](../architecture.md) > **UI**
+> [architecture](../design.md) > **UI**
 
 ## このドキュメントの責務
 
 UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、ユーザーに直感的な操作体験を提供します。
 
-**設計意図**: VS Codeネイティブな体験を提供します（[architecture.md](../architecture.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。独自Webビューは原則使いませんが、mdait.json 設定エディタのみ例外として Webview を採用しています（ADR-260711-01。見た目・操作モデルはVS Code設定画面に準拠）。
+**設計意図**: VS Codeネイティブな体験を提供します（[design.md](../design.md) P6参照）。TreeView、CodeLens、Hover、Progressなど、VS Code標準のUI要素を活用することで、他の拡張機能と一貫したUXを実現し、ユーザーの学習コストを低減します。独自Webビューは原則使いませんが、mdait.json 設定エディタのみ例外として Webview を採用しています（ADR-260711-01。見た目・操作モデルはVS Code設定画面に準拠）。
 
 本ドキュメントは UI **部品**のカタログである。ジャーニー全体・UX原則（デッドエンド禁止・判断サーフェス・工程間の手渡し等）・課題台帳は [ux.md](../ux.md) を正準とし、部品の追加・変更時は ux.md の原則との整合を確認すること。
 
@@ -111,10 +111,12 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **$(symbol-reference) Source**: 原文ユニットへジャンプ（`from`属性がある場合）
 - **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
+- **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「独立扱いにする」（`need`なし時のみ）と「ノート」を集約（`mdait.codelens.otherActions`）
 
 **ソースファイル（原文）のマーカー**:
 - **$(symbol-reference) Target**: 訳文ユニットへジャンプ（`from`属性がなく、対応する訳文が存在する場合）
 - 複数の訳文言語がある場合、`transPairs`設定順で最初のターゲットへジャンプ
+- **$(kebab-vertical) その他**: 訳文側と同じメニュー。原文側の isolate 宣言（sync が `need:translate` を生成しなくなる。ADR-260706-02）と原文側ノート（audit 時に `from` ハッシュ経由で AI に渡る）に対応
 
 **frontmatterマーカー**:
 - **$(play) 翻訳**: frontmatter翻訳を実行（`need:translate`がある場合のみ）
@@ -183,7 +185,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 
 sync/trans/term実行中の進行状況を表示し、`CancellationToken`でユーザーからの中断を処理します。
 
-**設計意図**: 長時間処理でもユーザーが状況を把握でき、必要に応じて即座にキャンセルできます（[architecture.md](../architecture.md) 哲学4参照）。
+**設計意図**: 長時間処理でもユーザーが状況を把握でき、必要に応じて即座にキャンセルできます（[design.md](../design.md) 哲学4参照）。
 
 ---
 
