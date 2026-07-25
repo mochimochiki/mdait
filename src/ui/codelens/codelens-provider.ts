@@ -22,6 +22,20 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
 /**
+ * 「その他」メニュー（isolate 宣言・note 編集）を出すユニットかどうかを判定する（純関数）。
+ * 訳文は対訳ユニット（from あり）、原文はマーカー hash を持つユニットが対象。
+ * 原文側も isolate 宣言・note 編集の対象である（ADR-260706-02・audit は from 経由で原文 note も読む）。
+ * from なしの訳文ユニット（独立ユニット）は対象外 — isolate は伝播停止の宣言であり、
+ * 対訳を持たないユニットには意味がなく、note も audit（対訳ペア単位）で読まれないため。
+ *
+ * @param marker 対象ユニットのマーカー
+ * @param isSourceFile 原文ファイルかどうか
+ */
+export function shouldShowOtherActions(marker: Pick<MdaitMarker, "hash" | "from">, isSourceFile: boolean): boolean {
+	return Boolean(marker.hash) && (isSourceFile || Boolean(marker.from));
+}
+
+/**
  * mdaitマーカーのCodeLensを提供するプロバイダー
  */
 export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
@@ -306,10 +320,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
-		// 低頻度アクション（isolate 宣言・note 編集）は「その他」メニューへ集約する（ADR-260719-01）。
-		// 訳文は対訳ユニット（from あり）、原文はマーカーを持つユニットが対象。
-		// 原文側も isolate 宣言・note 編集の対象である（ADR-260706-02・audit は from 経由で原文 note も読む）。
-		if (marker.hash && (isSourceFile || marker.from)) {
+		// 低頻度アクション（isolate 宣言・note 編集）は「その他」メニューへ集約する（ADR-260719-01）
+		if (shouldShowOtherActions(marker, isSourceFile)) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title: vscode.l10n.t("$(kebab-vertical) More"),

@@ -27,7 +27,7 @@ export interface ReviewReportLabels {
 }
 
 /** ラベル未注入時の既定（純関数のテストはこの英語を前提にする） */
-export const DEFAULT_REVIEW_REPORT_LABELS: ReviewReportLabels = {
+const DEFAULT_REVIEW_REPORT_LABELS: ReviewReportLabels = {
 	title: "mdait AI Translation Review",
 };
 
@@ -39,6 +39,12 @@ export interface ReviewTableOptions {
 	 * 仮想ドキュメント（相対リンクが解決できない）では指定しない。
 	 */
 	linkBaseDir?: string;
+}
+
+/** レポート全体（見出し＋表）の生成オプション */
+export interface ReviewReportOptions extends ReviewTableOptions {
+	/** 見出しのラベル（省略時は英語の既定） */
+	labels?: ReviewReportLabels;
 }
 
 /**
@@ -61,10 +67,7 @@ export interface ReportAnchor {
  * 検証結果の Markdown レポートを生成する（純関数・テスト可能）。
  * 自動承認されたユニットも必ず列挙する（ADR-260704-07）。
  */
-export function generateReviewReportContent(
-	results: AiReviewFileResult[],
-	options: ReviewTableOptions & { labels?: ReviewReportLabels } = {},
-): string {
+export function generateReviewReportContent(results: AiReviewFileResult[], options: ReviewReportOptions = {}): string {
 	return buildReviewReport(results, options).content;
 }
 
@@ -74,7 +77,7 @@ export function generateReviewReportContent(
  */
 export function buildReviewReport(
 	results: AiReviewFileResult[],
-	options: ReviewTableOptions & { labels?: ReviewReportLabels } = {},
+	options: ReviewReportOptions = {},
 ): { content: string; anchors: ReportAnchor[] } {
 	const labels = options.labels ?? DEFAULT_REVIEW_REPORT_LABELS;
 	const lines: string[] = [`# ${labels.title}`, ""];

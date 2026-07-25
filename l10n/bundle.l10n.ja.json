@@ -480,5 +480,8 @@
   "Term Detect Results": "用語検出結果",
   "Detected": "検出",
   "(target not detected)": "（訳語未検出）",
-  "context": "文脈"
+  "context": "文脈",
+  "Could not write the adoption report to {0}.": "取り込みレポートを {0} に書き出せませんでした。",
+  "Freeze this unit and stop propagating it to the translations.": "このユニットを凍結し、以後は訳文へ伝播しないようにします。",
+  "Unit marked as isolated. It will no longer propagate to the translations.": "ユニットを独立扱いにしました。以後は訳文へ伝播しません。"
 }

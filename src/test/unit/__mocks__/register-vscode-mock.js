@@ -4,11 +4,13 @@
  * mocha の --require で読み込まれ、`require("vscode")` をインターセプトする。
  * テスト側で `global.__vscodeMockWorkspaceRoot` を設定することで
  * vscode.workspace.workspaceFolders の返却値を制御できる。
+ * 同様に `global.__vscodeMockLanguage` で vscode.env.language（表示言語）を制御できる。
  *
  * @example
  * // テストファイル内
  * setup(() => {
  *   global.__vscodeMockWorkspaceRoot = tempDir;
+ *   global.__vscodeMockLanguage = "ja";
  * });
  */
 const fs = require("node:fs");
@@ -17,6 +19,8 @@ const path = require("node:path");
 
 // デフォルトのワークスペースルート（テスト側で上書き可能）
 global.__vscodeMockWorkspaceRoot = "/mock-workspace";
+// デフォルトの表示言語（テスト側で上書き可能。undefined を代入すると en に戻る）
+global.__vscodeMockLanguage = undefined;
 
 const vscodeMock = {
 	workspace: {

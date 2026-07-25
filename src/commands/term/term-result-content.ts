@@ -24,7 +24,7 @@ export interface TermResultLabels {
 }
 
 /** ラベル未注入時の既定（英語） */
-export const DEFAULT_TERM_RESULT_LABELS: TermResultLabels = {
+const DEFAULT_TERM_RESULT_LABELS: TermResultLabels = {
 	title: "Term Detect Results",
 	detectedHeading: "Detected",
 	none: "(none)",

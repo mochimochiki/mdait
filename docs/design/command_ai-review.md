@@ -150,7 +150,7 @@ sequenceDiagram
 { "results": [ { "index": 1, "verdict": "match", "confidence": 0.95, "issues": [], "reason": "..." } ] }
 ```
 
-`reason` / `issues` の**記述言語**は user-section の `{{responseLang}}`（VS Code の表示言語から `getResponseLanguage()` が組み立てる例: `Japanese (ja)`）で指示する。JSON キーと verdict 語彙は英語固定（ADR-260719-01）。変数未指定・レガシーテンプレート時は英語（レガシーはコード側で指示文を1行添える）。
+`reason` / `issues` の**記述言語**は user-section の `{{responseLang}}`（VS Code の表示言語から `getResponseLanguage()` が組み立てる例: `Japanese (ja)`）で指示する。JSON キーと verdict 語彙は英語固定（ADR-260719-01）。`{{responseLang}}` を持たないテンプレート（レガシー・旧既定のコピー等）にはコード側で指示文を1行添えるため、カスタムプロンプトでも表示言語に追従する。この散文は hover・レポートに加えて `mdait_aiReview` / `mdait_adopt` の `escalations[].reason` にも載るため、**エージェントが読む散文も表示言語になる**（英語固定なのは統計語彙行・verdict/action 語彙・nextActions）。
 
 バリデーション: verdict が4値 enum・confidence が number（0..1 クランプ）でなければ retryable エラーとしてリトライ（system 固定・user message 末尾に RETRY INSTRUCTION 追記、`trans.retryLimit` と同じ最大2回）。リトライ枯渇時は `verdict: uncertain, confidence: 0` 相当（自動承認されない安全側。バッチは部分受理）。
 

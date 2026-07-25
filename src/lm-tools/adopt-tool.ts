@@ -1,8 +1,8 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { buildAdoptStepList } from "../commands/adopt/adopt-command";
 import { executeAdopt } from "../commands/adopt/adopt-core";
 import { writeAdoptReport } from "../commands/adopt/adopt-report-file";
-import { buildAdoptStepList } from "../commands/adopt/adopt-command";
 import { type AdoptOutcome, type AdoptStageError, buildAdoptNextActions } from "../commands/adopt/adopt-result";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
 import { type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
@@ -80,8 +80,8 @@ interface AdoptData {
 		threshold: number;
 	};
 	dryRun: boolean;
-	/** 統合レポート（Markdown 実ファイル）のワークスペース相対パス */
-	reportPath: string;
+	/** 統合レポート（Markdown 実ファイル）のワークスペース相対パス。書き出せなかった場合は undefined */
+	reportPath?: string;
 	/** エスカレーション（mismatch/partial）の一覧。最大50件 */
 	escalations: Array<{
 		file: string;
@@ -149,10 +149,12 @@ export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 				);
 			}
 
-			// 人間が後から確認できるよう、レポートは実ファイルにも残す（プレビュー表示はしない）
-			await writeAdoptReport(config, outcome);
+			// 人間が後から確認できるよう、レポートは実ファイルにも残す（プレビュー表示はしない）。
+			// dryRun では書かない — 直前の本番実行のレポートを試行結果で上書きしないため
+			// （dryRun の結果はこのエンベロープに全て入っている）。
+			const reportUri = dryRun ? undefined : await writeAdoptReport(config, outcome);
 
-			const data = buildAdoptData(outcome, config);
+			const data = buildAdoptData(outcome, config, reportUri?.fsPath);
 			const summaryParts = [
 				vscode.l10n.t(
 					"Adoption completed: {0} adopted, {1} align-corrected; review {2} verified, {3} approved, {4} escalated ({5} mismatch / {6} partial), {7} kept, {8} errors.",
@@ -220,7 +222,7 @@ export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 /**
  * 取り込み結果からエンベロープの data を構築する。
  */
-function buildAdoptData(outcome: AdoptOutcome, config: Configuration): AdoptData {
+function buildAdoptData(outcome: AdoptOutcome, config: Configuration, reportFilePath?: string): AdoptData {
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	const toRelative = (filePath: string) => path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 	const sync = outcome.sync;
@@ -273,7 +275,7 @@ function buildAdoptData(outcome: AdoptOutcome, config: Configuration): AdoptData
 			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun: outcome.dryRun,
-		reportPath: toRelative(config.getAdoptReportFilePath()),
+		reportPath: reportFilePath ? toRelative(reportFilePath) : undefined,
 		escalations,
 		status: buildStatusData(getSelectedScopeFiles(StatusManager.getInstance().getStatusItemTree()), false),
 	};

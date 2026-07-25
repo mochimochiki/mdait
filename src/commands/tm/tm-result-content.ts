@@ -16,7 +16,7 @@ export interface TmResultLabels {
 }
 
 /** ラベル未注入時の既定（英語） */
-export const DEFAULT_TM_RESULT_LABELS: TmResultLabels = {
+const DEFAULT_TM_RESULT_LABELS: TmResultLabels = {
 	title: "TM Commit Results",
 	newHeading: "New",
 	updatedHeading: "Updated",

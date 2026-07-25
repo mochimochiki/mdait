@@ -57,8 +57,13 @@ export async function openAdoptReport(uri: vscode.Uri): Promise<void> {
 		await vscode.commands.executeCommand("markdown.showPreview", uri);
 	} catch (error) {
 		logger.warn("adopt", "Failed to open adopt report preview", formatError(error));
-		// プレビューが使えない環境ではテキストとして開く
-		const doc = await vscode.workspace.openTextDocument(uri);
-		await vscode.window.showTextDocument(doc, { preview: true });
+		try {
+			// プレビューが使えない環境ではテキストとして開く
+			const doc = await vscode.workspace.openTextDocument(uri);
+			await vscode.window.showTextDocument(doc, { preview: true });
+		} catch (fallbackError) {
+			// 取り込み自体は成功しているので、表示の失敗で取り込みを失敗扱いにしない
+			logger.warn("adopt", "Failed to open adopt report", formatError(fallbackError));
+		}
 	}
 }

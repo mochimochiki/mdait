@@ -5,6 +5,8 @@
  *   レポート本体の生成は VS Code 非依存の純関数（adopt-result / review-table）に置いたまま、
  *   ラベル構築だけをこの UI 層に閉じ込めることで「純関数のテスト可能性」と「l10n 抽出」を両立する。
  *   件数の語彙行（`adopted: 3 | ...`）とエージェント向け nextActions は共通語彙として英語のままにする。
+ *   英語の原文は純関数側の `DEFAULT_ADOPT_REPORT_LABELS` と一致させること
+ *   （l10n 抽出のためリテラルが必要で、既定値と二重に持つことになるため）。
  * @module commands/adopt/report-l10n
  */
 import * as vscode from "vscode";

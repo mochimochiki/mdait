@@ -177,7 +177,12 @@ async function showAdoptPreview(config: Configuration, outcome: AdoptOutcome): P
 		return;
 	}
 	const uri = await writeAdoptReport(config, outcome);
-	if (uri) {
-		await openAdoptReport(uri);
+	if (!uri) {
+		// 取り込み自体は成功しているため、レポートを書けなかったことだけを伝える
+		vscode.window.showWarningMessage(
+			vscode.l10n.t("Could not write the adoption report to {0}.", config.getAdoptReportFilePath()),
+		);
+		return;
 	}
+	await openAdoptReport(uri);
 }

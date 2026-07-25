@@ -149,12 +149,14 @@
   "Unit deleted.": "Unit deleted.",
   "Failed to delete unit: {0}": "Failed to delete unit: {0}",
   "$(circle-slash) Mark as Isolated": "$(circle-slash) Mark as Isolated",
+  "Freeze this unit and stop propagating it to the translations.": "Freeze this unit and stop propagating it to the translations.",
   "Freeze this unit and stop following source updates.": "Freeze this unit and stop following source updates.",
   "$(comment) Note": "$(comment) Note",
   "Add or edit a note for this unit (shown to the AI during audit).": "Add or edit a note for this unit (shown to the AI during audit).",
   "Unit actions": "Unit actions",
   "Select an action for this unit": "Select an action for this unit",
   "Failed to run the selected action: {0}": "Failed to run the selected action: {0}",
+  "Unit marked as isolated. It will no longer propagate to the translations.": "Unit marked as isolated. It will no longer propagate to the translations.",
   "Unit marked as isolated. It will no longer follow source updates.": "Unit marked as isolated. It will no longer follow source updates.",
   "Unit note": "Unit note",
   "Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.": "Leave a note about this unit. It is passed to the AI during audit — explain any intentional deviation here so the audit treats it as intended. Empty to remove.",
@@ -487,5 +489,6 @@
   "build translation memory": "build translation memory",
   "Adoption did not run. Check the mdait configuration.": "Adoption did not run. Check the mdait configuration.",
   "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.",
-  "{0} step error(s) — see the report.": "{0} step error(s) — see the report."
+  "{0} step error(s) — see the report.": "{0} step error(s) — see the report.",
+  "Could not write the adoption report to {0}.": "Could not write the adoption report to {0}."
 }

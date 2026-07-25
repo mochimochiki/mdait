@@ -16,8 +16,8 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
-import { Logger, formatError } from "../../infra/logging/logger";
 import { getResponseLanguage } from "../../infra/llm/response-language";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
@@ -129,22 +129,31 @@ function applyVerifyOutcome(
  * @param sourceHash 原文ユニットの hash（訳文マーカーの from）
  * @returns 連結した note（どちらも無ければ undefined）
  */
-async function loadPairNotes(
-	targetHash?: string | null,
-	sourceHash?: string | null,
-): Promise<string | undefined> {
+async function loadPairNotes(targetHash?: string | null, sourceHash?: string | null): Promise<string | undefined> {
 	const registry = UnitRegistryManager.getInstance();
-	const notes: string[] = [];
-	for (const hash of new Set([targetHash, sourceHash])) {
-		if (!hash) {
+	const found: Array<{ side: "translation" | "source"; note: string }> = [];
+	const seen = new Set<string>();
+	for (const [side, hash] of [
+		["translation", targetHash],
+		["source", sourceHash],
+	] as const) {
+		if (!hash || seen.has(hash)) {
 			continue;
 		}
+		seen.add(hash);
 		const note = await registry.loadNote(hash);
 		if (note?.trim()) {
-			notes.push(note.trim());
+			found.push({ side, note: note.trim() });
 		}
 	}
-	return notes.length > 0 ? notes.join("\n") : undefined;
+	if (found.length === 0) {
+		return undefined;
+	}
+	// 1件だけならそのまま渡す（従来どおり）。両側にある場合のみ、どちら側の説明かを明示する
+	if (found.length === 1) {
+		return found[0].note;
+	}
+	return found.map((entry) => `[${entry.side}] ${entry.note}`).join("\n");
 }
 
 /** AI翻訳レビューのオプション */
