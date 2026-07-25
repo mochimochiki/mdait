@@ -46,6 +46,8 @@ export interface UnitReviewResult {
 	unitHash: string;
 	fromHash: string;
 	title?: string;
+	/** ターゲットファイル内のユニット開始行（1始まり）。レポートの行リンクに使う */
+	line?: number;
 	verdict?: PairVerdict;
 	confidence?: number;
 	issues: string[];

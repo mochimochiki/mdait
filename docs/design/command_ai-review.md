@@ -150,6 +150,8 @@ sequenceDiagram
 { "results": [ { "index": 1, "verdict": "match", "confidence": 0.95, "issues": [], "reason": "..." } ] }
 ```
 
+`reason` / `issues` の**記述言語**は user-section の `{{responseLang}}`（VS Code の表示言語から `getResponseLanguage()` が組み立てる例: `Japanese (ja)`）で指示する。JSON キーと verdict 語彙は英語固定（ADR-260719-01）。変数未指定・レガシーテンプレート時は英語（レガシーはコード側で指示文を1行添える）。
+
 バリデーション: verdict が4値 enum・confidence が number（0..1 クランプ）でなければ retryable エラーとしてリトライ（system 固定・user message 末尾に RETRY INSTRUCTION 追記、`trans.retryLimit` と同じ最大2回）。リトライ枯渇時は `verdict: uncertain, confidence: 0` 相当（自動承認されない安全側。バッチは部分受理）。
 
 ### 設定（aiReview）
@@ -168,7 +170,7 @@ sequenceDiagram
 - コマンド: StatusTree のファイル/ディレクトリ行のインラインボタン `$(verified)`「✨AI翻訳レビュー」。QuickPick で範囲を選ぶ: 「未確認の訳のみレビュー」（pending）/「すべての訳を監査（レポートのみ・マーカー変更なし）」（audit）
 - 進捗: `withProgress`（cancellable）。AI 初回利用は AIOnboarding ゲート
 - 結果通知: escalated > 0 なら warning、それ以外は info
-- レポート: `mdait-ai-review:` スキームの仮想ドキュメント（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）
+- レポート: `mdait-ai-review:` スキームの仮想ドキュメント（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）。見出しは `buildReviewReport` へのラベル注入で表示言語化する（件数の語彙行・表ヘッダ・verdict/action 語彙は共通語彙として英語固定。ADR-260719-01）。ユニット列の行リンクは実ファイルのレポート（取り込みウィザード）でのみ有効にする（仮想ドキュメントは相対リンクを解決できないため）
 - hover: `SummaryManager.reviewReasons` に `AI translation review: {verdict} ({confidence}) — {reason}` を保存
 - StatusTree: 変更なし（need:review 数の減少が自然に反映される）
 

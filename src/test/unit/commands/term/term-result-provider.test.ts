@@ -76,3 +76,21 @@ suite("generateContent (term-detect)", () => {
 		assert.match(content, /# Term Detect Results - \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
 	});
 });
+
+suite("generateContent（ラベル注入・表示言語化）", () => {
+	test("ラベルを注入すると見出しと定型文が差し替わる", () => {
+		const content = generateContent(
+			{ entries: [], sourceLang: "ja", targetLang: "en" },
+			{
+				title: "用語検出結果",
+				detectedHeading: "検出",
+				none: "（なし）",
+				targetNotDetected: "（訳語未検出）",
+				context: "文脈",
+			},
+		);
+		assert.ok(content.includes("# 用語検出結果 - "));
+		assert.ok(content.includes("## 検出 (0)"));
+		assert.ok(content.includes("（なし）"));
+	});
+});

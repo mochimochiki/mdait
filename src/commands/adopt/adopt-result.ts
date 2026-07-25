@@ -8,7 +8,7 @@
  */
 
 import { type AiReviewFileResult, type ReviewAggregate, aggregateReviewResults } from "../ai-review/review-result";
-import { generateReviewTableSection } from "../ai-review/review-table";
+import { type ReviewTableOptions, generateReviewTableSection } from "../ai-review/review-table";
 import type { SyncResult } from "../sync/sync-command";
 
 /** 用語集構築段（term.detect → term.expand）の集計 */
@@ -75,41 +75,82 @@ export function formatSyncLine(sync: SyncResult): string {
 }
 
 /**
+ * 統合レポートの見出し・定型文（表示言語化のために VS Code 層から注入する。
+ * 既定は英語 — 純関数のままテストできるようにするため。ADR-260719-01）。
+ * 件数の語彙行（`adopted: 3 | ...`）はエージェントとの共通語彙なので英語固定とする。
+ */
+export interface AdoptReportLabels {
+	title: string;
+	syncHeading: string;
+	syncNotRun: string;
+	/** `files: {0} processed, {1} failed` 相当 */
+	filesLine: (processed: number, failed: number) => string;
+	reviewHeading: string;
+	dryRunNote: string;
+	glossaryHeading: string;
+	tmHeading: string;
+	stageErrorsHeading: string;
+}
+
+/** ラベル未注入時の既定（英語） */
+export const DEFAULT_ADOPT_REPORT_LABELS: AdoptReportLabels = {
+	title: "mdait Adopt Existing Translations",
+	syncHeading: "Sync (adopt + AI align)",
+	syncNotRun: "Sync did not run (check the mdait configuration).",
+	filesLine: (processed, failed) => `files: ${processed} processed, ${failed} failed`,
+	reviewHeading: "AI Translation Review",
+	dryRunNote: "_dry run: no markers were changed; glossary and TM steps were skipped._",
+	glossaryHeading: "Glossary",
+	tmHeading: "Translation Memory",
+	stageErrorsHeading: "Stage errors",
+};
+
+/** レポート生成のオプション */
+export interface AdoptReportOptions extends ReviewTableOptions {
+	/** 見出し・定型文のラベル（省略時は英語の既定） */
+	labels?: AdoptReportLabels;
+}
+
+/**
  * 取り込みウィザードの統合レポート（Markdown）を生成する（純関数・テスト可能）。
  * sync 段 → レビュー段 → 用語集段 → TM 段 → 段エラーの順で構成する
  * （オプション段のセクションは実行時のみ出力）。
+ *
+ * @param outcome 取り込み1回分の結果
+ * @param options ラベル注入（表示言語化）とユニット行リンクの基準ディレクトリ
  */
-export function generateAdoptReportContent(outcome: AdoptOutcome): string {
-	const lines: string[] = ["# mdait Adopt Existing Translations", ""];
+export function generateAdoptReportContent(outcome: AdoptOutcome, options: AdoptReportOptions = {}): string {
+	const labels = options.labels ?? DEFAULT_ADOPT_REPORT_LABELS;
+	const lines: string[] = [`# ${labels.title}`, ""];
 
-	lines.push("## Sync (adopt + AI align)", "");
+	lines.push(`## ${labels.syncHeading}`, "");
 	if (outcome.aborted || !outcome.sync) {
-		lines.push("Sync did not run (check the mdait configuration).", "");
+		lines.push(labels.syncNotRun, "");
 	} else {
 		lines.push(
-			`files: ${outcome.sync.totalFileCount} processed, ${outcome.sync.errorCount} failed`,
+			labels.filesLine(outcome.sync.totalFileCount, outcome.sync.errorCount),
 			formatSyncLine(outcome.sync),
 			"",
 		);
 	}
 
 	const agg = aggregateReviewResults(outcome.review);
-	lines.push("## AI Translation Review", "");
+	lines.push(`## ${labels.reviewHeading}`, "");
 	if (outcome.dryRun) {
-		lines.push("_dry run: no markers were changed; glossary and TM steps were skipped._", "");
+		lines.push(labels.dryRunNote, "");
 	}
 	lines.push(
 		`verified: ${agg.verified} | approved: ${agg.approved} | escalated: ${agg.escalated} | ` +
 			`kept: ${agg.kept} | skipped: ${agg.skipped} | errors: ${agg.errors}`,
 		"",
 	);
-	const table = generateReviewTableSection(outcome.review);
+	const table = generateReviewTableSection(outcome.review, { linkBaseDir: options.linkBaseDir });
 	if (table.trim().length > 0) {
 		lines.push(table);
 	}
 
 	if (outcome.term) {
-		lines.push("## Glossary", "");
+		lines.push(`## ${labels.glossaryHeading}`, "");
 		lines.push(
 			`detected: ${outcome.term.detected} | expanded: ${outcome.term.expanded} | remaining: ${outcome.term.remaining}`,
 			"",
@@ -117,7 +158,7 @@ export function generateAdoptReportContent(outcome: AdoptOutcome): string {
 	}
 
 	if (outcome.tm) {
-		lines.push("## Translation Memory", "");
+		lines.push(`## ${labels.tmHeading}`, "");
 		lines.push(
 			`files: ${outcome.tm.files} | units: ${outcome.tm.processedUnits} | new: ${outcome.tm.newEntries} | ` +
 				`updated: ${outcome.tm.existingEntries} | warnings: ${outcome.tm.warnedEntries} | errors: ${outcome.tm.errorUnits}`,
@@ -126,7 +167,7 @@ export function generateAdoptReportContent(outcome: AdoptOutcome): string {
 	}
 
 	if (outcome.stageErrors.length > 0) {
-		lines.push("## Stage errors", "");
+		lines.push(`## ${labels.stageErrorsHeading}`, "");
 		for (const err of outcome.stageErrors) {
 			lines.push(`- ${err.stage}${err.scope ? ` (${err.scope})` : ""}: ${err.message}`);
 		}

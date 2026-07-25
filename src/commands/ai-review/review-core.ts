@@ -17,6 +17,7 @@ import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { getResponseLanguage } from "../../infra/llm/response-language";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
@@ -203,6 +204,8 @@ export async function executeAiReviewForFile(
 			threshold: AUTO_APPROVE_THRESHOLD,
 		};
 		const summaryManager = SummaryManager.getInstance();
+		// AI が返す reason / issues は VS Code の表示言語で書かせる（ADR-260719-01）
+		const responseLang = getResponseLanguage();
 		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
 		let mutationCount = 0;
 
@@ -217,6 +220,8 @@ export async function executeAiReviewForFile(
 					unitHash: marker?.hash ?? "",
 					fromHash: marker?.from ?? "",
 					title: pair.targetUnit.title,
+					// レポートの行リンク用（startLine は 0 始まり、リンクは 1 始まり）
+					line: pair.targetUnit.startLine + 1,
 					issues: [],
 					action: "kept",
 				},
@@ -226,7 +231,7 @@ export async function executeAiReviewForFile(
 		for (const entry of entries) {
 			if (!entry.pair.sourceUnit) {
 				entry.unitResult.action = "skipped";
-				entry.unitResult.reason = "Source unit not found for from hash";
+				entry.unitResult.reason = vscode.l10n.t("Source unit not found for from hash");
 				result.skipped++;
 				entry.processed = true;
 			}
@@ -283,6 +288,7 @@ export async function executeAiReviewForFile(
 						{
 							sourceLang: transPair.sourceLang,
 							targetLang: transPair.targetLang,
+							responseLang,
 							sourceText: single.sourceText,
 							targetText: single.targetText,
 							humanNote: single.humanNote,
@@ -298,6 +304,7 @@ export async function executeAiReviewForFile(
 						{
 							sourceLang: transPair.sourceLang,
 							targetLang: transPair.targetLang,
+							responseLang,
 							pairs: batchPairs,
 						},
 						token,
@@ -310,7 +317,7 @@ export async function executeAiReviewForFile(
 					const verifyResult = verifyResults.get(j + 1);
 					if (!verifyResult) {
 						entry.unitResult.action = "error";
-						entry.unitResult.reason = "No verdict returned for pair";
+						entry.unitResult.reason = vscode.l10n.t("No verdict returned for pair");
 						result.errors++;
 						entry.processed = true;
 						continue;

@@ -22,7 +22,6 @@ import {
 	AiReviewResultContentProvider,
 } from "./commands/ai-review/review-result-provider";
 import { adoptCommand } from "./commands/adopt/adopt-command";
-import { AdoptResultContentProvider } from "./commands/adopt/adopt-result-provider";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -70,13 +69,12 @@ import {
 	codeLensClearFrontmatterNeedCommand,
 	codeLensClearNeedCommand,
 	codeLensDeleteUnitCommand,
-	codeLensEditNoteCommand,
 	codeLensJumpToSourceCommand,
 	codeLensJumpToSourceFileCommand,
 	codeLensJumpToSourceFrontmatterCommand,
 	codeLensJumpToTargetCommand,
 	codeLensJumpToTargetFileCommand,
-	codeLensMarkIsolatedCommand,
+	codeLensOtherActionsCommand,
 	codeLensTranslateCommand,
 	codeLensTranslateFileCommand,
 	editNoteForUnitCommand,
@@ -409,14 +407,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		new AiReviewResultCodeLensProvider(),
 	);
 
-	// Adopt Result ContentProvider登録
-	const adoptResultProvider = AdoptResultContentProvider.getInstance();
-	const adoptResultProviderDisposable =
-		vscode.workspace.registerTextDocumentContentProvider(
-			AdoptResultContentProvider.scheme,
-			adoptResultProvider,
-		);
-
 	// TM Result ContentProvider登録
 	const tmResultProvider = TmResultContentProvider.getInstance();
 	const tmResultProviderDisposable =
@@ -463,12 +453,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensDeleteUnitCommand,
 	);
 
-	// CodeLens isolate 宣言コマンド（UX-R1: isolate 宣言UI）
-	const codeLensMarkIsolatedDisposable = vscode.commands.registerCommand(
-		"mdait.codelens.markIsolated",
-		codeLensMarkIsolatedCommand,
-	);
-
 	// Frontmatter翻訳コマンド（StatusTree/CodeLensから呼び出し）
 	const translateFrontmatterDisposable = vscode.commands.registerCommand(
 		"mdait.translate.frontmatter",
@@ -508,11 +492,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensProvider.refresh();
 	});
 
-	// ユニット note 編集コマンド（audit 時に AI へ渡すメタ情報）
-	const editNoteDisposable = vscode.commands.registerCommand(
-		"mdait.unit.editNote",
+	// CodeLens「その他」メニュー（isolate 宣言・note 編集。ADR-260719-01）
+	const codeLensOtherActionsDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.otherActions",
 		async (range: vscode.Range) => {
-			await codeLensEditNoteCommand(range);
+			await codeLensOtherActionsCommand(range);
 			codeLensProvider.refresh();
 		},
 	);
@@ -946,8 +930,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
 		codeLensDeleteUnitDisposable,
-		codeLensMarkIsolatedDisposable,
-		editNoteDisposable,
+		codeLensOtherActionsDisposable,
 		editNoteForUnitDisposable,
 		codeLensDisposable,
 		hoverDisposable,
@@ -976,8 +959,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		aiReviewResultProviderDisposable,
 		aiReviewResultCodeLensDisposable,
 		aiReviewResultProvider,
-		adoptResultProviderDisposable,
-		adoptResultProvider,
 		tmResultProviderDisposable,
 		tmResultProvider,
 		termResultProviderDisposable,

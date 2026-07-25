@@ -36,7 +36,14 @@ export class TermResultContentProvider implements vscode.TextDocumentContentProv
 
 	/** 最新の結果をセットし、既存タブの内容を更新する。 */
 	setContent(result: TermDetectResult): void {
-		this.latestContent = generateContent(result);
+		// 見出し・定型文は表示言語で出す（ADR-260719-01）
+		this.latestContent = generateContent(result, {
+			title: vscode.l10n.t("Term Detect Results"),
+			detectedHeading: vscode.l10n.t("Detected"),
+			none: vscode.l10n.t("(none)"),
+			targetNotDetected: vscode.l10n.t("(target not detected)"),
+			context: vscode.l10n.t("context"),
+		});
 		this._onDidChange.fire(PREVIEW_URI);
 	}
 

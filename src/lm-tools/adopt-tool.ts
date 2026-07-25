@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAdopt } from "../commands/adopt/adopt-core";
+import { writeAdoptReport } from "../commands/adopt/adopt-report-file";
 import { buildAdoptStepList } from "../commands/adopt/adopt-command";
 import { type AdoptOutcome, type AdoptStageError, buildAdoptNextActions } from "../commands/adopt/adopt-result";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
@@ -79,6 +80,8 @@ interface AdoptData {
 		threshold: number;
 	};
 	dryRun: boolean;
+	/** 統合レポート（Markdown 実ファイル）のワークスペース相対パス */
+	reportPath: string;
 	/** エスカレーション（mismatch/partial）の一覧。最大50件 */
 	escalations: Array<{
 		file: string;
@@ -145,6 +148,9 @@ export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 					]),
 				);
 			}
+
+			// 人間が後から確認できるよう、レポートは実ファイルにも残す（プレビュー表示はしない）
+			await writeAdoptReport(config, outcome);
 
 			const data = buildAdoptData(outcome, config);
 			const summaryParts = [
@@ -267,6 +273,7 @@ function buildAdoptData(outcome: AdoptOutcome, config: Configuration): AdoptData
 			threshold: AUTO_APPROVE_THRESHOLD,
 		},
 		dryRun: outcome.dryRun,
+		reportPath: toRelative(config.getAdoptReportFilePath()),
 		escalations,
 		status: buildStatusData(getSelectedScopeFiles(StatusManager.getInstance().getStatusItemTree()), false),
 	};

@@ -145,3 +145,34 @@ suite("PairVerifier（AI呼び出しとリトライ）", () => {
 		assert.strictEqual(stub.calls.length, 0);
 	});
 });
+
+suite("PairVerifier（AI応答の記述言語指示）", () => {
+	teardown(() => {
+		PromptProvider.dispose();
+	});
+
+	test("responseLang を渡すと user message に記述言語の指示が入る", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify({ ...request, responseLang: "Japanese (ja)" });
+		assert.ok(stub.calls[0].user.includes("Japanese (ja)"), stub.calls[0].user);
+		// system は静的なまま（プレフィックスキャッシュ維持）
+		assert.ok(!stub.calls[0].system.includes("Japanese (ja)"));
+	});
+
+	test("responseLang 未指定なら指示行は出ない（既定の英語）", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify(request);
+		assert.ok(!stub.calls[0].user.includes("Response language"), stub.calls[0].user);
+	});
+
+	test("バッチ経路でも responseLang が user message に入る", async () => {
+		const stub = new StubAIService(['{"results": [{"index": 1, "verdict": "match", "confidence": 0.9, "issues": [], "reason": "OK"}]}']);
+		await buildVerifier(stub).verifyBatch({
+			sourceLang: "ja",
+			targetLang: "en",
+			responseLang: "Japanese (ja)",
+			pairs: [{ index: 1, sourceText: "本文A。", targetText: "Content A." }],
+		});
+		assert.ok(stub.calls[0].user.includes("Japanese (ja)"), stub.calls[0].user);
+	});
+});

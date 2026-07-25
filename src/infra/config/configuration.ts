@@ -415,6 +415,14 @@ export class Configuration {
 	}
 
 	/**
+	 * 既存翻訳の取り込みウィザードの統合レポート（Markdown 実ファイル）の絶対パスを取得する。
+	 * 実行ごとに上書きされる（ADR-260719-01）。
+	 */
+	public getAdoptReportFilePath(): string {
+		return path.join(this.getMdaitDir(), "adopt-report.md");
+	}
+
+	/**
 	 * マーカー保管方式が external かどうかを返す。
 	 */
 	public isExternalMarkers(): boolean {

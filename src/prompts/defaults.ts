@@ -1028,6 +1028,7 @@ Source Text Changes:
  * - {{targetLang}}: ターゲット言語コード (例: "en")
  * - {{sourceText}}: ソースユニット本文
  * - {{targetText}}: ターゲットユニット本文
+ * - {{responseLang}}: reason / issues の記述言語（例: "Japanese (ja)"。省略時は英語）
  *
  * @output
  * ```json
@@ -1056,11 +1057,12 @@ JUDGEMENT RULES:
 4. If most content corresponds but some sentences or paragraphs have no counterpart, use "partial" and list each gap in "issues".
 5. An untranslated copy is NOT a "match": if the target text is still written in the source language, use "mismatch" when the whole unit is untranslated, or "partial" with an issue note (e.g. "untranslated: second half is still in the source language") when only part of it is.
 6. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
-7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
-8. "reason" is one short English sentence summarizing the judgement.
-9. If a <humanNote> block is provided, it is the document author's own explanation of this unit (e.g. "this section is intentionally summarized" or "this part is intentionally omitted from the source"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
-10. If a <terms> block is provided, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
-11. If a <tmReferences> block is provided, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
+7. "issues" is a list of short notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
+8. "reason" is one short sentence summarizing the judgement.
+9. Write "issues" and "reason" in the language given as "Response language" in the user message (default English when it is absent). Keep the JSON keys and the "verdict" vocabulary in English.
+10. If a <humanNote> block is provided, it is the document author's own explanation of this unit (e.g. "this section is intentionally summarized" or "this part is intentionally omitted from the source"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
+11. If a <terms> block is provided, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
+12. If a <tmReferences> block is provided, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
 
 CRITICAL OUTPUT FORMAT RULES:
 
@@ -1082,13 +1084,16 @@ Response Format:
 {
   "verdict": "match | partial | mismatch | uncertain",
   "confidence": 0.0,
-  "issues": ["short English note per problem"],
-  "reason": "one short English sentence"
+  "issues": ["short note per problem, in the response language"],
+  "reason": "one short sentence, in the response language"
 }
 <!-- mdait:user-section -->
 Verification Task:
 - Source language: {{sourceLang}}
 - Target language: {{targetLang}}
+{{#responseLang}}
+- Response language (for "reason" and "issues"): {{responseLang}}
+{{/responseLang}}
 
 <sourceUnit>
 {{sourceText}}
@@ -1122,6 +1127,7 @@ Verification Task:
  * @input
  * - {{sourceLang}}: ソース言語コード (例: "ja")
  * - {{targetLang}}: ターゲット言語コード (例: "en")
+ * - {{responseLang}}: reason / issues の記述言語（例: "Japanese (ja)"。省略時は英語）
  * - {{pairCount}}: ペア数
  * - {{pairs}}: <pair index="N"> ブロック列（buildPairsBlock で組み立て）
  *
@@ -1151,11 +1157,12 @@ JUDGEMENT RULES:
 4. If most content corresponds but some sentences or paragraphs have no counterpart, use "partial" and list each gap in "issues".
 5. An untranslated copy is NOT a "match": if the target text is still written in the source language, use "mismatch" when the whole unit is untranslated, or "partial" with an issue note (e.g. "untranslated: second half is still in the source language") when only part of it is.
 6. "confidence" is your certainty in the verdict, from 0.0 (guess) to 1.0 (certain).
-7. "issues" is a list of short English notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
-8. "reason" is one short English sentence summarizing the judgement.
-9. If a <humanNote> block is provided inside a pair, it is the document author's own explanation of that unit (e.g. "this section is intentionally summarized"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
-10. If a <terms> block is provided inside a pair, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
-11. If a <tmReferences> block is provided inside a pair, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
+7. "issues" is a list of short notes, each describing one concrete problem (e.g. "omission: last paragraph about error handling is missing in target"). Leave it empty for a clean match.
+8. "reason" is one short sentence summarizing the judgement.
+9. Write "issues" and "reason" in the language given as "Response language" in the user message (default English when it is absent). Keep the JSON keys and the "verdict" vocabulary in English.
+10. If a <humanNote> block is provided inside a pair, it is the document author's own explanation of that unit (e.g. "this section is intentionally summarized"). Treat such a stated deviation as INTENTIONAL: if the note plausibly explains the difference you observe, judge "match" and do not report that explained difference as an issue. Still flag any problem the note does NOT cover.
+11. If a <terms> block is provided inside a pair, it lists established glossary translations for this project. When a source term is translated differently from the glossary, or the target uses a competing translation for a glossary term, report it as a terminology inconsistency: use "partial" and add an issue (e.g. "terminology: 'cache' translated as 'X', glossary says 'Y'") — unless a <humanNote> explains the deviation.
+12. If a <tmReferences> block is provided inside a pair, it lists past translations of similar sentences from this project's translation memory. Do NOT penalize stylistic differences from these references. Only when the target clearly contradicts an established translation of the SAME expression (translation inconsistency), report it as an issue.
 
 BATCH RULES:
 - Judge each <pair> INDEPENDENTLY. Do not let one pair influence another.
@@ -1183,8 +1190,8 @@ Response Format:
       "index": 1,
       "verdict": "match | partial | mismatch | uncertain",
       "confidence": 0.0,
-      "issues": ["short English note per problem"],
-      "reason": "one short English sentence"
+      "issues": ["short note per problem, in the response language"],
+      "reason": "one short sentence, in the response language"
     }
   ]
 }
@@ -1192,6 +1199,9 @@ Response Format:
 Verification Task:
 - Source language: {{sourceLang}}
 - Target language: {{targetLang}}
+{{#responseLang}}
+- Response language (for "reason" and "issues"): {{responseLang}}
+{{/responseLang}}
 - Number of pairs: {{pairCount}}
 
 {{pairs}}`;

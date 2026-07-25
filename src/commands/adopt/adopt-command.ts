@@ -13,8 +13,8 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { aggregateReviewResults } from "../ai-review/review-result";
 import { type AdoptOptions, executeAdopt } from "./adopt-core";
+import { openAdoptReport, writeAdoptReport } from "./adopt-report-file";
 import type { AdoptOutcome } from "./adopt-result";
-import { AdoptResultContentProvider } from "./adopt-result-provider";
 
 const logger = Logger.getInstance();
 
@@ -66,7 +66,7 @@ export async function adoptCommand(): Promise<AdoptOutcome | undefined> {
 			try {
 				const outcome = await executeAdopt(config, options, progress, token);
 				showAdoptResult(outcome);
-				await showAdoptPreview(outcome);
+				await showAdoptPreview(config, outcome);
 				return outcome;
 			} catch (error) {
 				logger.error("adopt", "Adopt failed", formatError(error));
@@ -169,12 +169,15 @@ function showAdoptResult(outcome: AdoptOutcome): void {
 }
 
 /**
- * 取り込み結果のプレビュードキュメントを開く。sync が走った場合のみ表示する。
+ * 取り込み結果のレポートを `.mdait/adopt-report.md` へ書き出し、プレビューで開く。
+ * sync が走った場合のみ表示する。
  */
-async function showAdoptPreview(outcome: AdoptOutcome): Promise<void> {
+async function showAdoptPreview(config: Configuration, outcome: AdoptOutcome): Promise<void> {
 	if (outcome.aborted || !outcome.sync) {
 		return;
 	}
-	AdoptResultContentProvider.getInstance().setContent(outcome);
-	await AdoptResultContentProvider.openPreview();
+	const uri = await writeAdoptReport(config, outcome);
+	if (uri) {
+		await openAdoptReport(uri);
+	}
 }

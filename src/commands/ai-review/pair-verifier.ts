@@ -35,6 +35,11 @@ export interface VerifyRequest {
 	tmReferences?: string;
 	/** ログ用コンテキスト */
 	unitContext?: { unitHash?: string; title?: string };
+	/**
+	 * AI が reason / issues を書く言語（例: "Japanese (ja)"）。
+	 * 省略時はプロンプト側の既定（英語）になる（ADR-260719-01）。
+	 */
+	responseLang?: string;
 }
 
 /** バッチ検証要求 */
@@ -43,6 +48,8 @@ export interface VerifyBatchRequest {
 	targetLang: string;
 	/** 検証対象ペア（index は 1-based 連番） */
 	pairs: VerifyBatchPair[];
+	/** AI が reason / issues を書く言語（例: "Japanese (ja)"） */
+	responseLang?: string;
 }
 
 /** 検証結果（リトライ枯渇時は fallback: true で uncertain 相当を返す） */
@@ -50,6 +57,14 @@ export interface VerifyResult {
 	parsed: ParsedVerifyResponse;
 	/** リトライ枯渇により安全側（uncertain / confidence 0）へフォールバックしたか */
 	fallback: boolean;
+}
+
+/**
+ * レガシーテンプレート用に、reason / issues の記述言語指示を1行で組み立てる。
+ * 未指定なら空文字（プロンプト既定の英語のまま）。
+ */
+function formatResponseLangLine(responseLang?: string): string {
+	return responseLang ? `\nWrite "reason" and "issues" in ${responseLang}.` : "";
 }
 
 /**
@@ -86,12 +101,14 @@ export class PairVerifier {
 			targetText: request.targetText,
 			terms: request.termsJson ? escapeForTag(request.termsJson) : "",
 			tmReferences: request.tmReferences ? escapeForTag(request.tmReferences) : "",
+			responseLang: request.responseLang ?? "",
 		});
 
 		// user-section 分割テンプレートでは userContext に全変数が展開される。
 		// レガシー（マーカーなしカスタムプロンプト）では system に全展開されるため簡潔な指示のみ送る。
+		// 表示言語の指示はテンプレートに依存せず届ける（レガシー/カスタムでも効く）。
 		const baseUserMessageRaw = promptParts.isLegacy
-			? "Judge the pairing and return ONLY the JSON verdict object."
+			? `Judge the pairing and return ONLY the JSON verdict object.${formatResponseLangLine(request.responseLang)}`
 			: promptParts.userContext;
 		// 人間の note はプロンプトテンプレートに依存せず user メッセージ末尾に添える
 		// （標準/レガシー/カスタムのいずれでも意図的乖離の説明が AI に届く）。
@@ -177,12 +194,13 @@ export class PairVerifier {
 			targetLang: request.targetLang,
 			pairCount: String(request.pairs.length),
 			pairs: pairsBlock,
+			responseLang: request.responseLang ?? "",
 		});
 
 		// レガシー（マーカーなしカスタムプロンプト）では変数が user 側に展開されないため、
 		// 簡潔な指示とペアブロックをコードで連結して送る。
 		const baseUserMessage = promptParts.isLegacy
-			? `Judge each pair independently and return ONLY the JSON results object.\n\n${pairsBlock}`
+			? `Judge each pair independently and return ONLY the JSON results object.${formatResponseLangLine(request.responseLang)}\n\n${pairsBlock}`
 			: promptParts.userContext;
 
 		let lastError: ValidationError | undefined;

@@ -46,6 +46,12 @@ const vscodeMock = {
 			update: async () => {},
 		}),
 	},
+	// 表示言語（テスト側で global.__vscodeMockLanguage を設定して上書きできる）
+	env: {
+		get language() {
+			return global.__vscodeMockLanguage ?? "en";
+		},
+	},
 	l10n: {
 		t: (message, ...args) => {
 			if (typeof message !== "string") return String(message);

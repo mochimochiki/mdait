@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - StatusTree: dedicated icons/tooltips for `need:verify-deletion` and `need:isolate`, and a distinct tooltip for `need:revise`
 - StatusTree: "Go to Next Item Needing Attention" (`mdait.needsAttention.next`) — jump to the next review/deletion decision in one step, from the CodeLens decision row, the Needs Attention node, or `ctrl+alt+n` / `cmd+alt+n`
 - StatusTree: Needs Attention items now show the file name and kind as a subtitle, and are always listed in a stable order (file path, then line)
+- CodeLens: a single "More" menu (`$(kebab-vertical)`) collects the low-frequency unit actions — "Mark as Isolated" and "Note" — and is now available on source units too (source-side isolate stops propagation; source-side notes reach the AI during audit)
+- Adopt wizard: the report is written to `.mdait/adopt-report.md` and opened in the Markdown preview; every unit row links to the exact line of the reviewed unit
+- Reports and AI review prose now follow the VS Code display language: report headings/boilerplate are localized, and the AI is asked to write review `reason` / `issues` in that language (`{{responseLang}}` in `aiReview.verifyPairing` / `aiReview.verifyPairingBatch`)
 
 - Unit-based Markdown synchronization with CRC32 hash tracking
 - AI translation with glossary and context injection (VS Code LM API, OpenAI, Ollama)
@@ -31,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- CodeLens: the standalone "Mark as Isolated" and "Note" buttons were replaced by the single "More" menu (commands `mdait.codelens.markIsolated` / `mdait.unit.editNote` are gone; use `mdait.codelens.otherActions`)
+- Adopt wizard: the report is a real file (`.mdait/adopt-report.md`, overwritten per run) instead of a `mdait-adopt:` virtual document
 - Item-argument commands (translate/term/tm-commit/ai-review variants) are hidden from the Command Palette; the ▶ (Translate Unit) inline button now appears only on units that trans will actually process
 - Unmarked orphan target content is no longer deleted by the orphan policy; sync now flags it with `need:review` (no `from`) so a human decides between declaring it independent, isolating it, or deleting it
 - `sync.orphanTargetPolicy` is narrowed to `"delete" | "verify"` and now applies only to managed orphans (units with a dangling `from`); legacy values `"keep"`/`"backfill"` are interpreted as `"verify"` with a warning

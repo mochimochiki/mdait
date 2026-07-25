@@ -53,3 +53,16 @@ suite("generateContent", () => {
 		assert.match(content, /# TM Commit Results - \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
 	});
 });
+
+suite("generateContent（ラベル注入・表示言語化）", () => {
+	test("ラベルを注入すると見出しと (none) が差し替わる", () => {
+		const content = generateContent(
+			{ newItems: [], updatedItems: [] },
+			{ title: "TM登録結果", newHeading: "新規", updatedHeading: "更新", none: "（なし）" },
+		);
+		assert.ok(content.includes("# TM登録結果 - "));
+		assert.ok(content.includes("## 新規 (0)"));
+		assert.ok(content.includes("## 更新 (0)"));
+		assert.ok(content.includes("（なし）"));
+	});
+});
