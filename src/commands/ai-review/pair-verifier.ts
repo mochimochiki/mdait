@@ -35,6 +35,11 @@ export interface VerifyRequest {
 	tmReferences?: string;
 	/** ログ用コンテキスト */
 	unitContext?: { unitHash?: string; title?: string };
+	/**
+	 * AI が reason / issues を書く言語（例: "Japanese (ja)"）。
+	 * 省略時はプロンプト側の既定（英語）になる（ADR-260719-01）。
+	 */
+	responseLang?: string;
 }
 
 /** バッチ検証要求 */
@@ -43,6 +48,8 @@ export interface VerifyBatchRequest {
 	targetLang: string;
 	/** 検証対象ペア（index は 1-based 連番） */
 	pairs: VerifyBatchPair[];
+	/** AI が reason / issues を書く言語（例: "Japanese (ja)"） */
+	responseLang?: string;
 }
 
 /** 検証結果（リトライ枯渇時は fallback: true で uncertain 相当を返す） */
@@ -50,6 +57,20 @@ export interface VerifyResult {
 	parsed: ParsedVerifyResponse;
 	/** リトライ枯渇により安全側（uncertain / confidence 0）へフォールバックしたか */
 	fallback: boolean;
+}
+
+/**
+ * reason / issues の記述言語指示を1行で組み立てる（テンプレートに `{{responseLang}}` が無い場合の補完用）。
+ * 既に展開済みの user メッセージに言語名が含まれていれば二重指示にならないよう空文字を返す。
+ *
+ * @param userMessage 変数展開済みの user メッセージ
+ * @param responseLang 記述言語（未指定ならプロンプト既定の英語のまま）
+ */
+function formatResponseLangLine(userMessage: string, responseLang?: string): string {
+	if (!responseLang || userMessage.includes(responseLang)) {
+		return "";
+	}
+	return `\n\nWrite "reason" and "issues" in ${responseLang}.`;
 }
 
 /**
@@ -86,13 +107,17 @@ export class PairVerifier {
 			targetText: request.targetText,
 			terms: request.termsJson ? escapeForTag(request.termsJson) : "",
 			tmReferences: request.tmReferences ? escapeForTag(request.tmReferences) : "",
+			responseLang: request.responseLang ?? "",
 		});
 
 		// user-section 分割テンプレートでは userContext に全変数が展開される。
 		// レガシー（マーカーなしカスタムプロンプト）では system に全展開されるため簡潔な指示のみ送る。
-		const baseUserMessageRaw = promptParts.isLegacy
+		const renderedUserMessage = promptParts.isLegacy
 			? "Judge the pairing and return ONLY the JSON verdict object."
 			: promptParts.userContext;
+		// 表示言語の指示はテンプレートに依存せず届ける（`{{responseLang}}` を持たない
+		// カスタム/レガシーテンプレートでも効かせる。humanNote と同じくコード側で添える）。
+		const baseUserMessageRaw = `${renderedUserMessage}${formatResponseLangLine(renderedUserMessage, request.responseLang)}`;
 		// 人間の note はプロンプトテンプレートに依存せず user メッセージ末尾に添える
 		// （標準/レガシー/カスタムのいずれでも意図的乖離の説明が AI に届く）。
 		// note は外部データなので山括弧をエスケープし、</humanNote> 等でラッパーを
@@ -177,13 +202,16 @@ export class PairVerifier {
 			targetLang: request.targetLang,
 			pairCount: String(request.pairs.length),
 			pairs: pairsBlock,
+			responseLang: request.responseLang ?? "",
 		});
 
 		// レガシー（マーカーなしカスタムプロンプト）では変数が user 側に展開されないため、
 		// 簡潔な指示とペアブロックをコードで連結して送る。
-		const baseUserMessage = promptParts.isLegacy
+		const renderedUserMessage = promptParts.isLegacy
 			? `Judge each pair independently and return ONLY the JSON results object.\n\n${pairsBlock}`
 			: promptParts.userContext;
+		// 単ペア経路と同じく、テンプレートに `{{responseLang}}` が無い場合はコード側で補う
+		const baseUserMessage = `${renderedUserMessage}${formatResponseLangLine(renderedUserMessage, request.responseLang)}`;
 
 		let lastError: ValidationError | undefined;
 		let lastEntries = new Map<number, ParsedVerifyResponse>();

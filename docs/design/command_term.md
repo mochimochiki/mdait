@@ -132,4 +132,4 @@ sequenceDiagram
 | [`term-expander.ts`](../../src/commands/term/term-expander.ts) | `TermExpander.expand()` - AI訳語推定 |
 | [`unit-pair-collector.ts`](../../src/commands/term/unit-pair-collector.ts) | `UnitPairCollector` - ソース/ターゲットのペア収集 |
 | [`command-open.ts`](../../src/commands/term/command-open.ts) | `openTermCommand()` - 用語集ファイルをエディタで開く |
-| [`term-result-provider.ts`](../../src/commands/term/term-result-provider.ts) | `TermResultContentProvider` - term-detect結果の仮想ドキュメントプレビュー（TM側と同パターン） |
+| [`term-result-provider.ts`](../../src/commands/term/term-result-provider.ts) | `TermResultContentProvider` - term-detect結果の仮想ドキュメントプレビュー（TM側と同パターン）。見出し・定型文はラベル注入で表示言語化（ADR-260719-01） |

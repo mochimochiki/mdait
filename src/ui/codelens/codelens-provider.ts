@@ -22,6 +22,20 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
 /**
+ * 「その他」メニュー（isolate 宣言・note 編集）を出すユニットかどうかを判定する（純関数）。
+ * 訳文は対訳ユニット（from あり）、原文はマーカー hash を持つユニットが対象。
+ * 原文側も isolate 宣言・note 編集の対象である（ADR-260706-02・audit は from 経由で原文 note も読む）。
+ * from なしの訳文ユニット（独立ユニット）は対象外 — isolate は伝播停止の宣言であり、
+ * 対訳を持たないユニットには意味がなく、note も audit（対訳ペア単位）で読まれないため。
+ *
+ * @param marker 対象ユニットのマーカー
+ * @param isSourceFile 原文ファイルかどうか
+ */
+export function shouldShowOtherActions(marker: Pick<MdaitMarker, "hash" | "from">, isSourceFile: boolean): boolean {
+	return Boolean(marker.hash) && (isSourceFile || Boolean(marker.from));
+}
+
+/**
  * mdaitマーカーのCodeLensを提供するプロバイダー
  */
 export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
@@ -101,7 +115,6 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.translate",
 					"mdait.codelens.clearNeed",
 					"mdait.codelens.deleteUnit",
-					"mdait.codelens.markIsolated",
 					[range],
 					isSourceFile,
 				);
@@ -138,7 +151,6 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.translate",
 					"mdait.codelens.clearNeed",
 					"mdait.codelens.deleteUnit",
-					"mdait.codelens.markIsolated",
 					[range],
 					isSourceFile,
 				);
@@ -205,6 +217,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * @param jumpToTargetCommand ターゲットへジャンプするコマンド
 	 * @param translateCommand 翻訳コマンド
 	 * @param clearNeedCommand needクリアコマンド
+	 * @param deleteUnitCommand ユニット削除コマンド
 	 * @param translateArgs 翻訳コマンドの引数
 	 * @param isSourceFile ソースファイルかどうか
 	 * @returns CodeLensの配列
@@ -217,7 +230,6 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		translateCommand: string,
 		clearNeedCommand: string,
 		deleteUnitCommand: string,
-		markIsolatedCommand: string,
 		translateArgs: (vscode.Range | vscode.Uri)[],
 		isSourceFile: boolean,
 	): vscode.CodeLens[] {
@@ -293,16 +305,6 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
-		} else if (!isSourceFile && marker.from) {
-			// 完了済み訳文ユニット（対訳あり）に isolate 宣言ボタンを出す（UX-R1: isolate 宣言UI）
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
-					tooltip: vscode.l10n.t("Tooltip: Freeze this unit and stop following source updates"),
-					command: markIsolatedCommand,
-					arguments: [range],
-				}),
-			);
 		}
 
 		if (isAwaitingDecision) {
@@ -318,14 +320,13 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
-		// 対訳ユニット（from あり）に note 編集ボタンを出す。
-		// note は audit 実行時に AI へ渡され、意図的な乖離の説明として判定に織り込まれる。
-		if (!isSourceFile && marker.from && marker.hash) {
+		// 低頻度アクション（isolate 宣言・note 編集）は「その他」メニューへ集約する（ADR-260719-01）
+		if (shouldShowOtherActions(marker, isSourceFile)) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(comment) Note"),
-					tooltip: vscode.l10n.t("Tooltip: Add or edit a note for this unit (shown to the AI during audit)"),
-					command: "mdait.unit.editNote",
+					title: vscode.l10n.t("$(kebab-vertical) More"),
+					tooltip: vscode.l10n.t("Tooltip: Other actions for this unit (isolate, note)"),
+					command: "mdait.codelens.otherActions",
 					arguments: [range],
 				}),
 			);

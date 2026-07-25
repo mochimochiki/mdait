@@ -3,14 +3,21 @@ import type { AiReviewFileResult, UnitReviewResult } from "../../../../commands/
 import {
 	buildReviewReport,
 	generateReviewReportContent,
+	generateReviewTableSection,
 } from "../../../../commands/ai-review/review-table";
 
-function unit(action: UnitReviewResult["action"], unitHash: string, title: string): UnitReviewResult {
+function unit(
+	action: UnitReviewResult["action"],
+	unitHash: string,
+	title: string,
+	line?: number,
+): UnitReviewResult {
 	return {
 		filePath: "/ws/en/doc.md",
 		unitHash,
 		fromHash: "src000",
 		title,
+		line,
 		verdict: action === "flagged" ? "partial" : "match",
 		confidence: 0.8,
 		issues: [],
@@ -62,6 +69,12 @@ suite("buildReviewReport（レポート＋flagged アンカー）", () => {
 		assert.strictEqual(generateReviewReportContent(results), buildReviewReport(results).content);
 	});
 
+	test("レポートの見出しはラベル注入で差し替えられる（表示言語化）", () => {
+		const results = [fileResult([unit("audited", "tgtB222", "Section B")])];
+		const { content } = buildReviewReport(results, { labels: { title: "mdait AI翻訳レビュー" } });
+		assert.ok(content.startsWith("# mdait AI翻訳レビュー"));
+	});
+
 	test("複数ファイルで各 flagged 行が正しく対応づく", () => {
 		const a = fileResult([unit("flagged", "aaa111", "A")]);
 		a.filePath = "/ws/en/a.md";
@@ -77,5 +90,36 @@ suite("buildReviewReport（レポート＋flagged アンカー）", () => {
 			assert.ok(lines[anchor.line].includes(anchor.title));
 			assert.ok(lines[anchor.line].includes("flagged"));
 		}
+	});
+});
+
+suite("generateReviewTableSection（ユニット行の該当箇所リンク）", () => {
+	test("linkBaseDir があればユニット列が行リンクになる", () => {
+		const table = generateReviewTableSection([fileResult([unit("flagged", "tgtA111", "Section A", 42)])], {
+			linkBaseDir: "/ws/.mdait",
+		});
+		assert.ok(table.includes("[Section A](<../en/doc.md#L42>)"), table);
+	});
+
+	test("linkBaseDir があればファイルの所在行もリンクになる", () => {
+		const table = generateReviewTableSection([fileResult([unit("flagged", "tgtA111", "Section A", 42)])], {
+			linkBaseDir: "/ws/.mdait",
+		});
+		assert.ok(table.includes("[../en/doc.md](<../en/doc.md>)"), table);
+	});
+
+	test("linkBaseDir がなければ従来どおりの素のタイトル・パス表記", () => {
+		const table = generateReviewTableSection([fileResult([unit("flagged", "tgtA111", "Section A", 42)])]);
+		assert.ok(table.includes("| Section A |"), table);
+		assert.ok(table.includes("/ws/en/doc.md"));
+		assert.ok(!table.includes("#L42"));
+	});
+
+	test("行番号が無いユニットはリンク化せずタイトルのまま出す", () => {
+		const table = generateReviewTableSection([fileResult([unit("flagged", "tgtA111", "Section A")])], {
+			linkBaseDir: "/ws/.mdait",
+		});
+		assert.ok(table.includes("| Section A |"), table);
+		assert.ok(!table.includes("#L"));
 	});
 });

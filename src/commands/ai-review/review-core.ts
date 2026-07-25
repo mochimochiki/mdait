@@ -16,6 +16,7 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { getResponseLanguage } from "../../infra/llm/response-language";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -120,6 +121,41 @@ function applyVerifyOutcome(
 	return mutationDelta;
 }
 
+/**
+ * ペアの note（人間が記録した意図的乖離の説明）を訳文・原文の両側から集めて1つにまとめる。
+ * note は hash キーで unit-registry に保存されるため、訳文は `hash`、原文は `from`（＝原文ユニットの hash）で引く。
+ *
+ * @param targetHash 訳文ユニットの hash
+ * @param sourceHash 原文ユニットの hash（訳文マーカーの from）
+ * @returns 連結した note（どちらも無ければ undefined）
+ */
+async function loadPairNotes(targetHash?: string | null, sourceHash?: string | null): Promise<string | undefined> {
+	const registry = UnitRegistryManager.getInstance();
+	const found: Array<{ side: "translation" | "source"; note: string }> = [];
+	const seen = new Set<string>();
+	for (const [side, hash] of [
+		["translation", targetHash],
+		["source", sourceHash],
+	] as const) {
+		if (!hash || seen.has(hash)) {
+			continue;
+		}
+		seen.add(hash);
+		const note = await registry.loadNote(hash);
+		if (note?.trim()) {
+			found.push({ side, note: note.trim() });
+		}
+	}
+	if (found.length === 0) {
+		return undefined;
+	}
+	// 1件だけならそのまま渡す（従来どおり）。両側にある場合のみ、どちら側の説明かを明示する
+	if (found.length === 1) {
+		return found[0].note;
+	}
+	return found.map((entry) => `[${entry.side}] ${entry.note}`).join("\n");
+}
+
 /** AI翻訳レビューのオプション */
 export interface AiReviewOptions {
 	/** true の場合はマーカーを一切変更しない（レポートのみ） */
@@ -203,6 +239,8 @@ export async function executeAiReviewForFile(
 			threshold: AUTO_APPROVE_THRESHOLD,
 		};
 		const summaryManager = SummaryManager.getInstance();
+		// AI が返す reason / issues は VS Code の表示言語で書かせる（ADR-260719-01）
+		const responseLang = getResponseLanguage();
 		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
 		let mutationCount = 0;
 
@@ -217,6 +255,8 @@ export async function executeAiReviewForFile(
 					unitHash: marker?.hash ?? "",
 					fromHash: marker?.from ?? "",
 					title: pair.targetUnit.title,
+					// レポートの行リンク用（startLine は 0 始まり、リンクは 1 始まり）
+					line: pair.targetUnit.startLine + 1,
 					issues: [],
 					action: "kept",
 				},
@@ -226,7 +266,7 @@ export async function executeAiReviewForFile(
 		for (const entry of entries) {
 			if (!entry.pair.sourceUnit) {
 				entry.unitResult.action = "skipped";
-				entry.unitResult.reason = "Source unit not found for from hash";
+				entry.unitResult.reason = vscode.l10n.t("Source unit not found for from hash");
 				result.skipped++;
 				entry.processed = true;
 			}
@@ -259,9 +299,10 @@ export async function executeAiReviewForFile(
 					const marker = entry.pair.targetUnit.marker;
 					const sourceText = entry.pair.sourceUnit?.content ?? "";
 					const targetText = entry.pair.targetUnit.content;
-					const humanNote = marker?.hash
-						? ((await UnitRegistryManager.getInstance().loadNote(marker.hash)) ?? undefined)
-						: undefined;
+					// 訳文ユニット（hash）と原文ユニット（from）の両方の note を集める。
+					// 原文側の note は CodeLens「その他」メニューから原文ユニットの hash キーで
+					// 保存されるため、ここで from を引かないと AI に届かない。
+					const humanNote = await loadPairNotes(marker?.hash, marker?.from);
 					const pairContext = reviewContext.getContextForPair(sourceText, targetText);
 					batchPairs.push({
 						index: j + 1,
@@ -283,6 +324,7 @@ export async function executeAiReviewForFile(
 						{
 							sourceLang: transPair.sourceLang,
 							targetLang: transPair.targetLang,
+							responseLang,
 							sourceText: single.sourceText,
 							targetText: single.targetText,
 							humanNote: single.humanNote,
@@ -298,6 +340,7 @@ export async function executeAiReviewForFile(
 						{
 							sourceLang: transPair.sourceLang,
 							targetLang: transPair.targetLang,
+							responseLang,
 							pairs: batchPairs,
 						},
 						token,
@@ -310,7 +353,7 @@ export async function executeAiReviewForFile(
 					const verifyResult = verifyResults.get(j + 1);
 					if (!verifyResult) {
 						entry.unitResult.action = "error";
-						entry.unitResult.reason = "No verdict returned for pair";
+						entry.unitResult.reason = vscode.l10n.t("No verdict returned for pair");
 						result.errors++;
 						entry.processed = true;
 						continue;

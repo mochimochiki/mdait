@@ -39,7 +39,10 @@ export class AiReviewResultContentProvider implements vscode.TextDocumentContent
 
 	/** 最新の結果をセットし、既存タブの内容を更新する。 */
 	setContent(results: AiReviewFileResult[]): void {
-		const { content, anchors } = buildReviewReport(results);
+		// 見出しは表示言語で出す（ADR-260719-01）。仮想ドキュメントのため行リンクは付けない
+		const { content, anchors } = buildReviewReport(results, {
+			labels: { title: vscode.l10n.t("mdait AI Translation Review") },
+		});
 		this.latestContent = content;
 		this.anchors = anchors;
 		this._onDidChange.fire(PREVIEW_URI);

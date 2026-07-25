@@ -16,7 +16,7 @@
 **背景** : 訳文CodeLensの行が長く、原文側isolate宣言UIが無い。adoptレポートは仮想文書でプレビュー不可、文章が英語固定。
 **決定** : isolate宣言とnote編集をQuickPick「その他」に集約。adoptレポートを`.mdait/adopt-report.md`の実ファイル化。ラベル注入で表示言語化。
 **理由** : 純関数のVS Code非依存とl10n抽出の両立には、ラベル構築だけをUI層に置くのが最小。実ファイルならプレビュー・行リンク・git差分が標準機能で得られる。
-**備考** : AIのreason/issuesはプロンプトの`{{responseLang}}`で指示する。統計語彙行とエージェント向けnextActionsは英語のまま。
+**備考** : AIのreason/issuesは`{{responseLang}}`で指示。統計語彙行とnextActionsは英語のまま。TM/用語のプレビューも同様。
 
 ### ADR-260712-03: UX-R1（判断サーフェスの完成）を実装しmdait_resolveをaction分岐に拡張する
 **背景** : ux.mdのB-1〜B-3（verify-deletionの削除導線欠如・isolate宣言UI皆無・レビュー溜まり時の連続処理手段なし）が未解消だった。

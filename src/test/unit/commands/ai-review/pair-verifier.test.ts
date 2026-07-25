@@ -145,3 +145,61 @@ suite("PairVerifier（AI呼び出しとリトライ）", () => {
 		assert.strictEqual(stub.calls.length, 0);
 	});
 });
+
+suite("PairVerifier（AI応答の記述言語指示）", () => {
+	teardown(() => {
+		PromptProvider.dispose();
+	});
+
+	test("responseLang を渡すと user message に記述言語の指示が入る", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify({ ...request, responseLang: "Japanese (ja)" });
+		assert.ok(stub.calls[0].user.includes("Japanese (ja)"), stub.calls[0].user);
+		// system は静的なまま（プレフィックスキャッシュ維持）
+		assert.ok(!stub.calls[0].system.includes("Japanese (ja)"));
+	});
+
+	test("responseLang 未指定なら指示行は出ない（既定の英語）", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify(request);
+		assert.ok(!stub.calls[0].user.includes("Response language"), stub.calls[0].user);
+	});
+
+	test("{{responseLang}} を持たないカスタムテンプレートにもコード側で指示を補う", async () => {
+		const stub = new StubAIService([validMatch]);
+		// user-section はあるが {{responseLang}} を持たないテンプレート（旧既定のコピー相当）
+		const template = [
+			"You are a QA reviewer.",
+			"<!-- mdait:user-section -->",
+			"Verification Task:",
+			"- Source language: {{sourceLang}}",
+			"- Target language: {{targetLang}}",
+		].join("\n");
+		const verifier = new PairVerifier(stub, () => ({
+			system: template.split("<!-- mdait:user-section -->")[0].trimEnd(),
+			userContext: "Verification Task:\n- Source language: ja\n- Target language: en",
+			isLegacy: false,
+		}));
+
+		await verifier.verify({ ...request, responseLang: "Japanese (ja)" });
+		assert.ok(stub.calls[0].user.includes("Japanese (ja)"), stub.calls[0].user);
+	});
+
+	test("テンプレートが既に言語指示を展開していれば二重に付けない", async () => {
+		const stub = new StubAIService([validMatch]);
+		await buildVerifier(stub).verify({ ...request, responseLang: "Japanese (ja)" });
+		const occurrences = stub.calls[0].user.split("Japanese (ja)").length - 1;
+		assert.strictEqual(occurrences, 1, stub.calls[0].user);
+	});
+
+	test("バッチ経路でも responseLang が user message に入る", async () => {
+		const stub = new StubAIService(['{"results": [{"index": 1, "verdict": "match", "confidence": 0.9, "issues": [], "reason": "OK"}]}']);
+		await buildVerifier(stub).verifyBatch({
+			sourceLang: "ja",
+			targetLang: "en",
+			responseLang: "Japanese (ja)",
+			pairs: [{ index: 1, sourceText: "本文A。", targetText: "Content A." }],
+		});
+		assert.ok(stub.calls[0].user.includes("Japanese (ja)"), stub.calls[0].user);
+	});
+});

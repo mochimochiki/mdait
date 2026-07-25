@@ -36,7 +36,13 @@ export class TmResultContentProvider implements vscode.TextDocumentContentProvid
 
 	/** 最新の結果をセットし、既存タブの内容を更新する。 */
 	setContent(result: Pick<TmCommitResult, "newItems" | "updatedItems">): void {
-		this.latestContent = generateContent(result);
+		// 見出し・定型文は表示言語で出す（ADR-260719-01）
+		this.latestContent = generateContent(result, {
+			title: vscode.l10n.t("TM Commit Results"),
+			newHeading: vscode.l10n.t("New"),
+			updatedHeading: vscode.l10n.t("Updated"),
+			none: vscode.l10n.t("(none)"),
+		});
 		this._onDidChange.fire(PREVIEW_URI);
 	}
 

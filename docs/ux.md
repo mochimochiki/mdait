@@ -110,7 +110,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 |---|---|---|
 | `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
 | `need:verify-deletion` の裁定 | 原文削除（policy=verify） | CodeLens/ツリーの「Keep」「Delete Unit」2択 / エージェントは `mdait_resolve { action:"resolve" }`（保持）/ `{ action:"delete" }`（削除） |
-| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文/原文両対応）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
 
@@ -136,7 +136,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
 | レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
 | verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit | `mdait_resolve { action:"resolve" \| "delete" }` |
-| isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文/原文）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
 | 検証 | （通知・レポート） | `mdait_validate` |

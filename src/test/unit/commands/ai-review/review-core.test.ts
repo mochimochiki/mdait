@@ -11,6 +11,7 @@ import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
 
 declare let __vscodeMockWorkspaceRoot: string;
+declare let __vscodeMockLanguage: string | undefined;
 
 /** 応答列を順番に返すスタブAIService（応答後フックでキャンセル等を注入できる） */
 class StubAIService implements AIService {
@@ -369,6 +370,23 @@ Content A.
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), SETTLED_TARGET_CONTENT);
 		});
 
+		suite("AI 応答の記述言語（表示言語に追従）", () => {
+			teardown(() => {
+				__vscodeMockLanguage = undefined;
+			});
+
+			test("VS Code の表示言語が記述言語の指示として user message に届く", async () => {
+				__vscodeMockLanguage = "ja";
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.ok(stub.userMessages.some((m) => m.includes("Japanese (ja)")), stub.userMessages[0]);
+			});
+		});
+
 		suite("ユニット note を AI へ渡す（意図的乖離の説明）", () => {
 			test("registry の note が verify の user メッセージに <humanNote> として渡る", async () => {
 				const config = await initConfig();
@@ -382,6 +400,40 @@ Content A.
 				// tgtA の検証メッセージに note が <humanNote> として含まれる
 				assert.ok(
 					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("intentionally condensed")),
+				);
+			});
+
+			test("原文ユニット（from）の note も <humanNote> として渡る", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				// 原文側の「その他」メニューで残した note は原文ユニットの hash キーで保存される
+				await UnitRegistryManager.getInstance().saveNote("srcA", "This section only exists in the source.");
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.ok(
+					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("only exists in the source")),
+				);
+			});
+
+			test("訳文・原文の両方に note があれば、どちら側かを明示して両方渡る", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				const registry = UnitRegistryManager.getInstance();
+				await registry.saveNote("tgtA", "Target note.");
+				await registry.saveNote("srcA", "Source note.");
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.ok(
+					stub.userMessages.some(
+						(m) =>
+							m.includes("<humanNote>") &&
+							m.includes("[translation] Target note.") &&
+							m.includes("[source] Source note."),
+					),
 				);
 			});
 

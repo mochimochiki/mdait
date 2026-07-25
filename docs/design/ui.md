@@ -142,7 +142,7 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 **ソースファイル（原文）のマーカー**:
 - **$(symbol-reference) Target**: 訳文ユニットへジャンプ（`from`属性がなく、対応する訳文が存在する場合）
 - 複数の訳文言語がある場合、`transPairs`設定順で最初のターゲットへジャンプ
-- **$(kebab-vertical) その他**: 訳文側と同じメニュー。原文側の isolate 宣言（sync が `need:translate` を生成しなくなる。ADR-260706-02）と原文側ノート（audit 時に `from` ハッシュ経由で AI に渡る）に対応
+- **$(kebab-vertical) その他**: 訳文側と同じメニュー（原文側は `hash` があれば表示）。原文側の isolate 宣言（sync が `need:translate` を生成しなくなる。ADR-260706-02）と原文側ノート（audit 時に `from` ハッシュ経由で AI に渡る）に対応
 
 **frontmatterマーカー**:
 - **$(play) 翻訳**: frontmatter翻訳を実行（`need:translate`がある場合のみ）

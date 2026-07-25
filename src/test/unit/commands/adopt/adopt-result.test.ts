@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import {
 	type AdoptOutcome,
+	DEFAULT_ADOPT_REPORT_LABELS,
 	buildAdoptNextActions,
 	formatSyncLine,
 	generateAdoptReportContent,
@@ -27,8 +28,23 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 	};
 }
 
-function unit(action: UnitReviewResult["action"], verdict?: UnitReviewResult["verdict"], title = "Sec"): UnitReviewResult {
-	return { filePath: "en/doc.md", unitHash: "h1", fromHash: "f1", title, issues: [], action, verdict, confidence: 0.9 };
+function unit(
+	action: UnitReviewResult["action"],
+	verdict?: UnitReviewResult["verdict"],
+	title = "Sec",
+	line?: number,
+): UnitReviewResult {
+	return {
+		filePath: "/ws/en/doc.md",
+		unitHash: "h1",
+		fromHash: "f1",
+		title,
+		line,
+		issues: [],
+		action,
+		verdict,
+		confidence: 0.9,
+	};
 }
 
 function reviewFile(units: UnitReviewResult[]): AiReviewFileResult {
@@ -116,6 +132,41 @@ suite("generateAdoptReportContent（統合レポート・純関数）", () => {
 	test("レビュー0件でもレポートは生成される（冪等 no-op）", () => {
 		const report = generateAdoptReportContent(outcome());
 		assert.ok(report.includes("verified: 0"));
+	});
+
+	test("ラベルを注入すると見出し・定型文が差し替わる（表示言語化）", () => {
+		const report = generateAdoptReportContent(outcome({ dryRun: true }), {
+			labels: {
+				...DEFAULT_ADOPT_REPORT_LABELS,
+				title: "mdait 既存翻訳の取り込み",
+				syncHeading: "同期（取り込み＋AIアライン）",
+				reviewHeading: "AI翻訳レビュー",
+				dryRunNote: "_ドライラン: マーカーは変更していません。_",
+				filesLine: (processed, failed) => `ファイル: ${processed} 件処理、${failed} 件失敗`,
+			},
+		});
+		assert.ok(report.includes("# mdait 既存翻訳の取り込み"));
+		assert.ok(report.includes("## 同期（取り込み＋AIアライン）"));
+		assert.ok(report.includes("## AI翻訳レビュー"));
+		assert.ok(report.includes("_ドライラン: マーカーは変更していません。_"));
+		assert.ok(report.includes("ファイル: 2 件処理、0 件失敗"));
+		// 件数の語彙行はエージェントとの共通語彙なので英語のまま
+		assert.ok(report.includes("verified: 0 | approved: 0"));
+	});
+
+	test("ラベル未注入なら既定の英語で出る（純関数の既定）", () => {
+		const report = generateAdoptReportContent(outcome());
+		assert.ok(report.includes("# mdait Adopt Existing Translations"));
+		assert.ok(report.includes("## Sync (adopt + AI align)"));
+		assert.ok(report.includes("files: 2 processed, 0 failed"));
+	});
+
+	test("linkBaseDir を渡すとレビュー表のユニット列が該当箇所への行リンクになる", () => {
+		const report = generateAdoptReportContent(
+			outcome({ review: [reviewFile([unit("escalated", "mismatch", "Section A", 12)])] }),
+			{ linkBaseDir: "/ws/.mdait" },
+		);
+		assert.ok(report.includes("[Section A](<../en/doc.md#L12>)"), report);
 	});
 });
 

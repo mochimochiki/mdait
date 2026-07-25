@@ -227,11 +227,35 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 	}
 }
 
+/** 「その他」メニューで選べるアクション */
+export type OtherAction = "isolate" | "note";
+
+/** 「その他」メニューの項目 */
+interface OtherActionItem extends vscode.QuickPickItem {
+	action: OtherAction;
+}
+
 /**
- * CodeLensからユニットに need:isolate を宣言するコマンド（凍結して下流伝播を止める）。
+ * 「その他」メニューに並べるアクションを決める（純関数）。
+ * isolate は need が付いていないユニットにのみ出す — 宣言操作が
+ * 他の判断待ち（review / verify-deletion など）を踏み潰さないための安全弁
+ * （`declareIsolateForFile` の need-already-set スキップと対になる）。
+ *
+ * @param hasNeed 対象ユニットに need が付いているか
+ */
+export function buildOtherActions(hasNeed: boolean): OtherAction[] {
+	return hasNeed ? ["note"] : ["isolate", "note"];
+}
+
+/**
+ * CodeLens の「その他」メニュー（QuickPick）を開き、選択されたアクションを実行する。
+ * 低頻度アクション（isolate 宣言・note 編集）を1つの CodeLens に集約し、
+ * マーカー行のボタン列が長くなるのを防ぐ（ADR-260719-01）。
+ * 原文・訳文の双方で同じメニューを提供する（原文側 isolate は sync の伝播停止・ADR-260706-02）。
+ *
  * @param range CodeLensが表示されている行の範囲
  */
-export async function codeLensMarkIsolatedCommand(range: vscode.Range): Promise<void> {
+export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<void> {
 	try {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor) {
@@ -245,19 +269,74 @@ export async function codeLensMarkIsolatedCommand(range: vscode.Range): Promise<
 			return;
 		}
 
-		const config = Configuration.getInstance();
-		const result = await declareIsolateForFile(document.uri.fsPath, marker.hash, config);
-		if (!result.declared) {
-			vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
+		// isolate の意味は方向で異なる（訳文は原文更新に追従しない・原文は訳文へ伝播しない）ため文言を分ける
+		const isSourceFile = isSourceDocument(document);
+
+		const items: OtherActionItem[] = buildOtherActions(Boolean(marker.need)).map((action) =>
+			action === "isolate"
+				? {
+						label: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
+						detail: isSourceFile
+							? vscode.l10n.t("Freeze this unit and stop propagating it to the translations.")
+							: vscode.l10n.t("Freeze this unit and stop following source updates."),
+						action,
+					}
+				: {
+						label: vscode.l10n.t("$(comment) Note"),
+						detail: vscode.l10n.t("Add or edit a note for this unit (shown to the AI during audit)."),
+						action,
+					},
+		);
+
+		const picked = await vscode.window.showQuickPick(items, {
+			title: vscode.l10n.t("Unit actions"),
+			placeHolder: vscode.l10n.t("Select an action for this unit"),
+		});
+		if (!picked) {
 			return;
 		}
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Unit marked as isolated. It will no longer follow source updates."),
-		);
+
+		if (picked.action === "isolate") {
+			await declareIsolateAtMarker(document.uri.fsPath, marker.hash, isSourceFile);
+			return;
+		}
+		await promptAndSaveNote(marker.hash, document.uri.fsPath);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(vscode.l10n.t("Failed to mark unit as isolated: {0}", errorMessage));
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to run the selected action: {0}", errorMessage));
 	}
+}
+
+/**
+ * ドキュメントが原文（ソース）側かどうかを判定する。ワークスペース未設定等では訳文扱い。
+ */
+function isSourceDocument(document: vscode.TextDocument): boolean {
+	try {
+		return new FileExplorer().isSourceFile(document.uri.fsPath, Configuration.getInstance());
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * 指定ユニットに need:isolate を宣言し、結果を通知する（「その他」メニューから利用）。
+ *
+ * @param absPath 対象ファイルの絶対パス
+ * @param unitHash 宣言対象ユニットの hash
+ * @param isSourceFile 原文側かどうか（通知文言の出し分けに使う）
+ */
+async function declareIsolateAtMarker(absPath: string, unitHash: string, isSourceFile: boolean): Promise<void> {
+	const config = Configuration.getInstance();
+	const result = await declareIsolateForFile(absPath, unitHash, config);
+	if (!result.declared) {
+		vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
+		return;
+	}
+	vscode.window.showInformationMessage(
+		isSourceFile
+			? vscode.l10n.t("Unit marked as isolated. It will no longer propagate to the translations.")
+			: vscode.l10n.t("Unit marked as isolated. It will no longer follow source updates."),
+	);
 }
 
 /**
@@ -292,30 +371,6 @@ async function promptAndSaveNote(hash: string, refreshFsPath: string): Promise<v
 			? vscode.l10n.t("Note removed.")
 			: vscode.l10n.t("Note saved. It will be shown to the AI during audit."),
 	);
-}
-
-/**
- * ユニットに紐づく note（人間のメタ情報）を CodeLens から編集するコマンド。
- * @param range CodeLensが表示されている行の範囲
- */
-export async function codeLensEditNoteCommand(range: vscode.Range): Promise<void> {
-	try {
-		const activeEditor = vscode.window.activeTextEditor;
-		if (!activeEditor) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
-			return;
-		}
-		const document = activeEditor.document;
-		const marker = getMarkerAtLine(document, range.start.line);
-		if (!marker?.hash) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
-			return;
-		}
-		await promptAndSaveNote(marker.hash, document.uri.fsPath);
-	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(vscode.l10n.t("Failed to save note: {0}", errorMessage));
-	}
 }
 
 /**

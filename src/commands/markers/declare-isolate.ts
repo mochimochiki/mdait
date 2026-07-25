@@ -1,8 +1,9 @@
 /**
  * @file declare-isolate.ts
  * @description
- *   訳文ユニットに need:isolate を宣言する（凍結宣言。ADR-260711-05 の isolate モデルに従い、
+ *   ユニットに need:isolate を宣言する（凍結宣言。ADR-260711-05 の isolate モデルに従い、
  *   以後 sync は hash/from のみ更新し revise を流さない＝下流伝播を止める）。UX-R1: isolate 宣言UI。
+ *   訳文・原文の両方に使える（原文側は sync が need:translate を生成しなくなる。ADR-260706-02）。
  *   解除（undeclare）は resolve-need.ts の resolveNeedForFile(needs:["isolate"]) を再利用する
  *   （need 除去という点で既存の解決経路と同一のため、新規実装しない）。
  * @module commands/markers/declare-isolate

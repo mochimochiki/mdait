@@ -167,6 +167,7 @@ retry 後も違反が残る場合は、guard を通過した分だけ保存し�
 
 新規/更新件数が 1 件以上あれば `TmResultContentProvider`（シングルトン）が仮想ドキュメントで結果を表示する。
 URI 固定（`mdait-tm-result:tm-commit-result`） + `onDidChange` で既存タブを上書き更新。
+本文生成（`tm-result-content.ts`）は VS Code 非依存の純関数のまま、見出し・定型文はプロバイダーからのラベル注入で表示言語化する（既定は英語。ADR-260719-01）。
 
 ### 重み計算ロジック（`recomputeTmWeights`）
 

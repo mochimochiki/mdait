@@ -63,6 +63,7 @@ src/commands/adopt/
   adopt-command.ts          # VS Code コマンド（mdait.adopt.run）: QuickPick→確認→withProgress
   adopt-result.ts           # 純関数: AdoptOutcome 集計・レポート生成（ラベル注入・行リンク）・nextActions
   report-l10n.ts            # レポートラベルの l10n ファクトリ（VS Code 層）
+  adopt-report-file.ts      # レポートの実ファイル書き出し（.mdait/adopt-report.md）とプレビュー起動
   align-core.ts             # AIアライン（sync_CoreProc へ注入。設計は command_ai-review.md）
   section-aligner.ts        # 〃
   align-result.ts           # 〃
@@ -129,7 +130,7 @@ interface AdoptOutcome {
 ```
 
 - 結果通知: escalated / errors / stageErrors があれば warning、なければ info。adopted / align 修正 / 承認 / 用語 / TM 件数を1行で要約。
-- レポート（実ファイル `.mdait/adopt-report.md`、実行ごとに上書き）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有。ユニット列は該当箇所への行リンク `[title](<relpath#Lnn>)`）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。見出し・定型文は `report-l10n.ts` のラベル注入で表示言語化（純関数の既定は英語）。パスは `Configuration.getAdoptReportFilePath()`。
+- レポート（実ファイル `.mdait/adopt-report.md`、実行ごとに上書き）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有。ユニット列は該当箇所への行リンク `[title](<relpath#Lnn>)`）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。見出し・定型文は `report-l10n.ts` のラベル注入で表示言語化（純関数の既定は英語）。パスは `Configuration.getAdoptReportFilePath()`。書き出しは `writeAdoptReport`（人間の実行・`mdait_adopt` の双方で書く）、表示は Markdown プレビュー（`markdown.showPreview`。失敗時はテキストで開くフォールバック）。
 - nextActions: escalated 残りあり → 「該当ユニットを確認し、解消後に AI翻訳レビュー / tm.commit を再実行」（**escalated 多数時に TM がほぼ空になるケースの受け皿**）。buildTm 未選択で承認あり → tm.commit を案内。全消化 → status 確認。
 
 ## LM tool 契約（mdait_adopt）
@@ -138,7 +139,7 @@ interface AdoptOutcome {
 
 入力: `{ dryRun?: boolean, buildGlossary?: boolean, buildTm?: boolean }`（buildGlossary / buildTm 既定 false — エージェントは通常 `mdait_term` / `mdait_tm` を個別に計画するため。人間向け UI の既定 ON とは意図的に異なる）。マーカー・知識ストア書き込みを伴うため `prepareInvocation` で確認 UI を出し、`invoke` 内で AIオンボーディングを再確認する。
 
-data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` に `term?: { detected, expanded, remaining }`・`tm?: { files, processedUnits, newEntries, existingEntries, warnedEntries, errorUnits }`・`stageErrors` を追加。
+data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` に `term?: { detected, expanded, remaining }`・`tm?: { files, processedUnits, newEntries, existingEntries, warnedEntries, errorUnits }`・`stageErrors`・`reportPath`（統合レポートのワークスペース相対パス）を追加。ツール経由の実行でもレポートは実ファイルに書き出す（プレビューは開かない）。
 
 ## 設定
 
