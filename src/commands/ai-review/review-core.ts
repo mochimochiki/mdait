@@ -121,6 +121,32 @@ function applyVerifyOutcome(
 	return mutationDelta;
 }
 
+/**
+ * ペアの note（人間が記録した意図的乖離の説明）を訳文・原文の両側から集めて1つにまとめる。
+ * note は hash キーで unit-registry に保存されるため、訳文は `hash`、原文は `from`（＝原文ユニットの hash）で引く。
+ *
+ * @param targetHash 訳文ユニットの hash
+ * @param sourceHash 原文ユニットの hash（訳文マーカーの from）
+ * @returns 連結した note（どちらも無ければ undefined）
+ */
+async function loadPairNotes(
+	targetHash?: string | null,
+	sourceHash?: string | null,
+): Promise<string | undefined> {
+	const registry = UnitRegistryManager.getInstance();
+	const notes: string[] = [];
+	for (const hash of new Set([targetHash, sourceHash])) {
+		if (!hash) {
+			continue;
+		}
+		const note = await registry.loadNote(hash);
+		if (note?.trim()) {
+			notes.push(note.trim());
+		}
+	}
+	return notes.length > 0 ? notes.join("\n") : undefined;
+}
+
 /** AI翻訳レビューのオプション */
 export interface AiReviewOptions {
 	/** true の場合はマーカーを一切変更しない（レポートのみ） */
@@ -264,9 +290,10 @@ export async function executeAiReviewForFile(
 					const marker = entry.pair.targetUnit.marker;
 					const sourceText = entry.pair.sourceUnit?.content ?? "";
 					const targetText = entry.pair.targetUnit.content;
-					const humanNote = marker?.hash
-						? ((await UnitRegistryManager.getInstance().loadNote(marker.hash)) ?? undefined)
-						: undefined;
+					// 訳文ユニット（hash）と原文ユニット（from）の両方の note を集める。
+					// 原文側の note は CodeLens「その他」メニューから原文ユニットの hash キーで
+					// 保存されるため、ここで from を引かないと AI に届かない。
+					const humanNote = await loadPairNotes(marker?.hash, marker?.from);
 					const pairContext = reviewContext.getContextForPair(sourceText, targetText);
 					batchPairs.push({
 						index: j + 1,

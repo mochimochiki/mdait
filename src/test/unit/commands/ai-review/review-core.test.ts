@@ -385,6 +385,37 @@ Content A.
 				);
 			});
 
+			test("原文ユニット（from）の note も <humanNote> として渡る", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				// 原文側の「その他」メニューで残した note は原文ユニットの hash キーで保存される
+				await UnitRegistryManager.getInstance().saveNote("srcA", "This section only exists in the source.");
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.ok(
+					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("only exists in the source")),
+				);
+			});
+
+			test("訳文・原文の両方に note があれば両方まとめて渡る", async () => {
+				const config = await initConfig();
+				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
+				const registry = UnitRegistryManager.getInstance();
+				await registry.saveNote("tgtA", "Target note.");
+				await registry.saveNote("srcA", "Source note.");
+
+				const stub = new StubAIService([MATCH, MATCH]);
+				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
+
+				assert.ok(
+					stub.userMessages.some(
+						(m) => m.includes("<humanNote>") && m.includes("Target note.") && m.includes("Source note."),
+					),
+				);
+			});
+
 			test("note が無いユニットには <humanNote> を付けない", async () => {
 				const config = await initConfig();
 				writePair(SOURCE_CONTENT, SETTLED_TARGET_CONTENT);
