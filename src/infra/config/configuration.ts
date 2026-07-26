@@ -415,11 +415,19 @@ export class Configuration {
 	}
 
 	/**
-	 * 既存翻訳の取り込みウィザードの統合レポート（Markdown 実ファイル）の絶対パスを取得する。
-	 * 実行ごとに上書きされる（ADR-260719-01）。
+	 * レポート出力ディレクトリ（`.mdait/reports/`）の絶対パスを取得する。
+	 * mdait.json と混ざらないようサブディレクトリに寄せている。
 	 */
-	public getAdoptReportFilePath(): string {
-		return path.join(this.getMdaitDir(), "adopt-report.md");
+	public getReportsDir(): string {
+		return path.join(this.getMdaitDir(), "reports");
+	}
+
+	/**
+	 * 各コマンドの実行レポート（Markdown 実ファイル）の絶対パスを取得する。
+	 * 実行ごとに上書きされ、履歴は git に委ねる（ADR-260719-01）。
+	 */
+	public getReportFilePath(kind: string): string {
+		return path.join(this.getReportsDir(), `${kind}.md`);
 	}
 
 	/**

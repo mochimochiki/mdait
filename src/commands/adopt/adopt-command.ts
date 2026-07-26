@@ -180,7 +180,7 @@ async function showAdoptPreview(config: Configuration, outcome: AdoptOutcome): P
 	if (!uri) {
 		// 取り込み自体は成功しているため、レポートを書けなかったことだけを伝える
 		vscode.window.showWarningMessage(
-			vscode.l10n.t("Could not write the adoption report to {0}.", config.getAdoptReportFilePath()),
+			vscode.l10n.t("Could not write the adoption report to {0}.", config.getReportFilePath("adopt")),
 		);
 		return;
 	}

@@ -17,10 +17,7 @@ import {
 	aiReviewDirectoryCommand,
 	aiReviewFileCommand,
 } from "./commands/ai-review/review-command";
-import {
-	AiReviewResultCodeLensProvider,
-	AiReviewResultContentProvider,
-} from "./commands/ai-review/review-result-provider";
+import { AiReviewResultCodeLensProvider } from "./commands/ai-review/review-result-provider";
 import { adoptCommand } from "./commands/adopt/adopt-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
@@ -28,14 +25,12 @@ import { detectTermCommand } from "./commands/term/command-detect";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
-import { TermResultContentProvider } from "./commands/term/term-result-provider";
 import {
 	tmCommitDirectoryCommand,
 	tmCommitFileCommand,
 } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { tmOptimizeCommand } from "./commands/tm/command-optimize";
-import { TmResultContentProvider } from "./commands/tm/tm-result-provider";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import {
@@ -248,10 +243,47 @@ export async function activate(context: vscode.ExtensionContext) {
 		diagnoseSetupCommand,
 	);
 
-	// sync command（オプションはdebug-ipc/E2Eからの adopt 指定などに使う）
+	/**
+	 * sync の実処理。**入口が3つあっても中身はこれ1つ**にする。
+	 *
+	 * 以前はツリーのボタン用とパレット用で別々に書かれており、パレットから実行したときだけ
+	 * 全体再構築が行われず、新しく増えた／消えたファイルがツリーに反映されなかった。
+	 * 表示（タイトル・アイコン・出す条件）はコマンド宣言と `when` 句だけで分ける。
+	 *
+	 * @param options debug-ipc / E2E からの adopt 指定などに使う
+	 */
+	const runSync = async (
+		options?: Parameters<typeof syncCommand>[0],
+	): Promise<void> => {
+		try {
+			await vscode.commands.executeCommand(
+				"setContext",
+				"mdaitSyncProcessing",
+				true,
+			);
+			await syncCommand(options);
+			// ファイル単位の更新は syncCommand 内で行われるが、ファイルの増減は
+			// 全体再構築でしかツリーに反映されない
+			await statusManager.buildStatusItemTree();
+		} catch (error) {
+			vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					"Failed to sync and refresh: {0}",
+					(error as Error).message,
+				),
+			);
+		} finally {
+			await vscode.commands.executeCommand(
+				"setContext",
+				"mdaitSyncProcessing",
+				false,
+			);
+		}
+	};
+
 	const syncDisposable = vscode.commands.registerCommand(
 		"mdait.sync",
-		(options?: Parameters<typeof syncCommand>[0]) => syncCommand(options),
+		(options?: Parameters<typeof syncCommand>[0]) => runSync(options),
 	);
 
 	// trans command
@@ -289,6 +321,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// StatusTree ユニット need 裁定ハンドラ（UX-R1: 判断サーフェスの完成）
 	const needHandler = new StatusTreeNeedHandler();
+	const unitMarkReviewedDisposable = vscode.commands.registerCommand(
+		"mdait.unit.markReviewed",
+		(item?: StatusItem) => needHandler.markReviewed(item),
+	);
 	const unitKeepDisposable = vscode.commands.registerCommand(
 		"mdait.unit.keep",
 		(item?: StatusItem) => needHandler.keepUnit(item),
@@ -321,12 +357,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	const termExpandDisposable = vscode.commands.registerCommand(
 		"mdait.term.expand",
 		(item) => expandTermCommand(item as StatusItem),
-	);
-
-	// term.open command
-	const termOpenDisposable = vscode.commands.registerCommand(
-		"mdait.term.open",
-		openTermCommand,
 	);
 
 	// term.addToGlossary command
@@ -394,33 +424,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		() => adoptCommand(),
 	);
 
-	// AI Review Result ContentProvider登録
-	const aiReviewResultProvider = AiReviewResultContentProvider.getInstance();
-	const aiReviewResultProviderDisposable =
-		vscode.workspace.registerTextDocumentContentProvider(
-			"mdait-ai-review",
-			aiReviewResultProvider,
-		);
-	// レポート（仮想ドキュメント）の flagged 行に「note を編集」CodeLens を出す
-	const aiReviewResultCodeLensDisposable = vscode.languages.registerCodeLensProvider(
-		{ scheme: "mdait-ai-review" },
-		new AiReviewResultCodeLensProvider(),
-	);
-
-	// TM Result ContentProvider登録
-	const tmResultProvider = TmResultContentProvider.getInstance();
-	const tmResultProviderDisposable =
-		vscode.workspace.registerTextDocumentContentProvider(
-			"mdait-tm-result",
-			tmResultProvider,
-		);
-
-	// Term Result ContentProvider登録
-	const termResultProvider = TermResultContentProvider.getInstance();
-	const termResultProviderDisposable =
-		vscode.workspace.registerTextDocumentContentProvider(
-			"mdait-term-result",
-			termResultProvider,
+	// AIレビューレポート（.mdait/reports/ai-review.md）の flagged 行に
+	// 「note を編集」CodeLens を出す。対象ファイルの絞り込みはプロバイダー側で行う
+	const aiReviewResultCodeLensDisposable =
+		vscode.languages.registerCodeLensProvider(
+			{ scheme: "file", language: "markdown" },
+			new AiReviewResultCodeLensProvider(),
 		);
 
 	// CodeLens翻訳コマンド
@@ -576,64 +585,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		context.subscriptions,
 	);
 
-	// status.sync.initial command（初回同期）
+	// ツリータイトルの同期ボタン。初回（未同期）とそれ以降でラベルだけを変える
+	// （実処理は runSync に一本化。package.json の when 句で排他表示）
 	const syncStatusInitialDisposable = vscode.commands.registerCommand(
 		"mdait.status.sync.initial",
-		async () => {
-			try {
-				await vscode.commands.executeCommand(
-					"setContext",
-					"mdaitSyncProcessing",
-					true,
-				);
-				await syncCommand();
-				// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
-				await statusManager.buildStatusItemTree();
-			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Failed to sync and refresh: {0}",
-						(error as Error).message,
-					),
-				);
-			} finally {
-				await vscode.commands.executeCommand(
-					"setContext",
-					"mdaitSyncProcessing",
-					false,
-				);
-			}
-		},
+		() => runSync(),
 	);
-
-	// status.sync command（通常同期）
 	const syncStatusDisposable = vscode.commands.registerCommand(
 		"mdait.status.sync",
-		async () => {
-			try {
-				await vscode.commands.executeCommand(
-					"setContext",
-					"mdaitSyncProcessing",
-					true,
-				);
-				await syncCommand();
-				// StatusManagerから初期化されたStatusTreeProviderのrefreshを呼ぶ
-				await statusManager.buildStatusItemTree();
-			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Failed to sync and refresh: {0}",
-						(error as Error).message,
-					),
-				);
-			} finally {
-				await vscode.commands.executeCommand(
-					"setContext",
-					"mdaitSyncProcessing",
-					false,
-				);
-			}
-		},
+		() => runSync(),
 	);
 
 	// status.openTerm command
@@ -919,7 +879,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		embedMarkersDisposable,
 		termDetectDisposable,
 		termExpandDisposable,
-		termOpenDisposable,
 		addToGlossaryDisposable,
 		termDirectoryDisposable,
 		termFileDisposable,
@@ -937,6 +896,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		translateDirectoryDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
+		unitMarkReviewedDisposable,
 		unitKeepDisposable,
 		unitDeleteDisposable,
 		unitMarkIsolatedDisposable,
@@ -956,13 +916,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		aiReviewFileDisposable,
 		aiReviewDirectoryDisposable,
 		adoptDisposable,
-		aiReviewResultProviderDisposable,
 		aiReviewResultCodeLensDisposable,
-		aiReviewResultProvider,
-		tmResultProviderDisposable,
-		tmResultProvider,
-		termResultProviderDisposable,
-		termResultProvider,
 		saveDisposable,
 		treeView,
 		syncStatusInitialDisposable,

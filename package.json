@@ -54,6 +54,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.unit.markReviewed",
+        "title": "%mdait.unit.markReviewed.title%",
+        "category": "mdait",
+        "icon": "$(check)"
+      },
+      {
         "command": "mdait.unit.keep",
         "title": "%mdait.unit.keep.title%",
         "icon": "$(check)",
@@ -141,7 +147,8 @@
         "command": "mdait.status.sync.processing",
         "title": "%mdait.status.sync.title%",
         "icon": "$(sync~spin)",
-        "category": "mdait"
+        "category": "mdait",
+        "enablement": "false"
       },
       {
         "command": "mdait.status.openTerm",
@@ -382,6 +389,10 @@
         {
           "command": "mdait.settings.openAsUi",
           "when": "false"
+        },
+        {
+          "command": "mdait.unit.markReviewed",
+          "when": "false"
         }
       ],
       "editor/context": [
@@ -462,6 +473,11 @@
           "group": "inline"
         },
         {
+          "command": "mdait.unit.markReviewed",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetAttention",
+          "group": "inline@1"
+        },
+        {
           "command": "mdait.unit.keep",
           "when": "view == mdait.status && viewItem == mdaitUnitTargetVerifyDeletion",
           "group": "inline@1"
@@ -473,12 +489,12 @@
         },
         {
           "command": "mdait.unit.markIsolated",
-          "when": "view == mdait.status && viewItem == mdaitUnitTargetCompletePaired",
+          "when": "view == mdait.status && (viewItem == mdaitUnitTargetCompletePaired || viewItem == mdaitUnitSource)",
           "group": "inline"
         },
         {
           "command": "mdait.unit.unisolate",
-          "when": "view == mdait.status && viewItem == mdaitUnitTargetIsolated",
+          "when": "view == mdait.status && viewItem == mdaitUnitIsolated",
           "group": "inline"
         },
         {
@@ -523,12 +539,12 @@
         },
         {
           "command": "mdait.aiReview.directory",
-          "when": "view == mdait.status && viewItem == mdaitDirectoryTarget",
+          "when": "view == mdait.status && (viewItem == mdaitDirectoryTarget || viewItem == mdaitDirectoryTargetComplete)",
           "group": "inline@4"
         },
         {
           "command": "mdait.aiReview.file",
-          "when": "view == mdait.status && viewItem == mdaitFileTarget",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
           "group": "inline@4"
         }
       ]

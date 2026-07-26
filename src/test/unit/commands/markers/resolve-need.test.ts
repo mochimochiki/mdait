@@ -10,6 +10,7 @@ import {
 	applyNeedResolution,
 	needMatchesSelection,
 	resolveNeedForFile,
+	unitTargets,
 } from "../../../../commands/markers/resolve-need";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
@@ -63,7 +64,9 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 
 	test("unitHashes指定時は指定ユニットのみ解決される", () => {
 		const units = [makeUnit("aaa", "s1", "review"), makeUnit("bbb", "s2", "review")];
-		const result = applyNeedResolution(units, { unitHashes: ["bbb"] });
+		const result = applyNeedResolution(units, {
+			targets: unitTargets(["bbb"]),
+		});
 		assert.deepStrictEqual(
 			result.resolved.map((r) => r.hash),
 			["bbb"],
@@ -73,17 +76,21 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 
 	test("存在しないhashはskipped(not-found)になる", () => {
 		const units = [makeUnit("aaa", "s1", "review")];
-		const result = applyNeedResolution(units, { unitHashes: ["zzz"] });
+		const result = applyNeedResolution(units, {
+			targets: unitTargets(["zzz"]),
+		});
 		assert.deepStrictEqual(result.skipped, [{ hash: "zzz", reason: "not-found" }]);
 		assert.strictEqual(result.changed, false);
 	});
 
 	test("needが無いユニットのhash指定はskipped(already-resolved)になる（冪等性）", () => {
 		const units = [makeUnit("aaa", "s1", "review")];
-		const first = applyNeedResolution(units, { unitHashes: ["aaa"] });
+		const first = applyNeedResolution(units, { targets: unitTargets(["aaa"]) });
 		assert.strictEqual(first.resolved.length, 1);
 
-		const second = applyNeedResolution(units, { unitHashes: ["aaa"] });
+		const second = applyNeedResolution(units, {
+			targets: unitTargets(["aaa"]),
+		});
 		assert.strictEqual(second.resolved.length, 0);
 		assert.deepStrictEqual(second.skipped, [{ hash: "aaa", reason: "already-resolved" }]);
 		assert.strictEqual(second.changed, false);
@@ -91,7 +98,9 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 
 	test("フィルタ外のneedを持つhash指定はskipped(need-not-selected)になる", () => {
 		const units = [makeUnit("aaa", "s1", "translate")];
-		const result = applyNeedResolution(units, { unitHashes: ["aaa"] });
+		const result = applyNeedResolution(units, {
+			targets: unitTargets(["aaa"]),
+		});
 		assert.deepStrictEqual(result.skipped, [{ hash: "aaa", reason: "need-not-selected" }]);
 		assert.strictEqual(units[0].marker?.need, "translate");
 	});
@@ -159,7 +168,14 @@ Content C.
 		fs.writeFileSync(
 			path.join(mdaitDir, "mdait.json"),
 			JSON.stringify({
-				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
+				transPairs: [
+					{
+						sourceDir: "ja",
+						targetDir: "en",
+						sourceLang: "ja",
+						targetLang: "en",
+					},
+				],
 				primaryLang: "ja",
 				...(Object.keys(markers).length > 0 ? { markers } : {}),
 			}),
@@ -222,10 +238,14 @@ Content C.
 	test("unitHashes指定の2回目はskipped(already-resolved)になる（冪等性）", async () => {
 		const config = await initConfig();
 		writeTarget();
-		const first = await resolveNeedForFile(targetFile, config, { unitHashes: ["tgtA"] });
+		const first = await resolveNeedForFile(targetFile, config, {
+			targets: unitTargets(["tgtA"]),
+		});
 		assert.strictEqual(first.resolved.length, 1);
 
-		const second = await resolveNeedForFile(targetFile, config, { unitHashes: ["tgtA"] });
+		const second = await resolveNeedForFile(targetFile, config, {
+			targets: unitTargets(["tgtA"]),
+		});
 		assert.strictEqual(second.resolved.length, 0);
 		assert.deepStrictEqual(second.skipped, [{ hash: "tgtA", reason: "already-resolved" }]);
 	});
@@ -262,8 +282,24 @@ Content C.
 		// unit-state ストアへ external マーカーを登録する
 		const store = UnitStateStore.getInstance();
 		store.load(path.join(tempDir, ".mdait"));
-		store.setEntry({ path: "en/doc.md", order: 0, level: 2, titleHash: "", hash: "tgtA", from: "srcA", need: "review" });
-		store.setEntry({ path: "en/doc.md", order: 1, level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
+		store.setEntry({
+			path: "en/doc.md",
+			order: 0,
+			level: 2,
+			titleHash: "",
+			hash: "tgtA",
+			from: "srcA",
+			need: "review",
+		});
+		store.setEntry({
+			path: "en/doc.md",
+			order: 1,
+			level: 2,
+			titleHash: "",
+			hash: "tgtB",
+			from: "srcB",
+			need: "",
+		});
 
 		const result = await resolveNeedForFile(targetFile, config);
 

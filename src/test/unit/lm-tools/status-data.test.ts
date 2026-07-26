@@ -118,18 +118,18 @@ suite("status-data（need内訳集計）", () => {
 			assert.strictEqual(data.filesTranslated, 0);
 		});
 
-		test("detailのファイル別totalUnitsはSource扱いユニット（isolate等）を分母から除外する", () => {
-			// isolateユニットはStatusCollectorでSource扱いになる（分母除外）
+		test("detailのファイル別totalUnitsは凍結ユニットを分母から除外する", () => {
+			// 凍結ユニットは翻訳済みだが進捗の分母には入らない（Statusは偽らない）
 			const files = [
 				file("/ws/docs/en/a.md", [
 					unit({ needFlag: "translate" }),
 					unit({ status: Status.Translated }),
-					unit({ needFlag: "isolate", status: Status.Source }),
+					unit({ needFlag: "isolate", status: Status.Translated }),
 				]),
 			];
 			const data = buildStatusData(files, true);
 			assert.ok(data.files);
-			// 全体集計と同じ基準: isolate(Source)は分母に入らない
+			// 全体集計と同じ基準: 凍結ユニットは分母に入らない
 			assert.strictEqual(data.files[0].totalUnits, 2);
 			assert.strictEqual(data.files[0].translatedUnits, 1);
 			assert.strictEqual(data.totalUnits, 2);
@@ -171,11 +171,11 @@ suite("status-data（need内訳集計）", () => {
 			assert.strictEqual(data.files[0].unitsTruncated, undefined);
 		});
 
-		test("isolateユニット（Source扱い）も列挙されるが、それ以外のSourceユニットは含めない", () => {
+		test("凍結ユニットも列挙されるが、原文ユニットは含めない", () => {
 			const files = [
 				file("/ws/docs/en/a.md", [
 					unit({ unitHash: "h1", needFlag: "translate" }),
-					unit({ unitHash: "h2", needFlag: "isolate", status: Status.Source }),
+					unit({ unitHash: "h2", needFlag: "isolate", status: Status.Translated }),
 					unit({ unitHash: "h3", needFlag: "translate", status: Status.Source }),
 				]),
 			];

@@ -1,63 +1,33 @@
 /**
  * @file term-result-provider.ts
  * @description
- *   term-detect 完了後の結果プレビューを提供する TextDocumentContentProvider。
- *   固定 URI + onDidChange による上書き更新方式で、既存タブを再利用する。
+ *   term-detect 結果のレポートを組み立て、共通のレポート出力経路
+ *   （commands/shared/report-file.ts）へ渡す。
+ *   以前は仮想ドキュメントで表示していたが、行リンクが張れず再読み込みで内容が消えたため
+ *   実ファイルへ統一した。
  * @module commands/term/term-result-provider
  */
 import * as vscode from "vscode";
+import { Configuration } from "../../infra/config/configuration";
+import { writeReport } from "../shared/report-file";
 import { type TermDetectResult, generateContent } from "./term-result-content";
 
 export type { TermDetectResult } from "./term-result-content";
 export { generateContent } from "./term-result-content";
 
-const SCHEME = "mdait-term-result";
-const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:term-detect-result`);
-
 /**
- * term-detect 結果の仮想ドキュメントを提供するシングルトン。
- * extension.ts で `workspace.registerTextDocumentContentProvider` に登録して使用する。
+ * 用語検出レポートを `.mdait/reports/term.md` へ書き出す。
+ * 見出し・定型文は表示言語で出す（ADR-260719-01）。
+ *
+ * @returns 書き出したファイルの URI（失敗時は undefined）
  */
-export class TermResultContentProvider implements vscode.TextDocumentContentProvider {
-	private static instance: TermResultContentProvider;
-	private latestContent = "";
-	private readonly _onDidChange = new vscode.EventEmitter<vscode.Uri>();
-
-	readonly onDidChange = this._onDidChange.event;
-
-	private constructor() {}
-
-	static getInstance(): TermResultContentProvider {
-		if (!TermResultContentProvider.instance) {
-			TermResultContentProvider.instance = new TermResultContentProvider();
-		}
-		return TermResultContentProvider.instance;
-	}
-
-	/** 最新の結果をセットし、既存タブの内容を更新する。 */
-	setContent(result: TermDetectResult): void {
-		// 見出し・定型文は表示言語で出す（ADR-260719-01）
-		this.latestContent = generateContent(result, {
-			title: vscode.l10n.t("Term Detect Results"),
-			detectedHeading: vscode.l10n.t("Detected"),
-			none: vscode.l10n.t("(none)"),
-			targetNotDetected: vscode.l10n.t("(target not detected)"),
-			context: vscode.l10n.t("context"),
-		});
-		this._onDidChange.fire(PREVIEW_URI);
-	}
-
-	provideTextDocumentContent(_uri: vscode.Uri): string {
-		return this.latestContent;
-	}
-
-	dispose(): void {
-		this._onDidChange.dispose();
-	}
-
-	/** プレビュードキュメントを現在のカラムで開く。 */
-	static async openPreview(): Promise<void> {
-		const doc = await vscode.workspace.openTextDocument(PREVIEW_URI);
-		await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Active, preview: true });
-	}
+export async function writeTermReport(result: TermDetectResult): Promise<vscode.Uri | undefined> {
+	const content = generateContent(result, {
+		title: vscode.l10n.t("Term Detect Results"),
+		detectedHeading: vscode.l10n.t("Detected"),
+		none: vscode.l10n.t("(none)"),
+		targetNotDetected: vscode.l10n.t("(target not detected)"),
+		context: vscode.l10n.t("context"),
+	});
+	return writeReport(Configuration.getInstance(), "term", content);
 }

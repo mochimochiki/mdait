@@ -155,9 +155,9 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 翻訳済み | ✅ 緑 | ✅ Source/Note | ✅ サマリ | ✅ |
 | `need:translate` | ✅ 白抜き | ✅ ▶ + Mark as Translated | — | ✅ |
 | `need:revise` | ✅ 白抜き＋専用ツールチップ | ✅ ▶ + Mark as Revised | — | ✅ |
-| `need:review` | ✅ 黄 | ✅ Mark as Reviewed | ✅ Needs Review | ✅ |
-| `need:verify-deletion` | ✅ trash/橙＋専用ツールチップ | ✅ Keep / Delete Unit の2択 | ❌ | ✅ |
-| `need:isolate` | ✅ circle-slash/灰＋専用ツールチップ | ✅ Mark as Isolated / Un-isolate | ❌ | ✅ |
+| `need:review` | ✅ 黄＋Mark as Reviewed | ✅ Mark as Reviewed | ✅ Needs Review | ✅ |
+| `need:verify-deletion` | ✅ trash/橙＋Keep / Delete Unit | ✅ Keep / Delete Unit の2択 | ❌ | ✅ |
+| `need:isolate` | ✅ circle-slash/灰＋Un-isolate | ✅ 「その他」メニュー内の Mark as Isolated / 完了マークの Un-isolate | ❌ | ✅ |
 | エラーユニット | ✅ 赤 | — | ✅ | ✅（件数） |
 | AIレビュー flagged | ❌（ツリーは need:review の有無のみ） | — | ✅ | ✅（escalations） |
 

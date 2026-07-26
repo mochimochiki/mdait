@@ -116,6 +116,39 @@ export interface FrontmatterStatusItem extends BaseStatusItem {
  */
 export type StatusItem = DirectoryStatusItem | FileStatusItem | UnitStatusItem | FrontmatterStatusItem;
 
+// ========== need フラグの分類 ==========
+
+/**
+ * ユニットが凍結宣言されているか（`need:isolate`）。
+ *
+ * 凍結は「作業待ち」ではなく恒久的な宣言である。sync は凍結ユニットの上に
+ * revise / translate / verify-deletion を書かない（sync-command.ts の suppressNeed、
+ * section-matcher.ts のパススルー保持）ため、宣言は解除されるまで残り続ける。
+ */
+export function isIsolatedNeed(need: string | null | undefined): boolean {
+	return need === "isolate";
+}
+
+/**
+ * need フラグが「人間または AI の作業待ち」を表すか。
+ * 凍結宣言は作業待ちではないため false を返す。
+ */
+export function isPendingWorkNeed(need: string | null | undefined): boolean {
+	return !!need && !isIsolatedNeed(need);
+}
+
+/**
+ * 翻訳率の分母・分子に数えるユニットか。
+ *
+ * `Status` にこの判定を持たせてはならない。以前は凍結ユニットを分母から外すために
+ * `Status.Source` を名乗らせていたが、`Status` は「原文側か訳文側か」も表すため、
+ * それを先に見ていた contextValue の分岐が巻き添えで壊れた（到達不能な分岐が生まれた）。
+ * 「数えるか」は Status とは独立した質問として、この述語だけが答える。
+ */
+export function isCountedInProgress(unit: UnitStatusItem): boolean {
+	return unit.status !== Status.Source && !isIsolatedNeed(unit.needFlag);
+}
+
 // ========== 型ガードヘルパー関数 ==========
 
 /**

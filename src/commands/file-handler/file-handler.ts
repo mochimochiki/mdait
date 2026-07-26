@@ -2,7 +2,16 @@ import type * as vscode from "vscode";
 import type { FileStatusItem } from "../../core/status/status-item";
 import type { TransPair } from "../../infra/config/configuration";
 import type { SectionAligner } from "../adopt/section-aligner";
+import type { DeclareIsolateResult } from "../markers/declare-isolate";
+import type { DeleteUnitResult } from "../markers/delete-unit";
+import type { NeedResolutionOptions, NeedTarget, ResolveNeedFileResult } from "../markers/resolve-need";
 import type { Translator } from "../trans/translator";
+
+export type {
+	NeedResolutionOptions,
+	NeedTarget,
+	ResolveNeedFileResult,
+} from "../markers/resolve-need";
 
 /** ファイルタイプ識別子 */
 export type FileType = "md" | "plain";
@@ -69,4 +78,18 @@ export interface FileHandler {
 
 	/** mdait管理下にあるか（マーカー or unit-state登録あり） */
 	isInitialized(filePath: string): Promise<boolean>;
+
+	// ===== マーカー／ユニット状態の書き換え =====
+	// CodeLens・ツリー・LM Tool はこの3メソッドだけを呼ぶ。サーフェス側でマーカーを
+	// 直接書き換えてはならない（排他制御・ステータス更新の取りこぼしが起きるため。
+	// 詳細は commands/markers/unit-mutation.ts）。
+
+	/** need フラグを外す（裁定の確定）。対象未指定なら needs フィルタに一致する全件 */
+	resolveNeed(filePath: string, options?: NeedResolutionOptions): Promise<ResolveNeedFileResult>;
+
+	/** 凍結を宣言する（need:isolate）。対応しないファイル種別では reason つきで false を返す */
+	declareIsolate(filePath: string, target: NeedTarget): Promise<DeclareIsolateResult>;
+
+	/** verify-deletion のユニットを削除する。対応しないファイル種別では reason つきで false を返す */
+	deleteUnit(filePath: string, target: NeedTarget): Promise<DeleteUnitResult>;
 }

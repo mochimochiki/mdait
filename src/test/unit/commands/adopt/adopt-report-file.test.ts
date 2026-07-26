@@ -78,17 +78,17 @@ suite("writeAdoptReport（統合レポートの実ファイル書き出し）", 
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	test("レポートは .mdait/adopt-report.md に書き出される", async () => {
+	test("レポートは .mdait/reports/adopt.md に書き出される", async () => {
 		const config = await initConfig();
 		const uri = await writeAdoptReport(config, outcome());
 
 		assert.ok(uri, "URI が返る");
-		assert.strictEqual(uri?.fsPath, path.join(tempDir, ".mdait", "adopt-report.md"));
-		assert.strictEqual(uri?.fsPath, config.getAdoptReportFilePath());
-		assert.ok(fs.existsSync(config.getAdoptReportFilePath()), "ファイルが存在する");
+		assert.strictEqual(uri?.fsPath, path.join(tempDir, ".mdait", "reports", "adopt.md"));
+		assert.strictEqual(uri?.fsPath, config.getReportFilePath("adopt"));
+		assert.ok(fs.existsSync(config.getReportFilePath("adopt")), "ファイルが存在する");
 	});
 
-	test("ユニット行はレポート位置（.mdait/）からの相対リンクになる", async () => {
+	test("ユニット行はレポート位置（.mdait/reports/）からの相対リンクになる", async () => {
 		const config = await initConfig();
 		const unit: UnitReviewResult = {
 			filePath: path.join(tempDir, "en", "doc.md"),
@@ -103,14 +103,14 @@ suite("writeAdoptReport（統合レポートの実ファイル書き出し）", 
 		};
 		await writeAdoptReport(config, outcome([reviewFile(tempDir, unit)]));
 
-		const content = fs.readFileSync(config.getAdoptReportFilePath(), "utf-8");
-		assert.ok(content.includes("[Section A](<../en/doc.md#L12>)"), content);
+		const content = fs.readFileSync(config.getReportFilePath("adopt"), "utf-8");
+		assert.ok(content.includes("[Section A](<../../en/doc.md#L12>)"), content);
 	});
 
 	test("再実行すると上書きされる（履歴は git に委ねる）", async () => {
 		const config = await initConfig();
 		await writeAdoptReport(config, outcome());
-		const first = fs.readFileSync(config.getAdoptReportFilePath(), "utf-8");
+		const first = fs.readFileSync(config.getReportFilePath("adopt"), "utf-8");
 
 		const unit: UnitReviewResult = {
 			filePath: path.join(tempDir, "en", "doc.md"),
@@ -124,7 +124,7 @@ suite("writeAdoptReport（統合レポートの実ファイル書き出し）", 
 			confidence: 0.99,
 		};
 		await writeAdoptReport(config, outcome([reviewFile(tempDir, unit)]));
-		const second = fs.readFileSync(config.getAdoptReportFilePath(), "utf-8");
+		const second = fs.readFileSync(config.getReportFilePath("adopt"), "utf-8");
 
 		assert.notStrictEqual(first, second);
 		assert.ok(second.includes("Section A"));

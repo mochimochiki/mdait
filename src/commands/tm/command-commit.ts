@@ -34,7 +34,8 @@ import {
 	prepareTmCommitUnit,
 } from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
-import { TmResultContentProvider } from "./tm-result-provider";
+import { notifyWithReport } from "../shared/report-file";
+import { writeTmReport } from "./tm-result-provider";
 
 export {
 	buildTmCommitUnitResolution,
@@ -683,12 +684,20 @@ function showTmCommitResult(result: TmCommitResult): void {
 }
 
 /**
- * tm-commit 結果のプレビュードキュメントを開く。1 件以上の新規/更新がある場合のみ表示する。
+ * tm-commit 結果のレポートを書き出し、通知のボタンから開けるようにする。
+ * 1 件以上の新規/更新がある場合のみ。
  */
 async function showTmCommitPreview(result: TmCommitResult): Promise<void> {
 	if (result.newItems.length + result.updatedItems.length === 0) {
 		return;
 	}
-	TmResultContentProvider.getInstance().setContent(result);
-	await TmResultContentProvider.openPreview();
+	const uri = await writeTmReport(result);
+	notifyWithReport(
+		vscode.l10n.t(
+			"TM commit report ready: {0} new, {1} updated.",
+			result.newItems.length,
+			result.updatedItems.length,
+		),
+		uri,
+	);
 }

@@ -15,7 +15,8 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
-import { TermResultContentProvider } from "./term-result-provider";
+import { notifyWithReport } from "../shared/report-file";
+import { writeTermReport } from "./term-result-provider";
 import { TermsRepository } from "./terms-repository";
 import { UnitPair, UnitPairCollector } from "./unit-pair-collector";
 
@@ -96,15 +97,18 @@ export async function detectTermCommand(
 		},
 	);
 
-	// 検出用語が1件以上あればプレビュー表示
+	// 検出用語が1件以上あればレポートを書き出し、通知のボタンから開けるようにする
+	// （自動で開かないのは実ファイルでいつでも開き直せるため。ux.md E-6）
 	if (detectedTerms.length > 0) {
-		const provider = TermResultContentProvider.getInstance();
-		provider.setContent({
+		const uri = await writeTermReport({
 			entries: detectedTerms,
 			sourceLang: transPair.sourceLang,
 			targetLang: transPair.targetLang,
 		});
-		await TermResultContentProvider.openPreview();
+		notifyWithReport(
+			vscode.l10n.t("Term detection completed: {0} term(s) detected.", detectedTerms.length),
+			uri,
+		);
 	}
 }
 

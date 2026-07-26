@@ -7,7 +7,7 @@
  * @module lm-tools/status-data
  */
 import type { FileStatusItem, UnitStatusItem } from "../core/status/status-item";
-import { Status } from "../core/status/status-item";
+import { Status, isCountedInProgress } from "../core/status/status-item";
 
 /** need フラグ語彙ごとの件数内訳 */
 export interface NeedBreakdown {
@@ -107,16 +107,12 @@ export function countNeedFlags(needFlags: string[]): NeedBreakdown {
 
 /**
  * ユニット一覧から need 内訳を集計する。
- * ソースユニット（Status.Source）は集計対象外。
+ * 原文ユニット（Status.Source）は集計対象外。凍結ユニットは進捗の分母には入らないが
+ * 内訳には計上する（`isolate` が何件あるかはエージェントに見えている必要があるため）。
  */
 export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 	const breakdown = emptyBreakdown();
 	for (const unit of units) {
-		// need:isolate の孤立ユニットはステータス上ソース扱い（分母除外）だが、内訳には計上する
-		if (unit.needFlag === "isolate") {
-			breakdown.isolate++;
-			continue;
-		}
 		if (unit.status === Status.Source) {
 			continue;
 		}
@@ -129,17 +125,20 @@ export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 
 /**
  * need のあるユニットのみを UnitNeedDetail として列挙する。
- * countNeeds と同じ基準で対象を選ぶ（isolate は Source 扱いでも列挙し、その他の Source は除外）。
+ * countNeeds と同じ基準で対象を選ぶ（原文ユニットは除外）。
  * 上限 MAX_UNIT_DETAILS_PER_FILE 件で切り詰め、超過時は truncated を返す。
  */
-function buildUnitNeedDetails(units: UnitStatusItem[]): { units: UnitNeedDetail[]; truncated: boolean } {
+function buildUnitNeedDetails(units: UnitStatusItem[]): {
+	units: UnitNeedDetail[];
+	truncated: boolean;
+} {
 	const details: UnitNeedDetail[] = [];
 	let truncated = false;
 	for (const unit of units) {
 		if (!unit.needFlag) {
 			continue;
 		}
-		if (unit.needFlag !== "isolate" && unit.status === Status.Source) {
+		if (unit.status === Status.Source) {
 			continue;
 		}
 		if (details.length >= MAX_UNIT_DETAILS_PER_FILE) {
@@ -177,7 +176,7 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 			continue;
 		}
 		for (const unit of units) {
-			if (unit.status === Status.Source) {
+			if (!isCountedInProgress(unit)) {
 				continue;
 			}
 			totalUnits++;
@@ -197,8 +196,8 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		if (totalActionableNeeds(needs) > 0) {
 			filesWithNeeds++;
 			if (detail) {
-				// 全体集計と同じ基準（Status.Sourceは分母から除外。isolateもSource扱い）
-				const countableUnits = units.filter((u) => u.status !== Status.Source);
+				// 全体集計と同じ基準（原文側と凍結ユニットは分母から除外）
+				const countableUnits = units.filter(isCountedInProgress);
 				const unitDetails = buildUnitNeedDetails(units);
 				const fileDetail: FileNeedDetail = {
 					path: file.filePath,

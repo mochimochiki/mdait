@@ -8,18 +8,19 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { type DeclareIsolateResult, declareIsolateForFile } from "../../commands/markers/declare-isolate";
-import { type DeleteUnitResult, deleteUnitFromFile } from "../../commands/markers/delete-unit";
+import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
+import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
+import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
-import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
-import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { StatusManager } from "../../core/status/status-manager";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
@@ -42,40 +43,19 @@ function getMarkerAtLine(document: vscode.TextDocument, line: number): MdaitMark
 }
 
 /**
- * external マーカーモードで、指定行を含むユニットの need を unit-state からクリアする。
- * 本文を書き換えず store エントリの need を "" にして保存し、ステータスを更新する。
+ * 解決対象に選ぶ need 種別。CodeLens の「完了マーク」は表示されている need を
+ * そのまま外すボタンなので、既定の解決対象（review / verify-deletion）に限らず
+ * translate / revise / isolate も対象に含める。
  */
-async function clearNeedExternal(document: vscode.TextDocument, line: number): Promise<void> {
-	const config = Configuration.getInstance();
-	const explorer = new FileExplorer();
-	const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
-	const io = resolveMarkerIO(config, document.uri.fsPath, role);
-	const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
-	const unit = findUnitAtLine(parsed.units, line);
-	const order = unit ? parsed.units.indexOf(unit) : -1;
-	if (!unit || order < 0) {
-		vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
-		return;
-	}
+const ALL_RESOLVABLE_NEEDS = ["translate", "revise", "review", "verify-deletion", "isolate"];
 
-	const rel = toWorkspaceRelativePath(document.uri.fsPath);
-	if (!rel) {
-		vscode.window.showErrorMessage(vscode.l10n.t("No workspace folder found"));
-		return;
-	}
-	const store = UnitStateStore.getInstance();
-	const entry = store.getEntry(rel, order);
-	if (!entry || !entry.need) {
+/**
+ * need 解決の結果をユーザーへ伝える。解決0件のときだけ警告を出す。
+ */
+function reportResolveOutcome(resolved: number): void {
+	if (resolved === 0) {
 		vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
-		return;
 	}
-	store.setEntry({ ...entry, need: "" });
-	const mdaitDir = await ensureMdaitDir();
-	if (mdaitDir) {
-		store.save(mdaitDir);
-	}
-	// ステータス更新 → onStatusTreeChanged 経由で CodeLens もリフレッシュされる
-	await StatusManager.getInstance().refreshFileStatus(document.uri.fsPath);
 }
 
 /**
@@ -125,40 +105,17 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 		}
 
 		const document = activeEditor.document;
-		const config = Configuration.getInstance();
-
-		// external: 本文ではなく unit-state のエントリの need をクリアする
-		if (config.isExternalMarkers()) {
-			await clearNeedExternal(document, range.start.line);
-			return;
-		}
-
-		const lineText = document.lineAt(range.start.line).text;
-
-		// マーカーをパースしてneedを削除
-		const marker = MdaitMarker.parse(lineText);
-		if (!marker || !marker.need) {
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
 			return;
 		}
 
-		// needをnullに設定して文字列化
-		marker.need = null;
-		const newLineText = marker.toString();
-
-		// 行全体を置換
-		await activeEditor.edit((editBuilder) => {
-			const lineRange = new vscode.Range(
-				range.start.line,
-				0,
-				range.start.line,
-				document.lineAt(range.start.line).text.length,
-			);
-			editBuilder.replace(lineRange, newLineText);
+		const result = await getFileHandler(document.uri.fsPath).resolveNeed(document.uri.fsPath, {
+			targets: [{ kind: "unit", hash: marker.hash }],
+			needs: ALL_RESOLVABLE_NEEDS,
 		});
-
-		// ドキュメントを保存
-		await document.save();
+		reportResolveOutcome(result.resolved.length);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
@@ -214,8 +171,10 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 			return;
 		}
 
-		const config = Configuration.getInstance();
-		const result = await deleteUnitFromFile(document.uri.fsPath, marker.hash, config);
+		const result = await getFileHandler(document.uri.fsPath).deleteUnit(document.uri.fsPath, {
+			kind: "unit",
+			hash: marker.hash,
+		});
 		if (!result.deleted) {
 			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
 			return;
@@ -326,8 +285,10 @@ function isSourceDocument(document: vscode.TextDocument): boolean {
  * @param isSourceFile 原文側かどうか（通知文言の出し分けに使う）
  */
 async function declareIsolateAtMarker(absPath: string, unitHash: string, isSourceFile: boolean): Promise<void> {
-	const config = Configuration.getInstance();
-	const result = await declareIsolateForFile(absPath, unitHash, config);
+	const result = await getFileHandler(absPath).declareIsolate(absPath, {
+		kind: "unit",
+		hash: unitHash,
+	});
 	if (!result.declared) {
 		vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
 		return;
@@ -383,7 +344,9 @@ async function promptAndSaveNote(hash: string, refreshFsPath: string): Promise<v
 export async function editNoteForUnitCommand(filePath: string, unitHash: string): Promise<void> {
 	try {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-		const editor = await vscode.window.showTextDocument(document, { preview: false });
+		const editor = await vscode.window.showTextDocument(document, {
+			preview: false,
+		});
 
 		// hash から該当ユニットの行を特定してスクロール（見つからなくても note 編集は続行）
 		const line = findUnitLineByHash(document, unitHash);
@@ -803,7 +766,7 @@ function startOneWayScrollSync(
  * CodeLensからfrontmatterのneedマーカーをクリアするコマンド
  * @param range CodeLensが表示されている行の範囲
  */
-export async function codeLensClearFrontmatterNeedCommand(range: vscode.Range): Promise<void> {
+export async function codeLensClearFrontmatterNeedCommand(_range: vscode.Range): Promise<void> {
 	try {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor) {
@@ -811,43 +774,12 @@ export async function codeLensClearFrontmatterNeedCommand(range: vscode.Range): 
 			return;
 		}
 
-		const document = activeEditor.document;
-		const config = Configuration.getInstance();
-
-		// Markdownファイルを読み込み＆パース
-		const content = document.getText();
-		const markdown = markdownParser.parse(content, config);
-
-		if (!markdown.frontMatter) {
-			return;
-		}
-
-		// frontmatterマーカーを取得してneedをクリア
-		const marker = parseFrontmatterMarker(markdown.frontMatter);
-		if (!marker || !marker.need) {
-			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
-			return;
-		}
-
-		marker.removeNeedTag();
-		// コメント形式ではなく、マーカーの内容のみを構築して格納
-		let markerContent = marker.hash;
-		if (marker.from) {
-			markerContent += ` from:${marker.from}`;
-		}
-		if (marker.need) {
-			markerContent += ` need:${marker.need}`;
-		}
-		markdown.frontMatter.set(FRONTMATTER_MARKER_KEY, markerContent);
-
-		// ファイルを保存
-		const updatedContent = markdownParser.stringify(markdown);
-		await activeEditor.edit((editBuilder) => {
-			const fullRange = new vscode.Range(0, 0, document.lineCount, 0);
-			editBuilder.replace(fullRange, updatedContent);
+		const filePath = activeEditor.document.uri.fsPath;
+		const result = await getFileHandler(filePath).resolveNeed(filePath, {
+			targets: [{ kind: "frontmatter" }],
+			needs: ALL_RESOLVABLE_NEEDS,
 		});
-
-		await document.save();
+		reportResolveOutcome(result.resolved.length);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear frontmatter need marker: {0}", errorMessage));
@@ -990,25 +922,11 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
-		const targetRelPath = toWorkspaceRelativePath(uri.fsPath);
-		if (!targetRelPath) {
-			vscode.window.showErrorMessage(vscode.l10n.t("No workspace folder found"));
-			return;
-		}
-
-		const store = UnitStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath, 0);
-		if (!entry || !entry.need) {
-			vscode.window.showWarningMessage(vscode.l10n.t("No need marker found to clear."));
-			return;
-		}
-
-		store.setEntry({ ...entry, need: "" });
-
-		const mdaitDir = await ensureMdaitDir();
-		if (mdaitDir) {
-			store.save(mdaitDir);
-		}
+		const result = await getFileHandler(uri.fsPath).resolveNeed(uri.fsPath, {
+			targets: [{ kind: "file" }],
+			needs: ALL_RESOLVABLE_NEEDS,
+		});
+		reportResolveOutcome(result.resolved.length);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));

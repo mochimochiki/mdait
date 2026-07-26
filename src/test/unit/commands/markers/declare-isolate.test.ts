@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { declareIsolateForFile } from "../../../../commands/markers/declare-isolate";
-import { resolveNeedForFile } from "../../../../commands/markers/resolve-need";
+import { resolveNeedForFile, unitTargets } from "../../../../commands/markers/resolve-need";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
@@ -40,7 +40,14 @@ Content C.
 		fs.writeFileSync(
 			path.join(mdaitDir, "mdait.json"),
 			JSON.stringify({
-				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
+				transPairs: [
+					{
+						sourceDir: "ja",
+						targetDir: "en",
+						sourceLang: "ja",
+						targetLang: "en",
+					},
+				],
 				primaryLang: "ja",
 				...(Object.keys(markers).length > 0 ? { markers } : {}),
 			}),
@@ -121,7 +128,7 @@ Content C.
 		await declareIsolateForFile(targetFile, "tgtA", config);
 
 		const resolveResult = await resolveNeedForFile(targetFile, config, {
-			unitHashes: ["tgtA"],
+			targets: unitTargets(["tgtA"]),
 			needs: ["isolate"],
 		});
 
@@ -137,7 +144,15 @@ Content C.
 
 		const store = UnitStateStore.getInstance();
 		store.load(path.join(tempDir, ".mdait"));
-		store.setEntry({ path: "en/doc.md", order: 0, level: 2, titleHash: "", hash: "tgtA", from: "srcA", need: "" });
+		store.setEntry({
+			path: "en/doc.md",
+			order: 0,
+			level: 2,
+			titleHash: "",
+			hash: "tgtA",
+			from: "srcA",
+			need: "",
+		});
 
 		const result = await declareIsolateForFile(targetFile, "tgtA", config);
 

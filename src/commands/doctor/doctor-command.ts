@@ -18,6 +18,7 @@ import {
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
 import { openConfigInSettingsEditor } from "../shared/open-config-editor";
+import { notifyWithReport, writeReport } from "../shared/report-file";
 
 const TROUBLESHOOTING_URL =
 	"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
@@ -316,8 +317,8 @@ async function presentDiagnostics(
 		return;
 	}
 
-	// 詳細レポートを Markdown 文書として開く
-	await openReport(diagnostics, errorCount, warnCount);
+	// 詳細レポートを実ファイルへ書き出す（通知のボタンから開く）
+	await writeDiagnosisReport(diagnostics, errorCount, warnCount, config);
 
 	// アクション付きサマリ通知
 	const needsConfig = diagnostics.some(
@@ -357,11 +358,12 @@ async function presentDiagnostics(
 	}
 }
 
-/** 診断レポートを読み取り用 Markdown 文書として開く */
-async function openReport(
+/** 診断レポートを `.mdait/reports/doctor.md` へ書き出し、通知のボタンから開けるようにする */
+async function writeDiagnosisReport(
 	diagnostics: Diagnostic[],
 	errorCount: number,
 	warnCount: number,
+	config: Configuration,
 ): Promise<void> {
 	const lines: string[] = [];
 	lines.push(`# ${vscode.l10n.t("mdait Setup Diagnosis")}`);
@@ -382,11 +384,9 @@ async function openReport(
 	lines.push(`---`);
 	lines.push(vscode.l10n.t("Troubleshooting guide: {0}", TROUBLESHOOTING_URL));
 
-	const doc = await vscode.workspace.openTextDocument({
-		content: lines.join("\n"),
-		language: "markdown",
-	});
-	await vscode.window.showTextDocument(doc, { preview: true });
+	// 他のレポートと同じく実ファイルへ（untitled だと保存を促されるうえ再度開けない）
+	const uri = await writeReport(config, "doctor", lines.join("\n"));
+	notifyWithReport(vscode.l10n.t("Setup diagnosis completed."), uri);
 }
 
 /** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
