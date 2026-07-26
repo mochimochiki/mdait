@@ -16,7 +16,6 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
-import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 const logger = Logger.getInstance();
 
@@ -26,7 +25,12 @@ export type ReportKind = "adopt" | "ai-review" | "term" | "tm" | "doctor";
 /**
  * レポートを `.mdait/reports/<kind>.md` へ書き出す。
  *
- * @returns 書き出したファイルの URI（失敗時は undefined。レポートの書き出し失敗で
+ * **レポートの書き出しが `.mdait/` を新規作成することはない。** まだ mdait 化されていない
+ * ワークスペースでは書かずに undefined を返す（セットアップ診断は未設定のワークスペースでも
+ * 走るため、診断しただけでディレクトリが増えると驚きになる）。mdait 管理下のコマンドは
+ * 本処理の中で既に `.mdait/` を用意しているので、この制約で困ることはない。
+ *
+ * @returns 書き出したファイルの URI（書けなかった場合は undefined。レポートの失敗で
  *   コマンド本体を失敗扱いにしないため、例外は投げずに undefined を返す）
  */
 export async function writeReport(
@@ -35,8 +39,7 @@ export async function writeReport(
 	content: string,
 ): Promise<vscode.Uri | undefined> {
 	try {
-		const mdaitDir = await ensureMdaitDir();
-		if (!mdaitDir) {
+		if (!fs.existsSync(config.getMdaitDir())) {
 			return undefined;
 		}
 		const reportsDir = config.getReportsDir();

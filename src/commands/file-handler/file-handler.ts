@@ -6,6 +6,7 @@ import type { DeclareIsolateResult } from "../markers/declare-isolate";
 import type { DeleteUnitResult } from "../markers/delete-unit";
 import type { NeedResolutionOptions, NeedTarget, ResolveNeedFileResult } from "../markers/resolve-need";
 import type { Translator } from "../trans/translator";
+import type { FileType } from "./file-type";
 
 export type {
 	NeedResolutionOptions,
@@ -13,8 +14,8 @@ export type {
 	ResolveNeedFileResult,
 } from "../markers/resolve-need";
 
-/** ファイルタイプ識別子 */
-export type FileType = "md" | "plain";
+/** ファイルタイプ識別子（定義は file-type.ts が持つ） */
+export type { FileType };
 
 /** sync結果（MdaitUnit非依存の簡潔な型） */
 export interface FileSyncResult {

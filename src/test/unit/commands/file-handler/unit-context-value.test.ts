@@ -10,12 +10,7 @@
 import * as assert from "node:assert";
 import { StatusCollector } from "../../../../commands/file-handler/status-collector";
 import type { MdaitUnit } from "../../../../core/markdown/mdait-unit";
-import {
-	Status,
-	type UnitStatusItem,
-	StatusItemType,
-	isCountedInProgress,
-} from "../../../../core/status/status-item";
+import { Status, StatusItemType, type UnitStatusItem, isCountedInProgress } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 
 /** マーカーだけを持つ最小のユニットを作る */

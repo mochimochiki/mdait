@@ -1,19 +1,16 @@
 /**
- * @file term-result-provider.ts
+ * @file term-report-file.ts
  * @description
  *   term-detect 結果のレポートを組み立て、共通のレポート出力経路
  *   （commands/shared/report-file.ts）へ渡す。
  *   以前は仮想ドキュメントで表示していたが、行リンクが張れず再読み込みで内容が消えたため
  *   実ファイルへ統一した。
- * @module commands/term/term-result-provider
+ * @module commands/term/term-report-file
  */
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { writeReport } from "../shared/report-file";
 import { type TermDetectResult, generateContent } from "./term-result-content";
-
-export type { TermDetectResult } from "./term-result-content";
-export { generateContent } from "./term-result-content";
 
 /**
  * 用語検出レポートを `.mdait/reports/term.md` へ書き出す。

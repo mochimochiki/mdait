@@ -1,19 +1,17 @@
 /**
- * @file tm-result-provider.ts
+ * @file tm-report-file.ts
  * @description
  *   TM登録結果のレポートを組み立て、共通のレポート出力経路
  *   （commands/shared/report-file.ts）へ渡す。
  *   以前は仮想ドキュメントで表示していたが、行リンクが張れず再読み込みで内容が消えたため
  *   実ファイルへ統一した。
- * @module commands/tm/tm-result-provider
+ * @module commands/tm/tm-report-file
  */
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { writeReport } from "../shared/report-file";
 import type { TmCommitResult } from "./commit-processor";
 import { generateContent } from "./tm-result-content";
-
-export { generateContent } from "./tm-result-content";
 
 /**
  * TM登録レポートを `.mdait/reports/tm.md` へ書き出す。

@@ -5,6 +5,7 @@ import { getFileHandler } from "../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../commands/markers/delete-unit";
 import {
+	ALL_RESOLVABLE_NEEDS,
 	DEFAULT_RESOLVABLE_NEEDS,
 	type NeedSkipReason,
 	type ResolvedNeedUnit,
@@ -25,7 +26,8 @@ const logger = Logger.getInstance();
 const MAX_CONFIRMATION_UNITS = 10;
 
 /** needs フィルタとして受理する値（マーカーの既定 need 語彙） */
-const ALLOWED_NEED_FILTERS = ["review", "verify-deletion", "translate", "revise", "isolate"] as const;
+/** 解決対象に指定できる need 種別（語彙の持ち主は resolve-need.ts） */
+const ALLOWED_NEED_FILTERS = ALL_RESOLVABLE_NEEDS;
 
 /**
  * 入力パラメータ: need フラグ解決ツール
@@ -134,7 +136,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			// needs フィルタの語彙チェック（未知の値はエージェントの入力ミスとして弾く）
 			const needsFilter = options.input.needs;
 			if (needsFilter) {
-				const invalid = needsFilter.filter((n) => !(ALLOWED_NEED_FILTERS as readonly string[]).includes(n));
+				const invalid = needsFilter.filter((n) => !ALLOWED_NEED_FILTERS.includes(n));
 				if (invalid.length > 0) {
 					const message = vscode.l10n.t(
 						"Unknown need kind(s) in needs filter: {0}. Allowed values: {1}.",

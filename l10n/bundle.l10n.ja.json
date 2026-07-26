@@ -481,15 +481,13 @@
   "Detected": "検出",
   "(target not detected)": "（訳語未検出）",
   "context": "文脈",
-  "Could not write the adoption report to {0}.": "取り込みレポートを {0} に書き出せませんでした。",
   "Freeze this unit and stop propagating it to the translations.": "このユニットを凍結し、以後は訳文へ伝播しないようにします。",
   "Unit marked as isolated. It will no longer propagate to the translations.": "ユニットを独立扱いにしました。以後は訳文へ伝播しません。",
   "Open report": "レポートを開く",
   "Nothing to mark as reviewed for this unit.": "このユニットにレビュー待ちはありません。",
   "No unconfirmed translations here. Everything is already confirmed — audit them for drift instead?": "未確定の訳文はありません。すべて確定済みです。ズレがないか監査しますか？",
   "Audit all translations": "すべての訳文を監査する",
-  "Setup diagnosis completed.": "セットアップ診断が完了しました。",
-  "AI review report ready.": "AI翻訳レビューのレポートができました。",
   "Term detection completed: {0} term(s) detected.": "用語検出が完了しました: {0} 件を検出。",
-  "TM commit report ready: {0} new, {1} updated.": "TM登録のレポートができました: 新規 {0} 件、更新 {1} 件。"
+  "Term detection completed: no terms detected.": "用語検出が完了しました: 検出された用語はありません。",
+  "mdait setup diagnosis: {0} error(s), {1} warning(s).": "mdait セットアップ診断: エラー {0} 件、警告 {1} 件。"
 }

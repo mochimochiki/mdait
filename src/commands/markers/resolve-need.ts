@@ -22,6 +22,14 @@ const logger = Logger.getInstance();
 export const DEFAULT_RESOLVABLE_NEEDS: readonly string[] = ["review", "verify-deletion"];
 
 /**
+ * 解決対象に指定できる need 種別の全て。need 語彙の持ち主はこのモジュールであり、
+ * サーフェスごとに同じ配列を書かないこと（CodeLens の「完了マーク」と LM Tool の
+ * 入力検証が別々に持っていたため、語彙を足すと片方だけ取り残される状態だった）。
+ * `revise` は `revise@{oldhash}` 形式にも一致する（needMatchesSelection）。
+ */
+export const ALL_RESOLVABLE_NEEDS: readonly string[] = ["translate", "revise", "review", "verify-deletion", "isolate"];
+
+/**
  * need 解決の対象指定。
  * - `{ kind: "unit" }`: 本文ユニット（hash で特定）
  * - `{ kind: "frontmatter" }`: frontmatter の mdait.front マーカー
@@ -34,7 +42,7 @@ export interface NeedResolutionOptions {
 	/** 対象。省略時は needs フィルタに一致するファイル内の全ユニット（frontmatter を含む） */
 	targets?: NeedTarget[];
 	/** 解決対象の need 種別フィルタ。省略時は DEFAULT_RESOLVABLE_NEEDS */
-	needs?: string[];
+	needs?: readonly string[];
 }
 
 /** 解決されたユニット */

@@ -277,9 +277,9 @@ interface ResolveInput {
 ```
 
 **実装（action別）**:
-- **`resolve`（既定）**: `resolveNeedForFile`（`src/commands/markers/resolve-need.ts`）に委譲。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**。`data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳
-- **`declare-isolate`**: `declareIsolateForFile`（`src/commands/markers/declare-isolate.ts`）に委譲。指定ユニットに `need:isolate` を設定する（凍結。以後 sync は revise を伝播しない）。既に何らかの need が付いているユニットはスキップする（安全弁）。`data`: `declared: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `need-already-set`）
-- **`delete`**: `deleteUnitFromFile`（`src/commands/markers/delete-unit.ts`）に委譲。指定ユニットをドキュメントから完全に除去する（hash/fromの書き換えではなくユニット自体の削除）。`need:verify-deletion` 以外は削除不可（安全弁）。external モードでは unit-state ストアの order を詰め直す。`data`: `deleted: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `not-verify-deletion`）
+- **`resolve`（既定）**: `getFileHandler(path).resolveNeed()` に委譲（人間の CodeLens・ツリーと同一経路）。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**。`data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳
+- **`declare-isolate`**: `getFileHandler(path).declareIsolate()` に委譲（非Markdownファイルは対象外で常に `not-found`）。指定ユニットに `need:isolate` を設定する（凍結。以後 sync は revise を伝播しない）。既に何らかの need が付いているユニットはスキップする（安全弁）。`data`: `declared: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `need-already-set`）
+- **`delete`**: `getFileHandler(path).deleteUnit()` に委譲（非Markdownファイルは対象外で常に `not-found`）。指定ユニットをドキュメントから完全に除去する（hash/fromの書き換えではなくユニット自体の削除）。`need:verify-deletion` 以外は削除不可（安全弁）。external モードでは unit-state ストアの order を詰め直す。`data`: `deleted: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `not-verify-deletion`）
 - 3系統とも ai-review の `review-core.ts` と同じ書換経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる。マーカー境界はパーサーに委譲するのでコードブロック内のサンプルマーカーには誤マッチしない
 - 冪等: 同入力の2回目は対象0件（`resolve`/`declare-isolate` の unitHashes 指定時は該当 reason でスキップ、`delete` は `not-found`）
 

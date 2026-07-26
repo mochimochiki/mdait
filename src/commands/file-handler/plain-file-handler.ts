@@ -34,6 +34,18 @@ const logger = Logger.getInstance();
 const NEED_REVISE_PREFIX = "revise@";
 
 /**
+ * 対象指定が、このファイル（＝単一ユニット）に一致するかを判定する。
+ * 未指定は全件、`kind:"file"` は常に一致、`kind:"unit"` は hash が一致したときのみ。
+ * `kind:"frontmatter"` は非Markdownには存在しないため一致しない。
+ */
+function matchesPlainTarget(targets: NeedTarget[] | undefined, hash: string): boolean {
+	if (!targets) {
+		return true;
+	}
+	return targets.some((t) => t.kind === "file" || (t.kind === "unit" && t.hash === hash));
+}
+
+/**
  * 非Markdownファイル（.txt, .csv, .tsv等）用のFileHandler実装。
  * UnitStateStoreで翻訳状態を管理し、ファイル全体を1ユニットとして扱う。
  */
@@ -428,8 +440,7 @@ export class PlainFileHandler implements FileHandler {
 	}
 
 	// ===== マーカー／ユニット状態の書き換え =====
-	// 非MDファイルは「ファイル＝単一ユニット」（order=0）なので、対象指定の種別は問わず
-	// 常にそのファイルのエントリを対象にする。need は unit-state のみに存在し本文は変えない。
+	// 非MDファイルは「ファイル＝単一ユニット」（order=0）。need は unit-state のみに存在し本文は変えない。
 
 	async resolveNeed(filePath: string, options: NeedResolutionOptions = {}): Promise<ResolveNeedFileResult> {
 		const selected = options.needs && options.needs.length > 0 ? options.needs : [...DEFAULT_RESOLVABLE_NEEDS];
@@ -446,6 +457,11 @@ export class PlainFileHandler implements FileHandler {
 			};
 			if (!entry) {
 				return { ...empty, skipped: [{ hash: "", reason: "not-found" }] };
+			}
+			// hash 指定は照合する。ファイル＝1ユニットでも、指定と違うユニットを黙って
+			// 解決してしまうと NeedTarget の契約が壊れる（エージェントが誤った成功を受け取る）
+			if (!matchesPlainTarget(options.targets, entry.hash)) {
+				return { ...empty, skipped: [{ hash: entry.hash, reason: "not-found" }], remainingNeedFlags: [entry.need] };
 			}
 			if (!entry.need) {
 				return {
@@ -471,13 +487,13 @@ export class PlainFileHandler implements FileHandler {
 		});
 	}
 
-	async declareIsolate(filePath: string, _target: NeedTarget): Promise<DeclareIsolateResult> {
+	async declareIsolate(_filePath: string, _target: NeedTarget): Promise<DeclareIsolateResult> {
 		// 非MDファイルは「ファイル＝1ユニット」で下流へ伝播する部分構造を持たないため凍結の対象外。
 		// 対象外であることを黙って素通りさせず、理由を返して呼び出し側に表示させる
 		return { declared: false, changed: false, hash: "", reason: "not-found" };
 	}
 
-	async deleteUnit(filePath: string, _target: NeedTarget): Promise<DeleteUnitResult> {
+	async deleteUnit(_filePath: string, _target: NeedTarget): Promise<DeleteUnitResult> {
 		// 同上。ファイルそのものの削除は mdait の責務外（エクスプローラで行う）
 		return { deleted: false, changed: false, hash: "", reason: "not-found" };
 	}

@@ -13,11 +13,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { getFileHandler } from "../../../../commands/file-handler/file-handler-factory";
+import type { StatusCollectorPort } from "../../../../core/status/status-collector-port";
 import type { FileStatusItem } from "../../../../core/status/status-item";
 import { Status, StatusItemType } from "../../../../core/status/status-item";
-import { StatusManager } from "../../../../core/status/status-manager";
-import type { StatusCollectorPort } from "../../../../core/status/status-collector-port";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
+import { StatusManager } from "../../../../core/status/status-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
@@ -114,10 +114,7 @@ suite("need 解決後のステータス更新（どのファイル種別でも�
 
 		assert.strictEqual(result.resolved.length, 1, "frontmatter の need が解決されること");
 		assert.ok(collector.refreshed.includes(file), "ステータス更新が呼ばれること");
-		assert.ok(
-			!fs.readFileSync(file, "utf-8").includes("need:review"),
-			"frontmatter マーカーから need が消えること",
-		);
+		assert.ok(!fs.readFileSync(file, "utf-8").includes("need:review"), "frontmatter マーカーから need が消えること");
 	});
 
 	test("非Markdownファイルのneed解決でステータス更新が走る", async () => {
@@ -151,6 +148,13 @@ suite("need 解決後のステータス更新（どのファイル種別でも�
 		);
 		assert.strictEqual(fs.readFileSync(file, "utf-8"), "hello\n", "本文は不変であること");
 		assert.ok(config.trans.extensions?.includes(".txt"));
+
+		// 非Markdownファイルの need はマーカーモードに関わらず unit-state に載るため、
+		// embedded でもディスクへ保存されていなければ再読み込みで need が復活する
+		const persisted = fs.readFileSync(path.join(tempDir, ".mdait", "unit-state"), "utf-8");
+		const row = persisted.split("\n").find((l) => l.startsWith("en/doc.txt\t"));
+		assert.ok(row, "unit-state に行が書き出されていること");
+		assert.ok(!row.endsWith("translate"), `need が残っている: ${row}`);
 	});
 
 	test("解決対象がないときはステータス更新を走らせない（冪等）", async () => {

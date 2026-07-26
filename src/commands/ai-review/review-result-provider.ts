@@ -1,3 +1,4 @@
+import * as path from "node:path";
 /**
  * @file review-result-provider.ts
  * @description
@@ -10,8 +11,8 @@
  * @module commands/ai-review/review-result-provider
  */
 import * as vscode from "vscode";
-import * as path from "node:path";
 import { Configuration } from "../../infra/config/configuration";
+import { normalizeFileKey } from "../../infra/workspace/file-key";
 import { writeReport } from "../shared/report-file";
 import type { AiReviewFileResult } from "./review-result";
 import { type ReportAnchor, buildReviewReport } from "./review-table";
@@ -54,8 +55,12 @@ export class AiReviewResultCodeLensProvider implements vscode.CodeLensProvider {
 	}
 
 	provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-		// レポート実ファイルのみを対象にする（同名の別ファイルに出さないため絶対パスで比較）
-		if (document.uri.fsPath !== Configuration.getInstance().getReportFilePath("ai-review")) {
+		// レポート実ファイルのみを対象にする。生の文字列比較では Windows のドライブレターや
+		// 大文字小文字の表記差で一致せず CodeLens が出ないため、正規化して比べる
+		if (
+			normalizeFileKey(document.uri.fsPath) !==
+			normalizeFileKey(Configuration.getInstance().getReportFilePath("ai-review"))
+		) {
 			return [];
 		}
 		return latestAnchors.map((anchor) => {

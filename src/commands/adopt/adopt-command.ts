@@ -12,8 +12,9 @@ import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { aggregateReviewResults } from "../ai-review/review-result";
+import { notifyWithReport } from "../shared/report-file";
 import { type AdoptOptions, executeAdopt } from "./adopt-core";
-import { openAdoptReport, writeAdoptReport } from "./adopt-report-file";
+import { writeAdoptReport } from "./adopt-report-file";
 import type { AdoptOutcome } from "./adopt-result";
 
 const logger = Logger.getInstance();
@@ -65,8 +66,7 @@ export async function adoptCommand(): Promise<AdoptOutcome | undefined> {
 		async (progress, token) => {
 			try {
 				const outcome = await executeAdopt(config, options, progress, token);
-				showAdoptResult(outcome);
-				await showAdoptPreview(config, outcome);
+				showAdoptResult(outcome, await writeAdoptReportIfAny(config, outcome));
 				return outcome;
 			} catch (error) {
 				logger.error("adopt", "Adopt failed", formatError(error));
@@ -134,7 +134,7 @@ export function buildAdoptStepList(options: AdoptOptions, autoApprove: boolean):
 /**
  * 取り込み結果を通知表示する。
  */
-function showAdoptResult(outcome: AdoptOutcome): void {
+function showAdoptResult(outcome: AdoptOutcome, reportUri: vscode.Uri | undefined): void {
 	if (outcome.aborted || !outcome.sync) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Adoption did not run. Check the mdait configuration."));
 		return;
@@ -161,28 +161,21 @@ function showAdoptResult(outcome: AdoptOutcome): void {
 		parts.push(vscode.l10n.t("{0} step error(s) — see the report.", outcome.stageErrors.length));
 	}
 	const message = parts.join(" ");
-	if (agg.escalated > 0 || agg.errors > 0 || outcome.stageErrors.length > 0) {
-		vscode.window.showWarningMessage(message);
-	} else {
-		vscode.window.showInformationMessage(message);
-	}
+	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く（自動オープンはしない）
+	notifyWithReport(
+		message,
+		reportUri,
+		agg.escalated > 0 || agg.errors > 0 || outcome.stageErrors.length > 0 ? "warning" : "info",
+	);
 }
 
 /**
- * 取り込み結果のレポートを `.mdait/adopt-report.md` へ書き出し、プレビューで開く。
- * sync が走った場合のみ表示する。
+ * 取り込み結果のレポートを書き出す。sync が走った場合のみ。
+ * 通知は showAdoptResult が1本だけ出す（ここでは出さない）。
  */
-async function showAdoptPreview(config: Configuration, outcome: AdoptOutcome): Promise<void> {
+async function writeAdoptReportIfAny(config: Configuration, outcome: AdoptOutcome): Promise<vscode.Uri | undefined> {
 	if (outcome.aborted || !outcome.sync) {
-		return;
+		return undefined;
 	}
-	const uri = await writeAdoptReport(config, outcome);
-	if (!uri) {
-		// 取り込み自体は成功しているため、レポートを書けなかったことだけを伝える
-		vscode.window.showWarningMessage(
-			vscode.l10n.t("Could not write the adoption report to {0}.", config.getReportFilePath("adopt")),
-		);
-		return;
-	}
-	await openAdoptReport(uri);
+	return writeAdoptReport(config, outcome);
 }

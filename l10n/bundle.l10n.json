@@ -337,7 +337,6 @@
   "TM commit error: {0}": "TM commit error: {0}",
   "Register TM for all files in directory '{0}'?": "Register TM for all files in directory '{0}'?",
   "TM commit completed: {0} new, {1} updated, {2} warnings, {3} errors": "TM commit completed: {0} new, {1} updated, {2} warnings, {3} errors",
-  "TM commit report ready: {0} new, {1} updated.": "TM commit report ready: {0} new, {1} updated.",
   "Term Detect Results": "Term Detect Results",
   "Detected": "Detected",
   "(target not detected)": "(target not detected)",
@@ -378,6 +377,7 @@
   "Phase 2 completed: {0} terms resolved": "Phase 2 completed: {0} terms resolved",
   "Phase 2: {0} terms resolved": "Phase 2: {0} terms resolved",
   "Term detection failed: {0}": "Term detection failed: {0}",
+  "Term detection completed: no terms detected.": "Term detection completed: no terms detected.",
   "Term detection completed: {0} term(s) detected.": "Term detection completed: {0} term(s) detected.",
   "Preparing batches...": "Preparing batches...",
   "Processing batch {0} of {1}": "Processing batch {0} of {1}",
@@ -445,10 +445,10 @@
   "Unknown AI provider: {0}": "Unknown AI provider: {0}",
   "mdait setup looks good. No issues found.": "mdait setup looks good. No issues found.",
   "mdait setup diagnosis: {0} error(s), {1} warning(s). See the report for details.": "mdait setup diagnosis: {0} error(s), {1} warning(s). See the report for details.",
+  "mdait setup diagnosis: {0} error(s), {1} warning(s).": "mdait setup diagnosis: {0} error(s), {1} warning(s).",
   "mdait Setup Diagnosis": "mdait Setup Diagnosis",
   "Errors: {0}, Warnings: {1}, Info: {2}": "Errors: {0}, Warnings: {1}, Info: {2}",
   "Troubleshooting guide: {0}": "Troubleshooting guide: {0}",
-  "Setup diagnosis completed.": "Setup diagnosis completed.",
   "mdait AI Translation Review": "mdait AI Translation Review",
   "$(comment) Add / edit note": "$(comment) Add / edit note",
   "Tooltip: Jump to this unit and edit its note (shown to the AI during audit)": "Tooltip: Jump to this unit and edit its note (shown to the AI during audit)",
@@ -468,7 +468,6 @@
   "No unconfirmed translations here. Everything is already confirmed — audit them for drift instead?": "No unconfirmed translations here. Everything is already confirmed — audit them for drift instead?",
   "AI review: no pairs matched the selected scope.": "AI review: no pairs matched the selected scope.",
   "AI review completed: {0} approved, {1} flagged, {2} escalated, {3} kept, {4} errors": "AI review completed: {0} approved, {1} flagged, {2} escalated, {3} kept, {4} errors",
-  "AI review report ready.": "AI review report ready.",
   "mdait Adopt Existing Translations": "mdait Adopt Existing Translations",
   "Sync (adopt + AI align)": "Sync (adopt + AI align)",
   "Sync did not run (check the mdait configuration).": "Sync did not run (check the mdait configuration).",
@@ -496,6 +495,5 @@
   "build translation memory": "build translation memory",
   "Adoption did not run. Check the mdait configuration.": "Adoption did not run. Check the mdait configuration.",
   "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.",
-  "{0} step error(s) — see the report.": "{0} step error(s) — see the report.",
-  "Could not write the adoption report to {0}.": "Could not write the adoption report to {0}."
+  "{0} step error(s) — see the report.": "{0} step error(s) — see the report."
 }

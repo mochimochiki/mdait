@@ -76,10 +76,7 @@ suite("status-data（need内訳集計）", () => {
 	suite("buildStatusData", () => {
 		test("全体集計とファイル数の内訳を返す", () => {
 			const files = [
-				file("/ws/docs/en/a.md", [
-					unit({ needFlag: "translate" }),
-					unit({ status: Status.Translated }),
-				]),
+				file("/ws/docs/en/a.md", [unit({ needFlag: "translate" }), unit({ status: Status.Translated })]),
 				file(
 					"/ws/docs/en/b.md",
 					[unit({ status: Status.Translated }), unit({ status: Status.Translated })],

@@ -16,11 +16,11 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { PromptProvider } from "../../prompts";
+import { notifyWithReport } from "../shared/report-file";
 import type { ReviewCollectMode } from "./pair-collector";
 import { PairVerifier } from "./pair-verifier";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
 import type { AiReviewFileResult } from "./review-result";
-import { notifyWithReport } from "../shared/report-file";
 import { writeAiReviewReport } from "./review-result-provider";
 
 const logger = Logger.getInstance();
@@ -209,8 +209,7 @@ async function runAiReviewWithMode(
 		async (progress, token) => {
 			try {
 				const results = await executeAiReviewForFiles(files, config, { mode }, progress, token);
-				showAiReviewResult(results, mode, files, scopeLabel);
-				await showAiReviewPreview(results);
+				showAiReviewResult(results, mode, files, scopeLabel, await writeAiReviewReportIfAny(results));
 				return results;
 			} catch (error) {
 				logger.error("aiReview", "AI review failed", {
@@ -232,6 +231,7 @@ function showAiReviewResult(
 	mode: ReviewCollectMode,
 	files: string[],
 	scopeLabel: string,
+	reportUri: vscode.Uri | undefined,
 ): void {
 	const approved = results.reduce((sum, r) => sum + r.approved, 0);
 	const escalated = results.reduce((sum, r) => sum + r.escalated, 0);
@@ -275,20 +275,17 @@ function showAiReviewResult(
 		kept,
 		errors,
 	);
-	if (flagged > 0 || escalated > 0 || errors > 0) {
-		vscode.window.showWarningMessage(message);
-	} else {
-		vscode.window.showInformationMessage(message);
-	}
+	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
+	notifyWithReport(message, reportUri, flagged > 0 || escalated > 0 || errors > 0 ? "warning" : "info");
 }
 
 /**
- * 検証結果のプレビュードキュメントを開く。1件以上検証した場合のみ表示する。
+ * 検証結果のレポートを書き出す。1件以上検証した場合のみ。
+ * 通知は showAiReviewResult が1本だけ出す（ここでは出さない）。
  */
-async function showAiReviewPreview(results: AiReviewFileResult[]): Promise<void> {
+async function writeAiReviewReportIfAny(results: AiReviewFileResult[]): Promise<vscode.Uri | undefined> {
 	if (results.every((r) => r.unitResults.length === 0)) {
-		return;
+		return undefined;
 	}
-	const uri = await writeAiReviewReport(results);
-	notifyWithReport(vscode.l10n.t("AI review report ready."), uri);
+	return writeAiReviewReport(results);
 }

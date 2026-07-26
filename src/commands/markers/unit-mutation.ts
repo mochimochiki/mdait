@@ -24,6 +24,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { isUnitStateBacked } from "../file-handler/file-type";
 
 /** 書き換え操作の結果が最低限持つべき情報 */
 export interface UnitMutationResult {
@@ -32,7 +33,7 @@ export interface UnitMutationResult {
 }
 
 /** ファイルが原文側か訳文側かを判定する（ワークスペース未設定等は訳文扱い） */
-export function resolveFileRole(absPath: string, config: Configuration): "source" | "target" {
+function resolveFileRole(absPath: string, config: Configuration): "source" | "target" {
 	try {
 		return new FileExplorer().isSourceFile(absPath, config) ? "source" : "target";
 	} catch {
@@ -44,8 +45,7 @@ export function resolveFileRole(absPath: string, config: Configuration): "source
  * ファイル単位の書き換えを排他・整合つきで実行する（ファイル種別を問わない外側の層）。
  *
  * - 読み取り〜書き戻しの間は FileMutex で排他する（sync / trans との競合防止）
- * - エディタ上の未保存バッファを先にディスクへ反映する
- * - external マーカーでは unit-state ストアをロードし、変更時に保存する
+ * - 状態が unit-state に載るファイル（非Markdown、または external マーカー）ではストアをロードし、変更時に保存する
  * - 変更があったときだけステータスを更新する（冪等性を保つため、無変更なら何もしない）
  *
  * @param absPath 対象ファイルの絶対パス
@@ -57,7 +57,11 @@ export async function withFileMutation<T extends UnitMutationResult>(
 	config: Configuration,
 	mutate: () => Promise<T>,
 ): Promise<T> {
-	if (config.isExternalMarkers()) {
+	// 非Markdownファイルは embedded モードでも状態がストアにしか無いため、
+	// external 判定だけで済ませてはならない（済ませると保存されず need が復活する）
+	const storeBacked = isUnitStateBacked(absPath, config.isExternalMarkers());
+
+	if (storeBacked) {
 		const mdaitDir = await ensureMdaitDir();
 		if (mdaitDir) {
 			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
@@ -66,7 +70,6 @@ export async function withFileMutation<T extends UnitMutationResult>(
 
 	let outcome: T | undefined;
 	await FileMutex.getInstance().runExclusive([absPath], async () => {
-		await flushDirtyDocument(absPath);
 		outcome = await mutate();
 	});
 
@@ -74,7 +77,7 @@ export async function withFileMutation<T extends UnitMutationResult>(
 	const result = outcome as T;
 
 	if (result.changed) {
-		if (config.isExternalMarkers()) {
+		if (storeBacked) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().save(mdaitDir);
@@ -112,6 +115,10 @@ export async function withMarkdownMutation<T extends UnitMutationResult>(
 	const role = resolveFileRole(absPath, config);
 
 	return withFileMutation(absPath, config, async () => {
+		// 本文を読むのはこの経路だけなので、未保存バッファの反映もここで行う
+		// （非Markdownの need 解除は本文に触れないため、頼んでいない保存を走らせない）
+		await flushDirtyDocument(absPath);
+
 		const decoder = new TextDecoder("utf-8");
 		const content = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(absPath)));
 		const io = resolveMarkerIO(config, absPath, role);

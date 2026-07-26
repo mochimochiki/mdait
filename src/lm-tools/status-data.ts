@@ -7,7 +7,7 @@
  * @module lm-tools/status-data
  */
 import type { FileStatusItem, UnitStatusItem } from "../core/status/status-item";
-import { Status, isCountedInProgress } from "../core/status/status-item";
+import { Status, isCountedInProgress, isIsolatedNeed } from "../core/status/status-item";
 
 /** need フラグ語彙ごとの件数内訳 */
 export interface NeedBreakdown {
@@ -113,7 +113,10 @@ export function countNeedFlags(needFlags: string[]): NeedBreakdown {
 export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 	const breakdown = emptyBreakdown();
 	for (const unit of units) {
-		if (unit.status === Status.Source) {
+		// 凍結宣言は原文側にも行える（ADR-260706-02）。原文ユニットは進捗集計の対象外だが、
+		// 「どこを凍結したか」はエージェントが解除を判断するために見えている必要があるので、
+		// 原文側かどうかに関わらず内訳へ計上する
+		if (unit.status === Status.Source && !isIsolatedNeed(unit.needFlag)) {
 			continue;
 		}
 		if (unit.needFlag) {
@@ -125,7 +128,7 @@ export function countNeeds(units: UnitStatusItem[]): NeedBreakdown {
 
 /**
  * need のあるユニットのみを UnitNeedDetail として列挙する。
- * countNeeds と同じ基準で対象を選ぶ（原文ユニットは除外）。
+ * countNeeds と同じ基準で対象を選ぶ（原文ユニットは除外。ただし凍結宣言は原文側も列挙する）。
  * 上限 MAX_UNIT_DETAILS_PER_FILE 件で切り詰め、超過時は truncated を返す。
  */
 function buildUnitNeedDetails(units: UnitStatusItem[]): {
@@ -138,7 +141,8 @@ function buildUnitNeedDetails(units: UnitStatusItem[]): {
 		if (!unit.needFlag) {
 			continue;
 		}
-		if (unit.status === Status.Source) {
+		// countNeeds と同じ基準（原文側の凍結ユニットも列挙する）
+		if (unit.status === Status.Source && !isIsolatedNeed(unit.needFlag)) {
 			continue;
 		}
 		if (details.length >= MAX_UNIT_DETAILS_PER_FILE) {

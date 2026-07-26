@@ -10,6 +10,8 @@
 import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
+import { Configuration } from "../../infra/config/configuration";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { getFileHandler } from "../file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "./declare-isolate";
 import type { DeleteUnitResult } from "./delete-unit";
@@ -30,6 +32,15 @@ function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string 
 		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
 	}
 	return vscode.l10n.t("Unit not found.");
+}
+
+/** 対象ファイルが原文側かを判定する（ワークスペース未設定等は訳文扱い） */
+function isSourceFile(filePath: string): boolean {
+	try {
+		return new FileExplorer().isSourceFile(filePath, Configuration.getInstance());
+	} catch {
+		return false;
+	}
 }
 
 /** ツリー項目がユニットであることを確認し、そうでなければエラーを出して undefined を返す */

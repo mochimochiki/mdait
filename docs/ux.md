@@ -221,7 +221,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | E-3 | tm-optimize がキャンセル不可（token 未配線） | 低 | 🔜 UX-R3 |
 | E-4 | term.add が sourceLang/targetLang を en/ja 決め打ち | 低 | 🔜 UX-R3 |
 | E-5 | パッチ適用失敗の Continue/Skip modal がバッチ翻訳を中断させ、連続失敗でモーダル連打 | 低 | 📋 発生頻度を観測してから判断 |
-| E-6 | detect/adopt/ai-review/tm.commit が成功のたびレポートタブを自動オープンしタブが増殖 | 低 | 📋 通知からの手動オープンへの変更を検討 |
+| E-6 | detect/adopt/ai-review/tm.commit が成功のたびレポートタブを自動オープンしタブが増殖 | 低 | ✅ レポートを実ファイル化し、完了通知の「レポートを開く」ボタンからの手動オープンに統一（ADR-260726-01） |
 | E-7 | 運用開始後も Adopt ボタンがツリータイトルに常駐し誤操作を誘発（冪等だが確認負荷） | 低 | 📋 |
 
 ---
@@ -237,7 +237,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 **実装内容**（ADR-260712-03、詳細は同ADR参照）:
 
 1. **verify-deletion の2択化**: CodeLens を汎用「Mark as Completed」から「$(check) Keep（needを外して保持）/ $(trash) Delete Unit（ユニット削除）」の2ボタンに分岐。Delete は modal 確認＋git 復旧可能の注記。ツリーのユニット行にも同アクションをコンテキストメニューで提供。
-2. **isolate 宣言UI**: 訳文側ユニットの CodeLens／ツリーコンテキストメニューに「Mark as Isolated」（`need:isolate` 付与）と「Un-isolate」（解除）を追加。
+2. **isolate 宣言UI**: ユニットの CodeLens／ツリーコンテキストメニューに「Mark as Isolated」（`need:isolate` 付与）と「Un-isolate」（解除）を追加。原文側ユニットにも宣言できる（ADR-260706-02。ツリー対応は ADR-260726-01）。
 3. **レビューキュー**: StatusTree に「Needs Attention」仮想ノード（review / verify-deletion を横断集約）を追加し、クリックで該当ユニットへジャンプ→CodeLens で裁定→次へ、の連続処理を成立させた。escalated（AIレビューflagged）の統合はB-4として📋見送り（データが未集計のため）。
 4. エージェント側は `mdait_resolve` を `action: "resolve" | "declare-isolate" | "delete"` に拡張し、新規ツールを増やさず判断サーフェスをエージェントにも開いた（ADR-260712-03で新規ツール分割ではなくaction拡張を選択）。
 

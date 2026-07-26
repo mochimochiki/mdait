@@ -23,10 +23,7 @@ export { openReport as openAdoptReport } from "../shared/report-file";
  * @param outcome 取り込み1回分の結果
  * @returns 書き出したファイルの URI（失敗時は undefined）
  */
-export async function writeAdoptReport(
-	config: Configuration,
-	outcome: AdoptOutcome,
-): Promise<vscode.Uri | undefined> {
+export async function writeAdoptReport(config: Configuration, outcome: AdoptOutcome): Promise<vscode.Uri | undefined> {
 	const content = generateAdoptReportContent(outcome, {
 		labels: createAdoptReportLabels(),
 		// リンクはレポートの置き場所（.mdait/reports/）からの相対パスで解決される

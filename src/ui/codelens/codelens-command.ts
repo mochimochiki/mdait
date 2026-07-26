@@ -11,19 +11,18 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
+import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
-import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
+import { parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
-import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 
 /**
  * 指定行のマーカーを取得する。
@@ -41,13 +40,6 @@ function getMarkerAtLine(document: vscode.TextDocument, line: number): MdaitMark
 	}
 	return MdaitMarker.parse(document.lineAt(line).text);
 }
-
-/**
- * 解決対象に選ぶ need 種別。CodeLens の「完了マーク」は表示されている need を
- * そのまま外すボタンなので、既定の解決対象（review / verify-deletion）に限らず
- * translate / revise / isolate も対象に含める。
- */
-const ALL_RESOLVABLE_NEEDS = ["translate", "revise", "review", "verify-deletion", "isolate"];
 
 /**
  * need 解決の結果をユーザーへ伝える。解決0件のときだけ警告を出す。
@@ -122,7 +114,7 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	}
 }
 
-/** deleteUnitFromFile の失敗理由を人間可読なメッセージに変換する */
+/** ユニット削除の失敗理由を人間可読なメッセージに変換する */
 function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	if (reason === "not-verify-deletion") {
 		return vscode.l10n.t(
@@ -132,7 +124,7 @@ function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	return vscode.l10n.t("Unit not found.");
 }
 
-/** declareIsolateForFile の失敗理由を人間可読なメッセージに変換する */
+/** 凍結宣言の失敗理由を人間可読なメッセージに変換する */
 function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
 	if (reason === "need-already-set") {
 		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
@@ -198,7 +190,7 @@ interface OtherActionItem extends vscode.QuickPickItem {
  * 「その他」メニューに並べるアクションを決める（純関数）。
  * isolate は need が付いていないユニットにのみ出す — 宣言操作が
  * 他の判断待ち（review / verify-deletion など）を踏み潰さないための安全弁
- * （`declareIsolateForFile` の need-already-set スキップと対になる）。
+ * （凍結宣言側の need-already-set スキップと対になる）。
  *
  * @param hasNeed 対象ユニットに need が付いているか
  */
@@ -918,7 +910,7 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
 
 /**
  * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
- * UnitStateStore のエントリを need:"" に更新して保存する。
+ * 実際の書き換え・保存・ステータス更新はハンドラ側が行う。
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
