@@ -16,6 +16,7 @@ import {
 	StatusItemType,
 	isCountedInProgress,
 } from "../../../../core/status/status-item";
+import { StatusItemTree } from "../../../../core/status/status-item-tree";
 
 /** マーカーだけを持つ最小のユニットを作る */
 function unit(need: string | null, from: string | null): MdaitUnit {
@@ -108,5 +109,29 @@ suite("ユニットの状態導出（contextValue と分母判定）", () => {
 	test("通常の訳文ユニットは翻訳率の分母に数える", () => {
 		assert.strictEqual(isCountedInProgress(statusItem(undefined, Status.Translated)), true);
 		assert.strictEqual(isCountedInProgress(statusItem("review", Status.NeedsTranslation)), true);
+	});
+
+	test("ツリー全体の進捗集計でも凍結ユニットは分母に入らない", () => {
+		// 分母判定を Status で書いた集計が残っていると、凍結ユニットが
+		// 「翻訳済み」として二重に数えられる（isCountedInProgress へ委ねること）
+		const tree = new StatusItemTree();
+		tree.addOrUpdateFile({
+			type: StatusItemType.File,
+			label: "a.md",
+			status: Status.Translated,
+			filePath: "/ws/en/a.md",
+			fileName: "a.md",
+			translatedUnits: 1,
+			totalUnits: 1,
+			children: [
+				{ ...statusItem(undefined, Status.Translated), unitHash: "u1" },
+				{ ...statusItem("isolate", Status.Translated), unitHash: "u2" },
+				{ ...statusItem(undefined, Status.Source), unitHash: "u3" },
+			],
+		});
+
+		const progress = tree.aggregateProgress();
+		assert.strictEqual(progress.totalUnits, 1, "凍結ユニットと原文ユニットは分母に入らない");
+		assert.strictEqual(progress.translatedUnits, 1);
 	});
 });

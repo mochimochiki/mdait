@@ -9,6 +9,7 @@ import {
 	StatusItemType,
 	type UnitStatusItem,
 	getUnitsFromFile,
+	isCountedInProgress,
 	isDirectoryStatusItem,
 	isFileStatusItem,
 	isUnitStatusItem,
@@ -347,8 +348,10 @@ export class StatusItemTree {
 		let errorUnits = 0;
 
 		for (const unit of this.unitItemMapWithPath.values()) {
-			// ソースユニット（Status.Source）はカウントしない
-			if (unit.status === Status.Source) {
+			// 原文ユニットと凍結ユニットは進捗の分母に入れない。
+			// 判定は必ず isCountedInProgress に委ねる（Status を直接見ると、
+			// 分母の定義が変わったときにここだけ取り残される）
+			if (!isCountedInProgress(unit)) {
 				continue;
 			}
 			totalUnits++;
