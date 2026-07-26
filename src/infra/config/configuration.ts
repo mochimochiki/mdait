@@ -415,11 +415,19 @@ export class Configuration {
 	}
 
 	/**
-	 * 既存翻訳の取り込みウィザードの統合レポート（Markdown 実ファイル）の絶対パスを取得する。
-	 * 実行ごとに上書きされる（ADR-260719-01）。
+	 * レポート出力ディレクトリ（`.mdait/reports/`）の絶対パスを取得する。
+	 * mdait.json と混ざらないようサブディレクトリに寄せている。
 	 */
-	public getAdoptReportFilePath(): string {
-		return path.join(this.getMdaitDir(), "adopt-report.md");
+	public getReportsDir(): string {
+		return path.join(this.getMdaitDir(), "reports");
+	}
+
+	/**
+	 * 各コマンドの実行レポート（Markdown 実ファイル）の絶対パスを取得する。
+	 * 実行ごとに上書きされ、履歴は git に委ねる（ADR-260719-01）。
+	 */
+	public getReportFilePath(kind: string): string {
+		return path.join(this.getReportsDir(), `${kind}.md`);
 	}
 
 	/**
@@ -434,9 +442,7 @@ export class Configuration {
 	 * external なら外部ストア Provider、それ以外は埋め込み Provider（既定）。
 	 */
 	public getMarkerProvider(): MarkerProvider {
-		return this.isExternalMarkers()
-			? externalMarkerProvider
-			: embeddedMarkerProvider;
+		return this.isExternalMarkers() ? externalMarkerProvider : embeddedMarkerProvider;
 	}
 
 	/**
@@ -468,26 +474,13 @@ export class Configuration {
 				if (eventType === "change") {
 					this.load().catch((error) => {
 						// 古い設定のまま動き続けるため、ユーザーにも通知する
-						Logger.getInstance().error(
-							"config",
-							"Failed to reload configuration",
-							formatError(error),
-						);
-						vscode.window.showErrorMessage(
-							vscode.l10n.t(
-								"Failed to reload mdait.json: {0}",
-								(error as Error).message,
-							),
-						);
+						Logger.getInstance().error("config", "Failed to reload configuration", formatError(error));
+						vscode.window.showErrorMessage(vscode.l10n.t("Failed to reload mdait.json: {0}", (error as Error).message));
 					});
 				}
 			});
 		} catch (error) {
-			Logger.getInstance().error(
-				"config",
-				"Failed to setup configuration watcher",
-				formatError(error),
-			);
+			Logger.getInstance().error("config", "Failed to setup configuration watcher", formatError(error));
 		}
 	}
 
@@ -506,11 +499,7 @@ export class Configuration {
 			try {
 				callback();
 			} catch (error) {
-				Logger.getInstance().error(
-					"config",
-					"Error in configuration change callback",
-					formatError(error),
-				);
+				Logger.getInstance().error("config", "Error in configuration change callback", formatError(error));
 			}
 		}
 	}
@@ -590,8 +579,7 @@ export class Configuration {
 			// すべて既定の "embedded" へ倒す。load() はシングルトンを in-place 更新するため、
 			// 「設定から markers を削除して external→embedded に戻す」動線で前回値が居残る
 			// stale を防ぐ（値を毎回確定させることで再ロードを冪等にする）。
-			this.markers.mode =
-				config.markers?.mode === "external" ? "external" : "embedded";
+			this.markers.mode = config.markers?.mode === "external" ? "external" : "embedded";
 
 			// AI設定の読み込み
 			if (config.ai) {
@@ -612,10 +600,7 @@ export class Configuration {
 						this.ai.ollama.model = config.ai.ollama.model;
 					}
 					if (config.ai.ollama.timeoutSec !== undefined) {
-						this.ai.ollama.timeoutSec = Math.max(
-							1,
-							config.ai.ollama.timeoutSec,
-						);
+						this.ai.ollama.timeoutSec = Math.max(1, config.ai.ollama.timeoutSec);
 					}
 					if (config.ai.ollama.keepAlive !== undefined) {
 						this.ai.ollama.keepAlive = config.ai.ollama.keepAlive;
@@ -627,13 +612,8 @@ export class Configuration {
 					}
 					if (config.ai.openai.apiKey) {
 						// 展開前の生値で直書き（漏洩）を検知し警告する: P5
-						this.warnIfApiKeyLiteral(
-							config.ai.provider,
-							config.ai.openai.apiKey,
-						);
-						this.ai.openai.apiKey = this.expandEnvironmentVariables(
-							config.ai.openai.apiKey,
-						);
+						this.warnIfApiKeyLiteral(config.ai.provider, config.ai.openai.apiKey);
+						this.ai.openai.apiKey = this.expandEnvironmentVariables(config.ai.openai.apiKey);
 					}
 					if (config.ai.openai.baseURL) {
 						this.ai.openai.baseURL = config.ai.openai.baseURL;
@@ -653,12 +633,10 @@ export class Configuration {
 						};
 					}
 					if (config.ai.debug.enableStatsLogging !== undefined) {
-						this.ai.debug.enableStatsLogging =
-							config.ai.debug.enableStatsLogging;
+						this.ai.debug.enableStatsLogging = config.ai.debug.enableStatsLogging;
 					}
 					if (config.ai.debug.logPromptAndResponse !== undefined) {
-						this.ai.debug.logPromptAndResponse =
-							config.ai.debug.logPromptAndResponse;
+						this.ai.debug.logPromptAndResponse = config.ai.debug.logPromptAndResponse;
 					}
 				}
 			}
@@ -666,15 +644,13 @@ export class Configuration {
 			// 翻訳設定の読み込み
 			if (config.trans?.markdown) {
 				if (config.trans.markdown.skipCodeBlocks !== undefined) {
-					this.trans.markdown.skipCodeBlocks =
-						config.trans.markdown.skipCodeBlocks;
+					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
 				}
 			}
 			if (config.trans?.frontmatter?.keys !== undefined) {
 				if (Array.isArray(config.trans.frontmatter.keys)) {
 					this.trans.frontmatter.keys = config.trans.frontmatter.keys.filter(
-						(key): key is string =>
-							typeof key === "string" && key.trim().length > 0,
+						(key): key is string => typeof key === "string" && key.trim().length > 0,
 					);
 				}
 			}
@@ -682,10 +658,7 @@ export class Configuration {
 				this.trans.contextSize = config.trans.contextSize;
 			}
 			if (config.trans?.retryLimit !== undefined) {
-				const normalizedRetryLimit = Math.min(
-					5,
-					Math.max(1, config.trans.retryLimit),
-				);
+				const normalizedRetryLimit = Math.min(5, Math.max(1, config.trans.retryLimit));
 				this.trans.retryLimit = normalizedRetryLimit;
 			}
 			if (config.trans?.maxFileSize !== undefined) {
@@ -693,10 +666,7 @@ export class Configuration {
 			}
 			if (config.trans?.concurrency !== undefined) {
 				// ファイル単位並列翻訳の同時実行数（1〜8にクランプ。1で逐次実行）
-				this.trans.concurrency = Math.min(
-					8,
-					Math.max(1, Math.floor(config.trans.concurrency)),
-				);
+				this.trans.concurrency = Math.min(8, Math.max(1, Math.floor(config.trans.concurrency)));
 			}
 			if (config.trans?.extensions !== undefined) {
 				if (Array.isArray(config.trans.extensions)) {
@@ -745,19 +715,13 @@ export class Configuration {
 					this.tm.enabled = config.tm.enabled;
 				}
 				if (config.tm.maxReferences !== undefined) {
-					this.tm.maxReferences = Math.max(
-						1,
-						Math.min(20, config.tm.maxReferences),
-					);
+					this.tm.maxReferences = Math.max(1, Math.min(20, config.tm.maxReferences));
 				}
 				if (config.tm.retryLimit !== undefined) {
 					this.tm.retryLimit = Math.min(5, Math.max(1, config.tm.retryLimit));
 				}
 				if (config.tm.minQueryLength !== undefined) {
-					this.tm.minQueryLength = Math.max(
-						1,
-						Math.min(100, config.tm.minQueryLength),
-					);
+					this.tm.minQueryLength = Math.max(1, Math.min(100, config.tm.minQueryLength));
 				}
 			}
 
@@ -770,10 +734,7 @@ export class Configuration {
 					this.aiReview.autoApprove = config.aiReview.autoApprove;
 				}
 				if (Number.isFinite(config.aiReview.batchSize)) {
-					this.aiReview.batchSize = Math.min(
-						10,
-						Math.max(1, Math.floor(config.aiReview.batchSize as number)),
-					);
+					this.aiReview.batchSize = Math.min(10, Math.max(1, Math.floor(config.aiReview.batchSize as number)));
 				}
 			}
 
@@ -793,10 +754,7 @@ export class Configuration {
 	 * openai プロバイダで apiKey が直書き（${env:} 参照でない）なら漏洩警告を表示する。
 	 * 同じ生値に対する連続再ロードでは重複警告しない。
 	 */
-	private warnIfApiKeyLiteral(
-		provider: string | undefined,
-		rawApiKey: string,
-	): void {
+	private warnIfApiKeyLiteral(provider: string | undefined, rawApiKey: string): void {
 		if (provider !== "openai" || !isLiteralApiKey(rawApiKey)) {
 			return;
 		}
@@ -815,9 +773,7 @@ export class Configuration {
 			.then((choice) => {
 				if (choice === useEnv) {
 					vscode.env.openExternal(
-						vscode.Uri.parse(
-							"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
-						),
+						vscode.Uri.parse("https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md"),
 					);
 				}
 			});
@@ -830,22 +786,16 @@ export class Configuration {
 	public validate(): string | null {
 		// 翻訳ペアが設定されているか
 		if (!this.transPairs || this.transPairs.length === 0) {
-			return vscode.l10n.t(
-				"Translation pairs (mdait.transPairs) are not configured.",
-			);
+			return vscode.l10n.t("Translation pairs (mdait.transPairs) are not configured.");
 		}
 
 		// 各翻訳ペアのディレクトリが設定されているか
 		for (const pair of this.transPairs) {
 			if (!pair.sourceDir) {
-				return vscode.l10n.t(
-					"Source directory (sourceDir) is not set in translation pair.",
-				);
+				return vscode.l10n.t("Source directory (sourceDir) is not set in translation pair.");
 			}
 			if (!pair.targetDir) {
-				return vscode.l10n.t(
-					"Target directory (targetDir) is not set in translation pair.",
-				);
+				return vscode.l10n.t("Target directory (targetDir) is not set in translation pair.");
 			}
 		}
 

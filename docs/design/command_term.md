@@ -94,7 +94,7 @@ sequenceDiagram
         Cmd->>Repo: Merge + save()
         Repo-->>User: 完了通知
         opt 検出数 > 0
-            Cmd->>User: 結果プレビュー表示（仮想ドキュメント）
+            Cmd->>User: 完了通知（レポートを開くボタン付き）
         end
     end
 
@@ -132,4 +132,4 @@ sequenceDiagram
 | [`term-expander.ts`](../../src/commands/term/term-expander.ts) | `TermExpander.expand()` - AI訳語推定 |
 | [`unit-pair-collector.ts`](../../src/commands/term/unit-pair-collector.ts) | `UnitPairCollector` - ソース/ターゲットのペア収集 |
 | [`command-open.ts`](../../src/commands/term/command-open.ts) | `openTermCommand()` - 用語集ファイルをエディタで開く |
-| [`term-result-provider.ts`](../../src/commands/term/term-result-provider.ts) | `TermResultContentProvider` - term-detect結果の仮想ドキュメントプレビュー（TM側と同パターン）。見出し・定型文はラベル注入で表示言語化（ADR-260719-01） |
+| [`term-report-file.ts`](../../src/commands/term/term-report-file.ts) | term-detect 結果のレポート本文を組み立て、共通経路（`commands/shared/report-file.ts`）で `.mdait/reports/term.md` へ書き出す。見出し・定型文はラベル注入で表示言語化（ADR-260719-01） |

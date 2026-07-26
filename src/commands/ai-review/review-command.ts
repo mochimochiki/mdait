@@ -16,11 +16,12 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { PromptProvider } from "../../prompts";
+import { notifyWithReport } from "../shared/report-file";
 import type { ReviewCollectMode } from "./pair-collector";
 import { PairVerifier } from "./pair-verifier";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
 import type { AiReviewFileResult } from "./review-result";
-import { AiReviewResultContentProvider } from "./review-result-provider";
+import { writeAiReviewReport } from "./review-result-provider";
 
 const logger = Logger.getInstance();
 
@@ -179,6 +180,20 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 		return;
 	}
 
+	return runAiReviewWithMode(files, scopeLabel, mode);
+}
+
+/**
+ * モードを決めた状態で AI 翻訳レビューを実行する。
+ * 対象0件だったときの「もう一方のモードへ切り替える」導線からも再入する
+ * （そのときモードは決まっているので QuickPick は出さない）。
+ */
+async function runAiReviewWithMode(
+	files: string[],
+	scopeLabel: string,
+	mode: ReviewCollectMode,
+): Promise<AiReviewFileResult[] | undefined> {
+	const config = Configuration.getInstance();
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
 	if (!shouldProceed) {
@@ -194,8 +209,7 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 		async (progress, token) => {
 			try {
 				const results = await executeAiReviewForFiles(files, config, { mode }, progress, token);
-				showAiReviewResult(results);
-				await showAiReviewPreview(results);
+				showAiReviewResult(results, mode, files, scopeLabel, await writeAiReviewReportIfAny(results));
 				return results;
 			} catch (error) {
 				logger.error("aiReview", "AI review failed", {
@@ -212,7 +226,13 @@ async function runAiReviewWithProgress(files: string[], scopeLabel: string): Pro
 /**
  * AI翻訳レビュー結果を通知表示する。
  */
-function showAiReviewResult(results: AiReviewFileResult[]): void {
+function showAiReviewResult(
+	results: AiReviewFileResult[],
+	mode: ReviewCollectMode,
+	files: string[],
+	scopeLabel: string,
+	reportUri: vscode.Uri | undefined,
+): void {
 	const approved = results.reduce((sum, r) => sum + r.approved, 0);
 	const escalated = results.reduce((sum, r) => sum + r.escalated, 0);
 	const flagged = results.reduce((sum, r) => sum + r.flagged, 0);
@@ -221,6 +241,28 @@ function showAiReviewResult(results: AiReviewFileResult[]): void {
 	const verified = results.reduce((sum, r) => sum + r.verified, 0);
 
 	if (verified === 0 && errors === 0) {
+		// 対象0件で行き止まりにしない。もう一方のモードなら対象があり得るので、その場で切り替えを促す
+		// （選択前に全ファイルをパースして件数を出すと、メニューが出るまで待たされるため事後に案内する）
+		if (mode === "pending") {
+			const auditNow = vscode.l10n.t("Audit all translations");
+			void vscode.window
+				.showInformationMessage(
+					vscode.l10n.t(
+						"No unconfirmed translations here. Everything is already confirmed — audit them for drift instead?",
+					),
+					auditNow,
+				)
+				.then((choice) => {
+					if (choice === auditNow) {
+						return runAiReviewWithMode(files, scopeLabel, "audit");
+					}
+					return undefined;
+				})
+				.then(undefined, (error) => {
+					logger.error("aiReview", "Audit switch failed", { ...formatError(error) });
+				});
+			return;
+		}
 		vscode.window.showInformationMessage(vscode.l10n.t("AI review: no pairs matched the selected scope."));
 		return;
 	}
@@ -233,20 +275,17 @@ function showAiReviewResult(results: AiReviewFileResult[]): void {
 		kept,
 		errors,
 	);
-	if (flagged > 0 || escalated > 0 || errors > 0) {
-		vscode.window.showWarningMessage(message);
-	} else {
-		vscode.window.showInformationMessage(message);
-	}
+	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
+	notifyWithReport(message, reportUri, flagged > 0 || escalated > 0 || errors > 0 ? "warning" : "info");
 }
 
 /**
- * 検証結果のプレビュードキュメントを開く。1件以上検証した場合のみ表示する。
+ * 検証結果のレポートを書き出す。1件以上検証した場合のみ。
+ * 通知は showAiReviewResult が1本だけ出す（ここでは出さない）。
  */
-async function showAiReviewPreview(results: AiReviewFileResult[]): Promise<void> {
+async function writeAiReviewReportIfAny(results: AiReviewFileResult[]): Promise<vscode.Uri | undefined> {
 	if (results.every((r) => r.unitResults.length === 0)) {
-		return;
+		return undefined;
 	}
-	AiReviewResultContentProvider.getInstance().setContent(results);
-	await AiReviewResultContentProvider.openPreview();
+	return writeAiReviewReport(results);
 }

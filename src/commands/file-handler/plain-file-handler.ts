@@ -1,42 +1,49 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-	applySimplePatch,
-	createUnifiedDiff,
-	hasDiff,
-} from "../../core/diff/diff-generator";
+import { applySimplePatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
-import {
-	type FileStatusItem,
-	Status,
-	StatusItemType,
-} from "../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
-import {
-	Configuration,
-	type TransPair,
-} from "../../infra/config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import type { DeclareIsolateResult } from "../markers/declare-isolate";
+import type { DeleteUnitResult } from "../markers/delete-unit";
+import {
+	DEFAULT_RESOLVABLE_NEEDS,
+	type NeedResolutionOptions,
+	type NeedTarget,
+	type ResolveNeedFileResult,
+	needMatchesSelection,
+} from "../markers/resolve-need";
+import { withFileMutation } from "../markers/unit-mutation";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
 import { lookupTmReferences } from "../trans/trans-command";
 import { TranslationContext } from "../trans/translation-context";
 import type { Translator } from "../trans/translator";
-import type {
-	FileHandler,
-	FileSyncResult,
-	FileTranslateResult,
-} from "./file-handler";
+import type { FileHandler, FileSyncResult, FileTranslateResult } from "./file-handler";
 
 const logger = Logger.getInstance();
 
 /** need:revise のプレフィックス */
 const NEED_REVISE_PREFIX = "revise@";
+
+/**
+ * 対象指定が、このファイル（＝単一ユニット）に一致するかを判定する。
+ * 未指定は全件、`kind:"file"` は常に一致、`kind:"unit"` は hash が一致したときのみ。
+ * `kind:"frontmatter"` は非Markdownには存在しないため一致しない。
+ */
+function matchesPlainTarget(targets: NeedTarget[] | undefined, hash: string): boolean {
+	if (!targets) {
+		return true;
+	}
+	return targets.some((t) => t.kind === "file" || (t.kind === "unit" && t.hash === hash));
+}
 
 /**
  * 非Markdownファイル（.txt, .csv, .tsv等）用のFileHandler実装。
@@ -67,13 +74,9 @@ export class PlainFileHandler implements FileHandler {
 			need = "review";
 			revisionsNeeded = 1;
 			modified = 1;
-			logger.info(
-				"sync",
-				"Rebuild detected for plain file, assigning need:review",
-				{
-					targetFile: targetRelPath,
-				},
-			);
+			logger.info("sync", "Rebuild detected for plain file, assigning need:review", {
+				targetFile: targetRelPath,
+			});
 		} else if (existing.from !== sourceHash) {
 			// ソース変更あり
 			if (existing.need.startsWith(NEED_REVISE_PREFIX)) {
@@ -118,10 +121,7 @@ export class PlainFileHandler implements FileHandler {
 		};
 	}
 
-	async syncNew(
-		sourceFile: string,
-		targetFile: string,
-	): Promise<FileSyncResult> {
+	async syncNew(sourceFile: string, targetFile: string): Promise<FileSyncResult> {
 		const fileExplorer = new FileExplorer();
 
 		// 1. ソースファイル読み込み、ハッシュ計算
@@ -249,27 +249,15 @@ export class PlainFileHandler implements FileHandler {
 		try {
 			const termsFilePath = config.getTermsFilePath();
 			const cacheManager = TermsCacheManager.getInstance();
-			const allTerms = await cacheManager.getTerms(
-				termsFilePath,
-				config.transPairs,
-			);
+			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
 			if (allTerms.length > 0) {
-				const extracted = extractRelevantTerms(
-					sourceContent,
-					allTerms,
-					pair.sourceLang,
-					pair.targetLang,
-				);
+				const extracted = extractRelevantTerms(sourceContent, allTerms, pair.sourceLang, pair.targetLang);
 				if (extracted.length > 0) {
 					termsJson = termsToJson(extracted);
 				}
 			}
 		} catch (error) {
-			logger.warn(
-				"trans",
-				"Failed to load terms for plain file translation",
-				formatError(error),
-			);
+			logger.warn("trans", "Failed to load terms for plain file translation", formatError(error));
 		}
 
 		// 7. TranslationContext構築
@@ -285,22 +273,13 @@ export class PlainFileHandler implements FileHandler {
 		// 8. TM参照の検索
 		let tmHit = false;
 		try {
-			const tmResult = lookupTmReferences(
-				sourceContent,
-				pair.sourceLang,
-				pair.targetLang,
-				oldSourceContent,
-			);
+			const tmResult = lookupTmReferences(sourceContent, pair.sourceLang, pair.targetLang, oldSourceContent);
 			if (tmResult) {
 				context.tmReferences = tmResult.formatted;
 				tmHit = true;
 			}
 		} catch (error) {
-			logger.debug(
-				"trans",
-				"TM reference lookup skipped for plain file",
-				formatError(error),
-			);
+			logger.debug("trans", "TM reference lookup skipped for plain file", formatError(error));
 		}
 
 		// 9. 進捗報告
@@ -320,9 +299,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 10. 翻訳実行
 		let translatedText: string | undefined;
-		let termSuggestions:
-			| { source: string; target: string; context: string; reason?: string }[]
-			| undefined;
+		let termSuggestions: { source: string; target: string; context: string; reason?: string }[] | undefined;
 		let usedPatchMode = false;
 
 		if (isRevise && previousTranslation && sourceDiff) {
@@ -334,38 +311,26 @@ export class PlainFileHandler implements FileHandler {
 					context,
 					token,
 				);
-				const patched = applySimplePatch(
-					previousTranslation,
-					patchResult.targetPatch,
-				);
+				const patched = applySimplePatch(previousTranslation, patchResult.targetPatch);
 				if (patched) {
 					translatedText = patched;
 					termSuggestions = patchResult.termSuggestions;
 					usedPatchMode = true;
 				} else {
-					logger.warn(
-						"trans",
-						"Patch apply failed for plain file, falling back to full translation",
-						{ file: targetRelPath },
-					);
+					logger.warn("trans", "Patch apply failed for plain file, falling back to full translation", {
+						file: targetRelPath,
+					});
 				}
 			} catch (error) {
-				logger.warn(
-					"trans",
-					"Patch translation failed for plain file, falling back",
-					{ file: targetRelPath, ...formatError(error) },
-				);
+				logger.warn("trans", "Patch translation failed for plain file, falling back", {
+					file: targetRelPath,
+					...formatError(error),
+				});
 			}
 		}
 
 		if (!translatedText) {
-			const result = await translator.translate(
-				sourceContent,
-				pair.sourceLang,
-				pair.targetLang,
-				context,
-				token,
-			);
+			const result = await translator.translate(sourceContent, pair.sourceLang, pair.targetLang, context, token);
 			translatedText = result.translatedText;
 			termSuggestions = result.termSuggestions;
 		}
@@ -382,10 +347,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 11. 結果書き込み
 		const encoder = new TextEncoder();
-		await vscode.workspace.fs.writeFile(
-			vscode.Uri.file(targetFilePath),
-			encoder.encode(translatedText),
-		);
+		await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFilePath), encoder.encode(translatedText));
 
 		// 12. UnitStateStore更新してディスクに保存
 		const sourceHash = calculateHash(sourceContent, false);
@@ -451,9 +413,7 @@ export class PlainFileHandler implements FileHandler {
 			const stats = fs.statSync(filePath);
 			const config = Configuration.getInstance();
 			if (stats.size > config.trans.maxFileSize) {
-				tooltip = vscode.l10n.t(
-					"File size limit exceeded, translation skipped",
-				);
+				tooltip = vscode.l10n.t("File size limit exceeded, translation skipped");
 			}
 		} catch {
 			// ファイルアクセスエラーは無視
@@ -469,10 +429,7 @@ export class PlainFileHandler implements FileHandler {
 			totalUnits: 1,
 			children: [],
 			tooltip,
-			contextValue:
-				status === Status.Translated
-					? "mdaitPlainFileTargetComplete"
-					: "mdaitPlainFileTarget",
+			contextValue: status === Status.Translated ? "mdaitPlainFileTargetComplete" : "mdaitPlainFileTarget",
 		};
 	}
 
@@ -480,5 +437,64 @@ export class PlainFileHandler implements FileHandler {
 		const targetRelPath = toWorkspaceRelativePath(filePath);
 		const store = UnitStateStore.getInstance();
 		return store.getEntry(targetRelPath, 0) !== undefined;
+	}
+
+	// ===== マーカー／ユニット状態の書き換え =====
+	// 非MDファイルは「ファイル＝単一ユニット」（order=0）。need は unit-state のみに存在し本文は変えない。
+
+	async resolveNeed(filePath: string, options: NeedResolutionOptions = {}): Promise<ResolveNeedFileResult> {
+		const selected = options.needs && options.needs.length > 0 ? options.needs : [...DEFAULT_RESOLVABLE_NEEDS];
+		const relPath = toWorkspaceRelativePath(filePath);
+
+		return withFileMutation<ResolveNeedFileResult>(filePath, Configuration.getInstance(), async () => {
+			const store = UnitStateStore.getInstance();
+			const entry = store.getEntry(relPath, 0);
+			const empty: ResolveNeedFileResult = {
+				resolved: [],
+				skipped: [],
+				changed: false,
+				remainingNeedFlags: [],
+			};
+			if (!entry) {
+				return { ...empty, skipped: [{ hash: "", reason: "not-found" }] };
+			}
+			// hash 指定は照合する。ファイル＝1ユニットでも、指定と違うユニットを黙って
+			// 解決してしまうと NeedTarget の契約が壊れる（エージェントが誤った成功を受け取る）
+			if (!matchesPlainTarget(options.targets, entry.hash)) {
+				return { ...empty, skipped: [{ hash: entry.hash, reason: "not-found" }], remainingNeedFlags: [entry.need] };
+			}
+			if (!entry.need) {
+				return {
+					...empty,
+					skipped: [{ hash: entry.hash, reason: "already-resolved" }],
+				};
+			}
+			if (!needMatchesSelection(entry.need, selected)) {
+				return {
+					...empty,
+					skipped: [{ hash: entry.hash, reason: "need-not-selected" }],
+					remainingNeedFlags: [entry.need],
+				};
+			}
+
+			store.setEntry({ ...entry, need: "" });
+			return {
+				resolved: [{ hash: entry.hash, need: entry.need }],
+				skipped: [],
+				changed: true,
+				remainingNeedFlags: [],
+			};
+		});
+	}
+
+	async declareIsolate(_filePath: string, _target: NeedTarget): Promise<DeclareIsolateResult> {
+		// 非MDファイルは「ファイル＝1ユニット」で下流へ伝播する部分構造を持たないため凍結の対象外。
+		// 対象外であることを黙って素通りさせず、理由を返して呼び出し側に表示させる
+		return { declared: false, changed: false, hash: "", reason: "not-found" };
+	}
+
+	async deleteUnit(_filePath: string, _target: NeedTarget): Promise<DeleteUnitResult> {
+		// 同上。ファイルそのものの削除は mdait の責務外（エクスプローラで行う）
+		return { deleted: false, changed: false, hash: "", reason: "not-found" };
 	}
 }

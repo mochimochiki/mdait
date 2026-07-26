@@ -42,7 +42,7 @@ src/commands/ai-review/
   pair-verifier.ts             # AIService 呼び出し + リトライ
   review-core.ts               # executeAiReviewForFile: 1ファイル分の検証→マーカー変異→書き戻し
   review-command.ts            # VS Code コマンド（mdait.aiReview.file / .directory）
-  review-result-provider.ts    # 仮想ドキュメントレポート（generateReviewTableSection を adopt と共有）
+  review-result-provider.ts    # レポート本文の組み立てと note 編集 CodeLens（generateReviewTableSection を adopt と共有）
   review-targets.ts            # レビュー対象ターゲット解決（mdait_aiReview / adopt で共有）
 src/commands/adopt/
   align-result.ts              # 純関数: スケルトン/ダイジェスト・修正提案バリデーション・matchResult 再配線
@@ -170,7 +170,7 @@ sequenceDiagram
 - コマンド: StatusTree のファイル/ディレクトリ行のインラインボタン `$(verified)`「✨AI翻訳レビュー」。QuickPick で範囲を選ぶ: 「未確認の訳のみレビュー」（pending）/「すべての訳を監査（レポートのみ・マーカー変更なし）」（audit）
 - 進捗: `withProgress`（cancellable）。AI 初回利用は AIOnboarding ゲート
 - 結果通知: escalated > 0 なら warning、それ以外は info
-- レポート: `mdait-ai-review:` スキームの仮想ドキュメント（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）。見出しは `buildReviewReport` へのラベル注入で表示言語化する（件数の語彙行・表ヘッダ・verdict/action 語彙は共通語彙として英語固定。ADR-260719-01）。ユニット列の行リンクは実ファイルのレポート（取り込みウィザード）でのみ有効にする（仮想ドキュメントは相対リンクを解決できないため）
+- レポート: 実ファイル `.mdait/reports/ai-review.md`（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）。見出しは `buildReviewReport` へのラベル注入で表示言語化する（件数の語彙行・表ヘッダ・verdict/action 語彙は共通語彙として英語固定。ADR-260719-01）。ユニット列は該当箇所への行リンクになる（`linkBaseDir` にレポートの置き場所を渡す。取り込みウィザードと同じ）
 - hover: `SummaryManager.reviewReasons` に `AI translation review: {verdict} ({confidence}) — {reason}` を保存
 - StatusTree: 変更なし（need:review 数の減少が自然に反映される）
 
@@ -244,7 +244,7 @@ ADR-260706-03 の既知の限界（意図的な単文乖離が audit のたび�
 - **保存先は `unit-registry` に統合**（1ファイル）。エントリを `hash → { content, note? }` に拡張（行 `<hash> <encContent>[ <encNote>]`、旧2列と後方互換）。note は「hash キーのユニットメタ」。
 - **同一性はユニットに追従**: content は content-addressed で不変（revise 用に旧 hash に残す）。note だけ、本文編集で hash が変わったとき **sync が旧→新 hash へ移送**する（`updateSectionHashes` が hash 差分を集め `migrateNotes` で付け替え。決定的・冪等・AI 不使用）。削除ユニットの note は GC（`retainOnly`）で消える。
 - **編集 UI は CodeLens**「$(kebab-vertical) その他」メニュー内の「ノート」（対訳ユニット・原文ユニットの両方）→ `showInputBox`。本文・マーカー・hash・from は不変。hover は registry から note を直接読んで表示。
-- **レポート → note ジャンプ**: audit レポート（仮想ドキュメント）の flagged 行に「Add / edit note」CodeLens を出す（`AiReviewResultCodeLensProvider`）。クリックで該当ファイルの当該ユニットへスクロールし note 入力を開く（`mdait.unit.editNoteForUnit`）。レポート生成（`buildReviewReport`）が flagged 行の行番号アンカーを返す。
+- **レポート → note ジャンプ**: audit レポート（実ファイル）の flagged 行に「Add / edit note」CodeLens を出す（`AiReviewResultCodeLensProvider`）。クリックで該当ファイルの当該ユニットへスクロールし note 入力を開く（`mdait.unit.editNoteForUnit`）。レポート生成（`buildReviewReport`）が flagged 行の行番号アンカーを返す。
 - **audit は note を verify プロンプトに `<humanNote>` として添える**（`PairVerifier`）。訳文ユニット（`hash`）と原文ユニット（`from`）の両方の note を集めて渡す（原文側の「その他」メニューで残した note も届く）。AI は note が説明する乖離を意図的とみなし match/audited を返す。**決定論的な抑止はしない**（毎回 AI を呼ぶ）。churn は「AI が note を見て flagged にしない」形で消える。
 - **TM 連携は不変**: note は機械的な受理フラグではないため TM 登録可否（need ベース）に影響させない。
 

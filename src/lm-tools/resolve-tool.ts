@@ -1,17 +1,16 @@
 import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { getFileHandler } from "../commands/file-handler/file-handler-factory";
+import type { DeclareIsolateResult } from "../commands/markers/declare-isolate";
+import type { DeleteUnitResult } from "../commands/markers/delete-unit";
 import {
-	type DeclareIsolateResult,
-	declareIsolateForFile,
-} from "../commands/markers/declare-isolate";
-import { type DeleteUnitResult, deleteUnitFromFile } from "../commands/markers/delete-unit";
-import {
+	ALL_RESOLVABLE_NEEDS,
 	DEFAULT_RESOLVABLE_NEEDS,
-	needMatchesSelection,
-	resolveNeedForFile,
 	type NeedSkipReason,
 	type ResolvedNeedUnit,
+	needMatchesSelection,
+	unitTargets,
 } from "../commands/markers/resolve-need";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
@@ -27,7 +26,8 @@ const logger = Logger.getInstance();
 const MAX_CONFIRMATION_UNITS = 10;
 
 /** needs フィルタとして受理する値（マーカーの既定 need 語彙） */
-const ALLOWED_NEED_FILTERS = ["review", "verify-deletion", "translate", "revise", "isolate"] as const;
+/** 解決対象に指定できる need 種別（語彙の持ち主は resolve-need.ts） */
+const ALLOWED_NEED_FILTERS = ALL_RESOLVABLE_NEEDS;
 
 /**
  * 入力パラメータ: need フラグ解決ツール
@@ -62,14 +62,20 @@ interface ResolveData {
 interface DeclareIsolateData {
 	file: string;
 	declared: Array<{ hash: string; title?: string }>;
-	skipped: Array<{ hash: string; reason: NonNullable<DeclareIsolateResult["reason"]> }>;
+	skipped: Array<{
+		hash: string;
+		reason: NonNullable<DeclareIsolateResult["reason"]>;
+	}>;
 }
 
 /** mdait_resolve の data 形式（action:"delete"） */
 interface DeleteUnitData {
 	file: string;
 	deleted: Array<{ hash: string; title?: string }>;
-	skipped: Array<{ hash: string; reason: NonNullable<DeleteUnitResult["reason"]> }>;
+	skipped: Array<{
+		hash: string;
+		reason: NonNullable<DeleteUnitResult["reason"]>;
+	}>;
 }
 
 /**
@@ -88,7 +94,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			const inputPath = options.input.path;
 			logger.info("LanguageModelTool", "Resolve tool invoked", {
 				inputPath,
-				unitHashes: options.input.unitHashes,
+				targets: unitTargets(options.input.unitHashes),
 				needs: options.input.needs,
 				action: options.input.action,
 			});
@@ -130,9 +136,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			// needs フィルタの語彙チェック（未知の値はエージェントの入力ミスとして弾く）
 			const needsFilter = options.input.needs;
 			if (needsFilter) {
-				const invalid = needsFilter.filter(
-					(n) => !(ALLOWED_NEED_FILTERS as readonly string[]).includes(n),
-				);
+				const invalid = needsFilter.filter((n) => !ALLOWED_NEED_FILTERS.includes(n));
 				if (invalid.length > 0) {
 					const message = vscode.l10n.t(
 						"Unknown need kind(s) in needs filter: {0}. Allowed values: {1}.",
@@ -143,8 +147,8 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 				}
 			}
 
-			const result = await resolveNeedForFile(absPath, config, {
-				unitHashes: options.input.unitHashes,
+			const result = await getFileHandler(absPath).resolveNeed(absPath, {
+				targets: unitTargets(options.input.unitHashes),
 				needs: needsFilter,
 			});
 
@@ -168,9 +172,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in resolve tool", formatError(error));
 			const errorMessage = vscode.l10n.t("Failed to resolve need flags: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -186,19 +188,28 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	): Promise<vscode.LanguageModelToolResult> {
 		if (!unitHashes || unitHashes.length === 0) {
 			const message = vscode.l10n.t(
-				"unitHashes is required for action:\"declare-isolate\". Run mdait_getStatus (detail:true) to find target unit hashes.",
+				'unitHashes is required for action:"declare-isolate". Run mdait_getStatus (detail:true) to find target unit hashes.',
 			);
 			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 		}
 
 		const declared: Array<{ hash: string; title?: string }> = [];
-		const skipped: Array<{ hash: string; reason: NonNullable<DeclareIsolateResult["reason"]> }> = [];
+		const skipped: Array<{
+			hash: string;
+			reason: NonNullable<DeclareIsolateResult["reason"]>;
+		}> = [];
 		for (const hash of unitHashes) {
-			const result = await declareIsolateForFile(absPath, hash, config);
+			const result = await getFileHandler(absPath).declareIsolate(absPath, {
+				kind: "unit",
+				hash,
+			});
 			if (result.declared) {
 				declared.push(result.title ? { hash: result.hash, title: result.title } : { hash: result.hash });
 			} else {
-				skipped.push({ hash: result.hash, reason: result.reason ?? "not-found" });
+				skipped.push({
+					hash: result.hash,
+					reason: result.reason ?? "not-found",
+				});
 			}
 		}
 
@@ -223,7 +234,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		}
 		if (declared.length > 0) {
 			nextActions.push(
-				"Isolated units are frozen: sync will keep their hash/from in sync but stop propagating revise. Run mdait_resolve (needs:[\"isolate\"]) with the same unitHashes to undeclare later if needed.",
+				'Isolated units are frozen: sync will keep their hash/from in sync but stop propagating revise. Run mdait_resolve (needs:["isolate"]) with the same unitHashes to undeclare later if needed.',
 			);
 		}
 		if (nextActions.length === 0) {
@@ -246,19 +257,28 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	): Promise<vscode.LanguageModelToolResult> {
 		if (!unitHashes || unitHashes.length === 0) {
 			const message = vscode.l10n.t(
-				"unitHashes is required for action:\"delete\". Run mdait_getStatus (detail:true) to find target unit hashes.",
+				'unitHashes is required for action:"delete". Run mdait_getStatus (detail:true) to find target unit hashes.',
 			);
 			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 		}
 
 		const deleted: Array<{ hash: string; title?: string }> = [];
-		const skipped: Array<{ hash: string; reason: NonNullable<DeleteUnitResult["reason"]> }> = [];
+		const skipped: Array<{
+			hash: string;
+			reason: NonNullable<DeleteUnitResult["reason"]>;
+		}> = [];
 		for (const hash of unitHashes) {
-			const result = await deleteUnitFromFile(absPath, hash, config);
+			const result = await getFileHandler(absPath).deleteUnit(absPath, {
+				kind: "unit",
+				hash,
+			});
 			if (result.deleted) {
 				deleted.push(result.title ? { hash: result.hash, title: result.title } : { hash: result.hash });
 			} else {
-				skipped.push({ hash: result.hash, reason: result.reason ?? "not-found" });
+				skipped.push({
+					hash: result.hash,
+					reason: result.reason ?? "not-found",
+				});
 			}
 		}
 
@@ -371,7 +391,11 @@ function collectConfirmationTargets(
 		if (unitHashes && unitHashes.length > 0 && !unitHashes.includes(unit.unitHash)) {
 			continue;
 		}
-		targets.push({ hash: unit.unitHash, title: unit.title, need: unit.needFlag });
+		targets.push({
+			hash: unit.unitHash,
+			title: unit.title,
+			need: unit.needFlag,
+		});
 	}
 	return targets;
 }

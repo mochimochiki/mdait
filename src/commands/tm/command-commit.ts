@@ -20,13 +20,10 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { PromptProvider } from "../../prompts";
+import { notifyWithReport } from "../shared/report-file";
 import { isTmCommitTarget, summarizeTmSkipReasons } from "./commit-filter";
 import type { TmSkipReasonBreakdown } from "./commit-filter";
-import {
-	TmCommitProcessor,
-	type TmCommitResolvedUnit,
-	type TmCommitResult,
-} from "./commit-processor";
+import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
 import {
 	type PreparedTmCommitUnit,
 	type TmCommitResolutionResult,
@@ -34,7 +31,7 @@ import {
 	prepareTmCommitUnit,
 } from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
-import { TmResultContentProvider } from "./tm-result-provider";
+import { writeTmReport } from "./tm-report-file";
 
 export {
 	buildTmCommitUnitResolution,
@@ -51,9 +48,7 @@ const logger = Logger.getInstance();
  * ファイル単位のtm-commitコマンド（StatusTreeから呼び出し）
  * @param item StatusItem
  */
-export async function tmCommitFileCommand(
-	item?: StatusItem,
-): Promise<TmCommitResult | undefined> {
+export async function tmCommitFileCommand(item?: StatusItem): Promise<TmCommitResult | undefined> {
 	if (!item || !("filePath" in item)) {
 		vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 		return;
@@ -66,9 +61,7 @@ export async function tmCommitFileCommand(
 		return;
 	}
 	if (!config.getTmEnabled()) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
 		return;
 	}
 
@@ -88,23 +81,15 @@ export async function tmCommitFileCommand(
 		},
 		async (progress, token) => {
 			try {
-				const result = await executeTmCommitForFile(
-					filePath,
-					config,
-					progress,
-					token,
-				);
-				showTmCommitResult(result);
-				await showTmCommitPreview(result);
+				const result = await executeTmCommitForFile(filePath, config, progress, token);
+				showTmCommitResult(result, await writeTmCommitReport(result));
 				return result;
 			} catch (error) {
 				logger.error("tm.commit", "TM commit failed", {
 					file: path.basename(filePath),
 					...formatError(error),
 				});
-				vscode.window.showErrorMessage(
-					vscode.l10n.t("TM commit error: {0}", (error as Error).message),
-				);
+				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
 				return undefined;
 			}
 		},
@@ -115,9 +100,7 @@ export async function tmCommitFileCommand(
  * ディレクトリ単位のtm-commitコマンド（StatusTreeから呼び出し）
  * @param item StatusItem
  */
-export async function tmCommitDirectoryCommand(
-	item?: StatusItem,
-): Promise<TmCommitResult | undefined> {
+export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCommitResult | undefined> {
 	// directoryPath が正（StatusTree・debug IPC とも）。dirPath は後方互換のみ
 	const dirPath =
 		item && "directoryPath" in item
@@ -137,9 +120,7 @@ export async function tmCommitDirectoryCommand(
 		return;
 	}
 	if (!config.getTmEnabled()) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
 		return;
 	}
 
@@ -150,10 +131,7 @@ export async function tmCommitDirectoryCommand(
 	}
 
 	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t(
-			"Register TM for all files in directory '{0}'?",
-			path.basename(dirPath),
-		),
+		vscode.l10n.t("Register TM for all files in directory '{0}'?", path.basename(dirPath)),
 		vscode.l10n.t("Yes"),
 		vscode.l10n.t("No"),
 	);
@@ -170,12 +148,7 @@ export async function tmCommitDirectoryCommand(
 		async (progress, token) => {
 			try {
 				const fileExplorer = new FileExplorer();
-				const files = await fileExplorer.findFilesInDirectory(
-					dirPath,
-					[".md"],
-					"**/*.md",
-					config.ignoredPatterns,
-				);
+				const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
 
 				const overallResult: TmCommitResult = {
 					processedUnits: 0,
@@ -199,12 +172,7 @@ export async function tmCommitDirectoryCommand(
 					});
 
 					try {
-						const result = await executeTmCommitForFile(
-							files[i],
-							config,
-							progress,
-							token,
-						);
+						const result = await executeTmCommitForFile(files[i], config, progress, token);
 						overallResult.processedUnits += result.processedUnits;
 						overallResult.skippedUnits += result.skippedUnits;
 						overallResult.newEntries += result.newEntries;
@@ -222,13 +190,10 @@ export async function tmCommitDirectoryCommand(
 					}
 				}
 
-				showTmCommitResult(overallResult);
-				await showTmCommitPreview(overallResult);
+				showTmCommitResult(overallResult, await writeTmCommitReport(overallResult));
 				return overallResult;
 			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t("TM commit error: {0}", (error as Error).message),
-				);
+				vscode.window.showErrorMessage(vscode.l10n.t("TM commit error: {0}", (error as Error).message));
 				return undefined;
 			}
 		},
@@ -245,9 +210,7 @@ export async function executeTmCommitForFile(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<TmCommitResult> {
-	const document = await vscode.workspace.openTextDocument(
-		vscode.Uri.file(filePath),
-	);
+	const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
 	const content = document.getText();
 	const markdown = markdownParser.parse(content, config);
 	const targetUnits = markdown.units.filter(isTmCommitTarget);
@@ -271,14 +234,7 @@ export async function executeTmCommitForFile(
 		};
 	}
 
-	const result = await executeTmCommitForUnits(
-		targetUnits,
-		filePath,
-		config,
-		progress,
-		token,
-		skipReasons,
-	);
+	const result = await executeTmCommitForUnits(targetUnits, filePath, config, progress, token, skipReasons);
 	result.skipReasons = skipReasons;
 	result.skippedUnits += markdown.units.length - targetUnits.length;
 	return result;
@@ -301,9 +257,7 @@ async function executeTmCommitForUnits(
 	const transPair = fileExplorer.getTransPairFromTarget(filePath, config);
 
 	if (!transPair) {
-		throw new Error(
-			vscode.l10n.t("No translation pair found for file: {0}", filePath),
-		);
+		throw new Error(vscode.l10n.t("No translation pair found for file: {0}", filePath));
 	}
 
 	// TMXストアの初期化
@@ -314,21 +268,11 @@ async function executeTmCommitForUnits(
 	// AIServiceとLLMTmEntryGeneratorの構築
 	const aiService = await new AIServiceBuilder().build();
 	const promptProvider = PromptProvider.getInstance();
-	const generator = new LLMTmEntryGenerator(aiService, (id, variables) =>
-		promptProvider.getPrompt(id, variables),
-	);
-	const processor = new TmCommitProcessor(
-		store,
-		generator,
-		config.getTermsPrimaryLang(),
-		config.getTmRetryLimit(),
-	);
+	const generator = new LLMTmEntryGenerator(aiService, (id, variables) => promptProvider.getPrompt(id, variables));
+	const processor = new TmCommitProcessor(store, generator, config.getTermsPrimaryLang(), config.getTmRetryLimit());
 
-	const workspaceRoot =
-		vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
-	const relativePath = path
-		.relative(workspaceRoot, filePath)
-		.replace(/\\/g, "/");
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+	const relativePath = path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 
 	const result: TmCommitResult = {
 		processedUnits: 0,
@@ -457,13 +401,7 @@ async function resolveTmCommitUnits(
 	}
 
 	const tree = statusManager.getStatusItemTree();
-	const sourceStatus = getSourceStatusUnit(
-		unit.marker.from,
-		filePath,
-		tree,
-		config,
-		fileExplorer,
-	);
+	const sourceStatus = getSourceStatusUnit(unit.marker.from, filePath, tree, config, fileExplorer);
 	if (!sourceStatus) {
 		logger.warn("tm.commit", "Failed to resolve direct source unit", {
 			filePath: currentUnit.unitPath,
@@ -483,12 +421,7 @@ async function resolveTmCommitUnits(
 		return { resolution: null, sourcePending: true };
 	}
 
-	const sourceUnit = await readResolvedUnit(
-		sourceStatus,
-		statusManager,
-		config,
-		fileExplorer,
-	);
+	const sourceUnit = await readResolvedUnit(sourceStatus, statusManager, config, fileExplorer);
 	if (!sourceUnit) {
 		return { resolution: null, sourcePending: false };
 	}
@@ -497,13 +430,7 @@ async function resolveTmCommitUnits(
 		currentUnit,
 		sourceUnit,
 		config.getTermsPrimaryLang(),
-		async (candidate) =>
-			await resolvePrimaryAncestor(
-				candidate,
-				statusManager,
-				config,
-				fileExplorer,
-			),
+		async (candidate) => await resolvePrimaryAncestor(candidate, statusManager, config, fileExplorer),
 	);
 
 	if (!resolution) {
@@ -541,31 +468,17 @@ async function resolvePrimaryAncestor(
 	}
 
 	const tree = statusManager.getStatusItemTree();
-	const currentStatus = tree.getUnit(
-		unit.unitHash,
-		denormalizeWorkspaceRelativePath(unit.unitPath),
-	);
+	const currentStatus = tree.getUnit(unit.unitHash, denormalizeWorkspaceRelativePath(unit.unitPath));
 	if (!currentStatus?.fromHash) {
 		return null;
 	}
 
-	const sourceStatus = getSourceStatusUnit(
-		currentStatus.fromHash,
-		currentStatus.filePath,
-		tree,
-		config,
-		fileExplorer,
-	);
+	const sourceStatus = getSourceStatusUnit(currentStatus.fromHash, currentStatus.filePath, tree, config, fileExplorer);
 	if (!sourceStatus) {
 		return null;
 	}
 
-	const sourceUnit = await readResolvedUnit(
-		sourceStatus,
-		statusManager,
-		config,
-		fileExplorer,
-	);
+	const sourceUnit = await readResolvedUnit(sourceStatus, statusManager, config, fileExplorer);
 	if (!sourceUnit) {
 		return null;
 	}
@@ -574,13 +487,7 @@ async function resolvePrimaryAncestor(
 		return sourceUnit;
 	}
 
-	return resolvePrimaryAncestor(
-		sourceUnit,
-		statusManager,
-		config,
-		fileExplorer,
-		nextVisited,
-	);
+	return resolvePrimaryAncestor(sourceUnit, statusManager, config, fileExplorer, nextVisited);
 }
 
 function getSourceStatusUnit(
@@ -591,12 +498,9 @@ function getSourceStatusUnit(
 	fileExplorer: FileExplorer,
 ): UnitStatusItem | undefined {
 	const transPair = fileExplorer.getTransPairFromTarget(filePath, config);
-	const preferredSourcePath = transPair
-		? fileExplorer.getSourcePath(filePath, transPair)
-		: null;
+	const preferredSourcePath = transPair ? fileExplorer.getSourcePath(filePath, transPair) : null;
 	return preferredSourcePath
-		? (tree.getUnit(fromHash, preferredSourcePath) ??
-				tree.getUnitByHash(fromHash))
+		? (tree.getUnit(fromHash, preferredSourcePath) ?? tree.getUnitByHash(fromHash))
 		: tree.getUnitByHash(fromHash);
 }
 
@@ -611,9 +515,7 @@ async function readResolvedUnit(
 		const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
 		const sourceFileContent = sourceDoc.getText();
 		const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
-		const sourceUnitData = sourceMarkdown.units.find(
-			(u) => u.marker?.hash === statusUnit.unitHash,
-		);
+		const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === statusUnit.unitHash);
 		if (!sourceUnitData?.content) {
 			return null;
 		}
@@ -636,11 +538,7 @@ async function readResolvedUnit(
 	}
 }
 
-function resolveFileLanguage(
-	filePath: string,
-	config: Configuration,
-	fileExplorer: FileExplorer,
-): string | null {
+function resolveFileLanguage(filePath: string, config: Configuration, fileExplorer: FileExplorer): string | null {
 	const targetPair = fileExplorer.getTransPairFromTarget(filePath, config);
 	if (targetPair) {
 		return targetPair.targetLang;
@@ -653,21 +551,19 @@ function resolveFileLanguage(
 }
 
 function normalizeWorkspaceRelativePath(filePath: string): string {
-	const workspaceRoot =
-		vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	return path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
 }
 
 function denormalizeWorkspaceRelativePath(relativePath: string): string {
-	const workspaceRoot =
-		vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 	return path.join(workspaceRoot, relativePath);
 }
 
 /**
  * TM commit結果を通知表示する。
  */
-function showTmCommitResult(result: TmCommitResult): void {
+function showTmCommitResult(result: TmCommitResult, reportUri: vscode.Uri | undefined): void {
 	const message = vscode.l10n.t(
 		"TM commit completed: {0} new, {1} updated, {2} warnings, {3} errors",
 		result.newEntries,
@@ -675,20 +571,17 @@ function showTmCommitResult(result: TmCommitResult): void {
 		result.warnedEntries,
 		result.errorUnits,
 	);
-	if (result.errorUnits > 0 || result.warnedEntries > 0) {
-		vscode.window.showWarningMessage(message);
-	} else {
-		vscode.window.showInformationMessage(message);
-	}
+	// 完了通知は1本にまとめる。レポートは同じ通知のボタンから開く
+	notifyWithReport(message, reportUri, result.errorUnits > 0 || result.warnedEntries > 0 ? "warning" : "info");
 }
 
 /**
- * tm-commit 結果のプレビュードキュメントを開く。1 件以上の新規/更新がある場合のみ表示する。
+ * tm-commit 結果のレポートを書き出す。1 件以上の新規/更新がある場合のみ。
+ * 通知は showTmCommitResult が1本だけ出す（ここでは出さない）。
  */
-async function showTmCommitPreview(result: TmCommitResult): Promise<void> {
+async function writeTmCommitReport(result: TmCommitResult): Promise<vscode.Uri | undefined> {
 	if (result.newItems.length + result.updatedItems.length === 0) {
-		return;
+		return undefined;
 	}
-	TmResultContentProvider.getInstance().setContent(result);
-	await TmResultContentProvider.openPreview();
+	return writeTmReport(result);
 }

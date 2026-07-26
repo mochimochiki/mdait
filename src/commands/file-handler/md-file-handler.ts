@@ -8,15 +8,18 @@ import type { TransPair } from "../../infra/config/configuration";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { SectionAligner } from "../adopt/section-aligner";
+import { type DeclareIsolateResult, declareIsolateForFile } from "../markers/declare-isolate";
+import { type DeleteUnitResult, deleteUnitFromFile } from "../markers/delete-unit";
+import {
+	type NeedResolutionOptions,
+	type NeedTarget,
+	type ResolveNeedFileResult,
+	resolveNeedForFile,
+} from "../markers/resolve-need";
 import { syncNew_CoreProc, sync_CoreProc } from "../sync/sync-command";
 import { transFile_CoreProc } from "../trans/trans-command";
 import type { Translator } from "../trans/translator";
-import type {
-	FileHandler,
-	FileSyncOptions,
-	FileSyncResult,
-	FileTranslateResult,
-} from "./file-handler";
+import type { FileHandler, FileSyncOptions, FileSyncResult, FileTranslateResult } from "./file-handler";
 import { StatusCollector } from "./status-collector";
 
 /**
@@ -48,10 +51,7 @@ export class MdFileHandler implements FileHandler {
 		};
 	}
 
-	async syncNew(
-		sourceFile: string,
-		targetFile: string,
-	): Promise<FileSyncResult> {
+	async syncNew(sourceFile: string, targetFile: string): Promise<FileSyncResult> {
 		const config = Configuration.getInstance();
 		const diffResult = await syncNew_CoreProc(sourceFile, targetFile, config);
 		return {
@@ -90,17 +90,13 @@ export class MdFileHandler implements FileHandler {
 
 	async isInitialized(filePath: string): Promise<boolean> {
 		const config = Configuration.getInstance();
-		const document = await vscode.workspace.fs.readFile(
-			vscode.Uri.file(filePath),
-		);
+		const document = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
 		const decoder = new TextDecoder("utf-8");
 		const content = decoder.decode(document);
 		const parsed = markdownParser.parse(content, config);
 
 		// frontmatter マーカーは両モードとも本文内に存在する
-		const hasFrontmatterMarker = parsed.frontMatter
-			? parseFrontmatterMarker(parsed.frontMatter) !== null
-			: false;
+		const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;
 
 		// external では unit マーカーは本文ではなく unit-state に退避されるため、store を参照する
 		if (config.isExternalMarkers()) {
@@ -113,10 +109,30 @@ export class MdFileHandler implements FileHandler {
 			return hasUnitState || hasFrontmatterMarker;
 		}
 
-		const hasUnitMarker = parsed.units.some(
-			(unit) => unit.marker.hash !== null,
-		);
+		const hasUnitMarker = parsed.units.some((unit) => unit.marker.hash !== null);
 
 		return hasUnitMarker || hasFrontmatterMarker;
+	}
+
+	// ===== マーカー／ユニット状態の書き換え =====
+
+	async resolveNeed(filePath: string, options: NeedResolutionOptions = {}): Promise<ResolveNeedFileResult> {
+		return resolveNeedForFile(filePath, Configuration.getInstance(), options);
+	}
+
+	async declareIsolate(filePath: string, target: NeedTarget): Promise<DeclareIsolateResult> {
+		if (target.kind !== "unit") {
+			// frontmatter は原文の同一ファイル内にあり伝播の概念がないため凍結の対象外
+			return { declared: false, changed: false, hash: "", reason: "not-found" };
+		}
+		return declareIsolateForFile(filePath, target.hash, Configuration.getInstance());
+	}
+
+	async deleteUnit(filePath: string, target: NeedTarget): Promise<DeleteUnitResult> {
+		if (target.kind !== "unit") {
+			// frontmatter は本文ユニットではないため個別削除の対象外
+			return { deleted: false, changed: false, hash: "", reason: "not-found" };
+		}
+		return deleteUnitFromFile(filePath, target.hash, Configuration.getInstance());
 	}
 }

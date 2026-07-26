@@ -7,15 +7,13 @@
 import * as vscode from "vscode";
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import {
-	Configuration,
-	type TransPair,
-} from "../../infra/config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { notifyWithReport } from "../shared/report-file";
 import { createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
-import { TermResultContentProvider } from "./term-result-provider";
+import { writeTermReport } from "./term-report-file";
 import { TermsRepository } from "./terms-repository";
 import { UnitPair, UnitPairCollector } from "./unit-pair-collector";
 
@@ -30,14 +28,9 @@ const MAX_BATCH_CHARS = 8000;
  * @param units 対象のMDaitUnit配列（ソース言語）
  * @param transPair 翻訳ペア設定
  */
-export async function detectTermCommand(
-	units: readonly MdaitUnit[],
-	transPair: TransPair,
-): Promise<void> {
+export async function detectTermCommand(units: readonly MdaitUnit[], transPair: TransPair): Promise<void> {
 	if (units.length === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No content found for term detection."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 		return;
 	}
 
@@ -68,44 +61,34 @@ export async function detectTermCommand(
 		},
 		async (progress, token) => {
 			try {
-				const entries = await detectTerm_CoreProc(
-					pairs,
-					transPair,
-					progress,
-					token,
-				);
+				const entries = await detectTerm_CoreProc(pairs, transPair, progress, token);
 
-				if (!token.isCancellationRequested) {
-					vscode.window.showInformationMessage(
-						vscode.l10n.t("Term detection completed successfully."),
-					);
-				}
+				// 完了通知はレポート書き出しの後に1本だけ出す（ここでは出さない）
 				return entries;
 			} catch (error) {
 				Logger.getInstance().error("term.detect", "Term detection failed", {
 					...formatError(error),
 				});
 				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Term detection failed: {0}",
-						error instanceof Error ? error.message : String(error),
-					),
+					vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
 				);
 				return [];
 			}
 		},
 	);
 
-	// 検出用語が1件以上あればプレビュー表示
-	if (detectedTerms.length > 0) {
-		const provider = TermResultContentProvider.getInstance();
-		provider.setContent({
-			entries: detectedTerms,
-			sourceLang: transPair.sourceLang,
-			targetLang: transPair.targetLang,
-		});
-		await TermResultContentProvider.openPreview();
+	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
+	// （自動で開かないのは実ファイルでいつでも開き直せるため。ux.md E-6）
+	if (detectedTerms.length === 0) {
+		vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed: no terms detected."));
+		return;
 	}
+	const uri = await writeTermReport({
+		entries: detectedTerms,
+		sourceLang: transPair.sourceLang,
+		targetLang: transPair.targetLang,
+	});
+	notifyWithReport(vscode.l10n.t("Term detection completed: {0} term(s) detected.", detectedTerms.length), uri);
 }
 
 /**
@@ -147,10 +130,7 @@ export async function detectTerm_CoreProc(
 	try {
 		termsRepository = await TermsRepository.load(termsPath);
 	} catch {
-		termsRepository = await TermsRepository.create(
-			termsPath,
-			config.transPairs,
-		);
+		termsRepository = await TermsRepository.create(termsPath, config.transPairs);
 	}
 
 	// 既存用語を読み込み
@@ -180,11 +160,7 @@ export async function detectTerm_CoreProc(
 		}
 
 		progress.report({
-			message: vscode.l10n.t(
-				"Processing batch {0} of {1}",
-				processedBatches + 1,
-				totalBatches,
-			),
+			message: vscode.l10n.t("Processing batch {0} of {1}", processedBatches + 1, totalBatches),
 			increment: 100 / totalBatches,
 		});
 
@@ -237,9 +213,7 @@ export async function detectTerm_CoreProc(
 		await termsRepository.Merge(allDetectedTerms, config.transPairs);
 		await termsRepository.save();
 
-		console.log(
-			`用語検出完了: ${allDetectedTerms.length}個の新しい用語を追加しました`,
-		);
+		console.log(`用語検出完了: ${allDetectedTerms.length}個の新しい用語を追加しました`);
 	} else {
 		console.log("新しい用語は検出されませんでした");
 	}

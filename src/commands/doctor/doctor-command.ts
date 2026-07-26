@@ -18,9 +18,9 @@ import {
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
 import { openConfigInSettingsEditor } from "../shared/open-config-editor";
+import { openReport, writeReport } from "../shared/report-file";
 
-const TROUBLESHOOTING_URL =
-	"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
+const TROUBLESHOOTING_URL = "https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
 
 /**
  * セットアップ診断コマンドのエントリポイント。
@@ -88,8 +88,7 @@ function directoryExists(absPath: string): boolean {
  */
 function createFsProbe(baseDir: string): DoctorProbe {
 	const cache = new Map<string, { md: number; withMarkers: number }>();
-	const resolveDir = (rel: string): string =>
-		path.isAbsolute(rel) ? rel : path.join(baseDir, rel);
+	const resolveDir = (rel: string): string => (path.isAbsolute(rel) ? rel : path.join(baseDir, rel));
 
 	const scan = (rel: string): { md: number; withMarkers: number } => {
 		const cached = cache.get(rel);
@@ -148,9 +147,7 @@ function createFsProbe(baseDir: string): DoctorProbe {
  * 設定された AI プロバイダの到達性を確認する。問題が無ければ undefined。
  * 例外は握りつぶし、診断は決して失敗させない。
  */
-async function checkAiReachability(
-	config: Configuration,
-): Promise<Diagnostic | undefined> {
+async function checkAiReachability(config: Configuration): Promise<Diagnostic | undefined> {
 	const provider = config.ai.provider;
 	try {
 		switch (provider) {
@@ -164,18 +161,14 @@ async function checkAiReachability(
 				return undefined;
 			}
 			case "openai": {
-				const resolved =
-					(config.ai.openai?.apiKey as string) ||
-					process.env.OPENAI_API_KEY ||
-					"";
+				const resolved = (config.ai.openai?.apiKey as string) || process.env.OPENAI_API_KEY || "";
 				if (!resolved) {
 					return { level: "error", id: "ai.openaiKeyMissing" };
 				}
 				return undefined;
 			}
 			case "ollama": {
-				const endpoint =
-					config.ai.ollama?.endpoint ?? "http://localhost:11434";
+				const endpoint = config.ai.ollama?.endpoint ?? "http://localhost:11434";
 				const reachable = await pingOllama(endpoint);
 				if (!reachable) {
 					return {
@@ -223,18 +216,13 @@ function describe(d: Diagnostic): string {
 	const p = d.params ?? {};
 	switch (d.id) {
 		case "config.noTransPairs":
-			return vscode.l10n.t(
-				"No translation pairs are configured (transPairs).",
-			);
+			return vscode.l10n.t("No translation pairs are configured (transPairs).");
 		case "pair.noSourceDir":
 			return vscode.l10n.t("A translation pair is missing sourceDir.");
 		case "pair.noTargetDir":
 			return vscode.l10n.t("A translation pair is missing targetDir.");
 		case "pair.sourceEqualsTarget":
-			return vscode.l10n.t(
-				"sourceDir and targetDir are the same ({0}). They must differ.",
-				p.dir ?? "",
-			);
+			return vscode.l10n.t("sourceDir and targetDir are the same ({0}). They must differ.", p.dir ?? "");
 		case "pair.nestedDirs":
 			return vscode.l10n.t(
 				"sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.",
@@ -244,19 +232,11 @@ function describe(d: Diagnostic): string {
 		case "pair.sourceMissing":
 			return vscode.l10n.t("Source directory does not exist: {0}", p.dir ?? "");
 		case "pair.targetMissing":
-			return vscode.l10n.t(
-				"Target directory does not exist yet: {0} (Sync will create it).",
-				p.dir ?? "",
-			);
+			return vscode.l10n.t("Target directory does not exist yet: {0} (Sync will create it).", p.dir ?? "");
 		case "pair.noMarkersRunSync":
-			return vscode.l10n.t(
-				"No mdait markers found in {0}. Run Sync first to start translation.",
-				p.dir ?? "",
-			);
+			return vscode.l10n.t("No mdait markers found in {0}. Run Sync first to start translation.", p.dir ?? "");
 		case "config.noPrimaryLang":
-			return vscode.l10n.t(
-				"Primary language (primaryLang) is not configured.",
-			);
+			return vscode.l10n.t("Primary language (primaryLang) is not configured.");
 		case "config.primaryLangMismatch":
 			return vscode.l10n.t(
 				'primaryLang "{0}" does not match any translation pair language ({1}).',
@@ -268,18 +248,13 @@ function describe(d: Diagnostic): string {
 				"OpenAI apiKey is written directly in mdait.json. Use the ${env:OPENAI_API_KEY} syntax to avoid leaking it through git.",
 			);
 		case "ai.vscodeLmUnavailable":
-			return vscode.l10n.t(
-				"No VS Code language model is available. Ensure GitHub Copilot is installed and enabled.",
-			);
+			return vscode.l10n.t("No VS Code language model is available. Ensure GitHub Copilot is installed and enabled.");
 		case "ai.openaiKeyMissing":
 			return vscode.l10n.t(
 				"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
 			);
 		case "ai.ollamaUnreachable":
-			return vscode.l10n.t(
-				"Could not reach the Ollama server at {0}.",
-				p.endpoint ?? "",
-			);
+			return vscode.l10n.t("Could not reach the Ollama server at {0}.", p.endpoint ?? "");
 		case "ai.unknownProvider":
 			return vscode.l10n.t("Unknown AI provider: {0}", p.provider ?? "");
 		default:
@@ -302,34 +277,32 @@ function levelIcon(level: Diagnostic["level"]): string {
 /**
  * 診断結果をレポート文書＋アクション付き通知で提示する。
  */
-async function presentDiagnostics(
-	diagnostics: Diagnostic[],
-	config: Configuration,
-): Promise<void> {
+async function presentDiagnostics(diagnostics: Diagnostic[], config: Configuration): Promise<void> {
 	const errorCount = diagnostics.filter((d) => d.level === "error").length;
 	const warnCount = diagnostics.filter((d) => d.level === "warn").length;
 
 	if (diagnostics.length === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("mdait setup looks good. No issues found."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("mdait setup looks good. No issues found."));
 		return;
 	}
 
-	// 詳細レポートを Markdown 文書として開く
-	await openReport(diagnostics, errorCount, warnCount);
+	// 詳細レポートを実ファイルへ書き出す（通知は下のサマリ1本にまとめる）
+	const reportUri = await writeDoctorReport(diagnostics, errorCount, warnCount, config);
 
 	// アクション付きサマリ通知
-	const needsConfig = diagnostics.some(
-		(d) => d.id.startsWith("config.") || d.id.startsWith("pair."),
-	);
+	const needsConfig = diagnostics.some((d) => d.id.startsWith("config.") || d.id.startsWith("pair."));
 	const needsSync = diagnostics.some((d) => d.id === "pair.noMarkersRunSync");
 
 	const openConfigLabel = vscode.l10n.t("Open mdait.json");
 	const runSyncLabel = vscode.l10n.t("Run Sync");
 	const docsLabel = vscode.l10n.t("Open docs");
+	const openReportLabel = vscode.l10n.t("Open report");
 
 	const actions: string[] = [];
+	// 「レポートを見ろ」と言う通知に、レポートを開く手段を同居させる
+	if (reportUri) {
+		actions.push(openReportLabel);
+	}
 	if (needsConfig) {
 		actions.push(openConfigLabel);
 	}
@@ -338,17 +311,21 @@ async function presentDiagnostics(
 	}
 	actions.push(docsLabel);
 
-	const summary = vscode.l10n.t(
-		"mdait setup diagnosis: {0} error(s), {1} warning(s). See the report for details.",
-		errorCount,
-		warnCount,
-	);
+	const summary = reportUri
+		? vscode.l10n.t(
+				"mdait setup diagnosis: {0} error(s), {1} warning(s). See the report for details.",
+				errorCount,
+				warnCount,
+			)
+		: vscode.l10n.t("mdait setup diagnosis: {0} error(s), {1} warning(s).", errorCount, warnCount);
 
 	const choice = hasBlockingError(diagnostics)
 		? await vscode.window.showErrorMessage(summary, ...actions)
 		: await vscode.window.showWarningMessage(summary, ...actions);
 
-	if (choice === openConfigLabel) {
+	if (choice === openReportLabel && reportUri) {
+		await openReport(reportUri);
+	} else if (choice === openConfigLabel) {
 		await openConfigFile(config);
 	} else if (choice === runSyncLabel) {
 		await vscode.commands.executeCommand("mdait.sync");
@@ -357,12 +334,19 @@ async function presentDiagnostics(
 	}
 }
 
-/** 診断レポートを読み取り用 Markdown 文書として開く */
-async function openReport(
+/**
+ * 診断レポートを `.mdait/reports/doctor.md` へ書き出す。
+ *
+ * まだ mdait 化されていないワークスペースでは何も書かない（undefined を返す）。
+ * 診断は未設定のワークスペースでも走らせる想定であり、診断しただけで `.mdait/` を
+ * 作ってしまうと「見ただけなのにファイルが増えた」という驚きになるため。
+ */
+async function writeDoctorReport(
 	diagnostics: Diagnostic[],
 	errorCount: number,
 	warnCount: number,
-): Promise<void> {
+	config: Configuration,
+): Promise<vscode.Uri | undefined> {
 	const lines: string[] = [];
 	lines.push(`# ${vscode.l10n.t("mdait Setup Diagnosis")}`);
 	lines.push("");
@@ -382,11 +366,8 @@ async function openReport(
 	lines.push(`---`);
 	lines.push(vscode.l10n.t("Troubleshooting guide: {0}", TROUBLESHOOTING_URL));
 
-	const doc = await vscode.workspace.openTextDocument({
-		content: lines.join("\n"),
-		language: "markdown",
-	});
-	await vscode.window.showTextDocument(doc, { preview: true });
+	// 他のレポートと同じく実ファイルへ（untitled だと保存を促されるうえ再度開けない）
+	return writeReport(config, "doctor", lines.join("\n"));
 }
 
 /** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */

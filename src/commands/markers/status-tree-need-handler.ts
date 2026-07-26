@@ -2,20 +2,21 @@
  * @file status-tree-need-handler.ts
  * @description
  *   StatusTreeのユニット行コンテキストメニューから呼び出す need 裁定アクション
- *   （verify-deletion の Keep/Delete、isolate の宣言/解除）。CodeLens の同名アクションと
- *   同じコア関数（resolve-need.ts / delete-unit.ts / declare-isolate.ts）に委譲することで、
- *   人間の2つの接点（CodeLens・ツリー）とエージェント（mdait_resolve）のサーフェス対称性を保つ。
+ *   （review の確定、verify-deletion の Keep/Delete、isolate の宣言/解除）。
+ *   CodeLens・LM Tool と同じく `getFileHandler` 経由で実行することで、人間の2つの接点と
+ *   エージェントのサーフェス対称性を保つ（マーカー書き換えをここで実装しないこと）。
  * @module commands/markers/status-tree-need-handler
  */
 import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
-import type { StatusItem } from "../../core/status/status-item";
+import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
 import { Configuration } from "../../infra/config/configuration";
-import { type DeclareIsolateResult, declareIsolateForFile } from "./declare-isolate";
-import { type DeleteUnitResult, deleteUnitFromFile } from "./delete-unit";
-import { resolveNeedForFile } from "./resolve-need";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { getFileHandler } from "../file-handler/file-handler-factory";
+import type { DeclareIsolateResult } from "./declare-isolate";
+import type { DeleteUnitResult } from "./delete-unit";
 
-/** deleteUnitFromFile の失敗理由を人間可読なメッセージに変換する */
+/** deleteUnit の失敗理由を人間可読なメッセージに変換する */
 function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	if (reason === "not-verify-deletion") {
 		return vscode.l10n.t(
@@ -25,7 +26,7 @@ function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	return vscode.l10n.t("Unit not found.");
 }
 
-/** declareIsolateForFile の失敗理由を人間可読なメッセージに変換する */
+/** declareIsolate の失敗理由を人間可読なメッセージに変換する */
 function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
 	if (reason === "need-already-set") {
 		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
@@ -33,37 +34,68 @@ function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string 
 	return vscode.l10n.t("Unit not found.");
 }
 
+/** 対象ファイルが原文側かを判定する（ワークスペース未設定等は訳文扱い） */
+function isSourceFile(filePath: string): boolean {
+	try {
+		return new FileExplorer().isSourceFile(filePath, Configuration.getInstance());
+	} catch {
+		return false;
+	}
+}
+
+/** ツリー項目がユニットであることを確認し、そうでなければエラーを出して undefined を返す */
+function requireUnit(item?: StatusItem): UnitStatusItem | undefined {
+	if (item?.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
+		vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
+		return undefined;
+	}
+	return item;
+}
+
 /**
  * StatusTreeのユニット行コンテキストメニューから呼び出す need 裁定アクションハンドラ
  */
 export class StatusTreeNeedHandler {
-	/** verify-deletion: 保持（needを外す） */
-	public async keepUnit(item?: StatusItem): Promise<void> {
-		if (item?.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
-			return;
-		}
-		const config = Configuration.getInstance();
-		const result = await resolveNeedForFile(item.filePath, config, {
-			unitHashes: [item.unitHash],
-			needs: ["verify-deletion"],
+	/** need を1種類だけ解決する共通処理。解決0件なら警告を出す */
+	private async resolveOne(item: UnitStatusItem, need: string, nothingToDo: string): Promise<void> {
+		const result = await getFileHandler(item.filePath).resolveNeed(item.filePath, {
+			targets: [{ kind: "unit", hash: item.unitHash }],
+			needs: [need],
 		});
 		if (result.resolved.length === 0) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Nothing to keep for this unit."));
+			vscode.window.showWarningMessage(nothingToDo);
 		}
+	}
+
+	/** review: レビュー済みとして need を外す */
+	public async markReviewed(item?: StatusItem): Promise<void> {
+		const unit = requireUnit(item);
+		if (!unit) {
+			return;
+		}
+		await this.resolveOne(unit, "review", vscode.l10n.t("Nothing to mark as reviewed for this unit."));
+	}
+
+	/** verify-deletion: 保持（needを外す） */
+	public async keepUnit(item?: StatusItem): Promise<void> {
+		const unit = requireUnit(item);
+		if (!unit) {
+			return;
+		}
+		await this.resolveOne(unit, "verify-deletion", vscode.l10n.t("Nothing to keep for this unit."));
 	}
 
 	/** verify-deletion: 削除（ユニットをドキュメントから除去） */
 	public async deleteUnit(item?: StatusItem): Promise<void> {
-		if (item?.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
+		const unit = requireUnit(item);
+		if (!unit) {
 			return;
 		}
 		const confirmLabel = vscode.l10n.t("Delete");
 		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
 				"Delete unit '{0}' from the document? This removes its content — recover via git history if needed.",
-				item.title ?? item.label,
+				unit.title ?? unit.label,
 			),
 			{ modal: true },
 			confirmLabel,
@@ -71,39 +103,42 @@ export class StatusTreeNeedHandler {
 		if (choice !== confirmLabel) {
 			return;
 		}
-		const config = Configuration.getInstance();
-		const result = await deleteUnitFromFile(item.filePath, item.unitHash, config);
+		const result = await getFileHandler(unit.filePath).deleteUnit(unit.filePath, {
+			kind: "unit",
+			hash: unit.unitHash,
+		});
 		if (!result.deleted) {
 			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
+			return;
 		}
+		vscode.window.showInformationMessage(vscode.l10n.t("Unit deleted."));
 	}
 
 	/** isolate 宣言（凍結して下流伝播を止める） */
 	public async markIsolated(item?: StatusItem): Promise<void> {
-		if (item?.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
+		const unit = requireUnit(item);
+		if (!unit) {
 			return;
 		}
-		const config = Configuration.getInstance();
-		const result = await declareIsolateForFile(item.filePath, item.unitHash, config);
+		const result = await getFileHandler(unit.filePath).declareIsolate(unit.filePath, {
+			kind: "unit",
+			hash: unit.unitHash,
+		});
 		if (!result.declared) {
 			vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
+			return;
 		}
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Unit marked as isolated. It will no longer follow source updates."),
+		);
 	}
 
 	/** isolate 解除 */
 	public async unisolate(item?: StatusItem): Promise<void> {
-		if (item?.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
+		const unit = requireUnit(item);
+		if (!unit) {
 			return;
 		}
-		const config = Configuration.getInstance();
-		const result = await resolveNeedForFile(item.filePath, config, {
-			unitHashes: [item.unitHash],
-			needs: ["isolate"],
-		});
-		if (result.resolved.length === 0) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Nothing to un-isolate for this unit."));
-		}
+		await this.resolveOne(unit, "isolate", vscode.l10n.t("Nothing to un-isolate for this unit."));
 	}
 }
