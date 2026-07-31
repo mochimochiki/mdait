@@ -222,6 +222,8 @@
   "How to use ${env:}": "${env:} の使い方",
   "How to restore": "復旧方法",
   "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.": "同期が完了しました: 成功 {0} 件、失敗 {1} 件。{2} 件のユニットが翻訳待ちです。",
+  "{0} file(s) not yet synced": "未同期のファイルが {0} 件あります",
+  "{0} file(s) under this pair are not yet synced and not counted in the progress. Run Sync to include them.": "このペアには、まだ同期されておらず進捗の分母に数えられていないファイルが {0} 件あります。Sync を実行すると進捗に含まれます。",
   "Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.": "原文が削除された孤立ユニットを {0} 件削除しました。意図しない場合は git から復元するか、sync.autoDelete を false に設定してください。",
   "OpenAI apiKey is written directly in mdait.json. Since this file is tracked by git, the key may leak. Use the ${env:OPENAI_API_KEY} syntax instead.": "OpenAI の apiKey が mdait.json に直書きされています。このファイルは git 管理対象のため鍵が漏洩する恐れがあります。${env:OPENAI_API_KEY} 構文を使用してください。",
   "No translation pairs are configured (transPairs).": "翻訳ペア（transPairs）が設定されていません。",

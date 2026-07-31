@@ -138,6 +138,15 @@ export function isPendingWorkNeed(need: string | null | undefined): boolean {
 }
 
 /**
+ * trans コマンドが自動で処理できる翻訳待ちの need（`translate` / `revise@…`）か。
+ * 人間の判断待ち（review / verify-deletion）や凍結宣言（isolate）は含まない。
+ * sync 完了通知の「翻訳待ち件数」など、「今すぐ翻訳」導線の対象を数えるときに使う。
+ */
+export function isTranslateNeed(need: string | null | undefined): boolean {
+	return need === "translate" || (need?.startsWith("revise@") ?? false);
+}
+
+/**
  * 翻訳率の分母・分子に数えるユニットか。
  *
  * `Status` にこの判定を持たせてはならない。以前は凍結ユニットを分母から外すために

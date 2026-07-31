@@ -12,6 +12,7 @@ import {
 	isCountedInProgress,
 	isDirectoryStatusItem,
 	isFileStatusItem,
+	isTranslateNeed,
 	isUnitStatusItem,
 } from "./status-item";
 
@@ -204,6 +205,79 @@ export class StatusItemTree {
 			}
 		}
 		return matches.sort(compareNeedsAttentionUnits);
+	}
+
+	/**
+	 * trans が自動で処理できる翻訳待ちユニット（need:translate / need:revise@…）を数える。
+	 *
+	 * sync 完了通知の「今すぐ翻訳」導線に使う。「今回の実行で新しく生じた件数」ではなく
+	 * 「現在ツリーに残っている件数」を返すことが重要である。前者だけを見ると、
+	 * 変更なしの2回目以降の sync で翻訳待ちが残っているのに導線が消えてしまう。
+	 *
+	 * @param scopeDirs 集計対象を限定するディレクトリ（絶対パス）の集合。
+	 *   sync / trans が処理する選択中の transPair と同じ範囲に揃える（未指定なら全ファイル）。
+	 */
+	public countPendingTranslationUnits(scopeDirs?: string[]): number {
+		let count = 0;
+		for (const file of this.getFilesInScope(scopeDirs)) {
+			for (const unit of this.getUnitsInFile(file.filePath)) {
+				if (isTranslateNeed(unit.needFlag)) {
+					count++;
+				}
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * 指定 transPair（絶対パス）でまだ sync 管理下に入っていないファイル数を数える。
+	 *
+	 * マーカーの無いファイルは進捗の分母（totalUnits）に入らないため、初回 sync の
+	 * 前後で分母が大きく変わって見える。「分母に入っていないファイルがある」ことを
+	 * ツリー上で明示するための集計であり、判定はスキャン済みのツリー参照のみで行う
+	 * （追加のファイルI/Oは発生させない）。
+	 *
+	 * 数える対象:
+	 * 1. target ディレクトリ配下の「マーカーなし」ファイル
+	 *    （Status.Source かつ全ユニットのハッシュが空。非MDは unit-state 未登録で
+	 *    children が空のため同条件で数えられる。独立ユニットのみのファイルは
+	 *    ハッシュを持つため誤検出しない）
+	 * 2. source ディレクトリ配下で、対応する target ファイルがまだツリーに存在しないもの
+	 *    （sync が target を新規作成するケース。空ファイルは sync が処理しないため除外）
+	 */
+	public countFilesNotYetSynced(sourceDirAbs: string, targetDirAbs: string): number {
+		let count = 0;
+
+		// 1. target 側: マーカーなしの既存ファイル
+		for (const file of this.getFilesInDirectoryRecursive(targetDirAbs)) {
+			if (file.status !== Status.Source) {
+				continue;
+			}
+			const markerless = (file.children ?? []).every((unit) => !unit.unitHash);
+			if (markerless) {
+				count++;
+			}
+		}
+
+		// 2. source 側: target ファイルがまだ無いもの
+		for (const file of this.getFilesInDirectoryRecursive(sourceDirAbs)) {
+			// source が target の祖先になる構成（例: docs → docs/ja）では
+			// target 配下のファイルを source として数えない
+			if (isSameOrUnder(path.dirname(file.filePath), targetDirAbs)) {
+				continue;
+			}
+			// 空ファイルは sync が処理しない（ユニットもfrontmatterも無い）ため除外
+			if (file.status === Status.Empty) {
+				continue;
+			}
+			const rel = path.relative(sourceDirAbs, file.filePath);
+			const expectedTarget = path.join(targetDirAbs, rel);
+			if (!this.fileItemMap.has(expectedTarget)) {
+				count++;
+			}
+		}
+
+		return count;
 	}
 
 	/**
