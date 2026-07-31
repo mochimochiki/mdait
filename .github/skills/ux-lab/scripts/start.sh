@@ -8,7 +8,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 PORT="${MDAIT_UXLAB_PORT:-8099}"
 WORKSPACE="${1:-$REPO_ROOT/src/test/unit/workspace}"
 
-pkill -f "code-server/out/node/entry.js" 2>/dev/null || true
+# 自分の WORKDIR の code-server だけを止める（他インスタンスを巻き込まない）
+pkill -f "$WORKDIR/node_modules/code-server/out/node/entry.js" 2>/dev/null || true
 sleep 1
 
 nohup node "$WORKDIR/node_modules/code-server/out/node/entry.js" \

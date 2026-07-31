@@ -23,7 +23,7 @@ async function connect(opts = {}) {
   const page = await browser.newPage({
     viewport: opts.viewport || { width: 1440, height: 900 },
   });
-  await page.goto(`http://127.0.0.1:${PORT}/?folder=${workspace}`, {
+  await page.goto(`http://127.0.0.1:${PORT}/?folder=${encodeURIComponent(workspace)}`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForSelector(".monaco-workbench", { timeout: 60000 });

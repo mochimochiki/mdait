@@ -3,6 +3,9 @@
 set -euo pipefail
 
 WORKDIR="${MDAIT_UXLAB_DIR:-/tmp/mdait-uxlab}"
+# 再現性が必要なときは code-server@x.y.z 形式でバージョンを固定できる
+CODE_SERVER_PKG="${MDAIT_UXLAB_CODE_SERVER_PKG:-code-server}"
+PLAYWRIGHT_PKG="${MDAIT_UXLAB_PLAYWRIGHT_PKG:-playwright-core}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
@@ -24,12 +27,17 @@ if [ ! -f "$WORKDIR/node_modules/code-server/out/node/entry.js" ]; then
   echo "-- code-server をインストール（postinstall 無効）--"
   # postinstall は GitHub から ripgrep バイナリを取得しようとして必ず失敗する
   # （このネットワークは npm レジストリのみ許可）ため、scripts を止めて後で手当てする
-  npm install --ignore-scripts --unsafe-perm code-server playwright-core
+  npm install --ignore-scripts --unsafe-perm "$CODE_SERVER_PKG" "$PLAYWRIGHT_PKG"
 
   pushd node_modules/code-server/lib/vscode > /dev/null
   npm install --ignore-scripts --omit=dev --unsafe-perm
 
   # ripgrep: バイナリのダウンロードを封じ、環境内蔵の rg を流用する
+  if ! command -v rg > /dev/null; then
+    echo "ERROR: rg (ripgrep) が見つかりません。この環境では ripgrep バイナリを" >&2
+    echo "  ダウンロードできないため、rg をインストールしてから再実行してください" >&2
+    exit 1
+  fi
   RG_PKG=node_modules/@vscode/ripgrep
   mkdir -p "$RG_PKG/bin" "$RG_PKG/lib"
   cp "$(command -v rg)" "$RG_PKG/bin/rg"
@@ -44,7 +52,7 @@ if [ ! -f "$WORKDIR/node_modules/code-server/out/node/entry.js" ]; then
   popd > /dev/null
 else
   echo "-- code-server はインストール済み。スキップ --"
-  [ -d node_modules/playwright-core ] || npm install --ignore-scripts playwright-core
+  [ -d node_modules/playwright-core ] || npm install --ignore-scripts "$PLAYWRIGHT_PKG"
 fi
 
 echo "-- mdait を vsix にパッケージ --"
