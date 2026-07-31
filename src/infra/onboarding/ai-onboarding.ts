@@ -4,7 +4,27 @@
  */
 
 import * as vscode from "vscode";
+import { type AIConfig, Configuration } from "../config/configuration";
 import { Logger } from "../logging/logger";
+
+/**
+ * 設定済みのAIサービスを「provider / vendor / model」形式の1行で表す。
+ * 初回同意ダイアログで、ユーザーが何に同意するのかを具体的に示すために使う。
+ * 各プロバイダ実装の既定値（vendor: copilot、ollama: llama2、openai: gpt-5-mini）に追従する。
+ */
+export function describeAiService(ai: AIConfig): string {
+	switch (ai.provider) {
+		case "vscode-lm":
+		case "default":
+			return [ai.provider, ai.vendor ?? "copilot", ai.model].filter(Boolean).join(" / ");
+		case "ollama":
+			return ["ollama", ai.ollama?.model || ai.model || "llama2"].filter(Boolean).join(" / ");
+		case "openai":
+			return ["openai", ai.model || "gpt-5-mini"].filter(Boolean).join(" / ");
+		default:
+			return [ai.provider, ai.model].filter(Boolean).join(" / ");
+	}
+}
 
 /**
  * AI機能の初回利用チェックとオンボーディング表示を行うクラス
@@ -70,9 +90,15 @@ export class AIOnboarding {
 
 		const proceedButton = vscode.l10n.t("Proceed");
 
+		// どのAIサービスに同意するのかを具体的に示す（mdait.json の設定内容）
+		const detail = vscode.l10n.t(
+			"AI service: {0} (from mdait.json)",
+			describeAiService(Configuration.getInstance().ai),
+		);
+
 		const result = await vscode.window.showInformationMessage(
 			message,
-			{ modal: true },
+			{ modal: true, detail },
 			proceedButton,
 		);
 

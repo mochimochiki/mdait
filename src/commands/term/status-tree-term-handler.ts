@@ -40,32 +40,13 @@ export class StatusTreeTermHandler {
 			return;
 		}
 
-		// 確認ダイアログを表示
-		const confirmation = await vscode.window.showInformationMessage(
-			vscode.l10n.t("Detect terms for all files in directory '{0}'?", item.directoryPath),
-			{ modal: true },
-			vscode.l10n.t("Yes"),
-			vscode.l10n.t("No"),
-		);
-
-		if (confirmation !== vscode.l10n.t("Yes")) {
-			return;
-		}
-
-		// AI初回利用チェック
-		const aiOnboarding = AIOnboarding.getInstance();
-		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
-		if (!shouldProceed) {
-			return; // ユーザーがキャンセルした場合
-		}
-
 		// 設定とファイル探索ユーティリティ
 		const config = Configuration.getInstance();
 		const fileExplorer = new FileExplorer();
 		const statusManager = StatusManager.getInstance();
 
 		try {
-			// ディレクトリ配下のMarkdownを列挙
+			// ディレクトリ配下のMarkdownを列挙（確認ダイアログに対象ファイル数を出すため、確認より先に列挙する）
 			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
 			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
@@ -76,6 +57,25 @@ export class StatusTreeTermHandler {
 					vscode.l10n.t("No Markdown files found in directory '{0}'", item.directoryPath),
 				);
 				return;
+			}
+
+			// 確認ダイアログを表示
+			const confirmation = await vscode.window.showInformationMessage(
+				vscode.l10n.t("Detect terms for all files in directory '{0}'? ({1} files)", item.directoryPath, sourceFiles.length),
+				{ modal: true },
+				vscode.l10n.t("Yes"),
+				vscode.l10n.t("No"),
+			);
+
+			if (confirmation !== vscode.l10n.t("Yes")) {
+				return;
+			}
+
+			// AI初回利用チェック
+			const aiOnboarding = AIOnboarding.getInstance();
+			const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+			if (!shouldProceed) {
+				return; // ユーザーがキャンセルした場合
 			}
 
 			// すでに処理中のファイルをスキップ
@@ -257,27 +257,8 @@ export class StatusTreeTermHandler {
 			return;
 		}
 
-		// 確認ダイアログを表示
-		const confirmation = await vscode.window.showInformationMessage(
-			vscode.l10n.t("Expand terms for all files in directory '{0}'?", item.directoryPath),
-			{ modal: true },
-			vscode.l10n.t("Yes"),
-			vscode.l10n.t("No"),
-		);
-
-		if (confirmation !== vscode.l10n.t("Yes")) {
-			return;
-		}
-
-		// AI初回利用チェック
-		const aiOnboarding = AIOnboarding.getInstance();
-		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
-		if (!shouldProceed) {
-			return; // ユーザーがキャンセルした場合
-		}
-
 		try {
-			// ディレクトリ配下のMarkdownを列挙
+			// ディレクトリ配下のMarkdownを列挙（確認ダイアログに対象ファイル数を出すため、確認より先に列挙する）
 			const pattern = new vscode.RelativePattern(item.directoryPath, "**/*.md");
 			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
@@ -288,6 +269,25 @@ export class StatusTreeTermHandler {
 					vscode.l10n.t("No Markdown files found in directory '{0}'", item.directoryPath),
 				);
 				return;
+			}
+
+			// 確認ダイアログを表示
+			const confirmation = await vscode.window.showInformationMessage(
+				vscode.l10n.t("Expand terms for all files in directory '{0}'? ({1} files)", item.directoryPath, targetFiles.length),
+				{ modal: true },
+				vscode.l10n.t("Yes"),
+				vscode.l10n.t("No"),
+			);
+
+			if (confirmation !== vscode.l10n.t("Yes")) {
+				return;
+			}
+
+			// AI初回利用チェック
+			const aiOnboarding = AIOnboarding.getInstance();
+			const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+			if (!shouldProceed) {
+				return; // ユーザーがキャンセルした場合
 			}
 
 			// ソースファイルパスを収集

@@ -130,8 +130,12 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 		return;
 	}
 
+	// 確認ダイアログに対象ファイル数を出すため、確認より先に列挙する
+	const fileExplorer = new FileExplorer();
+	const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
+
 	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t("Register TM for all files in directory '{0}'?", path.basename(dirPath)),
+		vscode.l10n.t("Register TM for all files in directory '{0}'? ({1} files)", path.basename(dirPath), files.length),
 		vscode.l10n.t("Yes"),
 		vscode.l10n.t("No"),
 	);
@@ -147,9 +151,6 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 		},
 		async (progress, token) => {
 			try {
-				const fileExplorer = new FileExplorer();
-				const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
-
 				const overallResult: TmCommitResult = {
 					processedUnits: 0,
 					skippedUnits: 0,

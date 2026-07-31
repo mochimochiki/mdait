@@ -38,14 +38,14 @@ export async function adoptCommand(): Promise<AdoptOutcome | undefined> {
 	}
 
 	// 確認UIを冒頭に1回（AI を使う段を列挙する。ADR-260705-01）
+	// 質問は短く保ち、実行段の列挙と git 推奨は detail に箇条書きで出す（読みやすさのため）
 	const steps = buildAdoptStepList(options, config.aiReview.autoApprove);
 	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t(
-			"Adopt existing translations? Steps: {0}. This updates translation markers{1}. Committing your workspace to git beforehand is recommended.",
-			steps.join(", "),
-			options.buildGlossary || options.buildTm ? vscode.l10n.t(" and writes to the glossary/TM") : "",
-		),
-		{ modal: true },
+		vscode.l10n.t("Adopt existing translations?"),
+		{
+			modal: true,
+			detail: buildAdoptConfirmDetail(steps, Boolean(options.buildGlossary || options.buildTm)),
+		},
 		vscode.l10n.t("Yes"),
 	);
 	if (confirm !== vscode.l10n.t("Yes")) {
@@ -129,6 +129,24 @@ export function buildAdoptStepList(options: AdoptOptions, autoApprove: boolean):
 		steps.push(vscode.l10n.t("build translation memory"));
 	}
 	return steps;
+}
+
+/**
+ * 取り込み確認ダイアログの detail 本文を組み立てる。
+ * 実行段を1行1項目の箇条書きで列挙し、末尾に影響範囲と git 推奨を添える。
+ * @param steps buildAdoptStepList が返す実行段リスト
+ * @param writesKnowledge 用語集/TM への書き込みを伴うか
+ */
+export function buildAdoptConfirmDetail(steps: string[], writesKnowledge: boolean): string {
+	return [
+		...steps.map((step) => `• ${step}`),
+		"",
+		vscode.l10n.t(
+			"This updates translation markers{0}.",
+			writesKnowledge ? vscode.l10n.t(" and writes to the glossary/TM") : "",
+		),
+		vscode.l10n.t("Committing your workspace to git beforehand is recommended."),
+	].join("\n");
 }
 
 /**
