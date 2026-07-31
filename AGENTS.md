@@ -36,7 +36,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 - 定常 sync（autoSyncOnSave 含む）は AI 不使用・決定的・冪等を維持する。AI を使う処理（trans・term・tm・ai-sync 系）は必ず明示的な起動＋確認UIを経由する（ADR-260705-01）
 - 個別ユニットのマーカー／`unit-state` を書き換える操作は `getFileHandler()` の `resolveNeed` / `declareIsolate` / `deleteUnit` だけを通す。排他制御・未保存の反映・ストア保存・ステータス更新は `commands/markers/unit-mutation.ts` にしか無く、サーフェス（CodeLens・ツリー・LM Tool）側で書き換えを実装すると必ず取りこぼす。一括変換（markers-migration・sync・trans・ai-review のコア）は別枠（ADR-260726-01）
 - `Status` は「原文側か訳文側か／翻訳の進み具合」だけを表す。「翻訳率の分母に数えるか」を `Status` の値で表現しない（`isCountedInProgress()` が単独で答える）。`contextValue` の決定に `Status` を渡さない（ADR-260726-01）
-- 各コマンドの実行レポートは `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに表示方法を実装しない（ADR-260726-01）
+- 実行レポートを出すコマンドは、必ず `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに独自の表示方法を実装しない（ADR-260726-01）
 
 ## テスト
 

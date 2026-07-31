@@ -71,7 +71,6 @@ Create `.mdait/mdait.json` in your workspace root:
   "trans": {
     "contextSize": 1,
     "retryLimit": 1,
-    "markdown": { "skipCodeBlocks": true },
     "frontmatter": { "keys": ["title", "description"] }
   },
   "tm": {

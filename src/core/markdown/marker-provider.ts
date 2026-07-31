@@ -9,13 +9,13 @@ const logger = Logger.getInstance();
 /**
  * マーカーの保管先を解決するためのファイルコンテキスト
  *
- * external（将来）では対象ファイルのパスをキーに外部ストアを引くため必要になる。
+ * external では対象ファイルのパスをキーに外部ストアを引くため必要になる。
  * embedded（既定）では未使用。
  */
 export interface MarkerFileContext {
 	/** 対象ファイルの絶対パス（external でストア検索に使う。embedded では未使用） */
 	filePath?: string;
-	/** "source" | "target"（将来 external で from の扱いを分けるため） */
+	/** "source" | "target"（現状は両ロール同一処理。呼び出し側の文脈提示用） */
 	role?: "source" | "target";
 }
 
@@ -27,7 +27,7 @@ export interface MarkerFileContext {
  * parse/stringify にこの Provider を注入する。
  *
  * - embedded（既定）: マーカーは本文に埋め込まれるため attach/detach は no-op。
- * - external（フェーズ1以降）: 外部ストアと attach/detach で橋渡しする。
+ * - external: 外部ストア `.mdait/unit-state` と attach/detach で橋渡しする。
  */
 export interface MarkerProvider {
 	readonly mode: "embedded" | "external";

@@ -149,14 +149,14 @@
         "vendor": {
           "type": "string",
           "description": "VS Code Language Model API vendor identifier (used by the 'vscode-lm' provider)",
-          "default": "customendpoint",
-          "examples": ["customendpoint", "copilot"]
+          "default": "copilot",
+          "examples": ["copilot", "customendpoint"]
         },
         "model": {
           "type": "string",
           "description": "AI model name to use with the selected provider",
-          "default": "gpt-4.1",
-          "examples": ["gpt-4.1", "gpt-5 mini"]
+          "default": "gpt-4o",
+          "examples": ["gpt-4o", "gpt-4.1", "gpt-5 mini"]
         },
         "ollama": {
           "type": "object",
@@ -244,18 +244,6 @@
       "type": "object",
       "description": "Translation settings",
       "properties": {
-        "markdown": {
-          "type": "object",
-          "description": "Markdown-specific translation settings",
-          "properties": {
-            "skipCodeBlocks": {
-              "type": "boolean",
-              "description": "Whether to exclude code blocks from translation targets when translating markdown",
-              "default": true
-            }
-          },
-          "additionalProperties": false
-        },
         "frontmatter": {
           "type": "object",
           "description": "Frontmatter translation settings",

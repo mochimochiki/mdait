@@ -26,6 +26,11 @@
         "title": "%mdait.sync.title%"
       },
       {
+        "command": "mdait.validate",
+        "title": "%mdait.validate.title%",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "mdait.markers.externalize",
         "title": "%mdait.markers.externalize.title%",
         "category": "mdait"
@@ -454,6 +459,11 @@
           "command": "mdait.settings.open",
           "when": "view == mdait.status && mdaitConfigured",
           "group": "navigation@9"
+        },
+        {
+          "command": "mdait.validate",
+          "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
+          "group": "1_actions"
         }
       ],
       "view/item/context": [

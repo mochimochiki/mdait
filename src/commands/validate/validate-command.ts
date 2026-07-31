@@ -2,7 +2,8 @@
  * @file validate-command.ts
  * @description
  *   翻訳済みペアユニットに対する検証（構造チェック＋用語一貫性 term-lint）のワークフロー。
- *   読取専用・AI不使用。mdait_validate ツールから呼び出される。
+ *   読取専用・AI不使用。mdait_validate ツール（エージェント）と `mdait.validate`
+ *   コマンド（人間。レポートは `.mdait/reports/validate.md`）の両サーフェスから呼び出される。
  * @module commands/validate/validate-command
  */
 import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
@@ -17,8 +18,10 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
+import { notifyWithReport } from "../shared/report-file";
 import { TermsRepository } from "../term/terms-repository";
 import { TranslationChecker } from "../trans/translation-checker";
+import { writeValidateReport } from "./validate-report-file";
 
 const logger = Logger.getInstance();
 
@@ -57,6 +60,46 @@ export interface ValidationReport {
 	unitsSkipped: number;
 	/** 違反一覧 */
 	violations: ValidationViolation[];
+}
+
+/**
+ * 人間向けの検証コマンド（`mdait.validate`）。
+ *
+ * 読取専用・AI不使用のため確認UIは挟まない（ux.md の確認ポリシー）。
+ * 結果は `.mdait/reports/validate.md` へ書き出し、完了通知のボタンから開く。
+ */
+export async function validateCommand(): Promise<void> {
+	try {
+		const report = await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: vscode.l10n.t("mdait: Validating translations..."),
+			},
+			() => validate_CoreProc(undefined),
+		);
+		const uri = await writeValidateReport(report);
+		if (report.violations.length === 0) {
+			notifyWithReport(
+				vscode.l10n.t("Validation passed: {0} units checked, no violations.", report.unitsChecked),
+				uri,
+				"info",
+			);
+		} else {
+			notifyWithReport(
+				vscode.l10n.t(
+					"Validation found {0} violations ({1} units checked).",
+					report.violations.length,
+					report.unitsChecked,
+				),
+				uri,
+				"warning",
+			);
+		}
+	} catch (error) {
+		logger.error("validate", "Validation command failed", formatError(error));
+		const message = error instanceof Error ? error.message : String(error);
+		void vscode.window.showErrorMessage(vscode.l10n.t("Validation failed: {0}", message));
+	}
 }
 
 /**

@@ -22,6 +22,7 @@ import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
+import { validateCommand } from "./commands/validate/validate-command";
 import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
 import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
@@ -238,6 +239,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
+
+	// validate command（読取専用・AI不使用。mdait_validate ツールと同じコアを人間サーフェスへ開く）
+	const validateDisposable = vscode.commands.registerCommand("mdait.validate", validateCommand);
 
 	// マーカー外部化 / 埋め込み戻し コマンド
 	const externalizeMarkersDisposable = vscode.commands.registerCommand(
@@ -694,6 +698,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		openSettingsAsUiDisposable,
 		diagnoseSetupDisposable,
 		syncDisposable,
+		validateDisposable,
 		selectTargetsDisposable,
 		transDisposable,
 		externalizeMarkersDisposable,
