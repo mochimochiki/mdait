@@ -904,9 +904,12 @@ async function translateUnit(
 			skipped: false,
 		};
 	} catch (error) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("Unit translation error: {0}", (error as Error).message),
-		);
+		// 通知は呼び出し側（transUnitCommand / ファイル翻訳のエラー処理）に一本化し、
+		// ここではログのみ残して伝播させる（同一エラーの二重トーストを防ぐ）
+		logger.error("trans", "Unit translation error", {
+			unitHash: unit.marker?.hash,
+			...formatError(error),
+		});
 		throw error;
 	}
 }

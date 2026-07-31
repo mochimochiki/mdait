@@ -156,7 +156,7 @@ async function checkAiReachability(config: Configuration): Promise<Diagnostic | 
 				const vendor = config.ai.vendor ?? "copilot";
 				const models = await vscode.lm.selectChatModels({ vendor });
 				if (!models || models.length === 0) {
-					return { level: "error", id: "ai.vscodeLmUnavailable" };
+					return { level: "error", id: "ai.vscodeLmUnavailable", params: { vendor } };
 				}
 				return undefined;
 			}
@@ -188,7 +188,11 @@ async function checkAiReachability(config: Configuration): Promise<Diagnostic | 
 		});
 		// vscode-lm 系は到達不能とみなして警告に倒す
 		if (provider === "vscode-lm" || provider === "default") {
-			return { level: "error", id: "ai.vscodeLmUnavailable" };
+			return {
+				level: "error",
+				id: "ai.vscodeLmUnavailable",
+				params: { vendor: config.ai.vendor ?? "copilot" },
+			};
 		}
 		return undefined;
 	}
@@ -247,8 +251,16 @@ function describe(d: Diagnostic): string {
 			return vscode.l10n.t(
 				"OpenAI apiKey is written directly in mdait.json. Use the ${env:OPENAI_API_KEY} syntax to avoid leaking it through git.",
 			);
-		case "ai.vscodeLmUnavailable":
-			return vscode.l10n.t("No VS Code language model is available. Ensure GitHub Copilot is installed and enabled.");
+		case "ai.vscodeLmUnavailable": {
+			// 案内は設定された vendor に合わせる（既定の copilot 以外で GitHub Copilot を案内しない）
+			const vendor = p.vendor && p.vendor !== "copilot" ? p.vendor : undefined;
+			return vendor
+				? vscode.l10n.t(
+						"No VS Code language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json, or ensure GitHub Copilot is enabled if you use the default vendor.",
+						vendor,
+					)
+				: vscode.l10n.t("No VS Code language model is available. Ensure GitHub Copilot is installed and enabled.");
+		}
 		case "ai.openaiKeyMissing":
 			return vscode.l10n.t(
 				"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",

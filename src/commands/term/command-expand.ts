@@ -77,14 +77,19 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 		},
 		async (progress, token) => {
 			try {
-				await expandTerm_CoreProc(transPair, progress, token);
+				const result = await expandTerm_CoreProc(transPair, progress, token);
 
-				if (!token.isCancellationRequested) {
+				// 件数付きで完了を通知（0件成功とエラーを区別できるようにする）。
+				// 対象が最初から無かった場合は CoreProc 側の案内に任せる。
+				if (
+					!token.isCancellationRequested &&
+					(result.expanded > 0 || result.remaining > 0)
+				) {
 					vscode.window.showInformationMessage(
 						vscode.l10n.t(
-							"Term expansion completed ({0} → {1})",
-							transPair.sourceLang,
-							transPair.targetLang,
+							"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
+							result.expanded,
+							result.remaining,
 						),
 					);
 				}
@@ -217,9 +222,7 @@ export async function expandTerm_CoreProc(
 	const allResults = extractResults;
 
 	if (allResults.size === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No terms could be expanded"),
-		);
+		// 通知は呼び出し側の件数付き完了通知（0 expanded / N remaining）に一本化する
 		return { expanded: 0, remaining: termsToExpand.length };
 	}
 

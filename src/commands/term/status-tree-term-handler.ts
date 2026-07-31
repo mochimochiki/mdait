@@ -12,9 +12,45 @@ import { StatusManager } from "../../core/status/status-manager";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { notifyWithReport } from "../shared/report-file";
 import { detectTerm_CoreProc } from "./command-detect";
-import { expandTerm_CoreProc } from "./command-expand";
+import { type TermExpandResult, expandTerm_CoreProc } from "./command-expand";
+import { writeTermReport } from "./term-report-file";
 import { UnitPairCollector } from "./unit-pair-collector";
+
+/**
+ * 用語検出の完了を件数付きで通知する（0件成功とエラーを区別できるようにする）。
+ * 検出があった場合はレポートを書き出し、通知のボタンから開けるようにする。
+ */
+async function notifyDetectCompleted(
+	detected: Awaited<ReturnType<typeof detectTerm_CoreProc>>,
+	sourceLang: string,
+	targetLang: string,
+): Promise<void> {
+	if (detected.length === 0) {
+		vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed: no terms detected."));
+		return;
+	}
+	const uri = await writeTermReport({ entries: detected, sourceLang, targetLang });
+	notifyWithReport(vscode.l10n.t("Term detection completed: {0} term(s) detected.", detected.length), uri);
+}
+
+/**
+ * 用語展開の完了を件数付きで通知する。
+ * 対象が最初から無かった場合（expanded/remaining とも 0）は CoreProc 側の案内に任せる。
+ */
+function notifyExpandCompleted(result: TermExpandResult): void {
+	if (result.expanded === 0 && result.remaining === 0) {
+		return;
+	}
+	vscode.window.showInformationMessage(
+		vscode.l10n.t(
+			"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
+			result.expanded,
+			result.remaining,
+		),
+	);
+}
 
 /**
  * ステータスツリーアイテムの用語検出アクションハンドラ
@@ -123,10 +159,10 @@ export class StatusTreeTermHandler {
 						}
 
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
+						const detected = await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
 
 						if (!token.isCancellationRequested) {
-							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+							await notifyDetectCompleted(detected, transPair.sourceLang, transPair.targetLang);
 						}
 
 						// StatusManagerの更新
@@ -213,10 +249,10 @@ export class StatusTreeTermHandler {
 						const collectionResult = await collector.collectFromFiles([sourceFilePath], transPair, token);
 
 						// バッチ処理実行（内部実装を直接呼び出し）
-						await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
+						const detected = await detectTerm_CoreProc(collectionResult.pairs, transPair, progress, token);
 
 						if (!token.isCancellationRequested) {
-							vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed successfully."));
+							await notifyDetectCompleted(detected, transPair.sourceLang, transPair.targetLang);
 							// StatusManagerの更新
 							await StatusManager.getInstance().refreshFileStatus(sourceFilePath);
 						}
@@ -313,12 +349,10 @@ export class StatusTreeTermHandler {
 				},
 				async (progress, token) => {
 					try {
-						await expandTerm_CoreProc(transPair, progress, token, sourceFiles);
+						const result = await expandTerm_CoreProc(transPair, progress, token, sourceFiles);
 
 						if (!token.isCancellationRequested) {
-							vscode.window.showInformationMessage(
-								vscode.l10n.t("Term expansion completed ({0} → {1})", transPair.sourceLang, transPair.targetLang),
-							);
+							notifyExpandCompleted(result);
 						}
 					} catch (error) {
 						const message =
@@ -383,12 +417,10 @@ export class StatusTreeTermHandler {
 			},
 			async (progress, token) => {
 				try {
-					await expandTerm_CoreProc(transPair, progress, token, [sourceFilePath]);
+					const result = await expandTerm_CoreProc(transPair, progress, token, [sourceFilePath]);
 
 					if (!token.isCancellationRequested) {
-						vscode.window.showInformationMessage(
-							vscode.l10n.t("Term expansion completed ({0} → {1})", transPair.sourceLang, transPair.targetLang),
-						);
+						notifyExpandCompleted(result);
 					}
 				} catch (error) {
 					const message = error instanceof Error ? error.message : vscode.l10n.t("Unknown error during term expansion");

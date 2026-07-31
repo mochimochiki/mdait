@@ -512,5 +512,11 @@
   "Audit all translations": "すべての訳文を監査する",
   "Term detection completed: {0} term(s) detected.": "用語検出が完了しました: {0} 件を検出。",
   "Term detection completed: no terms detected.": "用語検出が完了しました: 検出された用語はありません。",
-  "mdait setup diagnosis: {0} error(s), {1} warning(s).": "mdait セットアップ診断: エラー {0} 件、警告 {1} 件。"
+  "mdait setup diagnosis: {0} error(s), {1} warning(s).": "mdait セットアップ診断: エラー {0} 件、警告 {1} 件。",
+  "No language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json.": "vendor '{0}' で利用できる言語モデルがありません。mdait.json の AI 設定（ai.vendor / ai.model）を確認してください。",
+  "No VS Code language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json, or ensure GitHub Copilot is enabled if you use the default vendor.": "vendor '{0}' で利用できる VS Code 言語モデルがありません。mdait.json の AI 設定（ai.vendor / ai.model）を確認してください。既定の vendor を使う場合は GitHub Copilot が有効になっているか確認してください。",
+  "No glossary yet. Run term detection on a source file to collect terms into the glossary.": "用語集はまだありません。原文ファイルで用語検出を実行すると、用語が用語集に集められます。",
+  "Detect Terms": "用語検出を実行",
+  "Open a source Markdown file, then run term detection from the mdait view.": "原文の Markdown ファイルを開いてから、mdait ビューで用語検出を実行してください。",
+  "No translation memory yet. It is built when you run TM Commit on translated files.": "翻訳メモリはまだありません。翻訳済みファイルで TM Commit を実行すると作られます。"
 }

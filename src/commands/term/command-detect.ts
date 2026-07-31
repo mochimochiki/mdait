@@ -11,7 +11,7 @@ import { Configuration, type TransPair } from "../../infra/config/configuration"
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { notifyWithReport } from "../shared/report-file";
-import { createTermDetector } from "./term-detector";
+import { type TermDetector, createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
 import { writeTermReport } from "./term-report-file";
 import { TermsRepository } from "./terms-repository";
@@ -72,10 +72,15 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 				vscode.window.showErrorMessage(
 					vscode.l10n.t("Term detection failed: {0}", error instanceof Error ? error.message : String(error)),
 				);
-				return [];
+				// エラー通知済み。完了通知（0件検出）と混同させないため undefined を返す
+				return undefined;
 			}
 		},
 	);
+
+	if (detectedTerms === undefined) {
+		return; // エラーは通知済み
+	}
 
 	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
 	// （自動で開かないのは実ファイルでいつでも開き直せるため。ux.md E-6）
@@ -109,12 +114,14 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
  * @param transPair 翻訳ペア設定
  * @param progress 進捗報告用
  * @param cancellationToken キャンセルトークン
+ * @param injectedDetector テスト用の用語検出サービス（省略時は設定に従い生成）
  */
 export async function detectTerm_CoreProc(
 	pairs: readonly UnitPair[],
 	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
+	injectedDetector?: TermDetector,
 ): Promise<TermEntry[]> {
 	const config = Configuration.getInstance();
 	const sourceLang = transPair.sourceLang;
@@ -122,7 +129,7 @@ export async function detectTerm_CoreProc(
 	const primaryLang = config.getTermsPrimaryLang();
 
 	// 用語検出サービスを初期化
-	const termDetector = await createTermDetector();
+	const termDetector = injectedDetector ?? (await createTermDetector());
 
 	// 用語集リポジトリを初期化（既存ファイルがあれば読み込み、なければ作成）
 	const termsPath = config.getTermsFilePath();
@@ -150,6 +157,8 @@ export async function detectTerm_CoreProc(
 	const batches = createBatches(pairs);
 	const totalBatches = batches.length;
 	let processedBatches = 0;
+	let failedBatches = 0;
+	let firstBatchError: unknown;
 	const allDetectedTerms: TermEntry[] = [];
 
 	// Phase 2: バッチごとに用語検出
@@ -196,12 +205,22 @@ export async function detectTerm_CoreProc(
 				existingTerms = [...existingTerms, ...newTerms];
 			}
 		} catch (error) {
+			failedBatches++;
+			if (firstBatchError === undefined) {
+				firstBatchError = error;
+			}
 			Logger.getInstance().warn("term.detect", "Batch term detection failed", {
 				...formatError(error),
 			});
 		}
 
 		processedBatches++;
+	}
+
+	// 全バッチが失敗した場合は「0件検出の成功」と誤認させず、エラーとして伝播させる
+	// （AI未接続・未認可などの構成問題を呼び出し側のエラー通知で表面化する）
+	if (totalBatches > 0 && failedBatches === totalBatches) {
+		throw firstBatchError instanceof Error ? firstBatchError : new Error(String(firstBatchError));
 	}
 
 	// Phase 3: 検出された用語を用語集に追加

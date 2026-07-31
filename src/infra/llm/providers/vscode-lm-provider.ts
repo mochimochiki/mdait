@@ -49,10 +49,18 @@ export class VSCodeLanguageModelProvider implements AIService {
 			// 言語モデルを選択
 			const model = await this.selectLanguageModel();
 			if (!model) {
+				// 案内は設定された vendor に合わせる（既定の copilot 以外で
+				// GitHub Copilot を案内すると誤誘導になる）
+				const vendor = this.config.vendor ?? "copilot";
 				throw new Error(
-					vscode.l10n.t(
-						"Language model is not available. Please ensure GitHub Copilot is enabled.",
-					),
+					vendor === "copilot"
+						? vscode.l10n.t(
+								"Language model is not available. Please ensure GitHub Copilot is enabled.",
+							)
+						: vscode.l10n.t(
+								"No language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json.",
+								vendor,
+							),
 				);
 			}
 			modelFamily = model.family;
