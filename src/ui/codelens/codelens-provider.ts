@@ -182,7 +182,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		if (marker.needsTranslation()) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(play) Translate"),
+					title: vscode.l10n.t("✨Translate"),
 					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
 					command: "mdait.translate.frontmatter",
 					arguments: [document.uri],
@@ -263,7 +263,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		if (marker.needsTranslation()) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(play) Translate"),
+					title: vscode.l10n.t("✨Translate"),
 					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
 					command: translateCommand,
 					arguments: translateArgs,
@@ -377,7 +377,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			if (entry.need) {
 				codeLenses.push(
 					new vscode.CodeLens(range, {
-						title: vscode.l10n.t("$(play) Translate"),
+						title: vscode.l10n.t("✨Translate"),
 						tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
 						command: "mdait.codelens.translateFile",
 						arguments: [document.uri],

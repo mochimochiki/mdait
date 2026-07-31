@@ -34,6 +34,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- "Go to Next Item Needing Attention" now reports "No units are awaiting review or deletion verification." when its queue is empty, instead of the misleading "No units need attention." (units flagged `need:translate` were never part of this queue)
+- Select Targets: the QuickPick now has a title and placeholder explaining what it filters; when only one translation pair is configured it shows an information message instead of a single-row checkbox picker
+- The ✨ AI marker is now applied consistently: the unit-translate CodeLens reads "✨Translate" (was "$(play) Translate"), the post-sync "Translate now" button and the welcome view's "Adopt Existing Translations" link carry the marker, and Japanese command titles no longer have a stray space after ✨
 - CodeLens: the standalone "Mark as Isolated" and "Note" buttons were replaced by the single "More" menu (commands `mdait.codelens.markIsolated` / `mdait.unit.editNote` are gone; use `mdait.codelens.otherActions`)
 - Adopt wizard: the report is a real file (`.mdait/adopt-report.md`, overwritten per run) instead of a `mdait-adopt:` virtual document
 - Item-argument commands (translate/term/tm-commit/ai-review variants) are hidden from the Command Palette; the ▶ (Translate Unit) inline button now appears only on units that trans will actually process

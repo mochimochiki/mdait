@@ -335,7 +335,7 @@ export async function syncCommand(
 		// くるくるアニメーション）が終わらないため（ADR-260705-01 の非AI sync は同期処理完結が前提）。
 		const translatableCount = totalAdded + totalRevisionsNeeded;
 		if (translatableCount > 0) {
-			const translateNow = vscode.l10n.t("Translate now");
+			const translateNow = vscode.l10n.t("✨Translate now");
 			void vscode.window
 				.showInformationMessage(
 					vscode.l10n.t(

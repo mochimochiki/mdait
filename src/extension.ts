@@ -529,12 +529,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// 対象言語選択コマンド（QuickPick: 複数選択、空は確定不可）
 	const selectTargetsDisposable = vscode.commands.registerCommand("mdait.status.selectTargets", async () => {
-		const pick = vscode.window.createQuickPick<{
-			label: string;
-			description?: string;
-			key: string;
-		}>();
-		pick.canSelectMany = true;
 		const items = SelectionState.getInstance()
 			.getSelectableTargets()
 			.map((t) => ({
@@ -542,6 +536,30 @@ export async function activate(context: vscode.ExtensionContext) {
 				description: t.description,
 				key: t.key,
 			}));
+
+		// 絞り込む余地がないときは QuickPick を出さない（1件だけのチェックボックスは意味が伝わらない）
+		if (items.length === 0) {
+			vscode.window.showInformationMessage(vscode.l10n.t("No translation targets are configured."));
+			return;
+		}
+		if (items.length === 1) {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"Only one translation pair is configured ({0}); there is nothing to filter.",
+					items[0].description ?? items[0].label,
+				),
+			);
+			return;
+		}
+
+		const pick = vscode.window.createQuickPick<{
+			label: string;
+			description?: string;
+			key: string;
+		}>();
+		pick.canSelectMany = true;
+		pick.title = vscode.l10n.t("Select translation targets to show");
+		pick.placeholder = vscode.l10n.t("Check the targets to show in the Translation Status view");
 		pick.items = items;
 		// 既存選択を反映
 		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());

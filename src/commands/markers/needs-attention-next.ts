@@ -30,8 +30,10 @@ export async function needsAttentionNextCommand(
 	const units = collectSortedNeedsAttentionUnits();
 
 	if (units.length === 0) {
+		// 「要対応」= review / verify-deletion のみ。need:translate は含まれないため、
+		// 「対応すべきものは何もない」と誤読されない文言で何を調べたかを明示する。
 		vscode.window.showInformationMessage(
-			vscode.l10n.t("No units need attention."),
+			vscode.l10n.t("No units are awaiting review or deletion verification."),
 		);
 		return;
 	}
