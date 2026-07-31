@@ -26,6 +26,8 @@ export class TranslatorBuilder {
 			aiService,
 			config.getTermsPrimaryLang(),
 			(id, variables) => promptProvider.getPromptParts(id, variables),
+			undefined,
+			config.trans.retryLimit,
 		);
 	}
 
@@ -44,6 +46,7 @@ export class TranslatorBuilder {
 			config.getTermsPrimaryLang(),
 			(id, variables) => promptProvider.getPromptParts(id, variables),
 			PLAIN_PROMPT_CONFIG,
+			config.trans.retryLimit,
 		);
 	}
 }

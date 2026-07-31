@@ -143,19 +143,21 @@ export class AITranslator implements Translator {
 		variables?: PromptVariables,
 	) => PromptParts;
 	private readonly promptConfig: TranslatorPromptConfig;
-	/** 最大リトライ回数 */
-	private readonly maxRetries = 2;
+	/** 最大リトライ回数（`trans.retryLimit`。未指定時は従来のハードコード値 2 を維持） */
+	private readonly maxRetries: number;
 
 	constructor(
 		aiService: AIService,
 		primaryLang: string,
 		getPromptParts: (id: PromptId, variables?: PromptVariables) => PromptParts,
 		promptConfig?: TranslatorPromptConfig,
+		retryLimit?: number,
 	) {
 		this.aiService = aiService;
 		this.primaryLang = primaryLang;
 		this.getPromptParts = getPromptParts;
 		this.promptConfig = promptConfig ?? DEFAULT_MD_PROMPT_CONFIG;
+		this.maxRetries = retryLimit ?? 2;
 	}
 
 	/**

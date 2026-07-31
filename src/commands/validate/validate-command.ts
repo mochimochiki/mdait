@@ -77,6 +77,13 @@ export async function validateCommand(): Promise<void> {
 			},
 			() => validate_CoreProc(undefined),
 		);
+		if (report.filesChecked === 0) {
+			// 対象0件を「検証パス」と報告しない。空レポートで前回の実行結果も上書きしない
+			void vscode.window.showInformationMessage(
+				vscode.l10n.t("No translation targets found to validate. Run sync first, or check the transPairs settings."),
+			);
+			return;
+		}
 		const uri = await writeValidateReport(report);
 		if (report.violations.length === 0) {
 			notifyWithReport(
