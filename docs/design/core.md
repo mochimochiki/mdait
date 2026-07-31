@@ -181,7 +181,7 @@ docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 
 保管方式はグローバル設定 `markers.mode: "embedded"|"external"`（既定 embedded、`Configuration.isExternalMarkers()`/`getMarkerProvider()`）で決まります。「管理下ファイルの読み書き」経路（sync / trans / status-collector / md-file-handler の `isInitialized` / CodeLens / Hover / Decorator / migration）でのみ [`resolveMarkerIO(config, absPath, role)`](../../src/infra/config/marker-io.ts) が provider と ctx（`toWorkspaceRelativePath` によるワークスペースルート相対パス + role）を解決して `parse`/`stringify` に注入します。external では本文にマーカーが無いため、trans は全文 stringify で書き戻し（`saveExternalDocument`）、UI は [`findUnitAtLine`](../../src/core/markdown/unit-locator.ts) でユニット行範囲からマーカーを特定します。TM/term など非対象経路は embedded 既定のまま据え置きます。
 
-embedded↔external の一括変換は [`markers-migration.ts`](../../src/commands/markers/markers-migration.ts)（コマンド `mdait.markers.externalize` / `mdait.markers.embed`）が担い、「現モード provider で parse → 反対 provider で stringify」で全 MD を変換し、完了後に `markers.mode` を mdait.json へ書き戻します。frontmatter マーカーは両モードとも in-file（対象外）、手動サブ境界マーカーは external 非対応です。
+embedded↔external の一括変換は [`markers-migration.ts`](../../src/commands/markers/markers-migration.ts)（コマンド `mdait.markers.externalize` / `mdait.markers.embed`）が担います。externalize はマーカー除去後の本文を external 境界で再 parse し、(headingLevel, title) の部分列一致で embedded 側のマーカーを移送してから store へ退避します（サブ境界の統合で order がずれ、後続ユニットの状態を取り違えるのを防ぐ。ADR-260731-03）。embed は external parse（store から attach）→ embedded stringify です。完了後の `markers.mode` 書き戻しは `infra/config/config-json-editor` の `setConfigValue` 経由で、既存の整形を保持します。frontmatter マーカーは両モードとも in-file（対象外）、手動サブ境界マーカーは external 非対応です（変換前の確認ダイアログで警告）。
 
 ## Diff生成
 

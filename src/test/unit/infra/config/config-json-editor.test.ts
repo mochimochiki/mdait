@@ -3,7 +3,7 @@ import {
 	detectIndent,
 	removeConfigValue,
 	setConfigValue,
-} from "../../../../ui/settings/config-json-editor";
+} from "../../../../infra/config/config-json-editor";
 
 const SAMPLE = `{
   "transPairs": [

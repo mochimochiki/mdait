@@ -4,8 +4,10 @@
  *   マーカー保管方式を一括変換するコマンド。
  *   - externalize: 本文の埋め込みマーカーを `.mdait/unit-state` へ退避（embedded → external）
  *   - embed: unit-state のマーカーを本文へ書き戻す（external → embedded）
- *   変換は「現モードの provider で parse → 反対の provider で stringify」で行い、
- *   完了後に mdait.json の markers.mode を更新する。
+ *   externalize は「embedded parse → マーカー除去本文を external 境界で再 parse →
+ *   (headingLevel, title) 部分列一致でマーカー移送 → external stringify（store へ detach）」、
+ *   embed は「external parse（store から attach）→ embedded stringify」で行い、
+ *   完了後に mdait.json の markers.mode を整形保持で更新する（ADR-260731-03）。
  * @module commands/markers/markers-migration
  */
 import * as fs from "node:fs";
@@ -13,6 +15,7 @@ import * as vscode from "vscode";
 import { markdownParser } from "../../core/markdown/parser";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -26,6 +29,113 @@ const logger = Logger.getInstance();
 interface MigrationTarget {
 	absPath: string;
 	role: "source" | "target";
+}
+
+/** per-file 変換の結果 */
+export interface MigrateFileResult {
+	/** ファイル内容が実際に書き換わったか */
+	changed: boolean;
+	/** 移送されたマーカー数（hash を持つユニット） */
+	unitsMigrated: number;
+	/** externalize で失われたサブユニット境界マーカー数（embed では常に 0） */
+	unitsDropped: number;
+}
+
+/**
+ * 単一 MD ファイルの埋め込みマーカーを外部ストアへ退避する（embedded → external）。
+ *
+ * embedded parse のユニット列には「見出しを伴わないマーカー単独境界」や
+ * 「閾値より深い見出しに統合されたマーカー」のサブユニットが含まれうるが、
+ * external parse の境界は見出しレベルのみで決まるため、embedded の order を
+ * そのまま store に書くと external 側の order と食い違い、後続ユニットに
+ * ずれたマーカーが attach される（状態の取り違え）。
+ * これを防ぐため、マーカー除去後の本文を external 境界で再 parse し、
+ * (headingLevel, title) の部分列一致で embedded 側のマーカーを移送してから
+ * store へ書き込む。external 境界に対応しないマーカーは仕様どおり失われる
+ * （実行前の確認ダイアログで警告済み）。
+ *
+ * store.save() は呼ばない（一括実行の完了時に1回保存する）。
+ */
+export function externalizeFileMarkers(
+	absPath: string,
+	role: "source" | "target",
+	config: Configuration,
+): MigrateFileResult {
+	const content = fs.readFileSync(absPath, "utf-8");
+	const relPath = toWorkspaceRelativePath(absPath);
+	const embeddedParsed = markdownParser.parse(content, config, embeddedMarkerProvider);
+
+	// ctx を渡さない external stringify はマーカーを保存せず本文から除去するだけ（detach は no-op）。
+	// その結果を external 境界で再 parse して「外部化後のユニット列」を確定させる。
+	const strippedBody = markdownParser.stringify(embeddedParsed, externalMarkerProvider);
+	const externalParsed = markdownParser.parse(strippedBody, config, externalMarkerProvider);
+
+	// embedded 側のマーカーを (headingLevel, title) の部分列一致で移送する
+	let cursor = 0;
+	let unitsMigrated = 0;
+	for (const unit of externalParsed.units) {
+		let matched = -1;
+		for (let k = cursor; k < embeddedParsed.units.length; k++) {
+			const candidate = embeddedParsed.units[k];
+			if (candidate.headingLevel === unit.headingLevel && candidate.title === unit.title) {
+				matched = k;
+				break;
+			}
+		}
+		if (matched < 0) {
+			// 対応が見つからない場合はマーカー無しのまま（sync の need 判定で自己修復される）
+			continue;
+		}
+		const marker = embeddedParsed.units[matched].marker;
+		cursor = matched + 1;
+		if (marker?.hash) {
+			unit.marker = marker;
+			unitsMigrated++;
+		}
+	}
+	const totalWithHash = embeddedParsed.units.filter((u) => Boolean(u.marker?.hash)).length;
+	const unitsDropped = totalWithHash - unitsMigrated;
+	if (unitsDropped > 0) {
+		logger.info("markers", "Sub-unit boundary markers dropped during externalize (not supported in external mode)", {
+			file: relPath,
+			dropped: unitsDropped,
+		});
+	}
+
+	// ctx 付きの external stringify で store へ detach（order は external 境界のユニット列と一致）
+	const out = markdownParser.stringify(externalParsed, externalMarkerProvider, { filePath: relPath, role });
+	const changed = out !== content;
+	if (changed) {
+		fs.writeFileSync(absPath, out, "utf-8");
+	}
+	return { changed, unitsMigrated, unitsDropped };
+}
+
+/**
+ * 単一 MD ファイルへ外部ストアのマーカーを書き戻す（external → embedded）。
+ * 書き戻し後、この MD ファイルの unit-state エントリを削除する
+ * （非MDファイルの order:0 エントリは別パスなので影響しない）。
+ * store.save() は呼ばない（一括実行の完了時に1回保存する）。
+ */
+export function embedFileMarkers(
+	absPath: string,
+	role: "source" | "target",
+	config: Configuration,
+	store: UnitStateStore,
+): MigrateFileResult {
+	const content = fs.readFileSync(absPath, "utf-8");
+	const relPath = toWorkspaceRelativePath(absPath);
+	const parsed = markdownParser.parse(content, config, externalMarkerProvider, { filePath: relPath, role });
+	const unitsMigrated = parsed.units.filter((u) => Boolean(u.marker?.hash)).length;
+	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
+	const changed = out !== content;
+	if (changed) {
+		fs.writeFileSync(absPath, out, "utf-8");
+	}
+	for (const entry of store.getEntriesByPath(relPath)) {
+		store.removeEntry(relPath, entry.order);
+	}
+	return { changed, unitsMigrated, unitsDropped: 0 };
 }
 
 /**
@@ -67,15 +177,11 @@ export function reconcileMarkerModeForFile(
 		if (!parsed.units.some((u) => Boolean(u.marker?.hash))) {
 			return false;
 		}
-		const out = markdownParser.stringify(parsed, externalMarkerProvider, {
-			filePath: relPath,
-			role,
-		});
-		fs.writeFileSync(absPath, out, "utf-8");
+		const result = externalizeFileMarkers(absPath, role, config);
 		logger.info("markers", "Reconciled file to external mode during sync", {
 			file: relPath,
 		});
-		return true;
+		return result.changed;
 	}
 
 	// 目標: 本文に unit マーカーがある（embedded）。
@@ -89,19 +195,11 @@ export function reconcileMarkerModeForFile(
 	if (embeddedParse.units.some((u) => Boolean(u.marker?.hash))) {
 		return false;
 	}
-	const externalParse = markdownParser.parse(content, config, externalMarkerProvider, {
-		filePath: relPath,
-		role,
-	});
-	const out = markdownParser.stringify(externalParse, embeddedMarkerProvider);
-	fs.writeFileSync(absPath, out, "utf-8");
-	for (const entry of entries) {
-		store.removeEntry(relPath, entry.order);
-	}
+	const result = embedFileMarkers(absPath, role, config, store);
 	logger.info("markers", "Reconciled file to embedded mode during sync", {
 		file: relPath,
 	});
-	return true;
+	return result.changed;
 }
 
 /**
@@ -160,15 +258,25 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 	}
 
 	const toExternal = toMode === "external";
+
+	// 対象ファイルを先に数え、確認ダイアログで「何ファイル書き換わるか」を具体的に示す
+	const targets = await collectMarkdownTargets(config);
+	if (targets.length === 0) {
+		vscode.window.showInformationMessage(vscode.l10n.t("No managed Markdown files found. Nothing to convert."));
+		return;
+	}
+
 	const confirmLabel = toExternal
 		? vscode.l10n.t("Externalize markers")
 		: vscode.l10n.t("Embed markers");
 	const warnBody = toExternal
 		? vscode.l10n.t(
-				"This will move mdait markers out of all managed Markdown files into .mdait/unit-state. Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost. Continue?",
+				"Externalize markers (embedded → external): {0} managed Markdown file(s) will be rewritten, moving mdait markers out of the files into .mdait/unit-state. Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost. Committing your workspace to git beforehand is recommended. Continue?",
+				targets.length,
 			)
 		: vscode.l10n.t(
-				"This will write mdait markers from .mdait/unit-state back into all managed Markdown files. Continue?",
+				"Embed markers (external → embedded): {0} managed Markdown file(s) will be rewritten, writing mdait markers from .mdait/unit-state back into the files. Committing your workspace to git beforehand is recommended. Continue?",
+				targets.length,
 			);
 
 	const choice = await vscode.window.showWarningMessage(warnBody, { modal: true }, confirmLabel);
@@ -182,6 +290,9 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 		store.ensureLoaded(mdaitDir);
 	}
 
+	let filesRewritten = 0;
+	let unitsMigrated = 0;
+	let cancelled = false;
 	try {
 		await vscode.window.withProgress(
 			{
@@ -192,17 +303,10 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 				cancellable: true,
 			},
 			async (progress, token) => {
-				const targets = await collectMarkdownTargets(config);
-				if (targets.length === 0) {
-					return;
-				}
-
 				for (let i = 0; i < targets.length; i++) {
 					if (token.isCancellationRequested) {
-						vscode.window.showWarningMessage(
-							vscode.l10n.t("Marker conversion cancelled. Some files may already be converted; re-run to finish."),
-						);
-						return;
+						cancelled = true;
+						break;
 					}
 					const { absPath, role } = targets[i];
 					progress.report({
@@ -212,33 +316,27 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 
 					// 開いているエディタの未保存変更を反映してから読み込む
 					await flushDirtyDocument(absPath);
-					const content = fs.readFileSync(absPath, "utf-8");
-					const ctx = { filePath: toWorkspaceRelativePath(absPath), role };
-
-					if (toExternal) {
-						// 埋め込み parse → 外部 stringify（store へ detach・本文からマーカー除去）
-						const parsed = markdownParser.parse(content, config, embeddedMarkerProvider);
-						const out = markdownParser.stringify(parsed, externalMarkerProvider, ctx);
-						fs.writeFileSync(absPath, out, "utf-8");
-					} else {
-						// 外部 parse（store から attach）→ 埋め込み stringify（本文へ書き戻し）
-						const parsed = markdownParser.parse(content, config, externalMarkerProvider, ctx);
-						const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
-						fs.writeFileSync(absPath, out, "utf-8");
-						// この MD ファイルの unit-state エントリを削除（非MDの order:0 は別パスなので影響なし）
-						for (const entry of store.getEntriesByPath(ctx.filePath)) {
-							store.removeEntry(ctx.filePath, entry.order);
-						}
+					const result = toExternal
+						? externalizeFileMarkers(absPath, role, config)
+						: embedFileMarkers(absPath, role, config, store);
+					if (result.changed) {
+						filesRewritten++;
 					}
+					unitsMigrated += result.unitsMigrated;
 				}
 
-				// store を保存（external: 追加した detach、embedded: 削除を永続化）
+				// store を保存（external: 追加した detach、embedded: 削除を永続化）。
+				// キャンセル時も必ず保存する（変換済みファイルのマーカーは store 上にしか無く、
+				// 保存しないとキャンセルで失われる）。
 				if (mdaitDir) {
 					store.save(mdaitDir);
 				}
 
-				// mdait.json の markers.mode を更新（in-memory も即時反映）
-				await setMarkerModeInConfigFile(config, toMode);
+				// mdait.json の markers.mode を更新（in-memory も即時反映）。
+				// キャンセル時（部分変換）はモードを変えず、残りは sync の自己修復に委ねる。
+				if (!cancelled) {
+					await setMarkerModeInConfigFile(config, toMode);
+				}
 			},
 		);
 	} catch (error) {
@@ -249,17 +347,36 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 		return;
 	}
 
+	if (cancelled) {
+		vscode.window.showWarningMessage(
+			vscode.l10n.t("Marker conversion cancelled. Some files may already be converted; re-run to finish."),
+		);
+		return;
+	}
+
 	const doneMsg = toExternal
-		? vscode.l10n.t("Markers externalized. Run Sync to verify the result.")
-		: vscode.l10n.t("Markers embedded. Run Sync to verify the result.");
+		? vscode.l10n.t(
+				"Markers externalized: {0} of {1} file(s) rewritten, {2} unit marker(s) moved to .mdait/unit-state. Run Sync to verify the result.",
+				filesRewritten,
+				targets.length,
+				unitsMigrated,
+			)
+		: vscode.l10n.t(
+				"Markers embedded: {0} of {1} file(s) rewritten, {2} unit marker(s) written back into the files. Run Sync to verify the result.",
+				filesRewritten,
+				targets.length,
+				unitsMigrated,
+			);
 	vscode.window.showInformationMessage(doneMsg);
 }
 
 /**
  * mdait.json の markers.mode を書き換え、in-memory 設定も更新する。
+ * 書き換えは共有の setConfigValue 経由で行い、既存のインデント文字・キー順・
+ * 末尾改行を保持する（ファイル全体の再整形で git diff を汚さない）。
  * JSON パースに失敗した場合はファイルを変更せず in-memory のみ更新する。
  */
-async function setMarkerModeInConfigFile(config: Configuration, mode: "embedded" | "external"): Promise<void> {
+export async function setMarkerModeInConfigFile(config: Configuration, mode: "embedded" | "external"): Promise<void> {
 	const configPath = config.getConfigFilePath();
 	if (!configPath || !fs.existsSync(configPath)) {
 		config.markers.mode = mode;
@@ -267,9 +384,7 @@ async function setMarkerModeInConfigFile(config: Configuration, mode: "embedded"
 	}
 	try {
 		const raw = fs.readFileSync(configPath, "utf-8");
-		const json = JSON.parse(raw) as Record<string, unknown>;
-		json.markers = { ...((json.markers as Record<string, unknown>) ?? {}), mode };
-		fs.writeFileSync(configPath, `${JSON.stringify(json, null, "\t")}\n`, "utf-8");
+		fs.writeFileSync(configPath, setConfigValue(raw, ["markers", "mode"], mode), "utf-8");
 	} catch (error) {
 		logger.warn("markers", "Failed to update markers.mode in mdait.json", formatError(error));
 	}

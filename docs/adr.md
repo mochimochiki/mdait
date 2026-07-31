@@ -12,6 +12,12 @@
 
 ## ADR
 
+### ADR-260731-03: マーカー外部化のorder整列とmdait.json書き換えの単一経路化
+**背景** : externalizeがembedded parseのorderでstoreへ書くため、サブ境界統合でexternal側のorderとずれ後続ユニットの状態を取り違えた。mdait.json書き換えもタブ再整形でdiffを汚した。
+**決定** : externalizeはマーカー除去後の本文をexternal境界で再parseし、(level,title)部分列一致でマーカーを移送してから退避。mdait.json書き換えは`infra/config/config-json-editor`の`setConfigValue`を単一経路とする。
+**理由** : storeのorderは「external parseのユニット列」が正であり、書く側がそれに揃えるのが最小修正。設定書き換えの整形保持ロジックは既にsettings-panelにあり、移設して共有する方が再発しない。
+**備考** : 移行コマンドは対象数つき確認・キャンセル時もstore保存（消失防止）・件数つき完了通知に統一。サブ境界マーカーがexternalで失われる仕様は不変（確認UIで警告済み）。
+
 ### ADR-260731-02: trans.retryLimitは削除でなく配線で閉じる（消費者検出テストの強化が発見）
 **背景** : 消費者検出テストをdotted path化した際、`trans.retryLimit`が未配線（translatorはハードコード2）と判明。テンプレート由来で全ユーザー設定に存在するキーだった。
 **決定** : 削除でなく配線で閉じる。`TranslatorBuilder`が`config.trans.retryLimit`を`AITranslator`に渡す。
