@@ -46,9 +46,6 @@ export interface AIConfig {
  * 翻訳設定の型定義
  */
 export interface TransConfig {
-	markdown: {
-		skipCodeBlocks: boolean;
-	};
 	frontmatter: {
 		keys: string[];
 	};
@@ -155,9 +152,6 @@ interface MdaitConfig {
 		};
 	};
 	trans?: {
-		markdown?: {
-			skipCodeBlocks?: boolean;
-		};
 		frontmatter?: {
 			keys?: string[];
 		};
@@ -282,9 +276,6 @@ export class Configuration {
 	 * trans設定
 	 */
 	public trans: TransConfig = {
-		markdown: {
-			skipCodeBlocks: true,
-		},
 		frontmatter: {
 			keys: ["title", "description"],
 		},
@@ -642,11 +633,6 @@ export class Configuration {
 			}
 
 			// 翻訳設定の読み込み
-			if (config.trans?.markdown) {
-				if (config.trans.markdown.skipCodeBlocks !== undefined) {
-					this.trans.markdown.skipCodeBlocks = config.trans.markdown.skipCodeBlocks;
-				}
-			}
 			if (config.trans?.frontmatter?.keys !== undefined) {
 				if (Array.isArray(config.trans.frontmatter.keys)) {
 					this.trans.frontmatter.keys = config.trans.frontmatter.keys.filter(

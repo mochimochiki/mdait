@@ -8,7 +8,7 @@ import type { TermEntry } from "./term-entry";
 
 /**
  * 用語集リポジトリの抽象インターフェース
- * フォーマット非依存でCSV/YAML/JSON等に対応可能
+ * フォーマット非依存でCSV/YAMLに対応
  */
 export interface TermsRepository {
 	/**
@@ -35,8 +35,6 @@ export interface TermsRepository {
 	 */
 	save(): Promise<void>;
 
-	/**
-	 * 統計情報の取得
 	/**
 	 * 統計情報の取得
 	 */
@@ -69,7 +67,7 @@ export namespace TermsRepository {
 	export async function create(
 		path: string,
 		transPairs: readonly TransPair[],
-		format?: "csv" | "yaml" | "json",
+		format?: "csv" | "yaml",
 	): Promise<TermsRepository> {
 		const actualFormat = format ?? detectFormat(path);
 
@@ -82,9 +80,6 @@ export namespace TermsRepository {
 				const { YamlTermsRepository } = await import("./terms-repository-yaml.js");
 				return YamlTermsRepository.create(path, transPairs);
 			}
-			case "json":
-				// 将来実装
-				throw new Error("JSON format is not yet implemented");
 			default:
 				throw new Error(`Unsupported format: ${actualFormat}`);
 		}
@@ -107,9 +102,6 @@ export namespace TermsRepository {
 				const { YamlTermsRepository } = await import("./terms-repository-yaml.js");
 				return YamlTermsRepository.load(path);
 			}
-			case "json":
-				// 将来実装
-				throw new Error("JSON format is not yet implemented");
 			default:
 				throw new Error(`Unsupported format: ${format}`);
 		}
@@ -118,16 +110,12 @@ export namespace TermsRepository {
 	/**
 	 * ファイル拡張子から形式を自動判定
 	 */
-	function detectFormat(path: string): "csv" | "yaml" | "json" {
+	function detectFormat(path: string): "csv" | "yaml" {
 		const extension = path.toLowerCase().split(".").pop();
 		switch (extension) {
-			case "csv":
-				return "csv";
 			case "yaml":
 			case "yml":
 				return "yaml";
-			case "json":
-				return "json";
 			default:
 				return "csv"; // デフォルト
 		}

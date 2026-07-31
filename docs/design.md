@@ -207,7 +207,7 @@ graph TD
 - **AIプロバイダー**: `AIService` 実装として追加
 - **ファイルタイプ**: `FileHandler` Strategy + `FileHandlerFactory` で新ファイルタイプ対応を追加可能。非MDファイルは `PlainFileHandler` が処理し、翻訳状態は `.mdait/unit-state` で管理。TransPairの `extensions` 設定で対象拡張子を柔軟に指定
 - **出力戦略**: 翻訳結果の出力先（クリップボード等）を `OutputStrategy` として拡張
-- **用語集フォーマット**: CSV → JSON/YAML等への移行が可能
+- **用語集フォーマット**: CSV / YAML（`TermsRepository` の実装追加で他形式へ拡張可能）
 - **プロンプトカスタマイズ**: 全システムプロンプトを外部ファイルで上書き可能
 - **横断的知識の蓄積**: TMのようなユニット横断データは `.mdait/` 配下で管理。テキストベースで純粋に保ち、短文・数値のみなど翻訳価値のない断片はフィルタリング
 
@@ -220,7 +220,7 @@ graph TD
 - **`Status` の意味**: `Status` が答えるのは「原文側か訳文側か／翻訳がどこまで進んでいるか」だけである。**「翻訳率の分母に数えるか」を `Status` の値で表現してはならない。** 分母判定は `isCountedInProgress()` が単独で答える。かつて凍結ユニットを分母から外すために `Status.Source` を名乗らせた結果、`Status` を先に見ていたツリー行アクションの出し分けが巻き添えで壊れ、到達できない分岐が生まれた
 - **ツリー行アクションの出し分け**: `contextValue` の決定に `Status` を渡さない。ユニット自身の事実（`need` と `from`）だけで決める。`when` 句も「完了したか」ではなく**その操作が意味を持つか**で書く（例: 確定済みペアを監査する AI レビューは、完了したファイルでも意味を持つ）
 - **マーカー書き換えの単一経路**: 個別ユニットのマーカー／`unit-state` を書き換える操作は `getFileHandler()` が返すハンドラのメソッド（`resolveNeed` / `declareIsolate` / `deleteUnit`）だけを通す。排他制御・未保存バッファの反映・ストア保存・ステータス更新は `commands/markers/unit-mutation.ts` にしか無く、サーフェス側で書き換えを実装すると必ずどれかを取りこぼす。**例外はファイル全体を一括変換する処理**（`markers-migration.ts` の embedded↔external 変換、`sync` / `trans` / `ai-review` のコア）で、これらはユニット単位の裁定ではなく別枠の一括処理として自前の整合手順を持つ
-- **レポートの出し方**: 各コマンドの実行レポートは `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに表示方法を実装しない
+- **レポートの出し方**: 実行レポートを出すコマンドは、必ず `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに独自の表示方法を実装しない（現状レポートを出すのは doctor / adopt / term.detect / tm.commit / ai-review / validate。trans・sync の完了報告は通知のみで、レポート追加は ux.md UX-R2 の課題）
 
 ### 意図的な制約
 

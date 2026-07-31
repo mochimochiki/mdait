@@ -33,7 +33,6 @@
 | `trans.retryLimit` | `1` | 翻訳失敗時のリトライ上限（1〜5） |
 | `trans.concurrency` | `3` | ディレクトリ翻訳のファイル単位並列数（1〜8） |
 | `trans.maxUnitsPerRun` | `300` | 1 回の実行で扱うユニット数の上限。`0` で無制限 |
-| `trans.markdown.skipCodeBlocks` | `true` | コードブロックを翻訳しない |
 | `trans.frontmatter.keys` | `["title", "description"]` | 翻訳する FrontMatter のキー。`[]` で翻訳しない |
 | `trans.extensions` | `[]` | Markdown 以外に翻訳する拡張子（例 `[".txt"]`） |
 | `trans.maxFileSize` | `51200` | Markdown 以外のファイルのサイズ上限（バイト） |
@@ -169,6 +168,8 @@ TM,TM,,TM,翻訳メモリ。「翻訳メモリ」と訳さずTMのまま使う
 ## Git 運用
 
 `.mdait/` はまるごとコミットする。`mdait.json`（設定）・`terms.csv`（用語集）・`translations.tmx`（翻訳メモリ）・`unit-state`（外部モード時）はいずれもチームで共有する資産で、`logs/` だけが除外される。
+
+`reports/`（各コマンドの実行レポート）もコミット対象に含まれる。レポートは実行のたびに上書きされ、過去の実行結果は git の差分・履歴として残る設計になっている。レポートの履歴が不要なら、`.mdait/.gitignore` に `reports/` を1行足して追跡から外してもよい（レポートは同期で再生成される類の資産ではないため、外しても動作に影響はない）。
 
 翻訳状態は文書とサイドカーの中にしかないので、外部 DB もマイグレーションも要らない。取り込みや一括翻訳のような大きな書き込みの前にコミットしておけば、いつでも `git checkout` で戻せる。
 

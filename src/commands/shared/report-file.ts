@@ -20,7 +20,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 const logger = Logger.getInstance();
 
 /** レポートの種類。ファイル名 `<kind>.md` になる */
-export type ReportKind = "adopt" | "ai-review" | "term" | "tm" | "doctor";
+export type ReportKind = "adopt" | "ai-review" | "term" | "tm" | "doctor" | "validate";
 
 /**
  * レポートを `.mdait/reports/<kind>.md` へ書き出す。

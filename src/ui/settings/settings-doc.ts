@@ -202,10 +202,6 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 			"Write full prompts and responses to .mdait/logs/ai-detailed.log. Helpful when investigating translation quality, but the log contains your document text — keep it off otherwise.",
 		),
 	// --- trans ---
-	"trans.markdown.skipCodeBlocks": () =>
-		vscode.l10n.t(
-			"Keep fenced code blocks untouched during translation. Turn this off only if you want comments and strings inside code examples translated too.",
-		),
 	"trans.frontmatter.keys": () =>
 		vscode.l10n.t(
 			"Frontmatter keys to translate (e.g. 'title', 'description'). All other keys are copied verbatim. An empty list disables frontmatter translation.",

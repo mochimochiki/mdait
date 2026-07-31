@@ -89,9 +89,6 @@ sequenceDiagram
     }
   },
   "trans": {
-    "markdown": {
-      "skipCodeBlocks": true
-    },
     "frontmatter": {
       "keys": ["title", "description"]
     },

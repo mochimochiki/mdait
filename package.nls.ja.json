@@ -1,6 +1,7 @@
 {
   "mdait.description": "マークダウンファイルの翻訳拡張機能",
   "mdait.sync.title": "mdait: 同期",
+  "mdait.validate.title": "mdait: 翻訳を検証",
   "mdait.markers.externalize.title": "マーカーを外部化 (embedded → external)",
   "mdait.markers.embed.title": "マーカーを本文へ埋め込み (external → embedded)",
   "mdait.status.selectTargets.title": "対象言語を選択",

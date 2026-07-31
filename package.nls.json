@@ -1,6 +1,7 @@
 {
   "mdait.description": "Markdown AI Translator - AI-powered translation tool for Markdown files",
   "mdait.sync.title": "mdait: Sync",
+  "mdait.validate.title": "mdait: Validate Translations",
   "mdait.markers.externalize.title": "Externalize Markers (embedded → external)",
   "mdait.markers.embed.title": "Embed Markers (external → embedded)",
   "mdait.status.selectTargets.title": "Select Targets",

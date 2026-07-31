@@ -183,7 +183,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 - 処理時間
 - トークン数
 - TM参照ヒット（`source → target`形式）
-- 用語候補
+- 用語候補（各候補に「用語集に追加」リンク。`command:` URI 経由で `mdait.addToGlossary` を起動する唯一の導線）
 - 警告
 
 **実装**: `SummaryManager`からハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示
@@ -299,6 +299,27 @@ sequenceDiagram
 - **エラーハンドリング**: ファイルが存在しない場合は情報メッセージを表示
 
 **設計意図**: 用語集とTMファイルに素早くアクセスできることで、翻訳品質の確認・編集が容易になります。用語集は「本」アイコン（`$(repo)`）、TMは「データベース」アイコン（`$(database)`）で視覚的に区別します。
+
+**検証** (`mdait.validate`):
+- **配置**: ツールバーのオーバーフロー（`…`）メニューとコマンドパレット。行内ボタンは増やさない（露出過多の回避。ux.md E-7 の教訓）
+- **機能**: 構造チェック＋用語一貫性検証（読取専用・AI不使用・確認UIなし）。結果は `.mdait/reports/validate.md` へ書き出し、完了通知の「レポートを開く」ボタンから開く
+- **対称性**: エージェント側の `mdait_validate` と同一のコア（`validate_CoreProc`）を使う（UX-P1）
+
+---
+
+## コマンドID正準リスト
+
+`mdait.*` コマンドの正準台帳。**新しいコマンドを追加したらこの表も更新すること**（package.json・extension.ts と本表の乖離は「宣言と実体の齟齬」として扱う）。導線列の凡例: パレット=コマンドパレット、ツリー=StatusTree（タイトルバー/行内/コンテキストメニュー）、内部=UIサーフェスから直接は呼ばれない。
+
+| コマンドID | 導線 | 備考 |
+|---|---|---|
+| `mdait.sync` / `mdait.validate` / `mdait.setup.*` / `mdait.settings.open` / `mdait.markers.externalize` / `mdait.markers.embed` / `mdait.translateSelection` / `mdait.adopt.run` / `mdait.tm.optimize` | パレット（一部はツリーにも） | スタンドアロンで動作するもののみパレットに露出（ux.md C-2） |
+| `mdait.translate.{directory,file,unit,frontmatter}` / `mdait.term.{detect,expand}.{directory,file}` / `mdait.tm.commit.{file,directory}` / `mdait.aiReview.{file,directory}` | ツリー行内/コンテキストメニュー | アイテム引数必須のためパレット非表示 |
+| `mdait.unit.{markReviewed,keep,delete,markIsolated,unisolate}` / `mdait.needsAttention.next` / `mdait.jumpToUnit` | ツリー/CodeLens/キーバインド | 判断サーフェス（ux.md J4）。書き換えは `getFileHandler` 経由 |
+| `mdait.codelens.*` / `mdait.unit.editNoteForUnit` | CodeLens | エディタ内インラインアクション専用 |
+| `mdait.status.{sync,sync.initial,selectTargets,openTerm,openTm}` | ツリータイトルバー | `mdait.status.sync.processing` はハンドラを持たない表示専用ダミー（`enablement: false` のスピナー表示枠） |
+| `mdait.addToGlossary` | Hover の `command:` URI | package.json 未宣言（Hover 起点が正しい導線のため意図的） |
+| `mdait.trans` / `mdait.term.detect` / `mdait.term.expand` | 内部 | テスト・デバッグIPC・他コマンドからの内部呼び出し専用。パレットに出さない |
 
 ---
 
