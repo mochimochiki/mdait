@@ -293,6 +293,7 @@
   "(no violations)": "(no violations)",
   "unit": "unit",
   "mdait: Validating translations...": "mdait: Validating translations...",
+  "No translation targets found to validate. Run sync first, or check the transPairs settings.": "No translation targets found to validate. Run sync first, or check the transPairs settings.",
   "Validation passed: {0} units checked, no violations.": "Validation passed: {0} units checked, no violations.",
   "Validation found {0} violations ({1} units checked).": "Validation found {0} violations ({1} units checked).",
   "No text selected. Please select text to translate.": "No text selected. Please select text to translate.",

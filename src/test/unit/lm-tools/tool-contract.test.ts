@@ -25,7 +25,7 @@ function collectToolSources(): Array<{ name: string; content: string }> {
 }
 
 suite("LM Toolsのエンベロープ契約（ソース走査）", () => {
-	test("全ツールが9個ある（package.jsonのlanguageModelTools宣言と一致）", () => {
+	test("ツール実装ファイル数が package.json の languageModelTools 宣言数と一致する", () => {
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 		const declared: string[] = (pkg.contributes?.languageModelTools ?? []).map(
 			(t: { name: string }) => t.name,
@@ -40,10 +40,7 @@ suite("LM Toolsのエンベロープ契約（ソース走査）", () => {
 
 	test("全ツールが共通エンベロープ（createOkEnvelope/createErrorEnvelope）で応答する", () => {
 		for (const { name, content } of collectToolSources()) {
-			assert.ok(
-				content.includes("createOkEnvelope") || content.includes("createEnvelope"),
-				`${name}: 成功応答が共通エンベロープを経由すること`,
-			);
+			assert.ok(content.includes("createOkEnvelope"), `${name}: 成功応答が共通エンベロープを経由すること`);
 			assert.ok(content.includes("createErrorEnvelope"), `${name}: エラー応答が共通エンベロープを経由すること`);
 			assert.ok(content.includes("toToolResult"), `${name}: 応答が toToolResult で直列化されること`);
 		}

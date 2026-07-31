@@ -235,6 +235,7 @@
   "(no violations)": "（違反なし）",
   "unit": "ユニット",
   "mdait: Validating translations...": "mdait: 翻訳を検証しています...",
+  "No translation targets found to validate. Run sync first, or check the transPairs settings.": "検証対象の翻訳ファイルが見つかりません。先に同期を実行するか、transPairs 設定を確認してください。",
   "Validation passed: {0} units checked, no violations.": "検証OK: {0} ユニットを検証し、違反はありませんでした。",
   "Validation found {0} violations ({1} units checked).": "検証で違反 {0} 件が見つかりました（{1} ユニット検証）。",
   "primaryLang \"{0}\" does not match any translation pair language ({1}).": "primaryLang「{0}」が翻訳ペアの言語（{1}）のいずれとも一致しません。",

@@ -92,16 +92,18 @@ suite("設定スキーマとコード実装の整合（契約テスト）", () =
 			orphanTargetPolicy: "Configuration.getOrphanTargetPolicy() が autoDelete との後方互換解決に使用",
 		};
 
-		function collectLeafKeys(node: SchemaNode, keys: Set<string>): void {
+		/** リーフキーを dotted path（例: tm.retryLimit）で収集する。同名リーフの階層衝突を区別するため */
+		function collectLeafPaths(node: SchemaNode, prefix: string, paths: string[]): void {
 			if (node.properties) {
 				for (const [key, child] of Object.entries(node.properties)) {
+					const childPath = prefix ? `${prefix}.${key}` : key;
 					if (child.properties || child.items?.properties) {
-						collectLeafKeys(child, keys);
+						collectLeafPaths(child, childPath, paths);
 						if (child.items?.properties) {
-							collectLeafKeys(child.items, keys);
+							collectLeafPaths(child.items, childPath, paths);
 						}
 					} else {
-						keys.add(key);
+						paths.push(childPath);
 					}
 				}
 			}
@@ -123,9 +125,9 @@ suite("設定スキーマとコード実装の整合（契約テスト）", () =
 
 		test("スキーマの全設定キーに消費者が存在する（宣言だけの死に設定を作らない）", () => {
 			const schema = loadSchema();
-			const keys = new Set<string>();
-			collectLeafKeys(schema, keys);
-			assert.ok(keys.size > 20, "スキーマから設定キーを収集できていること");
+			const leafPaths: string[] = [];
+			collectLeafPaths(schema, "", leafPaths);
+			assert.ok(leafPaths.length > 20, "スキーマから設定キーを収集できていること");
 
 			// 宣言・解説だけの場所（型定義/読込/設定UI解説）を除いた本体コードを検索対象にする。
 			// キー名の単純一致なので汎用名は偽陰性になりうるが、完全に死んだキー
@@ -135,15 +137,35 @@ suite("設定スキーマとコード実装の整合（契約テスト）", () =
 			const searchable = files.filter(
 				(f) => !f.endsWith(`infra${path.sep}config${path.sep}configuration.ts`) && !f.endsWith("settings-doc.ts"),
 			);
-			const corpus = searchable.map((f) => fs.readFileSync(f, "utf-8")).join("\n");
+			const contents = searchable.map((f) => fs.readFileSync(f, "utf-8"));
+
+			// 同名リーフが複数階層にある場合（例: trans.retryLimit と tm.retryLimit）、
+			// リーフ名の出現だけでは片方が完全に死んでいても検出できない。
+			// 曖昧なリーフ名は「親セグメントと同一ファイル内で共起する」ことまで要求する。
+			// （プロパティアクセスの形は分割代入等で崩れるため、文字列レベルの共起で近似する）
+			const leafCount = new Map<string, number>();
+			for (const dotted of leafPaths) {
+				const leaf = dotted.split(".").pop() ?? dotted;
+				leafCount.set(leaf, (leafCount.get(leaf) ?? 0) + 1);
+			}
 
 			const dead: string[] = [];
-			for (const key of keys) {
-				if (key in CONSUMED_INSIDE_CONFIGURATION) {
+			for (const dotted of leafPaths) {
+				const segments = dotted.split(".");
+				const leaf = segments[segments.length - 1];
+				if (leaf in CONSUMED_INSIDE_CONFIGURATION) {
 					continue;
 				}
-				if (!corpus.includes(key)) {
-					dead.push(key);
+				const parent = segments.length > 1 ? segments[segments.length - 2] : undefined;
+				const ambiguous = (leafCount.get(leaf) ?? 0) > 1;
+				const consumed = contents.some((content) => {
+					if (!content.includes(leaf)) {
+						return false;
+					}
+					return !ambiguous || !parent || content.includes(parent);
+				});
+				if (!consumed) {
+					dead.push(dotted);
 				}
 			}
 			assert.deepStrictEqual(
