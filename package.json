@@ -448,17 +448,17 @@
         {
           "command": "mdait.status.openTerm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
-          "group": "navigation"
+          "group": "1_open@1"
         },
         {
           "command": "mdait.status.openTm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
-          "group": "navigation"
+          "group": "1_open@2"
         },
         {
           "command": "mdait.settings.open",
           "when": "view == mdait.status && mdaitConfigured",
-          "group": "navigation@9"
+          "group": "1_open@3"
         },
         {
           "command": "mdait.validate",
@@ -556,6 +556,96 @@
           "command": "mdait.aiReview.file",
           "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
           "group": "inline@4"
+        },
+        {
+          "command": "mdait.translate.directory",
+          "when": "view == mdait.status && (viewItem == mdaitDirectoryTarget || viewItem == mdaitDirectoryTargetComplete)",
+          "group": "1_translate@1"
+        },
+        {
+          "command": "mdait.translate.file",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
+          "group": "1_translate@1"
+        },
+        {
+          "command": "mdait.translate.unit",
+          "when": "view == mdait.status && viewItem == mdaitUnitTarget",
+          "group": "1_translate@1"
+        },
+        {
+          "command": "mdait.translate.frontmatter",
+          "when": "view == mdait.status && viewItem == mdaitFrontmatterTarget",
+          "group": "1_translate@1"
+        },
+        {
+          "command": "mdait.needsAttention.next",
+          "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
+          "group": "2_judge@1"
+        },
+        {
+          "command": "mdait.unit.markReviewed",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetAttention",
+          "group": "2_judge@1"
+        },
+        {
+          "command": "mdait.unit.keep",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetVerifyDeletion",
+          "group": "2_judge@1"
+        },
+        {
+          "command": "mdait.unit.delete",
+          "when": "view == mdait.status && viewItem == mdaitUnitTargetVerifyDeletion",
+          "group": "2_judge@2"
+        },
+        {
+          "command": "mdait.unit.markIsolated",
+          "when": "view == mdait.status && (viewItem == mdaitUnitTargetCompletePaired || viewItem == mdaitUnitSource)",
+          "group": "2_judge@3"
+        },
+        {
+          "command": "mdait.unit.unisolate",
+          "when": "view == mdait.status && viewItem == mdaitUnitIsolated",
+          "group": "2_judge@1"
+        },
+        {
+          "command": "mdait.aiReview.directory",
+          "when": "view == mdait.status && (viewItem == mdaitDirectoryTarget || viewItem == mdaitDirectoryTargetComplete)",
+          "group": "2_judge@4"
+        },
+        {
+          "command": "mdait.aiReview.file",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
+          "group": "2_judge@4"
+        },
+        {
+          "command": "mdait.term.detect.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectorySource",
+          "group": "3_knowledge@1"
+        },
+        {
+          "command": "mdait.term.detect.file",
+          "when": "view == mdait.status && viewItem == mdaitFileSource",
+          "group": "3_knowledge@1"
+        },
+        {
+          "command": "mdait.term.expand.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
+          "group": "3_knowledge@2"
+        },
+        {
+          "command": "mdait.term.expand.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
+          "group": "3_knowledge@2"
+        },
+        {
+          "command": "mdait.tm.commit.directory",
+          "when": "view == mdait.status && viewItem == mdaitDirectoryTargetComplete",
+          "group": "3_knowledge@3"
+        },
+        {
+          "command": "mdait.tm.commit.file",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetComplete",
+          "group": "3_knowledge@3"
         }
       ]
     },

@@ -86,6 +86,25 @@ const vscodeMock = {
 			dispose: () => {},
 		}),
 	},
+	// TreeView 系（StatusTreeProvider.getTreeItem の単体テスト用の最小実装）
+	TreeItem: class {
+		constructor(label, collapsibleState) {
+			this.label = label;
+			this.collapsibleState = collapsibleState;
+		}
+	},
+	TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+	ThemeIcon: class {
+		constructor(id, color) {
+			this.id = id;
+			this.color = color;
+		}
+	},
+	ThemeColor: class {
+		constructor(id) {
+			this.id = id;
+		}
+	},
 	EventEmitter: class {
 		constructor() {
 			this._listeners = [];

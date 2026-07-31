@@ -36,7 +36,7 @@
   "mdait.term.expand.directory.title": "✨Expand Terms for Directory",
   "mdait.term.expand.file.title": "✨Expand Terms for File",
   "mdait.viewsContainer.title": "mdait",
-  "mdait.status.view.title": "Translation Status",
+  "mdait.status.view.title": "Status",
   "mdait.configuration.title": "mdait",
   "mdait.logLevel.description": "Set the log level for mdait extension output",
   "mdait.tm.commit.file.title": "✨TM Commit File",

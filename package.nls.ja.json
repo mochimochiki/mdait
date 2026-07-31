@@ -36,7 +36,7 @@
   "mdait.term.expand.directory.title": "✨用語をこの言語へ展開（ディレクトリ）",
   "mdait.term.expand.file.title": "✨用語をこの言語へ展開（ファイル）",
   "mdait.viewsContainer.title": "mdait",
-  "mdait.status.view.title": "翻訳状況",
+  "mdait.status.view.title": "状況",
   "mdait.configuration.title": "mdait",
   "mdait.logLevel.description": "mdait拡張機能のログ出力レベル",
   "mdait.tm.commit.file.title": "✨ TM登録（ファイル）",

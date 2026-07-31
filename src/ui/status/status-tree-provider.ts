@@ -186,6 +186,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
 
+		// スクリーンリーダー向けの読み上げラベルを設定。
+		// 未設定だと tooltip（状態説明だけの文）が aria-label になり、どの項目かが
+		// 読み上げから分からなくなるため、「名前 — 状態」の形で明示する。
+		// 表示ラベル・副題（description）は変えない。
+		treeItem.accessibilityInformation = {
+			label: this.getAccessibleLabel(element, treeItem.tooltip),
+		};
+
 		// 副題（ラベル右の薄字）を設定
 		if (element.description) {
 			treeItem.description = element.description;
@@ -485,6 +493,23 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		return children;
+	}
+
+	/**
+	 * スクリーンリーダー向けの読み上げラベルを組み立てる。
+	 * 「名前 — 副題 — 状態」の順に、あるものだけをつなぐ（tooltip の改行は読点相当に置換）。
+	 * 各要素は l10n 済みの文字列なので、組み立て結果もそのままローカライズされる。
+	 */
+	private getAccessibleLabel(element: StatusItem, tooltip: string): string {
+		const parts = [element.label];
+		if (element.description) {
+			parts.push(element.description);
+		}
+		const state = tooltip.replace(/\n/g, ", ");
+		if (state && state !== element.label) {
+			parts.push(state);
+		}
+		return parts.join(" — ");
 	}
 
 	/**
