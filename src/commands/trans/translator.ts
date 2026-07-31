@@ -143,7 +143,7 @@ export class AITranslator implements Translator {
 		variables?: PromptVariables,
 	) => PromptParts;
 	private readonly promptConfig: TranslatorPromptConfig;
-	/** 最大リトライ回数（`trans.retryLimit`。未指定時は従来のハードコード値 2 を維持） */
+	/** 最大リトライ回数。通常は `TranslatorBuilder` が `trans.retryLimit` を渡す（コンストラクタ引数省略時のみ 2） */
 	private readonly maxRetries: number;
 
 	constructor(
