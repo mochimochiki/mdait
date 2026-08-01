@@ -542,5 +542,6 @@
   "No units are waiting for translation.": "翻訳待ちのユニットはありません。",
   "{0} unit(s) waiting": "翻訳待ち {0} 件",
   "Which translation do you want to run?": "どの翻訳を実行しますか？",
-  "Directory translation completed: {0} files succeeded, {1} files failed. Reason: {2}": "ディレクトリ翻訳完了: {0} ファイル成功、{1} ファイル失敗。理由: {2}"
+  "Directory translation completed: {0} files succeeded, {1} files failed. Reason: {2}": "ディレクトリ翻訳完了: {0} ファイル成功、{1} ファイル失敗。理由: {2}",
+  "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文を翻訳の単位に分けて .mdait/ に記録し、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。"
 }

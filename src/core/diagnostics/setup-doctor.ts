@@ -46,9 +46,33 @@ export interface DoctorProbe {
 	countFilesWithMarkers(relDir: string): number;
 }
 
-/** パス比較用に末尾スラッシュ除去・区切り正規化する */
+/**
+ * パス比較用の字句正規化。区切りを `/` に揃え、`.` と `..` を畳み、末尾スラッシュを落とす。
+ *
+ * 単純な文字列比較だと `docs` と `./docs`、`a/../docs` が別物と見なされ、
+ * 同一・入れ子の判定をすり抜ける。ファイルシステムには触らず（診断は probe 越しに
+ * しか I/O しない）、書き方の違いだけを吸収する。
+ */
 function normalizeDir(dir: string): string {
-	return dir.replace(/\\/g, "/").replace(/\/+$/, "");
+	const slashed = dir.replace(/\\/g, "/");
+	const isAbsolute = slashed.startsWith("/");
+	const out: string[] = [];
+	for (const segment of slashed.split("/")) {
+		if (segment === "" || segment === ".") {
+			continue;
+		}
+		if (segment === "..") {
+			// 先頭に残った `..` は畳めない（相対の外向き）のでそのまま積む
+			if (out.length > 0 && out[out.length - 1] !== "..") {
+				out.pop();
+			} else if (!isAbsolute) {
+				out.push("..");
+			}
+			continue;
+		}
+		out.push(segment);
+	}
+	return (isAbsolute ? "/" : "") + out.join("/");
 }
 
 /** 2つのディレクトリが同一を指すか */

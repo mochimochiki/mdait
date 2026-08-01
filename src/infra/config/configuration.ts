@@ -808,13 +808,22 @@ export class Configuration {
 			return base;
 		}
 
+		// 実際に読み書きされるパスで比較する。設定の書き方（"docs" / "./docs" /
+		// 絶対パス）が違うだけで同じ場所を指す組み合わせを取りこぼさないため、
+		// sync と同じ基準（getConfigBaseDir）で解決してから判定する
+		const baseDir = this.getConfigBaseDir();
+		const resolveDir = (dir: string): string => path.resolve(baseDir, dir);
+
 		for (const pair of this.transPairs) {
-			if (isSamePath(pair.sourceDir, pair.targetDir)) {
+			const sourceAbs = resolveDir(pair.sourceDir);
+			const targetAbs = resolveDir(pair.targetDir);
+
+			if (isSamePath(sourceAbs, targetAbs)) {
 				return vscode.l10n.t("sourceDir and targetDir are the same ({0}). They must differ.", pair.sourceDir);
 			}
 			// 入れ子は sync のたびに訳文が原文として拾われ、出力が一段ずつ深くなる
 			// （docs → docs/en → docs/en/en → …）。実行前にここで止める。
-			if (isNested(pair.sourceDir, pair.targetDir)) {
+			if (isNested(sourceAbs, targetAbs)) {
 				return vscode.l10n.t(
 					"sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.",
 					pair.sourceDir,

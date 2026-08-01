@@ -480,13 +480,22 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (this.statusItemTree.hasTargetUnits()) {
 			return undefined;
 		}
+		// マーカーの保管先は markers.mode で変わる（embedded は原文の Markdown 内、
+		// external は .mdait/ 配下）。「原文が書き換わる」かどうかは利用者にとって
+		// git 前提の判断材料なので、モードに合わせて実際に起きることだけを書く
+		const tooltip = this.configuration.isExternalMarkers()
+			? vscode.l10n.t(
+					"Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
+				)
+			: vscode.l10n.t(
+					"Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
+				);
+
 		return {
 			type: StatusItemType.Directory,
 			label: vscode.l10n.t("Not synced yet — run Initial Sync"),
 			description: vscode.l10n.t("Creates the translation files"),
-			tooltip: vscode.l10n.t(
-				"Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
-			),
+			tooltip,
 			status: Status.NeedsTranslation,
 			directoryPath: NOT_SYNCED_ID,
 		};
