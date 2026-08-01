@@ -138,7 +138,7 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 	const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
 
 	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t("Register TM for all files in directory '{0}'? ({1} files)", path.basename(dirPath), files.length),
+		vscode.l10n.t("Register TM for all files in directory '{0}'? ({1} file(s))", path.basename(dirPath), files.length),
 		vscode.l10n.t("Yes"),
 		vscode.l10n.t("No"),
 	);

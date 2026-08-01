@@ -71,7 +71,7 @@ export class StatusTreeTranslationHandler {
 			}
 
 			const confirmation = await vscode.window.showInformationMessage(
-				vscode.l10n.t("Translate all files in directory '{0}'? ({1} files)", directoryPath, files.length),
+				vscode.l10n.t("Translate all files in directory '{0}'? ({1} file(s))", directoryPath, files.length),
 				{ modal: true },
 				vscode.l10n.t("Yes"),
 				vscode.l10n.t("No"),

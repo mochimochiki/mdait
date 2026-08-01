@@ -558,7 +558,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}>();
 		pick.canSelectMany = true;
 		pick.title = vscode.l10n.t("Select translation targets to show");
-		pick.placeholder = vscode.l10n.t("Check the targets to show in the Translation Status view");
+		pick.placeholder = vscode.l10n.t("Check the targets to show in the Status view");
 		pick.items = items;
 		// 既存選択を反映
 		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());

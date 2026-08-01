@@ -307,23 +307,38 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 	const confirmLabel = toExternal
 		? vscode.l10n.t("Externalize markers")
 		: vscode.l10n.t("Embed markers");
-	let warnBody = toExternal
-		? vscode.l10n.t(
-				"Externalize markers (embedded → external): {0} managed Markdown file(s) will be rewritten, moving mdait markers out of the files into .mdait/unit-state. Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost. Committing your workspace to git beforehand is recommended. Continue?",
-				targets.length,
-			)
-		: vscode.l10n.t(
-				"Embed markers (external → embedded): {0} managed Markdown file(s) will be rewritten, writing mdait markers from .mdait/unit-state back into the files. Committing your workspace to git beforehand is recommended. Continue?",
-				targets.length,
-			);
-	if (manualLevelFiles > 0) {
-		warnBody = `${vscode.l10n.t(
-			"Warning: {0} file(s) set 'mdait.sync.level: 0' (fully manual marker placement) in their frontmatter. External marker mode cannot represent manual unit boundaries, so the markers of those files will be lost.",
-			manualLevelFiles,
-		)}\n\n${warnBody}`;
+	// adopt の確認と同じ「短い質問 + detail 箇条書き」形式（ADR-260705-01 の確認UI規約）
+	const question = toExternal
+		? vscode.l10n.t("Externalize markers (embedded → external)?")
+		: vscode.l10n.t("Embed markers (external → embedded)?");
+	const detailLines = [
+		vscode.l10n.t("• {0} managed Markdown file(s) will be rewritten", targets.length),
+		toExternal
+			? vscode.l10n.t("• Markers move out of the files into .mdait/unit-state")
+			: vscode.l10n.t("• Markers in .mdait/unit-state are written back into the files"),
+	];
+	if (toExternal) {
+		detailLines.push(
+			vscode.l10n.t(
+				"• Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost",
+			),
+		);
 	}
+	if (manualLevelFiles > 0) {
+		detailLines.push(
+			vscode.l10n.t(
+				"• Warning: {0} file(s) set 'mdait.sync.level: 0' (fully manual marker placement) in their frontmatter — their markers will be lost",
+				manualLevelFiles,
+			),
+		);
+	}
+	detailLines.push("", vscode.l10n.t("Committing your workspace to git beforehand is recommended."));
 
-	const choice = await vscode.window.showWarningMessage(warnBody, { modal: true }, confirmLabel);
+	const choice = await vscode.window.showWarningMessage(
+		question,
+		{ modal: true, detail: detailLines.join("\n") },
+		confirmLabel,
+	);
 	if (choice !== confirmLabel) {
 		return;
 	}

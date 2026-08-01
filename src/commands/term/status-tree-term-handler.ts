@@ -97,7 +97,7 @@ export class StatusTreeTermHandler {
 
 			// 確認ダイアログを表示
 			const confirmation = await vscode.window.showInformationMessage(
-				vscode.l10n.t("Detect terms for all files in directory '{0}'? ({1} files)", item.directoryPath, sourceFiles.length),
+				vscode.l10n.t("Detect terms for all files in directory '{0}'? ({1} file(s))", item.directoryPath, sourceFiles.length),
 				{ modal: true },
 				vscode.l10n.t("Yes"),
 				vscode.l10n.t("No"),
@@ -309,7 +309,7 @@ export class StatusTreeTermHandler {
 
 			// 確認ダイアログを表示
 			const confirmation = await vscode.window.showInformationMessage(
-				vscode.l10n.t("Expand terms for all files in directory '{0}'? ({1} files)", item.directoryPath, targetFiles.length),
+				vscode.l10n.t("Expand terms for all files in directory '{0}'? ({1} file(s))", item.directoryPath, targetFiles.length),
 				{ modal: true },
 				vscode.l10n.t("Yes"),
 				vscode.l10n.t("No"),

@@ -34,6 +34,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Status view: the title is now "Status" (was "Translation Status", which always truncated), Open Glossary / Open Translation Memory / Open Settings moved from the toolbar to the "..." overflow menu, and tree rows now offer their actions in the right-click context menu (previously inline-only, so right-click showed an empty menu)
+- Status tree rows expose "name — state" to screen readers via accessibilityInformation (previously every row read out only a generic state phrase); target roots also show how many files are not yet under sync
+- Sync completion always reports the current pending-translation count with a "✨Translate now" action (previously only the first sync after new needs showed them)
+- The AI first-use consent dialog names the configured AI service (provider / vendor / model from mdait.json); directory-level AI confirmations show the number of affected files; the adopt confirmation is a short question with bulleted details
+- Externalize/Embed markers: the confirmation states how many files will be rewritten (plus a warning for frontmatter `sync.level: 0` files), completion reports concrete counts, and the status tree / CodeLens refresh immediately afterwards; externalizing is blocked when global `sync.level` is 0, with a matching Diagnose Setup error
+- AI-unavailable errors now reflect the configured provider/vendor instead of always recommending GitHub Copilot (message and Diagnose report); opening a missing glossary/TM shows how to create it (with a "Detect Terms" shortcut for the glossary) instead of a raw-path error
 - "Go to Next Item Needing Attention" now reports "No units are awaiting review or deletion verification." when its queue is empty, instead of the misleading "No units need attention." (units flagged `need:translate` were never part of this queue)
 - Select Targets: the QuickPick now has a title and placeholder explaining what it filters; when only one translation pair is configured it shows an information message instead of a single-row checkbox picker
 - The ✨ AI marker is now applied consistently: the unit-translate CodeLens reads "✨Translate" (was "$(play) Translate"), the post-sync "Translate now" button and the welcome view's "Adopt Existing Translations" link carry the marker, and Japanese command titles no longer have a stray space after ✨
@@ -54,6 +60,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Term detection/expansion reported success even when the AI service was unavailable; AI failures now surface as errors and completion messages carry counts
+- A failed unit translation showed two stacked error notifications; now exactly one
+- Externalizing markers could attach a later unit's hash/need to the wrong unit when sub-unit boundaries were merged (order mismatch between embedded and external parses); cancelling a migration no longer loses markers of already-converted files; mdait.json keeps its original indentation when the marker mode is written
+- In external marker mode, CodeLens unit ranges, frontmatter jumps, save-time auto-sync detection, TM commit/optimize, and term collection/expansion treated files as marker-less (all marker reads now go through `resolveMarkerIO`)
 - TM Commit Directory and AI Translation Review (Directory) always failed when invoked from the status tree (`dirPath` vs `directoryPath` mismatch)
 - Needs Attention count and contents went out of sync: translating, syncing, or AI-reviewing added `need:review` / `need:verify-deletion` units without refreshing the root, so the count stayed frozen at its last value while the file tree showed the new flags (a manual Sync happened to fix it, an auto-sync on save did not)
 - Stale units lingered in the lookup index after their hash changed, so `getUnitByHash` / `getTargetUnitByFromHash` could return units that no longer exist

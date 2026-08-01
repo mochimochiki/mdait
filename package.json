@@ -448,17 +448,17 @@
         {
           "command": "mdait.status.openTerm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
-          "group": "1_open@1"
+          "group": "2_open@1"
         },
         {
           "command": "mdait.status.openTm",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
-          "group": "1_open@2"
+          "group": "2_open@2"
         },
         {
           "command": "mdait.settings.open",
           "when": "view == mdait.status && mdaitConfigured",
-          "group": "1_open@3"
+          "group": "2_open@3"
         },
         {
           "command": "mdait.validate",
