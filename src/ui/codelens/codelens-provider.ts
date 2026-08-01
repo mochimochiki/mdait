@@ -36,6 +36,20 @@ export function shouldShowOtherActions(marker: Pick<MdaitMarker, "hash" | "from"
 }
 
 /**
+ * 「人が訳文そのものを書いて締めくくる」種類の need かどうか（純関数）。
+ *
+ * translate（未訳）と revise@（原文が変わって訳が古い）は、本文を書き換えたうえで
+ * 人が完了を宣言する状態。review / verify-deletion / isolate は本文ではなく
+ * 可否を裁定する状態なので対象外。手入力ユーザー向けの案内 CodeLens はこの2つだけに出す。
+ */
+export function isManualCompletionNeed(need: string | null | undefined): boolean {
+	if (!need) {
+		return false;
+	}
+	return need === "translate" || need.startsWith("revise@");
+}
+
+/**
  * mdaitマーカーのCodeLensを提供するプロバイダー
  */
 export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
@@ -80,6 +94,17 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			// ワークスペースがない場合などは無視
 		}
 
+		// 手入力ユーザー向けの案内は、ドキュメント内で最初に見つかった翻訳待ちユニット
+		// にだけ添える。全ユニットに繰り返すと本文より案内の方が目立ってしまう
+		let manualHintUsed = isSourceFile;
+		const takeManualHint = (need: string | null | undefined): boolean => {
+			if (manualHintUsed || !isManualCompletionNeed(need)) {
+				return false;
+			}
+			manualHintUsed = true;
+			return true;
+		};
+
 		// FrontMatterクラスを使って正確なfrontmatter範囲を取得
 		const content = document.getText();
 		const { frontMatter } = FrontMatter.parse(content);
@@ -89,7 +114,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			const marker = parseFrontmatterMarker(frontMatter);
 			if (marker) {
 				// frontmatterの開始行（最初の---の行）にCodeLensを表示
-				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, frontMatter.startLine, document);
+				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(
+					marker,
+					frontMatter.startLine,
+					document,
+					takeManualHint(marker.need),
+				);
 				codeLenses.push(...frontmatterCodeLenses);
 			}
 		}
@@ -117,6 +147,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.deleteUnit",
 					[range],
 					isSourceFile,
+					takeManualHint(unit.marker.need),
 				);
 				codeLenses.push(...unitCodeLenses);
 			}
@@ -153,6 +184,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					"mdait.codelens.deleteUnit",
 					[range],
 					isSourceFile,
+					takeManualHint(marker.need),
 				);
 				codeLenses.push(...unitCodeLenses);
 			}
@@ -172,6 +204,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		marker: MdaitMarker,
 		lineIndex: number,
 		document: vscode.TextDocument,
+		showManualHint = false,
 	): vscode.CodeLens[] {
 		const line = document.lineAt(lineIndex);
 		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
@@ -201,6 +234,9 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
+			if (showManualHint) {
+				codeLenses.push(this.createManualCompletionHint(range, marker.need));
+			}
 		}
 
 		// 翻訳済み（from && !need）の場合は何も表示しない
@@ -232,6 +268,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		deleteUnitCommand: string,
 		translateArgs: (vscode.Range | vscode.Uri)[],
 		isSourceFile: boolean,
+		showManualHint = false,
 	): vscode.CodeLens[] {
 		const codeLenses: vscode.CodeLens[] = [];
 
@@ -305,6 +342,9 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
+			if (showManualHint) {
+				codeLenses.push(this.createManualCompletionHint(range, marker.need));
+			}
 		}
 
 		if (isAwaitingDecision) {
@@ -393,6 +433,9 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 						arguments: [document.uri],
 					}),
 				);
+				if (isManualCompletionNeed(entry.need)) {
+					codeLenses.push(this.createManualCompletionHint(range, entry.need));
+				}
 			}
 			return codeLenses;
 		}
@@ -436,35 +479,56 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * @param need needマーカーの値
 	 * @returns ボタンのtitleとtooltip
 	 */
-	private getCompletionButtonLabel(need: string): { title: string; tooltip: string } {
+	private getCompletionButtonLabel(need: string): { title: string; tooltip: string; plainTitle: string } {
 		if (need === "translate") {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Translated"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually translated"),
+				plainTitle: vscode.l10n.t("Mark as Translated"),
 			};
 		}
 		if (need.startsWith("revise@")) {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Revised"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually revised"),
+				plainTitle: vscode.l10n.t("Mark as Revised"),
 			};
 		}
 		if (need === "review") {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Reviewed"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
+				plainTitle: vscode.l10n.t("Mark as Reviewed"),
 			};
 		}
 		if (need === "isolate") {
 			return {
 				title: vscode.l10n.t("$(circle-slash) Un-isolate"),
 				tooltip: vscode.l10n.t("Tooltip: Resume following source updates for this unit"),
+				plainTitle: vscode.l10n.t("Un-isolate"),
 			};
 		}
 		// デフォルト
 		return {
 			title: vscode.l10n.t("$(check) Mark as Completed"),
 			tooltip: vscode.l10n.t("Tooltip: Mark this unit as completed"),
+			plainTitle: vscode.l10n.t("Mark as Completed"),
 		};
+	}
+
+	/**
+	 * 手で訳した場合の締めくくり方を説明する、押せない案内 CodeLens を作る。
+	 *
+	 * 自分で訳文を書いて保存しても need は消えない（訳したかどうかは機械には判定
+	 * できないため、確定は必ず人の宣言を通す）。しかしそれを知らないと「訳したのに
+	 * 進捗が動かない」という行き止まりになるので、確定ボタンの隣で一度だけ案内する。
+	 * command を空文字にすると VS Code はリンクではなく地の文として描画する。
+	 */
+	private createManualCompletionHint(range: vscode.Range, need: string): vscode.CodeLens {
+		const { plainTitle } = this.getCompletionButtonLabel(need);
+		return new vscode.CodeLens(range, {
+			title: vscode.l10n.t('$(info) Translated it yourself? Press "{0}" when done.', plainTitle),
+			command: "",
+		});
 	}
 }

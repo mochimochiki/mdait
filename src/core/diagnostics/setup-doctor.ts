@@ -52,12 +52,18 @@ function normalizeDir(dir: string): string {
 }
 
 /** 2つのディレクトリが同一を指すか */
-function isSamePath(a: string, b: string): boolean {
+export function isSamePath(a: string, b: string): boolean {
 	return normalizeDir(a) === normalizeDir(b);
 }
 
-/** 一方が他方の配下（入れ子）か */
-function isNested(a: string, b: string): boolean {
+/**
+ * 一方が他方の配下（入れ子）か。
+ *
+ * sourceDir と targetDir が入れ子だと、sync のたびに前回の訳文が原文として拾われ、
+ * `docs/en/en/...` のように出力が際限なく増えていく。診断だけでなく sync の
+ * 事前ガード（sync-command）からも同じ判定を使うため公開する。
+ */
+export function isNested(a: string, b: string): boolean {
 	const na = normalizeDir(a);
 	const nb = normalizeDir(b);
 	return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
@@ -123,8 +129,11 @@ export function runStaticChecks(
 				params: { dir: pair.sourceDir },
 			});
 		} else if (isNested(pair.sourceDir, pair.targetDir)) {
+			// warn ではなく error。入れ子のまま sync すると訳文が次の原文として拾われ、
+			// 実行するたびに出力が一段深くなる（docs/en → docs/en/en → …）。
+			// 助言ではなく停止すべき状態なので blocking にする。
 			out.push({
-				level: "warn",
+				level: "error",
 				id: "pair.nestedDirs",
 				params: { source: pair.sourceDir, target: pair.targetDir },
 			});

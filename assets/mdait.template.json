@@ -2,9 +2,9 @@
   "transPairs": [
     {
       "sourceLang": "ja",
-      "sourceDir": "docs/ja",
+      "sourceDir": "docs",
       "targetLang": "en",
-      "targetDir": "docs/en"
+      "targetDir": "i18n/en"
     }
   ],
   "ai": {

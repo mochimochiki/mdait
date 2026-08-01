@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
-import type { StatusItem } from "../../core/status/status-item";
+import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -8,6 +8,8 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
+import { showDirectoryTranslationFailure } from "../shared/guidance";
+import { getSelectedPairAbsDirs } from "../shared/status-scope";
 import {
 	type TransCommandResult,
 	type TranslateUnitMetrics,
@@ -35,6 +37,53 @@ export class StatusTreeTranslationHandler {
 	 */
 	public setStatusTreeProvider(provider: StatusTreeProvider): void {
 		this.statusTreeProvider = provider;
+	}
+
+	/**
+	 * 翻訳待ちが残っている訳文ルートを翻訳する（sync 完了通知の「今すぐ翻訳」の実体）。
+	 *
+	 * sync 直後にはアクティブなエディタが無いのが普通なので、ファイルを1つ選ばせずに
+	 * 「いま翻訳待ちのユニットがあるペア」をそのまま対象にする。ペアが複数あるときだけ
+	 * どれを訳すか尋ねる。
+	 */
+	public async translatePendingTargets(): Promise<void> {
+		const config = Configuration.getInstance();
+		const tree = StatusManager.getInstance().getStatusItemTree();
+
+		// 翻訳待ちが残っているターゲットルートだけを候補にする
+		const candidates = getSelectedPairAbsDirs(config)
+			.map((pair) => ({
+				dirItem: tree.getDirectory(pair.targetDirAbs),
+				pending: tree.countPendingTranslationUnits([pair.targetDirAbs]),
+			}))
+			.filter(
+				(c): c is { dirItem: DirectoryStatusItem; pending: number } =>
+					c.dirItem !== undefined && c.pending > 0,
+			);
+
+		if (candidates.length === 0) {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("No units are waiting for translation."),
+			);
+			return;
+		}
+
+		if (candidates.length === 1) {
+			await this.translateDirectory(candidates[0].dirItem);
+			return;
+		}
+
+		const picked = await vscode.window.showQuickPick(
+			candidates.map((c) => ({
+				label: c.dirItem.label,
+				description: vscode.l10n.t("{0} unit(s) waiting", c.pending),
+				dirItem: c.dirItem,
+			})),
+			{ title: vscode.l10n.t("Which translation do you want to run?") },
+		);
+		if (picked) {
+			await this.translateDirectory(picked.dirItem);
+		}
 	}
 
 	/**
@@ -107,6 +156,9 @@ export class StatusTreeTranslationHandler {
 						let successful = 0;
 						let failed = 0;
 						let completed = 0;
+						// 最初の失敗理由を保持して結果通知に載せる。件数だけを出すと、
+						// AI が使えないだけなのか原稿の問題なのかが利用者に分からない
+						let firstError: unknown;
 						const concurrency = clampConcurrency(config.trans.concurrency);
 
 						await runWithConcurrency(
@@ -122,6 +174,9 @@ export class StatusTreeTranslationHandler {
 										file: file.fsPath,
 										...formatError(error),
 									});
+									if (failed === 0) {
+										firstError = error;
+									}
 									failed++;
 								}
 								completed++;
@@ -151,15 +206,9 @@ export class StatusTreeTranslationHandler {
 							return { totalFiles: files.length, successful, failed, skipped };
 						}
 
-						// 結果を通知
+						// 結果を通知（失敗があれば理由と次の一手を添える）
 						if (failed > 0) {
-							vscode.window.showWarningMessage(
-								vscode.l10n.t(
-									"Directory translation completed: {0} files succeeded, {1} files failed",
-									successful,
-									failed,
-								),
-							);
+							void showDirectoryTranslationFailure(successful, failed, firstError);
 						}
 						return { totalFiles: files.length, successful, failed, skipped: 0 };
 					} finally {

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { isLiteralApiKey } from "../../core/diagnostics/setup-doctor";
+import { isLiteralApiKey, isNested, isSamePath } from "../../core/diagnostics/setup-doctor";
 import {
 	type MarkerProvider,
 	embeddedMarkerProvider,
@@ -787,6 +787,40 @@ export class Configuration {
 
 		if (!this.primaryLang) {
 			return vscode.l10n.t("Primary language (primaryLang) is not configured.");
+		}
+
+		return null;
+	}
+
+	/**
+	 * 実行（sync / trans）を始めてよい設定かを検証する。
+	 *
+	 * validate() の必須項目チェックに加え、走らせると壊れる組み合わせを弾く。
+	 * isConfigured()（＝ビューの表示切替）は validate() のままにしてある。ここで
+	 * 弾く状態は「未設定」ではなく「設定はあるが実行すると壊れる」であり、
+	 * 「mdaitはまだ設定されていません」に落とすと直し方が分からなくなるため。
+	 *
+	 * @returns エラーメッセージ。問題がなければnull
+	 */
+	public validateForRun(): string | null {
+		const base = this.validate();
+		if (base) {
+			return base;
+		}
+
+		for (const pair of this.transPairs) {
+			if (isSamePath(pair.sourceDir, pair.targetDir)) {
+				return vscode.l10n.t("sourceDir and targetDir are the same ({0}). They must differ.", pair.sourceDir);
+			}
+			// 入れ子は sync のたびに訳文が原文として拾われ、出力が一段ずつ深くなる
+			// （docs → docs/en → docs/en/en → …）。実行前にここで止める。
+			if (isNested(pair.sourceDir, pair.targetDir)) {
+				return vscode.l10n.t(
+					"sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.",
+					pair.sourceDir,
+					pair.targetDir,
+				);
+			}
 		}
 
 		return null;

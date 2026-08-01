@@ -95,7 +95,9 @@ export async function syncCommand(
 		// 準備
 		const statusManager = StatusManager.getInstance();
 		const config = Configuration.getInstance();
-		const validationError = config.validate();
+		// validate ではなく validateForRun。sourceDir/targetDir の入れ子など
+		// 「走らせると壊れる」組み合わせは、原文を書き換える前に止める必要がある
+		const validationError = config.validateForRun();
 		if (validationError) {
 			await showConfigError(validationError);
 			return;
@@ -356,7 +358,11 @@ export async function syncCommand(
 				)
 				.then((choice) => {
 					if (choice === translateNow) {
-						return vscode.commands.executeCommand("mdait.trans");
+						// mdait.trans は URI 必須の単一ファイル用コマンド。sync 直後は
+						// アクティブなエディタが無いのが普通で、引数なしで呼ぶと必ず
+						// 「翻訳対象のファイルが選択されていません」で終わっていた。
+						// 翻訳待ちが残っている訳文ルートを対象にするコマンドへ委譲する
+						return vscode.commands.executeCommand("mdait.trans.pendingTargets");
 					}
 					return undefined;
 				})

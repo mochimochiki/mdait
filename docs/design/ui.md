@@ -320,6 +320,7 @@ sequenceDiagram
 | `mdait.status.{sync,sync.initial,selectTargets,openTerm,openTm}` | ツリータイトルバー | `mdait.status.sync.processing` はハンドラを持たない表示専用ダミー（`enablement: false` のスピナー表示枠） |
 | `mdait.addToGlossary` | Hover の `command:` URI | package.json 未宣言（Hover 起点が正しい導線のため意図的） |
 | `mdait.trans` / `mdait.term.detect` / `mdait.term.expand` | 内部 | テスト・デバッグIPC・他コマンドからの内部呼び出し専用。パレットに出さない |
+| `mdait.trans.pendingTargets` | 内部 | sync 完了通知の「今すぐ翻訳」の実体。翻訳待ちが残る訳文ルートを対象にする（複数ペアなら QuickPick）。`mdait.trans` は URI 必須のため、この導線からは呼べない |
 
 ---
 

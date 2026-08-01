@@ -166,6 +166,17 @@ sequenceDiagram
 - `StatusTreeProvider`が空配列を返しリソース消費を抑制
 - `mdaitConfigured`コンテキスト変数を更新し、ツールバーボタンとWelcome Viewの表示を切り替え
 
+### validateForRun()メソッド
+
+`validate()` に加えて、**走らせるとファイルが壊れる組み合わせ**を弾きます（ADR-260801-02）。
+
+- `sourceDir` と `targetDir` が同一
+- `sourceDir` と `targetDir` が入れ子（`docs` と `docs/en` など）
+
+入れ子のまま sync すると、前回の訳文が次の原文として拾われ、実行のたびに出力が一段深くなります（`docs/en` → `docs/en/en` → …）。`syncCommand` は `validate()` ではなく本メソッドを使い、原文を書き換える前に停止します。
+
+`isConfigured()`（＝ビューの表示切替）は `validate()` のままです。ここで弾く状態は「未設定」ではなく「設定はあるが実行すると壊れる」であり、Welcome View の「まだ設定されていません」に落とすと直し方が分からなくなるためです。
+
 ---
 
 ## Frontmatter設定

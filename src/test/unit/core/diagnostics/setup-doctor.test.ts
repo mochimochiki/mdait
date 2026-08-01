@@ -146,7 +146,7 @@ suite("setup-doctor 静的診断", () => {
 		assert.equal(hasBlockingError(diags), true);
 	});
 
-	test("targetDir が sourceDir の入れ子なら warn", () => {
+	test("targetDir が sourceDir の入れ子なら error（sync のたびに出力が一段深くなるため）", () => {
 		const diags = runStaticChecks(
 			makeConfig({
 				transPairs: [
@@ -162,7 +162,8 @@ suite("setup-doctor 静的診断", () => {
 		);
 		const nested = diags.find((d) => d.id === "pair.nestedDirs");
 		assert.ok(nested, "pair.nestedDirs が含まれること");
-		assert.equal(nested?.level, "warn");
+		assert.equal(nested?.level, "error");
+		assert.equal(hasBlockingError(diags), true, "実行を止めるべき状態なので blocking");
 	});
 
 	test("P2/P3: Markdown はあるがマーカーが無ければ『まず Sync』を info で促す", () => {

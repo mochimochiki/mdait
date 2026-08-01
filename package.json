@@ -461,6 +461,11 @@
           "group": "2_open@3"
         },
         {
+          "command": "mdait.setup.diagnose",
+          "when": "view == mdait.status && mdaitConfigured",
+          "group": "2_open@4"
+        },
+        {
           "command": "mdait.validate",
           "when": "view == mdait.status && mdaitConfigured && mdaitHasStatus",
           "group": "1_actions"
