@@ -45,7 +45,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 
 1. **単体**（`npm test`、CI常時）: core + VS Code 非依存のコマンドロジック。VS Code 依存モジュールは `src/test/unit/__mocks__/register-vscode-mock.js` で登録されるモックを使用。テスト側で `global.__vscodeMockWorkspaceRoot` を設定可能。
 2. **統合**（`npm run test:vscode`、手動）: `src/test/gui/**` を VS Code Test Runner で実行。
-3. **探索的デバッグIPC**: `MDAIT_DEBUG_IPC=1` でファイルベース IPC を有効化し、マルチステップ E2E シナリオを実行 — `.github/skills/debug-ipc/` の `debug-ipc` スキルを参照。
+3. **探索的デバッグIPC**: `MDAIT_DEBUG_IPC=1` でファイルベース IPC を有効化し、マルチステップ E2E シナリオを実行 — `.claude/skills/debug-ipc/` の `debug-ipc` スキルを参照。
 
 規約: TDDスタイル（`suite`/`test`）、**テスト名は日本語で期待される動作を明示する**。新しいエッジケースは `src/test/unit/sample-content/` に追加する（`copy-test-files` でテストワークスペースに同期される）。
 

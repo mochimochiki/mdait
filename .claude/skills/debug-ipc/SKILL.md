@@ -16,7 +16,7 @@ description: "Extension Hostのデバッグ起動中にファイルベースIPC�
 
 **方法1: 自動化スクリプト（推奨）**
 ```powershell
-pwsh -File .github/skills/debug-ipc/scripts/debug-ipc-start.ps1
+pwsh -File .claude/skills/debug-ipc/scripts/debug-ipc-start.ps1
 ```
 code CLIでExtension Development Hostを起動し、readyシグナル（`src/test/unit/workspace/.mdait/debug/ready`）を自動検知する。ready後にIPC送信可能。
 
