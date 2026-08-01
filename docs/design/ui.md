@@ -118,7 +118,7 @@ VS Code設定画面ライクな mdait.json 編集用 Webview です（P6 の例�
 
 **編集の仕組み**:
 - 検索・カテゴリナビ・変更済みインジケータ（modified バー）・既定値リセットを提供
-- 書き込みはキー単位の最小差分（`config-json-editor.ts`）。既存キーの順序・インデント・末尾改行を保持し、リセットはキー削除＋空になった親オブジェクトの刈り取り
+- 書き込みはキー単位の最小差分（`src/infra/config/config-json-editor.ts`。markers-migration とも共有される mdait.json 書き換えの単一経路）。既存キーの順序・インデント・末尾改行を保持し、リセットはキー削除＋空になった親オブジェクトの刈り取り
 - 検証・型変換・パス解決（`Configuration` 経由）・ファイルI/Oはすべて拡張側（`settings-panel.ts`）。Webview は表示に徹する
 - 外部編集（エディタでの直接編集等）は `Configuration.onConfigurationChanged` 経由で UI に反映。入力中のウィジェットは上書きしない
 - mdait.json 未作成時はパネルを開かず `mdait.setup.createConfig` へ誘導

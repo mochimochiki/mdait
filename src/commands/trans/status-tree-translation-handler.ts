@@ -48,28 +48,11 @@ export class StatusTreeTranslationHandler {
 
 		const directoryPath = item.directoryPath; // 型安全性のためローカル変数に保存
 
-		const confirmation = await vscode.window.showInformationMessage(
-			vscode.l10n.t("Translate all files in directory '{0}'?", directoryPath),
-			{ modal: true },
-			vscode.l10n.t("Yes"),
-			vscode.l10n.t("No"),
-		);
-
-		if (confirmation !== vscode.l10n.t("Yes")) {
-			return;
-		}
-
-		// AI初回利用チェック
-		const aiOnboarding = AIOnboarding.getInstance();
-		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
-		if (!shouldProceed) {
-			return; // ユーザーがキャンセルした場合
-		}
-
 		const statusManager = StatusManager.getInstance();
 
 		try {
-			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）
+			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）。
+			// 確認ダイアログに対象ファイル数を出すため、確認より先に列挙する
 			const config = Configuration.getInstance();
 			const globPattern = FileExplorer.buildExtensionGlob(
 				config.trans.extensions,
@@ -85,6 +68,24 @@ export class StatusTreeTranslationHandler {
 					),
 				);
 				return { totalFiles: 0, successful: 0, failed: 0, skipped: 0 };
+			}
+
+			const confirmation = await vscode.window.showInformationMessage(
+				vscode.l10n.t("Translate all files in directory '{0}'? ({1} file(s))", directoryPath, files.length),
+				{ modal: true },
+				vscode.l10n.t("Yes"),
+				vscode.l10n.t("No"),
+			);
+
+			if (confirmation !== vscode.l10n.t("Yes")) {
+				return;
+			}
+
+			// AI初回利用チェック
+			const aiOnboarding = AIOnboarding.getInstance();
+			const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
+			if (!shouldProceed) {
+				return; // ユーザーがキャンセルした場合
 			}
 
 			// withProgressで進捗表示とキャンセル機能を統合管理

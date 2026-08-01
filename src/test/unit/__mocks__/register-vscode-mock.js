@@ -49,6 +49,20 @@ const vscodeMock = {
 			inspect: () => undefined,
 			update: async () => {},
 		}),
+		// 実ファイルを読む最小の TextDocument（外部マーカー等の parse 経路テスト用）
+		openTextDocument: async (uriOrPath) => {
+			const target =
+				typeof uriOrPath === "string" ? uriOrPath : (uriOrPath.fsPath ?? String(uriOrPath));
+			const text = fs.readFileSync(target, "utf-8");
+			const lines = text.split(/\r?\n/);
+			return {
+				uri: { fsPath: target, scheme: "file", path: target.replace(/\\/g, "/") },
+				fileName: target,
+				getText: () => text,
+				lineCount: lines.length,
+				lineAt: (i) => ({ text: lines[i] ?? "" }),
+			};
+		},
 	},
 	// 表示言語（テスト側で global.__vscodeMockLanguage を設定して上書きできる）
 	env: {
@@ -86,6 +100,25 @@ const vscodeMock = {
 			dispose: () => {},
 		}),
 	},
+	// TreeView 系（StatusTreeProvider.getTreeItem の単体テスト用の最小実装）
+	TreeItem: class {
+		constructor(label, collapsibleState) {
+			this.label = label;
+			this.collapsibleState = collapsibleState;
+		}
+	},
+	TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+	ThemeIcon: class {
+		constructor(id, color) {
+			this.id = id;
+			this.color = color;
+		}
+	},
+	ThemeColor: class {
+		constructor(id) {
+			this.id = id;
+		}
+	},
 	EventEmitter: class {
 		constructor() {
 			this._listeners = [];
@@ -114,6 +147,13 @@ const vscodeMock = {
 		}
 		cancel() { this.token.isCancellationRequested = true; }
 		dispose() {}
+	},
+	// 実VS Codeと同じく name/message が "Canceled" のエラー（キャンセル判定のテスト用）
+	CancellationError: class extends Error {
+		constructor() {
+			super("Canceled");
+			this.name = "Canceled";
+		}
 	},
 };
 

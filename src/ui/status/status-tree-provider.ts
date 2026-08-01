@@ -8,7 +8,10 @@ import {
 	type UnitStatusItem,
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
-import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
+import {
+	getSelectedPairAbsDirs,
+	getSelectedScopeDirs,
+} from "../../commands/shared/status-scope";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -185,6 +188,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// ツールチップを設定
 		treeItem.tooltip = this.getTooltip(element);
+
+		// スクリーンリーダー向けの読み上げラベルを設定。
+		// 未設定だと tooltip（状態説明だけの文）が aria-label になり、どの項目かが
+		// 読み上げから分からなくなるため、「名前 — 状態」の形で明示する。
+		// 表示ラベル・副題（description）は変えない。
+		treeItem.accessibilityInformation = {
+			label: this.getAccessibleLabel(element, treeItem.tooltip),
+		};
 
 		// 副題（ラベル右の薄字）を設定
 		if (element.description) {
@@ -375,11 +386,49 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// Status.Emptyのアイテムを除外
 		const visibleItems = items.filter((item) => item.status !== Status.Empty);
 
+		// 未同期ファイル数の副題をターゲットルートに添える
+		this.annotateNotYetSyncedFiles(visibleItems);
+
 		// Needs Attention仮想ノードを先頭に追加する（0件時は追加しない＝デッドエンドを作らない）
 		const needsAttentionItem = this.buildNeedsAttentionItem();
 		return needsAttentionItem
 			? [needsAttentionItem, ...visibleItems]
 			: visibleItems;
+	}
+
+	/**
+	 * 各 transPair のターゲットルートに「未同期ファイル数」の副題・ツールチップを添える。
+	 *
+	 * マーカーの無いファイルは翻訳率の分母（totalUnits）に入らないため、初回 sync の
+	 * 前後で「en (5/6)」→「en (5/86)」のように分母が急変して見える。分母の計算自体は
+	 * 変えず（isCountedInProgress の意味を保つ）、分母に入っていないファイルの存在を
+	 * ここで明示する。集計はスキャン済みツリーのメモリ参照のみで、追加のファイルI/Oはない。
+	 */
+	private annotateNotYetSyncedFiles(rootItems: StatusItem[]): void {
+		for (const pair of getSelectedPairAbsDirs(this.configuration)) {
+			const item = rootItems.find(
+				(i): i is DirectoryStatusItem =>
+					i.type === StatusItemType.Directory &&
+					i.directoryPath === pair.targetDirAbs,
+			);
+			if (!item) {
+				continue;
+			}
+			const count = this.statusItemTree.countFilesNotYetSynced(
+				pair.sourceDirAbs,
+				pair.targetDirAbs,
+			);
+			if (count > 0) {
+				item.description = vscode.l10n.t("{0} file(s) not yet synced", count);
+				item.tooltip = vscode.l10n.t(
+					"{0} file(s) under this pair are not yet synced and not counted in the progress. Run Sync to include them.",
+					count,
+				);
+			} else {
+				item.description = undefined;
+				item.tooltip = undefined;
+			}
+		}
 	}
 
 	/**
@@ -485,6 +534,23 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 
 		return children;
+	}
+
+	/**
+	 * スクリーンリーダー向けの読み上げラベルを組み立てる。
+	 * 「名前 — 副題 — 状態」の順に、あるものだけをつなぐ（tooltip の改行は読点相当に置換）。
+	 * 各要素は l10n 済みの文字列なので、組み立て結果もそのままローカライズされる。
+	 */
+	private getAccessibleLabel(element: StatusItem, tooltip: string): string {
+		const parts = [element.label];
+		if (element.description) {
+			parts.push(element.description);
+		}
+		const state = tooltip.replace(/\n/g, ", ");
+		if (state && state !== element.label) {
+			parts.push(state);
+		}
+		return parts.join(" — ");
 	}
 
 	/**

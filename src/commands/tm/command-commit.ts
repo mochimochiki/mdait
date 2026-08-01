@@ -8,8 +8,11 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { resolveMarkerIOForFile } from "../../infra/config/marker-io";
 import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
@@ -130,8 +133,12 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 		return;
 	}
 
+	// 確認ダイアログに対象ファイル数を出すため、確認より先に列挙する
+	const fileExplorer = new FileExplorer();
+	const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
+
 	const confirm = await vscode.window.showInformationMessage(
-		vscode.l10n.t("Register TM for all files in directory '{0}'?", path.basename(dirPath)),
+		vscode.l10n.t("Register TM for all files in directory '{0}'? ({1} file(s))", path.basename(dirPath), files.length),
 		vscode.l10n.t("Yes"),
 		vscode.l10n.t("No"),
 	);
@@ -147,9 +154,6 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 		},
 		async (progress, token) => {
 			try {
-				const fileExplorer = new FileExplorer();
-				const files = await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns);
-
 				const overallResult: TmCommitResult = {
 					processedUnits: 0,
 					skippedUnits: 0,
@@ -201,6 +205,23 @@ export async function tmCommitDirectoryCommand(item?: StatusItem): Promise<TmCom
 }
 
 /**
+ * tm-commit の対象ファイルを markers.mode に応じた provider/ctx でパースする。
+ * external ではマーカーが本文に無いため、素の parse だと全ユニットがマーカー無し扱いになり
+ * tm-commit が「対象0件」として静かに何もしなくなる（マーカー読取は resolveMarkerIO 経由が必須）。
+ */
+export async function parseTmDocument(filePath: string, config: Configuration): Promise<Markdown> {
+	if (config.isExternalMarkers()) {
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+		}
+	}
+	const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+	const io = resolveMarkerIOForFile(config, filePath);
+	return markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+}
+
+/**
  * ファイル内の全対象ユニットにtm-commitを実行する。
  * lm-tools（mdait_tm）からも再利用される。
  */
@@ -210,9 +231,7 @@ export async function executeTmCommitForFile(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
 ): Promise<TmCommitResult> {
-	const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-	const content = document.getText();
-	const markdown = markdownParser.parse(content, config);
+	const markdown = await parseTmDocument(filePath, config);
 	const targetUnits = markdown.units.filter(isTmCommitTarget);
 	const skipReasons = summarizeTmSkipReasons(markdown.units);
 
@@ -511,10 +530,8 @@ async function readResolvedUnit(
 	fileExplorer: FileExplorer,
 ): Promise<TmCommitResolvedUnit | null> {
 	try {
-		const sourceUri = vscode.Uri.file(statusUnit.filePath);
-		const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
-		const sourceFileContent = sourceDoc.getText();
-		const sourceMarkdown = markdownParser.parse(sourceFileContent, config);
+		// external でもマーカーを見失わないよう、必ず resolveMarkerIO 経由でパースする
+		const sourceMarkdown = await parseTmDocument(statusUnit.filePath, config);
 		const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === statusUnit.unitHash);
 		if (!sourceUnitData?.content) {
 			return null;

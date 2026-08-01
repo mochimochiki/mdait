@@ -5,6 +5,7 @@ import { adoptCommand } from "./commands/adopt/adopt-command";
 import { aiReviewDirectoryCommand, aiReviewFileCommand } from "./commands/ai-review/review-command";
 import { AiReviewResultCodeLensProvider } from "./commands/ai-review/review-result-provider";
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
+import { getFileHandler } from "./commands/file-handler/file-handler-factory";
 import { StatusCollector } from "./commands/file-handler/status-collector";
 import { embedMarkersCommand, externalizeMarkersCommand } from "./commands/markers/markers-migration";
 import { needsAttentionNextCommand } from "./commands/markers/needs-attention-next";
@@ -23,8 +24,6 @@ import { translateSelectionCommand } from "./commands/trans-selection/trans-sele
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
 import { validateCommand } from "./commands/validate/validate-command";
-import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
-import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
@@ -529,12 +528,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// 対象言語選択コマンド（QuickPick: 複数選択、空は確定不可）
 	const selectTargetsDisposable = vscode.commands.registerCommand("mdait.status.selectTargets", async () => {
-		const pick = vscode.window.createQuickPick<{
-			label: string;
-			description?: string;
-			key: string;
-		}>();
-		pick.canSelectMany = true;
 		const items = SelectionState.getInstance()
 			.getSelectableTargets()
 			.map((t) => ({
@@ -542,6 +535,30 @@ export async function activate(context: vscode.ExtensionContext) {
 				description: t.description,
 				key: t.key,
 			}));
+
+		// 絞り込む余地がないときは QuickPick を出さない（1件だけのチェックボックスは意味が伝わらない）
+		if (items.length === 0) {
+			vscode.window.showInformationMessage(vscode.l10n.t("No translation targets are configured."));
+			return;
+		}
+		if (items.length === 1) {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"Only one translation pair is configured ({0}); there is nothing to filter.",
+					items[0].description ?? items[0].label,
+				),
+			);
+			return;
+		}
+
+		const pick = vscode.window.createQuickPick<{
+			label: string;
+			description?: string;
+			key: string;
+		}>();
+		pick.canSelectMany = true;
+		pick.title = vscode.l10n.t("Select translation targets to show");
+		pick.placeholder = vscode.l10n.t("Check the targets to show in the Status view");
 		pick.items = items;
 		// 既存選択を反映
 		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());
@@ -624,16 +641,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			// 初期化済みかチェック（まだ一度もsyncしていないファイルは除外）
 			try {
 				if (isMdFile) {
-					// MDファイル: mdaitマーカーの存在チェック
-					const fileDocument = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-					const decoder = new TextDecoder("utf-8");
-					const content = decoder.decode(fileDocument);
-					const parsed = markdownParser.parse(content, config);
-
-					const hasUnitMarker = parsed.units.some((unit) => unit.marker.hash !== null);
-					const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;
-
-					if (!hasUnitMarker && !hasFrontmatterMarker) {
+					// MDファイル: マーカー存在チェックは FileHandler に委譲する。
+					// external モードではマーカーが本文でなく unit-state にあり、
+					// ここで素の parse をするとマーカー無し扱いになって autoSyncOnSave が沈黙する
+					if (!(await getFileHandler(filePath).isInitialized(filePath))) {
 						logger.debug("extension", "Skipping file save sync (no mdait markers)", { filePath });
 						return;
 					}

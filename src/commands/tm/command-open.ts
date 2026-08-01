@@ -14,8 +14,10 @@ export async function openTmCommand(): Promise<void> {
 		try {
 			await vscode.workspace.fs.stat(vscode.Uri.file(tmFilePath));
 		} catch {
-			// Show message if file does not exist
-			vscode.window.showInformationMessage(vscode.l10n.t("TM file does not exist: {0}", tmFilePath));
+			// まだ作られていないのは正常な状態。作り方を案内する（エラーにしない）
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("No translation memory yet. It is built when you run TM Commit on translated files."),
+			);
 			return;
 		}
 

@@ -21,7 +21,7 @@ import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../infra/config/configuration";
-import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { resolveMarkerIO, resolveMarkerIOForFile } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 
 /**
@@ -583,13 +583,28 @@ let _highlightInfo:
 	| undefined;
 
 /**
- * ユニットの終了行を見つける（次のマーカーまたはファイル末尾）
- * コードブロック内のマーカーは無視する。
+ * ユニットの終了行を見つける。
+ * - embedded: 次のマーカー行の直前（コードブロック内のマーカーは無視）
+ * - external: 本文にマーカーが無いため、resolveMarkerIO 経由でパースし
+ *   開始行を含むユニットの endLine を返す（素の行スキャンだと常にファイル末尾になる）
+ *
+ * テストのため export している（コマンド本体はエディタ UI に依存するため）。
  * @param document 対象ドキュメント
  * @param startLine ユニットの開始行
  * @returns ユニットの終了行
  */
-function findUnitEndLine(document: vscode.TextDocument, startLine: number): number {
+export function findUnitEndLine(document: Pick<vscode.TextDocument, "getText" | "lineAt" | "lineCount" | "uri">, startLine: number): number {
+	const config = Configuration.getInstance();
+	if (config.isExternalMarkers()) {
+		const io = resolveMarkerIOForFile(config, document.uri.fsPath);
+		const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
+		const unit = findUnitAtLine(parsed.units, startLine);
+		if (unit) {
+			return Math.min(unit.endLine, document.lineCount - 1);
+		}
+		return document.lineCount - 1;
+	}
+
 	const codeBlockLines = getCodeBlockLineSet(document.getText());
 
 	// 次の行から次のマーカーを探す
@@ -794,9 +809,10 @@ export async function codeLensJumpToSourceFrontmatterCommand(range: vscode.Range
 		const document = activeEditor.document;
 		const config = Configuration.getInstance();
 
-		// Markdownファイルを読み込み＆パース
+		// Markdownファイルを読み込み＆パース（マーカー読取は resolveMarkerIO 経由）
 		const content = document.getText();
-		const markdown = markdownParser.parse(content, config);
+		const io = resolveMarkerIO(config, document.uri.fsPath, "target");
+		const markdown = markdownParser.parse(content, config, io.provider, io.ctx);
 
 		if (!markdown.frontMatter) {
 			vscode.window.showWarningMessage(vscode.l10n.t("No frontmatter found."));
@@ -828,7 +844,8 @@ export async function codeLensJumpToSourceFrontmatterCommand(range: vscode.Range
 		// ソースファイルを開く（frontmatter領域は0行目から開始）
 		const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
 		const sourceContent = sourceDoc.getText();
-		const sourceMarkdown = markdownParser.parse(sourceContent, config);
+		const sourceIO = resolveMarkerIO(config, sourceFilePath, "source");
+		const sourceMarkdown = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
 
 		if (!sourceMarkdown.frontMatter) {
 			vscode.window.showWarningMessage(vscode.l10n.t("Source frontmatter not found."));

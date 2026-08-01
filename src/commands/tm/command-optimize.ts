@@ -5,6 +5,7 @@ import { recomputeTmWeights } from "../../core/tm/tm-optimize";
 import { buildSentenceQueries } from "../../core/tm/tm-query";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
@@ -63,7 +64,9 @@ export async function tmOptimizeCommand(): Promise<TmOptimizeResult | undefined>
 					const files = await fileExplorer.getSourceFiles(sourceDir, config);
 					for (const file of files) {
 						const content = fs.readFileSync(file, "utf-8");
-						const parsed = markdownParser.parse(content, config);
+						// マーカー読取は resolveMarkerIO 経由（external でも同一挙動を保つ）
+						const io = resolveMarkerIO(config, file, "source");
+						const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
 						for (const unit of parsed.units) {
 							const unitQueries = buildSentenceQueries(
 								unit.content,

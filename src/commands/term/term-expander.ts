@@ -122,8 +122,9 @@ export class AITermExpander implements TermExpander {
 			);
 			return this.parseExtractionResponse(response);
 		} catch (error) {
+			// AI呼び出しの失敗を「0件展開の成功」と誤認させないため握りつぶさず伝播させる
 			console.error("Phase 2 batch extraction failed:", error);
-			return new Map();
+			throw error;
 		}
 	}
 
@@ -164,8 +165,9 @@ export class AITermExpander implements TermExpander {
 			);
 			return this.parseTranslationResponse(response);
 		} catch (error) {
+			// AI呼び出しの失敗を「0件翻訳の成功」と誤認させないため握りつぶさず伝播させる
 			console.error("Phase 2 translation failed:", error);
-			return new Map();
+			throw error;
 		}
 	}
 

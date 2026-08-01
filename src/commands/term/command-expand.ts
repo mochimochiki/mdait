@@ -14,12 +14,14 @@ import {
 	Configuration,
 	type TransPair,
 } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { isCancellationError } from "../shared/cancellation";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
-import { type TermExpansionContext, createTermExpander } from "./term-expander";
+import { type TermExpander, type TermExpansionContext, createTermExpander } from "./term-expander";
 import { TermsRepository } from "./terms-repository";
 
 /** バッチ分割の文字数閾値 */
@@ -77,18 +79,28 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 		},
 		async (progress, token) => {
 			try {
-				await expandTerm_CoreProc(transPair, progress, token);
+				const result = await expandTerm_CoreProc(transPair, progress, token);
 
-				if (!token.isCancellationRequested) {
+				// 件数付きで完了を通知（0件成功とエラーを区別できるようにする）。
+				// 対象が最初から無かった場合は CoreProc 側の案内に任せる。
+				if (
+					!token.isCancellationRequested &&
+					(result.expanded > 0 || result.remaining > 0)
+				) {
 					vscode.window.showInformationMessage(
 						vscode.l10n.t(
-							"Term expansion completed ({0} → {1})",
-							transPair.sourceLang,
-							transPair.targetLang,
+							"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
+							result.expanded,
+							result.remaining,
 						),
 					);
 				}
 			} catch (error) {
+				// ユーザーのキャンセルはエラーではない（解決済みの部分結果は CoreProc 内で保存済み）。
+				// エラートースト（"Error during term expansion: Canceled"）を出さず静かに終える。
+				if (isCancellationError(error)) {
+					return;
+				}
 				const message =
 					error instanceof Error
 						? error.message
@@ -202,24 +214,21 @@ export async function expandTerm_CoreProc(
 		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
-	// グローバルバッチ分割と一括抽出
+	// グローバルバッチ分割と一括抽出。
+	// キャンセルされた場合も途中まで解決できたバッチの結果は破棄せず、後続の保存へ回す
+	// （以前はここで早期リターンし、解決済みの結果まで捨てていた）。
 	const extractResults = await extractFromBatches(
 		transPair,
 		contexts,
 		progress,
 		cancellationToken,
 	);
-	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length };
-	}
 
 	// 用語集を更新
 	const allResults = extractResults;
 
 	if (allResults.size === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No terms could be expanded"),
-		);
+		// 通知は呼び出し側の件数付き完了通知（0 expanded / N remaining）に一本化する
 		return { expanded: 0, remaining: termsToExpand.length };
 	}
 
@@ -283,7 +292,8 @@ async function collectExpansionContexts(
 
 		try {
 			const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
-			const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), config);
+			const sourceIO = resolveMarkerIO(config, sourceFilePath, "source");
+			const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), config, sourceIO.provider, sourceIO.ctx);
 
 			const targetFilePath = fileExplorer.getTargetPath(
 				sourceFilePath,
@@ -300,7 +310,8 @@ async function collectExpansionContexts(
 				continue;
 			}
 
-			const targetMarkdown = markdownParser.parse(targetDoc.getText(), config);
+			const targetIO = resolveMarkerIO(config, targetFilePath, "target");
+			const targetMarkdown = markdownParser.parse(targetDoc.getText(), config, targetIO.provider, targetIO.ctx);
 
 			for (const sourceUnit of sourceMarkdown.units) {
 				if (cancellationToken?.isCancellationRequested) {
@@ -366,12 +377,20 @@ async function collectExpansionContexts(
 
 /**
  * Phase 2: グローバルバッチ分割と一括抽出
+ *
+ * バッチ単位でエラーを捕捉し、失敗したバッチは飛ばして続行する（成功したバッチの
+ * 結果は保持して保存へ回す）。全バッチが失敗した場合のみ「0件展開の成功」と
+ * 誤認させないためエラーを伝播させる（command-detect.ts と同じ方針）。
+ * キャンセルは失敗として数えず、そこまでの部分結果を返す。
+ *
+ * @param injectedExpander テスト用の用語展開サービス（省略時は設定に従い生成）
  */
-async function extractFromBatches(
+export async function extractFromBatches(
 	transPair: TransPair,
 	contexts: TermExpansionContext[],
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
+	injectedExpander?: TermExpander,
 ): Promise<Map<string, string>> {
 	progress?.report({
 		message: vscode.l10n.t("Phase 2: Extracting terms from translations..."),
@@ -390,7 +409,11 @@ async function extractFromBatches(
 	}
 
 	const batches = splitIntoBatches(contexts);
-	const termExpander = await createTermExpander();
+	const termExpander = injectedExpander ?? (await createTermExpander());
+
+	let attemptedBatches = 0;
+	let failedBatches = 0;
+	let firstBatchError: unknown;
 
 	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
@@ -411,20 +434,45 @@ async function extractFromBatches(
 			continue;
 		}
 
-		const extracted = await termExpander.extractFromTranslationsBatch(
-			optimizedBatch,
-			sourceLang,
-			targetLang,
-			cancellationToken,
-		);
+		attemptedBatches++;
+		try {
+			const extracted = await termExpander.extractFromTranslationsBatch(
+				optimizedBatch,
+				sourceLang,
+				targetLang,
+				cancellationToken,
+			);
 
-		for (const [source, target] of extracted) {
-			results.set(source, target);
+			for (const [source, target] of extracted) {
+				results.set(source, target);
+			}
+		} catch (error) {
+			// AI呼び出し中のキャンセルはバッチ失敗ではない。ここで打ち切り、
+			// 解決済みの部分結果をそのまま持ち帰る（保存は呼び出し側が行う）
+			if (cancellationToken?.isCancellationRequested || isCancellationError(error)) {
+				break;
+			}
+			// 失敗したバッチは飛ばして続行する。最初の失敗で全体を中断すると、
+			// 既に解決済みのバッチの結果まで破棄されてしまう
+			failedBatches++;
+			if (firstBatchError === undefined) {
+				firstBatchError = error;
+			}
+			Logger.getInstance().warn("term.expand", "Batch term extraction failed", {
+				...formatError(error),
+			});
+			continue;
 		}
 
 		progress?.report({
 			message: vscode.l10n.t("Phase 2: {0} terms resolved", results.size),
 		});
+	}
+
+	// 全バッチが失敗した場合は「0件展開の成功」と誤認させず、エラーとして伝播させる
+	// （AI未接続・未認可などの構成問題を呼び出し側のエラー通知で表面化する）
+	if (attemptedBatches > 0 && failedBatches === attemptedBatches) {
+		throw firstBatchError instanceof Error ? firstBatchError : new Error(String(firstBatchError));
 	}
 
 	progress?.report({

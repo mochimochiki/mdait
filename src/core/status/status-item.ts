@@ -80,6 +80,12 @@ export interface FileStatusItem extends BaseStatusItem {
 	errorMessage?: string;
 	children?: UnitStatusItem[];
 	frontmatter?: FrontmatterStatusItem;
+	/**
+	 * ファイルレベルの need フラグ（非Markdownファイル用）。
+	 * 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たないため、
+	 * 翻訳待ちの need はここに載る。Markdown ファイルでは常に undefined（need はユニット側）。
+	 */
+	needFlag?: string;
 }
 
 /**
@@ -135,6 +141,15 @@ export function isIsolatedNeed(need: string | null | undefined): boolean {
  */
 export function isPendingWorkNeed(need: string | null | undefined): boolean {
 	return !!need && !isIsolatedNeed(need);
+}
+
+/**
+ * trans コマンドが自動で処理できる翻訳待ちの need（`translate` / `revise@…`）か。
+ * 人間の判断待ち（review / verify-deletion）や凍結宣言（isolate）は含まない。
+ * sync 完了通知の「翻訳待ち件数」など、「今すぐ翻訳」導線の対象を数えるときに使う。
+ */
+export function isTranslateNeed(need: string | null | undefined): boolean {
+	return need === "translate" || (need?.startsWith("revise@") ?? false);
 }
 
 /**

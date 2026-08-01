@@ -282,6 +282,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(status.contextValue, "mdaitPlainFileSource");
 			assert.strictEqual(status.translatedUnits, 0);
 			assert.strictEqual(status.totalUnits, 1);
+			assert.strictEqual(status.needFlag, undefined, "未登録ファイルはファイルレベルneedを持たないこと");
 		});
 
 		test("need空文字の場合、Status.Translatedが返されること", async () => {
@@ -305,6 +306,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(status.status, Status.Translated);
 			assert.strictEqual(status.contextValue, "mdaitPlainFileTargetComplete");
 			assert.strictEqual(status.translatedUnits, 1);
+			assert.strictEqual(status.needFlag, undefined, "翻訳済みはファイルレベルneedを持たないこと");
 		});
 
 		test("need:translateの場合、Status.NeedsTranslationが返されること", async () => {
@@ -328,6 +330,9 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(status.status, Status.NeedsTranslation);
 			assert.strictEqual(status.contextValue, "mdaitPlainFileTarget");
 			assert.strictEqual(status.translatedUnits, 0);
+			// 非MDは children を持たないため、翻訳待ちはファイルレベルの needFlag に載る
+			// （sync完了通知の翻訳待ち件数がプレーンファイルを拾えるようにする）
+			assert.strictEqual(status.needFlag, "translate");
 		});
 
 		test("need:revise@の場合、Status.NeedsTranslationが返されること", async () => {
@@ -349,6 +354,7 @@ suite("PlainFileHandler", () => {
 			const status = await handler.collectStatus(filePath);
 
 			assert.strictEqual(status.status, Status.NeedsTranslation);
+			assert.strictEqual(status.needFlag, "revise@cccc", "revise@の値がそのままファイルレベルneedに載ること");
 		});
 
 		test("need:reviewの場合、Status.NeedsTranslationが返されること", async () => {

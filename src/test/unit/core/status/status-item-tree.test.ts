@@ -15,6 +15,7 @@ function makeFileItem(
 	filePath: string,
 	status: Status = Status.NeedsTranslation,
 	children?: UnitStatusItem[],
+	extra?: Partial<FileStatusItem>,
 ): FileStatusItem {
 	return {
 		type: StatusItemType.File,
@@ -25,6 +26,7 @@ function makeFileItem(
 		totalUnits: 1,
 		status,
 		...(children ? { children } : {}),
+		...extra,
 	};
 }
 
@@ -464,6 +466,241 @@ suite("StatusItemTree", () => {
 				["a.md"],
 				"en-US が en のサブディレクトリとして現れないこと",
 			);
+		});
+	});
+
+	suite("countPendingTranslationUnits（sync完了通知の翻訳待ち件数）", () => {
+		test("translateとrevise@のユニットだけを数え、review/verify-deletion/isolateは数えないこと", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(filePath, Status.NeedsTranslation, [
+				makeUnitItem(filePath, "u1", "translate", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u2", "revise@abc123", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u3", "review", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u4", "verify-deletion", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u5", "isolate", Status.Translated),
+				makeUnitItem(filePath, "u6", undefined, Status.Translated),
+			]);
+
+			tree.buildTree([file], ["ja"]);
+
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				2,
+				"transが自動処理できるneed（translate/revise@…）のみが数えられること",
+			);
+		});
+
+		test("2回目のsync相当の更新後（変更なし）でも残っている翻訳待ちが数えられること", () => {
+			// バグ再現: 完了通知が「今回の実行で増えた分」だけを見ていると、
+			// 変更なしの2回目のsyncで翻訳待ちが残っているのに件数が0扱いになる
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(filePath, Status.NeedsTranslation, [
+				makeUnitItem(filePath, "u1", "translate", Status.NeedsTranslation),
+			]);
+			tree.buildTree([file], ["ja"]);
+
+			// 変更なしのsyncのrefreshFileStatus相当（同じ状態で上書き）
+			tree.addOrUpdateFile(
+				makeFileItem(filePath, Status.NeedsTranslation, [
+					makeUnitItem(filePath, "u1", "translate", Status.NeedsTranslation),
+				]),
+			);
+
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				1,
+				"変更なしの再sync後も翻訳待ち件数が維持されること",
+			);
+		});
+
+		test("非MD（プレーン）ファイルのファイルレベル翻訳待ち（needFlag）が数えられること", () => {
+			// バグ再現: 非MDファイルは children が空（ファイル＝1ユニット）で翻訳待ちが
+			// ファイルレベルの needFlag に載るため、ユニットだけを数えると
+			// プレーンファイルのみのワークスペースで件数0・「今すぐ翻訳」導線消失になる
+			const jaDir = path.resolve("/mock-workspace/ja");
+			tree.buildTree(
+				[
+					makeFileItem(path.join(jaDir, "notes.txt"), Status.NeedsTranslation, [], { needFlag: "translate" }),
+					makeFileItem(path.join(jaDir, "data.csv"), Status.NeedsTranslation, [], { needFlag: "revise@abc123" }),
+					makeFileItem(path.join(jaDir, "review.txt"), Status.NeedsTranslation, [], { needFlag: "review" }),
+					makeFileItem(path.join(jaDir, "done.txt"), Status.Translated, []),
+				],
+				["ja"],
+			);
+
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				2,
+				"translate / revise@… のプレーンファイルだけが数えられ、review・翻訳済みは数えないこと",
+			);
+		});
+
+		test("MDユニットとプレーンファイルの翻訳待ちが二重計上なく合算されること", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const mdPath = path.join(jaDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(mdPath, Status.NeedsTranslation, [
+						makeUnitItem(mdPath, "u1", "translate", Status.NeedsTranslation),
+					]),
+					makeFileItem(path.join(jaDir, "notes.txt"), Status.NeedsTranslation, [], { needFlag: "translate" }),
+				],
+				["ja"],
+			);
+
+			assert.strictEqual(tree.countPendingTranslationUnits(), 2);
+		});
+
+		test("scopeDirsを渡すと選択中ペアの範囲だけが数えられること", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const frDir = path.resolve("/mock-workspace/fr");
+			const jaPath = path.join(jaDir, "a.md");
+			const frPath = path.join(frDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(jaPath, Status.NeedsTranslation, [
+						makeUnitItem(jaPath, "jaUnit", "translate", Status.NeedsTranslation),
+					]),
+					makeFileItem(frPath, Status.NeedsTranslation, [
+						makeUnitItem(frPath, "frUnit", "translate", Status.NeedsTranslation),
+					]),
+				],
+				["ja", "fr"],
+			);
+
+			assert.strictEqual(tree.countPendingTranslationUnits([jaDir]), 1);
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				2,
+				"scopeDirs未指定なら全ファイルが対象であること",
+			);
+		});
+	});
+
+	suite("countFilesNotYetSynced（未同期ファイルの検出）", () => {
+		const enDir = path.resolve("/mock-workspace/en");
+		const jaDir = path.resolve("/mock-workspace/ja");
+
+		test("マーカーなしのターゲットファイル（全ユニットのハッシュが空）が数えられること", () => {
+			const syncedPath = path.join(jaDir, "synced.md");
+			const markerlessPath = path.join(jaDir, "markerless.md");
+			tree.buildTree(
+				[
+					makeFileItem(syncedPath, Status.Translated, [
+						makeUnitItem(syncedPath, "hash1", undefined, Status.Translated, {
+							fromHash: "from1",
+						}),
+					]),
+					makeFileItem(markerlessPath, Status.Source, [
+						makeUnitItem(markerlessPath, "", undefined, Status.Source),
+					]),
+				],
+				["en", "ja"],
+			);
+
+			assert.strictEqual(
+				tree.countFilesNotYetSynced(enDir, jaDir),
+				1,
+				"マーカーなしファイルだけが未同期として数えられること",
+			);
+		});
+
+		test("独立ユニットのみのターゲットファイルは未同期に数えないこと", () => {
+			// 独立ユニットはハッシュを持つ（fromなし・素hashマーカー）ため誤検出しない
+			const independentPath = path.join(jaDir, "independent.md");
+			tree.buildTree(
+				[
+					makeFileItem(independentPath, Status.Source, [
+						makeUnitItem(independentPath, "soloHash", undefined, Status.Source),
+					]),
+				],
+				["en", "ja"],
+			);
+
+			assert.strictEqual(tree.countFilesNotYetSynced(enDir, jaDir), 0);
+		});
+
+		test("非MDのターゲット（unit-state未登録でchildrenが空）も数えられること", () => {
+			const plainPath = path.join(jaDir, "notes.txt");
+			tree.buildTree([makeFileItem(plainPath, Status.Source, [])], ["en", "ja"]);
+
+			assert.strictEqual(tree.countFilesNotYetSynced(enDir, jaDir), 1);
+		});
+
+		test("対応するターゲットがまだ無いソースファイルが数えられること", () => {
+			const srcWithTarget = path.join(enDir, "a.md");
+			const srcWithoutTarget = path.join(enDir, "b.md");
+			const target = path.join(jaDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(srcWithTarget, Status.Source),
+					makeFileItem(srcWithoutTarget, Status.Source),
+					makeFileItem(target, Status.Translated, [
+						makeUnitItem(target, "hash1", undefined, Status.Translated, {
+							fromHash: "from1",
+						}),
+					]),
+				],
+				["en", "ja"],
+			);
+
+			assert.strictEqual(
+				tree.countFilesNotYetSynced(enDir, jaDir),
+				1,
+				"ターゲット未作成のソースファイルだけが数えられること",
+			);
+		});
+
+		test("空のソースファイル（syncが処理しない）は数えないこと", () => {
+			const emptySrc = path.join(enDir, "empty.md");
+			tree.buildTree([makeFileItem(emptySrc, Status.Empty)], ["en", "ja"]);
+
+			assert.strictEqual(tree.countFilesNotYetSynced(enDir, jaDir), 0);
+		});
+
+		test("sourceがtargetの祖先の構成でも二重に数えないこと", () => {
+			// 例: sourceDir "docs" / targetDir "docs/ja"。
+			// target配下のマーカーなしファイルがsource側の走査でも数えられると2件になる
+			const docsDir = path.resolve("/mock-workspace/docs");
+			const jaSubDir = path.join(docsDir, "ja");
+			const srcPath = path.join(docsDir, "a.md");
+			const tgtPath = path.join(jaSubDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(srcPath, Status.Source),
+					makeFileItem(tgtPath, Status.Source, [
+						makeUnitItem(tgtPath, "", undefined, Status.Source),
+					]),
+				],
+				["docs", "docs/ja"],
+				"/mock-workspace",
+			);
+
+			assert.strictEqual(
+				tree.countFilesNotYetSynced(docsDir, jaSubDir),
+				1,
+				"マーカーなしターゲット1件のみで、source側走査と二重計上しないこと",
+			);
+		});
+
+		test("全ファイルが同期済みなら0を返すこと", () => {
+			const srcPath = path.join(enDir, "a.md");
+			const tgtPath = path.join(jaDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(srcPath, Status.Source),
+					makeFileItem(tgtPath, Status.NeedsTranslation, [
+						makeUnitItem(tgtPath, "hash1", "translate", Status.NeedsTranslation, {
+							fromHash: "from1",
+						}),
+					]),
+				],
+				["en", "ja"],
+			);
+
+			assert.strictEqual(tree.countFilesNotYetSynced(enDir, jaDir), 0);
 		});
 	});
 

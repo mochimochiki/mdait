@@ -54,6 +54,38 @@ suite("setup-doctor 静的診断", () => {
 		);
 	});
 
+	test("external マーカーモード × sync.level 0 の非互換組み合わせを error として検出する", () => {
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external", syncLevel: 0 }),
+			makeProbe(),
+		);
+		const diag = diags.find((d) => d.id === "config.externalMarkersManualSyncLevel");
+		assert.ok(diag, "config.externalMarkersManualSyncLevel が含まれること");
+		assert.equal(diag?.level, "error");
+	});
+
+	test("external マーカーモードでも sync.level が 1 以上なら非互換診断を出さない", () => {
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external", syncLevel: 2 }),
+			makeProbe(),
+		);
+		assert.equal(
+			ids(diags).includes("config.externalMarkersManualSyncLevel"),
+			false,
+		);
+	});
+
+	test("embedded マーカーモードなら sync.level 0 でも非互換診断を出さない", () => {
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "embedded", syncLevel: 0 }),
+			makeProbe(),
+		);
+		assert.equal(
+			ids(diags).includes("config.externalMarkersManualSyncLevel"),
+			false,
+		);
+	});
+
 	test("P1: primaryLang 欠落を error として検出する", () => {
 		const diags = runStaticChecks(
 			makeConfig({ primaryLang: "" }),

@@ -37,6 +37,23 @@ export function getSelectedScopeDirs(config: ScopeConfig): string[] {
 }
 
 /**
+ * 選択中の transPair ごとの source / target ディレクトリ絶対パスの組を返す。
+ * ペア単位の集計（未同期ファイル数の表示など）が getSelectedScopeDirs と
+ * 同じ選択状態・同じパス解決を共有するための算出点。
+ */
+export function getSelectedPairAbsDirs(
+	config: ScopeConfig,
+): { sourceDirAbs: string; targetDirAbs: string }[] {
+	const configBaseDir = config.getConfigBaseDir();
+	return SelectionState.getInstance()
+		.filterTransPairs(config.transPairs)
+		.map((pair) => ({
+			sourceDirAbs: path.resolve(configBaseDir, pair.sourceDir),
+			targetDirAbs: path.resolve(configBaseDir, pair.targetDir),
+		}));
+}
+
+/**
  * 選択中の transPair に属するファイルのみをステータスツリーから取得する。
  *
  * ワークスペース全体を対象にする集計（LM Tools のステータス要約など）は必ずこれを通す。

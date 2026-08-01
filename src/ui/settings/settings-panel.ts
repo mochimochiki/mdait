@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
-import { removeConfigValue, setConfigValue } from "./config-json-editor";
+import { removeConfigValue, setConfigValue } from "../../infra/config/config-json-editor";
 import {
 	deriveSettingLabel,
 	getCategoryDoc,

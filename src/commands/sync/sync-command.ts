@@ -33,6 +33,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
 import { showConfigError } from "../shared/guidance";
+import { getSelectedScopeDirs } from "../shared/status-scope";
 import { copyDiffAssets } from "./asset-copier";
 import { DiffDetector, type DiffResult, type UnitDiff, DiffType } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
@@ -333,9 +334,16 @@ export async function syncCommand(
 		// 注: 導線の通知は fire-and-forget にする。ここで await すると通知をユーザーが
 		// 閉じるまで syncCommand が解決せず、呼び出し側の処理中フラグ（sync ボタンの
 		// くるくるアニメーション）が終わらないため（ADR-260705-01 の非AI sync は同期処理完結が前提）。
-		const translatableCount = totalAdded + totalRevisionsNeeded;
+		//
+		// 件数は「今回の実行で増えた分（totalAdded + totalRevisionsNeeded）」ではなく、
+		// sync 後のステータスツリーに残っている翻訳待ち（translate / revise）全体を使う。
+		// 前者だけを見ると、変更なしの2回目以降の sync で翻訳待ちが残っているのに
+		// 件数と「今すぐ翻訳」ボタンが消えてしまう。
+		const translatableCount = statusManager
+			.getStatusItemTree()
+			.countPendingTranslationUnits(getSelectedScopeDirs(config));
 		if (translatableCount > 0) {
-			const translateNow = vscode.l10n.t("Translate now");
+			const translateNow = vscode.l10n.t("✨Translate now");
 			void vscode.window
 				.showInformationMessage(
 					vscode.l10n.t(
