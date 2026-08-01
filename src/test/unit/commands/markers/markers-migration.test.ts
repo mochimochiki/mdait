@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	countManualSyncLevelZeroFiles,
 	embedFileMarkers,
 	externalizeFileMarkers,
 	reconcileMarkerModeForFile,
@@ -275,6 +276,46 @@ suite("setMarkerModeInConfigFile（mdait.json の整形保持）", () => {
 		const updated = fs.readFileSync(configPath, "utf-8");
 		assert.ok(updated.includes('\t"sync"'), "タブインデントが保たれる");
 		assert.strictEqual(JSON.parse(updated).markers.mode, "external");
+	});
+});
+
+// externalize の事前スキャン: frontmatter で mdait.sync.level: 0（完全手動マーカー配置）を
+// 上書きしているファイルは外部化でマーカーが失われるため、件数を確認ダイアログに含める。
+suite("countManualSyncLevelZeroFiles（externalize 事前スキャン）", () => {
+	let tempDir: string;
+
+	setup(() => {
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-lvl0-"));
+	});
+
+	teardown(() => {
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	function write(rel: string, content: string): string {
+		const abs = path.join(tempDir, rel);
+		fs.mkdirSync(path.dirname(abs), { recursive: true });
+		fs.writeFileSync(abs, content, "utf-8");
+		return abs;
+	}
+
+	test("frontmatter で mdait.sync.level: 0 を指定したファイルだけが数えられること", () => {
+		const manual = write(
+			"manual.md",
+			["---", "mdait:", "  sync:", "    level: 0", "---", "", "# 手動運用", ""].join("\n"),
+		);
+		const overridden = write(
+			"level3.md",
+			["---", "mdait:", "  sync:", "    level: 3", "---", "", "# 上書きあり", ""].join("\n"),
+		);
+		const plain = write("plain.md", "# frontmatter なし\n");
+
+		assert.strictEqual(countManualSyncLevelZeroFiles([manual, overridden, plain]), 1);
+	});
+
+	test("読めないファイルは 0 扱いで数えず、エラーにもならないこと", () => {
+		const missing = path.join(tempDir, "does-not-exist.md");
+		assert.strictEqual(countManualSyncLevelZeroFiles([missing]), 0);
 	});
 });
 

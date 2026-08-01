@@ -12,6 +12,7 @@
  */
 import * as fs from "node:fs";
 import * as vscode from "vscode";
+import { FrontMatter } from "../../core/markdown/front-matter";
 import { markdownParser } from "../../core/markdown/parser";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -247,6 +248,26 @@ async function collectMarkdownTargets(config: Configuration): Promise<MigrationT
 }
 
 /**
+ * frontmatter の `mdait.sync.level: 0`（完全手動マーカー運用のファイル別上書き）を持つ
+ * ファイル数を数える。external モードは手動サブユニット境界を表現できないため、
+ * externalize の事前スキャンで対象数を警告に含める。読めないファイルは 0 扱い。
+ */
+export function countManualSyncLevelZeroFiles(absPaths: readonly string[]): number {
+	let count = 0;
+	for (const absPath of absPaths) {
+		try {
+			const { frontMatter } = FrontMatter.parse(fs.readFileSync(absPath, "utf-8"));
+			if (frontMatter?.get("mdait.sync.level") === 0) {
+				count++;
+			}
+		} catch {
+			// 読めないファイルは対象外扱い（変換時に別途エラーになる）
+		}
+	}
+	return count;
+}
+
+/**
  * マーカー保管方式を一括変換する中核処理。
  * @param toMode 変換先のモード
  */
@@ -259,6 +280,18 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 
 	const toExternal = toMode === "external";
 
+	// sync.level 0（完全手動マーカー配置）は見出しに紐づかない境界を許すが、
+	// external モードは見出しベースの境界しか表現できず、外部化するとマーカーが失われる。
+	// グローバル設定が 0 の場合は非互換としてブロックする（ADR-260801-01）
+	if (toExternal && config.sync?.level === 0) {
+		vscode.window.showErrorMessage(
+			vscode.l10n.t(
+				"Cannot externalize markers: sync.level is 0 (fully manual marker placement). External marker mode stores markers by heading-based unit order and cannot represent manual unit boundaries, so externalizing would lose them. Set sync.level to 1 or higher first.",
+			),
+		);
+		return;
+	}
+
 	// 対象ファイルを先に数え、確認ダイアログで「何ファイル書き換わるか」を具体的に示す
 	const targets = await collectMarkdownTargets(config);
 	if (targets.length === 0) {
@@ -266,10 +299,14 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 		return;
 	}
 
+	// frontmatter の mdait.sync.level: 0 上書きを持つファイルは同様にマーカーが失われるため、
+	// 件数を確認ダイアログに含め、明示的な確認を経てのみ続行する
+	const manualLevelFiles = toExternal ? countManualSyncLevelZeroFiles(targets.map((t) => t.absPath)) : 0;
+
 	const confirmLabel = toExternal
 		? vscode.l10n.t("Externalize markers")
 		: vscode.l10n.t("Embed markers");
-	const warnBody = toExternal
+	let warnBody = toExternal
 		? vscode.l10n.t(
 				"Externalize markers (embedded → external): {0} managed Markdown file(s) will be rewritten, moving mdait markers out of the files into .mdait/unit-state. Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost. Committing your workspace to git beforehand is recommended. Continue?",
 				targets.length,
@@ -278,6 +315,12 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 				"Embed markers (external → embedded): {0} managed Markdown file(s) will be rewritten, writing mdait markers from .mdait/unit-state back into the files. Committing your workspace to git beforehand is recommended. Continue?",
 				targets.length,
 			);
+	if (manualLevelFiles > 0) {
+		warnBody = `${vscode.l10n.t(
+			"Warning: {0} file(s) set 'mdait.sync.level: 0' (fully manual marker placement) in their frontmatter. External marker mode cannot represent manual unit boundaries, so the markers of those files will be lost.",
+			manualLevelFiles,
+		)}\n\n${warnBody}`;
+	}
 
 	const choice = await vscode.window.showWarningMessage(warnBody, { modal: true }, confirmLabel);
 	if (choice !== confirmLabel) {

@@ -7,7 +7,7 @@ import {
 	externalMarkerProvider,
 } from "../../../../core/markdown/marker-provider";
 import { Configuration } from "../../../../infra/config/configuration";
-import { resolveMarkerIO } from "../../../../infra/config/marker-io";
+import { resolveMarkerIO, resolveMarkerIOForFile } from "../../../../infra/config/marker-io";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -66,5 +66,40 @@ suite("resolveMarkerIO", () => {
 		const io = resolveMarkerIO(config, path.join(tempDir, "src/ja/a.md"), "source");
 		assert.strictEqual(io.ctx?.role, "source");
 		assert.strictEqual(io.ctx?.filePath, "src/ja/a.md");
+	});
+});
+
+suite("resolveMarkerIOForFile（role 自動判定）", () => {
+	let tempDir: string;
+
+	setup(() => {
+		Configuration.dispose();
+		tempDir = createTempDir();
+		__vscodeMockWorkspaceRoot = tempDir;
+	});
+
+	teardown(() => {
+		Configuration.dispose();
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	test("external でソースディレクトリ配下のファイルは role=source と判定されること", async () => {
+		const config = await initWithMode(tempDir, "external");
+		const io = resolveMarkerIOForFile(config, path.join(tempDir, "src/ja/a.md"));
+		assert.strictEqual(io.ctx?.role, "source");
+		assert.strictEqual(io.ctx?.filePath, "src/ja/a.md");
+	});
+
+	test("external でターゲットディレクトリ配下のファイルは role=target と判定されること", async () => {
+		const config = await initWithMode(tempDir, "external");
+		const io = resolveMarkerIOForFile(config, path.join(tempDir, "src/en/a.md"));
+		assert.strictEqual(io.ctx?.role, "target");
+		assert.strictEqual(io.ctx?.filePath, "src/en/a.md");
+	});
+
+	test("embedded では ctx=undefined のまま provider=embedded になること", async () => {
+		const config = await initWithMode(tempDir, "embedded");
+		const io = resolveMarkerIOForFile(config, path.join(tempDir, "src/en/a.md"));
+		assert.strictEqual(io.ctx, undefined);
 	});
 });

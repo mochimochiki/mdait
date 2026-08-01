@@ -1,4 +1,5 @@
 import type { MarkerFileContext, MarkerProvider } from "../../core/markdown/marker-provider";
+import { FileExplorer } from "../workspace/file-explorer";
 import { toWorkspaceRelativePath } from "../workspace/workspace-path";
 import type { Configuration } from "./configuration";
 
@@ -26,4 +27,25 @@ export function resolveMarkerIO(config: Configuration, absPath: string, role: "s
 	const provider = config.getMarkerProvider();
 	const ctx = config.isExternalMarkers() ? { filePath: toWorkspaceRelativePath(absPath), role } : undefined;
 	return { provider, ctx };
+}
+
+/**
+ * role を FileExplorer で自動判定して MarkerIO を解決する。
+ *
+ * 呼び出し側の文脈から source / target が自明でない（あるいはどちらも来うる）
+ * parse サイト向けの薄い便宜ラッパー。判定不能（ワークスペース未設定等）は
+ * target 扱いにフォールバックする（現状 role は文脈提示用であり挙動を変えない）。
+ *
+ * 管理下 Markdown を parse する箇所は必ず本関数か resolveMarkerIO を通すこと。
+ * 素の `markdownParser.parse(content, config)` は external モードでマーカーを
+ * 見失い、「マーカー無しファイル」として静かに誤動作する。
+ */
+export function resolveMarkerIOForFile(config: Configuration, absPath: string): MarkerIO {
+	let role: "source" | "target" = "target";
+	try {
+		role = new FileExplorer().isSourceFile(absPath, config) ? "source" : "target";
+	} catch {
+		// ワークスペース未設定などの判定不能時は target 扱い
+	}
+	return resolveMarkerIO(config, absPath, role);
 }

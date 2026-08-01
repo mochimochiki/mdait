@@ -37,6 +37,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 - 個別ユニットのマーカー／`unit-state` を書き換える操作は `getFileHandler()` の `resolveNeed` / `declareIsolate` / `deleteUnit` だけを通す。排他制御・未保存の反映・ストア保存・ステータス更新は `commands/markers/unit-mutation.ts` にしか無く、サーフェス（CodeLens・ツリー・LM Tool）側で書き換えを実装すると必ず取りこぼす。一括変換（markers-migration・sync・trans・ai-review のコア）は別枠（ADR-260726-01）
 - `Status` は「原文側か訳文側か／翻訳の進み具合」だけを表す。「翻訳率の分母に数えるか」を `Status` の値で表現しない（`isCountedInProgress()` が単独で答える）。`contextValue` の決定に `Status` を渡さない（ADR-260726-01）
 - 実行レポートを出すコマンドは、必ず `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに独自の表示方法を実装しない（ADR-260726-01）
+- 管理下 Markdown のマーカー読取（`markdownParser.parse` / `stringify`）は必ず `infra/config/marker-io.ts` の `resolveMarkerIO` / `resolveMarkerIOForFile` で解決した provider/ctx を渡す。素の `parse(content, config)` は external マーカーモードでマーカーを見失い静かに誤動作する。例外は markers-migration（両表現を意図的に parse する）と、パーサー・FrontMatter 内部のみ（ADR-260801-01）
 
 ## テスト
 

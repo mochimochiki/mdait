@@ -14,6 +14,7 @@ import {
 	Configuration,
 	type TransPair,
 } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -286,7 +287,8 @@ async function collectExpansionContexts(
 
 		try {
 			const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
-			const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), config);
+			const sourceIO = resolveMarkerIO(config, sourceFilePath, "source");
+			const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), config, sourceIO.provider, sourceIO.ctx);
 
 			const targetFilePath = fileExplorer.getTargetPath(
 				sourceFilePath,
@@ -303,7 +305,8 @@ async function collectExpansionContexts(
 				continue;
 			}
 
-			const targetMarkdown = markdownParser.parse(targetDoc.getText(), config);
+			const targetIO = resolveMarkerIO(config, targetFilePath, "target");
+			const targetMarkdown = markdownParser.parse(targetDoc.getText(), config, targetIO.provider, targetIO.ctx);
 
 			for (const sourceUnit of sourceMarkdown.units) {
 				if (cancellationToken?.isCancellationRequested) {

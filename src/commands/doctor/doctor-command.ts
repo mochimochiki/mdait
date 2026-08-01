@@ -40,6 +40,8 @@ export async function diagnoseSetupCommand(): Promise<void> {
 		aiProvider: config.ai.provider,
 		// apiKey 直書き判定は「展開前の生値」で行う必要があるため設定ファイルから読む
 		openaiApiKey: readRawOpenAiApiKey(config),
+		markersMode: config.markers?.mode,
+		syncLevel: config.sync?.level,
 	};
 
 	const diagnostics = runStaticChecks(snapshot, createFsProbe(baseDir));
@@ -241,6 +243,10 @@ function describe(d: Diagnostic): string {
 			return vscode.l10n.t("No mdait markers found in {0}. Run Sync first to start translation.", p.dir ?? "");
 		case "config.noPrimaryLang":
 			return vscode.l10n.t("Primary language (primaryLang) is not configured.");
+		case "config.externalMarkersManualSyncLevel":
+			return vscode.l10n.t(
+				"markers.mode is 'external' while sync.level is 0 (fully manual marker placement). External marker mode cannot represent manual unit boundaries, so markers will be lost. Set sync.level to 1 or higher, or switch markers.mode back to 'embedded'.",
+			);
 		case "config.primaryLangMismatch":
 			return vscode.l10n.t(
 				'primaryLang "{0}" does not match any translation pair language ({1}).',

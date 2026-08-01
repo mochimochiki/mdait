@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { UnitPair } from "./unit-pair";
 
@@ -97,9 +98,10 @@ export class UnitPairCollector {
 	): Promise<UnitPair[]> {
 		const pairs: UnitPair[] = [];
 
-		// ソースファイルをパース
+		// ソースファイルをパース（external ではマーカーを store から attach する）
 		const sourceDoc = await vscode.workspace.openTextDocument(sourceFilePath);
-		const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), this.config);
+		const sourceIO = resolveMarkerIO(this.config, sourceFilePath, "source");
+		const sourceMarkdown = markdownParser.parse(sourceDoc.getText(), this.config, sourceIO.provider, sourceIO.ctx);
 
 		// ターゲットファイルを取得（存在しない場合はundefined）
 		const targetFilePath = this.fileExplorer.getTargetPath(sourceFilePath, transPair);
@@ -108,7 +110,8 @@ export class UnitPairCollector {
 		if (targetFilePath) {
 			try {
 				const targetDoc = await vscode.workspace.openTextDocument(targetFilePath);
-				const targetMarkdown = markdownParser.parse(targetDoc.getText(), this.config);
+				const targetIO = resolveMarkerIO(this.config, targetFilePath, "target");
+				const targetMarkdown = markdownParser.parse(targetDoc.getText(), this.config, targetIO.provider, targetIO.ctx);
 				targetUnits = targetMarkdown.units;
 			} catch {
 				// ターゲットファイルが存在しない場合は空配列のまま

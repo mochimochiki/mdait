@@ -942,9 +942,14 @@ async function translateFrontmatterIfNeeded(
 		vscode.Uri.file(sourceFilePath),
 	);
 	const sourceContent = decoder.decode(sourceDoc);
+	// frontmatter のみ使用するが、マーカー読取の単一経路（resolveMarkerIO）を通しておく
+	const sourceConfig = Configuration.getInstance();
+	const sourceIO = resolveMarkerIO(sourceConfig, sourceFilePath, "source");
 	const sourceMarkdown = markdownParser.parse(
 		sourceContent,
-		Configuration.getInstance(),
+		sourceConfig,
+		sourceIO.provider,
+		sourceIO.ctx,
 	);
 	const sourceFrontMatter = sourceMarkdown.frontMatter;
 

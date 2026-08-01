@@ -5,6 +5,7 @@ import { adoptCommand } from "./commands/adopt/adopt-command";
 import { aiReviewDirectoryCommand, aiReviewFileCommand } from "./commands/ai-review/review-command";
 import { AiReviewResultCodeLensProvider } from "./commands/ai-review/review-result-provider";
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
+import { getFileHandler } from "./commands/file-handler/file-handler-factory";
 import { StatusCollector } from "./commands/file-handler/status-collector";
 import { embedMarkersCommand, externalizeMarkersCommand } from "./commands/markers/markers-migration";
 import { needsAttentionNextCommand } from "./commands/markers/needs-attention-next";
@@ -23,8 +24,6 @@ import { translateSelectionCommand } from "./commands/trans-selection/trans-sele
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
 import { validateCommand } from "./commands/validate/validate-command";
-import { parseFrontmatterMarker } from "./core/markdown/frontmatter-translation";
-import { markdownParser } from "./core/markdown/parser";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
@@ -642,16 +641,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			// 初期化済みかチェック（まだ一度もsyncしていないファイルは除外）
 			try {
 				if (isMdFile) {
-					// MDファイル: mdaitマーカーの存在チェック
-					const fileDocument = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-					const decoder = new TextDecoder("utf-8");
-					const content = decoder.decode(fileDocument);
-					const parsed = markdownParser.parse(content, config);
-
-					const hasUnitMarker = parsed.units.some((unit) => unit.marker.hash !== null);
-					const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;
-
-					if (!hasUnitMarker && !hasFrontmatterMarker) {
+					// MDファイル: マーカー存在チェックは FileHandler に委譲する。
+					// external モードではマーカーが本文でなく unit-state にあり、
+					// ここで素の parse をするとマーカー無し扱いになって autoSyncOnSave が沈黙する
+					if (!(await getFileHandler(filePath).isInitialized(filePath))) {
 						logger.debug("extension", "Skipping file save sync (no mdait markers)", { filePath });
 						return;
 					}

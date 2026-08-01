@@ -30,6 +30,10 @@ export interface DoctorConfigSnapshot {
 	aiProvider: string;
 	/** openai プロバイダ利用時の apiKey 生値（解決前） */
 	openaiApiKey?: string;
+	/** マーカー保管方式（markers.mode。未指定は embedded 扱い） */
+	markersMode?: string;
+	/** ユニット分割の見出しレベル（sync.level。0 は完全手動マーカー配置） */
+	syncLevel?: number;
 }
 
 /** ファイルシステム探索の抽象（テストで差し替え可能にする） */
@@ -184,6 +188,11 @@ export function runStaticChecks(
 	// 4. APIキー直書き（P5：漏洩注意）
 	if (config.aiProvider === "openai" && isLiteralApiKey(config.openaiApiKey)) {
 		out.push({ level: "warn", id: "ai.apiKeyLiteral" });
+	}
+
+	// 5. external マーカー × sync.level 0 は非互換（手動サブユニット境界を表現できない）
+	if (config.markersMode === "external" && config.syncLevel === 0) {
+		out.push({ level: "error", id: "config.externalMarkersManualSyncLevel" });
 	}
 
 	return out;

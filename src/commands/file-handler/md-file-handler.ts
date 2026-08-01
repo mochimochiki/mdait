@@ -5,6 +5,7 @@ import type { FileStatusItem } from "../../core/status/status-item";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import type { TransPair } from "../../infra/config/configuration";
+import { resolveMarkerIOForFile } from "../../infra/config/marker-io";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { SectionAligner } from "../adopt/section-aligner";
@@ -93,7 +94,10 @@ export class MdFileHandler implements FileHandler {
 		const document = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
 		const decoder = new TextDecoder("utf-8");
 		const content = decoder.decode(document);
-		const parsed = markdownParser.parse(content, config);
+		// マーカー読取の単一経路（resolveMarkerIO）を通す。external ではユニット判定に
+		// parse 結果でなく unit-state を使うが、frontmatter 判定も同一 parse から得る
+		const io = resolveMarkerIOForFile(config, filePath);
+		const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
 
 		// frontmatter マーカーは両モードとも本文内に存在する
 		const hasFrontmatterMarker = parsed.frontMatter ? parseFrontmatterMarker(parsed.frontMatter) !== null : false;

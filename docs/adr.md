@@ -12,7 +12,11 @@
 
 ## ADR
 
-### ADR-260731-03: マーカー外部化のorder整列とmdait.json書き換えの単一経路化
+### ADR-260801-01: 管理下MDのマーカー読取はresolveMarkerIO経由を不変条件化し、external×sync.level 0を非互換としてガード
+**背景** : CodeLens・TM・term・保存フック等7箇所が素のparseでマーカーを読み、externalモードでマーカー無し扱いになり静かに誤動作していた。sync.level 0の手動境界もexternalでは表現できない。
+**決定** : 管理下MDのparse/マーカー読取は`resolveMarkerIO(ForFile)`経由を必須の不変条件とする（移行処理の両表現parseのみ例外）。externalizeはグローバルsync.level 0でブロック、frontmatter上書きは件数警告＋確認続行、doctorに非互換診断を追加。
+**理由** : マーカー保管方式の分岐を各所に書くと必ず取りこぼす。解決点を1つにすればembedded/externalの挙動同一性が構造的に保たれる。非互換組み合わせは入口（externalize/doctor）で見えるのが最も安い。
+**備考** : role自動判定の`resolveMarkerIOForFile`を追加。保存フックの初期化判定は`FileHandler.isInitialized`へ委譲。frontmatterのみ使うparseも同経路に統一。
 **背景** : externalizeがembedded parseのorderでstoreへ書くため、サブ境界統合でexternal側のorderとずれ後続ユニットの状態を取り違えた。mdait.json書き換えもタブ再整形でdiffを汚した。
 **決定** : externalizeはマーカー除去後の本文をexternal境界で再parseし、(level,title)部分列一致でマーカーを移送してから退避。mdait.json書き換えは`infra/config/config-json-editor`の`setConfigValue`を単一経路とする。
 **理由** : storeのorderは「external parseのユニット列」が正であり、書く側がそれに揃えるのが最小修正。設定書き換えの整形保持ロジックは既にsettings-panelにあり、移設して共有する方が再発しない。
