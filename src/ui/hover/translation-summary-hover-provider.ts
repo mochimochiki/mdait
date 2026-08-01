@@ -75,13 +75,15 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 
 		// サマリデータを取得
 		const summary = this.summaryManager.getSummary(marker.hash);
-		// サマリも note も無ければ hover を出さない
-		if (!summary && !note) {
+		// 手で訳したが未確定のユニットは、サマリが無くても締めくくり方を説明する
+		const unconfirmedEdit = !summary && marker.hasUnconfirmedEdit();
+		// サマリも note も未確定編集も無ければ hover を出さない
+		if (!summary && !note && !unconfirmedEdit) {
 			return null;
 		}
 
 		// MarkdownStringを生成（needフラグ・note も考慮）
-		const markdown = this.buildMarkdownString(summary, marker.need, note);
+		const markdown = this.buildMarkdownString(summary, marker.need, note, unconfirmedEdit);
 
 		// Hoverオブジェクトを返す
 		return new vscode.Hover(markdown);
@@ -97,12 +99,27 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		summary: TranslationSummary | undefined,
 		needFlag?: string | null,
 		note?: string | null,
+		unconfirmedEdit = false,
 	): vscode.MarkdownString {
 		const md = new vscode.MarkdownString();
 		md.isTrusted = true; // commandリンクを有効化
 		md.supportHtml = true; // HTML埋め込みを有効化
 
 		// ヘッダー（need:reviewの場合は「要確認」と表示）
+		if (unconfirmedEdit) {
+			// 訳せたかどうかは機械には判定できないため、完了は人の宣言で決まる。
+			// それを知らないと「訳したのに進捗が動かない」で手が止まる
+			md.appendMarkdown(`### ✏️ ${vscode.l10n.t("Edited — not marked done yet")}\n\n`);
+			md.appendMarkdown(
+				`${vscode.l10n.t(
+					"If you finished the translation by hand, press “{0}”.",
+					needFlag?.startsWith("revise@")
+						? vscode.l10n.t("Mark as Revised")
+						: vscode.l10n.t("Mark as Translated"),
+				)}\n\n`,
+			);
+			return md;
+		}
 		if (needFlag === "review") {
 			md.appendMarkdown(`### ${vscode.l10n.t("Needs Review")}\n\n`);
 		} else {

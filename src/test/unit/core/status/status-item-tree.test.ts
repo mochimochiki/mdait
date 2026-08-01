@@ -773,4 +773,47 @@ suite("StatusItemTree", () => {
 			assert.strictEqual(fired, 1);
 		});
 	});
+	suite("hasTargetUnits（一度でも sync が通っているか）", () => {
+		test("原文ユニットしか無ければ false（設定を直した直後の状態）", () => {
+			const srcDir = path.resolve("/mock-workspace/docs");
+			const filePath = path.join(srcDir, "a.md");
+			const fileItem = makeFileItem(filePath, Status.Source, [
+				makeUnitItem(filePath, "src1", undefined, Status.Source),
+			]);
+
+			tree.buildTree([fileItem], ["docs"]);
+
+			assert.strictEqual(
+				tree.hasTargetUnits(),
+				false,
+				"原文が見つかっただけでは同期済みとは言えない",
+			);
+			assert.strictEqual(tree.isEmpty(), false, "ツリー自体は空ではない");
+		});
+
+		test("訳文ユニットが1つでもあれば true", () => {
+			const srcDir = path.resolve("/mock-workspace/docs");
+			const tgtDir = path.resolve("/mock-workspace/i18n/en");
+			const srcPath = path.join(srcDir, "a.md");
+			const tgtPath = path.join(tgtDir, "a.md");
+
+			tree.buildTree(
+				[
+					makeFileItem(srcPath, Status.Source, [
+						makeUnitItem(srcPath, "src1", undefined, Status.Source),
+					]),
+					makeFileItem(tgtPath, Status.NeedsTranslation, [
+						makeUnitItem(tgtPath, "tgt1", "translate", Status.NeedsTranslation),
+					]),
+				],
+				["docs", "i18n/en"],
+			);
+
+			assert.strictEqual(tree.hasTargetUnits(), true);
+		});
+
+		test("空のツリーでは false", () => {
+			assert.strictEqual(tree.hasTargetUnits(), false);
+		});
+	});
 });

@@ -173,7 +173,7 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 
 ### 翻訳サマリ表示
 
-翻訳完了後、処理時間、トークン数、用語候補、警告をユーザーに提示します。
+翻訳完了後、処理時間、トークン数、用語候補、警告をユーザーに提示します。あわせて「手で訳したが未確定」のユニットの状態と解説もこの2つのサーフェスが担います（サーフェスの役割分担は [ux.md](../ux.md) §3.3 が正準）。
 
 #### TranslationSummaryHoverProvider
 
@@ -188,6 +188,8 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 
 **実装**: `SummaryManager`からハッシュをキーにサマリ情報を取得し、Markdown形式でリッチ表示
 
+**手で訳したが未確定のユニット**: サマリが無くても `MdaitMarker.hasUnconfirmedEdit()` が真なら、「手作業で翻訳完了した場合は『翻訳済みにする』を押す」旨の解説を出す。訳文を書いただけでは need は落ちないため、それを知らないと「訳したのに進捗が動かない」で手が止まる。解説の置き場は Hover に限る（CodeLens は操作専用。ADR-260801-03）
+
 #### SummaryDecorator
 
 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供します。
@@ -196,6 +198,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 - frontmatterマーカーも対象に含む
 - CodeLensと同じ色・フォントスタイルで統一
 - 詳細はHoverで確認可能
+- サマリが無くても、手で訳して未確定のユニット（`hasUnconfirmedEdit()`）には `編集済み — まだ完了にしていません` を出す。状態は気づける場所に置き、理由と対処は Hover に置く（ADR-260801-03）
 
 **設計意図**: エディタを開いたまま、翻訳の統計情報を一目で確認できます。
 
@@ -320,6 +323,7 @@ sequenceDiagram
 | `mdait.status.{sync,sync.initial,selectTargets,openTerm,openTm}` | ツリータイトルバー | `mdait.status.sync.processing` はハンドラを持たない表示専用ダミー（`enablement: false` のスピナー表示枠） |
 | `mdait.addToGlossary` | Hover の `command:` URI | package.json 未宣言（Hover 起点が正しい導線のため意図的） |
 | `mdait.trans` / `mdait.term.detect` / `mdait.term.expand` | 内部 | テスト・デバッグIPC・他コマンドからの内部呼び出し専用。パレットに出さない |
+| `mdait.trans.pendingTargets` | 内部 | sync 完了通知の「今すぐ翻訳」の実体。翻訳待ちが残る訳文ルートを対象にする（複数ペアなら QuickPick）。`mdait.trans` は URI 必須のため、この導線からは呼べない |
 
 ---
 

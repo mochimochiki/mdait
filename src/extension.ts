@@ -256,6 +256,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	const translateDirectoryDisposable = vscode.commands.registerCommand("mdait.translate.directory", (item) =>
 		translateItemCommand.translateDirectory(item),
 	);
+	// sync 完了通知の「今すぐ翻訳」から呼ばれる内部コマンド（パレットには出さない）
+	const translatePendingDisposable = vscode.commands.registerCommand("mdait.trans.pendingTargets", () =>
+		translateItemCommand.translatePendingTargets(),
+	);
 	const translateFileDisposable = vscode.commands.registerCommand("mdait.translate.file", (item) =>
 		translateItemCommand.translateFile(item),
 	);
@@ -731,6 +735,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensDisposable,
 		hoverDisposable,
 		translateDirectoryDisposable,
+		translatePendingDisposable,
 		translateFileDisposable,
 		translateUnitDisposable,
 		unitMarkReviewedDisposable,

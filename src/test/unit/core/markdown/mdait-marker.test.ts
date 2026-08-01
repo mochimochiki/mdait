@@ -182,4 +182,35 @@ suite("MdaitMarker", () => {
 		const header = new MdaitMarker(testHash, testFrom, "revise@abc12345");
 		assert.equal(header.toString(), `<!-- mdait ${testHash} from:${testFrom} need:revise@abc12345 -->`);
 	});
+	suite("hasUnconfirmedEdit（手で訳したが未確定か）", () => {
+		test("sync直後の訳文（hash === from）は編集されていない", () => {
+			assert.equal(new MdaitMarker("aaaa1111", "aaaa1111", "translate").hasUnconfirmedEdit(), false);
+		});
+
+		test("翻訳待ちのまま本文が書き換わっていれば編集済み", () => {
+			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", "translate").hasUnconfirmedEdit(), true);
+		});
+
+		test("要改訂は revise@ の基準ハッシュと比べる（改訂前は編集されていない）", () => {
+			// need:revise@X の X は改訂が要求された時点の訳文ハッシュ。
+			// from（更新後の原文ハッシュ）と hash が違うのは当たり前なので基準にしない
+			assert.equal(new MdaitMarker("cccc3333", "dddd4444", "revise@cccc3333").hasUnconfirmedEdit(), false);
+		});
+
+		test("要改訂で本文を書き換えていれば編集済み", () => {
+			assert.equal(new MdaitMarker("eeee5555", "dddd4444", "revise@cccc3333").hasUnconfirmedEdit(), true);
+		});
+
+		test("翻訳済み・裁定待ち・原文ユニットは対象外", () => {
+			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", null).hasUnconfirmedEdit(), false);
+			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", "review").hasUnconfirmedEdit(), false);
+			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", "verify-deletion").hasUnconfirmedEdit(), false);
+			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", "isolate").hasUnconfirmedEdit(), false);
+			assert.equal(new MdaitMarker("aaaa1111", null, "translate").hasUnconfirmedEdit(), false);
+		});
+
+		test("hash が空なら判定しない", () => {
+			assert.equal(new MdaitMarker("", "aaaa1111", "translate").hasUnconfirmedEdit(), false);
+		});
+	});
 });

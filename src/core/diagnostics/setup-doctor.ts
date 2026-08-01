@@ -46,18 +46,48 @@ export interface DoctorProbe {
 	countFilesWithMarkers(relDir: string): number;
 }
 
-/** パス比較用に末尾スラッシュ除去・区切り正規化する */
+/**
+ * パス比較用の字句正規化。区切りを `/` に揃え、`.` と `..` を畳み、末尾スラッシュを落とす。
+ *
+ * 単純な文字列比較だと `docs` と `./docs`、`a/../docs` が別物と見なされ、
+ * 同一・入れ子の判定をすり抜ける。ファイルシステムには触らず（診断は probe 越しに
+ * しか I/O しない）、書き方の違いだけを吸収する。
+ */
 function normalizeDir(dir: string): string {
-	return dir.replace(/\\/g, "/").replace(/\/+$/, "");
+	const slashed = dir.replace(/\\/g, "/");
+	const isAbsolute = slashed.startsWith("/");
+	const out: string[] = [];
+	for (const segment of slashed.split("/")) {
+		if (segment === "" || segment === ".") {
+			continue;
+		}
+		if (segment === "..") {
+			// 先頭に残った `..` は畳めない（相対の外向き）のでそのまま積む
+			if (out.length > 0 && out[out.length - 1] !== "..") {
+				out.pop();
+			} else if (!isAbsolute) {
+				out.push("..");
+			}
+			continue;
+		}
+		out.push(segment);
+	}
+	return (isAbsolute ? "/" : "") + out.join("/");
 }
 
 /** 2つのディレクトリが同一を指すか */
-function isSamePath(a: string, b: string): boolean {
+export function isSamePath(a: string, b: string): boolean {
 	return normalizeDir(a) === normalizeDir(b);
 }
 
-/** 一方が他方の配下（入れ子）か */
-function isNested(a: string, b: string): boolean {
+/**
+ * 一方が他方の配下（入れ子）か。
+ *
+ * sourceDir と targetDir が入れ子だと、sync のたびに前回の訳文が原文として拾われ、
+ * `docs/en/en/...` のように出力が際限なく増えていく。診断だけでなく sync の
+ * 事前ガード（sync-command）からも同じ判定を使うため公開する。
+ */
+export function isNested(a: string, b: string): boolean {
 	const na = normalizeDir(a);
 	const nb = normalizeDir(b);
 	return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
@@ -123,8 +153,11 @@ export function runStaticChecks(
 				params: { dir: pair.sourceDir },
 			});
 		} else if (isNested(pair.sourceDir, pair.targetDir)) {
+			// warn ではなく error。入れ子のまま sync すると訳文が次の原文として拾われ、
+			// 実行するたびに出力が一段深くなる（docs/en → docs/en/en → …）。
+			// 助言ではなく停止すべき状態なので blocking にする。
 			out.push({
-				level: "warn",
+				level: "error",
 				id: "pair.nestedDirs",
 				params: { source: pair.sourceDir, target: pair.targetDir },
 			});

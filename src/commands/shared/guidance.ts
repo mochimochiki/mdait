@@ -95,3 +95,67 @@ export async function showTranslationError(error: unknown): Promise<void> {
 		vscode.l10n.t("Error during translation: {0}", message),
 	);
 }
+
+/**
+ * ディレクトリ翻訳の失敗を、理由と次の一手つきで表示する。
+ *
+ * 件数だけの「0 成功 / 5 失敗」では、AI に届いていないのか原稿の問題なのかが
+ * 分からず、ログファイルを開けない利用者はそこで手が止まる。最初の失敗理由を
+ * 本文に出し、AI 到達不能が疑われるときは診断・設定・ドキュメントへ導く。
+ *
+ * @param successful 成功ファイル数
+ * @param failed 失敗ファイル数
+ * @param firstError 最初に発生したエラー（無ければ理由なしの警告になる）
+ */
+export async function showDirectoryTranslationFailure(
+	successful: number,
+	failed: number,
+	firstError?: unknown,
+): Promise<void> {
+	const reason =
+		firstError instanceof Error
+			? firstError.message
+			: firstError !== undefined
+				? String(firstError)
+				: "";
+
+	if (!reason) {
+		vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Directory translation completed: {0} files succeeded, {1} files failed",
+				successful,
+				failed,
+			),
+		);
+		return;
+	}
+
+	const body = vscode.l10n.t(
+		"Directory translation completed: {0} files succeeded, {1} files failed. Reason: {2}",
+		successful,
+		failed,
+		reason,
+	);
+
+	if (!isAiUnavailableMessage(reason)) {
+		vscode.window.showWarningMessage(body);
+		return;
+	}
+
+	const diagnose = vscode.l10n.t("Diagnose");
+	const openConfig = vscode.l10n.t("Open mdait.json");
+	const docs = vscode.l10n.t("Open docs");
+	const choice = await vscode.window.showErrorMessage(
+		body,
+		diagnose,
+		openConfig,
+		docs,
+	);
+	if (choice === diagnose) {
+		await vscode.commands.executeCommand("mdait.setup.diagnose");
+	} else if (choice === openConfig) {
+		await openConfigFile();
+	} else if (choice === docs) {
+		await openDocs();
+	}
+}

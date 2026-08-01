@@ -436,35 +436,41 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * @param need needマーカーの値
 	 * @returns ボタンのtitleとtooltip
 	 */
-	private getCompletionButtonLabel(need: string): { title: string; tooltip: string } {
+	private getCompletionButtonLabel(need: string): { title: string; tooltip: string; plainTitle: string } {
 		if (need === "translate") {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Translated"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually translated"),
+				plainTitle: vscode.l10n.t("Mark as Translated"),
 			};
 		}
 		if (need.startsWith("revise@")) {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Revised"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually revised"),
+				plainTitle: vscode.l10n.t("Mark as Revised"),
 			};
 		}
 		if (need === "review") {
 			return {
 				title: vscode.l10n.t("$(check) Mark as Reviewed"),
 				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
+				plainTitle: vscode.l10n.t("Mark as Reviewed"),
 			};
 		}
 		if (need === "isolate") {
 			return {
 				title: vscode.l10n.t("$(circle-slash) Un-isolate"),
 				tooltip: vscode.l10n.t("Tooltip: Resume following source updates for this unit"),
+				plainTitle: vscode.l10n.t("Un-isolate"),
 			};
 		}
 		// デフォルト
 		return {
 			title: vscode.l10n.t("$(check) Mark as Completed"),
 			tooltip: vscode.l10n.t("Tooltip: Mark this unit as completed"),
+			plainTitle: vscode.l10n.t("Mark as Completed"),
 		};
 	}
+
 }

@@ -146,7 +146,7 @@ suite("setup-doctor 静的診断", () => {
 		assert.equal(hasBlockingError(diags), true);
 	});
 
-	test("targetDir が sourceDir の入れ子なら warn", () => {
+	test("targetDir が sourceDir の入れ子なら error（sync のたびに出力が一段深くなるため）", () => {
 		const diags = runStaticChecks(
 			makeConfig({
 				transPairs: [
@@ -162,7 +162,47 @@ suite("setup-doctor 静的診断", () => {
 		);
 		const nested = diags.find((d) => d.id === "pair.nestedDirs");
 		assert.ok(nested, "pair.nestedDirs が含まれること");
-		assert.equal(nested?.level, "warn");
+		assert.equal(nested?.level, "error");
+		assert.equal(hasBlockingError(diags), true, "実行を止めるべき状態なので blocking");
+	});
+
+	test("書き方が違うだけの同じパス（./docs や a/../docs）も入れ子として検出する", () => {
+		for (const sourceDir of ["./docs", "docs/", "a/../docs"]) {
+			const diags = runStaticChecks(
+				makeConfig({
+					transPairs: [
+						{
+							sourceDir,
+							targetDir: "docs/en",
+							sourceLang: "ja",
+							targetLang: "en",
+						},
+					],
+				}),
+				makeProbe(),
+			);
+			assert.ok(
+				diags.some((d) => d.id === "pair.nestedDirs"),
+				`${sourceDir} が入れ子として検出されること（文字列比較だとすり抜ける）`,
+			);
+		}
+	});
+
+	test("末尾スラッシュや ./ の違いだけの同一ディレクトリも同一として検出する", () => {
+		const diags = runStaticChecks(
+			makeConfig({
+				transPairs: [
+					{
+						sourceDir: "./docs/",
+						targetDir: "docs",
+						sourceLang: "ja",
+						targetLang: "en",
+					},
+				],
+			}),
+			makeProbe(),
+		);
+		assert.ok(diags.some((d) => d.id === "pair.sourceEqualsTarget"));
 	});
 
 	test("P2/P3: Markdown はあるがマーカーが無ければ『まず Sync』を info で促す", () => {

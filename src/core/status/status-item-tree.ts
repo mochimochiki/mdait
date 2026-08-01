@@ -402,6 +402,22 @@ export class StatusItemTree {
 	// ========== 集計 ==========
 
 	/**
+	 * 訳文側のユニットが1つでも存在するか（＝一度でも sync が通っているか）。
+	 *
+	 * ツリーが空でないことは「原文が見つかった」だけを意味し、sync 済みとは限らない。
+	 * 設定を直した直後は原文ツリーだけが並び、まだ何も同期されていない状態になる。
+	 * 「次に初回同期を押す」導線を出すかどうかの判定に使う。
+	 */
+	public hasTargetUnits(): boolean {
+		for (const unit of this.unitItemMapWithPath.values()) {
+			if (unit.status !== Status.Source) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * 全体の進捗情報を集計
 	 */
 	public aggregateProgress(): {

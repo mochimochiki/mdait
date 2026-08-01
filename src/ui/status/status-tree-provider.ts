@@ -24,6 +24,15 @@ import { Logger, formatError } from "../../infra/logging/logger";
 const NEEDS_ATTENTION_ID = "mdait:needs-attention";
 
 /**
+ * ルート直下の「まだ同期していません」行の directoryPath に使う識別子。
+ *
+ * ビューの Welcome（初回同期ボタン）はツリーが空のときしか出ない。原文が見つかった
+ * 時点でツリーは空でなくなるため、一度も sync していないのに始め方の案内だけが消える。
+ * その穴を埋める行なので、実在パスと衝突しない非パス文字列を使う。
+ */
+const NOT_SYNCED_ID = "mdait:not-synced";
+
+/**
  * need フラグの人間向けラベル（要対応キューの副題・ツールチップ用）
  */
 function getNeedLabel(needFlag: string | undefined): string {
@@ -31,6 +40,42 @@ function getNeedLabel(needFlag: string | undefined): string {
 		return vscode.l10n.t("Deletion check");
 	}
 	return vscode.l10n.t("Review");
+}
+
+/**
+ * ユニット・frontmatter 行のラベル右に添える状態の短い説明。
+ *
+ * 状態の差がアイコンの色だけだと、色を見分けにくい人にも、アイコンの意味を
+ * 知らない人にも伝わらない。「未翻訳」「要改訂」を文字でも読めるようにする。
+ * 翻訳済み（need なし）は既定状態なので何も出さず、一覧を静かに保つ。
+ *
+ * @param status 項目のステータス
+ * @param needFlag 生の need フラグ（"translate" / "revise@xxxx" など）
+ * @returns 表示する説明。不要なら undefined
+ */
+export function getStateDescription(status: Status, needFlag: string | undefined): string | undefined {
+	if (needFlag) {
+		if (needFlag === "translate") {
+			return vscode.l10n.t("Not translated");
+		}
+		if (needFlag.startsWith("revise@")) {
+			return vscode.l10n.t("Needs revision");
+		}
+		if (needFlag === "review") {
+			return vscode.l10n.t("Needs review");
+		}
+		if (needFlag === "verify-deletion") {
+			return vscode.l10n.t("Deletion check");
+		}
+		if (needFlag === "isolate") {
+			return vscode.l10n.t("Isolated");
+		}
+		return undefined;
+	}
+	if (status === Status.Error) {
+		return vscode.l10n.t("Error");
+	}
+	return undefined;
 }
 
 /**
@@ -105,6 +150,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					}
 					this.needsAttentionExpandedOnce = true;
 					return vscode.TreeItemCollapsibleState.Expanded;
+				}
+				// 未同期の案内は押すだけの行なので子を持たない
+				if (element.directoryPath === NOT_SYNCED_ID) {
+					return vscode.TreeItemCollapsibleState.None;
 				}
 				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
 				return this.statusItemTree.getDirectoryChildren(element.directoryPath)
@@ -197,9 +246,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			label: this.getAccessibleLabel(element, treeItem.tooltip),
 		};
 
-		// 副題（ラベル右の薄字）を設定
+		// 副題（ラベル右の薄字）を設定。
+		// 明示的な description（要対応キューのファイル名など）が最優先。無ければ
+		// ユニット・frontmatter には状態の短い説明を出し、アイコンの色に頼らせない
 		if (element.description) {
 			treeItem.description = element.description;
+		} else if (
+			element.type === StatusItemType.Unit ||
+			element.type === StatusItemType.Frontmatter
+		) {
+			treeItem.description = getStateDescription(element.status, element.needFlag);
 		}
 
 		// contextValueを設定（StatusItemから）
@@ -210,6 +266,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (element.type === StatusItemType.Directory && element.directoryPath) {
 			if (element.directoryPath === NEEDS_ATTENTION_ID) {
 				treeItem.id = NEEDS_ATTENTION_ID;
+			} else if (element.directoryPath === NOT_SYNCED_ID) {
+				treeItem.id = NOT_SYNCED_ID;
 			} else if (workspaceFolder) {
 				treeItem.id = path.relative(workspaceFolder, element.directoryPath);
 			} else {
@@ -243,6 +301,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			}
 		}
 
+		// 未同期の案内はクリックで初回同期を実行する
+		if (
+			element.type === StatusItemType.Directory &&
+			element.directoryPath === NOT_SYNCED_ID
+		) {
+			treeItem.command = {
+				command: "mdait.status.sync.initial",
+				title: vscode.l10n.t("Not synced yet — run Initial Sync"),
+			};
+		}
 		// ファイルの場合はコマンドを設定してクリック時にファイルを開く（先頭行）
 		if (element.type === StatusItemType.File) {
 			treeItem.command = {
@@ -389,11 +457,48 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// 未同期ファイル数の副題をターゲットルートに添える
 		this.annotateNotYetSyncedFiles(visibleItems);
 
+		// 未同期の案内を最上段に置く（一度でも sync していれば出さない）
+		const notSyncedItem = this.buildNotSyncedItem();
+
 		// Needs Attention仮想ノードを先頭に追加する（0件時は追加しない＝デッドエンドを作らない）
 		const needsAttentionItem = this.buildNeedsAttentionItem();
-		return needsAttentionItem
-			? [needsAttentionItem, ...visibleItems]
-			: visibleItems;
+		return [
+			...(notSyncedItem ? [notSyncedItem] : []),
+			...(needsAttentionItem ? [needsAttentionItem] : []),
+			...visibleItems,
+		];
+	}
+
+	/**
+	 * 一度も sync していないときだけ出す「初回同期を実行」行を作る。
+	 *
+	 * 設定を直した直後は原文ツリーだけが並ぶ。ツリーが空でなくなるため Welcome が
+	 * 消え、初回同期ボタンはタイトルバーの無地のアイコンしか残らない。何を押せば
+	 * よいか分かる行をツリー本体に置いて、その行き止まりをなくす。
+	 */
+	private buildNotSyncedItem(): DirectoryStatusItem | undefined {
+		if (this.statusItemTree.hasTargetUnits()) {
+			return undefined;
+		}
+		// マーカーの保管先は markers.mode で変わる（embedded は原文の Markdown 内、
+		// external は .mdait/ 配下）。「原文が書き換わる」かどうかは利用者にとって
+		// git 前提の判断材料なので、モードに合わせて実際に起きることだけを書く
+		const tooltip = this.configuration.isExternalMarkers()
+			? vscode.l10n.t(
+					"Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
+				)
+			: vscode.l10n.t(
+					"Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
+				);
+
+		return {
+			type: StatusItemType.Directory,
+			label: vscode.l10n.t("Not synced yet — run Initial Sync"),
+			description: vscode.l10n.t("Creates the translation files"),
+			tooltip,
+			status: Status.NeedsTranslation,
+			directoryPath: NOT_SYNCED_ID,
+		};
 	}
 
 	/**
@@ -622,6 +727,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return new vscode.ThemeIcon("warning", new vscode.ThemeColor("charts.yellow"));
 		}
 
+		// 未同期の案内は「押すと同期が走る」ことが分かるアイコン
+		if (
+			element?.type === StatusItemType.Directory &&
+			element.directoryPath === NOT_SYNCED_ID
+		) {
+			return new vscode.ThemeIcon("sync", new vscode.ThemeColor("charts.blue"));
+		}
+
 		// Frontmatter階層の場合はbookアイコンを使用
 		if (element?.type === StatusItemType.Frontmatter) {
 			switch (status) {
@@ -649,6 +762,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (element?.type === StatusItemType.Unit) {
 			// needFlagを優先してアイコンを決定
 			if (element.needFlag) {
+				// 原文が変わって訳が古い状態。未翻訳と同じ見た目だと「まだ手つかず」と
+				// 区別できず、直すべき箇所が一覧から読み取れない
+				if (element.needFlag.startsWith("revise@")) {
+					return new vscode.ThemeIcon(
+						"circle-small-filled",
+						new vscode.ThemeColor("charts.orange"),
+					);
+				}
 				if (element.needFlag === "review") {
 					return new vscode.ThemeIcon(
 						"circle-small-filled",
