@@ -18,3 +18,4 @@ hooks.md
 node_modules/**
 esbuild.mjs
 .config/**
+.claude/**
