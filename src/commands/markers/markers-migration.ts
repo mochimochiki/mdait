@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { markdownParser } from "../../core/markdown/parser";
+import { StatusManager } from "../../core/status/status-manager";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { setConfigValue } from "../../infra/config/config-json-editor";
@@ -395,6 +396,17 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 			vscode.l10n.t("Marker conversion cancelled. Some files may already be converted; re-run to finish."),
 		);
 		return;
+	}
+
+	// モード切替を UI に即時反映する（ステータスツリー再構築 → 変更イベント経由で
+	// ツリー・CodeLens・コンテキスト変数がまとめて更新される）。失敗しても変換自体は
+	// 成功しているため、完了通知は出す
+	try {
+		await StatusManager.getInstance().buildStatusItemTree();
+	} catch (error) {
+		logger.warn("markers", "Failed to refresh status after marker migration", {
+			error: (error as Error).message,
+		});
 	}
 
 	const doneMsg = toExternal
