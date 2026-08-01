@@ -59,12 +59,19 @@ export class SummaryDecorator {
 		const decorations: vscode.DecorationOptions[] = [];
 		const config = Configuration.getInstance();
 
-		const addDecoration = (lineIndex: number, hash: string, need: string | null): void => {
-			const summary = this.summaryManager.getSummary(hash);
-			if (!summary) {
+		const addDecoration = (lineIndex: number, marker: MdaitMarker): void => {
+			const summary = this.summaryManager.getSummary(marker.hash);
+			// AI 翻訳のサマリが無くても、手で訳して未確定のユニットには状態を出す。
+			// 訳文を書いただけでは need は落ちないため、書いた本人に「まだ残っている」
+			// ことが見えないと進捗が動かない理由が分からない（詳細は hover 側）
+			const summaryText = summary
+				? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
+				: marker.hasUnconfirmedEdit()
+					? vscode.l10n.t("Edited — not marked done yet")
+					: undefined;
+			if (!summaryText) {
 				return;
 			}
-			const summaryText = this.buildSummaryText(summary.stats.duration, summary.stats.tokens, need);
 			const lineLength = document.lineAt(lineIndex).text.length;
 			decorations.push({
 				range: new vscode.Range(lineIndex, lineLength, lineIndex, lineLength),
@@ -80,7 +87,7 @@ export class SummaryDecorator {
 			const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
 			for (const unit of parsed.units) {
 				if (unit.marker?.hash) {
-					addDecoration(unit.startLine, unit.marker.hash, unit.marker.need);
+					addDecoration(unit.startLine, unit.marker);
 				}
 			}
 			editor.setDecorations(this.decorationType, decorations);
@@ -102,7 +109,7 @@ export class SummaryDecorator {
 				continue;
 			}
 
-			addDecoration(lineIndex, marker.hash, marker.need);
+			addDecoration(lineIndex, marker);
 		}
 
 		// Decorationを適用

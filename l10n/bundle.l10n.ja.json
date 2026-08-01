@@ -538,10 +538,11 @@
   "Mark as Reviewed": "レビュー済みにする",
   "Un-isolate": "独立扱いを解除",
   "Mark as Completed": "完了にする",
-  "$(info) Translated it yourself? Press \"{0}\" when done.": "$(info) 自分で訳した場合は、書き終えたら「{0}」を押してください",
   "No units are waiting for translation.": "翻訳待ちのユニットはありません。",
   "{0} unit(s) waiting": "翻訳待ち {0} 件",
   "Which translation do you want to run?": "どの翻訳を実行しますか？",
   "Directory translation completed: {0} files succeeded, {1} files failed. Reason: {2}": "ディレクトリ翻訳完了: {0} ファイル成功、{1} ファイル失敗。理由: {2}",
-  "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文を翻訳の単位に分けて .mdait/ に記録し、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。"
+  "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文を翻訳の単位に分けて .mdait/ に記録し、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。",
+  "Edited — not marked done yet": "編集済み — まだ完了にしていません",
+  "You changed this translation, but it is still counted as unfinished. mdait cannot tell whether a translation is complete, so you decide: press “{0}” above this unit when it is ready.": "この訳文を書き換えましたが、まだ未完了として数えられています。訳し終えたかどうかは mdait には判断できないため、完了にするかはあなたが決めます。仕上がったらユニット上部の「{0}」を押してください。"
 }

@@ -133,4 +133,29 @@ export class MdaitMarker {
 		}
 		return need.substring(7); // "revise@".length = 7
 	}
+
+	/**
+	 * 翻訳待ちのまま本文が書き換えられている（＝人が手で訳したが未確定）か。
+	 *
+	 * need が残っているのに本文ハッシュだけが動いていれば、AI 翻訳（完了時に need を
+	 * 落とす）ではなく人の編集である。判定の基準ハッシュは need の種類で異なる:
+	 * - translate: sync 直後の訳文は原文のコピーなので `hash === from`。動いていれば編集済み
+	 * - revise@X : X は改訂が要求された時点の訳文ハッシュ。動いていれば編集済み
+	 *
+	 * 「本文が原文と同一のまま訳し終えた」ケース（固有名詞の見出しなど）は編集と
+	 * 見なせないが、そこで案内を出さないのは害がない（確定ボタンは常に隣にある）。
+	 */
+	hasUnconfirmedEdit(): boolean {
+		if (!this.hash) {
+			return false;
+		}
+		if (this.need === "translate") {
+			return this.from !== null && this.hash !== this.from;
+		}
+		const oldHash = this.getOldHashFromNeed();
+		if (oldHash) {
+			return this.hash !== oldHash;
+		}
+		return false;
+	}
 }
