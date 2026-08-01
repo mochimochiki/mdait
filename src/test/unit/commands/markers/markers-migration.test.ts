@@ -7,10 +7,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	type MigrationTarget,
 	countManualSyncLevelZeroFiles,
 	embedFileMarkers,
 	externalizeFileMarkers,
 	reconcileMarkerModeForFile,
+	runMigrationLoop,
 	setMarkerModeInConfigFile,
 } from "../../../../commands/markers/markers-migration";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../../../core/markdown/marker-provider";
@@ -223,6 +225,108 @@ suite("マーカー移行コマンドの per-file 変換（外部化 / 埋め込
 		);
 		assert.ok(!body.includes("cccc3333"), "サブ境界マーカーは復元されない（externalize 時に失われている）");
 	});
+
+	test("embed: store エントリの無いユニットへ空スタブ <!-- mdait --> を書き込まないこと", () => {
+		// external 表現のファイル（本文にマーカー無し・見出し2つ）に対し、store のエントリが
+		// 先頭ユニットの1件しか無い「エントリ不足」の状態で embed する
+		fs.writeFileSync(absPath, headingDoc, "utf-8");
+		store.setEntry({
+			path: REL,
+			order: 0,
+			level: 1,
+			titleHash: "",
+			hash: "aaaa1111",
+			from: "src00001",
+			need: "",
+		});
+		const config = makeConfig(2);
+
+		const result = embedFileMarkers(absPath, "target", config, store);
+
+		const body = fs.readFileSync(absPath, "utf-8");
+		assert.ok(
+			body.includes("<!-- mdait aaaa1111 from:src00001 -->\n# 見出し1"),
+			"エントリのあるユニットにはマーカーが復元される",
+		);
+		assert.ok(!/^<!--\s*mdait\s*-->\s*$/m.test(body), "エントリの無いユニットに空スタブが書き込まれない");
+		assert.strictEqual(result.unitsMigrated, 1, "hash を持つマーカーだけが移送として数えられる");
+		assert.strictEqual(store.getEntriesByPath(REL).length, 0, "MD ファイルの store エントリは削除される");
+	});
+});
+
+// 一括変換ループ（runMigrationLoop）の store 保存保証を検証する。
+// externalize は per-file 変換の時点で本文からマーカーを除去するため、途中で例外が起きても
+// store が保存されないと、変換済みファイルのマーカーが次の sync の store.load() で永久に失われる。
+suite("runMigrationLoop（一括変換ループの store 保存保証）", () => {
+	let tempDir: string;
+	let prevRoot: string;
+	let store: UnitStateStore;
+
+	setup(() => {
+		UnitStateStore.dispose();
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-miglp-"));
+		prevRoot = __vscodeMockWorkspaceRoot;
+		__vscodeMockWorkspaceRoot = tempDir;
+		store = UnitStateStore.getInstance();
+		store.load(tempDir);
+	});
+
+	teardown(() => {
+		UnitStateStore.dispose();
+		__vscodeMockWorkspaceRoot = prevRoot;
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	function writeEmbedded(rel: string): string {
+		const abs = path.join(tempDir, rel);
+		fs.mkdirSync(path.dirname(abs), { recursive: true });
+		fs.writeFileSync(abs, buildEmbeddedDoc(), "utf-8");
+		return abs;
+	}
+
+	test("途中のファイルで例外が起きても、変換済みファイルのマーカーが store に保存されること", async () => {
+		const okRel = "docs/en/first.md";
+		const okAbs = writeEmbedded(okRel);
+		// 2件目は読み込みで必ず失敗する対象（ディレクトリを指す）
+		const brokenAbs = path.join(tempDir, "docs/en/broken.md");
+		fs.mkdirSync(brokenAbs, { recursive: true });
+		const targets: MigrationTarget[] = [
+			{ absPath: okAbs, role: "target" },
+			{ absPath: brokenAbs, role: "target" },
+		];
+
+		await assert.rejects(
+			runMigrationLoop(targets, true, makeConfig(2), store, tempDir),
+			"2件目のファイルで例外が伝播すること",
+		);
+		assert.ok(!fs.readFileSync(okAbs, "utf-8").includes("<!-- mdait"), "1件目は本文からマーカーが除去済み");
+
+		// 次の sync の store.load() を模して、ディスクから読み直す
+		UnitStateStore.dispose();
+		store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		const entries = store.getEntriesByPath(okRel);
+		assert.strictEqual(entries.length, 2, "例外時も store が保存され、変換済みマーカーが失われないこと");
+		assert.strictEqual(entries[0].hash, "aaaa1111");
+		assert.strictEqual(entries[1].need, "translate");
+	});
+
+	test("全ファイル成功時は件数を返し、store も保存されること", async () => {
+		const rel = "docs/en/guide.md";
+		const abs = writeEmbedded(rel);
+		const targets: MigrationTarget[] = [{ absPath: abs, role: "target" }];
+
+		const result = await runMigrationLoop(targets, true, makeConfig(2), store, tempDir);
+
+		assert.strictEqual(result.filesRewritten, 1);
+		assert.strictEqual(result.unitsMigrated, 2);
+		assert.strictEqual(result.cancelled, false);
+
+		UnitStateStore.dispose();
+		store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		assert.strictEqual(store.getEntriesByPath(rel).length, 2, "ディスクへ保存済みであること");
+	});
 });
 
 // mdait.json の markers.mode 書き換えが既存の整形スタイルを壊さないことを検証する。
@@ -388,6 +492,85 @@ suite("reconcileMarkerModeForFile (mode-switch self-heal)", () => {
 		const again = reconcileMarkerModeForFile(absPath, "target", config, store);
 		assert.strictEqual(again, false);
 		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), body, "2回目でファイル不変");
+	});
+
+	test("sync.level 0（グローバル設定）では externalize せず、手動マーカーを破壊しないこと", () => {
+		// 再現シナリオ: markers.mode を手で "external" に書き換えたサイトが sync.level: 0
+		//（完全手動マーカー配置）のまま sync すると、自己修復が手動マーカー3件を
+		// 見出しベース境界の store エントリ1件へ潰してしまい、need 状態ごと失われていた
+		const manualDoc = [
+			"<!-- mdait aaaa1111 from:src00001 -->",
+			"本文1。",
+			"",
+			"<!-- mdait bbbb2222 from:src00002 need:translate -->",
+			"本文2。",
+			"",
+			"<!-- mdait cccc3333 from:src00003 -->",
+			"本文3。",
+			"",
+		].join("\n");
+		fs.writeFileSync(absPath, manualDoc, "utf-8");
+		const config = makeModeConfig(0, "external");
+
+		const changed = reconcileMarkerModeForFile(absPath, "target", config, store);
+
+		assert.strictEqual(changed, false, "externalize しない（no-op）こと");
+		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), manualDoc, "本文の手動マーカーが一切変わらないこと");
+		assert.strictEqual(store.getEntriesByPath(REL).length, 0, "store へ退避されない（3件→1件の破壊が起きない）こと");
+	});
+
+	test("frontmatter の mdait.sync.level: 0 上書きを持つファイルも externalize されないこと", () => {
+		// グローバルは level 2 でも、ファイル別上書きが 0 なら実効レベルは 0
+		const doc = [
+			"---",
+			"mdait:",
+			"  sync:",
+			"    level: 0",
+			"---",
+			"",
+			"<!-- mdait aaaa1111 from:src00001 -->",
+			"# 見出し1",
+			"",
+			"本文1。",
+			"",
+			"<!-- mdait cccc3333 from:sub00001 -->",
+			"手動境界の本文。",
+			"",
+		].join("\n");
+		fs.writeFileSync(absPath, doc, "utf-8");
+		const config = makeModeConfig(2, "external");
+
+		const changed = reconcileMarkerModeForFile(absPath, "target", config, store);
+
+		assert.strictEqual(changed, false);
+		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), doc, "ファイルが書き換えられないこと");
+		assert.strictEqual(store.getEntriesByPath(REL).length, 0);
+	});
+
+	test("グローバル sync.level 0 でも frontmatter で 1 以上に上書きされたファイルは externalize されること", () => {
+		// 実効レベルは frontmatter 優先で解決される（parser と同じ規則）
+		const doc = [
+			"---",
+			"mdait:",
+			"  sync:",
+			"    level: 2",
+			"---",
+			"",
+			"<!-- mdait aaaa1111 from:src00001 -->",
+			"# 見出し1",
+			"",
+			"本文1。",
+			"",
+		].join("\n");
+		fs.writeFileSync(absPath, doc, "utf-8");
+		const config = makeModeConfig(0, "external");
+
+		const changed = reconcileMarkerModeForFile(absPath, "target", config, store);
+
+		assert.strictEqual(changed, true, "実効レベルが 1 以上なので externalize されること");
+		assert.ok(!fs.readFileSync(absPath, "utf-8").includes("<!-- mdait"), "本文からマーカーが除去される");
+		assert.strictEqual(store.getEntriesByPath(REL).length, 1);
+		assert.strictEqual(store.getEntriesByPath(REL)[0].hash, "aaaa1111");
 	});
 
 	test("既に目標モードの表現なら no-op（書き込まない）こと", () => {

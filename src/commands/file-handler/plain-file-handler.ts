@@ -429,6 +429,9 @@ export class PlainFileHandler implements FileHandler {
 			totalUnits: 1,
 			children: [],
 			tooltip,
+			// 非MDはファイル＝1ユニットで children を持たないため、need はファイルレベルに載せる
+			// （sync 完了通知の翻訳待ち件数などがユニット横断の集計から拾えるようにする）
+			needFlag: entry.need || undefined,
 			contextValue: status === Status.Translated ? "mdaitPlainFileTargetComplete" : "mdaitPlainFileTarget",
 		};
 	}

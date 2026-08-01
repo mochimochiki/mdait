@@ -27,8 +27,14 @@ import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
 const logger = Logger.getInstance();
 
+/**
+ * sync の自己修復（reconcile）で「sync.level 0 のため外部化しなかった」警告を出したファイル。
+ * sync のたびに同じ警告を繰り返さないためのセッション内の記録。
+ */
+const levelZeroExternalizeWarned = new Set<string>();
+
 /** 変換対象の MD ファイル（絶対パス + ロール） */
-interface MigrationTarget {
+export interface MigrationTarget {
 	absPath: string;
 	role: "source" | "target";
 }
@@ -129,6 +135,14 @@ export function embedFileMarkers(
 	const relPath = toWorkspaceRelativePath(absPath);
 	const parsed = markdownParser.parse(content, config, externalMarkerProvider, { filePath: relPath, role });
 	const unitsMigrated = parsed.units.filter((u) => Boolean(u.marker?.hash)).length;
+	// store にエントリの無いユニット（本文のユニット数がエントリ数より多い場合など）には
+	// マーカー行を出力しない。hash 空のままだと本文へ空スタブ `<!-- mdait -->` が
+	// 書き込まれてしまう。マーカーは次回 sync が正しく付与する（自己修復）。
+	for (const unit of parsed.units) {
+		if (!unit.marker?.hash) {
+			(unit as { marker: unknown }).marker = undefined;
+		}
+	}
 	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
 	const changed = out !== content;
 	if (changed) {
@@ -177,6 +191,22 @@ export function reconcileMarkerModeForFile(
 		// コードブロック内のサンプルマーカーは境界にならないため、権威判定は parse 結果で行う。
 		const parsed = markdownParser.parse(content, config, embeddedMarkerProvider);
 		if (!parsed.units.some((u) => Boolean(u.marker?.hash))) {
+			return false;
+		}
+		// 実効 sync.level が 0（完全手動マーカー配置。frontmatter の mdait.sync.level 上書きを含む）の
+		// ファイルは、見出しベース境界しか表現できない external モードへ外部化すると手動マーカーが
+		// 失われる。自己修復ではデータを破壊せず、ファイルを触らないまま警告のみ残す
+		// （markers.mode と sync.level の設定不整合そのものは doctor 診断が表面化する）。
+		const effectiveLevel = parsed.frontMatter?.get("mdait.sync.level") ?? config.sync?.level;
+		if (effectiveLevel === 0) {
+			if (!levelZeroExternalizeWarned.has(relPath)) {
+				levelZeroExternalizeWarned.add(relPath);
+				logger.warn(
+					"markers",
+					"Skipping externalize during sync: effective sync.level is 0 (fully manual marker placement) — externalizing would destroy manual markers. Run doctor for the config mismatch.",
+					{ file: relPath },
+				);
+			}
 			return false;
 		}
 		const result = externalizeFileMarkers(absPath, role, config);
@@ -266,6 +296,66 @@ export function countManualSyncLevelZeroFiles(absPaths: readonly string[]): numb
 		}
 	}
 	return count;
+}
+
+/** 一括変換ループの結果 */
+export interface MigrationLoopResult {
+	filesRewritten: number;
+	unitsMigrated: number;
+	cancelled: boolean;
+}
+
+/**
+ * 一括変換の中核ループ。対象ファイルを順に per-file 変換し、最後に store を保存する。
+ *
+ * store の保存は try/finally で行い、途中のファイルで例外が起きても必ず実行する。
+ * externalize は per-file 変換の時点で本文からマーカーを除去済みであり、その状態は
+ * store（メモリ上）にしか無い。保存せずに次の sync が store.load() すると、変換済み
+ * ファイルのマーカーが失われて復元不能になる（キャンセル時も同様の理由で保存する）。
+ * markers.mode の切替はここでは行わない（完全成功時のみ呼び出し側が行う）。
+ */
+export async function runMigrationLoop(
+	targets: readonly MigrationTarget[],
+	toExternal: boolean,
+	config: Configuration,
+	store: UnitStateStore,
+	mdaitDir: string | null | undefined,
+	token?: vscode.CancellationToken,
+	progress?: vscode.Progress<{ message?: string; increment?: number }>,
+): Promise<MigrationLoopResult> {
+	let filesRewritten = 0;
+	let unitsMigrated = 0;
+	let cancelled = false;
+	try {
+		for (let i = 0; i < targets.length; i++) {
+			if (token?.isCancellationRequested) {
+				cancelled = true;
+				break;
+			}
+			const { absPath, role } = targets[i];
+			progress?.report({
+				message: vscode.l10n.t("{0}/{1} files", i + 1, targets.length),
+				increment: 100 / targets.length,
+			});
+
+			// 開いているエディタの未保存変更を反映してから読み込む
+			await flushDirtyDocument(absPath);
+			const result = toExternal
+				? externalizeFileMarkers(absPath, role, config)
+				: embedFileMarkers(absPath, role, config, store);
+			if (result.changed) {
+				filesRewritten++;
+			}
+			unitsMigrated += result.unitsMigrated;
+		}
+	} finally {
+		// store を保存（external: 追加した detach、embedded: 削除を永続化）。
+		// 正常終了・キャンセル・途中の例外を含む全ての経路で必ず保存する。
+		if (mdaitDir) {
+			store.save(mdaitDir);
+		}
+	}
+	return { filesRewritten, unitsMigrated, cancelled };
 }
 
 /**
@@ -362,37 +452,16 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 				cancellable: true,
 			},
 			async (progress, token) => {
-				for (let i = 0; i < targets.length; i++) {
-					if (token.isCancellationRequested) {
-						cancelled = true;
-						break;
-					}
-					const { absPath, role } = targets[i];
-					progress.report({
-						message: vscode.l10n.t("{0}/{1} files", i + 1, targets.length),
-						increment: 100 / targets.length,
-					});
-
-					// 開いているエディタの未保存変更を反映してから読み込む
-					await flushDirtyDocument(absPath);
-					const result = toExternal
-						? externalizeFileMarkers(absPath, role, config)
-						: embedFileMarkers(absPath, role, config, store);
-					if (result.changed) {
-						filesRewritten++;
-					}
-					unitsMigrated += result.unitsMigrated;
-				}
-
-				// store を保存（external: 追加した detach、embedded: 削除を永続化）。
-				// キャンセル時も必ず保存する（変換済みファイルのマーカーは store 上にしか無く、
-				// 保存しないとキャンセルで失われる）。
-				if (mdaitDir) {
-					store.save(mdaitDir);
-				}
+				// ループ本体は runMigrationLoop に委譲。途中で例外が起きても store の保存は
+				// runMigrationLoop の finally が保証する（保存漏れ＝変換済みマーカーの喪失）。
+				const loopResult = await runMigrationLoop(targets, toExternal, config, store, mdaitDir, token, progress);
+				filesRewritten = loopResult.filesRewritten;
+				unitsMigrated = loopResult.unitsMigrated;
+				cancelled = loopResult.cancelled;
 
 				// mdait.json の markers.mode を更新（in-memory も即時反映）。
 				// キャンセル時（部分変換）はモードを変えず、残りは sync の自己修復に委ねる。
+				// ループが例外で中断した場合もここへ達しないため、モードは完全成功時のみ切り替わる。
 				if (!cancelled) {
 					await setMarkerModeInConfigFile(config, toMode);
 				}

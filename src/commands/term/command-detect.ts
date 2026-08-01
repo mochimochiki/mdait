@@ -10,6 +10,7 @@ import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { isCancellationError } from "../shared/cancellation";
 import { notifyWithReport } from "../shared/report-file";
 import { type TermDetector, createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
@@ -205,6 +206,13 @@ export async function detectTerm_CoreProc(
 				existingTerms = [...existingTerms, ...newTerms];
 			}
 		} catch (error) {
+			// AI呼び出し中のキャンセルはバッチ失敗ではない。失敗として数えると単一バッチ実行で
+			// 「全バッチ失敗」扱いになり、正常なキャンセルが "Term detection failed: Canceled" の
+			// エラー通知になる。ループ先頭のキャンセル検出と同じ「途中結果の返却」で終える。
+			if (cancellationToken?.isCancellationRequested || isCancellationError(error)) {
+				console.log("Term detection was cancelled by user");
+				return allDetectedTerms;
+			}
 			failedBatches++;
 			if (firstBatchError === undefined) {
 				firstBatchError = error;

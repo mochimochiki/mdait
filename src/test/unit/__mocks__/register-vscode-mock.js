@@ -148,6 +148,13 @@ const vscodeMock = {
 		cancel() { this.token.isCancellationRequested = true; }
 		dispose() {}
 	},
+	// 実VS Codeと同じく name/message が "Canceled" のエラー（キャンセル判定のテスト用）
+	CancellationError: class extends Error {
+		constructor() {
+			super("Canceled");
+			this.name = "Canceled";
+		}
+	},
 };
 
 // Module._resolveFilename をフックして "vscode" を自身のパスに解決

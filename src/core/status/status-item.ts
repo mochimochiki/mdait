@@ -80,6 +80,12 @@ export interface FileStatusItem extends BaseStatusItem {
 	errorMessage?: string;
 	children?: UnitStatusItem[];
 	frontmatter?: FrontmatterStatusItem;
+	/**
+	 * ファイルレベルの need フラグ（非Markdownファイル用）。
+	 * 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たないため、
+	 * 翻訳待ちの need はここに載る。Markdown ファイルでは常に undefined（need はユニット側）。
+	 */
+	needFlag?: string;
 }
 
 /**

@@ -8,6 +8,7 @@ import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as vscode from "vscode";
 import { detectTerm_CoreProc } from "../../../../commands/term/command-detect";
 import { LangTerm, TermEntry } from "../../../../commands/term/term-entry";
 import type { TermDetector } from "../../../../commands/term/term-detector";
@@ -87,6 +88,47 @@ suite("detectTerm_CoreProc", () => {
 		const termsPath = path.join(tempDir, ".mdait", "terms.csv");
 		assert.ok(fs.existsSync(termsPath), "用語集ファイルが保存されていること");
 		assert.ok(fs.readFileSync(termsPath, "utf8").includes("API endpoint"));
+	});
+
+	test("単一バッチのAI呼び出し中にキャンセルされた場合はエラーにせず途中結果を返す", async () => {
+		// バグ再現: AI呼び出し中のキャンセルは CancellationError として表面化する。
+		// これを失敗バッチとして数えると単一バッチ実行では「全バッチ失敗」になり、
+		// 正常なキャンセルが "Term detection failed: Canceled" のエラー通知になっていた
+		class CancellingTermDetector implements TermDetector {
+			async detectTerms(): Promise<readonly TermEntry[]> {
+				throw new vscode.CancellationError();
+			}
+		}
+
+		const result = await detectTerm_CoreProc(
+			[createPair()],
+			transPair,
+			progressStub,
+			undefined,
+			new CancellingTermDetector(),
+		);
+
+		assert.deepEqual(result, [], "キャンセルは0件の正常終了として扱われること");
+	});
+
+	test("トークンがキャンセル済みで素のエラーが投げられた場合もキャンセルとして扱う", async () => {
+		const tokenSource = new vscode.CancellationTokenSource();
+		class AbortingTermDetector implements TermDetector {
+			async detectTerms(): Promise<readonly TermEntry[]> {
+				tokenSource.cancel();
+				throw new Error("request aborted");
+			}
+		}
+
+		const result = await detectTerm_CoreProc(
+			[createPair()],
+			transPair,
+			progressStub,
+			tokenSource.token,
+			new AbortingTermDetector(),
+		);
+
+		assert.deepEqual(result, [], "キャンセルとして途中結果が返り、エラーにならないこと");
 	});
 
 	test("用語が検出されなかった場合（AIは成功）は空配列を返しエラーにしない", async () => {

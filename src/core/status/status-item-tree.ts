@@ -220,6 +220,12 @@ export class StatusItemTree {
 	public countPendingTranslationUnits(scopeDirs?: string[]): number {
 		let count = 0;
 		for (const file of this.getFilesInScope(scopeDirs)) {
+			// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
+			// 翻訳待ちはファイルレベルの needFlag に載る（MDファイルでは常に undefined のため
+			// ユニット側の集計と二重に数えることはない）
+			if (isTranslateNeed(file.needFlag)) {
+				count++;
+			}
 			for (const unit of this.getUnitsInFile(file.filePath)) {
 				if (isTranslateNeed(unit.needFlag)) {
 					count++;

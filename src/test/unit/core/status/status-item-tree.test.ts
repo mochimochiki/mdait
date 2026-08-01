@@ -15,6 +15,7 @@ function makeFileItem(
 	filePath: string,
 	status: Status = Status.NeedsTranslation,
 	children?: UnitStatusItem[],
+	extra?: Partial<FileStatusItem>,
 ): FileStatusItem {
 	return {
 		type: StatusItemType.File,
@@ -25,6 +26,7 @@ function makeFileItem(
 		totalUnits: 1,
 		status,
 		...(children ? { children } : {}),
+		...extra,
 	};
 }
 
@@ -511,6 +513,44 @@ suite("StatusItemTree", () => {
 				1,
 				"変更なしの再sync後も翻訳待ち件数が維持されること",
 			);
+		});
+
+		test("非MD（プレーン）ファイルのファイルレベル翻訳待ち（needFlag）が数えられること", () => {
+			// バグ再現: 非MDファイルは children が空（ファイル＝1ユニット）で翻訳待ちが
+			// ファイルレベルの needFlag に載るため、ユニットだけを数えると
+			// プレーンファイルのみのワークスペースで件数0・「今すぐ翻訳」導線消失になる
+			const jaDir = path.resolve("/mock-workspace/ja");
+			tree.buildTree(
+				[
+					makeFileItem(path.join(jaDir, "notes.txt"), Status.NeedsTranslation, [], { needFlag: "translate" }),
+					makeFileItem(path.join(jaDir, "data.csv"), Status.NeedsTranslation, [], { needFlag: "revise@abc123" }),
+					makeFileItem(path.join(jaDir, "review.txt"), Status.NeedsTranslation, [], { needFlag: "review" }),
+					makeFileItem(path.join(jaDir, "done.txt"), Status.Translated, []),
+				],
+				["ja"],
+			);
+
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				2,
+				"translate / revise@… のプレーンファイルだけが数えられ、review・翻訳済みは数えないこと",
+			);
+		});
+
+		test("MDユニットとプレーンファイルの翻訳待ちが二重計上なく合算されること", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const mdPath = path.join(jaDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(mdPath, Status.NeedsTranslation, [
+						makeUnitItem(mdPath, "u1", "translate", Status.NeedsTranslation),
+					]),
+					makeFileItem(path.join(jaDir, "notes.txt"), Status.NeedsTranslation, [], { needFlag: "translate" }),
+				],
+				["ja"],
+			);
+
+			assert.strictEqual(tree.countPendingTranslationUnits(), 2);
 		});
 
 		test("scopeDirsを渡すと選択中ペアの範囲だけが数えられること", () => {
