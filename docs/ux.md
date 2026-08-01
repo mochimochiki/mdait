@@ -61,7 +61,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 | **LM Tools（9種）** | `mdait_getStatus` / `mdait_sync` / `mdait_translate` / `mdait_term` / `mdait_tm` / `mdait_validate` / `mdait_aiReview` / `mdait_adopt` / `mdait_resolve`。共通JSONエンベロープ（`schemaVersion/ok/summary/data/nextActions`） | [design/tools.md](design/tools.md)、[design/agent-orchestration.md](design/agent-orchestration.md) |
 | **エージェント・プレイブック** | S1（新規翻訳）/S2（既存対訳取り込み）の手順・ゴール判定・リカバリ・禁止事項 | [guide-developer.md](guide-developer.md) |
 | **nextActions** | 各ツール出力に含まれる次アクション提案。状態→推奨アクションの誘導装置 | [design/tools.md](design/tools.md) |
-| **debug IPC** | 開発/E2E 検証用のファイルベースIPC（`MDAIT_DEBUG_IPC`）。全 `mdait.*` コマンドを機械実行 | `.github/skills/debug-ipc/` |
+| **debug IPC** | 開発/E2E 検証用のファイルベースIPC（`MDAIT_DEBUG_IPC`）。全 `mdait.*` コマンドを機械実行 | `.claude/skills/debug-ipc/` |
 
 ---
 

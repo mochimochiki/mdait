@@ -15,7 +15,7 @@ description: "ブラウザ版 VS Code (code-server) + Playwright + Chromium で 
 ## 構築
 
 ```bash
-bash .github/skills/ux-lab/scripts/setup.sh
+bash .claude/skills/ux-lab/scripts/setup.sh
 ```
 
 - 作業ディレクトリは `MDAIT_UXLAB_DIR`（既定 `/tmp/mdait-uxlab`）。
@@ -29,7 +29,7 @@ bash .github/skills/ux-lab/scripts/setup.sh
 ## 起動
 
 ```bash
-bash .github/skills/ux-lab/scripts/start.sh [ワークスペースパス]
+bash .claude/skills/ux-lab/scripts/start.sh [ワークスペースパス]
 ```
 
 - 既定ワークスペースは `src/test/unit/workspace`（`npm run copy-test-files` でリセット可能）。
@@ -44,7 +44,7 @@ bash .github/skills/ux-lab/scripts/start.sh [ワークスペースパス]
 `scripts/driver.js` に Playwright ヘルパがある。使用例:
 
 ```js
-const { connect } = require('/path/to/repo/.github/skills/ux-lab/scripts/driver');
+const { connect } = require('/path/to/repo/.claude/skills/ux-lab/scripts/driver');
 (async () => {
   const s = await connect();          // 信頼ダイアログの承認・Chatパネルの退避まで自動
   await s.openMdait();                // アクティビティバーの mdait ビューを開く
