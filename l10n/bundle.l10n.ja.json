@@ -543,6 +543,6 @@
   "Which translation do you want to run?": "どの翻訳を実行しますか？",
   "Directory translation completed: {0} files succeeded, {1} files failed. Reason: {2}": "ディレクトリ翻訳完了: {0} ファイル成功、{1} ファイル失敗。理由: {2}",
   "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文を翻訳の単位に分けて .mdait/ に記録し、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。",
-  "Not completed": "未完了",
-  "Editing the text does not complete it. Press “{0}” when it is ready.": "書き換えただけでは完了になりません。仕上がったら「{0}」を押してください。"
+  "Edited — not marked done yet": "編集済み — まだ完了にしていません",
+  "If you finished the translation by hand, press “{0}”.": "手作業で翻訳完了した場合は「{0}」を押してください。"
 }

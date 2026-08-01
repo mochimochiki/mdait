@@ -66,7 +66,7 @@ export class SummaryDecorator {
 			const summaryText = summary
 				? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
 				: marker.hasUnconfirmedEdit()
-					? vscode.l10n.t("Not completed")
+					? vscode.l10n.t("Edited — not marked done yet")
 					: undefined;
 			if (!summaryText) {
 				return;

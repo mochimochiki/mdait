@@ -109,10 +109,10 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		if (unconfirmedEdit) {
 			// 訳せたかどうかは機械には判定できないため、完了は人の宣言で決まる。
 			// それを知らないと「訳したのに進捗が動かない」で手が止まる
-			md.appendMarkdown(`### ✏️ ${vscode.l10n.t("Not completed")}\n\n`);
+			md.appendMarkdown(`### ✏️ ${vscode.l10n.t("Edited — not marked done yet")}\n\n`);
 			md.appendMarkdown(
 				`${vscode.l10n.t(
-					"Editing the text does not complete it. Press “{0}” when it is ready.",
+					"If you finished the translation by hand, press “{0}”.",
 					needFlag?.startsWith("revise@")
 						? vscode.l10n.t("Mark as Revised")
 						: vscode.l10n.t("Mark as Translated"),
