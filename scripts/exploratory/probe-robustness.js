@@ -5,6 +5,9 @@
  * 「原文編集 / 訳文編集 / 章の挿入・削除 / リネーム / フォルダ移動 / ファイル削除 / 外部変更」を
  * embedded と external の両モードで同一手順で実行し、sync 後の状態を突き合わせる。
  *
+ * S0〜S14 は単一操作。S20〜 は複合・意地悪シナリオ（分割/統合、見出しレベル変更、同一本文の重複章、
+ * 原文と訳文の同時編集、構造の食い違い、2段階操作、先頭ユニット、冪等性、frontmatter）。
+ *
  * 使い方: npm run compile && node scripts/exploratory/probe-robustness.js
  *
  * 注意: テストワークスペース（src/test/unit/workspace）の content と .mdait を破壊的に書き換える。
@@ -185,6 +188,26 @@ function editBody(rel, from, to) {
 	if (!t.includes(from)) throw new Error(`body not found: ${from}`);
 	write(rel, t.replace(from, to));
 }
+/**
+ * 章ブロックの見出し行（と embedded のマーカー行）を落として本文だけ残す＝直前の章へ統合する。
+ * 人が「章立てをやめて前の章に吸収した」操作に相当する。
+ */
+function mergeChapterIntoPrevious(rel, heading) {
+	const lines = read(rel).split("\n");
+	const r = blockRange(lines, heading);
+	if (!r) throw new Error(`chapter not found: ${heading}`);
+	const kept = lines.slice(r[0], r[1]).filter((l) => l.trim() !== heading && !/^<!--\s*mdait\b/.test(l.trim()));
+	lines.splice(r[0], r[1] - r[0], ...kept);
+	write(rel, lines.join("\n"));
+}
+/** 見出し行のレベルだけを変える（本文・マーカーは触らない） */
+function changeHeadingLevel(rel, heading, newHeading) {
+	const lines = read(rel).split("\n");
+	const h = lines.findIndex((l) => l.trim() === heading);
+	if (h < 0) throw new Error(`chapter not found: ${heading}`);
+	lines[h] = newHeading;
+	write(rel, lines.join("\n"));
+}
 
 const SRC = [
 	"# ドキュメント",
@@ -205,8 +228,35 @@ const SRC = [
 	"",
 ].join("\n");
 
+/** コピペで作られた同一本文の章を2つ持つ原文（S24/S25 用） */
+const DUP_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 注意事項",
+	"",
+	"安全に配慮してください。",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+	"## 注意事項",
+	"",
+	"安全に配慮してください。",
+	"",
+	"## 第3章",
+	"",
+	"第3章の本文。",
+	"",
+].join("\n");
+
+/** frontmatter を持つ原文（S33/S34 用。frontmatter マーカーは現状どちらのモードでも本文側に残る） */
+const FM_SRC = ["---", 'title: "ガイド"', 'description: "ガイドの説明"', "---", "", ...SRC.split("\n")].join("\n");
+
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
-async function bootstrap(mode) {
+async function bootstrap(mode, src) {
 	const t = (label, p) => {
 		const s = Date.now();
 		return Promise.resolve(p()).then((r) => {
@@ -215,7 +265,7 @@ async function bootstrap(mode) {
 		});
 	};
 	resetAll();
-	write("ja/guide.md", SRC);
+	write("ja/guide.md", src || SRC);
 	await t("setMode", () => setMode(mode));
 	await t("sync1", () => syncCommand());
 	installFakeAi();
@@ -227,9 +277,10 @@ async function bootstrap(mode) {
 const results = [];
 const ONLY = process.env.PROBE_ONLY ? process.env.PROBE_ONLY.split(",") : null;
 async function scenario(name, mutate, opts) {
-	if (ONLY && !ONLY.some((p) => name.startsWith(p))) return;
+	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
+	if (ONLY && !ONLY.includes(name.split(" ")[0])) return;
 	for (const mode of ["embedded", "external"]) {
-		await bootstrap(mode);
+		await bootstrap(mode, opts && opts.src);
 		const before = { src: unitsOf("ja/guide.md"), tgt: unitsOf("en/guide.md"), us: unitState() };
 		try {
 			await mutate(mode);
@@ -238,6 +289,8 @@ async function scenario(name, mutate, opts) {
 		}
 		if (opts && opts.reloadConfig) await setMode(mode, opts.pairs);
 		await syncCommand();
+		// 冪等性の確認用: 何も変えずに sync を追加で回す
+		for (let i = 0; i < ((opts && opts.extraSyncs) || 0); i++) await syncCommand();
 		if (opts && opts.transAfter) {
 			installFakeAi();
 			for (const rel of opts.transAfter) {
@@ -351,6 +404,114 @@ async function main() {
 				insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
 			},
 			{ transAfter: ["en/guide.md"] },
+		);
+
+		// ---- S20〜: 複合・意地悪シナリオ ----
+
+		// S20: 章の分割（1章を2章に割る）＝ 編集＋挿入の合わせ技
+		await scenario("S20 原文の第2章を2つに分割", async () => {
+			editBody("ja/guide.md", "第2章の本文。", "第2章の本文（前半）。\n\n## 第2.5章\n\n第2章の本文（後半）。");
+		});
+
+		// S21: 章の統合（第3章の見出しを外して第2章に吸収）＝ 編集＋削除の合わせ技
+		await scenario("S21 原文の第3章を第2章に統合", async () => {
+			mergeChapterIntoPrevious("ja/guide.md", "## 第3章");
+		});
+
+		// S22: 見出しレベルを下げる（## → ###）。ユニット数は変わらず level だけ変わる
+		await scenario("S22 原文の第2章を ## から ### へ降格", async () => {
+			changeHeadingLevel("ja/guide.md", "## 第2章", "### 第2章");
+		});
+
+		// S23: 降格して sync したあと元に戻して sync（2段階・自己修復するか）
+		await scenario("S23 第2章を ### に降格→sync→## に戻す（2段階）", async () => {
+			changeHeadingLevel("ja/guide.md", "## 第2章", "### 第2章");
+			await syncCommand();
+			changeHeadingLevel("ja/guide.md", "### 第2章", "## 第2章");
+		});
+
+		// S24: 同一本文の章が2つある文書（コピペ章）の間に新章を挿入
+		await scenario(
+			"S24 同一本文の章が2つある文書へ章を挿入",
+			async () => {
+				insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			},
+			{ src: DUP_SRC },
+		);
+
+		// S25: 同一本文の章が2つある文書から、先に出てくる方を削除
+		await scenario(
+			"S25 同一本文の章のうち先頭側を削除",
+			async () => {
+				removeChapter("ja/guide.md", "## 注意事項");
+			},
+			{ src: DUP_SRC },
+		);
+
+		// S26: 原文で章を挿入しつつ、訳文の別の章を人手で直す（両側同時編集）
+		await scenario("S26 原文へ章挿入＋訳文の別章を人手編集", async () => {
+			insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			editBody("en/guide.md", "第3章の本文。 [MT]", "Chapter 3 (hand-edited)");
+		});
+
+		// S27: 原文で章を挿入し、訳文では別の章を削除（双方の構造が食い違う）
+		await scenario("S27 原文へ章挿入＋訳文の第2章を削除", async () => {
+			insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			removeChapter("en/guide.md", "## 第2章 第2章の本文。 [MT]");
+		});
+
+		// S28: 並べ替えとフォルダ移動を同時に行う
+		await scenario("S28 章の入れ替え＋原文/訳文をサブフォルダへ移動", async () => {
+			swapChapters("ja/guide.md", "## 第2章", "## 第3章");
+			fs.mkdirSync(path.join(CONTENT, "ja/sub"), { recursive: true });
+			fs.mkdirSync(path.join(CONTENT, "en/sub"), { recursive: true });
+			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/sub/guide.md"));
+			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/sub/guide.md"));
+		});
+
+		// S29: 挿入して sync → さらに別の章を削除して sync（壊れの上に操作を重ねる）
+		await scenario("S29 章挿入→sync→第3章を削除→sync（2段階）", async () => {
+			insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			await syncCommand();
+			removeChapter("ja/guide.md", "## 第3章");
+		});
+
+		// S30: 先頭ユニット（H1 の導入）を削除する
+		await scenario("S30 先頭ユニット（導入 H1）を削除", async () => {
+			removeChapter("ja/guide.md", "# ドキュメント");
+		});
+
+		// S31: 文書の先頭に新しい H1 を挿入する（全ユニットが1つずれる）
+		await scenario("S31 文書の先頭に新しい H1 を挿入", async () => {
+			insertChapterBefore("ja/guide.md", "# ドキュメント", "# 新しいタイトル\n\n新しい導入。\n");
+		});
+
+		// S32: 壊れた状態で sync を繰り返す（増殖・振動しないか＝冪等性）
+		await scenario(
+			"S32 章挿入→sync を3回繰り返す（冪等性）",
+			async () => {
+				insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			},
+			{ extraSyncs: 2 },
+		);
+
+		// S33: frontmatter を持つ文書の途中に章を挿入
+		await scenario(
+			"S33 frontmatter 付き文書へ章を挿入",
+			async () => {
+				insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
+			},
+			{ src: FM_SRC },
+		);
+
+		// S34: frontmatter を持つ文書で frontmatter を編集しつつ章を削除
+		await scenario(
+			"S34 frontmatter 編集＋章削除",
+			async () => {
+				editBody("ja/guide.md", 'title: "ガイド"', 'title: "ガイド（改訂）"');
+				removeChapter("ja/guide.md", "## 第2章");
+			},
+			{ src: FM_SRC },
 		);
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
