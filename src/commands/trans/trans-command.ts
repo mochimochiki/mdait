@@ -280,10 +280,23 @@ export async function transFile_CoreProc(
 		return emptyResult("no-trans-pair");
 	}
 
-	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
-	return FileMutex.getInstance().runExclusive([targetFilePath], () =>
-		transFile_Exclusive(uri, transPair, progress, token, options),
-	);
+	// 「このファイルを処理中」を台帳に載せる。ディレクトリ翻訳は複数ファイルを同時に
+	// 走らせるため、ここで1ファイルずつ登録しないと「配下のファイルは全部処理中」と
+	// 推測するほかなくなり、どこまで進んだかが読めなくなる。
+	// 登録は排他区間の外側で行う — ロック待ちの間もそのファイルは着手済みだからである
+	const tracked = OperationRegistry.getInstance().track({
+		kind: "translate",
+		scope: "file",
+		path: targetFilePath,
+	});
+	try {
+		// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
+		return await FileMutex.getInstance().runExclusive([targetFilePath], () =>
+			transFile_Exclusive(uri, transPair, progress, token, options),
+		);
+	} finally {
+		tracked.release();
+	}
 }
 
 /**
@@ -394,21 +407,32 @@ async function transFile_Exclusive(
 	let frontmatterTranslated = false;
 
 	try {
-		// frontmatterの翻訳（必要な場合のみ）
+		// frontmatterの翻訳（必要な場合のみ）。frontmatter もツリー上の1行なので、
+		// 訳している間だけその行を処理中として登録する
 		if (needsFrontmatterTranslation) {
 			const sourceFilePath = fileExplorer.getSourcePath(
 				targetFilePath,
 				transPair,
 			);
-			const updated = await translateFrontmatterIfNeeded(
-				markdown,
-				sourceFilePath,
-				frontmatterKeys,
-				translator,
-				sourceLang,
-				targetLang,
-				token,
-			);
+			const trackedFrontmatter = OperationRegistry.getInstance().track({
+				kind: "translate",
+				scope: "frontmatter",
+				path: targetFilePath,
+			});
+			let updated: boolean;
+			try {
+				updated = await translateFrontmatterIfNeeded(
+					markdown,
+					sourceFilePath,
+					frontmatterKeys,
+					translator,
+					sourceLang,
+					targetLang,
+					token,
+				);
+			} finally {
+				trackedFrontmatter.release();
+			}
 			if (updated) {
 				frontmatterTranslated = true;
 				const encoder = new TextEncoder();
@@ -435,6 +459,7 @@ async function transFile_Exclusive(
 					increment: 100 / total,
 				});
 			},
+			beginUnit: (unit) => trackUnit(targetFilePath, unit.marker?.hash),
 			translateUnit: async (unit) => {
 				const oldHash = unit.marker?.hash;
 				const metrics = await translateUnit(
@@ -505,6 +530,25 @@ async function transFile_Exclusive(
 		// 状態を作り直すため翻訳エラーを知らず、先に刻むと必ず消えてしまう
 		markFailedUnit(targetFilePath, loop);
 	}
+}
+
+/**
+ * 「このユニットを処理中」を台帳に載せ、区間を閉じる後始末を返す（runUnitLoop の beginUnit 用）。
+ *
+ * ツリーの回転アイコンの粒度はここだけで決まる。登録しなければ「ファイルが処理中なら
+ * 配下ユニットも処理中」と推測するほかなくなり、着手前のユニットまで回り出す。
+ */
+function trackUnit(targetFilePath: string, unitHash: string | undefined): (() => void) | undefined {
+	if (!unitHash) {
+		return undefined;
+	}
+	const handle = OperationRegistry.getInstance().track({
+		kind: "translate",
+		scope: "unit",
+		path: targetFilePath,
+		unitHash,
+	});
+	return () => handle.release();
 }
 
 /**
@@ -1290,6 +1334,7 @@ async function transUnit_Exclusive(
 				onProgress: () => {
 					progress.report({ message: vscode.l10n.t("{0}/{1} units", 1, 1) });
 				},
+				beginUnit: (unit) => trackUnit(targetPath, unit.marker?.hash),
 				translateUnit: async (unit) => {
 					const metrics = await translateUnit(
 						unit,

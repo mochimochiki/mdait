@@ -84,6 +84,10 @@ export function getStateDescription(status: Status, needFlag: string | undefined
  *
  * 台帳に登録されている＝処理中、が唯一の根拠であり、解除は登録した側の
  * finally 一経路だけが行う。表示側は旗を持たない。
+ *
+ * 行の種類と問い合わせる範囲は必ず1対1に対応させる。ここで「frontmatter はひとまず
+ * ファイルとして問う」のような近似を入れると、その行はファイル処理のあいだ回りっぱなしに
+ * なり、進み具合を表さなくなる（ADR-260803-02）。
  */
 function isElementTranslating(element: StatusItem): boolean {
 	const registry = OperationRegistry.getInstance();
@@ -100,9 +104,8 @@ function isElementTranslating(element: StatusItem): boolean {
 				path: element.filePath,
 				unitHash: element.unitHash,
 			});
-		default:
-			// frontmatter は親ファイルの処理に追随する
-			return registry.isBusy({ scope: "file", path: element.filePath });
+		case StatusItemType.Frontmatter:
+			return registry.isBusy({ scope: "frontmatter", path: element.filePath });
 	}
 }
 
