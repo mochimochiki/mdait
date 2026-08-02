@@ -1,20 +1,18 @@
 /**
  * @file cancellation.ts
  * @description ユーザーによるキャンセルと本物のエラーを区別する共有ヘルパー。
- * withProgress のキャンセルは AI 呼び出しから vscode.CancellationError（または
- * name/message が "Canceled" のエラー）として表面化する。これをエラー通知に
- * 流すと、正常なキャンセルが「〜failed: Canceled」というエラートーストになる。
+ *
+ * 判定の実体は `infra/errors/operation-cancelled` にある（VS Code 非依存にして
+ * プロバイダ層からも同じ型を投げられるようにするため）。ここは commands 層からの
+ * 入口として残す。
  */
-import * as vscode from "vscode";
+export { OperationCancelledError, isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 
 /**
  * エラーがユーザーキャンセル由来かを判定する。
- * VS Code の CancellationError と、LM API などが投げる name/message "Canceled" の
- * 素のエラーの両方を扱う。
+ * @deprecated `isOperationCancelled` を直接使うこと。既存呼び出しのための別名。
  */
 export function isCancellationError(error: unknown): boolean {
-	if (typeof vscode.CancellationError === "function" && error instanceof vscode.CancellationError) {
-		return true;
-	}
-	return error instanceof Error && (error.name === "Canceled" || error.message === "Canceled");
+	return isOperationCancelled(error);
 }

@@ -40,7 +40,10 @@ interface BaseStatusItem {
 	iconPath?: vscode.ThemeIcon;
 	tooltip?: string;
 	contextValue?: string;
-	isTranslating?: boolean;
+
+	// 「処理中か」はここに持たない。書き換え可能な旗にすると、解除を分岐ごとに
+	// 手書きする必要が生まれ、中断・スキップの経路で下ろし忘れるたびに回転アイコンが
+	// 止まらなくなる。実行中かどうかは OperationRegistry が唯一の根拠を持つ（ADR-260803-01）
 
 	/**
 	 * ラベルの右に薄字で添える副題（TreeItem.description）。

@@ -50,20 +50,40 @@ Line 3`;
 	});
 });
 
+/** 成功した適用結果からテキストを取り出す（失敗なら明示的に落とす） */
+function patchedText(result: ReturnType<typeof applySimplePatch>): string {
+	assert.equal(result.ok, true, "パッチ適用が成功していること");
+	return result.ok ? result.text : "";
+}
+
 suite("applySimplePatch", () => {
-	test("空パッチはnullを返す", () => {
+	test("空パッチは失敗理由 empty-patch を返す", () => {
 		const applied = applySimplePatch("Hello", "");
-		assert.equal(applied, null);
+		assert.equal(applied.ok, false);
+		assert.equal(applied.ok === false && applied.reason, "empty-patch");
 	});
 
-	test("マッチしないコンテキストではnullを返す", () => {
+	test("=/-/+ 形式でないパッチは失敗理由 unrecognized-format を返す", () => {
+		const applied = applySimplePatch("Hello", "@@ -1 +1 @@\n-Hello\n+Hi");
+		assert.equal(applied.ok, false);
+		assert.equal(applied.ok === false && applied.reason, "unrecognized-format");
+	});
+
+	test("変更行が無いパッチは失敗理由 no-changes を返す", () => {
+		const applied = applySimplePatch("Hello", "=Hello");
+		assert.equal(applied.ok, false);
+		assert.equal(applied.ok === false && applied.reason, "no-changes");
+	});
+
+	test("目印の行が見つからないときは失敗理由 anchor-not-found を返す", () => {
 		const base = "Line 1\nLine 2\n";
 		const patch = `=Nonexistent context
 -Line 2
 +New Line 2`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.equal(applied, null);
+		assert.equal(applied.ok, false);
+		assert.equal(applied.ok === false && applied.reason, "anchor-not-found");
 	});
 
 	test("末尾空白の差異を吸収するfuzzyマッチ", () => {
@@ -73,8 +93,8 @@ suite("applySimplePatch", () => {
 +New Line 2`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("New Line 2"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("New Line 2"));
 	});
 
 	test("context-onlyフォールバック: old行が不正でもcontextで位置特定して適用する", () => {
@@ -97,9 +117,9 @@ suite("applySimplePatch", () => {
 
 		const applied = applySimplePatch(base, patch);
 		assert.notEqual(applied, null, "context-onlyフォールバックが動作するべき");
-		assert.ok(applied?.includes("> This is a revised quote."), "新しい翻訳が含まれるべき");
-		assert.ok(applied?.includes("## Test File 2"), "コンテキストが保持されるべき");
-		assert.ok(applied?.includes("Code block:"), "後続のコンテキストが保持されるべき");
+		assert.ok(patchedText(applied).includes("> This is a revised quote."), "新しい翻訳が含まれるべき");
+		assert.ok(patchedText(applied).includes("## Test File 2"), "コンテキストが保持されるべき");
+		assert.ok(patchedText(applied).includes("Code block:"), "後続のコンテキストが保持されるべき");
 	});
 
 	// ===== Prefixed mode（=プレフィックス） =====
@@ -112,10 +132,10 @@ suite("applySimplePatch", () => {
 =Some more text.`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("> Updated quote with new meaning."));
-		assert.ok(applied?.includes("## Introduction"));
-		assert.ok(applied?.includes("Some more text."));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("> Updated quote with new meaning."));
+		assert.ok(patchedText(applied).includes("## Introduction"));
+		assert.ok(patchedText(applied).includes("Some more text."));
 	});
 
 	test("prefixed mode: リスト項目がコンテキストにある場合に正しく動作する", () => {
@@ -128,8 +148,8 @@ suite("applySimplePatch", () => {
 =- Term management`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.equal(applied, "## Features\n\n- Translation support\n- Real-time sync\n- Term management\n");
+		assert.equal(applied.ok, true);
+		assert.equal(patchedText(applied), "## Features\n\n- Translation support\n- Real-time sync\n- Term management\n");
 	});
 
 	test("prefixed mode: リスト項目の追加（insert-only）", () => {
@@ -141,10 +161,10 @@ suite("applySimplePatch", () => {
 +- Term management`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("- Translation support"));
-		assert.ok(applied?.includes("- Sync support"));
-		assert.ok(applied?.includes("- Term management"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("- Translation support"));
+		assert.ok(patchedText(applied).includes("- Sync support"));
+		assert.ok(patchedText(applied).includes("- Term management"));
 	});
 
 	test("prefixed mode: リスト項目の削除（delete-only）", () => {
@@ -156,10 +176,10 @@ suite("applySimplePatch", () => {
 =- Term management`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("- Translation support"));
-		assert.ok(!applied?.includes("- Sync support"));
-		assert.ok(applied?.includes("- Term management"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("- Translation support"));
+		assert.ok(!patchedText(applied).includes("- Sync support"));
+		assert.ok(patchedText(applied).includes("- Term management"));
 	});
 
 	test("prefixed mode: 水平線（---）がコンテキストにある場合", () => {
@@ -172,10 +192,10 @@ suite("applySimplePatch", () => {
 +Updated Section 2`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("---"));
-		assert.ok(applied?.includes("Updated Section 2"));
-		assert.ok(!applied?.includes("\nSection 2\n"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("---"));
+		assert.ok(patchedText(applied).includes("Updated Section 2"));
+		assert.ok(!patchedText(applied).includes("\nSection 2\n"));
 	});
 
 	test("prefixed mode: 複数チャンクの変更", () => {
@@ -191,12 +211,12 @@ suite("applySimplePatch", () => {
 =Line 7`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("Modified 2"));
-		assert.ok(applied?.includes("Modified 6"));
-		assert.ok(applied?.includes("Line 3"));
-		assert.ok(applied?.includes("Line 4"));
-		assert.ok(applied?.includes("Line 5"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("Modified 2"));
+		assert.ok(patchedText(applied).includes("Modified 6"));
+		assert.ok(patchedText(applied).includes("Line 3"));
+		assert.ok(patchedText(applied).includes("Line 4"));
+		assert.ok(patchedText(applied).includes("Line 5"));
 	});
 
 	test("prefixed mode: 空行を含むコンテキスト", () => {
@@ -209,10 +229,10 @@ suite("applySimplePatch", () => {
 =Paragraph 3`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("Updated Paragraph 2"));
-		assert.ok(applied?.includes("Paragraph 1"));
-		assert.ok(applied?.includes("Paragraph 3"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("Updated Paragraph 2"));
+		assert.ok(patchedText(applied).includes("Paragraph 1"));
+		assert.ok(patchedText(applied).includes("Paragraph 3"));
 	});
 
 	test("prefixed mode: LLMが空行の=プレフィックスを忘れた場合", () => {
@@ -223,8 +243,8 @@ suite("applySimplePatch", () => {
 +Updated content.`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("Updated content."));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("Updated content."));
 	});
 
 	test("prefixed mode: blockquoteの変更", () => {
@@ -238,9 +258,9 @@ suite("applySimplePatch", () => {
 =More text.`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("> Updated important note."));
-		assert.ok(applied?.includes("> Second line."));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("> Updated important note."));
+		assert.ok(patchedText(applied).includes("> Second line."));
 	});
 
 	test("prefixed mode: タスクリストの変更", () => {
@@ -253,9 +273,9 @@ suite("applySimplePatch", () => {
 =- [ ] Task 3`;
 
 		const applied = applySimplePatch(base, patch);
-		assert.notEqual(applied, null);
-		assert.ok(applied?.includes("- [x] Updated Task 2"));
-		assert.ok(applied?.includes("- [ ] Task 1"));
-		assert.ok(applied?.includes("- [ ] Task 3"));
+		assert.equal(applied.ok, true);
+		assert.ok(patchedText(applied).includes("- [x] Updated Task 2"));
+		assert.ok(patchedText(applied).includes("- [ ] Task 1"));
+		assert.ok(patchedText(applied).includes("- [ ] Task 3"));
 	});
 });

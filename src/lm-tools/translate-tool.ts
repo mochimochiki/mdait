@@ -2,6 +2,7 @@ import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュール�
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { clampConcurrency, runWithConcurrency } from "../commands/shared/concurrency";
+import { OperationRegistry } from "../commands/shared/operation-registry";
 import { transFile_CoreProc } from "../commands/trans/trans-command";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
@@ -144,15 +145,38 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 				targetFiles,
 				concurrency,
 				async (file): Promise<TranslateFileResult> => {
+					// 人間の翻訳と重なったら断る。エージェントだけ台帳を通らないと、
+					// 待ち行列に並んだ末に古い解析結果で失敗する経路が残る
+					const handle = OperationRegistry.getInstance().acquire({
+						kind: "translate",
+						scope: "file",
+						path: file,
+					});
+					if (!handle) {
+						return {
+							path: file,
+							ok: false,
+							error: "Another translation is already running for this file",
+						};
+					}
 					try {
 						const result = await transFile_CoreProc(vscode.Uri.file(file), dummyProgress, token);
+						// 翻訳ペアが無いのは成功ではない。
+						// 成功扱いにするとエージェントが「訳し終えた」と誤って判断する
+						if (result.outcome === "no-trans-pair") {
+							return {
+								path: file,
+								ok: false,
+								error: "No translation pair found",
+							};
+						}
 						return {
 							path: file,
 							ok: true,
-							translatedUnits: result?.translatedCount ?? 0,
-							patchedUnits: result?.patchedCount ?? 0,
-							skippedUnits: result?.skippedCount ?? 0,
-							tmHits: result?.tmHits ?? 0,
+							translatedUnits: result.translatedCount,
+							patchedUnits: result.patchedCount,
+							skippedUnits: result.skippedCount,
+							tmHits: result.tmHits,
 						};
 					} catch (error) {
 						logger.error("LanguageModelTool", "Error translating file", {
@@ -164,6 +188,8 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 							ok: false,
 							error: (error as Error).message,
 						};
+					} finally {
+						handle.release();
 					}
 				},
 				() => token.isCancellationRequested,

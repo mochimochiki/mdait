@@ -11,6 +11,7 @@ import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュール�
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
+	type PatchFailureReason,
 	applySimplePatch,
 	createUnifiedDiff,
 	hasDiff,
@@ -38,8 +39,9 @@ import { formatTmReferences } from "../../core/tm/tm-reference-formatter";
 import { TmxStore } from "../../core/tm/tmx-store";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
-import { Configuration } from "../../infra/config/configuration";
+import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
@@ -51,7 +53,9 @@ import {
 	type TmReferenceInfo,
 } from "../../ui/hover/summary-manager";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { OperationRegistry } from "../shared/operation-registry";
 import {
+	reportTransOutcome,
 	showNeedSyncError,
 	showTranslationError,
 } from "../shared/guidance";
@@ -63,15 +67,65 @@ import {
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
+import {
+	type UnitLoopResult,
+	type UnitPersistOutcome,
+	runUnitLoop,
+} from "./translation-run";
 import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
 const logger = Logger.getInstance();
 
 /**
+ * 翻訳がどう終わったか。件数だけでは「AIに届かなかった」と「訳すものが無かった」を
+ * 区別できず、利用者が次の一手を選べないため、終わり方を明示的に持つ。
+ */
+export type TransOutcome =
+	/** 1件以上訳した（パッチ失敗による据え置きを含みうる） */
+	| "completed"
+	/** 訳す対象が無かった */
+	| "nothing-to-do"
+	/** ユーザーが中断した */
+	| "cancelled"
+	/** 翻訳ペアが見つからない（未同期・設定ミス） */
+	| "no-trans-pair"
+	/** 同じ対象を処理中のため受け付けなかった */
+	| "busy"
+	/** 失敗した（AI 到達不能など。理由は showTranslationError が伝える） */
+	| "failed";
+
+/** パッチ適用に失敗して手修正を保ったユニット */
+export interface PatchFailureInfo {
+	unitHash?: string;
+	title?: string;
+	reason: PatchFailureReason;
+}
+
+/** 訳文をファイルへ書き戻せなかったユニット */
+export interface WriteFailureInfo {
+	unitHash?: string;
+	title?: string;
+	reason?: string;
+}
+
+/**
+ * 翻訳の実行オプション
+ */
+export interface TransRunOptions {
+	/**
+	 * パッチ適用を使わず必ず全文で訳し直す。
+	 * パッチ失敗の報告から「全文で訳し直す」を選んだときだけ true になる。
+	 */
+	forceFullTranslation?: boolean;
+}
+
+/**
  * transコマンドの結果
  */
 export interface TransCommandResult {
+	/** 終わり方 */
+	outcome: TransOutcome;
 	/** 処理unit数 */
 	unitCount: number;
 	/** 実際に翻訳したunit数 */
@@ -82,6 +136,24 @@ export interface TransCommandResult {
 	skippedCount: number;
 	/** TM参照ヒット数 */
 	tmHits: number;
+	/** パッチ適用に失敗し、手修正を保って据え置いたユニット */
+	patchFailures: PatchFailureInfo[];
+	/** 訳文を書き戻せなかったユニット */
+	writeFailures: WriteFailureInfo[];
+}
+
+/** 何もしなかったことを表す結果を作る */
+function emptyResult(outcome: TransOutcome): TransCommandResult {
+	return {
+		outcome,
+		unitCount: 0,
+		translatedCount: 0,
+		patchedCount: 0,
+		skippedCount: 0,
+		tmHits: 0,
+		patchFailures: [],
+		writeFailures: [],
+	};
 }
 
 /**
@@ -90,6 +162,7 @@ export interface TransCommandResult {
  */
 export async function transCommand(
 	uri?: vscode.Uri,
+	options?: TransRunOptions,
 ): Promise<TransCommandResult | undefined> {
 	if (!uri) {
 		vscode.window.showErrorMessage(
@@ -114,25 +187,58 @@ export async function transCommand(
 		return; // ユーザーがキャンセルした場合
 	}
 
-	let result: TransCommandResult | undefined;
+	let result: TransCommandResult;
+	try {
+		result = await runFileTranslation(uri, options);
+	} catch (error) {
+		// 失敗の通知もここで1回だけ出す。中断は失敗として出さない
+		await showTranslationError(error);
+		return emptyResult(isOperationCancelled(error) ? "cancelled" : "failed");
+	}
 
-	// withProgressで進捗表示とキャンセル機能を提供
-	await vscode.window.withProgress(
-		{
-			location: vscode.ProgressLocation.Notification,
-			title: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
-			cancellable: true,
-		},
-		async (progress, token) => {
-			try {
-				result = await transFile_CoreProc(uri, progress, token);
-			} catch (error) {
-				await showTranslationError(error);
-			}
-		},
-	);
-
+	// 通知は必ず排他区間の外で出す（区間の中で人を待つとロックが解放されない）
+	await reportTransOutcome(result, {
+		label: path.basename(targetFilePath),
+		retryFullTranslation: () => transCommand(uri, { forceFullTranslation: true }),
+	});
 	return result;
+}
+
+/**
+ * ファイル翻訳を、多重起動の拒否・進捗表示・後始末つきで実行する（通知は行わない）。
+ *
+ * 排他区間（FileMutex）の中では人に問わず他コマンドも起こさない。判断が要る事象は
+ * 結果に載せて返し、呼び出し側が区間の外で扱う。
+ */
+async function runFileTranslation(
+	uri: vscode.Uri,
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
+	const targetFilePath = uri.fsPath;
+
+	// 多重起動の拒否。ここで断ることで、2本目の進捗表示が出て
+	// ロック待ちのまま「押したのに何も起きない」状態になるのを防ぐ
+	const handle = OperationRegistry.getInstance().acquire({
+		kind: "translate",
+		scope: "file",
+		path: targetFilePath,
+	});
+	if (!handle) {
+		return emptyResult("busy");
+	}
+
+	try {
+		return await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
+				cancellable: true,
+			},
+			(progress, token) => transFile_CoreProc(uri, progress, token, options),
+		);
+	} finally {
+		handle.release();
+	}
 }
 
 /**
@@ -154,18 +260,47 @@ export async function transFile_CoreProc(
 	uri: vscode.Uri,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<TransCommandResult | undefined> {
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
+	const targetFilePath = uri.fsPath;
+
+	// 翻訳ペアの解決は排他区間の外で行う。見つからないときの案内は「Sync を実行」
+	// ボタンを持つが、これを区間の中で待つと sync が同じファイルのロックを取りにいき
+	// 永久に解放されない（FileMutex は再入非対応）。
+	// 一方、未保存の反映（flushDirtyDocument）は区間の**中**で行う — 区間の外だと
+	// ロック待ちのあいだにユーザーが編集し直せてしまい、「保存済みのつもりで古い内容を
+	// 読む」「後の保存で翻訳結果が消える」という dirty-document.ts が防いでいる失敗が戻る。
+	// 保存が誘発する autoSyncOnSave は VS Code が待たない非同期リスナで、
+	// 同じロックの待ち行列に並ぶだけなのでデッドロックにはならない（sync/ai-review と同じ作法）
+	const transPair = new FileExplorer().getTransPairFromTarget(
+		targetFilePath,
+		Configuration.getInstance(),
+	);
+	if (!transPair) {
+		return emptyResult("no-trans-pair");
+	}
+
 	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
-	return FileMutex.getInstance().runExclusive([uri.fsPath], () =>
-		transFile_Exclusive(uri, progress, token),
+	return FileMutex.getInstance().runExclusive([targetFilePath], () =>
+		transFile_Exclusive(uri, transPair, progress, token, options),
 	);
 }
 
+/**
+ * 排他区間の中身。
+ *
+ * **不変条件: ここで人に問わない・他コマンドを起こさない。**
+ * この区間で `showXxxMessage` を await したり `executeCommand` を呼ぶと、
+ * FileMutex が再入非対応であるためロックが解放されなくなる。判断が要る事象は
+ * すべて結果に載せて返し、呼び出し側が区間の外で扱う。
+ */
 async function transFile_Exclusive(
 	uri: vscode.Uri,
+	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<TransCommandResult | undefined> {
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
 	const config = Configuration.getInstance();
 	const targetFilePath = uri.fsPath;
 
@@ -175,51 +310,44 @@ async function transFile_Exclusive(
 	// FileHandlerファクトリ経由でファイルタイプ別にディスパッチ
 	const handler = getFileHandler(targetFilePath);
 	if (handler.fileType !== "md") {
-		const fileExplorer = new FileExplorer();
-		const transPair = fileExplorer.getTransPairFromTarget(
-			targetFilePath,
-			config,
-		);
-		if (!transPair) {
-			await showNeedSyncError(
-				vscode.l10n.t(
-					"No translation pair found for file: {0}",
-					targetFilePath,
-				),
-			);
-			return;
-		}
 		const translator = await new TranslatorBuilder().buildPlain();
-		const result = await handler.translate(
-			targetFilePath,
-			translator,
-			transPair,
-			progress,
-			token,
-		);
-		if (!result) return undefined;
-		// 翻訳完了後にステータスパネルを更新（plain fileはファイル変更監視がないため明示的にrefresh）
-		await StatusManager.getInstance().refreshFileStatus(targetFilePath);
-		return {
-			unitCount: 1,
-			translatedCount: result.translatedCount,
-			patchedCount: result.patchedCount,
-			skippedCount: result.skippedCount,
-			tmHits: result.tmHits,
-		};
+		try {
+			const result = await handler.translate(
+				targetFilePath,
+				translator,
+				transPair,
+				progress,
+				token,
+			);
+			if (!result) return emptyResult("nothing-to-do");
+			// パッチ適用での更新も「訳した」に数える。非MDハンドラは patch 成功時に
+			// translatedCount=0 / patchedCount=1 を返すため、translatedCount だけを見ると
+			// 実際にはファイルを書き換えたのに「翻訳するものはありませんでした」になる
+			const changed = result.translatedCount + result.patchedCount > 0;
+			return {
+				outcome: changed ? "completed" : "nothing-to-do",
+				unitCount: 1,
+				translatedCount: result.translatedCount,
+				patchedCount: result.patchedCount,
+				skippedCount: result.skippedCount,
+				tmHits: result.tmHits,
+				patchFailures: [],
+				writeFailures: [],
+			};
+		} catch (error) {
+			if (isOperationCancelled(error)) {
+				return emptyResult("cancelled");
+			}
+			throw error;
+		} finally {
+			// plain file はファイル変更監視がないため明示的にrefresh。
+			// 中断・失敗でも必ず通す（状態表示の取り残しを構造的に無くす）
+			await StatusManager.getInstance().refreshFileStatus(targetFilePath);
+		}
 	}
 
 	const statusManager = StatusManager.getInstance();
-
-	// ファイル探索クラスを初期化
 	const fileExplorer = new FileExplorer();
-	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
-	if (!transPair) {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
-		);
-		return;
-	}
 
 	const sourceLang = transPair.sourceLang;
 	const targetLang = transPair.targetLang;
@@ -257,11 +385,13 @@ async function transFile_Exclusive(
 		maxUnitsPerRun > 0 ? allUnitsToTranslate.slice(0, maxUnitsPerRun) : allUnitsToTranslate;
 
 	if (!needsFrontmatterTranslation && unitsToTranslate.length === 0) {
-		return;
+		return emptyResult("nothing-to-do");
 	}
 
-	// ファイルステータスをInProgressに
-	await statusManager.changeFileStatus(targetFilePath, { isTranslating: true });
+	// 「ここまでの成果」を保持する。中断・失敗のどの経路で抜けても finally で保存する
+	let loop: UnitLoopResult<MdaitUnit> | undefined;
+	// frontmatter だけ訳してユニットが0件、という場合も「訳した」に数える
+	let frontmatterTranslated = false;
 
 	try {
 		// frontmatterの翻訳（必要な場合のみ）
@@ -280,6 +410,7 @@ async function transFile_Exclusive(
 				token,
 			);
 			if (updated) {
+				frontmatterTranslated = true;
 				const encoder = new TextEncoder();
 				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
 				await vscode.workspace.fs.writeFile(
@@ -289,57 +420,23 @@ async function transFile_Exclusive(
 			}
 		}
 
-		// 結果メトリクス
-		let translatedCount = 0;
-		let patchedCount = 0;
-		let skippedCount = 0;
-		let tmHits = 0;
+		// 置換用に旧マーカー文字列を保持しておく（翻訳するとマーカーが変わるため）
+		const oldMarkerTexts = unitsToTranslate.map(
+			(unit) => unit.marker?.toString() ?? "",
+		);
 
-		// 各ユニットを翻訳し、置換用に旧マーカー文字列を保持しつつ保存
-		for (let i = 0; i < unitsToTranslate.length; i++) {
-			// キャンセルチェック
-			if (token.isCancellationRequested) {
-				logger.info("trans", "Translation cancelled", { file: targetFilePath });
-				await statusManager.changeFileStatus(targetFilePath, {
-					isTranslating: false,
+		// 進行制御は VS Code 非依存の runUnitLoop に委ねる（単体テストで固定できる）。
+		// ここが持つのは「外界へどう触るか」だけ
+		loop = await runUnitLoop(unitsToTranslate, {
+			isCancelled: () => token.isCancellationRequested,
+			onProgress: (index, total) => {
+				progress.report({
+					message: vscode.l10n.t("{0}/{1} units", index + 1, total),
+					increment: 100 / total,
 				});
-				vscode.window.showInformationMessage(
-					vscode.l10n.t(
-						"Translation cancelled for: {0}",
-						path.basename(targetFilePath),
-					),
-				);
-				skippedCount += unitsToTranslate.length - i;
-				return {
-					unitCount: unitsToTranslate.length,
-					translatedCount,
-					patchedCount,
-					skippedCount,
-					tmHits,
-				};
-			}
-
-			const unit = unitsToTranslate[i];
-
-			// 進捗報告
-			progress.report({
-				message: vscode.l10n.t("{0}/{1} units", i + 1, unitsToTranslate.length),
-				increment: 100 / unitsToTranslate.length,
-			});
-
-			// 翻訳開始をStatusManagerに通知
-			if (unit.marker?.hash) {
-				statusManager.changeUnitStatus(
-					unit.marker.hash,
-					{ isTranslating: true },
-					targetFilePath,
-				);
-			}
-
-			const oldHash = unit.marker?.hash;
-			const oldMarkerText = unit.marker?.toString() ?? "";
-
-			try {
+			},
+			translateUnit: async (unit) => {
+				const oldHash = unit.marker?.hash;
 				const metrics = await translateUnit(
 					unit,
 					translator,
@@ -347,79 +444,127 @@ async function transFile_Exclusive(
 					targetLang,
 					targetFilePath,
 					token,
+					options,
 				);
-				if (metrics.skipped) {
-					skippedCount++;
-				} else {
-					translatedCount++;
-					if (metrics.patched) {
-						patchedCount++;
-					}
-				}
-				if (metrics.tmHit) {
-					tmHits++;
-				}
-
-				// スキップ時はStatusManager更新をスキップ
-				if (!metrics.skipped && oldHash) {
+				// 訳し終えたユニットは、進行中の見え方を先に更新する（1件ずつ緑になる）。
+				// 最終的な整合は finally の refreshFileStatus が担う。
+				// 失敗の印付けはここでは行わない — refresh がディスク由来の状態で
+				// 上書きするため必ず消える。後始末のあとで markFailedUnit がまとめて行う
+				if (!metrics.patchFailure && oldHash && unit.marker) {
 					statusManager.changeUnitStatus(
 						oldHash,
 						{
 							status: Status.Translated,
 							needFlag: undefined,
-							isTranslating: false,
 							unitHash: unit.marker.hash,
 						},
 						targetFilePath,
 					);
 				}
-			} catch (error) {
-				// 翻訳エラーをStatusManagerに通知
-				if (unit.marker?.hash) {
-					statusManager.changeUnitStatus(
-						unit.marker.hash,
-						{
-							status: Status.Error,
-							isTranslating: false,
-							errorMessage: (error as Error).message,
-						},
-						targetFilePath,
-					);
+				return metrics;
+			},
+			persistUnit: async (unit, index) => {
+				// external は本文にマーカーを書けないため、ループ後の一括保存に委ねる
+				if (external) {
+					return { written: true };
 				}
-				throw error;
-			}
+				return updateAndSaveUnit(uri, oldMarkerTexts[index], unit);
+			},
+		});
 
-			// 翻訳済みユニットをファイルに保存（external は本文書き込みできないためループ後に一括）
-			if (!external) {
-				await updateAndSaveUnit(uri, oldMarkerText, unit);
-			}
+		if (loop.error) {
+			throw loop.error;
 		}
-
-		// external: 翻訳結果を全文書き戻し＋ store 保存（マーカーは本文に出力されない）
-		if (external) {
-			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
-		}
-
-		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.refreshFileStatus(targetFilePath);
 
 		logger.info("trans", "Translation completed", {
 			file: path.basename(targetFilePath),
+			translated: loop.translated,
+			skipped: loop.skipped,
+			cancelled: loop.cancelled,
 		});
 
-		return {
-			unitCount: unitsToTranslate.length,
-			translatedCount,
-			patchedCount,
-			skippedCount,
-			tmHits,
-		};
+		return buildFileResult(unitsToTranslate, loop, frontmatterTranslated);
 	} finally {
-		// isTranslatingフラグをクリア
-		await statusManager.changeFileStatus(targetFilePath, {
-			isTranslating: false,
-		});
+		// **後始末の単一経路。** 中断でも失敗でも必ずここを通る。
+		// (1) ここまでの成果を保存する（external は一括保存なので、これが無いと
+		//     中断時にその実行の翻訳がすべて失われる）
+		// (2) 対象ファイルの状態をディスクから作り直す（旗・contextValue・ハッシュの
+		//     取り残しを構造的に無くす。個別に旗を下ろす処理は持たない）
+		if (external && (loop?.translated ?? 0) > 0) {
+			try {
+				await saveExternalDocument(uri, markdown, io.provider, io.ctx);
+			} catch (error) {
+				logger.error("trans", "Failed to persist translations", {
+					file: targetFilePath,
+					...formatError(error),
+				});
+			}
+		}
+		await statusManager.refreshFileStatus(targetFilePath);
+		// 失敗したユニットの印は refresh のあとに付け直す。refresh はディスクから
+		// 状態を作り直すため翻訳エラーを知らず、先に刻むと必ず消えてしまう
+		markFailedUnit(targetFilePath, loop);
 	}
+}
+
+/**
+ * 失敗したユニットに Status.Error を刻む（状態の作り直しのあとに呼ぶ）。
+ * どのユニットで落ちたかがツリーから読めないと、利用者は原稿のどこを直せばよいか分からない。
+ */
+function markFailedUnit(
+	targetFilePath: string,
+	loop: UnitLoopResult<MdaitUnit> | undefined,
+): void {
+	const hash = loop?.errorUnit?.marker?.hash;
+	if (!loop?.error || !hash) {
+		return;
+	}
+	StatusManager.getInstance().changeUnitStatus(
+		hash,
+		{
+			status: Status.Error,
+			errorMessage: (loop.error as Error).message,
+		},
+		targetFilePath,
+	);
+}
+
+/** 進行制御の結果を、呼び出し側へ返すコマンド結果に変換する */
+function buildFileResult(
+	units: readonly MdaitUnit[],
+	loop: UnitLoopResult<MdaitUnit>,
+	frontmatterTranslated = false,
+): TransCommandResult {
+	const describe = (unit: MdaitUnit) => ({
+		unitHash: unit.marker?.hash,
+		title: unit.title,
+	});
+	let outcome: TransOutcome = "completed";
+	if (loop.cancelled) {
+		outcome = "cancelled";
+	} else if (
+		loop.translated === 0 &&
+		loop.patchFailures.length === 0 &&
+		!frontmatterTranslated
+	) {
+		outcome = "nothing-to-do";
+	}
+	return {
+		outcome,
+		unitCount: units.length,
+		translatedCount: loop.translated,
+		patchedCount: loop.patched,
+		skippedCount: loop.skipped,
+		tmHits: loop.tmHits,
+		patchFailures: loop.patchFailures.map((f) => ({
+			...describe(f.unit),
+			reason: f.reason,
+		})),
+		writeFailures: loop.writeFailures.map((f) => ({
+			...describe(f.unit),
+			reason: f.reason,
+		})),
+	};
 }
 
 /**
@@ -450,8 +595,14 @@ export interface TranslateUnitMetrics {
 	patched: boolean;
 	/** TM参照がヒットしたか */
 	tmHit: boolean;
-	/** パッチ失敗時にスキップしたか */
-	skipped: boolean;
+	/**
+	 * パッチ適用に失敗したため訳文を据え置いた理由。
+	 *
+	 * 以前はここで確認ダイアログを出していたが、排他区間の中で人を待つため
+	 * キャンセルが効かず、後続の操作もロック待ちで止まっていた。いまは安全側
+	 * （手修正を保つ）に倒して理由だけを返し、報告と再実行の判断は区間の外で行う。
+	 */
+	patchFailure?: PatchFailureReason;
 }
 
 async function translateUnit(
@@ -461,29 +612,13 @@ async function translateUnit(
 	targetLang: string,
 	targetFilePath: string,
 	cancellationToken?: vscode.CancellationToken,
+	options?: TransRunOptions,
 ): Promise<TranslateUnitMetrics> {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
 	const config = Configuration.getInstance();
 
 	const startTime = Date.now();
-
-	/**
-	 * パッチ適用失敗時のユーザー確認ダイアログを表示する
-	 * @returns true: 全文再翻訳に続行, false: スキップ（手修正保持）
-	 */
-	async function confirmPatchFallback(): Promise<boolean> {
-		const continueLabel = vscode.l10n.t("Continue");
-		const skipLabel = vscode.l10n.t("Skip");
-		const choice = await vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Patch application failed. Full re-translation may overwrite manual edits. Continue?",
-			),
-			continueLabel,
-			skipLabel,
-		);
-		return choice === continueLabel;
-	}
 
 	// 翻訳開始ログ（DEBUGレベル）
 	logger.debug("trans", "Unit translation start", {
@@ -695,11 +830,14 @@ async function translateUnit(
 
 		let translationResult: TranslationResult | null = null;
 		let usedPatchMode = false;
-		let skipped = false;
+		let patchFailure: PatchFailureReason | undefined;
 
 		const canPatch =
-			unit.marker?.needsRevision() && previousTranslation && context.sourceDiff;
-		if (!canPatch && unit.marker?.needsRevision()) {
+			!options?.forceFullTranslation &&
+			unit.marker?.needsRevision() &&
+			previousTranslation &&
+			context.sourceDiff;
+		if (!canPatch && unit.marker?.needsRevision() && !options?.forceFullTranslation) {
 			logger.debug("trans", "Patch mode unavailable for revision unit", {
 				unitHash: unit.marker?.hash,
 				hasPreviousTranslation: !!previousTranslation,
@@ -725,55 +863,48 @@ async function translateUnit(
 					previousTranslation,
 					patchResult.targetPatch,
 				);
-				if (patched) {
+				if (patched.ok) {
 					translationResult = {
-						translatedText: patched,
+						translatedText: patched.text,
 						termSuggestions: patchResult.termSuggestions,
 						warnings: patchResult.warnings,
 						stats: patchResult.stats,
 					};
 					usedPatchMode = true;
 				} else {
-					logger.warn(
-						"trans",
-						"Patch apply failed, fallback to full translation",
-						{
-							unitHash: unit.marker?.hash,
-							patchContent: patchResult.targetPatch,
-							baseContentPreview: previousTranslation.slice(0, 200),
-						},
-					);
-					const shouldContinue = await confirmPatchFallback();
-					if (!shouldContinue && previousTranslation) {
-						translationResult = {
-							translatedText: previousTranslation,
-							termSuggestions: [],
-							warnings: [],
-						};
-						skipped = true;
-					}
+					// 全文再翻訳は手修正を消しうるので、ここでは訳文を据え置く。
+					// 理由は呼び出し側へ返し、排他区間の外でまとめて報告する
+					logger.warn("trans", "Patch apply failed, keeping current translation", {
+						unitHash: unit.marker?.hash,
+						reason: patched.reason,
+						patchContent: patchResult.targetPatch,
+						baseContentPreview: previousTranslation.slice(0, 200),
+					});
+					patchFailure = patched.reason;
 				}
 			} catch (error) {
-				logger.warn(
-					"trans",
-					"Patch translation failed, fallback to full translation",
-					{
-						unitHash: unit.marker?.hash,
-						patchContent:
-							(error as { patchContent?: string }).patchContent ?? "N/A",
-						...formatError(error),
-					},
-				);
-				const shouldContinue = await confirmPatchFallback();
-				if (!shouldContinue && previousTranslation) {
-					translationResult = {
-						translatedText: previousTranslation,
-						termSuggestions: [],
-						warnings: [],
-					};
-					skipped = true;
-				}
+				// **パッチ失敗として握り潰さない。** ここへ来る例外は AI 到達不能・
+				// ネットワーク断・利用上限といった本物の失敗であり（応答形式の問題は
+				// translator 側でフォールバック済みで、適用可否は applySimplePatch が
+				// 理由つきで返す）、パッチ失敗に丸めると「差分の書き方が違う」という
+				// 誤った理由を出したうえで、そのユニットを黙って飛ばすことになる
+				logger.warn("trans", "Patch translation request failed", {
+					unitHash: unit.marker?.hash,
+					patchContent:
+						(error as { patchContent?: string }).patchContent ?? "N/A",
+					...formatError(error),
+				});
+				throw error;
 			}
+		}
+
+		// パッチ適用に失敗したユニットは、訳文にもマーカーにも触れずに戻す
+		if (patchFailure) {
+			logger.info("trans", "Unit translation kept as-is after patch failure", {
+				unitHash: unit.marker?.hash,
+				reason: patchFailure,
+			});
+			return { patched: false, tmHit: !!context.tmReferences, patchFailure };
 		}
 
 		if (!translationResult) {
@@ -798,14 +929,6 @@ async function translateUnit(
 
 		// ユニットのコンテンツを更新
 		unit.content = resolvedResult.translatedText;
-
-		// スキップ時はmarker更新をスキップ（手修正保持）
-		if (skipped) {
-			logger.info("trans", "Unit translation skipped by user", {
-				unitHash: unit.marker?.hash,
-			});
-			return { patched: false, tmHit: !!context.tmReferences, skipped: true };
-		}
 
 		// ハッシュを再計算してmarkerを更新
 		if (unit.marker) {
@@ -901,7 +1024,6 @@ async function translateUnit(
 		return {
 			patched: usedPatchMode,
 			tmHit: !!context.tmReferences,
-			skipped: false,
 		};
 	} catch (error) {
 		// 通知は呼び出し側（transUnitCommand / ファイル翻訳のエラー処理）に一本化し、
@@ -1023,42 +1145,50 @@ async function translateFrontmatterIfNeeded(
 export async function transUnitCommand(
 	targetPath: string,
 	unitHash: string,
-): Promise<TranslateUnitMetrics | undefined> {
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
 	if (!shouldProceed) {
-		return; // ユーザーがキャンセルした場合
+		return emptyResult("cancelled");
 	}
 
-	let result: TranslateUnitMetrics | undefined;
+	// 多重起動の拒否。同じファイルを処理中なら、待たせずに断る
+	const handle = OperationRegistry.getInstance().acquire({
+		kind: "translate",
+		scope: "unit",
+		path: targetPath,
+		unitHash,
+	});
+	let result: TransCommandResult;
+	if (!handle) {
+		result = emptyResult("busy");
+	} else {
+		try {
+			result = await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: vscode.l10n.t("Translating unit {0}", unitHash.substring(0, 8)),
+					cancellable: true,
+				},
+				(progress, token) =>
+					transUnit_CoreProc(targetPath, unitHash, progress, token, options),
+			);
+		} catch (error) {
+			await showTranslationError(error);
+			return emptyResult(isOperationCancelled(error) ? "cancelled" : "failed");
+		} finally {
+			handle.release();
+		}
+	}
 
-	// withProgressで進捗表示とキャンセル機能を提供
-	await vscode.window.withProgress(
-		{
-			location: vscode.ProgressLocation.Notification,
-			title: vscode.l10n.t("Translating unit {0}", unitHash.substring(0, 8)),
-			cancellable: true,
-		},
-		async (progress, token) => {
-			try {
-				result = await transUnit_CoreProc(
-					targetPath,
-					unitHash,
-					progress,
-					token,
-				);
-			} catch (error) {
-				vscode.window.showErrorMessage(
-					vscode.l10n.t(
-						"Error during unit translation: {0}",
-						(error as Error).message,
-					),
-				);
-			}
-		},
-	);
-
+	// 通知は排他区間の外で1回だけ出す（結果を見ずに成功を出す呼び出し口を無くす）
+	await reportTransOutcome(result, {
+		label: vscode.l10n.t("unit {0}", unitHash.substring(0, 8)),
+		retryFullTranslation: () =>
+			transUnitCommand(targetPath, unitHash, { forceFullTranslation: true }),
+	});
 	return result;
 }
 
@@ -1081,34 +1211,42 @@ export async function transUnit_CoreProc(
 	unitHash: string,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<TranslateUnitMetrics | undefined> {
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
+	// 翻訳ペアの解決だけ区間の外で行う（見つからないときの案内が「Sync を実行」
+	// ボタンを持つため）。未保存の反映は区間の中で行う
+	const transPair = new FileExplorer().getTransPairFromTarget(
+		targetPath,
+		Configuration.getInstance(),
+	);
+	if (!transPair) {
+		return emptyResult("no-trans-pair");
+	}
+
 	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
 	return FileMutex.getInstance().runExclusive([targetPath], () =>
-		transUnit_Exclusive(targetPath, unitHash, progress, token),
+		transUnit_Exclusive(targetPath, unitHash, transPair, progress, token, options),
 	);
 }
 
+/**
+ * 排他区間の中身（単一ユニット）。
+ * **不変条件: ここで人に問わない・他コマンドを起こさない。**
+ */
 async function transUnit_Exclusive(
 	targetPath: string,
 	unitHash: string,
+	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<TranslateUnitMetrics | undefined> {
+	options?: TransRunOptions,
+): Promise<TransCommandResult> {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
 
 	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
 	await flushDirtyDocument(targetPath);
 
-	// 各種初期化
-	const fileExplorer = new FileExplorer();
-	const transPair = fileExplorer.getTransPairFromTarget(targetPath, config);
-	if (!transPair) {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for file: {0}", targetPath),
-		);
-		return;
-	}
 	const sourceLang = transPair.sourceLang;
 	const targetLang = transPair.targetLang;
 	const translator = await new TranslatorBuilder().build();
@@ -1132,119 +1270,81 @@ async function transUnit_Exclusive(
 	const markdown = markdownParser.parse(content, config, io.provider, io.ctx);
 
 	const targetUnit = findUnitByHash(markdown.units, unitHash);
-	if (!targetUnit) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t(
-				"Unit with hash {0} not found in file {1}",
-				unitHash,
-				targetPath,
-			),
-		);
-		return;
+	// 見つからない／訳す必要がない、はどちらも「訳すものが無かった」。
+	// 以前はここで別々のトーストを出しつつ、呼び出し口が結果を見ずに
+	// 「翻訳完了」を重ねて出していた
+	if (!targetUnit || !targetUnit.needsTranslation()) {
+		logger.info("trans", "Unit translation skipped", {
+			targetPath,
+			unitHash,
+			found: !!targetUnit,
+		});
+		return emptyResult("nothing-to-do");
 	}
 
-	// ユニットが翻訳必要かチェック
-	if (!targetUnit.needsTranslation()) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Unit {0} does not need translation", unitHash),
-		);
-		return;
-	}
-
-	// ステータス: 翻訳中
-	statusManager.changeUnitStatus(unitHash, { isTranslating: true }, targetPath);
-
+	let loop: UnitLoopResult<MdaitUnit> | undefined;
 	try {
-		// キャンセルチェック
-		if (token.isCancellationRequested) {
-			logger.info("trans", "Unit translation cancelled", { targetPath });
-			await statusManager.changeUnitStatus(
-				unitHash,
-				{ isTranslating: false },
-				targetPath,
-			);
-			vscode.window.showInformationMessage(
-				vscode.l10n.t(
-					"Translation cancelled for unit: {0}",
-					unitHash.substring(0, 8),
-				),
-			);
-			return;
-		}
-
 		const oldMarkerText = targetUnit.marker.toString();
-
-		// 翻訳実行（中核プロセス）
-		const metrics = await translateUnit(
-			targetUnit,
-			translator,
-			sourceLang,
-			targetLang,
-			targetPath,
-			token,
-		);
-
-		// スキップ時はステータス更新・ファイル保存をスキップ（手修正保持）
-		if (metrics.skipped) {
-			statusManager.changeUnitStatus(
-				unitHash,
-				{ isTranslating: false },
-				targetPath,
-			);
-			return metrics;
-		}
-
-		// ステータス: 翻訳完了
-		statusManager.changeUnitStatus(
-			unitHash,
-			{
-				status: Status.Translated,
-				needFlag: undefined,
-				isTranslating: false,
-				unitHash: targetUnit.marker.hash,
+		loop = await runUnitLoop([targetUnit], {
+				isCancelled: () => token.isCancellationRequested,
+				onProgress: () => {
+					progress.report({ message: vscode.l10n.t("{0}/{1} units", 1, 1) });
+				},
+				translateUnit: async (unit) => {
+					const metrics = await translateUnit(
+						unit,
+						translator,
+						sourceLang,
+						targetLang,
+						targetPath,
+						token,
+						options,
+					);
+					// 失敗の印付けは後始末のあと（markFailedUnit）にまとめる
+					if (!metrics.patchFailure) {
+						statusManager.changeUnitStatus(
+							unitHash,
+							{
+								status: Status.Translated,
+								needFlag: undefined,
+								unitHash: unit.marker.hash,
+							},
+							targetPath,
+						);
+					}
+					return metrics;
+				},
+				persistUnit: async (unit) => {
+					if (external) {
+						return { written: true };
+					}
+					return updateAndSaveUnit(
+						vscode.Uri.file(targetPath),
+						oldMarkerText,
+						unit,
+					);
 			},
-			targetPath,
-		);
-
-		// 翻訳済みユニットをファイルに保存（external は全文書き戻し＋ store 保存）
-		if (external) {
-			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
-		} else {
-			await updateAndSaveUnit(
-				vscode.Uri.file(targetPath),
-				oldMarkerText,
-				targetUnit,
-			);
-		}
-
-		// ファイル全体の状態をStatusManagerで更新
-		await statusManager.refreshFileStatus(targetPath);
-
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Unit translation completed: {0}", unitHash),
-		);
-
-		return metrics;
-	} catch (error) {
-		// ステータス: エラー
-		statusManager.changeUnitStatus(
-			unitHash,
-			{
-				status: Status.Error,
-				isTranslating: false,
-				errorMessage: (error as Error).message,
-			},
-			targetPath,
-		);
-		throw error;
+		});
 	} finally {
-		// isTranslatingフラグをクリア
-		statusManager.changeUnitStatus(
-			unitHash,
-			{ isTranslating: false },
-			targetPath,
-		);
+		// 後始末の単一経路。中断でも失敗でも必ず通る
+		if (external && (loop?.translated ?? 0) > 0) {
+			try {
+				await saveExternalDocument(uri, markdown, io.provider, io.ctx);
+			} catch (error) {
+				logger.error("trans", "Failed to persist translation", {
+					file: targetPath,
+					...formatError(error),
+				});
+			}
+		}
+		await statusManager.refreshFileStatus(targetPath);
+		markFailedUnit(targetPath, loop);
 	}
+
+	if (loop.error) {
+		throw loop.error;
+	}
+	return buildFileResult([targetUnit], loop);
 }
 
 /**
@@ -1280,13 +1380,19 @@ async function saveExternalDocument(
 }
 
 /**
- * 指定ファイルのユニットを更新し、保存する
+ * 指定ファイルのユニットを更新し、保存する。
+ *
+ * **失敗しても通知しない。** ここは排他区間の中であり、以前はマーカーが
+ * 見つからないときに「Sync を実行」ボタン付きの警告を await していた。
+ * そのボタンを押すと sync が同じファイルのロックを取りにいき、FileMutex が
+ * 再入非対応であるためロックが永久に解放されなくなっていた。
+ * 失敗は結果として返し、呼び出し側が区間の外で報告する。
  */
 async function updateAndSaveUnit(
 	file: vscode.Uri,
 	markerText: string,
 	unit: MdaitUnit,
-): Promise<void> {
+): Promise<UnitPersistOutcome> {
 	const replacement = unit.toString();
 	// 文字列でオフセット計算し、fs.writeFileでサイレント更新
 	const document = await vscode.workspace.fs.readFile(file);
@@ -1294,22 +1400,10 @@ async function updateAndSaveUnit(
 	const content = decoder.decode(document);
 	const offsets = getUnitPosition(content, markerText);
 	if (!offsets) {
-		// 翻訳結果が破棄されるため、ログだけでなくユーザーにも通知する
 		logger.warn("trans", "mdait marker not found, skipped unit replacement", {
 			unitTitle: unit.title,
 		});
-		const runSync = vscode.l10n.t("Run Sync");
-		const choice = await vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Could not write back translation for unit \"{0}\" because its marker was not found (the file may have changed). Run Sync and translate again.",
-				unit.title ?? "",
-			),
-			runSync,
-		);
-		if (choice === runSync) {
-			await vscode.commands.executeCommand("mdait.sync");
-		}
-		return;
+		return { written: false, reason: "marker-not-found" };
 	}
 	// 元のユニットの末尾改行を保持
 	const updated =
@@ -1319,6 +1413,7 @@ async function updateAndSaveUnit(
 		content.slice(offsets.end);
 	const encoder = new TextEncoder();
 	await vscode.workspace.fs.writeFile(file, encoder.encode(updated));
+	return { written: true };
 }
 
 /**
@@ -1393,6 +1488,7 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 	}
 
 	// withProgressで進捗表示とキャンセル機能を提供
+	let outcome: FrontmatterOutcome | undefined;
 	await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
@@ -1401,12 +1497,34 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 		},
 		async (progress, token) => {
 			try {
-				await translateFrontmatter_CoreProc(uri, progress, token);
+				outcome = await translateFrontmatter_CoreProc(uri, progress, token);
 			} catch (error) {
 				await showTranslationError(error);
 			}
 		},
 	);
+
+	// 通知は排他区間の外で1回だけ出す。どの終わり方でも黙らない（UX-P7）
+	const label = path.basename(targetFilePath);
+	if (outcome === "no-trans-pair") {
+		await showNeedSyncError(
+			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
+		);
+	} else if (outcome === "no-keys") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("No frontmatter keys configured for translation."),
+		);
+	} else if (outcome === "cancelled") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Translation cancelled for {0}.", label),
+		);
+	} else if (outcome === "nothing-to-do") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Nothing to translate in {0}.", label),
+		);
+	} else if (outcome === "completed") {
+		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
+	}
 }
 
 /**
@@ -1416,38 +1534,53 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
  * @param progress 進捗報告用オブジェクト
  * @param token キャンセルトークン
  */
+/** frontmatter 翻訳の終わり方 */
+type FrontmatterOutcome =
+	| "completed"
+	| "nothing-to-do"
+	| "cancelled"
+	| "no-keys"
+	| "no-trans-pair";
+
 async function translateFrontmatter_CoreProc(
 	uri: vscode.Uri,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<void> {
+): Promise<FrontmatterOutcome> {
+	const targetFilePath = uri.fsPath;
+
+	// 翻訳ペアの解決だけ区間の外で行う。未保存の反映は区間の中
+	const transPair = new FileExplorer().getTransPairFromTarget(
+		targetFilePath,
+		Configuration.getInstance(),
+	);
+	if (!transPair) {
+		return "no-trans-pair";
+	}
+
 	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
-	return FileMutex.getInstance().runExclusive([uri.fsPath], () =>
-		translateFrontmatter_Exclusive(uri, progress, token),
+	return FileMutex.getInstance().runExclusive([targetFilePath], () =>
+		translateFrontmatter_Exclusive(uri, transPair, progress, token),
 	);
 }
 
+/**
+ * **不変条件: ここで人に問わない・他コマンドを起こさない。**
+ * 通知に必要な情報は戻り値で返し、呼び出し側が区間の外で伝える。
+ */
 async function translateFrontmatter_Exclusive(
 	uri: vscode.Uri,
+	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<void> {
+): Promise<FrontmatterOutcome> {
 	const targetFilePath = uri.fsPath;
 	const config = Configuration.getInstance();
 	const statusManager = StatusManager.getInstance();
-
-	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
-	await flushDirtyDocument(targetFilePath);
-
-	// ファイル探索クラスを初期化
 	const fileExplorer = new FileExplorer();
-	const transPair = fileExplorer.getTransPairFromTarget(targetFilePath, config);
-	if (!transPair) {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
-		);
-		return;
-	}
+
+	// 未保存のエディタ変更をディスクへ反映
+	await flushDirtyDocument(targetFilePath);
 
 	// ソースファイルパスを取得
 	const sourceFilePath = fileExplorer.getSourcePath(targetFilePath, transPair);
@@ -1455,17 +1588,11 @@ async function translateFrontmatter_Exclusive(
 	// frontmatterの翻訳キーを取得
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	if (frontmatterKeys.length === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No frontmatter keys configured for translation."),
-		);
-		return;
+		return "no-keys";
 	}
 
 	// Translatorをビルド
 	const translator = await new TranslatorBuilder().build();
-	if (!translator) {
-		return;
-	}
 
 	// マーカー保管方式に応じた provider/ctx を解決
 	const io = resolveMarkerIO(config, targetFilePath, "target");
@@ -1494,7 +1621,7 @@ async function translateFrontmatter_Exclusive(
 	);
 
 	if (token.isCancellationRequested) {
-		return;
+		return "cancelled";
 	}
 
 	if (translated) {
@@ -1509,11 +1636,9 @@ async function translateFrontmatter_Exclusive(
 
 		// StatusManagerでファイルステータス更新
 		await statusManager.refreshFileStatus(targetFilePath);
-
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translation completed"),
-		);
+		return "completed";
 	}
+	return "nothing-to-do";
 }
 
 /**

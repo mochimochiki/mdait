@@ -8,6 +8,7 @@ import {
 	type UnitStatusItem,
 } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
+import { OperationRegistry } from "../../commands/shared/operation-registry";
 import {
 	getSelectedPairAbsDirs,
 	getSelectedScopeDirs,
@@ -79,6 +80,33 @@ export function getStateDescription(status: Status, needFlag: string | undefined
 }
 
 /**
+ * その項目がいま処理中に見えるかを実行台帳に問う。
+ *
+ * 台帳に登録されている＝処理中、が唯一の根拠であり、解除は登録した側の
+ * finally 一経路だけが行う。表示側は旗を持たない。
+ */
+function isElementTranslating(element: StatusItem): boolean {
+	const registry = OperationRegistry.getInstance();
+	switch (element.type) {
+		case StatusItemType.Directory:
+			return element.directoryPath
+				? registry.isBusy({ scope: "directory", path: element.directoryPath })
+				: false;
+		case StatusItemType.File:
+			return registry.isBusy({ scope: "file", path: element.filePath });
+		case StatusItemType.Unit:
+			return registry.isBusy({
+				scope: "unit",
+				path: element.filePath,
+				unitHash: element.unitHash,
+			});
+		default:
+			// frontmatter は親ファイルの処理に追随する
+			return registry.isBusy({ scope: "file", path: element.filePath });
+	}
+}
+
+/**
  * ステータスツリービューのデータプロバイダ
  */
 export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
@@ -119,6 +147,10 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// どのノードを描き直すかは判定しない（ADR-260724-01）。可視ノードの再取得は
 		// メモリ参照のみで安価であり、treeItem.id が安定しているため展開状態も維持される。
 		this.statusManager.onStatusTreeChanged(() => {
+			this.refresh();
+		});
+		// 実行台帳の増減も再描画のきっかけにする（回転アイコンの点灯・消灯）
+		OperationRegistry.getInstance().onChanged(() => {
 			this.refresh();
 		});
 	}
@@ -228,10 +260,13 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			this.determineCollapsibleState(element),
 		);
 
-		// ステータスに応じたアイコンを設定
+		// ステータスに応じたアイコンを設定。
+		// 「処理中か」は StatusItem の書き換え可能な旗ではなく実行台帳に問う。
+		// 旗は解除処理を分岐ごとに手書きする必要があり、中断・スキップの経路で
+		// 下ろし忘れるたびに回転アイコンが止まらなくなっていた（ADR-260803-01）
 		treeItem.iconPath = this.getStatusIcon(
 			element.status,
-			element.isTranslating,
+			isElementTranslating(element),
 			element,
 		);
 

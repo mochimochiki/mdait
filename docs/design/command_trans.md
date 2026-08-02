@@ -51,9 +51,11 @@ FrontMatterも同一のneedフラグで管理されます（`mdait.front`マー�
 
 ### エラー処理
 
-- **ユニット翻訳エラー**: `Status.Error`として記録し、後続ユニットの処理を継続
+- **ユニット翻訳エラー**: `Status.Error`として記録し、そのファイルの処理を打ち切る。打ち切っても**そこまでの翻訳は保存される**
 - **リトライ失敗**: JSON部分を除去した訳文で警告付き継続
-- **キャンセル**: ユニット単位でチェック。中断済みユニットは未翻訳状態を維持
+- **キャンセル**: ユニット単位でチェック。中断済みユニットは未翻訳状態を維持し、中断までに訳し終えた分は保存する。中断は失敗ではないためエラー通知を出さず、`Status.Error`も刻まない
+- **多重起動**: 同じ対象（重なる範囲）への2回目の起動は`OperationRegistry`が断り、「いま翻訳中です」と伝えて即座に終わる
+- **結果の通知**: 呼び出し口ごとに通知を書かず、`reportTransOutcome()`が終わり方（完了／対象なし／中断／ペア無し／実行中）に応じて1回だけ出す
 
 ---
 
@@ -99,8 +101,11 @@ sequenceDiagram
 ### 設計ノート
 
 - **diff-aware revise**: `need:revise@{oldhash}`時はLLMに`=`/`-`/`+`プレフィックス形式のパッチのみ生成させる → 適用（[design.md](../design.md) P4参照）。失敗時の挙動はファイルタイプで異なる:
-  - **MD**: ユーザーに確認ダイアログを表示し、「スキップ」で手修正を保持、「続行」で全文再翻訳にフォールバック
-  - **非MD**: サイレントに全文再翻訳へフォールバック（バッチ処理での中断回避のため）
+  - **MD**: 訳文を据え置いて手修正を保つ。理由（`PatchApplyResult.reason`）を持ち帰り、**排他区間の外**で件数と理由をまとめて1回通知し、「全文で訳し直す」導線を添える
+  - **非MD**: 理由をログに残して全文再翻訳へフォールバック（ユニット分割が無く、据え置くと訳文が古いまま残るため）
+- **排他区間の不変条件**: `FileMutex.runExclusive` の中では**人に問わない・他コマンドを起こさない**。判断が要る事象（パッチ失敗・書き戻し失敗・翻訳ペア無し）は結果に載せて返し、呼び出し側が区間の外で扱う。`FileMutex`は再入非対応なので、区間の中で`executeCommand("mdait.sync")`を待つとロックが解放されなくなる（ADR-260803-01）
+- **後始末の単一経路**: 中断・失敗を含むどの経路で抜けても`finally`で「そこまでの翻訳を保存」→「対象ファイルの状態をディスクから作り直す」を通す。進行中の旗を個別に下ろす処理は持たない（`StatusItem.isTranslating`は廃止し、表示は`OperationRegistry`に問う）
+- **中断の単一表現**: プロバイダ・リトライ層・translator は中断を`OperationCancelledError`で投げ、判定は`isOperationCancelled()`だけが行う。メッセージ文字列での判定はしない
 - **パッチ補完**: LLMが`@@`ハンク行なしのパッチを返すケースに対応し、`applyUnifiedPatch`内で自動補完する
 - **5層AIレスポンス防御**: プロンプト強化 → ResponseValidator検出 → リトライ（最大2回）→ JSON除去継続 → OutputSanitizerで最終検出
 - **用語集注入**: `terms.csv`が存在する場合、翻訳対象ユニットに含まれる用語を抽出してプロンプトに注入。キャッシュはmtime比較で管理（[command_term.md](command_term.md) 参照）
@@ -113,7 +118,10 @@ sequenceDiagram
 |---|---|
 | [`trans-command.ts`](../../src/commands/trans/trans-command.ts) | `transCommand()` → `TransCommandResult`, `transFile_CoreProc()`, `transUnit_CoreProc()`, `translateFrontmatter_CoreProc()`。FileHandler dispatch化済み: ファイルタイプに応じて`MdFileHandler`/`PlainFileHandler`に委譲 |
 | [`file-handler-factory.ts`](../../src/commands/file-handler/file-handler-factory.ts) | `getFileHandler()` - 拡張子に基づくFileHandler振り分け（分岐の唯一の集約点） |
-| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。UnitStateStore + UnitRegistryベース。revise時はパッチモード（`translateRevisionPatch` + `applySimplePatch`）を使用し、失敗時はサイレントに全文翻訳へフォールバック |
+| [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MDファイルの翻訳処理。UnitStateStore + UnitRegistryベース。revise時はパッチモード（`translateRevisionPatch` + `applySimplePatch`）を使用し、失敗時は理由をログに残して全文翻訳へフォールバック |
+| [`translation-run.ts`](../../src/commands/trans/translation-run.ts) | `runUnitLoop()` - 進行制御（処理順・中断・失敗・パッチ据え置き・保存の判断）のみを持つVS Code非依存の関数。例外は投げず結果に載せて返し、呼び出し側が保存してから報告できるようにする |
+| [`operation-registry.ts`](../../src/commands/shared/operation-registry.ts) | `OperationRegistry` - 「いま何を処理中か」の唯一の台帳。多重起動の拒否と、ツリーの回転アイコンの根拠を兼ねる |
+| [`operation-cancelled.ts`](../../src/infra/errors/operation-cancelled.ts) | `OperationCancelledError` / `isOperationCancelled()` - 中断の単一表現と判定 |
 | [`translator.ts`](../../src/commands/trans/translator.ts) | `Translator` - 翻訳サービスインターフェース。`TranslatorPromptConfig`でMD/非MD用プロンプトIDを切り替え |
 | [`translator-builder.ts`](../../src/commands/trans/translator-builder.ts) | `TranslatorBuilder` - `build()`でMD用、`buildPlain()`で非MD用Translatorを構築 |
 | [`translation-context.ts`](../../src/commands/trans/translation-context.ts) | `TranslationContext` - 翻訳コンテキスト（用語集・TM参照・`fileExtension`等） |

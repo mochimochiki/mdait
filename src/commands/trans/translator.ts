@@ -1,4 +1,5 @@
 import type * as vscode from "vscode";
+import { OperationCancelledError } from "../../infra/errors/operation-cancelled";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
@@ -311,7 +312,7 @@ export class AITranslator implements Translator {
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
 			if (cancellationToken?.isCancellationRequested) {
-				throw new Error("Translation cancelled");
+				throw new OperationCancelledError("Translation cancelled");
 			}
 
 			// リトライ時は補足プロンプトを user message 側に追加する
@@ -398,7 +399,7 @@ export class AITranslator implements Translator {
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
 			if (cancellationToken?.isCancellationRequested) {
-				throw new Error("Translation cancelled");
+				throw new OperationCancelledError("Translation cancelled");
 			}
 
 			// リトライ時は補足プロンプトを user message 側に追加する

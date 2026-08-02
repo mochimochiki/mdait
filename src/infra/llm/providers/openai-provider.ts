@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import { calculateHash } from "../../../core/hash/hash-calculator";
 import type { AIConfig } from "../../config/configuration";
+import { OperationCancelledError, rethrowIfCancelled } from "../../errors/operation-cancelled";
 import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
@@ -145,6 +146,9 @@ export class OpenAIProvider implements AIService {
 		} catch (error) {
 			status = "error";
 			errorMessage = (error as Error)?.message ?? String(error);
+			// 中断はプロバイダ名でラップしない。ラップすると名前が Error になって
+			// 受け手が「失敗」と区別できず、正常な中断が赤いエラー通知になる
+			rethrowIfCancelled(error);
 			throw new Error(`OpenAI provider error: ${errorMessage}`);
 		} finally {
 			// 統計情報をログに記録
@@ -256,8 +260,9 @@ export class OpenAIProvider implements AIService {
 						`Request timed out after ${this.timeoutMs / 1000}s`,
 					);
 				}
-				// ユーザーキャンセル起因のabortはリトライしない
-				throw new Error("Request aborted");
+				// ユーザーキャンセル起因のabortはリトライしない。
+				// 失敗ではなく中断として扱わせるため専用の型で投げる
+				throw new OperationCancelledError("Request aborted");
 			}
 			throw error;
 		} finally {

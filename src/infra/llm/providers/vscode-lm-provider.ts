@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
+import { OperationCancelledError, isOperationCancelled } from "../../errors/operation-cancelled";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
 
@@ -82,6 +83,12 @@ export class VSCodeLanguageModelProvider implements AIService {
 			return responseContent;
 		} catch (error) {
 			status = "error";
+			// 中断は失敗ではない。言語モデル API の CancellationError を
+			// 専用の型へ寄せ、下流が文字列を見ずに判定できるようにする
+			if (isOperationCancelled(error)) {
+				errorMessage = "cancelled";
+				throw new OperationCancelledError((error as Error).message);
+			}
 			if (error instanceof vscode.LanguageModelError) {
 				console.log(
 					"Language model error:",

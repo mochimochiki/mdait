@@ -22,6 +22,28 @@ export function hasDiff(oldContent: string, newContent: string): boolean {
 }
 
 /**
+ * パッチ適用の失敗理由。
+ *
+ * 以前は失敗をすべて `null` に潰していたため、確認ダイアログにもレポートにも
+ * 「なぜ失敗したのか」を出せなかった（AIが形式を守らなかったのか、原文が動いて
+ * 目印が消えたのかで、利用者が取るべき次の一手は正反対になる）。
+ */
+export type PatchFailureReason =
+	/** パッチが空（AIが何も返さなかった） */
+	| "empty-patch"
+	/** `=`/`-`/`+` 形式になっていない（AIが別の書式で返した） */
+	| "unrecognized-format"
+	/** 形式は合っているが変更行（`-`/`+`）が1つも無い */
+	| "no-changes"
+	/** 目印にする周辺行が訳文側に見つからない（訳文が手で編集された等） */
+	| "anchor-not-found";
+
+/** パッチ適用の結果。成功なら適用後テキスト、失敗なら理由を持つ */
+export type PatchApplyResult =
+	| { ok: true; text: string }
+	| { ok: false; reason: PatchFailureReason };
+
+/**
  * シンプルパッチを適用する。
  * `=`/`-`/`+` プレフィックス形式をサポート。複数チャンク対応。
  *
@@ -33,23 +55,29 @@ export function hasDiff(oldContent: string, newContent: string): boolean {
  *
  * @param baseContent パッチ適用対象の元テキスト
  * @param patch パッチ文字列
- * @returns 適用後のテキスト（失敗時はnull）
+ * @returns 適用後のテキスト、または失敗理由
  */
-export function applySimplePatch(baseContent: string, patch: string): string | null {
+export function applySimplePatch(baseContent: string, patch: string): PatchApplyResult {
 	const trimmedPatch = patch.trim();
 	if (!trimmedPatch) {
-		return null;
+		return { ok: false, reason: "empty-patch" };
 	}
 
 	// Prefixed mode（=/-/+ 形式）
-	if (hasPrefixedContextLines(trimmedPatch)) {
-		const chunks = parsePrefixedPatchChunks(trimmedPatch);
-		if (chunks.length > 0) {
-			return applyChunks(baseContent, chunks);
-		}
+	if (!hasPrefixedContextLines(trimmedPatch)) {
+		return { ok: false, reason: "unrecognized-format" };
 	}
 
-	return null;
+	const chunks = parsePrefixedPatchChunks(trimmedPatch);
+	if (chunks.length === 0) {
+		return { ok: false, reason: "no-changes" };
+	}
+
+	const applied = applyChunks(baseContent, chunks);
+	if (applied === null) {
+		return { ok: false, reason: "anchor-not-found" };
+	}
+	return { ok: true, text: applied };
 }
 
 interface SimplePatchChunk {

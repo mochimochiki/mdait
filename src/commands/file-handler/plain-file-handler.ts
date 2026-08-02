@@ -7,6 +7,10 @@ import { type FileStatusItem, Status, StatusItemType } from "../../core/status/s
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
+import {
+	OperationCancelledError,
+	isOperationCancelled,
+} from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
@@ -287,14 +291,11 @@ export class PlainFileHandler implements FileHandler {
 			message: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
 		});
 
-		// キャンセルチェック（LLM呼び出し前）
+		// キャンセルチェック（LLM呼び出し前）。
+		// 件数0で返すと呼び出し側が「訳す対象が無かった」と区別できず、
+		// 止めたのに「翻訳するものはありませんでした」と出る。中断は中断として投げる
 		if (token.isCancellationRequested) {
-			return {
-				translatedCount: 0,
-				patchedCount: 0,
-				skippedCount: 1,
-				tmHits: 0,
-			};
+			throw new OperationCancelledError();
 		}
 
 		// 10. 翻訳実行
@@ -312,16 +313,23 @@ export class PlainFileHandler implements FileHandler {
 					token,
 				);
 				const patched = applySimplePatch(previousTranslation, patchResult.targetPatch);
-				if (patched) {
-					translatedText = patched;
+				if (patched.ok) {
+					translatedText = patched.text;
 					termSuggestions = patchResult.termSuggestions;
 					usedPatchMode = true;
 				} else {
+					// 非MDはユニット分割が無く、据え置くと訳文が古いまま残るので全文再翻訳へ倒す。
+					// 理由は必ず記録する（以前は理由を持たない null だったため何も残せなかった）
 					logger.warn("trans", "Patch apply failed for plain file, falling back to full translation", {
 						file: targetRelPath,
+						reason: patched.reason,
 					});
 				}
 			} catch (error) {
+				// 中断は失敗ではないので握り潰さず伝播させる
+				if (isOperationCancelled(error)) {
+					throw error;
+				}
 				logger.warn("trans", "Patch translation failed for plain file, falling back", {
 					file: targetRelPath,
 					...formatError(error),
@@ -335,15 +343,9 @@ export class PlainFileHandler implements FileHandler {
 			termSuggestions = result.termSuggestions;
 		}
 
-		// キャンセルチェック（書き込み前）
-		if (token.isCancellationRequested) {
-			return {
-				translatedCount: 0,
-				patchedCount: 0,
-				skippedCount: 1,
-				tmHits: 0,
-			};
-		}
+		// ここでキャンセルを見て結果を捨てない。AI 呼び出しは既に終わって費用も
+		// かかっており、捨てると「止めたのに何も残らない」うえ再実行でもう一度課金される。
+		// 中断はAI呼び出し前・呼び出し中に効く（上のチェックとトークン伝播）
 
 		// 11. 結果書き込み
 		const encoder = new TextEncoder();
