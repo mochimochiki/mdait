@@ -21,8 +21,13 @@ cd "$WORKDIR"
 # apt-get update を先に通すこと — イメージ同梱のインデックスは古く、記載された版の .deb が
 # ミラーから消えていて 404 になる。update 無しの install は必ず失敗する
 if [ ! -f /usr/include/gssapi/gssapi.h ]; then
-  apt-get update -qq || true
-  apt-get install -y -qq libkrb5-dev \
+  # root なら sudo は不要（そもそも入っていないことが多い）。非 root なら sudo を通す
+  APT_SUDO=""
+  if [ "$(id -u)" -ne 0 ]; then
+    APT_SUDO="sudo"
+  fi
+  $APT_SUDO apt-get update -qq || true
+  $APT_SUDO apt-get install -y -qq libkrb5-dev \
     || echo "WARN: libkrb5-dev を導入できませんでした。kerberos のビルドが失敗する可能性があります"
 fi
 
