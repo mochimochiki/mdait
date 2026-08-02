@@ -493,7 +493,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// ツリータイトルの同期ボタン。初回（未同期）とそれ以降でラベルだけを変える
 	// （実処理は runSync に一本化。package.json の when 句で排他表示）
-	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", () => runSync());
+	// 初回同期だけは、何が起きるかを説明してから実行する（以後の定常 sync では確認しない。ADR-260802-01）
+	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", async () => {
+		if (await confirmInitialSync(config)) {
+			await runSync();
+		}
+	});
 	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", () => runSync());
 
 	// status.openTerm command
@@ -801,6 +806,32 @@ export async function activate(context: vscode.ExtensionContext) {
 /**
  * mdaitConfiguredコンテキスト変数を更新する
  */
+/**
+ * 初回同期の確認ダイアログ。
+ *
+ * 初回だけは「訳文ファイルが作られる」「（embedded では）原文にマーカーが書き加わる」ことを
+ * 先に伝える。取り消しは git に委ねるため、その旨も書く（ADR-260802-01）。
+ * 2回目以降の定常 sync では確認しない（毎回聞くと保存のたびの摩擦になる）。
+ *
+ * @returns 実行してよければ true
+ */
+async function confirmInitialSync(config: Configuration): Promise<boolean> {
+	const proceed = vscode.l10n.t("Start");
+	const detail = config.isExternalMarkers()
+		? vscode.l10n.t(
+				"Translation files will be created under the target directory, and mdait will record their state in .mdait/. Your source documents are not modified.",
+			)
+		: vscode.l10n.t(
+				"Translation files will be created under the target directory, and mdait will add comment markers to your source documents so it can track what changed. Use git to undo.",
+			);
+	const choice = await vscode.window.showInformationMessage(
+		vscode.l10n.t("Set up translation files for the first time?"),
+		{ modal: true, detail },
+		proceed,
+	);
+	return choice === proceed;
+}
+
 async function updateConfiguredContext(config: Configuration): Promise<void> {
 	const isConfigured = config.isConfigured();
 	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
