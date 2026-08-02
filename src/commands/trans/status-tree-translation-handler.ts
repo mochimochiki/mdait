@@ -154,97 +154,102 @@ export class StatusTreeTranslationHandler {
 				return undefined;
 			}
 
-			// withProgressで進捗表示とキャンセル機能を統合管理
-			return await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t("Translating directory '{0}'", directoryPath),
-					cancellable: true,
-				},
-				async (progress, token) => {
-					try {
-						// 各ファイルをtrans.concurrencyの同時実行数で並列翻訳（キャンセルチェック付き）。
-						// 異なるファイルペアは独立で、同一ファイルはFileMutexが排他するため競合しない
-						let successful = 0;
-						let failed = 0;
-						let completed = 0;
-						// 最初の失敗理由を保持して結果通知に載せる。件数だけを出すと、
-						// AI が使えないだけなのか原稿の問題なのかが利用者に分からない
-						let firstError: unknown;
-						const concurrency = clampConcurrency(config.trans.concurrency);
+			// withProgressで進捗表示とキャンセル機能を統合管理。
+			// 台帳の解放は withProgress の外側で行う — 中の finally だけだと、
+			// withProgress 自体が失敗したときに登録が残り、以後この対象を永久に断ってしまう
+			try {
+				return await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: vscode.l10n.t("Translating directory '{0}'", directoryPath),
+						cancellable: true,
+					},
+					async (progress, token) => {
+						try {
+							// 各ファイルをtrans.concurrencyの同時実行数で並列翻訳（キャンセルチェック付き）。
+							// 異なるファイルペアは独立で、同一ファイルはFileMutexが排他するため競合しない
+							let successful = 0;
+							let failed = 0;
+							let completed = 0;
+							// 最初の失敗理由を保持して結果通知に載せる。件数だけを出すと、
+							// AI が使えないだけなのか原稿の問題なのかが利用者に分からない
+							let firstError: unknown;
+							const concurrency = clampConcurrency(config.trans.concurrency);
 
-						await runWithConcurrency(
-							files,
-							concurrency,
-							async (file) => {
-								try {
-									// 内部実装を直接呼び出し（二重のwithProgressを回避）。
-									// 中断や「訳す対象が無い」を失敗に数えない — 以前は
-									// 「5件失敗」と出ても実際はユーザーが止めただけ、が起きていた
-									const fileResult = await transFile_CoreProc(file, progress, token);
-									if (fileResult.outcome === "no-trans-pair") {
-										failed++;
-										if (!firstError) {
-											firstError = new Error(
-												vscode.l10n.t("No translation pair found for file: {0}", file.fsPath),
-											);
+							await runWithConcurrency(
+								files,
+								concurrency,
+								async (file) => {
+									try {
+										// 内部実装を直接呼び出し（二重のwithProgressを回避）。
+										// 中断や「訳す対象が無い」を失敗に数えない — 以前は
+										// 「5件失敗」と出ても実際はユーザーが止めただけ、が起きていた
+										const fileResult = await transFile_CoreProc(file, progress, token);
+										if (fileResult.outcome === "no-trans-pair") {
+											failed++;
+											if (!firstError) {
+												firstError = new Error(
+													vscode.l10n.t("No translation pair found for file: {0}", file.fsPath),
+												);
+											}
+										} else {
+											successful++;
 										}
-									} else {
-										successful++;
+									} catch (error) {
+										// 中断は失敗ではない
+										if (isOperationCancelled(error)) {
+											return;
+										}
+										logger.error("trans", "Error translating file", {
+											file: file.fsPath,
+											...formatError(error),
+										});
+										if (!firstError) {
+											firstError = error;
+										}
+										failed++;
 									}
-								} catch (error) {
-									// 中断は失敗ではない
-									if (isOperationCancelled(error)) {
-										return;
-									}
-									logger.error("trans", "Error translating file", {
-										file: file.fsPath,
-										...formatError(error),
+									completed++;
+									progress.report({
+										message: vscode.l10n.t("{0}/{1} files", completed, files.length),
+										increment: 100 / files.length,
 									});
-									if (!firstError) {
-										firstError = error;
-									}
-									failed++;
-								}
-								completed++;
-								progress.report({
-									message: vscode.l10n.t("{0}/{1} files", completed, files.length),
-									increment: 100 / files.length,
-								});
-							},
-							() => token.isCancellationRequested,
-						);
-
-						// キャンセル時は未着手ファイル数を報告
-						if (token.isCancellationRequested) {
-							logger.info(
-								"trans",
-								"Directory translation cancelled, skipping remaining files",
+								},
+								() => token.isCancellationRequested,
 							);
-							const skipped = files.length - successful - failed;
-							vscode.window.showInformationMessage(
-								vscode.l10n.t(
-									"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
-									successful,
-									failed,
-									skipped,
-								),
-							);
-							return { totalFiles: files.length, successful, failed, skipped };
-						}
 
-						// 結果を通知（失敗があれば理由と次の一手を添える）
-						if (failed > 0) {
-							void showDirectoryTranslationFailure(successful, failed, firstError);
+							// キャンセル時は未着手ファイル数を報告
+							if (token.isCancellationRequested) {
+								logger.info(
+									"trans",
+									"Directory translation cancelled, skipping remaining files",
+								);
+								const skipped = files.length - successful - failed;
+								vscode.window.showInformationMessage(
+									vscode.l10n.t(
+										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
+										successful,
+										failed,
+										skipped,
+									),
+								);
+								return { totalFiles: files.length, successful, failed, skipped };
+							}
+
+							// 結果を通知（失敗があれば理由と次の一手を添える）
+							if (failed > 0) {
+								void showDirectoryTranslationFailure(successful, failed, firstError);
+							}
+							return { totalFiles: files.length, successful, failed, skipped: 0 };
+						} finally {
+							// 進行中の見え方は台帳が持つため、旗を下ろす処理は無い。
+							// 配下ファイルの最終状態はファイル側の後始末で反映済み
 						}
-						return { totalFiles: files.length, successful, failed, skipped: 0 };
-					} finally {
-						// 進行中の見え方は台帳が持つため、旗を下ろす処理は無い。
-						// 配下ファイルの最終状態はファイル側の後始末で反映済み
-						handle.release();
-					}
-				},
-			);
+					},
+				);
+			} finally {
+				handle.release();
+			}
 		} catch (error) {
 			logger.error("trans", "Error during directory translation", formatError(error));
 			vscode.window.showErrorMessage(

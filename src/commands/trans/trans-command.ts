@@ -856,17 +856,18 @@ async function translateUnit(
 					patchFailure = patched.reason;
 				}
 			} catch (error) {
-				// 中断はパッチ失敗ではない。そのまま伝播させる
-				if (isOperationCancelled(error)) {
-					throw error;
-				}
+				// **パッチ失敗として握り潰さない。** ここへ来る例外は AI 到達不能・
+				// ネットワーク断・利用上限といった本物の失敗であり（応答形式の問題は
+				// translator 側でフォールバック済みで、適用可否は applySimplePatch が
+				// 理由つきで返す）、パッチ失敗に丸めると「差分の書き方が違う」という
+				// 誤った理由を出したうえで、そのユニットを黙って飛ばすことになる
 				logger.warn("trans", "Patch translation request failed", {
 					unitHash: unit.marker?.hash,
 					patchContent:
 						(error as { patchContent?: string }).patchContent ?? "N/A",
 					...formatError(error),
 				});
-				patchFailure = "unrecognized-format";
+				throw error;
 			}
 		}
 
@@ -1472,6 +1473,7 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 	}
 
 	// withProgressで進捗表示とキャンセル機能を提供
+	let outcome: FrontmatterOutcome | undefined;
 	await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
@@ -1480,12 +1482,25 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 		},
 		async (progress, token) => {
 			try {
-				await translateFrontmatter_CoreProc(uri, progress, token);
+				outcome = await translateFrontmatter_CoreProc(uri, progress, token);
 			} catch (error) {
 				await showTranslationError(error);
 			}
 		},
 	);
+
+	// 通知は排他区間の外で1回だけ出す
+	if (outcome === "no-trans-pair") {
+		await showNeedSyncError(
+			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
+		);
+	} else if (outcome === "no-keys") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("No frontmatter keys configured for translation."),
+		);
+	} else if (outcome === "completed") {
+		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
+	}
 }
 
 /**
@@ -1495,11 +1510,14 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
  * @param progress 進捗報告用オブジェクト
  * @param token キャンセルトークン
  */
+/** frontmatter 翻訳の終わり方 */
+type FrontmatterOutcome = "completed" | "nothing-to-do" | "no-keys" | "no-trans-pair";
+
 async function translateFrontmatter_CoreProc(
 	uri: vscode.Uri,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<void> {
+): Promise<FrontmatterOutcome> {
 	const targetFilePath = uri.fsPath;
 
 	// 保存も翻訳ペアの解決も排他区間の外で行う（区間の中で人を待たない）
@@ -1510,10 +1528,7 @@ async function translateFrontmatter_CoreProc(
 		Configuration.getInstance(),
 	);
 	if (!transPair) {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
-		);
-		return;
+		return "no-trans-pair";
 	}
 
 	// sync・自動sync・他の翻訳と同一ファイルへの書き込みが交錯しないよう排他する
@@ -1522,13 +1537,16 @@ async function translateFrontmatter_CoreProc(
 	);
 }
 
-/** **不変条件: ここで人に問わない・他コマンドを起こさない。** */
+/**
+ * **不変条件: ここで人に問わない・他コマンドを起こさない。**
+ * 通知に必要な情報は戻り値で返し、呼び出し側が区間の外で伝える。
+ */
 async function translateFrontmatter_Exclusive(
 	uri: vscode.Uri,
 	transPair: TransPair,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	token: vscode.CancellationToken,
-): Promise<void> {
+): Promise<FrontmatterOutcome> {
 	const targetFilePath = uri.fsPath;
 	const config = Configuration.getInstance();
 	const statusManager = StatusManager.getInstance();
@@ -1540,17 +1558,11 @@ async function translateFrontmatter_Exclusive(
 	// frontmatterの翻訳キーを取得
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	if (frontmatterKeys.length === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No frontmatter keys configured for translation."),
-		);
-		return;
+		return "no-keys";
 	}
 
 	// Translatorをビルド
 	const translator = await new TranslatorBuilder().build();
-	if (!translator) {
-		return;
-	}
 
 	// マーカー保管方式に応じた provider/ctx を解決
 	const io = resolveMarkerIO(config, targetFilePath, "target");
@@ -1579,7 +1591,7 @@ async function translateFrontmatter_Exclusive(
 	);
 
 	if (token.isCancellationRequested) {
-		return;
+		return "nothing-to-do";
 	}
 
 	if (translated) {
@@ -1594,11 +1606,9 @@ async function translateFrontmatter_Exclusive(
 
 		// StatusManagerでファイルステータス更新
 		await statusManager.refreshFileStatus(targetFilePath);
-
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translation completed"),
-		);
+		return "completed";
 	}
+	return "nothing-to-do";
 }
 
 /**
