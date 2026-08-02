@@ -122,7 +122,12 @@ export async function runUnitLoop<T>(
 		}
 
 		const unit = units[i];
-		ports.onProgress(i, units.length, unit);
+		// 進捗表示の失敗で翻訳を止めない
+		try {
+			ports.onProgress(i, units.length, unit);
+		} catch {
+			// 表示だけの処理なので握り潰す
+		}
 
 		let outcome: UnitTranslationOutcome;
 		try {
@@ -157,7 +162,18 @@ export async function runUnitLoop<T>(
 			result.patched++;
 		}
 
-		const persisted = await ports.persistUnit(unit, i);
+		// 書き戻しの失敗も例外にせず結果へ載せる（この関数は例外を投げない契約）。
+		// 権限エラーやディスクフルでここが投げると、呼び出し側が「ここまでの成果を
+		// 保存してから報告する」流れに入れない
+		let persisted: UnitPersistOutcome;
+		try {
+			persisted = await ports.persistUnit(unit, i);
+		} catch (error) {
+			persisted = {
+				written: false,
+				reason: error instanceof Error ? error.message : String(error),
+			};
+		}
 		if (!persisted.written) {
 			result.writeFailures.push({ index: i, unit, reason: persisted.reason });
 		}

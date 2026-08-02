@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type * as vscode from "vscode";
+import { isOperationCancelled } from "../../../../infra/errors/operation-cancelled";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import type { Translator } from "../../../../commands/trans/translator";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
@@ -538,7 +539,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result, undefined);
 		});
 
-		test("翻訳前にキャンセルされた場合、skipped=1が返ること", async () => {
+		test("翻訳前にキャンセルされた場合、中断として投げること", async () => {
 			const sourceFile = path.join(tempDir, "source", "cancel.txt");
 			const targetFile = path.join(tempDir, "target", "cancel.txt");
 			mkdirp(path.dirname(sourceFile));
@@ -571,18 +572,20 @@ suite("PlainFileHandler", () => {
 				onCancellationRequested: () => ({ dispose: () => {} }),
 			};
 
-			const result = await handler.translate(
-				targetFile,
-				dummyTranslator,
-				pair,
-				dummyProgress,
-				cancelledToken,
+			// 中断は件数0で返さず中断として投げる。件数で返すと呼び出し側が
+			// 「訳す対象が無かった」と区別できず、止めたのに
+			// 「翻訳するものはありませんでした」と表示されていた
+			await assert.rejects(
+				() =>
+					handler.translate(
+						targetFile,
+						dummyTranslator,
+						pair,
+						dummyProgress,
+						cancelledToken,
+					),
+				(error: unknown) => isOperationCancelled(error),
 			);
-
-			assert.ok(result);
-			assert.strictEqual(result.skippedCount, 1);
-			assert.strictEqual(result.translatedCount, 0);
-			assert.strictEqual(result.patchedCount, 0);
 		});
 	});
 

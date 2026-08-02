@@ -56,3 +56,27 @@ suite("OperationCancelledError（中断の単一表現）", () => {
 		});
 	});
 });
+
+suite("プロバイダのラップが中断を潰さないこと", () => {
+	// 中断をプロバイダ名でラップし直すと name が Error に変わり、
+	// isOperationCancelled が false を返して「正常な中断が赤いエラー」に戻る。
+	// ollama / openai の catch はどちらも rethrowIfCancelled を通す
+	test("ラップ前に投げ直せば、包んだ後も中断と判定できる", () => {
+		const wrap = (error: unknown): Error => {
+			rethrowIfCancelled(error);
+			return new Error(`Provider error: ${(error as Error).message}`);
+		};
+
+		assert.throws(
+			() => {
+				throw wrap(new OperationCancelledError("Request aborted"));
+			},
+			(thrown: unknown) => isOperationCancelled(thrown),
+		);
+
+		// 中断でなければ従来どおり包む
+		const wrapped = wrap(new Error("boom"));
+		assert.strictEqual(isOperationCancelled(wrapped), false);
+		assert.match(wrapped.message, /Provider error: boom/);
+	});
+});

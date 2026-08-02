@@ -103,18 +103,23 @@ export async function showTranslationError(error: unknown): Promise<void> {
 	);
 }
 
-/** パッチ適用が失敗した理由を、原稿を書く人に伝わる言葉にする */
+/**
+ * パッチ適用が失敗した理由を、原稿を書く人に伝わる言葉にする。
+ *
+ * すべての理由を明示的に並べる（`default` にまとめない） — まとめると、
+ * 将来 `PatchFailureReason` が増えたときに、無関係な説明が黙って出てしまう。
+ */
 export function describePatchFailure(reason: PatchFailureReason): string {
 	switch (reason) {
 		case "empty-patch":
-			return vscode.l10n.t("the AI returned no changes");
+			return vscode.l10n.t("The AI returned no changes.");
 		case "unrecognized-format":
-			return vscode.l10n.t("the AI did not return the expected diff format");
+			return vscode.l10n.t("The AI did not answer in the expected format.");
 		case "no-changes":
-			return vscode.l10n.t("the returned diff contained no additions or deletions");
-		default:
+			return vscode.l10n.t("The AI's answer contained no changes to apply.");
+		case "anchor-not-found":
 			return vscode.l10n.t(
-				"the surrounding lines used to locate the change were not found in the translation (it may have been edited by hand)",
+				"The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.",
 			);
 	}
 }
@@ -202,9 +207,10 @@ export async function reportTransOutcome(
 		const runSync = vscode.l10n.t("Run Sync");
 		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
-				"Could not write back {0} translated unit(s) in {1} because their markers were not found (the file may have changed). Run Sync and translate again.",
-				result.writeFailures.length,
+				"Translated {0} unit(s) in {1}, but {2} of them could not be written back because their markers were not found (the file may have changed). Run Sync and translate again.",
+				result.translatedCount,
 				actions.label,
+				result.writeFailures.length,
 			),
 			runSync,
 		);
@@ -217,20 +223,33 @@ export async function reportTransOutcome(
 	// パッチ適用に失敗したユニットは訳文を据え置いてある。理由を出したうえで、
 	// 全文で訳し直すかどうかを一度だけ尋ねる（ユニットごとに聞くと連打になる）
 	if (result.patchFailures.length > 0) {
-		const reason = describePatchFailure(result.patchFailures[0].reason);
 		const body = vscode.l10n.t(
-			"Kept the existing translation for {0} unit(s) in {1}: patch could not be applied because {2}. Re-translating in full may overwrite manual edits.",
+			"Kept the existing translation for {0} unit(s) in {1}. {2}",
 			result.patchFailures.length,
 			actions.label,
-			reason,
+			describePatchFailure(result.patchFailures[0].reason),
 		);
 		if (!actions.retryFullTranslation) {
 			vscode.window.showWarningMessage(body);
 			return;
 		}
-		const retry = vscode.l10n.t("Re-translate in full");
+		// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
+		const retry = vscode.l10n.t("✨Re-translate in full");
 		const choice = await vscode.window.showWarningMessage(body, retry);
-		if (choice === retry) {
+		if (choice !== retry) {
+			return;
+		}
+		// 「これから何が起きるか・取り消せるか」は確認ダイアログの担当（ux.md §3.3）。
+		// 全文で訳し直すと手作業の修正が消えうるので、押した先で一度だけ確認する
+		const proceed = vscode.l10n.t("Re-translate");
+		const confirmed = await vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+			),
+			{ modal: true },
+			proceed,
+		);
+		if (confirmed === proceed) {
 			await actions.retryFullTranslation();
 		}
 		return;

@@ -7,7 +7,10 @@ import { type FileStatusItem, Status, StatusItemType } from "../../core/status/s
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
-import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import {
+	OperationCancelledError,
+	isOperationCancelled,
+} from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
@@ -288,14 +291,11 @@ export class PlainFileHandler implements FileHandler {
 			message: vscode.l10n.t("Translating {0}", path.basename(targetFilePath)),
 		});
 
-		// キャンセルチェック（LLM呼び出し前）
+		// キャンセルチェック（LLM呼び出し前）。
+		// 件数0で返すと呼び出し側が「訳す対象が無かった」と区別できず、
+		// 止めたのに「翻訳するものはありませんでした」と出る。中断は中断として投げる
 		if (token.isCancellationRequested) {
-			return {
-				translatedCount: 0,
-				patchedCount: 0,
-				skippedCount: 1,
-				tmHits: 0,
-			};
+			throw new OperationCancelledError();
 		}
 
 		// 10. 翻訳実行

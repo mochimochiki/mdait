@@ -264,13 +264,14 @@ export async function transFile_CoreProc(
 ): Promise<TransCommandResult> {
 	const targetFilePath = uri.fsPath;
 
-	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）。
-	// 保存は autoSyncOnSave を誘発しうるため、**必ず排他区間の外**で行う
-	await flushDirtyDocument(targetFilePath);
-
 	// 翻訳ペアの解決は排他区間の外で行う。見つからないときの案内は「Sync を実行」
 	// ボタンを持つが、これを区間の中で待つと sync が同じファイルのロックを取りにいき
-	// 永久に解放されない（FileMutex は再入非対応）
+	// 永久に解放されない（FileMutex は再入非対応）。
+	// 一方、未保存の反映（flushDirtyDocument）は区間の**中**で行う — 区間の外だと
+	// ロック待ちのあいだにユーザーが編集し直せてしまい、「保存済みのつもりで古い内容を
+	// 読む」「後の保存で翻訳結果が消える」という dirty-document.ts が防いでいる失敗が戻る。
+	// 保存が誘発する autoSyncOnSave は VS Code が待たない非同期リスナで、
+	// 同じロックの待ち行列に並ぶだけなのでデッドロックにはならない（sync/ai-review と同じ作法）
 	const transPair = new FileExplorer().getTransPairFromTarget(
 		targetFilePath,
 		Configuration.getInstance(),
@@ -303,6 +304,9 @@ async function transFile_Exclusive(
 	const config = Configuration.getInstance();
 	const targetFilePath = uri.fsPath;
 
+	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
+	await flushDirtyDocument(targetFilePath);
+
 	// FileHandlerファクトリ経由でファイルタイプ別にディスパッチ
 	const handler = getFileHandler(targetFilePath);
 	if (handler.fileType !== "md") {
@@ -316,8 +320,12 @@ async function transFile_Exclusive(
 				token,
 			);
 			if (!result) return emptyResult("nothing-to-do");
+			// パッチ適用での更新も「訳した」に数える。非MDハンドラは patch 成功時に
+			// translatedCount=0 / patchedCount=1 を返すため、translatedCount だけを見ると
+			// 実際にはファイルを書き換えたのに「翻訳するものはありませんでした」になる
+			const changed = result.translatedCount + result.patchedCount > 0;
 			return {
-				outcome: result.translatedCount > 0 ? "completed" : "nothing-to-do",
+				outcome: changed ? "completed" : "nothing-to-do",
 				unitCount: 1,
 				translatedCount: result.translatedCount,
 				patchedCount: result.patchedCount,
@@ -382,6 +390,8 @@ async function transFile_Exclusive(
 
 	// 「ここまでの成果」を保持する。中断・失敗のどの経路で抜けても finally で保存する
 	let loop: UnitLoopResult<MdaitUnit> | undefined;
+	// frontmatter だけ訳してユニットが0件、という場合も「訳した」に数える
+	let frontmatterTranslated = false;
 
 	try {
 		// frontmatterの翻訳（必要な場合のみ）
@@ -400,6 +410,7 @@ async function transFile_Exclusive(
 				token,
 			);
 			if (updated) {
+				frontmatterTranslated = true;
 				const encoder = new TextEncoder();
 				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
 				await vscode.workspace.fs.writeFile(
@@ -426,45 +437,31 @@ async function transFile_Exclusive(
 			},
 			translateUnit: async (unit) => {
 				const oldHash = unit.marker?.hash;
-				try {
-					const metrics = await translateUnit(
-						unit,
-						translator,
-						sourceLang,
-						targetLang,
+				const metrics = await translateUnit(
+					unit,
+					translator,
+					sourceLang,
+					targetLang,
+					targetFilePath,
+					token,
+					options,
+				);
+				// 訳し終えたユニットは、進行中の見え方を先に更新する（1件ずつ緑になる）。
+				// 最終的な整合は finally の refreshFileStatus が担う。
+				// 失敗の印付けはここでは行わない — refresh がディスク由来の状態で
+				// 上書きするため必ず消える。後始末のあとで markFailedUnit がまとめて行う
+				if (!metrics.patchFailure && oldHash && unit.marker) {
+					statusManager.changeUnitStatus(
+						oldHash,
+						{
+							status: Status.Translated,
+							needFlag: undefined,
+							unitHash: unit.marker.hash,
+						},
 						targetFilePath,
-						token,
-						options,
 					);
-					// 訳文を更新できたユニットだけ、進行中の見え方を先に更新する
-					// （最終的な整合はこの関数の finally の refreshFileStatus が担う）
-					if (!metrics.patchFailure && oldHash && unit.marker) {
-						statusManager.changeUnitStatus(
-							oldHash,
-							{
-								status: Status.Translated,
-								needFlag: undefined,
-								unitHash: unit.marker.hash,
-							},
-							targetFilePath,
-						);
-					}
-					return metrics;
-				} catch (error) {
-					// 中断は失敗ではないのでエラー状態を刻まない。
-					// 解除キーには**翻訳前の**ハッシュを使う（翻訳途中で書き換わりうるため）
-					if (!isOperationCancelled(error) && oldHash) {
-						statusManager.changeUnitStatus(
-							oldHash,
-							{
-								status: Status.Error,
-								errorMessage: (error as Error).message,
-							},
-							targetFilePath,
-						);
-					}
-					throw error;
 				}
+				return metrics;
 			},
 			persistUnit: async (unit, index) => {
 				// external は本文にマーカーを書けないため、ループ後の一括保存に委ねる
@@ -486,7 +483,7 @@ async function transFile_Exclusive(
 			cancelled: loop.cancelled,
 		});
 
-		return buildFileResult(unitsToTranslate, loop);
+		return buildFileResult(unitsToTranslate, loop, frontmatterTranslated);
 	} finally {
 		// **後始末の単一経路。** 中断でも失敗でも必ずここを通る。
 		// (1) ここまでの成果を保存する（external は一括保存なので、これが無いと
@@ -504,13 +501,39 @@ async function transFile_Exclusive(
 			}
 		}
 		await statusManager.refreshFileStatus(targetFilePath);
+		// 失敗したユニットの印は refresh のあとに付け直す。refresh はディスクから
+		// 状態を作り直すため翻訳エラーを知らず、先に刻むと必ず消えてしまう
+		markFailedUnit(targetFilePath, loop);
 	}
+}
+
+/**
+ * 失敗したユニットに Status.Error を刻む（状態の作り直しのあとに呼ぶ）。
+ * どのユニットで落ちたかがツリーから読めないと、利用者は原稿のどこを直せばよいか分からない。
+ */
+function markFailedUnit(
+	targetFilePath: string,
+	loop: UnitLoopResult<MdaitUnit> | undefined,
+): void {
+	const hash = loop?.errorUnit?.marker?.hash;
+	if (!loop?.error || !hash) {
+		return;
+	}
+	StatusManager.getInstance().changeUnitStatus(
+		hash,
+		{
+			status: Status.Error,
+			errorMessage: (loop.error as Error).message,
+		},
+		targetFilePath,
+	);
 }
 
 /** 進行制御の結果を、呼び出し側へ返すコマンド結果に変換する */
 function buildFileResult(
 	units: readonly MdaitUnit[],
 	loop: UnitLoopResult<MdaitUnit>,
+	frontmatterTranslated = false,
 ): TransCommandResult {
 	const describe = (unit: MdaitUnit) => ({
 		unitHash: unit.marker?.hash,
@@ -519,7 +542,11 @@ function buildFileResult(
 	let outcome: TransOutcome = "completed";
 	if (loop.cancelled) {
 		outcome = "cancelled";
-	} else if (loop.translated === 0 && loop.patchFailures.length === 0) {
+	} else if (
+		loop.translated === 0 &&
+		loop.patchFailures.length === 0 &&
+		!frontmatterTranslated
+	) {
 		outcome = "nothing-to-do";
 	}
 	return {
@@ -1186,10 +1213,8 @@ export async function transUnit_CoreProc(
 	token: vscode.CancellationToken,
 	options?: TransRunOptions,
 ): Promise<TransCommandResult> {
-	// 保存も翻訳ペアの解決も排他区間の外で行う（区間の中で人を待たない・
-	// 他コマンドを起こさないという不変条件のため）
-	await flushDirtyDocument(targetPath);
-
+	// 翻訳ペアの解決だけ区間の外で行う（見つからないときの案内が「Sync を実行」
+	// ボタンを持つため）。未保存の反映は区間の中で行う
 	const transPair = new FileExplorer().getTransPairFromTarget(
 		targetPath,
 		Configuration.getInstance(),
@@ -1218,6 +1243,9 @@ async function transUnit_Exclusive(
 ): Promise<TransCommandResult> {
 	const statusManager = StatusManager.getInstance();
 	const config = Configuration.getInstance();
+
+	// 未保存のエディタ変更をディスクへ反映（バッファとディスクの不整合による翻訳結果消失を防ぐ）
+	await flushDirtyDocument(targetPath);
 
 	const sourceLang = transPair.sourceLang;
 	const targetLang = transPair.targetLang;
@@ -1263,42 +1291,28 @@ async function transUnit_Exclusive(
 					progress.report({ message: vscode.l10n.t("{0}/{1} units", 1, 1) });
 				},
 				translateUnit: async (unit) => {
-					try {
-						const metrics = await translateUnit(
-							unit,
-							translator,
-							sourceLang,
-							targetLang,
+					const metrics = await translateUnit(
+						unit,
+						translator,
+						sourceLang,
+						targetLang,
+						targetPath,
+						token,
+						options,
+					);
+					// 失敗の印付けは後始末のあと（markFailedUnit）にまとめる
+					if (!metrics.patchFailure) {
+						statusManager.changeUnitStatus(
+							unitHash,
+							{
+								status: Status.Translated,
+								needFlag: undefined,
+								unitHash: unit.marker.hash,
+							},
 							targetPath,
-							token,
-							options,
 						);
-						if (!metrics.patchFailure) {
-							statusManager.changeUnitStatus(
-								unitHash,
-								{
-									status: Status.Translated,
-									needFlag: undefined,
-									unitHash: unit.marker.hash,
-								},
-								targetPath,
-							);
-						}
-						return metrics;
-					} catch (error) {
-						// 中断は失敗ではないのでエラー状態を刻まない
-						if (!isOperationCancelled(error)) {
-							statusManager.changeUnitStatus(
-								unitHash,
-								{
-									status: Status.Error,
-									errorMessage: (error as Error).message,
-								},
-								targetPath,
-							);
-						}
-						throw error;
 					}
+					return metrics;
 				},
 				persistUnit: async (unit) => {
 					if (external) {
@@ -1324,6 +1338,7 @@ async function transUnit_Exclusive(
 			}
 		}
 		await statusManager.refreshFileStatus(targetPath);
+		markFailedUnit(targetPath, loop);
 	}
 
 	if (loop.error) {
@@ -1489,7 +1504,8 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 		},
 	);
 
-	// 通知は排他区間の外で1回だけ出す
+	// 通知は排他区間の外で1回だけ出す。どの終わり方でも黙らない（UX-P7）
+	const label = path.basename(targetFilePath);
 	if (outcome === "no-trans-pair") {
 		await showNeedSyncError(
 			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
@@ -1497,6 +1513,14 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 	} else if (outcome === "no-keys") {
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("No frontmatter keys configured for translation."),
+		);
+	} else if (outcome === "cancelled") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Translation cancelled for {0}.", label),
+		);
+	} else if (outcome === "nothing-to-do") {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Nothing to translate in {0}.", label),
 		);
 	} else if (outcome === "completed") {
 		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
@@ -1511,7 +1535,12 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
  * @param token キャンセルトークン
  */
 /** frontmatter 翻訳の終わり方 */
-type FrontmatterOutcome = "completed" | "nothing-to-do" | "no-keys" | "no-trans-pair";
+type FrontmatterOutcome =
+	| "completed"
+	| "nothing-to-do"
+	| "cancelled"
+	| "no-keys"
+	| "no-trans-pair";
 
 async function translateFrontmatter_CoreProc(
 	uri: vscode.Uri,
@@ -1520,9 +1549,7 @@ async function translateFrontmatter_CoreProc(
 ): Promise<FrontmatterOutcome> {
 	const targetFilePath = uri.fsPath;
 
-	// 保存も翻訳ペアの解決も排他区間の外で行う（区間の中で人を待たない）
-	await flushDirtyDocument(targetFilePath);
-
+	// 翻訳ペアの解決だけ区間の外で行う。未保存の反映は区間の中
 	const transPair = new FileExplorer().getTransPairFromTarget(
 		targetFilePath,
 		Configuration.getInstance(),
@@ -1551,6 +1578,9 @@ async function translateFrontmatter_Exclusive(
 	const config = Configuration.getInstance();
 	const statusManager = StatusManager.getInstance();
 	const fileExplorer = new FileExplorer();
+
+	// 未保存のエディタ変更をディスクへ反映
+	await flushDirtyDocument(targetFilePath);
 
 	// ソースファイルパスを取得
 	const sourceFilePath = fileExplorer.getSourcePath(targetFilePath, transPair);
@@ -1591,7 +1621,7 @@ async function translateFrontmatter_Exclusive(
 	);
 
 	if (token.isCancellationRequested) {
-		return "nothing-to-do";
+		return "cancelled";
 	}
 
 	if (translated) {

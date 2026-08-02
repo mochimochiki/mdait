@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { StatusItemType } from "../../core/status/status-item";
 import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
@@ -148,7 +149,7 @@ export class StatusTreeTranslationHandler {
 				vscode.window.showInformationMessage(
 					vscode.l10n.t(
 						"{0} is already being translated. Wait for it to finish, or cancel it first.",
-						directoryPath,
+						path.basename(directoryPath),
 					),
 				);
 				return undefined;
@@ -171,6 +172,10 @@ export class StatusTreeTranslationHandler {
 							let successful = 0;
 							let failed = 0;
 							let completed = 0;
+							// 中断されたファイル・訳すものが無かったファイルは、
+							// 成功にも失敗にも数えない（数え分けないと結果報告が嘘になる）
+							let cancelledFiles = 0;
+							let untouched = 0;
 							// 最初の失敗理由を保持して結果通知に載せる。件数だけを出すと、
 							// AI が使えないだけなのか原稿の問題なのかが利用者に分からない
 							let firstError: unknown;
@@ -182,8 +187,8 @@ export class StatusTreeTranslationHandler {
 								async (file) => {
 									try {
 										// 内部実装を直接呼び出し（二重のwithProgressを回避）。
-										// 中断や「訳す対象が無い」を失敗に数えない — 以前は
-										// 「5件失敗」と出ても実際はユーザーが止めただけ、が起きていた
+										// 終わり方で数え分ける — 中断は失敗でも成功でもない。
+										// 以前は「5件失敗」と出ても実際はユーザーが止めただけ、が起きていた
 										const fileResult = await transFile_CoreProc(file, progress, token);
 										if (fileResult.outcome === "no-trans-pair") {
 											failed++;
@@ -192,6 +197,10 @@ export class StatusTreeTranslationHandler {
 													vscode.l10n.t("No translation pair found for file: {0}", file.fsPath),
 												);
 											}
+										} else if (fileResult.outcome === "cancelled") {
+											cancelledFiles++;
+										} else if (fileResult.outcome === "nothing-to-do") {
+											untouched++;
 										} else {
 											successful++;
 										}
@@ -224,7 +233,7 @@ export class StatusTreeTranslationHandler {
 									"trans",
 									"Directory translation cancelled, skipping remaining files",
 								);
-								const skipped = files.length - successful - failed;
+								const skipped = files.length - successful - failed + cancelledFiles;
 								vscode.window.showInformationMessage(
 									vscode.l10n.t(
 										"Directory translation cancelled: {0} files succeeded, {1} files failed, {2} files skipped",
@@ -236,11 +245,25 @@ export class StatusTreeTranslationHandler {
 								return { totalFiles: files.length, successful, failed, skipped };
 							}
 
-							// 結果を通知（失敗があれば理由と次の一手を添える）
+							// 結果を通知（失敗があれば理由と次の一手を添える）。
+							// 成功しても黙らない — ここは sync 完了通知の「✨今すぐ翻訳」から
+							// 来る主導線で、無言で終わると次の工程へ手渡せない（UX-P6）
 							if (failed > 0) {
 								void showDirectoryTranslationFailure(successful, failed, firstError);
+							} else if (successful > 0) {
+								vscode.window.showInformationMessage(
+									vscode.l10n.t(
+										"Translation completed for {0}: {1} file(s).",
+										path.basename(directoryPath),
+										successful,
+									),
+								);
+							} else {
+								vscode.window.showInformationMessage(
+									vscode.l10n.t("Nothing to translate in {0}.", path.basename(directoryPath)),
+								);
 							}
-							return { totalFiles: files.length, successful, failed, skipped: 0 };
+							return { totalFiles: files.length, successful, failed, skipped: untouched };
 						} finally {
 							// 進行中の見え方は台帳が持つため、旗を下ろす処理は無い。
 							// 配下ファイルの最終状態はファイル側の後始末で反映済み
