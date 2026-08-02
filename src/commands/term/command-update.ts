@@ -17,6 +17,7 @@ import { Configuration, type TransPair } from "../../infra/config/configuration"
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { OperationRegistry } from "../shared/operation-registry";
 import { notifyWithReport } from "../shared/report-file";
 import { detectTerm_CoreProc } from "./command-detect";
 import { expandTerm_CoreProc } from "./command-expand";
@@ -137,8 +138,11 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 	}
 
 	const statusManager = StatusManager.getInstance();
-	// 処理中はツリーにスピナーを出す（他の長い処理と同じ作法。解除は必ず finally で行う）
-	await Promise.all(scope.sourceFiles.map((file) => statusManager.changeFileStatus(file, { isTranslating: true })));
+	// 処理中はツリーにスピナーを出す。実体は実行台帳への登録で、解除は finally の
+	// release() 一経路だけが行う（StatusItem に旗を持たせない・ADR-260803-01）
+	const handles = scope.sourceFiles
+		.map((file) => OperationRegistry.getInstance().acquire({ kind: "terms", scope: "file", path: file }))
+		.filter((h): h is NonNullable<typeof h> => h !== undefined);
 	await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
@@ -189,9 +193,9 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 				);
 			} finally {
 				// スピナーの解除と再集計は、成功・失敗・キャンセルのどれでも必ず行う
-				await Promise.all(
-					scope.sourceFiles.map((file) => statusManager.changeFileStatus(file, { isTranslating: false })),
-				);
+				for (const handle of handles) {
+					handle.release();
+				}
 				for (const file of scope.sourceFiles) {
 					await statusManager.refreshFileStatus(file);
 				}

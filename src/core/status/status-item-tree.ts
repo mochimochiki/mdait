@@ -524,8 +524,6 @@ export class StatusItemTree {
 	 * FileItemを更新
 	 */
 	public addOrUpdateFile(fileItem: FileStatusItem): void {
-		this.recalcFileTranslating(fileItem);
-
 		const existingItem = this.fileItemMap.get(fileItem.filePath);
 		if (existingItem) {
 			// 既存のファイルStatusItemを更新
@@ -695,7 +693,6 @@ export class StatusItemTree {
 		// 親ファイルの翻訳中フラグとディレクトリ集計を追随させる
 		const fileItem = this.fileItemMap.get(filePath);
 		if (fileItem) {
-			this.recalcFileTranslating(fileItem);
 			this.addOrUpdateDirectory(fileItem);
 		}
 
@@ -704,17 +701,6 @@ export class StatusItemTree {
 	}
 
 	// ========== Private methods ==========
-
-	/**
-	 * ファイルの翻訳中フラグを子ユニット・frontmatterから再計算する
-	 */
-	private recalcFileTranslating(fileItem: FileStatusItem): void {
-		fileItem.isTranslating = (fileItem.children ?? []).some((unit) => unit.isTranslating === true);
-		// frontmatterの翻訳中フラグも考慮
-		if (fileItem.frontmatter?.isTranslating) {
-			fileItem.isTranslating = true;
-		}
-	}
 
 	/**
 	 * ソースファイルを除外したターゲットファイルのみ取得
@@ -807,9 +793,6 @@ export class StatusItemTree {
 		const allFiles = this.getFilesInDirectoryRecursive(dirPath);
 		directoryItem.status = this.determineMergedStatus(allFiles);
 
-		// ディレクトリのisTranslatingフラグを決定（再帰）
-		directoryItem.isTranslating = allFiles.some((file) => file.isTranslating === true);
-
 		// ディレクトリのラベル/集計値を更新（ターゲットファイルのみ）
 		const targetFiles = this.getTargetFiles(allFiles);
 		const totalUnits = targetFiles.reduce((sum, file) => sum + file.totalUnits, 0);
@@ -837,9 +820,6 @@ export class StatusItemTree {
 		// ディレクトリの全体ステータスを決定（再帰）
 		const status = this.determineMergedStatus(allFiles);
 
-		// ディレクトリのisTranslatingフラグを決定（再帰）
-		const isTranslating = allFiles.some((file) => file.isTranslating === true);
-
 		// sourceディレクトリの場合は翻訳ユニット数を表示しない
 		const label = status === Status.Source ? `${dirName}` : `${dirName} (${translatedUnits}/${totalUnits})`;
 
@@ -858,7 +838,6 @@ export class StatusItemTree {
 			label,
 			directoryPath: dirPath,
 			status,
-			isTranslating,
 			contextValue,
 			children: [...files], // 直下ファイルのコピーを保持
 			totalUnits,

@@ -12,6 +12,7 @@ import { getFileHandler } from "../../commands/file-handler/file-handler-factory
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
+import { showTranslationError } from "../../commands/shared/guidance";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
@@ -74,13 +75,12 @@ export async function codeLensTranslateCommand(range: vscode.Range): Promise<voi
 			return;
 		}
 
-		// 既存のtransUnitCommandを呼び出し
+		// 結果の通知は transUnitCommand が終わり方に応じて1回だけ出す。
+		// ここで無条件に成功を出すと、中断や「訳す対象が無い」場合に
+		// エラーと成功が並んで表示される
 		await transUnitCommand(targetPath, unitHash);
-
-		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed for unit: {0}", unitHash));
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(vscode.l10n.t("Translation failed: {0}", errorMessage));
+		await showTranslationError(error);
 	}
 }
 
@@ -941,10 +941,10 @@ function toWorkspaceRelativePath(absolutePath: string): string | null {
  */
 export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<void> {
 	try {
+		// 結果の通知は transCommand 側が終わり方に応じて出す
 		await transCommand(uri);
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		vscode.window.showErrorMessage(vscode.l10n.t("Translation failed: {0}", errorMessage));
+		await showTranslationError(error);
 	}
 }
 

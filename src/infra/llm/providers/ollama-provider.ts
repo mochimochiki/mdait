@@ -1,6 +1,7 @@
 import { Ollama } from "ollama";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../config/configuration";
+import { OperationCancelledError, rethrowIfCancelled } from "../../errors/operation-cancelled";
 import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
@@ -104,7 +105,7 @@ export class OllamaProvider implements AIService {
 			if (cancellationToken?.isCancellationRequested) {
 				status = "error";
 				errorMessage = "Operation cancelled before start";
-				throw new Error("Operation cancelled");
+				throw new OperationCancelledError();
 			}
 
 			// Ollama-js パッケージを使用してストリーミング生成
@@ -150,7 +151,7 @@ export class OllamaProvider implements AIService {
 			if (cancellationToken?.isCancellationRequested) {
 				status = "error";
 				errorMessage = "Operation cancelled after completion";
-				throw new Error("Operation cancelled");
+				throw new OperationCancelledError();
 			}
 
 			return responseContent;
@@ -160,6 +161,9 @@ export class OllamaProvider implements AIService {
 				status = "error";
 				errorMessage = (error as Error).message;
 			}
+			// 中断はプロバイダ名でラップしない。ラップすると受け手が「失敗」と
+			// 区別できず、正常な中断が赤いエラー通知になる
+			rethrowIfCancelled(error);
 			throw new Error(`Ollama provider error: ${(error as Error).message}`);
 		} finally {
 			// キャンセルリスナーのクリーンアップ

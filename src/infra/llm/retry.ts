@@ -1,4 +1,5 @@
 import type * as vscode from "vscode";
+import { OperationCancelledError } from "../errors/operation-cancelled";
 import { Logger } from "../logging/logger";
 
 /**
@@ -78,7 +79,7 @@ export function delayWithCancellation(
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		if (token?.isCancellationRequested) {
-			reject(new Error("Operation cancelled"));
+			reject(new OperationCancelledError());
 			return;
 		}
 
@@ -90,7 +91,7 @@ export function delayWithCancellation(
 		const subscription = token?.onCancellationRequested(() => {
 			clearTimeout(timer);
 			subscription?.dispose();
-			reject(new Error("Operation cancelled"));
+			reject(new OperationCancelledError());
 		});
 	});
 }
@@ -142,7 +143,7 @@ export async function withTransportRetry<T>(
 	let lastError: unknown;
 	for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
 		if (token?.isCancellationRequested) {
-			throw new Error("Operation cancelled");
+			throw new OperationCancelledError();
 		}
 
 		try {

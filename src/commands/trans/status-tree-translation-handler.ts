@@ -3,16 +3,18 @@ import { StatusItemType } from "../../core/status/status-item";
 import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
+import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
-import { showDirectoryTranslationFailure } from "../shared/guidance";
+import { showDirectoryTranslationFailure, showTranslationError } from "../shared/guidance";
+import { OperationRegistry } from "../shared/operation-registry";
 import { getSelectedPairAbsDirs } from "../shared/status-scope";
 import {
 	type TransCommandResult,
-	type TranslateUnitMetrics,
+	transCommand,
 	transFile_CoreProc,
 	transUnitCommand,
 } from "./trans-command";
@@ -97,8 +99,6 @@ export class StatusTreeTranslationHandler {
 
 		const directoryPath = item.directoryPath; // 型安全性のためローカル変数に保存
 
-		const statusManager = StatusManager.getInstance();
-
 		try {
 			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）。
 			// 確認ダイアログに対象ファイル数を出すため、確認より先に列挙する
@@ -137,6 +137,23 @@ export class StatusTreeTranslationHandler {
 				return; // ユーザーがキャンセルした場合
 			}
 
+			// 多重起動の拒否。配下のファイル翻訳とも範囲が重なるため、
+			// 台帳が「いま重なる操作が走っているか」を一手に判定する
+			const handle = OperationRegistry.getInstance().acquire({
+				kind: "translate",
+				scope: "directory",
+				path: directoryPath,
+			});
+			if (!handle) {
+				vscode.window.showInformationMessage(
+					vscode.l10n.t(
+						"{0} is already being translated. Wait for it to finish, or cancel it first.",
+						directoryPath,
+					),
+				);
+				return undefined;
+			}
+
 			// withProgressで進捗表示とキャンセル機能を統合管理
 			return await vscode.window.withProgress(
 				{
@@ -145,11 +162,6 @@ export class StatusTreeTranslationHandler {
 					cancellable: true,
 				},
 				async (progress, token) => {
-					// ディレクトリの翻訳状態を設定
-					await statusManager.changeDirectoryStatus(directoryPath, {
-						isTranslating: true,
-					});
-
 					try {
 						// 各ファイルをtrans.concurrencyの同時実行数で並列翻訳（キャンセルチェック付き）。
 						// 異なるファイルペアは独立で、同一ファイルはFileMutexが排他するため競合しない
@@ -166,15 +178,30 @@ export class StatusTreeTranslationHandler {
 							concurrency,
 							async (file) => {
 								try {
-									// 内部実装を直接呼び出し（二重のwithProgressを回避）
-									await transFile_CoreProc(file, progress, token);
-									successful++;
+									// 内部実装を直接呼び出し（二重のwithProgressを回避）。
+									// 中断や「訳す対象が無い」を失敗に数えない — 以前は
+									// 「5件失敗」と出ても実際はユーザーが止めただけ、が起きていた
+									const fileResult = await transFile_CoreProc(file, progress, token);
+									if (fileResult.outcome === "no-trans-pair") {
+										failed++;
+										if (!firstError) {
+											firstError = new Error(
+												vscode.l10n.t("No translation pair found for file: {0}", file.fsPath),
+											);
+										}
+									} else {
+										successful++;
+									}
 								} catch (error) {
+									// 中断は失敗ではない
+									if (isOperationCancelled(error)) {
+										return;
+									}
 									logger.error("trans", "Error translating file", {
 										file: file.fsPath,
 										...formatError(error),
 									});
-									if (failed === 0) {
+									if (!firstError) {
 										firstError = error;
 									}
 									failed++;
@@ -212,10 +239,9 @@ export class StatusTreeTranslationHandler {
 						}
 						return { totalFiles: files.length, successful, failed, skipped: 0 };
 					} finally {
-						// ディレクトリの翻訳状態をクリア
-						await statusManager.changeDirectoryStatus(directoryPath, {
-							isTranslating: false,
-						});
+						// 進行中の見え方は台帳が持つため、旗を下ろす処理は無い。
+						// 配下ファイルの最終状態はファイル側の後始末で反映済み
+						handle.release();
 					}
 				},
 			);
@@ -242,59 +268,9 @@ export class StatusTreeTranslationHandler {
 			return;
 		}
 
-		// AI初回利用チェック
-		const aiOnboarding = AIOnboarding.getInstance();
-		const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
-		if (!shouldProceed) {
-			return; // ユーザーがキャンセルした場合
-		}
-
-		const statusManager = StatusManager.getInstance();
-		const filePath = item.filePath; // 型安全性のためローカル変数に保存
-
-		let result: TransCommandResult | undefined;
-
-		try {
-			// StatusManagerを通じてisTranslatingを設定
-			await statusManager.changeFileStatus(filePath, { isTranslating: true });
-
-			// withProgressで進捗表示とキャンセル機能を提供
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: vscode.l10n.t(
-						"Translating {0}",
-						vscode.Uri.file(filePath).fsPath.split(/[\\/]/).pop() || filePath,
-					),
-					cancellable: true,
-				},
-				async (progress, token) => {
-					try {
-						// 内部実装を直接呼び出し（二重のwithProgressを回避）
-						result = await transFile_CoreProc(
-							vscode.Uri.file(filePath),
-							progress,
-							token,
-						);
-					} finally {
-						// StatusManagerを通じてisTranslatingを解除
-						await statusManager.changeFileStatus(filePath, {
-							isTranslating: false,
-						});
-					}
-				},
-			);
-		} catch (error) {
-			logger.error("trans", "Error during file translation", formatError(error));
-			vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					"Error during file translation: {0}",
-					(error as Error).message,
-				),
-			);
-		}
-
-		return result;
+		// ファイル翻訳は transCommand が AI初回確認・多重起動の拒否・進捗・通知まで
+		// 面倒を見る。ここで独自に旗を立てたり通知したりしない（サーフェスごとに書くと必ずずれる）
+		return (await transCommand(vscode.Uri.file(item.filePath))) ?? undefined;
 	}
 
 	/**
@@ -302,40 +278,19 @@ export class StatusTreeTranslationHandler {
 	 */
 	public async translateUnit(
 		item: StatusItem,
-	): Promise<TranslateUnitMetrics | undefined> {
+	): Promise<TransCommandResult | undefined> {
 		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
 		}
 
-		const statusManager = StatusManager.getInstance();
-		let result: TranslateUnitMetrics | undefined;
-
+		// 多重起動の拒否・進捗・通知はすべて transUnitCommand が持つ
 		try {
-			// StatusManagerを通じてisTranslatingを設定（これにより親ファイル・ディレクトリも自動更新される）
-			statusManager.changeUnitStatus(
-				item.unitHash,
-				{ isTranslating: true },
-				item.filePath,
-			);
-			result = await transUnitCommand(item.filePath, item.unitHash);
+			return await transUnitCommand(item.filePath, item.unitHash);
 		} catch (error) {
 			logger.error("trans", "Error during unit translation", formatError(error));
-			vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					"Error during unit translation: {0}",
-					(error as Error).message,
-				),
-			);
-		} finally {
-			// StatusManagerを通じてisTranslatingを解除（これにより親ファイル・ディレクトリも自動更新される）
-			statusManager.changeUnitStatus(
-				item.unitHash,
-				{ isTranslating: false },
-				item.filePath,
-			);
+			await showTranslationError(error);
+			return undefined;
 		}
-
-		return result;
 	}
 }

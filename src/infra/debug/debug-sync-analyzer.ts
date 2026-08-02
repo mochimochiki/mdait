@@ -61,7 +61,8 @@ function signatureOf(file: FileStatusItem): string {
 	return [
 		file.status,
 		`t${file.translatedUnits}/${file.totalUnits}`,
-		file.isTranslating ? "translating" : "idle",
+		// 「処理中か」は StatusItem ではなく OperationRegistry が持つため、
+		// ファイルの状態シグネチャには含めない（sync の冪等性判定にも不要）
 		file.hasParseError ? "parseError" : "ok",
 		`need[${needFlags}]`,
 	].join("|");
