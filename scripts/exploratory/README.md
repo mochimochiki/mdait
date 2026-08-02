@@ -27,10 +27,15 @@ npm run test:explore   # compile → scripts/exploratory/run-sweep.js
 ### probe-robustness.js の使い方
 
 ```bash
-npm run compile && node scripts/exploratory/probe-robustness.js   # S0〜S14 を全部流す
-PROBE_ONLY=S3,S13 node scripts/exploratory/probe-robustness.js    # シナリオを絞る
-PROBE_TIME=1 node scripts/exploratory/probe-robustness.js         # 各ステップの所要時間も出す
+npm run compile && node scripts/exploratory/probe-robustness.js                       # S0〜S14 を全部流す
+npm run compile && PROBE_ONLY=S3,S13 node scripts/exploratory/probe-robustness.js     # シナリオを絞る
+npm run compile && PROBE_TIME=1 node scripts/exploratory/probe-robustness.js          # 各ステップの所要時間も出す
+npm run compile && PROBE_KEEP=1 node scripts/exploratory/probe-robustness.js          # 終了時に復元せず最終状態を残す
 ```
+
+テストワークスペース（`src/test/unit/workspace` の `content` と `.mdait`）を破壊的に書き換えるが、
+終了時に `copy-test-files` で自動復元する。`PROBE_KEEP=1` で復元を止めた場合は、後で
+`npm run copy-test-files` を自分で実行すること（`mdait.json` は常に元に戻る）。
 
 読み方と実測結果の評価は [docs/design/unit-state.md](../../docs/design/unit-state.md) を参照。
 

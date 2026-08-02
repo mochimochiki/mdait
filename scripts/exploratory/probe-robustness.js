@@ -6,9 +6,13 @@
  * embedded と external の両モードで同一手順で実行し、sync 後の状態を突き合わせる。
  *
  * 使い方: npm run compile && node scripts/exploratory/probe-robustness.js
+ *
+ * 注意: テストワークスペース（src/test/unit/workspace）の content と .mdait を破壊的に書き換える。
+ * 終了時に copy-test-files で自動復元する（PROBE_KEEP=1 で復元を止めて最終状態を覗ける）。
  */
 const fs = require("node:fs");
 const path = require("node:path");
+const { execSync } = require("node:child_process");
 const { vscode, REPO, WS } = require("./vscode-shim");
 const { install: installFakeAi } = require("./fake-ai");
 
@@ -32,6 +36,15 @@ const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-sta
 const { UnitRegistryManager } = require(path.join(REPO, "out/core/unit-registry/unit-registry-manager.js"));
 const { StatusManager } = require(path.join(REPO, "out/core/status/status-manager.js"));
 
+/** dir 配下を再帰走査し、dir からの相対パス（/区切り）を返す（run-sweep.js の walk に揃える） */
+function walkRelative(dir, base = dir, out = []) {
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, e.name);
+		if (e.isDirectory()) walkRelative(full, base, out);
+		else out.push(path.relative(base, full).split(path.sep).join("/"));
+	}
+	return out;
+}
 function rmrf(p) {
 	if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
 }
@@ -75,6 +88,24 @@ function resetAll() {
 	UnitRegistryManager.resetInstance();
 	UnitStateStore.dispose();
 	if (StatusManager.dispose) StatusManager.dispose();
+}
+
+/**
+ * テストワークスペース（content と .mdait の生成物）を元に戻す。
+ * 本プローブは content を作り直し unit-state を書き換えるため、終了時に必ず復元する。
+ * 最終状態を手で覗きたいときは PROBE_KEEP=1 で復元を止められる。
+ */
+function restoreWorkspace() {
+	if (process.env.PROBE_KEEP) {
+		origLog("\n（PROBE_KEEP=1 のためテストワークスペースを復元していません。`npm run copy-test-files` で戻せます）");
+		return;
+	}
+	try {
+		execSync("npm run copy-test-files", { cwd: REPO, stdio: "ignore" });
+		for (const name of ["unit-state", "unit-registry"]) rmrf(path.join(MDAIT, name));
+	} catch (e) {
+		origLog(`  workspace restore failed: ${e && e.message}`);
+	}
 }
 
 /** 対象ファイルのユニット一覧を「モードに依らない形」で読む */
@@ -222,10 +253,8 @@ async function scenario(name, mutate, opts) {
 			await syncCommand();
 		}
 		const after = {
-			files: fs
-				.readdirSync(CONTENT, { recursive: true })
-				.filter((f) => String(f).endsWith(".md"))
-				.map(String)
+			files: walkRelative(CONTENT)
+				.filter((f) => f.endsWith(".md"))
 				.sort(),
 			us: unitState(),
 		};
@@ -325,6 +354,7 @@ async function main() {
 		);
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
+		restoreWorkspace();
 	}
 	origLog("\n========== DONE ==========");
 	// 保留中のタイマー/ウォッチャで終了しないため明示的に落とす

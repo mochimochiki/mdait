@@ -2,7 +2,13 @@
 
 > `markers.mode: "external"` で使う `.mdait/unit-state` について、**文書がふつうに編集・移動・削除されたときにどこまで状態が生き残るか**を実測し、embedded との差と、埋めるべき穴をまとめる。
 >
-> 実測スクリプト: `scripts/exploratory/probe-robustness.js`（`node scripts/exploratory/probe-robustness.js`）。VS Code を起動せずに sync/trans を直接動かし、同じ操作を embedded と external の両方で流して結果を並べる。
+> 実測スクリプト: `scripts/exploratory/probe-robustness.js`。VS Code を起動せずに sync/trans を直接動かし、同じ操作を embedded と external の両方で流して結果を並べる。
+>
+> ```bash
+> npm run compile && node scripts/exploratory/probe-robustness.js
+> ```
+>
+> テストワークスペース（`src/test/unit/workspace`）を書き換えるが終了時に自動復元する。オプションは [scripts/exploratory/README.md](../../scripts/exploratory/README.md) を参照。
 
 ---
 
