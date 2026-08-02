@@ -41,6 +41,15 @@ export interface UnitLoopPorts<T> {
 	isCancelled(): boolean;
 	/** 進捗の報告（表示用。失敗しても進行を止めない） */
 	onProgress(index: number, total: number, unit: T): void;
+	/**
+	 * 1ユニットの処理区間の開始を知らせる（表示用）。返した後始末関数は、そのユニットの
+	 * 処理が終わった時点で必ず1回呼ばれる — 成功・パッチ失敗・例外・中断のいずれでも。
+	 *
+	 * 「いま何番目を処理中か」はこの区間だけが知っている。呼び出し側がこれを使わずに
+	 * 「ファイル全体が処理中なら配下ユニットも処理中」と推測すると、着手前のユニットまで
+	 * 処理中に見え、進み具合が伝わらなくなる。
+	 */
+	beginUnit?(unit: T, index: number): (() => void) | undefined;
 	/** 翻訳本体。例外を投げるとループは打ち切られる */
 	translateUnit(unit: T, index: number): Promise<UnitTranslationOutcome>;
 	/**
@@ -129,53 +138,70 @@ export async function runUnitLoop<T>(
 			// 表示だけの処理なので握り潰す
 		}
 
-		let outcome: UnitTranslationOutcome;
+		// 「このユニットを処理中」の区間。後始末は finally の一経路だけが行うため、
+		// 中断・パッチ失敗・例外のどの抜け方でも取り残されない
+		let endUnit: (() => void) | undefined;
 		try {
-			outcome = await ports.translateUnit(unit, i);
-		} catch (error) {
-			// 中断は失敗ではない。ここまでの成果は呼び出し側が保存する
-			if (isOperationCancelled(error)) {
-				result.cancelled = true;
+			endUnit = ports.beginUnit?.(unit, i);
+		} catch {
+			// 表示だけの処理なので握り潰す
+		}
+
+		try {
+			let outcome: UnitTranslationOutcome;
+			try {
+				outcome = await ports.translateUnit(unit, i);
+			} catch (error) {
+				// 中断は失敗ではない。ここまでの成果は呼び出し側が保存する
+				if (isOperationCancelled(error)) {
+					result.cancelled = true;
+					result.skipped += units.length - i;
+					return result;
+				}
+				result.error = error;
+				result.errorUnit = unit;
 				result.skipped += units.length - i;
 				return result;
 			}
-			result.error = error;
-			result.errorUnit = unit;
-			result.skipped += units.length - i;
-			return result;
-		}
 
-		result.processed++;
-		if (outcome.tmHit) {
-			result.tmHits++;
-		}
+			result.processed++;
+			if (outcome.tmHit) {
+				result.tmHits++;
+			}
 
-		if (outcome.patchFailure) {
-			// 訳文は据え置き（手修正を保つ）。理由は呼び出し側が排他区間の外で報告する
-			result.skipped++;
-			result.patchFailures.push({ index: i, unit, reason: outcome.patchFailure });
-			continue;
-		}
+			if (outcome.patchFailure) {
+				// 訳文は据え置き（手修正を保つ）。理由は呼び出し側が排他区間の外で報告する
+				result.skipped++;
+				result.patchFailures.push({ index: i, unit, reason: outcome.patchFailure });
+				continue;
+			}
 
-		result.translated++;
-		if (outcome.patched) {
-			result.patched++;
-		}
+			result.translated++;
+			if (outcome.patched) {
+				result.patched++;
+			}
 
-		// 書き戻しの失敗も例外にせず結果へ載せる（この関数は例外を投げない契約）。
-		// 権限エラーやディスクフルでここが投げると、呼び出し側が「ここまでの成果を
-		// 保存してから報告する」流れに入れない
-		let persisted: UnitPersistOutcome;
-		try {
-			persisted = await ports.persistUnit(unit, i);
-		} catch (error) {
-			persisted = {
-				written: false,
-				reason: error instanceof Error ? error.message : String(error),
-			};
-		}
-		if (!persisted.written) {
-			result.writeFailures.push({ index: i, unit, reason: persisted.reason });
+			// 書き戻しの失敗も例外にせず結果へ載せる（この関数は例外を投げない契約）。
+			// 権限エラーやディスクフルでここが投げると、呼び出し側が「ここまでの成果を
+			// 保存してから報告する」流れに入れない
+			let persisted: UnitPersistOutcome;
+			try {
+				persisted = await ports.persistUnit(unit, i);
+			} catch (error) {
+				persisted = {
+					written: false,
+					reason: error instanceof Error ? error.message : String(error),
+				};
+			}
+			if (!persisted.written) {
+				result.writeFailures.push({ index: i, unit, reason: persisted.reason });
+			}
+		} finally {
+			try {
+				endUnit?.();
+			} catch {
+				// 表示だけの処理なので握り潰す
+			}
 		}
 	}
 

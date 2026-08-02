@@ -61,12 +61,33 @@ const { connect } = require('/path/to/repo/.claude/skills/ux-lab/scripts/driver'
 - 右クリック（コンテキストメニュー）は `row.click({ button: 'right' })`。
 - 通知トーストは `.notifications-toasts .notification-toast`、ダイアログは `.monaco-dialog-box`。
 
+## AI を使う機能を最後まで動かす（偽 Ollama）
+
+code-server には `vscode.lm` のプロバイダが無く、外部 API もネットワークポリシーで塞がれている。
+ただし mdait の Ollama プロバイダは接続先を設定で変えられるので、**ローカルに偽の Ollama を立てれば
+翻訳・term・tm・aiReview を最後まで実行できる**。翻訳中のツリーの見え方（回転アイコンの粒度や
+1件ずつ緑になる遷移）は、これが無いと目視できない。
+
+```bash
+# 応答をわざと遅らせる（既定 6 秒/リクエスト）。進行中の状態を撮る余裕を作るため
+node .claude/skills/ux-lab/scripts/fake-ollama.js &
+```
+
+ワークスペースの `.mdait/mdait.json` を向ける（**リポジトリ管理下なので検証後に `git checkout` で戻す**）:
+
+```json
+"ai": { "provider": "ollama",
+        "ollama": { "endpoint": "http://127.0.0.1:11434", "model": "fake:latest" } }
+```
+
+- 応答本文は `response-validator.ts` が期待する JSON（`{"translation": "..."}`）を返す。
+- 遅延は `FAKE_OLLAMA_DELAY_MS`、ポートは `FAKE_OLLAMA_PORT` で変えられる。
+- 翻訳待ちユニットは `mdait: Sync` で作る（sample-content には訳文の無い原文が多数ある）。
+- 初回実行時に AI 利用の確認ダイアログ（`Proceed`）が出るので、Playwright 側で承認すること。
+
 ## 制約（できないこと）
 
-- **AI 実行は不可**: code-server（Code OSS）には `vscode.lm` API のプロバイダが無く、外部 API も
-  ネットワークポリシーで塞がれている。翻訳・term・tm・aiReview・adopt は「確認UI → 実行 →
-  エラー通知」までの UX 確認に使う（それはそれで価値がある）。決定的な機能（sync・validate・
-  ツリー・CodeLens・設定エディタ・レポート表示）は最後まで動く。
+- **`vscode.lm` 経由のプロバイダは使えない**（上記の偽 Ollama で代替する）。
 - code-server は製品名やウェルカム画面など細部が公式版と異なるが、拡張が使うワークベンチUI
   （ツリー・CodeLens・QuickPick・通知・カスタムエディタ）は共通。
 

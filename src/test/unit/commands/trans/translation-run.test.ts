@@ -204,6 +204,121 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 		});
 	});
 
+	suite("1ユニットの処理区間（進行中の表示の根拠）", () => {
+		/** beginUnit / 後始末の呼び出し順を記録する口を作る */
+		function makeTracking(overrides: Partial<UnitLoopPorts<FakeUnit>> = {}) {
+			const trace: string[] = [];
+			const ports = makePorts({
+				beginUnit: (unit) => {
+					trace.push(`begin:${unit.name}`);
+					return () => trace.push(`end:${unit.name}`);
+				},
+				...overrides,
+			});
+			return { ports, trace };
+		}
+
+		test("区間は必ず1件ずつ開いて閉じる（同時に開きっぱなしにならない）", async () => {
+			const { ports, trace } = makeTracking();
+
+			await runUnitLoop(units, ports);
+
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
+		});
+
+		test("翻訳が失敗しても、そのユニットの区間は閉じる", async () => {
+			const { ports, trace } = makeTracking({
+				translateUnit: async (unit) => {
+					if (unit.name === "u2") {
+						throw new Error("boom");
+					}
+					return { patched: false, tmHit: false };
+				},
+			});
+
+			await runUnitLoop(units, ports);
+
+			assert.deepStrictEqual(trace, ["begin:u1", "end:u1", "begin:u2", "end:u2"]);
+		});
+
+		test("中断しても、着手中だったユニットの区間は閉じる", async () => {
+			const { ports, trace } = makeTracking({
+				translateUnit: async (unit) => {
+					if (unit.name === "u2") {
+						throw new OperationCancelledError();
+					}
+					return { patched: false, tmHit: false };
+				},
+			});
+
+			await runUnitLoop(units, ports);
+
+			assert.deepStrictEqual(trace, ["begin:u1", "end:u1", "begin:u2", "end:u2"]);
+		});
+
+		test("パッチ失敗で訳文を据え置いた場合も区間は閉じる", async () => {
+			const { ports, trace } = makeTracking({
+				translateUnit: async (unit) => ({
+					patched: false,
+					tmHit: false,
+					...(unit.name === "u2" ? { patchFailure: "anchor-not-found" as const } : {}),
+				}),
+			});
+
+			await runUnitLoop(units, ports);
+
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
+		});
+
+		test("書き戻しが例外を投げても区間は閉じる", async () => {
+			const { ports, trace } = makeTracking({
+				persistUnit: async (unit) => {
+					if (unit.name === "u2") {
+						throw new Error("disk full");
+					}
+					return { written: true };
+				},
+			});
+
+			await runUnitLoop(units, ports);
+
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
+		});
+
+		test("区間の登録が例外を投げても翻訳は止まらない（表示だけの処理のため）", async () => {
+			const ports = makePorts({
+				beginUnit: () => {
+					throw new Error("registry unavailable");
+				},
+			});
+
+			const result = await runUnitLoop(units, ports);
+
+			assert.strictEqual(result.translated, 3);
+		});
+	});
+
 	test("対象が0件なら何も起きず、中断でも失敗でもない", async () => {
 		const ports = makePorts();
 		const result = await runUnitLoop([], ports);

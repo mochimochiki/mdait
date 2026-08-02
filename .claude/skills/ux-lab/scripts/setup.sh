@@ -17,9 +17,12 @@ mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 [ -f package.json ] || npm init -y > /dev/null
 
-# kerberos のネイティブビルドに必要（入っていれば何もしない）
+# kerberos のネイティブビルドに必要（入っていれば何もしない）。
+# apt-get update を先に通すこと — イメージ同梱のインデックスは古く、記載された版の .deb が
+# ミラーから消えていて 404 になる。update 無しの install は必ず失敗する
 if [ ! -f /usr/include/gssapi/gssapi.h ]; then
-  sudo apt-get install -y -qq libkrb5-dev \
+  apt-get update -qq || true
+  apt-get install -y -qq libkrb5-dev \
     || echo "WARN: libkrb5-dev を導入できませんでした。kerberos のビルドが失敗する可能性があります"
 fi
 
