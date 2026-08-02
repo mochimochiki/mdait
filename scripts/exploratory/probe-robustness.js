@@ -127,12 +127,30 @@ function unitsOf(rel) {
 	}));
 }
 
+/**
+ * frontmatter マーカー（`mdait: front:` 行）の中身を返す。無ければ null。
+ * frontmatter マーカーは external でもファイル側（frontmatter 内）に残るため、本文ユニットとは別に見る。
+ */
+function frontMarker(rel) {
+	const abs = path.join(CONTENT, rel);
+	if (!fs.existsSync(abs)) return null;
+	const lines = fs.readFileSync(abs, "utf8").split("\n");
+	if (lines[0] !== "---") return null;
+	for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
+		const m = /^\s+front:\s*(.*)$/.exec(lines[i]);
+		if (m) return m[1].trim().replace(/^'|'$/g, "");
+	}
+	return null;
+}
+
 function fmtUnits(rel) {
 	const us = unitsOf(rel);
 	if (!us) return `${rel}: (ファイル無し)`;
+	const fm = frontMarker(rel);
 	const lines = us.map(
 		(u, i) => `    [${i}] ${u.title.padEnd(14)} need=${(u.need || "-").padEnd(18)} hash=${u.hash || "--------"} from=${u.from || "--------"} | ${u.body}`,
 	);
+	if (fm) lines.unshift(`    [fm] frontmatter        ${fm}`);
 	return `${rel}:\n${lines.join("\n")}`;
 }
 
