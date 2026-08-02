@@ -85,6 +85,12 @@ async function setMode(mode, pairs) {
 }
 
 function resetAll() {
+	// gray-matter は内容文字列をキーに parse 結果を溜め、mdait はその data を破壊的に書き換えるため、
+	// シナリオ間で同じ内容のファイルを作り直すと前のシナリオの frontmatter マーカーが返る。
+	// シナリオ同士を独立させるためここで捨てる（1シナリオ内で起きる同現象は S35 で測る）。
+	try {
+		require(path.join(REPO, "node_modules/gray-matter")).clearCache();
+	} catch {}
 	rmrf(CONTENT);
 	fs.mkdirSync(CONTENT, { recursive: true });
 	for (const name of ["unit-state", "unit-registry", "reports"]) rmrf(path.join(MDAIT, name));
@@ -530,6 +536,16 @@ async function main() {
 				removeChapter("ja/guide.md", "## 第2章");
 			},
 			{ src: FM_SRC },
+		);
+
+		// S35: frontmatter 付き文書で訳文を捨てて sync で作り直し、同じセッションのまま trans する
+		//      （同一内容の再パースで gray-matter のキャッシュに当たるか＝S14 の frontmatter 版）
+		await scenario(
+			"S35 frontmatter 付き訳文を削除→sync で作り直し→trans",
+			async () => {
+				fs.rmSync(path.join(CONTENT, "en/guide.md"));
+			},
+			{ src: FM_SRC, transAfter: ["en/guide.md"] },
 		);
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
