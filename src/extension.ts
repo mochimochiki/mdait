@@ -14,16 +14,15 @@ import { createConfigCommand, openExistingConfigCommand } from "./commands/setup
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
+import { updateGlossaryCommand } from "./commands/term/command-update";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
-import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
-import { validateCommand } from "./commands/validate/validate-command";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
@@ -66,6 +65,7 @@ import {
 	openSettingsAsUiCommand,
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
+import { StatusBarSummary } from "./ui/status/status-bar-summary";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -173,6 +173,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		updateHasStatusContext(statusManager);
 	});
 
+	// needs 件数のステータスバー常駐表示（原文保存で状態が変わったことに気づく唯一の受動サーフェス）
+	const statusBarSummary = new StatusBarSummary(statusManager, config);
+	context.subscriptions.push(statusBarSummary);
+	config.onConfigurationChanged(() => statusBarSummary.refresh());
+
 	// setup.createConfig command
 	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>
 		createConfigCommand(context),
@@ -239,8 +244,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
-	// validate command（読取専用・AI不使用。mdait_validate ツールと同じコアを人間サーフェスへ開く）
-	const validateDisposable = vscode.commands.registerCommand("mdait.validate", validateCommand);
 
 	// マーカー外部化 / 埋め込み戻し コマンド
 	const externalizeMarkersDisposable = vscode.commands.registerCommand(
@@ -302,22 +305,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	const addToGlossaryDisposable = vscode.commands.registerCommand("mdait.addToGlossary", addToGlossaryCommand);
 
 	// Term handler
-	const termHandler = new StatusTreeTermHandler();
-	termHandler.setStatusTreeProvider(statusTreeProvider);
-
-	const termDirectoryDisposable = vscode.commands.registerCommand("mdait.term.detect.directory", (item) =>
-		termHandler.termDetectDirectory(item as StatusItem),
-	);
-	const termFileDisposable = vscode.commands.registerCommand("mdait.term.detect.file", (item) =>
-		termHandler.termDetectFile(item as StatusItem),
-	);
-
-	// term.expand.directory/file commands
-	const termExpandDirectoryDisposable = vscode.commands.registerCommand("mdait.term.expand.directory", (item) =>
-		termHandler.termExpandDirectory(item as StatusItem),
-	);
-	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
-		termHandler.termExpandFile(item as StatusItem),
+	// 用語集を更新（検出→展開を1操作にまとめる。ADR-260802-02）
+	const termUpdateDisposable = vscode.commands.registerCommand("mdait.term.update", (item) =>
+		updateGlossaryCommand(item as StatusItem),
 	);
 
 	// Translate Selection command
@@ -503,7 +493,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// ツリータイトルの同期ボタン。初回（未同期）とそれ以降でラベルだけを変える
 	// （実処理は runSync に一本化。package.json の when 句で排他表示）
-	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", () => runSync());
+	// 初回同期だけは、何が起きるかを説明してから実行する（以後の定常 sync では確認しない。ADR-260802-01）
+	const syncStatusInitialDisposable = vscode.commands.registerCommand("mdait.status.sync.initial", async () => {
+		if (await confirmInitialSync(config)) {
+			await runSync();
+		}
+	});
 	const syncStatusDisposable = vscode.commands.registerCommand("mdait.status.sync", () => runSync());
 
 	// status.openTerm command
@@ -713,7 +708,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		openSettingsAsUiDisposable,
 		diagnoseSetupDisposable,
 		syncDisposable,
-		validateDisposable,
 		selectTargetsDisposable,
 		transDisposable,
 		externalizeMarkersDisposable,
@@ -721,10 +715,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		termDetectDisposable,
 		termExpandDisposable,
 		addToGlossaryDisposable,
-		termDirectoryDisposable,
-		termFileDisposable,
-		termExpandDirectoryDisposable,
-		termExpandFileDisposable,
+		termUpdateDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
@@ -815,9 +806,37 @@ export async function activate(context: vscode.ExtensionContext) {
 /**
  * mdaitConfiguredコンテキスト変数を更新する
  */
+/**
+ * 初回同期の確認ダイアログ。
+ *
+ * 初回だけは「訳文ファイルが作られる」「（embedded では）原文にマーカーが書き加わる」ことを
+ * 先に伝える。取り消しは git に委ねるため、その旨も書く（ADR-260802-01）。
+ * 2回目以降の定常 sync では確認しない（毎回聞くと保存のたびの摩擦になる）。
+ *
+ * @returns 実行してよければ true
+ */
+async function confirmInitialSync(config: Configuration): Promise<boolean> {
+	const proceed = vscode.l10n.t("Start");
+	const detail = config.isExternalMarkers()
+		? vscode.l10n.t(
+				"Translation files will be created under the target directory, and mdait will record their state in .mdait/. Your source documents are not modified.",
+			)
+		: vscode.l10n.t(
+				"Translation files will be created under the target directory, and mdait will add comment markers to your source documents so it can track what changed. Use git to undo.",
+			);
+	const choice = await vscode.window.showInformationMessage(
+		vscode.l10n.t("Set up translation files for the first time?"),
+		{ modal: true, detail },
+		proceed,
+	);
+	return choice === proceed;
+}
+
 async function updateConfiguredContext(config: Configuration): Promise<void> {
 	const isConfigured = config.isConfigured();
 	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+	// 対象言語の選択は、選ぶものが2つ以上あるときにだけ意味を持つ（ADR-260802-02）
+	await vscode.commands.executeCommand("setContext", "mdaitMultiplePairs", config.transPairs.length > 1);
 }
 
 /**

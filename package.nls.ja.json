@@ -1,7 +1,6 @@
 {
   "mdait.description": "マークダウンファイルの翻訳拡張機能",
   "mdait.sync.title": "mdait: 同期",
-  "mdait.validate.title": "mdait: 翻訳を検証",
   "mdait.markers.externalize.title": "マーカーを外部化 (embedded → external)",
   "mdait.markers.embed.title": "マーカーを本文へ埋め込み (external → embedded)",
   "mdait.status.selectTargets.title": "対象言語を選択",
@@ -30,11 +29,7 @@
   "mdait.needsAttention.next.title": "次の要対応へ",
   "mdait.translate.frontmatter.title": "✨Frontmatterを翻訳",
   "mdait.term.detect.title": "✨用語検出",
-  "mdait.term.detect.directory.title": "✨ディレクトリから用語検出",
-  "mdait.term.detect.file.title": "✨ファイルから用語検出",
   "mdait.term.expand.title": "✨用語をこの言語へ展開",
-  "mdait.term.expand.directory.title": "✨用語をこの言語へ展開（ディレクトリ）",
-  "mdait.term.expand.file.title": "✨用語をこの言語へ展開（ファイル）",
   "mdait.viewsContainer.title": "mdait",
   "mdait.status.view.title": "状況",
   "mdait.configuration.title": "mdait",
@@ -44,5 +39,6 @@
   "mdait.tm.optimize.title": "✨TM最適化",
   "mdait.aiReview.file.title": "✨AI翻訳レビュー（ファイル）",
   "mdait.aiReview.directory.title": "✨AI翻訳レビュー（ディレクトリ）",
-  "mdait.adopt.run.title": "✨既存翻訳の取り込み"
+  "mdait.adopt.run.title": "✨既存翻訳の取り込み",
+  "mdait.term.update.title": "✨用語集を更新"
 }

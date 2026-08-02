@@ -137,10 +137,14 @@ export class MdaitMarker {
 	/**
 	 * 翻訳待ちのまま本文が書き換えられている（＝人が手で訳したが未確定）か。
 	 *
-	 * need が残っているのに本文ハッシュだけが動いていれば、AI 翻訳（完了時に need を
-	 * 落とす）ではなく人の編集である。判定の基準ハッシュは need の種類で異なる:
-	 * - translate: sync 直後の訳文は原文のコピーなので `hash === from`。動いていれば編集済み
-	 * - revise@X : X は改訂が要求された時点の訳文ハッシュ。動いていれば編集済み
+	 * sync 直後の訳文は原文のコピーなので `hash === from`。need:translate が残ったまま
+	 * 本文ハッシュだけが動いていれば、AI 翻訳（完了時に need を落とす）ではなく人の編集である。
+	 *
+	 * **`revise@X` はここでは判定しない。** X は「改訂が要求された時点の訳文ハッシュ」ではなく
+	 * **旧原文のハッシュ**（`marker-sync.ts` の `setReviseNeed(oldSourceHash)`）であり、
+	 * 訳文テキストのハッシュと比べても意味を持たない（別の名前空間の値なので実質つねに不一致になり、
+	 * 訳文に一度も触れていないユニットまで「編集済み」と表示していた）。原文が変わったことは
+	 * `needsRevise()` が表し、状態表示はそちらが担う（ADR-260802-03）。
 	 *
 	 * 「本文が原文と同一のまま訳し終えた」ケース（固有名詞の見出しなど）は編集と
 	 * 見なせないが、そこで案内を出さないのは害がない（確定ボタンは常に隣にある）。
@@ -151,10 +155,6 @@ export class MdaitMarker {
 		}
 		if (this.need === "translate") {
 			return this.from !== null && this.hash !== this.from;
-		}
-		const oldHash = this.getOldHashFromNeed();
-		if (oldHash) {
-			return this.hash !== oldHash;
 		}
 		return false;
 	}

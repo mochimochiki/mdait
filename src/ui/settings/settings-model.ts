@@ -13,6 +13,11 @@ export interface JsonSchemaNode {
 	enum?: unknown[];
 	minimum?: number;
 	maximum?: number;
+	/**
+	 * 設定エディタで入力を許す下限。スキーマの `minimum`（保存された値の妥当性）とは別で、
+	 * 「値としては有効だが初級者に選ばせたくない」下限を表す（例: sync.level 0 = 完全手動配置）。
+	 */
+	"x-ui-minimum"?: number;
 	pattern?: string;
 	format?: string;
 	examples?: unknown[];
@@ -176,7 +181,8 @@ function toDescriptor(
 		type: resolveWidgetType(node),
 		description: node.description ?? resolveOneOfDescription(node),
 		default: node.default,
-		minimum: node.minimum,
+		// 設定エディタでは x-ui-minimum を優先する（互換のため保存値の下限は緩いまま）
+		minimum: node["x-ui-minimum"] ?? node.minimum,
 		maximum: node.maximum,
 		pattern: node.pattern,
 		examples: node.examples,

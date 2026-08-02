@@ -1,6 +1,6 @@
 /**
  * @file validate-report-content.test.ts
- * @description 検証レポート生成（純粋関数）の単体テスト
+ * @description 確定的な検査の結果セクション生成（純粋関数）の単体テスト
  */
 import * as assert from "node:assert";
 import type { ValidationReport } from "../../../../commands/validate/validate-command";
@@ -16,13 +16,20 @@ function emptyReport(): ValidationReport {
 	};
 }
 
-suite("validate-report-content（検証レポート生成）", () => {
+suite("validate-report-content（確定的な検査のレポートセクション生成）", () => {
 	test("違反0件のとき集計と「違反なし」定型文を出力する", () => {
 		const content = generateValidateReportContent(emptyReport());
-		assert.ok(content.includes("# Validation Results"), "タイトルを含む");
+		assert.ok(content.includes("## Deterministic checks"), "セクション見出しを含む");
 		assert.ok(content.includes("Files checked: 3"), "ファイル数の集計を含む");
 		assert.ok(content.includes("Units checked: 10"), "ユニット数の集計を含む");
+		assert.ok(content.includes("Units skipped (need pending): 2"), "スキップ数の集計を含む");
 		assert.ok(content.includes("(no violations)"), "違反なしの定型文を含む");
+	});
+
+	test("AIレビューレポートへ結合するため見出しは ## から始まる（ADR-260802-02）", () => {
+		const content = generateValidateReportContent(emptyReport());
+		assert.ok(!content.startsWith("# "), "文書タイトル（#）では始まらない");
+		assert.ok(content.startsWith("## "), "セクション見出し（##）で始まる");
 	});
 
 	test("違反はファイルごとにまとめられ、種別・ユニットhash・行リンク用のパスを含む", () => {
@@ -54,18 +61,17 @@ suite("validate-report-content（検証レポート生成）", () => {
 			},
 		];
 		const content = generateValidateReportContent(report);
-		assert.ok(content.includes("## Violations (3)"), "違反件数の見出しを含む");
+		assert.ok(content.includes("### Violations (3)"), "違反件数の見出しを含む");
 		assert.ok(content.includes("[docs/en/guide.md](/docs/en/guide.md)"), "ファイルへのリンクを含む");
 		assert.ok(content.includes("`terms`") && content.includes("`structure`"), "検証種別を含む");
 		assert.ok(content.includes("`a1b2c3d4`"), "ユニットhashを含む");
 		// 同一ファイルの違反が1つの見出しにまとまる（見出しはファイル数ぶんだけ）
-		assert.strictEqual(content.split("### ").length - 1, 2, "ファイル見出しは2つ");
+		assert.strictEqual(content.split("#### ").length - 1, 2, "ファイル見出しは2つ");
 	});
 
 	test("ラベル注入で表示言語を差し替えられる（ADR-260719-01）", () => {
 		const content = generateValidateReportContent(emptyReport(), {
-			title: "検証結果",
-			summary: "サマリ",
+			title: "機械チェック（構造・用語）",
 			filesChecked: "検証ファイル数",
 			unitsChecked: "検証ユニット数",
 			unitsSkipped: "スキップ（need残り）",
@@ -73,7 +79,7 @@ suite("validate-report-content（検証レポート生成）", () => {
 			noViolations: "（違反なし）",
 			unit: "ユニット",
 		});
-		assert.ok(content.includes("# 検証結果"), "注入したタイトルが使われる");
+		assert.ok(content.includes("## 機械チェック（構造・用語）"), "注入したタイトルが使われる");
 		assert.ok(content.includes("検証ファイル数: 3"), "注入したラベルが使われる");
 		assert.ok(content.includes("（違反なし）"), "注入した定型文が使われる");
 	});
