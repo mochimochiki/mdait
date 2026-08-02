@@ -125,6 +125,11 @@ function keepChangedWithContext(lines: SourceDiffLine[], contextLines: number): 
 /**
  * 差分を Markdown のコードフェンス（```diff）へ整形する。
  * 表示は Hover が担うが、整形自体は純関数として持つ（テスト可能にするため）。
+ *
+ * **フェンスの長さは中身に合わせて伸ばす。** 原文にコードブロック（```）が含まれるのは
+ * ドキュメントでは普通であり、固定長のフェンスだとそこでブロックが閉じてしまう。
+ * 閉じた先は Hover の `isTrusted` な Markdown として解釈されるため、
+ * 原文の中身が表示崩れどころかコマンドリンクとして解釈され得る。
  */
 export function formatSourceDiff(result: SourceDiffResult): string {
 	if (result.lines.length === 0) {
@@ -136,5 +141,15 @@ export function formatSourceDiff(result: SourceDiffResult): string {
 			return `${prefix}${line.text}`;
 		})
 		.join("\n");
-	return ["```diff", body, "```"].join("\n");
+	const fence = "`".repeat(Math.max(3, longestBacktickRun(body) + 1));
+	return [`${fence}diff`, body, fence].join("\n");
+}
+
+/** テキスト中で連続するバッククォートの最大長 */
+function longestBacktickRun(text: string): number {
+	let longest = 0;
+	for (const match of text.matchAll(/`+/g)) {
+		longest = Math.max(longest, match[0].length);
+	}
+	return longest;
 }

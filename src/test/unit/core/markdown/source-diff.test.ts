@@ -83,4 +83,30 @@ suite("formatSourceDiff（差分の整形）", () => {
 		const same = diffSourceLines("同じ\n", "同じ\n");
 		assert.strictEqual(formatSourceDiff(same), "");
 	});
+
+	test("原文にコードフェンスが含まれてもブロックが途中で閉じない", () => {
+		// ドキュメントの原文にコードブロックがあるのは普通。固定長のフェンスだとそこで閉じてしまい、
+		// 続きが Hover の（isTrusted な）Markdown として解釈されてしまう
+		const oldText = "## 例\n\n```bash\nnpm install foo\n```\n";
+		const newText = "## 例\n\n```bash\nnpm install bar\n```\n";
+		const formatted = formatSourceDiff(diffSourceLines(oldText, newText));
+
+		const fence = formatted.slice(0, formatted.indexOf("diff"));
+		assert.ok(fence.length > 3, `本文のバッククォートより長いフェンスになる (実際: ${fence.length})`);
+		assert.ok(formatted.endsWith(`\n${fence}`), "同じ長さのフェンスで閉じる");
+		// 開始と終了以外に、そのフェンスと同じ長さの行が現れない
+		const body = formatted.split("\n").slice(1, -1);
+		assert.ok(
+			body.every((line) => !line.startsWith(fence)),
+			"本文中にフェンスを閉じる行が無い",
+		);
+	});
+
+	test("さらに長いバッククォート列にも追随する", () => {
+		const oldText = "````\ncode\n````\n";
+		const newText = "````\nchanged\n````\n";
+		const formatted = formatSourceDiff(diffSourceLines(oldText, newText));
+		const fence = formatted.slice(0, formatted.indexOf("diff"));
+		assert.strictEqual(fence, "`".repeat(5), "本文の最長連続（4）より1つ長い");
+	});
 });

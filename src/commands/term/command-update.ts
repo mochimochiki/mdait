@@ -137,6 +137,8 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 	}
 
 	const statusManager = StatusManager.getInstance();
+	// 処理中はツリーにスピナーを出す（他の長い処理と同じ作法。解除は必ず finally で行う）
+	await Promise.all(scope.sourceFiles.map((file) => statusManager.changeFileStatus(file, { isTranslating: true })));
 	await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
@@ -180,14 +182,19 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 					uri,
 				);
 
-				for (const file of scope.sourceFiles) {
-					await statusManager.refreshFileStatus(file);
-				}
 			} catch (error) {
 				logger.error("term.update", "Glossary update failed", { ...formatError(error) });
 				vscode.window.showErrorMessage(
 					vscode.l10n.t("Error while updating the glossary: {0}", (error as Error).message),
 				);
+			} finally {
+				// スピナーの解除と再集計は、成功・失敗・キャンセルのどれでも必ず行う
+				await Promise.all(
+					scope.sourceFiles.map((file) => statusManager.changeFileStatus(file, { isTranslating: false })),
+				);
+				for (const file of scope.sourceFiles) {
+					await statusManager.refreshFileStatus(file);
+				}
 			}
 		},
 	);
