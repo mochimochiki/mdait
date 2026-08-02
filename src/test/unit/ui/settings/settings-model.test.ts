@@ -60,7 +60,9 @@ suite("settings-model: スキーマから設定モデルを生成する", () => 
 		assert.ok(level);
 		assert.strictEqual(level.type, "integer");
 		assert.strictEqual(level.default, 3);
-		assert.strictEqual(level.minimum, 0);
+		// sync.level は 0（完全手動マーカー配置）を保存値としては許すが、設定エディタでは
+		// 選ばせない。x-ui-minimum がスキーマの minimum より優先される（ADR-260802-02）
+		assert.strictEqual(level.minimum, 1);
 		assert.strictEqual(level.maximum, 6);
 
 		const policy = findSetting(categories, "sync.orphanTargetPolicy");

@@ -34,6 +34,7 @@ import {
 	prepareTmCommitUnit,
 } from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
+import { optimizeTmWeights } from "./command-optimize";
 import { writeTmReport } from "./tm-report-file";
 
 export {
@@ -378,6 +379,14 @@ async function executeTmCommitForUnits(
 
 	// 永続化
 	store.save(tmxFilePath);
+
+	// 検索重みの再計算は登録の後段で自動実行する（ユーザー操作として見せない。ADR-260802-02）。
+	// 純粋な計算で AI を呼ばず、TM が空なら即座に何もしない
+	try {
+		await optimizeTmWeights(config);
+	} catch (error) {
+		logger.warn("tm.commit", "TM weight recomputation failed (entries are saved)", { ...formatError(error) });
+	}
 
 	logger.info("tm.commit", "TM commit completed", {
 		file: relativePath,

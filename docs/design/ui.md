@@ -303,10 +303,11 @@ sequenceDiagram
 
 **設計意図**: 用語集とTMファイルに素早くアクセスできることで、翻訳品質の確認・編集が容易になります。用語集は「本」アイコン（`$(repo)`）、TMは「データベース」アイコン（`$(database)`）で視覚的に区別します。
 
-**検証** (`mdait.validate`):
-- **配置**: ツールバーのオーバーフロー（`…`）メニューとコマンドパレット。行内ボタンは増やさない（露出過多の回避。ux.md E-7 の教訓）
-- **機能**: 構造チェック＋用語一貫性検証（読取専用・AI不使用・確認UIなし）。結果は `.mdait/reports/validate.md` へ書き出し、完了通知の「レポートを開く」ボタンから開く
-- **対称性**: エージェント側の `mdait_validate` と同一のコア（`validate_CoreProc`）を使う（UX-P1）
+**検証**（単独の人間導線は持たない。ADR-260802-02）:
+- **配置**: ✨AI翻訳レビューの**前処理**として自動実行される。ツールバー・パレットには出さない
+- **機能**: 構造チェック＋用語一貫性検証（読取専用・AI不使用）。結果は AI レビューのレポート（`.mdait/reports/ai-review.md`）に「機械チェック（構造・用語）」セクションとして載り、件数は同じ完了通知に足される
+- **理由**: 機械で判定できる違反を LLM に有料で聞かない。ユーザーから見た操作は「✨AI翻訳レビュー」1つに減る
+- **対称性**: エージェント側の `mdait_validate` は据え置き（ゴール判定に使うため）。コア（`validate_CoreProc`）は共通
 
 ---
 
@@ -316,8 +317,9 @@ sequenceDiagram
 
 | コマンドID | 導線 | 備考 |
 |---|---|---|
-| `mdait.sync` / `mdait.validate` / `mdait.setup.*` / `mdait.settings.open` / `mdait.markers.externalize` / `mdait.markers.embed` / `mdait.translateSelection` / `mdait.adopt.run` / `mdait.tm.optimize` | パレット（一部はツリーにも） | スタンドアロンで動作するもののみパレットに露出（ux.md C-2） |
-| `mdait.translate.{directory,file,unit,frontmatter}` / `mdait.term.{detect,expand}.{directory,file}` / `mdait.tm.commit.{file,directory}` / `mdait.aiReview.{file,directory}` | ツリー行内/コンテキストメニュー | アイテム引数必須のためパレット非表示 |
+| `mdait.sync` / `mdait.setup.*` / `mdait.settings.open` / `mdait.translateSelection` / `mdait.adopt.run` | パレット（一部はツリーにも） | スタンドアロンで動作するもののみパレットに露出（ux.md C-2） |
+| `mdait.markers.externalize` / `mdait.markers.embed` / `mdait.tm.optimize` | 内部（パレット非表示） | AI 運用ループに乗らないためユーザー導線から外した（ADR-260802-02）。移行は設定変更時の sync 自己修復、TM の重み再計算は tm.commit の後段で自動実行される |
+| `mdait.translate.{directory,file,unit,frontmatter}` / `mdait.term.update` / `mdait.tm.commit.{file,directory}` / `mdait.aiReview.{file,directory}` | ツリー行内/コンテキストメニュー | アイテム引数必須のためパレット非表示。`term.update` は検出＋展開を1操作にまとめたもの（ADR-260802-02） |
 | `mdait.unit.{markReviewed,keep,delete,markIsolated,unisolate}` / `mdait.needsAttention.next` / `mdait.jumpToUnit` | ツリー/CodeLens/キーバインド | 判断サーフェス（ux.md J4）。書き換えは `getFileHandler` 経由 |
 | `mdait.codelens.*` / `mdait.unit.editNoteForUnit` | CodeLens | エディタ内インラインアクション専用 |
 | `mdait.status.{sync,sync.initial,selectTargets,openTerm,openTm}` | ツリータイトルバー | `mdait.status.sync.processing` はハンドラを持たない表示専用ダミー（`enablement: false` のスピナー表示枠） |

@@ -17,6 +17,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { PromptProvider } from "../../prompts";
 import { notifyWithReport } from "../shared/report-file";
+import { type ValidationReport, runDeterministicChecks } from "../validate/validate-command";
 import type { ReviewCollectMode } from "./pair-collector";
 import { PairVerifier } from "./pair-verifier";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
@@ -208,8 +209,18 @@ async function runAiReviewWithMode(
 		},
 		async (progress, token) => {
 			try {
+				// 確定的な検査を先に済ませる。機械で判定できる違反を AI に有料で聞かない（ADR-260802-02）
+				progress.report({ message: vscode.l10n.t("Checking structure and terminology...") });
+				const deterministic = await runDeterministicChecks(files);
 				const results = await executeAiReviewForFiles(files, config, { mode }, progress, token);
-				showAiReviewResult(results, mode, files, scopeLabel, await writeAiReviewReportIfAny(results));
+				showAiReviewResult(
+					results,
+					mode,
+					files,
+					scopeLabel,
+					await writeAiReviewReportIfAny(results, deterministic),
+					deterministic,
+				);
 				return results;
 			} catch (error) {
 				logger.error("aiReview", "AI review failed", {
@@ -232,6 +243,7 @@ function showAiReviewResult(
 	files: string[],
 	scopeLabel: string,
 	reportUri: vscode.Uri | undefined,
+	deterministic?: ValidationReport,
 ): void {
 	const approved = results.reduce((sum, r) => sum + r.approved, 0);
 	const escalated = results.reduce((sum, r) => sum + r.escalated, 0);
@@ -240,7 +252,21 @@ function showAiReviewResult(
 	const errors = results.reduce((sum, r) => sum + r.errors, 0);
 	const verified = results.reduce((sum, r) => sum + r.verified, 0);
 
+	const deterministicViolations = deterministic?.violations.length ?? 0;
+
 	if (verified === 0 && errors === 0) {
+		// AI の対象が0件でも、確定的な検査で違反が出ていればそれを報告する（見逃しを「問題なし」にしない）
+		if (deterministicViolations > 0) {
+			notifyWithReport(
+				vscode.l10n.t(
+					"No translations needed AI review, but deterministic checks found {0} issue(s).",
+					deterministicViolations,
+				),
+				reportUri,
+				"warning",
+			);
+			return;
+		}
 		// 対象0件で行き止まりにしない。もう一方のモードなら対象があり得るので、その場で切り替えを促す
 		// （選択前に全ファイルをパースして件数を出すと、メニューが出るまで待たされるため事後に案内する）
 		if (mode === "pending") {
@@ -275,17 +301,31 @@ function showAiReviewResult(
 		kept,
 		errors,
 	);
+	// 確定的な検査の結果は AI の結果と同じ通知に足す（サーフェスを増やさない）
+	const withChecks =
+		deterministicViolations > 0
+			? `${message} / ${vscode.l10n.t("{0} structure or terminology issue(s)", deterministicViolations)}`
+			: message;
 	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
-	notifyWithReport(message, reportUri, flagged > 0 || escalated > 0 || errors > 0 ? "warning" : "info");
+	notifyWithReport(
+		withChecks,
+		reportUri,
+		flagged > 0 || escalated > 0 || errors > 0 || deterministicViolations > 0 ? "warning" : "info",
+	);
 }
 
 /**
  * 検証結果のレポートを書き出す。1件以上検証した場合のみ。
  * 通知は showAiReviewResult が1本だけ出す（ここでは出さない）。
  */
-async function writeAiReviewReportIfAny(results: AiReviewFileResult[]): Promise<vscode.Uri | undefined> {
-	if (results.every((r) => r.unitResults.length === 0)) {
+async function writeAiReviewReportIfAny(
+	results: AiReviewFileResult[],
+	deterministic?: ValidationReport,
+): Promise<vscode.Uri | undefined> {
+	const hasAiResults = results.some((r) => r.unitResults.length > 0);
+	const hasChecks = (deterministic?.violations.length ?? 0) > 0;
+	if (!hasAiResults && !hasChecks) {
 		return undefined;
 	}
-	return writeAiReviewReport(results);
+	return writeAiReviewReport(results, deterministic);
 }

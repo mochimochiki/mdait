@@ -14,6 +14,8 @@ import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { normalizeFileKey } from "../../infra/workspace/file-key";
 import { writeReport } from "../shared/report-file";
+import type { ValidationReport } from "../validate/validate-command";
+import { buildValidateReportSection } from "../validate/validate-report-file";
 import type { AiReviewFileResult } from "./review-result";
 import { type ReportAnchor, buildReviewReport } from "./review-table";
 
@@ -28,7 +30,10 @@ const onDidWriteReport = new vscode.EventEmitter<void>();
  *
  * @returns 書き出したファイルの URI（失敗時は undefined）
  */
-export async function writeAiReviewReport(results: AiReviewFileResult[]): Promise<vscode.Uri | undefined> {
+export async function writeAiReviewReport(
+	results: AiReviewFileResult[],
+	deterministic?: ValidationReport,
+): Promise<vscode.Uri | undefined> {
 	const config = Configuration.getInstance();
 	const { content, anchors } = buildReviewReport(results, {
 		labels: { title: vscode.l10n.t("mdait AI Translation Review") },
@@ -36,7 +41,9 @@ export async function writeAiReviewReport(results: AiReviewFileResult[]): Promis
 		linkBaseDir: path.dirname(config.getReportFilePath("ai-review")),
 	});
 	latestAnchors = anchors;
-	const uri = await writeReport(config, "ai-review", content);
+	// 確定的な検査（構造・用語）の結果は同じレポートに載せる（ADR-260802-02）
+	const body = deterministic ? `${content}\n${buildValidateReportSection(deterministic)}` : content;
+	const uri = await writeReport(config, "ai-review", body);
 	onDidWriteReport.fire();
 	return uri;
 }

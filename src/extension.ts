@@ -14,16 +14,15 @@ import { createConfigCommand, openExistingConfigCommand } from "./commands/setup
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
+import { updateGlossaryCommand } from "./commands/term/command-update";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
-import { StatusTreeTermHandler } from "./commands/term/status-tree-term-handler";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
-import { validateCommand } from "./commands/validate/validate-command";
 import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
@@ -239,8 +238,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
-	// validate command（読取専用・AI不使用。mdait_validate ツールと同じコアを人間サーフェスへ開く）
-	const validateDisposable = vscode.commands.registerCommand("mdait.validate", validateCommand);
 
 	// マーカー外部化 / 埋め込み戻し コマンド
 	const externalizeMarkersDisposable = vscode.commands.registerCommand(
@@ -302,22 +299,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	const addToGlossaryDisposable = vscode.commands.registerCommand("mdait.addToGlossary", addToGlossaryCommand);
 
 	// Term handler
-	const termHandler = new StatusTreeTermHandler();
-	termHandler.setStatusTreeProvider(statusTreeProvider);
-
-	const termDirectoryDisposable = vscode.commands.registerCommand("mdait.term.detect.directory", (item) =>
-		termHandler.termDetectDirectory(item as StatusItem),
-	);
-	const termFileDisposable = vscode.commands.registerCommand("mdait.term.detect.file", (item) =>
-		termHandler.termDetectFile(item as StatusItem),
-	);
-
-	// term.expand.directory/file commands
-	const termExpandDirectoryDisposable = vscode.commands.registerCommand("mdait.term.expand.directory", (item) =>
-		termHandler.termExpandDirectory(item as StatusItem),
-	);
-	const termExpandFileDisposable = vscode.commands.registerCommand("mdait.term.expand.file", (item) =>
-		termHandler.termExpandFile(item as StatusItem),
+	// 用語集を更新（検出→展開を1操作にまとめる。ADR-260802-02）
+	const termUpdateDisposable = vscode.commands.registerCommand("mdait.term.update", (item) =>
+		updateGlossaryCommand(item as StatusItem),
 	);
 
 	// Translate Selection command
@@ -713,7 +697,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		openSettingsAsUiDisposable,
 		diagnoseSetupDisposable,
 		syncDisposable,
-		validateDisposable,
 		selectTargetsDisposable,
 		transDisposable,
 		externalizeMarkersDisposable,
@@ -721,10 +704,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		termDetectDisposable,
 		termExpandDisposable,
 		addToGlossaryDisposable,
-		termDirectoryDisposable,
-		termFileDisposable,
-		termExpandDirectoryDisposable,
-		termExpandFileDisposable,
+		termUpdateDisposable,
 		codeLensTranslateDisposable,
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
@@ -818,6 +798,8 @@ export async function activate(context: vscode.ExtensionContext) {
 async function updateConfiguredContext(config: Configuration): Promise<void> {
 	const isConfigured = config.isConfigured();
 	await vscode.commands.executeCommand("setContext", "mdaitConfigured", isConfigured);
+	// 対象言語の選択は、選ぶものが2つ以上あるときにだけ意味を持つ（ADR-260802-02）
+	await vscode.commands.executeCommand("setContext", "mdaitMultiplePairs", config.transPairs.length > 1);
 }
 
 /**

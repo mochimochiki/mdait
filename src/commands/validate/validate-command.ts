@@ -2,8 +2,11 @@
  * @file validate-command.ts
  * @description
  *   翻訳済みペアユニットに対する検証（構造チェック＋用語一貫性 term-lint）のワークフロー。
- *   読取専用・AI不使用。mdait_validate ツール（エージェント）と `mdait.validate`
- *   コマンド（人間。レポートは `.mdait/reports/validate.md`）の両サーフェスから呼び出される。
+ *   読取専用・AI不使用。
+ *
+ *   人間向けの単独コマンドは持たない（ADR-260802-02）。呼び出し口は2つ:
+ *   - ✨AIレビューの前処理（`runDeterministicChecks`）— AI に投げる前に確定的な違反を洗う
+ *   - `mdait_validate` ツール（エージェントのゴール判定）
  * @module commands/validate/validate-command
  */
 import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
@@ -18,10 +21,8 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
-import { notifyWithReport } from "../shared/report-file";
 import { TermsRepository } from "../term/terms-repository";
 import { TranslationChecker } from "../trans/translation-checker";
-import { writeValidateReport } from "./validate-report-file";
 
 const logger = Logger.getInstance();
 
@@ -63,50 +64,33 @@ export interface ValidationReport {
 }
 
 /**
- * 人間向けの検証コマンド（`mdait.validate`）。
+ * 複数ファイルに確定的な検査（構造＋用語一貫性）をかけ、1つのレポートにまとめる。
  *
- * 読取専用・AI不使用のため確認UIは挟まない（ux.md の確認ポリシー）。
- * 結果は `.mdait/reports/validate.md` へ書き出し、完了通知のボタンから開く。
+ * ✨AIレビューの前処理として使う。AI に投げる前に機械で判定できる違反を洗っておくと、
+ * 同じことを LLM に有料で聞かずに済む（ADR-260802-02）。
+ *
+ * 1ファイルの失敗は他のファイルを巻き込まない（`validate_CoreProc` 内で握り潰される）。
  */
-export async function validateCommand(): Promise<void> {
-	try {
-		const report = await vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.Notification,
-				title: vscode.l10n.t("mdait: Validating translations..."),
-			},
-			() => validate_CoreProc(undefined),
-		);
-		if (report.filesChecked === 0) {
-			// 対象0件を「検証パス」と報告しない。空レポートで前回の実行結果も上書きしない
-			void vscode.window.showInformationMessage(
-				vscode.l10n.t("No translation targets found to validate. Run sync first, or check the transPairs settings."),
-			);
-			return;
+export async function runDeterministicChecks(files: readonly string[]): Promise<ValidationReport> {
+	const merged: ValidationReport = {
+		checks: ["structure", "terms"],
+		filesChecked: 0,
+		unitsChecked: 0,
+		unitsSkipped: 0,
+		violations: [],
+	};
+	for (const file of files) {
+		try {
+			const report = await validate_CoreProc(file);
+			merged.filesChecked += report.filesChecked;
+			merged.unitsChecked += report.unitsChecked;
+			merged.unitsSkipped += report.unitsSkipped;
+			merged.violations.push(...report.violations);
+		} catch (error) {
+			logger.warn("validate", "Deterministic check failed for file", { file, ...formatError(error) });
 		}
-		const uri = await writeValidateReport(report);
-		if (report.violations.length === 0) {
-			notifyWithReport(
-				vscode.l10n.t("Validation passed: {0} units checked, no violations.", report.unitsChecked),
-				uri,
-				"info",
-			);
-		} else {
-			notifyWithReport(
-				vscode.l10n.t(
-					"Validation found {0} violations ({1} units checked).",
-					report.violations.length,
-					report.unitsChecked,
-				),
-				uri,
-				"warning",
-			);
-		}
-	} catch (error) {
-		logger.error("validate", "Validation command failed", formatError(error));
-		const message = error instanceof Error ? error.message : String(error);
-		void vscode.window.showErrorMessage(vscode.l10n.t("Validation failed: {0}", message));
 	}
+	return merged;
 }
 
 /**

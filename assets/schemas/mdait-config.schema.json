@@ -14,30 +14,52 @@
       "description": "Translation pairs configuration. Define source and target directories for translation.",
       "items": {
         "type": "object",
-        "required": ["sourceLang", "sourceDir", "targetLang", "targetDir"],
+        "required": [
+          "sourceLang",
+          "sourceDir",
+          "targetLang",
+          "targetDir"
+        ],
         "properties": {
           "sourceLang": {
             "type": "string",
             "description": "Source language code (e.g., 'ja', 'en')",
             "pattern": "^[a-z]{2}(-[A-Z]{2,4})?$",
-            "examples": ["ja", "en", "de", "fr", "zh-CN"]
+            "examples": [
+              "ja",
+              "en",
+              "de",
+              "fr",
+              "zh-CN"
+            ]
           },
           "sourceDir": {
             "type": "string",
             "description": "Path to the directory containing source language documents (relative to workspace root)",
-            "examples": ["docs/ja", "content/en"]
+            "examples": [
+              "docs/ja",
+              "content/en"
+            ]
           },
           "targetLang": {
             "type": "string",
             "description": "Target language code (e.g., 'en', 'ja')",
             "pattern": "^[a-z]{2}(-[A-Z]{2,4})?$",
-            "examples": ["ja", "en", "de", "fr", "zh-hans"]
+            "examples": [
+              "ja",
+              "en",
+              "de",
+              "fr",
+              "zh-hans"
+            ]
           },
           "targetDir": {
             "type": "string",
             "description": "Path to the directory to store target language documents (relative to workspace root)",
-            "examples": ["docs/en", "content/ja"]
-
+            "examples": [
+              "docs/en",
+              "content/ja"
+            ]
           },
           "copyAssets": {
             "description": "Per-pair override for asset copying. true: copy all non-translated files, false: do not copy, or an extension whitelist (e.g. [\".png\", \".jpg\"]). Falls back to sync.copyAssets when omitted.",
@@ -53,7 +75,14 @@
                 }
               }
             ],
-            "examples": [true, false, [".png", ".jpg"]]
+            "examples": [
+              true,
+              false,
+              [
+                ".png",
+                ".jpg"
+              ]
+            ]
           }
         },
         "additionalProperties": false
@@ -75,7 +104,14 @@
         }
       ],
       "default": "**/node_modules/**",
-      "examples": ["**/node_modules/**", ["**/node_modules/**", "**/.git/**", "**/dist/**"]]
+      "examples": [
+        "**/node_modules/**",
+        [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/dist/**"
+        ]
+      ]
     },
     "sync": {
       "type": "object",
@@ -85,6 +121,7 @@
           "type": "integer",
           "description": "Heading level at which to automatically insert mdait markers (1-6, or 0 to disable). Can be overridden in frontmatter.",
           "minimum": 0,
+          "x-ui-minimum": 1,
           "maximum": 6,
           "default": 3
         },
@@ -95,7 +132,10 @@
         },
         "orphanTargetPolicy": {
           "type": "string",
-          "enum": ["delete", "verify"],
+          "enum": [
+            "delete",
+            "verify"
+          ],
           "description": "How to handle orphan target units (managed target-side units whose source unit no longer exists). \"delete\": remove automatically. \"verify\": keep with need:verify-deletion for manual confirmation. Independent units (need:isolate, or a marker without from:) are always preserved regardless of this policy. Legacy values \"keep\" and \"backfill\" are deprecated and interpreted as \"verify\" with a warning. Takes precedence over autoDelete."
         },
         "autoSyncOnSave": {
@@ -118,7 +158,14 @@
             }
           ],
           "default": true,
-          "examples": [true, false, [".png", ".jpg"]]
+          "examples": [
+            true,
+            false,
+            [
+              ".png",
+              ".jpg"
+            ]
+          ]
         }
       },
       "additionalProperties": false
@@ -130,7 +177,10 @@
         "mode": {
           "type": "string",
           "description": "Where mdait unit markers are stored. 'embedded' (default) keeps markers as HTML comments in the document body. 'external' moves them to .mdait/unit-state.",
-          "enum": ["embedded", "external"],
+          "enum": [
+            "embedded",
+            "external"
+          ],
           "default": "embedded"
         }
       },
@@ -143,20 +193,32 @@
         "provider": {
           "type": "string",
           "description": "AI backend for translation and terminology. 'vscode-lm' (default) uses the VS Code Language Model API and GitHub Copilot subscription without an API key. 'openai' uses the OpenAI-compatible API configured below. 'ollama' uses the local Ollama server configured below. 'default' is a test-only mock provider that does not call an external LLM.",
-          "enum": ["default", "vscode-lm", "ollama", "openai"],
+          "enum": [
+            "default",
+            "vscode-lm",
+            "ollama",
+            "openai"
+          ],
           "default": "vscode-lm"
         },
         "vendor": {
           "type": "string",
           "description": "VS Code Language Model API vendor identifier (used by the 'vscode-lm' provider)",
           "default": "copilot",
-          "examples": ["copilot", "customendpoint"]
+          "examples": [
+            "copilot",
+            "customendpoint"
+          ]
         },
         "model": {
           "type": "string",
           "description": "AI model name to use with the selected provider",
           "default": "gpt-4o",
-          "examples": ["gpt-4o", "gpt-4.1", "gpt-5 mini"]
+          "examples": [
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-5 mini"
+          ]
         },
         "ollama": {
           "type": "object",
@@ -167,13 +229,21 @@
               "description": "Ollama server endpoint URL",
               "format": "uri",
               "default": "http://localhost:11434",
-              "examples": ["http://localhost:11434", "http://ollama-server:11434"]
+              "examples": [
+                "http://localhost:11434",
+                "http://ollama-server:11434"
+              ]
             },
             "model": {
               "type": "string",
               "description": "Ollama model name to use",
               "default": "llama2",
-              "examples": ["llama2", "llama3", "mistral", "codellama"]
+              "examples": [
+                "llama2",
+                "llama3",
+                "mistral",
+                "codellama"
+              ]
             },
             "timeoutSec": {
               "type": "number",
@@ -182,9 +252,16 @@
               "default": 120
             },
             "keepAlive": {
-              "type": ["string", "number"],
+              "type": [
+                "string",
+                "number"
+              ],
               "description": "How long the model stays loaded in memory after the request (e.g. \"10m\", or seconds as a number). When omitted, the Ollama server default (5 minutes) applies",
-              "examples": ["10m", "1h", 600]
+              "examples": [
+                "10m",
+                "1h",
+                600
+              ]
             }
           },
           "additionalProperties": false
@@ -196,14 +273,20 @@
             "apiKey": {
               "type": "string",
               "description": "OpenAI API key. Can use ${env:VARIABLE_NAME} syntax to reference environment variables.",
-              "examples": ["${env:OPENAI_API_KEY}", "sk-..."]
+              "examples": [
+                "${env:OPENAI_API_KEY}",
+                "sk-..."
+              ]
             },
             "baseURL": {
               "type": "string",
               "description": "OpenAI API base URL (optional, defaults to https://api.openai.com/v1)",
               "format": "uri",
               "default": "https://api.openai.com/v1",
-              "examples": ["https://api.openai.com/v1", "https://your-proxy.com/v1"]
+              "examples": [
+                "https://api.openai.com/v1",
+                "https://your-proxy.com/v1"
+              ]
             },
             "maxTokens": {
               "type": "integer",
@@ -254,7 +337,10 @@
               "items": {
                 "type": "string"
               },
-              "default": ["title", "description"]
+              "default": [
+                "title",
+                "description"
+              ]
             }
           },
           "additionalProperties": false
@@ -265,7 +351,12 @@
           "minimum": 0,
           "maximum": 5,
           "default": 1,
-          "examples": [0, 1, 2, 3]
+          "examples": [
+            0,
+            1,
+            2,
+            3
+          ]
         },
         "retryLimit": {
           "type": "integer",
@@ -273,14 +364,23 @@
           "minimum": 1,
           "maximum": 5,
           "default": 1,
-          "examples": [1, 2, 3, 5]
+          "examples": [
+            1,
+            2,
+            3,
+            5
+          ]
         },
         "maxFileSize": {
           "type": "integer",
           "description": "Maximum file size in bytes for non-Markdown file translation. Files exceeding this limit are skipped with a warning.",
           "minimum": 1024,
           "default": 51200,
-          "examples": [51200, 102400, 204800]
+          "examples": [
+            51200,
+            102400,
+            204800
+          ]
         },
         "concurrency": {
           "type": "integer",
@@ -288,14 +388,22 @@
           "minimum": 1,
           "maximum": 8,
           "default": 3,
-          "examples": [1, 3, 5]
+          "examples": [
+            1,
+            3,
+            5
+          ]
         },
         "maxUnitsPerRun": {
           "type": "integer",
           "description": "General cost guard for the maximum number of units processed in one pass over a single file. Applied per file by translation, AI translation review and AI align, so a directory run scales with the number of files. When the limit is exceeded: translation and review keep the unit's need flag (need:translate / need:review) and process the rest on the next run; AI align skips that file and keeps the deterministic position-based mapping. Set to 0 for no limit.",
           "minimum": 0,
           "default": 300,
-          "examples": [300, 500, 0]
+          "examples": [
+            300,
+            500,
+            0
+          ]
         },
         "extensions": {
           "type": "array",
@@ -304,7 +412,15 @@
             "type": "string",
             "pattern": "^\\.[a-zA-Z0-9]+$"
           },
-          "examples": [[".txt"], [".csv", ".tsv"]]
+          "examples": [
+            [
+              ".txt"
+            ],
+            [
+              ".csv",
+              ".tsv"
+            ]
+          ]
         }
       },
       "additionalProperties": false
@@ -313,7 +429,11 @@
       "type": "string",
       "description": "Primary language code shared across terminology and TM features",
       "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
-      "examples": ["en", "ja", "de"]
+      "examples": [
+        "en",
+        "ja",
+        "de"
+      ]
     },
     "terms": {
       "type": "object",
@@ -324,7 +444,11 @@
           "description": "Glossary filename (supports .csv and .yaml formats)",
           "default": "terms.csv",
           "pattern": "^[^/\\\\]+\\.(csv|ya?ml)$",
-          "examples": ["terms.csv", "glossary.yaml", "terminology.yml"]
+          "examples": [
+            "terms.csv",
+            "glossary.yaml",
+            "terminology.yml"
+          ]
         }
       },
       "additionalProperties": false
@@ -351,7 +475,12 @@
           "minimum": 1,
           "maximum": 5,
           "default": 1,
-          "examples": [1, 2, 3, 5]
+          "examples": [
+            1,
+            2,
+            3,
+            5
+          ]
         },
         "minQueryLength": {
           "type": "integer",
@@ -370,47 +499,65 @@
         "trans.translate": {
           "type": "string",
           "description": "Path to custom Markdown translation prompt file",
-          "examples": [".mdait/prompts/translate.txt"]
+          "examples": [
+            ".mdait/prompts/translate.txt"
+          ]
         },
         "trans.revisePatch": {
           "type": "string",
           "description": "Path to custom revision patch translation prompt file",
-          "examples": [".mdait/prompts/revise-patch.txt"]
+          "examples": [
+            ".mdait/prompts/revise-patch.txt"
+          ]
         },
         "term.detect": {
           "type": "string",
           "description": "Path to custom term detection prompt file",
-          "examples": [".mdait/prompts/term-detect.txt"]
+          "examples": [
+            ".mdait/prompts/term-detect.txt"
+          ]
         },
         "term.extractFromTranslations": {
           "type": "string",
           "description": "Path to custom term extraction from translations prompt file",
-          "examples": [".mdait/prompts/term-extract.txt"]
+          "examples": [
+            ".mdait/prompts/term-extract.txt"
+          ]
         },
         "term.translateTerms": {
           "type": "string",
           "description": "Path to custom term translation prompt file",
-          "examples": [".mdait/prompts/term-translate.txt"]
+          "examples": [
+            ".mdait/prompts/term-translate.txt"
+          ]
         },
         "tm.splitSentences": {
           "type": "string",
           "description": "Path to custom TM sentence alignment prompt file",
-          "examples": [".mdait/prompts/tm-split-sentences.txt"]
+          "examples": [
+            ".mdait/prompts/tm-split-sentences.txt"
+          ]
         },
         "aiReview.verifyPairing": {
           "type": "string",
           "description": "Path to custom AI translation review prompt file (single-pair, used when aiReview.batchSize is 1)",
-          "examples": [".mdait/prompts/ai-review-verify-pairing.txt"]
+          "examples": [
+            ".mdait/prompts/ai-review-verify-pairing.txt"
+          ]
         },
         "aiReview.verifyPairingBatch": {
           "type": "string",
           "description": "Path to custom AI translation review batch prompt file (used when aiReview.batchSize is 2 or more)",
-          "examples": [".mdait/prompts/ai-review-verify-pairing-batch.txt"]
+          "examples": [
+            ".mdait/prompts/ai-review-verify-pairing-batch.txt"
+          ]
         },
         "adopt.align": {
           "type": "string",
           "description": "Path to custom AI align (differential review) prompt file",
-          "examples": [".mdait/prompts/adopt-align.txt"]
+          "examples": [
+            ".mdait/prompts/adopt-align.txt"
+          ]
         }
       },
       "additionalProperties": false
@@ -435,6 +582,9 @@
       "additionalProperties": false
     }
   },
-  "required": ["transPairs", "primaryLang"],
+  "required": [
+    "transPairs",
+    "primaryLang"
+  ],
   "additionalProperties": false
 }

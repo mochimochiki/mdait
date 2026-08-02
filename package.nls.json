@@ -1,7 +1,6 @@
 {
   "mdait.description": "Markdown AI Translator - AI-powered translation tool for Markdown files",
   "mdait.sync.title": "mdait: Sync",
-  "mdait.validate.title": "mdait: Validate Translations",
   "mdait.markers.externalize.title": "Externalize Markers (embedded → external)",
   "mdait.markers.embed.title": "Embed Markers (external → embedded)",
   "mdait.status.selectTargets.title": "Select Targets",
@@ -30,11 +29,7 @@
   "mdait.needsAttention.next.title": "Go to Next Item Needing Attention",
   "mdait.translate.frontmatter.title": "✨Translate Frontmatter",
   "mdait.term.detect.title": "✨Detect Terms",
-  "mdait.term.detect.directory.title": "✨Detect Terms for Directory",
-  "mdait.term.detect.file.title": "✨Detect Terms for File",
   "mdait.term.expand.title": "✨Expand Terms",
-  "mdait.term.expand.directory.title": "✨Expand Terms for Directory",
-  "mdait.term.expand.file.title": "✨Expand Terms for File",
   "mdait.viewsContainer.title": "mdait",
   "mdait.status.view.title": "Status",
   "mdait.configuration.title": "mdait",
@@ -44,5 +39,6 @@
   "mdait.tm.optimize.title": "✨TM Optimize",
   "mdait.aiReview.file.title": "✨AI Translation Review (File)",
   "mdait.aiReview.directory.title": "✨AI Translation Review (Directory)",
-  "mdait.adopt.run.title": "✨Adopt Existing Translations"
+  "mdait.adopt.run.title": "✨Adopt Existing Translations",
+  "mdait.term.update.title": "✨Update Glossary"
 }
