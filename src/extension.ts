@@ -65,6 +65,7 @@ import {
 	openSettingsAsUiCommand,
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
+import { StatusBarSummary } from "./ui/status/status-bar-summary";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -171,6 +172,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	statusManager.onStatusTreeChanged(() => {
 		updateHasStatusContext(statusManager);
 	});
+
+	// needs 件数のステータスバー常駐表示（原文保存で状態が変わったことに気づく唯一の受動サーフェス）
+	const statusBarSummary = new StatusBarSummary(statusManager, config);
+	context.subscriptions.push(statusBarSummary);
+	config.onConfigurationChanged(() => statusBarSummary.refresh());
 
 	// setup.createConfig command
 	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>

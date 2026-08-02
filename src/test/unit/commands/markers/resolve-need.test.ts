@@ -303,6 +303,58 @@ Content C.
 		assert.deepStrictEqual(result.remainingNeedFlags, ["translate"]);
 	});
 
+	test("原文と同一の訳文は翻訳済みにできない（ファイル経由でも原文を引いて検査する）", async () => {
+		const config = await initConfig();
+		// sync 直後の状態: 訳文は原文のコピーで hash === from
+		const sourceContent = `<!-- mdait srcA -->
+## セクション A
+
+本文 A。
+`;
+		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
+		fs.writeFileSync(path.join(tempDir, "ja", "doc.md"), sourceContent, "utf-8");
+		writeTarget(`<!-- mdait srcA from:srcA need:translate -->
+## セクション A
+
+本文 A。
+`);
+
+		const result = await resolveNeedForFile(targetFile, config, {
+			targets: unitTargets(["srcA"]),
+			needs: ["translate"],
+		});
+
+		assert.strictEqual(result.resolved.length, 0);
+		assert.deepStrictEqual(result.skipped, [{ hash: "srcA", reason: "same-as-source" }]);
+		assert.ok(
+			fs.readFileSync(targetFile, "utf-8").includes("need:translate"),
+			"need は残る",
+		);
+	});
+
+	test("訳してあれば通る（同一テキスト検査は訳文を止めない）", async () => {
+		const config = await initConfig();
+		const sourceContent = `<!-- mdait srcA -->
+## セクション A
+
+本文 A。
+`;
+		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
+		fs.writeFileSync(path.join(tempDir, "ja", "doc.md"), sourceContent, "utf-8");
+		writeTarget(`<!-- mdait tgtA from:srcA need:translate -->
+## Section A
+
+Body A.
+`);
+
+		const result = await resolveNeedForFile(targetFile, config, {
+			targets: unitTargets(["tgtA"]),
+			needs: ["translate"],
+		});
+
+		assert.strictEqual(result.resolved.length, 1);
+	});
+
 	test("2回目の実行は無変更でresolved 0件（冪等性）", async () => {
 		const config = await initConfig();
 		writeTarget();

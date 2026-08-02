@@ -61,13 +61,16 @@ export class SummaryDecorator {
 
 		const addDecoration = (lineIndex: number, marker: MdaitMarker): void => {
 			const summary = this.summaryManager.getSummary(marker.hash);
-			// AI のサマリが無くても、手で訳して未確定のユニットには状態を出す
-			// （書いただけでは need は落ちない。理由と対処は hover 側）
+			// AI のサマリが無くても状態は出す（気づける場所に一言。詳細と対処は hover 側）:
+			// - 原文が変わった（need:revise）: 訳が古くなったことを、原文を編集した人でなくても知れるように
+			// - 手で訳して未確定: 書いただけでは need は落ちない
 			const summaryText = summary
 				? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
-				: marker.hasUnconfirmedEdit()
-					? vscode.l10n.t("Edited — not marked done yet")
-					: undefined;
+				: marker.needsRevision()
+					? vscode.l10n.t("The source has changed")
+					: marker.hasUnconfirmedEdit()
+						? vscode.l10n.t("Edited — not marked done yet")
+						: undefined;
 			if (!summaryText) {
 				return;
 			}

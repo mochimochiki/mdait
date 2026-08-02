@@ -9,6 +9,7 @@ import * as vscode from "vscode";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
+import { diffSourceLines, formatSourceDiff } from "../../core/markdown/source-diff";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../infra/config/configuration";
@@ -77,16 +78,45 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		const summary = this.summaryManager.getSummary(marker.hash);
 		// 手で訳したが未確定のユニットは、サマリが無くても締めくくり方を説明する
 		const unconfirmedEdit = !summary && marker.hasUnconfirmedEdit();
-		// サマリも note も未確定編集も無ければ hover を出さない
-		if (!summary && !note && !unconfirmedEdit) {
+		// 原文が変わったユニットは「どこが変わったか」を出す（旧原文は unit-registry にある）
+		const sourceDiff = marker.needsRevision() ? await this.buildSourceDiff(marker) : "";
+		// サマリも note も未確定編集も差分も無ければ hover を出さない
+		if (!summary && !note && !unconfirmedEdit && !sourceDiff) {
 			return null;
 		}
 
 		// MarkdownStringを生成（needフラグ・note も考慮）
-		const markdown = this.buildMarkdownString(summary, marker.need, note, unconfirmedEdit);
+		const markdown = this.buildMarkdownString(summary, marker.need, note, unconfirmedEdit, sourceDiff);
 
 		// Hoverオブジェクトを返す
 		return new vscode.Hover(markdown);
+	}
+
+	/**
+	 * 原文の新旧差分（```diff ブロック）を組み立てる。
+	 *
+	 * 旧原文は `need:revise@{旧原文ハッシュ}`、新原文は `from`（現在の原文ハッシュ）で
+	 * `.mdait/unit-registry` から引く。どちらか引けなければ差分は出さない（AI は使わない）。
+	 */
+	private async buildSourceDiff(marker: MdaitMarker): Promise<string> {
+		const oldHash = marker.getOldHashFromNeed();
+		if (!oldHash || !marker.from) {
+			return "";
+		}
+		try {
+			const registry = UnitRegistryManager.getInstance();
+			const [oldSource, newSource] = await Promise.all([
+				registry.loadUnitRegistry(oldHash),
+				registry.loadUnitRegistry(marker.from),
+			]);
+			if (oldSource === null || newSource === null) {
+				return "";
+			}
+			return formatSourceDiff(diffSourceLines(oldSource, newSource));
+		} catch {
+			// 差分は補助情報。読めないことを理由に hover 自体を壊さない
+			return "";
+		}
 	}
 
 	/**
@@ -100,10 +130,25 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		needFlag?: string | null,
 		note?: string | null,
 		unconfirmedEdit = false,
+		sourceDiff = "",
 	): vscode.MarkdownString {
 		const md = new vscode.MarkdownString();
 		md.isTrusted = true; // commandリンクを有効化
 		md.supportHtml = true; // HTML埋め込みを有効化
+
+		// 原文が変わったユニット: 何が変わったのかを先に出す（判断材料。ADR-260802-03）
+		if (sourceDiff) {
+			md.appendMarkdown(`### ${vscode.l10n.t("The source has changed")}\n\n`);
+			md.appendMarkdown(`${sourceDiff}\n\n`);
+			md.appendMarkdown(
+				`${vscode.l10n.t(
+					'Press “{0}” to translate it again, or fix it by hand and press “{1}”.',
+					vscode.l10n.t("✨Translate"),
+					vscode.l10n.t("Mark as Revised"),
+				)}\n\n`,
+			);
+			return md;
+		}
 
 		// ヘッダー（need:reviewの場合は「要確認」と表示）
 		if (unconfirmedEdit) {
