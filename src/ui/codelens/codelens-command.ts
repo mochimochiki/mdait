@@ -103,10 +103,33 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 			return;
 		}
 
-		const result = await getFileHandler(document.uri.fsPath).resolveNeed(document.uri.fsPath, {
-			targets: [{ kind: "unit", hash: marker.hash }],
+		const filePath = document.uri.fsPath;
+		const target = { kind: "unit" as const, hash: marker.hash };
+		const result = await getFileHandler(filePath).resolveNeed(filePath, {
+			targets: [target],
 			needs: ALL_RESOLVABLE_NEEDS,
 		});
+
+		// 訳文が原文とまったく同じだった場合は、訳し忘れの可能性が高いので確認する。
+		// 同一が正しい場合（コードだけのユニット等）もあるため、止めずに選ばせる（ADR-260802-01）
+		if (result.resolved.length === 0 && result.skipped.some((s) => s.reason === "same-as-source")) {
+			const markAnyway = vscode.l10n.t("Mark as done anyway");
+			const choice = await vscode.window.showWarningMessage(
+				vscode.l10n.t("This translation is identical to the source. Is it really finished?"),
+				{ modal: true },
+				markAnyway,
+			);
+			if (choice !== markAnyway) {
+				return;
+			}
+			const forced = await getFileHandler(filePath).resolveNeed(filePath, {
+				targets: [target],
+				needs: ALL_RESOLVABLE_NEEDS,
+				allowSameAsSource: true,
+			});
+			reportResolveOutcome(forced.resolved.length);
+			return;
+		}
 		reportResolveOutcome(result.resolved.length);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);

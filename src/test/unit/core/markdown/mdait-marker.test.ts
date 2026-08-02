@@ -191,14 +191,13 @@ suite("MdaitMarker", () => {
 			assert.equal(new MdaitMarker("bbbb2222", "aaaa1111", "translate").hasUnconfirmedEdit(), true);
 		});
 
-		test("要改訂は revise@ の基準ハッシュと比べる（改訂前は編集されていない）", () => {
-			// need:revise@X の X は改訂が要求された時点の訳文ハッシュ。
-			// from（更新後の原文ハッシュ）と hash が違うのは当たり前なので基準にしない
+		test("要改訂は判定対象外（ADR-260802-03）", () => {
+			// need:revise@X の X は「旧原文のハッシュ」であって訳文ハッシュではない
+			// （marker-sync.ts の setReviseNeed(oldSourceHash)）。別の名前空間の値なので比較しても
+			// 意味がなく、訳文に一度も触れていないユニットまで「編集済み」になっていた。
+			// 原文が変わったことは needsRevise() が表す
 			assert.equal(new MdaitMarker("cccc3333", "dddd4444", "revise@cccc3333").hasUnconfirmedEdit(), false);
-		});
-
-		test("要改訂で本文を書き換えていれば編集済み", () => {
-			assert.equal(new MdaitMarker("eeee5555", "dddd4444", "revise@cccc3333").hasUnconfirmedEdit(), true);
+			assert.equal(new MdaitMarker("eeee5555", "dddd4444", "revise@cccc3333").hasUnconfirmedEdit(), false);
 		});
 
 		test("翻訳済み・裁定待ち・原文ユニットは対象外", () => {

@@ -133,6 +133,87 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 	});
 });
 
+suite("applyNeedResolution（同一テキスト検査。ADR-260802-01）", () => {
+	/** hash→原文本文の対応表から SourceTextLookup を作る */
+	const lookupFrom = (map: Record<string, string>) => (fromHash: string) => map[fromHash];
+
+	test("訳文が原文とまったく同じなら翻訳済みにできない（same-as-source でスキップ）", () => {
+		const unit = makeUnit("aaa", "s1", "translate");
+		const result = applyNeedResolution(
+			[unit],
+			{ targets: unitTargets(["aaa"]), needs: ["translate"] },
+			lookupFrom({ s1: unit.content }),
+		);
+
+		assert.strictEqual(result.resolved.length, 0);
+		assert.deepStrictEqual(result.skipped, [{ hash: "aaa", reason: "same-as-source" }]);
+		assert.strictEqual(result.changed, false);
+		assert.strictEqual(unit.marker?.need, "translate", "need は残る");
+	});
+
+	test("要改訂も同じ検査にかかる", () => {
+		const unit = makeUnit("aaa", "s1", "revise@old1");
+		const result = applyNeedResolution(
+			[unit],
+			{ targets: unitTargets(["aaa"]), needs: ["revise"] },
+			lookupFrom({ s1: unit.content }),
+		);
+		assert.deepStrictEqual(result.skipped, [{ hash: "aaa", reason: "same-as-source" }]);
+	});
+
+	test("前後の空白・改行コードの差は「同じ」とみなす", () => {
+		const unit = makeUnit("aaa", "s1", "translate");
+		const withCrLf = `${unit.content.replace(/\n/g, "\r\n")}\n\n`;
+		const result = applyNeedResolution(
+			[unit],
+			{ targets: unitTargets(["aaa"]), needs: ["translate"] },
+			lookupFrom({ s1: withCrLf }),
+		);
+		assert.deepStrictEqual(result.skipped, [{ hash: "aaa", reason: "same-as-source" }]);
+	});
+
+	test("訳してあれば通る", () => {
+		const unit = makeUnit("aaa", "s1", "translate");
+		const result = applyNeedResolution(
+			[unit],
+			{ targets: unitTargets(["aaa"]), needs: ["translate"] },
+			lookupFrom({ s1: "## Section aaa\n\nDifferent source text.\n" }),
+		);
+		assert.strictEqual(result.resolved.length, 1);
+		assert.strictEqual(unit.marker?.need, null);
+	});
+
+	test("allowSameAsSource を指定すれば同一でも通る（コードだけのユニット等）", () => {
+		const unit = makeUnit("aaa", "s1", "translate");
+		const result = applyNeedResolution(
+			[unit],
+			{ targets: unitTargets(["aaa"]), needs: ["translate"], allowSameAsSource: true },
+			lookupFrom({ s1: unit.content }),
+		);
+		assert.strictEqual(result.resolved.length, 1);
+	});
+
+	test("review / verify-deletion / isolate は検査の対象外（訳したかを問う need ではない）", () => {
+		const units = [makeUnit("aaa", "s1", "review"), makeUnit("bbb", "s2", "verify-deletion")];
+		const result = applyNeedResolution(units, {}, lookupFrom({ s1: units[0].content, s2: units[1].content }));
+		assert.strictEqual(result.resolved.length, 2);
+	});
+
+	test("原文が引けないときは判定せず通す（検査できないことを理由に止めない）", () => {
+		const unit = makeUnit("aaa", "s1", "translate");
+		const result = applyNeedResolution([unit], { targets: unitTargets(["aaa"]), needs: ["translate"] }, lookupFrom({}));
+		assert.strictEqual(result.resolved.length, 1);
+	});
+
+	test("対象未指定の一括解決でも検査される", () => {
+		const units = [makeUnit("aaa", "s1", "translate"), makeUnit("bbb", "s2", "translate")];
+		const result = applyNeedResolution(units, { needs: ["translate"] }, lookupFrom({ s1: units[0].content }));
+		assert.strictEqual(result.resolved.length, 1, "訳してある bbb だけ解決される");
+		assert.strictEqual(result.resolved[0].hash, "bbb");
+		assert.deepStrictEqual(result.skipped, [{ hash: "aaa", reason: "same-as-source" }]);
+	});
+});
+
 suite("needMatchesSelection（needフィルタ一致判定）", () => {
 	test("完全一致とrevise@プレフィックス一致を判定する", () => {
 		assert.strictEqual(needMatchesSelection("review", ["review"]), true);

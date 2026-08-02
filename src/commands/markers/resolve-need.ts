@@ -9,11 +9,15 @@
  *   （サーフェスごとに書き換えを実装しないこと。理由は unit-mutation.ts を参照）。
  * @module commands/markers/resolve-need
  */
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import type { FrontMatter } from "../../core/markdown/front-matter";
 import { parseFrontmatterMarker, setFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { markdownParser } from "../../core/markdown/parser";
 import type { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger } from "../../infra/logging/logger";
+import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
@@ -43,6 +47,33 @@ export interface NeedResolutionOptions {
 	targets?: NeedTarget[];
 	/** 解決対象の need 種別フィルタ。省略時は DEFAULT_RESOLVABLE_NEEDS */
 	needs?: readonly string[];
+	/**
+	 * 訳文が原文とまったく同じでも `translate` / `revise` を解決する。
+	 *
+	 * 既定（false）では「訳していないのに翻訳済みになる」のを防ぐために止める。
+	 * コードブロックだけのユニットや原文のままが正しい見出しなど、同一が正しい場合は
+	 * 利用者に確認したうえでこのフラグで通す（ADR-260802-01）。
+	 */
+	allowSameAsSource?: boolean;
+}
+
+/**
+ * 「訳文が原文と同じか」を判定するための原文テキスト供給元。
+ * ユニットの `from` ハッシュから原文本文を引く（引けなければ判定しない）。
+ */
+export type SourceTextLookup = (fromHash: string) => string | undefined;
+
+/** 同一テキスト検査の対象となる need（訳したかどうかを問う need だけ） */
+const SAME_TEXT_GUARDED_NEEDS = ["translate", "revise"] as const;
+
+/** need が同一テキスト検査の対象か */
+function isSameTextGuarded(need: string): boolean {
+	return SAME_TEXT_GUARDED_NEEDS.some((guarded) => need === guarded || need.startsWith(`${guarded}@`));
+}
+
+/** 比較用にテキストを正規化する（前後の空白と改行コードの差は無視する） */
+function normalizeForComparison(text: string): string {
+	return text.replace(/\r\n/g, "\n").trim();
 }
 
 /** 解決されたユニット */
@@ -54,7 +85,7 @@ export interface ResolvedNeedUnit {
 }
 
 /** スキップ理由 */
-export type NeedSkipReason = "not-found" | "already-resolved" | "need-not-selected";
+export type NeedSkipReason = "not-found" | "already-resolved" | "need-not-selected" | "same-as-source";
 
 /** スキップされたユニット */
 export interface SkippedNeedUnit {
@@ -125,11 +156,31 @@ function includesFrontmatter(targets: NeedTarget[] | undefined): boolean {
  * @param units パース済みユニット（マーカーを直接変異させる）
  * @param options 対象選択オプション
  */
-export function applyNeedResolution(units: MdaitUnit[], options: NeedResolutionOptions = {}): NeedResolutionResult {
+export function applyNeedResolution(
+	units: MdaitUnit[],
+	options: NeedResolutionOptions = {},
+	sourceText?: SourceTextLookup,
+): NeedResolutionResult {
 	const selected = options.needs && options.needs.length > 0 ? options.needs : [...DEFAULT_RESOLVABLE_NEEDS];
 	const resolved: ResolvedNeedUnit[] = [];
 	const skipped: SkippedNeedUnit[] = [];
 	const hashes = unitHashesFrom(options.targets);
+
+	/**
+	 * 訳文が原文とまったく同じなら、まだ訳していない可能性が高いので解決しない。
+	 * 原文が引けないとき（供給元なし・from なし）は判定せず通す（誤って止めない）。
+	 */
+	const isUntranslated = (unit: MdaitUnit, need: string): boolean => {
+		if (options.allowSameAsSource || !sourceText || !isSameTextGuarded(need)) {
+			return false;
+		}
+		const from = unit.marker?.from;
+		if (!from) {
+			return false;
+		}
+		const source = sourceText(from);
+		return source !== undefined && normalizeForComparison(source) === normalizeForComparison(unit.content);
+	};
 
 	if (hashes && hashes.length > 0) {
 		for (const hash of hashes) {
@@ -147,6 +198,10 @@ export function applyNeedResolution(units: MdaitUnit[], options: NeedResolutionO
 				skipped.push({ hash, reason: "need-not-selected" });
 				continue;
 			}
+			if (isUntranslated(unit, need)) {
+				skipped.push({ hash, reason: "same-as-source" });
+				continue;
+			}
 			unit.marker.removeNeedTag();
 			resolved.push(toResolvedUnit(unit, need));
 		}
@@ -155,6 +210,10 @@ export function applyNeedResolution(units: MdaitUnit[], options: NeedResolutionO
 		for (const unit of units) {
 			const need = unit.marker?.need;
 			if (!need || !needMatchesSelection(need, selected)) {
+				continue;
+			}
+			if (isUntranslated(unit, need)) {
+				skipped.push({ hash: unit.marker?.hash ?? "", reason: "same-as-source" });
 				continue;
 			}
 			unit.marker?.removeNeedTag();
@@ -187,6 +246,37 @@ export function applyFrontmatterNeedResolution(
 }
 
 /**
+ * 訳文ファイルに対応する原文を読み、`from` ハッシュから原文本文を引ける関数を返す。
+ *
+ * 原文が見つからない・読めない場合は undefined を返し、同一テキスト検査は行われない
+ * （検査できないことを理由に操作を止めない）。
+ */
+function loadSourceTextLookup(targetPath: string, config: Configuration): SourceTextLookup | undefined {
+	try {
+		const fileExplorer = new FileExplorer();
+		const pair = fileExplorer.getTransPairFromTarget(targetPath, config);
+		if (!pair) {
+			return undefined;
+		}
+		const sourcePath = fileExplorer.getSourcePath(targetPath, pair);
+		if (!sourcePath || !fs.existsSync(sourcePath)) {
+			return undefined;
+		}
+		const io = resolveMarkerIO(config, sourcePath, "source");
+		const parsed = markdownParser.parse(fs.readFileSync(sourcePath, "utf-8"), config, io.provider, io.ctx);
+		const byHash = new Map<string, string>();
+		for (const unit of parsed.units) {
+			if (unit.marker?.hash) {
+				byHash.set(unit.marker.hash, unit.content);
+			}
+		}
+		return (fromHash: string) => byHash.get(fromHash);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * 1ファイル分の need フラグ解決を実行する（Markdown）。
  *
  * 排他制御・未保存の反映・ストア保存・ステータス更新は `withMarkdownMutation` が担う。
@@ -202,9 +292,14 @@ export async function resolveNeedForFile(
 	options: NeedResolutionOptions = {},
 ): Promise<ResolveNeedFileResult> {
 	const selected = options.needs && options.needs.length > 0 ? options.needs : [...DEFAULT_RESOLVABLE_NEEDS];
+	// 同一テキスト検査に使う原文（必要なときだけ読む）
+	const sourceText =
+		options.allowSameAsSource || !selected.some((need) => isSameTextGuarded(need))
+			? undefined
+			: loadSourceTextLookup(absPath, config);
 
 	const outcome = await withMarkdownMutation<ResolveNeedFileResult>(absPath, config, ({ parsed }) => {
-		const result = applyNeedResolution(parsed.units, options);
+		const result = applyNeedResolution(parsed.units, options, sourceText);
 
 		if (includesFrontmatter(options.targets)) {
 			const fm = applyFrontmatterNeedResolution(parsed.frontMatter, selected);

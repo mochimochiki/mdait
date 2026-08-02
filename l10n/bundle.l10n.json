@@ -159,6 +159,8 @@
   "Could not extract unit hash from marker.": "Could not extract unit hash from marker.",
   "Translation completed for unit: {0}": "Translation completed for unit: {0}",
   "Translation failed: {0}": "Translation failed: {0}",
+  "Mark as done anyway": "Mark as done anyway",
+  "This translation is identical to the source. Is it really finished?": "This translation is identical to the source. Is it really finished?",
   "Failed to clear need marker: {0}": "Failed to clear need marker: {0}",
   "This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.": "This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.",
   "Unit not found.": "Unit not found.",

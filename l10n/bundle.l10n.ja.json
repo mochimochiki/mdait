@@ -159,6 +159,8 @@
   "Could not extract unit hash from marker.": "マーカーからユニットのハッシュを取得できませんでした。",
   "Translation completed for unit: {0}": "ユニットの翻訳が完了しました: {0}",
   "Translation failed: {0}": "翻訳に失敗しました: {0}",
+  "Mark as done anyway": "このまま翻訳済みにする",
+  "This translation is identical to the source. Is it really finished?": "訳文が原文とまったく同じです。本当に翻訳は終わっていますか？",
   "Failed to clear need marker: {0}": "needマーカーの削除に失敗しました: {0}",
   "This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.": "このユニットには need:verify-deletion が付いていません。削除確認が付いたユニットのみこの方法で削除できます。",
   "Unit not found.": "ユニットが見つかりません。",
