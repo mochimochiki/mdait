@@ -61,8 +61,20 @@ function snapshot() {
 	for (const f of walkFiles(CONTENT)) map[path.relative(CONTENT, f)] = fs.readFileSync(f, "utf8");
 	return map;
 }
+/**
+ * 本文中の mdait マーカー文字列を列挙する。
+ * コードブロックの中にある「マーカーの書き方」の見本は本文であってマーカーではないため除く
+ * （design.md P9 と同じ扱い。除かないと見本を本物と数えて誤検知する）。
+ */
 function markerLines(content) {
-	return content.match(MARKER_LOOSE) || [];
+	const codeBlockLines = getCodeBlockLineSet(content);
+	const out = [];
+	content.split("\n").forEach((line, i) => {
+		if (codeBlockLines.has(i)) return;
+		const m = line.match(MARKER_LOOSE);
+		if (m) out.push(...m);
+	});
+	return out;
 }
 function needFlag(markerText) {
 	const m = MARKER_STRICT.exec(markerText);
@@ -119,7 +131,12 @@ function filesWithBodyMarkers(map) {
 	const out = [];
 	for (const [rel, c] of Object.entries(map)) {
 		if (!rel.endsWith(".md")) continue;
-		for (const line of c.split("\n")) if (/<!--\s*mdait\b/.test(line) && !line.includes("front")) out.push(rel);
+		// コードブロック内の見本は本文なので除く（markerLines と同じ理由）
+		const codeBlockLines = getCodeBlockLineSet(c);
+		c.split("\n").forEach((line, i) => {
+			if (codeBlockLines.has(i)) return;
+			if (/<!--\s*mdait\b/.test(line) && !line.includes("front")) out.push(rel);
+		});
 	}
 	return [...new Set(out)];
 }
@@ -127,6 +144,7 @@ function filesWithBodyMarkers(map) {
 const { syncCommand } = require(path.join(REPO, "out/commands/sync/sync-command.js"));
 const { transCommand } = require(path.join(REPO, "out/commands/trans/trans-command.js"));
 const { externalizeMarkersCommand } = require(path.join(REPO, "out/commands/markers/markers-migration.js"));
+const { getCodeBlockLineSet } = require(path.join(REPO, "out/core/markdown/code-block-lines.js"));
 
 async function phase1() {
 	const P = "P1-sync";

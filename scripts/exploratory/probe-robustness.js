@@ -546,10 +546,7 @@ const EXPECTED_DIFF = {
  * まだ直していない既知の欠陥。想定内の差とは分けて数え、毎回はっきり出す。
  * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
  */
-const KNOWN_BUGS = {
-	S55: "訳文の行頭にマーカー風の文字列が現れると external は無傷の訳文まで need:translate に落とす。突き合わせの外側（マーカー行の解釈）の問題で、embedded も別の形で壊れる",
-	S58: "同上（編集ゼロでも差が出る最小形）",
-};
+const KNOWN_BUGS = {};
 
 /** シナリオごとに embedded と external の結果を突き合わせる */
 function reportModeParity() {
@@ -990,6 +987,22 @@ async function main() {
 		await scenario("S60 第1章を末尾へ移動＋その第1章を編集", async () => {
 			moveChapterToEnd("ja/guide.md", "## 第1章");
 			editBody("ja/guide.md", "第1章の本文。", "第1章の本文（改訂）。");
+		});
+
+		// S70: 原文の本文を空にする（全選択して消した・別の内容へ差し替える途中など）。
+		//      訳文が丸ごと消えないか（＝作業内容が失われないか）を見る
+		await scenario("S70 原文の本文を空にする", async () => {
+			write("ja/guide.md", "");
+		});
+
+		// S71: 訳文の章にコードブロックを書き足す（人手編集の検知）。
+		//      ハッシュが変わったことが状態に反映されるかを見る
+		await scenario("S71 訳文の章にコードブロックを書き足す", async () => {
+			editBody(
+				"en/guide.md",
+				"## 第2章 第2章の本文。 [MT]",
+				["## 第2章 第2章の本文。 [MT]", "", "```js", "console.log(1);", "```"].join("\n"),
+			);
 		});
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);

@@ -64,6 +64,8 @@ export interface SyncResult {
 	totalOrphanReviewed: number;
 	/** AIアラインが適用した修正提案数 */
 	totalAlignCorrections: number;
+	/** 原文が空になったため訳文に触れずに中止したファイル数 */
+	totalSourceEmptied?: number;
 	durationMs: number;
 }
 
@@ -137,6 +139,7 @@ export async function syncCommand(
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
 		let totalAlignCorrections = 0;
+		let totalSourceEmptied = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -271,6 +274,7 @@ export async function syncCommand(
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
+						totalSourceEmptied += syncResult.sourceEmptied ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -329,6 +333,7 @@ export async function syncCommand(
 			totalKept,
 			totalOrphanReviewed,
 			totalAlignCorrections,
+			totalSourceEmptied,
 			durationMs,
 		});
 
@@ -383,6 +388,25 @@ export async function syncCommand(
 			);
 		}
 
+		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）。
+		// 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため。
+		// fire-and-forget（await すると処理中フラグが残る）。
+		if (totalSourceEmptied > 0) {
+			void vscode.window
+				.showWarningMessage(
+					vscode.l10n.t(
+						"Sync skipped {0} file(s): the source has no content while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
+						totalSourceEmptied,
+					),
+				)
+				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+				.then(undefined, (error) => {
+					logger.error("sync", "Empty-source guidance failed", {
+						...formatError(error),
+					});
+				});
+		}
+
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
 		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
 		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
@@ -427,6 +451,7 @@ export async function syncCommand(
 			totalKept,
 			totalOrphanReviewed,
 			totalAlignCorrections,
+			totalSourceEmptied,
 			durationMs,
 		};
 	} catch (error) {
@@ -819,6 +844,28 @@ export async function sync_CoreProc(
 			modified: 0,
 			deleted: 0,
 			unchanged: 0,
+		};
+	}
+
+	// 原文の本文が空（ユニット0件）で訳文には本文がある場合は、訳文に触らず中止する。
+	// 全選択して消した直後・別の内容へ差し替える途中・コードフェンスの崩れなど、
+	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
+	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
+	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
+	// unit-state の末尾行を刈らない条件（unit-state-align の pruneEntriesFrom）と同じ考え方。
+	if (source.units.length === 0 && target.units.length > 0) {
+		logger.warn(
+			"sync",
+			"Source has no units while target still has content; skipped to avoid emptying the translation",
+			{ sourceFile, targetFile, targetUnits: target.units.length },
+		);
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: target.units.length,
+			sourceEmptied: 1,
 		};
 	}
 

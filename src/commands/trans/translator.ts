@@ -21,6 +21,49 @@ import {
 import type { TranslationContext } from "./translation-context";
 
 /**
+ * コードブロックのプレースホルダを元のコードブロックへ戻す。
+ *
+ * 複数行のコードブロックが行の途中に戻ると開始フェンス（```）が行頭に来ず、
+ * Markdown としてコードブロックでなくなる。するとブロックの中身
+ * （サンプルの見出しや mdait マーカー風の文字列）が本文として読まれ、
+ * ユニット境界を誤って作り本文を失う（design.md P9 の趣旨）。
+ * AI がプレースホルダを前後の文とつなげて1行にまとめることは実際に起きるため、
+ * 戻すときに行頭・行末へ来るよう改行を補う。
+ *
+ * @param text プレースホルダを含むテキスト
+ * @param placeholders プレースホルダ文字列（codeBlocks と同じ並び）
+ * @param codeBlocks 元のコードブロック文字列
+ * @returns コードブロックを復元したテキスト
+ */
+export function restoreCodeBlocks(
+	text: string,
+	placeholders: string[],
+	codeBlocks: string[],
+): string {
+	let result = text;
+	for (let i = 0; i < placeholders.length; i++) {
+		const placeholder = placeholders[i];
+		const block = codeBlocks[i];
+		const isMultiline = block.includes("\n");
+		let searchFrom = 0;
+		while (true) {
+			const idx = result.indexOf(placeholder, searchFrom);
+			if (idx === -1) {
+				break;
+			}
+			const before = result.slice(0, idx);
+			const after = result.slice(idx + placeholder.length);
+			const leading = isMultiline && before !== "" && !before.endsWith("\n") ? "\n" : "";
+			const trailing = isMultiline && after !== "" && !after.startsWith("\n") ? "\n" : "";
+			const replacement = `${leading}${block}${trailing}`;
+			result = before + replacement + after;
+			searchFrom = before.length + replacement.length;
+		}
+	}
+	return result;
+}
+
+/**
  * 用語候補情報
  */
 export interface TermSuggestion {
@@ -481,12 +524,12 @@ export class AITranslator implements Translator {
 		codeBlocks: string[],
 		placeholders: string[],
 	): TranslationResult {
-		let content = parsed.translation;
-
 		// プレースホルダー復元
-		for (let i = 0; i < placeholders.length; i++) {
-			content = content.replaceAll(placeholders[i], codeBlocks[i]);
-		}
+		const content = restoreCodeBlocks(
+			parsed.translation,
+			placeholders,
+			codeBlocks,
+		);
 
 		// サニタイズ処理
 		const sanitized = sanitizeTranslationOutput(content);
@@ -506,12 +549,12 @@ export class AITranslator implements Translator {
 		codeBlocks: string[],
 		placeholders: string[],
 	): RevisionPatchResult {
-		let content = parsed.targetPatch;
-
 		// プレースホルダー復元
-		for (let i = 0; i < placeholders.length; i++) {
-			content = content.replaceAll(placeholders[i], codeBlocks[i]);
-		}
+		const content = restoreCodeBlocks(
+			parsed.targetPatch,
+			placeholders,
+			codeBlocks,
+		);
 
 		// サニタイズ処理
 		const sanitized = sanitizeTranslationOutput(content);
@@ -532,10 +575,7 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 		error?: ValidationError,
 	): TranslationResult {
-		let text = rawResponse;
-		for (let i = 0; i < placeholders.length; i++) {
-			text = text.replaceAll(placeholders[i], codeBlocks[i]);
-		}
+		const text = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
 
 		const sanitized = sanitizeTranslationOutput(text);
 
@@ -558,10 +598,7 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 		error?: ValidationError,
 	): RevisionPatchResult {
-		let text = rawResponse;
-		for (let i = 0; i < placeholders.length; i++) {
-			text = text.replaceAll(placeholders[i], codeBlocks[i]);
-		}
+		const text = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
 
 		const sanitized = sanitizeTranslationOutput(text);
 

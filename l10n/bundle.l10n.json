@@ -420,6 +420,7 @@
   "✨Translate now": "✨Translate now",
   "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.": "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.",
   "Synchronization completed: {0} succeeded, {1} failed": "Synchronization completed: {0} succeeded, {1} failed",
+  "Sync skipped {0} file(s): the source has no content while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.": "Sync skipped {0} file(s): the source has no content while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
   "How to restore": "How to restore",
   "Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.": "Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
   "An error occurred during synchronization: {0}": "An error occurred during synchronization: {0}",
