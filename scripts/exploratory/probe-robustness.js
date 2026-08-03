@@ -458,8 +458,27 @@ const CODE_SRC = [
 	"",
 ].join("\n");
 
+/**
+ * 既定の翻訳ペア（ja → en の1本）。
+ * シナリオが `pairs` で別の組を指定できるようにしたため、指定が無いときは必ずここへ戻す
+ * （前のシナリオが書き換えた mdait.json を次のシナリオが引き継がないようにするため）。
+ */
+const DEFAULT_PAIRS = [{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "en", targetDir: "content/en" }];
+
+/** 訳文2言語（ja → en, ja → fr）。多言語構成のシナリオ用 */
+const MULTI_PAIRS = [
+	{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "en", targetDir: "content/en" },
+	{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "fr", targetDir: "content/fr" },
+];
+
+/** 対象言語の選択を差し替える（sync が走査するペアを絞る） */
+function selectTargets(keys) {
+	const { SelectionState } = require(path.join(REPO, "out/core/status/selection-state.js"));
+	SelectionState.getInstance().updateSelection(keys);
+}
+
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
-async function bootstrap(mode, src) {
+async function bootstrap(mode, src, pairs) {
 	const t = (label, p) => {
 		const s = Date.now();
 		return Promise.resolve(p()).then((r) => {
@@ -469,11 +488,14 @@ async function bootstrap(mode, src) {
 	};
 	resetAll();
 	write("ja/guide.md", src || SRC);
-	await t("setMode", () => setMode(mode));
+	await t("setMode", () => setMode(mode, pairs || DEFAULT_PAIRS));
 	await t("sync1", () => syncCommand());
 	installFakeAi();
-	const tgt = path.join(CONTENT, "en/guide.md");
-	if (fs.existsSync(tgt)) await t("trans", () => transCommand(vscode.Uri.file(tgt)));
+	// 全ペアの訳文を翻訳しておく（多言語シナリオでは fr 側も翻訳済みにする）
+	for (const p of pairs || DEFAULT_PAIRS) {
+		const tgt = path.join(WS, p.targetDir, "guide.md");
+		if (fs.existsSync(tgt)) await t(`trans:${p.targetLang}`, () => transCommand(vscode.Uri.file(tgt)));
+	}
 	await t("sync2", () => syncCommand());
 }
 
@@ -483,7 +505,7 @@ async function scenario(name, mutate, opts) {
 	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
 	if (ONLY && !ONLY.includes(name.split(" ")[0])) return;
 	for (const mode of ["embedded", "external"]) {
-		await bootstrap(mode, opts && opts.src);
+		await bootstrap(mode, opts && opts.src, opts && opts.pairs);
 		const before = { src: unitsOf("ja/guide.md"), tgt: unitsOf("en/guide.md"), us: unitState() };
 		try {
 			await mutate(mode);
@@ -991,6 +1013,33 @@ async function main() {
 			moveChapterToEnd("ja/guide.md", "## 第1章");
 			editBody("ja/guide.md", "第1章の本文。", "第1章の本文（改訂）。");
 		});
+
+		// ---- S62〜: 多言語構成（走査対象外のペアの状態が守られるか） ----
+
+		// S62: ja→en と ja→fr の2ペアがある構成で、en だけを選んで sync する。
+		//      走査していない fr の状態が消えないかを見る（消えると fr が全 need:review に倒れる）。
+		await scenario(
+			"S62 多言語（en/fr）で en だけ選んで sync → 全選択に戻す",
+			async () => {
+				selectTargets(["en"]);
+				editBody("ja/guide.md", "第2章の本文。", "第2章の本文（改訂）。");
+				await syncCommand();
+				selectTargets(["en", "fr"]);
+			},
+			{ pairs: MULTI_PAIRS },
+		);
+
+		// S63: S62 の最小形。原文を1文字も触らず、en だけ選んで sync するだけ。
+		//      「走査対象外」を「実体が無い」と取り違えていないかを、編集の影響抜きで見る。
+		await scenario(
+			"S63 多言語（en/fr）で en だけ選んで sync（編集なし）",
+			async () => {
+				selectTargets(["en"]);
+				await syncCommand();
+				selectTargets(["en", "fr"]);
+			},
+			{ pairs: MULTI_PAIRS },
+		);
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
 		restoreWorkspace();

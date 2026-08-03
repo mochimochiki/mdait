@@ -136,13 +136,52 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			});
 		}
 		// ユニットが減ったときに末尾の旧エントリが残ると、次に増えたときそれを拾ってしまう。
-		// ただし units が空のときは刈らない（本文を一時的に空にした・パース途中の
-		// 崩れた状態で、そのファイルの行を丸ごと失わないため）。
-		if (units.length > 0) {
+		// ただし「一時的に減っただけ」のときは刈らない（下記 shouldPruneTail）。
+		if (shouldPruneTail(this.store.countEntriesByPath(filePath), units.length, filePath)) {
 			this.store.pruneEntriesFrom(filePath, units.length);
 		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
 	}
+}
+
+/**
+ * 「一時的に減っただけかもしれない」と疑い始める減少幅（件）。
+ * これ未満の減少は、章をいくつか消したという普通の編集として刈る。
+ */
+const MIN_SUSPICIOUS_DROP = 3;
+
+/**
+ * 末尾の余った行を刈ってよいか。
+ *
+ * 守りたいのは「ユニットが 0 件になった」ときだけではなく「**一時的に減った**」ときである。
+ * コードブロックの閉じ忘れでパースが崩れる、`sync.level` の設定を変えて見出しの粒度が
+ * 変わる、といった理由でユニット数は簡単に激減する。その状態で刈ると、原因を直して
+ * ユニット数が戻っても、消えた `from`/`need` は戻らない。
+ *
+ * 刈らずに残した行は害が小さい。突き合わせは内容で行うので（`unit-state-align.ts`）、
+ * 余った行は内容が一致しないかぎり拾われないし、章が戻ってくれば正しく拾われる。
+ * 消す側の失敗は取り返せず、残す側の失敗は取り返せる。非対称なので残す側に倒す。
+ */
+export function shouldPruneTail(entryCount: number, unitCount: number, filePath?: string): boolean {
+	if (unitCount === 0) {
+		// 本文を一時的に空にした・パース途中の崩れた状態。そのファイルの行を丸ごと失わない
+		return false;
+	}
+	const dropped = entryCount - unitCount;
+	if (dropped <= 0) {
+		return true; // 減っていない（刈るものが無い）
+	}
+	// 比率だけで見ると 2 件が 1 件になっただけで止まってしまうので、絶対件数の下限を併せる
+	if (dropped >= MIN_SUSPICIOUS_DROP && unitCount * 2 < entryCount) {
+		logger.warn("marker", "Skipped pruning unit-state entries: unit count dropped sharply", {
+			path: filePath,
+			entries: entryCount,
+			units: unitCount,
+			note: "If this is not a real deletion (unclosed code fence, sync.level change), fix it and sync again — the state is kept.",
+		});
+		return false;
+	}
+	return true;
 }
 
 /**

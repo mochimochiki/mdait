@@ -16,6 +16,8 @@ import { FrontMatter } from "../../core/markdown/front-matter";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
+import { alignEntriesToUnits } from "../../core/unit-state/unit-state-align";
+import type { UnitStateEntry } from "../../core/unit-state/unit-state-store";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
@@ -32,6 +34,12 @@ const logger = Logger.getInstance();
  * sync のたびに同じ警告を繰り返さないためのセッション内の記録。
  */
 const levelZeroExternalizeWarned = new Set<string>();
+
+/**
+ * embed で「本文に書き戻せなかった行を残した」警告を出したファイル。
+ * reconcile 経由で sync のたびに通るため、同じ警告を繰り返さないためのセッション内の記録。
+ */
+const embedOrphanWarned = new Set<string>();
 
 /** 変換対象の MD ファイル（絶対パス + ロール） */
 export interface MigrationTarget {
@@ -121,8 +129,16 @@ export function externalizeFileMarkers(
 
 /**
  * 単一 MD ファイルへ外部ストアのマーカーを書き戻す（external → embedded）。
- * 書き戻し後、この MD ファイルの unit-state エントリを削除する
- * （非MDファイルの order:0 エントリは別パスなので影響しない）。
+ *
+ * 書き戻せた行だけを store から消す。**本文に書き戻せなかった行は残す。**
+ * 本文のユニットと行の対応は内容で決まるため（`alignEntriesToUnits`）、行の数だけ
+ * ユニットがあるとは限らない。対応の付かなかった行を一緒に消すと、その `from`/`need` は
+ * 本文にも store にも残らず、復旧手段が無くなる。
+ *
+ * 「消せなかった行があるならファイル単位で削除を見送る」案も採れるが、そうすると
+ * 書き戻し済みの行まで残り、本文（＝これ以降の正）と二重に持つことになる。二重に持った
+ * 状態は embedded 運用のあいだ静かに古くなるので、残すのは「本文に居場所の無い行」だけにする。
+ *
  * store.save() は呼ばない（一括実行の完了時に1回保存する）。
  */
 export function embedFileMarkers(
@@ -133,23 +149,50 @@ export function embedFileMarkers(
 ): MigrateFileResult {
 	const content = fs.readFileSync(absPath, "utf-8");
 	const relPath = toWorkspaceRelativePath(absPath);
+	const entries = store.getEntriesByPath(relPath);
 	const parsed = markdownParser.parse(content, config, externalMarkerProvider, { filePath: relPath, role });
-	const unitsMigrated = parsed.units.filter((u) => Boolean(u.marker?.hash)).length;
+
+	// parse の attach と同じ対応表を作り直す（同じ入力に対する純粋関数なので同じ結果になる）。
+	// どの行がどのユニットへ書き戻されたかを知るために要る。
+	const aligned = alignEntriesToUnits(entries, parsed.units);
+	const embeddedEntries = new Set<UnitStateEntry>();
+
 	// store にエントリの無いユニット（本文のユニット数がエントリ数より多い場合など）には
 	// マーカー行を出力しない。hash 空のままだと本文へ空スタブ `<!-- mdait -->` が
 	// 書き込まれてしまう。マーカーは次回 sync が正しく付与する（自己修復）。
-	for (const unit of parsed.units) {
+	for (let i = 0; i < parsed.units.length; i++) {
+		const unit = parsed.units[i];
 		if (!unit.marker?.hash) {
 			(unit as { marker: unknown }).marker = undefined;
+			continue;
+		}
+		const entry = aligned[i];
+		if (entry) {
+			embeddedEntries.add(entry);
 		}
 	}
+	const unitsMigrated = embeddedEntries.size;
+
 	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
 	const changed = out !== content;
 	if (changed) {
 		fs.writeFileSync(absPath, out, "utf-8");
 	}
-	for (const entry of store.getEntriesByPath(relPath)) {
-		store.removeEntry(relPath, entry.order);
+
+	const orphanedEntries = entries.filter((e) => !embeddedEntries.has(e));
+	for (const entry of entries) {
+		if (embeddedEntries.has(entry)) {
+			store.removeEntry(relPath, entry.order);
+		}
+	}
+	// 同じファイルで sync のたびに同じ警告を繰り返さない（reconcile 経由で毎回通るため）
+	if (orphanedEntries.length > 0 && !embedOrphanWarned.has(relPath)) {
+		embedOrphanWarned.add(relPath);
+		logger.warn(
+			"markers",
+			"Kept unit-state entries that could not be written back into the file (no matching unit in the body)",
+			{ file: relPath, kept: orphanedEntries.length, orders: orphanedEntries.map((e) => e.order) },
+		);
 	}
 	return { changed, unitsMigrated, unitsDropped: 0 };
 }

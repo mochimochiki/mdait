@@ -144,13 +144,30 @@ export async function syncCommand(
 			UnitStateStore.getInstance().load(mdaitDir);
 		}
 
-		// orphanクリーンアップ用: 全pairの有効ターゲットパスを収集
-		const validTargetPaths = new Set<string>();
+		// orphanクリーンアップ用: 「今回どこを走査し、そこで何を見つけたか」を集める。
+		// 走査していないディレクトリ（未選択の pair など）は scannedDirs に入らないため、
+		// そこの行は「見つからなかった」ではなく「確かめていない」として残る。
+		const scannedDirs = new Set<string>();
+		const seenPaths = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
 			// ソースファイル一覧を取得（extensions対応）
 			const fileExplorer = new FileExplorer();
+
+			// 走査範囲の登録。ソースディレクトリが手元に無い（sparse checkout・ブランチ切替・
+			// 設定ミス）ときは「見に行けなかった」だけなので範囲に入れない
+			const sourceDirAbs = path.resolve(config.getConfigBaseDir(), pair.sourceDir);
+			const targetDirAbs = path.resolve(config.getConfigBaseDir(), pair.targetDir);
+			if (fs.existsSync(sourceDirAbs)) {
+				scannedDirs.add(toWorkspaceRelativePath(sourceDirAbs));
+				scannedDirs.add(toWorkspaceRelativePath(targetDirAbs));
+			} else {
+				logger.warn("sync", "Source directory not found; skipping unit-state cleanup for this pair", {
+					sourceDir: pair.sourceDir,
+				});
+			}
+
 			const files = await fileExplorer.getSourceFiles(
 				pair.sourceDir,
 				config,
@@ -167,24 +184,18 @@ export async function syncCommand(
 				continue;
 			}
 
-			// 有効パスを収集（unit-state の orphan クリーンアップ用）
-			// - 非MD: ターゲットパス（order:0 の1エントリ）
-			// - MD-external: ソース・ターゲット両方（複数 order エントリ）。entry キーと一致させるため
-			//   toWorkspaceRelativePath で正規化する
-			const externalMarkers = config.isExternalMarkers();
+			// 実在を確認したパスを収集（unit-state の orphan クリーンアップ用）。
+			// キーは `UnitStateEntry.path` と同じ基準（ワークスペースルート相対）にそろえる。
+			// FileExplorer.normalizePath は設定ベースディレクトリ相対なので、カスタム config
+			// パスでは基準が食い違い、非MDの行が毎 sync 全滅する（docs/design/unit-state.md §5-(4)）。
+			//
+			// MD もマーカー保管方式に関わらず収集する。embedded 運用でも、embed で本文へ
+			// 書き戻せなかった行がストアに残ることがあり、それを掃除で消してしまわないため。
 			for (const file of files) {
-				const isMd = path.extname(file).toLowerCase() === ".md";
-				if (!isMd) {
-					const tgt = fileExplorer.getTargetPath(file, pair);
-					if (tgt) {
-						validTargetPaths.add(fileExplorer.normalizePath(tgt));
-					}
-				} else if (externalMarkers) {
-					validTargetPaths.add(toWorkspaceRelativePath(file));
-					const tgt = fileExplorer.getTargetPath(file, pair);
-					if (tgt) {
-						validTargetPaths.add(toWorkspaceRelativePath(tgt));
-					}
+				seenPaths.add(toWorkspaceRelativePath(file));
+				const tgt = fileExplorer.getTargetPath(file, pair);
+				if (tgt) {
+					seenPaths.add(toWorkspaceRelativePath(tgt));
 				}
 			}
 
@@ -301,7 +312,10 @@ export async function syncCommand(
 		// UnitStateStoreのorphanクリーンアップ＋保存
 		if (mdaitDir) {
 			const unitStateStore = UnitStateStore.getInstance();
-			const orphansRemoved = unitStateStore.cleanupOrphans(validTargetPaths);
+			const orphansRemoved = unitStateStore.cleanupOrphansInScope({
+				scannedDirs: [...scannedDirs],
+				seenPaths,
+			});
 			if (orphansRemoved > 0) {
 				logger.info("sync", "Cleaned up orphan unit-state entries", {
 					orphansRemoved,
