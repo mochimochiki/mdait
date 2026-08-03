@@ -85,12 +85,6 @@ async function setMode(mode, pairs) {
 }
 
 function resetAll() {
-	// gray-matter は内容文字列をキーに parse 結果を溜め、mdait はその data を破壊的に書き換えるため、
-	// シナリオ間で同じ内容のファイルを作り直すと前のシナリオの frontmatter マーカーが返る。
-	// シナリオ同士を独立させるためここで捨てる（1シナリオ内で起きる同現象は S35 で測る）。
-	try {
-		require(path.join(REPO, "node_modules/gray-matter")).clearCache();
-	} catch {}
 	rmrf(CONTENT);
 	fs.mkdirSync(CONTENT, { recursive: true });
 	for (const name of ["unit-state", "unit-registry", "reports"]) rmrf(path.join(MDAIT, name));

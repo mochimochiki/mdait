@@ -64,8 +64,14 @@ export class FrontMatter {
 		content: string;
 		frontMatterLineOffset: number;
 	} {
-		const parsed = matter(markdown);
-		const data = parsed.data as FrontMatterData;
+		// gray-matter は内容文字列をキーに parse 結果を溜め、同じ内容には同じ data の参照を返す
+		// （返り値は浅いコピーなので data だけが共有される）。FrontMatter は _data を破壊的に
+		// 書き換えるため、そのまま持つとキャッシュ側が書き換え後の値に汚染され、
+		// 同じ内容のファイルを開き直しても前回の書き換え結果が返ってくる。
+		// オプションを渡してキャッシュを使わせず、さらに data は自前の複製を持つ
+		// （FrontMatter が _data の所有者であることを、gray-matter の実装に依存せず保証する）。
+		const parsed = matter(markdown, {});
+		const data = structuredClone(parsed.data) as FrontMatterData;
 		const content = parsed.content;
 
 		// フロントマターの生文字列を抽出
