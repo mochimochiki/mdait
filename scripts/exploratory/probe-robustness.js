@@ -335,12 +335,61 @@ async function scenario(name, mutate, opts) {
 				.sort(),
 			us: unitState(),
 		};
-		results.push({ name, mode, before, after, dump: opts && opts.dump ? opts.dump() : null });
+		// 両モードの突き合わせに使う「文書の見え方」。unit-state の中身は
+		// external にしか無いので比較には含めない（比べたいのは結果であって保管形式ではない）。
+		const view = [`files: ${after.files.join(", ")}`, ...after.files.map((f) => fmtUnits(f))].join("\n");
+		results.push({ name, mode, view });
 		origLog(`\n===== ${name} / ${mode} =====`);
 		origLog(`  files: ${after.files.join(", ")}`);
 		for (const f of after.files) origLog(`  ${fmtUnits(f).split("\n").join("\n  ")}`);
 		if (mode === "external") origLog(`  --- unit-state ---\n${after.us.replace(/^/gm, "  ")}`);
 	}
+}
+
+/**
+ * 両モードで結果が違ってよいシナリオと、その理由。
+ * ここに無いシナリオで差が出たら、どちらかの入口だけが直った（または壊れた）ということ。
+ */
+const EXPECTED_DIFF = {
+	S6: "ファイルの同一性（パス）の話。行の追随は未対応",
+	S7: "同上",
+	S8: "同上",
+	S9: "同上",
+	S10: "リネームを含むため（章の挿入・編集の部分は一致している）",
+	S11: "unit-state を消す操作なので embedded には影響が無い",
+	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
+	S28: "リネームを含むため（並べ替えの部分は一致している）",
+};
+
+/** シナリオごとに embedded と external の結果を突き合わせる */
+function reportModeParity() {
+	const byName = new Map();
+	for (const r of results) {
+		if (!byName.has(r.name)) byName.set(r.name, {});
+		byName.get(r.name)[r.mode] = r.view;
+	}
+	const unexpected = [];
+	let same = 0;
+	let expectedDiff = 0;
+	origLog("\n========== embedded と external の突き合わせ ==========");
+	for (const [name, v] of byName) {
+		if (v.embedded === undefined || v.external === undefined) continue;
+		const key = name.split(" ")[0];
+		if (v.embedded === v.external) {
+			same++;
+			if (EXPECTED_DIFF[key]) {
+				origLog(`  [注意] ${name}: 差が出る想定だったが一致した（EXPECTED_DIFF の見直しどき）`);
+			}
+		} else if (EXPECTED_DIFF[key]) {
+			expectedDiff++;
+			origLog(`  [想定内の差] ${name} — ${EXPECTED_DIFF[key]}`);
+		} else {
+			unexpected.push(name);
+			origLog(`  [不一致] ${name}`);
+		}
+	}
+	origLog(`\n一致 ${same} / 想定内の差 ${expectedDiff} / 想定外の差 ${unexpected.length}`);
+	return unexpected.length;
 }
 
 async function main() {
@@ -551,9 +600,10 @@ async function main() {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
 		restoreWorkspace();
 	}
+	const unexpected = ONLY ? 0 : reportModeParity();
 	origLog("\n========== DONE ==========");
 	// 保留中のタイマー/ウォッチャで終了しないため明示的に落とす
-	process.exit(0);
+	process.exit(unexpected > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

@@ -60,13 +60,13 @@ export async function deleteUnitFromFile(
 			};
 		}
 
-		const oldLength = parsed.units.length;
 		const title = target.title;
 		parsed.units.splice(index, 1);
 
-		// external: detachMarkers は 0..newLength-1 のみ書き戻すため、末尾の旧エントリを刈り取る
+		// external: detachMarkers の刈り取りは units が空のとき働かない（誤って全行を失わないため）。
+		// ここは「最後の1ユニットを消した」場合も含めて意図的な削除なので、明示的に刈る。
 		if (config.isExternalMarkers() && io.ctx?.filePath) {
-			UnitStateStore.getInstance().removeEntry(io.ctx.filePath, oldLength - 1);
+			UnitStateStore.getInstance().pruneEntriesFrom(io.ctx.filePath, parsed.units.length);
 		}
 
 		const result: DeleteUnitResult = {
