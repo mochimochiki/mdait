@@ -538,6 +538,17 @@ const EXPECTED_DIFF = {
 	S11: "unit-state を消す操作なので embedded には影響が無い",
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
 	S28: "リネームを含むため（並べ替えの部分は一致している）",
+	S50: "章を消したうえで残りを見出しごと全面改稿。どの章が消えたかを示す情報がファイルに残らない（外部ストア方式の構造的な限界）",
+	S56: "同上（訳文側を全面改稿してから原文の章を削除）",
+};
+
+/**
+ * まだ直していない既知の欠陥。想定内の差とは分けて数え、毎回はっきり出す。
+ * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
+ */
+const KNOWN_BUGS = {
+	S55: "訳文の行頭にマーカー風の文字列が現れると external は無傷の訳文まで need:translate に落とす。突き合わせの外側（マーカー行の解釈）の問題で、embedded も別の形で壊れる",
+	S58: "同上（編集ゼロでも差が出る最小形）",
 };
 
 /** シナリオごとに embedded と external の結果を突き合わせる */
@@ -550,15 +561,19 @@ function reportModeParity() {
 	const unexpected = [];
 	let same = 0;
 	let expectedDiff = 0;
+	let knownBugs = 0;
 	origLog("\n========== embedded と external の突き合わせ ==========");
 	for (const [name, v] of byName) {
 		if (v.embedded === undefined || v.external === undefined) continue;
 		const key = name.split(" ")[0];
 		if (v.embedded === v.external) {
 			same++;
-			if (EXPECTED_DIFF[key]) {
-				origLog(`  [注意] ${name}: 差が出る想定だったが一致した（EXPECTED_DIFF の見直しどき）`);
+			if (EXPECTED_DIFF[key] || KNOWN_BUGS[key]) {
+				origLog(`  [注意] ${name}: 差が出る想定だったが一致した（一覧の見直しどき）`);
 			}
+		} else if (KNOWN_BUGS[key]) {
+			knownBugs++;
+			origLog(`  [未修正の既知欠陥] ${name} — ${KNOWN_BUGS[key]}`);
 		} else if (EXPECTED_DIFF[key]) {
 			expectedDiff++;
 			origLog(`  [想定内の差] ${name} — ${EXPECTED_DIFF[key]}`);
@@ -567,7 +582,9 @@ function reportModeParity() {
 			origLog(`  [不一致] ${name}`);
 		}
 	}
-	origLog(`\n一致 ${same} / 想定内の差 ${expectedDiff} / 想定外の差 ${unexpected.length}`);
+	origLog(
+		`\n一致 ${same} / 想定内の差 ${expectedDiff} / 未修正の既知欠陥 ${knownBugs} / 想定外の差 ${unexpected.length}`,
+	);
 	return unexpected.length;
 }
 

@@ -124,11 +124,18 @@ suite("unit-state-align", () => {
 			assert.deepStrictEqual(linkedFrom(rows, [ch3, editedElsewhere, ch2]), ["s3", "s1", "s2"]);
 		});
 
-		test("章を移動したうえで、残り2章を見出しごと書き換えた場合", () => {
+		// 章を移動したうえで、別の章を見出しごと丸ごと書き換えた場合、書き換えた章には
+		// 手がかりが1つも残らない（本文も見出しもレベルも一致しない）。これは「消して
+		// 新しく足した」と区別がつかないため、対応が付かないのが正しい。
+		// ここで無理に余り同士を結ぶと、別の場所で消えた章の訳文が新しく増えた章に
+		// 割り当てられる（実測 S54）。移動していない側の対応が保たれることだけを固定する。
+		test("章を移動したうえで別の章を見出しごと書き換えても、動かした章の対応は保たれること", () => {
 			const rows4 = [rowOf(intro, 0, "s0"), rowOf(ch1, 1, "s1"), rowOf(ch2, 2, "s2"), rowOf(ch3, 3, "s3")];
 			const renamedA = unit("まったく別の章", "まったく別の本文。");
 			const renamedB = unit("さらに別の章", "さらに別の本文。");
-			assert.deepStrictEqual(linkedFrom(rows4, [ch3, intro, renamedA, renamedB]), ["s3", "s0", "s1", "s2"]);
+			const linked = linkedFrom(rows4, [ch3, intro, renamedA, renamedB]);
+			assert.deepStrictEqual(linked.slice(0, 2), ["s3", "s0"]);
+			assert.strictEqual(new Set(linked.filter((x) => x !== null)).size, linked.filter((x) => x !== null).length);
 		});
 
 		test("移動だけで編集していなければ、当然そのままの対応になること", () => {
