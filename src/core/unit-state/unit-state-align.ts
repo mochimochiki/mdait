@@ -55,7 +55,9 @@ export function alignEntriesToUnits(
 	//    順序が入れ替わっていても採用する（章を並べ替えても対応が入れ替わらないのはこのため）。
 	const entriesByHash = groupBy(entries.length, (e) => entries[e].hash);
 	const unitsByHash = groupBy(units.length, (u) => unitHashes[u]);
-	const ambiguous: AlignAnchor[] = [];
+	// 同じ本文の章が複数ある場合。どれとどれを結ぶかは前後関係で決めるので、
+	// 候補の組み立ては区間が決まってから行う（先に総当たりを作ると区間の数だけ舐め直すことになる）
+	const ambiguousGroups: Array<{ entryIdxs: number[]; unitIdxs: number[] }> = [];
 	for (const [hash, entryIdxs] of entriesByHash) {
 		if (!hash) continue;
 		const unitIdxs = unitsByHash.get(hash);
@@ -63,12 +65,7 @@ export function alignEntriesToUnits(
 		if (entryIdxs.length === 1 && unitIdxs.length === 1) {
 			link(entryIdxs[0], unitIdxs[0]);
 		} else {
-			// 同じ本文の章が複数ある場合。どれとどれを結ぶかは前後関係で決める（後段）
-			for (const e of entryIdxs) {
-				for (const u of unitIdxs) {
-					ambiguous.push({ a: e, b: u });
-				}
-			}
+			ambiguousGroups.push({ entryIdxs, unitIdxs });
 		}
 	}
 
@@ -76,20 +73,28 @@ export function alignEntriesToUnits(
 	//    枠から外れた組（＝移動された章）も対応は保つが、区間の境界には使わない。
 	const frame = selectMonotonicAnchors(matched);
 
-	// 3. 区間ごとに、残りを弱い手がかりの順に埋めていく
+	// 3. 区間ごとに、残りを弱い手がかりの順に埋めていく。
+	//    区間は互いに素なので、候補の組み立てを区間の中で行えば総量は変わらない。
+	const additions: AlignAnchor[] = [];
+	const linkInGap = (a: number, b: number): void => {
+		link(a, b);
+		additions.push({ a, b });
+	};
 	for (const gap of gapsBetweenAnchors(entries.length, units.length, frame)) {
-		const inGap = (c: AlignAnchor): boolean =>
-			c.a >= gap.aStart &&
-			c.a < gap.aEnd &&
-			c.b >= gap.bStart &&
-			c.b < gap.bEnd &&
-			!usedEntries.has(c.a) &&
-			!usedUnits.has(c.b);
-
 		// 3a. 同じ本文が複数ある分は、この区間に収まる組み合わせだけを単調性で決める
-		for (const pick of selectMonotonicAnchors(ambiguous.filter(inGap))) {
+		const ambiguousInGap: AlignAnchor[] = [];
+		for (const group of ambiguousGroups) {
+			for (const e of group.entryIdxs) {
+				if (e < gap.aStart || e >= gap.aEnd || usedEntries.has(e)) continue;
+				for (const u of group.unitIdxs) {
+					if (u < gap.bStart || u >= gap.bEnd || usedUnits.has(u)) continue;
+					ambiguousInGap.push({ a: e, b: u });
+				}
+			}
+		}
+		for (const pick of selectMonotonicAnchors(ambiguousInGap)) {
 			if (!usedEntries.has(pick.a) && !usedUnits.has(pick.b)) {
-				link(pick.a, pick.b);
+				linkInGap(pick.a, pick.b);
 			}
 		}
 
@@ -106,15 +111,38 @@ export function alignEntriesToUnits(
 		}
 		for (const pick of selectMonotonicAnchors(titleCandidates)) {
 			if (!usedEntries.has(pick.a) && !usedUnits.has(pick.b)) {
-				link(pick.a, pick.b);
+				linkInGap(pick.a, pick.b);
 			}
 		}
 	}
 
-	// 4. それでも残ったものは区間内の順序で埋める（見出しごと書き換えられた章がここで拾われる）
-	const finalFrame = selectMonotonicAnchors(matched);
+	// 4. それでも残ったものは区間内の順序で埋める（見出しごと書き換えられた章がここで拾われる）。
+	//    枠は「段階2の枠 ＋ 段階3で区間の中に足した分」。区間は互いに素で段階3の追加も
+	//    区間内で単調なので、この和は単調である。ここで単調部分列を取り直すと、
+	//    同じ長さの別の解に乗り換えて段階1で確定した錨が枠から落ちうるため、取り直さない。
+	const finalFrame = [...frame, ...additions].sort((x, y) => x.a - y.a);
 	for (const pair of fillGaps(entries.length, units.length, finalFrame, usedEntries, usedUnits)) {
 		link(pair.a, pair.b);
+	}
+
+	// 5. 最後の受け皿: 区間に関係なく、余った行と余ったユニットを順序で当てる。
+	//
+	//    章を移動したうえで編集すると、確定した対応が交差するため区間の枠が崩れ、
+	//    余った行と余ったユニットが別々の区間に取り残されることがある。そのまま
+	//    「対応なし」で返すと、その訳文ユニットは from を失って新規扱いになり、
+	//    次の翻訳で人の訳が上書きされる。**行が余っているのにユニットを対応なしに
+	//    しない**ことを、対応の正しさより優先する（誤った from は revise になるが、
+	//    from の消失は translate になり、訳文が失われるため）。
+	const leftoverEntries: number[] = [];
+	for (let e = 0; e < entries.length; e++) {
+		if (!usedEntries.has(e)) leftoverEntries.push(e);
+	}
+	const leftoverUnits: number[] = [];
+	for (let u = 0; u < units.length; u++) {
+		if (!usedUnits.has(u)) leftoverUnits.push(u);
+	}
+	for (let i = 0; i < Math.min(leftoverEntries.length, leftoverUnits.length); i++) {
+		link(leftoverEntries[i], leftoverUnits[i]);
 	}
 	return result;
 }

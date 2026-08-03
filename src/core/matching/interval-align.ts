@@ -105,10 +105,32 @@ function approximateAnchors(candidates: readonly AlignAnchor[]): AlignAnchor[] {
 /**
  * 錨で区切られた区間の一覧を返す。錨そのものは含まない。
  *
+ * 返す区間は必ず互いに素で、a も b も昇順に並ぶ。錨が単調でない場合
+ * （並べ替えられた要素をそのまま渡した場合など）は、順序を巻き戻す錨を
+ * 区切りとして使わずに読み飛ばす。区間が重なると `fillGaps` が同じ添字を
+ * 二度使ってしまうため、ここで必ず単調にしておく。
+ *
  * @param lenA 左の並びの長さ
  * @param lenB 右の並びの長さ
- * @param anchors a 昇順・単調な錨（`selectMonotonicAnchors` の出力を想定）
+ * @param anchors 錨（`selectMonotonicAnchors` の出力を想定。単調でなくても壊れない）
  */
+export function normalizeAnchors(anchors: readonly AlignAnchor[]): AlignAnchor[] {
+	const sorted = [...anchors].sort((x, y) => (x.a !== y.a ? x.a - y.a : x.b - y.b));
+	const kept: AlignAnchor[] = [];
+	let lastA = -1;
+	let lastB = -1;
+	for (const anchor of sorted) {
+		// 区切りに使えるのは、両側とも直前の錨より後ろにある錨だけ
+		if (anchor.a <= lastA || anchor.b <= lastB) {
+			continue;
+		}
+		kept.push(anchor);
+		lastA = anchor.a;
+		lastB = anchor.b;
+	}
+	return kept;
+}
+
 export function gapsBetweenAnchors(
 	lenA: number,
 	lenB: number,
@@ -117,7 +139,7 @@ export function gapsBetweenAnchors(
 	const gaps: Array<{ aStart: number; aEnd: number; bStart: number; bEnd: number }> = [];
 	let aCursor = 0;
 	let bCursor = 0;
-	for (const anchor of anchors) {
+	for (const anchor of normalizeAnchors(anchors)) {
 		if (anchor.a > aCursor || anchor.b > bCursor) {
 			gaps.push({ aStart: aCursor, aEnd: anchor.a, bStart: bCursor, bEnd: anchor.b });
 		}
@@ -142,16 +164,19 @@ export function gapsBetweenAnchors(
  * @returns a の昇順（a が null の組は対応する b の位置に現れる）
  */
 export function alignByAnchors(lenA: number, lenB: number, anchors: readonly AlignAnchor[]): AlignedPair[] {
-	const usedA = new Set<number>(anchors.map((x) => x.a));
-	const usedB = new Set<number>(anchors.map((x) => x.b));
-	const filled = fillGaps(lenA, lenB, anchors, usedA, usedB);
+	// 単調でない錨は区切りに使えない（区間が重なり、同じ添字を二度使ってしまう）。
+	// 落ちた錨の添字は未使用として扱い、区間の順序埋めに回す。
+	const normalized = normalizeAnchors(anchors);
+	const usedA = new Set<number>(normalized.map((x) => x.a));
+	const usedB = new Set<number>(normalized.map((x) => x.b));
+	const filled = fillGaps(lenA, lenB, normalized, usedA, usedB);
 	for (const pair of filled) {
 		usedA.add(pair.a);
 		usedB.add(pair.b);
 	}
 
 	const bByA = new Map<number, number>();
-	for (const pair of [...anchors, ...filled]) {
+	for (const pair of [...normalized, ...filled]) {
 		bByA.set(pair.a, pair.b);
 	}
 

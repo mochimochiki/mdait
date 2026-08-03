@@ -107,6 +107,71 @@ suite("unit-state-align", () => {
 		assert.deepStrictEqual(linkedFrom(rows, [intro, ch2, notice, ch3]), ["s0", "s2", "s3", "s4"]);
 	});
 
+	// 章を移動したうえで編集すると確定した対応が交差し、区間の枠が崩れる。
+	// 余った行と余ったユニットが別々の区間に取り残されて対応なしになると、
+	// その訳文は from を失って新規扱いになり、次の翻訳で人の訳が上書きされる。
+	// 行が余っている限りユニットを対応なしにしないことを固定する。
+	suite("章の移動と編集が重なっても、行が余っている限り対応なしを作らない", () => {
+		const movedEdited = unit("第3章", "第3章の本文（改訂）。");
+		const editedElsewhere = unit("第1章", "第1章の本文（改訂）。");
+		const rows = [rowOf(ch1, 0, "s1"), rowOf(ch2, 1, "s2"), rowOf(ch3, 2, "s3")];
+
+		test("末尾の章を先頭へ移動し、その章を編集した場合", () => {
+			assert.deepStrictEqual(linkedFrom(rows, [movedEdited, ch1, ch2]), ["s3", "s1", "s2"]);
+		});
+
+		test("末尾の章を先頭へ移動し、別の章を編集した場合", () => {
+			assert.deepStrictEqual(linkedFrom(rows, [ch3, editedElsewhere, ch2]), ["s3", "s1", "s2"]);
+		});
+
+		test("章を移動したうえで、残り2章を見出しごと書き換えた場合", () => {
+			const rows4 = [rowOf(intro, 0, "s0"), rowOf(ch1, 1, "s1"), rowOf(ch2, 2, "s2"), rowOf(ch3, 3, "s3")];
+			const renamedA = unit("まったく別の章", "まったく別の本文。");
+			const renamedB = unit("さらに別の章", "さらに別の本文。");
+			assert.deepStrictEqual(linkedFrom(rows4, [ch3, intro, renamedA, renamedB]), ["s3", "s0", "s1", "s2"]);
+		});
+
+		test("移動だけで編集していなければ、当然そのままの対応になること", () => {
+			assert.deepStrictEqual(linkedFrom(rows, [ch3, ch1, ch2]), ["s3", "s1", "s2"]);
+		});
+	});
+
+	test("同じ本文の章が3つある文書を並べ替えても、どれも対応を失わないこと", () => {
+		const notice = unit("注意事項", "安全に配慮してください。");
+		const other = unit("M章", "Mの本文。");
+		const last = unit("Z章", "Zの本文。");
+		const rows = [
+			rowOf(ch1, 0, "s0"),
+			rowOf(notice, 1, "s1"),
+			rowOf(other, 2, "s2"),
+			rowOf(notice, 3, "s3"),
+			rowOf(last, 4, "s4"),
+			rowOf(notice, 5, "s5"),
+		];
+		// 先頭と末尾から2番目を入れ替える
+		const linked = linkedFrom(rows, [last, notice, other, notice, ch1, notice]);
+		assert.strictEqual(
+			linked.filter((x) => x === null).length,
+			0,
+			`対応なしが出ないこと（実際: ${JSON.stringify(linked)}）`,
+		);
+		assert.strictEqual(new Set(linked).size, linked.length, "同じ行が二度使われないこと");
+	});
+
+	test("同一本文が多い大きな文書でも現実的な時間で終わること", () => {
+		const many = 1600;
+		const built = [];
+		for (let i = 0; i < many; i++) {
+			built.push(i % 2 === 0 ? unit("共通", "同じ本文。") : unit(`章${i}`, `本文${i}`));
+		}
+		const rows = built.map((u, i) => rowOf(u, i, `s${i}`));
+		const edited = built.map((u, i) => (i % 7 === 0 ? unit(u.title, `書き換え${i}`) : u));
+		const started = Date.now();
+		alignEntriesToUnits(rows, edited);
+		const elapsed = Date.now() - started;
+		assert.ok(elapsed < 1000, `1秒未満で終わること（実際: ${elapsed}ms）`);
+	});
+
 	test("行が1件も無ければ、すべて対応なしになること", () => {
 		assert.deepStrictEqual(linkedFrom([], [intro, ch1]), [null, null]);
 	});

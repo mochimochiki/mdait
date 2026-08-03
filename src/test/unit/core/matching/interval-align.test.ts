@@ -86,6 +86,19 @@ suite("interval-align", () => {
 			]);
 		});
 
+		test("単調でない錨を渡しても、区間が重ならないこと", () => {
+			// 区間が重なると fillGaps が同じ添字を二度使ってしまう。
+			// 順序を巻き戻す錨は区切りに使わず読み飛ばす。
+			const gaps = gapsBetweenAnchors(8, 8, [
+				{ a: 5, b: 3 },
+				{ a: 1, b: 5 },
+			]);
+			for (let i = 1; i < gaps.length; i++) {
+				assert.ok(gaps[i].aStart >= gaps[i - 1].aEnd, "a の区間が重ならないこと");
+				assert.ok(gaps[i].bStart >= gaps[i - 1].bEnd, "b の区間が重ならないこと");
+			}
+		});
+
 		test("すき間が無ければ区間は生まれないこと", () => {
 			const gaps = gapsBetweenAnchors(2, 2, [
 				{ a: 0, b: 0 },
@@ -123,6 +136,17 @@ suite("interval-align", () => {
 				{ a: 2, b: 2 },
 			]);
 			assert.deepStrictEqual(format(pairs), ["0→0", "1→1", "2→2"]);
+		});
+
+		test("単調でない錨を渡しても、同じ添字が二度現れないこと", () => {
+			const pairs = alignByAnchors(2, 4, [
+				{ a: 0, b: 3 },
+				{ a: 1, b: 0 },
+			]);
+			const as = pairs.filter((p) => p.a !== null).map((p) => p.a);
+			const bs = pairs.filter((p) => p.b !== null).map((p) => p.b);
+			assert.strictEqual(new Set(as).size, as.length, "a が重複しないこと");
+			assert.strictEqual(new Set(bs).size, bs.length, "b が重複しないこと");
 		});
 	});
 });
