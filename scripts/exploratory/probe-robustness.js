@@ -224,6 +224,60 @@ function mergeChapterIntoPrevious(rel, heading) {
 	lines.splice(r[0], r[1] - r[0], ...kept);
 	write(rel, lines.join("\n"));
 }
+/**
+ * 同じ見出しが何度も出てくる文書のために、n 番目（0始まり）の出現に対する章ブロック範囲を返す。
+ * blockRange と同じ規則（embedded では直前のマーカー行も含める）。
+ */
+function blockRangeNth(lines, heading, n) {
+	let seen = -1;
+	let h = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading) {
+			seen++;
+			if (seen === n) {
+				h = i;
+				break;
+			}
+		}
+	}
+	if (h < 0) return null;
+	let start = h;
+	if (h > 0 && /^<!--\s*mdait\b/.test(lines[h - 1].trim())) start = h - 1;
+	let end = lines.length;
+	for (let i = h + 1; i < lines.length; i++) {
+		if (/^#{1,6}\s/.test(lines[i]) || /^<!--\s*mdait\b/.test(lines[i].trim())) {
+			end = i;
+			break;
+		}
+	}
+	return [start, end];
+}
+/** n 番目（0始まり）の同名見出しの章ブロックを丸ごと削除する */
+function removeChapterNth(rel, heading, n) {
+	const lines = read(rel).split("\n");
+	const r = blockRangeNth(lines, heading, n);
+	if (!r) throw new Error(`chapter not found: ${heading}#${n}`);
+	lines.splice(r[0], r[1] - r[0]);
+	write(rel, lines.join("\n"));
+}
+/** n 番目（0始まり）の同名見出しの章ブロックの直前に新しい章を挿入する */
+function insertChapterBeforeNth(rel, heading, n, block) {
+	const lines = read(rel).split("\n");
+	const r = blockRangeNth(lines, heading, n);
+	if (!r) throw new Error(`chapter not found: ${heading}#${n}`);
+	lines.splice(r[0], 0, ...block.split("\n"));
+	write(rel, lines.join("\n"));
+}
+/** 章ブロックを丸ごと文書末尾へ移す（embedded ではマーカーごと動く＝人が切り貼りした形） */
+function moveChapterToEnd(rel, heading) {
+	const lines = read(rel).split("\n");
+	const r = blockRangeNth(lines, heading, 0);
+	if (!r) throw new Error(`chapter not found: ${heading}`);
+	const block = lines.slice(r[0], r[1]);
+	lines.splice(r[0], r[1] - r[0]);
+	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+	write(rel, [...lines, "", ...block].join("\n"));
+}
 /** 見出し行のレベルだけを変える（本文・マーカーは触らない） */
 function changeHeadingLevel(rel, heading, newHeading) {
 	const lines = read(rel).split("\n");
@@ -278,6 +332,131 @@ const DUP_SRC = [
 
 /** frontmatter を持つ原文（S33/S34 用。frontmatter マーカーは現状どちらのモードでも本文側に残る） */
 const FM_SRC = ["---", 'title: "ガイド"', 'description: "ガイドの説明"', "---", "", ...SRC.split("\n")].join("\n");
+
+// ---- S40〜 用の「病的な文書」たち ----
+
+/** まったく同じ本文の章が3つある原文（S40〜S42） */
+const TRIPLE_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 注意事項",
+	"",
+	"安全に配慮してください。",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+	"## 注意事項",
+	"",
+	"安全に配慮してください。",
+	"",
+	"## 第3章",
+	"",
+	"第3章の本文。",
+	"",
+	"## 注意事項",
+	"",
+	"安全に配慮してください。",
+	"",
+].join("\n");
+
+/** 本文が空の章（見出しだけの章）が並ぶ原文。うち2つは見出しまで同一（S43・S44） */
+const HEADONLY_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 用語",
+	"",
+	"## 記法",
+	"",
+	"## 予約",
+	"",
+	"## 予約",
+	"",
+	"## まとめ",
+	"",
+	"まとめの本文。",
+	"",
+].join("\n");
+
+/** 同じ見出しがレベル違いで同居する原文（S45・S46） */
+const LEVEL_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 概要",
+	"",
+	"概要の本文。",
+	"",
+	"### 概要",
+	"",
+	"詳細な概要の本文。",
+	"",
+	"## 手順",
+	"",
+	"手順の本文。",
+	"",
+	"### 概要",
+	"",
+	"もうひとつの詳細。",
+	"",
+].join("\n");
+
+/** 見出しに属さない前書きから始まる原文（S47・S48） */
+const PREAMBLE_SRC = [
+	"前書きの文章。どの見出しにも属さない。",
+	"",
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 第1章",
+	"",
+	"第1章の本文。",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+].join("\n");
+
+/** ユニットが1つしかない原文（S52・S53） */
+const SINGLE_SRC = ["# ただ一つの章", "", "唯一の本文。", ""].join("\n");
+
+/** 20 章を持つ原文（S54） */
+const MANY_SRC = ["# 手引き", "", "導入の文章。", ""]
+	.concat(
+		Array.from({ length: 20 }, (_, i) => [`## 第${i + 1}節`, "", `第${i + 1}節の本文。`, ""]).reduce((a, b) => a.concat(b), []),
+	)
+	.join("\n");
+
+/** コードブロックの中に mdait マーカーらしき文字列がある原文（design.md P9・S55） */
+const CODE_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## コード例",
+	"",
+	"マーカーの書き方は次のとおりです。",
+	"",
+	"```markdown",
+	"<!-- mdait 12345678 from:87654321 need:translate -->",
+	"## サンプル章",
+	"",
+	"サンプルの本文。",
+	"```",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+].join("\n");
 
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
 async function bootstrap(mode, src) {
@@ -596,6 +775,205 @@ async function main() {
 			},
 			{ src: FM_SRC, transAfter: ["en/guide.md"] },
 		);
+
+		// ---- S40〜: 内容照合アルゴリズムが苦手そうな「病的な文書」 ----
+
+		// S40: 同一本文の章が3つ。真ん中を消すと、残り2つのどちらが消えたか本文からは決まらない
+		await scenario(
+			"S40 同一本文の章が3つ、真ん中を削除",
+			async () => {
+				removeChapterNth("ja/guide.md", "## 注意事項", 1);
+			},
+			{ src: TRIPLE_SRC },
+		);
+
+		// S41: 同一本文の章が3つ。2つ目と3つ目のあいだに新章を挿入
+		await scenario(
+			"S41 同一本文の章が3つ、2つ目と3つ目の間に新章を挿入",
+			async () => {
+				insertChapterBeforeNth("ja/guide.md", "## 注意事項", 2, "## 第2.5章\n\n第2.5章の本文。\n");
+			},
+			{ src: TRIPLE_SRC },
+		);
+
+		// S42: 同一本文の章が3つ。末尾側を削除しつつ、その手前の章を編集（錨がずれる）
+		await scenario(
+			"S42 同一本文の章が3つ、末尾を削除＋第2章を編集",
+			async () => {
+				removeChapterNth("ja/guide.md", "## 注意事項", 2);
+				editBody("ja/guide.md", "第2章の本文。", "第2章の本文（改訂）。");
+			},
+			{ src: TRIPLE_SRC },
+		);
+
+		// S43: 見出しだけの章が並ぶ文書から、中間の見出しだけの章を削除
+		await scenario(
+			"S43 見出しだけの章が並ぶ文書から中間を削除",
+			async () => {
+				removeChapter("ja/guide.md", "## 記法");
+			},
+			{ src: HEADONLY_SRC },
+		);
+
+		// S44: 見出しだけの章（うち2つは見出しまで同一）の2つ目の直前に、見出しだけの章を挿入
+		await scenario(
+			"S44 見出しだけ・同名の章の間に見出しだけの章を挿入",
+			async () => {
+				insertChapterBeforeNth("ja/guide.md", "## 予約", 1, "## 追加\n");
+			},
+			{ src: HEADONLY_SRC },
+		);
+
+		// S45: 同名見出しがレベル違いで同居する文書から、最初の「### 概要」を削除
+		await scenario(
+			"S45 同名見出し（レベル違い同居）の最初の ### 概要 を削除",
+			async () => {
+				removeChapterNth("ja/guide.md", "### 概要", 0);
+			},
+			{ src: LEVEL_SRC },
+		);
+
+		// S46: 「## 概要」を「### 概要」へ降格。見出しハッシュ＋レベルが他の章と衝突する
+		await scenario(
+			"S46 ## 概要 を ### へ降格（同名 ### が2つある文書）",
+			async () => {
+				changeHeadingLevel("ja/guide.md", "## 概要", "### 概要");
+			},
+			{ src: LEVEL_SRC },
+		);
+
+		// S47: 見出しに属さない前書きを編集する
+		await scenario(
+			"S47 見出しの無い前書きを編集",
+			async () => {
+				editBody("ja/guide.md", "前書きの文章。どの見出しにも属さない。", "前書きの文章（改訂）。どの見出しにも属さない。");
+			},
+			{ src: PREAMBLE_SRC },
+		);
+
+		// S48: 見出しに属さない前書きを丸ごと削除する（先頭ユニットが消える）
+		await scenario(
+			"S48 見出しの無い前書きを削除",
+			async () => {
+				const lines = read("ja/guide.md").split("\n");
+				const h = lines.findIndex((l) => l.trim() === "# ドキュメント");
+				let start = h;
+				if (h > 0 && /^<!--\s*mdait\b/.test(lines[h - 1].trim())) start = h - 1;
+				write("ja/guide.md", lines.slice(start).join("\n"));
+			},
+			{ src: PREAMBLE_SRC },
+		);
+
+		// S49: 全ユニットの見出しも本文も同時に書き換える（手がかりが1つも残らない）
+		await scenario("S49 全ユニットの見出しと本文を同時に全面改稿", async () => {
+			editBody("ja/guide.md", "# ドキュメント", "# 手引き");
+			editBody("ja/guide.md", "導入の文章。", "はじめにお読みください。");
+			editBody("ja/guide.md", "## 第1章", "## 概論");
+			editBody("ja/guide.md", "第1章の本文。", "概論の中身。");
+			editBody("ja/guide.md", "## 第2章", "## 各論");
+			editBody("ja/guide.md", "第2章の本文。", "各論の中身。");
+			editBody("ja/guide.md", "## 第3章", "## 結論");
+			editBody("ja/guide.md", "第3章の本文。", "結論の中身。");
+		});
+
+		// S50: 第1章を削除しつつ、残る第2章・第3章を見出しごと全面改稿
+		//      （どの章が消えたかを示す手がかりが本文に一切残らない）
+		await scenario("S50 第1章を削除＋第2章・第3章を見出しごと全面改稿", async () => {
+			removeChapter("ja/guide.md", "## 第1章");
+			editBody("ja/guide.md", "## 第2章", "## 各論");
+			editBody("ja/guide.md", "第2章の本文。", "各論の中身。");
+			editBody("ja/guide.md", "## 第3章", "## 結論");
+			editBody("ja/guide.md", "第3章の本文。", "結論の中身。");
+		});
+
+		// S51: 章を入れ替え、さらに移動した片方を編集（確定した対応が単調でなくなる）
+		await scenario("S51 第2章と第3章を入れ替え＋第3章を編集", async () => {
+			swapChapters("ja/guide.md", "## 第2章", "## 第3章");
+			editBody("ja/guide.md", "第3章の本文。", "第3章の本文（改訂）。");
+		});
+
+		// S52: ユニットが1つしかない文書の本文を編集
+		await scenario(
+			"S52 ユニットが1つだけの文書を編集",
+			async () => {
+				editBody("ja/guide.md", "唯一の本文。", "唯一の本文（改訂）。");
+			},
+			{ src: SINGLE_SRC },
+		);
+
+		// S53: ユニットが1つしかない文書を空にする（ユニット0件＝行の刈り取りが止まる境界）
+		await scenario(
+			"S53 ユニットが1つだけの文書を空にする",
+			async () => {
+				write("ja/guide.md", "");
+			},
+			{ src: SINGLE_SRC },
+		);
+
+		// S54: 20 章の文書に、挿入・削除・削除・編集を同時に加える
+		await scenario(
+			"S54 20章の文書へ複数箇所の挿入・削除・編集",
+			async () => {
+				insertChapterBefore("ja/guide.md", "## 第5節", "## 第4.5節\n\n第4.5節の本文。\n");
+				removeChapter("ja/guide.md", "## 第10節");
+				removeChapter("ja/guide.md", "## 第15節");
+				editBody("ja/guide.md", "第18節の本文。", "第18節の本文（改訂）。");
+			},
+			{ src: MANY_SRC },
+		);
+
+		// S55: コードブロックの中にマーカーらしき文字列がある文書へ章を挿入し、別の章を編集
+		await scenario(
+			"S55 コードブロック内にマーカー風文字列がある文書へ章挿入＋編集",
+			async () => {
+				insertChapterBefore("ja/guide.md", "## コード例", "## 前置き\n\n前置きの本文。\n");
+				editBody("ja/guide.md", "第2章の本文。", "第2章の本文（改訂）。");
+			},
+			{ src: CODE_SRC },
+		);
+
+		// S56: 訳文側だけを大きく編集（章削除＋見出しごと改稿）してから、原文の構造も変える
+		await scenario("S56 訳文を大幅改稿（章削除＋見出し改稿）→原文の章を削除", async () => {
+			removeChapter("en/guide.md", "## 第1章 第1章の本文。 [MT]");
+			editBody("en/guide.md", "## 第2章 第2章の本文。 [MT]", "## Chapter Two, fully rewritten by hand");
+			editBody("en/guide.md", "## 第3章 第3章の本文。 [MT]", "## Chapter Three, fully rewritten by hand");
+			removeChapter("ja/guide.md", "## 第2章");
+		});
+
+		// S57: 先頭寄りの章を文書の末尾へ移動する（並べ替えの極端形）
+		await scenario("S57 第1章を文書の末尾へ移動", async () => {
+			moveChapterToEnd("ja/guide.md", "## 第1章");
+		});
+
+		// S58: S55 の切り分け。コードブロック内にマーカー風文字列があるだけで（編集ゼロで）
+		//      両モードが食い違うかを見る
+		await scenario("S58 コードブロック内マーカー風文字列・操作なし", async () => {}, { src: CODE_SRC });
+
+		// S59: S51 の最小形。3ユニットの文書で2章を入れ替え、そのうち片方を編集する
+		await scenario(
+			"S59 最小形: 2章を入れ替え＋一方を編集",
+			async () => {
+				swapChapters("ja/guide.md", "## A", "## B");
+				editBody("ja/guide.md", "Bの本文。", "Bの本文（改訂）。");
+			},
+			{ src: ["# ドキュメント", "", "導入の文章。", "", "## A", "", "Aの本文。", "", "## B", "", "Bの本文。", ""].join("\n") },
+		);
+
+		// S61: 訳文の既存章の本文に、マーカー風文字列を含むコードブロックを書き足す
+		//      （マーカーを翻訳した文書を訳す、という実際に起きる状況。S58 の訳文側版）
+		await scenario("S61 訳文の章にマーカー風文字列入りコードブロックを書き足す", async () => {
+			editBody(
+				"en/guide.md",
+				"## 第2章 第2章の本文。 [MT]",
+				["## 第2章 第2章の本文。 [MT]", "", "```markdown", "<!-- mdait 12345678 from:87654321 need:translate -->", "## Sample", "```"].join("\n"),
+			);
+		});
+
+		// S60: 移動と編集の合わせ技（入れ替えでなく片道の移動でも同じことが起きるか）
+		await scenario("S60 第1章を末尾へ移動＋その第1章を編集", async () => {
+			moveChapterToEnd("ja/guide.md", "## 第1章");
+			editBody("ja/guide.md", "第1章の本文。", "第1章の本文（改訂）。");
+		});
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
 		restoreWorkspace();
