@@ -1,5 +1,6 @@
 import { Logger } from "../../infra/logging/logger";
 import { calculateHash } from "../hash/hash-calculator";
+import { alignEntriesToUnits } from "../unit-state/unit-state-align";
 import { UnitStateStore } from "../unit-state/unit-state-store";
 import { MdaitMarker } from "./mdait-marker";
 import type { MdaitUnit } from "./mdait-unit";
@@ -94,23 +95,26 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			return;
 		}
 		const entries = this.store.getEntriesByPath(filePath);
+		// 「何番目か」ではなく中身で突き合わせる。章の挿入・削除・並べ替えで
+		// 対応がずれないようにするため（詳細は unit-state-align.ts）。
+		const aligned = alignEntriesToUnits(entries, units);
+		let unmatchedUnits = 0;
 		for (let i = 0; i < units.length; i++) {
-			const entry = entries[i];
+			const entry = aligned[i];
 			if (!entry) {
-				// エントリ不足: マーカー不在のまま（sync が need 判定で自己修復）
+				// 対応する行が無い＝新しく増えたユニット。マーカー不在のまま sync が新規と判定する
+				unmatchedUnits++;
 				continue;
 			}
-			// titleHash は補助検証のみ。不一致でも index マッチを採用する
-			const expected = calculateHash(units[i].title);
-			if (entry.titleHash && entry.titleHash !== expected) {
-				logger.debug("marker", "titleHash mismatch (index match used)", {
-					path: filePath,
-					order: i,
-					expected,
-					stored: entry.titleHash,
-				});
-			}
 			units[i].marker = new MdaitMarker(entry.hash, entry.from || null, entry.need || null);
+		}
+		if (unmatchedUnits > 0 || entries.length !== units.length) {
+			logger.debug("marker", "attached external markers", {
+				path: filePath,
+				entries: entries.length,
+				units: units.length,
+				unmatchedUnits,
+			});
 		}
 	}
 
@@ -130,6 +134,12 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				from: unit.marker?.from ?? "",
 				need: unit.marker?.need ?? "",
 			});
+		}
+		// ユニットが減ったときに末尾の旧エントリが残ると、次に増えたときそれを拾ってしまう。
+		// ただし units が空のときは刈らない（本文を一時的に空にした・パース途中の
+		// 崩れた状態で、そのファイルの行を丸ごと失わないため）。
+		if (units.length > 0) {
+			this.store.pruneEntriesFrom(filePath, units.length);
 		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
 	}

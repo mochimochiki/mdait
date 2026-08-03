@@ -22,6 +22,22 @@ npm run test:explore   # compile → scripts/exploratory/run-sweep.js
 | `vscode-shim.js` | `src/test/unit/__mocks__` の vscode モックを読み込み、commands 層が使う API（`withProgress`/`commands`/`findFiles` など）を実FS委譲で増補 |
 | `fake-ai.js` | trans が要求する JSON エンベロープ `{"translation": ...}` を返す構造化フェイク。`AIServiceBuilder.prototype.build` を差し替えて全 AI 経路へ注入 |
 | `run-sweep.js` | 総なめランナー（P1 sync 冪等/マーカー整合、P2 translate、P3 revise、P4 非MD、P5 external 正規フロー、P6 モード切替→sync 自己修復）。共有 `mdait.json` は snapshot/restore して汚さない |
+| `probe-robustness.js` | 頑健性プローブ（調査用・CI 非対象）。編集・章の挿入/削除/並べ替え・リネーム・フォルダ移動・ファイル削除・外部変更を **embedded と external の両方で同じ手順で流し**、sync 後の状態を並べて出す。判定はせず観察結果を出力するだけ |
+
+### probe-robustness.js の使い方
+
+```bash
+npm run compile && node scripts/exploratory/probe-robustness.js                       # S0〜S14 を全部流す
+npm run compile && PROBE_ONLY=S3,S13 node scripts/exploratory/probe-robustness.js     # シナリオを絞る
+npm run compile && PROBE_TIME=1 node scripts/exploratory/probe-robustness.js          # 各ステップの所要時間も出す
+npm run compile && PROBE_KEEP=1 node scripts/exploratory/probe-robustness.js          # 終了時に復元せず最終状態を残す
+```
+
+テストワークスペース（`src/test/unit/workspace` の `content` と `.mdait`）を破壊的に書き換えるが、
+終了時に `copy-test-files` で自動復元する。`PROBE_KEEP=1` で復元を止めた場合は、後で
+`npm run copy-test-files` を自分で実行すること（`mdait.json` は常に元に戻る）。
+
+読み方と実測結果の評価は [docs/design/unit-state.md](../../docs/design/unit-state.md) を参照。
 
 ## 前提
 
