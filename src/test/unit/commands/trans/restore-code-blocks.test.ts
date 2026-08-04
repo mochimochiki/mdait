@@ -5,6 +5,7 @@
 // バッククォートの位置から切り出すと行頭の前置きが取り残されて壊れる。
 
 import { strict as assert } from "node:assert";
+import { resolveFileType } from "../../../../commands/file-handler/file-type";
 import { isMarkdownExtension, protectCodeBlocks, restoreCodeBlocks } from "../../../../commands/trans/translator";
 
 /** AI が何も変えなかったときの往復 */
@@ -116,9 +117,31 @@ suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と
 			assert.strictEqual(isMarkdownExtension(undefined), true);
 			assert.strictEqual(isMarkdownExtension(".md"), true);
 			assert.strictEqual(isMarkdownExtension(".MD"), true);
-			assert.strictEqual(isMarkdownExtension(".markdown"), true);
 			assert.strictEqual(isMarkdownExtension(".txt"), false);
 			assert.strictEqual(isMarkdownExtension(".json"), false);
+		});
+
+		test("拡張子の判定が resolveFileType と食い違わないこと", () => {
+			// 食い違うと「ハンドラは plain として扱うのに退避だけ Markdown 規則」になり、
+			// 字下げした本文が翻訳から外れる（ADR-260804-01 と同じ症状が別経路で復活する）
+			for (const ext of [".md", ".markdown", ".mdx", ".txt", ".json", ".csv", ".MD", ""]) {
+				assert.strictEqual(
+					isMarkdownExtension(ext),
+					resolveFileType(`sample${ext}`) === "md",
+					`拡張子 ${JSON.stringify(ext)} の扱いが resolveFileType とずれている`,
+				);
+			}
+		});
+
+		test("Markdown 以外の拡張子（.markdown / .mdx）は plain として扱うこと", () => {
+			// resolveFileType が md とするのは .md だけ。ここを広げると
+			// PlainFileHandler が扱うファイルに Markdown 規則が当たる
+			assert.strictEqual(isMarkdownExtension(".markdown"), false);
+			assert.strictEqual(isMarkdownExtension(".mdx"), false);
+
+			const source = ["見出し", "", "    字下げした本文", "", "以上。"].join("\n");
+			const { codeBlocks } = protectCodeBlocks(source, { markdown: isMarkdownExtension(".markdown") });
+			assert.deepStrictEqual(codeBlocks, []);
 		});
 
 		test("字下げしただけの本文を退避しないこと（翻訳から外さない）", () => {

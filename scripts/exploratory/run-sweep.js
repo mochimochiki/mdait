@@ -237,7 +237,7 @@ async function phase3() {
 async function phase4() {
 	const P = "P4-nonmd";
 	resetWorkspace();
-	await loadConfigAndSelectAll({ extensions: [".txt", ".csv"] });
+	await loadConfigAndSelectAll({ extensions: [".txt", ".csv", ".json"] });
 
 	const r1 = await syncCommand();
 	const us1 = readUnitState();
@@ -262,6 +262,34 @@ async function phase4() {
 		else fail(P, "en/notice.txt", `非MD trans 後も need 残存: ${need}`, line);
 	} catch (e) {
 		fail(P, "en/notice.txt", "非MD transCommand が例外", String(e && e.message));
+	}
+
+	// JSON ファイルも例外なく訳し切れること（need が残らないこと）。
+	// なお「JSON を訳すと need:review が立つ」偽陽性は**ここでは測れない**。
+	// フェイクAIが出力から波括弧を落とすため、JSON 混入検出がそもそも発火しない。
+	// その回帰は単体テスト（plain-translation-review.test.ts）で守っている。
+	const jsonTgt = path.join(CONTENT, "en/config-sample.json");
+	try {
+		await transCommand(vscode.Uri.file(jsonTgt));
+		const line = readUnitState().split("\n").find((l) => l.includes("en/config-sample.json")) || "";
+		const need = line.split("\t")[6] || "";
+		if (need === "") ok(P, "JSON 翻訳後に need クリアOK");
+		else fail(P, "en/config-sample.json", `JSON 翻訳後も need 残存: ${need}`, line);
+	} catch (e) {
+		fail(P, "en/config-sample.json", "JSON transCommand が例外", String(e && e.message));
+	}
+
+	// 字下げした本文が翻訳されること。Markdown の「4スペース＝コードブロック」を
+	// 非MDファイルに当てると、字下げ行が AI に渡らず訳文に原文が残る。
+	const outlineTgt = path.join(CONTENT, "en/outline.txt");
+	try {
+		await transCommand(vscode.Uri.file(outlineTgt));
+		const out = fs.readFileSync(outlineTgt, "utf8");
+		const untouched = ["    背景", "    目的", "    体制", "    - 検索が速くなりました"].filter((l) => out.includes(l));
+		if (untouched.length === 0) ok(P, "非MDの字下げ本文も翻訳されるOK");
+		else fail(P, "en/outline.txt", `字下げ本文が原文のまま残る（${untouched.length}行）`, untouched.join(" / "));
+	} catch (e) {
+		fail(P, "en/outline.txt", "outline transCommand が例外", String(e && e.message));
 	}
 
 	// 原文変更 → sync で revise@oldhash 付与

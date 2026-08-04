@@ -9,6 +9,7 @@ import type {
 } from "../../prompts/prompt-provider";
 import { buildUserMessage } from "../../prompts/prompt-provider";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
+import { resolveFileTypeFromExtension } from "../file-handler/file-type";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
@@ -51,13 +52,21 @@ export interface ProtectCodeBlocksOptions {
 	markdown?: boolean;
 }
 
-/** Markdown として読む拡張子か（未指定は Markdown 経路とみなす） */
+/**
+ * Markdown として読む拡張子か（未指定は Markdown 経路とみなす）。
+ *
+ * 判定は持たず `resolveFileTypeFromExtension`（拡張子から種別を決める唯一の定義）へ委ねる。
+ * ここで独自に拡張子を並べると、`PlainFileHandler` が plain として扱うファイルに
+ * 退避だけ Markdown の規則が当たり、字下げした本文が翻訳から外れる
+ * （＝ADR-260804-01 で直した症状が別経路で復活する）。
+ */
 export function isMarkdownExtension(fileExtension?: string): boolean {
-	if (!fileExtension) {
+	// 拡張子を持ち回らないのは Markdown 経路だけ。非Markdown経路は必ず
+	// `path.extname()` の結果を入れる（拡張子なしのファイルは空文字＝plain）。
+	if (fileExtension === undefined) {
 		return true;
 	}
-	const ext = fileExtension.toLowerCase();
-	return ext === ".md" || ext === ".markdown" || ext === ".mdx";
+	return resolveFileTypeFromExtension(fileExtension) === "md";
 }
 
 /**
@@ -235,6 +244,12 @@ export interface TranslationResult {
 	termSuggestions?: TermSuggestion[];
 	/** 警告メッセージ */
 	warnings?: string[];
+	/**
+	 * AI の応答から消えていて戻せなかったコードブロックの数。
+	 * `warnings` は JSON 混入検出など別種の指摘も混ざるため、
+	 * 「本文が失われた」ことだけを見たい呼び出し側はこちらを使う。
+	 */
+	droppedCodeBlocks?: number;
 	/** 統計情報（将来の拡張用） */
 	stats?: {
 		/** 推定使用トークン数 */
@@ -252,6 +267,8 @@ export interface RevisionPatchResult {
 	termSuggestions?: TermSuggestion[];
 	/** 警告メッセージ */
 	warnings?: string[];
+	/** AI の応答から消えていて戻せなかったコードブロックの数（TranslationResult と同義） */
+	droppedCodeBlocks?: number;
 	/** 統計情報（将来の拡張用） */
 	stats?: {
 		/** 推定使用トークン数 */
@@ -677,6 +694,7 @@ export class AITranslator implements Translator {
 				...sanitized.warnings,
 				...(parsed.warnings ?? []),
 			],
+			droppedCodeBlocks: restored.missing.length,
 		};
 	}
 
@@ -706,6 +724,7 @@ export class AITranslator implements Translator {
 				...sanitized.warnings,
 				...(parsed.warnings ?? []),
 			],
+			droppedCodeBlocks: restored.missing.length,
 		};
 	}
 
@@ -730,6 +749,7 @@ export class AITranslator implements Translator {
 				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 			],
+			droppedCodeBlocks: restored.missing.length,
 		};
 	}
 
@@ -754,6 +774,7 @@ export class AITranslator implements Translator {
 				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 			],
+			droppedCodeBlocks: restored.missing.length,
 		};
 	}
 

@@ -17,7 +17,20 @@ export type FileType = "md" | "plain";
  * Markdown 以外はすべて「ファイル＝単一ユニット」の plain として扱う。
  */
 export function resolveFileType(filePath: string): FileType {
-	return path.extname(filePath).toLowerCase() === ".md" ? "md" : "plain";
+	return resolveFileTypeFromExtension(path.extname(filePath));
+}
+
+/**
+ * 拡張子（`.txt` のような先頭ドット付き）からファイル種別を判定する。
+ *
+ * パスではなく拡張子しか持たない場所（翻訳時の `TranslationContext.fileExtension` など）
+ * のための入口。`path.extname(".txt")` は空文字を返すのでパス版には渡せない。
+ * 規則そのものはここ1か所に置く。
+ *
+ * @param fileExtension 先頭ドット付きの拡張子。空文字（拡張子なし）は plain
+ */
+export function resolveFileTypeFromExtension(fileExtension: string): FileType {
+	return fileExtension.toLowerCase() === ".md" ? "md" : "plain";
 }
 
 /**
