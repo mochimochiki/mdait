@@ -984,11 +984,12 @@ export async function sync_CoreProc(
 	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）。
 	// 独立ユニットはポリシーに関わらず保持、マーカーなし孤立は need:review で一次受けする）
 	//
-	// ただし「原文がごっそり対応を失った」ときは自動削除しない（下記 resolveOrphanPolicy）。
+	// ただし「原文の構造が潰れた」ときは自動削除しない（下記 resolveOrphanPolicy）。
 	const orphanCandidates = countDanglingOrphans(matchResult, independentTargets);
 	const withheldPolicy = resolveOrphanPolicy(
 		config.getOrphanTargetPolicy(),
-		target.units.length,
+		countManagedTargets(target.units, independentTargets),
+		countExportedSources(source.units),
 		orphanCandidates,
 		targetFile,
 	);
@@ -1072,7 +1073,31 @@ function countDanglingOrphans(
 }
 
 /**
- * 孤立ユニットの扱いを決める。**原文がごっそり対応を失ったときは自動削除しない。**
+ * 自動削除の対象になりうる訳文ユニット（＝原文と対応しているはずのユニット）の数を数える。
+ *
+ * 独立ユニット・`need:isolate`・マーカーなしの管理外コンテンツは、もともと自動削除の
+ * 対象ではないので数えない。この数が「原文の構造が潰れたか」を測るときの分母になる。
+ */
+function countManagedTargets(targetUnits: readonly MdaitUnit[], independentTargets: ReadonlySet<MdaitUnit>): number {
+	let count = 0;
+	for (const unit of targetUnits) {
+		if (independentTargets.has(unit) || unit.marker?.need === "isolate") continue;
+		if (unit.marker?.from || unit.marker?.need === "verify-deletion") {
+			count++;
+		}
+	}
+	return count;
+}
+
+/**
+ * 下流へ出る原文ユニット（`need:isolate` は伝播しないので除く）の数を数える。
+ */
+function countExportedSources(sourceUnits: readonly MdaitUnit[]): number {
+	return sourceUnits.filter((u) => u.marker?.need !== "isolate").length;
+}
+
+/**
+ * 孤立ユニットの扱いを決める。**原文の構造が潰れたときは自動削除しない。**
  *
  * 原文にコードブロックの閉じ忘れが1つ入るだけで、以降の見出しが全部コードとして飲まれ、
  * 訳文の章がまとめて「原文を失った」状態になる。既定設定（`sync.autoDelete: true`）では
@@ -1081,11 +1106,23 @@ function countDanglingOrphans(
  *
  * `unit-state` の行を守るのと同じ判定（`isSuspiciousShrink`）を本文にも当てる。
  * 行だけ守って本文を消していては「見えていないものを無いと断定しない」原則が成立しない。
+ * 慎重さは削除側（`DELETE_SUSPICION`）を使う。崩れは文書の大きさに関係なく1ユニットまで
+ * 潰すので、「残りが1件以下」なら減少幅が1件でも疑う。刈り取り側の下限（3件）をそのまま
+ * 使うと、見出し2つの README のような小さい文書が素通りする。
  *
- * ただし慎重さは削除側のほう（`DELETE_SUSPICION`）を使う。崩れは文書の大きさに関係なく
- * 1ユニットまで潰すので、「対応が1件以下しか残らない」なら減少幅が1件でも疑う。
- * 刈り取り側の下限（3件）をそのまま使うと、見出し2つの README のような小さい文書が
- * 素通りし、動機となった事故がそのまま残る（実測: 3ユニットの訳文が2件とも物理削除）。
+ * **何を数えるかが要点。** 見るのは「**原文のユニット数**」であって「対応が付いた数」ではない。
+ * この2つは小さい文書で見分けがつかず、対応が付いた数で判断すると普通の編集を崩れと誤認する。
+ *
+ * | 場面 | 原文 | 訳文 | 対応が付いた数 |
+ * |---|---|---|---|
+ * | フェンス崩れ（本物） | **1**（8から潰れた） | 8 | 1 |
+ * | 2ユニットの1章を編集 | **2**（潰れていない） | 2 | 1 |
+ *
+ * 対応が付いた数だけを見ると後者も「残り1件」に見え、古い章が `verify-deletion` として
+ * 本文に残り、訳文に同じ章が2つ並ぶ（実測。原文がマーカーを失った状態で編集すると起きる）。
+ * 原文のユニット数を見れば、崩れていない（2 対 2）ことが分かる。
+ *
+ * どちらも**いまの数**しか使わないので、前回の状態を持たない embedded でも同じように効く。
  *
  * 止めるときは黙って残すのではなく `verify`（`need:verify-deletion`）へ倒す。
  * 削除が本当に正しければ人が確定でき、原文が戻れば `updateSectionHashes` が自動で解除する。
@@ -1093,20 +1130,21 @@ function countDanglingOrphans(
  */
 function resolveOrphanPolicy(
 	configured: OrphanTargetPolicy,
-	targetUnitCount: number,
+	managedTargetCount: number,
+	sourceUnitCount: number,
 	orphanCandidates: number,
 	targetFile: string,
 ): { policy: OrphanTargetPolicy; withheld: boolean } {
 	if (configured !== "delete" || orphanCandidates === 0) {
 		return { policy: configured, withheld: false };
 	}
-	const remaining = targetUnitCount - orphanCandidates;
-	if (!isSuspiciousShrink(targetUnitCount, remaining, DELETE_SUSPICION)) {
+	if (!isSuspiciousShrink(managedTargetCount, sourceUnitCount, DELETE_SUSPICION)) {
 		return { policy: configured, withheld: false };
 	}
-	logger.warn("sync", "Withheld automatic deletion of orphaned target units (source lost too many units at once)", {
+	logger.warn("sync", "Withheld automatic deletion of orphaned target units (the source structure collapsed)", {
 		file: targetFile,
-		targetUnits: targetUnitCount,
+		managedTargetUnits: managedTargetCount,
+		sourceUnits: sourceUnitCount,
 		orphaned: orphanCandidates,
 		note: "Kept the translations and marked them need:verify-deletion. If the source is broken (unclosed code fence, sync.level change), fix it and sync again — the units recover automatically.",
 	});

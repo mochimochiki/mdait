@@ -560,6 +560,51 @@ async function phase8() {
 	// （タイトル＋2節＝3ユニット）で訳文が2件とも物理削除されていた。崩れは文書の大きさに
 	// 関係なく1ユニットまで潰すので、元のユニット数で守られるかどうかが変わってはいけない
 	await checkSmallDocument(P);
+
+	// 逆側の誤爆。原文がマーカーを失った状態で1章編集すると「対応が付いたのは1件」になるが、
+	// 原文の構造は潰れていない。ここを崩れと読むと訳文に同じ章が2つ並ぶ
+	await checkMarkerlessSourceEdit(P);
+}
+
+/**
+ * マーカーを失った原文で1章だけ編集したとき、訳文に章が重複しないこと。
+ *
+ * 原文をバックアップや git から書き戻すとマーカーが落ちる。その状態で編集された章は
+ * from 一致で結べず「孤立1件＋新規1件」になる。2ユニットの文書ではこれが
+ * 「対応が付いたのは1件」に見えるため、対応の数で崩れを判定すると必ず誤爆する。
+ */
+async function checkMarkerlessSourceEdit(P) {
+	const srcPath = path.join(WS, "content/ja/_markerless.md");
+	const tgtPath = path.join(WS, "content/en/_markerless.md");
+	const doc = (body) => ["# 手引き", "", "導入の本文。", "", "## 第1章", "", body, ""].join("\n");
+	try {
+		await loadConfigAndSelectAll(); // embedded（本文にマーカーが乗る運用）
+		fs.writeFileSync(srcPath, doc("第1章の本文。"), "utf8");
+		await syncCommand();
+		const headingsOf = (text) => (text.match(/^#{1,6}\s.*$/gm) || []).length;
+		const before = headingsOf(fs.readFileSync(tgtPath, "utf8"));
+		if (before !== 2) {
+			info(P, "content/ja/_markerless.md", `訳文の見出しが ${before} 件で、想定した2ユニットの形になっていない`);
+			return;
+		}
+
+		// マーカーを含まない本文で丸ごと差し替える（＝書き戻し + 1章編集）
+		fs.writeFileSync(srcPath, doc("第1章の本文（改訂）。"), "utf8");
+		await syncCommand();
+		const after = fs.readFileSync(tgtPath, "utf8");
+		if (headingsOf(after) === before && !after.includes("need:verify-deletion")) {
+			ok(P, `マーカーを失った原文の編集で訳文が重複しないOK（見出し ${before}→${headingsOf(after)}）`);
+		} else {
+			fail(
+				P,
+				"content/ja/_markerless.md",
+				`マーカーを失った原文の編集で訳文に章が重複した（見出し ${before}→${headingsOf(after)}）`,
+				after.slice(0, 300),
+			);
+		}
+	} finally {
+		for (const p of [srcPath, tgtPath]) if (fs.existsSync(p)) fs.rmSync(p);
+	}
 }
 
 /** 3ユニットの小さい文書を作り、フェンス崩れで訳文が消えないことを確かめる */
