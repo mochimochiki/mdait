@@ -8,6 +8,7 @@ import type {
 	PromptVariables,
 } from "../../prompts/prompt-provider";
 import { buildUserMessage } from "../../prompts/prompt-provider";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
@@ -20,37 +21,114 @@ import {
 } from "./response-validator";
 import type { TranslationContext } from "./translation-context";
 
+/** コードブロックを退避した結果 */
+export interface ProtectedCodeBlocks {
+	/** コードブロックをプレースホルダへ置き換えたテキスト（AI へ渡す形） */
+	text: string;
+	/** 退避したコードブロック（行まるごと。字下げや引用記号を含む） */
+	codeBlocks: string[];
+	/** プレースホルダ（codeBlocks と同じ並び） */
+	placeholders: string[];
+}
+
+/** コードブロックを戻した結果 */
+export interface RestoredCodeBlocks {
+	/** コードブロックを復元したテキスト */
+	text: string;
+	/** AI の応答から消えていて戻せなかったプレースホルダ */
+	missing: string[];
+}
+
+/**
+ * コードブロックを AI へ渡さないように退避する。
+ *
+ * 「どこがコードブロックか」はパーサーと同じ `getCodeBlockLineSet`（markdown-it）に問う。
+ * 独自の正規表現で探すと、```` ``` ```` しか拾えない・`~~~`・字下げコードブロック・4連
+ * バッククォートを取りこぼす／誤分割する。同じ問いに2つの答えを持たない（design.md P9）。
+ *
+ * 退避は**行まるごと**で行う。リスト項目の中や引用の中のコードブロックは行頭に字下げや
+ * `> ` が付くため、バッククォートの位置から切り出すと前置きがプレースホルダの手前に残り、
+ * 戻すときに行の途中と誤判定される。行ごと退避すれば前置きもブロックに含まれ、
+ * 元どおりに戻る。
+ *
+ * コードブロックでない行に残った行内の ```` ```...``` ````（インラインのコード）も、
+ * 従来どおり翻訳させずに退避する。こちらは1行内で完結するので改行の補いは要らない。
+ *
+ * @param text 退避対象のテキスト
+ * @returns 退避結果
+ */
+export function protectCodeBlocks(text: string): ProtectedCodeBlocks {
+	const lines = text.split("\n");
+	const codeBlockLines = getCodeBlockLineSet(text);
+	const out: string[] = [];
+	const codeBlocks: string[] = [];
+	const placeholders: string[] = [];
+
+	const take = (block: string): string => {
+		const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
+		codeBlocks.push(block);
+		placeholders.push(placeholder);
+		return placeholder;
+	};
+
+	// 行内で完結する ```...```（インラインのコード）。改行をまたがせないことで、
+	// 離れた場所にある無関係なバッククォート同士を1つの塊にしてしまう事故を防ぐ。
+	const inlineCodeRegex = /```[^\n]*?```/g;
+
+	let i = 0;
+	while (i < lines.length) {
+		if (!codeBlockLines.has(i)) {
+			out.push(lines[i].replace(inlineCodeRegex, (match) => take(match)));
+			i++;
+			continue;
+		}
+		// 連続するコードブロック行をひとまとまりとして退避する
+		let end = i;
+		while (end < lines.length && codeBlockLines.has(end)) {
+			end++;
+		}
+		out.push(take(lines.slice(i, end).join("\n")));
+		i = end;
+	}
+
+	return { text: out.join("\n"), codeBlocks, placeholders };
+}
+
 /**
  * コードブロックのプレースホルダを元のコードブロックへ戻す。
  *
- * 複数行のコードブロックが行の途中に戻ると開始フェンス（```）が行頭に来ず、
- * Markdown としてコードブロックでなくなる。するとブロックの中身
- * （サンプルの見出しや mdait マーカー風の文字列）が本文として読まれ、
- * ユニット境界を誤って作り本文を失う（design.md P9 の趣旨）。
- * AI がプレースホルダを前後の文とつなげて1行にまとめることは実際に起きるため、
- * 戻すときに行頭・行末へ来るよう改行を補う。
+ * `protectCodeBlocks` はプレースホルダを必ず1行として置くので、AI が形を保っていれば
+ * そのまま行が入れ替わり原文どおりに戻る。ただし AI がプレースホルダを前後の文と
+ * つなげて1行にまとめることは実際に起きる。そのとき複数行のブロックが行の途中に戻ると
+ * 開始フェンスが行頭に来ず Markdown としてコードブロックでなくなり、中身（サンプルの
+ * 見出しや mdait マーカー風の文字列）が本文として読まれてユニット境界を誤る
+ * （design.md P9）。そのため行頭・行末へ来るよう改行を補う。
  *
  * @param text プレースホルダを含むテキスト
  * @param placeholders プレースホルダ文字列（codeBlocks と同じ並び）
  * @param codeBlocks 元のコードブロック文字列
- * @returns コードブロックを復元したテキスト
+ * @returns 復元したテキストと、戻せなかったプレースホルダ
  */
 export function restoreCodeBlocks(
 	text: string,
 	placeholders: string[],
 	codeBlocks: string[],
-): string {
+): RestoredCodeBlocks {
 	let result = text;
+	const missing: string[] = [];
+
 	for (let i = 0; i < placeholders.length; i++) {
 		const placeholder = placeholders[i];
 		const block = codeBlocks[i];
 		const isMultiline = block.includes("\n");
 		let searchFrom = 0;
+		let found = false;
 		while (true) {
 			const idx = result.indexOf(placeholder, searchFrom);
 			if (idx === -1) {
 				break;
 			}
+			found = true;
 			const before = result.slice(0, idx);
 			const after = result.slice(idx + placeholder.length);
 			const leading = isMultiline && before !== "" && !before.endsWith("\n") ? "\n" : "";
@@ -59,8 +137,22 @@ export function restoreCodeBlocks(
 			result = before + replacement + after;
 			searchFrom = before.length + replacement.length;
 		}
+		if (!found) {
+			missing.push(placeholder);
+		}
 	}
-	return result;
+
+	return { text: result, missing };
+}
+
+/** 戻せなかったコードブロックがあれば警告文にする（黙って消さない） */
+function codeBlockLossWarnings(missing: string[]): string[] {
+	if (missing.length === 0) {
+		return [];
+	}
+	return [
+		`AI response dropped ${missing.length} code block(s); they could not be restored: ${missing.join(", ")}`,
+	];
 }
 
 /**
@@ -222,17 +314,8 @@ export class AITranslator implements Translator {
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
-		// コードブロックをスキップするロジック
-		const codeBlockRegex = /```[\s\S]*?```/g;
-		const codeBlocks: string[] = [];
-		const placeholders: string[] = [];
-
-		const textWithoutCodeBlocks = text.replace(codeBlockRegex, (match) => {
-			const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
-			codeBlocks.push(match);
-			placeholders.push(placeholder);
-			return placeholder;
-		});
+		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）
+		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text);
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
@@ -286,17 +369,8 @@ export class AITranslator implements Translator {
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
-		// コードブロックをスキップするロジック
-		const codeBlockRegex = /```[\s\S]*?```/g;
-		const codeBlocks: string[] = [];
-		const placeholders: string[] = [];
-
-		const textWithoutCodeBlocks = text.replace(codeBlockRegex, (match) => {
-			const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
-			codeBlocks.push(match);
-			placeholders.push(placeholder);
-			return placeholder;
-		});
+		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）
+		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text);
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
@@ -525,19 +599,23 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 	): TranslationResult {
 		// プレースホルダー復元
-		const content = restoreCodeBlocks(
+		const restored = restoreCodeBlocks(
 			parsed.translation,
 			placeholders,
 			codeBlocks,
 		);
 
 		// サニタイズ処理
-		const sanitized = sanitizeTranslationOutput(content);
+		const sanitized = sanitizeTranslationOutput(restored.text);
 
 		return {
 			translatedText: sanitized.text,
 			termSuggestions: parsed.termSuggestions ?? [],
-			warnings: [...sanitized.warnings, ...(parsed.warnings ?? [])],
+			warnings: [
+				...codeBlockLossWarnings(restored.missing),
+				...sanitized.warnings,
+				...(parsed.warnings ?? []),
+			],
 		};
 	}
 
@@ -550,19 +628,23 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 	): RevisionPatchResult {
 		// プレースホルダー復元
-		const content = restoreCodeBlocks(
+		const restored = restoreCodeBlocks(
 			parsed.targetPatch,
 			placeholders,
 			codeBlocks,
 		);
 
 		// サニタイズ処理
-		const sanitized = sanitizeTranslationOutput(content);
+		const sanitized = sanitizeTranslationOutput(restored.text);
 
 		return {
 			targetPatch: sanitized.text,
 			termSuggestions: parsed.termSuggestions ?? [],
-			warnings: [...sanitized.warnings, ...(parsed.warnings ?? [])],
+			warnings: [
+				...codeBlockLossWarnings(restored.missing),
+				...sanitized.warnings,
+				...(parsed.warnings ?? []),
+			],
 		};
 	}
 
@@ -575,15 +657,16 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 		error?: ValidationError,
 	): TranslationResult {
-		const text = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
+		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
 
-		const sanitized = sanitizeTranslationOutput(text);
+		const sanitized = sanitizeTranslationOutput(restored.text);
 
 		return {
 			translatedText: sanitized.text,
 			termSuggestions: [],
 			warnings: [
 				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
+				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 			],
 		};
@@ -598,15 +681,16 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 		error?: ValidationError,
 	): RevisionPatchResult {
-		const text = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
+		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
 
-		const sanitized = sanitizeTranslationOutput(text);
+		const sanitized = sanitizeTranslationOutput(restored.text);
 
 		return {
 			targetPatch: sanitized.text,
 			termSuggestions: [],
 			warnings: [
 				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
+				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 			],
 		};

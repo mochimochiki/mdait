@@ -60,6 +60,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Documents that show mdait markers inside a code block were corrupted: the parser inserted a blank line into the code block, and translation could reinsert a fenced block mid-line so its contents were read as body text — losing the translated unit (embedded) or dropping every unit to `need:translate` (external). Code blocks are now detected the same way everywhere (markdown-it), including `~~~` fences, indented blocks, and blocks nested in lists or block quotes. **Note:** documents that contain a marker-like line inside a code block get a new hash on the next sync (the stray blank line is gone), so those units are re-flagged once
+- Code blocks dropped by the AI during translation are now reported as a warning instead of vanishing silently
+- Emptying a source document no longer empties its translation: sync now stops, leaves the translation untouched, and says so (both on explicit sync and on save-time auto-sync)
 - Term detection/expansion reported success even when the AI service was unavailable; AI failures now surface as errors and completion messages carry counts
 - A failed unit translation showed two stacked error notifications; now exactly one
 - Externalizing markers could attach a later unit's hash/need to the wrong unit when sub-unit boundaries were merged (order mismatch between embedded and external parses); cancelling a migration no longer loses markers of already-converted files; mdait.json keeps its original indentation when the marker mode is written

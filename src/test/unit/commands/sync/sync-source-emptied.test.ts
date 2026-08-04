@@ -114,6 +114,33 @@ suite("sync: 原文が空になったとき訳文を守る", () => {
 		assert.strictEqual(units.length, 2);
 	});
 
+	test("原文が frontmatter だけになっても訳文は守られること", async () => {
+		const config = await bootstrap();
+		const before = fs.readFileSync(targetFile, "utf-8");
+
+		fs.writeFileSync(sourceFile, ["---", "title: 手引き", "---", ""].join("\n"), "utf-8");
+		const diff = await sync_CoreProc(sourceFile, targetFile, config);
+
+		assert.strictEqual(diff.sourceEmptied, 1);
+		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), before);
+	});
+
+	test("中止したときは frontmatter も書き換えないこと（状態を変えない）", async () => {
+		const config = await initConfig();
+		fs.writeFileSync(
+			sourceFile,
+			["---", "title: 手引き", "---", "", "# 手引き", "", "導入の本文。", ""].join("\n"),
+			"utf-8",
+		);
+		await syncNew_CoreProc(sourceFile, targetFile, config);
+		const before = fs.readFileSync(targetFile, "utf-8");
+
+		fs.writeFileSync(sourceFile, ["---", "title: 手引き", "---", ""].join("\n"), "utf-8");
+		await sync_CoreProc(sourceFile, targetFile, config);
+
+		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), before);
+	});
+
 	test("原文も訳文も空のままなら中止扱いにしないこと", async () => {
 		const config = await initConfig();
 		fs.writeFileSync(sourceFile, "", "utf-8");

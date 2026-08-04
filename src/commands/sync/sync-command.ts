@@ -44,6 +44,51 @@ import { syncFrontmatterMarkers } from "./sync-frontmatter";
 const logger = Logger.getInstance();
 
 /**
+ * 原文が空で同期を中止したことを、直近に伝えた訳文のパス。
+ * autoSyncOnSave は保存のたびに走るので、同じ状態が続くあいだ毎回トーストを出さない
+ * （ux.md §3.3「変化のたびにトーストを出さない」）。通常どおり同期できたら忘れる。
+ */
+const sourceEmptiedNotified = new Set<string>();
+
+/**
+ * 原文が空で同期を中止したことを伝える（訳文消失の予防: P6）。
+ * 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため黙らない。
+ * fire-and-forget（await すると呼び出し側の処理中フラグが残る）。
+ *
+ * @param count 中止したファイル数。0 のときは何もしない
+ */
+function notifySourceEmptied(count: number): void {
+	if (count <= 0) {
+		return;
+	}
+	const restoreHelp = vscode.l10n.t("How to restore");
+	void vscode.window
+		.showWarningMessage(
+			vscode.l10n.t(
+				"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
+				count,
+			),
+			restoreHelp,
+		)
+		.then((choice) => {
+			if (choice === restoreHelp) {
+				return vscode.env.openExternal(
+					vscode.Uri.parse(
+						"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
+					),
+				);
+			}
+			return undefined;
+		})
+		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+		.then(undefined, (error) => {
+			logger.error("sync", "Empty-source guidance failed", {
+				...formatError(error),
+			});
+		});
+}
+
+/**
  * syncコマンドの結果
  */
 export interface SyncResult {
@@ -388,24 +433,8 @@ export async function syncCommand(
 			);
 		}
 
-		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）。
-		// 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため。
-		// fire-and-forget（await すると処理中フラグが残る）。
-		if (totalSourceEmptied > 0) {
-			void vscode.window
-				.showWarningMessage(
-					vscode.l10n.t(
-						"Sync skipped {0} file(s): the source has no content while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
-						totalSourceEmptied,
-					),
-				)
-				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
-				.then(undefined, (error) => {
-					logger.error("sync", "Empty-source guidance failed", {
-						...formatError(error),
-					});
-				});
-		}
+		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）
+		notifySourceEmptied(totalSourceEmptied);
 
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
 		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
@@ -568,6 +597,17 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		// ステータスを更新
 		await statusManager.refreshFileStatus(sourceFile);
 		await statusManager.refreshFileStatus(targetFile);
+
+		// 原文が空で中止した場合は保存で走る自動同期でも黙らない（ADR-260803-04）。
+		// ただし保存のたびに出さないよう、同じ状態が続くあいだは1回だけにする。
+		if ((syncResult.sourceEmptied ?? 0) > 0) {
+			if (!sourceEmptiedNotified.has(targetFile)) {
+				sourceEmptiedNotified.add(targetFile);
+				notifySourceEmptied(syncResult.sourceEmptied ?? 0);
+			}
+		} else {
+			sourceEmptiedNotified.delete(targetFile);
+		}
 
 		// 変化の有無でログレベルを切り替え
 		const hasChanges =
@@ -810,6 +850,31 @@ export async function sync_CoreProc(
 	normalizeLegacyNeeds(source.units);
 	normalizeLegacyNeeds(target.units);
 
+	// 原文の本文が空（ユニット0件）で訳文には本文がある場合は、訳文に触らず中止する。
+	// 全選択して消した直後・別の内容へ差し替える途中・コードフェンスの崩れなど、
+	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
+	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
+	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
+	// unit-state の末尾行を刈らない条件（unit-state-align の pruneEntriesFrom）と同じ考え方。
+	//
+	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
+	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
+	if (source.units.length === 0 && target.units.length > 0) {
+		logger.warn(
+			"sync",
+			"Source has no units while target still has content; skipped to avoid emptying the translation",
+			{ sourceFile, targetFile, targetUnits: target.units.length },
+		);
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: target.units.length,
+			sourceEmptied: 1,
+		};
+	}
+
 	// 独立ユニット（target側パススルー保護）の判定 Set。
 	// ensureMdaitMarkerHash がマーカーなしユニットへメモリ上で素hashを合成するため、
 	// 「ファイルに永続化されたマーカー」を区別できる ensure 前に作る必要がある
@@ -844,28 +909,6 @@ export async function sync_CoreProc(
 			modified: 0,
 			deleted: 0,
 			unchanged: 0,
-		};
-	}
-
-	// 原文の本文が空（ユニット0件）で訳文には本文がある場合は、訳文に触らず中止する。
-	// 全選択して消した直後・別の内容へ差し替える途中・コードフェンスの崩れなど、
-	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
-	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
-	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
-	// unit-state の末尾行を刈らない条件（unit-state-align の pruneEntriesFrom）と同じ考え方。
-	if (source.units.length === 0 && target.units.length > 0) {
-		logger.warn(
-			"sync",
-			"Source has no units while target still has content; skipped to avoid emptying the translation",
-			{ sourceFile, targetFile, targetUnits: target.units.length },
-		);
-		return {
-			diffs: [],
-			added: 0,
-			modified: 0,
-			deleted: 0,
-			unchanged: target.units.length,
-			sourceEmptied: 1,
 		};
 	}
 

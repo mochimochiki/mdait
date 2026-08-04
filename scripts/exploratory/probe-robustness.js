@@ -458,6 +458,84 @@ const CODE_SRC = [
 	"",
 ].join("\n");
 
+/** コードブロックを `~~~` で囲んだ原文（S72。```` ``` ```` 限定の実装だと素通りする） */
+const TILDE_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## コード例",
+	"",
+	"マーカーの書き方は次のとおりです。",
+	"",
+	"~~~markdown",
+	"<!-- mdait 12345678 from:87654321 need:translate -->",
+	"## サンプル章",
+	"",
+	"サンプルの本文。",
+	"~~~",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+].join("\n");
+
+/** リストと引用の中にコードブロックがある原文（S73。行頭の字下げ・引用記号を落とさないか） */
+const NESTED_CODE_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## 手順",
+	"",
+	"- 手順1: 実行する",
+	"  ```js",
+	"  console.log(1);",
+	"  ```",
+	"- 手順2: 確認する",
+	"",
+	"## 注意",
+	"",
+	"> 次のように書く。",
+	"> ```js",
+	"> console.log(2);",
+	"> ```",
+	"",
+].join("\n");
+
+/** 字下げ（4スペース）コードブロックにマーカー風文字列がある原文（S74） */
+const INDENTED_CODE_SRC = [
+	"# ドキュメント",
+	"",
+	"導入の文章。",
+	"",
+	"## コード例",
+	"",
+	"字下げで書いた例。",
+	"",
+	"    <!-- mdait 12345678 from:87654321 need:translate -->",
+	"    ## サンプル章",
+	"",
+	"## 第2章",
+	"",
+	"第2章の本文。",
+	"",
+].join("\n");
+
+/**
+ * 「この行がそのまま残っていること」を確かめる絶対チェックを作る。
+ * 両モードが揃って壊れる欠陥は突き合わせでは出ないので、結果そのものを見るしかない。
+ */
+function expectLinesIntact(rel, lines) {
+	return ({ read }) => {
+		const content = read(rel);
+		if (content === null) return [`${rel} が存在しない`];
+		const actual = content.split("\n");
+		return lines.filter((l) => !actual.includes(l)).map((l) => `${rel} に行が残っていない: ${JSON.stringify(l)}`);
+	};
+}
+
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
 async function bootstrap(mode, src) {
 	const t = (label, p) => {
@@ -478,6 +556,14 @@ async function bootstrap(mode, src) {
 }
 
 const results = [];
+/**
+ * 両モードの突き合わせでは見つからない壊れ方（＝両モードが同じように壊れる場合）を捕まえるための
+ * 「絶対チェック」の失敗一覧。シナリオの opts.expect が返した文言を溜める。
+ *
+ * 突き合わせは相対的な検査なので、embedded と external が揃って壊れると差が出ず素通りする。
+ * コードブロックの取り扱いのように「両モード共通の読み書き」に関わる欠陥はここでしか守れない。
+ */
+const absoluteFailures = [];
 const ONLY = process.env.PROBE_ONLY ? process.env.PROBE_ONLY.split(",") : null;
 async function scenario(name, mutate, opts) {
 	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
@@ -522,6 +608,13 @@ async function scenario(name, mutate, opts) {
 		origLog(`  files: ${after.files.join(", ")}`);
 		for (const f of after.files) origLog(`  ${fmtUnits(f).split("\n").join("\n  ")}`);
 		if (mode === "external") origLog(`  --- unit-state ---\n${after.us.replace(/^/gm, "  ")}`);
+		// 絶対チェック（両モードが同じように壊れても気づけるように、結果そのものを見る）
+		if (opts && opts.expect) {
+			for (const msg of opts.expect({ read, mode }) || []) {
+				absoluteFailures.push(`${name} / ${mode}: ${msg}`);
+				origLog(`  [絶対チェック失敗] ${msg}`);
+			}
+		}
 	}
 }
 
@@ -547,6 +640,15 @@ const EXPECTED_DIFF = {
  * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
  */
 const KNOWN_BUGS = {};
+
+/**
+ * **両モードが同じように壊れている**ため突き合わせには出ない、未解決の欠陥。
+ * 差が出ないので `KNOWN_BUGS` の仕組み（モード差の説明）には載せられないが、
+ * 消し忘れに気づけるよう毎回はっきり出す。直したらここから消すこと。
+ */
+const KNOWN_BUGS_BOTH_MODES = {
+	S71: "訳文を手編集してもハッシュが更新されるだけで、編集されたことがどのサーフェスにも出ない（need を付けるのは need の語彙とぶつかるため製品判断待ち。unit-state.md §12 参照）",
+};
 
 /** シナリオごとに embedded と external の結果を突き合わせる */
 function reportModeParity() {
@@ -582,7 +684,26 @@ function reportModeParity() {
 	origLog(
 		`\n一致 ${same} / 想定内の差 ${expectedDiff} / 未修正の既知欠陥 ${knownBugs} / 想定外の差 ${unexpected.length}`,
 	);
-	return unexpected.length;
+
+	// 突き合わせは相対的な検査なので、両モードが揃って壊れると差が出ない。
+	// 結果そのものを見る絶対チェックの失敗はここで別に数える。
+	const bothModes = Object.entries(KNOWN_BUGS_BOTH_MODES).filter(([key]) =>
+		[...byName.keys()].some((n) => n.split(" ")[0] === key),
+	);
+	if (bothModes.length > 0) {
+		origLog("\n========== 両モード共通の未修正欠陥（差が出ないので突き合わせでは検出できない） ==========");
+		for (const [key, reason] of bothModes) origLog(`  [未修正] ${key} — ${reason}`);
+	}
+
+	origLog("\n========== 絶対チェック（両モード共通の壊れ方） ==========");
+	if (absoluteFailures.length === 0) {
+		origLog("  すべて通過");
+	} else {
+		for (const m of absoluteFailures) origLog(`  [失敗] ${m}`);
+	}
+	origLog(`\n絶対チェックの失敗 ${absoluteFailures.length}`);
+
+	return unexpected.length + absoluteFailures.length;
 }
 
 async function main() {
@@ -1004,11 +1125,61 @@ async function main() {
 				["## 第2章 第2章の本文。 [MT]", "", "```js", "console.log(1);", "```"].join("\n"),
 			);
 		});
+
+		// S72: S58 のチルダ版。コードブロックの囲いが ``` でなくても同じように扱えるか
+		//      （``` 限定の実装だと退避を素通りしてマーカー風文字列が本文に露出する）
+		await scenario("S72 チルダのコードブロック内マーカー風文字列・操作なし", async () => {}, {
+			src: TILDE_SRC,
+			expect: expectLinesIntact("ja/guide.md", [
+				"~~~markdown",
+				"<!-- mdait 12345678 from:87654321 need:translate -->",
+				"## サンプル章",
+				"~~~",
+			]),
+		});
+
+		// S73: リストと引用の中のコードブロック。行頭の字下げ・引用記号ごと守られるか。
+		//      両モードが同じように壊れるため突き合わせでは出ない＝絶対チェックで見る
+		await scenario("S73 リスト・引用の中のコードブロック・操作なし", async () => {}, {
+			src: NESTED_CODE_SRC,
+			expect: ({ read, mode }) => {
+				const msgs = expectLinesIntact("ja/guide.md", [
+					"- 手順1: 実行する",
+					"  ```js",
+					"  console.log(1);",
+					"  ```",
+					"> 次のように書く。",
+					"> ```js",
+					"> console.log(2);",
+					"> ```",
+				])({ read, mode });
+				// 訳文側でも、字下げ・引用記号を失った裸のフェンスが生えていないこと
+				const tgt = read("en/guide.md");
+				if (tgt !== null) {
+					const bare = tgt.split("\n").filter((l) => l === "```js").length;
+					if (bare > 0) msgs.push(`en/guide.md に字下げ・引用記号を失った \`\`\`js が ${bare} 行ある`);
+				}
+				return msgs;
+			},
+		});
+
+		// S74: 字下げ（4スペース）コードブロック内のマーカー風文字列
+		await scenario("S74 字下げコードブロック内マーカー風文字列・操作なし", async () => {}, {
+			src: INDENTED_CODE_SRC,
+			expect: expectLinesIntact("ja/guide.md", [
+				"    <!-- mdait 12345678 from:87654321 need:translate -->",
+				"    ## サンプル章",
+			]),
+		});
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
 		restoreWorkspace();
 	}
-	const unexpected = ONLY ? 0 : reportModeParity();
+	// PROBE_ONLY のときは突き合わせを飛ばすが、絶対チェックは1シナリオでも成立するので数える
+	const unexpected = ONLY ? absoluteFailures.length : reportModeParity();
+	if (ONLY) {
+		for (const m of absoluteFailures) origLog(`  [絶対チェック失敗] ${m}`);
+	}
 	origLog("\n========== DONE ==========");
 	// 保留中のタイマー/ウォッチャで終了しないため明示的に落とす
 	process.exit(unexpected > 0 ? 1 : 0);

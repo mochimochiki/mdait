@@ -421,7 +421,7 @@
   "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.": "同期が完了しました: 成功 {0} 件、失敗 {1} 件。{2} 件のユニットが翻訳待ちです。",
   "Synchronization completed: {0} succeeded, {1} failed": "同期完了: {0} 成功、{1} 失敗",
   "How to restore": "復旧方法",
-  "Sync skipped {0} file(s): the source has no content while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.": "原文が空で訳文に本文が残っているため、{0} 件のファイルの同期を見送りました。訳文はそのままにしています。原文を元に戻すか、作り直したい場合は訳文ファイルを削除してください。",
+  "Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.": "原文に本文が無く訳文には本文が残っているため、{0} 件のファイルの同期を見送りました。訳文はそのままにしています。原文を元に戻すか、作り直したい場合は訳文ファイルを削除してください。",
   "Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.": "原文が削除された孤立ユニットを {0} 件削除しました。意図しない場合は git から復元するか、sync.autoDelete を false に設定してください。",
   "An error occurred during synchronization: {0}": "同期中にエラーが発生しました: {0}",
   "Open report": "レポートを開く",
