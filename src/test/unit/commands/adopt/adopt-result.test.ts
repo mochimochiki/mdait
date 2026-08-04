@@ -22,6 +22,7 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 		totalAdopted: 0,
 		totalKept: 0,
 		totalOrphanReviewed: 0,
+		totalOrphanDeletionWithheld: 0,
 		totalAlignCorrections: 0,
 		durationMs: 10,
 		...overrides,

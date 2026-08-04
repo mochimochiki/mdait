@@ -51,6 +51,38 @@ suite("FileExplorer.normalizePath", () => {
 		);
 	});
 
+	test('"./" 付きの相対パスは畳まれること', () => {
+		// mdait.json に sourceDir: "./content/ja" と書くのは validateForRun が想定している書き方。
+		// 畳まないと isPathInDirectory の文字列前方一致が外れ、getTargetPath が null を返して
+		// 1ファイルも同期されず、訳文側の unit-state の行が sync 1回で全部消えていた
+		__vscodeMockWorkspaceRoot = "/ws";
+		const explorer = new FileExplorer();
+
+		assert.strictEqual(explorer.normalizePath("./content/ja"), "content/ja");
+		assert.strictEqual(explorer.normalizePath("./content/ja/x.md"), "content/ja/x.md");
+	});
+
+	test("末尾スラッシュ・重複スラッシュ・途中の . が畳まれること", () => {
+		__vscodeMockWorkspaceRoot = "/ws";
+		const explorer = new FileExplorer();
+
+		assert.strictEqual(explorer.normalizePath("content/ja/"), "content/ja");
+		assert.strictEqual(explorer.normalizePath("content//ja"), "content/ja");
+		assert.strictEqual(explorer.normalizePath("content/./ja"), "content/ja");
+		assert.strictEqual(explorer.normalizePath("content/en/../ja"), "content/ja");
+	});
+
+	test("同じ場所を指す表記はすべて同じ文字列になること", () => {
+		__vscodeMockWorkspaceRoot = "/ws";
+		const explorer = new FileExplorer();
+
+		const forms = ["content/ja", "./content/ja", "content/ja/", "./content/ja/", "content//ja"];
+		const normalized = forms.map((f) => explorer.normalizePath(f));
+		assert.deepStrictEqual(normalized, forms.map(() => "content/ja"));
+		// 絶対パス表記も同じ結果に落ちる
+		assert.strictEqual(explorer.normalizePath("/ws/content/ja"), "content/ja");
+	});
+
 	test("相対パス入力はそのまま返す（絶対パスでないため即 return）", () => {
 		__vscodeMockWorkspaceRoot = "/ws";
 		const explorer = new FileExplorer();

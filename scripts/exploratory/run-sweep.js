@@ -448,6 +448,69 @@ async function phase7() {
 	fs.writeFileSync(absPath, original, "utf8");
 }
 
+// P8: 原文のパースが崩れたときに、訳文の**本文**が消えないこと（ADR-260803-05）。
+//
+// 行を守っても本文が消えていては意味が無い。既定設定（sync.autoDelete: true）では、
+// 原文にコードブロックの閉じ忘れが1つ入るだけで以降の見出しが全部コードとして飲まれ、
+// 対応を失った訳文の章がまとめて物理削除されていた（実測: 7章が消え、直しても戻らない）。
+//
+// probe の突き合わせでは測れない。embedded でも同じことが起きるので両モードが一致してしまい、
+// 「両方とも壊れている」ことは差として現れないためである。
+async function phase8() {
+	const P = "P8-nobodyloss";
+	resetWorkspace();
+	await loadConfigAndSelectAll({ markersMode: "external" });
+	await syncCommand();
+
+	const relPath = "content/ja/40_structure_mismatch.md";
+	const absSrc = path.join(WS, relPath);
+	const absTgt = path.join(WS, relPath.replace("/ja/", "/en/"));
+	if (!fs.existsSync(absSrc) || !fs.existsSync(absTgt)) {
+		info(P, relPath, "対象ファイルが見つからず、フェンス崩れを検証できない");
+		return;
+	}
+	const originalSrc = fs.readFileSync(absSrc, "utf8");
+	const originalTgt = fs.readFileSync(absTgt, "utf8");
+	const headingsOf = (text) => (text.match(/^#{1,6}\s.*$/gm) || []).length;
+	const before = headingsOf(originalTgt);
+	if (before < 4) {
+		info(P, relPath, `訳文の見出しが ${before} 件しかなく、まとめて消える状況を作れない`);
+		return;
+	}
+
+	// 原文の先頭にコードブロックの閉じ忘れを入れる（以降が全部コードとして飲まれる）
+	const lines = originalSrc.split("\n");
+	const firstHeading = lines.findIndex((l) => /^#{1,6}\s/.test(l));
+	lines.splice(firstHeading + 1, 0, "", "```text");
+	fs.writeFileSync(absSrc, lines.join("\n"), "utf8");
+	await syncCommand();
+
+	const afterBroken = headingsOf(fs.readFileSync(absTgt, "utf8"));
+	if (afterBroken >= before) {
+		ok(P, `フェンス崩れで訳文の本文が消えないOK（見出し ${before}→${afterBroken}）`);
+	} else {
+		fail(P, relPath, `フェンス崩れで訳文の本文が物理削除された（見出し ${before}→${afterBroken}）`, "");
+	}
+
+	// 崩れを直すと確認待ちも自動で解ける
+	fs.writeFileSync(absSrc, originalSrc, "utf8");
+	await syncCommand();
+	const restored = fs.readFileSync(absTgt, "utf8");
+	if (headingsOf(restored) >= before && !restored.includes("need:verify-deletion")) {
+		ok(P, "崩れを直すと訳文が戻り verify-deletion も解けるOK");
+	} else {
+		fail(
+			P,
+			relPath,
+			"崩れを直しても訳文が戻らない、または verify-deletion が残る",
+			`headings=${headingsOf(restored)} (before=${before})`,
+		);
+	}
+
+	fs.writeFileSync(absSrc, originalSrc, "utf8");
+	fs.writeFileSync(absTgt, originalTgt, "utf8");
+}
+
 async function main() {
 	const cfgBackup = fs.readFileSync(CFG_PATH);
 	try {
@@ -461,6 +524,7 @@ async function main() {
 		await phase5();
 		await phase6();
 		await phase7();
+		await phase8();
 	} finally {
 		// 共有 mdait.json を必ず元に戻す（provider 上書きを残さない）
 		fs.writeFileSync(CFG_PATH, cfgBackup);

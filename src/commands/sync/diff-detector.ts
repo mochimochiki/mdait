@@ -50,6 +50,8 @@ export interface DiffResult {
 	orphanVerified?: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
 	orphanReviewed?: number;
+	/** 崩れを疑って自動削除を見送り、確認待ちにした孤立ターゲット数 */
+	orphanDeletionWithheld?: number;
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
 }

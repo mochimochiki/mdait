@@ -331,6 +331,9 @@ const SRC = [
 	"",
 ].join("\n");
 
+/** 同じディレクトリに置くもう1本の原文（S9 用。ディレクトリが空にならないようにする） */
+const OTHER_SRC = ["# もう一つの文書", "", "こちらの導入。", "", "## 付録", "", "付録の本文。", ""].join("\n");
+
 /** コピペで作られた同一本文の章を2つ持つ原文（S24/S25 用） */
 const DUP_SRC = [
 	"# ドキュメント",
@@ -490,6 +493,11 @@ const CODE_SRC = [
  */
 const DEFAULT_PAIRS = [{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "en", targetDir: "content/en" }];
 
+/** 同じディレクトリを "./" 付きで書いたペア（表記ゆれのシナリオ用） */
+const DOTTED_PAIRS = [
+	{ sourceLang: "ja", sourceDir: "./content/ja", targetLang: "en", targetDir: "./content/en" },
+];
+
 /** 訳文2言語（ja → en, ja → fr）。多言語構成のシナリオ用 */
 const MULTI_PAIRS = [
 	{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "en", targetDir: "content/en" },
@@ -503,7 +511,7 @@ function selectTargets(keys) {
 }
 
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
-async function bootstrap(mode, src, pairs) {
+async function bootstrap(mode, src, pairs, extraSources) {
 	const t = (label, p) => {
 		const s = Date.now();
 		return Promise.resolve(p()).then((r) => {
@@ -513,13 +521,19 @@ async function bootstrap(mode, src, pairs) {
 	};
 	resetAll();
 	write("ja/guide.md", src || SRC);
+	// 原文をもう1本置くシナリオ用（「ディレクトリの中身の数で挙動が変わる」を測れるようにする）
+	for (const [rel, text] of Object.entries(extraSources || {})) write(rel, text);
 	await t("setMode", () => setMode(mode, pairs || DEFAULT_PAIRS));
 	await t("sync1", () => syncCommand());
 	installFakeAi();
-	// 全ペアの訳文を翻訳しておく（多言語シナリオでは fr 側も翻訳済みにする）
+	// 全ペアの訳文をすべて翻訳しておく（多言語シナリオの fr 側や、原文が複数あるときの2本目も）
 	for (const p of pairs || DEFAULT_PAIRS) {
-		const tgt = path.join(WS, p.targetDir, "guide.md");
-		if (fs.existsSync(tgt)) await t(`trans:${p.targetLang}`, () => transCommand(vscode.Uri.file(tgt)));
+		const dir = path.join(WS, p.targetDir);
+		if (!fs.existsSync(dir)) continue;
+		for (const rel of walkRelative(dir)) {
+			if (!rel.endsWith(".md")) continue;
+			await t(`trans:${p.targetLang}:${rel}`, () => transCommand(vscode.Uri.file(path.join(dir, rel))));
+		}
 	}
 	await t("sync2", () => syncCommand());
 }
@@ -530,10 +544,12 @@ async function scenario(name, mutate, opts) {
 	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
 	if (ONLY && !ONLY.includes(name.split(" ")[0])) return;
 	for (const mode of ["embedded", "external"]) {
-		await bootstrap(mode, opts && opts.src, opts && opts.pairs);
+		await bootstrap(mode, opts && opts.src, opts && opts.pairs, opts && opts.extraSources);
 		const before = { src: unitsOf("ja/guide.md"), tgt: unitsOf("en/guide.md"), us: unitState() };
 		try {
-			await mutate(mode);
+			// external でしか意味を持たない操作（モード切替・表記ゆれ）は embedded 側では何もしない。
+			// embedded にとっての等価な操作が no-op だからで、突き合わせは「往復が無損失か」を見る
+			if (!(opts && opts.externalOnly) || mode === "external") await mutate(mode);
 		} catch (e) {
 			origLog(`  mutate error: ${e && e.message}`);
 		}
@@ -580,14 +596,14 @@ const EXPECTED_DIFF = {
 	S6: "ファイルの同一性（パス）の話。行の追随は未対応",
 	S7: "同上",
 	S8: "同上",
-	// S9（原文ファイルを削除）は一致するようになった。原文ディレクトリを走査して0件だったとき
-	// 「全部消えた」と読まなくなったため、external でも状態が残る（ADR-260803-03）
+	S9: "原文を消すと external は訳文の状態を失う（embedded は本文にマーカーが残る）。ファイルの同一性の話で未対応。原文が1本だけのときは content/ja が0件になり『走査していない』扱いで行が残るため一致してしまう＝ディレクトリの中身の数で挙動が変わる。実態を測るため原文を2ファイルにしてある",
 	S10: "リネームを含むため（章の挿入・編集の部分は一致している）",
 	S11: "unit-state を消す操作なので embedded には影響が無い",
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
 	S28: "リネームを含むため（並べ替えの部分は一致している）",
 	S50: "章を消したうえで残りを見出しごと全面改稿。どの章が消えたかを示す情報がファイルに残らない（外部ストア方式の構造的な限界）",
 	S56: "同上（訳文側を全面改稿してから原文の章を削除）",
+	S69: "フェンスを含んでいたユニットだけ差が出る。他の章は両モードとも完全復帰する（自動削除の見送りが効いている）。external はそのユニットの訳を保って need:revise、embedded はマーカーがフェンスに飲まれて訳を失い原文で作り直す＝external が強い（S12 と同種）",
 };
 
 /**
@@ -597,6 +613,7 @@ const EXPECTED_DIFF = {
 const KNOWN_BUGS = {
 	S55: "訳文の行頭にマーカー風の文字列が現れると external は無傷の訳文まで need:translate に落とす。突き合わせの外側（マーカー行の解釈）の問題で、embedded も別の形で壊れる",
 	S58: "同上（編集ゼロでも差が出る最小形）",
+	S68: "訳文を空にして同じ内容を貼り戻すと external だけ全ユニットが need:translate に固定される。行が残っているため rebuild 検知（sync-command.ts の isExternalRebuild）が働かない。保留席とは無関係の既存欠陥",
 };
 
 /** シナリオごとに embedded と external の結果を突き合わせる */
@@ -686,10 +703,16 @@ async function main() {
 			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/sub/guide.md"));
 		});
 
-		// S9: 原文ファイルの削除
-		await scenario("S9 原文ファイルを削除", async () => {
-			fs.rmSync(path.join(CONTENT, "ja/guide.md"));
-		});
+		// S9: 原文ファイルの削除。原文をもう1本置いてから片方だけ消す。
+		//     原文が1本しか無いと content/ja が0件になり「走査していない」扱いで行が残るため、
+		//     ディレクトリに他のファイルが在る実態（＝ふつうのサイト）を測る。
+		await scenario(
+			"S9 原文ファイルを削除（原文は2ファイル）",
+			async () => {
+				fs.rmSync(path.join(CONTENT, "ja/guide.md"));
+			},
+			{ extraSources: { "ja/other.md": OTHER_SRC } },
+		);
 
 		// S10: 混合（章挿入 ＋ 本文編集 ＋ リネーム）
 		await scenario("S10 混合（章挿入＋編集＋原文/訳文リネーム）", async () => {
@@ -1103,6 +1126,36 @@ async function main() {
 			},
 			{ src: MANY_SRC },
 		);
+
+		// S67: 同じディレクトリを指したまま、mdait.json の書き方だけを "./content/ja" に変える。
+		//      validateForRun が正当と認めている書き方なので、これで状態が消えてはいけない。
+		await scenario(
+			'S67 sourceDir/targetDir の表記を "./content/ja" 形式へ変える',
+			async () => {
+				await setMode("external", DOTTED_PAIRS);
+				await syncCommand();
+				await setMode("external", DEFAULT_PAIRS);
+			},
+			{ externalOnly: true },
+		);
+
+		// S68: 訳文を一時的に空にして、1文字も違わない元の内容を貼り戻す。
+		//      embedded は本文のマーカーごと戻るので完全復帰する。
+		await scenario("S68 訳文を空にして、同じ内容を貼り戻す", async () => {
+			const saved = read("en/guide.md");
+			write("en/guide.md", "");
+			await syncCommand();
+			write("en/guide.md", saved);
+		});
+
+		// S69: 原文にコードブロックの閉じ忘れが入り、以降の章が全部コードとして飲まれる。
+		//      訳文が物理削除されないこと、フェンスを直せば元に戻ることを見る。
+		await scenario("S69 原文にフェンスの閉じ忘れ → sync → 直して sync", async () => {
+			const saved = read("ja/guide.md");
+			editBody("ja/guide.md", "導入の文章。", "導入の文章。\n\n```text");
+			await syncCommand();
+			write("ja/guide.md", saved);
+		});
 
 		// S66: 原文ディレクトリは在るが、原文ファイルが一時的に1件も無い状態で sync する。
 		//      「見に行ったが0件」を「全部消えた」と読むと、そのペアの行が全消えして
