@@ -14,7 +14,7 @@ import {
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { isSuspiciousShrink } from "../../core/matching/shrink-guard";
+import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -1058,6 +1058,11 @@ function countDanglingOrphans(
  * `unit-state` の行を守るのと同じ判定（`isSuspiciousShrink`）を本文にも当てる。
  * 行だけ守って本文を消していては「見えていないものを無いと断定しない」原則が成立しない。
  *
+ * ただし慎重さは削除側のほう（`DELETE_SUSPICION`）を使う。崩れは文書の大きさに関係なく
+ * 1ユニットまで潰すので、「対応が1件以下しか残らない」なら減少幅が1件でも疑う。
+ * 刈り取り側の下限（3件）をそのまま使うと、見出し2つの README のような小さい文書が
+ * 素通りし、動機となった事故がそのまま残る（実測: 3ユニットの訳文が2件とも物理削除）。
+ *
  * 止めるときは黙って残すのではなく `verify`（`need:verify-deletion`）へ倒す。
  * 削除が本当に正しければ人が確定でき、原文が戻れば `updateSectionHashes` が自動で解除する。
  * need の語彙は増やしていない（既存のポリシーへ倒すだけ）。
@@ -1072,7 +1077,7 @@ function resolveOrphanPolicy(
 		return { policy: configured, withheld: false };
 	}
 	const remaining = targetUnitCount - orphanCandidates;
-	if (!isSuspiciousShrink(targetUnitCount, remaining)) {
+	if (!isSuspiciousShrink(targetUnitCount, remaining, DELETE_SUSPICION)) {
 		return { policy: configured, withheld: false };
 	}
 	logger.warn("sync", "Withheld automatic deletion of orphaned target units (source lost too many units at once)", {

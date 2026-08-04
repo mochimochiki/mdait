@@ -509,6 +509,49 @@ async function phase8() {
 
 	fs.writeFileSync(absSrc, originalSrc, "utf8");
 	fs.writeFileSync(absTgt, originalTgt, "utf8");
+
+	// 小さい文書でも守られること。閾値を減少幅だけで決めていたときは、見出し2つの README
+	// （タイトル＋2節＝3ユニット）で訳文が2件とも物理削除されていた。崩れは文書の大きさに
+	// 関係なく1ユニットまで潰すので、元のユニット数で守られるかどうかが変わってはいけない
+	await checkSmallDocument(P);
+}
+
+/** 3ユニットの小さい文書を作り、フェンス崩れで訳文が消えないことを確かめる */
+async function checkSmallDocument(P) {
+	const smallSrc = path.join(WS, "content/ja/_small_doc.md");
+	const smallTgt = path.join(WS, "content/en/_small_doc.md");
+	const body = ["# 小さな手引き", "", "導入の文章。", "", "## 準備", "", "準備の本文。", "", "## 使い方", "", "使い方の本文。", ""].join("\n");
+	try {
+		fs.writeFileSync(smallSrc, body, "utf8");
+		await syncCommand();
+		const headingsOf = (text) => (text.match(/^#{1,6}\s.*$/gm) || []).length;
+		const before = headingsOf(fs.readFileSync(smallTgt, "utf8"));
+		if (before !== 3) {
+			info(P, "content/ja/_small_doc.md", `訳文の見出しが ${before} 件で、想定した3ユニットの形になっていない`);
+			return;
+		}
+
+		// 導入の直後にフェンスの閉じ忘れを入れる（以降の2節が全部コードとして飲まれる）
+		fs.writeFileSync(smallSrc, body.replace("導入の文章。", "導入の文章。\n\n```text"), "utf8");
+		await syncCommand();
+		const after = headingsOf(fs.readFileSync(smallTgt, "utf8"));
+		if (after >= before) {
+			ok(P, `3ユニットの小さい文書でも訳文が消えないOK（見出し ${before}→${after}）`);
+		} else {
+			fail(P, "content/ja/_small_doc.md", `小さい文書でフェンス崩れが訳文を物理削除した（見出し ${before}→${after}）`, "");
+		}
+
+		fs.writeFileSync(smallSrc, body, "utf8");
+		await syncCommand();
+		const restored = fs.readFileSync(smallTgt, "utf8");
+		if (headingsOf(restored) >= before && !restored.includes("need:verify-deletion")) {
+			ok(P, "小さい文書でも崩れを直すと訳文が戻り verify-deletion も解けるOK");
+		} else {
+			fail(P, "content/ja/_small_doc.md", "小さい文書で崩れを直しても戻らない、または verify-deletion が残る", restored.slice(0, 200));
+		}
+	} finally {
+		for (const p of [smallSrc, smallTgt]) if (fs.existsSync(p)) fs.rmSync(p);
+	}
 }
 
 async function main() {
