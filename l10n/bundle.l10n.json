@@ -416,6 +416,8 @@
   "e.g., Application settings": "e.g., Application settings",
   "Term added to glossary: \"{0}\" → \"{1}\"": "Term added to glossary: \"{0}\" → \"{1}\"",
   "Failed to add term to glossary: {0}": "Failed to add term to glossary: {0}",
+  "How to restore": "How to restore",
+  "Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.": "Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
   "[{0} -> {1}] No files found for synchronization.": "[{0} -> {1}] No files found for synchronization.",
   "✨Translate now": "✨Translate now",
   "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.": "Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need translation.",

@@ -302,6 +302,11 @@ export class PlainFileHandler implements FileHandler {
 		let translatedText: string | undefined;
 		let termSuggestions: { source: string; target: string; context: string; reason?: string }[] | undefined;
 		let usedPatchMode = false;
+		// 翻訳結果に付いた警告。非MD経路には TranslationChecker が無いため、
+		// ここで拾わないと誰も気づけない（ログにだけは必ず残す）。
+		let translationWarnings: string[] = [];
+		// そのうち「本文が失われた」ものだけを別に数える。need を立てる判断に使う
+		let droppedCodeBlocks = 0;
 
 		if (isRevise && previousTranslation && sourceDiff) {
 			try {
@@ -316,6 +321,8 @@ export class PlainFileHandler implements FileHandler {
 				if (patched.ok) {
 					translatedText = patched.text;
 					termSuggestions = patchResult.termSuggestions;
+					translationWarnings = patchResult.warnings ?? [];
+					droppedCodeBlocks = patchResult.droppedCodeBlocks ?? 0;
 					usedPatchMode = true;
 				} else {
 					// 非MDはユニット分割が無く、据え置くと訳文が古いまま残るので全文再翻訳へ倒す。
@@ -341,6 +348,31 @@ export class PlainFileHandler implements FileHandler {
 			const result = await translator.translate(sourceContent, pair.sourceLang, pair.targetLang, context, token);
 			translatedText = result.translatedText;
 			termSuggestions = result.termSuggestions;
+			translationWarnings = result.warnings ?? [];
+			droppedCodeBlocks = result.droppedCodeBlocks ?? 0;
+		}
+
+		// 警告はすべてログに残す（原因を追えるようにする）。
+		if (translationWarnings.length > 0) {
+			logger.warn("trans", "Plain file translation produced warnings", {
+				file: path.basename(targetFilePath),
+				warnings: translationWarnings,
+			});
+		}
+
+		// need:review を立てるのは「コードブロックが戻らなかった」＝本文が失われたときだけ。
+		// 非MDファイルはユニットに割れておらず TranslationChecker も通らないので、
+		// ここで倒さないと本文が消えた訳文がそのまま完了になる。
+		//
+		// 警告があること自体を条件にはしない。JSON 混入検出（sanitizeTranslationOutput）は
+		// 「AI が応答のエンベロープを漏らした」を捕まえる道具なので、.json ファイルや
+		// JSON の例を含む .txt を訳すと定義上つねに偽陽性になる。翻訳のたびに review が
+		// 立つと、確認という仕組みそのものが信用されなくなる。
+		if (droppedCodeBlocks > 0) {
+			logger.warn("trans", "Plain file translation dropped code blocks", {
+				file: path.basename(targetFilePath),
+				droppedCodeBlocks,
+			});
 		}
 
 		// ここでキャンセルを見て結果を捨てない。AI 呼び出しは既に終わって費用も
@@ -360,7 +392,7 @@ export class PlainFileHandler implements FileHandler {
 			titleHash: "",
 			hash: calculateHash(translatedText, false),
 			from: sourceHash,
-			need: "",
+			need: droppedCodeBlocks > 0 ? "review" : "",
 		});
 		const mdaitDir = await ensureMdaitDir();
 		if (mdaitDir) {

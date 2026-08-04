@@ -54,6 +54,8 @@ export interface DiffResult {
 	orphanDeletionWithheld?: number;
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
+	/** 原文が空になったため訳文に触れずに中止したファイル数（0 or 1） */
+	sourceEmptied?: number;
 }
 
 /**

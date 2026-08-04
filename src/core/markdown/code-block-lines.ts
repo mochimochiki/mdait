@@ -10,6 +10,19 @@ import MarkdownIt from "markdown-it";
 
 const md = new MarkdownIt({ breaks: true });
 
+/** `getCodeBlockLineSet` の判定オプション */
+export interface CodeBlockLineOptions {
+	/**
+	 * 字下げ（4スペース／タブ）のコードブロックを含めるか。既定は true。
+	 *
+	 * false にすると ``` や ~~~ で囲んだフェンスだけを見る。
+	 * 「行頭の字下げ＝コードブロック」は Markdown 固有の規則なので、
+	 * Markdown でないファイル（`trans.extensions` の .txt など）に当てると
+	 * ただ字下げしただけの本文をコードと誤認する。
+	 */
+	includeIndented?: boolean;
+}
+
 /**
  * 文書中で「コードブロック内」とみなされる行番号（0-indexed）の集合を返す。
  *
@@ -20,14 +33,17 @@ const md = new MarkdownIt({ breaks: true });
  * インラインコード（`` ` ``）は対象外。
  *
  * @param content Markdown本文（frontmatterを含んでも構わない）
+ * @param options 判定オプション（省略時は字下げコードブロックも含める）
  * @returns コードブロックの内側に属する行番号の Set（0-indexed）
  */
-export function getCodeBlockLineSet(content: string): Set<number> {
+export function getCodeBlockLineSet(content: string, options?: CodeBlockLineOptions): Set<number> {
+	const includeIndented = options?.includeIndented ?? true;
 	const lines = new Set<number>();
 	const tokens = md.parse(content, {});
 
 	for (const token of tokens) {
-		if ((token.type === "code_block" || token.type === "fence") && token.map) {
+		const isCodeBlock = token.type === "fence" || (includeIndented && token.type === "code_block");
+		if (isCodeBlock && token.map) {
 			const [start, end] = token.map;
 			for (let line = start; line < end; line++) {
 				lines.add(line);

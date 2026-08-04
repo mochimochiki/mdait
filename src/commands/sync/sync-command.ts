@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
@@ -18,31 +17,103 @@ import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import { alignMatchResult } from "../adopt/align-core";
+import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
 import type { FileSyncResult } from "../file-handler/file-handler";
 import { getFileHandler } from "../file-handler/file-handler-factory";
 import { reconcileMarkerModeForFile } from "../markers/markers-migration";
-import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
-import { alignMatchResult } from "../adopt/align-core";
-import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
 import { showConfigError } from "../shared/guidance";
 import { getSelectedScopeDirs } from "../shared/status-scope";
 import { copyDiffAssets } from "./asset-copier";
-import { DiffDetector, type DiffResult, type UnitDiff, DiffType } from "./diff-detector";
+import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-detector";
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 const logger = Logger.getInstance();
+
+/**
+ * 原文が空で同期を中止したことを、直近に伝えた訳文のパス。
+ * autoSyncOnSave は保存のたびに走るので、同じ状態が続くあいだ毎回トーストを出さない
+ * （ux.md §3.3「変化のたびにトーストを出さない」）。通常どおり同期できたら忘れる。
+ */
+const sourceEmptiedNotified = new Set<string>();
+
+/**
+ * 「原文が空」の記憶を更新し、**いま通知すべきか**を返す。
+ *
+ * 通知は状態が続くあいだ1回だけにする（ux.md §3.3）。ただし記憶を消す機会は
+ * 自動同期だけに置いてはいけない。原文は保存イベントを起こさずに戻ることがある
+ * （SCM の「変更を破棄」・`git checkout`・エディタ外での復元）ので、
+ * 明示 sync の結果でも忘れる。忘れないと2度目の事故で黙ることになる。
+ *
+ * @param targetFile 訳文の絶対パス
+ * @param sourceEmptied そのファイルで中止したか（0 なら通常どおり同期できた）
+ * @returns 今回このファイルについて通知すべきなら true
+ */
+export function updateSourceEmptiedMemory(targetFile: string, sourceEmptied: number): boolean {
+	if (sourceEmptied <= 0) {
+		sourceEmptiedNotified.delete(targetFile);
+		return false;
+	}
+	if (sourceEmptiedNotified.has(targetFile)) {
+		return false;
+	}
+	sourceEmptiedNotified.add(targetFile);
+	return true;
+}
+
+/** テスト用: 「原文が空」の通知記憶を捨てる */
+export function resetSourceEmptiedMemory(): void {
+	sourceEmptiedNotified.clear();
+}
+
+/**
+ * 原文が空で同期を中止したことを伝える（訳文消失の予防: P6）。
+ * 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため黙らない。
+ * fire-and-forget（await すると呼び出し側の処理中フラグが残る）。
+ *
+ * @param count 中止したファイル数。0 のときは何もしない
+ */
+function notifySourceEmptied(count: number): void {
+	if (count <= 0) {
+		return;
+	}
+	const restoreHelp = vscode.l10n.t("How to restore");
+	void vscode.window
+		.showWarningMessage(
+			vscode.l10n.t(
+				"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
+				count,
+			),
+			restoreHelp,
+		)
+		.then((choice) => {
+			if (choice === restoreHelp) {
+				return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
+			}
+			return undefined;
+		})
+		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
+		.then(undefined, (error) => {
+			logger.error("sync", "Empty-source guidance failed", {
+				...formatError(error),
+			});
+		});
+}
 
 /**
  * syncコマンドの結果
@@ -67,6 +138,8 @@ export interface SyncResult {
 	totalOrphanDeletionWithheld: number;
 	/** AIアラインが適用した修正提案数 */
 	totalAlignCorrections: number;
+	/** 原文が空になったため訳文に触れずに中止したファイル数 */
+	totalSourceEmptied?: number;
 	durationMs: number;
 }
 
@@ -90,9 +163,7 @@ export interface SyncCommandOptions {
  * sync command
  * Markdownユニットの同期を行う
  */
-export async function syncCommand(
-	options?: SyncCommandOptions,
-): Promise<SyncResult | undefined> {
+export async function syncCommand(options?: SyncCommandOptions): Promise<SyncResult | undefined> {
 	const startTime = Date.now();
 	try {
 		// 準備
@@ -106,9 +177,7 @@ export async function syncCommand(
 			return;
 		}
 
-		const pairs = SelectionState.getInstance().filterTransPairs(
-			config.transPairs,
-		);
+		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 		logger.info("sync", "Sync started", {
 			pairCount: pairs.length,
 		});
@@ -121,10 +190,7 @@ export async function syncCommand(
 			if (proceed) {
 				aligner = await buildSectionAligner(config);
 			} else {
-				logger.info(
-					"sync",
-					"AI align skipped (onboarding declined); continuing with deterministic adopt",
-				);
+				logger.info("sync", "AI align skipped (onboarding declined); continuing with deterministic adopt");
 			}
 		}
 
@@ -141,6 +207,7 @@ export async function syncCommand(
 		let totalOrphanReviewed = 0;
 		let totalOrphanDeletionWithheld = 0;
 		let totalAlignCorrections = 0;
+		let totalSourceEmptied = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -163,19 +230,10 @@ export async function syncCommand(
 			// throw して sync 全体が止まる。unit-state の行が守られるのは掃除に到達しないためで、
 			// 掃除側の分岐で守っているわけではない（実測: 後続ペアも1件も処理されない）。
 			const fileExplorer = new FileExplorer();
-
-			const files = await fileExplorer.getSourceFiles(
-				pair.sourceDir,
-				config,
-				config.trans.extensions,
-			);
+			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config, config.trans.extensions);
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
-					vscode.l10n.t(
-						"[{0} -> {1}] No files found for synchronization.",
-						pair.sourceDir,
-						pair.targetDir,
-					),
+					vscode.l10n.t("[{0} -> {1}] No files found for synchronization.", pair.sourceDir, pair.targetDir),
 				);
 				continue;
 			}
@@ -227,26 +285,22 @@ export async function syncCommand(
 						// FileHandlerを取得してdispatch
 						// 翻訳・自動syncと同一ファイルへの書き込みが交錯しないよう排他する
 						const handler = getFileHandler(sourceFile);
-						const syncResult: FileSyncResult =
-							await FileMutex.getInstance().runExclusive(
-								[sourceFile, targetFile],
-								async () => {
-									// 未保存のエディタ変更をディスクへ反映してから同期する
-									await flushDirtyDocument(sourceFile);
-									await flushDirtyDocument(targetFile);
-									if (fs.existsSync(targetFile)) {
-										return handler.sync(sourceFile, targetFile, options, aligner);
-									}
-									return handler.syncNew(sourceFile, targetFile);
-								},
-							);
+						const syncResult: FileSyncResult = await FileMutex.getInstance().runExclusive(
+							[sourceFile, targetFile],
+							async () => {
+								// 未保存のエディタ変更をディスクへ反映してから同期する
+								await flushDirtyDocument(sourceFile);
+								await flushDirtyDocument(targetFile);
+								if (fs.existsSync(targetFile)) {
+									return handler.sync(sourceFile, targetFile, options, aligner);
+								}
+								return handler.syncNew(sourceFile, targetFile);
+							},
+						);
 
 						// 結果をStatusManagerに反映
 						// 変化の有無でログレベルを切り替え
-						const hasChanges =
-							syncResult.added > 0 ||
-							syncResult.modified > 0 ||
-							syncResult.deleted > 0;
+						const hasChanges = syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;
 						if (hasChanges) {
 							logger.info("sync", "File synced", {
 								pair: `${pair.sourceDir} -> ${pair.targetDir}`,
@@ -266,13 +320,9 @@ export async function syncCommand(
 						if (fs.existsSync(targetFile)) {
 							await statusManager.refreshFileStatus(targetFile);
 						} else {
-							logger.debug(
-								"sync",
-								"Skipping target status refresh (file not created)",
-								{
-									targetFile,
-								},
-							);
+							logger.debug("sync", "Skipping target status refresh (file not created)", {
+								targetFile,
+							});
 						}
 						successCount++;
 						totalFileCount++;
@@ -286,26 +336,26 @@ export async function syncCommand(
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
+						totalSourceEmptied += syncResult.sourceEmptied ?? 0;
+						// 自動同期の「1回だけ通知」の記憶は、明示 sync の結果でも更新する。
+						// 原文を保存イベント無しで戻す（SCM の変更を破棄・git checkout・
+						// エディタ外での復元）と自動同期は走らないため、ここで忘れないと
+						// 次に同じことが起きたときに黙ってしまう。
+						updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0);
 					} catch (error) {
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
 							file: sourceFile,
 							...formatError(error),
 						});
-						await statusManager.changeFileStatusWithError(
-							sourceFile,
-							error as Error,
-						);
+						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
 						errorCount++;
 					}
 				}
 			};
 
 			// ワーカー起動と完了待機
-			const workers = Array.from(
-				{ length: Math.min(effectiveParallel, files.length) },
-				() => worker(),
-			);
+			const workers = Array.from({ length: Math.min(effectiveParallel, files.length) }, () => worker());
 			await Promise.all(workers);
 
 			// スナップショットバッファをフラッシュ
@@ -349,6 +399,7 @@ export async function syncCommand(
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
+			totalSourceEmptied,
 			durationMs,
 		});
 
@@ -395,11 +446,7 @@ export async function syncCommand(
 				});
 		} else {
 			void vscode.window.showInformationMessage(
-				vscode.l10n.t(
-					"Synchronization completed: {0} succeeded, {1} failed",
-					successCount,
-					errorCount,
-				),
+				vscode.l10n.t("Synchronization completed: {0} succeeded, {1} failed", successCount, errorCount),
 			);
 		}
 
@@ -432,6 +479,9 @@ export async function syncCommand(
 				});
 		}
 
+		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）
+		notifySourceEmptied(totalSourceEmptied);
+
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
 		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
 		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
@@ -446,11 +496,7 @@ export async function syncCommand(
 				)
 				.then((choice) => {
 					if (choice === restoreHelp) {
-						return vscode.env.openExternal(
-							vscode.Uri.parse(
-								"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md",
-							),
-						);
+						return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
 					}
 					return undefined;
 				})
@@ -477,6 +523,7 @@ export async function syncCommand(
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
+			totalSourceEmptied,
 			durationMs,
 		};
 	} catch (error) {
@@ -487,10 +534,7 @@ export async function syncCommand(
 			...formatError(error),
 		});
 		vscode.window.showErrorMessage(
-			vscode.l10n.t(
-				"An error occurred during synchronization: {0}",
-				(error as Error).message,
-			),
+			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
 		return undefined;
 	}
@@ -540,9 +584,7 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		let matchedPair: TransPair | null = null;
 
 		// 選択された TransPair のみを処理対象とする
-		const pairs = SelectionState.getInstance().filterTransPairs(
-			config.transPairs,
-		);
+		const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 
 		for (const pair of pairs) {
 			if (fileExplorer.isSourceFile(filePath, config)) {
@@ -585,16 +627,15 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		// 翻訳・他のsyncと同一ファイルへの書き込みが交錯しないよう排他する
 		const src = sourceFile;
 		const tgt = targetFile;
-		const syncResult: FileSyncResult =
-			await FileMutex.getInstance().runExclusive([src, tgt], async () => {
-				// ペアファイル側の未保存変更もディスクへ反映してから同期する
-				await flushDirtyDocument(src);
-				await flushDirtyDocument(tgt);
-				if (fs.existsSync(tgt)) {
-					return handler.sync(src, tgt);
-				}
-				return handler.syncNew(src, tgt);
-			});
+		const syncResult: FileSyncResult = await FileMutex.getInstance().runExclusive([src, tgt], async () => {
+			// ペアファイル側の未保存変更もディスクへ反映してから同期する
+			await flushDirtyDocument(src);
+			await flushDirtyDocument(tgt);
+			if (fs.existsSync(tgt)) {
+				return handler.sync(src, tgt);
+			}
+			return handler.syncNew(src, tgt);
+		});
 
 		// スナップショットバッファをフラッシュ
 		await unitRegistryManager.flushBuffer();
@@ -611,9 +652,14 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		await statusManager.refreshFileStatus(sourceFile);
 		await statusManager.refreshFileStatus(targetFile);
 
+		// 原文が空で中止した場合は保存で走る自動同期でも黙らない（ADR-260803-06）。
+		// ただし保存のたびに出さないよう、同じ状態が続くあいだは1回だけにする。
+		if (updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0)) {
+			notifySourceEmptied(syncResult.sourceEmptied ?? 0);
+		}
+
 		// 変化の有無でログレベルを切り替え
-		const hasChanges =
-			syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;
+		const hasChanges = syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;
 		if (hasChanges) {
 			logger.info("sync", "File sync completed", {
 				file: path.basename(filePath),
@@ -657,9 +703,7 @@ export async function syncNew_CoreProc(
 	const fileExplorer = new FileExplorer();
 
 	// 1. ソースファイル読み込み＆パース
-	const document = await vscode.workspace.fs.readFile(
-		vscode.Uri.file(sourceFile),
-	);
+	const document = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
 	const decoder = new TextDecoder("utf-8");
 	const sourceContent = decoder.decode(document);
 
@@ -673,19 +717,12 @@ export async function syncNew_CoreProc(
 	normalizeLegacyNeeds(source.units);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
-	const sourceFrontHash = calculateFrontmatterHash(
-		source.frontMatter,
-		frontmatterKeys,
-	);
+	const sourceFrontHash = calculateFrontmatterHash(source.frontMatter, frontmatterKeys);
 	const shouldSyncFrontmatter = sourceFrontHash !== null;
 
 	// フロントマターのみのファイルは、frontmatter翻訳が無効なら処理しない
 	if (source.units.length === 0 && !shouldSyncFrontmatter) {
-		logger.debug(
-			"sync",
-			"Skipping empty file (no units, no frontmatter translation keys)",
-			{ sourceFile },
-		);
+		logger.debug("sync", "Skipping empty file (no units, no frontmatter translation keys)", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,
@@ -699,11 +736,7 @@ export async function syncNew_CoreProc(
 	ensureMdaitMarkerHash(source.units);
 
 	// 2.5. frontmatterマーカーを同期（syncFrontmatterMarkersで統一処理）
-	const frontmatterSync = syncFrontmatterMarkers(
-		source.frontMatter,
-		undefined,
-		frontmatterKeys,
-	);
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, undefined, frontmatterKeys);
 
 	// 3. target用ユニットを生成（from:hash, need:translateを付与）。
 	//    need:isolate の source は下流に出さない（伝播停止）
@@ -725,19 +758,13 @@ export async function syncNew_CoreProc(
 	const encoder = new TextEncoder();
 	const targetContent = markdownParser.stringify(targetDoc, targetIO.provider, targetIO.ctx);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	await vscode.workspace.fs.writeFile(
-		vscode.Uri.file(targetFile),
-		encoder.encode(targetContent),
-	);
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
 
 	// 4.5. スナップショット保存（初回sync時も保存）
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			unitRegistryManager.saveUnitRegistry(
-				srcUnit.marker.hash,
-				srcUnit.content,
-			);
+			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
 		}
 	}
 
@@ -750,10 +777,7 @@ export async function syncNew_CoreProc(
 		sourceIO.provider,
 		sourceIO.ctx,
 	);
-	await vscode.workspace.fs.writeFile(
-		vscode.Uri.file(sourceFile),
-		encoder.encode(updatedSourceContent),
-	);
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 6. DiffResultを返す（isolate で target 出力から除外したユニットは追加に数えない）
 	const diffs: UnitDiff[] = exportedSourceUnits.map((u) => ({
@@ -822,12 +846,8 @@ export async function sync_CoreProc(
 
 	// ファイル読み込み
 	const decoder = new TextDecoder("utf-8");
-	const sourceDoc = await vscode.workspace.fs.readFile(
-		vscode.Uri.file(sourceFile),
-	);
-	const targetDoc = await vscode.workspace.fs.readFile(
-		vscode.Uri.file(targetFile),
-	);
+	const sourceDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile));
+	const targetDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile));
 	const sourceContent = decoder.decode(sourceDoc);
 	const targetContent = decoder.decode(targetDoc);
 
@@ -852,6 +872,31 @@ export async function sync_CoreProc(
 	normalizeLegacyNeeds(source.units);
 	normalizeLegacyNeeds(target.units);
 
+	// 原文の本文が空（ユニット0件）で訳文には本文がある場合は、訳文に触らず中止する。
+	// 全選択して消した直後・別の内容へ差し替える途中・コードフェンスの崩れなど、
+	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
+	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
+	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
+	// unit-state の末尾行を刈らない条件（unit-state-align の pruneEntriesFrom）と同じ考え方。
+	//
+	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
+	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
+	if (source.units.length === 0 && target.units.length > 0) {
+		logger.warn(
+			"sync",
+			"Source has no units while target still has content; skipped to avoid emptying the translation",
+			{ sourceFile, targetFile, targetUnits: target.units.length },
+		);
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: target.units.length,
+			sourceEmptied: 1,
+		};
+	}
+
 	// 独立ユニット（target側パススルー保護）の判定 Set。
 	// ensureMdaitMarkerHash がマーカーなしユニットへメモリ上で素hashを合成するため、
 	// 「ファイルに永続化されたマーカー」を区別できる ensure 前に作る必要がある
@@ -863,23 +908,11 @@ export async function sync_CoreProc(
 	);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
-	const frontmatterSync = syncFrontmatterMarkers(
-		source.frontMatter,
-		target.frontMatter,
-		frontmatterKeys,
-	);
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
 
 	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
-	if (
-		source.units.length === 0 &&
-		target.units.length === 0 &&
-		!frontmatterSync.processed
-	) {
-		logger.debug(
-			"sync",
-			"Skipping empty file (no units, no frontmatter changes)",
-			{ sourceFile },
-		);
+	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
+		logger.debug("sync", "Skipping empty file (no units, no frontmatter changes)", { sourceFile });
 		return {
 			diffs: [],
 			added: 0,
@@ -941,10 +974,7 @@ export async function sync_CoreProc(
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 	for (const srcUnit of source.units) {
 		if (srcUnit.marker?.hash) {
-			unitRegistryManager.saveUnitRegistry(
-				srcUnit.marker.hash,
-				srcUnit.content,
-			);
+			unitRegistryManager.saveUnitRegistry(srcUnit.marker.hash, srcUnit.content);
 		}
 	}
 	// 本文編集で hash が変わったユニットの note を旧→新 hash へ移送する
@@ -993,10 +1023,7 @@ export async function sync_CoreProc(
 
 	// ファイル出力
 	const encoder = new TextEncoder();
-	await vscode.workspace.fs.writeFile(
-		vscode.Uri.file(targetFile),
-		encoder.encode(syncedContent),
-	);
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
@@ -1009,10 +1036,7 @@ export async function sync_CoreProc(
 		sourceIO.ctx,
 	);
 
-	await vscode.workspace.fs.writeFile(
-		vscode.Uri.file(sourceFile),
-		encoder.encode(updatedSourceContent),
-	);
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 差分に応じたアセットコピー（有効/無効・ホワイトリストの解決は asset-copier 側で実施）
 	await copyDiffAssets({
@@ -1173,13 +1197,10 @@ function updateSectionHashes(
 			const suppressNeed = source.marker?.need === "isolate" || target.marker?.need === "isolate";
 
 			// 共通ロジックを使用してペア同期
-			const result = syncMarkerPair(
-				sourceHash,
-				targetHash,
-				source.marker,
-				target.marker,
-				{ adoptTarget, suppressNeed },
-			);
+			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker, {
+				adoptTarget,
+				suppressNeed,
+			});
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
 			if (result.targetMarker.needsRevision()) {

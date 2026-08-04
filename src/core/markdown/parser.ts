@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { Configuration } from "../../infra/config/configuration";
+import { getCodeBlockLineSet } from "./code-block-lines";
 import { FrontMatter } from "./front-matter";
 import { type MarkerFileContext, type MarkerProvider, embeddedMarkerProvider } from "./marker-provider";
 import type { Markdown } from "./mdait-markdown";
@@ -81,19 +82,24 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * マーカーが前のテキストと同じinlineトークンに含まれてしまい、
 	 * 境界として正しく検出されない。
 	 *
+	 * コードブロック内の行は対象外（design.md P9）。利用者が書いたサンプルのマーカーは
+	 * 境界にならないため空行を入れる理由が無く、入れれば本文（コードブロックの中身）を
+	 * 書き換えてしまう。
+	 *
 	 * @param content フロントマターを除いた本文コンテンツ
 	 * @returns 正規化されたコンテンツ
 	 */
 	private normalizeMarkerSpacing(content: string): string {
 		const lines = content.split(/\r?\n/);
+		const codeBlockLines = getCodeBlockLineSet(content);
 		const result: string[] = [];
 
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
 			const trimmedLine = line.trim();
 
-			// mdaitマーカー行かどうかをチェック
-			if (MarkdownItParser.MDAIT_MARKER_LINE_REGEX.test(trimmedLine)) {
+			// mdaitマーカー行かどうかをチェック（コードブロック内は本文なので触らない）
+			if (!codeBlockLines.has(i) && MarkdownItParser.MDAIT_MARKER_LINE_REGEX.test(trimmedLine)) {
 				// 直前の行が空行でない場合（かつ先頭行でない場合）、空行を挿入
 				if (i > 0 && result.length > 0 && result[result.length - 1].trim() !== "") {
 					result.push("");

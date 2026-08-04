@@ -16,11 +16,10 @@ import {
 	runStaticChecks,
 } from "../../core/diagnostics/setup-doctor";
 import { Configuration } from "../../infra/config/configuration";
+import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger } from "../../infra/logging/logger";
 import { openConfigInSettingsEditor } from "../shared/open-config-editor";
 import { openReport, writeReport } from "../shared/report-file";
-
-const TROUBLESHOOTING_URL = "https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
 
 /**
  * セットアップ診断コマンドのエントリポイント。

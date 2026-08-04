@@ -9,10 +9,8 @@ import * as vscode from "vscode";
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { openConfigInSettingsEditor } from "./open-config-editor";
-
-const TROUBLESHOOTING_URL =
-	"https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md";
 
 /** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
 async function openConfigFile(): Promise<void> {
@@ -98,9 +96,7 @@ export async function showTranslationError(error: unknown): Promise<void> {
 		}
 		return;
 	}
-	vscode.window.showErrorMessage(
-		vscode.l10n.t("Error during translation: {0}", message),
-	);
+	vscode.window.showErrorMessage(vscode.l10n.t("Error during translation: {0}", message));
 }
 
 /**
@@ -126,13 +122,7 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 
 /** 翻訳結果のうち、通知に必要な部分だけの形 */
 export interface TransOutcomeSummary {
-	outcome:
-		| "completed"
-		| "nothing-to-do"
-		| "cancelled"
-		| "no-trans-pair"
-		| "busy"
-		| "failed";
+	outcome: "completed" | "nothing-to-do" | "cancelled" | "no-trans-pair" | "busy" | "failed";
 	translatedCount: number;
 	patchFailures: Array<{ title?: string; reason: PatchFailureReason }>;
 	writeFailures: Array<{ title?: string; reason?: string }>;
@@ -156,28 +146,20 @@ export interface TransOutcomeActions {
  * 逆に、結果を見ずに成功を出すこともしない（以前は CodeLens が常に
  * 「翻訳が完了しました」を出しており、エラーと成功が並んで表示されていた）。
  */
-export async function reportTransOutcome(
-	result: TransOutcomeSummary,
-	actions: TransOutcomeActions,
-): Promise<void> {
+export async function reportTransOutcome(result: TransOutcomeSummary, actions: TransOutcomeActions): Promise<void> {
 	if (result.outcome === "failed") {
 		// 失敗の理由は showTranslationError が既に伝えている（ここで重ねない）
 		return;
 	}
 
 	if (result.outcome === "no-trans-pair") {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for: {0}", actions.label),
-		);
+		await showNeedSyncError(vscode.l10n.t("No translation pair found for: {0}", actions.label));
 		return;
 	}
 
 	if (result.outcome === "busy") {
 		vscode.window.showInformationMessage(
-			vscode.l10n.t(
-				"{0} is already being translated. Wait for it to finish, or cancel it first.",
-				actions.label,
-			),
+			vscode.l10n.t("{0} is already being translated. Wait for it to finish, or cancel it first.", actions.label),
 		);
 		return;
 	}
@@ -196,9 +178,7 @@ export async function reportTransOutcome(
 	}
 
 	if (result.outcome === "nothing-to-do") {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Nothing to translate in {0}.", actions.label),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("Nothing to translate in {0}.", actions.label));
 		return;
 	}
 
@@ -256,11 +236,7 @@ export async function reportTransOutcome(
 	}
 
 	vscode.window.showInformationMessage(
-		vscode.l10n.t(
-			"Translation completed for {0}: {1} unit(s).",
-			actions.label,
-			result.translatedCount,
-		),
+		vscode.l10n.t("Translation completed for {0}: {1} unit(s).", actions.label, result.translatedCount),
 	);
 }
 
@@ -280,20 +256,11 @@ export async function showDirectoryTranslationFailure(
 	failed: number,
 	firstError?: unknown,
 ): Promise<void> {
-	const reason =
-		firstError instanceof Error
-			? firstError.message
-			: firstError !== undefined
-				? String(firstError)
-				: "";
+	const reason = firstError instanceof Error ? firstError.message : firstError !== undefined ? String(firstError) : "";
 
 	if (!reason) {
 		vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Directory translation completed: {0} files succeeded, {1} files failed",
-				successful,
-				failed,
-			),
+			vscode.l10n.t("Directory translation completed: {0} files succeeded, {1} files failed", successful, failed),
 		);
 		return;
 	}
@@ -313,12 +280,7 @@ export async function showDirectoryTranslationFailure(
 	const diagnose = vscode.l10n.t("Diagnose");
 	const openConfig = vscode.l10n.t("Open mdait.json");
 	const docs = vscode.l10n.t("Open docs");
-	const choice = await vscode.window.showErrorMessage(
-		body,
-		diagnose,
-		openConfig,
-		docs,
-	);
+	const choice = await vscode.window.showErrorMessage(body, diagnose, openConfig, docs);
 	if (choice === diagnose) {
 		await vscode.commands.executeCommand("mdait.setup.diagnose");
 	} else if (choice === openConfig) {
