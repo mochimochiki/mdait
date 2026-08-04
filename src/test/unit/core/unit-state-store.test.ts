@@ -2,7 +2,13 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { UnitStateStore } from "../../../core/unit-state/unit-state-store";
+import {
+	HELD_ORDER_BASE,
+	UnitStateStore,
+	isHeldBackEntry,
+	isPathInDirs,
+	shouldRemoveEntryPath,
+} from "../../../core/unit-state/unit-state-store";
 import type { UnitStateEntry } from "../../../core/unit-state/unit-state-store";
 
 /** テスト用一時ディレクトリを作成 */
@@ -188,20 +194,315 @@ suite("UnitStateStore", () => {
 		assert.ok(dataLines[2].startsWith("z.md\t1\t"));
 	});
 
-	test("cleanupOrphansで同一pathの全order行が削除されること", () => {
+	test("cleanupOrphansInScopeで走査範囲内の見つからなかったpathの全order行が削除されること", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
 
-		store.setEntry({ path: "keep.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
-		store.setEntry({ path: "orphan.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
-		store.setEntry({ path: "orphan.md", order: 1, level: 2, titleHash: "h", hash: "5", from: "6", need: "translate" });
+		store.setEntry({ path: "ja/keep.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "ja/orphan.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+		store.setEntry({ path: "ja/orphan.md", order: 1, level: 2, titleHash: "h", hash: "5", from: "6", need: "translate" });
 
-		const removed = store.cleanupOrphans(new Set(["keep.md"]));
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set(["ja/keep.md"]),
+		});
 
 		assert.strictEqual(removed, 2);
-		assert.ok(store.getEntry("keep.md", 0));
-		assert.strictEqual(store.getEntry("orphan.md", 0), undefined);
-		assert.strictEqual(store.getEntry("orphan.md", 1), undefined);
+		assert.ok(store.getEntry("ja/keep.md", 0));
+		assert.strictEqual(store.getEntry("ja/orphan.md", 0), undefined);
+		assert.strictEqual(store.getEntry("ja/orphan.md", 1), undefined);
+	});
+
+	test("cleanupOrphansInScopeが、configにはあるが今回走査していないディレクトリの行を残すこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "fr/guide.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		// fr は config に載っているが未選択なので走査していない
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en", "fr"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set(["ja/guide.md", "en/guide.md"]),
+		});
+
+		assert.strictEqual(removed, 0);
+		assert.ok(store.getEntry("fr/guide.md", 0));
+	});
+
+	test("cleanupOrphansInScopeがconfigのどのディレクトリにも属さない行を削除すること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		// ペアを config から外した／ディレクトリを改名した後の旧パス
+		store.setEntry({ path: "fr/guide.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set(["ja/guide.md", "en/guide.md"]),
+		});
+
+		assert.strictEqual(removed, 1);
+		assert.strictEqual(store.getEntry("fr/guide.md", 0), undefined);
+		assert.ok(store.getEntry("en/guide.md", 0));
+	});
+
+	test("cleanupOrphansInScopeがconfiguredDirs空のときは何もしないこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: [],
+			scannedDirs: [],
+			seenPaths: new Set<string>(),
+		});
+
+		assert.strictEqual(removed, 0);
+		assert.ok(store.getEntry("en/guide.md", 0));
+	});
+
+	test("cleanupOrphansInScopeが名前の先頭が同じ別ディレクトリを範囲内と誤判定しないこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "content/en2/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "", need: "" });
+
+		// content/en2 は content/en の配下ではないので「config 外」＝削除対象になる
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["content/ja", "content/en"],
+			scannedDirs: ["content/ja", "content/en"],
+			seenPaths: new Set<string>(),
+		});
+
+		assert.strictEqual(removed, 1);
+		assert.strictEqual(store.getEntry("content/en2/guide.md", 0), undefined);
+	});
+
+	test("isPathInDirsがディレクトリ境界まで見て判定すること", () => {
+		assert.strictEqual(isPathInDirs("content/en/a.md", ["content/en"]), true);
+		assert.strictEqual(isPathInDirs("content/en/sub/a.md", ["content/en"]), true);
+		assert.strictEqual(isPathInDirs("content/en2/a.md", ["content/en"]), false);
+		assert.strictEqual(isPathInDirs("content/en/a.md", ["content/en/"]), true);
+		assert.strictEqual(isPathInDirs("content/en/a.md", []), false);
+		// ワークスペースルート自体が対象なら全てが範囲内
+		assert.strictEqual(isPathInDirs("content/en/a.md", [""]), true);
+	});
+
+	suite("parkEntriesFrom（刈り取りを見送った行の保留席）", () => {
+		test("指定order以降の行が保留席へ移り、内容は変わらないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			for (let i = 0; i < 4; i++) {
+				store.setEntry({
+					path: "en/a.md",
+					order: i,
+					level: 2,
+					titleHash: `t${i}`,
+					hash: `h${i}`,
+					from: `f${i}`,
+					need: i === 3 ? "translate" : "",
+				});
+			}
+
+			const parked = store.parkEntriesFrom("en/a.md", 1);
+
+			assert.strictEqual(parked, 3);
+			const entries = store.getEntriesByPath("en/a.md");
+			assert.deepStrictEqual(
+				entries.map((e) => e.order),
+				[0, HELD_ORDER_BASE, HELD_ORDER_BASE + 1, HELD_ORDER_BASE + 2],
+			);
+			// 内容（hash/from/need）は保たれる
+			assert.deepStrictEqual(
+				entries.map((e) => `${e.hash}/${e.from}/${e.need}`),
+				["h0/f0/", "h1/f1/", "h2/f2/", "h3/f3/translate"],
+			);
+		});
+
+		test("保留席の行は isHeldBackEntry で見分けられること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "en/a.md", order: 0, level: 1, titleHash: "t", hash: "h", from: "f", need: "" });
+			store.setEntry({ path: "en/a.md", order: 1, level: 2, titleHash: "t", hash: "h", from: "f", need: "" });
+			store.parkEntriesFrom("en/a.md", 1);
+
+			const entries = store.getEntriesByPath("en/a.md");
+			assert.deepStrictEqual(entries.map(isHeldBackEntry), [false, true]);
+		});
+
+		test("既に保留席にある行は二重に移動せず、席が重ならないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "en/a.md", order: 0, level: 1, titleHash: "t", hash: "h0", from: "", need: "" });
+			store.setEntry({ path: "en/a.md", order: 1, level: 2, titleHash: "t", hash: "h1", from: "", need: "" });
+			store.setEntry({ path: "en/a.md", order: 2, level: 2, titleHash: "t", hash: "h2", from: "", need: "" });
+			assert.strictEqual(store.parkEntriesFrom("en/a.md", 1), 2);
+
+			// 次の detach でユニットがさらに減った場合（order 0 だけが生きている）
+			assert.strictEqual(store.parkEntriesFrom("en/a.md", 1), 0, "生きている行が無ければ何も動かない");
+			assert.strictEqual(store.getEntriesByPath("en/a.md").length, 3, "行が失われない");
+
+			// 新たに order 1 が書かれてから、また保留になるケース
+			store.setEntry({ path: "en/a.md", order: 1, level: 2, titleHash: "t", hash: "h9", from: "", need: "" });
+			assert.strictEqual(store.parkEntriesFrom("en/a.md", 1), 1);
+			const orders = store.getEntriesByPath("en/a.md").map((e) => e.order);
+			assert.strictEqual(new Set(orders).size, orders.length, "保留席が重ならない");
+			assert.strictEqual(orders.length, 4);
+		});
+
+		test("移すものが無ければ0を返すこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "en/a.md", order: 0, level: 1, titleHash: "t", hash: "h", from: "", need: "" });
+
+			assert.strictEqual(store.parkEntriesFrom("en/a.md", 1), 0);
+			assert.deepStrictEqual(
+				store.getEntriesByPath("en/a.md").map((e) => e.order),
+				[0],
+			);
+		});
+	});
+
+	suite("shouldRemoveEntryPath（掃除の3分割）", () => {
+		const scope = {
+			configuredDirs: ["content/ja", "content/en", "content/fr"],
+			scannedDirs: ["content/ja", "content/en"],
+			seenPaths: new Set(["content/ja/a.md", "content/en/a.md"]),
+		};
+
+		test("configのどのディレクトリにも属さない行は消す", () => {
+			assert.strictEqual(shouldRemoveEntryPath("content/de/a.md", scope), true);
+			assert.strictEqual(shouldRemoveEntryPath("old/a.md", scope), true);
+		});
+
+		test("configにはあるが今回走査していない行は残す", () => {
+			assert.strictEqual(shouldRemoveEntryPath("content/fr/a.md", scope), false);
+		});
+
+		test("走査して見つかった行は残す", () => {
+			assert.strictEqual(shouldRemoveEntryPath("content/en/a.md", scope), false);
+		});
+
+		test("走査したが見つからなかった行は消す", () => {
+			assert.strictEqual(shouldRemoveEntryPath("content/en/gone.txt", scope), true);
+		});
+	});
+
+	suite("pruneEntriesFrom", () => {
+		test("指定order以降の行だけが削除されること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			for (let i = 0; i < 4; i++) {
+				store.setEntry({ path: "ja/a.md", order: i, level: 2, titleHash: "t", hash: `h${i}`, from: "", need: "" });
+			}
+
+			const removed = store.pruneEntriesFrom("ja/a.md", 2);
+
+			assert.strictEqual(removed, 2);
+			assert.ok(store.getEntry("ja/a.md", 0));
+			assert.ok(store.getEntry("ja/a.md", 1));
+			assert.strictEqual(store.getEntry("ja/a.md", 2), undefined);
+			assert.strictEqual(store.getEntry("ja/a.md", 3), undefined);
+		});
+
+		test("他のpathの行には触れないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.setEntry({ path: "ja/b.md", order: 0, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.setEntry({ path: "ja/b.md", order: 1, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+
+			const removed = store.pruneEntriesFrom("ja/b.md", 0);
+
+			assert.strictEqual(removed, 2);
+			assert.ok(store.getEntry("ja/a.md", 0));
+			assert.strictEqual(store.getEntry("ja/b.md", 0), undefined);
+		});
+
+		test("削除対象が無ければ0を返し保存対象にしないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.save(tempDir);
+			const before = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
+
+			const removed = store.pruneEntriesFrom("ja/a.md", 5);
+
+			assert.strictEqual(removed, 0);
+			// dirty が立たないので save は書き換えない
+			store.save(tempDir);
+			assert.strictEqual(fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8"), before);
+		});
+
+		test("orderが飛んでいても指定order以上をすべて削除すること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.setEntry({ path: "ja/a.md", order: 7, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.setEntry({ path: "ja/a.md", order: 9, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+
+			const removed = store.pruneEntriesFrom("ja/a.md", 1);
+
+			assert.strictEqual(removed, 2);
+			assert.deepStrictEqual(
+				store.getEntriesByPath("ja/a.md").map((e) => e.order),
+				[0],
+			);
+		});
+
+		test("保留席（HELD_ORDER_BASE以降）の行も削除されること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "h", from: "", need: "" });
+			store.setEntry({
+				path: "ja/a.md",
+				order: HELD_ORDER_BASE,
+				level: 2,
+				titleHash: "t",
+				hash: "h",
+				from: "",
+				need: "",
+			});
+
+			const removed = store.pruneEntriesFrom("ja/a.md", 1);
+
+			assert.strictEqual(removed, 1);
+			assert.strictEqual(store.getEntriesByPath("ja/a.md").length, 1);
+		});
+
+		test("削除した結果がファイルへ保存されること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "h0", from: "", need: "" });
+			store.setEntry({ path: "ja/a.md", order: 1, level: 2, titleHash: "t", hash: "h1", from: "", need: "" });
+			store.save(tempDir);
+
+			store.pruneEntriesFrom("ja/a.md", 1);
+			store.save(tempDir);
+
+			const dataLines = fs
+				.readFileSync(path.join(tempDir, "unit-state"), "utf-8")
+				.split("\n")
+				.filter((l) => l.trim() !== "" && !l.startsWith("#"));
+			assert.strictEqual(dataLines.length, 1);
+			assert.ok(dataLines[0].startsWith("ja/a.md\t0\t"));
+		});
 	});
 
 	test("getEntriesNeedingActionがneed非空のみ返すこと", () => {

@@ -252,6 +252,52 @@ suite("マーカー移行コマンドの per-file 変換（外部化 / 埋め込
 		assert.strictEqual(result.unitsMigrated, 1, "hash を持つマーカーだけが移送として数えられる");
 		assert.strictEqual(store.getEntriesByPath(REL).length, 0, "MD ファイルの store エントリは削除される");
 	});
+
+	test("embed: 本文へ書き戻せなかったエントリは削除されずに残ること", () => {
+		// 本文のユニットは1つしか無いのに、store には3行ある（本文を大きく削った途中の状態など）。
+		// 対応の付かない2行の from/need を、本文にも store にも残さずに消してはならない。
+		fs.writeFileSync(absPath, ["# 見出し1", "", "本文1。", ""].join("\n"), "utf-8");
+		for (let i = 0; i < 3; i++) {
+			store.setEntry({
+				path: REL,
+				order: i,
+				level: i === 0 ? 1 : 2,
+				titleHash: "",
+				hash: `hash000${i}`,
+				from: `src0000${i}`,
+				need: i === 2 ? "translate" : "",
+			});
+		}
+
+		const result = embedFileMarkers(absPath, "target", makeConfig(2), store);
+
+		const body = fs.readFileSync(absPath, "utf-8");
+		assert.ok(body.includes("<!-- mdait hash0000 from:src00000 -->"), "書き戻せた分は本文に出る");
+		assert.strictEqual(result.unitsMigrated, 1);
+
+		const remaining = store.getEntriesByPath(REL);
+		assert.strictEqual(remaining.length, 2, "書き戻せなかった2行は残る");
+		assert.deepStrictEqual(
+			remaining.map((e) => e.order),
+			[1, 2],
+		);
+		assert.strictEqual(remaining[1].need, "translate", "need も失われない");
+	});
+
+	test("embed: 全エントリが書き戻せた場合は行が残らないこと", () => {
+		const externalized = markdownParser.stringify(
+			markdownParser.parse(buildEmbeddedDoc(), makeConfig(2), embeddedMarkerProvider),
+			externalMarkerProvider,
+			{ filePath: REL, role: "target" },
+		);
+		fs.writeFileSync(absPath, externalized, "utf-8");
+		assert.strictEqual(store.getEntriesByPath(REL).length, 2, "前提: store に2行ある");
+
+		const result = embedFileMarkers(absPath, "target", makeConfig(2), store);
+
+		assert.strictEqual(result.unitsMigrated, 2);
+		assert.strictEqual(store.getEntriesByPath(REL).length, 0);
+	});
 });
 
 // 一括変換ループ（runMigrationLoop）の store 保存保証を検証する。

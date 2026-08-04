@@ -14,10 +14,11 @@ import {
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import type { TransPair } from "../../infra/config/configuration";
+import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -62,6 +63,8 @@ export interface SyncResult {
 	totalKept: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
 	totalOrphanReviewed: number;
+	/** 崩れを疑って自動削除を見送り、確認待ちにした孤立ターゲット数 */
+	totalOrphanDeletionWithheld: number;
 	/** AIアラインが適用した修正提案数 */
 	totalAlignCorrections: number;
 	durationMs: number;
@@ -136,6 +139,7 @@ export async function syncCommand(
 		let totalAdopted = 0;
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
+		let totalOrphanDeletionWithheld = 0;
 		let totalAlignCorrections = 0;
 
 		// UnitStateStoreをロード
@@ -144,13 +148,22 @@ export async function syncCommand(
 			UnitStateStore.getInstance().load(mdaitDir);
 		}
 
-		// orphanクリーンアップ用: 全pairの有効ターゲットパスを収集
-		const validTargetPaths = new Set<string>();
+		// orphanクリーンアップ用の範囲（詳細は UnitStateStore.cleanupOrphansInScope）。
+		// - configuredDirs: config の全 pair のディレクトリ。ここから外れた行は消してよい
+		// - scannedDirs:    今回実際に走査できたディレクトリ。ここに無い行は「確かめていない」
+		// - seenPaths:      走査して実在を確認したファイル
+		const configuredDirs = collectConfiguredDirs(config);
+		const scannedDirs = new Set<string>();
+		const seenPaths = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
-			// ソースファイル一覧を取得（extensions対応）
+			// ソースファイル一覧を取得（extensions対応）。
+			// 原文ディレクトリが手元に無い（sparse checkout・ブランチ切替・設定ミス）と、ここが
+			// throw して sync 全体が止まる。unit-state の行が守られるのは掃除に到達しないためで、
+			// 掃除側の分岐で守っているわけではない（実測: 後続ペアも1件も処理されない）。
 			const fileExplorer = new FileExplorer();
+
 			const files = await fileExplorer.getSourceFiles(
 				pair.sourceDir,
 				config,
@@ -167,24 +180,25 @@ export async function syncCommand(
 				continue;
 			}
 
-			// 有効パスを収集（unit-state の orphan クリーンアップ用）
-			// - 非MD: ターゲットパス（order:0 の1エントリ）
-			// - MD-external: ソース・ターゲット両方（複数 order エントリ）。entry キーと一致させるため
-			//   toWorkspaceRelativePath で正規化する
-			const externalMarkers = config.isExternalMarkers();
+			// ここまで来たら「このペアのディレクトリを走査して1件以上見つけた」。
+			// 走査したことの登録は必ずファイル列挙の後で行う。前に置くと、ディレクトリは在るのに
+			// 0件だったとき（原文を一時的に退避した等）に「全部見たが1件も無かった」と読まれ、
+			// そのペアの全行が消える
+			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.sourceDir)));
+			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.targetDir)));
+
+			// 実在を確認したパスを収集（unit-state の orphan クリーンアップ用）。
+			// キーは `UnitStateEntry.path` と同じ基準（ワークスペースルート相対）にそろえる。
+			// FileExplorer.normalizePath は設定ベースディレクトリ相対なので、カスタム config
+			// パスでは基準が食い違い、非MDの行が毎 sync 全滅する（docs/design/unit-state.md §5-(4)）。
+			//
+			// MD もマーカー保管方式に関わらず収集する。embedded 運用でも、embed で本文へ
+			// 書き戻せなかった行がストアに残ることがあり、それを掃除で消してしまわないため。
 			for (const file of files) {
-				const isMd = path.extname(file).toLowerCase() === ".md";
-				if (!isMd) {
-					const tgt = fileExplorer.getTargetPath(file, pair);
-					if (tgt) {
-						validTargetPaths.add(fileExplorer.normalizePath(tgt));
-					}
-				} else if (externalMarkers) {
-					validTargetPaths.add(toWorkspaceRelativePath(file));
-					const tgt = fileExplorer.getTargetPath(file, pair);
-					if (tgt) {
-						validTargetPaths.add(toWorkspaceRelativePath(tgt));
-					}
+				seenPaths.add(toWorkspaceRelativePath(file));
+				const tgt = fileExplorer.getTargetPath(file, pair);
+				if (tgt) {
+					seenPaths.add(toWorkspaceRelativePath(tgt));
 				}
 			}
 
@@ -270,6 +284,7 @@ export async function syncCommand(
 						totalAdopted += syncResult.adopted ?? 0;
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
+						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
 					} catch (error) {
 						logger.error("sync", "File sync error", {
@@ -301,7 +316,11 @@ export async function syncCommand(
 		// UnitStateStoreのorphanクリーンアップ＋保存
 		if (mdaitDir) {
 			const unitStateStore = UnitStateStore.getInstance();
-			const orphansRemoved = unitStateStore.cleanupOrphans(validTargetPaths);
+			const orphansRemoved = unitStateStore.cleanupOrphansInScope({
+				configuredDirs,
+				scannedDirs: [...scannedDirs],
+				seenPaths,
+			});
 			if (orphansRemoved > 0) {
 				logger.info("sync", "Cleaned up orphan unit-state entries", {
 					orphansRemoved,
@@ -328,6 +347,7 @@ export async function syncCommand(
 			totalAdopted,
 			totalKept,
 			totalOrphanReviewed,
+			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
 			durationMs,
 		});
@@ -383,6 +403,35 @@ export async function syncCommand(
 			);
 		}
 
+		// 自動削除を見送った場合は「何も起きなかったように見える」ので必ず伝える。
+		// ux.md §3.3 では通知に載せてよいのは「実行の結果と、結果に対する次の一手」。
+		// これは sync の実行結果そのもの（＝訳文を消さずに確認待ちにした）なので通知が正しい。
+		// 状態はツリー（need:verify-deletion のユニット）に出るので、ここでは件数と入口だけを示す。
+		// 明示実行の sync だけが出す（autoSyncOnSave は syncSingleFile 経由で通知を出さない）。
+		if (totalOrphanDeletionWithheld > 0) {
+			const showList = vscode.l10n.t("Show units");
+			void vscode.window
+				.showWarningMessage(
+					vscode.l10n.t(
+						"Sync did not delete {0} translated unit(s) whose source disappeared all at once — this often means the source failed to parse (an unclosed code fence, or a changed sync.level). They are kept and marked for your confirmation. Fix the source and sync again to restore them.",
+						totalOrphanDeletionWithheld,
+					),
+					showList,
+				)
+				.then((choice) => {
+					if (choice === showList) {
+						// VS Code が view id から自動生成するフォーカスコマンド
+					return vscode.commands.executeCommand("mdait.status.focus");
+					}
+					return undefined;
+				})
+				.then(undefined, (error) => {
+					logger.error("sync", "Withheld-deletion guidance failed", {
+						...formatError(error),
+					});
+				});
+		}
+
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
 		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
 		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
@@ -426,6 +475,7 @@ export async function syncCommand(
 			totalAdopted,
 			totalKept,
 			totalOrphanReviewed,
+			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
 			durationMs,
 		};
@@ -444,6 +494,23 @@ export async function syncCommand(
 		);
 		return undefined;
 	}
+}
+
+/**
+ * config の全 pair の原文・訳文ディレクトリを、`UnitStateEntry.path` と同じ基準
+ * （ワークスペースルート相対・`/` 区切り）で返す。
+ *
+ * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
+ * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
+ */
+function collectConfiguredDirs(config: Configuration): string[] {
+	const baseDir = config.getConfigBaseDir();
+	const dirs = new Set<string>();
+	for (const pair of config.transPairs) {
+		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.sourceDir)));
+		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
+	}
+	return [...dirs];
 }
 
 /**
@@ -886,9 +953,18 @@ export async function sync_CoreProc(
 	// 同期結果の生成（孤立ターゲットの処理はポリシーに従う。
 	// delete=自動削除 / verify=need:verify-deletion付与で手動確認に委ねる（P6対策）。
 	// 独立ユニットはポリシーに関わらず保持、マーカーなし孤立は need:review で一次受けする）
+	//
+	// ただし「原文がごっそり対応を失った」ときは自動削除しない（下記 resolveOrphanPolicy）。
+	const orphanCandidates = countDanglingOrphans(matchResult, independentTargets);
+	const withheldPolicy = resolveOrphanPolicy(
+		config.getOrphanTargetPolicy(),
+		target.units.length,
+		orphanCandidates,
+		targetFile,
+	);
 	const syncedResult = sectionMatcher.createSyncedTargets(
 		matchResult,
-		config.getOrphanTargetPolicy(),
+		withheldPolicy.policy,
 		independentTargets,
 	);
 	const syncedUnits = syncedResult.units;
@@ -900,6 +976,7 @@ export async function sync_CoreProc(
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
+	diffResult.orphanDeletionWithheld = withheldPolicy.withheld ? syncedResult.orphanVerified : 0;
 	diffResult.alignCorrections = alignCorrections;
 
 	// 同期結果をMarkdownオブジェクトとして構築
@@ -946,6 +1023,70 @@ export async function sync_CoreProc(
 	});
 
 	return diffResult;
+}
+
+/**
+ * 原文を失った（dangling）訳文ユニットの数を数える。
+ *
+ * 独立ユニット・`need:isolate`・マーカーなしの管理外コンテンツは、もともと自動削除の
+ * 対象ではないので数えない（`createSyncedTargets` の分岐と対応させる）。
+ */
+function countDanglingOrphans(
+	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
+	independentTargets: ReadonlySet<MdaitUnit>,
+): number {
+	let count = 0;
+	for (const pair of matchResult) {
+		if (pair.source || !pair.target) continue;
+		if (independentTargets.has(pair.target) || pair.target.marker?.need === "isolate") continue;
+		const marker = pair.target.marker;
+		if (marker?.from || marker?.need === "verify-deletion") {
+			count++;
+		}
+	}
+	return count;
+}
+
+/**
+ * 孤立ユニットの扱いを決める。**原文がごっそり対応を失ったときは自動削除しない。**
+ *
+ * 原文にコードブロックの閉じ忘れが1つ入るだけで、以降の見出しが全部コードとして飲まれ、
+ * 訳文の章がまとめて「原文を失った」状態になる。既定設定（`sync.autoDelete: true`）では
+ * それが**訳文の物理削除**になり、フェンスを直しても訳は戻らない（git からしか戻せない）。
+ * 実測: 7章の訳文がフェンス1つで全部消え、直したあとは全ユニット `need:translate` になった。
+ *
+ * `unit-state` の行を守るのと同じ判定（`isSuspiciousShrink`）を本文にも当てる。
+ * 行だけ守って本文を消していては「見えていないものを無いと断定しない」原則が成立しない。
+ *
+ * ただし慎重さは削除側のほう（`DELETE_SUSPICION`）を使う。崩れは文書の大きさに関係なく
+ * 1ユニットまで潰すので、「対応が1件以下しか残らない」なら減少幅が1件でも疑う。
+ * 刈り取り側の下限（3件）をそのまま使うと、見出し2つの README のような小さい文書が
+ * 素通りし、動機となった事故がそのまま残る（実測: 3ユニットの訳文が2件とも物理削除）。
+ *
+ * 止めるときは黙って残すのではなく `verify`（`need:verify-deletion`）へ倒す。
+ * 削除が本当に正しければ人が確定でき、原文が戻れば `updateSectionHashes` が自動で解除する。
+ * need の語彙は増やしていない（既存のポリシーへ倒すだけ）。
+ */
+function resolveOrphanPolicy(
+	configured: OrphanTargetPolicy,
+	targetUnitCount: number,
+	orphanCandidates: number,
+	targetFile: string,
+): { policy: OrphanTargetPolicy; withheld: boolean } {
+	if (configured !== "delete" || orphanCandidates === 0) {
+		return { policy: configured, withheld: false };
+	}
+	const remaining = targetUnitCount - orphanCandidates;
+	if (!isSuspiciousShrink(targetUnitCount, remaining, DELETE_SUSPICION)) {
+		return { policy: configured, withheld: false };
+	}
+	logger.warn("sync", "Withheld automatic deletion of orphaned target units (source lost too many units at once)", {
+		file: targetFile,
+		targetUnits: targetUnitCount,
+		orphaned: orphanCandidates,
+		note: "Kept the translations and marked them need:verify-deletion. If the source is broken (unclosed code fence, sync.level change), fix it and sync again — the units recover automatically.",
+	});
+	return { policy: "verify", withheld: true };
 }
 
 /**
@@ -1013,6 +1154,11 @@ function updateSectionHashes(
 
 		// sourceとtargetが存在 : 通常の同期処理
 		if (source && target) {
+			// 原文が戻ってきたので「削除してよいか確認して」の前提が消えた。ここで解除しないと、
+			// パースの崩れが直ったあとも全ユニットが verify-deletion のまま残る（実測）。
+			if (target.marker?.need === "verify-deletion") {
+				target.marker.removeNeedTag();
+			}
 			const sourceHash = calculateHash(source.content);
 			const targetHash = calculateHash(target.content);
 			recordMigration(source.marker?.hash, sourceHash);

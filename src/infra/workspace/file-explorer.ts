@@ -5,6 +5,23 @@ import { Configuration } from "../config/configuration";
 import type { TransPair } from "../config/configuration";
 
 /**
+ * `/` 区切りのパスから表記のゆれを畳む（`./x` → `x`、`x/` → `x`、`a//b` → `a/b`、`a/./b` → `a/b`）。
+ *
+ * `path.posix.normalize` は末尾の `/` を残すので自分で落とす。`.`（カレント）は空文字にする。
+ * ルート（`/`）だけは落とさない（落とすと空文字になり別の意味になる）。
+ */
+function collapsePathNotation(slashPath: string): string {
+	if (slashPath === "") {
+		return "";
+	}
+	let collapsed = path.posix.normalize(slashPath);
+	if (collapsed.length > 1) {
+		collapsed = collapsed.replace(/\/+$/, "");
+	}
+	return collapsed === "." ? "" : collapsed;
+}
+
+/**
  * ファイル探索とファイル種別解決を統合的に行うクラス
  *
  * このクラスは以下の責務を持つ：
@@ -271,10 +288,17 @@ export class FileExplorer {
 	}
 
 	/**
-	 * パスを正規化（スラッシュ統一、設定ベースディレクトリ相対パス化）
+	 * パスを正規化（スラッシュ統一、表記ゆれの畳み込み、設定ベースディレクトリ相対パス化）
+	 *
+	 * 正規化された文字列同士は前方一致で「配下かどうか」を判定される（`isPathInDirectory`）。
+	 * したがって**同じ場所を指す表記は必ず同じ文字列にならなければならない**。
+	 * `"./content/ja"` や `"content/ja/"` を畳まずに返していたため、`mdait.json` に
+	 * `sourceDir: "./content/ja"` と書くだけで `getTargetPath` が null を返し、
+	 * 1ファイルも同期されないうえ訳文側の `unit-state` の行が sync 1回で全部消えていた
+	 * （`validateForRun` は `"./docs"` を正当な書き方として想定している）。
 	 */
 	public normalizePath(inputPath: string): string {
-		let normalizedPath = inputPath.replace(/\\/g, "/");
+		let normalizedPath = collapsePathNotation(inputPath.replace(/\\/g, "/"));
 
 		// 絶対パスの場合は設定ベースディレクトリ相対パスに変換
 		if (path.isAbsolute(normalizedPath)) {
@@ -292,7 +316,7 @@ export class FileExplorer {
 				!relative.startsWith("../") &&
 				!path.isAbsolute(relative)
 			) {
-				normalizedPath = relative;
+				normalizedPath = collapsePathNotation(relative);
 			}
 		}
 

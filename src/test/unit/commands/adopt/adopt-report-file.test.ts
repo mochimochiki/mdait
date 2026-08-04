@@ -23,6 +23,7 @@ function syncResult(): SyncResult {
 		totalAdopted: 1,
 		totalKept: 0,
 		totalOrphanReviewed: 0,
+		totalOrphanDeletionWithheld: 0,
 		totalAlignCorrections: 0,
 		durationMs: 1,
 	};

@@ -348,6 +348,212 @@ async function phase6() {
 	else fail(P, "-", "embedded 復帰後の sync が4回でも収束しない（成長/振動の疑い）", "");
 }
 
+/** そのパスの行の「内容としての状態」を1本の文字列で表す（order は含めない） */
+function stateOf(store, relPath) {
+	return store
+		.getEntriesByPath(relPath)
+		.map((e) => `${e.hash}/${e.from}/${e.need}`)
+		.sort()
+		.join(" ");
+}
+
+// P7: 外部ストアの行を「静かに消さない」ことの検証（ADR-260803-03）。
+//
+// probe-robustness.js の embedded/external 突き合わせでは、この2つは観測できない。
+// sync は必ず文書を「同期後のユニット列」へ書き直してから detach するため、
+// 一時的にユニットが崩れた状態が detach に届かないからである。崩れた本文がそのまま
+// 読み書きされるのは unit-mutation（CodeLens の操作）と markers-migration の経路で、
+// ここではその2経路を直接叩いて確かめる。
+async function phase7() {
+	const P = "P7-nosilentdelete";
+	resetWorkspace();
+	await loadConfigAndSelectAll();
+	await syncCommand();
+	await loadConfigAndSelectAll({ markersMode: "external" });
+	await syncCommand();
+
+	const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
+	const { getFileHandler } = require(path.join(REPO, "out/commands/file-handler/file-handler-factory.js"));
+	const { embedFileMarkers } = require(path.join(REPO, "out/commands/markers/markers-migration.js"));
+	const { Configuration } = require(path.join(REPO, "out/infra/config/configuration.js"));
+	const store = UnitStateStore.getInstance();
+
+	// 訳文側で行が多いファイルを選ぶ（閾値まわりの挙動を見たいので4行以上）。
+	// 原文側の行は hash を本文から再計算できるため、消えても sync が作り直してしまい
+	// 「状態を失った」ことが観測できない。守りたいのは from/need を持つ訳文側の行である。
+	const rowsPerPath = {};
+	for (const e of store.getAllEntries()) {
+		if (!e.path.endsWith(".md")) continue;
+		rowsPerPath[e.path] = rowsPerPath[e.path] || { total: 0, withFrom: 0 };
+		rowsPerPath[e.path].total++;
+		if (e.from !== "") rowsPerPath[e.path].withFrom++;
+	}
+	const relPath = Object.keys(rowsPerPath).find((p) => rowsPerPath[p].total >= 4 && rowsPerPath[p].withFrom >= 3);
+	if (!relPath) {
+		info(P, "-", "from を持つ行が4件以上ある訳文 .md が無く、刈り取り閾値まわりを検証できない");
+		return;
+	}
+	const absPath = path.join(WS, relPath);
+	const original = fs.readFileSync(absPath, "utf8");
+	const beforeRows = store.getEntriesByPath(relPath).length;
+	const beforeState = stateOf(store, relPath);
+
+	// ---- (a) C-3: 本文が一時的に崩れた状態で読み書きしても行を失わない ----
+	// コードブロックの閉じ忘れ。以降が全部コードとして飲まれ、ユニットが激減する。
+	// unit-mutation（CodeLens の操作）も markers-migration も、本文をこの形で
+	// parse → stringify する。sync と違い「同期後のユニット列」へ直さないので、
+	// 崩れたユニット列がそのまま detach に届く。
+	const { markdownParser } = require(path.join(REPO, "out/core/markdown/parser.js"));
+	const { resolveMarkerIOForFile } = require(path.join(REPO, "out/infra/config/marker-io.js"));
+	fs.writeFileSync(absPath, `${original.split("\n")[0]}\n\n\`\`\`text\n${original}\n`, "utf8");
+	const brokenIO = resolveMarkerIOForFile(Configuration.getInstance(), absPath);
+	const brokenDoc = markdownParser.parse(fs.readFileSync(absPath, "utf8"), Configuration.getInstance(), brokenIO.provider, brokenIO.ctx);
+	if (brokenDoc.units.length >= beforeRows) {
+		info(P, relPath, `フェンスを崩してもユニットが減らず（${brokenDoc.units.length}件）刈り取り判定を通せない`);
+	}
+	markdownParser.stringify(brokenDoc, brokenIO.provider, brokenIO.ctx);
+	const afterBroken = store.getEntriesByPath(relPath).length;
+	if (afterBroken >= beforeRows) {
+		ok(P, `フェンス崩れの本文を書き換えても行が減らないOK（${relPath}: ${beforeRows}→${afterBroken}）`);
+	} else {
+		fail(P, relPath, `フェンス崩れで unit-state の行が消えた（${beforeRows}→${afterBroken}）`, "");
+	}
+
+	// 崩れを直すと状態が戻る（保留席の行が内容で拾い直される）。
+	// 行数だけ見ても sync が作り直すので戻って見える。from/need まで一致するかを見る。
+	fs.writeFileSync(absPath, original, "utf8");
+	await syncCommand();
+	const restoredState = stateOf(store, relPath);
+	if (restoredState === beforeState) {
+		ok(P, `崩れを直すと from/need が元に戻るOK（${relPath}）`);
+	} else {
+		fail(P, relPath, "崩れを直しても from/need が元に戻らない", `before=${beforeState}\nafter =${restoredState}`);
+	}
+
+	// ---- (b) C-2: embed で本文へ書き戻せなかった行を消さない ----
+	// 本文を先頭ユニットだけに削り、行のほうが多い状態で embed する。
+	const head = original.split("\n").slice(0, 2).join("\n");
+	fs.writeFileSync(absPath, `${head}\n`, "utf8");
+	const rowsBeforeEmbed = store.getEntriesByPath(relPath).length;
+	embedFileMarkers(absPath, "target", Configuration.getInstance(), store);
+	const rowsAfterEmbed = store.getEntriesByPath(relPath).length;
+	if (rowsBeforeEmbed > 1 && rowsAfterEmbed > 0) {
+		ok(P, `embed で書き戻せなかった行が残るOK（${relPath}: ${rowsBeforeEmbed}→${rowsAfterEmbed}）`);
+	} else if (rowsBeforeEmbed <= 1) {
+		info(P, relPath, "embed 前の行が1件以下で、書き戻せない行を作れなかった");
+	} else {
+		fail(P, relPath, `embed が書き戻せなかった行まで削除した（${rowsBeforeEmbed}→0）`, "");
+	}
+
+	fs.writeFileSync(absPath, original, "utf8");
+}
+
+// P8: 原文のパースが崩れたときに、訳文の**本文**が消えないこと（ADR-260803-05）。
+//
+// 行を守っても本文が消えていては意味が無い。既定設定（sync.autoDelete: true）では、
+// 原文にコードブロックの閉じ忘れが1つ入るだけで以降の見出しが全部コードとして飲まれ、
+// 対応を失った訳文の章がまとめて物理削除されていた（実測: 7章が消え、直しても戻らない）。
+//
+// probe の突き合わせでは測れない。embedded でも同じことが起きるので両モードが一致してしまい、
+// 「両方とも壊れている」ことは差として現れないためである。
+async function phase8() {
+	const P = "P8-nobodyloss";
+	resetWorkspace();
+	await loadConfigAndSelectAll({ markersMode: "external" });
+	await syncCommand();
+
+	const relPath = "content/ja/40_structure_mismatch.md";
+	const absSrc = path.join(WS, relPath);
+	const absTgt = path.join(WS, relPath.replace("/ja/", "/en/"));
+	if (!fs.existsSync(absSrc) || !fs.existsSync(absTgt)) {
+		info(P, relPath, "対象ファイルが見つからず、フェンス崩れを検証できない");
+		return;
+	}
+	const originalSrc = fs.readFileSync(absSrc, "utf8");
+	const originalTgt = fs.readFileSync(absTgt, "utf8");
+	const headingsOf = (text) => (text.match(/^#{1,6}\s.*$/gm) || []).length;
+	const before = headingsOf(originalTgt);
+	if (before < 4) {
+		info(P, relPath, `訳文の見出しが ${before} 件しかなく、まとめて消える状況を作れない`);
+		return;
+	}
+
+	// 原文の先頭にコードブロックの閉じ忘れを入れる（以降が全部コードとして飲まれる）
+	const lines = originalSrc.split("\n");
+	const firstHeading = lines.findIndex((l) => /^#{1,6}\s/.test(l));
+	lines.splice(firstHeading + 1, 0, "", "```text");
+	fs.writeFileSync(absSrc, lines.join("\n"), "utf8");
+	await syncCommand();
+
+	const afterBroken = headingsOf(fs.readFileSync(absTgt, "utf8"));
+	if (afterBroken >= before) {
+		ok(P, `フェンス崩れで訳文の本文が消えないOK（見出し ${before}→${afterBroken}）`);
+	} else {
+		fail(P, relPath, `フェンス崩れで訳文の本文が物理削除された（見出し ${before}→${afterBroken}）`, "");
+	}
+
+	// 崩れを直すと確認待ちも自動で解ける
+	fs.writeFileSync(absSrc, originalSrc, "utf8");
+	await syncCommand();
+	const restored = fs.readFileSync(absTgt, "utf8");
+	if (headingsOf(restored) >= before && !restored.includes("need:verify-deletion")) {
+		ok(P, "崩れを直すと訳文が戻り verify-deletion も解けるOK");
+	} else {
+		fail(
+			P,
+			relPath,
+			"崩れを直しても訳文が戻らない、または verify-deletion が残る",
+			`headings=${headingsOf(restored)} (before=${before})`,
+		);
+	}
+
+	fs.writeFileSync(absSrc, originalSrc, "utf8");
+	fs.writeFileSync(absTgt, originalTgt, "utf8");
+
+	// 小さい文書でも守られること。閾値を減少幅だけで決めていたときは、見出し2つの README
+	// （タイトル＋2節＝3ユニット）で訳文が2件とも物理削除されていた。崩れは文書の大きさに
+	// 関係なく1ユニットまで潰すので、元のユニット数で守られるかどうかが変わってはいけない
+	await checkSmallDocument(P);
+}
+
+/** 3ユニットの小さい文書を作り、フェンス崩れで訳文が消えないことを確かめる */
+async function checkSmallDocument(P) {
+	const smallSrc = path.join(WS, "content/ja/_small_doc.md");
+	const smallTgt = path.join(WS, "content/en/_small_doc.md");
+	const body = ["# 小さな手引き", "", "導入の文章。", "", "## 準備", "", "準備の本文。", "", "## 使い方", "", "使い方の本文。", ""].join("\n");
+	try {
+		fs.writeFileSync(smallSrc, body, "utf8");
+		await syncCommand();
+		const headingsOf = (text) => (text.match(/^#{1,6}\s.*$/gm) || []).length;
+		const before = headingsOf(fs.readFileSync(smallTgt, "utf8"));
+		if (before !== 3) {
+			info(P, "content/ja/_small_doc.md", `訳文の見出しが ${before} 件で、想定した3ユニットの形になっていない`);
+			return;
+		}
+
+		// 導入の直後にフェンスの閉じ忘れを入れる（以降の2節が全部コードとして飲まれる）
+		fs.writeFileSync(smallSrc, body.replace("導入の文章。", "導入の文章。\n\n```text"), "utf8");
+		await syncCommand();
+		const after = headingsOf(fs.readFileSync(smallTgt, "utf8"));
+		if (after >= before) {
+			ok(P, `3ユニットの小さい文書でも訳文が消えないOK（見出し ${before}→${after}）`);
+		} else {
+			fail(P, "content/ja/_small_doc.md", `小さい文書でフェンス崩れが訳文を物理削除した（見出し ${before}→${after}）`, "");
+		}
+
+		fs.writeFileSync(smallSrc, body, "utf8");
+		await syncCommand();
+		const restored = fs.readFileSync(smallTgt, "utf8");
+		if (headingsOf(restored) >= before && !restored.includes("need:verify-deletion")) {
+			ok(P, "小さい文書でも崩れを直すと訳文が戻り verify-deletion も解けるOK");
+		} else {
+			fail(P, "content/ja/_small_doc.md", "小さい文書で崩れを直しても戻らない、または verify-deletion が残る", restored.slice(0, 200));
+		}
+	} finally {
+		for (const p of [smallSrc, smallTgt]) if (fs.existsSync(p)) fs.rmSync(p);
+	}
+}
+
 async function main() {
 	const cfgBackup = fs.readFileSync(CFG_PATH);
 	try {
@@ -360,6 +566,8 @@ async function main() {
 		await phase4();
 		await phase5();
 		await phase6();
+		await phase7();
+		await phase8();
 	} finally {
 		// 共有 mdait.json を必ず元に戻す（provider 上書きを残さない）
 		fs.writeFileSync(CFG_PATH, cfgBackup);
