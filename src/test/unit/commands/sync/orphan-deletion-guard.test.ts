@@ -226,7 +226,13 @@ suite("孤立ユニット自動削除の見送りガード", () => {
 		fs.writeFileSync(sourceFile, "", "utf-8");
 		const emptied = await sync_CoreProc(sourceFile, targetFile, config);
 		assert.strictEqual(parseUnits(targetFile).length, 3, "原文が空でも訳文を消さない");
-		assert.ok((emptied.orphanDeletionWithheld ?? 0) > 0);
+		// 訳文を守る関門は2つあり、原文が空のときは手前の「原文に本文が無いので中止」
+		// （ADR-260803-06）が先に効いて、孤立の判定まで進まない。どちらが働いたかは
+		// 問わず、どちらも働かなければ落ちるように書く（機構ではなく結果を固定する）。
+		assert.ok(
+			(emptied.sourceEmptied ?? 0) > 0 || (emptied.orphanDeletionWithheld ?? 0) > 0,
+			"原文が空のとき、中止と見送りのどちらの関門も働いていない",
+		);
 
 		fs.writeFileSync(sourceFile, original, "utf-8");
 		await sync_CoreProc(sourceFile, targetFile, config);
