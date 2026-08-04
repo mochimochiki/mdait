@@ -144,29 +144,21 @@ export async function syncCommand(
 			UnitStateStore.getInstance().load(mdaitDir);
 		}
 
-		// orphanクリーンアップ用: 「今回どこを走査し、そこで何を見つけたか」を集める。
-		// 走査していないディレクトリ（未選択の pair など）は scannedDirs に入らないため、
-		// そこの行は「見つからなかった」ではなく「確かめていない」として残る。
+		// orphanクリーンアップ用の範囲（詳細は UnitStateStore.cleanupOrphansInScope）。
+		// - configuredDirs: config の全 pair のディレクトリ。ここから外れた行は消してよい
+		// - scannedDirs:    今回実際に走査できたディレクトリ。ここに無い行は「確かめていない」
+		// - seenPaths:      走査して実在を確認したファイル
+		const configuredDirs = collectConfiguredDirs(config);
 		const scannedDirs = new Set<string>();
 		const seenPaths = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
-			// ソースファイル一覧を取得（extensions対応）
+			// ソースファイル一覧を取得（extensions対応）。
+			// 原文ディレクトリが手元に無い（sparse checkout・ブランチ切替・設定ミス）と、ここが
+			// throw して sync 全体が止まる。unit-state の行が守られるのは掃除に到達しないためで、
+			// 掃除側の分岐で守っているわけではない（実測: 後続ペアも1件も処理されない）。
 			const fileExplorer = new FileExplorer();
-
-			// 走査範囲の登録。ソースディレクトリが手元に無い（sparse checkout・ブランチ切替・
-			// 設定ミス）ときは「見に行けなかった」だけなので範囲に入れない
-			const sourceDirAbs = path.resolve(config.getConfigBaseDir(), pair.sourceDir);
-			const targetDirAbs = path.resolve(config.getConfigBaseDir(), pair.targetDir);
-			if (fs.existsSync(sourceDirAbs)) {
-				scannedDirs.add(toWorkspaceRelativePath(sourceDirAbs));
-				scannedDirs.add(toWorkspaceRelativePath(targetDirAbs));
-			} else {
-				logger.warn("sync", "Source directory not found; skipping unit-state cleanup for this pair", {
-					sourceDir: pair.sourceDir,
-				});
-			}
 
 			const files = await fileExplorer.getSourceFiles(
 				pair.sourceDir,
@@ -183,6 +175,13 @@ export async function syncCommand(
 				);
 				continue;
 			}
+
+			// ここまで来たら「このペアのディレクトリを走査して1件以上見つけた」。
+			// 走査したことの登録は必ずファイル列挙の後で行う。前に置くと、ディレクトリは在るのに
+			// 0件だったとき（原文を一時的に退避した等）に「全部見たが1件も無かった」と読まれ、
+			// そのペアの全行が消える
+			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.sourceDir)));
+			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.targetDir)));
 
 			// 実在を確認したパスを収集（unit-state の orphan クリーンアップ用）。
 			// キーは `UnitStateEntry.path` と同じ基準（ワークスペースルート相対）にそろえる。
@@ -313,6 +312,7 @@ export async function syncCommand(
 		if (mdaitDir) {
 			const unitStateStore = UnitStateStore.getInstance();
 			const orphansRemoved = unitStateStore.cleanupOrphansInScope({
+				configuredDirs,
 				scannedDirs: [...scannedDirs],
 				seenPaths,
 			});
@@ -458,6 +458,23 @@ export async function syncCommand(
 		);
 		return undefined;
 	}
+}
+
+/**
+ * config の全 pair の原文・訳文ディレクトリを、`UnitStateEntry.path` と同じ基準
+ * （ワークスペースルート相対・`/` 区切り）で返す。
+ *
+ * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
+ * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
+ */
+function collectConfiguredDirs(config: Configuration): string[] {
+	const baseDir = config.getConfigBaseDir();
+	const dirs = new Set<string>();
+	for (const pair of config.transPairs) {
+		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.sourceDir)));
+		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
+	}
+	return [...dirs];
 }
 
 /**

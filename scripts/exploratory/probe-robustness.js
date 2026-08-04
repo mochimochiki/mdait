@@ -278,6 +278,31 @@ function moveChapterToEnd(rel, heading) {
 	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
 	write(rel, [...lines, "", ...block].join("\n"));
 }
+/**
+ * 末尾から n 個の `## ` 章ブロックを削除する（embedded では直前のマーカー行も落とす）。
+ * 「章をまとめて大きく減らした」操作をモードに依らず作るために使う。
+ */
+function removeLastChapters(rel, n) {
+	const lines = read(rel).split("\n");
+	for (let k = 0; k < n; k++) {
+		let h = -1;
+		for (let i = lines.length - 1; i >= 0; i--) {
+			if (/^##\s/.test(lines[i])) {
+				h = i;
+				break;
+			}
+		}
+		if (h < 0) throw new Error(`no chapter left in ${rel}`);
+		let start = h;
+		if (h > 0 && /^<!--\s*mdait\b/.test(lines[h - 1].trim())) start = h - 1;
+		lines.splice(start, lines.length - start);
+	}
+	write(rel, `${lines.join("\n")}\n`);
+}
+/** 文書の末尾へ新しい章を足す（マーカー無し＝人が書き足した形） */
+function appendChapter(rel, heading, body) {
+	write(rel, `${read(rel).replace(/\s*$/, "\n")}\n${heading}\n\n${body}\n`);
+}
 /** 見出し行のレベルだけを変える（本文・マーカーは触らない） */
 function changeHeadingLevel(rel, heading, newHeading) {
 	const lines = read(rel).split("\n");
@@ -555,7 +580,8 @@ const EXPECTED_DIFF = {
 	S6: "ファイルの同一性（パス）の話。行の追随は未対応",
 	S7: "同上",
 	S8: "同上",
-	S9: "同上",
+	// S9（原文ファイルを削除）は一致するようになった。原文ディレクトリを走査して0件だったとき
+	// 「全部消えた」と読まなくなったため、external でも状態が残る（ADR-260803-03）
 	S10: "リネームを含むため（章の挿入・編集の部分は一致している）",
 	S11: "unit-state を消す操作なので embedded には影響が無い",
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
@@ -1040,14 +1066,67 @@ async function main() {
 			},
 			{ pairs: MULTI_PAIRS },
 		);
+
+		// S64: 章を大きく減らして sync（刈り取りが見送られる）→ そのあと新しい章を足す。
+		//      取り残された行が、内容の一致しない新章に順序で貼り付かないかを見る。
+		//      貼り付くと新章に削除済みの章の from が付き need:revise になる（AI に無関係な差分が渡る）。
+		await scenario(
+			"S64 章を大きく減らして sync → 新しい章を足す",
+			async () => {
+				removeLastChapters("ja/guide.md", 15);
+				removeLastChapters("en/guide.md", 15);
+				await syncCommand();
+				appendChapter("ja/guide.md", "## 新章", "新章の本文。");
+				appendChapter("en/guide.md", "## New Chapter", "Body of the new chapter.");
+			},
+			{ src: MANY_SRC },
+		);
+
+		// S65: S64 のあいだにマーカー保管方式を embedded へ戻してまた external に戻す。
+		//      モード切替は external 側だけの操作なので、embedded 側は S64 と同じ手順を踏む
+		//      （＝往復が無損失なら S64 と同じ結果になるはず）。
+		//      embed が本文へ書き戻せなかった行を消すと、往復後に状態が失われて差が出る。
+		await scenario(
+			"S65 章を大きく減らす → embedded へ戻す → external に戻す → 新章を足す",
+			async (mode) => {
+				removeLastChapters("ja/guide.md", 15);
+				removeLastChapters("en/guide.md", 15);
+				await syncCommand();
+				if (mode === "external") {
+					await setMode("embedded", DEFAULT_PAIRS);
+					await syncCommand();
+					await setMode("external", DEFAULT_PAIRS);
+					await syncCommand();
+				}
+				appendChapter("ja/guide.md", "## 新章", "新章の本文。");
+				appendChapter("en/guide.md", "## New Chapter", "Body of the new chapter.");
+			},
+			{ src: MANY_SRC },
+		);
+
+		// S66: 原文ディレクトリは在るが、原文ファイルが一時的に1件も無い状態で sync する。
+		//      「見に行ったが0件」を「全部消えた」と読むと、そのペアの行が全消えして
+		//      原文を戻したときに全ユニット need:review へ倒れる（S62/S63 と同じ症状）。
+		await scenario("S66 原文ファイルを一時退避（ディレクトリは残す）→ sync → 戻す", async () => {
+			const abs = path.join(CONTENT, "ja/guide.md");
+			const stash = path.join(WS, "guide.md.stash");
+			fs.renameSync(abs, stash);
+			await syncCommand();
+			fs.renameSync(stash, abs);
+		});
 	} finally {
 		fs.writeFileSync(CFG_PATH, cfgBackup);
 		restoreWorkspace();
 	}
-	const unexpected = ONLY ? 0 : reportModeParity();
+	// 絞って走らせたときも突き合わせは出す（シナリオを書きながら確かめられるように）。
+	// ただし終了コードで落とすのは全件走らせたときだけ（絞った実行は網羅していないため）。
+	const unexpected = reportModeParity();
+	if (ONLY) {
+		origLog("（PROBE_ONLY 指定のため、想定外の差があっても終了コードは 0 にします）");
+	}
 	origLog("\n========== DONE ==========");
 	// 保留中のタイマー/ウォッチャで終了しないため明示的に落とす
-	process.exit(unexpected > 0 ? 1 : 0);
+	process.exit(!ONLY && unexpected > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

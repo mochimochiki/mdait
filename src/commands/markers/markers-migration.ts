@@ -18,7 +18,7 @@ import { StatusManager } from "../../core/status/status-manager";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { alignEntriesToUnits } from "../../core/unit-state/unit-state-align";
 import type { UnitStateEntry } from "../../core/unit-state/unit-state-store";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { UnitStateStore, isHeldBackEntry } from "../../core/unit-state/unit-state-store";
 import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -34,12 +34,6 @@ const logger = Logger.getInstance();
  * sync のたびに同じ警告を繰り返さないためのセッション内の記録。
  */
 const levelZeroExternalizeWarned = new Set<string>();
-
-/**
- * embed で「本文に書き戻せなかった行を残した」警告を出したファイル。
- * reconcile 経由で sync のたびに通るため、同じ警告を繰り返さないためのセッション内の記録。
- */
-const embedOrphanWarned = new Set<string>();
 
 /** 変換対象の MD ファイル（絶対パス + ロール） */
 export interface MigrationTarget {
@@ -154,7 +148,14 @@ export function embedFileMarkers(
 
 	// parse の attach と同じ対応表を作り直す（同じ入力に対する純粋関数なので同じ結果になる）。
 	// どの行がどのユニットへ書き戻されたかを知るために要る。
-	const aligned = alignEntriesToUnits(entries, parsed.units);
+	// 「位置を信用しない行」も attach と同一でなければ対応表がずれる。
+	const untrusted = new Set<number>();
+	for (let i = 0; i < entries.length; i++) {
+		if (isHeldBackEntry(entries[i])) {
+			untrusted.add(i);
+		}
+	}
+	const aligned = alignEntriesToUnits(entries, parsed.units, untrusted);
 	const embeddedEntries = new Set<UnitStateEntry>();
 
 	// store にエントリの無いユニット（本文のユニット数がエントリ数より多い場合など）には
@@ -185,9 +186,10 @@ export function embedFileMarkers(
 			store.removeEntry(relPath, entry.order);
 		}
 	}
-	// 同じファイルで sync のたびに同じ警告を繰り返さない（reconcile 経由で毎回通るため）
-	if (orphanedEntries.length > 0 && !embedOrphanWarned.has(relPath)) {
-		embedOrphanWarned.add(relPath);
+	// 抑制はしない。「一度出したら二度と出さない」にすると、原因を直したのにまた起きたときに
+	// 気づけなくなる（記録用の Set も解放されず増え続ける）。出力チャネルのログなので
+	// 繰り返しても人の作業は止めない
+	if (orphanedEntries.length > 0) {
 		logger.warn(
 			"markers",
 			"Kept unit-state entries that could not be written back into the file (no matching unit in the body)",
@@ -268,6 +270,11 @@ export function reconcileMarkerModeForFile(
 	}
 	const embeddedParse = markdownParser.parse(content, config, embeddedMarkerProvider);
 	if (embeddedParse.units.some((u) => Boolean(u.marker?.hash))) {
+		return false;
+	}
+	if (embeddedParse.units.length === 0) {
+		// 本文にユニットが1つも無いので書き戻す先が無い。ここで抜けないと、行が残る限り
+		// この条件は永久に真のままで、sync のたびに parse + 突き合わせ + stringify を空回りする
 		return false;
 	}
 	const result = embedFileMarkers(absPath, role, config, store);

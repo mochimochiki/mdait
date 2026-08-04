@@ -1,7 +1,7 @@
 import { Logger } from "../../infra/logging/logger";
 import { calculateHash } from "../hash/hash-calculator";
 import { alignEntriesToUnits } from "../unit-state/unit-state-align";
-import { UnitStateStore } from "../unit-state/unit-state-store";
+import { UnitStateStore, isHeldBackEntry } from "../unit-state/unit-state-store";
 import { MdaitMarker } from "./mdait-marker";
 import type { MdaitUnit } from "./mdait-unit";
 
@@ -97,7 +97,15 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		const entries = this.store.getEntriesByPath(filePath);
 		// 「何番目か」ではなく中身で突き合わせる。章の挿入・削除・並べ替えで
 		// 対応がずれないようにするため（詳細は unit-state-align.ts）。
-		const aligned = alignEntriesToUnits(entries, units);
+		// 保留席の行（＝前回の刈り取りを見送って取り残された行）は、順序で機械的に埋める段から外す。
+		// 内容が一致すれば拾えるので、章が戻ってくれば正しく復帰する。
+		const untrusted = new Set<number>();
+		for (let i = 0; i < entries.length; i++) {
+			if (isHeldBackEntry(entries[i])) {
+				untrusted.add(i);
+			}
+		}
+		const aligned = alignEntriesToUnits(entries, units, untrusted);
 		let unmatchedUnits = 0;
 		for (let i = 0; i < units.length; i++) {
 			const entry = aligned[i];
@@ -136,9 +144,12 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			});
 		}
 		// ユニットが減ったときに末尾の旧エントリが残ると、次に増えたときそれを拾ってしまう。
-		// ただし「一時的に減っただけ」のときは刈らない（下記 shouldPruneTail）。
+		// ただし「一時的に減っただけ」のときは刈らず、保留席へ移して位置の意味だけを剥がす
+		// （下記 shouldPruneTail / UnitStateStore.parkEntriesFrom）。
 		if (shouldPruneTail(this.store.countEntriesByPath(filePath), units.length, filePath)) {
 			this.store.pruneEntriesFrom(filePath, units.length);
+		} else {
+			this.store.parkEntriesFrom(filePath, units.length);
 		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
 	}
@@ -151,6 +162,21 @@ export class ExternalMarkerProvider implements MarkerProvider {
 const MIN_SUSPICIOUS_DROP = 3;
 
 /**
+ * 行の数がユニットの数に対して「一時的に減っただけ」と疑わしいほど多いか。
+ *
+ * 刈り取りを止める判断（detach）と、残した行の位置を信用しない判断（attach）は、
+ * 同じ状況を指していないと辻褄が合わない。両方をこの1つの述語から導く。
+ *
+ * 比率だけで見ると 2 件が 1 件になっただけで止まってしまうので、絶対件数の下限を併せる。
+ */
+export function isSuspiciousShrink(entryCount: number, unitCount: number): boolean {
+	if (unitCount === 0) {
+		return false;
+	}
+	return entryCount - unitCount >= MIN_SUSPICIOUS_DROP && unitCount * 2 < entryCount;
+}
+
+/**
  * 末尾の余った行を刈ってよいか。
  *
  * 守りたいのは「ユニットが 0 件になった」ときだけではなく「**一時的に減った**」ときである。
@@ -158,21 +184,25 @@ const MIN_SUSPICIOUS_DROP = 3;
  * 変わる、といった理由でユニット数は簡単に激減する。その状態で刈ると、原因を直して
  * ユニット数が戻っても、消えた `from`/`need` は戻らない。
  *
- * 刈らずに残した行は害が小さい。突き合わせは内容で行うので（`unit-state-align.ts`）、
- * 余った行は内容が一致しないかぎり拾われないし、章が戻ってくれば正しく拾われる。
- * 消す側の失敗は取り返せず、残す側の失敗は取り返せる。非対称なので残す側に倒す。
+ * 刈らないと決めた行は捨て置かれるのではなく、**保留席へ移して位置の意味を剥がす**
+ * （`UnitStateStore.parkEntriesFrom`）。保留席の行は順序では拾われず、内容（本文の hash・
+ * 見出しの hash とレベル）が一致したときだけ拾われる。だから章が戻ってくれば正しく復帰し、
+ * 戻ってこなければ無害に居座るだけになる。この保証があって初めて
+ * 「消す側の失敗は取り返せず、残す側の失敗は取り返せる」という非対称が成り立つ。
+ *
+ * 位置を剥がさずに残すと、内容が1文字も一致しない古い行があとから増えた章に貼り付く。
+ * 実測: 8ユニットから6章消して新章を1つ足すと、新章に削除済みの第2章の `from` が付き
+ * `need:revise` になった（AI に無関係な章の差分が渡る）。
  */
 export function shouldPruneTail(entryCount: number, unitCount: number, filePath?: string): boolean {
 	if (unitCount === 0) {
 		// 本文を一時的に空にした・パース途中の崩れた状態。そのファイルの行を丸ごと失わない
 		return false;
 	}
-	const dropped = entryCount - unitCount;
-	if (dropped <= 0) {
+	if (entryCount - unitCount <= 0) {
 		return true; // 減っていない（刈るものが無い）
 	}
-	// 比率だけで見ると 2 件が 1 件になっただけで止まってしまうので、絶対件数の下限を併せる
-	if (dropped >= MIN_SUSPICIOUS_DROP && unitCount * 2 < entryCount) {
+	if (isSuspiciousShrink(entryCount, unitCount)) {
 		logger.warn("marker", "Skipped pruning unit-state entries: unit count dropped sharply", {
 			path: filePath,
 			entries: entryCount,
