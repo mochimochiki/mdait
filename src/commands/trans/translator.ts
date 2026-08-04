@@ -39,6 +39,48 @@ export interface RestoredCodeBlocks {
 	missing: string[];
 }
 
+/** `protectCodeBlocks` のオプション */
+export interface ProtectCodeBlocksOptions {
+	/**
+	 * 本文を Markdown として読むか。既定は true。
+	 *
+	 * false（`trans.extensions` の .txt など Markdown でないファイル）では
+	 * 「行頭の字下げ＝コードブロック」という Markdown 固有の規則を当てず、
+	 * 閉じたフェンス（```／~~~）だけを退避する。
+	 */
+	markdown?: boolean;
+}
+
+/** Markdown として読む拡張子か（未指定は Markdown 経路とみなす） */
+export function isMarkdownExtension(fileExtension?: string): boolean {
+	if (!fileExtension) {
+		return true;
+	}
+	const ext = fileExtension.toLowerCase();
+	return ext === ".md" || ext === ".markdown" || ext === ".mdx";
+}
+
+/**
+ * フェンスで囲まれたブロックが閉じているか（最後の行が閉じフェンスか）。
+ * Markdown でないファイルでのみ使う保険。閉じていないフェンスは、
+ * markdown-it の規則ではファイル末尾までコードブロックになるが、
+ * Markdown でない文書では「たまたま ``` で始まる行があった」だけの可能性が高い。
+ * その場合に末尾まで丸ごと翻訳から外すと、本文が原文のまま残って誰も気づけない。
+ */
+function isClosedFence(blockLines: string[]): boolean {
+	if (blockLines.length < 2) {
+		return false;
+	}
+	const open = /^\s*(`{3,}|~{3,})/.exec(blockLines[0]);
+	if (!open) {
+		return false;
+	}
+	const marker = open[1][0];
+	const length = open[1].length;
+	const close = new RegExp(`^\\s*\\${marker}{${length},}\\s*$`);
+	return close.test(blockLines[blockLines.length - 1]);
+}
+
 /**
  * コードブロックを AI へ渡さないように退避する。
  *
@@ -54,12 +96,16 @@ export interface RestoredCodeBlocks {
  * コードブロックでない行に残った行内の ```` ```...``` ````（インラインのコード）も、
  * 従来どおり翻訳させずに退避する。こちらは1行内で完結するので改行の補いは要らない。
  *
+ * Markdown でないファイルでは Markdown 固有の規則を当てない（`markdown: false`）。
+ *
  * @param text 退避対象のテキスト
+ * @param options 判定オプション
  * @returns 退避結果
  */
-export function protectCodeBlocks(text: string): ProtectedCodeBlocks {
+export function protectCodeBlocks(text: string, options?: ProtectCodeBlocksOptions): ProtectedCodeBlocks {
+	const markdown = options?.markdown ?? true;
 	const lines = text.split("\n");
-	const codeBlockLines = getCodeBlockLineSet(text);
+	const codeBlockLines = getCodeBlockLineSet(text, { includeIndented: markdown });
 	const out: string[] = [];
 	const codeBlocks: string[] = [];
 	const placeholders: string[] = [];
@@ -74,11 +120,12 @@ export function protectCodeBlocks(text: string): ProtectedCodeBlocks {
 	// 行内で完結する ```...```（インラインのコード）。改行をまたがせないことで、
 	// 離れた場所にある無関係なバッククォート同士を1つの塊にしてしまう事故を防ぐ。
 	const inlineCodeRegex = /```[^\n]*?```/g;
+	const protectInline = (line: string): string => line.replace(inlineCodeRegex, (match) => take(match));
 
 	let i = 0;
 	while (i < lines.length) {
 		if (!codeBlockLines.has(i)) {
-			out.push(lines[i].replace(inlineCodeRegex, (match) => take(match)));
+			out.push(protectInline(lines[i]));
 			i++;
 			continue;
 		}
@@ -87,7 +134,15 @@ export function protectCodeBlocks(text: string): ProtectedCodeBlocks {
 		while (end < lines.length && codeBlockLines.has(end)) {
 			end++;
 		}
-		out.push(take(lines.slice(i, end).join("\n")));
+		const blockLines = lines.slice(i, end);
+		if (!markdown && !isClosedFence(blockLines)) {
+			// 閉じていないフェンスは退避せず、ふつうの本文として翻訳させる（安全側）
+			for (const line of blockLines) {
+				out.push(protectInline(line));
+			}
+		} else {
+			out.push(take(blockLines.join("\n")));
+		}
 		i = end;
 	}
 
@@ -314,8 +369,11 @@ export class AITranslator implements Translator {
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
-		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）
-		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text);
+		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）。
+		// Markdown でないファイル（trans.extensions）には Markdown 固有の規則を当てない
+		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text, {
+			markdown: isMarkdownExtension(context.fileExtension),
+		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
@@ -369,8 +427,11 @@ export class AITranslator implements Translator {
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
-		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）
-		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text);
+		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）。
+		// Markdown でないファイル（trans.extensions）には Markdown 固有の規則を当てない
+		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text, {
+			markdown: isMarkdownExtension(context.fileExtension),
+		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;

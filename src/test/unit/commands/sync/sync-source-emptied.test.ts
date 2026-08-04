@@ -8,7 +8,12 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { syncNew_CoreProc, sync_CoreProc } from "../../../../commands/sync/sync-command";
+import {
+	resetSourceEmptiedMemory,
+	syncNew_CoreProc,
+	sync_CoreProc,
+	updateSourceEmptiedMemory,
+} from "../../../../commands/sync/sync-command";
 import { markdownParser } from "../../../../core/markdown/parser";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../../../infra/config/configuration";
@@ -139,6 +144,33 @@ suite("sync: 原文が空になったとき訳文を守る", () => {
 		await sync_CoreProc(sourceFile, targetFile, config);
 
 		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), before);
+	});
+
+	test("明示 sync で通常どおり同期できたら「通知済み」の記憶を忘れること", async () => {
+		// 保存イベント無しで原文が戻る（SCM の変更を破棄・git checkout）ことがあるため、
+		// 記憶を消す機会が自動同期だけだと2度目の事故で黙る。
+		const config = await bootstrap();
+		resetSourceEmptiedMemory();
+
+		fs.writeFileSync(sourceFile, "", "utf-8");
+		const first = await sync_CoreProc(sourceFile, targetFile, config);
+		assert.strictEqual(first.sourceEmptied, 1);
+		assert.strictEqual(updateSourceEmptiedMemory(targetFile, first.sourceEmptied ?? 0), true, "1回目は通知する");
+		assert.strictEqual(updateSourceEmptiedMemory(targetFile, 1), false, "続けて同じ状態なら黙る");
+
+		// 原文が戻り、通常どおり同期できた
+		fs.writeFileSync(
+			sourceFile,
+			["# 手引き", "", "導入の本文。", "", "## 第1章", "", "第1章の本文。", ""].join("\n"),
+			"utf-8",
+		);
+		const restored = await sync_CoreProc(sourceFile, targetFile, config);
+		assert.strictEqual(updateSourceEmptiedMemory(targetFile, restored.sourceEmptied ?? 0), false);
+
+		// もう一度空にしたら、また通知する
+		fs.writeFileSync(sourceFile, "", "utf-8");
+		const again = await sync_CoreProc(sourceFile, targetFile, config);
+		assert.strictEqual(updateSourceEmptiedMemory(targetFile, again.sourceEmptied ?? 0), true, "2度目の事故でも黙らない");
 	});
 
 	test("原文も訳文も空のままなら中止扱いにしないこと", async () => {

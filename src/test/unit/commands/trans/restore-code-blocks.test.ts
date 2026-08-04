@@ -5,7 +5,7 @@
 // バッククォートの位置から切り出すと行頭の前置きが取り残されて壊れる。
 
 import { strict as assert } from "node:assert";
-import { protectCodeBlocks, restoreCodeBlocks } from "../../../../commands/trans/translator";
+import { isMarkdownExtension, protectCodeBlocks, restoreCodeBlocks } from "../../../../commands/trans/translator";
 
 /** AI が何も変えなかったときの往復 */
 function roundTrip(source: string): string {
@@ -108,6 +108,62 @@ suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と
 		test("離れた行のバッククォート同士をまとめないこと", () => {
 			const { codeBlocks } = protectCodeBlocks(["前の行 ``` だけ。", "", "次の行 ``` だけ。", ""].join("\n"));
 			assert.deepStrictEqual(codeBlocks, []);
+		});
+	});
+
+	suite("Markdown でないファイルには Markdown 固有の規則を当てない", () => {
+		test("拡張子の判定（未指定は Markdown 経路とみなす）", () => {
+			assert.strictEqual(isMarkdownExtension(undefined), true);
+			assert.strictEqual(isMarkdownExtension(".md"), true);
+			assert.strictEqual(isMarkdownExtension(".MD"), true);
+			assert.strictEqual(isMarkdownExtension(".markdown"), true);
+			assert.strictEqual(isMarkdownExtension(".txt"), false);
+			assert.strictEqual(isMarkdownExtension(".json"), false);
+		});
+
+		test("字下げしただけの本文を退避しないこと（翻訳から外さない）", () => {
+			const source = ["プロジェクト概要", "", "    背景", "    目的", "", "以上。"].join("\n");
+			const { text, codeBlocks } = protectCodeBlocks(source, { markdown: false });
+
+			assert.deepStrictEqual(codeBlocks, []);
+			assert.strictEqual(text, source);
+		});
+
+		test("タブで字下げした本文も退避しないこと", () => {
+			const source = ["見出し", "", "\t項目1", "\t項目2", "", "以上。"].join("\n");
+			const { codeBlocks } = protectCodeBlocks(source, { markdown: false });
+
+			assert.deepStrictEqual(codeBlocks, []);
+		});
+
+		test("閉じたフェンスは Markdown でなくても退避すること（従来どおり）", () => {
+			const source = ["説明。", "", "```", "code here", "```", "", "以上。"].join("\n");
+			const { codeBlocks } = protectCodeBlocks(source, { markdown: false });
+
+			assert.strictEqual(codeBlocks.length, 1);
+			assert.strictEqual(codeBlocks[0], ["```", "code here", "```"].join("\n"));
+		});
+
+		test("閉じていないフェンスは退避しないこと（末尾まで翻訳から外さない）", () => {
+			const source = ["説明。", "", "```", "本文が続く", "さらに本文", ""].join("\n");
+			const { text, codeBlocks } = protectCodeBlocks(source, { markdown: false });
+
+			assert.deepStrictEqual(codeBlocks, []);
+			assert.strictEqual(text, source);
+		});
+
+		test("Markdown では字下げコードブロックを従来どおり退避すること", () => {
+			const source = ["説明。", "", "    <!-- mdait aabbccdd -->", "", "以上。"].join("\n");
+			const { codeBlocks } = protectCodeBlocks(source, { markdown: true });
+
+			assert.strictEqual(codeBlocks.length, 1);
+		});
+
+		test("Markdown でなくても往復して1バイトも変わらないこと", () => {
+			const source = ["リリースノート", "", "変更点:", "", "    - 速くなりました", "", "```", "v2.0.0", "```", ""].join("\n");
+			const { text, codeBlocks, placeholders } = protectCodeBlocks(source, { markdown: false });
+
+			assert.strictEqual(restoreCodeBlocks(text, placeholders, codeBlocks).text, source);
 		});
 	});
 

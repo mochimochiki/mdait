@@ -504,7 +504,11 @@ const NESTED_CODE_SRC = [
 	"",
 ].join("\n");
 
-/** 字下げ（4スペース）コードブロックにマーカー風文字列がある原文（S74） */
+/**
+ * 字下げ（4スペース）コードブロックにマーカー風文字列がある原文（S74）。
+ * マーカー風の行は**ブロックの2行目以降**に置く。直前が空行だと
+ * 「マーカーの前に空行を入れる」処理が発火せず、欠陥を再現できないため。
+ */
 const INDENTED_CODE_SRC = [
 	"# ドキュメント",
 	"",
@@ -514,8 +518,9 @@ const INDENTED_CODE_SRC = [
 	"",
 	"字下げで書いた例。",
 	"",
-	"    <!-- mdait 12345678 from:87654321 need:translate -->",
 	"    ## サンプル章",
+	"    <!-- mdait 12345678 from:87654321 need:translate -->",
+	"    サンプルの本文。",
 	"",
 	"## 第2章",
 	"",
@@ -524,15 +529,36 @@ const INDENTED_CODE_SRC = [
 ].join("\n");
 
 /**
- * 「この行がそのまま残っていること」を確かめる絶対チェックを作る。
+ * 「この行の並びが、順序も含めてそのまま残っていること」を確かめる絶対チェックを作る。
  * 両モードが揃って壊れる欠陥は突き合わせでは出ないので、結果そのものを見るしかない。
+ *
+ * 各行が「どこかに在るか」だけを見ると、行の間に何かが挿し込まれても通ってしまう。
+ * パーサーがコードブロックの中へ空行を入れる欠陥（B-2）はまさにその形なので、
+ * **連続一致**で見る。
  */
 function expectLinesIntact(rel, lines) {
 	return ({ read }) => {
 		const content = read(rel);
 		if (content === null) return [`${rel} が存在しない`];
+		const block = lines.join("\n");
+		if (content.includes(block)) return [];
+		// どこで崩れたかを分かりやすく出す（行が消えたのか、間に何か入ったのか）
 		const actual = content.split("\n");
-		return lines.filter((l) => !actual.includes(l)).map((l) => `${rel} に行が残っていない: ${JSON.stringify(l)}`);
+		const missing = lines.filter((l) => !actual.includes(l));
+		if (missing.length > 0) {
+			return missing.map((l) => `${rel} に行が残っていない: ${JSON.stringify(l)}`);
+		}
+		return [`${rel} で行の並びが崩れている（各行は在るが連続していない）: ${JSON.stringify(block)}`];
+	};
+}
+
+/** 「この行が在ること」を確かめる（消えていないか）。順序は問わない */
+function expectLinesPresent(rel, lines) {
+	return ({ read }) => {
+		const content = read(rel);
+		if (content === null) return [`${rel} が存在しない`];
+		const actual = content.split("\n");
+		return lines.filter((l) => !actual.includes(l)).map((l) => `${rel} に行が無い: ${JSON.stringify(l)}`);
 	};
 }
 
@@ -1134,6 +1160,8 @@ async function main() {
 				"~~~markdown",
 				"<!-- mdait 12345678 from:87654321 need:translate -->",
 				"## サンプル章",
+				"",
+				"サンプルの本文。",
 				"~~~",
 			]),
 		});
@@ -1142,19 +1170,17 @@ async function main() {
 		//      両モードが同じように壊れるため突き合わせでは出ない＝絶対チェックで見る
 		await scenario("S73 リスト・引用の中のコードブロック・操作なし", async () => {}, {
 			src: NESTED_CODE_SRC,
-			expect: ({ read, mode }) => {
-				const msgs = expectLinesIntact("ja/guide.md", [
-					"- 手順1: 実行する",
-					"  ```js",
-					"  console.log(1);",
-					"  ```",
-					"> 次のように書く。",
-					"> ```js",
-					"> console.log(2);",
-					"> ```",
-				])({ read, mode });
-				// 訳文側でも、字下げ・引用記号を失った裸のフェンスが生えていないこと
-				const tgt = read("en/guide.md");
+			expect: (ctx) => {
+				const msgs = [
+					// 原文: リストの中と引用の中、それぞれが連続したまま残っていること
+					...expectLinesIntact("ja/guide.md", ["  ```js", "  console.log(1);", "  ```"])(ctx),
+					...expectLinesIntact("ja/guide.md", ["> ```js", "> console.log(2);", "> ```"])(ctx),
+					// 訳文: コードブロックが字下げ・引用記号ごと「在る」こと。
+					//       否定（壊れた形が無い）だけを見ると、丸ごと消えた場合に素通りする
+					...expectLinesPresent("en/guide.md", ["  ```js", "  console.log(1);", "> ```js", "> console.log(2);"])(ctx),
+				];
+				// 訳文側に、字下げ・引用記号を失った裸のフェンスが生えていないこと
+				const tgt = ctx.read("en/guide.md");
 				if (tgt !== null) {
 					const bare = tgt.split("\n").filter((l) => l === "```js").length;
 					if (bare > 0) msgs.push(`en/guide.md に字下げ・引用記号を失った \`\`\`js が ${bare} 行ある`);
@@ -1167,8 +1193,9 @@ async function main() {
 		await scenario("S74 字下げコードブロック内マーカー風文字列・操作なし", async () => {}, {
 			src: INDENTED_CODE_SRC,
 			expect: expectLinesIntact("ja/guide.md", [
-				"    <!-- mdait 12345678 from:87654321 need:translate -->",
 				"    ## サンプル章",
+				"    <!-- mdait 12345678 from:87654321 need:translate -->",
+				"    サンプルの本文。",
 			]),
 		});
 	} finally {
