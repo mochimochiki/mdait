@@ -16,7 +16,8 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
-import type { DeleteUnitResult } from "../markers/delete-unit";
+import type { DeleteUnitResult, DeleteUnitsResult } from "../markers/delete-unit";
+import type { KeepUnitsResult } from "../markers/keep-unit";
 import {
 	DEFAULT_RESOLVABLE_NEEDS,
 	type NeedResolutionOptions,
@@ -533,5 +534,20 @@ export class PlainFileHandler implements FileHandler {
 	async deleteUnit(_filePath: string, _target: NeedTarget): Promise<DeleteUnitResult> {
 		// 同上。ファイルそのものの削除は mdait の責務外（エクスプローラで行う）
 		return { deleted: false, changed: false, hash: "", reason: "not-found" };
+	}
+
+	async keepUnits(_filePath: string, hashes?: string[]): Promise<KeepUnitsResult> {
+		// 非MDファイルに verify-deletion が付く経路は無い（孤立の判定はユニット構造を持つMDのみ）。
+		// 黙って成功にせず、0件の結果を返して呼び出し側に表示させる
+		return {
+			kept: [],
+			skipped: (hashes ?? []).map((hash) => ({ hash, reason: "not-found" as const })),
+			changed: false,
+		};
+	}
+
+	async deleteAllVerifyDeletion(_filePath: string): Promise<DeleteUnitsResult> {
+		// 同上。ファイルそのものの削除は mdait の責務外（エクスプローラで行う）
+		return { deleted: [], changed: false };
 	}
 }

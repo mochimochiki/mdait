@@ -50,6 +50,7 @@ import {
 	codeLensJumpToSourceFrontmatterCommand,
 	codeLensJumpToTargetCommand,
 	codeLensJumpToTargetFileCommand,
+	codeLensKeepUnitCommand,
 	codeLensOtherActionsCommand,
 	codeLensTranslateCommand,
 	codeLensTranslateFileCommand,
@@ -281,6 +282,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	const unitDeleteDisposable = vscode.commands.registerCommand("mdait.unit.delete", (item?: StatusItem) =>
 		needHandler.deleteUnit(item),
 	);
+	// ファイル単位の一括確定（確認待ちをまとめて残す／まとめて削除。unit-state.md §14(6)-(b)）
+	const fileKeepVerifyDeletionDisposable = vscode.commands.registerCommand(
+		"mdait.file.keepVerifyDeletion",
+		(item?: StatusItem) => needHandler.keepAllInFile(item),
+	);
+	const fileDeleteVerifyDeletionDisposable = vscode.commands.registerCommand(
+		"mdait.file.deleteVerifyDeletion",
+		(item?: StatusItem) => needHandler.deleteAllInFile(item),
+	);
 	const unitMarkIsolatedDisposable = vscode.commands.registerCommand("mdait.unit.markIsolated", (item?: StatusItem) =>
 		needHandler.markIsolated(item),
 	);
@@ -372,6 +382,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensDeleteUnitDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.deleteUnit",
 		codeLensDeleteUnitCommand,
+	);
+
+	// CodeLens verify-deletion Keep（恒久化: 独立ユニット化）コマンド
+	const codeLensKeepUnitDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.keepUnit",
+		codeLensKeepUnitCommand,
 	);
 
 	// Frontmatter翻訳コマンド（StatusTree/CodeLensから呼び出し）
@@ -721,6 +737,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
 		codeLensDeleteUnitDisposable,
+		codeLensKeepUnitDisposable,
 		codeLensOtherActionsDisposable,
 		editNoteForUnitDisposable,
 		codeLensDisposable,
@@ -732,6 +749,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		unitMarkReviewedDisposable,
 		unitKeepDisposable,
 		unitDeleteDisposable,
+		fileKeepVerifyDeletionDisposable,
+		fileDeleteVerifyDeletionDisposable,
 		unitMarkIsolatedDisposable,
 		unitUnisolateDisposable,
 		needsAttentionNextDisposable,

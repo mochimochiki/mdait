@@ -159,7 +159,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 判断 | 発生条件 | 操作手段 |
 |---|---|---|
 | `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
-| `need:verify-deletion` の裁定 | 原文削除（policy=verify） | CodeLens/ツリーの「Keep」「Delete Unit」2択 / エージェントは `mdait_resolve { action:"resolve" }`（保持）/ `{ action:"delete" }`（削除） |
+| `need:verify-deletion` の裁定 | 原文削除（policy=verify）・崩れ疑いの自動削除見送り | CodeLens/ツリーの「Keep」「Delete Unit」2択（Keep は独立ユニット化＝恒久。ADR-260805-01）。ファイル行に一括の「まとめて残す/まとめて削除」（modal） / エージェントは `mdait_resolve { action:"keep" }`（保持）/ `{ action:"delete" }`（削除） |
 | `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
@@ -185,7 +185,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 同期 | Sync ボタン / 保存時自動 | `mdait_sync` |
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
 | レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
-| verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit | `mdait_resolve { action:"resolve" \| "delete" }` |
+| verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit（＋ファイル行の一括確定） | `mdait_resolve { action:"keep" \| "delete" }` |
 | isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
@@ -332,7 +332,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 **実装内容**（ADR-260712-03、詳細は同ADR参照）:
 
-1. **verify-deletion の2択化**: CodeLens を汎用「Mark as Completed」から「$(check) Keep（needを外して保持）/ $(trash) Delete Unit（ユニット削除）」の2ボタンに分岐。Delete は modal 確認＋git 復旧可能の注記。ツリーのユニット行にも同アクションをコンテキストメニューで提供。
+1. **verify-deletion の2択化**: CodeLens を汎用「Mark as Completed」から「$(check) Keep（needを外して保持）/ $(trash) Delete Unit（ユニット削除）」の2ボタンに分岐。Delete は modal 確認＋git 復旧可能の注記。ツリーのユニット行にも同アクションをコンテキストメニューで提供。※Keep はその後、独立ユニット化（need と from を同時に外す恒久操作）へ変更（ADR-260805-01）。
 2. **isolate 宣言UI**: ユニットの CodeLens／ツリーコンテキストメニューに「Mark as Isolated」（`need:isolate` 付与）と「Un-isolate」（解除）を追加。原文側ユニットにも宣言できる（ADR-260706-02。ツリー対応は ADR-260726-01）。
 3. **レビューキュー**: StatusTree に「Needs Attention」仮想ノード（review / verify-deletion を横断集約）を追加し、クリックで該当ユニットへジャンプ→CodeLens で裁定→次へ、の連続処理を成立させた。escalated（AIレビューflagged）の統合はB-4として📋見送り（データが未集計のため）。
 4. エージェント側は `mdait_resolve` を `action: "resolve" | "declare-isolate" | "delete"` に拡張し、新規ツールを増やさず判断サーフェスをエージェントにも開いた（ADR-260712-03で新規ツール分割ではなくaction拡張を選択）。

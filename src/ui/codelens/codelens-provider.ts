@@ -276,13 +276,16 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		const isAwaitingDecision =
 			marker.need === "review" || marker.need === "verify-deletion";
 
-		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）
+		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）。
+		// Keep は need を外すだけでなく独立ユニット化する（恒久化。clearNeed だと次の sync で復活する）
 		if (marker.need === "verify-deletion") {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title: vscode.l10n.t("$(check) Keep"),
-					tooltip: vscode.l10n.t("Tooltip: Keep this unit and clear the deletion review flag"),
-					command: clearNeedCommand,
+					tooltip: vscode.l10n.t(
+						"Tooltip: Keep this unit as independent — it will no longer be matched against the source",
+					),
+					command: "mdait.codelens.keepUnit",
 					arguments: [range],
 				}),
 			);

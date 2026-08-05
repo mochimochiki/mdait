@@ -137,6 +137,47 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	}
 }
 
+/**
+ * CodeLensから verify-deletion ユニットを「残す（独立化）」するコマンド。
+ * need を外すだけでは次の sync で確認待ちが復活するため、need と from を同時に外して
+ * 独立ユニットにする（keepUnits）。単体操作なので modal は出さない（意味はラベルと tooltip で伝える）。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensKeepUnitCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
+			return;
+		}
+
+		const filePath = document.uri.fsPath;
+		const result = await getFileHandler(filePath).keepUnits(filePath, [marker.hash]);
+		if (result.kept.length === 0) {
+			vscode.window.showWarningMessage(
+				result.skipped[0]?.reason === "not-verify-deletion"
+					? vscode.l10n.t(
+							"This unit does not have need:verify-deletion. Only units awaiting deletion review can be kept this way.",
+						)
+					: vscode.l10n.t("Nothing to keep for this unit."),
+			);
+			return;
+		}
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Unit kept as independent. It will no longer be matched against the source."),
+		);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to keep unit: {0}", errorMessage));
+	}
+}
+
 /** ユニット削除の失敗理由を人間可読なメッセージに変換する */
 function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	if (reason === "not-verify-deletion") {

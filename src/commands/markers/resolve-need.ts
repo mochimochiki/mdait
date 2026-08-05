@@ -22,8 +22,13 @@ import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
 
-/** 既定で解決対象とする need 種別（translate / revise は明示指定時のみ解決する） */
-export const DEFAULT_RESOLVABLE_NEEDS: readonly string[] = ["review", "verify-deletion"];
+/**
+ * 既定で解決対象とする need 種別（translate / revise は明示指定時のみ解決する）。
+ * verify-deletion は既定に含めない: need を外すだけでは from が残り、次の sync で
+ * 確認待ちが復活する（Keep の恒久化は keep-unit.ts が need と from を同時に外す）。
+ * 明示指定（needs:["verify-deletion"]）は一時的に伏せる操作として引き続き通る。
+ */
+export const DEFAULT_RESOLVABLE_NEEDS: readonly string[] = ["review"];
 
 /**
  * 解決対象に指定できる need 種別の全て。need 語彙の持ち主はこのモジュールであり、

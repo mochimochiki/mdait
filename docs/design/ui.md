@@ -137,7 +137,7 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **$(symbol-reference) Source**: 原文ユニットへジャンプ（`from`属性がある場合）
 - **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
-- **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき）
+- **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき。Keep は独立ユニット化＝need と from を同時に外す恒久操作。ADR-260805-01）。ツリーのファイル行には一括の「まとめて残す/まとめて削除」（どちらも modal）
 - **$(arrow-right) Next**: 次の要対応ユニットへ（`need:review` / `need:verify-deletion` のとき）
 - **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「独立扱いにする」（`need`なし時のみ）と「ノート」を集約（`mdait.codelens.otherActions`）
 

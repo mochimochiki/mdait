@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../commands/markers/delete-unit";
+import type { KeepUnitsResult } from "../commands/markers/keep-unit";
 import {
 	ALL_RESOLVABLE_NEEDS,
 	DEFAULT_RESOLVABLE_NEEDS,
@@ -35,18 +36,21 @@ const ALLOWED_NEED_FILTERS = ALL_RESOLVABLE_NEEDS;
 interface ResolveInput {
 	/** 対象ファイルのパス（相対または絶対） */
 	path: string;
-	/** 対象ユニットの hash。resolve では省略時ファイル内の needs フィルタに一致する全ユニット。declare-isolate では必須 */
+	/** 対象ユニットの hash。resolve では省略時ファイル内の needs フィルタに一致する全ユニット。declare-isolate / keep / delete では必須 */
 	unitHashes?: string[];
-	/** 解決対象の need 種別フィルタ（action:"resolve"のみ）。省略時は ["review", "verify-deletion"] */
+	/** 解決対象の need 種別フィルタ（action:"resolve"のみ）。省略時は ["review"] */
 	needs?: string[];
 	/**
-	 * "resolve"（既定）: 指定 need フラグを除去する（review/verify-deletion 等の裁定 = Keep相当）。
+	 * "resolve"（既定）: 指定 need フラグを除去する（review 等の裁定）。verify-deletion をこれで
+	 * 外しても from が残るため次の sync で確認待ちが復活する — 残したい場合は "keep" を使うこと。
+	 * "keep": unitHashes で指定した need:verify-deletion ユニットを独立ユニットとして残す
+	 * （need と from を同時に外す恒久化。ツリー/CodeLens の Keep と同じ）。
 	 * "declare-isolate": unitHashes で指定したユニットに need:isolate を宣言する（凍結。伝播停止）。
 	 * 既に need が付いているユニットは宣言をスキップする（他の判断待ちを踏み潰さない安全弁）。
 	 * "delete": unitHashes で指定した need:verify-deletion ユニットをドキュメントから削除する。
-	 * 安全弁として need:verify-deletion 以外のユニットは削除できない。
+	 * 安全弁として need:verify-deletion 以外のユニットは削除・独立化できない。
 	 */
-	action?: "resolve" | "declare-isolate" | "delete";
+	action?: "resolve" | "keep" | "declare-isolate" | "delete";
 }
 
 /** mdait_resolve の data 形式（action:"resolve"） */
@@ -66,6 +70,13 @@ interface DeclareIsolateData {
 		hash: string;
 		reason: NonNullable<DeclareIsolateResult["reason"]>;
 	}>;
+}
+
+/** mdait_resolve の data 形式（action:"keep"） */
+interface KeepUnitData {
+	file: string;
+	kept: Array<{ hash: string; title?: string }>;
+	skipped: KeepUnitsResult["skipped"];
 }
 
 /** mdait_resolve の data 形式（action:"delete"） */
@@ -128,6 +139,9 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 
 			if (options.input.action === "declare-isolate") {
 				return await this.invokeDeclareIsolate(inputPath, absPath, config, options.input.unitHashes);
+			}
+			if (options.input.action === "keep") {
+				return await this.invokeKeep(inputPath, absPath, options.input.unitHashes);
 			}
 			if (options.input.action === "delete") {
 				return await this.invokeDelete(inputPath, absPath, config, options.input.unitHashes);
@@ -245,6 +259,55 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	}
 
 	/**
+	 * action:"keep" の実処理。unitHashes 必須（省略してファイル内全件を暗黙的に独立化する経路は
+	 * 提供しない。意図せぬ大量独立化を防ぐ安全弁。複数 hash を明示指定した一括 Keep 自体は対応する）。
+	 * need:verify-deletion 以外のユニットは独立化しない（keepUnits の安全弁）。
+	 */
+	private async invokeKeep(
+		inputPath: string,
+		absPath: string,
+		unitHashes: string[] | undefined,
+	): Promise<vscode.LanguageModelToolResult> {
+		if (!unitHashes || unitHashes.length === 0) {
+			const message = vscode.l10n.t(
+				'unitHashes is required for action:"keep". Run mdait_getStatus (detail:true) to find target unit hashes.',
+			);
+			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
+		}
+
+		const result = await getFileHandler(absPath).keepUnits(absPath, unitHashes);
+		const data: KeepUnitData = { file: inputPath, kept: result.kept, skipped: result.skipped };
+		const summary = vscode.l10n.t(
+			"Kept {0} unit(s) as independent in {1} ({2} skipped).",
+			result.kept.length,
+			inputPath,
+			result.skipped.length,
+		);
+
+		const nextActions: string[] = [];
+		if (result.skipped.some((s) => s.reason === "not-verify-deletion")) {
+			nextActions.push(
+				"Some units were skipped because they don't have need:verify-deletion. Only units awaiting deletion review can be kept this way.",
+			);
+		}
+		if (result.skipped.some((s) => s.reason === "not-found")) {
+			nextActions.push(
+				"Some unit hashes were not found. Run mdait_getStatus (detail:true) to get current unit hashes, then retry.",
+			);
+		}
+		if (result.kept.length > 0) {
+			nextActions.push(
+				"Kept units are now independent: sync will no longer match them against the source. If the source section ever comes back, a fresh translation unit will be created alongside them.",
+			);
+		}
+		if (nextActions.length === 0) {
+			nextActions.push("Nothing was kept. Run mdait_getStatus (detail:true) to inspect unit state.");
+		}
+
+		return toToolResult(createOkEnvelope(summary, data, nextActions));
+	}
+
+	/**
 	 * action:"delete" の実処理。unitHashes 必須（省略してファイル内全件を暗黙的に削除する経路は
 	 * 提供しない。誤った大量削除を防ぐ安全弁。複数 hash を明示指定した一括削除自体は対応する）。
 	 * need:verify-deletion 以外のユニットは削除しない（deleteUnitFromFile の安全弁）。
@@ -322,6 +385,21 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 					title: vscode.l10n.t("Confirm Isolate Declaration"),
 					message: vscode.l10n.t(
 						"This will declare need:isolate on {0} unit(s) in {1}, freezing them so sync stops propagating revise. Units that already have a pending need are skipped. No AI is used.",
+						hashes.length,
+						inputPath,
+					),
+				},
+			};
+		}
+
+		if (options.input.action === "keep") {
+			const hashes = options.input.unitHashes ?? [];
+			return {
+				invocationMessage: vscode.l10n.t("Keeping unit(s) as independent..."),
+				confirmationMessages: {
+					title: vscode.l10n.t("Confirm Keep as Independent"),
+					message: vscode.l10n.t(
+						"This will keep {0} unit(s) flagged need:verify-deletion in {1} as independent units. They will no longer be matched against the source; re-linking them later is a manual edit. No AI is used.",
 						hashes.length,
 						inputPath,
 					),
@@ -412,9 +490,14 @@ function buildResolveNextActions(data: ResolveData): string[] {
 		);
 	}
 	const remaining = data.remainingNeeds;
-	if (remaining.review + remaining.verifyDeletion > 0) {
+	if (remaining.review > 0) {
 		nextActions.push(
-			`${remaining.review + remaining.verifyDeletion} unit(s) in this file still have need:review or need:verify-deletion. Review them and run mdait_resolve again with their unitHashes to approve.`,
+			`${remaining.review} unit(s) in this file still have need:review. Review them and run mdait_resolve again with their unitHashes to approve.`,
+		);
+	}
+	if (remaining.verifyDeletion > 0) {
+		nextActions.push(
+			`${remaining.verifyDeletion} unit(s) in this file still have need:verify-deletion. Decide per unit: run mdait_resolve (action:"keep") to keep them as independent units, or (action:"delete") to remove them.`,
 		);
 	}
 	if (remaining.translate + remaining.revise > 0) {

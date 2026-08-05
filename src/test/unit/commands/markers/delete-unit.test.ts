@@ -7,7 +7,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { deleteUnitFromFile } from "../../../../commands/markers/delete-unit";
+import { deleteAllVerifyDeletionUnits, deleteUnitFromFile } from "../../../../commands/markers/delete-unit";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
@@ -152,5 +152,53 @@ Content C.
 			[0, 1],
 			"order が詰め直されること",
 		);
+	});
+
+	test("一括削除: ファイル内の全verify-deletionユニットが1回の操作で除去され、他は保持される", async () => {
+		const config = await initConfig();
+		const content = `<!-- mdait tgtA from:srcA need:verify-deletion -->
+## Section A
+
+Content A.
+
+<!-- mdait tgtB from:srcB -->
+## Section B
+
+Content B.
+
+<!-- mdait tgtC from:srcC need:verify-deletion -->
+## Section C
+
+Content C.
+
+<!-- mdait tgtD from:srcD need:review -->
+## Section D
+
+Content D.
+`;
+		writeTarget(content);
+
+		const result = await deleteAllVerifyDeletionUnits(targetFile, config);
+
+		assert.deepStrictEqual(
+			result.deleted.map((d) => d.hash),
+			["tgtA", "tgtC"],
+		);
+		const written = fs.readFileSync(targetFile, "utf-8");
+		assert.ok(!written.includes("Content A."));
+		assert.ok(!written.includes("Content C."));
+		assert.ok(written.includes("Content B."), "確認待ちでないユニットは保持されること");
+		assert.ok(written.includes("Content D."), "reviewの判断待ちは保持されること");
+	});
+
+	test("一括削除: 対象が無ければ無変更（冪等性）", async () => {
+		const config = await initConfig();
+		writeTarget();
+		const first = await deleteAllVerifyDeletionUnits(targetFile, config);
+		assert.strictEqual(first.deleted.length, 1);
+
+		const second = await deleteAllVerifyDeletionUnits(targetFile, config);
+		assert.strictEqual(second.deleted.length, 0);
+		assert.strictEqual(second.changed, false);
 	});
 });
