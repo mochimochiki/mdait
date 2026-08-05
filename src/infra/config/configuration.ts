@@ -7,6 +7,7 @@ import {
 	embeddedMarkerProvider,
 	externalMarkerProvider,
 } from "../../core/markdown/marker-provider";
+import { TROUBLESHOOTING_URL } from "../links";
 import { Logger, formatError } from "../logging/logger";
 
 /**
@@ -758,9 +759,7 @@ export class Configuration {
 			)
 			.then((choice) => {
 				if (choice === useEnv) {
-					vscode.env.openExternal(
-						vscode.Uri.parse("https://github.com/mochimochiki/mdait/blob/main/docs/guide/ja/troubleshooting.md"),
-					);
+					vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
 				}
 			});
 	}

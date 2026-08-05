@@ -30,8 +30,12 @@ export interface FileSyncResult {
 	kept?: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
 	orphanReviewed?: number;
+	/** 崩れを疑って自動削除を見送り、確認待ちにした孤立ターゲット数 */
+	orphanDeletionWithheld?: number;
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
+	/** 原文が空になったため訳文に触れずに中止したファイル数（0 or 1） */
+	sourceEmptied?: number;
 }
 
 /** syncのオプション（コマンド層のSyncCommandOptionsと同義。循環依存回避のためここで定義） */

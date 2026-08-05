@@ -16,7 +16,9 @@ import { FrontMatter } from "../../core/markdown/front-matter";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { alignEntriesToUnits } from "../../core/unit-state/unit-state-align";
+import type { UnitStateEntry } from "../../core/unit-state/unit-state-store";
+import { UnitStateStore, isHeldBackEntry } from "../../core/unit-state/unit-state-store";
 import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -121,8 +123,16 @@ export function externalizeFileMarkers(
 
 /**
  * 単一 MD ファイルへ外部ストアのマーカーを書き戻す（external → embedded）。
- * 書き戻し後、この MD ファイルの unit-state エントリを削除する
- * （非MDファイルの order:0 エントリは別パスなので影響しない）。
+ *
+ * 書き戻せた行だけを store から消す。**本文に書き戻せなかった行は残す。**
+ * 本文のユニットと行の対応は内容で決まるため（`alignEntriesToUnits`）、行の数だけ
+ * ユニットがあるとは限らない。対応の付かなかった行を一緒に消すと、その `from`/`need` は
+ * 本文にも store にも残らず、復旧手段が無くなる。
+ *
+ * 「消せなかった行があるならファイル単位で削除を見送る」案も採れるが、そうすると
+ * 書き戻し済みの行まで残り、本文（＝これ以降の正）と二重に持つことになる。二重に持った
+ * 状態は embedded 運用のあいだ静かに古くなるので、残すのは「本文に居場所の無い行」だけにする。
+ *
  * store.save() は呼ばない（一括実行の完了時に1回保存する）。
  */
 export function embedFileMarkers(
@@ -133,23 +143,58 @@ export function embedFileMarkers(
 ): MigrateFileResult {
 	const content = fs.readFileSync(absPath, "utf-8");
 	const relPath = toWorkspaceRelativePath(absPath);
+	const entries = store.getEntriesByPath(relPath);
 	const parsed = markdownParser.parse(content, config, externalMarkerProvider, { filePath: relPath, role });
-	const unitsMigrated = parsed.units.filter((u) => Boolean(u.marker?.hash)).length;
+
+	// parse の attach と同じ対応表を作り直す（同じ入力に対する純粋関数なので同じ結果になる）。
+	// どの行がどのユニットへ書き戻されたかを知るために要る。
+	// 「位置を信用しない行」も attach と同一でなければ対応表がずれる。
+	const untrusted = new Set<number>();
+	for (let i = 0; i < entries.length; i++) {
+		if (isHeldBackEntry(entries[i])) {
+			untrusted.add(i);
+		}
+	}
+	const aligned = alignEntriesToUnits(entries, parsed.units, untrusted);
+	const embeddedEntries = new Set<UnitStateEntry>();
+
 	// store にエントリの無いユニット（本文のユニット数がエントリ数より多い場合など）には
 	// マーカー行を出力しない。hash 空のままだと本文へ空スタブ `<!-- mdait -->` が
 	// 書き込まれてしまう。マーカーは次回 sync が正しく付与する（自己修復）。
-	for (const unit of parsed.units) {
+	for (let i = 0; i < parsed.units.length; i++) {
+		const unit = parsed.units[i];
 		if (!unit.marker?.hash) {
 			(unit as { marker: unknown }).marker = undefined;
+			continue;
+		}
+		const entry = aligned[i];
+		if (entry) {
+			embeddedEntries.add(entry);
 		}
 	}
+	const unitsMigrated = embeddedEntries.size;
+
 	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
 	const changed = out !== content;
 	if (changed) {
 		fs.writeFileSync(absPath, out, "utf-8");
 	}
-	for (const entry of store.getEntriesByPath(relPath)) {
-		store.removeEntry(relPath, entry.order);
+
+	const orphanedEntries = entries.filter((e) => !embeddedEntries.has(e));
+	for (const entry of entries) {
+		if (embeddedEntries.has(entry)) {
+			store.removeEntry(relPath, entry.order);
+		}
+	}
+	// 抑制はしない。「一度出したら二度と出さない」にすると、原因を直したのにまた起きたときに
+	// 気づけなくなる（記録用の Set も解放されず増え続ける）。出力チャネルのログなので
+	// 繰り返しても人の作業は止めない
+	if (orphanedEntries.length > 0) {
+		logger.warn(
+			"markers",
+			"Kept unit-state entries that could not be written back into the file (no matching unit in the body)",
+			{ file: relPath, kept: orphanedEntries.length, orders: orphanedEntries.map((e) => e.order) },
+		);
 	}
 	return { changed, unitsMigrated, unitsDropped: 0 };
 }
@@ -225,6 +270,11 @@ export function reconcileMarkerModeForFile(
 	}
 	const embeddedParse = markdownParser.parse(content, config, embeddedMarkerProvider);
 	if (embeddedParse.units.some((u) => Boolean(u.marker?.hash))) {
+		return false;
+	}
+	if (embeddedParse.units.length === 0) {
+		// 本文にユニットが1つも無いので書き戻す先が無い。ここで抜けないと、行が残る限り
+		// この条件は永久に真のままで、sync のたびに parse + 突き合わせ + stringify を空回りする
 		return false;
 	}
 	const result = embedFileMarkers(absPath, role, config, store);

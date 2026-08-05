@@ -6,9 +6,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
-import { ExternalMarkerProvider } from "../../../../core/markdown/marker-provider";
+import { ExternalMarkerProvider, shouldPruneTail } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
-import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
+import { HELD_ORDER_BASE, UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
 
 function makeConfig(level: number): Configuration {
@@ -203,5 +203,145 @@ suite("ExternalMarkerProvider", () => {
 		assert.strictEqual(dataLines.length, 2);
 		assert.ok(dataLines[0].startsWith(`${TARGET_PATH}\t0\t`));
 		assert.ok(dataLines[1].startsWith(`${TARGET_PATH}\t1\t`));
+	});
+
+	test("detach: ユニットが急減したときは末尾の余った行を刈らず保留席へ移すこと", () => {
+		// 6行ある状態で、パースが崩れて1ユニットしか取れなかった状況を作る
+		for (let i = 0; i < 6; i++) {
+			store.setEntry({
+				path: TARGET_PATH,
+				order: i,
+				level: 2,
+				titleHash: `t${i}`,
+				hash: `hash000${i}`,
+				from: `src0000${i}`,
+				need: i === 5 ? "translate" : "",
+			});
+		}
+
+		const provider = new ExternalMarkerProvider(store);
+		const parsed = markdownParser.parse("# 見出し1\n\n本文1。\n", makeConfig(2), provider, {
+			filePath: TARGET_PATH,
+		});
+		assert.strictEqual(parsed.units.length, 1, "前提: ユニットは1つしか取れていない");
+		markdownParser.stringify(parsed, provider, { filePath: TARGET_PATH });
+
+		const entries = store.getEntriesByPath(TARGET_PATH);
+		assert.strictEqual(entries.length, 6, "末尾の行が消えていない");
+		assert.strictEqual(entries.filter(isHeldBackEntry).length, 5, "生きている1件を除いて保留席へ移る");
+		assert.strictEqual(entries[5].need, "translate", "need も残っている");
+	});
+
+	test("attach: 保留席の行は、内容が一致しない新しいユニットへ順序で貼り付かないこと", () => {
+		// 「章を大きく減らして sync（＝保留）→ 新しい章を足す」状況。
+		// 保留席の行が順序で拾われると、新章に削除済みの章の from が付き need:revise になる。
+		store.setEntry({
+			path: TARGET_PATH,
+			order: 0,
+			level: 1,
+			titleHash: calculateHash("見出し1"),
+			hash: calculateHash("# 見出し1\n\n本文1。\n"),
+			from: "src00001",
+			need: "",
+		});
+		for (let i = 0; i < 3; i++) {
+			store.setEntry({
+				path: TARGET_PATH,
+				order: HELD_ORDER_BASE + i,
+				level: 2,
+				titleHash: `old${i}`,
+				hash: `oldhash${i}`,
+				from: `oldsrc${i}`,
+				need: "",
+			});
+		}
+
+		const provider = new ExternalMarkerProvider(store);
+		const parsed = markdownParser.parse(externalDoc, makeConfig(2), provider, { filePath: TARGET_PATH });
+
+		assert.strictEqual(parsed.units.length, 2);
+		assert.strictEqual(parsed.units[1].marker.hash, "", "新しいユニットには保留席の行が付かない");
+		assert.strictEqual(parsed.units[1].marker.from, null);
+	});
+
+	test("attach: 保留席の行でも、内容（本文hash）が一致すれば拾い直されること", () => {
+		// 崩れを直して章が戻ってきた状況。位置ではなく内容で復帰する。
+		const bodyHash = calculateHash("## 見出し2\n\n本文2。\n");
+		store.setEntry({
+			path: TARGET_PATH,
+			order: 0,
+			level: 1,
+			titleHash: calculateHash("見出し1"),
+			hash: "aaaa1111",
+			from: "src00001",
+			need: "",
+		});
+		store.setEntry({
+			path: TARGET_PATH,
+			order: HELD_ORDER_BASE,
+			level: 2,
+			titleHash: calculateHash("見出し2"),
+			hash: bodyHash,
+			from: "src00002",
+			need: "translate",
+		});
+
+		const provider = new ExternalMarkerProvider(store);
+		const parsed = markdownParser.parse(externalDoc, makeConfig(2), provider, { filePath: TARGET_PATH });
+
+		assert.strictEqual(parsed.units[1].marker.hash, bodyHash);
+		assert.strictEqual(parsed.units[1].marker.from, "src00002", "from が復帰する");
+		assert.strictEqual(parsed.units[1].marker.need, "translate", "need も復帰する");
+	});
+
+	test("detach: ユニットが少し減っただけなら末尾の余った行を刈ること", () => {
+		for (let i = 0; i < 3; i++) {
+			store.setEntry({
+				path: TARGET_PATH,
+				order: i,
+				level: i === 0 ? 1 : 2,
+				titleHash: `t${i}`,
+				hash: `hash000${i}`,
+				from: `src0000${i}`,
+				need: "",
+			});
+		}
+
+		const provider = new ExternalMarkerProvider(store);
+		const parsed = markdownParser.parse(externalDoc, makeConfig(2), provider, {
+			filePath: TARGET_PATH,
+		});
+		assert.strictEqual(parsed.units.length, 2);
+		markdownParser.stringify(parsed, provider, { filePath: TARGET_PATH });
+
+		assert.strictEqual(store.getEntriesByPath(TARGET_PATH).length, 2, "3行目は刈られる");
+	});
+});
+
+suite("shouldPruneTail（末尾行の刈り取り判定）", () => {
+	test("ユニットが0件なら刈らないこと", () => {
+		assert.strictEqual(shouldPruneTail(5, 0), false);
+	});
+
+	test("ユニットが減っていなければ刈ること", () => {
+		assert.strictEqual(shouldPruneTail(3, 3), true);
+		assert.strictEqual(shouldPruneTail(3, 5), true);
+	});
+
+	test("減少幅が小さければ刈ること（普通の章削除）", () => {
+		assert.strictEqual(shouldPruneTail(10, 8), true);
+		assert.strictEqual(shouldPruneTail(2, 1), true, "2件が1件は比率では半減だが件数が小さいので刈る");
+		assert.strictEqual(shouldPruneTail(4, 2), true, "減少2件は疑わしさの下限に届かない");
+	});
+
+	test("半分未満へ3件以上減ったときは刈らないこと（一時的な崩れを疑う）", () => {
+		assert.strictEqual(shouldPruneTail(6, 1), false);
+		assert.strictEqual(shouldPruneTail(20, 1), false);
+		assert.strictEqual(shouldPruneTail(7, 3), false);
+	});
+
+	test("半分以上残っていれば3件以上減っても刈ること", () => {
+		assert.strictEqual(shouldPruneTail(10, 6), true);
+		assert.strictEqual(shouldPruneTail(8, 4), true, "ちょうど半分は刈る");
 	});
 });
