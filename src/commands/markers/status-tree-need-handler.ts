@@ -161,9 +161,16 @@ export class StatusTreeNeedHandler {
 		if (choice !== confirmLabel) {
 			return;
 		}
-		const result = await getFileHandler(file.filePath).keepUnits(file.filePath);
+		// modal に列挙した集合だけを処理する。開いている間に sync が確認待ちを増やしても、
+		// 同意していないユニットを巻き込まない（ずれた指定はスキップされる＝安全側）
+		const result = await getFileHandler(file.filePath).keepUnits(
+			file.filePath,
+			pending.map((unit) => unit.unitHash),
+		);
 		if (result.kept.length === 0) {
-			vscode.window.showWarningMessage(vscode.l10n.t("No units awaiting deletion review in this file."));
+			vscode.window.showWarningMessage(
+				vscode.l10n.t("The listed units have changed since the dialog was shown. Check the tree and try again."),
+			);
 			return;
 		}
 		vscode.window.showInformationMessage(vscode.l10n.t("Kept {0} unit(s) as independent.", result.kept.length));
@@ -197,9 +204,16 @@ export class StatusTreeNeedHandler {
 		if (choice !== confirmLabel) {
 			return;
 		}
-		const result = await getFileHandler(file.filePath).deleteAllVerifyDeletion(file.filePath);
+		// modal に列挙した集合だけを削除する（keepAllInFile と同じ理由。削除は取り返しが
+		// つかないので、同意した一覧の外を巻き込まないことが特に重要）
+		const result = await getFileHandler(file.filePath).deleteAllVerifyDeletion(
+			file.filePath,
+			pending.map((unit) => unit.unitHash),
+		);
 		if (result.deleted.length === 0) {
-			vscode.window.showWarningMessage(vscode.l10n.t("No units awaiting deletion review in this file."));
+			vscode.window.showWarningMessage(
+				vscode.l10n.t("The listed units have changed since the dialog was shown. Check the tree and try again."),
+			);
 			return;
 		}
 		vscode.window.showInformationMessage(vscode.l10n.t("Deleted {0} unit(s).", result.deleted.length));

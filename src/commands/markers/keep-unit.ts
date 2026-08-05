@@ -15,8 +15,10 @@
  *   （サーフェスごとに書き換えを実装しないこと。理由は unit-mutation.ts を参照）。
  * @module commands/markers/keep-unit
  */
-import { Logger } from "../../infra/logging/logger";
+import { calculateHash } from "../../core/hash/hash-calculator";
+import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { Configuration } from "../../infra/config/configuration";
+import { Logger } from "../../infra/logging/logger";
 import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
@@ -56,9 +58,33 @@ export async function keepUnitsAsIndependent(
 		const kept: KeptUnit[] = [];
 		const skipped: SkippedKeepUnit[] = [];
 
+		/**
+		 * 独立化の実体。sync の独立ユニット保護は「hash あり・from なし」が条件なので、
+		 * hash の無い手書きマーカーはここで hash を合成してから外す（合成しないと
+		 * 「以後対応付けない」と伝えたのに次の sync で need:review の列へ戻る）。
+		 */
+		const keepOne = (unit: MdaitUnit): string => {
+			const marker = unit.marker;
+			if (!marker) {
+				return "";
+			}
+			if (!marker.hash) {
+				marker.updateHash(calculateHash(unit.content));
+			}
+			marker.removeNeedTag();
+			marker.from = null;
+			kept.push(unit.title ? { hash: marker.hash, title: unit.title } : { hash: marker.hash });
+			return marker.hash;
+		};
+
 		if (hashes && hashes.length > 0) {
 			for (const hash of hashes) {
-				const unit = parsed.units.find((u) => u.marker?.hash === hash);
+				// hash は本文 CRC なので同一本文の章が並ぶと重複する。先頭一致だけだと
+				// 「Keep 済みの1つ目」を掴み続けて2つ目に永久に到達できないため、
+				// verify-deletion が付いているものを優先して探す
+				const unit =
+					parsed.units.find((u) => u.marker?.hash === hash && u.marker.need === "verify-deletion") ??
+					parsed.units.find((u) => u.marker?.hash === hash);
 				if (!unit?.marker) {
 					skipped.push({ hash, reason: "not-found" });
 					continue;
@@ -67,19 +93,14 @@ export async function keepUnitsAsIndependent(
 					skipped.push({ hash, reason: "not-verify-deletion" });
 					continue;
 				}
-				unit.marker.removeNeedTag();
-				unit.marker.from = null;
-				kept.push(unit.title ? { hash, title: unit.title } : { hash });
+				keepOne(unit);
 			}
 		} else {
 			for (const unit of parsed.units) {
 				if (unit.marker?.need !== "verify-deletion") {
 					continue;
 				}
-				const hash = unit.marker.hash;
-				unit.marker.removeNeedTag();
-				unit.marker.from = null;
-				kept.push(unit.title ? { hash, title: unit.title } : { hash });
+				keepOne(unit);
 			}
 		}
 

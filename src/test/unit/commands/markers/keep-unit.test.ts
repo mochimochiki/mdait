@@ -139,6 +139,51 @@ Content D.
 		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), afterFirst);
 	});
 
+	test("hashの無い手書きverify-deletionマーカーはKeep時にhashが合成され、独立ユニットの条件を満たす", async () => {
+		// sync の独立ユニット保護は「hash あり・from なし」。hash 無しのまま need だけ外すと
+		// 次の sync で need:review の列へ戻り、「以後対応付けない」という通知と矛盾する
+		const config = await initConfig();
+		writeTarget(`<!-- mdait need:verify-deletion -->
+## Handwritten
+
+Handwritten content.
+`);
+
+		const result = await keepUnitsAsIndependent(targetFile, config);
+
+		assert.strictEqual(result.kept.length, 1);
+		assert.ok(result.kept[0].hash, "合成されたhashが結果に載ること");
+		const written = fs.readFileSync(targetFile, "utf-8");
+		assert.ok(!written.includes("need:verify-deletion"));
+		assert.match(written, /<!-- mdait [a-zA-Z0-9]+ -->/, "hash付きの素マーカーになること");
+	});
+
+	test("同一hashのverify-deletionが2つあっても、単体Keepを2回で両方に到達できる", async () => {
+		// hash は本文CRCなので同一本文の章は同じhashになる。先頭一致だけだと
+		// 1つ目のKeep後に2つ目へ永久に到達できない（正しさレビューの指摘）
+		const config = await initConfig();
+		writeTarget(`<!-- mdait dup1 from:srcA need:verify-deletion -->
+## Same
+
+Same content.
+
+<!-- mdait dup1 from:srcB need:verify-deletion -->
+## Same
+
+Same content.
+`);
+
+		const first = await keepUnitsAsIndependent(targetFile, config, ["dup1"]);
+		assert.strictEqual(first.kept.length, 1);
+
+		const second = await keepUnitsAsIndependent(targetFile, config, ["dup1"]);
+		assert.strictEqual(second.kept.length, 1, "2回目はまだverify-deletionの方が優先して選ばれること");
+
+		const written = fs.readFileSync(targetFile, "utf-8");
+		assert.ok(!written.includes("need:verify-deletion"), "両方とも独立化されること");
+		assert.ok(!written.includes("from:"), "両方のfromが外れること");
+	});
+
 	test("externalマーカーモードではストアの行からもneedとfromが外れる", async () => {
 		const config = await initConfig({ mode: "external" });
 		const externalContent = "## Section A\n\nContent A.\n\n## Section B\n\nContent B.\n";
@@ -242,6 +287,39 @@ suite("Keepの恒久性（sync統合。unit-state.md §14(6)-(a) の解消）", 
 		assert.strictEqual(diff.kept, 1, "syncが独立ユニットとして数えること");
 
 		// さらにもう1回 sync しても不変（冪等性）
+		const before = fs.readFileSync(targetFile, "utf-8");
+		await sync_CoreProc(sourceFile, targetFile, config);
+		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), before);
+	});
+
+	test("Keepした章の原文が復活すると、独立ユニットの隣に新規translateユニットが並ぶ（ADR-260805-01の受け入れた帰結）", async () => {
+		// 独立化は「機械の対応付けから外す」という人の宣言なので、原文が戻っても再連結しない。
+		// 同名章が2本並ぶのは宣言どおりの挙動 — この帰結が変わったら ADR の再訪が要る
+		const config = await initConfig();
+		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"), "utf-8");
+		await syncNew_CoreProc(sourceFile, targetFile, config);
+
+		// 原文から「付録」を削除 → sync → Keep（独立化）
+		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", ""].join("\n"), "utf-8");
+		await sync_CoreProc(sourceFile, targetFile, config);
+		const pending = parseUnits(targetFile).find((u) => u.title === "付録");
+		assert.ok(pending?.marker);
+		await keepUnitsAsIndependent(targetFile, config, [pending.marker.hash]);
+
+		// 原文の「付録」を復活させて sync
+		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"), "utf-8");
+		await sync_CoreProc(sourceFile, targetFile, config);
+
+		const appendixUnits = parseUnits(targetFile).filter((u) => u.title === "付録");
+		assert.strictEqual(appendixUnits.length, 2, "独立ユニットと新規translateの2本が並ぶこと");
+		const independent = appendixUnits.find((u) => !u.marker?.from);
+		const fresh = appendixUnits.find((u) => u.marker?.from);
+		assert.ok(independent, "Keepした独立ユニットが保持されること");
+		assert.strictEqual(independent.marker?.need, null);
+		assert.ok(fresh, "復活した原文から新規ユニットが生成されること");
+		assert.strictEqual(fresh.marker?.need, "translate");
+
+		// 2回目の sync で増殖しない（冪等性）
 		const before = fs.readFileSync(targetFile, "utf-8");
 		await sync_CoreProc(sourceFile, targetFile, config);
 		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), before);

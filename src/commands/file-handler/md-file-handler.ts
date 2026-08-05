@@ -152,7 +152,7 @@ export class MdFileHandler implements FileHandler {
 		return keepUnitsAsIndependent(filePath, Configuration.getInstance(), hashes);
 	}
 
-	async deleteAllVerifyDeletion(filePath: string): Promise<DeleteUnitsResult> {
-		return deleteAllVerifyDeletionUnits(filePath, Configuration.getInstance());
+	async deleteAllVerifyDeletion(filePath: string, hashes?: string[]): Promise<DeleteUnitsResult> {
+		return deleteAllVerifyDeletionUnits(filePath, Configuration.getInstance(), hashes);
 	}
 }

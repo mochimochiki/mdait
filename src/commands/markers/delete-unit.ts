@@ -99,7 +99,7 @@ export async function deleteUnitFromFile(
 }
 
 /**
- * ファイル内の全 need:verify-deletion ユニットを1回の排他で削除する（一括確定）。
+ * ファイル内の need:verify-deletion ユニットを1回の排他で削除する（一括確定）。
  *
  * 1ユニットずつ deleteUnitFromFile を繰り返すとロックの取得・ファイル書き込み・
  * ステータス更新がユニット数ぶん走るため、一括の入口を分ける。
@@ -107,13 +107,24 @@ export async function deleteUnitFromFile(
  *
  * @param absPath 対象ファイルの絶対パス
  * @param config 設定
+ * @param hashes 対象を確認画面に列挙した集合へ限定する。省略時はファイル内の全 verify-deletion。
+ *   確認 modal を見せている間に sync が新しい確認待ちを増やしても、同意していないユニットを
+ *   巻き込まないために使う（一致しない指定は黙って残る＝安全側）
  */
-export async function deleteAllVerifyDeletionUnits(absPath: string, config: Configuration): Promise<DeleteUnitsResult> {
+export async function deleteAllVerifyDeletionUnits(
+	absPath: string,
+	config: Configuration,
+	hashes?: string[],
+): Promise<DeleteUnitsResult> {
+	const targetHashes = hashes && hashes.length > 0 ? new Set(hashes) : undefined;
 	const outcome = await withMarkdownMutation<DeleteUnitsResult>(absPath, config, ({ parsed, io }) => {
 		const deleted: DeletedUnit[] = [];
 		for (let i = parsed.units.length - 1; i >= 0; i--) {
 			const unit = parsed.units[i];
 			if (unit.marker?.need !== "verify-deletion") {
+				continue;
+			}
+			if (targetHashes && !targetHashes.has(unit.marker.hash)) {
 				continue;
 			}
 			const entry: DeletedUnit = { hash: unit.marker.hash };

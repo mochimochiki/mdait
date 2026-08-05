@@ -312,6 +312,14 @@
           "when": "false"
         },
         {
+          "command": "mdait.file.keepVerifyDeletion",
+          "when": "false"
+        },
+        {
+          "command": "mdait.file.deleteVerifyDeletion",
+          "when": "false"
+        },
+        {
           "command": "mdait.unit.markIsolated",
           "when": "false"
         },

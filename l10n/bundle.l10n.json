@@ -471,6 +471,7 @@
   "Keep All": "Keep All",
   "Keep {0} unit(s) awaiting deletion review in '{1}' as independent?": "Keep {0} unit(s) awaiting deletion review in '{1}' as independent?",
   "mdait will stop matching them against the source. They stay in the document, but re-linking them later is a manual edit.": "mdait will stop matching them against the source. They stay in the document, but re-linking them later is a manual edit.",
+  "The listed units have changed since the dialog was shown. Check the tree and try again.": "The listed units have changed since the dialog was shown. Check the tree and try again.",
   "Kept {0} unit(s) as independent.": "Kept {0} unit(s) as independent.",
   "Delete All": "Delete All",
   "Delete {0} unit(s) awaiting deletion review from '{1}'?": "Delete {0} unit(s) awaiting deletion review from '{1}'?",

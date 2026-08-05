@@ -106,6 +106,9 @@ export interface FileHandler {
 	 */
 	keepUnits(filePath: string, hashes?: string[]): Promise<KeepUnitsResult>;
 
-	/** ファイル内の全 verify-deletion ユニットを1回の排他で削除する（一括確定） */
-	deleteAllVerifyDeletion(filePath: string): Promise<DeleteUnitsResult>;
+	/**
+	 * verify-deletion ユニットを1回の排他で削除する（一括確定）。
+	 * hashes 指定時は確認画面に列挙した集合だけを対象にする（省略時はファイル内全件）。
+	 */
+	deleteAllVerifyDeletion(filePath: string, hashes?: string[]): Promise<DeleteUnitsResult>;
 }

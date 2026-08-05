@@ -546,7 +546,7 @@ export class PlainFileHandler implements FileHandler {
 		};
 	}
 
-	async deleteAllVerifyDeletion(_filePath: string): Promise<DeleteUnitsResult> {
+	async deleteAllVerifyDeletion(_filePath: string, _hashes?: string[]): Promise<DeleteUnitsResult> {
 		// 同上。ファイルそのものの削除は mdait の責務外（エクスプローラで行う）
 		return { deleted: [], changed: false };
 	}
