@@ -120,9 +120,11 @@ export async function deleteAllVerifyDeletionUnits(absPath: string, config: Conf
 			if (unit.title) {
 				entry.title = unit.title;
 			}
-			deleted.unshift(entry);
+			deleted.push(entry);
 			parsed.units.splice(i, 1);
 		}
+		// 末尾から走査したので、結果は文書順に戻して返す
+		deleted.reverse();
 
 		if (deleted.length === 0) {
 			return { deleted, changed: false };

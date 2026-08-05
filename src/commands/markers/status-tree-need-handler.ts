@@ -27,12 +27,15 @@ function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
 	return vscode.l10n.t("Unit not found.");
 }
 
-/** keepUnits の失敗理由を人間可読なメッセージに変換する */
-function describeKeepFailure(reason: KeepUnitsResult["skipped"][number]["reason"] | undefined): string {
+/** keepUnits の失敗理由を人間可読なメッセージに変換する（delete/isolate の文言と揃える。CodeLens と共用） */
+export function describeKeepFailure(reason: KeepUnitsResult["skipped"][number]["reason"] | undefined): string {
 	if (reason === "not-verify-deletion") {
 		return vscode.l10n.t(
 			"This unit does not have need:verify-deletion. Only units awaiting deletion review can be kept this way.",
 		);
+	}
+	if (reason === "not-found") {
+		return vscode.l10n.t("Unit not found.");
 	}
 	return vscode.l10n.t("Nothing to keep for this unit.");
 }

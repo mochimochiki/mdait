@@ -11,6 +11,7 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
+import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
@@ -160,13 +161,7 @@ export async function codeLensKeepUnitCommand(range: vscode.Range): Promise<void
 		const filePath = document.uri.fsPath;
 		const result = await getFileHandler(filePath).keepUnits(filePath, [marker.hash]);
 		if (result.kept.length === 0) {
-			vscode.window.showWarningMessage(
-				result.skipped[0]?.reason === "not-verify-deletion"
-					? vscode.l10n.t(
-							"This unit does not have need:verify-deletion. Only units awaiting deletion review can be kept this way.",
-						)
-					: vscode.l10n.t("Nothing to keep for this unit."),
-			);
+			vscode.window.showWarningMessage(describeKeepFailure(result.skipped[0]?.reason));
 			return;
 		}
 		vscode.window.showInformationMessage(
