@@ -25,7 +25,9 @@ function makeUnit(hash: string, from: string | null, need: string | null, title 
 }
 
 suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
-	test("既定ではreview/verify-deletionのみ解決され、translate/reviseは残る", () => {
+	test("既定ではreviewのみ解決され、verify-deletion/translate/reviseは残る", () => {
+		// verify-deletion を既定で解決すると from が残ったまま need だけ消え、
+		// 次の sync で確認待ちが復活する。Keep（恒久化）は keep-unit.ts の担当
 		const units = [
 			makeUnit("aaa", "s1", "review"),
 			makeUnit("bbb", "s2", "verify-deletion"),
@@ -37,16 +39,21 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 
 		assert.deepStrictEqual(
 			result.resolved.map((r) => ({ hash: r.hash, need: r.need })),
-			[
-				{ hash: "aaa", need: "review" },
-				{ hash: "bbb", need: "verify-deletion" },
-			],
+			[{ hash: "aaa", need: "review" }],
 		);
 		assert.strictEqual(result.changed, true);
 		assert.strictEqual(units[0].marker?.need, null);
-		assert.strictEqual(units[1].marker?.need, null);
+		assert.strictEqual(units[1].marker?.need, "verify-deletion");
 		assert.strictEqual(units[2].marker?.need, "translate");
 		assert.strictEqual(units[3].marker?.need, "revise@old1");
+	});
+
+	test("verify-deletionは明示指定すれば解決できる（一時的に伏せる操作として残す）", () => {
+		const units = [makeUnit("bbb", "s2", "verify-deletion")];
+		const result = applyNeedResolution(units, { needs: ["verify-deletion"] });
+		assert.strictEqual(result.resolved.length, 1);
+		assert.strictEqual(units[0].marker?.need, null);
+		assert.strictEqual(units[0].marker?.from, "s2", "fromは残る（＝次のsyncで再び確認待ちになる）");
 	});
 
 	test("hashとfromは変更されない", () => {
@@ -123,7 +130,7 @@ suite("applyNeedResolution（needフラグ解決の純ロジック）", () => {
 	});
 
 	test("unitHashes省略・全ユニット解決の2回目は無変更（冪等性）", () => {
-		const units = [makeUnit("aaa", "s1", "review"), makeUnit("bbb", "s2", "verify-deletion")];
+		const units = [makeUnit("aaa", "s1", "review"), makeUnit("bbb", "s2", "review")];
 		const first = applyNeedResolution(units);
 		assert.strictEqual(first.resolved.length, 2);
 
@@ -195,7 +202,11 @@ suite("applyNeedResolution（同一テキスト検査。ADR-260802-01）", () =>
 
 	test("review / verify-deletion / isolate は検査の対象外（訳したかを問う need ではない）", () => {
 		const units = [makeUnit("aaa", "s1", "review"), makeUnit("bbb", "s2", "verify-deletion")];
-		const result = applyNeedResolution(units, {}, lookupFrom({ s1: units[0].content, s2: units[1].content }));
+		const result = applyNeedResolution(
+			units,
+			{ needs: ["review", "verify-deletion"] },
+			lookupFrom({ s1: units[0].content, s2: units[1].content }),
+		);
 		assert.strictEqual(result.resolved.length, 2);
 	});
 
@@ -286,21 +297,21 @@ Content C.
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	test("review/verify-deletionのneedだけが除去されhash/from/本文は不変", async () => {
+	test("既定ではreviewのneedだけが除去されhash/from/本文は不変（verify-deletionは残る）", async () => {
 		const config = await initConfig();
 		writeTarget();
 
 		const result = await resolveNeedForFile(targetFile, config);
 
-		assert.strictEqual(result.resolved.length, 2);
+		assert.strictEqual(result.resolved.length, 1);
 		assert.strictEqual(result.changed, true);
 		const written = fs.readFileSync(targetFile, "utf-8");
 		assert.ok(written.includes("<!-- mdait tgtA from:srcA -->"));
-		assert.ok(written.includes("<!-- mdait tgtB from:srcB -->"));
+		assert.ok(written.includes("<!-- mdait tgtB from:srcB need:verify-deletion -->"), "verify-deletionは残ること");
 		assert.ok(written.includes("<!-- mdait tgtC from:srcC need:translate -->"), "translateは残ること");
 		assert.ok(written.includes("Content A."));
 		assert.ok(written.includes("Content B."));
-		assert.deepStrictEqual(result.remainingNeedFlags, ["translate"]);
+		assert.deepStrictEqual(result.remainingNeedFlags.sort(), ["translate", "verify-deletion"]);
 	});
 
 	test("原文と同一の訳文は翻訳済みにできない（ファイル経由でも原文を引いて検査する）", async () => {

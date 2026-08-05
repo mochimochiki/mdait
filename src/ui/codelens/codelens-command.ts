@@ -11,6 +11,7 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
+import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
@@ -134,6 +135,41 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
+	}
+}
+
+/**
+ * CodeLensから verify-deletion ユニットを「残す（独立化）」するコマンド。
+ * need を外すだけでは次の sync で確認待ちが復活するため、need と from を同時に外して
+ * 独立ユニットにする（keepUnits）。単体操作なので modal は出さない（意味はラベルと tooltip で伝える）。
+ * @param range CodeLensが表示されている行の範囲
+ */
+export async function codeLensKeepUnitCommand(range: vscode.Range): Promise<void> {
+	try {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor) {
+			vscode.window.showErrorMessage(vscode.l10n.t("No active editor found."));
+			return;
+		}
+		const document = activeEditor.document;
+		const marker = getMarkerAtLine(document, range.start.line);
+		if (!marker?.hash) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
+			return;
+		}
+
+		const filePath = document.uri.fsPath;
+		const result = await getFileHandler(filePath).keepUnits(filePath, [marker.hash]);
+		if (result.kept.length === 0) {
+			vscode.window.showWarningMessage(describeKeepFailure(result.skipped[0]?.reason));
+			return;
+		}
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Unit kept as independent. It will no longer be matched against the source."),
+		);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to keep unit: {0}", errorMessage));
 	}
 }
 

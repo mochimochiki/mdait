@@ -3,7 +3,8 @@ import type { FileStatusItem } from "../../core/status/status-item";
 import type { TransPair } from "../../infra/config/configuration";
 import type { SectionAligner } from "../adopt/section-aligner";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
-import type { DeleteUnitResult } from "../markers/delete-unit";
+import type { DeleteUnitResult, DeleteUnitsResult } from "../markers/delete-unit";
+import type { KeepUnitsResult } from "../markers/keep-unit";
 import type { NeedResolutionOptions, NeedTarget, ResolveNeedFileResult } from "../markers/resolve-need";
 import type { Translator } from "../trans/translator";
 import type { FileType } from "./file-type";
@@ -97,4 +98,17 @@ export interface FileHandler {
 
 	/** verify-deletion のユニットを削除する。対応しないファイル種別では reason つきで false を返す */
 	deleteUnit(filePath: string, target: NeedTarget): Promise<DeleteUnitResult>;
+
+	/**
+	 * verify-deletion のユニットを独立ユニットとして残す（Keep の恒久化。need と from を同時に外す）。
+	 * need を外すだけの resolveNeed では次の sync で確認待ちが復活するため、Keep はこちらを使う。
+	 * hashes 省略時はファイル内の全 verify-deletion ユニットが対象（一括確定）。
+	 */
+	keepUnits(filePath: string, hashes?: string[]): Promise<KeepUnitsResult>;
+
+	/**
+	 * verify-deletion ユニットを1回の排他で削除する（一括確定）。
+	 * hashes 指定時は確認画面に列挙した集合だけを対象にする（省略時はファイル内全件）。
+	 */
+	deleteAllVerifyDeletion(filePath: string, hashes?: string[]): Promise<DeleteUnitsResult>;
 }

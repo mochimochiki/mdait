@@ -242,10 +242,15 @@ export class StatusCollector implements StatusCollectorPort {
 		// ソースファイルは全ユニット数、ターゲットファイルはターゲットユニット数を表示
 		const displayTotalUnits = status === Status.Source ? children.length : totalUnits;
 
-		// contextValueにステータスを反映（翻訳完了状態を識別）
+		// contextValueにステータスを反映（翻訳完了状態を識別）。
+		// 確認待ち（need:verify-deletion）を含むファイルは一括確定の操作を出すため区別する
+		// （ユニットの事実から決める。verify-deletion があるファイルは Translated にならないため
+		// Complete との両立は考えなくてよい）
 		let contextValue: string;
 		if (status === Status.Source) {
 			contextValue = "mdaitFileSource";
+		} else if (children.some((unit) => unit.needFlag === "verify-deletion")) {
+			contextValue = "mdaitFileTargetVerifyDeletion";
 		} else if (status === Status.Translated) {
 			contextValue = "mdaitFileTargetComplete";
 		} else {

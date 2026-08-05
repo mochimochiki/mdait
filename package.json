@@ -72,6 +72,18 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.file.keepVerifyDeletion",
+        "title": "%mdait.file.keepVerifyDeletion.title%",
+        "icon": "$(check-all)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.file.deleteVerifyDeletion",
+        "title": "%mdait.file.deleteVerifyDeletion.title%",
+        "icon": "$(trash)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.unit.markIsolated",
         "title": "%mdait.unit.markIsolated.title%",
         "icon": "$(circle-slash)",
@@ -300,6 +312,14 @@
           "when": "false"
         },
         {
+          "command": "mdait.file.keepVerifyDeletion",
+          "when": "false"
+        },
+        {
+          "command": "mdait.file.deleteVerifyDeletion",
+          "when": "false"
+        },
+        {
           "command": "mdait.unit.markIsolated",
           "when": "false"
         },
@@ -450,8 +470,18 @@
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetVerifyDeletion || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
           "group": "inline"
+        },
+        {
+          "command": "mdait.file.keepVerifyDeletion",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetVerifyDeletion",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdait.file.deleteVerifyDeletion",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetVerifyDeletion",
+          "group": "inline@2"
         },
         {
           "command": "mdait.translate.unit",
@@ -510,7 +540,7 @@
         },
         {
           "command": "mdait.aiReview.file",
-          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetVerifyDeletion || viewItem == mdaitFileTargetComplete)",
           "group": "inline@4"
         },
         {
@@ -520,7 +550,7 @@
         },
         {
           "command": "mdait.translate.file",
-          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetVerifyDeletion || viewItem == mdaitFileTargetComplete || viewItem == mdaitPlainFileTarget || viewItem == mdaitPlainFileTargetComplete)",
           "group": "1_translate@1"
         },
         {
@@ -554,6 +584,16 @@
           "group": "2_judge@2"
         },
         {
+          "command": "mdait.file.keepVerifyDeletion",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetVerifyDeletion",
+          "group": "2_judge@1"
+        },
+        {
+          "command": "mdait.file.deleteVerifyDeletion",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetVerifyDeletion",
+          "group": "2_judge@2"
+        },
+        {
           "command": "mdait.unit.markIsolated",
           "when": "view == mdait.status && (viewItem == mdaitUnitTargetCompletePaired || viewItem == mdaitUnitSource)",
           "group": "2_judge@3"
@@ -570,7 +610,7 @@
         },
         {
           "command": "mdait.aiReview.file",
-          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete)",
+          "when": "view == mdait.status && (viewItem == mdaitFileTarget || viewItem == mdaitFileTargetVerifyDeletion || viewItem == mdaitFileTargetComplete)",
           "group": "2_judge@4"
         },
         {
@@ -840,7 +880,7 @@
         "name": "mdait_resolve",
         "displayName": "mdait: Resolve Need Flags",
         "toolReferenceName": "mdaitResolve",
-        "modelDescription": "Adjudicate need flags on unit markers in a single mdait-managed file - the programmatic equivalent of the StatusTree/CodeLens judgment actions (Mark as Reviewed, Keep/Delete Unit, Mark as Isolated/Un-isolate). Three actions, selected via the action parameter: action:\"resolve\" (default) removes need flags - use it to approve a review (need:review) or KEEP a unit under deletion verification (need:verify-deletion resolves to kept). By default only review and verify-deletion are resolved; translate/revise are cleared only when explicitly listed in needs (normally let mdait_translate process them), and \"isolate\" undeclares an isolation. action:\"declare-isolate\" declares need:isolate on the given unitHashes (required), freezing them so sync stops propagating revise - units that already have a pending need are skipped. action:\"delete\" permanently removes the given unitHashes (required) from the document - only units flagged need:verify-deletion can be deleted this way. Never hand-edit marker comments; always call this tool. Pass unitHashes (from mdait_getStatus detail:true) to target specific units; omit only for action:\"resolve\" to resolve every matching unit in the file (declare-isolate/delete require unitHashes). Marker hashes and from links are never changed by resolve/declare-isolate, and delete only removes the targeted unit's own content. No AI is used, but markers/content are rewritten so a confirmation is shown. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } whose data shape depends on action: resolve -> resolved/skipped/remainingNeeds; declare-isolate -> declared/skipped; delete -> deleted/skipped. Idempotent: re-running with the same input affects 0 unit(s) on the second run.",
+        "modelDescription": "Adjudicate need flags on unit markers in a single mdait-managed file - the programmatic equivalent of the StatusTree/CodeLens judgment actions (Mark as Reviewed, Keep/Delete Unit, Mark as Isolated/Un-isolate). Four actions, selected via the action parameter: action:\"resolve\" (default) removes need flags - use it to approve a review (need:review). By default only review is resolved; translate/revise are cleared only when explicitly listed in needs (normally let mdait_translate process them), and \"isolate\" undeclares an isolation. Do NOT use resolve to keep a unit under deletion verification: clearing need:verify-deletion alone leaves the from link, so the next sync re-flags it. action:\"keep\" permanently KEEPS the given unitHashes (required) flagged need:verify-deletion as independent units (clears need AND from together; sync stops matching them against the source). action:\"declare-isolate\" declares need:isolate on the given unitHashes (required), freezing them so sync stops propagating revise - units that already have a pending need are skipped. action:\"delete\" permanently removes the given unitHashes (required) from the document - only units flagged need:verify-deletion can be deleted this way. Never hand-edit marker comments; always call this tool. Pass unitHashes (from mdait_getStatus detail:true) to target specific units; omit only for action:\"resolve\" to resolve every matching unit in the file (keep/declare-isolate/delete require unitHashes). Marker hashes are never changed; from links are cleared only by keep; delete only removes the targeted unit's own content. No AI is used, but markers/content are rewritten so a confirmation is shown. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } whose data shape depends on action: resolve -> resolved/skipped/remainingNeeds; keep -> kept/skipped; declare-isolate -> declared/skipped; delete -> deleted/skipped. Idempotent: re-running with the same input affects 0 unit(s) on the second run.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -862,17 +902,18 @@
               "type": "string",
               "enum": [
                 "resolve",
+                "keep",
                 "declare-isolate",
                 "delete"
               ],
-              "description": "\"resolve\" (default): remove need flags (review/verify-deletion approval, or undeclare isolate). \"declare-isolate\": declare need:isolate on unitHashes (required). \"delete\": permanently remove unitHashes (required) that are flagged need:verify-deletion."
+              "description": "\"resolve\" (default): remove need flags (review approval, or undeclare isolate). \"keep\": keep unitHashes (required) flagged need:verify-deletion as independent units (clears need and from together - the permanent Keep). \"declare-isolate\": declare need:isolate on unitHashes (required). \"delete\": permanently remove unitHashes (required) that are flagged need:verify-deletion."
             },
             "unitHashes": {
               "type": "array",
               "items": {
                 "type": "string"
               },
-              "description": "Marker hashes of the target units. Required for action:\"declare-isolate\" and action:\"delete\". For action:\"resolve\", omit to resolve every unit in the file whose need flag matches the needs filter. Get current hashes from mdait_getStatus (detail:true)."
+              "description": "Marker hashes of the target units. Required for action:\"keep\", action:\"declare-isolate\" and action:\"delete\". For action:\"resolve\", omit to resolve every unit in the file whose need flag matches the needs filter. Get current hashes from mdait_getStatus (detail:true)."
             },
             "needs": {
               "type": "array",
@@ -886,7 +927,7 @@
                   "isolate"
                 ]
               },
-              "description": "action:\"resolve\" only. Need flag kinds to resolve. Defaults to [\"review\", \"verify-deletion\"]. translate/revise flags are cleared only when explicitly listed here (\"revise\" also matches revise@{oldhash}); \"isolate\" undeclares an isolation."
+              "description": "action:\"resolve\" only. Need flag kinds to resolve. Defaults to [\"review\"]. translate/revise flags are cleared only when explicitly listed here (\"revise\" also matches revise@{oldhash}); \"isolate\" undeclares an isolation. Listing \"verify-deletion\" here only hushes the flag until the next sync - use action:\"keep\" or action:\"delete\" to settle it."
             }
           }
         }

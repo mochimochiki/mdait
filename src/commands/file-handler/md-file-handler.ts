@@ -10,7 +10,13 @@ import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { SectionAligner } from "../adopt/section-aligner";
 import { type DeclareIsolateResult, declareIsolateForFile } from "../markers/declare-isolate";
-import { type DeleteUnitResult, deleteUnitFromFile } from "../markers/delete-unit";
+import {
+	type DeleteUnitResult,
+	type DeleteUnitsResult,
+	deleteAllVerifyDeletionUnits,
+	deleteUnitFromFile,
+} from "../markers/delete-unit";
+import { type KeepUnitsResult, keepUnitsAsIndependent } from "../markers/keep-unit";
 import {
 	type NeedResolutionOptions,
 	type NeedTarget,
@@ -140,5 +146,13 @@ export class MdFileHandler implements FileHandler {
 			return { deleted: false, changed: false, hash: "", reason: "not-found" };
 		}
 		return deleteUnitFromFile(filePath, target.hash, Configuration.getInstance());
+	}
+
+	async keepUnits(filePath: string, hashes?: string[]): Promise<KeepUnitsResult> {
+		return keepUnitsAsIndependent(filePath, Configuration.getInstance(), hashes);
+	}
+
+	async deleteAllVerifyDeletion(filePath: string, hashes?: string[]): Promise<DeleteUnitsResult> {
+		return deleteAllVerifyDeletionUnits(filePath, Configuration.getInstance(), hashes);
 	}
 }
