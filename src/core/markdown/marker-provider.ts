@@ -132,6 +132,13 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		if (!filePath) {
 			return;
 		}
+		// 上書きで失われる状態を数える。行はユニットの並び順でそのまま上書きされるため、
+		// **ユニット数が元に戻った場合は保留も刈り取りも起きず、行が無言で消える**
+		// （訳文の中ほどの章を1つ消して保存する筋書き。docs/design/unit-state.md §17）。
+		// 刈り取りにも保留にもログがあるのに、実際に状態を失うこの経路だけ記録が無いと
+		// 追跡のしようがない。直すのは Task-260806-01 で、ここでは見えるようにするだけ。
+		const lostState = this.countLostState(filePath, units);
+
 		for (let i = 0; i < units.length; i++) {
 			const unit = units[i];
 			this.store.setEntry({
@@ -144,6 +151,15 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				need: unit.marker?.need ?? "",
 			});
 		}
+		if (lostState > 0) {
+			logger.warn("marker", "Overwrote unit-state entries whose translation state has no place left", {
+				path: filePath,
+				units: units.length,
+				lostState,
+				note: "A unit was removed from the document and its from/need is gone. Pasting the text back will not restore it (docs/design/unit-state.md §17).",
+			});
+		}
+
 		// ユニットが減ったときに末尾の旧エントリが残ると、次に増えたときそれを拾ってしまう。
 		// ただし「一時的に減っただけ」のときは刈らず、保留席へ移して位置の意味だけを剥がす
 		// （下記 shouldPruneTail / UnitStateStore.parkEntriesFrom）。
@@ -174,6 +190,42 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			}
 		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
+	}
+
+	/**
+	 * 書き出しで失われる「翻訳の状態」を数える。
+	 *
+	 * 数えるのは `from` か `need` を持っていた行だけである。それ以外（hash だけの行）は
+	 * 本文から計算し直せるので、消えても取り返しがつく。いまの本文のどこかに同じ hash が
+	 * あるなら、その行は位置が変わっただけで失われていない。
+	 */
+	private countLostState(filePath: string, units: readonly MdaitUnit[]): number {
+		const previous = this.store.getEntriesByPath(filePath);
+		if (previous.length === 0) {
+			return 0;
+		}
+		const survivingHashes = new Set<string>();
+		for (const unit of units) {
+			if (unit.marker?.hash) {
+				survivingHashes.add(unit.marker.hash);
+			}
+		}
+		let lost = 0;
+		for (const entry of previous) {
+			if (isHeldBackEntry(entry)) {
+				continue; // 保留席は上書きされない（order が桁違いのため）
+			}
+			if (!entry.hash || (!entry.from && !entry.need)) {
+				continue; // 守るべき状態が無い
+			}
+			if (entry.order >= units.length) {
+				continue; // 末尾。刈り取り／保留の判断が別に下される
+			}
+			if (!survivingHashes.has(entry.hash)) {
+				lost++;
+			}
+		}
+		return lost;
 	}
 }
 

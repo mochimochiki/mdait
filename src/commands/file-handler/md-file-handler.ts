@@ -57,6 +57,7 @@ export class MdFileHandler implements FileHandler {
 			orphanDeletionWithheld: diffResult.orphanDeletionWithheld ?? 0,
 			alignCorrections: diffResult.alignCorrections ?? 0,
 			sourceEmptied: diffResult.sourceEmptied ?? 0,
+			targetEmptied: diffResult.targetEmptied ?? 0,
 		};
 	}
 

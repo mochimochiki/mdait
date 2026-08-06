@@ -285,9 +285,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		};
 
 		// 副題（ラベル右の薄字）を設定。
-		// 明示的な description（要対応キューのファイル名など）が最優先。無ければ
-		// ユニット・frontmatter には状態の短い説明を出し、アイコンの色に頼らせない
-		if (element.description) {
+		// 孤立訳文は色やアイコンだけで表さず、必ず文字でも読めるようにする
+		// （ux.md §3.3「状態は色だけで表さない」）。要対応キューの説明より優先するのは、
+		// 原文が消えている事実のほうが、その中のユニットの状態より先に判断が要るため
+		if (element.type === StatusItemType.File && element.isOrphanTarget) {
+			treeItem.description = vscode.l10n.t("no source");
+		} else if (element.description) {
 			treeItem.description = element.description;
 		} else if (
 			element.type === StatusItemType.Unit ||
@@ -704,6 +707,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			return element.tooltip;
 		}
 
+		// 解説はすべて Hover（ここ）に置く（ux.md §3.3）。ツリーとアイコンは
+		// 「原文が無い」という状態だけを伝え、なぜそうなるのか・次に何をすればよいかはここで説明する
+		if (element.type === StatusItemType.File && element.isOrphanTarget) {
+			return vscode.l10n.t(
+				"The source file for this translation is missing.\nIt may have been renamed or moved outside VS Code, or the source was deleted.\nRestore the source file to reconnect it, or discard this translation (moved to the trash).",
+			);
+		}
+
 		if (
 			element.type === StatusItemType.Directory &&
 			element.directoryPath === NEEDS_ATTENTION_ID
@@ -755,6 +766,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	): vscode.ThemeIcon {
 		if (isProgress) {
 			return new vscode.ThemeIcon("sync~spin");
+		}
+
+		// 原文と結びついていない訳文。ファイルの状態（何ユニット訳し終えたか）より
+		// 先に伝えるべきことなので、他のファイルアイコンより優先する
+		if (element?.type === StatusItemType.File && element.isOrphanTarget) {
+			return new vscode.ThemeIcon(
+				"debug-disconnect",
+				new vscode.ThemeColor("charts.orange"),
+			);
 		}
 
 		// Needs Attention仮想ノードは専用アイコン

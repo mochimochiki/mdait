@@ -706,10 +706,8 @@ async function scenario(name, mutate, opts) {
  * ここに無いシナリオで差が出たら、どちらかの入口だけが直った（または壊れた）ということ。
  */
 const EXPECTED_DIFF = {
-	S6: "ファイルの同一性（パス）の話。行の追随は未対応",
-	S7: "同上",
+	S7: "原文・訳文を揃えて動かすと、行の path が旧パスのまま取り残される（新パスには行が無い）。ペアごと動かす段階2で直す",
 	S8: "同上",
-	S9: "原文を消すと external は訳文の状態を失う（embedded は本文にマーカーが残る）。ファイルの同一性の話で未対応。原文が1本だけのときは content/ja が0件になり『走査していない』扱いで行が残るため一致してしまう＝ディレクトリの中身の数で挙動が変わる。実態を測るため原文を2ファイルにしてある",
 	S10: "リネームを含むため（章の挿入・編集の部分は一致している）",
 	S11: "unit-state を消す操作なので embedded には影響が無い",
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
@@ -724,7 +722,7 @@ const EXPECTED_DIFF = {
  * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
  */
 const KNOWN_BUGS = {
-	S68: "訳文を空にして同じ内容を貼り戻すと external だけ全ユニットが need:translate に固定される。行が残っているため rebuild 検知（sync-command.ts の isExternalRebuild）が働かない。保留席とは無関係の既存欠陥",
+	S75: "訳し終えた訳文から章を1つ消して sync すると、その章の行が保留も刈り取りもされないまま上書きされる（detachMarkers は行を並び順でそのまま書き直し、ユニット数が元に戻るので shouldPruneTail が働かない）。貼り戻しても external だけ need:translate のまま固定される。embedded は本文のマーカーごと戻るので完全復帰する。直すには保留の基準を「末尾の行」から「対応が付かなかった行」へ変える配管が要る（Task-260806-01 / unit-state.md §17）",
 };
 
 /**
@@ -1283,6 +1281,21 @@ async function main() {
 		await scenario("S68 訳文を空にして、同じ内容を貼り戻す", async () => {
 			const saved = read("en/guide.md");
 			write("en/guide.md", "");
+			await syncCommand();
+			write("en/guide.md", saved);
+		});
+
+		// S75: 訳し終えた訳文から章を1つ消して sync し、そのあと元の内容を貼り戻す。
+		//      sync が原文からその章を作り直すのでユニット数は元に戻り、末尾の刈り取り／保留は
+		//      どちらも働かない。消された章の行は上書きされ、痕跡も残らない（unit-state.md §17）。
+		//      先に訳し終えておくのは、未翻訳のままだと失われる状態が need:translate で、
+		//      作り直した結果と区別が付かないためである（＝実害は「訳し終えた章」でだけ出る）。
+		await scenario("S75 訳文を訳したあと章を1つ消して sync → 貼り戻す", async () => {
+			installFakeAi();
+			await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+			await syncCommand();
+			const saved = read("en/guide.md");
+			removeLastChapters("en/guide.md", 1);
 			await syncCommand();
 			write("en/guide.md", saved);
 		});

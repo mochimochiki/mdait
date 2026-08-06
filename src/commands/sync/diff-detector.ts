@@ -56,6 +56,8 @@ export interface DiffResult {
 	alignCorrections?: number;
 	/** 原文が空になったため訳文に触れずに中止したファイル数（0 or 1） */
 	sourceEmptied?: number;
+	/** 訳文が空になったため状態を守って中止したファイル数（0 or 1） */
+	targetEmptied?: number;
 }
 
 /**

@@ -267,6 +267,72 @@ suite("UnitStateStore", () => {
 		assert.ok(store.getEntry("en/guide.md", 0));
 	});
 
+	test("cleanupOrphansInScopeが、実体はあるが原文を失った訳文の行を残すこと（孤立訳文）", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		// 原文だけリネームされた訳文。原文起点の走査には現れないので seenPaths に入らない
+		store.setEntry({ path: "en/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set(["ja/guide.md", "en/guide.md"]),
+			isOrphanTarget: (filePath) => filePath === "en/gone.md",
+		});
+
+		assert.strictEqual(removed, 0);
+		assert.ok(store.getEntry("en/gone.md", 0), "孤立を可視化する材料（from / need）が残ること");
+	});
+
+	test("cleanupOrphansInScopeが、孤立ではないと答えられた行は従来どおり削除すること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		// trans.extensions を変えて管理対象から外れたファイル。実体はあるが原文も在るので孤立ではない
+		store.setEntry({ path: "en/notes.txt", order: 0, level: 0, titleHash: "", hash: "1", from: "2", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set<string>(),
+			isOrphanTarget: () => false,
+		});
+
+		assert.strictEqual(removed, 1, "掃除が永久に効かなくなってはいけない");
+		assert.strictEqual(store.getEntry("en/notes.txt", 0), undefined);
+	});
+
+	test("cleanupOrphansInScopeで孤立判定を渡さなければ従来どおりの挙動になること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set<string>(),
+		});
+
+		assert.strictEqual(removed, 1);
+	});
+
+	test("removeEntriesByPathが保留席も含めて指定パスの行を全部消すこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "en/gone.md", order: HELD_ORDER_BASE, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+		store.setEntry({ path: "en/keep.md", order: 0, level: 1, titleHash: "h", hash: "5", from: "6", need: "" });
+
+		assert.strictEqual(store.removeEntriesByPath("en/gone.md"), 2);
+		assert.strictEqual(store.getEntry("en/gone.md", 0), undefined);
+		assert.strictEqual(store.getEntry("en/gone.md", HELD_ORDER_BASE), undefined);
+		assert.ok(store.getEntry("en/keep.md", 0));
+	});
+
 	test("cleanupOrphansInScopeが名前の先頭が同じ別ディレクトリを範囲内と誤判定しないこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);

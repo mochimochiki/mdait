@@ -24,6 +24,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { isUnitStateBacked } from "../file-handler/file-type";
 
 /** 書き換え操作の結果が最低限持つべき情報 */
@@ -86,6 +87,50 @@ export async function withFileMutation<T extends UnitMutationResult>(
 		await StatusManager.getInstance().refreshFileStatus(absPath);
 	}
 	return result;
+}
+
+/** 訳文ファイルの破棄結果 */
+export interface DiscardFileResult extends UnitMutationResult {
+	/** 削除した `unit-state` の行数 */
+	removedEntries: number;
+}
+
+/**
+ * 訳文ファイルそのものを手放す（孤立訳文の破棄）。
+ *
+ * **ごみ箱へ移す**（`useTrash`）。mdait がユーザーの文書ファイルを消すのはこの操作だけで、
+ * 確認の要否と実装は「破壊的か」ではなく「間違えたとき取り返しがつくか」で決めている
+ * （ADR-260804-01 / -260805-01）。ごみ箱経由なら取り返しがつく側に入る。
+ *
+ * 排他区間の中でファイルを消してから行を消す。順序を逆にすると、削除に失敗したときに
+ * 行だけが失われる（＝画面から孤立が消えるのに実体は残り、二度と気づけなくなる）。
+ * 行の削除はマーカー保管方式に関わらず行う — embedded 運用でも、embed で本文へ
+ * 書き戻せなかった行や、モードを切り替える前の行が残っていることがある。
+ */
+export async function discardTargetFile(absPath: string, config: Configuration): Promise<DiscardFileResult> {
+	const mdaitDir = await ensureMdaitDir();
+	if (mdaitDir) {
+		UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+	}
+
+	let removedEntries = 0;
+	await FileMutex.getInstance().runExclusive([absPath], async () => {
+		await vscode.workspace.fs.delete(vscode.Uri.file(absPath), { useTrash: true, recursive: false });
+		try {
+			removedEntries = UnitStateStore.getInstance().removeEntriesByPath(toWorkspaceRelativePath(absPath));
+		} catch {
+			// ワークスペース未設定。ファイルは消えているので、行は次の sync の掃除に任せる
+			removedEntries = 0;
+		}
+	});
+
+	if (mdaitDir && removedEntries > 0) {
+		UnitStateStore.getInstance().save(mdaitDir);
+	}
+	// ファイルが実在しないので、ステータス更新はツリーからの取り除きとして働く
+	await StatusManager.getInstance().refreshFileStatus(absPath);
+
+	return { changed: true, removedEntries };
 }
 
 /** Markdown 書き換えの作業コンテキスト */

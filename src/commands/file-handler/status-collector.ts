@@ -17,9 +17,11 @@ import {
 	isPendingWorkNeed,
 } from "../../core/status/status-item";
 import { StatusItemTree } from "../../core/status/status-item-tree";
+import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { getFileHandler } from "./file-handler-factory";
 
 /**
@@ -108,6 +110,37 @@ export class StatusCollector implements StatusCollectorPort {
 	 * @return FileStatusItem - ファイルのステータス
 	 */
 	public async collectFileStatus(filePath: string): Promise<FileStatusItem> {
+		return this.applyOrphanFlag(await this.collectFileStatusCore(filePath));
+	}
+
+	/**
+	 * 「原文と結びついていない訳文」の印を付ける。
+	 *
+	 * 収集のたびに計算する（記録しない。ADR-260806-01）。ここで一括して付けるのは、
+	 * MD・非MD・空ファイル・パースエラーのどの経路で作られた項目にも同じ印が要るためで、
+	 * 構築側それぞれに書くと必ずどれかが漏れる。
+	 *
+	 * `contextValue` は孤立を最優先で上書きする。原文が消えている訳文に対して
+	 * 「まとめて残す／まとめて削除」のような通常のユニット操作を並べても、
+	 * 人が最初に決めるべきこと（この訳文をどうするか）から目を逸らさせるだけである
+	 * （ux.md「同じ重みのボタンを3つ以上並べない」）。
+	 */
+	private applyOrphanFlag(item: FileStatusItem): FileStatusItem {
+		let orphan = false;
+		try {
+			orphan = isOrphanTarget(item.filePath, createOrphanTargetProbe(this.config, this.fileExplorer));
+		} catch {
+			// 設定が読めない・ワークスペース未設定。印を付けないだけで収集は続ける
+			orphan = false;
+		}
+		if (!orphan) {
+			return item;
+		}
+		return { ...item, isOrphanTarget: true, contextValue: "mdaitFileTargetOrphan" };
+	}
+
+	/** 単一ファイルの翻訳状況を収集する本体（孤立の印は `collectFileStatus` が付ける） */
+	private async collectFileStatusCore(filePath: string): Promise<FileStatusItem> {
 		// 非MDファイルはFileHandlerに委譲
 		if (path.extname(filePath).toLowerCase() !== ".md") {
 			return getFileHandler(filePath).collectStatus(filePath);

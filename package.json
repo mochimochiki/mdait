@@ -84,6 +84,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.file.discardOrphan",
+        "title": "%mdait.file.discardOrphan.title%",
+        "icon": "$(trash)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.unit.markIsolated",
         "title": "%mdait.unit.markIsolated.title%",
         "icon": "$(circle-slash)",
@@ -320,6 +326,10 @@
           "when": "false"
         },
         {
+          "command": "mdait.file.discardOrphan",
+          "when": "false"
+        },
+        {
           "command": "mdait.unit.markIsolated",
           "when": "false"
         },
@@ -484,6 +494,11 @@
           "group": "inline@2"
         },
         {
+          "command": "mdait.file.discardOrphan",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetOrphan",
+          "group": "inline@1"
+        },
+        {
           "command": "mdait.translate.unit",
           "when": "view == mdait.status && viewItem == mdaitUnitTarget",
           "group": "inline"
@@ -592,6 +607,11 @@
           "command": "mdait.file.deleteVerifyDeletion",
           "when": "view == mdait.status && viewItem == mdaitFileTargetVerifyDeletion",
           "group": "2_judge@2"
+        },
+        {
+          "command": "mdait.file.discardOrphan",
+          "when": "view == mdait.status && viewItem == mdaitFileTargetOrphan",
+          "group": "2_judge@1"
         },
         {
           "command": "mdait.unit.markIsolated",

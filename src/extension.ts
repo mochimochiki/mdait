@@ -7,6 +7,7 @@ import { AiReviewResultCodeLensProvider } from "./commands/ai-review/review-resu
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
 import { getFileHandler } from "./commands/file-handler/file-handler-factory";
 import { StatusCollector } from "./commands/file-handler/status-collector";
+import { discardOrphanTargetCommand } from "./commands/markers/discard-orphan";
 import { embedMarkersCommand, externalizeMarkersCommand } from "./commands/markers/markers-migration";
 import { needsAttentionNextCommand } from "./commands/markers/needs-attention-next";
 import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
@@ -290,6 +291,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	const fileDeleteVerifyDeletionDisposable = vscode.commands.registerCommand(
 		"mdait.file.deleteVerifyDeletion",
 		(item?: StatusItem) => needHandler.deleteAllInFile(item),
+	);
+	// 原文と結びついていない訳文の破棄（ごみ箱へ移動。ADR-260806-01）
+	const fileDiscardOrphanDisposable = vscode.commands.registerCommand(
+		"mdait.file.discardOrphan",
+		(item?: StatusItem) => discardOrphanTargetCommand(item),
 	);
 	const unitMarkIsolatedDisposable = vscode.commands.registerCommand("mdait.unit.markIsolated", (item?: StatusItem) =>
 		needHandler.markIsolated(item),
@@ -751,6 +757,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		unitDeleteDisposable,
 		fileKeepVerifyDeletionDisposable,
 		fileDeleteVerifyDeletionDisposable,
+		fileDiscardOrphanDisposable,
 		unitMarkIsolatedDisposable,
 		unitUnisolateDisposable,
 		needsAttentionNextDisposable,

@@ -16,6 +16,7 @@ import { markdownParser } from "../../core/markdown/parser";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
+import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
@@ -28,6 +29,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { createOrphanTargetProbe, createRelativeOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
@@ -82,6 +84,74 @@ export function resetSourceEmptiedMemory(): void {
 }
 
 /**
+ * 訳文が空で同期を中止したことを、直近に伝えた訳文のパス。
+ * 記憶の作法は `sourceEmptiedNotified` と同じ（ADR-260803-06 / -260806-02）。
+ */
+const targetEmptiedNotified = new Set<string>();
+
+/**
+ * 「訳文が空」の記憶を更新し、**いま通知すべきか**を返す。
+ * @param targetFile 訳文の絶対パス
+ * @param targetEmptied そのファイルで中止したか（0 なら通常どおり同期できた）
+ */
+export function updateTargetEmptiedMemory(targetFile: string, targetEmptied: number): boolean {
+	if (targetEmptied <= 0) {
+		targetEmptiedNotified.delete(targetFile);
+		return false;
+	}
+	if (targetEmptiedNotified.has(targetFile)) {
+		return false;
+	}
+	targetEmptiedNotified.add(targetFile);
+	return true;
+}
+
+/** テスト用: 「訳文が空」の通知記憶を捨てる */
+export function resetTargetEmptiedMemory(): void {
+	targetEmptiedNotified.clear();
+}
+
+/**
+ * 直近の sync で「原文と結びついていない」と伝えた訳文のパス。
+ *
+ * 孤立は人が片付けるまで続く状態なので、毎回の sync で言うと通知疲れになる
+ * （ux.md §3.3、unit-state.md §8）。逆に黙りきると、リネームという**能動的な操作**の
+ * 直後に何も言われず、原因と結果が結びつかない。だから「新しく孤立したものが出たときだけ」言う。
+ *
+ * 記憶の単位を件数ではなく**パスの集合**にしているのは、1件解消して1件発生したときに
+ * 黙ってしまわないためである。
+ */
+const notifiedOrphanPaths = new Set<string>();
+
+/**
+ * 孤立の記憶を更新し、**今回新しく孤立したパス**を返す。
+ *
+ * @param currentOrphans いま孤立していると判定されたパスの集合
+ * @param scopePaths 今回判定の対象にしたパス（この範囲の外は記憶を触らない。
+ *   未選択の pair やブランチ切替で「見ていないだけ」のものを解消と読み違えないため）
+ */
+export function updateOrphanMemory(currentOrphans: ReadonlySet<string>, scopePaths: ReadonlySet<string>): string[] {
+	const fresh: string[] = [];
+	for (const orphanPath of currentOrphans) {
+		if (!notifiedOrphanPaths.has(orphanPath)) {
+			fresh.push(orphanPath);
+			notifiedOrphanPaths.add(orphanPath);
+		}
+	}
+	for (const known of [...notifiedOrphanPaths]) {
+		if (scopePaths.has(known) && !currentOrphans.has(known)) {
+			notifiedOrphanPaths.delete(known); // 解消した。次に起きたらまた言う
+		}
+	}
+	return fresh;
+}
+
+/** テスト用: 孤立の通知記憶を捨てる */
+export function resetOrphanMemory(): void {
+	notifiedOrphanPaths.clear();
+}
+
+/**
  * 原文が空で同期を中止したことを伝える（訳文消失の予防: P6）。
  * 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため黙らない。
  * fire-and-forget（await すると呼び出し側の処理中フラグが残る）。
@@ -113,6 +183,97 @@ function notifySourceEmptied(count: number): void {
 				...formatError(error),
 			});
 		});
+}
+
+/**
+ * 訳文が空で同期を中止したことを伝える（ADR-260806-02）。
+ * 中止したこと自体より「状態は守られている・作り直すならファイルを消す」を伝えるのが目的。
+ */
+function notifyTargetEmptied(count: number): void {
+	if (count <= 0) {
+		return;
+	}
+	void vscode.window.showWarningMessage(
+		vscode.l10n.t(
+			"Sync skipped {0} file(s): the translation has no body text. Its translation state was kept, so pasting the text back restores it. Delete the translation file if you meant to start over.",
+			count,
+		),
+	);
+}
+
+/**
+ * 新しく孤立した訳文があることを伝える。
+ * 状態はツリーに出ているので、ここでは件数と入口だけを渡す（ux.md §3.3）。
+ */
+function notifyNewOrphans(count: number): void {
+	if (count <= 0) {
+		return;
+	}
+	const showLabel = vscode.l10n.t("Show in mdait");
+	void vscode.window
+		.showWarningMessage(
+			vscode.l10n.t(
+				"{0} translation(s) no longer have a source file. They were kept, not deleted — check them in the mdait view.",
+				count,
+			),
+			showLabel,
+		)
+		.then((choice) => {
+			if (choice === showLabel) {
+				return vscode.commands.executeCommand("mdait.status.focus");
+			}
+			return undefined;
+		})
+		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する
+		.then(undefined, (error) => {
+			logger.error("sync", "Orphan notification failed", { ...formatError(error) });
+		});
+}
+
+/**
+ * 今回走査した訳文ディレクトリの配下で、孤立の印を測り直す。
+ *
+ * 孤立した訳文は**原文が消えているので sync の処理対象に入らない**（走査は原文ディレクトリを
+ * 起点にしている）。つまり `refreshFileStatus` が呼ばれず、ツリーの印は古いままになる。
+ * ここで測り直さないと、リネームした直後の sync で孤立が画面に出ない。
+ *
+ * 判定材料はディスク上のファイルの有無だけなので、ステータスツリーが既に知っている
+ * ファイルに対して実在確認をかけるだけで済む（ディレクトリの列挙はしない）。
+ *
+ * @returns 孤立していると判定したファイルの絶対パスと、判定の対象にしたパス
+ */
+async function refreshOrphanFlags(
+	config: Configuration,
+	scannedTargetDirs: readonly string[],
+	statusManager: StatusManager,
+): Promise<{ orphans: Set<string>; scoped: Set<string> }> {
+	const orphans = new Set<string>();
+	const scoped = new Set<string>();
+	if (scannedTargetDirs.length === 0) {
+		return { orphans, scoped };
+	}
+	const probe = createOrphanTargetProbe(config);
+	const tree = statusManager.getStatusItemTree();
+	const stale: string[] = [];
+	for (const dir of scannedTargetDirs) {
+		for (const file of tree.getFilesInDirectoryRecursive(dir)) {
+			if (scoped.has(file.filePath)) {
+				continue;
+			}
+			scoped.add(file.filePath);
+			const orphan = isOrphanTarget(file.filePath, probe);
+			if (orphan) {
+				orphans.add(file.filePath);
+			}
+			if (orphan !== (file.isOrphanTarget === true)) {
+				stale.push(file.filePath);
+			}
+		}
+	}
+	for (const filePath of stale) {
+		await statusManager.refreshFileStatus(filePath);
+	}
+	return { orphans, scoped };
 }
 
 /**
@@ -208,6 +369,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalOrphanDeletionWithheld = 0;
 		let totalAlignCorrections = 0;
 		let totalSourceEmptied = 0;
+		let totalTargetEmptied = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -222,6 +384,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const configuredDirs = collectConfiguredDirs(config);
 		const scannedDirs = new Set<string>();
 		const seenPaths = new Set<string>();
+		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
+		const scannedTargetDirsAbs = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
@@ -242,8 +406,10 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			// 走査したことの登録は必ずファイル列挙の後で行う。前に置くと、ディレクトリは在るのに
 			// 0件だったとき（原文を一時的に退避した等）に「全部見たが1件も無かった」と読まれ、
 			// そのペアの全行が消える
+			const absTargetDir = path.resolve(config.getConfigBaseDir(), pair.targetDir);
 			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.sourceDir)));
-			scannedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.targetDir)));
+			scannedDirs.add(toWorkspaceRelativePath(absTargetDir));
+			scannedTargetDirsAbs.add(absTargetDir);
 
 			// 実在を確認したパスを収集（unit-state の orphan クリーンアップ用）。
 			// キーは `UnitStateEntry.path` と同じ基準（ワークスペースルート相対）にそろえる。
@@ -337,6 +503,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
 						totalSourceEmptied += syncResult.sourceEmptied ?? 0;
+						totalTargetEmptied += syncResult.targetEmptied ?? 0;
+						updateTargetEmptiedMemory(targetFile, syncResult.targetEmptied ?? 0);
 						// 自動同期の「1回だけ通知」の記憶は、明示 sync の結果でも更新する。
 						// 原文を保存イベント無しで戻す（SCM の変更を破棄・git checkout・
 						// エディタ外での復元）と自動同期は走らないため、ここで忘れないと
@@ -370,6 +538,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				configuredDirs,
 				scannedDirs: [...scannedDirs],
 				seenPaths,
+				// 実体がそこにあり原文だけ消えている訳文の行は消さない（ADR-260806-01）。
+				// 消すと孤立を可視化する材料（from / need）ごと失われる
+				isOrphanTarget: createRelativeOrphanTargetProbe(config),
 			});
 			if (orphansRemoved > 0) {
 				logger.info("sync", "Cleaned up orphan unit-state entries", {
@@ -481,6 +652,26 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 
 		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）
 		notifySourceEmptied(totalSourceEmptied);
+
+		// 訳文が空で中止したファイルがある場合も同様に伝える（ADR-260806-02）
+		notifyTargetEmptied(totalTargetEmptied);
+
+		// 孤立の印を測り直し、新しく孤立したものがあるときだけ伝える（ADR-260806-01）。
+		// 測り直しは失敗しても sync の成否には関わらないので、握って握りつぶさずログに残す
+		try {
+			const { orphans, scoped } = await refreshOrphanFlags(config, [...scannedTargetDirsAbs], statusManager);
+			const fresh = updateOrphanMemory(orphans, scoped);
+			if (fresh.length > 0) {
+				logger.info("sync", "Translations without a source file", {
+					paths: fresh.slice(0, 20),
+					fresh: fresh.length,
+					total: orphans.size,
+				});
+			}
+			notifyNewOrphans(fresh.length);
+		} catch (error) {
+			logger.error("sync", "Orphan re-check failed", { ...formatError(error) });
+		}
 
 		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
 		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
@@ -654,6 +845,9 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		// 原文が空で中止した場合は保存で走る自動同期でも黙らない（ADR-260803-06）。
 		// ただし保存のたびに出さないよう、同じ状態が続くあいだは1回だけにする。
+		if (updateTargetEmptiedMemory(targetFile, syncResult.targetEmptied ?? 0)) {
+			notifyTargetEmptied(syncResult.targetEmptied ?? 0);
+		}
 		if (updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0)) {
 			notifySourceEmptied(syncResult.sourceEmptied ?? 0);
 		}
@@ -894,6 +1088,35 @@ export async function sync_CoreProc(
 			deleted: 0,
 			unchanged: target.units.length,
 			sourceEmptied: 1,
+		};
+	}
+
+	// 逆向きの守り: 訳文の本文が空（ユニット0件）で、その訳文の状態が unit-state に残っている
+	// ときは、訳文にも unit-state にも書かずに中止する（ADR-260806-02）。
+	//
+	// 全選択して消す・翻訳会社から戻った訳文で丸ごと差し替える途中など、訳文が「一時的に空」に
+	// なることは普通に起きる。`autoSyncOnSave` があるのでその瞬間に sync が走り、原文のユニットが
+	// 全部「新規」と判定されて行が `need:translate` に上書きされる。**その時点で元の状態は失われ、
+	// 貼り戻しても戻らない**（probe S68）。行が無傷なら、貼り戻した瞬間にハッシュが一致して復帰する。
+	//
+	// 行が1つも無いときは素通りする。守るべき状態が無いので、
+	// 「空のファイルを置いて sync で埋める」という従来どおりの使い方を妨げない。
+	// embedded は状態が本文にしか無く、本文が空なら守る対象そのものが存在しないため
+	// この段には掛からない（＝挙動は変わらない）。
+	const storedEntryCount = targetRel === undefined ? 0 : UnitStateStore.getInstance().countEntriesByPath(targetRel);
+	if (target.units.length === 0 && source.units.length > 0 && storedEntryCount > 0) {
+		logger.warn("sync", "Target has no units while its state is still on record; skipped to avoid losing it", {
+			sourceFile,
+			targetFile,
+			storedEntries: storedEntryCount,
+		});
+		return {
+			diffs: [],
+			added: 0,
+			modified: 0,
+			deleted: 0,
+			unchanged: 0,
+			targetEmptied: 1,
 		};
 	}
 

@@ -26,6 +26,7 @@
   "mdait.unit.delete.title": "Delete Unit",
   "mdait.file.keepVerifyDeletion.title": "Keep All Units Awaiting Deletion Review",
   "mdait.file.deleteVerifyDeletion.title": "Delete All Units Awaiting Deletion Review",
+  "mdait.file.discardOrphan.title": "Discard Translation (Move to Trash)",
   "mdait.unit.markIsolated.title": "Mark as Isolated",
   "mdait.unit.unisolate.title": "Un-isolate",
   "mdait.needsAttention.next.title": "Go to Next Item Needing Attention",

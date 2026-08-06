@@ -89,6 +89,13 @@ export interface FileStatusItem extends BaseStatusItem {
 	 * 翻訳待ちの need はここに載る。Markdown ファイルでは常に undefined（need はユニット側）。
 	 */
 	needFlag?: string;
+	/**
+	 * 原文と結びついていない訳文か（実在するが導出した原文が無い）。
+	 *
+	 * 記録された事実ではなく、収集のたびにディスクから計算した結果である（ADR-260806-01）。
+	 * 原文が戻れば次の収集で false に戻る。
+	 */
+	isOrphanTarget?: boolean;
 }
 
 /**

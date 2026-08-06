@@ -26,6 +26,7 @@
   "mdait.unit.delete.title": "ユニットを削除",
   "mdait.file.keepVerifyDeletion.title": "確認待ちのユニットをまとめて残す",
   "mdait.file.deleteVerifyDeletion.title": "確認待ちのユニットをまとめて削除",
+  "mdait.file.discardOrphan.title": "訳文を破棄（ごみ箱へ移動）",
   "mdait.unit.markIsolated.title": "独立扱いにする",
   "mdait.unit.unisolate.title": "独立扱いを解除",
   "mdait.needsAttention.next.title": "次の要対応へ",
