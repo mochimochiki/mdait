@@ -18,7 +18,7 @@
   "Needs review": "Needs review",
   "Isolated": "Isolated",
   "Error": "Error",
-  "no source": "no source",
+  "No source": "No source",
   "Not synced yet — run Initial Sync": "Not synced yet — run Initial Sync",
   "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",
   "Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.",

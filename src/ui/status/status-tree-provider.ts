@@ -289,7 +289,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// （ux.md §3.3「状態は色だけで表さない」）。要対応キューの説明より優先するのは、
 		// 原文が消えている事実のほうが、その中のユニットの状態より先に判断が要るため
 		if (element.type === StatusItemType.File && element.isOrphanTarget) {
-			treeItem.description = vscode.l10n.t("no source");
+			treeItem.description = vscode.l10n.t("No source");
 		} else if (element.description) {
 			treeItem.description = element.description;
 		} else if (

@@ -18,7 +18,7 @@
   "Needs review": "レビュー待ち",
   "Isolated": "独立扱い",
   "Error": "エラー",
-  "no source": "原文なし",
+  "No source": "原文なし",
   "Not synced yet — run Initial Sync": "まだ同期していません — 初回同期を実行",
   "Initial Sync splits your source documents into translation units, records them under .mdait/, and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文を翻訳の単位に分けて .mdait/ に記録し、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。",
   "Initial Sync writes mdait markers into your source Markdown and creates the translation files under the target directory. Committing your workspace to git beforehand is recommended.": "初回同期は、原文の Markdown に mdait の目印を書き込み、訳文ディレクトリに訳文ファイルを作ります。先に git へコミットしておくことをおすすめします。",
