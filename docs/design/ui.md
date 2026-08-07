@@ -60,11 +60,20 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 - `mdaitFileSource` / `mdaitDirectorySource`: ソースファイル/ディレクトリ（用語集検出コマンド用）
 - `mdaitFileTarget` / `mdaitDirectoryTarget`: 翻訳未完了のターゲットファイル/ディレクトリ
 - `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`: 翻訳完了のターゲットファイル/ディレクトリ（TM登録・用語集展開コマンド用）
+- `mdaitFileTargetVerifyDeletion`: 確認待ち（`need:verify-deletion`）を含むターゲットファイル（ファイル単位の一括確定用。ADR-260805-01）
+- `mdaitFileTargetOrphan`: 原文と結びついていないターゲットファイル（破棄コマンド用。ADR-260806-01）
+- `mdaitPlainFileTarget` / `mdaitPlainFileTargetComplete`: 非Markdownのターゲットファイル（ファイル＝1ユニット）
 
 **contextValueの設定**:
 ターゲットファイル/ディレクトリは、翻訳状態に応じて以下のいずれかのcontextValueを持ちます：
 - 未完了: `mdaitFileTarget` / `mdaitDirectoryTarget`
 - 完了: `mdaitFileTargetComplete` / `mdaitDirectoryTargetComplete`
+- 確認待ちを含む: `mdaitFileTargetVerifyDeletion`
+- **原文なし: `mdaitFileTargetOrphan`（最優先で上書きする）**
+
+孤立を最優先にするのは、原文が消えている訳文に通常のユニット操作を並べても、
+人が最初に決めるべきこと（この訳文をどうするか）から目を逸らさせるだけだからである
+（ux.md §3.3「同じ重みのボタンを3つ以上並べない」）。
 
 **package.jsonのwhen条件**:
 - 翻訳コマンド: `viewItem == mdaitFileTarget || viewItem == mdaitFileTargetComplete` （完了・未完了両方で表示）

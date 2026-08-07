@@ -34,6 +34,14 @@ suite("孤立訳文の判定", () => {
 		assert.strictEqual(isOrphanTarget("ja/guide.md", probe), false);
 	});
 
+	test("そのファイル自身が別ペアの原文なら孤立としないこと（ja→en, en→fr のピボット構成）", () => {
+		// `ja` を消すと `en/x.md` は「原文の無い訳文」に見えるが、それは `fr` の現役の原文。
+		// 破棄を勧めれば `fr/x.md` を新たに孤立させることになる。
+		// probe 側が「原文でもあるパス」に null を返す契約になっている（orphan-probe.ts）
+		const probe = probeOf(["en/guide.md", "fr/guide.md"], {});
+		assert.strictEqual(isOrphanTarget("en/guide.md", probe), false);
+	});
+
 	test("原文が戻れば孤立でなくなること（記録を持たないので状態が残らない）", () => {
 		const present = new Set(["en/guide.md"]);
 		const probe: OrphanTargetProbe = {

@@ -15,6 +15,7 @@ import { type StatusItem, StatusItemType } from "../../core/status/status-item";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { Configuration } from "../../infra/config/configuration";
 import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
+import { forgetOrphanPath } from "../sync/sync-command";
 import { discardTargetFile } from "./unit-mutation";
 
 /**
@@ -31,8 +32,19 @@ export async function discardOrphanTargetCommand(item?: StatusItem): Promise<voi
 	const filePath = item.filePath;
 	const config = Configuration.getInstance();
 
-	// 実行の直前に測り直す（ツリーは古いことがある）
-	if (!isOrphanTarget(filePath, createOrphanTargetProbe(config))) {
+	// 実行の直前に測り直す（ツリーは古いことがある）。
+	// 判定は設定とワークスペースを引くので、未設定なら落ちる — コマンドを生の例外で
+	// 終わらせるとツリーのボタンがデッドエンドになる（UX-P7）
+	let stillOrphan: boolean;
+	try {
+		stillOrphan = isOrphanTarget(filePath, createOrphanTargetProbe(config));
+	} catch (error) {
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Could not check '{0}': {1}", path.basename(filePath), (error as Error).message),
+		);
+		return;
+	}
+	if (!stillOrphan) {
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("This translation is linked to a source file again. Nothing was discarded."),
 		);
@@ -63,5 +75,7 @@ export async function discardOrphanTargetCommand(item?: StatusItem): Promise<voi
 		);
 		return;
 	}
+	// 記憶に残したままだと、同じパスに訳文が作り直されて再び孤立しても黙ることになる
+	forgetOrphanPath(filePath);
 	vscode.window.showInformationMessage(vscode.l10n.t("Moved '{0}' to the trash.", fileName));
 }

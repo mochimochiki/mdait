@@ -61,6 +61,14 @@ export interface StatusData {
 	filesTranslated: number;
 	/** detail:true のときのみ。need のあるファイルの内訳（出力爆発防止のため完訳ファイルは含めない） */
 	files?: FileNeedDetail[];
+	/**
+	 * 原文と結びついていない訳文のパス一覧（ADR-260806-01）。
+	 *
+	 * 人のツリーに出ている状態をエージェントにも同じだけ見せる（片方にしか出ない状態を作らない）。
+	 * **破棄の手段は渡さない** — 「この訳文はもう要らない」は機械が決めることではないため、
+	 * エージェントにできるのは原文を戻すか、人に判断を求めることだけである。
+	 */
+	orphanTargets: string[];
 }
 
 function emptyBreakdown(): NeedBreakdown {
@@ -171,6 +179,7 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 	let filesWithNeeds = 0;
 	let filesTranslated = 0;
 	const fileDetails: FileNeedDetail[] = [];
+	const orphanTargets: string[] = [];
 
 	for (const file of files) {
 		const units = file.children ?? [];
@@ -178,6 +187,9 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		if (file.status === Status.Source) {
 			// ソースファイルは進捗集計の対象外
 			continue;
+		}
+		if (file.isOrphanTarget) {
+			orphanTargets.push(file.filePath);
 		}
 		for (const unit of units) {
 			if (!isCountedInProgress(unit)) {
@@ -227,6 +239,7 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		needs: totals,
 		filesWithNeeds,
 		filesTranslated,
+		orphanTargets,
 	};
 	if (detail) {
 		data.files = fileDetails;

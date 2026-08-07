@@ -17,12 +17,14 @@ import * as vscode from "vscode";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
+import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { isUnitStateBacked } from "../file-handler/file-type";
@@ -106,8 +108,20 @@ export interface DiscardFileResult extends UnitMutationResult {
  * 行だけが失われる（＝画面から孤立が消えるのに実体は残り、二度と気づけなくなる）。
  * 行の削除はマーカー保管方式に関わらず行う — embedded 運用でも、embed で本文へ
  * 書き戻せなかった行や、モードを切り替える前の行が残っていることがある。
+ *
+ * **孤立していない訳文は手放さない。** 呼び出し側の確認だけに頼ると、この関数が
+ * 「どの訳文でもごみ箱へ送れる入口」になる。AGENTS.md が唯一の入口と定めた以上、
+ * 前提の確認も内側に置く。
  */
 export async function discardTargetFile(absPath: string, config: Configuration): Promise<DiscardFileResult> {
+	if (!isOrphanTarget(absPath, createOrphanTargetProbe(config))) {
+		throw new Error(vscode.l10n.t("This translation still has a source file; it was not discarded."));
+	}
+
+	// 未保存のバッファを先に反映する。ダーティなタブを残したままファイルを消すと、
+	// その後の保存で**行の無い訳文**として復活し、「実体だけが残る」状態を自分で作ってしまう
+	await flushDirtyDocument(absPath);
+
 	const mdaitDir = await ensureMdaitDir();
 	if (mdaitDir) {
 		UnitStateStore.getInstance().ensureLoaded(mdaitDir);

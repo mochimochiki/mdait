@@ -92,9 +92,13 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 				data.errorUnits,
 				data.filesWithNeeds,
 			);
+			const summaryWithOrphans =
+				data.orphanTargets.length > 0
+					? `${summary} ${vscode.l10n.t("{0} translation file(s) have no source file.", data.orphanTargets.length)}`
+					: summary;
 
-			const nextActions = buildNextActions(data.needs, data.errorUnits);
-			return toToolResult(createOkEnvelope(summary, data, nextActions));
+			const nextActions = buildNextActions(data.needs, data.errorUnits, data.orphanTargets.length);
+			return toToolResult(createOkEnvelope(summaryWithOrphans, data, nextActions));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in getStatus tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to get translation status: {0}", (error as Error).message);

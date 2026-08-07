@@ -593,15 +593,15 @@ export class StatusCollector implements StatusCollectorPort {
 					if (i >= allFiles.length) break;
 					const filePath = allFiles[i];
 					try {
-						if (filePath.toLowerCase().endsWith(".md")) {
-							results[i] = await this.collectFileStatus(filePath);
-						} else {
-							results[i] = await getFileHandler(filePath).collectStatus(filePath);
-						}
+						// 拡張子で分岐してはならない。collectFileStatus が非MDを FileHandler へ
+						// 委譲したうえで孤立の印を付ける唯一の入口で、ここで直接 FileHandler を
+						// 呼ぶと非MDの訳文だけ全体再構築のたびに印が消える（点いたり消えたりする）
+						results[i] = await this.collectFileStatus(filePath);
 					} catch (error) {
 						console.error(`Error processing file ${filePath}:`, error);
-						// エラーファイルも含める
-						results[i] = {
+						// エラーファイルも含める（孤立の印は付ける。原文が消えている事実は
+						// パースできるかどうかとは無関係で、むしろ両方起きているときこそ要る）
+						results[i] = this.applyOrphanFlag({
 							type: StatusItemType.File,
 							label: path.basename(filePath),
 							status: Status.Error,
@@ -612,7 +612,7 @@ export class StatusCollector implements StatusCollectorPort {
 							hasParseError: true,
 							errorMessage: (error as Error).message,
 							contextValue: "mdaitFileTarget",
-						};
+						});
 					}
 				}
 			};

@@ -280,24 +280,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// 未設定だと tooltip（状態説明だけの文）が aria-label になり、どの項目かが
 		// 読み上げから分からなくなるため、「名前 — 状態」の形で明示する。
 		// 表示ラベル・副題（description）は変えない。
+		// 副題（ラベル右の薄字）を決める。
+		// 読み上げラベルには渡さない — 状態は tooltip 側が語っており、両方入れると
+		// 「Introduction — Needs review — Review required」のように同じことを2度読む。
+		// 孤立訳文も tooltip に完全な解説が入るので、読み上げから漏れることはない
+		const description = this.resolveDescription(element);
+		if (description) {
+			treeItem.description = description;
+		}
+
 		treeItem.accessibilityInformation = {
 			label: this.getAccessibleLabel(element, treeItem.tooltip),
 		};
-
-		// 副題（ラベル右の薄字）を設定。
-		// 孤立訳文は色やアイコンだけで表さず、必ず文字でも読めるようにする
-		// （ux.md §3.3「状態は色だけで表さない」）。要対応キューの説明より優先するのは、
-		// 原文が消えている事実のほうが、その中のユニットの状態より先に判断が要るため
-		if (element.type === StatusItemType.File && element.isOrphanTarget) {
-			treeItem.description = vscode.l10n.t("No source");
-		} else if (element.description) {
-			treeItem.description = element.description;
-		} else if (
-			element.type === StatusItemType.Unit ||
-			element.type === StatusItemType.Frontmatter
-		) {
-			treeItem.description = getStateDescription(element.status, element.needFlag);
-		}
 
 		// contextValueを設定（StatusItemから）
 		treeItem.contextValue = element.contextValue;
@@ -687,6 +681,26 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 「名前 — 副題 — 状態」の順に、あるものだけをつなぐ（tooltip の改行は読点相当に置換）。
 	 * 各要素は l10n 済みの文字列なので、組み立て結果もそのままローカライズされる。
 	 */
+	/**
+	 * 副題（ラベル右の薄字）を決める。
+	 *
+	 * 孤立訳文は色やアイコンだけで表さず、必ず文字でも読めるようにする
+	 * （ux.md §3.3「状態は色だけで表さない」）。明示的な description より優先するのは、
+	 * 原文が消えている事実のほうが、その中のユニットの状態より先に判断が要るため。
+	 */
+	private resolveDescription(element: StatusItem): string | undefined {
+		if (element.type === StatusItemType.File && element.isOrphanTarget) {
+			return vscode.l10n.t("No source");
+		}
+		if (element.description) {
+			return element.description;
+		}
+		if (element.type === StatusItemType.Unit || element.type === StatusItemType.Frontmatter) {
+			return getStateDescription(element.status, element.needFlag);
+		}
+		return undefined;
+	}
+
 	private getAccessibleLabel(element: StatusItem, tooltip: string): string {
 		const parts = [element.label];
 		if (element.description) {
@@ -703,16 +717,19 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * ツールチップを取得する
 	 */
 	private getTooltip(element: StatusItem): string {
-		if (element.tooltip) {
-			return element.tooltip;
-		}
-
 		// 解説はすべて Hover（ここ）に置く（ux.md §3.3）。ツリーとアイコンは
-		// 「原文が無い」という状態だけを伝え、なぜそうなるのか・次に何をすればよいかはここで説明する
+		// 「原文が無い」という状態だけを伝え、なぜそうなるのか・次に何をすればよいかはここで説明する。
+		// element.tooltip より先に見る — 非MDのサイズ超過など、別の理由で tooltip が
+		// 立っているファイルでは、孤立の唯一の説明サーフェスが潰されてしまうため
 		if (element.type === StatusItemType.File && element.isOrphanTarget) {
-			return vscode.l10n.t(
+			const explanation = vscode.l10n.t(
 				"The source file for this translation is missing.\nIt may have been renamed or moved outside VS Code, or the source was deleted.\nRestore the source file to reconnect it, or discard this translation (moved to the trash).",
 			);
+			return element.tooltip ? `${explanation}\n\n${element.tooltip}` : explanation;
+		}
+
+		if (element.tooltip) {
+			return element.tooltip;
 		}
 
 		if (

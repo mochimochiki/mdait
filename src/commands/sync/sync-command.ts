@@ -146,6 +146,16 @@ export function updateOrphanMemory(currentOrphans: ReadonlySet<string>, scopePat
 	return fresh;
 }
 
+/**
+ * 孤立の記憶から1件落とす（破棄したときに呼ぶ）。
+ *
+ * 破棄した訳文はツリーから消えるので、以後どの走査の対象にもならない。
+ * 記憶に残したままだと、同じパスに訳文が作り直されて再び孤立しても黙ることになる。
+ */
+export function forgetOrphanPath(filePath: string): void {
+	notifiedOrphanPaths.delete(filePath);
+}
+
 /** テスト用: 孤立の通知記憶を捨てる */
 export function resetOrphanMemory(): void {
 	notifiedOrphanPaths.clear();
@@ -301,6 +311,8 @@ export interface SyncResult {
 	totalAlignCorrections: number;
 	/** 原文が空になったため訳文に触れずに中止したファイル数 */
 	totalSourceEmptied?: number;
+	/** 訳文が空になったため状態を守って中止したファイル数 */
+	totalTargetEmptied?: number;
 	durationMs: number;
 }
 
@@ -571,6 +583,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
 			totalSourceEmptied,
+			totalTargetEmptied,
 			durationMs,
 		});
 
@@ -650,10 +663,10 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				});
 		}
 
-		// 原文が空で中止したファイルがある場合は、黙って見送らずに伝える（訳文消失の予防: P6）
+		// 「空になった側には触らない」を守って中止したファイルは、黙って見送らずに伝える。
+		// 原文が空（ADR-260803-06。訳文消失の予防: P6）と訳文が空（ADR-260806-02。
+		// 翻訳の状態の保護）は別の事故なので、通知も別々に出す
 		notifySourceEmptied(totalSourceEmptied);
-
-		// 訳文が空で中止したファイルがある場合も同様に伝える（ADR-260806-02）
 		notifyTargetEmptied(totalTargetEmptied);
 
 		// 孤立の印を測り直し、新しく孤立したものがあるときだけ伝える（ADR-260806-01）。
@@ -715,6 +728,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalOrphanDeletionWithheld,
 			totalAlignCorrections,
 			totalSourceEmptied,
+			totalTargetEmptied,
 			durationMs,
 		};
 	} catch (error) {
