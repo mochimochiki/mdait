@@ -20,10 +20,19 @@ const { vscode, REPO, WS } = require("./vscode-shim");
 const { install: installFakeAi } = require("./fake-ai");
 
 const origLog = console.log;
-console.log = (...a) => {
+const isNoise = (a) => {
 	const s = String(a[0] != null ? a[0] : "");
-	if (s.startsWith("StatusManager:") || s.startsWith("DefaultAIProvider")) return;
+	return s.startsWith("StatusManager:") || s.startsWith("DefaultAIProvider");
+};
+console.log = (...a) => {
+	if (isNoise(a)) return;
 	origLog(...a);
+};
+// StatusManager は collector 未設定を warn で出す。log 側だけ絞っても読みやすくならない
+const origWarn = console.warn;
+console.warn = (...a) => {
+	if (isNoise(a)) return;
+	origWarn(...a);
 };
 
 const CONTENT = path.join(WS, "content");
@@ -38,6 +47,7 @@ const { resolveMarkerIOForFile } = require(path.join(REPO, "out/infra/config/mar
 const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
 const { UnitRegistryManager } = require(path.join(REPO, "out/core/unit-registry/unit-registry-manager.js"));
 const { StatusManager } = require(path.join(REPO, "out/core/status/status-manager.js"));
+const { buildRenameFollowEdit, completeRenameFollow } = require(path.join(REPO, "out/commands/markers/rename-follow.js"));
 
 /** dir 配下を再帰走査し、dir からの相対パス（/区切り）を返す（run-sweep.js の walk に揃える） */
 function walkRelative(dir, base = dir, out = []) {
@@ -69,6 +79,35 @@ function unitStateRows() {
 		.split("\n")
 		.filter((l) => l && !l.startsWith("#"))
 		.map((l) => l.split("\t"));
+}
+
+/**
+ * VS Code のエクスプローラでの移動を模す（段階2 / roadmap-v01 の P02）。
+ *
+ * 実運用ではファイルは `onWillRenameFiles` の `waitUntil` に返した WorkspaceEdit で動く。
+ * ここでは製品と**同じ2つの入口**（`buildRenameFollowEdit` / `completeRenameFollow`）を
+ * 同じ順序で呼び、その間に VS Code がやることだけをディスク操作で埋める。
+ * VS Code を起動せずにペアの導出・重複の排除・行の追随を実測できる。
+ *
+ * 生の `fs.renameSync` を使うシナリオ（S6 など）は「VS Code の外で動かされた場合」を
+ * 測っており、そちらは段階4（内容による再リンク）が受け持つ。混ぜないこと。
+ *
+ * @param moves [[移動元, 移動先], ...]（content からの相対パス）
+ */
+async function renameViaEditor(moves) {
+	const files = moves.map(([from, to]) => ({
+		oldUri: vscode.Uri.file(path.join(CONTENT, from)),
+		newUri: vscode.Uri.file(path.join(CONTENT, to)),
+	}));
+	// onWillRenameFiles: 連れて動かす訳文を編集へ載せる
+	const edit = buildRenameFollowEdit(files);
+	// VS Code が編集を適用するところ（ユーザーぶん＋連れて動かすぶん）
+	for (const m of [...files, ...edit.renamedFiles]) {
+		fs.mkdirSync(path.dirname(m.newUri.fsPath), { recursive: true });
+		fs.renameSync(m.oldUri.fsPath, m.newUri.fsPath);
+	}
+	// onDidRenameFiles: 行を実態に合わせる
+	await completeRenameFollow(files);
 }
 
 async function setMode(mode, pairs) {
@@ -706,12 +745,8 @@ async function scenario(name, mutate, opts) {
  * ここに無いシナリオで差が出たら、どちらかの入口だけが直った（または壊れた）ということ。
  */
 const EXPECTED_DIFF = {
-	S7: "原文・訳文を揃えて動かすと、行の path が旧パスのまま取り残される（新パスには行が無い）。ペアごと動かす段階2で直す",
-	S8: "同上",
-	S10: "リネームを含むため（章の挿入・編集の部分は一致している）",
 	S11: "unit-state を消す操作なので embedded には影響が無い",
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
-	S28: "リネームを含むため（並べ替えの部分は一致している）",
 	S50: "章を消したうえで残りを見出しごと全面改稿。どの章が消えたかを示す情報がファイルに残らない（外部ストア方式の構造的な限界）",
 	S56: "同上（訳文側を全面改稿してから原文の章を削除）",
 	S69: "フェンスに飲まれたユニットで差が出る。それ以外の章は両モードとも完全復帰する（自動削除の見送りが効いている）。external はそのユニットの訳を保って need:revise、embedded はマーカーがフェンスに飲まれて訳を失い原文で作り直す＝external が強い（S12 と同種）。実測では、フェンスを直すのと同時に章を1つ編集すると embedded はその章の訳も失う（原文側のマーカーも飲まれて from の指す hash が消えるため）。孤立1件は普通の編集の形なので自動削除の見送りは効かない",
@@ -826,18 +861,20 @@ async function main() {
 			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
 		});
 
-		// S7: 原文・訳文を揃えてリネーム
+		// S7: 原文・訳文を揃えてリネーム（エディタ上の操作。複数選択で両方を一度に動かす形）
 		await scenario("S7 原文・訳文を揃えてリネーム", async () => {
-			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
-			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
+			await renameViaEditor([
+				["ja/guide.md", "ja/handbook.md"],
+				["en/guide.md", "en/handbook.md"],
+			]);
 		});
 
-		// S8: フォルダ移動（原文・訳文とも sub/ 配下へ）
+		// S8: サブフォルダへ移動（原文・訳文とも sub/ 配下へ）
 		await scenario("S8 原文・訳文をサブフォルダへ移動", async () => {
-			fs.mkdirSync(path.join(CONTENT, "ja/sub"), { recursive: true });
-			fs.mkdirSync(path.join(CONTENT, "en/sub"), { recursive: true });
-			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/sub/guide.md"));
-			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/sub/guide.md"));
+			await renameViaEditor([
+				["ja/guide.md", "ja/sub/guide.md"],
+				["en/guide.md", "en/sub/guide.md"],
+			]);
 		});
 
 		// S9: 原文ファイルの削除。原文をもう1本置いてから片方だけ消す。
@@ -855,8 +892,10 @@ async function main() {
 		await scenario("S10 混合（章挿入＋編集＋原文/訳文リネーム）", async () => {
 			insertChapterBefore("ja/guide.md", "## 第2章", "## 第1.5章\n\n第1.5章の本文。\n");
 			editBody("ja/guide.md", "第3章の本文。", "第3章の本文（改訂）。");
-			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
-			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
+			await renameViaEditor([
+				["ja/guide.md", "ja/handbook.md"],
+				["en/guide.md", "en/handbook.md"],
+			]);
 		});
 
 		// S11: 外部変更（unit-state を消す = git conflict 解決で捨てた / 別マシンで未生成）
@@ -940,10 +979,10 @@ async function main() {
 		// S28: 並べ替えとフォルダ移動を同時に行う
 		await scenario("S28 章の入れ替え＋原文/訳文をサブフォルダへ移動", async () => {
 			swapChapters("ja/guide.md", "## 第2章", "## 第3章");
-			fs.mkdirSync(path.join(CONTENT, "ja/sub"), { recursive: true });
-			fs.mkdirSync(path.join(CONTENT, "en/sub"), { recursive: true });
-			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/sub/guide.md"));
-			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/sub/guide.md"));
+			await renameViaEditor([
+				["ja/guide.md", "ja/sub/guide.md"],
+				["en/guide.md", "en/sub/guide.md"],
+			]);
 		});
 
 		// S29: 挿入して sync → さらに別の章を削除して sync（壊れの上に操作を重ねる）
@@ -1299,6 +1338,36 @@ async function main() {
 			await syncCommand();
 			write("en/guide.md", saved);
 		});
+
+		// S76: 原文だけをエディタでリネームする（段階2 の本命）。
+		//      訳文を連れて動かさないと、旧訳文が孤立したうえに新パスへ未翻訳の複製訳文が
+		//      作られる（unit-state.md §9）。これは embedded でも同じように起きるので、
+		//      両モードが揃って「連れて動いた」ことを見る。
+		await scenario("S76 原文だけをエディタでリネーム（訳文が連れて動く）", async () => {
+			await renameViaEditor([["ja/guide.md", "ja/handbook.md"]]);
+		});
+
+		// S77: 原文フォルダごとエディタで移動する。
+		//      フォルダの移動はイベント1件でファイルが何十件も動くため、
+		//      ディレクトリをディレクトリのまま扱えないと丸ごと取りこぼす。
+		await scenario(
+			"S77 原文フォルダごとエディタで移動（訳文フォルダも連れて動く）",
+			async () => {
+				await renameViaEditor([["ja/sub", "ja/moved"]]);
+			},
+			{ extraSources: { "ja/sub/a.md": OTHER_SRC, "ja/sub/deep/b.md": OTHER_SRC } },
+		);
+
+		// S78: 原文をリネームするが、行き先の訳文が既に埋まっている。
+		//      上書きで移すと別の訳文がごみ箱も経由せず消えるので、連れて行かない。
+		//      連れて行かなかった訳文は原文を失うので、段階1の孤立として画面に出る。
+		await scenario(
+			"S78 原文をリネーム（行き先の訳文が既にある）",
+			async () => {
+				await renameViaEditor([["ja/guide.md", "ja/other.md"]]);
+			},
+			{ extraSources: { "ja/other.md": OTHER_SRC } },
+		);
 
 		// S69: 原文にコードブロックの閉じ忘れが入り、以降の章が全部コードとして飲まれる。
 		//      訳文が物理削除されないこと、フェンスを直せば元に戻ることを見る。

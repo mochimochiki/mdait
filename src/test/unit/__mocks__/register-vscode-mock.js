@@ -100,6 +100,17 @@ const vscodeMock = {
 			dispose: () => {},
 		}),
 	},
+	// ファイル操作を伴う編集（onWillRenameFiles の waitUntil に返す WorkspaceEdit）。
+	// 実 VS Code はリネームの一覧を読み出す API を公開していないため、
+	// テストから何が載ったかを見られるよう renamedFiles に控える（モック限定の便宜）。
+	WorkspaceEdit: class {
+		constructor() {
+			this.renamedFiles = [];
+		}
+		renameFile(oldUri, newUri, options) {
+			this.renamedFiles.push({ oldUri, newUri, options });
+		}
+	},
 	// TreeView 系（StatusTreeProvider.getTreeItem の単体テスト用の最小実装）
 	TreeItem: class {
 		constructor(label, collapsibleState) {

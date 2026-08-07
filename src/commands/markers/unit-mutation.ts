@@ -13,19 +13,23 @@
  *
  * @module commands/markers/unit-mutation
  */
+import * as fs from "node:fs";
 import * as vscode from "vscode";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
+import type { PathRename } from "../../core/unit-state/rename-plan";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { Logger } from "../../infra/logging/logger";
 import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { withUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { isUnitStateBacked } from "../file-handler/file-type";
 
@@ -145,6 +149,122 @@ export async function discardTargetFile(absPath: string, config: Configuration):
 	await StatusManager.getInstance().refreshFileStatus(absPath);
 
 	return { changed: true, removedEntries };
+}
+
+/** `unit-state` の行をファイルの移動に追随させた結果 */
+export interface RelocateEntriesResult extends UnitMutationResult {
+	/** `path` を付け替えた行数 */
+	movedEntries: number;
+}
+
+/**
+ * ファイルの移動に `unit-state` の行を追随させる（リネーム・フォルダ移動）。
+ *
+ * **移動そのものはここでは行わない。** ファイルを動かすのはユーザーの操作と同じ
+ * 取り消し単位に相乗りする必要があり（`onWillRenameFiles` の `waitUntil`）、
+ * ここは「動いたあとに行を合わせる」役目だけを持つ。
+ *
+ * **必ず保存する。** `syncCommand` は毎回 `load()` を無条件に呼んでメモリ上の変更を
+ * 捨てるため、ここで保存せずに終わると、次の sync が走った瞬間に付け替えが無言で消え、
+ * 行は旧パスのまま取り残される（docs/design/unit-state.md §8）。
+ *
+ * 排他は移動元と移動先の両方に掛ける。移動元だけだと、移動先へ向けて走っている
+ * sync や翻訳と重なる。
+ *
+ * @param moves 実際に行われた移動（絶対パス。ファイル・ディレクトリを問わない）
+ * @param config 設定（どの移動が管理下のものかの判定に使う）
+ */
+export async function relocateUnitEntries(
+	moves: readonly PathRename[],
+	config: Configuration,
+): Promise<RelocateEntriesResult> {
+	if (moves.length === 0) {
+		return { changed: false, movedEntries: 0 };
+	}
+
+	const mdaitDir = await ensureMdaitDir();
+	if (!mdaitDir) {
+		return { changed: false, movedEntries: 0 };
+	}
+
+	const lockKeys = moves.flatMap((m) => [m.oldPath, m.newPath]);
+	let movedEntries = 0;
+	// ストアの読み込みから保存までを sync と排他する。ここを外すと、sync が走っている
+	// 最中に届いた移動は `load()` に読み捨てられるか `save()` に上書きされて無言で消え、
+	// 行だけが旧パスに取り残される（docs/design/unit-state.md §8）
+	await withUnitStateLock(async () => {
+		const store = UnitStateStore.getInstance();
+		store.ensureLoaded(mdaitDir);
+		await FileMutex.getInstance().runExclusive(lockKeys, async () => {
+			for (const move of moves) {
+				try {
+					movedEntries += store.movePath(
+						toWorkspaceRelativePath(move.oldPath),
+						toWorkspaceRelativePath(move.newPath),
+					);
+				} catch (error) {
+					// ワークスペース未設定などでパスを相対化できない。行は動かせないが、
+					// 他の移動まで巻き添えにしない（残った行は孤立としてツリーに出る）
+					Logger.getInstance().warn("rename", "Could not follow a move in unit-state", {
+						oldPath: move.oldPath,
+						newPath: move.newPath,
+						error: (error as Error).message,
+					});
+				}
+			}
+		});
+		if (movedEntries > 0) {
+			store.save(mdaitDir);
+		}
+	});
+
+	// 表示の更新は管理下に関わる移動のときだけ行う。ワークスペースのどこかで
+	// フォルダの名前を変えるたびにツリーを丸ごと作り直すのは、払う理由の無い代償である
+	if (movedEntries > 0 || moves.some((move) => touchesManagedPath(move, config))) {
+		await refreshStatusAfterMoves(moves);
+	}
+	return { changed: movedEntries > 0, movedEntries };
+}
+
+/** その移動は管理下（どれかのペアの原文・訳文）に関わるか */
+function touchesManagedPath(move: PathRename, config: Configuration): boolean {
+	try {
+		const explorer = new FileExplorer();
+		const managed = (p: string) => explorer.isSourceFile(p, config) || explorer.isTargetFile(p, config);
+		return managed(move.oldPath) || managed(move.newPath);
+	} catch {
+		return false; // ワークスペース未設定。判定できないなら触らない
+	}
+}
+
+/**
+ * 移動後のステータス表示を合わせる。
+ *
+ * ディレクトリの移動は1件のイベントでファイルが何十件も動くため、どのファイルが動いたかを
+ * ここでは知らない。**ツリーを丸ごと作り直す**のが唯一取りこぼしの無いやり方である。
+ * ファイルだけの移動なら旧パス（ツリーから取り除かれる）と新パスの2点で足りる。
+ *
+ * 行が1行も動かなかった場合も更新する — embedded 運用では動かす行がそもそも無く、
+ * それでもツリーの中身は移動によって変わっているため（`changed` に紐づけると
+ * embedded でリネームしたときだけツリーが古いまま残る）。
+ */
+async function refreshStatusAfterMoves(moves: readonly PathRename[]): Promise<void> {
+	const statusManager = StatusManager.getInstance();
+	const hasDirectoryMove = moves.some((move) => {
+		try {
+			return fs.statSync(move.newPath).isDirectory();
+		} catch {
+			return false;
+		}
+	});
+	if (hasDirectoryMove) {
+		await statusManager.buildStatusItemTree();
+		return;
+	}
+	for (const move of moves) {
+		await statusManager.refreshFileStatus(move.oldPath);
+		await statusManager.refreshFileStatus(move.newPath);
+	}
 }
 
 /** Markdown 書き換えの作業コンテキスト */
