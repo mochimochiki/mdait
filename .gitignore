@@ -13,3 +13,7 @@ src/test/unit/workspace/.mdait/translations.tmx
 src/test/unit/workspace/.mdait/unit-state
 src/test/unit/workspace/.mdait/unit-registry
 .claude/worktrees/
+
+# タスクチケットはローカルの持ち物（リポジトリには載せない）
+docs/tasks/
+

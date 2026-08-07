@@ -722,7 +722,7 @@ const EXPECTED_DIFF = {
  * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
  */
 const KNOWN_BUGS = {
-	S75: "訳し終えた訳文から章を1つ消して sync すると、その章の行が保留も刈り取りもされないまま上書きされる（detachMarkers は行を並び順でそのまま書き直し、ユニット数が元に戻るので shouldPruneTail が働かない）。貼り戻しても external だけ need:translate のまま固定される。embedded は本文のマーカーごと戻るので完全復帰する。直すには保留の基準を「末尾の行」から「対応が付かなかった行」へ変える配管が要る（Task-260806-01 / unit-state.md §17）",
+	S75: "訳し終えた訳文から章を1つ消して sync すると、その章の行が保留も刈り取りもされないまま上書きされる（detachMarkers は行を並び順でそのまま書き直し、ユニット数が元に戻るので shouldPruneTail が働かない）。貼り戻しても external だけ need:translate のまま固定される。embedded は本文のマーカーごと戻るので完全復帰する。直すには保留の基準を「末尾の行」から「対応が付かなかった行」へ変える配管が要る（roadmap-v01 の P03 / unit-state.md §17）",
 };
 
 /**

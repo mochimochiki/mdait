@@ -136,7 +136,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		// **ユニット数が元に戻った場合は保留も刈り取りも起きず、行が無言で消える**
 		// （訳文の中ほどの章を1つ消して保存する筋書き。docs/design/unit-state.md §17）。
 		// 刈り取りにも保留にもログがあるのに、実際に状態を失うこの経路だけ記録が無いと
-		// 追跡のしようがない。直すのは Task-260806-01 で、ここでは見えるようにするだけ。
+		// 追跡のしようがない。直すのは roadmap-v01 の P03 で、ここでは見えるようにするだけ。
 		const lostState = this.countLostState(filePath, units);
 
 		for (let i = 0; i < units.length; i++) {
