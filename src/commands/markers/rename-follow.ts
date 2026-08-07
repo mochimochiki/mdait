@@ -71,7 +71,20 @@ export function buildRenameFollowEdit(files: readonly RenamedFileUris[]): vscode
 	}
 
 	for (const companion of plan.companions) {
-		edit.renameFile(vscode.Uri.file(companion.oldPath), vscode.Uri.file(companion.newPath));
+		// `ignoreIfExists` は、計画を立ててから編集が適用されるまでの隙に行き先が
+		// 作られた場合（他の拡張・並行操作）の受け皿である。付けないとその1件の失敗が
+		// **ユーザーのリネームごと巻き添えにする** — 追随は付随的な仕事なので、
+		// 失敗しても訳文を連れて行かないだけに留めなければならない。
+		// 連れて行けなかった訳文は原文を失い、段階1の孤立として画面に出る。
+		// 行の付け替えは移動後にディスクを実測して決めるので、ここが黙って no-op に
+		// なっても行は旧パスの訳文に付いたまま正しく残る。
+		//
+		// `overwrite` は明示的に false のままにする（`overwrite` は `ignoreIfExists` に
+		// 優先するため、取り違えると上書きで別の訳文が消える。しかもごみ箱を経由しない）。
+		edit.renameFile(vscode.Uri.file(companion.oldPath), vscode.Uri.file(companion.newPath), {
+			overwrite: false,
+			ignoreIfExists: true,
+		});
 	}
 	if (plan.companions.length > 0) {
 		logger.info("rename", "Moving translations along with their source", {

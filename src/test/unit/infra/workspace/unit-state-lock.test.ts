@@ -12,7 +12,11 @@ import {
 	withUnitStateLock,
 } from "../../../../infra/workspace/unit-state-lock";
 
-/** 次のマイクロタスクまで待つ（区間が本当に重ならないことを確かめるための間） */
+/**
+ * 次のイベントループ（`setImmediate` の check フェーズ）まで待つ。
+ * マイクロタスクではなくここまで待たせるのは、待ち行列が本当に堰き止めているかを見るため
+ * — マイクロタスク1つぶんでは、単に await が挟まっただけの実装でも区間が重ならない。
+ */
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 suite("unit-state ストアの排他", () => {

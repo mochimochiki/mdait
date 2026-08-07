@@ -22,7 +22,11 @@ declare let __vscodeMockWorkspaceRoot: string;
 
 /** モックの WorkspaceEdit が控えるリネーム（テストからのみ見える） */
 interface RecordedEdit {
-	renamedFiles: Array<{ oldUri: vscode.Uri; newUri: vscode.Uri }>;
+	renamedFiles: Array<{
+		oldUri: vscode.Uri;
+		newUri: vscode.Uri;
+		options?: { overwrite?: boolean; ignoreIfExists?: boolean };
+	}>;
 }
 
 suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
@@ -102,6 +106,19 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 		assert.strictEqual(edit.renamedFiles.length, 1, "訳文の移動が1件載ること");
 		assert.strictEqual(edit.renamedFiles[0].oldUri.fsPath, abs("en/guide.md"));
 		assert.strictEqual(edit.renamedFiles[0].newUri.fsPath, abs("en/handbook.md"));
+	});
+
+	test("追随の失敗がユーザーのリネームを巻き添えにしない条件で載せること", () => {
+		// 計画を立ててから編集が適用されるまでの隙に行き先が作られると、
+		// `ignoreIfExists` が無い限りその1件の失敗がリネーム全体を道連れにする。
+		// `overwrite` は `ignoreIfExists` に優先するので、false のままでなければ
+		// 行き先の訳文が上書きで消える（しかもごみ箱を経由しない）
+		place("ja/guide.md");
+		place("en/guide.md");
+
+		const edit = buildRenameFollowEdit(uris(["ja/guide.md", "ja/handbook.md"])) as unknown as RecordedEdit;
+
+		assert.deepStrictEqual(edit.renamedFiles[0].options, { overwrite: false, ignoreIfExists: true });
 	});
 
 	test("行き先の訳文が既にあるときは編集に載せないこと（上書きで訳文を失わない）", () => {
