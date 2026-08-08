@@ -30,6 +30,7 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { createOrphanTargetProbe, createRelativeOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
+import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
@@ -338,6 +339,10 @@ export interface SyncCommandOptions {
  */
 export async function syncCommand(options?: SyncCommandOptions): Promise<SyncResult | undefined> {
 	const startTime = Date.now();
+	// ストアを読み込んでから書き戻すまでを丸ごと押さえる。`load()` を無条件に呼ぶため、
+	// この区間に割り込んだ書き換え（リネームへの追随・保存時の単一ファイル同期）は
+	// 読み捨てられるか上書きで消える。待たせれば失われない（docs/design/unit-state.md §8）
+	const storeLock = await acquireUnitStateLock();
 	try {
 		// 準備
 		const statusManager = StatusManager.getInstance();
@@ -742,6 +747,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
 		);
 		return undefined;
+	} finally {
+		storeLock.release();
 	}
 }
 
@@ -769,6 +776,9 @@ function collectConfiguredDirs(config: Configuration): string[] {
  * @param filePath 保存されたファイルのパス
  */
 export async function syncSingleFile(filePath: string): Promise<void> {
+	// 明示 sync と同じ理由でストアを押さえる。保存のたびに走るこの経路が
+	// 全体 sync と重なると、後に save() したほうの内容だけが残る
+	const storeLock = await acquireUnitStateLock();
 	try {
 		const config = Configuration.getInstance();
 		const validationError = config.validate();
@@ -884,6 +894,8 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 	} catch (error) {
 		logger.error("sync", "Error during single file sync", formatError(error));
 		// エラーは表示せず、ログに記録のみ（ユーザー体験を妨げない）
+	} finally {
+		storeLock.release();
 	}
 }
 

@@ -343,6 +343,7 @@ sequenceDiagram
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
 | StatusCollectorPort | [`src/core/status/status-collector-port.ts`](../../src/core/status/status-collector-port.ts) | ステータス収集のDI境界インターフェース |
 | UnitStateStore | [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts) | 翻訳ユニットの状態管理（(path,order)→level/titleHash/hash/from/need）。非MD＝N=1特殊形 |
+| planRenameFollow / planEntryMoves | [`src/core/unit-state/rename-plan.ts`](../../src/core/unit-state/rename-plan.ts) | ファイルの移動に訳文と `unit-state` の行を追随させる計画（ADR-260807-01） |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |
 | TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |

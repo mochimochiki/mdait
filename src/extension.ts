@@ -10,6 +10,7 @@ import { StatusCollector } from "./commands/file-handler/status-collector";
 import { discardOrphanTargetCommand } from "./commands/markers/discard-orphan";
 import { embedMarkersCommand, externalizeMarkersCommand } from "./commands/markers/markers-migration";
 import { needsAttentionNextCommand } from "./commands/markers/needs-attention-next";
+import { buildRenameFollowEdit, completeRenameFollow } from "./commands/markers/rename-follow";
 import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
 import { createConfigCommand, openExistingConfigCommand } from "./commands/setup/setup-command";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
@@ -709,6 +710,36 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// ファイルの移動に、対になる相手と unit-state の行を追随させる。
+	//
+	// waitUntil へ返した編集はユーザーの移動と**同じ取り消し単位**に入るため、
+	// Ctrl+Z で原文と訳文が一緒に戻る。取り消しに相乗りできる＝取り返しがつくので
+	// 確認は挟まない（ADR-260804-01 / -260805-01）。フォルダの移動ではイベント1件で
+	// ファイルが何十件も動くため、確認を挟む設計はそもそも成立しない。
+	const willRenameDisposable = vscode.workspace.onWillRenameFiles((event) => {
+		if (!configInitialized) {
+			return;
+		}
+		try {
+			event.waitUntil(Promise.resolve(buildRenameFollowEdit(event.files)));
+		} catch (error) {
+			// ここで投げるとユーザーのリネームそのものが失敗する。追随を諦めても
+			// 取りこぼした訳文は孤立としてツリーに出るので、黙って壊れることはない
+			logger.warn("extension", "Failed to plan how to follow a rename", {
+				error: (error as Error).message,
+			});
+		}
+	});
+
+	// 行の付け替えは移動が済んでから行う。移動前に付け替えると、ユーザーが移動をやめた
+	// ときに「実体は旧パス・行は新パス」が残り、次の sync で行が掃除されて状態を失う
+	const didRenameDisposable = vscode.workspace.onDidRenameFiles(async (event) => {
+		if (!configInitialized) {
+			return;
+		}
+		await completeRenameFollow(event.files);
+	});
+
 	// LanguageModel Tools 登録
 	const getStatusToolDisposable = vscode.lm.registerTool("mdait_getStatus", new MdaitGetStatusTool());
 	const syncToolDisposable = vscode.lm.registerTool("mdait_sync", new MdaitSyncTool());
@@ -777,6 +808,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		adoptDisposable,
 		aiReviewResultCodeLensDisposable,
 		saveDisposable,
+		willRenameDisposable,
+		didRenameDisposable,
 		treeView,
 		syncStatusInitialDisposable,
 		syncStatusDisposable,
