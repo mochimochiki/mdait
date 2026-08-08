@@ -267,6 +267,72 @@ suite("UnitStateStore", () => {
 		assert.ok(store.getEntry("en/guide.md", 0));
 	});
 
+	test("cleanupOrphansInScopeが、実体はあるが原文を失った訳文の行を残すこと（孤立訳文）", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		// 原文だけリネームされた訳文。原文起点の走査には現れないので seenPaths に入らない
+		store.setEntry({ path: "en/guide.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set(["ja/guide.md", "en/guide.md"]),
+			isOrphanTarget: (filePath) => filePath === "en/gone.md",
+		});
+
+		assert.strictEqual(removed, 0);
+		assert.ok(store.getEntry("en/gone.md", 0), "孤立を可視化する材料（from / need）が残ること");
+	});
+
+	test("cleanupOrphansInScopeが、孤立ではないと答えられた行は従来どおり削除すること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		// trans.extensions を変えて管理対象から外れたファイル。実体はあるが原文も在るので孤立ではない
+		store.setEntry({ path: "en/notes.txt", order: 0, level: 0, titleHash: "", hash: "1", from: "2", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set<string>(),
+			isOrphanTarget: () => false,
+		});
+
+		assert.strictEqual(removed, 1, "掃除が永久に効かなくなってはいけない");
+		assert.strictEqual(store.getEntry("en/notes.txt", 0), undefined);
+	});
+
+	test("cleanupOrphansInScopeで孤立判定を渡さなければ従来どおりの挙動になること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set<string>(),
+		});
+
+		assert.strictEqual(removed, 1);
+	});
+
+	test("removeEntriesByPathが保留席も含めて指定パスの行を全部消すこと", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+		store.setEntry({ path: "en/gone.md", order: HELD_ORDER_BASE, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
+		store.setEntry({ path: "en/keep.md", order: 0, level: 1, titleHash: "h", hash: "5", from: "6", need: "" });
+
+		assert.strictEqual(store.removeEntriesByPath("en/gone.md"), 2);
+		assert.strictEqual(store.getEntry("en/gone.md", 0), undefined);
+		assert.strictEqual(store.getEntry("en/gone.md", HELD_ORDER_BASE), undefined);
+		assert.ok(store.getEntry("en/keep.md", 0));
+	});
+
 	test("cleanupOrphansInScopeが名前の先頭が同じ別ディレクトリを範囲内と誤判定しないこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
@@ -625,5 +691,121 @@ suite("UnitStateStore", () => {
 		const store2 = UnitStateStore.getInstance();
 		store2.load(tempDir);
 		assert.strictEqual(store2.getAllEntries().length, 4);
+	});
+
+	suite("movePath（ファイルの移動への追随）", () => {
+		/** MD-external 相当のエントリを生成 */
+		function mdEntry(filePath: string, order: number, hash: string, need: string): UnitStateEntry {
+			return { path: filePath, order, level: 1, titleHash: `t${order}`, hash, from: `f${order}`, need };
+		}
+
+		test("パスに一致する行を新しいパスへ付け替えること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/guide.md", 0, "h0", "review"));
+			store.setEntry(mdEntry("content/en/guide.md", 1, "h1", ""));
+
+			assert.strictEqual(store.movePath("content/en/guide.md", "content/en/handbook.md"), 2);
+			assert.strictEqual(store.countEntriesByPath("content/en/guide.md"), 0);
+
+			const moved = store.getEntriesByPath("content/en/handbook.md");
+			assert.strictEqual(moved.length, 2);
+			assert.deepStrictEqual(
+				moved.map((e) => [e.order, e.hash, e.from, e.need]),
+				[
+					[0, "h0", "f0", "review"],
+					[1, "h1", "f1", ""],
+				],
+				"order・hash・from・need は移動で変わらないこと",
+			);
+		});
+
+		test("ディレクトリを動かすと配下の行がまとめて追随すること", () => {
+			// フォルダの移動はイベント1件でファイルが何十件も動くため、
+			// ファイル単位の呼び出しに割り戻していると取りこぼす
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/sub/a.md", 0, "a0", ""));
+			store.setEntry(mdEntry("content/en/sub/deep/b.md", 0, "b0", "translate"));
+			store.setEntry(mdEntry("content/en/other.md", 0, "o0", ""));
+
+			assert.strictEqual(store.movePath("content/en/sub", "content/en/moved"), 2);
+			assert.strictEqual(store.countEntriesByPath("content/en/moved/a.md"), 1);
+			assert.strictEqual(store.countEntriesByPath("content/en/moved/deep/b.md"), 1);
+			assert.strictEqual(store.countEntriesByPath("content/en/other.md"), 1, "配下でない行は動かないこと");
+		});
+
+		test("前方一致だけの別ファイルを巻き込まないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/sub-notes.md", 0, "n0", ""));
+
+			assert.strictEqual(store.movePath("content/en/sub", "content/en/moved"), 0);
+			assert.strictEqual(store.countEntriesByPath("content/en/sub-notes.md"), 1);
+		});
+
+		test("保留席の行も一緒に動かすこと", () => {
+			// 保留席は「いまの本文に対応する場所が無い行」の置き場で、移動で失う理由が無い
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/guide.md", 0, "h0", ""));
+			store.setEntry(mdEntry("content/en/guide.md", HELD_ORDER_BASE, "held", "review"));
+
+			assert.strictEqual(store.movePath("content/en/guide.md", "content/en/handbook.md"), 2);
+			const moved = store.getEntriesByPath("content/en/handbook.md");
+			assert.strictEqual(moved.filter((e) => isHeldBackEntry(e)).length, 1);
+		});
+
+		test("行き先に残っていた行を消してから移すこと", () => {
+			// 移動は上書きであって併合ではない。行き先の余った行を残すと、
+			// 次の parse で「余った行」として別の章に拾われる
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/guide.md", 0, "new0", ""));
+			store.setEntry(mdEntry("content/en/handbook.md", 0, "old0", ""));
+			store.setEntry(mdEntry("content/en/handbook.md", 1, "old1", ""));
+			store.setEntry(mdEntry("content/en/handbook.md", 2, "old2", ""));
+
+			assert.strictEqual(store.movePath("content/en/guide.md", "content/en/handbook.md"), 1);
+			const moved = store.getEntriesByPath("content/en/handbook.md");
+			assert.deepStrictEqual(
+				moved.map((e) => e.hash),
+				["new0"],
+			);
+		});
+
+		test("動かす行が無ければ何もしないこと（管理外のファイルの移動）", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("content/en/a.txt", "h", "f", ""));
+
+			assert.strictEqual(store.movePath("README.md", "docs/README.md"), 0);
+			assert.strictEqual(store.getAllEntries().length, 1);
+		});
+
+		test("同じパスへの移動は何もしないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/guide.md", 0, "h0", ""));
+
+			assert.strictEqual(store.movePath("content/en/guide.md", "content/en/guide.md"), 0);
+			assert.strictEqual(store.countEntriesByPath("content/en/guide.md"), 1);
+		});
+
+		test("付け替えた結果が保存され、読み直しても残ること", () => {
+			// syncCommand は毎回 load() を無条件に呼ぶため、保存されない付け替えは
+			// 次の sync で無言で消える（docs/design/unit-state.md §8）
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(mdEntry("content/en/guide.md", 0, "h0", "review"));
+			store.movePath("content/en/guide.md", "content/en/handbook.md");
+			store.save(tempDir);
+
+			UnitStateStore.dispose();
+			const reloaded = UnitStateStore.getInstance();
+			reloaded.load(tempDir);
+			assert.strictEqual(reloaded.countEntriesByPath("content/en/guide.md"), 0);
+			assert.strictEqual(reloaded.getEntry("content/en/handbook.md", 0)?.need, "review");
+		});
 	});
 });

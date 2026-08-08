@@ -15,8 +15,16 @@ import type { NeedBreakdown } from "./status-data";
  * @param needs need 内訳
  * @param errorUnits エラーユニット数
  */
-export function buildNextActions(needs: NeedBreakdown, errorUnits = 0): string[] {
+export function buildNextActions(needs: NeedBreakdown, errorUnits = 0, orphanTargets = 0): string[] {
 	const actions: string[] = [];
+
+	// 孤立訳文には破棄の手段を渡さない（ADR-260806-01）。エージェントにできるのは
+	// 原文を戻すか、人に判断を求めることだけである
+	if (orphanTargets > 0) {
+		actions.push(
+			`${orphanTargets} translation file(s) have no source file (see data.orphanTargets). They were kept, not deleted. Restore or re-create the source file to reconnect them, or ask the user whether to discard them — do not delete translation files yourself.`,
+		);
+	}
 
 	if (needs.translate > 0 || needs.revise > 0) {
 		actions.push(

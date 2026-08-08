@@ -23,6 +23,8 @@ export interface StatusBarCounts {
 	pendingTranslation: number;
 	/** 人の裁定が要る件数（need:review / need:verify-deletion） */
 	needsAttention: number;
+	/** 原文と結びついていない訳文の数 */
+	orphanTargets: number;
 }
 
 /**
@@ -36,6 +38,11 @@ export function buildStatusBarText(counts: StatusBarCounts): string {
 	}
 	if (counts.needsAttention > 0) {
 		parts.push(vscode.l10n.t("{0} to check", counts.needsAttention));
+	}
+	// 孤立は「訳文が置き去りになっている」という別種の事実なので、
+	// 要対応の件数に混ぜず独立した項目として出す
+	if (counts.orphanTargets > 0) {
+		parts.push(vscode.l10n.t("{0} without source", counts.orphanTargets));
 	}
 	return parts.length > 0 ? `$(globe) ${parts.join(" / ")}` : "";
 }
@@ -68,6 +75,7 @@ export class StatusBarSummary implements vscode.Disposable {
 		return {
 			pendingTranslation: tree.countPendingTranslationUnits(scopeDirs),
 			needsAttention: tree.getNeedsAttentionUnits(scopeDirs).length,
+			orphanTargets: tree.countOrphanTargetFiles(scopeDirs),
 		};
 	}
 
@@ -85,9 +93,10 @@ export class StatusBarSummary implements vscode.Disposable {
 		}
 		this.item.text = text;
 		this.item.tooltip = vscode.l10n.t(
-			"mdait: {0} unit(s) waiting for translation, {1} unit(s) waiting for your decision. Click to open the mdait view.",
+			"mdait: {0} unit(s) waiting for translation, {1} unit(s) waiting for your decision, {2} translation(s) with no source file. Click to open the mdait view.",
 			counts.pendingTranslation,
 			counts.needsAttention,
+			counts.orphanTargets,
 		);
 		this.item.show();
 	}

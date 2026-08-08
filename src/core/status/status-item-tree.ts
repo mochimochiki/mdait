@@ -129,6 +129,16 @@ export class StatusItemTree {
 	}
 
 	/**
+	 * 原文と結びついていない訳文の数を数える（ステータスバーの常駐サマリ用）。
+	 *
+	 * 印そのものは収集時にディスクから計算されたもので、ここでは数えるだけである
+	 * （ADR-260806-01。ツリーが持っているのは前回計算した結果）。
+	 */
+	public countOrphanTargetFiles(scopeDirs?: string[]): number {
+		return this.getFilesInScope(scopeDirs).filter((file) => file.isOrphanTarget === true).length;
+	}
+
+	/**
 	 * 全ソースファイルStatusItemを取得
 	 */
 	public getSourceFilesAll(): FileStatusItem[] {
