@@ -332,6 +332,28 @@ function removeLastChapters(rel, n) {
 	}
 	write(rel, `${lines.join("\n")}\n`);
 }
+/**
+ * 文書の途中の章を1つ消す（0起点で index 番目の `## ` 章）。
+ *
+ * 末尾を消す `removeLastChapters` と違い、消えた場所が「行の並びの途中」になる。
+ * 末尾を見る刈り取り／保留はここでは何も拾えないため、対応が付かなかった行を
+ * 読み込み時に見つけて預ける経路（P03）でしか守れない。
+ */
+function removeChapterAt(rel, index) {
+	const lines = read(rel).split("\n");
+	const heads = [];
+	for (let i = 0; i < lines.length; i++) {
+		if (/^##\s/.test(lines[i])) heads.push(i);
+	}
+	if (index >= heads.length) throw new Error(`no chapter #${index} in ${rel}`);
+	let start = heads[index];
+	if (start > 0 && /^<!--\s*mdait\b/.test(lines[start - 1].trim())) start = start - 1;
+	const end = index + 1 < heads.length ? heads[index + 1] : lines.length;
+	let stop = end;
+	if (stop > 0 && stop <= lines.length && /^<!--\s*mdait\b/.test((lines[stop - 1] || "").trim())) stop = stop - 1;
+	lines.splice(start, stop - start);
+	write(rel, `${lines.join("\n")}\n`);
+}
 /** 文書の末尾へ新しい章を足す（マーカー無し＝人が書き足した形） */
 function appendChapter(rel, heading, body) {
 	write(rel, `${read(rel).replace(/\s*$/, "\n")}\n${heading}\n\n${body}\n`);
@@ -756,9 +778,7 @@ const EXPECTED_DIFF = {
  * まだ直していない既知の欠陥。想定内の差とは分けて数え、毎回はっきり出す。
  * 直したらここから消すこと（消し忘れると差が出なくなったことに気づけない）。
  */
-const KNOWN_BUGS = {
-	S75: "訳し終えた訳文から章を1つ消して sync すると、その章の行が保留も刈り取りもされないまま上書きされる（detachMarkers は行を並び順でそのまま書き直し、ユニット数が元に戻るので shouldPruneTail が働かない）。貼り戻しても external だけ need:translate のまま固定される。embedded は本文のマーカーごと戻るので完全復帰する。直すには保留の基準を「末尾の行」から「対応が付かなかった行」へ変える配管が要る（roadmap-v01 の P03 / unit-state.md §17）",
-};
+const KNOWN_BUGS = {};
 
 /**
  * **両モードが同じように壊れている**ため突き合わせには出ない、未解決の欠陥。
@@ -1325,8 +1345,9 @@ async function main() {
 		});
 
 		// S75: 訳し終えた訳文から章を1つ消して sync し、そのあと元の内容を貼り戻す。
-		//      sync が原文からその章を作り直すのでユニット数は元に戻り、末尾の刈り取り／保留は
-		//      どちらも働かない。消された章の行は上書きされ、痕跡も残らない（unit-state.md §17）。
+		//      sync が原文からその章を作り直すのでユニット数は元に戻り、末尾を見る刈り取り／保留は
+		//      どちらも働かない。対応が付かなかったことを知っているのは読み込み時だけなので、
+		//      その控えを書き出しまで運んで保留席へ移す（P03 / ADR-260809-01）。
 		//      先に訳し終えておくのは、未翻訳のままだと失われる状態が need:translate で、
 		//      作り直した結果と区別が付かないためである（＝実害は「訳し終えた章」でだけ出る）。
 		await scenario("S75 訳文を訳したあと章を1つ消して sync → 貼り戻す", async () => {
@@ -1335,6 +1356,20 @@ async function main() {
 			await syncCommand();
 			const saved = read("en/guide.md");
 			removeLastChapters("en/guide.md", 1);
+			await syncCommand();
+			write("en/guide.md", saved);
+		});
+
+		// S79: S75 の「途中の章」版。末尾ではなく文書のまん中の章を消して sync → 貼り戻す。
+		//      末尾を見る刈り取り／保留（shouldPruneTail / parkEntriesFrom）はここでは
+		//      何も拾えない。読み込み時に「対応が付かなかった行」を控えて書き出しで
+		//      保留席へ移す経路が働いて初めて、貼り戻しで訳が戻る（ADR-260809-01）。
+		await scenario("S79 訳文を訳したあと途中の章を消して sync → 貼り戻す", async () => {
+			installFakeAi();
+			await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+			await syncCommand();
+			const saved = read("en/guide.md");
+			removeChapterAt("en/guide.md", 0);
 			await syncCommand();
 			write("en/guide.md", saved);
 		});

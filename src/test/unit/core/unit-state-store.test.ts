@@ -360,6 +360,119 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(isPathInDirs("content/en/a.md", [""]), true);
 	});
 
+	suite("parkEntries / dropEntries（対応が付かなかった行の保留席）", () => {
+		function seed(store: UnitStateStore, count: number): void {
+			for (let i = 0; i < count; i++) {
+				store.setEntry({
+					path: "ja/a.md",
+					order: i,
+					level: 2,
+					titleHash: `t${i}`,
+					hash: `h${i}`,
+					from: `s${i}`,
+					need: "",
+				});
+			}
+		}
+
+		test("末尾でない order を指定して保留席へ移せること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			seed(store, 3);
+
+			assert.strictEqual(store.parkEntries("ja/a.md", [1]), 1);
+
+			const entries = store.getEntriesByPath("ja/a.md");
+			assert.deepStrictEqual(
+				entries.map((e) => e.order),
+				[0, 2, HELD_ORDER_BASE],
+			);
+			assert.strictEqual(entries[2].hash, "h1", "内容は変わらない");
+			assert.strictEqual(entries[2].from, "s1");
+		});
+
+		test("既に保留席に居る行と、存在しない order は動かさないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			seed(store, 2);
+			store.setEntry({
+				path: "ja/a.md",
+				order: HELD_ORDER_BASE,
+				level: 2,
+				titleHash: "th",
+				hash: "held",
+				from: "sh",
+				need: "",
+			});
+
+			assert.strictEqual(store.parkEntries("ja/a.md", [HELD_ORDER_BASE, 99]), 0);
+			assert.strictEqual(store.getEntriesByPath("ja/a.md").length, 3);
+		});
+
+		test("同じ本文hashの席は増えず、中身が新しいほうで置き換わること", () => {
+			// 席は本文hashの完全一致でしか拾われないので、同じhashの席が2つあっても
+			// 片方は永遠に使われない。同じ章を消すたびに席が増えるのを防ぐ
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry({
+				path: "ja/a.md",
+				order: HELD_ORDER_BASE,
+				level: 2,
+				titleHash: "t",
+				hash: "same",
+				from: "old",
+				need: "",
+			});
+			store.setEntry({ path: "ja/a.md", order: 0, level: 2, titleHash: "t", hash: "same", from: "new", need: "" });
+
+			assert.strictEqual(store.parkEntries("ja/a.md", [0]), 0, "席は増えない");
+
+			const entries = store.getEntriesByPath("ja/a.md");
+			assert.strictEqual(entries.length, 1);
+			assert.strictEqual(entries[0].order, HELD_ORDER_BASE);
+			assert.strictEqual(entries[0].from, "new", "新しいほうが現在に近い");
+		});
+
+		test("dropEntries で席の行を外せること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			seed(store, 1);
+			store.setEntry({
+				path: "ja/a.md",
+				order: HELD_ORDER_BASE,
+				level: 2,
+				titleHash: "t",
+				hash: "held",
+				from: "s",
+				need: "",
+			});
+
+			assert.strictEqual(store.dropEntries("ja/a.md", [HELD_ORDER_BASE, 12345]), 1);
+			assert.deepStrictEqual(
+				store.getEntriesByPath("ja/a.md").map((e) => e.order),
+				[0],
+			);
+		});
+
+		test("countLiveEntriesByPath は席の行を数えないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			seed(store, 2);
+			store.setEntry({
+				path: "ja/a.md",
+				order: HELD_ORDER_BASE,
+				level: 2,
+				titleHash: "t",
+				hash: "held",
+				from: "s",
+				need: "",
+			});
+
+			assert.strictEqual(store.countEntriesByPath("ja/a.md"), 3);
+			assert.strictEqual(store.countLiveEntriesByPath("ja/a.md"), 2);
+		});
+	});
+
 	suite("parkEntriesFrom（刈り取りを見送った行の保留席）", () => {
 		test("指定order以降の行が保留席へ移り、内容は変わらないこと", () => {
 			const store = UnitStateStore.getInstance();
@@ -530,7 +643,10 @@ suite("UnitStateStore", () => {
 			);
 		});
 
-		test("保留席（HELD_ORDER_BASE以降）の行も削除されること", () => {
+		test("保留席（HELD_ORDER_BASE以降）の行は削除されないこと", () => {
+			// 保留席の order は必ずユニット数より大きいので、範囲で消すと
+			// 「ユニット数が元に戻った瞬間に席が全部消える」ことになり、
+			// 本文が戻ってくるまで状態を預かるという席の役目が果たせない（ADR-260809-01）
 			const store = UnitStateStore.getInstance();
 			store.load(tempDir);
 
@@ -539,16 +655,19 @@ suite("UnitStateStore", () => {
 				path: "ja/a.md",
 				order: HELD_ORDER_BASE,
 				level: 2,
-				titleHash: "t",
-				hash: "h",
-				from: "",
+				titleHash: "t2",
+				hash: "h2",
+				from: "f",
 				need: "",
 			});
 
 			const removed = store.pruneEntriesFrom("ja/a.md", 1);
 
-			assert.strictEqual(removed, 1);
-			assert.strictEqual(store.getEntriesByPath("ja/a.md").length, 1);
+			assert.strictEqual(removed, 0);
+			assert.deepStrictEqual(
+				store.getEntriesByPath("ja/a.md").map((e) => e.order),
+				[0, HELD_ORDER_BASE],
+			);
 		});
 
 		test("削除した結果がファイルへ保存されること", () => {
