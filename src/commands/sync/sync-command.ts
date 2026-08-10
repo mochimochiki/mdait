@@ -16,6 +16,12 @@ import { markdownParser } from "../../core/markdown/parser";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
+import {
+	type LostPathCandidate,
+	type NewTargetCandidate,
+	logRelinkPlan,
+	planContentRelink,
+} from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -31,7 +37,7 @@ import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { createOrphanTargetProbe, createRelativeOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
-import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import { toAbsoluteWorkspacePath, toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
 import type { FileSyncResult } from "../file-handler/file-handler";
@@ -443,6 +449,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				}
 			}
 
+			// VS Code の外で動かされたファイルを、本文の hash で行と結び直す（P04）。
+			// **ワーカーより前に置く。** sync がそのファイルを処理してしまうと、行の無い訳文の
+			// 全ユニットが「新規」と判定されて need:translate が書かれ、結び直す相手が消える
+			await relinkMovedFilesForPair(config, pair, files, fileExplorer);
+
 			// CPUコア数に基づく並列処理制限
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
 			// align 有効時は AI レート制限に配慮して逐次実行する（review 経路と整合）
@@ -767,6 +778,113 @@ function collectConfiguredDirs(config: Configuration): string[] {
 		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
 	}
 	return [...dirs];
+}
+
+/**
+ * VS Code の外で動かされたファイルを、本文の hash で `unit-state` の行と結び直す（P04）。
+ *
+ * エディタ上の移動は `rename-follow.ts` がイベントで拾うが、git・CLI・外部エクスプローラでの
+ * 移動はイベントが来ない。そのとき「行はあるがファイルが無いパス」と「ファイルはあるが行が
+ * 無い訳文」が同時にでき、そのまま sync すると後者の全ユニットが新規と判定されて
+ * `need:translate` になる（＝次の翻訳で人の訳が潰れる）。
+ *
+ * 突き合わせる相手は**このペアの訳文だけ**に絞る。未翻訳の訳文は原文の丸写しなので、
+ * 原文を混ぜると原文の行が旧訳文へ吸い込まれる（roadmap-v01 の P04）。
+ *
+ * embedded では何もしない（状態が本文にあり、ファイルと一緒に動いているため既に復帰している）。
+ * 非 Markdown の訳文も対象外にする — 行の `hash` はファイル全体の hash で、ユニット単位の
+ * 重なりという判断材料にならない。
+ */
+async function relinkMovedFilesForPair(
+	config: Configuration,
+	pair: TransPair,
+	sourceFiles: readonly string[],
+	fileExplorer: FileExplorer,
+): Promise<void> {
+	if (!config.isExternalMarkers()) {
+		return;
+	}
+	const store = UnitStateStore.getInstance();
+	const absTargetDir = path.resolve(config.getConfigBaseDir(), pair.targetDir);
+	const targetDirRel = toWorkspaceRelativePath(absTargetDir);
+
+	// (1) ファイルはあるが行が1つも無い訳文（＝これから「全部新規」と判定される側）
+	const fresh: NewTargetCandidate[] = [];
+	const freshPaths = new Set<string>();
+	for (const sourceFile of sourceFiles) {
+		const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
+		if (!targetFile || path.extname(targetFile).toLowerCase() !== ".md") {
+			continue;
+		}
+		const targetRel = toWorkspaceRelativePath(targetFile);
+		if (store.countEntriesByPath(targetRel) > 0 || !fs.existsSync(targetFile)) {
+			continue;
+		}
+		const hashes = await readUnitHashes(config, targetFile);
+		if (hashes.size === 0) {
+			continue;
+		}
+		fresh.push({ path: targetRel, hashes });
+		freshPaths.add(targetRel);
+	}
+	if (fresh.length === 0) {
+		return;
+	}
+
+	// (2) 行はあるがファイルが無いパス（このペアの訳文ディレクトリ配下だけ）。
+	//     保留席の行も手がかりに使う — 消えた章の本文 hash はその文書のものである
+	const lostByPath = new Map<string, Set<string>>();
+	for (const entry of store.getAllEntries()) {
+		if (entry.path === targetDirRel || !entry.path.startsWith(`${targetDirRel}/`)) {
+			continue;
+		}
+		if (freshPaths.has(entry.path) || !entry.hash) {
+			continue;
+		}
+		const known = lostByPath.get(entry.path);
+		if (known) {
+			known.add(entry.hash);
+			continue;
+		}
+		if (fs.existsSync(toAbsoluteWorkspacePath(entry.path))) {
+			continue; // ファイルが実在する＝迷子ではない
+		}
+		lostByPath.set(entry.path, new Set([entry.hash]));
+	}
+	if (lostByPath.size === 0) {
+		return;
+	}
+
+	const lost: LostPathCandidate[] = [...lostByPath].map(([p, hashes]) => ({ path: p, hashes }));
+	const plan = planContentRelink(lost, fresh);
+	logRelinkPlan(plan);
+	for (const decision of plan.decisions) {
+		store.movePath(decision.from, decision.to);
+	}
+}
+
+/**
+ * 訳文をパースして、ユニットの本文 hash の集合を返す。
+ *
+ * 行の `hash` 列に入っているのと同じ計算（`calculateHash(unit.content)`）である。
+ * 読み取りだけで、ストアには何も書かない。
+ */
+async function readUnitHashes(config: Configuration, absPath: string): Promise<Set<string>> {
+	const hashes = new Set<string>();
+	try {
+		const io = resolveMarkerIO(config, absPath, "target");
+		const content = new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(absPath)));
+		const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
+		for (const unit of parsed.units) {
+			hashes.add(calculateHash(unit.content));
+		}
+	} catch (error) {
+		logger.warn("sync", "Could not read a translation while looking for files moved outside the editor", {
+			file: absPath,
+			...formatError(error),
+		});
+	}
+	return hashes;
 }
 
 /**

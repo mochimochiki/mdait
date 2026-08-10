@@ -771,6 +771,7 @@ const EXPECTED_DIFF = {
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
 	S50: "章を消したうえで残りを見出しごと全面改稿。どの章が消えたかを示す情報がファイルに残らない（外部ストア方式の構造的な限界）",
 	S56: "同上（訳文側を全面改稿してから原文の章を削除）",
+	S81: "中身が1文字も違わない訳文を2本まとめて VS Code の外で動かした場合。どの行がどのファイルのものか内容から決められないので結び直さない（ADR-260810-01）。誤って結ぶと別文書の翻訳状態が付いて取り返しがつかないが、落としてもいまと同じ＝状態が失われるだけなので、落とす側を選んでいる。embedded は本文にマーカーがあるので動いても失わない",
 	S69: "フェンスに飲まれたユニットで差が出る。それ以外の章は両モードとも完全復帰する（自動削除の見送りが効いている）。external はそのユニットの訳を保って need:revise、embedded はマーカーがフェンスに飲まれて訳を失い原文で作り直す＝external が強い（S12 と同種）。実測では、フェンスを直すのと同時に章を1つ編集すると embedded はその章の訳も失う（原文側のマーカーも飲まれて from の指す hash が消えるため）。孤立1件は普通の編集の形なので自動削除の見送りは効かない",
 };
 
@@ -1373,6 +1374,43 @@ async function main() {
 			await syncCommand();
 			write("en/guide.md", saved);
 		});
+
+		// S80: 原文も訳文も VS Code の外で動かす（git mv・CLI・外部エクスプローラ）。
+		//      イベントが来ないので段階2 の追随は働かない。訳し終えた訳文の全ユニットが
+		//      「新規」と判定されて need:translate になると、次の翻訳で人の訳が潰れる。
+		//      行が覚えている本文 hash と、動いた先の本文の hash が一致するので、
+		//      内容で結び直せる（段階4 / ADR-260810-01）。
+		await scenario("S80 原文・訳文を VS Code の外で揃えてリネーム", async () => {
+			installFakeAi();
+			await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+			await syncCommand();
+			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
+			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
+		});
+
+		// S81: S80 と同じ形だが、**中身が1文字も違わない訳文を2本まとめて**外で動かす。
+		//      どの行がどのファイルのものか内容から決められないので、結び直さずに落とす。
+		//      誤って結ぶと別文書の翻訳状態が付いて取り返しがつかない一方、落としても
+		//      いまと同じ（状態が失われる）だけなので、この非対称に合わせて落とす側を選ぶ。
+		//      embedded は本文にマーカーがあるので動いても失わない ＝ 意図した差。
+		await scenario(
+			"S81 外で揃えてリネーム（中身が同じ訳文が2本で決められない）",
+			async () => {
+				installFakeAi();
+				await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+				await transCommand(vscode.Uri.file(path.join(CONTENT, "en/twin.md")));
+				await syncCommand();
+				for (const [from, to] of [
+					["ja/guide.md", "ja/handbook.md"],
+					["en/guide.md", "en/handbook.md"],
+					["ja/twin.md", "ja/notebook.md"],
+					["en/twin.md", "en/notebook.md"],
+				]) {
+					fs.renameSync(path.join(CONTENT, from), path.join(CONTENT, to));
+				}
+			},
+			{ extraSources: { "ja/twin.md": SRC } },
+		);
 
 		// S76: 原文だけをエディタでリネームする（段階2 の本命）。
 		//      訳文を連れて動かさないと、旧訳文が孤立したうえに新パスへ未翻訳の複製訳文が
