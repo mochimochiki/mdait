@@ -111,6 +111,19 @@ const vscodeMock = {
 			this.renamedFiles.push({ oldUri, newUri, options });
 		}
 	},
+	// LanguageModelTool 系（LM Tool の invoke / prepareInvocation を単体で叩くための最小実装）。
+	// 実 VS Code は結果を LanguageModelToolResult に包むので、テスト側が中身を読めるよう
+	// parts をそのまま保持する（lm-tools/tool-result.ts の toToolResult が使う）。
+	LanguageModelTextPart: class {
+		constructor(value) {
+			this.value = value;
+		}
+	},
+	LanguageModelToolResult: class {
+		constructor(parts) {
+			this.content = parts;
+		}
+	},
 	// TreeView 系（StatusTreeProvider.getTreeItem の単体テスト用の最小実装）
 	TreeItem: class {
 		constructor(label, collapsibleState) {

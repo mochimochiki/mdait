@@ -46,6 +46,22 @@ suite("LM Toolsのエンベロープ契約（ソース走査）", () => {
 		}
 	});
 
+	test("状態を変えるツールは確認UIを持ち、読むだけのツールは持たない", () => {
+		// ADR-260705-01: AI を使う処理も、マーカーを書き換える処理も、必ず明示の確認を経由する。
+		// 読むだけのツールに確認を出すと、確認そのものが軽く扱われるようになる。
+		// 新しいツールを足したときに、どちらなのかをここで宣言させる（暗黙に増やさせない）。
+		const readOnly = new Set(["get-status-tool.ts", "validate-tool.ts"]);
+		for (const { name, content } of collectToolSources()) {
+			assert.ok(content.includes("prepareInvocation"), `${name}: prepareInvocation を実装すること`);
+			const confirms = content.includes("confirmationMessages");
+			if (readOnly.has(name)) {
+				assert.strictEqual(confirms, false, `${name}: 読むだけのツールは確認を出さないこと`);
+			} else {
+				assert.strictEqual(confirms, true, `${name}: 状態を変えるツールは確認を出すこと`);
+			}
+		}
+	});
+
 	test("全ツールが成功応答に nextActions の誘導を含める", () => {
 		// buildNextActions / buildAdoptNextActions / インラインの nextActions 構築のいずれかを参照していること。
 		// nextActions はエージェントの観測→行動ループの誘導装置であり、欠落したツールは
