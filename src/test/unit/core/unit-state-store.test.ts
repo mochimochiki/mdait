@@ -840,6 +840,67 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(store2.getAllEntries().length, 4);
 	});
 
+	suite("行の持ち方（path → order の二段）", () => {
+		test("ファイル単位の読み出しが、他のファイルの行数に影響されないこと", () => {
+			// ワークスペース全体の行数に比例して重くならないことの、挙動としての最小確認。
+			// （速さそのものは測らない。ここで固定するのは「他所の行が混ざらない」こと）
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			for (let f = 0; f < 50; f++) {
+				for (let o = 0; o < 5; o++) {
+					store.setEntry({
+						path: `content/en/f${f}.md`,
+						order: o,
+						level: 2,
+						titleHash: "t",
+						hash: `h${f}_${o}`,
+						from: "s",
+						need: "",
+					});
+				}
+			}
+
+			assert.strictEqual(store.getAllEntries().length, 250);
+			assert.strictEqual(store.countEntriesByPath("content/en/f7.md"), 5);
+			assert.deepStrictEqual(
+				store.getEntriesByPath("content/en/f7.md").map((e) => e.hash),
+				["h7_0", "h7_1", "h7_2", "h7_3", "h7_4"],
+			);
+			assert.strictEqual(store.countEntriesByPath("content/en/nothing.md"), 0);
+			assert.deepStrictEqual(store.getEntriesByPath("content/en/nothing.md"), []);
+		});
+
+		test("入れ子のディレクトリへ移しても、行が二重にならないこと", () => {
+			// 移動元と行き先が重なる形。取り出してから置き直す順序を間違えると、
+			// 行き先を消す段で「いま動かした行」を巻き込む
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			store.setEntry({ path: "content/en/a.md", order: 0, level: 2, titleHash: "t", hash: "h1", from: "", need: "" });
+			store.setEntry({
+				path: "content/en/sub/b.md",
+				order: 0,
+				level: 2,
+				titleHash: "t",
+				hash: "h2",
+				from: "",
+				need: "",
+			});
+
+			const moved = store.movePath("content/en", "content/en/sub");
+
+			assert.strictEqual(moved, 2);
+			assert.deepStrictEqual(
+				store
+					.getAllEntries()
+					.map((e) => e.path)
+					.sort(),
+				["content/en/sub/a.md", "content/en/sub/sub/b.md"],
+			);
+		});
+	});
+
 	suite("movePath（ファイルの移動への追随）", () => {
 		/** MD-external 相当のエントリを生成 */
 		function mdEntry(filePath: string, order: number, hash: string, need: string): UnitStateEntry {
