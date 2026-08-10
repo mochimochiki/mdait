@@ -55,6 +55,11 @@ function resolveFileRole(absPath: string, config: Configuration): "source" | "ta
  * - 状態が unit-state に載るファイル（非Markdown、または external マーカー）ではストアをロードし、変更時に保存する
  * - 変更があったときだけステータスを更新する（冪等性を保つため、無変更なら何もしない）
  *
+ * **ストアに載るファイルでは `unit-state-lock` も取る。** `FileMutex` はファイルパス単位
+ * なので、ストア全体の「読み込んでから書き戻すまで」は守れない。`syncCommand` は開始時に
+ * `load()` を無条件に呼び終了時に `save()` するので、この区間と重なると書き換えが
+ * 読み捨てられるか上書きで消える — どちらも無言で起きる（ADR-260810-04）。
+ *
  * @param absPath 対象ファイルの絶対パス
  * @param config 設定
  * @param mutate 実際の書き換え。changed:false を返した場合は保存・更新を行わない
@@ -67,7 +72,25 @@ export async function withFileMutation<T extends UnitMutationResult>(
 	// 非Markdownファイルは embedded モードでも状態がストアにしか無いため、
 	// external 判定だけで済ませてはならない（済ませると保存されず need が復活する）
 	const storeBacked = isUnitStateBacked(absPath, config.isExternalMarkers());
+	if (!storeBacked) {
+		// ストアに触らないので、ストア全体の排他は取らない（sync を無駄に待たせない）
+		return runFileMutation(absPath, false, mutate);
+	}
+	return withUnitStateLock(() => runFileMutation(absPath, true, mutate));
+}
 
+/**
+ * `withFileMutation` の中身（ストア全体の排他を取ったあと）。
+ *
+ * ロックの獲得と処理本体を分けているのは、ストアに触らないファイルで無駄に待たせないため。
+ * **ストアの `ensureLoaded` から `save()` までがこの関数の中に収まっていること**が要点で、
+ * 外に出すと排他の意味が無くなる。
+ */
+async function runFileMutation<T extends UnitMutationResult>(
+	absPath: string,
+	storeBacked: boolean,
+	mutate: () => Promise<T>,
+): Promise<T> {
 	if (storeBacked) {
 		const mdaitDir = await ensureMdaitDir();
 		if (mdaitDir) {
@@ -126,29 +149,33 @@ export async function discardTargetFile(absPath: string, config: Configuration):
 	// その後の保存で**行の無い訳文**として復活し、「実体だけが残る」状態を自分で作ってしまう
 	await flushDirtyDocument(absPath);
 
-	const mdaitDir = await ensureMdaitDir();
-	if (mdaitDir) {
-		UnitStateStore.getInstance().ensureLoaded(mdaitDir);
-	}
-
-	let removedEntries = 0;
-	await FileMutex.getInstance().runExclusive([absPath], async () => {
-		await vscode.workspace.fs.delete(vscode.Uri.file(absPath), { useTrash: true, recursive: false });
-		try {
-			removedEntries = UnitStateStore.getInstance().removeEntriesByPath(toWorkspaceRelativePath(absPath));
-		} catch {
-			// ワークスペース未設定。ファイルは消えているので、行は次の sync の掃除に任せる
-			removedEntries = 0;
+	// ここも「ストアを読み込んでから書き戻すまで」の区間を持つ。sync と重なると
+	// 行の削除が読み捨てられ、ファイルだけ消えて行が残る（ADR-260810-04）
+	return withUnitStateLock(async () => {
+		const mdaitDir = await ensureMdaitDir();
+		if (mdaitDir) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
 		}
+
+		let removedEntries = 0;
+		await FileMutex.getInstance().runExclusive([absPath], async () => {
+			await vscode.workspace.fs.delete(vscode.Uri.file(absPath), { useTrash: true, recursive: false });
+			try {
+				removedEntries = UnitStateStore.getInstance().removeEntriesByPath(toWorkspaceRelativePath(absPath));
+			} catch {
+				// ワークスペース未設定。ファイルは消えているので、行は次の sync の掃除に任せる
+				removedEntries = 0;
+			}
+		});
+
+		if (mdaitDir && removedEntries > 0) {
+			UnitStateStore.getInstance().save(mdaitDir);
+		}
+		// ファイルが実在しないので、ステータス更新はツリーからの取り除きとして働く
+		await StatusManager.getInstance().refreshFileStatus(absPath);
+
+		return { changed: true, removedEntries };
 	});
-
-	if (mdaitDir && removedEntries > 0) {
-		UnitStateStore.getInstance().save(mdaitDir);
-	}
-	// ファイルが実在しないので、ステータス更新はツリーからの取り除きとして働く
-	await StatusManager.getInstance().refreshFileStatus(absPath);
-
-	return { changed: true, removedEntries };
 }
 
 /** `unit-state` の行をファイルの移動に追随させた結果 */
