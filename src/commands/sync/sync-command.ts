@@ -35,7 +35,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
-import { createOrphanTargetProbe, createRelativeOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
+import { createOrphanTargetProbe, createRelativeExistsProbe } from "../../infra/workspace/orphan-probe";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { toAbsoluteWorkspacePath, toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { alignMatchResult } from "../adopt/align-core";
@@ -566,9 +566,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				configuredDirs,
 				scannedDirs: [...scannedDirs],
 				seenPaths,
-				// 実体がそこにあり原文だけ消えている訳文の行は消さない（ADR-260806-01）。
-				// 消すと孤立を可視化する材料（from / need）ごと失われる
-				isOrphanTarget: createRelativeOrphanTargetProbe(config),
+				// **ファイルが実体としてそこに在るなら消さない。** 走査の一覧に載らない理由は
+				// 消えたことだけではない（ignoredPatterns で外した・trans.extensions から
+				// 拡張子を外した・原文が消えて訳文だけ残った）。消すと from が失われ、
+				// 除外を解いた瞬間に人の訳が need:translate に戻る（ADR-260806-01 / -260810-02）
+				fileExists: createRelativeExistsProbe(),
 			});
 			if (orphansRemoved > 0) {
 				logger.info("sync", "Cleaned up orphan unit-state entries", {

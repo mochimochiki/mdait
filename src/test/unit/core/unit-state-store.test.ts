@@ -279,29 +279,48 @@ suite("UnitStateStore", () => {
 			configuredDirs: ["ja", "en"],
 			scannedDirs: ["ja", "en"],
 			seenPaths: new Set(["ja/guide.md", "en/guide.md"]),
-			isOrphanTarget: (filePath) => filePath === "en/gone.md",
+			fileExists: (filePath: string) => filePath === "en/gone.md",
 		});
 
 		assert.strictEqual(removed, 0);
 		assert.ok(store.getEntry("en/gone.md", 0), "孤立を可視化する材料（from / need）が残ること");
 	});
 
-	test("cleanupOrphansInScopeが、孤立ではないと答えられた行は従来どおり削除すること", () => {
+	test("cleanupOrphansInScopeが、実体のあるファイルの行は管理対象から外れていても残すこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
 
-		// trans.extensions を変えて管理対象から外れたファイル。実体はあるが原文も在るので孤立ではない
+		// trans.extensions から .txt を外した／ignoredPatterns で除外した、というファイル。
+		// 走査の一覧には載らないが「見に行って無かった」のではなく「初めから探していない」。
+		// 行を消すと from が失われ、除外を解いた瞬間に人の訳が need:translate へ戻る
 		store.setEntry({ path: "en/notes.txt", order: 0, level: 0, titleHash: "", hash: "1", from: "2", need: "" });
 
 		const removed = store.cleanupOrphansInScope({
 			configuredDirs: ["ja", "en"],
 			scannedDirs: ["ja", "en"],
 			seenPaths: new Set<string>(),
-			isOrphanTarget: () => false,
+			fileExists: (filePath: string) => filePath === "en/notes.txt",
+		});
+
+		assert.strictEqual(removed, 0);
+		assert.ok(store.getEntry("en/notes.txt", 0), "実体があるあいだは from を持っておく");
+	});
+
+	test("cleanupOrphansInScopeが、実体の無いファイルの行は削除すること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+
+		store.setEntry({ path: "en/deleted.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
+
+		const removed = store.cleanupOrphansInScope({
+			configuredDirs: ["ja", "en"],
+			scannedDirs: ["ja", "en"],
+			seenPaths: new Set<string>(),
+			fileExists: () => false,
 		});
 
 		assert.strictEqual(removed, 1, "掃除が永久に効かなくなってはいけない");
-		assert.strictEqual(store.getEntry("en/notes.txt", 0), undefined);
+		assert.strictEqual(store.getEntry("en/deleted.md", 0), undefined);
 	});
 
 	test("cleanupOrphansInScopeで孤立判定を渡さなければ従来どおりの挙動になること", () => {
@@ -572,8 +591,17 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(shouldRemoveEntryPath("content/en/a.md", scope), false);
 		});
 
-		test("走査したが見つからなかった行は消す", () => {
+		test("走査した一覧に無く、実体も無い行は消す", () => {
 			assert.strictEqual(shouldRemoveEntryPath("content/en/gone.txt", scope), true);
+		});
+
+		test("走査した一覧に無くても、実体があれば残す", () => {
+			// ignoredPatterns で外した・trans.extensions から拡張子を外した・原文が消えて
+			// 訳文だけ残った（孤立訳文）。どれも「初めから探していない」であって、
+			// 「見に行って無かった」ではない（ADR-260810-02）
+			const withExists = { ...scope, fileExists: (p: string) => p === "content/en/ignored.md" };
+			assert.strictEqual(shouldRemoveEntryPath("content/en/ignored.md", withExists), false);
+			assert.strictEqual(shouldRemoveEntryPath("content/en/gone.md", withExists), true);
 		});
 	});
 

@@ -110,12 +110,15 @@ async function renameViaEditor(moves) {
 	await completeRenameFollow(files);
 }
 
-async function setMode(mode, pairs) {
+async function setMode(mode, pairs, extensions) {
 	const j = JSON.parse(fs.readFileSync(CFG_PATH, "utf8"));
 	j.ai = Object.assign({}, j.ai, { provider: "default", vendor: "default" });
 	if (mode === "external") j.markers = { mode: "external" };
 	else j.markers = undefined;
 	if (pairs) j.transPairs = pairs;
+	// 非Markdown（.txt 等）を管理下に入れる／外す。undefined を渡すと既定へ戻す
+	if (extensions !== undefined) j.trans = Object.assign({}, j.trans, { extensions });
+	else if (j.trans) j.trans = Object.assign({}, j.trans, { extensions: undefined });
 	fs.writeFileSync(CFG_PATH, JSON.stringify(j, null, 2));
 	await Configuration.getInstance().load();
 	const { SelectionState } = require(path.join(REPO, "out/core/status/selection-state.js"));
@@ -385,6 +388,9 @@ const SRC = [
 	"第3章の本文。",
 	"",
 ].join("\n");
+
+/** 非Markdown の原文（S84 / S85 用。ファイル＝単一ユニットの特殊形を測る） */
+const TXT_SRC = ["これは注意書きです。", "", "取り扱いに気をつけてください。", ""].join("\n");
 
 /** 同じディレクトリに置くもう1本の原文（S9 用。ディレクトリが空にならないようにする） */
 const OTHER_SRC = ["# もう一つの文書", "", "こちらの導入。", "", "## 付録", "", "付録の本文。", ""].join("\n");
@@ -670,7 +676,7 @@ function expectLinesPresent(rel, lines) {
 }
 
 /** 初期状態: 原文を置き → sync → trans（フェイク）→ sync（need クリア） */
-async function bootstrap(mode, src, pairs, extraSources) {
+async function bootstrap(mode, src, pairs, extraSources, extensions) {
 	const t = (label, p) => {
 		const s = Date.now();
 		return Promise.resolve(p()).then((r) => {
@@ -682,7 +688,7 @@ async function bootstrap(mode, src, pairs, extraSources) {
 	write("ja/guide.md", src || SRC);
 	// 原文をもう1本置くシナリオ用（「ディレクトリの中身の数で挙動が変わる」を測れるようにする）
 	for (const [rel, text] of Object.entries(extraSources || {})) write(rel, text);
-	await t("setMode", () => setMode(mode, pairs || DEFAULT_PAIRS));
+	await t("setMode", () => setMode(mode, pairs || DEFAULT_PAIRS, extensions));
 	await t("sync1", () => syncCommand());
 	installFakeAi();
 	// 全ペアの訳文をすべて翻訳しておく（多言語シナリオの fr 側や、原文が複数あるときの2本目も）
@@ -711,7 +717,13 @@ async function scenario(name, mutate, opts) {
 	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
 	if (ONLY && !ONLY.includes(name.split(" ")[0])) return;
 	for (const mode of ["embedded", "external"]) {
-		await bootstrap(mode, opts && opts.src, opts && opts.pairs, opts && opts.extraSources);
+		await bootstrap(
+			mode,
+			opts && opts.src,
+			opts && opts.pairs,
+			opts && opts.extraSources,
+			opts && opts.extensions,
+		);
 		const before = { src: unitsOf("ja/guide.md"), tgt: unitsOf("en/guide.md"), us: unitState() };
 		try {
 			// external でしか意味を持たない操作（モード切替・表記ゆれ）は embedded 側では何もしない。
@@ -720,7 +732,7 @@ async function scenario(name, mutate, opts) {
 		} catch (e) {
 			origLog(`  mutate error: ${e && e.message}`);
 		}
-		if (opts && opts.reloadConfig) await setMode(mode, opts.pairs);
+		if (opts && opts.reloadConfig) await setMode(mode, opts.pairs, opts.reloadExtensions);
 		await syncCommand();
 		// 冪等性の確認用: 何も変えずに sync を追加で回す
 		for (let i = 0; i < ((opts && opts.extraSyncs) || 0); i++) await syncCommand();
@@ -1440,6 +1452,84 @@ async function main() {
 				await renameViaEditor([["ja/guide.md", "ja/other.md"]]);
 			},
 			{ extraSources: { "ja/other.md": OTHER_SRC } },
+		);
+
+		// ---- レビューの積み残し（申し送りで「まだ試されていない筋書き」として挙がっていたもの） ----
+
+		// S82: 訳文の本文だけ消して frontmatter を残す。ユニット0件だが空ファイルではない。
+		//      「訳文が空ならその訳文には触らない」（ADR-260806-02）が frontmatter 付きでも
+		//      効くかを見る。効かないと、貼り戻しても全ユニットが need:translate に固定される。
+		await scenario(
+			"S82 訳文の本文だけ消して frontmatter を残す → 貼り戻す",
+			async () => {
+				const saved = read("en/guide.md");
+				write("en/guide.md", '---\ntitle: "Guide"\ndescription: "The description"\n---\n');
+				await syncCommand();
+				write("en/guide.md", saved);
+			},
+			{ src: FM_SRC },
+		);
+
+		// S83: 訳文側にフェンスの閉じ忘れが入り、以降が全部コードとして飲まれてユニットが潰れる。
+		//      S69 は原文側。訳文側は「行を刈るか保留するか」の判断がそのまま当たる場所で、
+		//      刈ってしまうとフェンスを直しても訳が戻らない。
+		await scenario("S83 訳文にフェンスの閉じ忘れ → sync → 直して sync", async () => {
+			const saved = read("en/guide.md");
+			write("en/guide.md", saved.replace("## 第1章", "```\n## 第1章"));
+			await syncCommand();
+			write("en/guide.md", saved);
+		});
+
+		// S84: 非Markdown（.txt）の訳文を空にする。非MD は「ファイル＝単一ユニット」の特殊形で、
+		//      MD とは別のハンドラを通る。空にしたときの守り（ADR-260806-02）が非MD にも
+		//      効いているかを見る。
+		await scenario(
+			"S84 非Markdown（.txt）の訳文を空にして貼り戻す",
+			async () => {
+				// 先に訳しておく。未翻訳のままだと失われる状態が need:translate で、
+				// 作り直した結果と区別が付かない（S75 と同じ理由）
+				installFakeAi();
+				await transCommand(vscode.Uri.file(path.join(CONTENT, "en/notes.txt")));
+				await syncCommand();
+				const saved = read("en/notes.txt");
+				write("en/notes.txt", "");
+				await syncCommand();
+				write("en/notes.txt", saved);
+			},
+			{ extensions: [".txt"], extraSources: { "ja/notes.txt": TXT_SRC } },
+		);
+
+		// S85: 管理下に入れていた .txt を trans.extensions から外して sync する。
+		//      §13 の「掃除が永久に効かなくなった」の再来がないか（外した拡張子の行が
+		//      走査対象外として永久に残るのか、消えるのか）を実際に見る。
+		await scenario(
+			"S85 trans.extensions から .txt を外して sync",
+			async () => {
+				installFakeAi();
+				await transCommand(vscode.Uri.file(path.join(CONTENT, "en/notes.txt")));
+				await syncCommand();
+			},
+			{
+				extensions: [".txt"],
+				extraSources: { "ja/notes.txt": TXT_SRC },
+				reloadConfig: true,
+				reloadExtensions: undefined,
+			},
+		);
+
+		// S86: 多言語（en/fr）で en だけ選んで sync した状態で、原文を消す。
+		//      孤立の判定は「訳文が実在し、導いた原文が実在しない」だけを見るので、
+		//      走査していない fr 側も孤立として印が付くはずである。走査の有無で
+		//      判定が揺れると、選択を変えるたびに印が出たり消えたりする。
+		await scenario(
+			"S86 多言語で en だけ sync している状態で原文を消す",
+			async () => {
+				selectTargets(["en"]);
+				fs.unlinkSync(path.join(CONTENT, "ja/guide.md"));
+				await syncCommand();
+				selectTargets(["en", "fr"]);
+			},
+			{ pairs: MULTI_PAIRS, extraSources: { "ja/other.md": OTHER_SRC } },
 		);
 
 		// S69: 原文にコードブロックの閉じ忘れが入り、以降の章が全部コードとして飲まれる。
