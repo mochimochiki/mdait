@@ -50,6 +50,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 const logger = Logger.getInstance();
@@ -175,76 +176,105 @@ export function resetOrphanMemory(): void {
  *
  * @param count 中止したファイル数。0 のときは何もしない
  */
-function notifySourceEmptied(count: number): void {
+function sourceEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	const restoreHelp = vscode.l10n.t("How to restore");
-	void vscode.window
-		.showWarningMessage(
-			vscode.l10n.t(
-				"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
-				count,
-			),
-			restoreHelp,
-		)
-		.then((choice) => {
-			if (choice === restoreHelp) {
-				return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
-			}
-			return undefined;
-		})
-		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
-		.then(undefined, (error) => {
-			logger.error("sync", "Empty-source guidance failed", {
-				...formatError(error),
-			});
-		});
+	return {
+		kind: "source-emptied",
+		detail: vscode.l10n.t(
+			"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} file(s) skipped because the source is empty", count),
+		action: {
+			label: vscode.l10n.t("How to restore"),
+			run: () => vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL)),
+		},
+	};
 }
 
 /**
  * 訳文が空で同期を中止したことを伝える（ADR-260806-02）。
  * 中止したこと自体より「状態は守られている・作り直すならファイルを消す」を伝えるのが目的。
  */
-function notifyTargetEmptied(count: number): void {
+function targetEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	void vscode.window.showWarningMessage(
-		vscode.l10n.t(
+	return {
+		kind: "target-emptied",
+		detail: vscode.l10n.t(
 			"Sync skipped {0} file(s): the translation has no body text. Its translation state was kept, so pasting the text back restores it. Delete the translation file if you meant to start over.",
 			count,
 		),
-	);
+		summary: vscode.l10n.t("{0} file(s) skipped because the translation is empty", count),
+	};
 }
 
 /**
  * 新しく孤立した訳文があることを伝える。
  * 状態はツリーに出ているので、ここでは件数と入口だけを渡す（ux.md §3.3）。
  */
-function notifyNewOrphans(count: number): void {
+function newOrphansNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	const showLabel = vscode.l10n.t("Show in mdait");
-	void vscode.window
-		.showWarningMessage(
-			vscode.l10n.t(
-				"{0} translation(s) no longer have a source file. They were kept, not deleted — check them in the mdait view.",
-				count,
-			),
-			showLabel,
-		)
-		.then((choice) => {
-			if (choice === showLabel) {
-				return vscode.commands.executeCommand("mdait.status.focus");
-			}
-			return undefined;
-		})
-		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する
-		.then(undefined, (error) => {
-			logger.error("sync", "Orphan notification failed", { ...formatError(error) });
-		});
+	return {
+		kind: "new-orphans",
+		detail: vscode.l10n.t(
+			"{0} translation(s) no longer have a source file. They were kept, not deleted — check them in the mdait view.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} translation(s) lost their source file", count),
+		action: {
+			label: vscode.l10n.t("Show in mdait"),
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/**
+ * 自動削除を見送って確認待ちにしたことを伝える。
+ * 「何も起きなかったように見える」ので必ず伝える。状態はツリー（need:verify-deletion の
+ * ユニット）に出るので、ここでは件数と入口だけを示す。
+ */
+function deletionWithheldNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "deletion-withheld",
+		detail: vscode.l10n.t(
+			"Sync did not delete {0} translated unit(s) whose source disappeared all at once — this often means the source failed to parse (an unclosed code fence, or a changed sync.level). They are kept and marked for your confirmation. Fix the source and sync again to restore them.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} unit(s) kept for your confirmation instead of being deleted", count),
+		action: {
+			label: vscode.l10n.t("Show units"),
+			// VS Code が view id から自動生成するフォーカスコマンド
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/** 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6） */
+function orphanDeletedNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "orphan-deleted",
+		detail: vscode.l10n.t(
+			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
+		action: {
+			label: vscode.l10n.t("How to restore"),
+			run: () => vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL)),
+		},
+	};
 }
 
 /**
@@ -652,46 +682,13 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			);
 		}
 
-		// 自動削除を見送った場合は「何も起きなかったように見える」ので必ず伝える。
-		// ux.md §3.3 では通知に載せてよいのは「実行の結果と、結果に対する次の一手」。
-		// これは sync の実行結果そのもの（＝訳文を消さずに確認待ちにした）なので通知が正しい。
-		// 状態はツリー（need:verify-deletion のユニット）に出るので、ここでは件数と入口だけを示す。
-		// 明示実行の sync だけが出す（autoSyncOnSave は syncSingleFile 経由で通知を出さない）。
-		if (totalOrphanDeletionWithheld > 0) {
-			const showList = vscode.l10n.t("Show units");
-			void vscode.window
-				.showWarningMessage(
-					vscode.l10n.t(
-						"Sync did not delete {0} translated unit(s) whose source disappeared all at once — this often means the source failed to parse (an unclosed code fence, or a changed sync.level). They are kept and marked for your confirmation. Fix the source and sync again to restore them.",
-						totalOrphanDeletionWithheld,
-					),
-					showList,
-				)
-				.then((choice) => {
-					if (choice === showList) {
-						// VS Code が view id から自動生成するフォーカスコマンド
-					return vscode.commands.executeCommand("mdait.status.focus");
-					}
-					return undefined;
-				})
-				.then(undefined, (error) => {
-					logger.error("sync", "Withheld-deletion guidance failed", {
-						...formatError(error),
-					});
-				});
-		}
-
-		// 「空になった側には触らない」を守って中止したファイルは、黙って見送らずに伝える。
-		// 原文が空（ADR-260803-06。訳文消失の予防: P6）と訳文が空（ADR-260806-02。
-		// 翻訳の状態の保護）は別の事故なので、通知も別々に出す
-		notifySourceEmptied(totalSourceEmptied);
-		notifyTargetEmptied(totalTargetEmptied);
-
-		// 孤立の印を測り直し、新しく孤立したものがあるときだけ伝える（ADR-260806-01）。
-		// 測り直しは失敗しても sync の成否には関わらないので、握って握りつぶさずログに残す
+		// 孤立の印を測り直す（ADR-260806-01）。
+		// 測り直しは失敗しても sync の成否には関わらないので、握りつぶさずログに残す
+		let freshOrphans = 0;
 		try {
 			const { orphans, scoped } = await refreshOrphanFlags(config, [...scannedTargetDirsAbs], statusManager);
 			const fresh = updateOrphanMemory(orphans, scoped);
+			freshOrphans = fresh.length;
 			if (fresh.length > 0) {
 				logger.info("sync", "Translations without a source file", {
 					paths: fresh.slice(0, 20),
@@ -699,37 +696,24 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 					total: orphans.size,
 				});
 			}
-			notifyNewOrphans(fresh.length);
 		} catch (error) {
 			logger.error("sync", "Orphan re-check failed", { ...formatError(error) });
 		}
 
-		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
-		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
-		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
-			const restoreHelp = vscode.l10n.t("How to restore");
-			void vscode.window
-				.showWarningMessage(
-					vscode.l10n.t(
-						"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
-						totalDeleted,
-					),
-					restoreHelp,
-				)
-				.then((choice) => {
-					if (choice === restoreHelp) {
-						return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
-					}
-					return undefined;
-				})
-				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
-				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
-				.then(undefined, (error) => {
-					logger.error("sync", "Orphan restore guidance failed", {
-						...formatError(error),
-					});
-				});
-		}
+		// ふつうと違うできごとをまとめて渡し、**出し方は showSyncNotices が決める**
+		// （1件なら個別に、2件以上なら1本に。ux.md §3.3 の「変化の気づきは1箇所に集約する」）。
+		// 明示実行の sync だけが出す（autoSyncOnSave は syncSingleFile 経由）。
+		showSyncNotices(
+			[
+				deletionWithheldNotice(totalOrphanDeletionWithheld),
+				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
+				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
+				sourceEmptiedNotice(totalSourceEmptied),
+				targetEmptiedNotice(totalTargetEmptied),
+				newOrphansNotice(freshOrphans),
+				config.getOrphanTargetPolicy() === "delete" ? orphanDeletedNotice(totalDeleted) : undefined,
+			].filter((notice): notice is SyncNotice => notice !== undefined),
+		);
 
 		return {
 			totalFileCount,
@@ -989,12 +973,22 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		// 原文が空で中止した場合は保存で走る自動同期でも黙らない（ADR-260803-06）。
 		// ただし保存のたびに出さないよう、同じ状態が続くあいだは1回だけにする。
+		// 単一ファイルの経路では同時に2件起きることが無い（1ファイルは原文が空か訳文が空かの
+		// どちらかにしかならない）ので、まとめる余地も無い。出し方の判断は同じ場所へ通す
+		const singleFileNotices: SyncNotice[] = [];
 		if (updateTargetEmptiedMemory(targetFile, syncResult.targetEmptied ?? 0)) {
-			notifyTargetEmptied(syncResult.targetEmptied ?? 0);
+			const notice = targetEmptiedNotice(syncResult.targetEmptied ?? 0);
+			if (notice) {
+				singleFileNotices.push(notice);
+			}
 		}
 		if (updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0)) {
-			notifySourceEmptied(syncResult.sourceEmptied ?? 0);
+			const notice = sourceEmptiedNotice(syncResult.sourceEmptied ?? 0);
+			if (notice) {
+				singleFileNotices.push(notice);
+			}
 		}
+		showSyncNotices(singleFileNotices);
 
 		// 変化の有無でログレベルを切り替え
 		const hasChanges = syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;

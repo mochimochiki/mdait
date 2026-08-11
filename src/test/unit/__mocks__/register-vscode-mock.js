@@ -21,6 +21,18 @@ const path = require("node:path");
 global.__vscodeMockWorkspaceRoot = "/mock-workspace";
 // デフォルトの表示言語（テスト側で上書き可能。undefined を代入すると en に戻る）
 global.__vscodeMockLanguage = undefined;
+// showXxxMessage の記録先（テスト側で配列を代入したときだけ控える）と、押されたボタンの差し替え
+global.__vscodeMockShownMessages = undefined;
+global.__vscodeMockMessageChoice = undefined;
+
+/** showXxxMessage の呼び出しを控える（テストが「何本出たか」を見られるようにする） */
+function recordMessage(level, message, items) {
+	const shown = global.__vscodeMockShownMessages;
+	if (Array.isArray(shown)) {
+		shown.push({ level, message, items: items.flat() });
+	}
+	return global.__vscodeMockMessageChoice;
+}
 
 const vscodeMock = {
 	workspace: {
@@ -88,9 +100,12 @@ const vscodeMock = {
 		parse: (s) => ({ fsPath: s, scheme: "file", path: s }),
 	},
 	window: {
-		showInformationMessage: async () => undefined,
-		showWarningMessage: async () => undefined,
-		showErrorMessage: async () => undefined,
+		// 出したトーストをテストから見られるよう控える（モック限定の便宜）。
+		// テスト側で global.__vscodeMockShownMessages = [] と初期化して使う。
+		// 返す選択肢は global.__vscodeMockMessageChoice で差し替えられる
+		showInformationMessage: async (message, ...items) => recordMessage("info", message, items),
+		showWarningMessage: async (message, ...items) => recordMessage("warning", message, items),
+		showErrorMessage: async (message, ...items) => recordMessage("error", message, items),
 		createOutputChannel: () => ({
 			appendLine: () => {},
 			append: () => {},
