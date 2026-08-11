@@ -10,7 +10,7 @@
  * @module infra/workspace/orphan-probe
  */
 import * as fs from "node:fs";
-import { type OrphanTargetProbe, isOrphanTarget } from "../../core/unit-state/orphan-target";
+import type { OrphanTargetProbe } from "../../core/unit-state/orphan-target";
 import type { Configuration } from "../config/configuration";
 import { FileExplorer } from "./file-explorer";
 import { toAbsoluteWorkspacePath } from "./workspace-path";
@@ -57,17 +57,16 @@ export function createOrphanTargetProbe(config: Configuration, explorer?: FileEx
 }
 
 /**
- * ワークスペース相対パス（`UnitStateEntry.path` と同じ基準）を受け取る probe を作る。
+ * ワークスペース相対パス（`UnitStateEntry.path` と同じ基準）で実在を答える probe を作る。
  *
- * `cleanupOrphansInScope` は行の `path` しか持たないため、絶対パスへ戻してから判定する。
- * ワークスペースが開かれていない等で変換に失敗したときは「判断できない」として
- * 孤立ではないと答える（変換できない時点で実在確認そのものができないため）。
+ * `cleanupOrphansInScope` は行の `path` しか持たないため、絶対パスへ戻してから確かめる。
+ * 掃除はストアの行ごとに呼ぶので（1ファイル100ユニットなら同じパスへ100回）結果を覚える。
+ * probe は1回の走査ごとに作り直す前提なので、その間にファイルが増減しても取りこぼさない。
+ *
+ * ワークスペースが開かれていない等で変換に失敗したときは「無い」と答える — 変換できない
+ * 時点で実在確認そのものができないため、この規則が無かった頃と同じ扱いに落とす。
  */
-export function createRelativeOrphanTargetProbe(
-	config: Configuration,
-	explorer?: FileExplorer,
-): (relativePath: string) => boolean {
-	const probe = createOrphanTargetProbe(config, explorer);
+export function createRelativeExistsProbe(): (relativePath: string) => boolean {
 	const verdicts = new Map<string, boolean>();
 	return (relativePath: string): boolean => {
 		const cached = verdicts.get(relativePath);
@@ -76,7 +75,7 @@ export function createRelativeOrphanTargetProbe(
 		}
 		let verdict = false;
 		try {
-			verdict = isOrphanTarget(toAbsoluteWorkspacePath(relativePath), probe);
+			verdict = fs.existsSync(toAbsoluteWorkspacePath(relativePath));
 		} catch {
 			verdict = false;
 		}

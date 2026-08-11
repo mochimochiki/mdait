@@ -497,6 +497,61 @@ export class Configuration {
 	}
 
 	/**
+	 * すべての設定値を既定へ戻す（`load()` がファイルを当てる前に呼ぶ）。
+	 *
+	 * このクラスはシングルトンを in-place で更新するため、既定に戻す場所がここしか無い。
+	 * 追加した設定はここにも足すこと — 足し忘れると「消しても効かない設定」が1つ増える。
+	 * 既定値はフィールド宣言と同じものを、参照を共有しないように作り直す。
+	 */
+	private resetToDefaults(): void {
+		this.transPairs = [];
+		this.ignoredPatterns = "**/node_modules/**";
+		this.primaryLang = "";
+		this.sync = {
+			level: 3,
+			autoDelete: true,
+			autoSyncOnSave: true,
+			copyAssets: true,
+		};
+		this.markers = { mode: "embedded" };
+		this.ai = {
+			provider: "vscode-lm",
+			vendor: "copilot",
+			model: "gpt-4o",
+			ollama: {
+				endpoint: "http://localhost:11434",
+				model: "llama2",
+			},
+			debug: {
+				enableStatsLogging: true,
+				logPromptAndResponse: false,
+			},
+		};
+		this.trans = {
+			frontmatter: {
+				keys: ["title", "description"],
+			},
+			contextSize: 1,
+			retryLimit: 1,
+			maxFileSize: 51200,
+			concurrency: 3,
+			maxUnitsPerRun: 300,
+		};
+		this.terms = { filename: "terms.csv" };
+		this.prompts = {};
+		this.tm = {
+			enabled: true,
+			maxReferences: 5,
+			retryLimit: 1,
+			minQueryLength: 10,
+		};
+		this.aiReview = {
+			autoApprove: true,
+			batchSize: 3,
+		};
+	}
+
+	/**
 	 * 設定を読み込む
 	 */
 	private async load(): Promise<void> {
@@ -519,6 +574,17 @@ export class Configuration {
 			if (!config || typeof config !== "object") {
 				throw new Error("Invalid configuration file format");
 			}
+
+			// **読み込みのたびに既定へ戻してから当てる。**
+			// 以降の読み込みは「書いてあるキーだけ上書きする」形なので、これが無いと
+			// mdait.json からキーを消しても前回値が居座る。設定UIの「リセット」は
+			// キーをファイルから削除する実装（settings-panel.ts の applyReset）なので、
+			// **画面は既定値を表示するのに engine は古い値で動き続ける**ことになり、
+			// 再起動するまで食い違いに気づけない。
+			//
+			// パースが成功したあとに置く。編集の途中でファイルが壊れることは普通に起きるので、
+			// 壊れている間に既定へ倒すと、保存のたびに設定が飛んだように見える。
+			this.resetToDefaults();
 
 			// 翻訳ペア設定の読み込み
 			if (config.transPairs) {
@@ -568,9 +634,8 @@ export class Configuration {
 
 			// markers設定の読み込み。
 			// 明示的に "external" のときのみ external とし、未指定・"embedded"・不正値は
-			// すべて既定の "embedded" へ倒す。load() はシングルトンを in-place 更新するため、
-			// 「設定から markers を削除して external→embedded に戻す」動線で前回値が居残る
-			// stale を防ぐ（値を毎回確定させることで再ロードを冪等にする）。
+			// すべて既定の "embedded" へ倒す（不正値を external と読み違えない）。
+			// キーを消したときに既定へ戻ることは resetToDefaults() が受け持つ。
 			this.markers.mode = config.markers?.mode === "external" ? "external" : "embedded";
 
 			// AI設定の読み込み

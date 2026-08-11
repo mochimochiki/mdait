@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
-import { ExternalMarkerProvider, shouldPruneTail } from "../../../../core/markdown/marker-provider";
+import { ExternalMarkerProvider, buildAlignmentMemo, shouldPruneTail } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
 import { HELD_ORDER_BASE, UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
@@ -292,6 +292,203 @@ suite("ExternalMarkerProvider", () => {
 		assert.strictEqual(parsed.units[1].marker.hash, bodyHash);
 		assert.strictEqual(parsed.units[1].marker.from, "src00002", "from が復帰する");
 		assert.strictEqual(parsed.units[1].marker.need, "translate", "need も復帰する");
+	});
+
+	suite("対応が付かなかった行を保留席へ預ける（P03 / ADR-260809-01）", () => {
+		/** 3章のドキュメント。真ん中の章を消すと「末尾ではない場所」が空く */
+		const doc3 = ["# 見出し1", "", "本文1。", "", "## 見出し2", "", "本文2。", "", "## 見出し3", "", "本文3。", ""].join(
+			"\n",
+		);
+		/** 真ん中（見出し2）を消したもの */
+		const doc3WithoutMiddle = ["# 見出し1", "", "本文1。", "", "## 見出し3", "", "本文3。", ""].join("\n");
+
+		/** doc3 を「訳し終えた」状態の3行としてストアへ置き、その本文hashを返す */
+		function seedTranslated(provider: ExternalMarkerProvider): string[] {
+			const probe = markdownParser.parse(doc3, makeConfig(2), provider, { filePath: "tmp/probe.md" });
+			const hashes = probe.units.map((u) => calculateHash(u.content));
+			for (let i = 0; i < probe.units.length; i++) {
+				store.setEntry({
+					path: TARGET_PATH,
+					order: i,
+					level: probe.units[i].headingLevel,
+					titleHash: calculateHash(probe.units[i].title),
+					hash: hashes[i],
+					from: `src0000${i}`,
+					need: "",
+				});
+			}
+			store.removeEntriesByPath("tmp/probe.md");
+			return hashes;
+		}
+
+		test("真ん中の章が消えると、その行は上書きされずに保留席へ移ること", () => {
+			const provider = new ExternalMarkerProvider(store);
+			const hashes = seedTranslated(provider);
+
+			// 同じ ctx で読み書きする。「対応が付かなかった」と分かるのは読み込み時だけなので、
+			// その控えが書き出しまで届いて初めて保留席へ移せる
+			const ctx = { filePath: TARGET_PATH };
+			const parsed = markdownParser.parse(doc3WithoutMiddle, makeConfig(2), provider, ctx);
+			assert.strictEqual(parsed.units.length, 2, "前提: 真ん中の章が消えて2ユニットになっている");
+			markdownParser.stringify(parsed, provider, ctx);
+
+			const held = store.getEntriesByPath(TARGET_PATH).filter(isHeldBackEntry);
+			assert.strictEqual(held.length, 1, "消えた章の行が保留席へ移る");
+			assert.strictEqual(held[0].hash, hashes[1], "移ったのは消えた章の行である");
+			assert.strictEqual(held[0].from, "src00001", "from が保たれている");
+		});
+
+		test("sync が章を作り直してユニット数が元に戻っても、保留席の行が刈られないこと", () => {
+			// S75 / S79 の形。書き出し側は「作り直した後の3ユニット」しか見ておらず、
+			// 減ったという事実に一度も触れない。末尾を見る刈り取りは何も拾えない
+			const provider = new ExternalMarkerProvider(store);
+			const hashes = seedTranslated(provider);
+
+			const ctx = { filePath: TARGET_PATH };
+			markdownParser.parse(doc3WithoutMiddle, makeConfig(2), provider, ctx);
+			const rebuilt = markdownParser.parse(doc3, makeConfig(2), provider, { filePath: "tmp/rebuilt.md" });
+			markdownParser.stringify(rebuilt, provider, ctx);
+			store.removeEntriesByPath("tmp/rebuilt.md");
+
+			const entries = store.getEntriesByPath(TARGET_PATH);
+			assert.strictEqual(entries.filter((e) => !isHeldBackEntry(e)).length, 3, "通常の行は3件");
+			const held = entries.filter(isHeldBackEntry);
+			assert.strictEqual(held.length, 1, "ユニット数が戻っても保留席の行は残る");
+			assert.strictEqual(held[0].hash, hashes[1]);
+		});
+
+		test("消した章の本文を貼り戻すと状態が復帰し、保留席が空くこと", () => {
+			const provider = new ExternalMarkerProvider(store);
+			seedTranslated(provider);
+
+			const shrinkCtx = { filePath: TARGET_PATH };
+			const shrunk = markdownParser.parse(doc3WithoutMiddle, makeConfig(2), provider, shrinkCtx);
+			markdownParser.stringify(shrunk, provider, shrinkCtx);
+			assert.strictEqual(store.getEntriesByPath(TARGET_PATH).filter(isHeldBackEntry).length, 1, "前提: 席に1件");
+
+			// 1文字も違わない本文が戻ってきた
+			const restoreCtx = { filePath: TARGET_PATH };
+			const restored = markdownParser.parse(doc3, makeConfig(2), provider, restoreCtx);
+			assert.strictEqual(restored.units[1].marker.from, "src00001", "席から from が復帰する");
+			markdownParser.stringify(restored, provider, restoreCtx);
+
+			const entries = store.getEntriesByPath(TARGET_PATH);
+			assert.strictEqual(entries.filter(isHeldBackEntry).length, 0, "拾い戻された行は席から外れる");
+			assert.strictEqual(entries.length, 3, "行が二重にならない");
+			assert.strictEqual(entries[1].from, "src00001");
+		});
+
+		test("同じ章を消して貼り戻すのを繰り返しても保留席が増えないこと", () => {
+			const provider = new ExternalMarkerProvider(store);
+			seedTranslated(provider);
+
+			for (let round = 0; round < 5; round++) {
+				const shrinkCtx = { filePath: TARGET_PATH };
+				const shrunk = markdownParser.parse(doc3WithoutMiddle, makeConfig(2), provider, shrinkCtx);
+				markdownParser.stringify(shrunk, provider, shrinkCtx);
+
+				const restoreCtx = { filePath: TARGET_PATH };
+				const restored = markdownParser.parse(doc3, makeConfig(2), provider, restoreCtx);
+				markdownParser.stringify(restored, provider, restoreCtx);
+			}
+
+			const entries = store.getEntriesByPath(TARGET_PATH);
+			assert.strictEqual(entries.length, 3, "行が増えない");
+			assert.strictEqual(entries.filter(isHeldBackEntry).length, 0, "席も空のまま");
+			assert.strictEqual(entries[1].from, "src00001", "状態も保たれている");
+		});
+
+		test("本文から計算し直せる行は席を取らないこと（from も need も無い / need:translate）", () => {
+			const provider = new ExternalMarkerProvider(store);
+			const probe = markdownParser.parse(doc3, makeConfig(2), provider, { filePath: "tmp/probe.md" });
+			store.removeEntriesByPath("tmp/probe.md");
+			for (let i = 0; i < probe.units.length; i++) {
+				store.setEntry({
+					path: TARGET_PATH,
+					order: i,
+					level: probe.units[i].headingLevel,
+					titleHash: calculateHash(probe.units[i].title),
+					hash: calculateHash(probe.units[i].content),
+					from: i === 1 ? "src00001" : "",
+					need: i === 1 ? "translate" : "",
+				});
+			}
+
+			const ctx = { filePath: TARGET_PATH };
+			const parsed = markdownParser.parse(doc3WithoutMiddle, makeConfig(2), provider, ctx);
+			markdownParser.stringify(parsed, provider, ctx);
+
+			assert.strictEqual(
+				store.getEntriesByPath(TARGET_PATH).filter(isHeldBackEntry).length,
+				0,
+				"need:translate は『まだ人が訳していない』だけなので預けない",
+			);
+		});
+
+		test("ユニット0件のときは控えを作らないこと（一時的な崩れを削除の証拠にしない）", () => {
+			// 本文を全選択で消した・コードブロックの閉じ忘れで以降が全部飲まれた、という形では
+			// すべての行が「対応なし」になるが、それは章が消えた証拠ではない。
+			// （0件のとき行を席へ預けること自体は、従来からある末尾側の守り）
+			const entries = [
+				{ path: TARGET_PATH, order: 0, level: 1, titleHash: "t0", hash: "h0", from: "s0", need: "" },
+				{ path: TARGET_PATH, order: 1, level: 2, titleHash: "t1", hash: "h1", from: "s1", need: "" },
+			];
+			const memo = buildAlignmentMemo(entries, 0, new Set());
+			assert.deepStrictEqual(memo.unmatchedOrders, [], "1件も預けない");
+			assert.deepStrictEqual(memo.recoveredHeldOrders, []);
+		});
+
+		test("本文を空にして貼り戻しても、行が二重にならず状態が戻ること", () => {
+			const provider = new ExternalMarkerProvider(store);
+			seedTranslated(provider);
+
+			const emptyCtx = { filePath: TARGET_PATH };
+			const emptied = markdownParser.parse("", makeConfig(2), provider, emptyCtx);
+			markdownParser.stringify(emptied, provider, emptyCtx);
+			assert.strictEqual(store.getEntriesByPath(TARGET_PATH).length, 3, "行そのものは失わない");
+
+			const restoreCtx = { filePath: TARGET_PATH };
+			const restored = markdownParser.parse(doc3, makeConfig(2), provider, restoreCtx);
+			assert.strictEqual(restored.units[1].marker.from, "src00001", "本文が戻れば状態も戻る");
+			markdownParser.stringify(restored, provider, restoreCtx);
+
+			const entries2 = store.getEntriesByPath(TARGET_PATH);
+			assert.strictEqual(entries2.length, 3, "席と通常の行で二重にならない");
+			assert.strictEqual(entries2.filter(isHeldBackEntry).length, 0, "席が空く");
+		});
+
+		test("保留席の行は、見出しだけ同じ別物の章には付かないこと", () => {
+			// 席に長く居座るようになったぶん、拾い戻しは本文hashの完全一致だけに絞る。
+			// 見出しの一致で拾うと、新しい章に削除済みの章の from が付き
+			// need:revise@実在しない章 になる
+			const provider = new ExternalMarkerProvider(store);
+			const probe = markdownParser.parse(doc3, makeConfig(2), provider, { filePath: "tmp/probe.md" });
+			store.removeEntriesByPath("tmp/probe.md");
+			store.setEntry({
+				path: TARGET_PATH,
+				order: 0,
+				level: probe.units[0].headingLevel,
+				titleHash: calculateHash(probe.units[0].title),
+				hash: calculateHash(probe.units[0].content),
+				from: "src00000",
+				need: "",
+			});
+			// 見出しは同じだが本文が違う行を席に置く
+			store.setEntry({
+				path: TARGET_PATH,
+				order: HELD_ORDER_BASE,
+				level: probe.units[1].headingLevel,
+				titleHash: calculateHash(probe.units[1].title),
+				hash: "ちがう本文のhash",
+				from: "src00001",
+				need: "",
+			});
+
+			const parsed = markdownParser.parse(doc3, makeConfig(2), provider, { filePath: TARGET_PATH });
+
+			assert.strictEqual(parsed.units[1].marker.from, null, "見出しが同じでも席の行は付かない");
+			assert.strictEqual(parsed.units[1].marker.hash, "", "本文hashも付かない");
+		});
 	});
 
 	test("detach: ユニットが少し減っただけなら末尾の余った行を刈ること", () => {

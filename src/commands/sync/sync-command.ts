@@ -16,6 +16,12 @@ import { markdownParser } from "../../core/markdown/parser";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
+import {
+	type LostPathCandidate,
+	type NewTargetCandidate,
+	logRelinkPlan,
+	planContentRelink,
+} from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -29,9 +35,9 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
-import { createOrphanTargetProbe, createRelativeOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
+import { createOrphanTargetProbe, createRelativeExistsProbe } from "../../infra/workspace/orphan-probe";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
-import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
+import { toAbsoluteWorkspacePath, toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { alignMatchResult } from "../adopt/align-core";
 import { type SectionAligner, buildSectionAligner } from "../adopt/section-aligner";
 import type { FileSyncResult } from "../file-handler/file-handler";
@@ -44,6 +50,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 const logger = Logger.getInstance();
@@ -169,76 +176,105 @@ export function resetOrphanMemory(): void {
  *
  * @param count 中止したファイル数。0 のときは何もしない
  */
-function notifySourceEmptied(count: number): void {
+function sourceEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	const restoreHelp = vscode.l10n.t("How to restore");
-	void vscode.window
-		.showWarningMessage(
-			vscode.l10n.t(
-				"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
-				count,
-			),
-			restoreHelp,
-		)
-		.then((choice) => {
-			if (choice === restoreHelp) {
-				return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
-			}
-			return undefined;
-		})
-		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
-		.then(undefined, (error) => {
-			logger.error("sync", "Empty-source guidance failed", {
-				...formatError(error),
-			});
-		});
+	return {
+		kind: "source-emptied",
+		detail: vscode.l10n.t(
+			"Sync skipped {0} file(s): the source has no body text while the translation still does. The translation was left untouched. Restore the source, or delete the translation file if you meant to start over.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} file(s) skipped because the source is empty", count),
+		action: {
+			label: vscode.l10n.t("How to restore"),
+			run: () => vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL)),
+		},
+	};
 }
 
 /**
  * 訳文が空で同期を中止したことを伝える（ADR-260806-02）。
  * 中止したこと自体より「状態は守られている・作り直すならファイルを消す」を伝えるのが目的。
  */
-function notifyTargetEmptied(count: number): void {
+function targetEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	void vscode.window.showWarningMessage(
-		vscode.l10n.t(
+	return {
+		kind: "target-emptied",
+		detail: vscode.l10n.t(
 			"Sync skipped {0} file(s): the translation has no body text. Its translation state was kept, so pasting the text back restores it. Delete the translation file if you meant to start over.",
 			count,
 		),
-	);
+		summary: vscode.l10n.t("{0} file(s) skipped because the translation is empty", count),
+	};
 }
 
 /**
  * 新しく孤立した訳文があることを伝える。
  * 状態はツリーに出ているので、ここでは件数と入口だけを渡す（ux.md §3.3）。
  */
-function notifyNewOrphans(count: number): void {
+function newOrphansNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
-		return;
+		return undefined;
 	}
-	const showLabel = vscode.l10n.t("Show in mdait");
-	void vscode.window
-		.showWarningMessage(
-			vscode.l10n.t(
-				"{0} translation(s) no longer have a source file. They were kept, not deleted — check them in the mdait view.",
-				count,
-			),
-			showLabel,
-		)
-		.then((choice) => {
-			if (choice === showLabel) {
-				return vscode.commands.executeCommand("mdait.status.focus");
-			}
-			return undefined;
-		})
-		// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する
-		.then(undefined, (error) => {
-			logger.error("sync", "Orphan notification failed", { ...formatError(error) });
-		});
+	return {
+		kind: "new-orphans",
+		detail: vscode.l10n.t(
+			"{0} translation(s) no longer have a source file. They were kept, not deleted — check them in the mdait view.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} translation(s) lost their source file", count),
+		action: {
+			label: vscode.l10n.t("Show in mdait"),
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/**
+ * 自動削除を見送って確認待ちにしたことを伝える。
+ * 「何も起きなかったように見える」ので必ず伝える。状態はツリー（need:verify-deletion の
+ * ユニット）に出るので、ここでは件数と入口だけを示す。
+ */
+function deletionWithheldNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "deletion-withheld",
+		detail: vscode.l10n.t(
+			"Sync did not delete {0} translated unit(s) whose source disappeared all at once — this often means the source failed to parse (an unclosed code fence, or a changed sync.level). They are kept and marked for your confirmation. Fix the source and sync again to restore them.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} unit(s) kept for your confirmation instead of being deleted", count),
+		action: {
+			label: vscode.l10n.t("Show units"),
+			// VS Code が view id から自動生成するフォーカスコマンド
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/** 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6） */
+function orphanDeletedNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "orphan-deleted",
+		detail: vscode.l10n.t(
+			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
+		action: {
+			label: vscode.l10n.t("How to restore"),
+			run: () => vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL)),
+		},
+	};
 }
 
 /**
@@ -443,6 +479,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				}
 			}
 
+			// VS Code の外で動かされたファイルを、本文の hash で行と結び直す（P04）。
+			// **ワーカーより前に置く。** sync がそのファイルを処理してしまうと、行の無い訳文の
+			// 全ユニットが「新規」と判定されて need:translate が書かれ、結び直す相手が消える
+			await relinkMovedFilesForPair(config, pair, files, fileExplorer);
+
 			// CPUコア数に基づく並列処理制限
 			const parallelCpuLimit = Math.max(1, Math.min(os.cpus()?.length ?? 4, 8));
 			// align 有効時は AI レート制限に配慮して逐次実行する（review 経路と整合）
@@ -555,9 +596,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				configuredDirs,
 				scannedDirs: [...scannedDirs],
 				seenPaths,
-				// 実体がそこにあり原文だけ消えている訳文の行は消さない（ADR-260806-01）。
-				// 消すと孤立を可視化する材料（from / need）ごと失われる
-				isOrphanTarget: createRelativeOrphanTargetProbe(config),
+				// **ファイルが実体としてそこに在るなら消さない。** 走査の一覧に載らない理由は
+				// 消えたことだけではない（ignoredPatterns で外した・trans.extensions から
+				// 拡張子を外した・原文が消えて訳文だけ残った）。消すと from が失われ、
+				// 除外を解いた瞬間に人の訳が need:translate に戻る（ADR-260806-01 / -260810-02）
+				fileExists: createRelativeExistsProbe(),
 			});
 			if (orphansRemoved > 0) {
 				logger.info("sync", "Cleaned up orphan unit-state entries", {
@@ -639,46 +682,13 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			);
 		}
 
-		// 自動削除を見送った場合は「何も起きなかったように見える」ので必ず伝える。
-		// ux.md §3.3 では通知に載せてよいのは「実行の結果と、結果に対する次の一手」。
-		// これは sync の実行結果そのもの（＝訳文を消さずに確認待ちにした）なので通知が正しい。
-		// 状態はツリー（need:verify-deletion のユニット）に出るので、ここでは件数と入口だけを示す。
-		// 明示実行の sync だけが出す（autoSyncOnSave は syncSingleFile 経由で通知を出さない）。
-		if (totalOrphanDeletionWithheld > 0) {
-			const showList = vscode.l10n.t("Show units");
-			void vscode.window
-				.showWarningMessage(
-					vscode.l10n.t(
-						"Sync did not delete {0} translated unit(s) whose source disappeared all at once — this often means the source failed to parse (an unclosed code fence, or a changed sync.level). They are kept and marked for your confirmation. Fix the source and sync again to restore them.",
-						totalOrphanDeletionWithheld,
-					),
-					showList,
-				)
-				.then((choice) => {
-					if (choice === showList) {
-						// VS Code が view id から自動生成するフォーカスコマンド
-					return vscode.commands.executeCommand("mdait.status.focus");
-					}
-					return undefined;
-				})
-				.then(undefined, (error) => {
-					logger.error("sync", "Withheld-deletion guidance failed", {
-						...formatError(error),
-					});
-				});
-		}
-
-		// 「空になった側には触らない」を守って中止したファイルは、黙って見送らずに伝える。
-		// 原文が空（ADR-260803-06。訳文消失の予防: P6）と訳文が空（ADR-260806-02。
-		// 翻訳の状態の保護）は別の事故なので、通知も別々に出す
-		notifySourceEmptied(totalSourceEmptied);
-		notifyTargetEmptied(totalTargetEmptied);
-
-		// 孤立の印を測り直し、新しく孤立したものがあるときだけ伝える（ADR-260806-01）。
-		// 測り直しは失敗しても sync の成否には関わらないので、握って握りつぶさずログに残す
+		// 孤立の印を測り直す（ADR-260806-01）。
+		// 測り直しは失敗しても sync の成否には関わらないので、握りつぶさずログに残す
+		let freshOrphans = 0;
 		try {
 			const { orphans, scoped } = await refreshOrphanFlags(config, [...scannedTargetDirsAbs], statusManager);
 			const fresh = updateOrphanMemory(orphans, scoped);
+			freshOrphans = fresh.length;
 			if (fresh.length > 0) {
 				logger.info("sync", "Translations without a source file", {
 					paths: fresh.slice(0, 20),
@@ -686,37 +696,24 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 					total: orphans.size,
 				});
 			}
-			notifyNewOrphans(fresh.length);
 		} catch (error) {
 			logger.error("sync", "Orphan re-check failed", { ...formatError(error) });
 		}
 
-		// 孤立ユニットを削除した場合は復旧導線を示す（訳文消失への気づき: P6）
-		// こちらも同様に fire-and-forget（await すると処理中フラグが残る）。
-		if (config.getOrphanTargetPolicy() === "delete" && totalDeleted > 0) {
-			const restoreHelp = vscode.l10n.t("How to restore");
-			void vscode.window
-				.showWarningMessage(
-					vscode.l10n.t(
-						"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
-						totalDeleted,
-					),
-					restoreHelp,
-				)
-				.then((choice) => {
-					if (choice === restoreHelp) {
-						return vscode.env.openExternal(vscode.Uri.parse(TROUBLESHOOTING_URL));
-					}
-					return undefined;
-				})
-				// VS Code の Thenable には .catch が無いため .then の第2引数で拒否を捕捉する。
-				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
-				.then(undefined, (error) => {
-					logger.error("sync", "Orphan restore guidance failed", {
-						...formatError(error),
-					});
-				});
-		}
+		// ふつうと違うできごとをまとめて渡し、**出し方は showSyncNotices が決める**
+		// （1件なら個別に、2件以上なら1本に。ux.md §3.3 の「変化の気づきは1箇所に集約する」）。
+		// 明示実行の sync だけが出す（autoSyncOnSave は syncSingleFile 経由）。
+		showSyncNotices(
+			[
+				deletionWithheldNotice(totalOrphanDeletionWithheld),
+				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
+				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
+				sourceEmptiedNotice(totalSourceEmptied),
+				targetEmptiedNotice(totalTargetEmptied),
+				newOrphansNotice(freshOrphans),
+				config.getOrphanTargetPolicy() === "delete" ? orphanDeletedNotice(totalDeleted) : undefined,
+			].filter((notice): notice is SyncNotice => notice !== undefined),
+		);
 
 		return {
 			totalFileCount,
@@ -767,6 +764,113 @@ function collectConfiguredDirs(config: Configuration): string[] {
 		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
 	}
 	return [...dirs];
+}
+
+/**
+ * VS Code の外で動かされたファイルを、本文の hash で `unit-state` の行と結び直す（P04）。
+ *
+ * エディタ上の移動は `rename-follow.ts` がイベントで拾うが、git・CLI・外部エクスプローラでの
+ * 移動はイベントが来ない。そのとき「行はあるがファイルが無いパス」と「ファイルはあるが行が
+ * 無い訳文」が同時にでき、そのまま sync すると後者の全ユニットが新規と判定されて
+ * `need:translate` になる（＝次の翻訳で人の訳が潰れる）。
+ *
+ * 突き合わせる相手は**このペアの訳文だけ**に絞る。未翻訳の訳文は原文の丸写しなので、
+ * 原文を混ぜると原文の行が旧訳文へ吸い込まれる（roadmap-v01 の P04）。
+ *
+ * embedded では何もしない（状態が本文にあり、ファイルと一緒に動いているため既に復帰している）。
+ * 非 Markdown の訳文も対象外にする — 行の `hash` はファイル全体の hash で、ユニット単位の
+ * 重なりという判断材料にならない。
+ */
+async function relinkMovedFilesForPair(
+	config: Configuration,
+	pair: TransPair,
+	sourceFiles: readonly string[],
+	fileExplorer: FileExplorer,
+): Promise<void> {
+	if (!config.isExternalMarkers()) {
+		return;
+	}
+	const store = UnitStateStore.getInstance();
+	const absTargetDir = path.resolve(config.getConfigBaseDir(), pair.targetDir);
+	const targetDirRel = toWorkspaceRelativePath(absTargetDir);
+
+	// (1) ファイルはあるが行が1つも無い訳文（＝これから「全部新規」と判定される側）
+	const fresh: NewTargetCandidate[] = [];
+	const freshPaths = new Set<string>();
+	for (const sourceFile of sourceFiles) {
+		const targetFile = fileExplorer.getTargetPath(sourceFile, pair);
+		if (!targetFile || path.extname(targetFile).toLowerCase() !== ".md") {
+			continue;
+		}
+		const targetRel = toWorkspaceRelativePath(targetFile);
+		if (store.countEntriesByPath(targetRel) > 0 || !fs.existsSync(targetFile)) {
+			continue;
+		}
+		const hashes = await readUnitHashes(config, targetFile);
+		if (hashes.size === 0) {
+			continue;
+		}
+		fresh.push({ path: targetRel, hashes });
+		freshPaths.add(targetRel);
+	}
+	if (fresh.length === 0) {
+		return;
+	}
+
+	// (2) 行はあるがファイルが無いパス（このペアの訳文ディレクトリ配下だけ）。
+	//     保留席の行も手がかりに使う — 消えた章の本文 hash はその文書のものである
+	const lostByPath = new Map<string, Set<string>>();
+	for (const entry of store.getAllEntries()) {
+		if (entry.path === targetDirRel || !entry.path.startsWith(`${targetDirRel}/`)) {
+			continue;
+		}
+		if (freshPaths.has(entry.path) || !entry.hash) {
+			continue;
+		}
+		const known = lostByPath.get(entry.path);
+		if (known) {
+			known.add(entry.hash);
+			continue;
+		}
+		if (fs.existsSync(toAbsoluteWorkspacePath(entry.path))) {
+			continue; // ファイルが実在する＝迷子ではない
+		}
+		lostByPath.set(entry.path, new Set([entry.hash]));
+	}
+	if (lostByPath.size === 0) {
+		return;
+	}
+
+	const lost: LostPathCandidate[] = [...lostByPath].map(([p, hashes]) => ({ path: p, hashes }));
+	const plan = planContentRelink(lost, fresh);
+	logRelinkPlan(plan);
+	for (const decision of plan.decisions) {
+		store.movePath(decision.from, decision.to);
+	}
+}
+
+/**
+ * 訳文をパースして、ユニットの本文 hash の集合を返す。
+ *
+ * 行の `hash` 列に入っているのと同じ計算（`calculateHash(unit.content)`）である。
+ * 読み取りだけで、ストアには何も書かない。
+ */
+async function readUnitHashes(config: Configuration, absPath: string): Promise<Set<string>> {
+	const hashes = new Set<string>();
+	try {
+		const io = resolveMarkerIO(config, absPath, "target");
+		const content = new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(absPath)));
+		const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
+		for (const unit of parsed.units) {
+			hashes.add(calculateHash(unit.content));
+		}
+	} catch (error) {
+		logger.warn("sync", "Could not read a translation while looking for files moved outside the editor", {
+			file: absPath,
+			...formatError(error),
+		});
+	}
+	return hashes;
 }
 
 /**
@@ -869,12 +973,22 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 
 		// 原文が空で中止した場合は保存で走る自動同期でも黙らない（ADR-260803-06）。
 		// ただし保存のたびに出さないよう、同じ状態が続くあいだは1回だけにする。
+		// 単一ファイルの経路では同時に2件起きることが無い（1ファイルは原文が空か訳文が空かの
+		// どちらかにしかならない）ので、まとめる余地も無い。出し方の判断は同じ場所へ通す
+		const singleFileNotices: SyncNotice[] = [];
 		if (updateTargetEmptiedMemory(targetFile, syncResult.targetEmptied ?? 0)) {
-			notifyTargetEmptied(syncResult.targetEmptied ?? 0);
+			const notice = targetEmptiedNotice(syncResult.targetEmptied ?? 0);
+			if (notice) {
+				singleFileNotices.push(notice);
+			}
 		}
 		if (updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0)) {
-			notifySourceEmptied(syncResult.sourceEmptied ?? 0);
+			const notice = sourceEmptiedNotice(syncResult.sourceEmptied ?? 0);
+			if (notice) {
+				singleFileNotices.push(notice);
+			}
 		}
+		showSyncNotices(singleFileNotices);
 
 		// 変化の有無でログレベルを切り替え
 		const hasChanges = syncResult.added > 0 || syncResult.modified > 0 || syncResult.deleted > 0;
