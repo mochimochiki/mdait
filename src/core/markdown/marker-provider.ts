@@ -307,7 +307,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			from: marker?.from ?? "",
 			need: marker?.need ?? "",
 		});
-		frontMatter.detachExternalValue(FRONTMATTER_MARKER_KEY);
+		frontMatter.stripExternalValueFromRaw(FRONTMATTER_MARKER_KEY);
 	}
 
 	/**

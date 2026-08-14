@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { FrontMatter } from "../../core/markdown/front-matter";
+import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
@@ -158,6 +159,21 @@ export function embedFileMarkers(
 	const aligned = alignEntriesToUnits(entries, parsed.units, untrusted);
 	const embeddedEntries = new Set<UnitStateEntry>();
 
+	// 外部ストアの frontmatter マーカーを本文側の表現へ戻す。
+	// `attachFrontMatter` が「置き場所は外部」と印を付けているので、外さないと
+	// `stringify` がこのキーを書き出さず、マーカーが黙って消える。
+	// frontmatter そのものが無いファイルには書き戻す先が無いので、行を残す
+	// （消す側の失敗は取り返しがつかない）。
+	const frontEntry = store.getFrontMatterEntry(relPath);
+	const frontEmbedded = Boolean(frontEntry && parsed.frontMatter);
+	if (frontEmbedded) {
+		parsed.frontMatter?.unmarkExternalKey(FRONTMATTER_MARKER_KEY);
+	} else if (frontEntry) {
+		logger.warn("markers", "Kept the frontmatter unit-state entry: the file has no frontmatter to write it back into", {
+			file: relPath,
+		});
+	}
+
 	// store にエントリの無いユニット（本文のユニット数がエントリ数より多い場合など）には
 	// マーカー行を出力しない。hash 空のままだと本文へ空スタブ `<!-- mdait -->` が
 	// 書き込まれてしまう。マーカーは次回 sync が正しく付与する（自己修復）。
@@ -178,6 +194,10 @@ export function embedFileMarkers(
 	const changed = out !== content;
 	if (changed) {
 		fs.writeFileSync(absPath, out, "utf-8");
+	}
+
+	if (frontEmbedded) {
+		store.removeFrontMatterEntry(relPath);
 	}
 
 	const orphanedEntries = entries.filter((e) => !embeddedEntries.has(e));
@@ -228,14 +248,17 @@ export function reconcileMarkerModeForFile(
 
 	if (config.isExternalMarkers()) {
 		// 目標: 本文に unit マーカーが無い。埋め込み残存を検出したら externalize する。
-		// 安価な事前判定: 正しく外部化済みなら本文に "<!-- mdait" は一切現れない
-		// （frontmatter マーカーは YAML キーで、HTML コメントではない）。
-		if (!content.includes("<!-- mdait")) {
+		// 安価な事前判定: 正しく外部化済みなら本文に "<!-- mdait" も frontmatter の
+		// `mdait:` キーも現れない。**frontmatter マーカーも外部化の対象**なので、
+		// HTML コメントだけを見て抜けると原文にマーカーが残ったままになる（P05）。
+		if (!content.includes("<!-- mdait") && !content.includes("mdait:")) {
 			return false;
 		}
 		// コードブロック内のサンプルマーカーは境界にならないため、権威判定は parse 結果で行う。
 		const parsed = markdownParser.parse(content, config, embeddedMarkerProvider);
-		if (!parsed.units.some((u) => Boolean(u.marker?.hash))) {
+		const hasUnitMarker = parsed.units.some((u) => Boolean(u.marker?.hash));
+		const hasFrontMarker = Boolean(parseFrontmatterMarker(parsed.frontMatter));
+		if (!hasUnitMarker && !hasFrontMarker) {
 			return false;
 		}
 		// 実効 sync.level が 0（完全手動マーカー配置。frontmatter の mdait.sync.level 上書きを含む）の
@@ -265,15 +288,16 @@ export function reconcileMarkerModeForFile(
 	// store に本ファイルのエントリが在る＝直前まで external だった痕跡。
 	// かつ本文にマーカーが無い場合のみ embed（本文にマーカーが在れば既に embedded 済み）。
 	const entries = store.getEntriesByPath(relPath);
-	if (entries.length === 0) {
+	const frontEntry = store.getFrontMatterEntry(relPath);
+	if (entries.length === 0 && !frontEntry) {
 		return false;
 	}
 	const embeddedParse = markdownParser.parse(content, config, embeddedMarkerProvider);
 	if (embeddedParse.units.some((u) => Boolean(u.marker?.hash))) {
 		return false;
 	}
-	if (embeddedParse.units.length === 0) {
-		// 本文にユニットが1つも無いので書き戻す先が無い。ここで抜けないと、行が残る限り
+	if (embeddedParse.units.length === 0 && !(frontEntry && embeddedParse.frontMatter)) {
+		// 本文にも frontmatter にも書き戻す先が無い。ここで抜けないと、行が残る限り
 		// この条件は永久に真のままで、sync のたびに parse + 突き合わせ + stringify を空回りする
 		return false;
 	}

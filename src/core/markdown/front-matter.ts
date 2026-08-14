@@ -333,6 +333,23 @@ export class FrontMatter {
 	}
 
 	/**
+	 * このキーの置き場所を「外部」から戻す（embedded へ書き戻すとき）。
+	 *
+	 * 印が付いたままだと `_raw` を作り直してもこのキーは書き出されず、**黙って消える**。
+	 * 値が `_data` に載っているなら、その場で `_raw` を作り直して本文側の表現に戻す。
+	 *
+	 * @param key ドットパス（例: "mdait.front"）
+	 */
+	unmarkExternalKey(key: string): void {
+		if (!this._externalKeys.delete(key)) {
+			return;
+		}
+		if (this.has(key)) {
+			this._updateRaw();
+		}
+	}
+
+	/**
 	 * 外部ストア由来の値を `_data` にだけ載せる（`_raw` は触らない）。
 	 *
 	 * external マーカーでは frontmatter マーカーの置き場所は `unit-state` であり、
@@ -362,24 +379,26 @@ export class FrontMatter {
 	}
 
 	/**
-	 * 外部ストアへ移した値を `_data` から外す。
+	 * 外部へ持ち出したキーを `_raw` から取り除く。**`_data` には残す。**
 	 *
-	 * `_raw` には元々書かれていないので触らない。例外は、**ファイルにマーカーが
-	 * 書かれたまま残っている**ワークスペース（external へ移る前から在るもの）で、
-	 * そのときだけ該当行を `_raw` から取り除く。作り直すのではなく行を消すのは、
-	 * 他のキーの書式を1バイトも動かさないためである。
+	 * 残すのは2つの理由による。(1) 同じ文書を2度書き出す経路がある（翻訳の後始末など）。
+	 * 消してしまうと2度目に「マーカーが無い」と読まれ、外部ストアの行がそのまま消える。
+	 * (2) 書き出したあとに frontmatter を読む側（ステータス収集など）が、モードによって
+	 * 見えたり見えなかったりする状態を作らない。ユニット側の `detachMarkers` も
+	 * `unit.marker` を残しており、それに揃える。
+	 *
+	 * `_raw` に現れるのは、**ファイルにマーカーが書かれたまま残っている**ワークスペース
+	 * （external へ移る前から在るもの）だけである。作り直すのではなく行を消すのは、
+	 * 他のキーの書式を1バイトも動かさないため。
 	 *
 	 * @param key ドットパス（例: "mdait.front"）
 	 */
-	detachExternalValue(key: string): void {
+	stripExternalValueFromRaw(key: string): void {
 		const keys = key.split(".").filter((k) => k.length > 0);
 		if (keys.length === 0) {
 			return;
 		}
 		this.markExternalKey(key);
-		// 空になった親を畳む処理を二重に持たないよう、消す処理そのものは delete() を使う
-		// （外部キーとして印が付いているので `_raw` は作り直されない）
-		this.delete(key);
 		this._removeNestedKeyFromRaw(keys);
 	}
 

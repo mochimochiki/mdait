@@ -25,7 +25,7 @@ import {
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { UnitStateStore, isFrontMatterEntry } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
@@ -826,6 +826,13 @@ async function relinkMovedFilesForPair(
 			continue;
 		}
 		if (freshPaths.has(entry.path) || !entry.hash) {
+			continue;
+		}
+		if (isFrontMatterEntry(entry)) {
+			// 手がかりは**本文の** hash に限る（ADR-260810-01）。frontmatter の hash は
+			// 本文ユニットの hash と一致しようがないので、混ぜると分母だけが1増え、
+			// 本文が2ユニットのファイルは 2/3 = 0.667 で閾値 0.7 を割って結び直せなくなる。
+			// 「その path の行が在る」ことは迷子の証拠なので、走査からは外さない
 			continue;
 		}
 		const known = lostByPath.get(entry.path);

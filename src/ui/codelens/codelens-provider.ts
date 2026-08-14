@@ -80,9 +80,15 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			// ワークスペースがない場合などは無視
 		}
 
-		// FrontMatterクラスを使って正確なfrontmatter範囲を取得
 		const content = document.getText();
-		const { frontMatter } = FrontMatter.parse(content);
+
+		// frontmatter マーカーの置き場所はモードで変わる（external では .mdait/unit-state）。
+		// 素の `FrontMatter.parse` は external でマーカーを見失い、CodeLens のボタンが
+		// 黙って消える。管理下 Markdown は必ず resolveMarkerIO を通して読む（ADR-260801-01）。
+		// embedded ではマーカーが本文にあるため、行スキャンで足りる従来どおりの経路を残す
+		const io = resolveMarkerIO(config, document.uri.fsPath, isSourceFile ? "source" : "target");
+		const parsed = config.isExternalMarkers() ? markdownParser.parse(content, config, io.provider, io.ctx) : undefined;
+		const frontMatter = parsed ? parsed.frontMatter : FrontMatter.parse(content).frontMatter;
 
 		// frontmatter内のmdait.frontマーカーを検出（FrontMatterクラスの範囲情報を利用）
 		if (frontMatter && !frontMatter.isEmpty() && frontMatter.has(FRONTMATTER_MARKER_KEY)) {
@@ -95,9 +101,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		}
 
 		// external: 本文にマーカーが無いため、パースしてユニットの開始行に CodeLens を配置する
-		if (config.isExternalMarkers()) {
-			const io = resolveMarkerIO(config, document.uri.fsPath, isSourceFile ? "source" : "target");
-			const parsed = markdownParser.parse(content, config, io.provider, io.ctx);
+		if (parsed) {
 			for (const unit of parsed.units) {
 				if (token.isCancellationRequested) {
 					return [];

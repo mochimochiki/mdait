@@ -427,9 +427,13 @@ async function phase7() {
 	// 訳文側で行が多いファイルを選ぶ（閾値まわりの挙動を見たいので4行以上）。
 	// 原文側の行は hash を本文から再計算できるため、消えても sync が作り直してしまい
 	// 「状態を失った」ことが観測できない。守りたいのは from/need を持つ訳文側の行である。
+	const { isFrontMatterEntry } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
 	const rowsPerPath = {};
 	for (const e of store.getAllEntries()) {
 		if (!e.path.endsWith(".md")) continue;
+		// 見たいのは「本文のユニットが何行あるか」（刈り取り閾値の話）なので、
+		// 本文の並びに属さない frontmatter の行は数えない
+		if (isFrontMatterEntry(e)) continue;
 		rowsPerPath[e.path] = rowsPerPath[e.path] || { total: 0, withFrom: 0 };
 		rowsPerPath[e.path].total++;
 		if (e.from !== "") rowsPerPath[e.path].withFrom++;

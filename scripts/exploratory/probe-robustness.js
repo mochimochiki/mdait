@@ -48,6 +48,8 @@ const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-sta
 const { UnitRegistryManager } = require(path.join(REPO, "out/core/unit-registry/unit-registry-manager.js"));
 const { StatusManager } = require(path.join(REPO, "out/core/status/status-manager.js"));
 const { buildRenameFollowEdit, completeRenameFollow } = require(path.join(REPO, "out/commands/markers/rename-follow.js"));
+const { MdaitMarker } = require(path.join(REPO, "out/core/markdown/mdait-marker.js"));
+const { serializeFrontmatterMarker } = require(path.join(REPO, "out/core/markdown/frontmatter-translation.js"));
 
 /** dir 配下を再帰走査し、dir からの相対パス（/区切り）を返す（run-sweep.js の walk に揃える） */
 function walkRelative(dir, base = dir, out = []) {
@@ -229,12 +231,23 @@ function unitsOf(rel) {
 }
 
 /**
- * frontmatter マーカー（`mdait: front:` 行）の中身を返す。無ければ null。
- * frontmatter マーカーは external でもファイル側（frontmatter 内）に残るため、本文ユニットとは別に見る。
+ * frontmatter マーカーの中身を「モードに依らない形」で返す。無ければ null。
+ *
+ * 置き場所はモードで変わる（embedded はファイルの frontmatter、external は
+ * `.mdait/unit-state` の予約席）。ファイルを直に読むと external 側だけ常に null になり、
+ * **全シナリオが「想定外の差」に化ける**。比べたいのは保管形式ではなく結果なので、
+ * `unitsOf` と同じく置き場所を吸収してから比べる。
  */
 function frontMarker(rel) {
 	const abs = path.join(CONTENT, rel);
 	if (!fs.existsSync(abs)) return null;
+	if (Configuration.getInstance().isExternalMarkers()) {
+		const key = path.relative(WS, abs).split(path.sep).join("/");
+		const entry = UnitStateStore.getInstance().getFrontMatterEntry(key);
+		if (!entry) return null;
+		// 表示の形は embedded 側（frontmatter に書かれる文字列）に揃える
+		return serializeFrontmatterMarker(new MdaitMarker(entry.hash, entry.from || null, entry.need || null));
+	}
 	const lines = fs.readFileSync(abs, "utf8").split("\n");
 	if (lines[0] !== "---") return null;
 	for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
