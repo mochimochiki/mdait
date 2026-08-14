@@ -248,10 +248,16 @@ export function reconcileMarkerModeForFile(
 
 	if (config.isExternalMarkers()) {
 		// 目標: 本文に unit マーカーが無い。埋め込み残存を検出したら externalize する。
-		// 安価な事前判定: 正しく外部化済みなら本文に "<!-- mdait" も frontmatter の
-		// `mdait:` キーも現れない。**frontmatter マーカーも外部化の対象**なので、
-		// HTML コメントだけを見て抜けると原文にマーカーが残ったままになる（P05）。
-		if (!content.includes("<!-- mdait") && !content.includes("mdait:")) {
+		// 安価な事前判定。ここを通ると markdown-it の全解析に入るので、字面で確実に絞る。
+		// **frontmatter マーカーも外部化の対象**なので、HTML コメントだけを見て抜けると
+		// 原文にマーカーが残ったままになる（P05）。
+		//
+		// ただし `mdait:` だけを見てはいけない。`mdait.sync.level`（ファイル別の見出し
+		// レベル指定）を書いただけのファイルが毎 sync で全解析に入る。frontmatter
+		// マーカーは必ず `front:` を伴うので、両方の字面がある場合だけ先へ進める。
+		const mayHaveUnitMarker = content.includes("<!-- mdait");
+		const mayHaveFrontMarker = content.includes("mdait:") && content.includes("front:");
+		if (!mayHaveUnitMarker && !mayHaveFrontMarker) {
 			return false;
 		}
 		// コードブロック内のサンプルマーカーは境界にならないため、権威判定は parse 結果で行う。

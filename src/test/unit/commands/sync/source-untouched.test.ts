@@ -39,6 +39,22 @@ const SOURCE = [
 	"",
 ].join("\n");
 
+/**
+ * 原文が**バイト列として**変わっていないことを確かめる。
+ *
+ * 文字列に直してから比べると、BOM の有無や改行コードの違いが decode で吸収され、
+ * このテストが主張している「1バイトも変わらない」より弱い検査になる。
+ * 落ちたときだけ文字列に直して差分を出す（バイト列の diff は読めないため）。
+ */
+function assertBytesUnchanged(before: Buffer, filePath: string, message: string): void {
+	const after = fs.readFileSync(filePath);
+	if (after.equals(before)) {
+		return;
+	}
+	assert.strictEqual(after.toString("utf-8"), before.toString("utf-8"), message);
+	assert.fail(`${message}（文字としては同じだが、バイト列が違う）`);
+}
+
 suite("sync: external で原文を書き換えない", () => {
 	let tempDir: string;
 	let sourceFile: string;
@@ -90,7 +106,7 @@ suite("sync: external で原文を書き換えない", () => {
 
 		await syncNew_CoreProc(sourceFile, targetFile, config);
 
-		assert.strictEqual(fs.readFileSync(sourceFile, "utf-8"), before.toString("utf-8"));
+		assertBytesUnchanged(before, sourceFile, "初期同期で原文が書き換わった");
 	});
 
 	test("2回目以降の同期でも原文のバイト列が変わらないこと", async () => {
@@ -101,7 +117,7 @@ suite("sync: external で原文を書き換えない", () => {
 		await sync_CoreProc(sourceFile, targetFile, config);
 		await sync_CoreProc(sourceFile, targetFile, config);
 
-		assert.strictEqual(fs.readFileSync(sourceFile, "utf-8"), before.toString("utf-8"));
+		assertBytesUnchanged(before, sourceFile, "2回目以降の同期で原文が書き換わった");
 	});
 
 	test("frontmatter の翻訳状態が失われないこと（書き換えないことと引き換えにしない）", async () => {

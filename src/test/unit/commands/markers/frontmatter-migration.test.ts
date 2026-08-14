@@ -10,7 +10,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { embedFileMarkers, externalizeFileMarkers } from "../../../../commands/markers/markers-migration";
+import { embedFileMarkers, externalizeFileMarkers, reconcileMarkerModeForFile } from "../../../../commands/markers/markers-migration";
 import { embeddedMarkerProvider, externalMarkerProvider } from "../../../../core/markdown/marker-provider";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
@@ -103,6 +103,18 @@ suite("frontmatter マーカーはモードの往復で失われない", () => {
 		embedFileMarkers(absPath, "target", makeConfig("embedded"), store);
 
 		assert.ok(store.getFrontMatterEntry(relPath), "書き戻す先が無いなら行を消さないこと（消す側の失敗は取り返しがつかない）");
+	});
+
+	test("mdait.sync.level だけを持つファイルは自己修復が触らないこと", () => {
+		// `mdait:` の字面だけで先へ進めると、見出しレベルを指定しただけのファイルが
+		// 毎 sync で markdown-it の全解析に入る。frontmatter マーカーは必ず `front:` を伴う
+		const doc = ["---", "title: Guide", "mdait:", "  sync:", "    level: 2", "---", "", "# Guide", "", "Body.", ""].join("\n");
+		fs.writeFileSync(absPath, doc, "utf-8");
+
+		const changed = reconcileMarkerModeForFile(absPath, "target", makeConfig("external"), store);
+
+		assert.strictEqual(changed, false, "書き換えないこと");
+		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), doc, "内容が変わらないこと");
 	});
 
 	test("frontmatter の行が本文ユニットの並びに混ざらないこと", () => {
