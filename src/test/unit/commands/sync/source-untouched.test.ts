@@ -110,10 +110,17 @@ suite("sync: external で原文を書き換えない", () => {
 
 		// 原文には出ないが、状態そのものはどこかに残っていなければならない。
 		// 残っていなければ「原文を汚さない」と「訳文の確認を促す」が両立していない。
-		const rows = UnitStateStore.getInstance().getAllEntries();
-		assert.ok(
-			rows.some((entry) => entry.path === "en/doc.md" && entry.need === "translate"),
-			"訳文側に frontmatter の翻訳状態が残っていること",
+		const store = UnitStateStore.getInstance();
+		const targetFront = store.getFrontMatterEntry("en/doc.md");
+		assert.ok(targetFront, "訳文側に frontmatter の行があること");
+		assert.strictEqual(targetFront?.need, "translate", "frontmatter がまだ訳されていないと分かること");
+		assert.ok(store.getFrontMatterEntry("ja/doc.md"), "原文側にも frontmatter の行があること");
+
+		// 本文ユニットの並びに混ざっていないこと（混ざると本文ユニットに化ける）
+		assert.strictEqual(
+			store.getEntriesByPath("en/doc.md").length,
+			2,
+			"本文ユニットの行数に frontmatter が数えられないこと",
 		);
 	});
 

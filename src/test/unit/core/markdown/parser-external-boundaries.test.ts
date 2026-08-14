@@ -15,6 +15,8 @@ const externalLikeProvider = {
 	markersFormBoundaries: false,
 	attachMarkers: () => {},
 	detachMarkers: () => {},
+	attachFrontMatter: () => {},
+	detachFrontMatter: () => {},
 };
 
 suite("parser external 境界生成（markersFormBoundaries=false）", () => {

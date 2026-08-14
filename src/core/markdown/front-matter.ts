@@ -19,6 +19,14 @@ export class FrontMatter {
 	private _nonMdaitRaw: string;
 	/** set()で変更されたnon-mdaitトップレベルキー（これらは_dataから再生成される） */
 	private _modifiedNonMdaitKeys: Set<string>;
+	/**
+	 * 置き場所が外部（`unit-state`）にあるキー（ドットパス）。
+	 *
+	 * `_data` には載せるが `_raw` には**一度も書かない**。読み手が `get()` で引ける形を
+	 * 保ちながら、ファイルには出さないための区別である。`_updateRaw()` を通して消す形に
+	 * すると、mdait 以外のキーの書式（空行の位置など）が再現されずに崩れる。
+	 */
+	private _externalKeys: Set<string>;
 
 	/**
 	 * フロントマターの開始行番号（0ベース、通常0）
@@ -45,6 +53,7 @@ export class FrontMatter {
 		endLine = 0,
 		nonMdaitRaw = "",
 		modifiedNonMdaitKeys?: Set<string>,
+		externalKeys?: Set<string>,
 	) {
 		this._data = data;
 		this._raw = raw;
@@ -52,6 +61,7 @@ export class FrontMatter {
 		this.endLine = endLine;
 		this._nonMdaitRaw = nonMdaitRaw;
 		this._modifiedNonMdaitKeys = modifiedNonMdaitKeys ?? new Set();
+		this._externalKeys = externalKeys ?? new Set();
 	}
 
 	/**
@@ -219,7 +229,12 @@ export class FrontMatter {
 			this._modifiedNonMdaitKeys.add(topLevelKey);
 		}
 
-		this._updateRaw();
+		// 置き場所が外部のキーは _raw に出ないので、作り直す理由が無い。
+		// 作り直すと mdait 以外のキーの書式（空行の位置）が再現されず、
+		// 「マーカーは書いていないのに原文が変わった」という形の書き換えになる
+		if (!this._externalKeys.has(key)) {
+			this._updateRaw();
+		}
 	}
 
 	/**
@@ -298,7 +313,124 @@ export class FrontMatter {
 			}
 		}
 
-		this._updateRaw();
+		if (!this._externalKeys.has(key)) {
+			this._updateRaw();
+		}
+	}
+
+	/**
+	 * このキーの置き場所は外部（`unit-state`）だと記録する。
+	 *
+	 * 以後 `_raw` を作り直すときにこのキーは書き出されない。値を載せる前に呼んでおく
+	 * 必要がある — 載せてから別の `set()` が走ると、その時点で `_raw` へ漏れる。
+	 *
+	 * @param key ドットパス（例: "mdait.front"）
+	 */
+	markExternalKey(key: string): void {
+		if (key.length > 0) {
+			this._externalKeys.add(key);
+		}
+	}
+
+	/**
+	 * 外部ストア由来の値を `_data` にだけ載せる（`_raw` は触らない）。
+	 *
+	 * external マーカーでは frontmatter マーカーの置き場所は `unit-state` であり、
+	 * ファイルの frontmatter には現れてはならない。それでも `_data` に載せるのは、
+	 * 読み手（ツリー・CodeLens・need の解決）が `get()` でマーカーを引くためである。
+	 *
+	 * @param key ドットパス（例: "mdait.front"）
+	 * @param value 載せる値
+	 */
+	attachExternalValue(key: string, value: string): void {
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			return;
+		}
+		this.markExternalKey(key);
+		// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+		let current: any = this._data;
+		for (let i = 0; i < keys.length - 1; i++) {
+			const k = keys[i];
+			const existing = current[k];
+			if (typeof existing !== "object" || existing === null || Array.isArray(existing)) {
+				current[k] = {};
+			}
+			current = current[k];
+		}
+		current[keys[keys.length - 1]] = value;
+	}
+
+	/**
+	 * 外部ストアへ移した値を `_data` から外す。
+	 *
+	 * `_raw` には元々書かれていないので触らない。例外は、**ファイルにマーカーが
+	 * 書かれたまま残っている**ワークスペース（external へ移る前から在るもの）で、
+	 * そのときだけ該当行を `_raw` から取り除く。作り直すのではなく行を消すのは、
+	 * 他のキーの書式を1バイトも動かさないためである。
+	 *
+	 * @param key ドットパス（例: "mdait.front"）
+	 */
+	detachExternalValue(key: string): void {
+		const keys = key.split(".").filter((k) => k.length > 0);
+		if (keys.length === 0) {
+			return;
+		}
+		this.markExternalKey(key);
+		// 空になった親を畳む処理を二重に持たないよう、消す処理そのものは delete() を使う
+		// （外部キーとして印が付いているので `_raw` は作り直されない）
+		this.delete(key);
+		this._removeNestedKeyFromRaw(keys);
+	}
+
+	/**
+	 * `_raw` から、指定したドットパスのキーの行を取り除く（他の行は1バイトも動かさない）。
+	 *
+	 * 末尾のキー名だけで探すと無関係なトップレベルキーの下の同名キーに当たるので、
+	 * 先頭のキーのブロックに入ってから探す。取り除いた結果その親が空になるなら
+	 * 親の行も落とす（`mdait:` だけが残った状態を作らない）。
+	 */
+	private _removeNestedKeyFromRaw(keys: string[]): void {
+		if (!this._raw || keys.length < 2) {
+			return;
+		}
+		const [top] = keys;
+		const leaf = keys[keys.length - 1];
+		const lines = this._raw.split(/\r?\n/);
+		const kept: string[] = [];
+		let topLineIndex = -1;
+		let topChildCount = 0;
+		let inTop = false;
+		let removed = false;
+		for (const line of lines) {
+			const indent = line.search(/\S/);
+			const trimmed = line.trim();
+			if (indent === 0 && trimmed !== "" && trimmed !== "---") {
+				inTop = trimmed.startsWith(`${top}:`);
+				if (inTop) {
+					topLineIndex = kept.length;
+					topChildCount = 0;
+				}
+				kept.push(line);
+				continue;
+			}
+			if (inTop && indent > 0) {
+				if (!removed && new RegExp(`^${leaf}\\s*:`).test(trimmed)) {
+					removed = true;
+					continue;
+				}
+				topChildCount++;
+			}
+			kept.push(line);
+		}
+		if (!removed) {
+			return;
+		}
+		// 子が1つも残らなかった親（`mdait:` だけの行）は落とす
+		if (topLineIndex >= 0 && topChildCount === 0) {
+			kept.splice(topLineIndex, 1);
+		}
+		this._raw = kept.join("\n");
 	}
 
 	/**
@@ -354,12 +486,56 @@ export class FrontMatter {
 	 * （不要な再フォーマットを避ける。マーカー値そのものの差分は set() 経由で常に整合するため対象外）。
 	 */
 	reconcileRaw(): void {
-		const hasMarkerInData =
-			typeof this._data === "object" && this._data !== null && "mdait" in this._data;
+		const hasMarkerInData = Object.keys(this._mdaitForRaw()).length > 0;
 		const hasMarkerInRaw = /(^|\n)\s*mdait:/.test(this._raw);
 		if (hasMarkerInData !== hasMarkerInRaw) {
 			this._updateRaw();
 		}
+	}
+
+	/**
+	 * `_raw` に書き出すべき mdait 部分（置き場所が外部のキーを除いたもの）。
+	 *
+	 * 除いた結果 `mdait` が空になるなら、`mdait:` という見出しごと出さない。
+	 */
+	private _mdaitForRaw(): FrontMatterData {
+		const { mdait } = separateMdaitData(this._data);
+		if (this._externalKeys.size === 0 || Object.keys(mdait).length === 0) {
+			return mdait;
+		}
+		const copy = structuredClone(mdait) as FrontMatterData;
+		for (const key of this._externalKeys) {
+			const keys = key.split(".").filter((k) => k.length > 0);
+			// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+			const path: any[] = [copy];
+			// biome-ignore lint/suspicious/noExplicitAny: フロントマターは任意の階層構造を持つ
+			let current: any = copy;
+			let reachable = true;
+			for (let i = 0; i < keys.length - 1; i++) {
+				const next = current[keys[i]];
+				if (typeof next !== "object" || next === null) {
+					reachable = false;
+					break;
+				}
+				current = next;
+				path.push(current);
+			}
+			if (!reachable) {
+				continue;
+			}
+			delete current[keys[keys.length - 1]];
+			// 空になった親を畳む（`mdait: {}` を出さない）
+			for (let i = keys.length - 2; i >= 0; i--) {
+				const parent = path[i];
+				const child = parent[keys[i]];
+				if (typeof child === "object" && child !== null && !Array.isArray(child) && Object.keys(child).length === 0) {
+					delete parent[keys[i]];
+				} else {
+					break;
+				}
+			}
+		}
+		return copy;
 	}
 
 	/**
@@ -373,8 +549,9 @@ export class FrontMatter {
 			return;
 		}
 
-		// mdait部分とnon-mdait部分を分離
-		const { mdait, nonMdait } = separateMdaitData(this._data);
+		// mdait部分とnon-mdait部分を分離。置き場所が外部のキーは _raw に書かない
+		const { nonMdait } = separateMdaitData(this._data);
+		const mdait = this._mdaitForRaw();
 
 		// mdait部分が空でnon-mdait部分もない場合
 		if (Object.keys(mdait).length === 0 && Object.keys(nonMdait).length === 0) {
@@ -437,6 +614,7 @@ export class FrontMatter {
 			this.endLine,
 			this._nonMdaitRaw,
 			new Set(this._modifiedNonMdaitKeys),
+			new Set(this._externalKeys),
 		);
 	}
 }

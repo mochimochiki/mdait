@@ -13,6 +13,7 @@ import {
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
@@ -27,7 +28,7 @@ import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-mana
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
-import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
@@ -1029,6 +1030,33 @@ export async function syncSingleFile(filePath: string): Promise<void> {
  * @param config 設定
  * @returns 差分検出結果
  */
+/**
+ * 原文の書き戻し。**external では書かない。**
+ *
+ * external ではマーカーの置き場所が `.mdait/unit-state` なので、原文の中身に mdait の
+ * 状態は1つも乗っていない。書き戻す理由が無いのに書き戻すと、`stringify` の連結規則
+ * （frontmatter の直後に空行を置かない等）で原文が静かに整形され、
+ * 「原文を1文字も書き換えない」という external の約束（ADR-260802-04）が破れる。
+ *
+ * `stringify` そのものは external でも必ず通す。ユニットと frontmatter のマーカーを
+ * ストアへ引き取る（detach）唯一の経路がここだからである。
+ *
+ * 既に frontmatter マーカーが書かれている既存のワークスペースは、この関数ではなく
+ * sync の自己修復（`reconcileMarkerModeForFile`）が1回だけ書き換えて取り除く。
+ */
+async function persistSourceDocument(
+	sourceFile: string,
+	doc: Markdown,
+	io: MarkerIO,
+	config: Configuration,
+): Promise<void> {
+	const content = markdownParser.stringify(doc, io.provider, io.ctx);
+	if (config.isExternalMarkers()) {
+		return;
+	}
+	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), new TextEncoder().encode(content));
+}
+
 export async function syncNew_CoreProc(
 	sourceFile: string,
 	targetFile: string,
@@ -1102,16 +1130,16 @@ export async function syncNew_CoreProc(
 		}
 	}
 
-	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない）
-	const updatedSourceContent = markdownParser.stringify(
+	// 5. ソースファイルもマーカー付きで更新（need,fromは付与しない。external では書かない）
+	await persistSourceDocument(
+		sourceFile,
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
 		},
-		sourceIO.provider,
-		sourceIO.ctx,
+		sourceIO,
+		config,
 	);
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 6. DiffResultを返す（isolate で target 出力から除外したユニットは追加に数えない）
 	const diffs: UnitDiff[] = exportedSourceUnits.map((u) => ({
@@ -1389,18 +1417,17 @@ export async function sync_CoreProc(
 	const encoder = new TextEncoder();
 	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
 
-	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存
+	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存（external では書かない）
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
-	const updatedSourceContent = markdownParser.stringify(
+	await persistSourceDocument(
+		sourceFile,
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
 		},
-		sourceIO.provider,
-		sourceIO.ctx,
+		sourceIO,
+		config,
 	);
-
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), encoder.encode(updatedSourceContent));
 
 	// 差分に応じたアセットコピー（有効/無効・ホワイトリストの解決は asset-copier 側で実施）
 	await copyDiffAssets({
