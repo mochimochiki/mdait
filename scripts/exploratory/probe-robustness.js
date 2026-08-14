@@ -82,6 +82,65 @@ function unitStateRows() {
 }
 
 /**
+ * 原文が置かれているディレクトリ（絶対パス）。
+ *
+ * ピボット構成（ja→en, en→fr）の中間言語は原文であると同時に訳文でもあるので外す。
+ * そちらは mdait が書き換えてよいファイルで、「書き換えていないこと」を求める対象ではない。
+ */
+function sourceDirsOf(pairs) {
+	const list = pairs || DEFAULT_PAIRS;
+	const targets = new Set(list.map((p) => path.normalize(p.targetDir)));
+	const dirs = [];
+	for (const p of list) {
+		const norm = path.normalize(p.sourceDir);
+		if (targets.has(norm)) continue;
+		const abs = path.join(WS, norm);
+		if (!dirs.includes(abs)) dirs.push(abs);
+	}
+	return dirs;
+}
+
+/** 原文ファイルのバイト列を控える */
+function snapshotSources(pairs) {
+	const snap = new Map();
+	for (const dir of sourceDirsOf(pairs)) {
+		if (!fs.existsSync(dir)) continue;
+		for (const rel of walkRelative(dir)) {
+			const abs = path.join(dir, rel);
+			snap.set(abs, fs.readFileSync(abs));
+		}
+	}
+	return snap;
+}
+
+/** 見つかった書き換えを溜める。scenario が名前を付けて absoluteFailures へ移す */
+let sourceRewrites = [];
+
+/**
+ * 「external で原文が1バイトも書き換わらない」を全シナリオで見る絶対チェック
+ * （roadmap-v01 の P05 / ADR-260802-04 のゴールそのもの）。
+ *
+ * embedded は原文にマーカーを書くのが仕様なので external のときだけ見る。
+ * マーカーの有無ではなく**バイト列**を比べる — 空行の入れ方や改行コードが変わる形の
+ * 書き換えは、原稿を預ける相手にとってマーカーの混入と同じ「勝手に書き換わった」である。
+ *
+ * 消えた・動いたファイルは書き換えではないので見ない（シナリオ側の操作の結果）。
+ * モードの往復のように**原文を書き換えること自体が目的**の操作は allow で外す。
+ */
+async function withSourceIntact(mode, pairs, allow, fn) {
+	if (mode !== "external" || allow) return fn();
+	const before = snapshotSources(pairs);
+	const result = await fn();
+	for (const [abs, bytes] of before) {
+		if (!fs.existsSync(abs)) continue;
+		if (fs.readFileSync(abs).equals(bytes)) continue;
+		const rel = path.relative(WS, abs).split(path.sep).join("/");
+		if (!sourceRewrites.includes(rel)) sourceRewrites.push(rel);
+	}
+	return result;
+}
+
+/**
  * VS Code のエクスプローラでの移動を模す（段階2 / roadmap-v01 の P02）。
  *
  * 実運用ではファイルは `onWillRenameFiles` の `waitUntil` に返した WorkspaceEdit で動く。
@@ -689,7 +748,7 @@ async function bootstrap(mode, src, pairs, extraSources, extensions) {
 	// 原文をもう1本置くシナリオ用（「ディレクトリの中身の数で挙動が変わる」を測れるようにする）
 	for (const [rel, text] of Object.entries(extraSources || {})) write(rel, text);
 	await t("setMode", () => setMode(mode, pairs || DEFAULT_PAIRS, extensions));
-	await t("sync1", () => syncCommand());
+	await t("sync1", () => withSourceIntact(mode, pairs || DEFAULT_PAIRS, false, () => syncCommand()));
 	installFakeAi();
 	// 全ペアの訳文をすべて翻訳しておく（多言語シナリオの fr 側や、原文が複数あるときの2本目も）
 	for (const p of pairs || DEFAULT_PAIRS) {
@@ -717,6 +776,7 @@ async function scenario(name, mutate, opts) {
 	// 先頭トークン（S3 など）で厳密一致。S3 と S30 が衝突しないよう前方一致にはしない
 	if (ONLY && !ONLY.includes(name.split(" ")[0])) return;
 	for (const mode of ["embedded", "external"]) {
+		sourceRewrites = [];
 		await bootstrap(
 			mode,
 			opts && opts.src,
@@ -733,23 +793,25 @@ async function scenario(name, mutate, opts) {
 			origLog(`  mutate error: ${e && e.message}`);
 		}
 		if (opts && opts.reloadConfig) await setMode(mode, opts.pairs, opts.reloadExtensions);
-		await syncCommand();
-		// 冪等性の確認用: 何も変えずに sync を追加で回す
-		for (let i = 0; i < ((opts && opts.extraSyncs) || 0); i++) await syncCommand();
-		if (opts && opts.transAfter) {
-			installFakeAi();
-			for (const rel of opts.transAfter) {
-				const abs = path.join(CONTENT, rel);
-				if (fs.existsSync(abs)) {
-					try {
-						await transCommand(vscode.Uri.file(abs));
-					} catch (e) {
-						origLog(`  trans error: ${e && e.message}`);
+		await withSourceIntact(mode, opts && opts.pairs, opts && opts.allowSourceRewrite, async () => {
+			await syncCommand();
+			// 冪等性の確認用: 何も変えずに sync を追加で回す
+			for (let i = 0; i < ((opts && opts.extraSyncs) || 0); i++) await syncCommand();
+			if (opts && opts.transAfter) {
+				installFakeAi();
+				for (const rel of opts.transAfter) {
+					const abs = path.join(CONTENT, rel);
+					if (fs.existsSync(abs)) {
+						try {
+							await transCommand(vscode.Uri.file(abs));
+						} catch (e) {
+							origLog(`  trans error: ${e && e.message}`);
+						}
 					}
 				}
+				await syncCommand();
 			}
-			await syncCommand();
-		}
+		});
 		const after = {
 			files: walkRelative(CONTENT)
 				.filter((f) => f.endsWith(".md"))
@@ -765,6 +827,12 @@ async function scenario(name, mutate, opts) {
 		for (const f of after.files) origLog(`  ${fmtUnits(f).split("\n").join("\n  ")}`);
 		if (mode === "external") origLog(`  --- unit-state ---\n${after.us.replace(/^/gm, "  ")}`);
 		// 絶対チェック（両モードが同じように壊れても気づけるように、結果そのものを見る）
+		for (const rel of sourceRewrites) {
+			const msg = `external なのに原文が書き換わった: ${rel}`;
+			absoluteFailures.push(`${name} / ${mode}: ${msg}`);
+			origLog(`  [絶対チェック失敗] ${msg}`);
+		}
+		sourceRewrites = [];
 		if (opts && opts.expect) {
 			for (const msg of opts.expect({ read, mode }) || []) {
 				absoluteFailures.push(`${name} / ${mode}: ${msg}`);
