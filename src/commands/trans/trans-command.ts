@@ -515,7 +515,12 @@ async function transFile_Exclusive(
 		//     中断時にその実行の翻訳がすべて失われる）
 		// (2) 対象ファイルの状態をディスクから作り直す（旗・contextValue・ハッシュの
 		//     取り残しを構造的に無くす。個別に旗を下ろす処理は持たない）
-		if (external && (loop?.translated ?? 0) > 0) {
+		// frontmatter だけを訳した場合も保存する。P05a で frontmatter マーカーの置き場所が
+		// `unit-state` へ移ったため、本文のユニットを1つも訳さなかった実行でも
+		// **ストアに書くべき成果がある**。ユニット数だけで判断すると、frontmatter しか
+		// 持たないファイルは訳文がディスクに書かれるのに行は `need:translate` のまま残り、
+		// ツリーは未翻訳のまま、次の翻訳で AI がもう一度訳す（probe S90）
+		if (external && ((loop?.translated ?? 0) > 0 || frontmatterTranslated)) {
 			try {
 				await saveExternalDocument(uri, markdown, io.provider, io.ctx);
 			} catch (error) {
