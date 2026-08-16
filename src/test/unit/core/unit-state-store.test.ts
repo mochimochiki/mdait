@@ -3,9 +3,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	FRONT_MATTER_ORDER,
 	HELD_ORDER_BASE,
 	UnitStateStore,
+	isFrontMatterEntry,
 	isHeldBackEntry,
+	isLiveBodyEntry,
 	isPathInDirs,
 	shouldRemoveEntryPath,
 } from "../../../core/unit-state/unit-state-store";
@@ -1014,6 +1017,71 @@ suite("UnitStateStore", () => {
 			reloaded.load(tempDir);
 			assert.strictEqual(reloaded.countEntriesByPath("content/en/guide.md"), 0);
 			assert.strictEqual(reloaded.getEntry("content/en/handbook.md", 0)?.need, "review");
+		});
+	});
+
+	suite("行の種別（本文・保留席・frontmatter）の見分け", () => {
+		const rel = "content/en/guide.md";
+
+		function bodyEntry(order: number): UnitStateEntry {
+			return { path: rel, order, level: 1, titleHash: "t", hash: `h${order}`, from: "f", need: "" };
+		}
+
+		test("frontmatter の行は本文の行でも保留席でもないこと", () => {
+			const fm: UnitStateEntry = {
+				path: rel,
+				order: FRONT_MATTER_ORDER,
+				level: 0,
+				titleHash: "",
+				hash: "fh",
+				from: "sf",
+				need: "",
+			};
+			assert.strictEqual(isFrontMatterEntry(fm), true);
+			assert.strictEqual(isHeldBackEntry(fm), false, "保留席より上だが席ではない");
+			assert.strictEqual(isLiveBodyEntry(fm), false, "本文の位置を持たない");
+		});
+
+		test("保留席の行は本文の行ではないこと", () => {
+			const held: UnitStateEntry = {
+				path: rel,
+				order: HELD_ORDER_BASE,
+				level: 1,
+				titleHash: "t",
+				hash: "hh",
+				from: "f",
+				need: "",
+			};
+			assert.strictEqual(isHeldBackEntry(held), true);
+			assert.strictEqual(isLiveBodyEntry(held), false, "意味は持つが位置は持たない");
+			assert.strictEqual(isFrontMatterEntry(held), false);
+		});
+
+		test("countBodyEntriesByPath が frontmatter の行を数えないこと", () => {
+			// 「訳文に守るべき状態が残っているか」を全行で数えると、frontmatter しか
+			// 持たない訳文が常に1以上になり、原文にあとから足した章が永久に現れなくなる
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setFrontMatterEntry(rel, { hash: "fh", from: "sf", need: "translate" });
+
+			assert.strictEqual(store.countEntriesByPath(rel), 1, "全行では1");
+			assert.strictEqual(store.countBodyEntriesByPath(rel), 0, "本文の行は0");
+			assert.strictEqual(store.countLiveEntriesByPath(rel), 0);
+		});
+
+		test("countBodyEntriesByPath は保留席を数に入れ、countLiveEntriesByPath は入れないこと", () => {
+			// 席の行は「消えた章の from / need を預かっている」＝守るべき状態そのものなので、
+			// 状態の有無を問うときは数える。位置の話（末尾を刈るか）のときだけ外す
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(bodyEntry(0));
+			store.setEntry(bodyEntry(1));
+			store.setFrontMatterEntry(rel, { hash: "fh", from: "sf", need: "" });
+			store.parkEntries(rel, [1]);
+
+			assert.strictEqual(store.countEntriesByPath(rel), 3, "本文1 + 席1 + frontmatter1");
+			assert.strictEqual(store.countBodyEntriesByPath(rel), 2, "本文1 + 席1");
+			assert.strictEqual(store.countLiveEntriesByPath(rel), 1, "本文1のみ");
 		});
 	});
 });

@@ -25,7 +25,7 @@ import {
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore, isFrontMatterEntry } from "../../core/unit-state/unit-state-store";
+import { UnitStateStore, isLiveBodyEntry } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
@@ -804,7 +804,9 @@ async function relinkMovedFilesForPair(
 			continue;
 		}
 		const targetRel = toWorkspaceRelativePath(targetFile);
-		if (store.countEntriesByPath(targetRel) > 0 || !fs.existsSync(targetFile)) {
+		// 「まだ行を持っていない訳文か」の問いなので本文の行だけを見る。frontmatter の行の
+		// 有無で候補から外れると、結び直せるはずのファイルが静かに落ちる
+		if (store.countBodyEntriesByPath(targetRel) > 0 || !fs.existsSync(targetFile)) {
 			continue;
 		}
 		const hashes = await readUnitHashes(config, targetFile);
@@ -819,7 +821,6 @@ async function relinkMovedFilesForPair(
 	}
 
 	// (2) 行はあるがファイルが無いパス（このペアの訳文ディレクトリ配下だけ）。
-	//     保留席の行も手がかりに使う — 消えた章の本文 hash はその文書のものである
 	const lostByPath = new Map<string, Set<string>>();
 	for (const entry of store.getAllEntries()) {
 		if (entry.path === targetDirRel || !entry.path.startsWith(`${targetDirRel}/`)) {
@@ -828,11 +829,18 @@ async function relinkMovedFilesForPair(
 		if (freshPaths.has(entry.path) || !entry.hash) {
 			continue;
 		}
-		if (isFrontMatterEntry(entry)) {
-			// 手がかりは**本文の** hash に限る（ADR-260810-01）。frontmatter の hash は
-			// 本文ユニットの hash と一致しようがないので、混ぜると分母だけが1増え、
-			// 本文が2ユニットのファイルは 2/3 = 0.667 で閾値 0.7 を割って結び直せなくなる。
-			// 「その path の行が在る」ことは迷子の証拠なので、走査からは外さない
+		if (!isLiveBodyEntry(entry)) {
+			// 手がかりは「**いまの本文に在るはずの** hash」に限る（ADR-260810-01）。
+			// 被覆率は「旧行の hash のうちいまの本文に残っている割合」なので、いまの本文に
+			// 在りようのない hash を混ぜると分母だけが増えて閾値 0.7 を割る。
+			//
+			// - frontmatter の行: 本文ユニットの hash と一致しようがない。本文2ユニットの
+			//   ファイルは 2/3 = 0.667 で落ちる
+			// - 保留席の行: 「消えたきり戻ってこなかった章」の hash なので、定義からして
+			//   いまの本文に無い。章を2つ消した4ユニットのファイルは 4/6 = 0.667 で落ちる
+			//   （probe S89）
+			//
+			// どちらも「その path の行が在る」ことは迷子の証拠なので、走査からは外さない
 			continue;
 		}
 		const known = lostByPath.get(entry.path);
@@ -1278,7 +1286,11 @@ export async function sync_CoreProc(
 	// 「空のファイルを置いて sync で埋める」という従来どおりの使い方を妨げない。
 	// embedded は状態が本文にしか無く、本文が空なら守る対象そのものが存在しないため
 	// この段には掛からない（＝挙動は変わらない）。
-	const storedEntryCount = targetRel === undefined ? 0 : UnitStateStore.getInstance().countEntriesByPath(targetRel);
+	// 数えるのは**本文の行**だけである。frontmatter の行は本文が1つも無くても在りうるので
+	// （P05a で置き場所が unit-state へ移った）、全部を数えると frontmatter しか無い訳文が
+	// 常に「状態が残っている」と読まれ、原文にあとから足した章が永久に訳文へ現れない（probe S90）
+	const storedEntryCount =
+		targetRel === undefined ? 0 : UnitStateStore.getInstance().countBodyEntriesByPath(targetRel);
 	if (target.units.length === 0 && source.units.length > 0 && storedEntryCount > 0) {
 		logger.warn("sync", "Target has no units while its state is still on record; skipped to avoid losing it", {
 			sourceFile,
