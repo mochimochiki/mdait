@@ -27,9 +27,33 @@ const EXPECTED_COLUMN_COUNT = 7;
  */
 export const HELD_ORDER_BASE = 1_000_000;
 
-/** 保留席に居る（＝いまの本文に対応する場所が無い）行か */
+/**
+ * frontmatter マーカー（`mdait.front`）の行の `order`。1ファイルに1つだけ。
+ *
+ * frontmatter は本文の並びに属さないので、本文ユニットの `order`（0..N-1）とも
+ * 保留席（`HELD_ORDER_BASE` 以降）とも重ならない席をここに予約する。列を増やすと
+ * 既存の `unit-state` が警告付きで全行スキップされる（7列固定）ため、目印は既存の
+ * 列の中に作る必要がある。
+ *
+ * 保留席より**上**に置くのが要点である。末尾の刈り取り・保留への退避はどちらも
+ * `order < HELD_ORDER_BASE` の行だけを対象にするので、ここに居る限り
+ * 「ユニットが減った」という理由で消されることが構造的に起こらない。
+ */
+export const FRONT_MATTER_ORDER = 2_000_000;
+
+/** frontmatter マーカーの行か */
+export function isFrontMatterEntry(entry: UnitStateEntry): boolean {
+	return entry.order === FRONT_MATTER_ORDER;
+}
+
+/**
+ * 保留席に居る（＝いまの本文に対応する場所が無い）行か。
+ *
+ * frontmatter の行は order が桁で見れば保留席より上だが、席ではない。除かないと
+ * 本文 hash の一致で本文ユニットへ拾われうるし、席の採番が毎回その上へ逃げていく。
+ */
 export function isHeldBackEntry(entry: UnitStateEntry): boolean {
-	return entry.order >= HELD_ORDER_BASE;
+	return entry.order >= HELD_ORDER_BASE && !isFrontMatterEntry(entry);
 }
 
 /**
@@ -407,7 +431,7 @@ export class UnitStateStore {
 		let nextSeat = HELD_ORDER_BASE;
 		const seatByHash = new Map<string, number>();
 		for (const entry of rows.values()) {
-			if (entry.order >= HELD_ORDER_BASE) {
+			if (isHeldBackEntry(entry)) {
 				nextSeat = Math.max(nextSeat, entry.order + 1);
 				if (entry.hash) {
 					seatByHash.set(entry.hash, entry.order);
@@ -513,10 +537,56 @@ export class UnitStateStore {
 		return count;
 	}
 
-	/** 指定パスのエントリをorder昇順で返す（attachMarkers用） */
+	/**
+	 * 指定パスの**本文の行**を order 昇順で返す（attachMarkers 用）。
+	 *
+	 * frontmatter の行は含めない。呼び出し側はどれも「本文ユニットの並び」を欲しがって
+	 * いて、混ざると本文ユニットに化ける。frontmatter が要るときは
+	 * `getFrontMatterEntry` を名指しで呼ぶ — 取り違えたときに黙って壊れるより、
+	 * 呼び忘れて何も出ないほうが気づける。
+	 */
 	getEntriesByPath(filePath: string): UnitStateEntry[] {
 		this.autoLoad();
-		return [...(this.rowsOf(filePath)?.values() ?? [])].sort((a, b) => a.order - b.order);
+		return [...(this.rowsOf(filePath)?.values() ?? [])]
+			.filter((entry) => !isFrontMatterEntry(entry))
+			.sort((a, b) => a.order - b.order);
+	}
+
+	/** 指定パスの frontmatter マーカーの行（無ければ undefined） */
+	getFrontMatterEntry(filePath: string): UnitStateEntry | undefined {
+		this.autoLoad();
+		return this.rowsOf(filePath)?.get(FRONT_MATTER_ORDER);
+	}
+
+	/**
+	 * 指定パスの frontmatter マーカーの行を書く。
+	 *
+	 * `hash` が空なら行を消す（マーカーが消えた状態を空の行として残さない）。
+	 */
+	setFrontMatterEntry(filePath: string, marker: { hash: string; from: string; need: string }): void {
+		this.autoLoad();
+		if (!marker.hash) {
+			this.removeFrontMatterEntry(filePath);
+			return;
+		}
+		this.ensureRows(filePath).set(FRONT_MATTER_ORDER, {
+			path: filePath,
+			order: FRONT_MATTER_ORDER,
+			level: 0,
+			titleHash: "",
+			hash: marker.hash,
+			from: marker.from,
+			need: marker.need,
+		});
+		this.dirty = true;
+	}
+
+	/** 指定パスの frontmatter マーカーの行を消す */
+	removeFrontMatterEntry(filePath: string): void {
+		this.autoLoad();
+		if (this.deleteRow(filePath, FRONT_MATTER_ORDER)) {
+			this.dirty = true;
+		}
 	}
 
 	/** need != '' のエントリ一覧 */

@@ -35,7 +35,9 @@ graph TD
 P00[P00: 3分割と掃除の是正<br/>完了] --> P01[P01: 孤立訳文の可視化<br/>完了]
 P01 --> P02[P02: リネームにペアで追随<br/>完了]
 P02 --> P04[P04: 内容による再リンク<br/>完了]
-P04 --> P05[P05: frontmatter 外部化と既定化]
+P04 --> P05a[P05a: frontmatter の外部化<br/>完了]
+P05a --> R[敵対的レビュー<br/>#98 / #99 / #100 の積み残し]
+R --> P05b[P05b: 既定を external にする]
 P01 -.->|前提ではない| P03[P03: ユニット単位の状態喪失<br/>完了]
 ```
 
@@ -135,7 +137,7 @@ embedded は貼り戻しで完全復帰するのでモード差の欠陥であ�
 ### P04: 内容によるファイル再リンク ※完了（§20）
 
 **Why**
-VS Code の外（git・エクスプローラ・CLI）で動かされたファイルは P02 では拾えない。P05 で frontmatter まで
+VS Code の外（git・エクスプローラ・CLI）で動かされたファイルは P02 では拾えない。P05a で frontmatter まで
 外部化すると、Markdown は mdait の痕跡を1文字も持たなくなるため、内容が唯一の手がかりになる。
 
 **WHAT**
@@ -150,31 +152,77 @@ order 再割当）を先に定式化する。**未翻訳の訳文は原文の丸
 
 ---
 
-### P05: frontmatter の外部化と external の既定化
+### P05a: frontmatter の外部化 ※完了（§25 / ADR-260814-01）
 
 **Why**
-ADR-260802-04 のゴール。external でも frontmatter マーカーは全ファイルの先頭に残っており、
-「原文は初回同期でも1文字も書き換わらない」はまだ達成できていない。
+external でも frontmatter マーカーは全ファイルの先頭に残っており、「原文は初回同期でも1文字も
+書き換わらない」（ADR-260802-04）はまだ達成できていなかった。
 
 **WHAT**
-frontmatter マーカーを `unit-state` へ退避し、新規セットアップのテンプレート既定を `markers.mode: external`
-にする。既存ワークスペースは据え置き。7列固定の形式にバージョンを入れるならこの段階で行う
-（ADR-260805-02 で「形式バージョニングが入るなら限界費用がほぼゼロ」として再訪を約束した項目がここに集まる）。
+frontmatter マーカーを `unit-state` の**予約した order**（`FRONT_MATTER_ORDER` = 2,000,000。
+保留席より上）へ移す。列は増やさない — 7列固定を破ると既存ファイルが警告付きで全行スキップされる。
+出し入れは `MarkerProvider` の `attachFrontMatter` / `detachFrontMatter` に載せ、本文ユニットと
+同じ仕組みに相乗りさせる。**形式バージョニングは入れない**（列を増やさない道を選んだ時点で、
+この段階に集める理由が消えた。ADR-260805-02 の再訪は先送り）。
+
+**Steps**
+- [x] 検証を先に置く（probe の大域絶対チェック＋ CI で回る単体テスト。置いた時点では赤い）
+- [x] 予約 order と `isFrontMatterEntry`。保留席の判定・採番・本文の行の取得から外す
+- [x] `FrontMatter` に `_raw` を触らない経路（`_externalKeys`）。`set()`/`delete()` は外部キーで `_updateRaw()` を呼ばない
+- [x] external では sync が原文を書き戻さない（`stringify` は行の引き取りのために必ず通す）
+- [x] Externalize / Embed の双方向でマーカーを運ぶ。自己修復の早期判定も frontmatter を見る
+- [x] CodeLens の素の `FrontMatter.parse` を `resolveMarkerIO` 経由へ（ADR-260801-01）
+- [x] 内容による再リンクの手がかりから frontmatter 行を外す
+- [x] probe の frontmatter 読み取りをモード非依存にする
 
 **Gates**
-- [ ] external で原文が1バイトも書き換わらない
-- [ ] 既存ワークスペースの `unit-state` が読めなくならない（形式の移行）
-- [ ] probe の `想定外の差 0` を維持したまま既定を切り替えられる
+- [x] external で原文が1バイトも書き換わらない（単体＋ probe 全シナリオの絶対チェック）
+- [x] 既存ワークスペースの `unit-state` が読めなくならない（列を増やさないので該当しない）
+- [x] probe の `想定外の差 0` を維持（一致 72 / 想定内の差 6 / 想定外の差 0 / 絶対チェック失敗 0）
+- [x] モードの往復で frontmatter の翻訳状態が失われない（単体）
+
+---
+
+### P05b: 新規セットアップの既定を external にする
+
+**Why**
+ADR-260802-04 のゴール。P05a で「原文を書き換えない」は達成できたので、あとは既定を倒すだけ。
+
+**WHAT**
+`assets/mdait.template.json` に `"markers": { "mode": "external" }` を足す。**`Configuration` の
+既定（`resetToDefaults()`）は `embedded` のまま**にする。既存ワークスペースの `mdait.json` には
+`markers` キーが無いので、テンプレートだけを触れば据え置きが自動的に成り立つ。
+あわせて `settings-doc.ts` の「'embedded' (default)」という説明を書き換え、`npm run l10n` で再生成する。
+
+**Why not `Configuration` の既定**
+既定そのものを倒すと、`markers` キーを持たない既存ワークスペースが一斉に external になり、
+本文に埋まっているマーカーがただのコメント文字列として扱われる。probe も `setMode("embedded")` で
+`markers` キーを消して既定に頼っているため（`probe-robustness.js`）、embedded 側の測定が
+external になり、**突き合わせが全件「一致」になって、測っていないのに緑になる**。
+
+**この段階の前に置くもの**
+未消化の敵対的レビュー（PR #98 は3体中1体のみ完走、#99 と #100 は0周）。既定を倒した瞬間に
+P02（リネーム追随）・P03（保留席）・P04（再リンク）の欠陥が**これから使い始める全員の既定の経路**に
+なるため、関所はここに置く。レビューの単位は PR 差分ではなく **`unit-state` / `marker-provider` /
+sync の掃除と再リンクというモジュール単位**とする（#100 が #98・#99 のコードを部分的に作り替えており、
+差分に書かれた形はもう `main` に無い）。
+
+**Gates**
+- [ ] 新規セットアップの `mdait.json` に `markers.mode: external` が書かれている
+- [ ] `markers` キーを持たない既存ワークスペースが embedded のまま動く
+- [ ] probe の embedded 側が embedded のまま測れている（`setMode` の明示指定）
+- [ ] 設定UIの説明と l10n が既定の変更に追随している
 
 ## Gates
 
-- [ ] 新規セットアップの既定が `markers.mode: external` になっている
+- [ ] 新規セットアップの既定が `markers.mode: external` になっている（P05b）
 - [ ] external が embedded に対して弱い項目が `docs/design/unit-state.md` §6 の表から消えている
-- [ ] probe が `想定外の差 0`、絶対チェックの失敗0で通る
+- [x] probe が `想定外の差 0`、絶対チェックの失敗0で通る
+- [x] external で原文が1バイトも書き換わらない（P05a）
 
 ## Notes
 
-- 段階番号は `docs/design/unit-state.md` §7 の段階表と対応する（P01=段階1、P02=段階2、P04=段階4、P05=段階5）。
+- 段階番号は `docs/design/unit-state.md` §7 の段階表と対応する（P01=段階1、P02=段階2、P04=段階4、P05a/P05b=段階5）。
   段階3（並べ合わせの作り直し）はロードマップから外し、その一部（保留席の基準）だけを P03 として技術債に移した。
 - **原文への `id` 1行は書かない**（§7 の 2026-08-05 決定）。再訪条件は「P04 を入れたあと、実運用で
   再リンクが決められず孤立のまま残る事例が観測されたら」。

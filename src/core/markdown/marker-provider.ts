@@ -3,6 +3,12 @@ import { calculateHash } from "../hash/hash-calculator";
 import { isSuspiciousShrink } from "../matching/shrink-guard";
 import { alignEntriesToUnits } from "../unit-state/unit-state-align";
 import { type UnitStateEntry, UnitStateStore, isHeldBackEntry } from "../unit-state/unit-state-store";
+import type { FrontMatter } from "./front-matter";
+import {
+	FRONTMATTER_MARKER_KEY,
+	parseFrontmatterMarker,
+	serializeFrontmatterMarker,
+} from "./frontmatter-translation";
 import { MdaitMarker } from "./mdait-marker";
 import type { MdaitUnit } from "./mdait-unit";
 
@@ -76,6 +82,16 @@ export interface MarkerProvider {
 	attachMarkers(units: MdaitUnit[], ctx?: MarkerFileContext): void;
 	/** stringify 前: ユニットからマーカーを引き取り永続化する（embedded は no-op） */
 	detachMarkers(units: MdaitUnit[], ctx?: MarkerFileContext): void;
+	/**
+	 * parse 後: frontmatter マーカーを外部ストアから後付けする（embedded は no-op）。
+	 *
+	 * 本文ユニットと別の入口になっているのは、frontmatter が本文の並びに属さないためで、
+	 * 扱いの原則は同じ。読み手（ツリー・CodeLens・need の解決）は `parse` の返り値の
+	 * frontmatter を見るだけでよく、モードを意識しない。
+	 */
+	attachFrontMatter(frontMatter: FrontMatter | undefined, ctx?: MarkerFileContext): void;
+	/** stringify 前: frontmatter マーカーを引き取り永続化する（embedded は no-op） */
+	detachFrontMatter(frontMatter: FrontMatter | undefined, ctx?: MarkerFileContext): void;
 }
 
 /**
@@ -94,6 +110,14 @@ export class EmbeddedMarkerProvider implements MarkerProvider {
 
 	detachMarkers(): void {
 		/* no-op: MdaitUnit.toString() が埋め込む */
+	}
+
+	attachFrontMatter(): void {
+		/* no-op: マーカーは frontmatter に書き込み済み */
+	}
+
+	detachFrontMatter(): void {
+		/* no-op: frontmatter の raw がそのまま出力される */
 	}
 }
 
@@ -239,6 +263,51 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			}
 		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
+	}
+
+	/**
+	 * frontmatter マーカーをストアから frontmatter オブジェクトへ載せる。
+	 *
+	 * 行が無いときは何もしない。ファイル側に古いマーカーが残っている（外部化する前から
+	 * ある既存のワークスペース）場合はそれがそのまま残り、`detachFrontMatter` が
+	 * ストアへ退避してファイルから消す。**移行はこの往復で済む**ので、移行専用の
+	 * 経路を別に持たない。
+	 */
+	attachFrontMatter(frontMatter: FrontMatter | undefined, ctx?: MarkerFileContext): void {
+		const filePath = ctx?.filePath;
+		if (!filePath || !frontMatter) {
+			return;
+		}
+		// 行の有無に関わらず先に印を付ける。sync はこのあと frontmatter マーカーを
+		// `set()` で書き換えるので、印が無いとその時点で `_raw` へ漏れる
+		frontMatter.markExternalKey(FRONTMATTER_MARKER_KEY);
+		const entry = this.store.getFrontMatterEntry(filePath);
+		if (!entry) {
+			return;
+		}
+		const marker = new MdaitMarker(entry.hash, entry.from || null, entry.need || null);
+		frontMatter.attachExternalValue(FRONTMATTER_MARKER_KEY, serializeFrontmatterMarker(marker));
+	}
+
+	/**
+	 * frontmatter マーカーをストアへ引き取り、frontmatter オブジェクトから外す。
+	 *
+	 * frontmatter そのものが無いファイルでは行に触らない。マーカーを消してよいと
+	 * 判断できるのは「frontmatter を読んだうえでマーカーが無かった」ときだけで、
+	 * 「frontmatter が無い」は読めていないのと同じである（ADR-260810-02 と同じ考え方）。
+	 */
+	detachFrontMatter(frontMatter: FrontMatter | undefined, ctx?: MarkerFileContext): void {
+		const filePath = ctx?.filePath;
+		if (!filePath || !frontMatter) {
+			return;
+		}
+		const marker = parseFrontmatterMarker(frontMatter);
+		this.store.setFrontMatterEntry(filePath, {
+			hash: marker?.hash ?? "",
+			from: marker?.from ?? "",
+			need: marker?.need ?? "",
+		});
+		frontMatter.stripExternalValueFromRaw(FRONTMATTER_MARKER_KEY);
 	}
 
 	/**

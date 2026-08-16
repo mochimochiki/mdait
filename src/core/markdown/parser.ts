@@ -127,6 +127,10 @@ export class MarkdownItParser implements IMarkdownParser {
 	): Markdown {
 		const { frontMatter, content, frontMatterLineOffset } = FrontMatter.parse(markdown);
 
+		// 外部ストアの frontmatter マーカーを載せる（embedded は no-op）。
+		// これより後は、読み手はモードを意識せず frontMatter.get() でマーカーを引ける
+		provider.attachFrontMatter(frontMatter, ctx);
+
 		const fontMaterlevel = frontMatter?.get("mdait.sync.level");
 		const mdaitMarkerLevel = fontMaterlevel ?? config?.sync?.level ?? 2;
 
@@ -539,6 +543,9 @@ export class MarkdownItParser implements IMarkdownParser {
 	stringify(doc: Markdown, provider: MarkerProvider = embeddedMarkerProvider, ctx?: MarkerFileContext): string {
 		// ユニットからマーカーを引き取り永続化する（embedded は no-op）
 		provider.detachMarkers(doc.units, ctx);
+		// frontmatter マーカーも同様に引き取る。**reconcileRaw より前**でなければならない
+		// （reconcileRaw は _data を正として _raw を作り直すので、残っていると書き戻る）
+		provider.detachFrontMatter(doc.frontMatter, ctx);
 
 		if (doc.units.length === 0) {
 			// ユニットがない場合はfrontmatterのみ。
