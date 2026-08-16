@@ -1504,7 +1504,7 @@ async function main() {
 			},
 			{ extraSources: { "ja/twin.md": SRC } },
 		);
-		// S82: S80 と同じ形だが、外で動かしたあと**明示 sync より先に保存が走る**。
+		// S87: S80 と同じ形だが、外で動かしたあと**明示 sync より先に保存が走る**。
 		//      autoSyncOnSave は既定で有効なので、動かしたファイルを開いて保存すれば
 		//      `syncSingleFile` がまず走る。そこに段階4 の再リンクが無いと、行の無い訳文の
 		//      全ユニットが「新規」と判定されて need:translate が書かれ、そのあと明示 sync が
@@ -1518,7 +1518,7 @@ async function main() {
 			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
 			await syncSingleFile(path.join(CONTENT, "ja/handbook.md"));
 		});
-		// S88: S80 と同じ「外で揃えてリネーム」だが、その前に訳文の章を2つ消してある
+		// S89: S80 と同じ「外で揃えてリネーム」だが、その前に訳文の章を2つ消してある
 		//      （＝保留席が2つ立っている）。再リンクの被覆率は「旧行の hash のうち
 		//      いまの本文に残っている割合」で測るが、保留席の行まで分母に入れているため
 		//      4/6 = 0.667 となり閾値 0.7 を割って結び直せない。frontmatter の行を
