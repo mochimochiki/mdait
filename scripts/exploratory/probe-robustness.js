@@ -39,7 +39,7 @@ const CONTENT = path.join(WS, "content");
 const CFG_PATH = path.join(WS, ".mdait/mdait.json");
 const MDAIT = path.join(WS, ".mdait");
 
-const { syncCommand } = require(path.join(REPO, "out/commands/sync/sync-command.js"));
+const { syncCommand, syncSingleFile } = require(path.join(REPO, "out/commands/sync/sync-command.js"));
 const { transCommand } = require(path.join(REPO, "out/commands/trans/trans-command.js"));
 const { markdownParser } = require(path.join(REPO, "out/core/markdown/parser.js"));
 const { Configuration } = require(path.join(REPO, "out/infra/config/configuration.js"));
@@ -1503,6 +1503,46 @@ async function main() {
 				}
 			},
 			{ extraSources: { "ja/twin.md": SRC } },
+		);
+		// S87: S80 と同じ形だが、外で動かしたあと**明示 sync より先に保存が走る**。
+		//      autoSyncOnSave は既定で有効なので、動かしたファイルを開いて保存すれば
+		//      `syncSingleFile` がまず走る。そこに段階4 の再リンクが無いと、行の無い訳文の
+		//      全ユニットが「新規」と判定されて need:translate が書かれ、そのあと明示 sync が
+		//      走っても訳文には行があるので再リンクの候補から外れる（＝手がかりが消える）。
+		//      人の訳が need:translate に戻ると、次の翻訳でそのまま潰される。
+		await scenario("S87 外で揃えてリネーム＋明示 sync の前に保存が走る", async () => {
+			installFakeAi();
+			await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+			await syncCommand();
+			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
+			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
+			await syncSingleFile(path.join(CONTENT, "ja/handbook.md"));
+		});
+		// S89: S80 と同じ「外で揃えてリネーム」だが、その前に訳文の章を2つ消してある
+		//      （＝保留席が2つ立っている）。再リンクの被覆率は「旧行の hash のうち
+		//      いまの本文に残っている割合」で測るが、保留席の行まで分母に入れているため
+		//      4/6 = 0.667 となり閾値 0.7 を割って結び直せない。frontmatter の行を
+		//      分母から外したのと同じ理由（ADR-260810-01）が保留席にも当てはまる。
+		await scenario("S89 保留席がある訳文を外で揃えてリネーム", async () => {
+			installFakeAi();
+			await transCommand(vscode.Uri.file(path.join(CONTENT, "en/guide.md")));
+			await syncCommand();
+			removeChapterAt("en/guide.md", 2);
+			removeChapterAt("en/guide.md", 1);
+			await syncCommand();
+			fs.renameSync(path.join(CONTENT, "ja/guide.md"), path.join(CONTENT, "ja/handbook.md"));
+			fs.renameSync(path.join(CONTENT, "en/guide.md"), path.join(CONTENT, "en/handbook.md"));
+		});
+		// S90: frontmatter しか無い原文にあとから本文の章を足す。訳文側は「ユニット0件」だが
+		//      frontmatter の行が1つ在るため、S68 の守り（訳文が空で状態が残っているなら中止）が
+		//      `countEntriesByPath > 0` で誤発火し、足した章が訳文にいつまでも現れない。
+		//      「行が1つも無いときは素通りする」という前提は、本文の行を数えるつもりで書かれている。
+		await scenario(
+			"S90 frontmatter だけの原文にあとから章を足す",
+			async () => {
+				write("ja/meta.md", ["---", "title: 見出し", "---", "", "# 新しい章", "", "本文。", ""].join("\n"));
+			},
+			{ extraSources: { "ja/meta.md": ["---", "title: 見出し", "---", ""].join("\n") } },
 		);
 
 		// S76: 原文だけをエディタでリネームする（段階2 の本命）。

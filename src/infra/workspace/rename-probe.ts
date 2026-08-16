@@ -14,9 +14,11 @@
  */
 import * as fs from "node:fs";
 import type { PathRename, RenameFollowProbe } from "../../core/unit-state/rename-plan";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../config/configuration";
 import { FileExplorer } from "./file-explorer";
 import { normalizeFileKey } from "./file-key";
+import { toWorkspaceRelativePath } from "./workspace-path";
 
 /**
  * 移動への追随を計画するための probe を作る。
@@ -47,6 +49,17 @@ export function createRenameFollowProbe(config: Configuration, explorer?: FileEx
 		},
 		exists(filePath: string): boolean {
 			return fs.existsSync(filePath);
+		},
+		hasEntriesAt(filePath: string): boolean {
+			// ワークスペース外・未設定なら「知らない」と答える。ここで例外を投げると
+			// ユーザーのリネームごと巻き添えにする（追随は付随的な仕事である）
+			let rel: string;
+			try {
+				rel = toWorkspaceRelativePath(filePath);
+			} catch {
+				return false;
+			}
+			return UnitStateStore.getInstance().hasEntriesAtOrUnder(rel);
 		},
 		sameKey(filePath: string): string {
 			return normalizeFileKey(filePath);

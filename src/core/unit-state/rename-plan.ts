@@ -57,6 +57,15 @@ export interface RenameFollowProbe {
 	deriveTargetRenames(rename: PathRename): PathRename[];
 	/** そのパスに実体があるか（ファイル・ディレクトリを問わない） */
 	exists(path: string): boolean;
+	/**
+	 * そのパス（またはその配下）に `unit-state` の行が既にあるか。
+	 *
+	 * 「mdait が以前から知っている場所か」を問うために要る。移動が済んだあとの世界では
+	 * 「旧パスに無い・新パスに在る」だけでは**動いてきたのか、前から在ったのか**を
+	 * 区別できない（{@link planEntryMoves} を見よ）。ディレクトリの移動も扱うので
+     * 配下まで含めて答えること。
+	 */
+	hasEntriesAt(path: string): boolean;
 	/** 同じ場所を指すパスを同じ文字列にする（重複の排除に使う） */
 	sameKey(path: string): string;
 }
@@ -179,7 +188,26 @@ export function planEntryMoves(renames: readonly PathRename[], probe: RenameFoll
 		if (probe.exists(candidate.oldPath)) {
 			return "skip";
 		}
-		return probe.exists(candidate.newPath) ? "take" : "skip";
+		if (!probe.exists(candidate.newPath)) {
+			return "skip";
+		}
+		// **行き先を mdait が既に知っているなら、そこは「動いてきた先」ではない。**
+		//
+		// 「旧パスに無い・新パスに在る」は、訳文が動いた場合だけでなく
+		// 「旧パスの訳文は前に消されていて、新パスには無関係な訳文が前から在った」
+		// でも成り立つ。実在だけを見て動かすと、`UnitStateStore.movePath` が行き先の行を
+		// 先に全消しするので、**別の文書の from と need が消える**。from は本文から
+		// 計算し直せない唯一の情報なので、消えた瞬間にその訳文は need:translate へ落ちる。
+		//
+		// 連れて動かした訳文なら、行はまだ旧パスに付いている（付け替えるのがこれからの
+		// 仕事である）ので、行き先に行は無い。だからこの条件で本物だけが残る。
+		//
+		// 前段（`planRenameFollow`）は同じ状況を「訳文がまだ無い」として既に見送っている。
+		// 前後で判断が食い違っていたのが元の欠陥だった。
+		if (probe.hasEntriesAt(candidate.newPath)) {
+			return "skip";
+		}
+		return "take";
 	});
 	return [...renames, ...taken];
 }

@@ -13,8 +13,9 @@ import {
  * 実装（前方一致でディレクトリ配下を判定し、相対パスを付け替える）を最小限になぞる。
  * パスは `/` 区切りの相対表記で書く。
  */
-function probeOf(pairs: Array<[string, string]>, existing: string[]): RenameFollowProbe {
+function probeOf(pairs: Array<[string, string]>, existing: string[], known: string[] = []): RenameFollowProbe {
 	const present = new Set(existing);
+	const knownPaths = new Set(known);
 	const under = (p: string, dir: string) => p === dir || p.startsWith(`${dir}/`);
 	const swapDir = (p: string, from: string, to: string) => (p === from ? to : `${to}/${p.substring(from.length + 1)}`);
 	return {
@@ -35,6 +36,7 @@ function probeOf(pairs: Array<[string, string]>, existing: string[]): RenameFoll
 			return derived;
 		},
 		exists: (p) => present.has(p),
+		hasEntriesAt: (p) => [...knownPaths].some((k) => k === p || k.startsWith(`${p}/`)),
 		sameKey: (p) => p,
 	};
 }
@@ -196,6 +198,35 @@ suite("移動のあとに立てる計画（unit-state の行の付け替え）",
 		);
 
 		assert.strictEqual(moves.length, 2);
+	});
+
+	test("行き先に別の訳文の行が既にあるなら、導いた付け替えを見送ること", () => {
+		// 移動前から `content/en/handbook.md` が在り（訳し終えた別の文書）、
+		// `content/en/guide.md` は以前に消されているが行だけ残っている、という世界。
+		// 「旧パスに無く・新パスに在る」は満たしてしまうので、実在だけを見ていると
+		// 移動していないものを移動と誤認し、`movePath` が行き先の行を先に全消しする。
+		// mdait が既に知っている訳文は、いまの移動で生まれたものではない
+		const probe = probeOf(
+			JA_EN,
+			["content/ja/handbook.md", "content/en/handbook.md"],
+			["content/en/guide.md", "content/en/handbook.md"],
+		);
+		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
+
+		assert.deepStrictEqual(
+			moves,
+			[{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }],
+			"ユーザー自身の移動だけが残ること",
+		);
+	});
+
+	test("ユーザー自身の移動は、行き先に行があっても含めること", () => {
+		// 上書きを伴うリネームはユーザーが選んだ結果なので、行もそれに従う。
+		// 見送ってよいのは、こちらが勝手に導いた訳文の付け替えだけである
+		const probe = probeOf(JA_EN, ["content/ja/handbook.md"], ["content/ja/handbook.md"]);
+		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
+
+		assert.deepStrictEqual(moves, [{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }]);
 	});
 
 	test("管理下でないファイルの移動でも、行の付け替えは試みること", () => {

@@ -57,6 +57,22 @@ export function isHeldBackEntry(entry: UnitStateEntry): boolean {
 }
 
 /**
+ * いまの本文の**位置**を持っている行か（＝保留席でも frontmatter でもない）。
+ *
+ * 行には3つの種別がある。`order` の桁で見分けられるが、桁を各所で書き下すと
+ * 種別が1つ増えるたびに全部を直して回ることになり、必ずどこかが取り残される
+ * （実測: P05a で frontmatter の行が増えたとき、数える側が2箇所取り残された）。
+ * 見分けは必ずこの3つの述語を通す。
+ *
+ * - `isLiveBodyEntry` … いまの本文の何番目か、という意味を持つ行
+ * - `isHeldBackEntry` … 保留席。意味は持つが位置は持たない
+ * - `isFrontMatterEntry` … frontmatter。本文の並びに属さない
+ */
+export function isLiveBodyEntry(entry: UnitStateEntry): boolean {
+	return entry.order < HELD_ORDER_BASE;
+}
+
+/**
  * unit-stateエントリ。
  * 非MDファイルは「ファイル＝単一ユニット」（order=0, level=0, titleHash=""）の特殊形、
  * MD-external は同一 path に複数 order 行を持つ。
@@ -513,10 +529,39 @@ export class UnitStateStore {
 		return removed;
 	}
 
-	/** 指定パスのエントリ数を返す（配列を作らない軽い版。刈り取り判定用） */
+	/**
+	 * 指定パスの**すべての**行の数（frontmatter の行も保留席も含む）。
+	 *
+	 * 「そのパスに行が1つでも在るか」を問うときだけ使う。**「訳文に守るべき状態が
+	 * 残っているか」を問うのに使ってはならない** — frontmatter の行は本文が1つも
+	 * 無くても在りうるので、本文の話をしているつもりで数えると常に1以上になる
+	 * （`countBodyEntriesByPath` を使うこと）。
+	 */
 	countEntriesByPath(filePath: string): number {
 		this.autoLoad();
 		return this.rowsOf(filePath)?.size ?? 0;
+	}
+
+	/**
+	 * 指定パスの**本文の行**の数（frontmatter の行を除く。保留席は含む）。
+	 *
+	 * 数え方は `getEntriesByPath` と同じで、配列を作らないだけの版である。
+	 * 「訳文が空になったが状態は残っているか」「この訳文はまだ行を持っていないか」
+	 * といった、**本文ユニットについての問い**はすべてこちらを通す。
+	 *
+	 * 保留席を含めるのは、席の行が「消えた章の from / need を預かっている」＝
+	 * 守るべき状態そのものだからである。位置の話（末尾を刈るか）だけが席を
+	 * 除いて数える（`countLiveEntriesByPath`）。
+	 */
+	countBodyEntriesByPath(filePath: string): number {
+		this.autoLoad();
+		let count = 0;
+		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
+			if (!isFrontMatterEntry(entry)) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	/**
@@ -529,8 +574,8 @@ export class UnitStateStore {
 	countLiveEntriesByPath(filePath: string): number {
 		this.autoLoad();
 		let count = 0;
-		for (const order of this.rowsOf(filePath)?.keys() ?? []) {
-			if (order < HELD_ORDER_BASE) {
+		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
+			if (isLiveBodyEntry(entry)) {
 				count++;
 			}
 		}
@@ -550,6 +595,28 @@ export class UnitStateStore {
 		return [...(this.rowsOf(filePath)?.values() ?? [])]
 			.filter((entry) => !isFrontMatterEntry(entry))
 			.sort((a, b) => a.order - b.order);
+	}
+
+	/**
+	 * そのパス、またはその配下に行があるか（＝mdait が以前から知っている場所か）。
+	 *
+	 * 移動への追随が「行き先は動いてきた先か、前から在った場所か」を見分けるために使う
+	 * （`core/unit-state/rename-plan.ts` の `planEntryMoves`）。ディレクトリの移動も
+	 * 同じ問いになるので配下まで見るが、走査するのは**パスの一覧**であって行の一覧では
+	 * ないため、ワークスペース全体の行数には比例しない。
+	 */
+	hasEntriesAtOrUnder(filePath: string): boolean {
+		this.autoLoad();
+		if ((this.rowsOf(filePath)?.size ?? 0) > 0) {
+			return true;
+		}
+		const prefix = `${filePath}/`;
+		for (const known of this.byPath.keys()) {
+			if (known.startsWith(prefix)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** 指定パスの frontmatter マーカーの行（無ければ undefined） */
