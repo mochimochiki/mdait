@@ -958,6 +958,15 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 			}
 		}
 
+		// VS Code の外で動かされたファイルを、本文の hash で行と結び直す（P04）。
+		// **明示 sync と同じくワーカーより前に置く。** 保存で走るこちらの経路のほうが
+		// 明示 sync より先に来ることが普通にあり（動かしたファイルを開いて直して保存する）、
+		// ここを素通りすると行の無い訳文に need が書かれてしまう。いったん行が付くと
+		// 明示 sync の再リンクは「行がある」を理由に候補から外すので、**手がかりは
+		// 二度と戻らない**（probe S87）。渡す原文はこの1本だけでよい — 結び直しの相手は
+		// そこから導いた訳文1つに絞られ、迷ったら結ばない判断はそのまま効く
+		await relinkMovedFilesForPair(config, matchedPair, [sourceFile], fileExplorer);
+
 		// FileHandlerを使って同期処理を実行
 		// 翻訳・他のsyncと同一ファイルへの書き込みが交錯しないよう排他する
 		const src = sourceFile;
