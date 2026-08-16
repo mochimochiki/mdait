@@ -597,6 +597,28 @@ export class UnitStateStore {
 			.sort((a, b) => a.order - b.order);
 	}
 
+	/**
+	 * そのパス、またはその配下に行があるか（＝mdait が以前から知っている場所か）。
+	 *
+	 * 移動への追随が「行き先は動いてきた先か、前から在った場所か」を見分けるために使う
+	 * （`core/unit-state/rename-plan.ts` の `planEntryMoves`）。ディレクトリの移動も
+	 * 同じ問いになるので配下まで見るが、走査するのは**パスの一覧**であって行の一覧では
+	 * ないため、ワークスペース全体の行数には比例しない。
+	 */
+	hasEntriesAtOrUnder(filePath: string): boolean {
+		this.autoLoad();
+		if ((this.rowsOf(filePath)?.size ?? 0) > 0) {
+			return true;
+		}
+		const prefix = `${filePath}/`;
+		for (const known of this.byPath.keys()) {
+			if (known.startsWith(prefix)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** 指定パスの frontmatter マーカーの行（無ければ undefined） */
 	getFrontMatterEntry(filePath: string): UnitStateEntry | undefined {
 		this.autoLoad();
