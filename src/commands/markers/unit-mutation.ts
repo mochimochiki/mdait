@@ -303,15 +303,26 @@ export interface MarkdownMutationContext {
 }
 
 /**
- * Markdown ファイルの書き換えを実行する（`withFileMutation` の Markdown 版）。
+ * Markdown ファイルの書き換えを実行する（`withFileMutation` の Markdown 版）。**本文を書き換える操作専用。**
  *
  * embedded / external の差異は `resolveMarkerIO` 経由の parse/stringify に乗ることで吸収する。
  * マーカー境界の探索はパーサーに委譲するため、コードブロック内のサンプルマーカーには
  * 誤マッチしない（生の正規表現探索は行わない）。
  *
+ * **どちらの入口を選ぶか。**
+ * - 本文そのものを変える操作（章を消す、段落を書き換える）は **こちら**。
+ *   モードに関わらず書き戻さないと、変更が消える。
+ * - マーカーしか変えない操作（need 解除・Keep・isolate 宣言）は
+ *   `withMarkerOnlyMutation` を通す。こちらを通すと、external でパーサーの整形が
+ *   原稿に焼き付く（改行コードが CRLF から LF に変わる等）。
+ *
+ * 入口を選び間違えると、どちらも**無言で**壊れる。判断の基準は「`mutate` が
+ * `parsed.units` の中身・並びを変えるか」の一点で、マーカー（`unit.marker`）だけを
+ * 触るなら後者である。
+ *
  * **書き戻すのは中身が変わったときだけ**（`changed:true` でも、出来上がりが読み込んだ内容と
- * 同じならファイルには触れない）。external では need 解除・Keep・isolate 宣言が本文を
- * 変えないため、この判定が「原文を1バイトも書き換えない」約束を守る唯一の場所になる。
+ * 同じならファイルには触れない）。無駄な書き込みを減らすための守りで、
+ * 「原文を1バイトも書き換えない」約束そのものは `withMarkerOnlyMutation` が担う。
  *
  * @param absPath 対象ファイルの絶対パス
  * @param config 設定
@@ -321,6 +332,60 @@ export async function withMarkdownMutation<T extends UnitMutationResult>(
 	absPath: string,
 	config: Configuration,
 	mutate: (ctx: MarkdownMutationContext) => Promise<T> | T,
+): Promise<T> {
+	return runMarkdownMutation(absPath, config, mutate, "body");
+}
+
+/**
+ * マーカーしか変えない書き換えを実行する（need 解除・Keep（独立化）・isolate 宣言）。
+ *
+ * **external では絶対にファイルを書かない。** external を選ぶ理由は「原文を1バイトも
+ * 書き換えない」ことであり（ADR-260802-04 / ADR-260814-01）、マーカーがストアにある以上、
+ * これらの操作で本文へ書き戻す理由がそもそも無い。sync の `persistSourceDocument` が
+ * モードで書き込みを止めているのと同じ強さを、この3経路にも与える。
+ *
+ * 「出来上がりが読み込んだ内容と同じなら書かない」という比較では足りない。パーサーを
+ * 通した書き出しは改行コードを LF に揃え、ユニット間の余分な空行を詰め、末尾に改行を足す。
+ * つまり **整形そのものが差分になる**ので、正規形でない原稿では比較が必ず「変わった」と
+ * 答えてしまう（実測: CRLF の原稿は全行が LF に書き換わった）。訳文にも同じことが起きる
+ * ため、「原文なら書かない」でも足りない。
+ *
+ * **`stringify` は external でも必ず呼ぶ。** external ではここで `detachMarkers` が
+ * マーカーをストアへ引き取るため、呼ばないと状態が保存されない。**止めるのは書き込みだけ**。
+ *
+ * embedded ではマーカーが本文にあるので、従来どおり書き戻す。
+ *
+ * **どちらの入口を選ぶか。** 本文（`parsed.units` の中身・並び）を変える操作は
+ * `withMarkdownMutation` を通すこと。本文の変更をこちらに通すと、external で変更が
+ * 無言で消える（ユニットを消したのにファイルに残る）。
+ *
+ * @param absPath 対象ファイルの絶対パス
+ * @param config 設定
+ * @param mutate パース済みドキュメントのマーカーだけを変異させ、結果を返す
+ */
+export async function withMarkerOnlyMutation<T extends UnitMutationResult>(
+	absPath: string,
+	config: Configuration,
+	mutate: (ctx: MarkdownMutationContext) => Promise<T> | T,
+): Promise<T> {
+	return runMarkdownMutation(absPath, config, mutate, "marker-only");
+}
+
+/** その書き換えが本文に及ぶか（書き戻しの要否を決める） */
+type MutationScope = "body" | "marker-only";
+
+/**
+ * `withMarkdownMutation` / `withMarkerOnlyMutation` の共通の中身。
+ *
+ * 読み取り・parse・stringify・ストアへの引き取りは両者で同一で、違うのは
+ * **書き込みを許すかどうか**の一点だけ。ここを1つの関数に閉じ込めておくことで、
+ * 入口が増えても「stringify を呼び忘れる」形の事故が起きない。
+ */
+async function runMarkdownMutation<T extends UnitMutationResult>(
+	absPath: string,
+	config: Configuration,
+	mutate: (ctx: MarkdownMutationContext) => Promise<T> | T,
+	scope: MutationScope,
 ): Promise<T> {
 	const role = resolveFileRole(absPath, config);
 
@@ -344,18 +409,12 @@ export async function withMarkdownMutation<T extends UnitMutationResult>(
 				io.provider,
 				io.ctx,
 			);
-			// **中身が1文字も変わっていなければ書かない。**
-			// external では need 解除・Keep（独立化）・isolate 宣言で本文に変化が無い
-			// （マーカーはストアにある）。それでも書き戻すと、パーサーを通った整形が
-			// そのまま原文に焼き付く — 実測では改行コードが CRLF から LF に変わり、
-			// ユニット間の余分な空行と末尾の空行が消えた。external の存在理由は
-			// 「原文を1バイトも書き換えない」ことなので、これは約束を破っている
-			// （ADR-260802-04 / ADR-260814-01）。
-			//
-			// 判定にモードも原文/訳文も持ち込まない。「external なら書かない」にすると、
-			// external でも本文から章そのものを消す deleteUnit が壊れる（章が消えない）。
-			// 中身の比較はモードに依らず正しく、embedded でも無駄な書き込みが減る。
-			if (updated !== content) {
+			// マーカーしか変えない操作は、external では本文に用が無い。原稿がどう書かれて
+			// いても書かない（比較では止まらない。理由は withMarkerOnlyMutation の JSDoc）
+			const forbidden = scope === "marker-only" && config.isExternalMarkers();
+			// **中身が1文字も変わっていなければ書かない。** 無駄な書き込みを減らす守り。
+			// embedded でも効く（マーカーに変化が無ければ本文はそのまま）。
+			if (!forbidden && updated !== content) {
 				const encoder = new TextEncoder();
 				await vscode.workspace.fs.writeFile(vscode.Uri.file(absPath), encoder.encode(updated));
 			}

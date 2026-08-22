@@ -37,7 +37,7 @@ P01 --> P02[P02: リネームにペアで追随<br/>完了]
 P02 --> P04[P04: 内容による再リンク<br/>完了]
 P04 --> P05a[P05a: frontmatter の外部化<br/>完了]
 P05a --> R[敵対的レビュー<br/>#102 で1周・完了]
-R --> P05b[P05b: 既定を external にする]
+R --> P05b[P05b: 既定を external にする<br/>完了]
 P01 -.->|前提ではない| P03[P03: ユニット単位の状態喪失<br/>完了]
 FM[先頭が --- の文書で sync が落ちる<br/>両モード共通・このロードマップの外] -.->|前提ではない| P05b
 ```
@@ -237,24 +237,29 @@ external になり、**突き合わせが全件「一致」になって、測っ
   ので先に単独で直す。
 
 **Steps**
-- [ ] 原文の書き換えを止める（`withMarkdownMutation` は `stringify` の結果が読んだ内容と同一なら書かない）
-- [ ] probe の絶対チェック「external なのに原文が書き換わった」を、上の4経路まで広げる
-- [ ] `assets/mdait.template.json` に `markers.mode: external` を足す
-- [ ] `settings-doc.ts` の説明を書き換え、`npm run l10n` で再生成する
-- [ ] probe の embedded 側が `setMode("embedded")` の明示指定で測れていることを確かめる
-- [ ] `docs/design/unit-state.md` §6 の表を実測に合わせる
+- [x] マーカーしか変えない3経路（need 解除・Keep・独立化）を専用の入口 `withMarkerOnlyMutation` へ移し、
+      external では書き込みを構造的に禁じる（ADR-260822-02）
+- [x] 4経路の「原文が1バイトも変わらない」を単体テストで固定する（18件）。
+      **probe ではなく単体にした** — probe のテストワークスペースは正規形の原稿しか持たず、この欠陥は
+      **正規形でない原稿（CRLF・空行2つ・末尾改行なし）でしか出ない**。加えて probe は CI に入らない
+- [x] `assets/mdait.template.json` に `markers.mode: external` を足す
+- [x] `settings-doc.ts` の説明を書き換え、`npm run l10n` で再生成する（スキーマと README も追随）
+- [x] probe の embedded 側が `setMode("embedded")` の明示指定で測れていることを確かめる
+- [x] `docs/design/unit-state.md` §6 の表を実測に合わせる
 
 **Gates**
-- [ ] 新規セットアップの `mdait.json` に `markers.mode: external` が書かれている
-- [ ] `markers` キーを持たない既存ワークスペースが embedded のまま動く
-- [ ] probe の embedded 側が embedded のまま測れている（`setMode` の明示指定）
-- [ ] 設定UIの説明と l10n が既定の変更に追随している
-- [ ] external の原文が1バイトも変わらないことを、sync だけでなく CodeLens・ツリーからの操作でも測っている
+- [x] 新規セットアップの `mdait.json` に `markers.mode: external` が書かれている
+- [x] `markers` キーを持たない既存ワークスペースが embedded のまま動く
+- [x] probe の embedded 側が embedded のまま測れている（`setMode` の明示指定。数字が変わらなかったので、
+      これまでも embedded で測れていたことの裏付けにもなった）
+- [x] 設定UIの説明と l10n が既定の変更に追随している
+- [x] external の原文が1バイトも変わらないことを、sync だけでなく CodeLens・ツリーからの操作でも測っている
+      （4つの原稿の形 × 原文/訳文の8件で sha256 が変わらない。修正前は6件が書き換わった）
 
 ## Gates
 
-- [ ] 新規セットアップの既定が `markers.mode: external` になっている（P05b）
-- [ ] `docs/design/unit-state.md` §6 の表が実測と合っており、**残る差が理由付きで載っている**
+- [x] 新規セットアップの既定が `markers.mode: external` になっている（P05b）
+- [x] `docs/design/unit-state.md` §6 の表が実測と合っており、**残る差が理由付きで載っている**
 - [x] probe が `想定外の差 0`、絶対チェックの失敗0で通る
 - [x] external で原文が1バイトも書き換わらない（P05a）
 
