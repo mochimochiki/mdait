@@ -79,13 +79,21 @@ function chunk({ id, created, model, delta, finishReason }) {
 }
 
 /**
- * ストリーミングで流す断片を順に返す。
- * 最初の role だけの断片は「接続が生きている」ことを相手に伝える役目も持つ。
+ * ストリーミングの先頭に流す、role だけの断片。
+ *
+ * 答えが決まる前に送る。相手に「受け付けた、いま考えている」と伝えて接続を切らせないためで、
+ * 本文の断片とは送るタイミングが違う。だから buildStreamChunks とは別の関数にしてある。
+ */
+export function buildStreamPreamble({ id, created, model }) {
+	return chunk({ id, created, model, delta: { role: "assistant", content: "" } });
+}
+
+/**
+ * ストリーミングで流す本文の断片を順に返す。
+ * 先頭の role だけの断片は含まない（buildStreamPreamble が別に送る）。
  */
 export function buildStreamChunks({ id, created, model, reply, promptChars }) {
 	const chunks = [];
-	chunks.push(chunk({ id, created, model, delta: { role: "assistant", content: "" } }));
-
 	const text = reply.text ?? "";
 	if (text.length > 0) {
 		// 1本の文字列で送らず、実物のAPIらしく刻む（受け手の結合処理を試すため）

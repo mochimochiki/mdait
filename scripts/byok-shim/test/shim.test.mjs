@@ -63,6 +63,12 @@ suite("BYOK shim: OpenAI 互換の形", () => {
 		assert.ok(text.trimEnd().endsWith("data: [DONE]"));
 	});
 
+	test("role だけの断片は1つしか流れない", async () => {
+		const { text } = await askStream(shim.base, {});
+		const roleChunks = sseEvents(text).filter((event) => event.choices[0].delta.role !== undefined);
+		assert.equal(roleChunks.length, 1, `role の断片が ${roleChunks.length} 個あります`);
+	});
+
 	test("知らない入口は 404 だが、記録は残る", async () => {
 		const response = await fetch(`${shim.base}/responses`, { method: "POST", body: "{}" });
 		assert.equal(response.status, 404);
@@ -200,6 +206,26 @@ suite("BYOK shim: 録音と再生", () => {
 			const { status, json } = await ask(shim.base, { messages: [{ role: "user", content: "違う本文" }] });
 			assert.equal(status, 409);
 			assert.equal(json.error.type, "replay_mismatch");
+		} finally {
+			await shim.close();
+		}
+	});
+
+	test("録音を使い切ったあとの 409 に、録音された回数がそのまま出る", async () => {
+		const dir = tempDir("exhaust-replay");
+		const request = { model: "test-model", stream: false, messages: [{ role: "user", content: "同じ本文" }] };
+		const record = writeJsonl(dir, "transcript.jsonl", [
+			{ kind: "chat", request, reply: translationReply("1回目") },
+			{ kind: "chat", request, reply: translationReply("2回目") },
+		]);
+		const shim = await startShim({ backend: new ReplayBackend({ file: record }) });
+		try {
+			assert.equal((await ask(shim.base, { messages: request.messages })).status, 200);
+			assert.equal((await ask(shim.base, { messages: request.messages })).status, 200);
+			const third = await ask(shim.base, { messages: request.messages });
+			assert.equal(third.status, 409);
+			// 使い切ったあとでも「録音に2回あった」と言えること（待ち行列の残り 0 を数えない）
+			assert.match(third.json.error.message, /録音に 2 回ある/);
 		} finally {
 			await shim.close();
 		}

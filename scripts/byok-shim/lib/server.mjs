@@ -9,7 +9,7 @@
 import http from "node:http";
 import { ReplayMismatchError, ShimUsageError } from "./backends.mjs";
 import { Transcript, maskHeaders } from "./transcript.mjs";
-import { buildCompletion, buildModelList, buildStreamChunks, newCompletionId } from "./wire.mjs";
+import { buildCompletion, buildModelList, buildStreamChunks, buildStreamPreamble, newCompletionId } from "./wire.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -229,13 +229,7 @@ async function respondStreaming({
 		if (!closed) response.write(`data: ${JSON.stringify(payload)}\n\n`);
 	};
 
-	write({
-		id,
-		object: "chat.completion.chunk",
-		created,
-		model: usedModel,
-		choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null, logprobs: null }],
-	});
+	write(buildStreamPreamble({ id, created, model: usedModel }));
 
 	const heartbeat = setInterval(() => {
 		// SSE のコメント行。受け手からは無視されるが、経路上の機器には「生きている」と伝わる

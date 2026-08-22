@@ -121,10 +121,14 @@ export class ReplayBackend {
 		// 中身で引く。ファイル単位の並列翻訳では要求の到着順が毎回変わるので、
 		// 並び順で突き合わせると、同じ仕事なのに再生が失敗してしまう
 		this.byFingerprint = new Map();
+		// 録音時点の件数を別に数えておく。byFingerprint の待ち行列は使うたびに減るので、
+		// 使い切ったあとに数えても 0 しか出てこず、食い違いの原因を伝えられない
+		this.recordedCounts = new Map();
 		for (const entry of this.entries) {
 			const key = requestFingerprint(entry.request);
 			if (!this.byFingerprint.has(key)) this.byFingerprint.set(key, []);
 			this.byFingerprint.get(key).push(entry.reply);
+			this.recordedCounts.set(key, (this.recordedCounts.get(key) ?? 0) + 1);
 		}
 		this.used = 0;
 		this.name = "replay";
@@ -136,7 +140,7 @@ export class ReplayBackend {
 		const queue = this.byFingerprint.get(key);
 		if (!queue || queue.length === 0) {
 			const reason = queue
-				? `同じ要求は録音にあるが、録音された回数（${this.byFingerprint.get(key).length}）を超えて来ました`
+				? `同じ要求は録音に ${this.recordedCounts.get(key)} 回あるが、その回数を超えて来ました`
 				: "この要求は録音にありません";
 			throw new ReplayMismatchError(
 				[`${this.used} 回目の要求が録音と合いません。${reason}`, `今回: ${key.slice(0, 800)}`].join("\n"),
