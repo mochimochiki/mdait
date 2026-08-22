@@ -14,7 +14,7 @@
 
 | 層 | 名前 | 対象 | 実行 | CI |
 |---|------|------|------|-----|
-| ①unit | 単体テスト | Core層 + VS Code非依存のCommandロジック | `npm test` | 常時 |
+| ①unit | 単体テスト | Core層 + VS Code非依存のCommandロジック + BYOK shim 自身 | `npm test` | 常時 |
 | ②e2e | 統合テスト | VS Code統合（StatusTree, コマンドフロー, UI）+ VS Code依存のCommandテスト | `npm run test:vscode` | 手動 |
 | ③debug | 探索的テスト | マルチステップE2Eシナリオ | ファイルベースIPC | 手動 |
 
@@ -24,10 +24,11 @@
 - Core層の純粋な関数（`src/test/unit/core/**`）: 正規化、ハッシュ計算、Markdownパーサー、差分生成、TM、ユニットレジストリ等
 - Commandロジック（`src/test/unit/commands/**` のうちVS Code非依存分）: marker-sync、section-matcher、sync-frontmatter、term-result-provider、terms-repository、tm-entry-generator、translator-retry、output-sanitizer、response-validator等。DI化によりConfiguration/PromptProviderの直接参照を排除したモジュールを含む
 - vscodeモック経由のCommandテスト: PlainFileHandler等、vscode APIに依存するがモック注入で単体テスト可能なモジュール。モックは`src/test/unit/__mocks__/register-vscode-mock.js`で`.mocharc.json`のrequireフックとして登録。テスト側で`global.__vscodeMockWorkspaceRoot`を設定してワークスペースパスを制御する
+- BYOK shim 自身（`scripts/byok-shim/test/**`）: 開発用ツールの単体テスト。外につながず、翻訳役の`claude`コマンドも偽物を使うため、CIでそのまま走る。`npm test`から`npm run test:byok`として呼ばれる（mocha 25件）
 
 **スタイル**: `suite`/`test`のTDDスタイル
 
-**実行**: CIで常時実行（`npm run test`）
+**実行**: CIで常時実行（`npm test` = `test:unit` → `test:byok`）
 
 **設計意図**: Core層とCommandビジネスロジック層をVS Code APIから独立させているため、副作用のない処理の入出力を高速に検証できます（[design.md](../design.md) P5参照）。
 
@@ -62,6 +63,23 @@
 **設計意図**: VS Code をヘッドレス起動できない環境（クラウド等）でも、UX/挙動系のリグレッション（特に sync の冪等性）をエージェントが自律的に炙り出せるようにする。訳質や revise パッチ適用は実LLMが要るため対象外（INFO として記録）。
 
 > このスイープは frontmatter マーカー同期の非冪等バグ2件（末尾改行の無限増加 / front マーカーの1回遅れ）を検出した。根本修正の回帰は `src/test/unit/core/markdown/frontmatter-idempotency.test.ts` で単体固定している。
+
+### プロバイダ層まで通す検証（BYOK shim / `npm run test:byok:e2e`）
+
+**対象**: AIを呼ぶ処理を、HTTPでつながる相手まで含めて動かしたときの挙動（プロバイダ層のリトライ・タイムアウト・`ai-stats.log`への記録を含む）
+
+**やり方**: `scripts/byok-shim/`はOpenAI互換のローカルサーバーを立てる開発用の道具。mdaitの`ai.provider: "openai"`は`ai.openai.baseURL`の行き先を差し替えられるので、翻訳の要求をこのサーバーへ向ける。裏に誰を翻訳役として据えるかは起動時に選ぶ。使い方は[scripts/byok-shim/README.md](../../scripts/byok-shim/README.md)を参照。
+
+**実行**:
+
+- `npm run test:byok:e2e`: `scripts/byok-shim/recordings/trans-en-child.jsonl`に録ってある実機の12往復を再生し、`trans`が同じ結果になることを確かめる。LLMは1回も呼ばないので、鍵も費用も要らない。要求が録音と1文字でも違えばshimが409を返して落ちるため、プロンプトの組み立てが変わったことに気づける
+- `node scripts/byok-shim/trans-e2e.js`: shimを相手に`trans`を実際に走らせる駆動役。`scripts/exploratory/vscode-shim.js`のvscodeモックに相乗りし、コンパイル済みのcommands層を直接呼ぶ
+
+**頻度**: 手動実行（CI対象外）。テスト用ワークスペース（`src/test/unit/workspace`）の`mdait.json`と`content/`を書き換えるため、`npm run test:explore`と同じ理由で手動にしています。
+
+**層の位置づけ**: 新しい層は立てず、探索的スイープの隣に置いています。駆動の仕組みは`run-sweep.js`と同じで、違いは`fake-ai.js`を読み込まないことだけだからです。そのため`AIServiceBuilder`は本物の`OpenAIProvider`を作り、HTTPでshimを叩きます。
+
+**設計意図**: fake-aiやDefaultAIProviderは`AIService`の実装そのものを差し替えるため、プロバイダ層（HTTP・リトライ・タイムアウト・`ai-stats.log`への記録）は動きません。shimはHTTPの向こう側に立つので、そこまで本物が走ります。①②③のどれでも埋まらなかった穴が、ここで埋まります。
 
 ### サンプルワークスペース
 
