@@ -327,6 +327,28 @@ suite("BYOK shim: ダイジェストは差分だけを見せる", () => {
 		assert.ok(!digest.includes("長い指示"), "前回と同じ内容が残っています");
 	});
 
+	test("道具を呼ぶだけの発言でも、何を呼んだかが要約に出る", () => {
+		// 道具を呼ぶ相手では assistant の本文が空になる。本文しか見ないと呼び出しが消える
+		const body = {
+			model: "m",
+			messages: [
+				{ role: "user", content: "調べて" },
+				{
+					role: "assistant",
+					content: null,
+					tool_calls: [{ id: "c1", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } }],
+				},
+				{ role: "tool", tool_call_id: "c1", content: "README.md" },
+			],
+		};
+		const digest = buildDigest({ seq: 1, body, requestFile: "req", replyFile: "res" });
+		assert.ok(digest.includes("道具を呼ぶ: `bash`"), "呼び出した道具の名前が出ていません");
+		assert.ok(digest.includes('{"command":"ls"}'), "呼び出しの引数が出ていません");
+		assert.ok(!digest.includes("```\nnull\n```"), "本文なしが null と表示されています");
+		// どの呼び出しに対する結果かが分からないと、往復の対応が追えない
+		assert.ok(digest.includes("tool（c1 の結果）"), "結果と呼び出しの対応が出ていません");
+	});
+
 	test("長いメッセージは切って、全文の場所を添える", () => {
 		const long = { model: "m", messages: [{ role: "user", content: "あ".repeat(5000) }] };
 		const digest = buildDigest({ seq: 1, body: long, requestFile: "req-001.json", replyFile: "res", clipChars: 100 });
@@ -415,6 +437,25 @@ suite("BYOK shim: agent（別のエージェントを翻訳役にする）", () 
 		]);
 		assert.equal(system, "S");
 		assert.equal(renderPrompt(turns), "本文");
+	});
+
+	test("道具の往復を、頼まれごとと取り違えずに並べる", async () => {
+		const { renderPrompt, splitConversation } = await import("../lib/backends.mjs");
+		const { turns } = splitConversation([
+			{ role: "system", content: "S" },
+			{ role: "user", content: "調べて" },
+			{
+				role: "assistant",
+				content: null,
+				tool_calls: [{ id: "c1", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } }],
+			},
+			{ role: "tool", tool_call_id: "c1", content: "README.md" },
+		]);
+		const rendered = renderPrompt(turns);
+		assert.ok(rendered.includes('道具を呼んだ: bash({"command":"ls"})'), "呼び出しが落ちています");
+		// 実行結果を「依頼」として並べると、頼まれごとと結果の区別がつかなくなる
+		assert.ok(rendered.includes("【道具の実行結果】\nREADME.md"), "実行結果が別扱いになっていません");
+		assert.ok(!rendered.includes("【依頼】\nREADME.md"), "実行結果が依頼として並んでいます");
 	});
 
 	test("会話が複数往復なら、誰の発言かが分かる形に並べる", async () => {

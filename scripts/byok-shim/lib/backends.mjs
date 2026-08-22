@@ -264,9 +264,16 @@ export function splitConversation(messages) {
 	const systemParts = [];
 	const turns = [];
 	for (const message of messages || []) {
-		const content = typeof message.content === "string" ? message.content : (message.content || []).join("");
+		const content =
+			typeof message.content === "string"
+				? message.content
+				: Array.isArray(message.content)
+					? message.content.join("")
+					: "";
 		if (message.role === "system") systemParts.push(content);
-		else turns.push({ role: message.role, content });
+		// 道具の呼び出しは本文と別の場所に入っている。ここで落とすと、
+		// 何を実行しようとしたのかが翻訳役に伝わらない
+		else turns.push({ role: message.role, content, toolCalls: message.tool_calls });
 	}
 	return { system: systemParts.join("\n\n"), turns };
 }
@@ -277,11 +284,25 @@ export function splitConversation(messages) {
  */
 export function renderPrompt(turns) {
 	if (turns.length === 1 && turns[0].role === "user") return turns[0].content;
-	return turns
-		.map((turn) =>
-			turn.role === "assistant" ? `【これまでのあなたの返答】\n${turn.content}` : `【依頼】\n${turn.content}`,
-		)
-		.join("\n\n");
+	return turns.map(renderTurn).join("\n\n");
+}
+
+/** 1つの発言を、誰の何なのかが分かる形にする */
+function renderTurn(turn) {
+	if (turn.role === "assistant") {
+		const calls = (turn.toolCalls ?? []).map((call) => {
+			const fn = call.function ?? {};
+			const args = typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments ?? {});
+			return `${fn.name ?? "(名前なし)"}(${args})`;
+		});
+		const body = [turn.content, calls.length > 0 ? `道具を呼んだ: ${calls.join(" / ")}` : ""]
+			.filter(Boolean)
+			.join("\n");
+		return `【これまでのあなたの返答】\n${body || "（発言なし）"}`;
+	}
+	// 道具の実行結果を「依頼」として並べると、頼まれごとと結果の区別がつかなくなる
+	if (turn.role === "tool") return `【道具の実行結果】\n${turn.content}`;
+	return `【依頼】\n${turn.content}`;
 }
 
 export class AgentBackend {

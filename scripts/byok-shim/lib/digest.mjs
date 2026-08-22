@@ -13,10 +13,38 @@ function clip(text, limit) {
 	return `${value.slice(0, limit)}\n…（ここで切りました。全文は ${value.length} 文字）`;
 }
 
-/** メッセージ1件を「役割＋中身」の1ブロックにする */
+/** メッセージの本文を文字列にする。中身が無いとき（道具を呼ぶだけの発言）は空文字 */
+function messageText(message) {
+	if (typeof message.content === "string") return message.content;
+	if (Array.isArray(message.content)) return message.content.map((part) => part?.text ?? JSON.stringify(part)).join("");
+	if (message.content == null) return "";
+	return JSON.stringify(message.content);
+}
+
+/**
+ * メッセージ1件を「役割＋中身」の1ブロックにする。
+ *
+ * 道具を呼ぶ相手では、assistant の発言が「本文が空で tool_calls だけ」という形になる。
+ * 本文しか見ないと、相手が何を実行しようとしたのかが要約から消えてしまうので、
+ * 呼び出しの中身も並べる。
+ */
 function renderMessage(message, limit) {
-	const content = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
-	return `### ${message.role}\n\n\`\`\`\n${clip(content, limit)}\n\`\`\`\n`;
+	const blocks = [];
+	const text = messageText(message);
+	if (text.length > 0) blocks.push(`\`\`\`\n${clip(text, limit)}\n\`\`\``);
+
+	for (const call of message.tool_calls ?? []) {
+		const fn = call.function ?? {};
+		const args = typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments ?? {});
+		blocks.push(`道具を呼ぶ: \`${fn.name ?? "(名前なし)"}\`\n\n\`\`\`json\n${clip(args, limit)}\n\`\`\``);
+	}
+
+	if (blocks.length === 0) blocks.push("（中身なし）");
+
+	// どの呼び出しに対する結果なのかが分からないと、往復の対応が追えない
+	const label =
+		message.role === "tool" && message.tool_call_id ? `tool（${message.tool_call_id} の結果）` : message.role;
+	return `### ${label}\n\n${blocks.join("\n\n")}\n`;
 }
 
 /**
