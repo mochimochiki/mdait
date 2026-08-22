@@ -176,7 +176,7 @@
       "properties": {
         "mode": {
           "type": "string",
-          "description": "Where mdait unit markers are stored. 'embedded' (default) keeps markers as HTML comments in the document body. 'external' moves them to .mdait/unit-state.",
+          "description": "Where mdait unit markers are stored. 'external' is what new workspaces get: markers move to .mdait/unit-state and documents are never rewritten. 'embedded' keeps markers as HTML comments in the document body, so the state travels with the file. Absent this key the mode is 'embedded'.",
           "enum": [
             "embedded",
             "external"

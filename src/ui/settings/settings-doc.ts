@@ -146,7 +146,7 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 	// --- markers ---
 	"markers.mode": () =>
 		vscode.l10n.t(
-			"Where unit markers live. 'embedded' (default) keeps them as invisible HTML comments inside each document — self-contained and robust when files are copied or moved. 'external' stores them in .mdait/unit-state so documents stay completely clean; convert existing documents with the 'mdait: Externalize markers' / 'Embed markers' commands.",
+			"Where unit markers live. 'external' (the default for new workspaces) stores them in .mdait/unit-state and never rewrites your documents — the state survives formatters, translation-vendor round-trips and copy-paste that drops HTML comments. 'embedded' keeps them as invisible HTML comments inside each document, so the state travels with the file: nothing extra to carry, and git conflicts stay spread across files. When this setting is absent the mode is 'embedded', so existing workspaces keep working unchanged. Convert existing documents with the 'mdait: Externalize markers' / 'Embed markers' commands.",
 		),
 	// --- ai ---
 	"ai.provider": () =>

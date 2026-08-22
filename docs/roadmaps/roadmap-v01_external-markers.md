@@ -195,9 +195,18 @@ frontmatter マーカーを `unit-state` の**予約した order**（`FRONT_MATT
 ADR-260802-04 のゴール。P05a で「原文を書き換えない」は達成できたので、あとは既定を倒すだけ。
 
 **WHAT**
-`assets/mdait.template.json` に `"markers": { "mode": "external" }` を足す。**`Configuration` の
-既定（`resetToDefaults()`）は `embedded` のまま**にする。既存ワークスペースの `mdait.json` には
+`assets/mdait.template.json` に `"markers": { "mode": "external" }` を足す。**`Configuration` が
+キー未指定のときに倒す先は `embedded` のまま**にする。既存ワークスペースの `mdait.json` には
 `markers` キーが無いので、テンプレートだけを触れば据え置きが自動的に成り立つ。
+
+キー未指定のときに実際に効いているのは `resetToDefaults()` ではなく、`load()` の中の
+`config.markers?.mode === "external" ? "external" : "embedded"`（`configuration.ts:639`）である
+（2026-08-22 に実測）。`resetToDefaults()` の値は、まだ読み込んでいないインスタンスと、JSON が
+壊れているあいだ直前値を保つ経路にしか効かない。**倒す危険があるのはこの三項演算子の else 側**
+なので、据え置きを固定するテストはファイルを読ませる経路に置く。なお
+`assets/schemas/mdait-config.schema.json` の `default` は `"embedded"` のまま残す —
+スキーマの `default` と `Configuration` の既定値の一致を契約として突き合わせるテストがあり、
+値としてもキーが無いときの挙動は embedded なので正しい。
 あわせて `settings-doc.ts` の「'embedded' (default)」という説明を書き換え、`npm run l10n` で再生成する。
 
 **Why not `Configuration` の既定**
