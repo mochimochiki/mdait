@@ -14,8 +14,10 @@
 ```bash
 npm run compile        # TypeScriptコンパイル (tsc → out/)
 npm run lint           # Biomeリント (設定: .config/biome.json)
-npm test               # compile + lint + 単体テスト (mocha, TDD UI)
+npm test               # compile + lint + 単体テスト + BYOK shim の単体テスト (mocha, TDD UI)
 npm run test:vscode    # VS Code統合テスト（手動実行、CI対象外）
+npm run test:byok      # BYOK shim 自身の単体テスト（npm test から呼ばれる、CI常時）
+npm run test:byok:e2e  # 録音した実機12往復の再生で trans を検証（手動実行、CI対象外）
 npm run watch          # 開発用esbuildウォッチ
 npm run bundle         # 本番バンドル (esbuild → dist/extension.js)
 npm run copy-test-files  # src/test/unit/sample-content からテストワークスペースをリセット
@@ -52,6 +54,8 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 1. **単体**（`npm test`、CI常時）: core + VS Code 非依存のコマンドロジック。VS Code 依存モジュールは `src/test/unit/__mocks__/register-vscode-mock.js` で登録されるモックを使用。テスト側で `global.__vscodeMockWorkspaceRoot` を設定可能。
 2. **統合**（`npm run test:vscode`、手動）: `src/test/gui/**` を VS Code Test Runner で実行。
 3. **探索的デバッグIPC**: `MDAIT_DEBUG_IPC=1` でファイルベース IPC を有効化し、マルチステップ E2E シナリオを実行 — `.claude/skills/debug-ipc/` の `debug-ipc` スキルを参照。
+
+加えて、AI を呼ぶ処理は `scripts/byok-shim/` のローカルサーバーを相手に検証できる（`npm run test:byok:e2e`）。fake-ai と違って HTTP の向こう側に立つため、プロバイダ層（リトライ・タイムアウト・`ai-stats.log`）まで本物が走る。新しい層ではなく探索的スイープの隣に置いている — 詳細は `docs/design/test.md`。
 
 規約: TDDスタイル（`suite`/`test`）、**テスト名は日本語で期待される動作を明示する**。新しいエッジケースは `src/test/unit/sample-content/` に追加する（`copy-test-files` でテストワークスペースに同期される）。
 

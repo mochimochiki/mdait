@@ -53,15 +53,15 @@ interface AIService {
 
 ### OpenAIProvider
 
-**使用ライブラリ**: `openai`パッケージ  
-**API**: OpenAI Responses API
+**通信方法**: Nodeの`fetch`でHTTPリクエストを直接送ります（`openai`パッケージは使いません）  
+**API**: OpenAI Chat Completions API（宛先は`{baseURL}/chat/completions`。baseURL末尾の`/`は取り除きます）
 
 #### 設定例
 ```json
 {
   "ai": {
     "provider": "openai",
-    "model": "gpt-4o-mini",
+    "model": "gpt-5-mini",
     "openai": {
       "apiKey": "${env:OPENAI_API_KEY}",
       "baseURL": "https://api.openai.com/v1",
@@ -73,10 +73,16 @@ interface AIService {
 ```
 
 #### 主要パラメータ
-- `maxTokens`: 最大出力トークン数（デフォルト: 2048）
+- `model`: 使うモデル名。書かなかった場合は`gpt-5-mini`を使います（設定ファイルの雛形と設定の既定値は`gpt-4o`のため、通常はそちらが入ります）
+- `maxTokens`: 最大出力トークン数（デフォルト: 16384）。リクエストには`max_completion_tokens`として送ります
 - `timeoutSec`: リクエストタイムアウト秒数（デフォルト: 120）
-- `temperature`: 0.7固定（コード内設定）
+- `temperature`: 送りません（リクエストに含めず、モデル側の既定に任せます）
 - **`store`: false固定（プライバシー重視、コード内ハードコーディング）**
+
+リクエスト本文に入れるキーは`model` / `messages` / `stream`（false） / `store`（false） / `max_completion_tokens` / `prompt_cache_key`の6つだけです。
+
+#### 受け口の差し替え
+`baseURL`を書き換えると、OpenAI互換のリクエストを受け取れるサーバーであれば、どこへでも要求を送れます。手元に受け口を立てる方法は[scripts/byok-shim/README.md](../../scripts/byok-shim/README.md)にあります。
 
 #### プロンプトキャッシュ
 - リクエストに `prompt_cache_key`（`mdait-{system promptのCRC32（8桁hex、正規化なし）}`）を付与し、同一system promptのリクエストが同じ推論ノードへルーティングされやすくする
@@ -90,7 +96,7 @@ interface AIService {
 
 **実装**: [`src/infra/llm/providers/openai-provider.ts`](../../src/infra/llm/providers/openai-provider.ts)
 
-**設計意図**: Responses APIを採用することで、将来のツール連携や機能拡張に対応しています。
+**設計意図**: HTTPを直接扱うことで、送信するキー・リトライ・タイムアウトの扱いをこの層に閉じ込めています。
 
 ---
 
@@ -148,6 +154,29 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 
 ---
 
+### 開発用の受け皿（BYOK shim）
+
+**置き場所**: `scripts/byok-shim/`
+
+翻訳の要求を手元で受け取るための小さなサーバーです。Nodeの組み込みモジュールだけで書かれており、依存パッケージは増やしていません。
+
+`ai.provider`を`openai`にして、`ai.openai.baseURL`をこのサーバーに向けると、翻訳の要求が手元へ届きます。
+
+#### 誰が答えるか
+4通りから選べます。
+
+- `live`: ファイルの郵便受けに要求が置かれ、人が答えを書き込む
+- `script`: あらかじめ用意した台本を順に返す
+- `replay`: 録音を再生する。要求が録音と食い違えば409を返して止まる
+- `agent`: `claude`コマンドを翻訳役として起動し、無人で並列に答える
+
+#### モック実装との違い
+DefaultAIProviderや`scripts/exploratory/fake-ai.js`は、`AIService`の実装そのものを差し替えます。そのため、OpenAIProviderが担う処理（HTTP通信・リトライ・タイムアウト）は走りません（`fake-ai.js`は`ai-stats.log`への記録も通りません）。shimはHTTPの向こう側に立つため、プロバイダー層まで本物が動きます。
+
+使い方は[scripts/byok-shim/README.md](../../scripts/byok-shim/README.md)を参照してください。
+
+---
+
 ## 呼び出しシーケンス
 
 ```mermaid
@@ -200,4 +229,4 @@ sequenceDiagram
 
 ## 関連
 
-- [design.md](../design.md) 「LLM層」参照
+- [design.md](../design.md) 「アーキテクチャ」のInfra層を参照
