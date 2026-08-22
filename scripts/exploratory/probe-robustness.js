@@ -175,7 +175,7 @@ async function setMode(mode, pairs, extensions) {
 	const j = JSON.parse(fs.readFileSync(CFG_PATH, "utf8"));
 	j.ai = Object.assign({}, j.ai, { provider: "default", vendor: "default" });
 	if (mode === "external") j.markers = { mode: "external" };
-	else j.markers = undefined;
+	else j.markers = { mode: "embedded" };
 	if (pairs) j.transPairs = pairs;
 	// 非Markdown（.txt 等）を管理下に入れる／外す。undefined を渡すと既定へ戻す
 	if (extensions !== undefined) j.trans = Object.assign({}, j.trans, { extensions });

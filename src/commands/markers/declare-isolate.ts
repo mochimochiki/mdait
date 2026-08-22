@@ -12,7 +12,7 @@
  */
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
-import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
+import { type UnitMutationResult, withMarkerOnlyMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
 
@@ -39,7 +39,7 @@ export async function declareIsolateForFile(
 	unitHash: string,
 	config: Configuration,
 ): Promise<DeclareIsolateResult> {
-	const outcome = await withMarkdownMutation<DeclareIsolateResult>(absPath, config, ({ parsed }) => {
+	const outcome = await withMarkerOnlyMutation<DeclareIsolateResult>(absPath, config, ({ parsed }) => {
 		const unit = parsed.units.find((u) => u.marker?.hash === unitHash);
 		if (!unit?.marker) {
 			return {

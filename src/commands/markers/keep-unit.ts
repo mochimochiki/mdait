@@ -19,7 +19,7 @@ import { calculateHash } from "../../core/hash/hash-calculator";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
-import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
+import { type UnitMutationResult, withMarkerOnlyMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
 
@@ -54,7 +54,7 @@ export async function keepUnitsAsIndependent(
 	config: Configuration,
 	hashes?: string[],
 ): Promise<KeepUnitsResult> {
-	const outcome = await withMarkdownMutation<KeepUnitsResult>(absPath, config, ({ parsed }) => {
+	const outcome = await withMarkerOnlyMutation<KeepUnitsResult>(absPath, config, ({ parsed }) => {
 		const kept: KeptUnit[] = [];
 		const skipped: SkippedKeepUnit[] = [];
 

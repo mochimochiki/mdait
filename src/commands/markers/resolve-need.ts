@@ -18,7 +18,7 @@ import type { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { Logger } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
-import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
+import { type UnitMutationResult, withMarkerOnlyMutation } from "./unit-mutation";
 
 const logger = Logger.getInstance();
 
@@ -284,8 +284,9 @@ function loadSourceTextLookup(targetPath: string, config: Configuration): Source
 /**
  * 1ファイル分の need フラグ解決を実行する（Markdown）。
  *
- * 排他制御・未保存の反映・ストア保存・ステータス更新は `withMarkdownMutation` が担う。
- * 変更が無ければファイルへは書き込まない（冪等）。
+ * 排他制御・未保存の反映・ストア保存・ステータス更新は `withMarkerOnlyMutation` が担う。
+ * need 解除はマーカーしか変えないため、external では本文へ1バイトも書き込まない
+ * （原文・訳文とも。原稿の改行コードや空行の入れ方は保たれる）。
  *
  * @param absPath 対象ファイルの絶対パス
  * @param config 設定
@@ -303,7 +304,7 @@ export async function resolveNeedForFile(
 			? undefined
 			: loadSourceTextLookup(absPath, config);
 
-	const outcome = await withMarkdownMutation<ResolveNeedFileResult>(absPath, config, ({ parsed }) => {
+	const outcome = await withMarkerOnlyMutation<ResolveNeedFileResult>(absPath, config, ({ parsed }) => {
 		const result = applyNeedResolution(parsed.units, options, sourceText);
 
 		if (includesFrontmatter(options.targets)) {

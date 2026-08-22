@@ -93,7 +93,7 @@ Create `.mdait/mdait.json` in your workspace root:
 | `trans.retryLimit` | Max retries on translation failure (1–5). |
 | `tm.maxReferences` | Max TM entries referenced per translation. |
 | `terms.filename` | Glossary filename (`terms.csv` or `terms.yaml`). |
-| `markers.mode` | Marker storage: `"embedded"` (default, in-document HTML comments) or `"external"` (`.mdait/unit-state`). |
+| `markers.mode` | Marker storage: `"external"` (default for new workspaces, `.mdait/unit-state`) or `"embedded"` (in-document HTML comments). Absent from `mdait.json` means `"embedded"`. |
 | `ignoredPatterns` | Glob pattern(s) for files/directories to exclude from all processing. Accepts a string or array of strings. Default: `"**/node_modules/**"`. |
 
 ---
@@ -182,8 +182,8 @@ State is fully git-tracked — changes appear naturally in `git diff` — with n
 
 Set `markers.mode` in `mdait.json` to choose where this state lives:
 
-- **`embedded`** (default) — markers stay inline in each Markdown file. Self-contained, no sidecar files.
-- **`external`** — markers are kept out of the document body and stored in a single `.mdait/unit-state` file (TSV: `path / order / level / titleHash / hash / from / need`, sorted by `path` then `order`). This also unifies state management for non-Markdown files (`.txt`, `.csv`, …) that cannot host inline comments.
+- **`external`** (default for new workspaces) — markers are kept out of the document body and stored in a single `.mdait/unit-state` file (TSV: `path / order / level / titleHash / hash / from / need`, sorted by `path` then `order`). Your documents are never rewritten, and the state survives formatters, translation-vendor round-trips and copy-paste that drops HTML comments. This also unifies state management for non-Markdown files (`.txt`, `.csv`, …) that cannot host inline comments.
+- **`embedded`** — markers stay inline in each Markdown file. Self-contained, no sidecar files: the state travels with the file and git conflicts stay spread across files. Workspaces whose `mdait.json` has no `markers` key run in this mode, so existing setups are unaffected.
 
 Convert existing documents in place with the **`mdait: Externalize Markers`** and **`mdait: Embed Markers`** commands.
 

@@ -24,6 +24,9 @@
     "autoDelete": true,
     "autoSyncOnSave": true
   },
+  "markers": {
+    "mode": "external"
+  },
   "tm": {
     "retryLimit": 1,
     "maxReferences": 5
