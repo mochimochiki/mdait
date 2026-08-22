@@ -19,3 +19,4 @@ node_modules/**
 esbuild.mjs
 .config/**
 .claude/**
+scripts/**

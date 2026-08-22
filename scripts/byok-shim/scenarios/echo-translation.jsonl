@@ -1,0 +1,5 @@
+// mdait の trans が期待する形（{"translation": "..."}）を返すだけの台本。
+// 中身は確かめないので、往復が成立するかだけを見るときに使う。
+{"text": "{\"translation\": \"（台本1）ここに訳文が入ります。\", \"termSuggestions\": []}"}
+{"text": "{\"translation\": \"（台本2）ここに訳文が入ります。\", \"termSuggestions\": []}"}
+{"text": "{\"translation\": \"（台本3）ここに訳文が入ります。\", \"termSuggestions\": []}"}
