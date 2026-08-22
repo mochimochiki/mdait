@@ -309,9 +309,13 @@ export interface MarkdownMutationContext {
  * マーカー境界の探索はパーサーに委譲するため、コードブロック内のサンプルマーカーには
  * 誤マッチしない（生の正規表現探索は行わない）。
  *
+ * **書き戻すのは中身が変わったときだけ**（`changed:true` でも、出来上がりが読み込んだ内容と
+ * 同じならファイルには触れない）。external では need 解除・Keep・isolate 宣言が本文を
+ * 変えないため、この判定が「原文を1バイトも書き換えない」約束を守る唯一の場所になる。
+ *
  * @param absPath 対象ファイルの絶対パス
  * @param config 設定
- * @param mutate パース済みドキュメントを変異させ、結果を返す。changed:true のときのみ書き戻す
+ * @param mutate パース済みドキュメントを変異させ、結果を返す。changed:false なら何もしない
  */
 export async function withMarkdownMutation<T extends UnitMutationResult>(
 	absPath: string,
@@ -333,13 +337,28 @@ export async function withMarkdownMutation<T extends UnitMutationResult>(
 		const result = await mutate({ parsed, io });
 
 		if (result.changed) {
-			const encoder = new TextEncoder();
+			// stringify は「文字列を作る」だけの関数ではない。external では detachMarkers が
+			// ここでマーカーをストアへ引き取るため、書き込みを見送るときも必ず呼ぶ
 			const updated = markdownParser.stringify(
 				{ frontMatter: parsed.frontMatter, units: parsed.units },
 				io.provider,
 				io.ctx,
 			);
-			await vscode.workspace.fs.writeFile(vscode.Uri.file(absPath), encoder.encode(updated));
+			// **中身が1文字も変わっていなければ書かない。**
+			// external では need 解除・Keep（独立化）・isolate 宣言で本文に変化が無い
+			// （マーカーはストアにある）。それでも書き戻すと、パーサーを通った整形が
+			// そのまま原文に焼き付く — 実測では改行コードが CRLF から LF に変わり、
+			// ユニット間の余分な空行と末尾の空行が消えた。external の存在理由は
+			// 「原文を1バイトも書き換えない」ことなので、これは約束を破っている
+			// （ADR-260802-04 / ADR-260814-01）。
+			//
+			// 判定にモードも原文/訳文も持ち込まない。「external なら書かない」にすると、
+			// external でも本文から章そのものを消す deleteUnit が壊れる（章が消えない）。
+			// 中身の比較はモードに依らず正しく、embedded でも無駄な書き込みが減る。
+			if (updated !== content) {
+				const encoder = new TextEncoder();
+				await vscode.workspace.fs.writeFile(vscode.Uri.file(absPath), encoder.encode(updated));
+			}
 		}
 		return result;
 	});
