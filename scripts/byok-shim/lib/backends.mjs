@@ -118,30 +118,42 @@ export class ReplayBackend {
 		if (this.entries.length === 0) {
 			throw new ShimUsageError(`録音 ${file} に再生できるやり取り（kind:"chat"）がありません`);
 		}
+		// 中身で引く。ファイル単位の並列翻訳では要求の到着順が毎回変わるので、
+		// 並び順で突き合わせると、同じ仕事なのに再生が失敗してしまう
+		this.byFingerprint = new Map();
+		for (const entry of this.entries) {
+			const key = requestFingerprint(entry.request);
+			if (!this.byFingerprint.has(key)) this.byFingerprint.set(key, []);
+			this.byFingerprint.get(key).push(entry.reply);
+		}
 		this.used = 0;
 		this.name = "replay";
 	}
 
 	async respond(body) {
-		const entry = this.entries[this.used];
-		if (!entry) {
-			throw new ReplayMismatchError(
-				`録音は ${this.entries.length} 往復ぶんしかないのに、${this.used + 1} 回目の要求が来ました`,
-			);
-		}
 		this.used += 1;
-		const recorded = requestFingerprint(entry.request);
-		const incoming = requestFingerprint(body);
-		if (recorded !== incoming) {
+		const key = requestFingerprint(body);
+		const queue = this.byFingerprint.get(key);
+		if (!queue || queue.length === 0) {
+			const reason = queue
+				? `同じ要求は録音にあるが、録音された回数（${this.byFingerprint.get(key).length}）を超えて来ました`
+				: "この要求は録音にありません";
 			throw new ReplayMismatchError(
-				[
-					`${this.used} 回目の要求が録音と違います。`,
-					`録音: ${recorded.slice(0, 600)}`,
-					`今回: ${incoming.slice(0, 600)}`,
-				].join("\n"),
+				[`${this.used} 回目の要求が録音と合いません。${reason}`, `今回: ${key.slice(0, 800)}`].join("\n"),
 			);
 		}
-		return entry.reply;
+		return queue.shift();
+	}
+
+	/** まだ使われていない録音の数。全部使い切ったかを確かめるのに使う */
+	unusedCount() {
+		let remaining = 0;
+		for (const queue of this.byFingerprint.values()) remaining += queue.length;
+		return remaining;
+	}
+
+	stats() {
+		return { recorded: this.entries.length, replayed: this.used, unused: this.unusedCount() };
 	}
 }
 

@@ -57,6 +57,12 @@ export function createShimServer({ backend, model = "byok-shim", recordFile, hea
 		const headers = maskHeaders(request.headers);
 		const url = new URL(request.url, "http://127.0.0.1");
 
+		if (request.method === "GET" && url.pathname === "/__shim/stats") {
+			// 実測用の覗き窓。何本が同時に来たかを外から確かめられるようにしてある
+			sendJson(response, 200, { ...stats, backend: backend.stats?.() ?? null, mode: backend.name });
+			return;
+		}
+
 		if (request.method === "GET" && url.pathname.endsWith("/models")) {
 			transcript.append({ kind: "other", method: request.method, path: url.pathname, headers });
 			sendJson(response, 200, buildModelList([model]));

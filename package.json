@@ -986,6 +986,7 @@
     "test:vscode": "rimraf out/test && npm run compile && npm run lint && vscode-test --config .config/.vscode-test.mjs",
     "test:explore": "npm run compile && node scripts/exploratory/run-sweep.js",
     "test:byok": "mocha --ui tdd --timeout 30000 \"scripts/byok-shim/test/**/*.test.mjs\"",
+    "test:byok:e2e": "npm run compile && node scripts/byok-shim/replay-e2e.mjs",
     "watch": "node esbuild.mjs --watch",
     "copy-test-files": "rimraf ./src/test/unit/workspace/content && node -e \"require('node:fs').cpSync('./src/test/unit/sample-content', './src/test/unit/workspace/content', { recursive: true, force: true })\"",
     "l10n": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
