@@ -74,13 +74,27 @@ export class FrontMatter {
 		content: string;
 		frontMatterLineOffset: number;
 	} {
+		// gray-matter は先頭の `---` を無条件にフロントマターの開始と見なすため、
+		// 本文の水平線（`---`）で始まる Markdown を「フロントマターだけの文書」と誤読する。
+		// 誤読は「例外を投げる（本文が YAML として壊れている）」か
+		// 「data がマッピング以外になる（本文が1つのスカラーとして読まれる）」の形で現れるので、
+		// **data がマッピング（プレーンオブジェクト）であること**をフロントマターの判別式にする。
+		// 空のマッピング `{}` もフロントマターである（空のフロントマターやコメントだけの
+		// フロントマターがこれになる）。無しと判定すると gray-matter が既に content から
+		// 取り除いた区切りごと消えてしまうため、「空でないこと」を条件にしてはならない。
+		const parsed = parseAsFrontMatter(markdown);
+		if (!parsed) {
+			// フロントマター無し。content は gray-matter の返り値ではなく元の Markdown 全文に戻す
+			// （誤読で飲み込まれた部分を落とさないため）
+			return { frontMatter: undefined, content: markdown, frontMatterLineOffset: 0 };
+		}
 		// gray-matter は内容文字列をキーに parse 結果を溜め、同じ内容には同じ data の参照を返す
 		// （返り値は浅いコピーなので data だけが共有される）。FrontMatter は _data を破壊的に
 		// 書き換えるため、そのまま持つとキャッシュ側が書き換え後の値に汚染され、
 		// 同じ内容のファイルを開き直しても前回の書き換え結果が返ってくる。
-		// オプションを渡してキャッシュを使わせず、さらに data は自前の複製を持つ
+		// キャッシュを使わせない（parseAsFrontMatter がオプションを渡している）だけでなく、
+		// data は自前の複製を持つ
 		// （FrontMatter が _data の所有者であることを、gray-matter の実装に依存せず保証する）。
-		const parsed = matter(markdown, {});
 		const data = structuredClone(parsed.data) as FrontMatterData;
 		const content = parsed.content;
 
@@ -636,6 +650,40 @@ export class FrontMatter {
 			new Set(this._externalKeys),
 		);
 	}
+}
+
+/**
+ * gray-matter でパースし、**フロントマターとして読めたときだけ**結果を返す。
+ *
+ * フロントマターとして読めたとは「`data` がマッピング（プレーンオブジェクト）であること」。
+ * 本文の水平線を誤読した場合は YAML 例外になるか、`data` が文字列・配列などマッピング以外に
+ * なるので、その2つを1つの出口（`undefined`）にまとめる。
+ *
+ * 空のマッピング `{}` はフロントマターとして扱う（空・コメントだけのフロントマター）。
+ *
+ * @param markdown Markdown 文字列
+ * @returns フロントマターとして読めた場合は gray-matter の結果、読めなければ undefined
+ */
+function parseAsFrontMatter(markdown: string): { data: FrontMatterData; content: string } | undefined {
+	let parsed: { data: unknown; content: string };
+	try {
+		// gray-matter は内容文字列をキーに parse 結果を溜め、同じ内容には同じ data の参照を返す。
+		// オプションを渡してキャッシュを使わせない（呼び出し側で複製する前提）
+		parsed = matter(markdown, {});
+	} catch {
+		return undefined;
+	}
+	if (!isPlainObject(parsed.data)) {
+		return undefined;
+	}
+	return { data: parsed.data as FrontMatterData, content: parsed.content };
+}
+
+/**
+ * YAML のマッピングに相当するプレーンオブジェクトかどうか（配列・null・文字列などは false）
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
