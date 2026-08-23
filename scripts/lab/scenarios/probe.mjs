@@ -60,7 +60,7 @@ import { parseArgs } from "../lib/args.mjs";
 import { sendCommand } from "../lib/ipc.mjs";
 import { RUNS_DIR } from "../lib/runs.mjs";
 import { LAB_DIR, readSession } from "../lib/session.mjs";
-import { REPO, prepareWorkspace } from "../lib/workspace.mjs";
+import { REPO, configureAi, prepareWorkspace } from "../lib/workspace.mjs";
 
 const LAB_CLI = path.join(REPO, "scripts", "lab", "lab.mjs");
 /** 観察結果の置き場の名前（run ディレクトリの直下） */
@@ -2134,7 +2134,10 @@ export async function run(options = {}) {
 		if (!options.keep) {
 			// 次に lab を使う人が「見本の原稿」から始められるように戻しておく
 			try {
-				await prepareWorkspace({ mode: session.wsMode ?? "tmp", reset: true });
+				const fresh = await prepareWorkspace({ mode: session.wsMode ?? "tmp", reset: true });
+				// 作り直すと設定が雛形へ戻る。AI の相手への差し向けを付け直さないと、
+				// 次にここを使う人（次回のこのプローブを含む）の翻訳が丸ごと空振りする
+				if (session.ai?.baseURL) configureAi(fresh, { mode: session.ai.mode, baseURL: session.ai.baseURL });
 				await hostReload();
 				say("\n作業場を見本から作り直しました（そのまま見たいときは --keep）");
 			} catch (e) {

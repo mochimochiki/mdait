@@ -29,7 +29,7 @@ const SHIM = path.join(AI_DIR, "shim.mjs");
 const HOSTS = ["headless", "code-server", "desktop"];
 const AI_MODES = ["echo", "live", "agent", "script", "replay", "none"];
 
-const BOOLEANS = ["reset", "json", "help", "quiet"];
+const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time"];
 
 const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
 
@@ -268,7 +268,8 @@ async function ensureUp() {
 	return readSession();
 }
 
-async function verbRun(opts) {
+/** コマンドを1つ実行して、結果と終了コードの両方を返す */
+async function runOne(opts) {
 	const command = opts._[0];
 	if (!command) throw new UsageError("実行するコマンド名が要ります（例: lab run mdait.sync）");
 	if (!command.startsWith("mdait.")) throw new UsageError(`コマンド名は mdait. で始まります（渡された値: ${command}）`);
@@ -287,12 +288,18 @@ async function verbRun(opts) {
 
 	if (opts.json) {
 		say(JSON.stringify(result, null, 2));
-		return result.status === "error" ? 1 : 0;
+		return { result, code: result.status === "error" ? 1 : 0 };
 	}
 
 	const step = saveStep(session.runDir, command, result, { args, ws: session.ws });
 	say(step.digest.trimEnd());
-	return result.status === "error" ? 1 : 0;
+	return { result, code: result.status === "error" ? 1 : 0 };
+}
+
+/** 動詞としての run。終了コードだけを返す（中身が要る場面は runOne を直に呼ぶ） */
+async function verbRun(opts) {
+	const { code } = await runOne(opts);
+	return code;
 }
 
 /**
@@ -505,15 +512,17 @@ async function verbDown() {
 }
 
 // ===========================================================================
-// ひとまとめの段取り（骨組みだけ。中身は次の段階で入れる）
+// ひとまとめの段取り
 // ===========================================================================
 
 /**
- * 段取りは「低レベルな動詞の組み立て」としてだけ書く。独自の実装を持たせない。
- * いまはどう組み立てるかを見せて終わる。
+ * 段取りは「低レベルな動詞の組み立て」としてだけ書く。**独自の実装を持たせない。**
+ * ここに手続きを書き足したくなったら、それは動詞かシナリオのどちらかに属する仕事である。
+ * steps は「実際には何をしているのか」を人に見せるためのもので、--dry を付けると実行せずに出す。
  */
 const PRESETS = {
 	sweep: {
+		run: presetSweep,
 		note: "決定的スイープ（旧 npm run test:explore）。うまくいかなければ終了コード 1",
 		steps: [
 			"lab up --host headless --ai echo --ws tmp --reset --name sweep",
@@ -524,6 +533,7 @@ const PRESETS = {
 		],
 	},
 	probe: {
+		run: presetProbe,
 		note: "頑健性プローブ（旧 probe-robustness）。前回の run との差を出す",
 		steps: [
 			"lab up --host headless --ai echo --ws tmp --reset --name probe",
@@ -533,6 +543,7 @@ const PRESETS = {
 		],
 	},
 	regress: {
+		run: presetRegress,
 		note: "録音の再生（旧 npm run test:byok:e2e）。食い違えば終了コード 1",
 		steps: [
 			"lab up --host headless --ai replay --replay scripts/lab/ai/recordings/trans-en-child.jsonl --ws tmp --reset",
@@ -554,13 +565,61 @@ const PRESETS = {
 	},
 };
 
-function runPreset(name) {
+async function runPreset(name, opts) {
 	const preset = PRESETS[name];
-	say(`「${name}」はまだ中身が入っていません。次の段階で入れます。`);
-	say(`  ねらい: ${preset.note}`);
-	say("  組み立て方（低レベルな動詞の並び）:");
-	for (const step of preset.steps) say(`    ${step}`);
-	return 2;
+	if (opts.dry || !preset.run) {
+		if (!preset.run) say(`「${name}」はまだ中身が入っていません。組み立て方だけ出します。`);
+		say(`  ねらい: ${preset.note}`);
+		say("  組み立て方（低レベルな動詞の並び）:");
+		for (const step of preset.steps) say(`    ${step}`);
+		return preset.run ? 0 : 2;
+	}
+	return await preset.run(opts);
+}
+
+/** スイープ（決定的な総なめ）。判定は scenarios/sweep.mjs が持つ */
+async function presetSweep(opts) {
+	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "sweep" });
+	const { run } = await import("./scenarios/sweep.mjs");
+	const { failed } = await run({ session: readSession(), verbose: opts.verbose, only: opts.only });
+	if (!opts.keep) await verbDown();
+	return failed > 0 ? 1 : 0;
+}
+
+/** 頑健性プローブ（観察するだけ）。判定はしない */
+async function presetProbe(opts) {
+	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "probe" });
+	const { run } = await import("./scenarios/probe.mjs");
+	await run({ session: readSession(), only: opts.only, diff: opts.diff, time: opts.time });
+	if (!opts.keep) await verbDown();
+	return 0;
+}
+
+/**
+ * 録音の再生。要求が録音と1文字でも違えば shim が 409 を返し、ここで落ちる。
+ * つまり「指示文の組み立てが変わった」ことに気づける。
+ */
+async function presetRegress(opts) {
+	const recording = opts.replay ?? path.join(HERE, "ai/recordings/trans-en-child.jsonl");
+	if (liveSession()) await verbDown();
+	await verbUp({ host: "headless", ai: "replay", replay: recording, ws: "tmp", reset: true, name: "regress" });
+	let code = 0;
+	try {
+		await runOne({ _: ["mdait.sync"] });
+		const { result } = await runOne({ _: ["mdait.translate.directory", "content/en/child"] });
+		const summary = result?.result;
+		const failedFiles = summary?.failed ?? 0;
+		if (failedFiles > 0) {
+			warn(`再生が食い違いました（${failedFiles} ファイルが失敗）。指示文の組み立てが変わっています。`);
+			warn("意図した変更なら録り直す。意図しないなら変更を戻す。どちらかを決めてから進むこと。");
+			code = 1;
+		} else {
+			say("録音のとおりに再生できました（LLM 呼び出し 0 回）。指示文の組み立ては変わっていません。");
+		}
+	} finally {
+		if (!opts.keep) await verbDown();
+	}
+	return code;
 }
 
 // ===========================================================================
@@ -580,7 +639,7 @@ async function main() {
 		return 0;
 	}
 
-	if (PRESETS[verb]) return runPreset(verb);
+	if (PRESETS[verb]) return await runPreset(verb, opts);
 
 	switch (verb) {
 		case "up":
