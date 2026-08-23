@@ -109,11 +109,11 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
 という三重の使い分けを型として確立する。
 
 **Steps**
-- [ ] `term.detect` / `term.expand` / `tm.commit` / `ai-review` / `adopt` の各経路
-- [ ] external マーカーモードでの sync / trans（`markers.mode: "external"`）
-- [ ] 非 Markdown（csv / txt）の `PlainFileHandler` 分岐
-- [ ] エッジな原稿（`structure_mismatch` / 空マーカー / マーカー無し / frontmatter だけ / 見出しレベルの境界）
-- [ ] 意地悪な台本（429 / 500 / 遅延 / 途中で切れた JSON）を trans 以外の AI 経路にも当てる
+- [x] `term.detect` / `term.expand` / `tm.commit` / `ai-review` / `adopt` の各経路（sweep の P9〜P12）
+- [x] external マーカーモードでの sync / trans（P5・P6 で既にカバー済み）
+- [x] 非 Markdown（csv / txt）の `PlainFileHandler` 分岐（P4 で既にカバー済み）
+- [x] エッジな原稿（空マーカー / コードブロック内の見本 / 空ファイル / frontmatter だけ / 見出しレベルの境界）— P13・P14
+- [x] 意地悪な台本を trans 以外の AI 経路にも当てる（`lab resilience`。9経路 × 8種）
 - [ ] 実 UI でしか見えないもの（翻訳中のツリーの遷移、CodeLens、確認ダイアログ）を code-server ホストで撮る
 
 **Gates**
@@ -164,6 +164,16 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
 - **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/logs` は `.gitignore`
   済みで掃除に巻き込まれるが、`AIStatsLogger` はパスを覚えたまま `appendFile` を呼ぶため、消えると毎回
   ENOENT になり**記録だけが静かに途切れていた**（翻訳は続く）。ENOENT のときだけ作り直して1回書き直す。
+- **耐性検査で、翻訳系だけが壊れることが分かった（判断待ち）。** 同じ意地悪（途中で切れた応答・空の応答・
+  形の違う JSON）を AI を使う9経路すべてに当てたところ、**用語検出・用語展開・TM 登録はすべて跳ね返した**
+  （警告を出して件数0で終わり、原稿にも用語集にも翻訳メモリにも何も書かない）。一方**翻訳の5経路だけ**が
+  壊れる。原因は `src/commands/trans/translator.ts:734` の `createTranslationFallbackResult` で、検証に
+  落ちたあと**最後の生応答をそのまま訳文として書く**設計。結果として (1) 壊れた応答の生テキストが本文に入り
+  見出しと段落が失われる、(2) 空の応答では本文が消えハッシュが `00000000` になり以後の sync でも拾われない、
+  (3) それでも `translatedCount:1`・通知「Translation completed」と**成功として報告する**、
+  (4) frontmatter は need ごと消えて誰にも回されない。実 LLM も応答が途中で切れる以上、偽の AI の限界では
+  ない。用語・TM 側と同じ「書かずに件数0で終える」に揃えるのが筋に見えるが、製品の振る舞いの変更なので
+  判断を待つ。少なくとも (3) は意図した設計とは考えにくい。
 - [TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。
   ツリーの provider が構築されないなら省略で構わないが、取れるなら sync のギャップ検出が headless でも効く。
 
