@@ -250,6 +250,10 @@ async function verbUp(opts) {
 		host,
 		hostPid: started.pid,
 		hostPort: started.port ?? null,
+		// 画面を開いたままにしておく常駐ページ（code-server のときだけ）。
+		// これがいないと Extension Host ごと畳まれ、IPC に返事が来なくなる
+		browserPid: started.browserPid ?? null,
+		browserWs: started.browserWs ?? null,
 		ws,
 		wsMode,
 		ai: ai ?? { mode: "none" },
@@ -290,6 +294,18 @@ async function runOne(opts) {
 
 	const args = resolvePathArgs(entry, opts._.slice(1), session.ws);
 	const result = await sendCommand(session.ws, command, args, { timeoutSec: asNumber(opts.timeout, 600) });
+
+	// 実ホストでは、画面を見張っている常駐ページがダイアログや通知に答えている。
+	// その控えを結果に合流させて、headless と同じ形（result.dialogs）で読めるようにする。
+	if (session.host === "code-server") {
+		try {
+			const { drainDialogs } = await import(path.join(HERE, "ui", "driver.mjs"));
+			const dialogs = await drainDialogs();
+			if (dialogs.length > 0) result.dialogs = [...(result.dialogs ?? []), ...dialogs];
+		} catch {
+			// 常駐ページがいなければ控えも無い。結果の扱いは変えない
+		}
+	}
 
 	if (opts.json) {
 		say(JSON.stringify(result, null, 2));

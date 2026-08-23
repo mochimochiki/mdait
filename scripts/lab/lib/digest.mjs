@@ -233,9 +233,14 @@ export function renderDigest({ seq, command, args, result, diff, jsonPath }) {
 	const dialogs = Array.isArray(result?.dialogs) ? result.dialogs : [];
 	if (dialogs.length > 0) {
 		lines.push("");
-		lines.push("### 出た確認ダイアログ（画面が無いので lab が代わりに答えた）");
+		lines.push("### 出た確認ダイアログ・通知（lab が代わりに答えた）");
 		for (const dialog of dialogs.slice(0, 20)) {
-			const answer = dialog.answered ? `「${dialog.answered}」と答えた` : "答えなかった";
+			// 通知は押さずに閉じる（ボタンを押すと別の仕事が始まってしまうため）
+			const answer = dialog.answered
+				? `「${dialog.answered}」と答えた`
+				: dialog.dismissed
+					? "押さずに閉じた"
+					: "答えなかった";
 			const choices = dialog.buttons?.length ? `［${dialog.buttons.join(" / ")}］` : "";
 			lines.push(`- ${answer}${choices}: ${dialog.message.replace(/\s+/g, " ").slice(0, 120)}`);
 		}
