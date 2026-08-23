@@ -51,17 +51,16 @@ const URI_FILE_COMMANDS = new Set([
 	"mdait.trans",
 	"mdait.translate.frontmatter",
 ]);
+// 注意: かつて mdait.term.detect.file / .directory と mdait.term.expand.file / .directory を
+// ここに並べていたが、この4つはどこにも registerCommand されていない（実在しないコマンド名）。
+// 実在するのは mdait.term.detect と mdait.term.expand の2つだけなので、表から外した。
 const FILE_ITEM_COMMANDS = new Set([
 	"mdait.translate.file",
 	"mdait.tm.commit.file",
-	"mdait.term.detect.file",
-	"mdait.term.expand.file",
 	"mdait.aiReview.file",
 ]);
 const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.translate.directory",
-	"mdait.term.detect.directory",
-	"mdait.term.expand.directory",
 	"mdait.tm.commit.directory",
 	"mdait.aiReview.directory",
 ]);

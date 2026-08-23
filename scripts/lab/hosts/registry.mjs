@@ -19,22 +19,19 @@ const URI_FILE_COMMANDS = new Set(["mdait.trans", "mdait.translate.frontmatter"]
 /**
  * 1つ目の文字列を「ファイルの StatusItem」にする。
  *
- * `mdait.term.detect.file` と `mdait.term.expand.file` は debug-command-handler.ts の表に
- * 載っているが、実際にはどこにも登録されていない（=存在しないコマンド名）。表の形を合わせる
- * ためだけに残してあり、下の COMMANDS には載せていない。
+ * 注意: `mdait.term.detect.file` / `.directory` と `mdait.term.expand.file` / `.directory` は
+ * debug-command-handler.ts の同じ表に載っているが、**どこにも登録されていない**（実在しない
+ * コマンド名）。実在しないものを表に残すと、次に読む人が「あるもの」と思い込む。ここには載せない。
+ * 実在するのは `mdait.term.detect` と `mdait.term.expand` の2つだけ。
  */
 const FILE_ITEM_COMMANDS = new Set([
 	"mdait.translate.file",
 	"mdait.tm.commit.file",
-	"mdait.term.detect.file",
-	"mdait.term.expand.file",
 	"mdait.aiReview.file",
 ]);
-/** 1つ目の文字列を「フォルダの StatusItem」にする（上と同じ理由で term.* の2つは飾り） */
+/** 1つ目の文字列を「フォルダの StatusItem」にする */
 const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.translate.directory",
-	"mdait.term.detect.directory",
-	"mdait.term.expand.directory",
 	"mdait.tm.commit.directory",
 	"mdait.aiReview.directory",
 ]);
