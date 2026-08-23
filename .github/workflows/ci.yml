@@ -36,6 +36,15 @@ jobs:
     - name: Run tests
       run: npm test
       
+    # 検証の土台（mdait Lab）が生きていることを守る。ワークスペースは /tmp に作られるので
+    # リポジトリを汚さない（ADR-260823-03）。sweep は sync の冪等性とマーカー整合を、
+    # regress は録音の再生で指示文の組み立てが変わっていないことを見る。どちらも LLM を呼ばない。
+    - name: Exploratory sweep (mdait Lab)
+      run: npm run test:explore
+
+    - name: Replay regression (mdait Lab)
+      run: npm run test:byok:e2e
+
     - name: Bundle extension
       run: npm run bundle
       

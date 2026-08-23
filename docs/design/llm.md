@@ -82,7 +82,7 @@ interface AIService {
 リクエスト本文に入れるキーは`model` / `messages` / `stream`（false） / `store`（false） / `max_completion_tokens` / `prompt_cache_key`の6つだけです。
 
 #### 受け口の差し替え
-`baseURL`を書き換えると、OpenAI互換のリクエストを受け取れるサーバーであれば、どこへでも要求を送れます。手元に受け口を立てる方法は[scripts/byok-shim/README.md](../../scripts/byok-shim/README.md)にあります。
+`baseURL`を書き換えると、OpenAI互換のリクエストを受け取れるサーバーであれば、どこへでも要求を送れます。手元に受け口を立てる方法は[scripts/lab/ai/README.md](../../scripts/lab/ai/README.md)にあります。
 
 #### プロンプトキャッシュ
 - リクエストに `prompt_cache_key`（`mdait-{system promptのCRC32（8桁hex、正規化なし）}`）を付与し、同一system promptのリクエストが同じ推論ノードへルーティングされやすくする
@@ -156,7 +156,7 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 
 ### 開発用の受け皿（BYOK shim）
 
-**置き場所**: `scripts/byok-shim/`
+**置き場所**: `scripts/lab/ai/`
 
 翻訳の要求を手元で受け取るための小さなサーバーです。Nodeの組み込みモジュールだけで書かれており、依存パッケージは増やしていません。
 
@@ -171,9 +171,9 @@ VS Code標準のLMと統合されます。GitHub Copilotのモデルを利用す
 - `agent`: `claude`コマンドを翻訳役として起動し、無人で並列に答える
 
 #### モック実装との違い
-DefaultAIProviderや`scripts/exploratory/fake-ai.js`は、`AIService`の実装そのものを差し替えます。そのため、OpenAIProviderが担う処理（HTTP通信・リトライ・タイムアウト）は走りません（`fake-ai.js`は`ai-stats.log`への記録も通りません）。shimはHTTPの向こう側に立つため、プロバイダー層まで本物が動きます。
+DefaultAIProviderは、`AIService`の実装そのものを差し替えます。そのため、OpenAIProviderが担う処理（HTTP通信・リトライ・タイムアウト・`ai-stats.log`への記録）は走りません。shimはHTTPの向こう側に立つため、プロバイダー層まで本物が動きます。かつて同じ位置にいた`scripts/exploratory/fake-ai.js`は、この理由で廃止しました（ADR-260823-02）。決定的な訳文が欲しいときはshimの`echo`モードを使います。
 
-使い方は[scripts/byok-shim/README.md](../../scripts/byok-shim/README.md)を参照してください。
+使い方は[scripts/lab/ai/README.md](../../scripts/lab/ai/README.md)を参照してください。
 
 ---
 

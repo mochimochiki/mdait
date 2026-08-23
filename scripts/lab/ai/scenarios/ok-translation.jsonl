@@ -1,0 +1,8 @@
+// まともな訳文を1件だけ返す台本。意地悪ではなく、**下ごしらえ**に使う。
+// --script-loop と一緒に使うと、何ユニットあっても同じ訳文を返し続ける。
+//
+// なぜ echo ではだめか: echo は原文を1行に潰して返すので、見出し（`# ...`）が落ちる。
+// 見出しの落ちた訳文は、あとで原文を書き換えたときに原文ユニットと結び付かず、
+// 「改訂（need:revise）」ではなく「削除＋新規」になってしまう。
+// 改訂の場面を作りたいときは、見出しを残すこの台本を使うこと。
+{"text": "{\"translation\": \"# Heading A\\n\\nBody A. This is the prepared translation used as a starting point. [MT]\", \"termSuggestions\": []}"}

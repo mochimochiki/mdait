@@ -1,0 +1,7 @@
+// 壊れた SSE（検査せずそのまま流す断片）。--script-loop と一緒に使う。
+//
+// 注意: mdait の OpenAI プロバイダは常に stream:false で投げるため、shim の
+// raw_chunks は使われない（respondStreaming の中でしか見ていない）。
+// この台本を当てると、本文が空の 200 応答として届く。つまり「壊れた SSE」ではなく
+// 「空の応答」を試すことになる。到達させたいなら shim 側に手当てが要る。
+{"raw_chunks": ["data: {\"choices\":[{\"delta\":{\"content\":\"途中で", "data: [DONE]"]}

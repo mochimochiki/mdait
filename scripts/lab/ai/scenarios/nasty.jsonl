@@ -1,0 +1,42 @@
+// わざと壊す台本の見本箱。本物のLLMでは狙って出せない場面を、順に1つずつ並べてある。
+//
+//   lab up --ai script --script scripts/lab/ai/scenarios/nasty.jsonl
+//
+// 使うときの注意が3つある。
+//   1. mdait は 429 と 5xx を自分で送り直す（2秒 → 4秒 → 8秒、最大3回）。
+//      送り直しも1件ずつ台本を食べるので、**何件目がどのユニットに当たるかは読めない**。
+//      「この意地悪をこの経路に確実に当てたい」ときは、この見本箱ではなく
+//      1種類だけを書いた nasty-*.jsonl を --script-loop 付きで使うこと
+//      （scenarios/resilience.mjs がそうしている）。
+//   2. 台本を使い切ると 409 で止まる。黙って先頭へは戻らない。
+//   3. raw_chunks（壊れた SSE）は shim のストリーミング経路でしか使われない。
+//      mdait の OpenAI プロバイダは常に stream:false なので、当てても
+//      「本文が空の 200」として届く。
+//
+// res の鍵: delay（秒だけ黙る）/ http_status（429・500 などを返す）/
+//           finish_reason（length で途中打ち切り）/ raw_chunks（壊れた SSE）/ error
+//
+// 1件目: 遅い応答（タイムアウトの手前で返る）
+{"text": "{\"translation\": \"遅れて届いた訳文。\", \"termSuggestions\": []}", "delay": 5}
+// 2件目: サーバー側の一時的な失敗。クライアントは指数バックオフで再送するはず
+{"http_status": 503, "error": {"message": "shim がわざと落としました", "type": "server_error"}}
+// 3件目: 出力が途中で切れた（finish_reason: length）。JSON として壊れている
+{"text": "{\"translation\": \"途中まで訳したところで", "finish_reason": "length"}
+// 4件目: レート制限
+{"http_status": 429, "error": {"message": "shim がわざとレート制限を返しました", "type": "rate_limit_error"}}
+// 5件目: 正常に戻る
+{"text": "{\"translation\": \"やっと正しく返せました。\", \"termSuggestions\": []}"}
+// 6件目: 送り直しても直らない失敗（500）
+{"http_status": 500, "error": {"message": "shim がわざと内部エラーを返しました", "type": "server_error"}}
+// 7件目: こちらの出し方が悪いという返事（400）。送り直してはいけない
+{"http_status": 400, "error": {"message": "shim がわざと不正な要求だと答えました", "type": "invalid_request_error"}}
+// 8件目: 空の応答（200 だが本文が空文字）。訳文として採用すると本文が消える
+{"text": ""}
+// 9件目: JSON としては正しいが、期待している形ではない
+{"text": "{\"answer\": 42, \"note\": \"これは訳文ではありません\"}"}
+// 10件目: JSON ですらない、ただの文章
+{"text": "Sure! Here is the translation you asked for:"}
+// 11件目: 壊れた SSE の断片（stream:true のときだけ効く。上の注意 3 を参照）
+{"raw_chunks": ["data: {\"choices\":[{\"delta\":{\"content\":\"途中で", "data: [DONE]"]}
+// 12件目: 正常に戻る
+{"text": "{\"translation\": \"最後にもう一度、正しく返せました。\", \"termSuggestions\": []}"}

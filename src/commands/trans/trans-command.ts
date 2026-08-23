@@ -157,6 +157,36 @@ function emptyResult(outcome: TransOutcome): TransCommandResult {
 }
 
 /**
+ * 翻訳の終わり方を通知し、「全文で訳し直す」を選ばれたときは
+ * **やり直した側の結果**を呼び手に返す。
+ *
+ * やり直しの結果を捨てると、訳文が書き換わりハッシュも need も進んでいるのに
+ * 「0件翻訳・1件スキップ」という古い結果が返り、返り値を読む側
+ * （LM ツール・ステータスツリー・lab の IPC）が実態と食い違う。
+ *
+ * **必ず排他区間の外から呼ぶこと**（中でボタン付き通知を待つとロックが解放されない）。
+ *
+ * @param result 通知の対象になる、やり直し前の結果
+ * @param label 対象の呼び名（ファイル名・ユニット名）
+ * @param retryFullTranslation 全文で訳し直す処理。返り値がそのまま呼び手への結果になる
+ */
+export async function reportTransOutcomeWithRetry(
+	result: TransCommandResult,
+	label: string,
+	retryFullTranslation: () => Promise<TransCommandResult | undefined>,
+): Promise<TransCommandResult> {
+	let finalResult = result;
+	await reportTransOutcome(result, {
+		label,
+		retryFullTranslation: async () => {
+			// やり直しが中断・失敗して結果を返さなかったときは、元の結果を保つ
+			finalResult = (await retryFullTranslation()) ?? finalResult;
+		},
+	});
+	return finalResult;
+}
+
+/**
  * Markdownファイルの翻訳コマンド（パブリックAPI）
  * @param uri 翻訳対象ファイルのURI（ファイルパス）
  */
@@ -197,11 +227,9 @@ export async function transCommand(
 	}
 
 	// 通知は必ず排他区間の外で出す（区間の中で人を待つとロックが解放されない）
-	await reportTransOutcome(result, {
-		label: path.basename(targetFilePath),
-		retryFullTranslation: () => transCommand(uri, { forceFullTranslation: true }),
-	});
-	return result;
+	return await reportTransOutcomeWithRetry(result, path.basename(targetFilePath), () =>
+		transCommand(uri, { forceFullTranslation: true }),
+	);
 }
 
 /**
@@ -1233,12 +1261,9 @@ export async function transUnitCommand(
 	}
 
 	// 通知は排他区間の外で1回だけ出す（結果を見ずに成功を出す呼び出し口を無くす）
-	await reportTransOutcome(result, {
-		label: vscode.l10n.t("unit {0}", unitHash.substring(0, 8)),
-		retryFullTranslation: () =>
-			transUnitCommand(targetPath, unitHash, { forceFullTranslation: true }),
-	});
-	return result;
+	return await reportTransOutcomeWithRetry(result, vscode.l10n.t("unit {0}", unitHash.substring(0, 8)), () =>
+		transUnitCommand(targetPath, unitHash, { forceFullTranslation: true }),
+	);
 }
 
 /**

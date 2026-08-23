@@ -1,0 +1,7 @@
+// 一時的な失敗のあと正常に戻る台本（翻訳系の経路むけ）。
+// --script-loop と一緒に使うこと。3件で1周するので、ユニットが何個あっても
+// 「429 → 送り直し → 503 → 送り直し → 成功」が各ユニットで同じように起きる。
+// 見たいこと: 送り直しが起きるか、約2秒おきか、最後まで完走するか。
+{"http_status": 429, "error": {"message": "shim がわざとレート制限を返しました", "type": "rate_limit_error"}}
+{"http_status": 503, "error": {"message": "shim がわざとサーバー側の一時的失敗を返しました", "type": "server_error"}}
+{"text": "{\"translation\": \"# Heading A\\n\\n(script) resilience fixture translated. [MT]\", \"termSuggestions\": []}"}
