@@ -29,7 +29,7 @@ const SHIM = path.join(AI_DIR, "shim.mjs");
 const HOSTS = ["headless", "code-server", "desktop"];
 const AI_MODES = ["echo", "live", "agent", "script", "replay", "none"];
 
-const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time", "no-diff"];
+const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time", "no-diff", "script-loop"];
 
 const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
 
@@ -50,6 +50,7 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --name <名前>             run ディレクトリに付ける名前
             --delay <ミリ秒>          echo が答えるまで待つ時間（遅さの再現）
             --script <ファイル>       script モードの台本
+            --script-loop             台本を使い切ったら先頭へ戻す（無いと 409 で止まる）
             --replay <ファイル>       replay モードの録音
             --record <ファイル>       やり取りを録音する
   run     mdait のコマンドを1つ実行する（up していなければ既定で自動的に始める）
@@ -78,6 +79,9 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --only S3,S13  シナリオを絞る    --diff <runのパス>  比べる相手    --time 所要時間も出す
   regress  録音の再生（旧 npm run test:byok:e2e）。食い違えば終了コード 1
             --replay <ファイル>  別の録音を再生する
+  resilience  壊れた応答への耐性（429・500・途中で切れた JSON・長い沈黙など）
+            --only R1,R8   経路を絞る    --nasty N1,N4  意地悪を絞る
+            **1周は20〜30分かかる。CI には入れていない**
   prompt   指示文の比べ読み（未実装。組み立て方だけ出ます）
   ux       ブラウザ版 VS Code で mdait のビューを開いて撮る（未実装。組み立て方だけ出ます）
 
@@ -155,6 +159,8 @@ async function startShim(mode, options) {
 	const argv = ["--mode", mode, "--port", "0"];
 	if (options.delay !== undefined) argv.push("--delay", String(options.delay));
 	if (options.script) argv.push("--script", path.resolve(options.script));
+	// 台本を使い切ったら先頭へ戻す。無いと、ユニット数が台本の数を超えた時点で 409 で止まる
+	if (options.scriptLoop) argv.push("--script-loop");
 	if (options.replay) argv.push("--replay", path.resolve(options.replay));
 	if (options.record) argv.push("--record", path.resolve(options.record));
 	const mailbox = path.join(LAB_DIR, "mailbox");
@@ -231,6 +237,7 @@ async function verbUp(opts) {
 	const ai = await startShim(aiMode, {
 		delay: opts.delay,
 		script: opts.script,
+		scriptLoop: opts["script-loop"],
 		replay: opts.replay,
 		record: opts.record,
 	});
@@ -591,6 +598,16 @@ const PRESETS = {
 			"lab report ／ lab down",
 		],
 	},
+	resilience: {
+		run: presetResilience,
+		note: "壊れた応答への耐性。AI を使う9経路に8種の意地悪を当て、原稿が壊れないかを見る",
+		steps: [
+			"lab up --host headless --ai echo --ws tmp --reset --name resilience",
+			"経路ごとに見本を作り直し、意地悪な台本の受け皿を --script-loop 付きで起こす",
+			"コマンドを1つ叩き、前後のファイル・マーカー・台帳・用語集・翻訳メモリを突き合わせる",
+			"lab report ／ lab down",
+		],
+	},
 	prompt: {
 		note: "指示文の比べ読み。claude を翻訳役に立てて同じ原稿を訳し、録音を見比べる",
 		steps: [
@@ -622,6 +639,23 @@ async function presetSweep(opts) {
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "sweep" });
 	const { run } = await import("./scenarios/sweep.mjs");
 	const { failed } = await run({ session: readSession(), verbose: opts.verbose, only: opts.only });
+	if (!opts.keep) await verbDown();
+	return failed > 0 ? 1 : 0;
+}
+
+/**
+ * 壊れた応答への耐性。1周は 72 件で 20〜30 分かかる（送り直しの待ちと
+ * タイムアウトが経路の数だけ乗るため）。CI には入れず、--only / --nasty で絞って使う。
+ */
+async function presetResilience(opts) {
+	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "resilience" });
+	const { run } = await import("./scenarios/resilience.mjs");
+	const { failed } = await run({
+		session: readSession(),
+		verbose: opts.verbose,
+		only: opts.only,
+		nasty: opts.nasty,
+	});
 	if (!opts.keep) await verbDown();
 	return failed > 0 ? 1 : 0;
 }
