@@ -1,5 +1,5 @@
 // frontmatter マーカー同期の冪等性に関する回帰テスト。
-// 探索ハーネス（scripts/exploratory）が検出した2件の非冪等バグを単体で固定する:
+// 探索スイープ（いまの mdait Lab / scripts/lab）が検出した2件の非冪等バグを単体で固定する:
 //   Bug B: frontmatter のみのファイルで stringify のたびに末尾改行が増える
 //   Bug A: _data のマーカーが更新されても _raw が古いまま残り、出力にマーカーが出ない
 

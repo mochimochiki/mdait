@@ -2,13 +2,13 @@
 
 > `markers.mode: "external"` で使う `.mdait/unit-state` について、**文書がふつうに編集・移動・削除されたときにどこまで状態が生き残るか**を実測し、embedded との差と、埋めるべき穴をまとめる。
 >
-> 実測スクリプト: `scripts/exploratory/probe-robustness.js`。VS Code を起動せずに sync/trans を直接動かし、同じ操作を embedded と external の両方で流して結果を並べる。
+> 実測スクリプト: `scripts/lab/scenarios/probe.mjs`（`node scripts/lab/lab.mjs probe`）。VS Code を起動せずに sync/trans を動かし、同じ操作を embedded と external の両方で流して結果を並べる。
 >
 > ```bash
-> npm run compile && node scripts/exploratory/probe-robustness.js
+> npm run compile && node scripts/lab/lab.mjs probe
 > ```
 >
-> テストワークスペース（`src/test/unit/workspace`）を書き換えるが終了時に自動復元する。オプションは [scripts/exploratory/README.md](../../scripts/exploratory/README.md) を参照。
+> 作業場はリポジトリの外（`/tmp/mdait-lab/ws`）に作られるのでリポジトリは汚れない。オプションは `node scripts/lab/lab.mjs --help` と [scripts/lab/README.md](../../scripts/lab/README.md) を参照。
 
 ---
 
@@ -177,7 +177,7 @@ Extension Host は長時間動く1プロセスなので実運用で起きる。g
 
 **要点**: embedded は「文書の中の変化」に強く「文書の外の処理」に弱い。external はその逆。external を既定にするには、embedded が無料で持っている「文書の中の変化への追従」を**別の手段で作り直す**必要があった。§10〜§16（内容による突き合わせ）・§17〜§18（孤立の可視化とリネーム追随）・§19（保留席）・§20（内容による再リンク）がそれである。
 
-**2026-08-22 時点の実測**（`node scripts/exploratory/probe-robustness.js`）: `一致 75 / 想定内の差 6 / 想定外の差 0 / 絶対チェックの失敗 0`。差が出てよいとされている6件のうち、**external が弱いのは上の表の下2行（S50 / S56 と S81）だけ**である。残りの4件は external が強いか（S12 / S69）、モードの違いに意味がないか（S11）である。
+**2026-08-22 時点の実測**（`node scripts/lab/lab.mjs probe`。2026-08-23 に移設後も同じ結果を再現）: `一致 75 / 想定内の差 6 / 想定外の差 0 / 絶対チェックの失敗 0`。差が出てよいとされている6件のうち、**external が弱いのは上の表の下2行（S50 / S56 と S81）だけ**である。残りの4件は external が強いか（S12 / S69）、モードの違いに意味がないか（S11）である。
 
 なお「external が弱い項目がゼロになる」ことは**原理的にありえない**。状態を本文の外に置いた以上、本文だけを見て復元できない操作は必ず残る。S50 / S56 を潰すには原文に安定した `id` を1行書くしかなく、それは「原文を1文字も書き換えない」（ADR-260802-04）と正面から衝突する（§7 の 2026-08-05 決定で書かないと決めてある）。したがって判断の基準は**弱い項目の数がゼロか**ではなく、**残った差を数えて説明できるか**である。
 
@@ -298,7 +298,7 @@ frontmatter まで外に出すと、external の Markdown は**mdait の痕跡�
 
 ### どこまで直ったか（実測）
 
-`scripts/exploratory/probe-robustness.js` は最後に**両モードの結果を突き合わせ、想定外の差があれば
+`scripts/lab/scenarios/probe.mjs` は最後に**両モードの結果を突き合わせ、想定外の差があれば
 終了コード 1 を返す**ようにした。差が出てよいシナリオは理由つきで `EXPECTED_DIFF` に列挙してある。
 
 ```
