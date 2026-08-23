@@ -230,6 +230,17 @@ export function renderDigest({ seq, command, args, result, diff, jsonPath }) {
 	lines.push("");
 	lines.push("### ワークスペースの変化（前の手順から）");
 	for (const row of diff ?? []) lines.push(`- ${row}`);
+	const dialogs = Array.isArray(result?.dialogs) ? result.dialogs : [];
+	if (dialogs.length > 0) {
+		lines.push("");
+		lines.push("### 出た確認ダイアログ（画面が無いので lab が代わりに答えた）");
+		for (const dialog of dialogs.slice(0, 20)) {
+			const answer = dialog.answered ? `「${dialog.answered}」と答えた` : "答えなかった";
+			const choices = dialog.buttons?.length ? `［${dialog.buttons.join(" / ")}］` : "";
+			lines.push(`- ${answer}${choices}: ${dialog.message.replace(/\s+/g, " ").slice(0, 120)}`);
+		}
+		if (dialogs.length > 20) lines.push(`- …ほか ${dialogs.length - 20} 件`);
+	}
 	if (s.notable.length > 0) {
 		lines.push("");
 		lines.push("### 気になるログ（警告・エラーのみ）");

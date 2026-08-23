@@ -253,11 +253,22 @@ async function reload(say) {
 	say("覚えていた中身を捨てて読み直しました");
 }
 
-/** ステータスツリーを組み直す。組めなくても止まらない */
+/**
+ * ステータスツリーを組み直す。組めなくても止まらない。
+ *
+ * 集める役（StatusCollector）を先に渡しておくこと。渡さないと buildStatusItemTree は
+ * 「collector not set, skipping」と言って**何も組まずに戻る**。ツリーが空のままだと
+ * trans が `from` から原文ユニットを引けず（`Source unit not found`）、原文の代わりに
+ * 訳文側の中身を送るという、実運用と違う道を通ってしまう。実測で見つけて直した。
+ */
 async function rebuildTree(say) {
 	try {
 		const { StatusManager } = out("core/status/status-manager.js");
-		await StatusManager.getInstance().buildStatusItemTree();
+		const { StatusCollector } = out("commands/file-handler/status-collector.js");
+		const manager = StatusManager.getInstance();
+		// 毎回渡す。作り直し（lab.reload）で入れ物が替わっても取りこぼさないため
+		manager.setCollector(new StatusCollector());
+		await manager.buildStatusItemTree();
 	} catch (error) {
 		say(`一覧の組み立ては見送りました: ${error?.message ?? error}`);
 	}
@@ -338,6 +349,7 @@ async function handleOnce(ws, vscode, logger, say) {
 	});
 
 	say(`実行します: ${command} ${JSON.stringify(args)}`);
+	vscode.__labResetDialogs?.();
 	try {
 		const result = await invoke(command, args, vscode);
 		const completedAt = new Date().toISOString();
@@ -345,7 +357,17 @@ async function handleOnce(ws, vscode, logger, say) {
 		const status = typeof errorCount === "number" && errorCount > 0 ? "done-with-errors" : "done";
 		writeResult(
 			paths.resultFile,
-			blank({ id, command, status, result: result ?? null, logs, structuredLogs, startedAt, completedAt }),
+			blank({
+				id,
+				command,
+				status,
+				result: result ?? null,
+				logs,
+				structuredLogs,
+				dialogs: vscode.__labDialogs?.() ?? [],
+				startedAt,
+				completedAt,
+			}),
 		);
 		say(`終わりました: ${command} → ${status}`);
 	} catch (error) {
@@ -358,6 +380,7 @@ async function handleOnce(ws, vscode, logger, say) {
 				error: error instanceof Error ? error.message : String(error),
 				logs,
 				structuredLogs,
+				dialogs: vscode.__labDialogs?.() ?? [],
 				startedAt,
 				completedAt: new Date().toISOString(),
 			}),

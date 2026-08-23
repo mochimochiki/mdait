@@ -41,6 +41,37 @@ vscode.window.showTextDocument = async () => ({});
 vscode.window.activeTextEditor = undefined;
 vscode.window.showQuickPick = async () => undefined;
 vscode.window.showInputBox = async () => undefined;
+
+/*
+ * 確認ダイアログへの答え方。
+ *
+ * 画面が無いので誰も答えられない。答えないと commands 層は「取り消された」と読んで
+ * 無言で何もしない（実測: mdait.translate.directory は確認ダイアログで止まり、
+ * ログ0行・返り値なしで終わっていた）。それでは何も確かめられないので、
+ * ここでは**最初のボタン＝人が主たる操作を押したもの**として答える。
+ *
+ * ただし黙って押さない。押したことは必ず控えて lab の要約に出す。
+ * 取り消し側を試したいときは MDAIT_LAB_DIALOG=no を設定する（どれにも答えない）。
+ */
+const answeredDialogs = [];
+function answerDialog(level, message, items) {
+	const flat = items.flat();
+	const buttons = flat.filter((item) => typeof item === "string");
+	const modal = flat.some((item) => item && typeof item === "object" && item.modal === true);
+	// エラーの通知に付くボタンは「ログを開く」など別の操作なので押さない
+	const declines = process.env.MDAIT_LAB_DIALOG === "no" || level === "error";
+	const answered = declines ? undefined : buttons[0];
+	answeredDialogs.push({ level, modal, message: String(message), buttons, answered: answered ?? null });
+	return answered;
+}
+vscode.window.showInformationMessage = async (message, ...items) => answerDialog("info", message, items);
+vscode.window.showWarningMessage = async (message, ...items) => answerDialog("warning", message, items);
+vscode.window.showErrorMessage = async (message, ...items) => answerDialog("error", message, items);
+/** 直前の命令で出たダイアログを読む（headless ホストが結果に載せる） */
+vscode.__labDialogs = () => answeredDialogs.slice();
+vscode.__labResetDialogs = () => {
+	answeredDialogs.length = 0;
+};
 vscode.env = { openExternal: async () => true, language: "en" };
 
 // RelativePattern

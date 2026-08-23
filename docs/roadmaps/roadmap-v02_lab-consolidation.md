@@ -135,6 +135,20 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
 - 実測済みの事実（12往復28.4秒、503/429 は約2秒後に再送され完走、409 は再送されない、コードブロックは
   プレースホルダに置換されて送られる、`SelectionState` は初期状態が空）は、新しいスキル文書の本体に残す。
   参照ファイルへ逃がすと読まれず、同じ調査が二度行われる。
+- 統合の実走で**もう1つ製品側の疑いが出た**。`src/commands/trans/trans-command.ts:716` は
+  `const previousTranslation = unit.marker?.from ? unit.content : undefined;` としている。
+  ところが**初回同期の訳文は原文のコピーで、`from:` も付く**（実測: `<!-- mdait 6647337d from:6647337d
+  need:translate -->` の下に原文がそのまま置かれる）。そのため初回翻訳でも「前回の訳文」があると
+  判定され、指示文に **「原文が改訂されました。前回の訳文を活かして直してください」** という枠組みと、
+  「前回の訳文」として**原文そのもの**が付く。すぐ上のコメントは「原文が改訂された場合」と書いており、
+  条件（`from` の有無）と意図（改訂かどうか）がずれている。`needsRevision()` で判定するのが筋に見えるが、
+  指示文の変更は訳質と録音に響くので、P03 で `--ai live` を使って送信内容を観察してから決める。
+- **headless の忠実度の穴を1つ塞いだ。** `StatusManager.buildStatusItemTree()` は集める役
+  （`StatusCollector`）を渡さないと「collector not set, skipping」と言って**何も組まずに戻る**。
+  旧 `trans-e2e.js` も渡していなかったため、ツリーが空のまま trans が走り、`from` から原文ユニットを
+  引けず（`Source unit not found` が9件）、**周辺文脈のブロックが丸ごと落ち、「前回の訳文」に隣の章の
+  本文が入った要求**を送っていた。つまり `recordings/trans-en-child.jsonl` は**実運用では起こらない
+  指示文**を録音していた。集める役を渡すよう直し、実機（`--ai agent`）で録り直した（12往復・34.7秒）。
 - 統合の下調べで**製品側の欠陥**を1つ見つけた。`src/commands/term/command-open.ts:51` が
   `mdait.term.detect.file` を `executeCommand` しているが、**その ID はどこにも登録されていない**
   （実在するのは `mdait.term.detect` で、引数は `(units, transPair)`）。用語集ファイルが無いときに

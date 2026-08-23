@@ -222,6 +222,31 @@ export async function connect(opts = {}) {
 		return { message, detail, buttons };
 	};
 
+	/**
+	 * 通知（トースト）のボタンを文字で押す。
+	 * mdait には「ボタンを押すまで終わらない通知」があるため、放っておくとコマンドが
+	 * 終わらないことがある（実測: 対がないファイルへの trans は通知を出したまま running のまま）。
+	 */
+	const clickNotificationButton = async (text) => {
+		const button = page.locator(".notifications-toasts .notification-toast .monaco-button", {
+			hasText: text,
+		});
+		await button.first().waitFor({ timeout: 10000 });
+		await button.first().click();
+	};
+
+	/** 通知を閉じる（ボタンを押さずに片付ける） */
+	const dismissNotifications = async () => {
+		const closers = page.locator(
+			".notifications-toasts .notification-toast .codicon-notifications-clear",
+		);
+		const count = await closers.count();
+		for (let i = count - 1; i >= 0; i--) {
+			await closers.nth(i).click({ timeout: 5000 }).catch(() => {});
+		}
+		return count;
+	};
+
 	/** ダイアログのボタンを文字で押す（AI 利用の確認 "Proceed" など） */
 	const clickDialogButton = async (text) => {
 		const button = page.locator(".monaco-dialog-box .dialog-buttons a", { hasText: text });
@@ -251,6 +276,8 @@ export async function connect(opts = {}) {
 		runCommand,
 		treeRow,
 		notifications,
+		clickNotificationButton,
+		dismissNotifications,
 		dialog,
 		clickDialogButton,
 		close,
@@ -273,7 +300,7 @@ export function uiPaths() {
  * 同じ command.json を2つの拡張が奪い合う。さらに画面を閉じたときに ready ファイルが
  * 消えてしまう（拡張は終了時に自分で消す）。画面は1つに保つのが安全（実測）。
  *
- * @param {"shot"|"notifications"|"dialog"|"click-dialog"|"open-mdait"|"run-command"|"tree-rows"|"url"|"reload"} action
+ * @param {"shot"|"notifications"|"click-notification"|"dismiss-notifications"|"dialog"|"click-dialog"|"open-mdait"|"run-command"|"tree-rows"|"url"|"reload"} action
  */
 export async function ask(action, args = {}, { timeoutSec = 60 } = {}) {
 	const { requestFile, resultFile } = uiPaths();
@@ -418,6 +445,10 @@ async function handleRequest(keeper, request) {
 			return await keeper.dialog();
 		case "click-dialog":
 			return await keeper.clickDialogButton(a.text);
+		case "click-notification":
+			return await keeper.clickNotificationButton(a.text);
+		case "dismiss-notifications":
+			return await keeper.dismissNotifications();
 		case "open-mdait":
 			return await keeper.openMdait();
 		case "run-command":
