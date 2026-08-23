@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { LAB_DIR, ensureLabDir } from "./session.mjs";
+import { LAB_DIR, ensureLabDir, readSession } from "./session.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** リポジトリのルート */
@@ -102,7 +102,12 @@ export async function prepareWorkspace(options = {}) {
 		fs.mkdirSync(path.join(ws, ".mdait"), { recursive: true });
 		const configFile = path.join(ws, ".mdait", "mdait.json");
 		if (reset || !fs.existsSync(configFile)) {
+			// 設定を雛形から入れ直すと、AI の差し向け（ai.openai.baseURL）も一緒に消える。
+			// 消えたことに気づく手掛かりが無く、翻訳がまるごと起きないまま完走してしまうので
+			// （実測: 全ユニットが need:translate のまま終わり、集計だけが静かに変わった）、
+			// いま立っている相手が分かるなら、ここで必ず差し向け直す
 			fs.copyFileSync(TEMPLATE_CONFIG, configFile);
+			reapplyAi(ws);
 		}
 		if (reset) clearResidue(ws);
 		return ws;
@@ -135,6 +140,19 @@ function backupConfig(ws) {
  * @param {{mode?: string, baseURL?: string, model?: string, timeoutSec?: number}} ai
  *   mode が "none" のときは何もしない（実物のプロバイダをそのまま使う）
  */
+/**
+ * いま立っている AI の相手へ、設定を差し向け直す。
+ * 設定ファイルを作り直したあとに呼ぶ。相手がいなければ何もしない。
+ */
+function reapplyAi(ws) {
+	try {
+		const session = readSession();
+		if (session?.ai?.baseURL && session.ws === ws) configureAi(ws, session.ai);
+	} catch {
+		// 差し向け直せなくても、作り直し自体は成功させる
+	}
+}
+
 export function configureAi(ws, ai = {}) {
 	if (!ai.mode || ai.mode === "none") return;
 	if (!ai.baseURL) throw new Error("configureAi には baseURL が要ります");

@@ -65,6 +65,32 @@ import { REPO, configureAi, prepareWorkspace } from "../lib/workspace.mjs";
 const LAB_CLI = path.join(REPO, "scripts", "lab", "lab.mjs");
 /** 観察結果の置き場の名前（run ディレクトリの直下） */
 const OBSERVATIONS = "probe-observations.json";
+/**
+ * 絞って走らせたときの置き場。全件の控えを潰さないために名前を分ける。
+ * （潰すと、次に全件を走らせたときに 150 件以上が「追加」に見えて差分が読めなくなる）
+ */
+const OBSERVATIONS_PARTIAL = "probe-observations-partial.json";
+
+/**
+ * 過去の run から、同じ走らせ方の控えを新しい順に1つ探す。
+ * 見つからなければ null（最初の1回目）。
+ */
+function latestObservationsBefore(currentRunDir, only) {
+	const wanted = only ? OBSERVATIONS_PARTIAL : OBSERVATIONS;
+	const runsRoot = path.dirname(currentRunDir);
+	let entries;
+	try {
+		entries = fs.readdirSync(runsRoot, { withFileTypes: true });
+	} catch {
+		return null;
+	}
+	const candidates = entries
+		.filter((e) => e.isDirectory() && path.join(runsRoot, e.name) !== currentRunDir)
+		.map((e) => path.join(runsRoot, e.name, wanted))
+		.filter((file) => fs.existsSync(file))
+		.sort();
+	return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+}
 
 // ===========================================================================
 // この実行のあいだ持ち回るもの
@@ -2151,9 +2177,12 @@ export async function run(options = {}) {
 		say(`※ AI の相手が ${session.ai.mode} です。訳文が決まった形にならないと結果がぶれます（echo を勧めます）`);
 	}
 
-	// 差分の相手は、今回の書き出しで消える前に読んでおく
-	const previousInThisRun = path.join(RUN_DIR, OBSERVATIONS);
-	const fallbackBase = fs.existsSync(previousInThisRun) ? previousInThisRun : null;
+	// 今回の書き出し先。絞って走らせたときは全件の控えと分ける
+	const outFile = path.join(RUN_DIR, ONLY ? OBSERVATIONS_PARTIAL : OBSERVATIONS);
+	// 差分の相手は、今回の書き出しで消える前に決めておく。
+	// まず同じ run の中（＝絞ったまま繰り返し直したとき）、無ければ**過去の run から新しい順に**探す。
+	// lab probe は毎回新しい run を作るので、同じ run の中だけを見ると相手が永遠に見つからない
+	const fallbackBase = fs.existsSync(outFile) ? outFile : latestObservationsBefore(RUN_DIR, ONLY);
 
 	const startedAt = new Date().toISOString();
 	try {
@@ -2194,19 +2223,20 @@ export async function run(options = {}) {
 	}
 	observations.diff = diff;
 
-	// 全文はディスクへ。画面に出したものと同じ並びで残す
-	try {
-		fs.writeFileSync(path.join(RUN_DIR, OBSERVATIONS), `${JSON.stringify(observations, null, 2)}\n`, "utf8");
-		fs.writeFileSync(path.join(RUN_DIR, "probe.log"), `${logLines.join("\n")}\n`, "utf8");
-	} catch (e) {
-		say(`記録を残せませんでした: ${e?.message}`);
-	}
-
 	// 絞って走らせたときは「想定外の差」を合否に数えない（シナリオを書きながら確かめられるように）。
 	// 絶対チェックは1シナリオでも成立するので、いつでも数える。
 	observations.ok = ONLY
 		? absoluteFailures.length === 0
 		: parity.unexpected.length === 0 && absoluteFailures.length === 0;
+
+	// 全文はディスクへ。画面に出したものと同じ並びで残す
+	try {
+		fs.writeFileSync(outFile, `${JSON.stringify(observations, null, 2)}\n`, "utf8");
+		fs.writeFileSync(path.join(RUN_DIR, ONLY ? "probe-partial.log" : "probe.log"), `${logLines.join("\n")}\n`, "utf8");
+	} catch (e) {
+		say(`記録を残せませんでした: ${e?.message}`);
+	}
+
 	say("\n========== DONE ==========");
 	return observations;
 }

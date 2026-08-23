@@ -293,13 +293,21 @@ function writeResult(file, payload) {
 	fs.renameSync(tmp, file);
 }
 
-/** 命令を1つ受けて結果を書く。止める合図なら "shutdown" を返す */
+/**
+ * 命令を1つ受けて結果を書く。止める合図なら "shutdown" を返す。
+ *
+ * **依頼の紙は、読んだらすぐ捨てる。** 結果を書いてから捨てると、こちらの結果を見た相手が
+ * すぐ次の依頼を置いたときに、まだ捨てていない紙と入れ替わり、**新しい依頼のほうを捨てて
+ * しまう**。相手は返事を待ち続け、時間切れになる（実測: 約1800回の依頼で1回起きた。
+ * ホストのログは5分間まったく何も受け取らなかった）。
+ */
 async function handleOnce(ws, vscode, logger, say) {
 	const paths = ipcPaths(ws);
 	const payload = await readCommandWithRetry(paths.commandFile);
+	// 読み終えた時点で紙を捨てる。以後この関数の中で捨て直さない
+	fs.rmSync(paths.commandFile, { force: true });
 	if (!payload) {
 		writeResult(paths.resultFile, blank({ error: "command.json を読めませんでした" }));
-		fs.rmSync(paths.commandFile, { force: true });
 		return;
 	}
 
@@ -328,7 +336,6 @@ async function handleOnce(ws, vscode, logger, say) {
 				}),
 			);
 		}
-		fs.rmSync(paths.commandFile, { force: true });
 		return;
 	}
 
@@ -337,7 +344,6 @@ async function handleOnce(ws, vscode, logger, say) {
 			paths.resultFile,
 			blank({ id, command, status: "done", result: { stopped: true }, startedAt, completedAt: new Date().toISOString() }),
 		);
-		fs.rmSync(paths.commandFile, { force: true });
 		return "shutdown";
 	}
 
@@ -388,7 +394,6 @@ async function handleOnce(ws, vscode, logger, say) {
 		say(`つまずきました: ${command} → ${error?.message ?? error}`);
 	} finally {
 		listener.dispose();
-		fs.rmSync(paths.commandFile, { force: true });
 	}
 	// 次の命令が古い一覧を見ないように組み直す（extension の sync 後と同じ手当て）
 	await rebuildTree(say);

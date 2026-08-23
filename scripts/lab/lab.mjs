@@ -29,7 +29,7 @@ const SHIM = path.join(AI_DIR, "shim.mjs");
 const HOSTS = ["headless", "code-server", "desktop"];
 const AI_MODES = ["echo", "live", "agent", "script", "replay", "none"];
 
-const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time"];
+const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time", "no-diff"];
 
 const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
 
@@ -611,7 +611,7 @@ async function presetSweep(opts) {
 async function presetProbe(opts) {
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "probe" });
 	const { run } = await import("./scenarios/probe.mjs");
-	await run({ session: readSession(), only: opts.only, diff: opts.diff, time: opts.time });
+	await run({ session: readSession(), only: opts.only, diff: opts.diff, time: opts.time, noDiff: opts["no-diff"] });
 	if (!opts.keep) await verbDown();
 	return 0;
 }
