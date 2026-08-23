@@ -95,11 +95,47 @@ export class AIStatsLogger {
 			const tsvLine = this.formatAsTSV(record);
 
 			// ファイルに非同期で追記（ベストエフォート）
-			await fs.appendFile(this.logFilePath, `${tsvLine}\n`, "utf-8");
+			await this.appendLine(this.logFilePath, `${tsvLine}\n`, async () => {
+				this.logFilePath = undefined;
+				await this.initializeLogFile();
+				return this.logFilePath;
+			});
 		} catch (error) {
 			// ログ記録の失敗は本処理に影響させない
 			console.warn("Failed to write AI stats log:", error);
 		}
+	}
+
+	/**
+	 * 1行を追記する。置き場ごと消えていたら（ENOENT）、一度だけ用意し直して書き直す。
+	 *
+	 * `.mdait/logs` は `.mdait/.gitignore` に載っていて git の管理外なので、
+	 * `git clean -xdf` や掃除で消えることがある。ところがパスは最初の1回しか
+	 * 決めていないため、消えたあとは追記が毎回 ENOENT で落ち、拡張を立ち上げ直すまで
+	 * AI とのやり取りが一切残らなくなる（呼び出し元が握り潰すので誰も気づけない）。
+	 *
+	 * @param filePath いま覚えているログファイルのパス
+	 * @param line 追記する1行（改行込み）
+	 * @param reinitialize 置き場を用意し直し、新しいパスを返す（用意できなければ undefined）
+	 */
+	private async appendLine(
+		filePath: string,
+		line: string,
+		reinitialize: () => Promise<string | undefined>,
+	): Promise<void> {
+		try {
+			await fs.appendFile(filePath, line, "utf-8");
+			return;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw error;
+			}
+		}
+		const restored = await reinitialize();
+		if (!restored) {
+			return;
+		}
+		await fs.appendFile(restored, line, "utf-8");
 	}
 
 	/**
@@ -188,7 +224,11 @@ export class AIStatsLogger {
 			const jsonLine = JSON.stringify(record);
 
 			// ファイルに非同期で追記（ベストエフォート）
-			await fs.appendFile(this.detailedLogFilePath, `${jsonLine}\n`, "utf-8");
+			await this.appendLine(this.detailedLogFilePath, `${jsonLine}\n`, async () => {
+				this.detailedLogFilePath = undefined;
+				await this.initializeDetailedLogFile();
+				return this.detailedLogFilePath;
+			});
 		} catch (error) {
 			// ログ記録の失敗は本処理に影響させない
 			console.warn("Failed to write AI detailed log:", error);

@@ -52,7 +52,8 @@
 | フォルダの StatusItem | `{ type: "directory", directoryPath, label }` | `mdait.translate.directory`、`mdait.tm.commit.directory`、`mdait.aiReview.directory` |
 | そのまま | 文字列・JSON | 上記以外 |
 
-JSON をそのまま渡したいときは引数を JSON として書く（例: `lab run mdait.sync '{"adopt":true}'`）。
+`{...}` や `[...]` の形で書いた引数は JSON として読まれる（例: `lab run mdait.sync '{"adopt":true}'` で
+取り込みが走り、`totalAdopted` が増える）。読めない形はそのまま文字列として渡るので、パスや普通の語は壊れない。
 
 ## よく使うコマンド
 
@@ -65,7 +66,7 @@ JSON をそのまま渡したいときは引数を JSON として書く（例: `
 | `mdait.translate.frontmatter` | フロントマターの翻訳 | **訳文の側**のファイルのパス |
 | `mdait.tm.commit.file` / `.directory` | TM 登録 | パス |
 | `mdait.aiReview.file` / `.directory` | AI による訳文レビュー | パス |
-| `mdait.term.expand` | 用語の展開 | パス（ファイル／フォルダは lab が判定して形を作る） |
+| `mdait.term.expand` | 用語の展開 | **フォルダのパス**（ファイルを渡すと何もせず `done` で戻る。下記） |
 | `mdait.adopt.run` | 既存訳の取り込み | なし |
 | `mdait.markers.externalize` / `mdait.markers.embed` | マーカーの保管方式の切り替え | なし |
 | `mdait.setup.createConfig` | 設定の作成 | なし |
@@ -82,8 +83,11 @@ JSON をそのまま渡したいときは引数を JSON として書く（例: `
 - **`mdait.term.detect` は引数が `(units, transPair)`** で、パスや StatusItem を受け取らない。
   つまり IPC からは素直に叩けない。lab は headless のときだけ `detectTerm_CoreProc` を直接呼ぶ
   アダプタで代行する（手本は `src/lm-tools/term-tool.ts`）。実 Extension Host では使えない。
-- UI の操作が要るコマンド（QuickPick を出すもの、CodeLens から呼ばれるもの）は headless では動かない。
-  `lab run` が実行前に「このコマンドは headless では動かない」と知らせる。
+- **`mdait.term.expand` はフォルダしか受け付けない。** ファイルを渡すとエラートーストを出して即戻るが、
+  IPC の結果は `status: done`・返り値なし・ログ0行なので、**効かない渡し方をしたことが呼び手に伝わらない**。
+  用語集がバイト単位で変わっていないことで見分ける。
+- CodeLens から呼ばれるコマンドは headless では動かない。`lab run` が実行前に知らせる。
+  選択肢の一覧（QuickPick）を出すコマンドは、lab が先頭を選んで答えるので走る（答えたことは要約に出る）。
 
 ## 困ったとき
 

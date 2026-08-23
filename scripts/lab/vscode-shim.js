@@ -39,7 +39,6 @@ vscode.window.withProgress = async (_opts, task) => {
 };
 vscode.window.showTextDocument = async () => ({});
 vscode.window.activeTextEditor = undefined;
-vscode.window.showQuickPick = async () => undefined;
 vscode.window.showInputBox = async () => undefined;
 
 /*
@@ -71,6 +70,27 @@ vscode.window.showErrorMessage = async (message, ...items) => answerDialog("erro
 vscode.__labDialogs = () => answeredDialogs.slice();
 vscode.__labResetDialogs = () => {
 	answeredDialogs.length = 0;
+};
+
+/*
+ * 選択肢の一覧（QuickPick）にも同じ考え方で答える。
+ *
+ * 答えないと、選ばせてから始まる処理が丸ごと走らない。実測: `mdait.aiReview.file` は
+ * 「未確認だけ / 全部」を選ばせる一覧で止まり、**ログ0行・返り値なしで done** になっていた。
+ * 呼び手からは成功と区別が付かない。ここでは**先頭の選択肢**を選び、選んだことを控える。
+ */
+vscode.window.showQuickPick = async (items, options = {}) => {
+	const list = Array.isArray(items) ? items : await items;
+	const choice = process.env.MDAIT_LAB_DIALOG === "no" ? undefined : list?.[0];
+	const label = (value) => (value && typeof value === "object" ? (value.label ?? JSON.stringify(value)) : String(value));
+	answeredDialogs.push({
+		level: "quickpick",
+		modal: false,
+		message: String(options.title ?? options.placeHolder ?? "選択肢の一覧"),
+		buttons: (list ?? []).map(label),
+		answered: choice === undefined ? null : label(choice),
+	});
+	return choice;
 };
 vscode.env = { openExternal: async () => true, language: "en" };
 

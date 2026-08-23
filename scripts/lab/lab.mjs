@@ -292,7 +292,7 @@ async function runOne(opts) {
 		warn(`※ ${command} は途中で確認を出します。headless では誰も答えないので、何もせず戻ることがあります。`);
 	}
 
-	const args = resolvePathArgs(entry, opts._.slice(1), session.ws);
+	const args = resolvePathArgs(entry, opts._.slice(1).map(parseArgValue), session.ws);
 	const result = await sendCommand(session.ws, command, args, { timeoutSec: asNumber(opts.timeout, 600) });
 
 	// 実ホストでは、画面を見張っている常駐ページがダイアログや通知に答えている。
@@ -321,6 +321,25 @@ async function runOne(opts) {
 async function verbRun(opts) {
 	const { code } = await runOne(opts);
 	return code;
+}
+
+/**
+ * `{...}` や `[...]` の形で書かれた引数を、そのまま JSON として読む。
+ *
+ * `lab run mdait.sync '{"adopt":true}'` のように書けることを文書で約束しているのに、
+ * 文字列のまま渡していた（実測: `options?.adopt` が偽になり、取り込みが起きないまま
+ * `done` / `totalAdopted:0` で終わる。**起きなかったことが結果から見分けられない**）。
+ * 読めない形はそのまま文字列として渡す（パスや普通の語を壊さないため）。
+ */
+function parseArgValue(value) {
+	if (typeof value !== "string") return value;
+	const trimmed = value.trim();
+	if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return value;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return value;
+	}
 }
 
 /**

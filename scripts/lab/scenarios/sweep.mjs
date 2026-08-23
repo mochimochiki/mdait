@@ -2,7 +2,7 @@
 /*
  * 決まった手順のスイープ — mdait の「機構」を端から確かめる。
  *
- * 見るのは次の8つ。旧 scripts/exploratory/run-sweep.js をそのまま引き継いでいる。
+ * 見るのは次の14。P1〜P8 は旧 scripts/exploratory/run-sweep.js をそのまま引き継いでいる。
  *   P1-sync          マーカーの形が揃っているか / need:translate が付くか / 2回目で何も変わらないか
  *   P2-trans         翻訳すると need:translate が消えるか / そのあと sync しても変わらないか
  *   P3-revise        原文を書き換えると need:revise@もとのハッシュ が付くか
@@ -11,6 +11,12 @@
  *   P6-modeswitch    設定を書き換えるだけで本文の表現が付いたり外れたりし、増えも振れもしないか
  *   P7-nosilentdelete 本文が一時的に崩れても、外の台帳（unit-state）の行を黙って消さないか
  *   P8-nobodyloss    原文のフェンスが崩れても、訳文の本文がまとめて消えないか
+ *   P9-term          用語の検出・展開が原稿を触らず、用語集の行を失わず、2回流しても変わらないか
+ *   P10-tm           翻訳メモリへの登録が「確定した対訳」だけを拾い、理由つきで残りを見送るか
+ *   P11-aireview     訳文レビューが訳文を書き換えないか（レビュー本体は headless では走らない）
+ *   P12-adopt        既にある訳を取り込んでも本文が1文字も変わらず、あとから上書きもされないか
+ *   P13-edge         端の原稿（空マーカー・コードブロック内の見本・空ファイル・frontmatter だけ）
+ *   P14-level        見出しレベルの設定どおりに境目が決まり、変えても本文が失われないか
  *
  * 判定は2つに分ける。この分け方は「狼が来た」を防ぐための決まりなので、勝手に変えないこと。
  *   FAIL … 製品の側の不具合。1件でもあれば終了コード 1
@@ -20,7 +26,8 @@
  *   node scripts/lab/lab.mjs sweep          （まとめ役が配線する呼び方）
  *   node scripts/lab/scenarios/sweep.mjs    （単独。実験場が無ければ自分で起こして、終わったら止める）
  *     --verbose   通った判定（OK）も1件ずつ出す
- *     --only P1,P5   見たい分だけ（P1〜P3 はひと続きなので、途中だけ選ぶと前提が揃わない）
+ *     --only P1,P5   見たい分だけ（P1〜P3 はひと続きなので、途中だけ選ぶと前提が揃わない。
+ *                    P4 以降は段ごとに作業場を作り直すので、1つだけ選んでも成り立つ）
  *     --keep      単独で動かしたとき、終わっても実験場を止めない
  *
  * 手順の出し方
@@ -162,6 +169,69 @@ function needFlag(markerText) {
 	return matched?.[3] || "";
 }
 
+/** 本文のマーカーを {hash, from, need} の形で並べる（コードブロックの中の見本は除く） */
+function markerInfo(content) {
+	return markerLines(content).map((marker) => {
+		const matched = MARKER_STRICT.exec(marker);
+		return { hash: matched?.[1] || "", from: matched?.[2] || "", need: matched?.[3] || "" };
+	});
+}
+
+/**
+ * マーカーの行を取り除いた本文を返す。
+ * 既にある訳が取り込み（adopt）で1文字も変わっていないかを見るのに使う。
+ * コードブロックの中の「マーカーの書き方の見本」は本文なので残す。
+ */
+function bodyWithoutMarkers(content) {
+	const codeBlockLines = getCodeBlockLineSet(content);
+	return content
+		.split("\n")
+		.filter((line, at) => codeBlockLines.has(at) || !/<!--\s*mdait\b/.test(line))
+		.join("\n");
+}
+
+/** 見出しの深さを並べる（コードブロックの中は数えない） */
+function headingLevels(content) {
+	const codeBlockLines = getCodeBlockLineSet(content);
+	const levels = [];
+	content.split("\n").forEach((line, at) => {
+		if (codeBlockLines.has(at)) return;
+		const matched = /^(#{1,6})\s/.exec(line);
+		if (matched) levels.push(matched[1].length);
+	});
+	return levels;
+}
+
+/** 控えた原稿を2つ見比べて、中身が変わったファイルを並べる */
+function changedFiles(before, after) {
+	const changed = [];
+	for (const rel of new Set([...Object.keys(before), ...Object.keys(after)])) {
+		if (before[rel] !== after[rel]) changed.push(rel);
+	}
+	return changed.sort();
+}
+
+/** 用語集のファイル（設定の terms.filename。既定は terms.csv） */
+function glossaryFile() {
+	const json = JSON.parse(read(configFile()));
+	return path.join(ws, ".mdait", json.terms?.filename ?? "terms.csv");
+}
+
+/** 翻訳メモリのファイル */
+function tmxFile() {
+	return path.join(ws, ".mdait", "translations.tmx");
+}
+
+/** ファイルがあれば中身を、無ければ空文字を返す */
+function readIfExists(file) {
+	return fs.existsSync(file) ? read(file) : "";
+}
+
+/** その手順で出た知らせ・確認ダイアログの文言を並べる（返り値を持たないコマンドの結果を読むのに使う） */
+function dialogMessages(result) {
+	return (result?.dialogs ?? []).map((dialog) => String(dialog.message ?? ""));
+}
+
 /** 控えた原稿ぜんぶで、need が指定の頭で始まるマーカーを数える */
 function countNeed(map, prefix) {
 	let count = 0;
@@ -287,7 +357,19 @@ function applyConfig(extra = {}) {
 	if (extra.extensions !== undefined) json.trans = { ...(json.trans ?? {}), extensions: extra.extensions };
 	if (extra.markersMode !== undefined) json.markers = { mode: extra.markersMode };
 	else json.markers = undefined;
+	// 見出しレベル（ユニットの境目の深さ）。指定が無ければ雛形の値へ戻す
+	if (json.sync) json.sync = { ...json.sync, level: extra.level ?? templateLevel() };
 	fs.writeFileSync(configFile(), `${JSON.stringify(json, null, 2)}\n`, "utf8");
+}
+
+/** 雛形（src/test/unit/workspace/.mdait/mdait.json）の見出しレベル。指定が無いときはここへ戻す */
+let templateLevelCache = null;
+function templateLevel() {
+	if (templateLevelCache === null) {
+		const template = JSON.parse(read(path.join(REPO, "src", "test", "unit", "workspace", ".mdait", "mdait.json")));
+		templateLevelCache = template.sync?.level ?? 3;
+	}
+	return templateLevelCache;
 }
 
 /** 設定を書き換えて、ホストにも読み直してもらう */
@@ -949,6 +1031,499 @@ async function checkMarkerlessSourceEdit(P) {
 }
 
 // ===========================================================================
+// P9 — 用語集（検出と展開）
+// ===========================================================================
+
+/*
+ * 偽の AI（echo）は「訳文を1つ返す」形しか作れない。用語の検出も展開も答えは JSON の配列なので、
+ * ここでは**用語が増えること自体は確かめられない**（実物の AI が要る）。増えないことを FAIL に
+ * すると狼少年になるので INFO で控える。
+ *
+ * その代わり、AI を通さなくても決まる次の3つは FAIL として見る。
+ *   ・用語の検出・展開は原稿（Markdown）を1文字も書き換えない
+ *   ・展開は既にある用語集の行を失わない
+ *   ・二度流しても用語集が変わらない（冪等）
+ */
+async function phase9() {
+	const P = "P9-term";
+	await resetWs();
+	await sync();
+
+	const srcFile = path.join(contentDir(), "ja/technical.md");
+	const before = snapshot();
+	const detected = await runCmd("mdait.term.detect", [srcFile]);
+	if (detected.status === "error") {
+		fail(P, "content/ja/technical.md", "term.detect が例外", String(detected.error));
+	} else {
+		const touched = changedFiles(before, snapshot());
+		if (touched.length === 0) ok(P, "term.detect は原稿を書き換えないOK");
+		else fail(P, touched[0], `term.detect が原稿を書き換えた（${touched.length}ファイル）`, touched.join(", "));
+
+		const newTerms = detected.result?.newTerms ?? 0;
+		if (newTerms > 0) ok(P, `term.detect が用語を ${newTerms} 件足した`);
+		else info(P, "-", "偽の AI は用語の一覧（JSON 配列）を返せず、用語集が増えない（実物の AI で要確認）");
+	}
+
+	// 用語集を手で1行だけ用意する（訳語が空＝展開待ち）。検出では増やせないため、展開の入口をここで作る。
+	const glossary = glossaryFile();
+	const seeded = "ja,en,context,variants_ja\nマイクロサービスアーキテクチャ,,システム設計,\n";
+	fs.writeFileSync(glossary, seeded, "utf8");
+
+	const beforeExpand = snapshot();
+	const expanded = await runCmd("mdait.term.expand", [path.join(contentDir(), "en")]);
+	if (expanded.status === "error") {
+		fail(P, "-", "term.expand が例外", String(expanded.error));
+		return;
+	}
+	const touchedByExpand = changedFiles(beforeExpand, snapshot());
+	if (touchedByExpand.length === 0) ok(P, "term.expand は原稿を書き換えないOK");
+	else
+		fail(
+			P,
+			touchedByExpand[0],
+			`term.expand が原稿を書き換えた（${touchedByExpand.length}ファイル）`,
+			touchedByExpand.join(", "),
+		);
+
+	const afterExpand = readIfExists(glossary);
+	if (afterExpand.includes("マイクロサービスアーキテクチャ")) ok(P, "term.expand が既にある用語集の行を残すOK");
+	else fail(P, path.basename(glossary), "term.expand の後に用語集の行が消えた", afterExpand.slice(0, 200));
+
+	const expandMessage = dialogMessages(expanded).find((message) => message.includes("Term expansion completed"));
+	if (/([1-9]\d*) term\(s\) expanded/.test(expandMessage ?? "")) {
+		ok(P, `term.expand が訳語を埋めた（${expandMessage}）`);
+	} else {
+		info(P, "-", "偽の AI は訳語の一覧（JSON 配列）を返せず、用語の展開が0件になる（実物の AI で要確認）");
+	}
+
+	// 二度目。用語が増えないのは同じでも、書き出しが揺れていないかはここで分かる
+	await runCmd("mdait.term.expand", [path.join(contentDir(), "en")]);
+	if (readIfExists(glossary) === afterExpand) ok(P, "term.expand 2回目で用語集が変わらないOK（冪等）");
+	else fail(P, path.basename(glossary), "term.expand を2回流すと用語集が変わる（非冪等）", "byte diff");
+
+	// フォルダ専用のコマンドにファイルを渡したとき（案内を出して何もしないのが正）
+	const beforeFileArg = readIfExists(glossary);
+	const byFile = await runCmd("mdait.term.expand", [srcFile]);
+	if (byFile.status !== "error" && readIfExists(glossary) === beforeFileArg) {
+		ok(P, "ファイルを渡した term.expand は何もせず用語集も触らないOK（フォルダ専用）");
+	} else {
+		fail(P, path.basename(glossary), "ファイルを渡した term.expand が用語集を書き換えた", String(byFile.error ?? ""));
+	}
+}
+
+// ===========================================================================
+// P10 — 翻訳メモリへの登録
+// ===========================================================================
+
+/*
+ * 登録の可否は「from があって need が付いていない」だけで決まる（commit-filter）。ここは AI を
+ * 通らないので FAIL として見る。実際に文の対を作るところは AI の答え（JSON の配列）が要るため、
+ * 偽の AI では必ず0件になる。それは INFO で控える。
+ */
+async function phase10() {
+	const P = "P10-tm";
+	await resetWs();
+	await sync();
+
+	const rel = "content/en/technical.md";
+	const abs = path.join(ws, rel);
+	if (!fs.existsSync(abs)) {
+		info(P, rel, "対象ファイルが見つからず、TM 登録を確かめられない");
+		return;
+	}
+
+	// ---- (a) 訳す前。確定した対訳が無いので1件も拾わないはず ----
+	const beforeTrans = await runCmd("mdait.tm.commit.file", [abs]);
+	const beforeValue = beforeTrans.result;
+	if (!beforeValue) {
+		info(P, rel, `tm.commit が結果を返さなかった（TM が無効かもしれない）: ${String(beforeTrans.error ?? "")}`);
+		return;
+	}
+	const pendingUnits = markerInfo(read(abs)).filter((marker) => marker.need.startsWith("translate")).length;
+	if (beforeValue.processedUnits === 0 && beforeValue.skipReasons?.needTranslate === pendingUnits) {
+		ok(P, `翻訳前の tm.commit は1件も拾わないOK（見送り needTranslate=${pendingUnits}）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`翻訳前なのに tm.commit が対象を拾った（processed=${beforeValue.processedUnits}, needTranslate=${beforeValue.skipReasons?.needTranslate} / 期待 0, ${pendingUnits}）`,
+			JSON.stringify(beforeValue.skipReasons ?? {}),
+		);
+	}
+
+	// ---- (b) 訳した後。マーカーの姿から数えた「確定した対訳」と一致するはず ----
+	const translated = await trans(abs);
+	if (translated.status === "error") {
+		fail(P, rel, "trans が例外（TM 登録の前提が作れない）", String(translated.error));
+		return;
+	}
+	const markers = markerInfo(read(abs));
+	const settled = markers.filter((marker) => marker.from !== "" && marker.need === "").length;
+	const afterTrans = await runCmd("mdait.tm.commit.file", [abs]);
+	const afterValue = afterTrans.result ?? {};
+	if (afterValue.processedUnits === settled && (afterValue.skipReasons?.needTranslate ?? 0) === 0) {
+		ok(P, `翻訳後の tm.commit が確定した対訳だけを拾うOK（${settled}件 / 見送り ${afterValue.skippedUnits}件）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`tm.commit の対象がマーカーの姿と合わない（processed=${afterValue.processedUnits} / 期待 ${settled}）`,
+			JSON.stringify(afterValue.skipReasons ?? {}),
+		);
+	}
+
+	if ((afterValue.newEntries ?? 0) > 0) ok(P, `TM へ ${afterValue.newEntries} 件登録`);
+	else info(P, "-", "偽の AI は文の対（JSON 配列）を返せず、TM が1件も増えない（実物の AI で要確認）");
+
+	// ---- (c) 二度流しても翻訳メモリが変わらない ----
+	const tmxOnce = readIfExists(tmxFile());
+	await runCmd("mdait.tm.commit.file", [abs]);
+	if (readIfExists(tmxFile()) === tmxOnce) ok(P, "tm.commit 2回目で translations.tmx が変わらないOK（冪等）");
+	else fail(P, "translations.tmx", "tm.commit を2回流すと翻訳メモリが変わる（非冪等）", "byte diff");
+
+	// ---- (d) フォルダ単位でも原稿を書き換えない ----
+	const beforeDir = snapshot();
+	const dirResult = await runCmd("mdait.tm.commit.directory", [path.join(contentDir(), "en/child")]);
+	if (dirResult.status === "error") {
+		fail(P, "content/en/child", "tm.commit.directory が例外", String(dirResult.error));
+	} else {
+		const touched = changedFiles(beforeDir, snapshot());
+		if (touched.length === 0) ok(P, "tm.commit.directory は原稿を書き換えないOK");
+		else fail(P, touched[0], `tm.commit.directory が原稿を書き換えた（${touched.length}ファイル）`, touched.join(", "));
+	}
+}
+
+// ===========================================================================
+// P11 — 訳文のレビュー
+// ===========================================================================
+
+/*
+ * レビューは最初に「未確認だけを見るか、全部を見るか」を選ばせる（QuickPick）。画面の無い
+ * headless では誰も答えられないので、レビュー本体（AI との照合・need:review の付け外し）は走らない。
+ * それでも「呼んでも訳文が書き換わらない」ことだけは確かめられる。走らなかったことは INFO で控える。
+ */
+async function phase11() {
+	const P = "P11-aireview";
+	await resetWs();
+	await sync();
+
+	const rel = "content/en/technical.md";
+	const abs = path.join(ws, rel);
+	const translated = await trans(abs);
+	if (translated.status === "error") {
+		fail(P, rel, "trans が例外（レビューの前提が作れない）", String(translated.error));
+		return;
+	}
+
+	const before = snapshot();
+	const fileReview = await runCmd("mdait.aiReview.file", [abs]);
+	if (fileReview.status === "error") {
+		fail(P, rel, "aiReview.file が例外", String(fileReview.error));
+	} else {
+		const touched = changedFiles(before, snapshot());
+		if (touched.length === 0) ok(P, "aiReview.file は訳文を書き換えないOK");
+		else fail(P, touched[0], `aiReview.file が訳文を書き換えた（${touched.length}ファイル）`, touched.join(", "));
+	}
+
+	const beforeDir = snapshot();
+	const dirReview = await runCmd("mdait.aiReview.directory", [path.join(contentDir(), "en/child")]);
+	if (dirReview.status === "error") {
+		fail(P, "content/en/child", "aiReview.directory が例外", String(dirReview.error));
+	} else {
+		const touched = changedFiles(beforeDir, snapshot());
+		if (touched.length === 0) ok(P, "aiReview.directory は訳文を書き換えないOK");
+		else fail(P, touched[0], `aiReview.directory が訳文を書き換えた（${touched.length}ファイル）`, touched.join(", "));
+	}
+
+	// レビューが走ったなら、ファイル1件ぶんの結果（配列）が返る。返らないのは範囲の選択で止まったとき
+	if (Array.isArray(fileReview.result)) {
+		ok(P, `aiReview.file が結果を返した（${JSON.stringify(fileReview.result).slice(0, 120)}）`);
+	} else {
+		info(
+			P,
+			"-",
+			"レビューの範囲を選ぶ QuickPick に headless では答えられず、レビュー本体（AI 照合・need:review の付け外し）は走らない",
+		);
+	}
+}
+
+// ===========================================================================
+// P12 — 既にある訳の取り込み（adopt）
+// ===========================================================================
+
+/*
+ * いちばん怖いのは「取り込んだつもりが、既にある訳を消す・上書きする」こと。だからここは
+ * 本文の一致（マーカーの行を除いた中身が1文字も変わらないこと）を軸に見る。取り込みは
+ * 位置で対応づけるだけで AI を使わないので（align を明示したときだけ AI）、全部 FAIL として見てよい。
+ *
+ * 引数は**オブジェクトのまま**渡す。`lab run mdait.sync '{"adopt":true}'` のように文字列で渡すと
+ * 文字列のまま届き、取り込みが起きないまま普通の sync として終わる（実測）。
+ */
+async function phase12() {
+	const P = "P12-adopt";
+	await resetWs();
+
+	const rel = "content/en/40_structure_mismatch.md";
+	const abs = path.join(ws, rel);
+	if (!fs.existsSync(abs)) {
+		info(P, rel, "マーカー無しの既存対訳の見本が無く、取り込みを確かめられない");
+		return;
+	}
+	const originalBody = read(abs);
+
+	const adopted = await runCmd("mdait.sync", [{ adopt: true }]);
+	if (adopted.status === "error") {
+		fail(P, "-", "adopt 付きの sync が失敗した", String(adopted.error));
+		return;
+	}
+	const value = adopted.result ?? {};
+	if ((value.totalAdopted ?? 0) > 0) ok(P, `既存訳を ${value.totalAdopted} ユニット取り込んだOK`);
+	else fail(P, "-", "adopt を指定したのに1ユニットも取り込まれない", JSON.stringify(value));
+
+	if (bodyWithoutMarkers(read(abs)) === originalBody) ok(P, "取り込んでも既存訳の本文が1文字も変わらないOK");
+	else fail(P, rel, "取り込みで既存訳の本文が変わった", "マーカー行を除いた中身に差分あり");
+
+	const adoptedMarkers = markerInfo(read(abs));
+	const reviewed = adoptedMarkers.filter((marker) => marker.from !== "" && marker.need === "review").length;
+	if (adoptedMarkers.length > 0 && reviewed === adoptedMarkers.length) {
+		ok(P, `取り込んだユニットに from と need:review が付くOK（${reviewed}件）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`取り込み後のマーカーが from＋need:review になっていない（${reviewed}/${adoptedMarkers.length}）`,
+			adoptedMarkers.map((marker) => `${marker.hash}/${marker.from}/${marker.need}`).join(" | "),
+		);
+	}
+
+	// 取り込んだ訳を、あとから翻訳が上書きしないこと（need:review は翻訳の対象ではない）
+	const transResult = await trans(abs);
+	const transValue = transResult.result ?? {};
+	if ((transValue.translatedCount ?? 0) === 0 && bodyWithoutMarkers(read(abs)) === originalBody) {
+		ok(P, "取り込んだ訳は trans に上書きされないOK（確認待ちは翻訳の対象外）");
+	} else {
+		fail(
+			P,
+			rel,
+			`取り込んだ訳が trans で書き換えられた（translated=${transValue.translatedCount}）`,
+			JSON.stringify(transValue),
+		);
+	}
+
+	// 確認待ち（need:review）は確定した対訳ではないので TM にも登録されない
+	const committed = await runCmd("mdait.tm.commit.file", [abs]);
+	const commitValue = committed.result;
+	if (commitValue && commitValue.processedUnits === 0 && (commitValue.skipReasons?.needReview ?? 0) > 0) {
+		ok(P, `確認待ちの訳は TM へ登録されないOK（見送り needReview=${commitValue.skipReasons.needReview}）`);
+	} else if (!commitValue) {
+		info(P, rel, "tm.commit が結果を返さず、確認待ちの見送りを確かめられない");
+	} else {
+		fail(
+			P,
+			rel,
+			`確認待ちの訳が TM へ登録された（processed=${commitValue.processedUnits}）`,
+			JSON.stringify(commitValue.skipReasons ?? {}),
+		);
+	}
+
+	// 取り込みのあと、普通の sync が落ち着いているか
+	const settled = await sync();
+	if (
+		settled.totalAdded === 0 &&
+		settled.totalModified === 0 &&
+		settled.totalDeleted === 0 &&
+		settled.revisionsNeeded === 0
+	) {
+		ok(P, "取り込み後の sync が落ち着いているOK（added/modified/deleted/revise すべて0）");
+	} else {
+		fail(P, "-", "取り込み後の sync が落ち着かない", JSON.stringify(settled));
+	}
+	const afterFirst = read(abs);
+	await sync();
+	if (read(abs) === afterFirst) ok(P, "取り込み後 sync を重ねても訳文が変わらないOK（冪等）");
+	else fail(P, rel, "取り込み後の sync が非冪等（訳文が変わる）", "byte diff");
+
+	if ((value.totalOrphanReviewed ?? 0) === 0) {
+		info(
+			P,
+			rel,
+			"見本は原文と訳文の章数が同じなので、訳文だけにある章の一次受け（totalOrphanReviewed）を通せない。章数のずれた見本が要る",
+		);
+	}
+}
+
+// ===========================================================================
+// P13 — 端の原稿
+// ===========================================================================
+
+/*
+ * 端の原稿は「壊れ方が静か」なのが怖い。空マーカー・コードブロックの中の見本・空ファイル・
+ * frontmatter だけの原稿は、どれも見た目には何も起きないので、気づかないまま壊れる。
+ * ここは AI を通らない（frontmatter の翻訳だけ通るが、見るのはマーカーと本文の姿）。
+ */
+async function phase13() {
+	const P = "P13-edge";
+	await resetWs();
+	await sync();
+
+	// ---- 空マーカー（`<!-- mdait -->`）にハッシュが埋まる ----
+	const hashRel = "content/ja/hash-empty-marker-test.md";
+	const hashAbs = path.join(ws, hashRel);
+	if (fs.existsSync(hashAbs)) {
+		const markers = markerInfo(read(hashAbs));
+		const empty = markers.filter((marker) => marker.hash === "").length;
+		if (markers.length > 0 && empty === 0) ok(P, `空マーカーにハッシュが埋まるOK（${markers.length}件すべて8桁hex）`);
+		else fail(P, hashRel, `sync 後もハッシュの無いマーカーが ${empty} 件残る`, "");
+	} else {
+		info(P, hashRel, "空マーカーの見本が無く、ハッシュの補完を確かめられない");
+	}
+
+	// ---- コードブロックの中の「マーカーの書き方の見本」は書き換えない ----
+	const codeRel = "content/ja/code-block-marker.md";
+	const codeAbs = path.join(ws, codeRel);
+	if (fs.existsSync(codeAbs)) {
+		const body = read(codeAbs);
+		const samples = ["<!-- mdait 12345678 from:87654321 need:translate -->", "<!-- mdait aabbccdd -->"];
+		const lost = samples.filter((sample) => !body.includes(sample));
+		if (lost.length === 0) ok(P, "コードブロックの中のマーカーの見本が書き換わらないOK");
+		else fail(P, codeRel, `コードブロックの中の見本が書き換えられた（${lost.length}件）`, lost.join(" / "));
+	} else {
+		info(P, codeRel, "コードブロック内マーカーの見本が無く、誤マッチを確かめられない");
+	}
+
+	// ---- 空の原稿 ----
+	const emptyRel = "content/ja/child/child2/empty.md";
+	const emptyAbs = path.join(ws, emptyRel);
+	if (fs.existsSync(emptyAbs)) {
+		const body = read(emptyAbs);
+		if (body.trim() === "") ok(P, "空の原稿にマーカーが書き込まれないOK");
+		else fail(P, emptyRel, "空の原稿に何かが書き込まれた", body.slice(0, 120));
+		const emptyTarget = path.join(ws, emptyRel.replace("/ja/", "/en/"));
+		if (fs.existsSync(emptyTarget))
+			info(P, emptyRel, "空の原稿から訳文ファイルが作られた（中身の無いファイルが増える）");
+	} else {
+		info(P, emptyRel, "空の原稿の見本が無い");
+	}
+
+	// ---- frontmatter だけの原稿 ----
+	const frontRel = "content/en/only-frontmatter.md";
+	const frontAbs = path.join(ws, frontRel);
+	if (fs.existsSync(frontAbs)) {
+		const before = read(frontAbs);
+		if (markerLines(before).length === 0 && before.includes("front:")) {
+			ok(P, "frontmatter だけの原稿は本文にマーカーを持たないOK（front マーカーだけ）");
+		} else {
+			fail(P, frontRel, "frontmatter だけの原稿の姿がおかしい", before.slice(0, 200));
+		}
+		const result = await runCmd("mdait.translate.frontmatter", [frontAbs]);
+		if (result.status === "error") {
+			fail(P, frontRel, "translate.frontmatter が例外", String(result.error));
+		} else {
+			const after = read(frontAbs);
+			const needLeft = /front:\s*'[^']*need:/.test(after);
+			if (!needLeft && after.includes("weight: 20")) {
+				ok(P, "frontmatter を訳すと need が消え、翻訳の対象でないキーが残るOK");
+			} else {
+				fail(P, frontRel, `frontmatter の翻訳後の姿がおかしい（need 残り=${needLeft}）`, after.slice(0, 200));
+			}
+		}
+	} else {
+		info(P, frontRel, "frontmatter だけの見本が無い");
+	}
+
+	// ---- マーカー無しの既訳は、普通の sync では確定扱いにしない ----
+	const noMarkerRel = "content/en/20_no_marker.md";
+	const noMarkerAbs = path.join(ws, noMarkerRel);
+	if (fs.existsSync(noMarkerAbs)) {
+		const markers = markerInfo(read(noMarkerAbs));
+		const settled = markers.filter((marker) => marker.from !== "" && marker.need === "").length;
+		if (markers.length > 0 && settled === 0) {
+			ok(P, "マーカー無しの既訳を普通の sync が勝手に確定させないOK（取り込みは adopt だけ）");
+		} else {
+			fail(
+				P,
+				noMarkerRel,
+				`マーカー無しの既訳が確定した対訳として扱われた（${settled}/${markers.length}）`,
+				markers.map((marker) => `${marker.hash}/${marker.from}/${marker.need}`).join(" | "),
+			);
+		}
+	} else {
+		info(P, noMarkerRel, "マーカー無しの既訳の見本が無い");
+	}
+}
+
+// ===========================================================================
+// P14 — 見出しレベルの境目
+// ===========================================================================
+
+/*
+ * ユニットの境目は見出しの深さ（sync.level）で決まる。浅くすれば章はまとまり、深くすれば分かれる。
+ * ここで見たいのは「設定どおりの深さで切れるか」と「深さを変えても本文が失われないか」の2つ。
+ * どちらも AI を通らないので FAIL として見る。
+ */
+async function phase14() {
+	const P = "P14-level";
+	// 見出しレベル2（H1・H2 だけを境目にする）で作り直す
+	await resetWs({ level: 2 });
+	const before = snapshot();
+	await sync();
+	const after = snapshot();
+
+	const rel = "content/ja/technical.md";
+	const abs = path.join(ws, rel);
+	if (!fs.existsSync(abs)) {
+		info(P, rel, "見出しの深い原稿が無く、レベルの境目を確かめられない");
+		return;
+	}
+	const levels = headingLevels(read(abs));
+	const shallow = levels.filter((level) => level <= 2).length;
+	const markers = markerLines(read(abs)).length;
+	if (levels.length > shallow && markers === shallow) {
+		ok(P, `レベル2の境目が H1・H2 だけになるOK（マーカー ${markers}件 / 見出し ${levels.length}件）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`レベル2なのに境目の数が合わない（マーカー ${markers}件 / H1・H2 ${shallow}件 / 見出し合計 ${levels.length}件）`,
+			"",
+		);
+	}
+
+	// 深さを変えても本文（見出し）が減らないこと
+	let lost = 0;
+	for (const [relPath, content] of Object.entries(after)) {
+		if (!relPath.endsWith(".md")) continue;
+		const was = before[relPath];
+		if (was === undefined) continue;
+		if (headingLevels(content).length < headingLevels(was).length) {
+			lost += 1;
+			fail(P, relPath, "レベル2の sync で見出しが減った（本文の喪失）", "");
+		}
+	}
+	if (lost === 0) ok(P, "レベル2の sync で見出しが1つも減らないOK");
+
+	const once = snapshot();
+	const second = await sync();
+	if (JSON.stringify(once) === JSON.stringify(snapshot()) && second.totalAdded === 0 && second.totalModified === 0) {
+		ok(P, "レベル2の sync が冪等OK（2回目で無変化）");
+	} else {
+		fail(P, "-", `レベル2の sync が非冪等 (added=${second.totalAdded}, modified=${second.totalModified})`, "");
+	}
+
+	// 深さを戻す。既にある境目は動かないので、本文が増えたり消えたりしてはいけない
+	await switchConfig();
+	await sync();
+	const backHeadings = headingLevels(read(abs)).length;
+	if (backHeadings === levels.length) ok(P, `レベルを戻しても見出しの数が変わらないOK（${backHeadings}件）`);
+	else fail(P, rel, `レベルを戻したら見出しの数が変わった（${levels.length}→${backHeadings}）`, "");
+
+	const afterBack = snapshot();
+	await sync();
+	if (JSON.stringify(afterBack) === JSON.stringify(snapshot())) ok(P, "レベルを戻した後の sync も冪等OK");
+	else fail(P, "-", "レベルを戻した後の sync が非冪等", "");
+}
+
+// ===========================================================================
 // 段の一覧と入口
 // ===========================================================================
 
@@ -961,6 +1536,12 @@ const PHASES = [
 	["P6-modeswitch", phase6],
 	["P7-nosilentdelete", phase7],
 	["P8-nobodyloss", phase8],
+	["P9-term", phase9],
+	["P10-tm", phase10],
+	["P11-aireview", phase11],
+	["P12-adopt", phase12],
+	["P13-edge", phase13],
+	["P14-level", phase14],
 ];
 
 /** --only の書き方（P1 / P1-sync / 1 のどれでも）を段の名前へ直す */

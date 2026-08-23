@@ -125,8 +125,8 @@ TM に登録したのとは**別の**訳文ファイルを翻訳し、`structure
 **いつ**: 用語検出・展開・用語集ファイルの操作を変えたとき（**前提**: P1 の後）
 
 ```bash
-lab run mdait.term.detect "<原文の絶対パス>"
-lab run mdait.term.expand "<原文の絶対パス>"
+lab run mdait.term.detect "<原文のフォルダ>"
+lab run mdait.term.expand "<原文のフォルダ>"    # ← expand はフォルダしか受け付けない
 ```
 
 **確かめること**: 各ステップが `done`。用語集ファイル（既定 `terms.csv`）にエントリが増えている。

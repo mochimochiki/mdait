@@ -220,7 +220,9 @@ export function renderDigest({ seq, command, args, result, diff, jsonPath }) {
 	const s = summarizeResult(result);
 	const lines = [];
 	const label = String(seq).padStart(3, "0");
-	lines.push(`## ${label} ${command}${args?.length ? ` ${args.join(" ")}` : ""}`);
+	// 引数はそのまま並べる。オブジェクト（{"adopt":true} など）は JSON の姿で見せる
+	const shownArgs = (args ?? []).map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)));
+	lines.push(`## ${label} ${command}${shownArgs.length ? ` ${shownArgs.join(" ")}` : ""}`);
 	lines.push("");
 	lines.push(`- 結果: **${s.status}**${s.durationSec ? `（${s.durationSec} 秒）` : ""}`);
 	if (s.error) lines.push(`- エラー: ${s.error}`);
