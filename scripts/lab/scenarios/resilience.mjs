@@ -208,8 +208,13 @@ async function sync() {
  * ユニットが何個あっても同じ意地悪が当たり、台本切れ（409）で話がすり替わらない。
  * lab.mjs の `up` はこの旗を渡さないので、ここでは shim を直に起こしている。
  */
+let shimSeq = 0;
+
 async function startNastyShim(scriptFile) {
-	const logFile = path.join(LAB_DIR, "resilience-shim.log");
+	// ログは相手ごとに別のファイルにする。使い回して切り詰めると、止めたばかりの相手が
+	// あとから書き足した行を次の相手の分として数えてしまう（実測で往復の数がずれた）。
+	shimSeq += 1;
+	const logFile = path.join(LAB_DIR, `resilience-shim-${shimSeq}.log`);
 	fs.writeFileSync(logFile, "", "utf8");
 	const fd = fs.openSync(logFile, "a");
 	const child = spawn(
@@ -566,11 +571,16 @@ const ROUTES = [
 		command: "mdait.aiReview.file",
 		shape: "translation",
 		watch: [`en/${FIXTURE}/doc.md`],
-		// headless では QuickPick に誰も答えられない。aiReview は最初に
-		// 「未確認だけ／全部を監査」を QuickPick で選ばせるので、答えが undefined になり
-		// AI へ行き着く前に静かに戻る（scripts/lab/vscode-shim.js の showQuickPick は
-		// 常に undefined を返す）。この経路を試すには shim 側の手当てが要る。
-		blocked: "headless では aiReview 冒頭の QuickPick に答えられず、AI へ行き着かない",
+		// aiReview は最初に「未確認だけ／全部を監査」を QuickPick で選ばせる。
+		// vscode-shim.js は一覧の先頭（＝「未確認だけ」）を選ぶので、確認待ちのユニットが
+		// 1つも無いと対象0件になり、AI へ行き着かないことがある。
+		// そのときは「もう一方（全部を監査）へ切り替えるか」の確認が出て、そこで初めて AI が動く。
+		// つまりこの経路は**下ごしらえの状態しだいで意地悪が当たらない**。
+		// 当たったかどうかは「AI を1回も呼ばずに終わった」の INFO で見分けること。
+		// さらに、対象0件から「全部を監査」へ切り替えたときの2周目は、コマンドの返り値より
+		// あとまで走っているように見える（20 秒黙る台本を当てても 0.1 秒で戻る）。
+		// だから R9 の「壊れなかった」は、2周目の書き込みまで見届けた結果ではない。
+		blocked: "aiReview は冒頭の QuickPick で「未確認だけ」を選ぶため、確認待ちが無いと AI へ行き着かない",
 		prepare: async () => {
 			await useGoodAi();
 			await runCmd("mdait.trans", [path.join(tgtDir(), "doc.md")], 300);
@@ -779,8 +789,21 @@ function judge(phase, route, nasty, ctx) {
 			}
 		}
 		if (nasty.id === "N2" && requests > 1) ok(phase, `500 は ${requests} 回まで送り直してから諦めた`);
-		if (nasty.id === "N6" && elapsed > nasty.timeoutSec * 0.8)
-			ok(phase, `タイムアウトが効いた（${elapsed.toFixed(1)}秒）`);
+		if (nasty.id === "N6") {
+			if (elapsed > nasty.timeoutSec * 0.8) {
+				ok(phase, `タイムアウトが効いた（${elapsed.toFixed(1)}秒）`);
+			} else {
+				// 相手は 20 秒黙る台本なのに、それより早く返ってきた。
+				// つまりコマンドは AI の返事を待たずに戻っている（別の場所で走らせている）。
+				// このとき、そのあと何が書かれるかはこの段取りからは見えない。
+				info(
+					phase,
+					route.watch[0],
+					`AI の返事を待たずに ${elapsed.toFixed(1)} 秒で戻った（この経路の後始末はここからは見えない）`,
+					`相手は 20 秒黙る台本、mdait 側のタイムアウトは ${nasty.timeoutSec} 秒。往復 ${requests} 回`,
+				);
+			}
+		}
 		return;
 	}
 
