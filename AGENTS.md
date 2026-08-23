@@ -55,7 +55,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 2. **統合**（`npm run test:vscode`、手動）: `src/test/gui/**` を VS Code Test Runner で実行。
 3. **探索的デバッグIPC**: `MDAIT_DEBUG_IPC=1` でファイルベース IPC を有効化し、マルチステップ E2E シナリオを実行 — `.claude/skills/debug-ipc/` の `debug-ipc` スキルを参照。
 
-加えて、AI を呼ぶ処理は `scripts/byok-shim/` のローカルサーバーを相手に検証できる（`npm run test:byok:e2e`）。fake-ai と違って HTTP の向こう側に立つため、プロバイダ層（リトライ・タイムアウト・`ai-stats.log`）まで本物が走る。新しい層ではなく探索的スイープの隣に置いている — 詳細は `docs/design/test.md`。
+加えて、AI を呼ぶ処理は `scripts/byok-shim/` のローカルサーバーを相手に検証できる（`npm run test:byok:e2e`）。fake-ai と違って HTTP の向こう側に立つため、プロバイダ層（リトライ・タイムアウト・`ai-stats.log`）まで本物が走る。新しい層ではなく探索的スイープの隣に置いている — 詳細は `docs/design/test.md`、使い方は `.claude/skills/byok-shim/` の `byok-shim` スキルを参照。
 
 規約: TDDスタイル（`suite`/`test`）、**テスト名は日本語で期待される動作を明示する**。新しいエッジケースは `src/test/unit/sample-content/` に追加する（`copy-test-files` でテストワークスペースに同期される）。
 
