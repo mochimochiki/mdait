@@ -34,13 +34,13 @@ IPC が使える**ので、コマンドパレットに文字を打つ壊れや�
 
 ```mermaid
 graph TD
-P01[P01: 土台を作り、4スキルを1つに置き換える] --> P02[P02: probe の移植とCIの守り]
-P02 --> P03[P03: 未カバー経路へシナリオを広げる]
+P01[P01: 土台を作り、4スキルを1つに置き換える<br/>完了] --> P02[P02: probe の移植とCIの守り<br/>完了]
+P02 --> P03[P03: 未カバー経路へシナリオを広げる<br/>進行中]
 ```
 
 ## Phases
 
-### P01: 土台を作り、4スキルを1つに置き換える
+### P01: 土台を作り、4スキルを1つに置き換える ※完了
 
 **Why**
 「4つがバラバラ」という痛みは、土台（入口・命令経路・AI・結果の形・ワークスペース）が1つになった時点で
@@ -54,26 +54,26 @@ P02 --> P03[P03: 未カバー経路へシナリオを広げる]
 `npm run test:explore` / `test:byok` / `test:byok:e2e` は**名前を変えず**、中身が `lab` を呼ぶ形にする。
 
 **Steps**
-- [ ] `scripts/lab/lib/`（session / ipc / workspace / runs / digest）を作る
-- [ ] `hosts/headless.mjs` — 常駐して `command.json` を待ち、`result.json` を返す。形は `DebugCommandHandler` と同一
-- [ ] `hosts/registry.mjs` — `mdait.*` から `out/` の実装への対応表。UI 前提のものは理由つきで「headless では動かせない」と返す
-- [ ] `hosts/code-server.mjs` — 設営（ネットワーク制約の回避を全部引き継ぐ）・起動・`.ipc-enabled` の設置・ready 待ち
-- [ ] `hosts/desktop.mjs` — `.ps1` を Node へ移し、OS を問わず同じ呼び方にする（同バージョン回避の知識を残す）
-- [ ] `ui/driver.mjs` — Playwright ヘルパ。撮る先を run ディレクトリへ。通知・ダイアログの文言を機械可読で拾う
-- [ ] `ai/` — `byok-shim` を移設し、`echo` モード（決定的・遅延指定つき）を足す。`fake-ai.js` と `fake-ollama.js` を廃止
-- [ ] `lab.mjs` — 動詞（up / run / shot / ai / status / reset / report / down）とプリセットの骨組み
-- [ ] `scenarios/sweep.mjs` — `run-sweep.js` の P1〜P8 を土台に載せ替え、判定（FAIL / INFO）はそのまま残す
-- [ ] `.claude/skills/mdait-lab/` を書き、旧4スキルを削除する
-- [ ] `docs/design/test.md` を新しい形に合わせて直す
+- [x] `scripts/lab/lib/`（session / ipc / workspace / runs / digest）を作る
+- [x] `hosts/headless.mjs` — 常駐して `command.json` を待ち、`result.json` を返す。形は `DebugCommandHandler` と同一
+- [x] `hosts/registry.mjs` — `mdait.*` から `out/` の実装への対応表。UI 前提のものは理由つきで「headless では動かせない」と返す
+- [x] `hosts/code-server.mjs` — 設営（ネットワーク制約の回避を全部引き継ぐ）・起動・`.ipc-enabled` の設置・ready 待ち
+- [x] `hosts/desktop.mjs` — `.ps1` を Node へ移し、OS を問わず同じ呼び方にする（同バージョン回避の知識を残す）
+- [x] `ui/driver.mjs` — Playwright ヘルパ。撮る先を run ディレクトリへ。通知・ダイアログの文言を機械可読で拾う
+- [x] `ai/` — `byok-shim` を移設し、`echo` モード（決定的・遅延指定つき）を足す。`fake-ai.js` と `fake-ollama.js` を廃止
+- [x] `lab.mjs` — 動詞（up / run / shot / ai / status / reset / report / down）とプリセットの骨組み
+- [x] `scenarios/sweep.mjs` — `run-sweep.js` の P1〜P8 を土台に載せ替え、判定（FAIL / INFO）はそのまま残す
+- [x] `.claude/skills/mdait-lab/` を書き、旧4スキルを削除する
+- [x] `docs/design/test.md` を新しい形に合わせて直す
 
 **Gates**
-- [ ] `lab up --host headless --ai echo` → `lab run mdait.sync` → `lab run mdait.trans <file>` が通る
-- [ ] `lab up --host code-server` → `lab run mdait.sync`（IPC）→ `lab shot` が通る
-- [ ] `npm test` / `npm run test:explore` / `npm run test:byok:e2e` が緑
-- [ ] `git status` が汚れない（既定のワークスペースがリポジトリ外にある）
-- [ ] 旧4スキルのディレクトリが残っていない
+- [x] `lab up --host headless --ai echo` → `lab run mdait.sync` → `lab run mdait.trans <file>` が通る
+- [x] `lab up --host code-server` → `lab run mdait.sync`（IPC）→ `lab shot` が通る
+- [x] `npm test` / `npm run test:explore` / `npm run test:byok:e2e` が緑
+- [x] `git status` が汚れない（既定のワークスペースがリポジトリ外にある）
+- [x] 旧4スキルのディレクトリが残っていない
 
-### P02: probe の移植と、CI による土台の守り
+### P02: probe の移植と、CI による土台の守り ※完了
 
 **Why**
 `probe-robustness.js`（78KB・S0〜S14）は「どの順に何を起こすと何が壊れるか」という手順の知識そのもので、
@@ -87,16 +87,16 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
 `regress` / `prompt` / `ux`）を実装で埋める。
 
 **Steps**
-- [ ] `scenarios/probe.mjs` — S0〜S14 を移植（embedded と external の両方を同じ手順で流す性質を保つ）
-- [ ] `lab probe --diff <前の run>` — 前回の観察結果との差分を出す
-- [ ] CI に headless スモークを追加（起こす → `mdait.sync` → 期待どおり → 落とす。数秒で終わる範囲）
-- [ ] プリセット5つを低レベル動詞の合成として実装する（独自実装を持たせない）
-- [ ] `scripts/exploratory/` を削除する（橋渡し用に残していた薄い再輸出も消す）
+- [x] `scenarios/probe.mjs` — S0〜S14 を移植（embedded と external の両方を同じ手順で流す性質を保つ）
+- [x] `lab probe --diff <前の run>` — 前回の観察結果との差分を出す
+- [x] CI に headless スモークを追加（起こす → `mdait.sync` → 期待どおり → 落とす。数秒で終わる範囲）
+- [x] プリセット5つを低レベル動詞の合成として実装する（独自実装を持たせない）
+- [x] `scripts/exploratory/` を削除する（橋渡し用に残していた薄い再輸出も消す）
 
 **Gates**
-- [ ] `lab probe` が旧 `probe-robustness.js` と同じ観察結果を出す（S0〜S14 の出力を突き合わせる）
-- [ ] `lab probe` を2回走らせ、2回目が「前回と差分なし」と答える
-- [ ] CI が緑（追加したスモークを含む）
+- [x] `lab probe` が旧 `probe-robustness.js` と同じ観察結果を出す（S0〜S14 の出力を突き合わせる）
+- [x] `lab probe` を2回走らせ、2回目が「前回と差分なし」と答える
+- [x] CI が緑（追加したスモークを含む）
 
 ### P03: 未カバー経路へシナリオを広げる
 
@@ -122,11 +122,11 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
 
 ## Gates
 
-- [ ] 検証の入口が `lab` 1つになっている（他の入口は `npm run test:*` の別名だけ）
-- [ ] AI の偽物が shim 1つになっている（`fake-ai.js` / `fake-ollama.js` が存在しない）
-- [ ] 3ホストで `lab run` の書き方が同一である
-- [ ] スキルが `mdait-lab` 1本になっている
-- [ ] 既定の操作でリポジトリが汚れない
+- [x] 検証の入口が `lab` 1つになっている（他の入口は `npm run test:*` の別名だけ）
+- [x] AI の偽物が shim 1つになっている（`fake-ai.js` / `fake-ollama.js` が存在しない）
+- [x] 3ホストで `lab run` の書き方が同一である（詰まり方も揃えた — 確認ダイアログと通知への答え方を3ホストで統一した）
+- [x] スキルが `mdait-lab` 1本になっている
+- [x] 既定の操作でリポジトリが汚れない
 
 ## Notes
 
