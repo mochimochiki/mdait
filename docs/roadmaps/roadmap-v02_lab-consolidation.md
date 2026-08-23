@@ -149,13 +149,21 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
   引けず（`Source unit not found` が9件）、**周辺文脈のブロックが丸ごと落ち、「前回の訳文」に隣の章の
   本文が入った要求**を送っていた。つまり `recordings/trans-en-child.jsonl` は**実運用では起こらない
   指示文**を録音していた。集める役を渡すよう直し、実機（`--ai agent`）で録り直した（12往復・34.7秒）。
-- 統合の下調べで**製品側の欠陥**を1つ見つけた。`src/commands/term/command-open.ts:51` が
-  `mdait.term.detect.file` を `executeCommand` しているが、**その ID はどこにも登録されていない**
-  （実在するのは `mdait.term.detect` で、引数は `(units, transPair)`）。用語集ファイルが無いときに
-  「開いているファイルから用語検出を起こす」経路が、必ず「用語集ファイルを開けませんでした」で終わる。
-  同じ4つの実在しない ID が `src/infra/debug/debug-command-handler.ts` の変換表にも載っている。
-  どの入口から用語検出を起こすのが正しいかは設計判断を伴うので、P03（term 経路のシナリオ）で
-  実際に叩いて確かめてから直す。
+- **用語検出の入口が壊れていた（P03 で確かめて修正済み）。** `src/commands/term/command-open.ts:51` が
+  実在しない `mdait.term.detect.file` を `executeCommand` していた。ブラウザ版 VS Code で実際に踏み、
+  通知の全文（`Failed to open glossary file: command 'mdait.term.detect.file' not found`）を機械で拾って
+  確定させた。実在して同じ仕事をする `mdait.term.update` へ向け直した。二次的な欠陥（呼び出しが外側の
+  try/catch の中にあり、検出側の失敗が「用語集ファイルを開けませんでした」という無関係な文言で
+  報告される）も直した。通知のボタンの文言（"Detect Terms"）は l10n を伴うため据え置き。
+  同じ壊れ方を次から捕まえるため、**`executeCommand` の宛先が実在するかを見る単体テスト**を足した。
+- **やり直した翻訳の結果が呼び手に返っていなかった（P03 で確かめて修正済み）。** 差分の当てはめに失敗して
+  「全文で訳し直す」を選ぶと、訳文もハッシュも need も進むのに返り値は `translatedCount:0 / skippedCount:1`
+  のままだった（`guidance.ts` がやり直しの返り値を捨て、`trans-command.ts` が古い結果を返していた）。
+  返り値を読む側（LM ツール・ツリー・lab の IPC）が実態と食い違う。`reportTransOutcomeWithRetry` に
+  括り出して直し、単体テストで固定した。
+- **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/logs` は `.gitignore`
+  済みで掃除に巻き込まれるが、`AIStatsLogger` はパスを覚えたまま `appendFile` を呼ぶため、消えると毎回
+  ENOENT になり**記録だけが静かに途切れていた**（翻訳は続く）。ENOENT のときだけ作り直して1回書き直す。
 - [TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。
   ツリーの provider が構築されないなら省略で構わないが、取れるなら sync のギャップ検出が headless でも効く。
 
