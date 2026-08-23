@@ -54,7 +54,8 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --record <ファイル>       やり取りを録音する
   run     mdait のコマンドを1つ実行する（up していなければ既定で自動的に始める）
             node scripts/lab/lab.mjs run mdait.sync
-            node scripts/lab/lab.mjs run mdait.trans content/ja/10_test.md
+            node scripts/lab/lab.mjs run mdait.trans content/en/10_test.md
+            （パスは作業場から見た相対でよい。翻訳系は「訳文の側」のファイルを渡す）
             --json                    要約でなく result.json をそのまま出す
             --timeout <秒>            待つ上限（既定: 600）
   shot    画面を撮る（code-server ホストのときだけ）

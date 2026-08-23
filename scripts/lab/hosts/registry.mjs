@@ -115,7 +115,7 @@ export const COMMANDS = {
 		export: "transCommand",
 		args: "uri",
 		hosts: ALL,
-		note: "1ファイルを翻訳する。引数はファイルのパス",
+		note: "1ファイルを翻訳する。引数は**訳文の側**のファイルのパス（原文を渡すと no-trans-pair で何もしない）",
 	},
 	"mdait.translate.file": {
 		module: "out/commands/trans/status-tree-translation-handler.js",
@@ -123,7 +123,7 @@ export const COMMANDS = {
 		method: "translateFile",
 		args: "file-item",
 		hosts: ALL,
-		note: "ツリーの「ファイルを翻訳」。引数はファイルのパス",
+		note: "ツリーの「ファイルを翻訳」。引数は訳文の側のファイルのパス",
 	},
 	"mdait.translate.directory": {
 		module: "out/commands/trans/status-tree-translation-handler.js",
@@ -131,7 +131,7 @@ export const COMMANDS = {
 		method: "translateDirectory",
 		args: "dir-item",
 		hosts: ALL,
-		note: "ツリーの「フォルダを翻訳」。引数はフォルダのパス",
+		note: "ツリーの「フォルダを翻訳」。引数は訳文の側のフォルダのパス",
 	},
 	"mdait.trans.pendingTargets": {
 		module: "out/commands/trans/status-tree-translation-handler.js",
@@ -146,7 +146,7 @@ export const COMMANDS = {
 		export: "translateFrontmatterCommand",
 		args: "uri",
 		hosts: ALL,
-		note: "frontmatter だけを翻訳する。引数はファイルのパス",
+		note: "frontmatter だけを翻訳する。引数は訳文の側のファイルのパス",
 	},
 
 	// --- マーカーの置き場の切り替え ---

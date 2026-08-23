@@ -59,10 +59,10 @@ JSON をそのまま渡したいときは引数を JSON として書く（例: `
 | コマンド | すること | 引数 |
 |---|---|---|
 | `mdait.sync` | 状態の同期 | なし（`{"adopt":true}` で取り込み） |
-| `mdait.trans` | 単体翻訳 | ファイルの絶対パス |
-| `mdait.translate.file` | ファイル翻訳 | ファイルの絶対パス |
-| `mdait.translate.directory` | フォルダ翻訳 | フォルダの絶対パス |
-| `mdait.translate.frontmatter` | フロントマターの翻訳 | ファイルの絶対パス |
+| `mdait.trans` | 単体翻訳 | **訳文の側**のファイルのパス |
+| `mdait.translate.file` | ファイル翻訳 | **訳文の側**のファイルのパス |
+| `mdait.translate.directory` | フォルダ翻訳 | **訳文の側**のフォルダのパス |
+| `mdait.translate.frontmatter` | フロントマターの翻訳 | **訳文の側**のファイルのパス |
 | `mdait.tm.commit.file` / `.directory` | TM 登録 | パス |
 | `mdait.aiReview.file` / `.directory` | AI による訳文レビュー | パス |
 | `mdait.term.expand` | 用語の展開 | パス（ファイル／フォルダは lab が判定して形を作る） |
@@ -70,6 +70,9 @@ JSON をそのまま渡したいときは引数を JSON として書く（例: `
 | `mdait.markers.externalize` / `mdait.markers.embed` | マーカーの保管方式の切り替え | なし |
 | `mdait.setup.createConfig` | 設定の作成 | なし |
 | `mdait.setup.diagnose` | 診断 | なし |
+
+> **翻訳系は必ず「訳文の側」を渡す。** 原文のパスを渡すと `no-trans-pair` で何もせずに終わる
+> （エラーにもならないので、渡し間違いは「なぜか翻訳されない」としか見えない）。
 
 ## 気をつけること（実装と食い違っていた点）
 
