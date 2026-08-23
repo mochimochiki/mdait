@@ -71,12 +71,17 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
   report  run ディレクトリから report.md を組み立てて場所を出す
   down    ホストと AI の相手を止め、退避した設定を戻す
 
-ひとまとめの段取り（低レベルな動詞の組み合わせ。**まだ中身は入っていません**）
-  sweep    決定的スイープ（旧 test:explore）
-  probe    頑健性プローブ（旧 probe-robustness）
-  regress  録音の再生（旧 test:byok:e2e）
-  prompt   指示文の比べ読み
-  ux       ブラウザ版 VS Code で mdait のビューを開いて撮る
+ひとまとめの段取り（低レベルな動詞の組み合わせ。独自の実装は持ちません）
+  sweep    決定的スイープ（旧 npm run test:explore）。FAIL があれば終了コード 1
+            --only P1,P5   段を絞る    --verbose 通った判定も出す    --keep 終わっても止めない
+  probe    頑健性プローブ（旧 probe-robustness）。判定せず観察し、前回の run と比べる
+            --only S3,S13  シナリオを絞る    --diff <runのパス>  比べる相手    --time 所要時間も出す
+  regress  録音の再生（旧 npm run test:byok:e2e）。食い違えば終了コード 1
+            --replay <ファイル>  別の録音を再生する
+  prompt   指示文の比べ読み（未実装。組み立て方だけ出ます）
+  ux       ブラウザ版 VS Code で mdait のビューを開いて撮る（未実装。組み立て方だけ出ます）
+
+  どの段取りも --dry を付けると、実行せずに「実際には何をしているのか」だけを出します。
 
 はじめの一歩
   node scripts/lab/lab.mjs up --host headless --ai none --ws tmp --reset

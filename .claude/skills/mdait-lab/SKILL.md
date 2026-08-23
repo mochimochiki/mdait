@@ -51,15 +51,20 @@ node scripts/lab/lab.mjs down                    # 片付ける
 
 ## プリセット（動詞の組み合わせ。独自実装は持たない）
 
-| プリセット | 中身 | 対応する旧コマンド |
+| プリセット | 中身 | 主なオプション |
 |---|---|---|
-| `lab sweep` | 決定的スイープ（P1〜P8）。失敗で exit 1 | `npm run test:explore` |
-| `lab probe [--only S3,S13]` | 頑健性プローブ（S0〜S14）。前回 run との差分つき | `node scripts/exploratory/probe-robustness.js` |
-| `lab regress` | 録音の再生。LLM 0回 | `npm run test:byok:e2e` |
-| `lab prompt --dir en/child` | `agent` モードで走らせて指示文を比べる | — |
-| `lab ux` | code-server を起こして mdait ビューを開き、初期状態を撮る | — |
+| `lab sweep` | 決定的スイープ（P1〜P8）。FAIL があれば exit 1 | `--only P1,P5` / `--verbose` / `--keep` |
+| `lab probe` | 頑健性プローブ（S0〜S14）。判定せず観察し、前回 run と比べる | `--only S3,S13` / `--diff <run>` / `--time` |
+| `lab regress` | 録音の再生。LLM 0回。食い違えば exit 1 | `--replay <ファイル>` |
+| `lab prompt` | `agent` モードで走らせて指示文を比べる（未実装） | — |
+| `lab ux` | code-server を起こして mdait ビューを開き、初期状態を撮る（未実装） | — |
 
-`npm run test:explore` / `test:byok` / `test:byok:e2e` は**名前のまま残っている**（中身が lab を呼ぶ）。
+どの段取りも `--dry` を付けると、実行せずに**「実際には何をしているのか」だけ**を出す。
+プリセットは低レベル動詞の組み立てしか持たないので、`--dry` の出力がそのまま中身の説明になる。
+
+`npm run test:explore`（= `lab sweep`）と `npm run test:byok:e2e`（= `lab regress`）は
+**名前のまま残っていて、CI で常時走る**。ワークスペースがリポジトリの外にあるので、CI で走らせても
+何も汚さない。
 
 ## 実測して分かっていること
 
