@@ -57,7 +57,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "../lib/args.mjs";
-import { sendCommand } from "../lib/ipc.mjs";
+import { ipcPaths, sendCommand } from "../lib/ipc.mjs";
 import { RUNS_DIR } from "../lib/runs.mjs";
 import { LAB_DIR, readSession } from "../lib/session.mjs";
 import { REPO, configureAi, prepareWorkspace } from "../lib/workspace.mjs";
@@ -122,10 +122,36 @@ function quietConsole() {
 // 土台への頼みごと（ホストに実際のコマンドを走らせてもらう）
 // ===========================================================================
 
+/**
+ * ホストが依頼の紙（command.json）を片付けるまで待つ。
+ *
+ * ホストは「結果を書く → 依頼の紙を捨てる」の順で動く。結果を見てすぐ次の依頼を置くと、
+ * まだ捨てていない紙と入れ替わり、ホストがその**新しい紙のほう**を捨ててしまうことがある
+ * （こちらは返事を待ち続け、実測で1800回に1回ほど止まった）。紙が消えるのを見届けてから
+ * 次を置けば、この取り違えは起こらない。
+ */
+async function waitCommandConsumed(limitMs = 5000) {
+	const { commandFile } = ipcPaths(WS);
+	const limit = Date.now() + limitMs;
+	while (Date.now() < limit) {
+		if (!fs.existsSync(commandFile)) return true;
+		await new Promise((r) => setTimeout(r, 20));
+	}
+	return false;
+}
+
 /** 1つ頼んで結果を待つ。つまずいたら画面に出して先へ進む（1件で全体を止めない） */
-async function ask(command, args = [], timeoutSec = 300) {
-	const result = await sendCommand(WS, command, args, { timeoutSec });
+async function ask(command, args = [], timeoutSec = 120) {
+	let result;
+	try {
+		result = await sendCommand(WS, command, args, { timeoutSec });
+	} catch (e) {
+		// 返事が来ないのは、上に書いた紙の取り違えでほぼ説明が付く。1度だけ置き直す
+		say(`  ${command} の返事が来ないので、もう一度頼みます: ${e?.message}`);
+		result = await sendCommand(WS, command, args, { timeoutSec });
+	}
 	if (result.status === "error") say(`  ${command} でつまずきました: ${result.error}`);
+	await waitCommandConsumed();
 	return result;
 }
 
@@ -141,7 +167,9 @@ async function hostTrans(abs) {
 
 /** ホストに「覚えていた中身を捨ててディスクから読み直せ」と言う */
 async function hostReload() {
-	return sendCommand(WS, "lab.reload", [], { timeoutSec: 120 });
+	const result = await sendCommand(WS, "lab.reload", [], { timeoutSec: 120 });
+	await waitCommandConsumed();
+	return result;
 }
 
 // ===========================================================================
