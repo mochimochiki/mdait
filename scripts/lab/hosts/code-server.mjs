@@ -423,9 +423,13 @@ export async function up(options = {}) {
 	};
 }
 
-/** 自分の作業ディレクトリで起こしたものだけを PID で止める */
+/**
+ * 自分の作業ディレクトリで起こしたものだけを PID で止める。
+ * @returns {Promise<{stopped: boolean, pid: number|null, reason: string}>}
+ */
 export async function down(session = {}) {
 	const dir = codeServerDir();
+	const pid = session.hostPid || readPid(pidFile(dir));
 	const stopped = [];
 	if (session.hostPid && stopPid(session.hostPid)) {
 		stopped.push(`code-server(${session.hostPid})`);
@@ -434,15 +438,17 @@ export async function down(session = {}) {
 		stopped.push("code-server");
 	}
 	if (session.browserPid && stopPid(session.browserPid)) {
-		stopped.push(`browser(${session.browserPid})`);
+		stopped.push(`常駐画面(${session.browserPid})`);
 		fs.rmSync(browserPidFile(dir), { force: true });
 	} else if (stopRecorded(browserPidFile(dir))) {
-		stopped.push("browser");
+		stopped.push("常駐画面");
 	}
 	fs.rmSync(path.join(dir, "browser-ws.txt"), { force: true });
 	fs.rmSync(path.join(dir, "ui-request.json"), { force: true });
 	fs.rmSync(path.join(dir, "ui-result.json"), { force: true });
-	log(stopped.length ? `止めました: ${stopped.join(", ")}` : "止めるものはありませんでした");
+	const reason = stopped.length ? `止めました: ${stopped.join(", ")}` : "止めるものはありませんでした";
+	log(reason);
+	return { stopped: stopped.length > 0, pid, reason };
 }
 
 /** 今どうなっているかを一行で */

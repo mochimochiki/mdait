@@ -304,12 +304,17 @@ export async function up(options = {}) {
 	return { pid: child.pid, ws, binary, version, logFile };
 }
 
-/** 自分が起こしたものだけを PID で止める */
+/**
+ * 自分が起こしたものだけを PID で止める。
+ * @returns {Promise<{stopped: boolean, pid: number|null, reason: string}>}
+ */
 export async function down(session = {}) {
 	const pid = session.hostPid || readPid(pidFile());
 	const stopped = stopPid(pid);
 	fs.rmSync(pidFile(), { force: true });
-	log(stopped ? `止めました pid=${pid}` : "止めるものはありませんでした");
+	const reason = stopped ? `止めました pid=${pid}` : "止めるものはありませんでした";
+	log(reason);
+	return { stopped, pid, reason };
 }
 
 /** 今どうなっているかを一行で */
