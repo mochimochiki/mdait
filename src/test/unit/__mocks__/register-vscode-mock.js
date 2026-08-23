@@ -64,6 +64,12 @@ const vscodeMock = {
 				const target = uri.fsPath ?? String(uri);
 				return new Uint8Array(fs.readFileSync(target));
 			},
+			// 実 VS Code と同じく、存在しないパスでは例外になる
+			stat: async (uri) => {
+				const target = uri.fsPath ?? String(uri);
+				const s = fs.statSync(target);
+				return { type: s.isDirectory() ? 2 : 1, ctime: s.ctimeMs, mtime: s.mtimeMs, size: s.size };
+			},
 		},
 		getConfiguration: () => ({
 			get: () => undefined,

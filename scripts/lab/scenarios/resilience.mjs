@@ -54,7 +54,9 @@
  *   `lab up --ai script --script <1本>` では、経路ごとに違う台本を当てられないうえ、
  *   台本を使い切ると 409 で止まる。ここでは shim を `--script-loop` 付きで起こし、
  *   1件〜3件の短い台本を繰り返させる（ユニットが何個でも同じ意地悪が当たる）。
- *   下ごしらえ（翻訳しておく・用語集を作る）は、実験場の echo の相手をそのまま使う。
+ *   下ごしらえ（翻訳しておく・用語集を作る）は、ふだんは実験場の echo の相手をそのまま使う。
+ *   ただし「まともな訳文」が要る下ごしらえだけは ok-translation.jsonl を使う。
+ *   echo は原文を1行に潰すので見出しが落ち、改訂（need:revise）の場面が作れないため。
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -278,6 +280,18 @@ async function useNastyAi(scriptFile, timeoutSec) {
 	await reload();
 }
 
+/**
+ * 下ごしらえで「まともな訳文」が要るときの相手。
+ *
+ * echo は原文を1行に潰して返すので**見出しが落ちる**。見出しの落ちた訳文は、
+ * あとで原文を書き換えても原文ユニットと結び付かず、改訂（need:revise）の場面が作れない
+ * （実測: sync が「削除1・新規1」と数え、訳文が未翻訳のコピーに戻った）。
+ * だから下ごしらえの翻訳だけは、見出しを残す台本を使う。
+ */
+async function useGoodAi() {
+	await useNastyAi(path.join(SCENARIOS, "ok-translation.jsonl"), 600);
+}
+
 // ===========================================================================
 // 原稿を見る道具
 // ===========================================================================
@@ -309,6 +323,12 @@ function markersOf(content) {
 /** マーカーの need を取り出す（無ければ空文字） */
 function needFlag(markerText) {
 	return MARKER_STRICT.exec(markerText)?.[3] || "";
+}
+
+/** frontmatter の中のマーカー（`mdait: front: '...'`）だけを取り出す。無ければ空文字 */
+function frontMarker(content) {
+	const matched = /^\s*front:\s*'([^']*)'/m.exec(content);
+	return matched ? `<!-- mdait ${matched[1]} -->` : "";
 }
 
 /** マーカーを除いた本文（空かどうかを見るため） */
@@ -447,10 +467,20 @@ const ROUTES = [
 		// 下ごしらえ: いちど訳してから原文を書き換え、need:revise を作る。
 		// 訳文に「人の書いたもの」が入っている状態で壊れた応答を受けるとどうなるかを見る。
 		prepare: async () => {
+			// 見出しを残す訳文で下ごしらえする（echo だと見出しが落ちて改訂にならない）
+			await useGoodAi();
 			await runCmd("mdait.trans", [path.join(tgtDir(), "doc.md")], 300);
+			// 原文は**マーカーを残したまま**書き換えること。
+			// 丸ごと書き直すとマーカーが落ち、mdait は「別のユニットが増えた」と読む。
+			// すると訳文とは結び付かず、改訂ではなく「未翻訳のコピーで置き換え」になる
+			// （実測: sync が added=1 / deleted=1 と数え、せっかくの訳文が消えた）。
+			const srcFile = path.join(srcDir(), "doc.md");
 			fs.writeFileSync(
-				path.join(srcDir(), "doc.md"),
-				"# 見出しA\n\n本文A。壊れた応答のあとでも、この段落は残っていなければならない。ここを書き換えて改訂を誘発する。\n",
+				srcFile,
+				read(srcFile).replace(
+					"残っていなければならない。",
+					"残っていなければならない。ここを書き換えて改訂を誘発する。",
+				),
 				"utf8",
 			);
 			await reload();
@@ -524,6 +554,7 @@ const ROUTES = [
 		watch: [`en/${FIXTURE}/doc.md`],
 		// 下ごしらえ: 登録できる「確定した対訳」を作る（need が付いていると見送られる）
 		prepare: async () => {
+			await useGoodAi();
 			await runCmd("mdait.trans", [path.join(tgtDir(), "doc.md")], 300);
 			await reload();
 		},
@@ -541,6 +572,7 @@ const ROUTES = [
 		// 常に undefined を返す）。この経路を試すには shim 側の手当てが要る。
 		blocked: "headless では aiReview 冒頭の QuickPick に答えられず、AI へ行き着かない",
 		prepare: async () => {
+			await useGoodAi();
 			await runCmd("mdait.trans", [path.join(tgtDir(), "doc.md")], 300);
 			await reload();
 		},
@@ -643,6 +675,19 @@ function judge(phase, route, nasty, ctx) {
 			`結果: ${JSON.stringify(result.result)}\n通知: ${JSON.stringify((result.dialogs ?? []).map((d) => d.message))}`,
 		);
 		return;
+	}
+
+	// (0.5) 途中で確認ダイアログが出て、lab が代わりに押していないか。
+	//       押した結果として原稿が書き換わったなら、それは「勝手に壊した」のではなく
+	//       「人が押したことにして進めた」ということ。この区別を落とすと騒ぎすぎになる。
+	const pressed = (result.dialogs ?? []).filter((d) => d.answered && (d.buttons ?? []).length > 0);
+	for (const dialog of pressed) {
+		info(
+			phase,
+			route.watch[0],
+			`途中で確認が出て、lab が「${dialog.answered}」と答えた`,
+			`${dialog.message}\n選べたボタン: ${JSON.stringify(dialog.buttons)}\n※ 断る側を試すには MDAIT_LAB_DIALOG=no を付けてホストを起こし直す`,
+		);
 	}
 
 	// (1) 原文は1バイトも変わってはいけない
@@ -781,6 +826,20 @@ function judge(phase, route, nasty, ctx) {
 		if (named === 0) {
 			info(phase, rel, "壊れた応答のあとで訳文が変わった（本文が消えたわけではない）", `前:\n${was}\n後:\n${now}`);
 		}
+		// frontmatter のマーカーは本文のマーカーと別勘定にする。
+		// まとめて数えると、本文がまだ need:translate のままであることに隠れて、
+		// frontmatter の need だけが外れたことを見落とす（実測で見落とした）。
+		const frontNeedWas = needFlag(frontMarker(was));
+		const frontNeedNow = needFlag(frontMarker(now));
+		if (frontNeedWas.startsWith("translate") && frontNeedNow === "" && was !== now) {
+			fail(
+				phase,
+				rel,
+				"frontmatter の訳が壊れているのに need が外れ、誰にも回されていない",
+				`前: ${frontMarker(was)}\n後: ${frontMarker(now)}\n後の全文:\n${now.slice(0, 400)}`,
+			);
+		}
+
 		// need フラグが宙に浮いていないか
 		const wasNeeds = markersOf(was).map(needFlag).filter(Boolean);
 		const nowNeeds = markersOf(now).map(needFlag).filter(Boolean);
