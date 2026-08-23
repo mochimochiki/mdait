@@ -24,14 +24,24 @@ global.__vscodeMockLanguage = undefined;
 // showXxxMessage の記録先（テスト側で配列を代入したときだけ控える）と、押されたボタンの差し替え
 global.__vscodeMockShownMessages = undefined;
 global.__vscodeMockMessageChoice = undefined;
+// executeCommand の記録先（配列を代入したときだけ控える）と、コマンドの実装差し替え。
+// __vscodeMockCommandHandlers にオブジェクトを代入すると、そこに無い ID の実行は
+// 実 VS Code と同じく "command 'xxx' not found" で失敗する
+global.__vscodeMockExecutedCommands = undefined;
+global.__vscodeMockCommandHandlers = undefined;
+// vscode.window.activeTextEditor の差し替え
+global.__vscodeMockActiveTextEditor = undefined;
 
 /** showXxxMessage の呼び出しを控える（テストが「何本出たか」を見られるようにする） */
 function recordMessage(level, message, items) {
+	const flat = items.flat();
 	const shown = global.__vscodeMockShownMessages;
 	if (Array.isArray(shown)) {
-		shown.push({ level, message, items: items.flat() });
+		shown.push({ level, message, items: flat });
 	}
-	return global.__vscodeMockMessageChoice;
+	const choice = global.__vscodeMockMessageChoice;
+	// 関数を代入すると、通知ごとに押すボタンを選び分けられる（続けて2枚出る確認など）
+	return typeof choice === "function" ? choice({ level, message, items: flat }) : choice;
 }
 
 const vscodeMock = {
@@ -91,6 +101,25 @@ const vscodeMock = {
 			);
 		},
 	},
+	commands: {
+		executeCommand: async (command, ...args) => {
+			const executed = global.__vscodeMockExecutedCommands;
+			if (Array.isArray(executed)) {
+				executed.push({ command, args });
+			}
+			const handlers = global.__vscodeMockCommandHandlers;
+			if (!handlers) {
+				return undefined;
+			}
+			const handler = handlers[command];
+			if (!handler) {
+				// 実 VS Code と同じ失敗の仕方（未登録 ID を踏んだことをテストが捕まえられる）
+				throw new Error(`command '${command}' not found`);
+			}
+			return handler(...args);
+		},
+		registerCommand: () => ({ dispose: () => {} }),
+	},
 	Uri: {
 		file: (p) => ({
 			fsPath: p,
@@ -106,6 +135,10 @@ const vscodeMock = {
 		showInformationMessage: async (message, ...items) => recordMessage("info", message, items),
 		showWarningMessage: async (message, ...items) => recordMessage("warning", message, items),
 		showErrorMessage: async (message, ...items) => recordMessage("error", message, items),
+		get activeTextEditor() {
+			return global.__vscodeMockActiveTextEditor;
+		},
+		showTextDocument: async (document) => ({ document }),
 		createOutputChannel: () => ({
 			appendLine: () => {},
 			append: () => {},

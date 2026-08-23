@@ -197,11 +197,17 @@ export async function transCommand(
 	}
 
 	// 通知は必ず排他区間の外で出す（区間の中で人を待つとロックが解放されない）
+	// 「全文で訳し直す」を選んだときは、やり直した側の結果を呼び手に返す。
+	// 捨てると、訳文もハッシュも進んでいるのに 0 件・スキップ 1 件と報告され、
+	// 返り値を読む側（LM ツール・ツリー・lab の IPC）が実態と食い違う
+	let finalResult = result;
 	await reportTransOutcome(result, {
 		label: path.basename(targetFilePath),
-		retryFullTranslation: () => transCommand(uri, { forceFullTranslation: true }),
+		retryFullTranslation: async () => {
+			finalResult = (await transCommand(uri, { forceFullTranslation: true })) ?? finalResult;
+		},
 	});
-	return result;
+	return finalResult;
 }
 
 /**
@@ -1233,12 +1239,15 @@ export async function transUnitCommand(
 	}
 
 	// 通知は排他区間の外で1回だけ出す（結果を見ずに成功を出す呼び出し口を無くす）
+	// やり直した側の結果を呼び手に返すのはファイル翻訳と同じ理由（実態と返り値を合わせる）
+	let finalResult = result;
 	await reportTransOutcome(result, {
 		label: vscode.l10n.t("unit {0}", unitHash.substring(0, 8)),
-		retryFullTranslation: () =>
-			transUnitCommand(targetPath, unitHash, { forceFullTranslation: true }),
+		retryFullTranslation: async () => {
+			finalResult = await transUnitCommand(targetPath, unitHash, { forceFullTranslation: true });
+		},
 	});
-	return result;
+	return finalResult;
 }
 
 /**
