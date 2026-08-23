@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { ipcPaths } from "../lib/ipc.mjs";
 import { LAB_DIR, readSession } from "../lib/session.mjs";
 
 const require_ = createRequire(import.meta.url);
@@ -146,6 +147,15 @@ export async function connect(opts = {}) {
 		}
 	}
 
+	/** アイコンの見た目から情報／警告／エラーを見分ける */
+	const levelOf = async (locator) => {
+		const cls = await locator.getAttribute("class").catch(() => null);
+		if (!cls) return "info";
+		if (cls.includes("error")) return "error";
+		if (cls.includes("warning")) return "warning";
+		return "info";
+	};
+
 	/**
 	 * スクリーンショットを保存する。
 	 * @param {string} name 拡張子なしの名前
@@ -188,7 +198,7 @@ export async function connect(opts = {}) {
 
 	/**
 	 * 画面右下の通知（トースト）を読む。目視だけに頼らず文言を機械的に拾うため。
-	 * @returns {Promise<Array<{text: string, buttons: string[]}>>}
+	 * @returns {Promise<Array<{text: string, buttons: string[], level: string}>>}
 	 */
 	const notifications = async () => {
 		const toasts = page.locator(".notifications-toasts .notification-toast");
@@ -196,30 +206,58 @@ export async function connect(opts = {}) {
 		const out = [];
 		for (let i = 0; i < count; i++) {
 			const toast = toasts.nth(i);
-			const text = ((await toast.locator(".notification-list-item-message").innerText().catch(() => "")) || (await toast.innerText().catch(() => ""))).trim();
+			const text = (
+				(await toast
+					.locator(".notification-list-item-message")
+					.innerText()
+					.catch(() => "")) || (await toast.innerText().catch(() => ""))
+			).trim();
 			const buttons = (
-				await toast.locator(".monaco-button, .notification-list-item-buttons-container a").allInnerTexts()
+				await toast
+					.locator(".monaco-button, .notification-list-item-buttons-container a")
+					.allInnerTexts()
 			)
-				.map((s) => s.trim())
+				.map((t) => t.trim())
 				.filter(Boolean);
-			out.push({ text, buttons });
+			const level = await levelOf(toast.locator(".notification-list-item-icon").first());
+			out.push({ text, buttons, level });
 		}
 		return out;
 	};
 
 	/**
 	 * 前面のダイアログを読む。出ていなければ null。
-	 * @returns {Promise<{message: string, detail: string, buttons: string[]} | null>}
+	 * primary は「人が主に押すことになるボタン」（VS Code は控えめな方に secondary の印を付ける）。
+	 * @returns {Promise<{message: string, detail: string, buttons: string[], primary: string|null, level: string} | null>}
 	 */
 	const dialog = async () => {
 		const box = page.locator(".monaco-dialog-box");
 		if ((await box.count()) === 0) return null;
-		const message = (await box.locator(".dialog-message-text").innerText().catch(() => "")).trim();
-		const detail = (await box.locator(".dialog-message-detail").innerText().catch(() => "")).trim();
-		const buttons = (await box.locator(".dialog-buttons a").allInnerTexts())
-			.map((s) => s.trim())
-			.filter(Boolean);
-		return { message, detail, buttons };
+		const message = (
+			await box
+				.locator(".dialog-message-text")
+				.innerText()
+				.catch(() => "")
+		).trim();
+		const detail = (
+			await box
+				.locator(".dialog-message-detail")
+				.innerText()
+				.catch(() => "")
+		).trim();
+		const details = await box
+			.locator(".dialog-buttons .monaco-button")
+			.evaluateAll((nodes) =>
+				nodes.map((n) => ({
+					text: (n.textContent || "").trim(),
+					secondary: n.classList.contains("secondary"),
+				})),
+			)
+			.catch(() => []);
+		const buttons = details.map((b) => b.text).filter(Boolean);
+		const primary = (details.find((b) => !b.secondary) || details[0] || {}).text || null;
+		const level = await levelOf(box.locator(".dialog-icon").first());
+		return { message, detail, buttons, primary, level };
 	};
 
 	/**
@@ -233,6 +271,14 @@ export async function connect(opts = {}) {
 		});
 		await button.first().waitFor({ timeout: 10000 });
 		await button.first().click();
+	};
+
+	/** 文言で指した通知を1つだけ閉じる（ボタンは押さない） */
+	const dismissNotificationByText = async (text) => {
+		const toast = page
+			.locator(".notifications-toasts .notification-toast", { hasText: text })
+			.first();
+		await toast.locator(".codicon-notifications-clear").first().click({ timeout: 5000 });
 	};
 
 	/** 通知を閉じる（ボタンを押さずに片付ける） */
@@ -277,6 +323,7 @@ export async function connect(opts = {}) {
 		treeRow,
 		notifications,
 		clickNotificationButton,
+		dismissNotificationByText,
 		dismissNotifications,
 		dialog,
 		clickDialogButton,
@@ -328,6 +375,24 @@ export async function ask(action, args = {}, { timeoutSec = 60 } = {}) {
 }
 
 /**
+ * 常駐ページが控えた「確認ダイアログ・止まっていた通知」を受け取り、控えを空にする。
+ *
+ * headless ホストは vscode シムが同じことを控えて result.json の `dialogs` に載せる。
+ * 実ホストでは拡張機能が result.json を書くのでこちらから足せない。そこで lab run が
+ * 結果を受け取ったあとに、これを呼んで合流させる（形は headless と同じ）。
+ *
+ * @returns {Promise<Array<{level: string, modal: boolean, message: string, buttons: string[], answered: string|null, dismissed?: boolean}>>}
+ */
+export async function drainDialogs() {
+	try {
+		return (await ask("drain-dialogs", {}, { timeoutSec: 15 })) ?? [];
+	} catch {
+		// 常駐ページがいなければ控えも無い
+		return [];
+	}
+}
+
+/**
  * スクリーンショットを撮る。lab shot の実体。
  *
  * 呼び方は2通り。lab.mjs は `shot(session, 名前)` で呼ぶ（保存先はその run の shots/）。
@@ -371,6 +436,8 @@ export async function shot(first, second) {
  */
 async function serve(argv) {
 	const chromium = loadChromium();
+	/** 見張りが控えた確認ダイアログ・止まっていた通知（drain-dialogs で持ち出す） */
+	const screenLog = [];
 	const server = await chromium.launchServer({
 		executablePath: CHROMIUM_PATH,
 		args: ["--no-sandbox"],
@@ -391,7 +458,9 @@ async function serve(argv) {
 		});
 		await keeper.openMdait();
 		console.log(`常駐ページを開きました: ${workspace}`);
-		serveRequests(keeper);
+		const queue = createQueue();
+		serveRequests(keeper, queue, screenLog);
+		watchScreen(keeper, workspace, queue, screenLog);
 	}
 
 	const stop = async () => {
@@ -411,7 +480,7 @@ async function serve(argv) {
 }
 
 /** 常駐ページへの頼まれごとを受け付ける（ファイル越しの簡単なやり取り） */
-async function serveRequests(keeper) {
+async function serveRequests(keeper, queue, screenLog) {
 	const { requestFile, resultFile } = uiPaths();
 	fs.rmSync(requestFile, { force: true });
 	fs.rmSync(resultFile, { force: true });
@@ -426,7 +495,11 @@ async function serveRequests(keeper) {
 		fs.rmSync(requestFile, { force: true });
 		let out;
 		try {
-			out = { id: request.id, ok: true, value: await handleRequest(keeper, request) };
+			out = {
+				id: request.id,
+				ok: true,
+				value: await queue(() => handleRequest(keeper, request, screenLog)),
+			};
 		} catch (e) {
 			out = { id: request.id, ok: false, error: String((e && e.message) || e) };
 		}
@@ -434,7 +507,7 @@ async function serveRequests(keeper) {
 	}
 }
 
-async function handleRequest(keeper, request) {
+async function handleRequest(keeper, request, screenLog) {
 	const a = request.args || {};
 	switch (request.action) {
 		case "shot":
@@ -457,12 +530,122 @@ async function handleRequest(keeper, request) {
 			return await keeper.page.locator(".part.sidebar .monaco-list-row").allInnerTexts();
 		case "url":
 			return keeper.page.url();
+		case "drain-dialogs": {
+			const out = screenLog.slice();
+			screenLog.length = 0;
+			return out;
+		}
 		case "reload":
 			await keeper.page.reload({ waitUntil: "domcontentloaded" });
 			await keeper.page.waitForSelector(".monaco-workbench", { timeout: 60000 });
 			return true;
 		default:
 			throw new Error(`知らない頼まれごとです: ${request.action}`);
+	}
+}
+
+/**
+ * ページを触る用事を1つずつ順番に行うための待ち行列。
+ * 見張りと頼まれごとが同時に同じページを触ると取り違えるため。
+ */
+function createQueue() {
+	let tail = Promise.resolve();
+	return (job) => {
+		const next = tail.then(job, job);
+		tail = next.then(
+			() => {},
+			() => {},
+		);
+		return next;
+	};
+}
+
+/** いま命令が動いている最中かどうか（動いていない間は通知に手を出さない） */
+function commandInFlight(ws) {
+	const { commandFile, resultFile } = ipcPaths(ws);
+	if (fs.existsSync(commandFile)) return true;
+	try {
+		return JSON.parse(fs.readFileSync(resultFile, "utf-8")).status === "running";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * 画面を見張り、命令が止まらないように代わりに答える。headless の vscode シムと同じ考え方。
+ *
+ * - 確認のダイアログ: **主たるボタン**（VS Code が控えめな方に付ける secondary の印が無い方）を押す。
+ *   エラーのダイアログのボタンは「ログを開く」など別の操作なので押さない。
+ * - ボタン付きの通知: 押すと別の仕事が始まってしまうので**押さずに閉じる**。
+ *   命令が動いている最中だけ手を出す（普段の目視評価で通知が消えては困るため）。
+ * - どちらも**黙ってやらない**。控えて drain-dialogs で持ち出せるようにする。
+ * - `MDAIT_LAB_DIALOG=no` のときはどれにも答えない（取り消し側を試したいとき用）。
+ */
+async function watchScreen(keeper, ws, queue, screenLog) {
+	const declineAll = process.env.MDAIT_LAB_DIALOG === "no";
+	const firstSeen = new Map();
+	let lastUntouched = null;
+	for (;;) {
+		await new Promise((r) => setTimeout(r, 500));
+		try {
+			const box = await queue(() => keeper.dialog());
+			if (box && box.buttons.length > 0) {
+				const decline = declineAll || box.level === "error";
+				const answer = decline ? null : box.primary;
+				const message = [box.message, box.detail].filter(Boolean).join(" / ");
+				if (answer) {
+					await queue(() => keeper.clickDialogButton(answer));
+					screenLog.push({
+						level: box.level,
+						modal: true,
+						message,
+						buttons: box.buttons,
+						answered: answer,
+					});
+					console.log(`確認ダイアログに「${answer}」と答えました: ${message.slice(0, 60)}`);
+				} else if (lastUntouched !== message) {
+					lastUntouched = message;
+					screenLog.push({
+						level: box.level,
+						modal: true,
+						message,
+						buttons: box.buttons,
+						answered: null,
+					});
+					console.log(`確認ダイアログに答えませんでした: ${message.slice(0, 60)}`);
+				}
+				continue;
+			}
+			lastUntouched = null;
+
+			if (declineAll) continue;
+			if (!commandInFlight(ws)) {
+				firstSeen.clear();
+				continue;
+			}
+			const toasts = await queue(() => keeper.notifications());
+			const now = Date.now();
+			for (const toast of toasts) {
+				if (toast.buttons.length === 0) continue; // ボタンが無い通知は待たせない
+				const seen = firstSeen.get(toast.text) ?? now;
+				firstSeen.set(toast.text, seen);
+				if (now - seen < 2000) continue; // すぐ消えるものを慌てて閉じない
+				const head = toast.text.split("\n")[0].slice(0, 60);
+				await queue(() => keeper.dismissNotificationByText(head));
+				firstSeen.delete(toast.text);
+				screenLog.push({
+					level: toast.level,
+					modal: false,
+					message: toast.text,
+					buttons: toast.buttons,
+					answered: null,
+					dismissed: true,
+				});
+				console.log(`止まっていた通知を閉じました: ${head}`);
+			}
+		} catch {
+			// 画面が入れ替わる途中は掴み損ねる。次の周回で見直す
+		}
 	}
 }
 

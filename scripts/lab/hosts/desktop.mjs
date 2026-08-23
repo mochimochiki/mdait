@@ -7,6 +7,11 @@
  *
  * 命令はファイル IPC（<ws>/.mdait/debug/command.json）で送る。
  * 手元の本物のプロバイダ（vscode.lm など）を使いたいときはこのホストを選ぶ。
+ *
+ * 確認ダイアログについて: headless は vscode シムが、code-server は常駐ページの見張りが
+ * 代わりに答える。デスクトップ版は本物の画面なので、**そこに居る人が答える**。
+ * 答えるまで `lab run` は返らない（result.json が running のまま）。画面を見ていない場では
+ * headless か code-server を使うこと。
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
