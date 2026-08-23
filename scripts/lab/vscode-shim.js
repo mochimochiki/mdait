@@ -38,7 +38,14 @@ vscode.window.withProgress = async (_opts, task) => {
 	return await task(progress, token);
 };
 vscode.window.showTextDocument = async () => ({});
-vscode.window.activeTextEditor = undefined;
+// 開いているエディタは無いことにする。
+// 基のモックはこれを **getter**（`global.__vscodeMockActiveTextEditor` 由来）で持つことがある。
+// そこへ代入すると「getter しかない」と言われて読み込みごと落ちるので、持ち方を見てから決める。
+if (Object.getOwnPropertyDescriptor(vscode.window, "activeTextEditor")?.get) {
+	global.__vscodeMockActiveTextEditor = undefined;
+} else {
+	vscode.window.activeTextEditor = undefined;
+}
 vscode.window.showInputBox = async () => undefined;
 
 /*
