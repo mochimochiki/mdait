@@ -376,6 +376,13 @@ export async function up(options = {}) {
 	enableIpc(ws);
 	const pid = startServer(dir, ws, port);
 	await waitHttp(port, 90);
+	if (!alive(pid)) {
+		// 応答はあるのに自分のプロセスが死んでいる = 別の code-server がポートを握っている
+		const tail = fs.readFileSync(path.join(dir, "cs.log"), "utf-8").split("\n").slice(-5).join("\n");
+		throw new Error(
+			`起こした code-server が落ちました（ポート ${port} は別のものが使っているかもしれません）。\n${tail}`,
+		);
+	}
 	log(`HTTP 応答あり: http://127.0.0.1:${port}/?folder=${encodeURIComponent(ws)}`);
 
 	// 画面を開いて拡張を動かし、ready ファイルができるまで待つ。

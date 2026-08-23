@@ -302,19 +302,34 @@ export async function ask(action, args = {}, { timeoutSec = 60 } = {}) {
 
 /**
  * スクリーンショットを撮る。lab shot の実体。
+ *
+ * 呼び方は2通り。lab.mjs は `shot(session, 名前)` で呼ぶ（保存先はその run の shots/）。
+ * 手で使うときは `shot(名前, 保存先)` でもよい。
  * 常駐ページがいればそこで撮る。いなければ一時的に画面を開いて撮る（下の注意を参照）。
  */
-export async function shot(name, dir) {
+export async function shot(first, second) {
+	const isSession = Boolean(first) && typeof first === "object";
+	const session = isSession ? first : null;
+	const name = isSession ? second : first;
+	const dir = isSession
+		? session.runDir
+			? path.join(session.runDir, "shots")
+			: undefined
+		: second;
 	try {
 		return await ask("shot", { name, dir });
 	} catch (e) {
 		console.error(`常駐ページを使えませんでした（${e.message}）。一時的に画面を開いて撮ります`);
 		console.error("注意: 一時的な画面を閉じると ready ファイルが消えます（拡張が終了時に消すため）");
-		const session = await connect({});
+		const opened = await connect({
+			workspace: session?.ws,
+			port: session?.hostPort,
+			shotsDir: dir,
+		});
 		try {
-			return await session.shot(name, dir);
+			return await opened.shot(name, dir);
 		} finally {
-			await session.close();
+			await opened.close();
 		}
 	}
 }
