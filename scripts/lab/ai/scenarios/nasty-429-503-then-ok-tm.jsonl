@@ -1,0 +1,5 @@
+// 上と同じだが、最後の1件を「翻訳メモリ登録（tm.commit）が期待する配列」にしてある。
+// --script-loop と一緒に使う。
+{"http_status": 429, "error": {"message": "shim がわざとレート制限を返しました", "type": "rate_limit_error"}}
+{"http_status": 503, "error": {"message": "shim がわざとサーバー側の一時的失敗を返しました", "type": "server_error"}}
+{"text": "[{\"type\": \"new\", \"tuid\": \"-\", \"primary\": \"耐性の見本。\", \"local\": \"Resilience fixture.\"}]"}

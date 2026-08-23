@@ -1,0 +1,4 @@
+// 出力が途中で切れた（finish_reason: length）。JSON として閉じていない。
+// --script-loop と一緒に使う。
+// 見たいこと: 途中までの文字列を「訳文」として本文へ書いてしまわないか。
+{"text": "{\"translation\": \"(script) ここまで訳したところで力尽き", "finish_reason": "length"}

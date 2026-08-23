@@ -1,0 +1,5 @@
+// 長い沈黙。--script-loop と一緒に使う。
+// 20 秒黙ってから返す。mdait 側の ai.openai.timeoutSec をそれより短くしておくと
+// タイムアウトが起きる。
+// 見たいこと: タイムアウトが効くか、打ち切ったあとに原稿が壊れていないか。
+{"delay": 20, "text": "{\"translation\": \"(script) 遅れて届いた訳文。 [MT]\", \"termSuggestions\": []}"}
