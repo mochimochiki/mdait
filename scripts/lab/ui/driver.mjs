@@ -584,6 +584,7 @@ function commandInFlight(ws) {
 async function watchScreen(keeper, ws, queue, screenLog) {
 	const declineAll = process.env.MDAIT_LAB_DIALOG === "no";
 	const firstSeen = new Map();
+	const noticed = new Set();
 	let lastUntouched = null;
 	for (;;) {
 		await new Promise((r) => setTimeout(r, 500));
@@ -618,15 +619,29 @@ async function watchScreen(keeper, ws, queue, screenLog) {
 			}
 			lastUntouched = null;
 
-			if (declineAll) continue;
 			if (!commandInFlight(ws)) {
 				firstSeen.clear();
+				noticed.clear();
 				continue;
 			}
 			const toasts = await queue(() => keeper.notifications());
 			const now = Date.now();
 			for (const toast of toasts) {
 				if (toast.buttons.length === 0) continue; // ボタンが無い通知は待たせない
+				if (declineAll) {
+					// 何もしない約束のとき。ただし放置したことは控える（命令は返らないままになる）
+					if (noticed.has(toast.text)) continue;
+					noticed.add(toast.text);
+					screenLog.push({
+						level: toast.level,
+						modal: false,
+						message: toast.text,
+						buttons: toast.buttons,
+						answered: null,
+					});
+					console.log(`ボタン付きの通知を放置しました: ${toast.text.split("\n")[0].slice(0, 60)}`);
+					continue;
+				}
 				const seen = firstSeen.get(toast.text) ?? now;
 				firstSeen.set(toast.text, seen);
 				if (now - seen < 2000) continue; // すぐ消えるものを慌てて閉じない
