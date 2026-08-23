@@ -2,21 +2,19 @@
 /*
  * 郵便受けに答えを置く。形が違っていればその場で教える。
  *
- *   node scripts/byok-shim/reply.mjs 001 --text "訳文"
- *   node scripts/byok-shim/reply.mjs 001 --json '{"text":"...","delay":3}'
- *   echo '{"text":"..."}' | node scripts/byok-shim/reply.mjs 001
- *   node scripts/byok-shim/reply.mjs --next --translation "訳文だけ渡す（JSONに包む）"
+ *   node scripts/lab/ai/reply.mjs 001 --text "訳文"
+ *   node scripts/lab/ai/reply.mjs 001 --json '{"text":"...","delay":3}'
+ *   echo '{"text":"..."}' | node scripts/lab/ai/reply.mjs 001
+ *   node scripts/lab/ai/reply.mjs --next --translation "訳文だけ渡す（JSONに包む）"
  *
  * --translation は mdait の trans が期待する {"translation": "..."} に包んでから渡す。
  * 手で JSON を書くと引用符の入れ子で必ず間違えるので、翻訳を返すときはこれを使う。
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { validateReply } from "./lib/backends.mjs";
+import { defaultMailbox } from "./lib/paths.mjs";
 import { findPending } from "./wait.mjs";
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 function readStdin() {
 	try {
@@ -28,7 +26,7 @@ function readStdin() {
 
 async function main() {
 	const argv = process.argv.slice(2);
-	const options = { mailbox: path.join(HERE, "mailbox") };
+	const options = { mailbox: defaultMailbox() };
 	let tag;
 	for (let at = 0; at < argv.length; at += 1) {
 		const flag = argv[at];
@@ -40,7 +38,7 @@ async function main() {
 		else if (flag === "--next") options.next = true;
 		else if (flag === "-h" || flag === "--help") {
 			process.stdout.write(
-				"node scripts/byok-shim/reply.mjs <番号|--next> [--text S | --translation S | --json S | --file F] [--mailbox DIR]\n",
+				"node scripts/lab/ai/reply.mjs <番号|--next> [--text S | --translation S | --json S | --file F] [--mailbox DIR]\n",
 			);
 			process.exit(0);
 		} else if (!flag.startsWith("--")) tag = flag;

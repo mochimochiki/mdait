@@ -13,7 +13,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const REPO = path.resolve(__dirname, "..", "..");
-const WS = path.join(REPO, "src/test/unit/workspace");
+
+// どのフォルダを「ワークスペース」として扱うかは呼び出し側が決められる。
+// 優先順は 環境変数 MDAIT_LAB_WS → 事前に立てた global.__mdaitLabWorkspaceRoot → 従来のリポジトリ内テスト用フォルダ。
+// （lab のヘッドレスホストは /tmp 側の使い捨てワークスペースを渡す。旧 run-sweep / probe は指定しないので従来どおり）
+const WS = path.resolve(
+	process.env.MDAIT_LAB_WS || global.__mdaitLabWorkspaceRoot || path.join(REPO, "src/test/unit/workspace"),
+);
 
 // モックは読込時に __vscodeMockWorkspaceRoot を既定値で上書きするため、後で再設定する
 const vscode = require(path.join(REPO, "src/test/unit/__mocks__/register-vscode-mock.js"));

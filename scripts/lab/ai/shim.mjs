@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * BYOK shim — mdait の翻訳相手を手元に用意する。
+ * AI shim（旧 BYOK shim）— mdait の翻訳相手を手元に用意する。
  *
  * mdait の設定を
  *   "ai": { "provider": "openai", "openai": { "baseURL": "http://127.0.0.1:8080/v1" } }
@@ -11,25 +11,28 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentBackend, LiveBackend, ReplayBackend, ScriptBackend } from "./lib/backends.mjs";
+import { AgentBackend, EchoBackend, LiveBackend, ReplayBackend, ScriptBackend } from "./lib/backends.mjs";
+import { defaultMailbox } from "./lib/paths.mjs";
 import { createShimServer } from "./lib/server.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const USAGE = `AI shim — mdait の翻訳相手を手元に用意する
 
-const USAGE = `BYOK shim — mdait の翻訳相手を手元に用意する
-
-  node scripts/byok-shim/shim.mjs [オプション]
+  node scripts/lab/ai/shim.mjs [オプション]
 
 共通
-  --mode <live|script|replay|agent>  誰が答えるか（既定: live）
+  --mode <echo|live|script|replay|agent>  誰が答えるか（既定: live）
   --port <番号>                      待ち受けポート（既定: 8080。0 で空きポートを自動取得）
   --model <名前>                     /v1/models で名乗る名前（既定: byok-shim）
   --record <ファイル>                やり取りを録音する（あとで --mode replay に使える）
   --heartbeat <秒>                   ストリーミング中に心拍を打つ間隔（既定: 10）
   --quiet                            進行の表示を止める
 
+echo（原文から決まった訳文をその場で作る。無人・速い・毎回同じ）
+  --delay <ミリ秒>                   答えるまで黙っている時間（既定: 0）
+  --echo-limit <文字数>              訳文に使う本文の長さ（既定: 200）
+
 live（郵便受け。人やエージェントがファイルで答える）
-  --mailbox <ディレクトリ>           既定: scripts/byok-shim/mailbox
+  --mailbox <ディレクトリ>           既定: scripts/lab/ai/mailbox（MDAIT_LAB_DIR があればその下）
   --answer-timeout <秒>              答えを待つ上限（既定: 900）
   --clip <文字数>                    ダイジェストで1メッセージを切る長さ（既定: 1200）
 
@@ -48,21 +51,28 @@ agent（claude コマンドを翻訳役として起動する。無人・並列�
   --agent-cwd <ディレクトリ>         翻訳役の作業場所（既定: shim の作業用ディレクトリ）
 `;
 
-function parseArgs(argv) {
-	const options = {
+/** 何も指定しなかったときの設定。コマンド行からも embed.mjs からも同じものを使う */
+export function defaultOptions() {
+	return {
 		mode: "live",
 		port: 8080,
 		model: "byok-shim",
 		heartbeat: 10,
-		mailbox: path.join(HERE, "mailbox"),
+		mailbox: defaultMailbox(),
 		answerTimeout: 900,
 		clip: 1200,
+		delay: 0,
+		echoLimit: 200,
 		scriptLoop: false,
 		agentCommand: "claude",
 		agentConcurrency: 4,
 		agentTimeout: 300,
 		quiet: false,
 	};
+}
+
+function parseArgs(argv) {
+	const options = defaultOptions();
 	for (let at = 0; at < argv.length; at += 1) {
 		const flag = argv[at];
 		const next = () => {
@@ -100,6 +110,12 @@ function parseArgs(argv) {
 			case "--clip":
 				options.clip = Number(next());
 				break;
+			case "--delay":
+				options.delay = Number(next());
+				break;
+			case "--echo-limit":
+				options.echoLimit = Number(next());
+				break;
 			case "--script":
 				options.script = path.resolve(next());
 				break;
@@ -136,6 +152,8 @@ function parseArgs(argv) {
 
 export function buildBackend(options) {
 	switch (options.mode) {
+		case "echo":
+			return new EchoBackend({ delayMs: options.delay ?? 0, limit: options.echoLimit ?? 200 });
 		case "live":
 			return new LiveBackend({
 				mailbox: options.mailbox,
@@ -161,7 +179,7 @@ export function buildBackend(options) {
 			});
 		}
 		default:
-			throw new Error(`知らないモードです: ${options.mode}（live / script / replay / agent）`);
+			throw new Error(`知らないモードです: ${options.mode}（echo / live / script / replay / agent）`);
 	}
 }
 

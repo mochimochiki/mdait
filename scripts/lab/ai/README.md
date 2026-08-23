@@ -1,4 +1,6 @@
-# BYOK shim — mdait の翻訳相手を手元に用意する
+# AI shim — mdait の翻訳相手を手元に用意する
+
+（旧 `scripts/byok-shim/`。lab の AI 係として `scripts/lab/ai/` へ移した）
 
 mdait は `ai.provider` を `openai` にすると、翻訳の依頼を `ai.openai.baseURL` の宛先へ HTTP で送る。
 宛先は本家 OpenAI である必要がない。この道具は、その宛先として手元に立てる小さなサーバーである。
@@ -8,6 +10,7 @@ mdait は `ai.provider` を `openai` にすると、翻訳の依頼を `ai.opena
 ```mermaid
 graph LR
 	A[mdait の trans] -->|POST /v1/chat/completions| B[shim]
+	B --> G[echo: 決まった訳文をその場で作る]
 	B --> C[live: ファイルの郵便受け]
 	B --> D[script: 台本]
 	B --> E[replay: 録音の再生]
@@ -36,7 +39,7 @@ shim には遅延・状態コード・壊れた断片を指定するつまみが
 ## 立てる
 
 ```bash
-node scripts/byok-shim/shim.mjs --mode script --script scripts/byok-shim/scenarios/echo-translation.jsonl
+node scripts/lab/ai/shim.mjs --mode script --script scripts/lab/ai/scenarios/echo-translation.jsonl
 ```
 
 起動すると標準出力に `PORT=8080` の1行が出る。`--port 0` を渡すと空いているポートを自動で取るので、
@@ -67,9 +70,33 @@ mdait 側の設定はこうする。
 
 ## 誰が答えるかを選ぶ
 
-### live — あなたが答える（既定）
+### echo — 原文から決まった訳文をその場で作る
 
-依頼が届くと `mailbox/` に3つのファイルが現れる。
+無人で速く、同じ原文なら毎回同じ答えを返す。決定的な検証（スイープ・UI の見た目確認）はこれを使う。
+
+```bash
+node scripts/lab/ai/shim.mjs --mode echo --port 0
+node scripts/lab/ai/shim.mjs --mode echo --delay 1500   # 「翻訳中」の見た目を撮りたいとき
+```
+
+やっていることは単純である。要求から原文（`=== SOURCE TEXT ===` より後ろ。目印が無ければ本文まるごと）を
+取り出し、空白を1つに潰し、先頭 200 文字に `[MT]` を付けて `{"translation": "..."}` の形で返す。
+時刻も乱数も混ぜないので、同じ入力なら何度でも同じ答えになる。
+
+2つだけ気をつけていることがある。
+
+- **コードブロックの目印は必ず残す。** mdait はコードブロックを `__CODE_BLOCK_PLACEHOLDER_0__` に
+  置き換えて送る。これを落とすと戻すものが無くなり、本文からコードブロックが消える。
+  だから目印は長さの勘定に入れず、全部そのまま訳文に入れる
+- **`{` `}` は取り除く。** 応答は JSON なので、原文の波括弧がそのまま混ざると形が壊れる
+
+`--delay <ミリ秒>` は答えるまで黙っている時間。UI の「翻訳中」の表示を見るときに使う。
+`--echo-limit <文字数>` で訳文に使う本文の長さを変えられる（既定 200）。
+
+### live — あなたが答える
+
+依頼が届くと郵便受けに3つのファイルが現れる。置き場所は環境変数 `MDAIT_LAB_DIR` があれば
+`<MDAIT_LAB_DIR>/mailbox`、無ければ `scripts/lab/ai/mailbox`（`--mailbox` で変えられる）。
 
 | ファイル | 中身 |
 |---|---|
@@ -84,7 +111,7 @@ mdait 側の設定はこうする。
 答えを書くには `reply.mjs` を使う。
 
 ```bash
-node scripts/byok-shim/reply.mjs --next --translation "訳した文をここに"
+node scripts/lab/ai/reply.mjs --next --translation "訳した文をここに"
 ```
 
 `--translation` は、mdait が待っている形（`{"translation": "..."}`）に包んでから渡す。
@@ -94,7 +121,7 @@ node scripts/byok-shim/reply.mjs --next --translation "訳した文をここに"
 次の依頼が届くまで止まっていて、届いたら要約の場所を1行出して終わる。**終わることが合図になる**。
 
 ```bash
-node scripts/byok-shim/wait.mjs   # 依頼が来るまで戻ってこない
+node scripts/lab/ai/wait.mjs   # 依頼が来るまで戻ってこない
 ```
 
 答えを書いたら、また `wait.mjs` を起こし直す。これで1往復の型になる。
@@ -117,7 +144,7 @@ node scripts/byok-shim/wait.mjs   # 依頼が来るまで戻ってこない
 依頼が来るたびに `claude -p` を1回起こし、その答えをそのまま返す。無人で、並列に走る。
 
 ```bash
-node scripts/byok-shim/shim.mjs --mode agent --agent-concurrency 6
+node scripts/lab/ai/shim.mjs --mode agent --agent-concurrency 6
 ```
 
 mdait の指示文はそのまま `--system-prompt` に渡し、本文を標準入力から流す。
@@ -169,20 +196,26 @@ mdait の指示文はそのまま `--system-prompt` に渡し、本文を標準�
 
 ## 実際に翻訳を通す
 
-`trans-e2e.js` は、VS Code を起動せずに mdait の `trans` を走らせる。
-`scripts/exploratory/vscode-shim.js` が用意する vscode の代役に相乗りし、コンパイル済みのコマンド層を直接呼ぶ。
-`scripts/exploratory/run-sweep.js` との違いは1つだけで、`fake-ai.js` を読み込まない。
-つまり本物の `OpenAIProvider` が組み立てられ、HTTP で shim を叩く。
+実際に mdait の `trans` を走らせる役（駆動役）は、ここには無い。lab のホストが受け持つ。
+この道具は「AI の代役を立てて、繋ぎ先を教える」ところまでを引き受ける。
 
-```bash
-npm run compile
-node scripts/byok-shim/shim.mjs --mode agent --port 8123 &
-node scripts/byok-shim/trans-e2e.js --shim http://127.0.0.1:8123/v1 --target en/10_test.md
-node scripts/byok-shim/trans-e2e.js --shim http://127.0.0.1:8123/v1 --dir en/child --concurrency 4
+同じプロセスの中に立てたいときは `embed.mjs` を使う。外にプロセスを増やさない。
+
+```js
+import { startShim } from "./scripts/lab/ai/embed.mjs";
+
+const ai = await startShim({ mode: "echo", delay: 0 });
+// ai.baseURL を mdait.json の ai.openai.baseURL に書いてから trans を走らせる
+console.log(ai.baseURL); // http://127.0.0.1:53211/v1
+await ai.close();
 ```
 
-`--dir` を渡すと、ディレクトリ翻訳と同じ経路を通る（`transFile_CoreProc` を `runWithConcurrency` に載せる）。
-テスト用ワークスペースの `mdait.json` を書き換えるが、終了時に必ず元へ戻す。
+`startShim` が受け取る名前はコマンド行のオプションと同じ（`--answer-timeout` は `answerTimeout`）。
+既定は `mode: "echo"` と `port: 0`（空きポートを自動で取る）。返るのは
+`{ baseURL, port, mode, server, backend, stats(), close() }` である。
+
+別プロセスとして立てるなら、これまでどおり `shim.mjs` を起動して標準出力の1行目
+（`PORT=8080`）からポートを拾う。
 
 `GET /__shim/stats` を叩くと、何件受けたか・同時に何本走ったかが分かる。
 
@@ -256,10 +289,26 @@ npm run test:byok       # shim 自体の単体テスト。外につながず、c
 npm run test:byok:e2e   # 録音を再生して trans が同じ結果になるかを見る。LLM は呼ばない
 ```
 
+直に叩くならこう。
+
+```bash
+npx mocha --ui tdd --timeout 30000 "scripts/lab/ai/test/**/*.test.mjs"
+```
+
 `npm run test:byok` は `npm test` から呼ばれるので、CI でも走る。
 
 `npm run test:byok:e2e` は CI に入れていない。テスト用ワークスペースの `mdait.json` と `content/` を
 書き換えるため、`npm run test:explore` と同じ扱いで手動実行にしてある。
+
+録音の再生（`replay-e2e.mjs`）は、駆動役を `--` の後ろから受け取る。
+
+```bash
+node scripts/lab/ai/replay-e2e.mjs -- <駆動役のコマンド> [引数...]
+```
+
+引数の中の `{baseURL}` は shim の繋ぎ先に置き換わる。環境変数 `MDAIT_AI_BASE_URL` でも渡す。
+駆動役に求めるのは2つだけで、成功したら終了コード 0 で終わること、ファイルごとに1行、
+対象のパス・`"translatedCount":N`・`残った need: {"-"...}` を含む行を出すことである。
 
 ---
 

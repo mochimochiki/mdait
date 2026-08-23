@@ -9,18 +9,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+import { defaultMailbox } from "./lib/paths.mjs";
 
 function parseArgs(argv) {
-	const options = { mailbox: path.join(HERE, "mailbox"), timeoutSec: 1800, intervalMs: 300 };
+	const options = { mailbox: defaultMailbox(), timeoutSec: 1800, intervalMs: 300 };
 	for (let at = 0; at < argv.length; at += 1) {
 		const flag = argv[at];
 		if (flag === "--mailbox") options.mailbox = path.resolve(argv[++at]);
 		else if (flag === "--timeout") options.timeoutSec = Number(argv[++at]);
 		else if (flag === "--interval") options.intervalMs = Number(argv[++at]);
 		else if (flag === "-h" || flag === "--help") {
-			process.stdout.write("node scripts/byok-shim/wait.mjs [--mailbox DIR] [--timeout SEC] [--interval MS]\n");
+			process.stdout.write("node scripts/lab/ai/wait.mjs [--mailbox DIR] [--timeout SEC] [--interval MS]\n");
 			process.exit(0);
 		} else {
 			process.stderr.write(`知らないオプションです: ${flag}\n`);

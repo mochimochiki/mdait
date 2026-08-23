@@ -6,7 +6,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentBackend, LiveBackend, ReplayBackend, ScriptBackend, validateReply } from "../lib/backends.mjs";
+import { startShim as startEmbeddedShim } from "../embed.mjs";
+import {
+	AgentBackend,
+	EchoBackend,
+	LiveBackend,
+	ReplayBackend,
+	ScriptBackend,
+	buildEchoTranslation,
+	extractSourceText,
+	validateReply,
+} from "../lib/backends.mjs";
 import { buildDigest } from "../lib/digest.mjs";
 import { readJsonl } from "../lib/transcript.mjs";
 import { ask, askStream, countPings, sseEvents, startShim, tempDir, writeJsonl } from "./helper.mjs";
@@ -164,6 +174,120 @@ suite("BYOK shim: わざと壊すつまみ", () => {
 		assert.match(validateReply({ text: 1 }), /文字列/);
 		assert.match(validateReply({ text: "a", finish_reason: "???" }), /finish_reason/);
 		assert.equal(validateReply({ text: "a" }), null);
+	});
+});
+
+suite("BYOK shim: echo（原文から決まった訳文を作る）", () => {
+	/** trans が送ってくる形（指示文のあとに原文の目印が来る）を組み立てる */
+	const askEcho = async (source, options) => {
+		const shim = await startShim({ backend: new EchoBackend(options) });
+		try {
+			const { json } = await ask(shim.base, {
+				messages: [
+					{ role: "system", content: "You are a professional translator." },
+					{ role: "user", content: `Translation Direction:\n- Source language: en\n\n=== SOURCE TEXT ===\n${source}` },
+				],
+			});
+			return JSON.parse(json.choices[0].message.content);
+		} finally {
+			await shim.close();
+		}
+	};
+
+	test("原文の目印より後ろだけを訳文にする（指示文は混ぜない）", async () => {
+		const reply = await askEcho("Hello   world\nsecond line");
+		assert.equal(reply.translation, "Hello world second line [MT]");
+		assert.deepEqual(reply.termSuggestions, []);
+		// 指示文（翻訳の向き）を訳文に混ぜていないこと
+		assert.ok(!reply.translation.includes("Translation Direction"));
+	});
+
+	test("同じ原文なら何度聞いても同じ訳文になる", async () => {
+		const first = await askEcho("Deterministic sentence.");
+		const second = await askEcho("Deterministic sentence.");
+		assert.equal(first.translation, second.translation);
+	});
+
+	test("コードブロックの目印は長さで切られず必ず残る", async () => {
+		// 200 文字を超える本文の後ろに目印を置く。素朴に切ると目印が落ちる
+		const long = "word ".repeat(80);
+		const reply = await askEcho(`${long}\n\n__CODE_BLOCK_PLACEHOLDER_0__\n\n${long}\n\n__CODE_BLOCK_PLACEHOLDER_1__`);
+		assert.ok(reply.translation.includes("__CODE_BLOCK_PLACEHOLDER_0__"), "0番の目印が落ちています");
+		assert.ok(reply.translation.includes("__CODE_BLOCK_PLACEHOLDER_1__"), "1番の目印が落ちています");
+		// 目印が途中で切られて別物になっていないこと
+		assert.equal(reply.translation.match(/__CODE_BLOCK_PLACEHOLDER_/g).length, 2);
+	});
+
+	test("JSON を壊す波括弧は取り除く", async () => {
+		const reply = await askEcho('A {"broken": true} B');
+		assert.ok(!reply.translation.includes("{"));
+		assert.ok(!reply.translation.includes("}"));
+		assert.equal(reply.translation, 'A "broken": true B [MT]');
+	});
+
+	test("目印の無い短い依頼（フロントマターの title）にも同じ形で答える", async () => {
+		const shim = await startShim({ backend: new EchoBackend() });
+		try {
+			const { status, json } = await ask(shim.base, {
+				messages: [{ role: "user", content: "Getting Started" }],
+			});
+			assert.equal(status, 200);
+			assert.equal(JSON.parse(json.choices[0].message.content).translation, "Getting Started [MT]");
+		} finally {
+			await shim.close();
+		}
+	});
+
+	test("--delay を渡すと、その時間だけ黙ってから返す", async () => {
+		const shim = await startShim({ backend: new EchoBackend({ delayMs: 400 }) });
+		try {
+			const started = Date.now();
+			const { status } = await ask(shim.base, { messages: [{ role: "user", content: "待たされる本文" }] });
+			const elapsed = Date.now() - started;
+			assert.equal(status, 200);
+			assert.ok(elapsed >= 350, `待っていません: ${elapsed}ms`);
+		} finally {
+			await shim.close();
+		}
+	});
+
+	test("原文の取り出しは、いちばん新しい user の発言だけを見る", () => {
+		const source = extractSourceText([
+			{ role: "system", content: "指示文" },
+			{ role: "user", content: "古い依頼\n=== SOURCE TEXT ===\n古い本文" },
+			{ role: "assistant", content: "前の答え" },
+			{ role: "user", content: "新しい依頼\n=== SOURCE TEXT ===\n新しい本文" },
+		]);
+		assert.equal(source, "新しい本文");
+	});
+
+	test("訳文の長さは上限で抑える（目印はその勘定に入れない）", () => {
+		const translation = buildEchoTranslation(`${"あ".repeat(500)} __CODE_BLOCK_PLACEHOLDER_0__`, { limit: 20 });
+		assert.equal(translation, `${"あ".repeat(20)} __CODE_BLOCK_PLACEHOLDER_0__ [MT]`);
+	});
+});
+
+suite("BYOK shim: 同じプロセスの中に立てる（embed）", () => {
+	test("startShim が空きポートで立ち、繋ぎ先を返す", async () => {
+		const ai = await startEmbeddedShim({ mode: "echo" });
+		try {
+			assert.match(ai.baseURL, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+			assert.ok(ai.port > 0);
+			assert.equal(ai.mode, "echo");
+			const { status, json } = await ask(ai.baseURL, { messages: [{ role: "user", content: "本文" }] });
+			assert.equal(status, 200);
+			assert.equal(JSON.parse(json.choices[0].message.content).translation, "本文 [MT]");
+			assert.equal(ai.stats().requests, 1);
+		} finally {
+			await ai.close();
+		}
+	});
+
+	test("close のあとは繋がらない（後片付けができている）", async () => {
+		const ai = await startEmbeddedShim({ mode: "echo" });
+		const base = ai.baseURL;
+		await ai.close();
+		await assert.rejects(() => fetch(`${base}/models`));
 	});
 });
 

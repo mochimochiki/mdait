@@ -1,6 +1,7 @@
 /*
- * 「何を返すか」を決める4つのやり方。
+ * 「何を返すか」を決める5つのやり方。
  *
+ *   echo   : 原文から決まった訳文をその場で作って返す。無人・速い・毎回同じ
  *   live   : 郵便受け。人（またはエージェント）がファイルで答える
  *   script : 台本を順に返す。無人
  *   replay : 録音を再生する。要求が録音と食い違ったら止まる
@@ -67,6 +68,90 @@ export function validateReply(reply) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// --------------------------------------------------------------------------
+// echo（原文から決まった訳文を作る）
+// --------------------------------------------------------------------------
+
+/** 原文の始まりを示す目印。この行より後ろが訳す対象になる */
+const SOURCE_TEXT_SEPARATOR = "=== SOURCE TEXT ===";
+
+/** コードブロックの退避先につけられる目印 */
+const CODE_BLOCK_PLACEHOLDER = /__CODE_BLOCK_PLACEHOLDER_\d+__/g;
+
+/**
+ * 要求のメッセージから、訳す対象の原文を取り出す。
+ *
+ * 指示文には翻訳の向きや用語集も載っているので、目印より後ろだけを見る。
+ * 目印が無ければ（フロントマターの title のような短い依頼）本文をまるごと対象にする。
+ */
+export function extractSourceText(messages) {
+	const last = [...(messages || [])].reverse().find((message) => message.role === "user");
+	const raw = last?.content;
+	const content = Array.isArray(raw) ? raw.join("\n") : typeof raw === "string" ? raw : "";
+	const at = content.indexOf(SOURCE_TEXT_SEPARATOR);
+	return (at >= 0 ? content.slice(at + SOURCE_TEXT_SEPARATOR.length) : content).trim();
+}
+
+/**
+ * 原文から、決まった形の訳文を作る。時刻も乱数も混ぜないので、同じ原文なら毎回同じ答えになる。
+ *
+ * 空白を潰して先頭だけを使うが、コードブロックの目印（`__CODE_BLOCK_PLACEHOLDER_0__`）は
+ * 長さの勘定に入れず必ず全部残す。落とすと mdait 側で本文からコードブロックが消えるため。
+ * JSON を壊す `{` `}` は取り除く。
+ *
+ * @param {string} source 原文
+ * @param {{limit?: number}} options limit は目印を除いた本文の上限文字数（既定 200）
+ */
+export function buildEchoTranslation(source, { limit = 200 } = {}) {
+	const squashed = String(source ?? "")
+		.replace(/\s+/g, " ")
+		.replace(/[{}]/g, "")
+		.trim();
+
+	const pieces = [];
+	let budget = limit;
+	let cursor = 0;
+	const pushPlain = (plain) => {
+		const text = plain.trim();
+		if (text.length === 0 || budget <= 0) return;
+		pieces.push(text.slice(0, budget));
+		budget -= Math.min(text.length, budget);
+	};
+	for (const match of squashed.matchAll(CODE_BLOCK_PLACEHOLDER)) {
+		pushPlain(squashed.slice(cursor, match.index));
+		pieces.push(match[0]);
+		cursor = match.index + match[0].length;
+	}
+	pushPlain(squashed.slice(cursor));
+
+	return `${pieces.join(" ")} [MT]`.trim();
+}
+
+export class EchoBackend {
+	/**
+	 * @param {object} options
+	 * @param {number} options.delayMs 答えるまで黙っている時間（ミリ秒）。UI の「翻訳中」を見るのに使う
+	 * @param {number} options.limit 訳文に使う本文の上限文字数
+	 */
+	constructor({ delayMs = 0, limit = 200 } = {}) {
+		this.delayMs = Math.max(0, delayMs);
+		this.limit = limit;
+		this.name = "echo";
+		this.answered = 0;
+	}
+
+	async respond(body) {
+		if (this.delayMs > 0) await sleep(this.delayMs);
+		this.answered += 1;
+		const translation = buildEchoTranslation(extractSourceText(body.messages), { limit: this.limit });
+		return { text: JSON.stringify({ translation, termSuggestions: [] }) };
+	}
+
+	stats() {
+		return { answered: this.answered, delayMs: this.delayMs };
+	}
+}
 
 // --------------------------------------------------------------------------
 // script
