@@ -147,15 +147,6 @@ export async function connect(opts = {}) {
 		}
 	}
 
-	/** アイコンの見た目から情報／警告／エラーを見分ける */
-	const levelOf = async (locator) => {
-		const cls = await locator.getAttribute("class").catch(() => null);
-		if (!cls) return "info";
-		if (cls.includes("error")) return "error";
-		if (cls.includes("warning")) return "warning";
-		return "info";
-	};
-
 	/**
 	 * スクリーンショットを保存する。
 	 * @param {string} name 拡張子なしの名前
@@ -197,32 +188,197 @@ export async function connect(opts = {}) {
 	const treeRow = (text) => page.locator(".part.sidebar .monaco-list-row", { hasText: text });
 
 	/**
+	 * サイドバーのツリーを機械可読で読む。
+	 *
+	 * 見た目でしか分からないこと（回転アイコン・色・字下げの深さ）を文字にして持ち出すためのもの。
+	 * アイコンは codicon の class 名がそのまま状態の名前になっている（`sync~spin` は
+	 * `codicon-sync codicon-modifier-spin` として出る）。
+	 *
+	 * @returns {Promise<Array<{label: string, description: string, icon: string, spinning: boolean, aria: string, depth: number}>>}
+	 */
+	const treeItems = async () => {
+		return await page.locator(".part.sidebar .monaco-list-row").evaluateAll((rows) =>
+			rows.map((row) => {
+				const icon = row.querySelector(".custom-view-tree-node-item-icon, .monaco-icon-label > .codicon");
+				const cls = icon ? icon.className : "";
+				const name = row.querySelector(".monaco-icon-name-container .label-name");
+				const desc = row.querySelector(".monaco-icon-description-container .label-description");
+				const indent = row.querySelector(".monaco-tl-indent");
+				return {
+					label: (name?.textContent || row.textContent || "").trim(),
+					description: (desc?.textContent || "").trim(),
+					icon: (cls.match(/codicon-[\w-]+/g) || []).join(" "),
+					spinning: cls.includes("codicon-modifier-spin"),
+					aria: (row.getAttribute("aria-label") || "").trim(),
+					depth: Number(row.getAttribute("aria-level") || indent?.childElementCount || 0),
+				};
+			}),
+		);
+	};
+
+	/**
+	 * ツリーを畳まれているところまで開く。
+	 *
+	 * 開かないと**根しか見えない**（実測: 同期直後は `ja` と `en` の2行だけ）。
+	 * 折り畳みは行の `aria-expanded="false"` で見分けられるので、それが無くなるまで押す。
+	 * 深さが青天井にならないよう回数で止める。
+	 *
+	 * @param {number} rounds 押し広げる回数の上限
+	 * @returns {Promise<number>} 開いた行の数
+	 */
+	const expandTree = async (rounds = 6) => {
+		let opened = 0;
+		for (let i = 0; i < rounds; i++) {
+			const collapsed = page.locator('.part.sidebar .monaco-list-row[aria-expanded="false"]');
+			const count = await collapsed.count();
+			if (count === 0) break;
+			// **下から順に押す。** 上から押すと、開いて増えた子がすぐ次の「最初の畳まれた行」に
+			// なるため、深さ方向へ潜り続けて隣の枝（en）へ永久に辿り着かない（実測: 91回
+			// 押しても en が畳まれたままだった）。下から押せば上の行の位置は動かない。
+			for (let n = count - 1; n >= 0; n--) {
+				const row = page.locator('.part.sidebar .monaco-list-row[aria-expanded="false"]').nth(n);
+				if ((await row.count()) === 0) continue;
+				await row.click({ timeout: 5000 }).catch(() => {});
+				opened += 1;
+				await page.waitForTimeout(150);
+			}
+			await page.waitForTimeout(500);
+		}
+		return opened;
+	};
+
+	/**
+	 * ツリーの1行を開く／畳む。
+	 *
+	 * 全部開くと**行が画面からはみ出す**。VS Code のリストは見えている行しか DOM に置かないので、
+	 * はみ出した行は読むことも撮ることもできない（実測: 翻訳中に回転していたのは、
+	 * 見えていた `en (5/90)` の1行だけだった）。見たい枝だけを開き、要らない枝は畳む。
+	 *
+	 * @param {string} label 行の名前（前方一致。`en (5/90)` は `en` で当たる）
+	 * @param {boolean} expanded true なら開く、false なら畳む
+	 * @returns {Promise<boolean>} 目当ての行が見つかったか
+	 */
+	const setRowExpanded = async (label, expanded = true) => {
+		const rows = page.locator(".part.sidebar .monaco-list-row");
+		const count = await rows.count();
+		for (let i = 0; i < count; i++) {
+			const row = rows.nth(i);
+			const name = (
+				await row
+					.locator(".monaco-icon-name-container .label-name")
+					.first()
+					.textContent()
+					.catch(() => "")
+			)?.trim();
+			if (name !== label) continue;
+			const state = await row.getAttribute("aria-expanded").catch(() => null);
+			if (state === null) return true; // 子を持たない行。開くも畳むも無い
+			if ((state === "true") !== expanded) {
+				await row.scrollIntoViewIfNeeded().catch(() => {});
+				await row.click({ timeout: 5000 });
+				await page.waitForTimeout(600);
+			}
+			return true;
+		}
+		return false;
+	};
+
+	/**
+	 * いま開いているエディタの CodeLens を機械可読で読む。
+	 *
+	 * CodeLens は**実 Extension Host でしか出ない**（headless では provider ごと動かない）。
+	 * ボタンの文字は `$(check) Mark as Translated` のようにアイコン記法を含むが、
+	 * 画面ではアイコンに置き換わるので、ここで拾えるのは文字の部分だけになる。
+	 *
+	 * @returns {Promise<Array<{line: number, buttons: string[]}>>} 行の上から順
+	 */
+	const codeLenses = async () => {
+		const raw = await page.locator(".monaco-editor .codelens-decoration").evaluateAll((nodes) =>
+			nodes.map((node) => ({
+				top: node.parentElement?.getBoundingClientRect().top ?? 0,
+				buttons: Array.from(node.querySelectorAll("a"))
+					.map((a) => (a.textContent || "").trim())
+					.filter(Boolean),
+			})),
+		);
+		return raw
+			.filter((entry) => entry.buttons.length > 0)
+			.sort((a, b) => a.top - b.top)
+			.map((entry, i) => ({ line: i + 1, buttons: entry.buttons }));
+	};
+
+	/**
+	 * ファイルを開く（クイックオープン）。
+	 *
+	 * コマンドの実行は IPC を使う約束だが、**ファイルを開くのは IPC では頼めない**
+	 * （`DebugCommandHandler` は `mdait.` で始まるコマンドしか受け付けない）。
+	 * CodeLens もホバーも「エディタが開いている」ことが前提なので、ここだけは画面を操作する。
+	 *
+	 * @param {string} relPath ワークスペースから見た相対パス
+	 */
+	const openFile = async (relPath) => {
+		// Ctrl+P は使わない。ブラウザ側に取られて quick input が出ないことがある（実測）。
+		// F1（コマンドパレット）は確実に開くので、頭の ">" を消して**ファイル検索**へ切り替える。
+		await page.keyboard.press("F1");
+		await page.waitForSelector(".quick-input-widget", { timeout: 15000 });
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type(relPath, { delay: 10 });
+		await page.waitForTimeout(1500);
+		await page.keyboard.press("Enter");
+		const name = relPath.split("/").pop();
+		await page.waitForSelector(`.tabs-container .tab[aria-label*="${name}"]`, { timeout: 20000 });
+		// CodeLens は provider が返してから描かれるので、開いた直後には無い
+		await page.waitForTimeout(2500);
+		return name;
+	};
+
+	/**
+	 * 開いているエディタを全部閉じる。
+	 *
+	 * コマンドパレットに文字を打つ方法は当てにしない（候補の並びで別のコマンドを引くことがある）。
+	 * タブの×を直に押す。前の実験で開いたタブは**画面の状態として保存されている**ので、
+	 * 立て直しても復活する（実測: reset した直後の初期状態の写しに前回のタブが写っていた）。
+	 *
+	 * @returns {Promise<number>} 閉じたタブの数
+	 */
+	const closeEditors = async () => {
+		let closed = 0;
+		for (let i = 0; i < 20; i++) {
+			const closer = page.locator(".tabs-container .tab .codicon-close, .tabs-container .tab .tab-close a").first();
+			if ((await closer.count()) === 0) break;
+			await closer.click({ timeout: 5000 }).catch(() => {});
+			closed += 1;
+			await page.waitForTimeout(300);
+		}
+		await page.waitForTimeout(500);
+		return closed;
+	};
+
+	/**
 	 * 画面右下の通知（トースト）を読む。目視だけに頼らず文言を機械的に拾うため。
 	 * @returns {Promise<Array<{text: string, buttons: string[], level: string}>>}
 	 */
 	const notifications = async () => {
-		const toasts = page.locator(".notifications-toasts .notification-toast");
-		const count = await toasts.count();
-		const out = [];
-		for (let i = 0; i < count; i++) {
-			const toast = toasts.nth(i);
-			const text = (
-				(await toast
-					.locator(".notification-list-item-message")
-					.innerText()
-					.catch(() => "")) || (await toast.innerText().catch(() => ""))
-			).trim();
-			const buttons = (
-				await toast
-					.locator(".monaco-button, .notification-list-item-buttons-container a")
-					.allInnerTexts()
-			)
-				.map((t) => t.trim())
-				.filter(Boolean);
-			const level = await levelOf(toast.locator(".notification-list-item-icon").first());
-			out.push({ text, buttons, level });
-		}
-		return out;
+		// **innerText() を使わない。** 見つからない要素に対する待ち合わせが働き、
+		// 無いだけで既定の 30 秒ぶら下がる。見張りは待ち行列を握ったままなので、
+		// その間ほかの頼まれごとが全部止まる（実測で `dialog-policy` が 60 秒応答しなかった）。
+		// 一度の evaluateAll で読み切れば、無いものは無いまま即座に返る。
+		return await page.locator(".notifications-toasts .notification-toast").evaluateAll((toasts) =>
+			toasts.map((toast) => {
+				const message = toast.querySelector(".notification-list-item-message");
+				const icon = toast.querySelector(".notification-list-item-icon");
+				const cls = icon ? icon.className : "";
+				return {
+					text: ((message || toast).textContent || "").trim(),
+					buttons: Array.from(
+						toast.querySelectorAll(".monaco-button, .notification-list-item-buttons-container a"),
+					)
+						.map((b) => (b.textContent || "").trim())
+						.filter(Boolean),
+					level: cls.includes("error") ? "error" : cls.includes("warning") ? "warning" : "info",
+				};
+			}),
+		);
 	};
 
 	/**
@@ -231,33 +387,26 @@ export async function connect(opts = {}) {
 	 * @returns {Promise<{message: string, detail: string, buttons: string[], primary: string|null, level: string} | null>}
 	 */
 	const dialog = async () => {
-		const box = page.locator(".monaco-dialog-box");
-		if ((await box.count()) === 0) return null;
-		const message = (
-			await box
-				.locator(".dialog-message-text")
-				.innerText()
-				.catch(() => "")
-		).trim();
-		const detail = (
-			await box
-				.locator(".dialog-message-detail")
-				.innerText()
-				.catch(() => "")
-		).trim();
-		const details = await box
-			.locator(".dialog-buttons .monaco-button")
-			.evaluateAll((nodes) =>
-				nodes.map((n) => ({
-					text: (n.textContent || "").trim(),
-					secondary: n.classList.contains("secondary"),
-				})),
-			)
-			.catch(() => []);
-		const buttons = details.map((b) => b.text).filter(Boolean);
-		const primary = (details.find((b) => !b.secondary) || details[0] || {}).text || null;
-		const level = await levelOf(box.locator(".dialog-icon").first());
-		return { message, detail, buttons, primary, level };
+		// notifications と同じ理由で innerText() を使わない。確認ダイアログには
+		// 補足（detail）が無いものがあり、待ち合わせに掛かると 1 回読むのに 30 秒かかる。
+		const boxes = await page.locator(".monaco-dialog-box").evaluateAll((nodes) =>
+			nodes.map((box) => {
+				const buttons = Array.from(box.querySelectorAll(".dialog-buttons .monaco-button")).map((b) => ({
+					text: (b.textContent || "").trim(),
+					secondary: b.classList.contains("secondary"),
+				}));
+				const icon = box.querySelector(".dialog-icon");
+				const cls = icon ? icon.className : "";
+				return {
+					message: (box.querySelector(".dialog-message-text")?.textContent || "").trim(),
+					detail: (box.querySelector(".dialog-message-detail")?.textContent || "").trim(),
+					buttons: buttons.map((b) => b.text).filter(Boolean),
+					primary: (buttons.find((b) => !b.secondary) || buttons[0] || {}).text || null,
+					level: cls.includes("error") ? "error" : cls.includes("warning") ? "warning" : "info",
+				};
+			}),
+		);
+		return boxes[0] ?? null;
 	};
 
 	/**
@@ -321,6 +470,12 @@ export async function connect(opts = {}) {
 		openMdait,
 		runCommand,
 		treeRow,
+		treeItems,
+		expandTree,
+		setRowExpanded,
+		codeLenses,
+		openFile,
+		closeEditors,
 		notifications,
 		clickNotificationButton,
 		dismissNotificationByText,
@@ -438,6 +593,13 @@ async function serve(argv) {
 	const chromium = loadChromium();
 	/** 見張りが控えた確認ダイアログ・止まっていた通知（drain-dialogs で持ち出す） */
 	const screenLog = [];
+	/**
+	 * 見張りの答え方。`MDAIT_LAB_DIALOG=no` で始めれば最初から答えない。
+	 * 走らせたまま `dialog-policy` で切り替えられる（ダイアログを撮るには置き去りにする必要があるが、
+	 * 環境変数は起動時にしか読めないため）。**変える側は必ず元へ戻すこと** — 戻し忘れると
+	 * 以後のコマンドが誰にも答えてもらえず、返らないまま止まる。
+	 */
+	const policy = { declineAll: process.env.MDAIT_LAB_DIALOG === "no" };
 	const server = await chromium.launchServer({
 		executablePath: CHROMIUM_PATH,
 		args: ["--no-sandbox"],
@@ -459,8 +621,8 @@ async function serve(argv) {
 		await keeper.openMdait();
 		console.log(`常駐ページを開きました: ${workspace}`);
 		const queue = createQueue();
-		serveRequests(keeper, queue, screenLog);
-		watchScreen(keeper, workspace, queue, screenLog);
+		serveRequests(keeper, queue, screenLog, policy);
+		watchScreen(keeper, workspace, queue, screenLog, policy);
 	}
 
 	const stop = async () => {
@@ -480,7 +642,7 @@ async function serve(argv) {
 }
 
 /** 常駐ページへの頼まれごとを受け付ける（ファイル越しの簡単なやり取り） */
-async function serveRequests(keeper, queue, screenLog) {
+async function serveRequests(keeper, queue, screenLog, policy) {
 	const { requestFile, resultFile } = uiPaths();
 	fs.rmSync(requestFile, { force: true });
 	fs.rmSync(resultFile, { force: true });
@@ -498,7 +660,7 @@ async function serveRequests(keeper, queue, screenLog) {
 			out = {
 				id: request.id,
 				ok: true,
-				value: await queue(() => handleRequest(keeper, request, screenLog)),
+				value: await queue(() => handleRequest(keeper, request, screenLog, policy)),
 			};
 		} catch (e) {
 			out = { id: request.id, ok: false, error: String((e && e.message) || e) };
@@ -507,7 +669,7 @@ async function serveRequests(keeper, queue, screenLog) {
 	}
 }
 
-async function handleRequest(keeper, request, screenLog) {
+async function handleRequest(keeper, request, screenLog, policy) {
 	const a = request.args || {};
 	switch (request.action) {
 		case "shot":
@@ -528,6 +690,23 @@ async function handleRequest(keeper, request, screenLog) {
 			return await keeper.runCommand(a.query);
 		case "tree-rows":
 			return await keeper.page.locator(".part.sidebar .monaco-list-row").allInnerTexts();
+		case "tree-items":
+			return await keeper.treeItems();
+		case "expand-tree":
+			return await keeper.expandTree(a.rounds);
+		case "set-row-expanded":
+			return await keeper.setRowExpanded(a.label, a.expanded !== false);
+		case "codelens":
+			return await keeper.codeLenses();
+		case "open-file":
+			return await keeper.openFile(a.path);
+		case "close-editors":
+			return await keeper.closeEditors();
+		case "dialog-policy":
+			// 見張りの答え方を走らせたまま切り替える。ダイアログを撮りたいときは "decline" にして
+			// 置き去りにし、撮ってから自分で押す（環境変数は起動時にしか読めないため必要）
+			if (a.policy === "answer" || a.policy === "decline") policy.declineAll = a.policy === "decline";
+			return policy.declineAll ? "decline" : "answer";
 		case "url":
 			return keeper.page.url();
 		case "drain-dialogs": {
@@ -581,14 +760,14 @@ function commandInFlight(ws) {
  * - どちらも**黙ってやらない**。控えて drain-dialogs で持ち出せるようにする。
  * - `MDAIT_LAB_DIALOG=no` のときはどれにも答えない（取り消し側を試したいとき用）。
  */
-async function watchScreen(keeper, ws, queue, screenLog) {
-	const declineAll = process.env.MDAIT_LAB_DIALOG === "no";
+async function watchScreen(keeper, ws, queue, screenLog, policy) {
 	const firstSeen = new Map();
 	const noticed = new Set();
 	let lastUntouched = null;
 	for (;;) {
 		await new Promise((r) => setTimeout(r, 500));
 		try {
+			const declineAll = policy.declineAll;
 			const box = await queue(() => keeper.dialog());
 			if (box && box.buttons.length > 0) {
 				const decline = declineAll || box.level === "error";
