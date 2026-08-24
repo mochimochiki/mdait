@@ -38,6 +38,8 @@ interface TranslateFileResult {
 	skippedUnits?: number;
 	/** TM参照ヒット数 */
 	tmHits?: number;
+	/** AI の答えが使えず、訳さずに残したユニット数（need はそのまま残っている） */
+	unusableResponses?: number;
 	/** 失敗時の原因 */
 	error?: string;
 }
@@ -170,6 +172,19 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 								error: "No translation pair found",
 							};
 						}
+						// AI の答えが使えず1件も訳せなかったのも成功ではない。
+						// ok:true で translatedUnits:0 を返すと、エージェントは
+						// 「訳すものが無かった」と読んで次の工程へ進んでしまう
+						if (result.outcome === "failed") {
+							return {
+								path: file,
+								ok: false,
+								error:
+									result.responseFailures.length > 0
+										? "The AI's answer could not be used; nothing was written and the units still need translation"
+										: "Translation failed",
+							};
+						}
 						return {
 							path: file,
 							ok: true,
@@ -177,6 +192,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 							patchedUnits: result.patchedCount,
 							skippedUnits: result.skippedCount,
 							tmHits: result.tmHits,
+							unusableResponses: result.responseFailures.length || undefined,
 						};
 					} catch (error) {
 						logger.error("LanguageModelTool", "Error translating file", {

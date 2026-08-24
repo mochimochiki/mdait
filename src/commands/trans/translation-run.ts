@@ -12,6 +12,7 @@
  * @module commands/trans/translation-run
  */
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
+import type { UnusableResponseReason } from "../../infra/llm/unusable-response";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 
 /** 1ユニットの翻訳結果 */
@@ -25,6 +26,14 @@ export interface UnitTranslationOutcome {
 	 * 設定されている場合、そのユニットは「翻訳していない」として数える。
 	 */
 	patchFailure?: PatchFailureReason;
+	/**
+	 * AI の答えが使えなかったため、訳文にもマーカーにも触れずに置いた理由。
+	 * 設定されている場合、そのユニットは「翻訳していない」として数える。
+	 *
+	 * パッチ失敗と同じ扱いにしてある — どちらも「AI とはやり取りできたが採用できない」
+	 * であり、安全側（いまある訳文と need をそのまま残す）へ倒すのが正しい。
+	 */
+	responseFailure?: UnusableResponseReason;
 }
 
 /** 1ユニットの書き戻し結果 */
@@ -66,6 +75,13 @@ export interface PatchFailureRecord<T> {
 	reason: PatchFailureReason;
 }
 
+/** AI の答えが使えず、訳さずに置いたユニット */
+export interface ResponseFailureRecord<T> {
+	index: number;
+	unit: T;
+	reason: UnusableResponseReason;
+}
+
 /** 書き戻せなかったユニット */
 export interface WriteFailureRecord<T> {
 	index: number;
@@ -88,6 +104,8 @@ export interface UnitLoopResult<T> {
 	/** ユーザーが中断したか */
 	cancelled: boolean;
 	patchFailures: Array<PatchFailureRecord<T>>;
+	/** AI の答えが使えず、訳さずに置いたユニット */
+	responseFailures: Array<ResponseFailureRecord<T>>;
 	writeFailures: Array<WriteFailureRecord<T>>;
 	/** 打ち切りの原因となった例外（中断は含まない。中断は cancelled で表す） */
 	error?: unknown;
@@ -120,6 +138,7 @@ export async function runUnitLoop<T>(
 		tmHits: 0,
 		cancelled: false,
 		patchFailures: [],
+		responseFailures: [],
 		writeFailures: [],
 	};
 
@@ -173,6 +192,15 @@ export async function runUnitLoop<T>(
 				// 訳文は据え置き（手修正を保つ）。理由は呼び出し側が排他区間の外で報告する
 				result.skipped++;
 				result.patchFailures.push({ index: i, unit, reason: outcome.patchFailure });
+				continue;
+			}
+
+			if (outcome.responseFailure) {
+				// AI の答えが使えなかった。**訳したことにしない**（translated を増やさない）。
+				// 書き戻しにも進まない — 進むと、訳していないユニットのマーカーが
+				// 書き換わって need が外れ、誰にも回されないまま残る
+				result.skipped++;
+				result.responseFailures.push({ index: i, unit, reason: outcome.responseFailure });
 				continue;
 			}
 

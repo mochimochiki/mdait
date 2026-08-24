@@ -875,6 +875,21 @@ function judge(phase, route, nasty, ctx) {
 		}
 	}
 
+	// 通知が「できた」と語っていないか。
+	// 返り値を持たない経路（frontmatter 翻訳など）は、ここでしか成功と失敗を見分けられない。
+	// 「原稿が変わらなかった」だけを見て通すと、何も書いていないのに
+	// 「翻訳が完了しました」と出す状態を見逃す（実測で見逃していた）。
+	const SUCCESS_WORDS = ["Translation completed", "Nothing to translate"];
+	const spoken = (result.dialogs ?? []).map((d) => d.message ?? "");
+	const wrongClaim = spoken.find((message) => SUCCESS_WORDS.some((word) => message.includes(word)));
+	if (wrongClaim) {
+		fail(phase, route.watch[0], "壊れた応答しか受けていないのに、通知が成功を語った", wrongClaim);
+	} else if (spoken.length === 0) {
+		info(phase, route.watch[0], "壊れた応答を受けたが、通知が1本も出なかった（黙って終わった）");
+	} else {
+		ok(phase, `通知は成功を語らなかった: ${spoken[spoken.length - 1].slice(0, 80)}`);
+	}
+
 	// 壊れた応答を受けたのに「できた」と報告していないか
 	if (claimsSuccess(result) === true) {
 		fail(

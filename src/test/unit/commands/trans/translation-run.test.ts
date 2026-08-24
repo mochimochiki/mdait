@@ -151,6 +151,50 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 		});
 	});
 
+	suite("AI の答えが使えなかったとき", () => {
+		test("使えない答えのユニットは訳したことにせず、書き戻しもしないで次へ進む", async () => {
+			const ports = makePorts({
+				translateUnit: async (unit) => {
+					if (unit.name === "u2") {
+						return { patched: false, tmHit: false, responseFailure: "invalid-format" as const };
+					}
+					return { patched: false, tmHit: false };
+				},
+			});
+
+			const result = await runUnitLoop(units, ports);
+
+			assert.strictEqual(result.cancelled, false, "1件壊れても他のユニットは訳すこと");
+			assert.strictEqual(result.translated, 2, "使えなかったユニットは翻訳に数えないこと");
+			assert.strictEqual(result.skipped, 1);
+			assert.strictEqual(result.responseFailures.length, 1);
+			assert.strictEqual(result.responseFailures[0].reason, "invalid-format");
+			assert.strictEqual(result.responseFailures[0].unit.name, "u2");
+			assert.deepStrictEqual(
+				ports.persisted,
+				["u1", "u3"],
+				"使えなかったユニットは書き戻さないこと（マーカーを書き換えない）",
+			);
+		});
+
+		test("全部が使えない答えでも、途中で止まらず翻訳0件として返す", async () => {
+			const ports = makePorts({
+				translateUnit: async () => ({
+					patched: false,
+					tmHit: false,
+					responseFailure: "truncated" as const,
+				}),
+			});
+
+			const result = await runUnitLoop(units, ports);
+
+			assert.strictEqual(result.translated, 0);
+			assert.strictEqual(result.skipped, 3);
+			assert.strictEqual(result.responseFailures.length, 3);
+			assert.deepStrictEqual(ports.persisted, [], "1件も書き戻さないこと");
+		});
+	});
+
 	suite("失敗", () => {
 		test("翻訳が失敗すると打ち切るが、そこまでの成果は保存済みとして残る", async () => {
 			const boom = new Error("AI unavailable");

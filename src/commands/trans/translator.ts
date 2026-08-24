@@ -11,6 +11,7 @@ import { buildUserMessage } from "../../prompts/prompt-provider";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { resolveFileTypeFromExtension } from "../file-handler/file-type";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
 	type ParsedRevisionPatchResponse,
@@ -159,6 +160,50 @@ export function protectCodeBlocks(text: string, options?: ProtectCodeBlocksOptio
 }
 
 /**
+ * 参考として添える文の中でコードブロックを伏せるときの目印。
+ *
+ * 番号を持たないのは、戻す相手がいないから。`restoreCodeBlocks` は
+ * `__CODE_BLOCK_PLACEHOLDER_<番号>__` を厳密一致で探すので、この目印が
+ * 混ざっても取り違えない。
+ */
+export const CODE_BLOCK_OMITTED_MARK = "__CODE_BLOCK_OMITTED__";
+
+/**
+ * 参考として添える文（周辺テキスト・参考用の前回訳文）からコードブロックの中身を伏せる。
+ *
+ * 訳す本文には `protectCodeBlocks` で `__CODE_BLOCK_PLACEHOLDER_n__` を置いているのに、
+ * 参考の側には生のコードがそのまま乗っていると、AI からは**同じ内容が二つの姿で現れる**。
+ * 「参考の側にはコードがあるのに本文では消えている」＝そこが変更点だ、と読める。
+ * 実際、初回同期直後の訳文ユニットでは原文と参考文が一字一句同じで、
+ * 唯一違うのがコードブロックの姿だけ、という状態が起きていた。
+ *
+ * 参考文は文脈が分かればよく、コードの中身は要らないので、目印1つに畳む。
+ * 「どこがコードブロックか」の判定は `protectCodeBlocks` に委ねる
+ * （同じ問いに2つの答えを持たない。design.md P9）。
+ *
+ * **パッチの土台には使わない。** `need:revise` の差分パッチでは前回訳文と1行ずつ
+ * 突き合わせるため、そこへ渡す前回訳文は生のままでなければならない。
+ *
+ * @param text 参考として添える文（undefined はそのまま返す）
+ * @param options 判定オプション（`protectCodeBlocks` と同じ）
+ * @returns コードブロックを目印に畳んだ文
+ */
+export function elideCodeBlocks(
+	text: string | undefined,
+	options?: ProtectCodeBlocksOptions,
+): string | undefined {
+	if (text === undefined) {
+		return undefined;
+	}
+	const { text: replaced, placeholders } = protectCodeBlocks(text, options);
+	let result = replaced;
+	for (const placeholder of placeholders) {
+		result = result.split(placeholder).join(CODE_BLOCK_OMITTED_MARK);
+	}
+	return result;
+}
+
+/**
  * コードブロックのプレースホルダを元のコードブロックへ戻す。
  *
  * `protectCodeBlocks` はプレースホルダを必ず1行として置くので、AI が形を保っていれば
@@ -207,6 +252,37 @@ export function restoreCodeBlocks(
 	}
 
 	return { text: result, missing };
+}
+
+/**
+ * 検証に落ちた応答を「使えない答え」の例外に変える。
+ *
+ * **生の応答をここから外へ出さない。** 以前はこの位置に「最後の生応答をそのまま
+ * 訳文として返す」後始末があり、途中で切れた JSON（`{"translation": "…途中`）や
+ * 空文字がそのまま本文になっていた。しかも need フラグまで外れるため、
+ * 壊れた訳文が誰にも回されずに残った。生応答は記録（ログ）にだけ残す。
+ *
+ * @param rawResponse 最後に受け取った生応答
+ * @param error 最後の検証エラー
+ * @param attempts 送り直しを含めて何回試したか
+ */
+function buildUnusableResponseError(
+	rawResponse: string,
+	error: ValidationError | undefined,
+	attempts: number,
+): UnusableAIResponseError {
+	// 空の答えは「形が違う」ではなく「何も返ってこなかった」。区別しないと、
+	// 利用者に出る説明が「JSON の形が違います」になり、実態と食い違う
+	const reason = rawResponse.trim() === "" ? "empty" : "invalid-format";
+	const message =
+		reason === "empty"
+			? `AI returned an empty response after ${attempts} attempt(s)`
+			: `AI response did not match the expected format after ${attempts} attempt(s): ${error?.message ?? "unknown error"}`;
+	return new UnusableAIResponseError(
+		reason,
+		message,
+		`code=${error?.code ?? "UNKNOWN"} rawChars=${rawResponse.length}`,
+	);
 }
 
 /** 戻せなかったコードブロックがあれば警告文にする（黙って消さない） */
@@ -399,16 +475,20 @@ export class AITranslator implements Translator {
 				? primaryLang
 				: sourceLang;
 
-		// systemPrompt（静的）と user message（可変コンテキスト＋本文）の構築
+		// systemPrompt（静的）と user message（可変コンテキスト＋本文）の構築。
+		// 参考として添える文（周辺テキスト・前回訳文）は、本文と同じくコードブロックを
+		// 伏せてから渡す。ここは参考にしかならないので中身は要らず、生のまま乗せると
+		// 本文側のプレースホルダとの食い違いが「変更点」に見える（elideCodeBlocks 参照）
+		const markdown = isMarkdownExtension(context.fileExtension);
 		const promptParts = this.getPromptParts(
 			this.promptConfig.translatePromptId,
 			{
 				sourceLang,
 				targetLang,
 				contextLang,
-				surroundingText: context.surroundingText,
+				surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
 				terms: context.terms,
-				previousTranslation: context.previousTranslation,
+				previousTranslation: elideCodeBlocks(context.previousTranslation, { markdown }),
 				sourceDiff: context.sourceDiff,
 				tmReferences: context.tmReferences,
 				fileExtension: context.fileExtension,
@@ -428,6 +508,7 @@ export class AITranslator implements Translator {
 			messages,
 			codeBlocks,
 			placeholders,
+			markdown,
 			cancellationToken,
 			unitContext,
 		);
@@ -457,13 +538,18 @@ export class AITranslator implements Translator {
 				? primaryLang
 				: sourceLang;
 
+		// 周辺テキストは参考にしかならないのでコードブロックを伏せる。
+		// **前回訳文だけは生のまま渡す** — 差分パッチはこの文と1行ずつ突き合わせて
+		// 当てはめる（`applySimplePatch`）ので、目印に畳むと "=" の文脈行が
+		// 実物と一致しなくなり、パッチが必ず外れる
+		const markdown = isMarkdownExtension(context.fileExtension);
 		const promptParts = this.getPromptParts(
 			this.promptConfig.revisePatchPromptId,
 			{
 				sourceLang,
 				targetLang,
 				contextLang,
-				surroundingText: context.surroundingText,
+				surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
 				terms: context.terms,
 				previousTranslation: context.previousTranslation,
 				sourceDiff: context.sourceDiff,
@@ -485,6 +571,7 @@ export class AITranslator implements Translator {
 			messages,
 			codeBlocks,
 			placeholders,
+			markdown,
 			cancellationToken,
 			unitContext,
 		);
@@ -498,11 +585,16 @@ export class AITranslator implements Translator {
 		messages: AIMessage[],
 		codeBlocks: string[],
 		placeholders: string[],
+		/** 本文への JSON 混入を検出するか（Markdown 以外では偽陽性になるので見ない） */
+		detectJsonInContent: boolean,
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
+		// 実際に送った回数。上限に達する前に打ち切ることがあるので、上限をそのまま
+		// 「試した回数」として報告しない（記録が実態と食い違う）
+		let attemptsMade = 0;
 
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
@@ -520,12 +612,15 @@ export class AITranslator implements Translator {
 				? this.appendToLastUserMessage(messages, retryPromptSuffix)
 				: messages;
 
+			attemptsMade++;
 			lastRawResponse = await this.aiService.sendMessage(
 				systemPrompt,
 				attemptMessages,
 				cancellationToken,
 			);
-			const validation = validateTranslationResponse(lastRawResponse);
+			const validation = validateTranslationResponse(lastRawResponse, {
+				detectJsonInContent,
+			});
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
@@ -560,7 +655,7 @@ export class AITranslator implements Translator {
 		// リトライ上限到達後のエラーログ
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts", {
-			totalAttempts: this.maxRetries + 1,
+			totalAttempts: attemptsMade,
 			lastError: lastError
 				? formatError(lastError)
 				: "No error details available",
@@ -568,13 +663,8 @@ export class AITranslator implements Translator {
 			title: unitContext?.title,
 		});
 
-		// フォールバック処理
-		return this.createTranslationFallbackResult(
-			lastRawResponse,
-			codeBlocks,
-			placeholders,
-			lastError,
-		);
+		// 検証に落ちた答えは**使わない**。ここで断ち切る
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
 	}
 
 	/**
@@ -585,11 +675,16 @@ export class AITranslator implements Translator {
 		messages: AIMessage[],
 		codeBlocks: string[],
 		placeholders: string[],
+		/** 本文への JSON 混入を検出するか（Markdown 以外では偽陽性になるので見ない） */
+		detectJsonInContent: boolean,
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
+		// 実際に送った回数。上限に達する前に打ち切ることがあるので、上限をそのまま
+		// 「試した回数」として報告しない（記録が実態と食い違う）
+		let attemptsMade = 0;
 
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
@@ -607,12 +702,15 @@ export class AITranslator implements Translator {
 				? this.appendToLastUserMessage(messages, retryPromptSuffix)
 				: messages;
 
+			attemptsMade++;
 			lastRawResponse = await this.aiService.sendMessage(
 				systemPrompt,
 				attemptMessages,
 				cancellationToken,
 			);
-			const validation = validateRevisionPatchResponse(lastRawResponse);
+			const validation = validateRevisionPatchResponse(lastRawResponse, {
+				detectJsonInContent,
+			});
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
@@ -650,7 +748,7 @@ export class AITranslator implements Translator {
 			"trans",
 			"Translation failed after all retry attempts (revision patch)",
 			{
-				totalAttempts: this.maxRetries + 1,
+				totalAttempts: attemptsMade,
 				lastError: lastError
 					? formatError(lastError)
 					: "No error details available",
@@ -659,13 +757,8 @@ export class AITranslator implements Translator {
 			},
 		);
 
-		// フォールバック処理
-		return this.createRevisionPatchFallbackResult(
-			lastRawResponse,
-			codeBlocks,
-			placeholders,
-			lastError,
-		);
+		// 検証に落ちた答えは**使わない**。ここで断ち切る
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
 	}
 
 	/**
@@ -723,56 +816,6 @@ export class AITranslator implements Translator {
 				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 				...(parsed.warnings ?? []),
-			],
-			droppedCodeBlocks: restored.missing.length,
-		};
-	}
-
-	/**
-	 * 翻訳フォールバック結果生成
-	 */
-	private createTranslationFallbackResult(
-		rawResponse: string,
-		codeBlocks: string[],
-		placeholders: string[],
-		error?: ValidationError,
-	): TranslationResult {
-		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
-
-		const sanitized = sanitizeTranslationOutput(restored.text);
-
-		return {
-			translatedText: sanitized.text,
-			termSuggestions: [],
-			warnings: [
-				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
-			],
-			droppedCodeBlocks: restored.missing.length,
-		};
-	}
-
-	/**
-	 * 改訂パッチフォールバック結果生成
-	 */
-	private createRevisionPatchFallbackResult(
-		rawResponse: string,
-		codeBlocks: string[],
-		placeholders: string[],
-		error?: ValidationError,
-	): RevisionPatchResult {
-		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
-
-		const sanitized = sanitizeTranslationOutput(restored.text);
-
-		return {
-			targetPatch: sanitized.text,
-			termSuggestions: [],
-			warnings: [
-				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
 			],
 			droppedCodeBlocks: restored.missing.length,
 		};

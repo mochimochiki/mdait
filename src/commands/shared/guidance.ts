@@ -9,6 +9,10 @@ import * as vscode from "vscode";
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import {
+	type UnusableResponseReason,
+	isUnusableAIResponse,
+} from "../../infra/llm/unusable-response";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { openConfigInSettingsEditor } from "./open-config-editor";
 
@@ -80,6 +84,18 @@ export async function showTranslationError(error: unknown): Promise<void> {
 		vscode.window.showInformationMessage(vscode.l10n.t("Translation cancelled."));
 		return;
 	}
+	// 「AI に届かなかった」と「AI は答えたが使えない」を混ぜない。
+	// 後者で診断（Diagnose）へ誘導すると、接続は正常なので何も見つからず利用者が迷う。
+	// 原稿は書き換えていないので、伝えるべきは理由と次の一手だけ
+	if (isUnusableAIResponse(error)) {
+		vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Could not translate: the AI's answer could not be used. Nothing was changed. {0}",
+				describeResponseFailure(error.reason),
+			),
+		);
+		return;
+	}
 	const message = error instanceof Error ? error.message : String(error);
 	if (isAiUnavailableMessage(message)) {
 		const diagnose = vscode.l10n.t("Diagnose");
@@ -120,11 +136,32 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 	}
 }
 
+/**
+ * AI の答えが使えなかった理由を、原稿を書く人に伝わる言葉にする。
+ *
+ * `describePatchFailure` と同じく、すべての理由を明示的に並べる（`default` にまとめない）
+ * — まとめると、理由が増えたときに無関係な説明が黙って出る。
+ */
+export function describeResponseFailure(reason: UnusableResponseReason): string {
+	switch (reason) {
+		case "truncated":
+			return vscode.l10n.t(
+				"The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.",
+			);
+		case "empty":
+			return vscode.l10n.t("The AI returned an empty answer.");
+		case "invalid-format":
+			return vscode.l10n.t("The AI did not answer in the expected format.");
+	}
+}
+
 /** 翻訳結果のうち、通知に必要な部分だけの形 */
 export interface TransOutcomeSummary {
 	outcome: "completed" | "nothing-to-do" | "cancelled" | "no-trans-pair" | "busy" | "failed";
 	translatedCount: number;
 	patchFailures: Array<{ title?: string; reason: PatchFailureReason }>;
+	/** AI の答えが使えず、訳さずに置いたユニット（need はそのまま残っている） */
+	responseFailures: Array<{ title?: string; reason: UnusableResponseReason }>;
 	writeFailures: Array<{ title?: string; reason?: string }>;
 }
 
@@ -147,11 +184,6 @@ export interface TransOutcomeActions {
  * 「翻訳が完了しました」を出しており、エラーと成功が並んで表示されていた）。
  */
 export async function reportTransOutcome(result: TransOutcomeSummary, actions: TransOutcomeActions): Promise<void> {
-	if (result.outcome === "failed") {
-		// 失敗の理由は showTranslationError が既に伝えている（ここで重ねない）
-		return;
-	}
-
 	if (result.outcome === "no-trans-pair") {
 		await showNeedSyncError(vscode.l10n.t("No translation pair found for: {0}", actions.label));
 		return;
@@ -177,12 +209,10 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 		return;
 	}
 
-	if (result.outcome === "nothing-to-do") {
-		vscode.window.showInformationMessage(vscode.l10n.t("Nothing to translate in {0}.", actions.label));
-		return;
-	}
-
-	// 書き戻せなかったユニットは翻訳結果が失われている。最優先で伝える
+	// 書き戻せなかったユニットは翻訳結果が失われている。**いちばん重いので先に伝える。**
+	// 使えない答え（responseFailures）は何も書いていないので、もう一度叩けば取り返せる。
+	// こちらは訳した成果が消えているうえ、「同期を実行」という次の一手も添えている。
+	// 順序を逆にすると、同じ実行で両方起きたときにその導線ごと隠れる。
 	if (result.writeFailures.length > 0) {
 		const runSync = vscode.l10n.t("Run Sync");
 		const choice = await vscode.window.showWarningMessage(
@@ -197,6 +227,42 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 		if (choice === runSync) {
 			await vscode.commands.executeCommand("mdait.sync");
 		}
+		return;
+	}
+
+	// AI の答えが使えなかったユニットは、訳文にもマーカーにも触れずに置いてある。
+	// 成功と混ぜない — 件数だけを出すと「0件翻訳しました」で終わり、
+	// 何も書かれていないことも、まだ訳されていないことも伝わらない。
+	// 例外が飛んだ失敗（outcome === "failed"）より先に見る。ここは例外ではないので、
+	// showTranslationError は何も言っていない
+	if (result.responseFailures.length > 0) {
+		const reason = describeResponseFailure(result.responseFailures[0].reason);
+		vscode.window.showWarningMessage(
+			result.translatedCount > 0
+				? vscode.l10n.t(
+						"Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}",
+						result.translatedCount,
+						actions.label,
+						result.responseFailures.length,
+						reason,
+					)
+				: vscode.l10n.t(
+						"Could not translate {0}: the AI's answer could not be used for {1} unit(s). Nothing was changed; they still need translation. {2}",
+						actions.label,
+						result.responseFailures.length,
+						reason,
+					),
+		);
+		return;
+	}
+
+	if (result.outcome === "failed") {
+		// 失敗の理由は showTranslationError が既に伝えている（ここで重ねない）
+		return;
+	}
+
+	if (result.outcome === "nothing-to-do") {
+		vscode.window.showInformationMessage(vscode.l10n.t("Nothing to translate in {0}.", actions.label));
 		return;
 	}
 

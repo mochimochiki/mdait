@@ -5,6 +5,7 @@ import { OperationCancelledError, rethrowIfCancelled } from "../../errors/operat
 import { Logger } from "../../logging/logger";
 import type { AIMessage, AIService } from "../ai-service";
 import { AIStatsLogger } from "../ai-stats-logger";
+import { UnusableAIResponseError, isUnusableAIResponse } from "../unusable-response";
 
 /**
  * Ollama-js パッケージを使用した AI プロバイダー実装
@@ -141,6 +142,16 @@ export class OllamaProvider implements AIService {
 				if (part.done) {
 					promptTokens = part.prompt_eval_count;
 					completionTokens = part.eval_count;
+					// 出力上限で打ち切られた答えは使えない（OpenAI 経路の finish_reason: "length" と同じ）。
+					// 途中で切れた JSON を訳文として採用させないため、ここで断ち切る
+					const doneReason = (part as { done_reason?: string }).done_reason;
+					if (doneReason === "length") {
+						throw new UnusableAIResponseError(
+							"truncated",
+							"Ollama response was cut off at the output limit (num_predict)",
+							`outputChars=${responseContent.length}`,
+						);
+					}
 					break;
 				}
 			}
@@ -164,6 +175,10 @@ export class OllamaProvider implements AIService {
 			// 中断はプロバイダ名でラップしない。ラップすると受け手が「失敗」と
 			// 区別できず、正常な中断が赤いエラー通知になる
 			rethrowIfCancelled(error);
+			// 「答えたが使えない」もラップしない（型が消えると呼び出し側が区別できない）
+			if (isUnusableAIResponse(error)) {
+				throw error;
+			}
 			throw new Error(`Ollama provider error: ${(error as Error).message}`);
 		} finally {
 			// キャンセルリスナーのクリーンアップ

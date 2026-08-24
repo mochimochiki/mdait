@@ -217,7 +217,12 @@ lab run mdait.sync
 **確かめること**
 - adopt 後: 既訳の本文が**1文字も変わっていない**（スナップショット比較）。対応ペアに `from` ＋ `need:review` が付く。`totalAdopted > 0`
 - adopt 後: 日本語だけの章に対応する en 側ユニットに `need:translate` が付く
-- adopt 後: 訳文側だけにある章（マーカー無し）が**削除されず** `need:review`（`from` なし）で一次受けされる（`totalOrphanReviewed > 0`）
+- adopt 後: 訳文側だけにある章（マーカー無し）が**削除されず**一次受けされる
+  > **注意（実測）**: 対応付けは**位置で並べるだけ**で、内容は見ない。原文にだけ章が1つあると
+  > 以降が玉突きでずれ、`totalOrphanReviewed` は 0 のまま**意味の違う組**が確定する。
+  > これを直すのが `align`（AI による並べ直し）で、`mdait.sync '{"adopt":true}'` だけでは走らない
+  > （`adopt` と `align` の両方が要る）。偽の AI では align が成立しないので、
+  > この期待を確かめるには**本物の LLM** が要る。
 - 素ハッシュ化した独立ユニットは以後の sync で不変（対応付けにも使われない）
 - `tm.commit`: `newEntries > 0`。独立ユニット化より前に流すと `need:review` スキップ・`noFrom` スキップになることも確認できる
 - 最後の sync: added / modified / deleted / revisionsNeeded / adopted すべて 0

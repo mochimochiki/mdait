@@ -201,8 +201,31 @@ export class StatusTreeTranslationHandler {
 											cancelledFiles++;
 										} else if (fileResult.outcome === "nothing-to-do") {
 											untouched++;
+										} else if (fileResult.outcome === "failed") {
+											// 例外は出ていないが訳せていない（AI の答えが使えなかった）。
+											// 成功に数えると「N件翻訳しました」と嘘になる
+											failed++;
+											if (!firstError) {
+												firstError = new Error(
+													fileResult.responseFailures.length > 0
+														? vscode.l10n.t(
+																"The AI's answer could not be used for {0}.",
+																path.basename(file.fsPath),
+															)
+														: vscode.l10n.t("Translation failed for {0}.", path.basename(file.fsPath)),
+												);
+											}
 										} else {
 											successful++;
+											// 一部のユニットだけ訳せなかったファイルも黙って通さない。
+											// ファイル単位の通知は出していないので、ここで残さないと誰も気づけない
+											if (fileResult.responseFailures.length > 0) {
+												logger.warn("trans", "Some units were left untranslated (unusable AI response)", {
+													file: file.fsPath,
+													count: fileResult.responseFailures.length,
+													reasons: fileResult.responseFailures.map((f) => f.reason),
+												});
+											}
 										}
 									} catch (error) {
 										// 中断は失敗ではない
