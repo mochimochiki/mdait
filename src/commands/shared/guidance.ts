@@ -209,6 +209,27 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 		return;
 	}
 
+	// 書き戻せなかったユニットは翻訳結果が失われている。**いちばん重いので先に伝える。**
+	// 使えない答え（responseFailures）は何も書いていないので、もう一度叩けば取り返せる。
+	// こちらは訳した成果が消えているうえ、「同期を実行」という次の一手も添えている。
+	// 順序を逆にすると、同じ実行で両方起きたときにその導線ごと隠れる。
+	if (result.writeFailures.length > 0) {
+		const runSync = vscode.l10n.t("Run Sync");
+		const choice = await vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Translated {0} unit(s) in {1}, but {2} of them could not be written back because their markers were not found (the file may have changed). Run Sync and translate again.",
+				result.translatedCount,
+				actions.label,
+				result.writeFailures.length,
+			),
+			runSync,
+		);
+		if (choice === runSync) {
+			await vscode.commands.executeCommand("mdait.sync");
+		}
+		return;
+	}
+
 	// AI の答えが使えなかったユニットは、訳文にもマーカーにも触れずに置いてある。
 	// 成功と混ぜない — 件数だけを出すと「0件翻訳しました」で終わり、
 	// 何も書かれていないことも、まだ訳されていないことも伝わらない。
@@ -242,24 +263,6 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 
 	if (result.outcome === "nothing-to-do") {
 		vscode.window.showInformationMessage(vscode.l10n.t("Nothing to translate in {0}.", actions.label));
-		return;
-	}
-
-	// 書き戻せなかったユニットは翻訳結果が失われている。最優先で伝える
-	if (result.writeFailures.length > 0) {
-		const runSync = vscode.l10n.t("Run Sync");
-		const choice = await vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Translated {0} unit(s) in {1}, but {2} of them could not be written back because their markers were not found (the file may have changed). Run Sync and translate again.",
-				result.translatedCount,
-				actions.label,
-				result.writeFailures.length,
-			),
-			runSync,
-		);
-		if (choice === runSync) {
-			await vscode.commands.executeCommand("mdait.sync");
-		}
 		return;
 	}
 
