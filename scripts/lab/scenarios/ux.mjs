@@ -185,10 +185,21 @@ async function phaseDialogAndProgress() {
 	// 誰にも答えてもらえず返らない）
 	await ask("dialog-policy", { policy: "decline" });
 	// 訳文側の枝だけを開き、原文側は畳む。開きすぎると行が画面からはみ出し、
-	// はみ出した行は DOM に無いので**回転していても読めない**
-	await ask("set-row-expanded", { label: "ja", expanded: false }, { timeoutSec: 60 }).catch(() => {});
-	for (const label of ["en", "child", "child2"]) {
-		await ask("set-row-expanded", { label, expanded: true }, { timeoutSec: 60 }).catch(() => {});
+	// はみ出した行は DOM に無いので**回転していても読めない**。
+	// 開け閉てが空振りしたら黙って進まない — 枝が畳まれたままだと、回転を1つも捉えられずに
+	// 「回転しなかった」という誤った判定になる
+	const missed = [];
+	for (const [label, expanded] of [
+		["ja", false],
+		["en", true],
+		["child", true],
+		["child2", true],
+	]) {
+		const found = await ask("set-row-expanded", { label, expanded }, { timeoutSec: 60 }).catch(() => false);
+		if (!found) missed.push(label);
+	}
+	if (missed.length > 0) {
+		info("U3", "tree", `ツリーに見つからず開け閉てできなかった行: ${missed.join(" / ")}`);
 	}
 	const dialogs = [];
 	const frames = [];

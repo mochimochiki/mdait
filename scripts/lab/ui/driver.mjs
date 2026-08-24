@@ -56,6 +56,21 @@ function readBrowserWs() {
 }
 
 /**
+ * ツリーの行の名前が、探している名前かどうかを見る。
+ *
+ * 訳文側の行のラベルには**翻訳の進み具合が入る**（`status-item-tree.ts` が
+ * `` `${dirName} (${translated}/${total})` `` を組み立てる）。そのため `en` と探しても
+ * 画面上の名前は `en (5/90)` で、そのまま比べると当たらない。かといって前方一致にすると
+ * `child` が `child2` にも当たってしまう。**数え上げの括弧が続くときだけ**同じ行と見なす。
+ *
+ * @param {string} name 画面に出ている名前
+ * @param {string} label 探している名前
+ */
+function matchesRowName(name, label) {
+	return name === label || name.startsWith(`${label} (`);
+}
+
+/**
  * code-server に接続し、mdait の画面を見られる状態のセッションを返す。
  *
  * - 立ち上げっぱなしのブラウザ（up が起こしたもの）があれば繋ぎ直す。無ければ自分で起こす。
@@ -254,9 +269,11 @@ export async function connect(opts = {}) {
 	 * はみ出した行は読むことも撮ることもできない（実測: 翻訳中に回転していたのは、
 	 * 見えていた `en (5/90)` の1行だけだった）。見たい枝だけを開き、要らない枝は畳む。
 	 *
-	 * @param {string} label 行の名前（前方一致。`en (5/90)` は `en` で当たる）
+	 * @param {string} label 行の名前。翻訳の進み具合はラベル自体に入るので（`en (5/90)`）、
+	 *   `en` のように**数え上げを外した名前**でも当たる（`matchesRowName` を参照）
 	 * @param {boolean} expanded true なら開く、false なら畳む
-	 * @returns {Promise<boolean>} 目当ての行が見つかったか
+	 * @returns {Promise<boolean>} 目当ての行が見つかったか。**見つからなければ false を返す**
+	 *   （呼び手はここを見ること。黙って何もしないと、開いたつもりの枝が畳まれたままになる）
 	 */
 	const setRowExpanded = async (label, expanded = true) => {
 		const rows = page.locator(".part.sidebar .monaco-list-row");
@@ -270,7 +287,7 @@ export async function connect(opts = {}) {
 					.textContent()
 					.catch(() => "")
 			)?.trim();
-			if (name !== label) continue;
+			if (!name || !matchesRowName(name, label)) continue;
 			const state = await row.getAttribute("aria-expanded").catch(() => null);
 			if (state === null) return true; // 子を持たない行。開くも畳むも無い
 			if ((state === "true") !== expanded) {
