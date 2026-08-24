@@ -709,6 +709,29 @@ function buildFileResult(
  * @param cancellationToken キャンセルトークン
  */
 /**
+ * AI へ「前回の訳文」として渡す文を決める。
+ *
+ * 渡してよいのは **`need:revise`（原文が改訂された）ユニットだけ**。
+ * `unit.content` には翻訳前の状態が入っているが、それが本当に前回の訳文なのは
+ * 改訂のときだけで、初回同期で作られた訳文ユニットの中身は
+ * `MdaitUnit.createEmptyTargetUnit` が丸写しした**原文そのもの**である。
+ * `from` の有無で判定すると初回翻訳でも真になり、
+ * 「原文が改訂されました。前回の訳文を活かして、変わっていない部分は変えないでください」
+ * という枠つきで原文を送り返すことになる（実測で user メッセージの 45%）。
+ * 取り込み（adopt）した章は `need:review` が付いて翻訳対象にならないので、
+ * 「既訳を参考として送る」場面はこの1つしかない。
+ *
+ * frontmatter 側（`translateFrontmatter`）は元から `needsRevision()` で判定しており、
+ * ここだけが食い違っていた。
+ *
+ * @param unit 翻訳対象のユニット
+ * @returns 前回の訳文（改訂でなければ undefined）
+ */
+export function resolvePreviousTranslation(unit: MdaitUnit): string | undefined {
+	return unit.marker?.needsRevision() ? unit.content : undefined;
+}
+
+/**
  * translateUnitの結果メトリクス
  */
 export interface TranslateUnitMetrics {
@@ -791,9 +814,8 @@ async function translateUnit(
 			);
 		}
 
-		// 前回の訳文を取得（原文が改訂された場合）
-		// unit.contentには翻訳前の状態（＝前回の訳文）が含まれている
-		const previousTranslation = unit.marker?.from ? unit.content : undefined;
+		// 前回の訳文を取得（**原文が改訂された場合だけ**。判断は resolvePreviousTranslation）
+		const previousTranslation = resolvePreviousTranslation(unit);
 		if (previousTranslation) {
 			logger.debug("trans", "Using previous translation as reference", {
 				unitHash: unit.marker?.hash,

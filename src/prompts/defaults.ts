@@ -101,6 +101,10 @@ USER MESSAGE STRUCTURE:
 The user message begins with a "Translation Direction" section (source / target / context languages), followed by optional reference sections (Surrounding Text, Terminology, Previous Translation, Source Text Changes, Translation Memory Reference). These sections are instructions and reference material — do NOT translate them.
 A line containing only "=== SOURCE TEXT ===" marks the start of the text to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
 
+CODE BLOCKS:
+- Code blocks in the text to translate appear as __CODE_BLOCK_PLACEHOLDER_n__. Reproduce each marker verbatim, on its own line, in the same order.
+- Code blocks in the reference sections are collapsed to __CODE_BLOCK_OMITTED__. That is an artifact of preparing the reference, not a change in the document, and the marker must never appear in your output.
+
 Markdown Preservation Rules:
 1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
   - Headings: #, ##, ###, ####
@@ -265,6 +269,11 @@ ABSOLUTE LANGUAGE CONSTRAINT:
 USER MESSAGE STRUCTURE:
 The user message begins with a "Translation Direction" section (source / target / context languages), followed by reference sections (optionally Surrounding Text, Terminology, Translation Memory Reference, and always Previous Translation and Source Text Changes). Use them as instructed below; do NOT treat them as the text to patch.
 A line containing only "=== SOURCE TEXT ===" marks the start of the current (revised) source text.
+
+CODE BLOCKS:
+- Code blocks in the source text appear as __CODE_BLOCK_PLACEHOLDER_n__, while the Previous Translation shows its code blocks in full. The two shapes describe the SAME code: this is an artifact of preparing the source text, not a source change.
+- Never patch a code block into a placeholder or a placeholder into code, and never translate either form.
+- Code blocks in the Surrounding Text section are collapsed to __CODE_BLOCK_OMITTED__; never copy that marker into the patch.
 
 Instructions:
 1. Produce a patch that transforms the PREVIOUS TRANSLATION to reflect the source changes.
@@ -816,6 +825,7 @@ CRITICAL RULES:
 USER MESSAGE STRUCTURE:
 The user message begins with a "Translation Direction" section (source / target languages and file type), followed by optional reference sections (TERMINOLOGY, Previous Translation, Source Changes, TRANSLATION MEMORY REFERENCES). These sections are instructions and reference material — do NOT translate them.
 A line containing only "=== SOURCE TEXT ===" marks the start of the content to translate. Everything after that line is the translation target. If that line is absent, the entire user message is the translation target.
+In the reference sections, fenced code blocks may be collapsed to __CODE_BLOCK_OMITTED__ because their content is not needed for reference. This is not a difference in the document, and that marker must never appear in your output.
 
 Response Format:
 Return ONLY valid JSON in the following format. Do NOT include markdown code blocks or explanations outside JSON.
