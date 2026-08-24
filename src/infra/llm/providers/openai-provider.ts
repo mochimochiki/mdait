@@ -12,6 +12,7 @@ import {
 	parseRetryAfterMs,
 	withTransportRetry,
 } from "../retry";
+import { UnusableAIResponseError, isUnusableAIResponse } from "../unusable-response";
 
 /**
  * OpenAI Chat Completions API 非ストリーミングレスポンスの型
@@ -149,6 +150,11 @@ export class OpenAIProvider implements AIService {
 			// 中断はプロバイダ名でラップしない。ラップすると名前が Error になって
 			// 受け手が「失敗」と区別できず、正常な中断が赤いエラー通知になる
 			rethrowIfCancelled(error);
+			// 「答えたが使えない」も同じ理由でラップしない。ラップすると型が消えて、
+			// 呼び出し側が「AI に届かなかった」失敗と区別できなくなる
+			if (isUnusableAIResponse(error)) {
+				throw error;
+			}
 			throw new Error(`OpenAI provider error: ${errorMessage}`);
 		} finally {
 			// 統計情報をログに記録
@@ -247,8 +253,32 @@ export class OpenAIProvider implements AIService {
 
 			// 非ストリーミング応答の処理
 			const data = (await response.json()) as OpenAIChatCompletionResponse;
+			const choice = data.choices?.[0];
+			const content = choice?.message?.content ?? "";
+
+			// 出力上限に当たって途中で切れた答えは**使えない**。ここで断ち切る。
+			//
+			// 送り直さない: finish_reason: "length" は相手が落ちているのではなく、
+			// こちらが渡した上限に当たったということなので、同じ要求を送れば同じところで
+			// 切れる。429/503 のような一時的な失敗ではないため、待って送り直すのは
+			// 費用と時間を捨てるだけになる（実測: 台本を繰り返す相手に当てると、
+			// 送り直しのたびに同じ位置で切れた文字列が返る）。
+			//
+			// 推論する型のモデル（既定の gpt-5-mini など）では、考えている分の
+			// トークンも max_completion_tokens に数えられる。使い切ると **本文が空のまま**
+			// finish_reason: "length" で返ることがあり、これを「空の答え」として扱うと
+			// 「上限を上げれば直る」という肝心の手掛かりが失われる。だから空かどうかより
+			// 先に finish_reason を見る。
+			if (choice?.finish_reason === "length") {
+				throw new UnusableAIResponseError(
+					"truncated",
+					`OpenAI response was cut off at the output limit (max_completion_tokens=${this.maxOutputTokens})`,
+					`outputChars=${content.length}`,
+				);
+			}
+
 			return {
-				content: data.choices?.[0]?.message?.content ?? "",
+				content,
 				usage: data.usage,
 			};
 		} catch (error) {

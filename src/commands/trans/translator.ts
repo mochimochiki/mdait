@@ -11,6 +11,7 @@ import { buildUserMessage } from "../../prompts/prompt-provider";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { resolveFileTypeFromExtension } from "../file-handler/file-type";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
 	type ParsedRevisionPatchResponse,
@@ -207,6 +208,37 @@ export function restoreCodeBlocks(
 	}
 
 	return { text: result, missing };
+}
+
+/**
+ * 検証に落ちた応答を「使えない答え」の例外に変える。
+ *
+ * **生の応答をここから外へ出さない。** 以前はこの位置に「最後の生応答をそのまま
+ * 訳文として返す」後始末があり、途中で切れた JSON（`{"translation": "…途中`）や
+ * 空文字がそのまま本文になっていた。しかも need フラグまで外れるため、
+ * 壊れた訳文が誰にも回されずに残った。生応答は記録（ログ）にだけ残す。
+ *
+ * @param rawResponse 最後に受け取った生応答
+ * @param error 最後の検証エラー
+ * @param attempts 送り直しを含めて何回試したか
+ */
+function buildUnusableResponseError(
+	rawResponse: string,
+	error: ValidationError | undefined,
+	attempts: number,
+): UnusableAIResponseError {
+	// 空の答えは「形が違う」ではなく「何も返ってこなかった」。区別しないと、
+	// 利用者に出る説明が「JSON の形が違います」になり、実態と食い違う
+	const reason = rawResponse.trim() === "" ? "empty" : "invalid-format";
+	const message =
+		reason === "empty"
+			? `AI returned an empty response after ${attempts} attempt(s)`
+			: `AI response did not match the expected format after ${attempts} attempt(s): ${error?.message ?? "unknown error"}`;
+	return new UnusableAIResponseError(
+		reason,
+		message,
+		`code=${error?.code ?? "UNKNOWN"} rawChars=${rawResponse.length}`,
+	);
 }
 
 /** 戻せなかったコードブロックがあれば警告文にする（黙って消さない） */
@@ -428,6 +460,7 @@ export class AITranslator implements Translator {
 			messages,
 			codeBlocks,
 			placeholders,
+			isMarkdownExtension(context.fileExtension),
 			cancellationToken,
 			unitContext,
 		);
@@ -485,6 +518,7 @@ export class AITranslator implements Translator {
 			messages,
 			codeBlocks,
 			placeholders,
+			isMarkdownExtension(context.fileExtension),
 			cancellationToken,
 			unitContext,
 		);
@@ -498,11 +532,16 @@ export class AITranslator implements Translator {
 		messages: AIMessage[],
 		codeBlocks: string[],
 		placeholders: string[],
+		/** 本文への JSON 混入を検出するか（Markdown 以外では偽陽性になるので見ない） */
+		detectJsonInContent: boolean,
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
+		// 実際に送った回数。上限に達する前に打ち切ることがあるので、上限をそのまま
+		// 「試した回数」として報告しない（記録が実態と食い違う）
+		let attemptsMade = 0;
 
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
@@ -520,12 +559,15 @@ export class AITranslator implements Translator {
 				? this.appendToLastUserMessage(messages, retryPromptSuffix)
 				: messages;
 
+			attemptsMade++;
 			lastRawResponse = await this.aiService.sendMessage(
 				systemPrompt,
 				attemptMessages,
 				cancellationToken,
 			);
-			const validation = validateTranslationResponse(lastRawResponse);
+			const validation = validateTranslationResponse(lastRawResponse, {
+				detectJsonInContent,
+			});
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
@@ -560,7 +602,7 @@ export class AITranslator implements Translator {
 		// リトライ上限到達後のエラーログ
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts", {
-			totalAttempts: this.maxRetries + 1,
+			totalAttempts: attemptsMade,
 			lastError: lastError
 				? formatError(lastError)
 				: "No error details available",
@@ -568,13 +610,8 @@ export class AITranslator implements Translator {
 			title: unitContext?.title,
 		});
 
-		// フォールバック処理
-		return this.createTranslationFallbackResult(
-			lastRawResponse,
-			codeBlocks,
-			placeholders,
-			lastError,
-		);
+		// 検証に落ちた答えは**使わない**。ここで断ち切る
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
 	}
 
 	/**
@@ -585,11 +622,16 @@ export class AITranslator implements Translator {
 		messages: AIMessage[],
 		codeBlocks: string[],
 		placeholders: string[],
+		/** 本文への JSON 混入を検出するか（Markdown 以外では偽陽性になるので見ない） */
+		detectJsonInContent: boolean,
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
 		let lastError: ValidationError | undefined;
 		let lastRawResponse = "";
+		// 実際に送った回数。上限に達する前に打ち切ることがあるので、上限をそのまま
+		// 「試した回数」として報告しない（記録が実態と食い違う）
+		let attemptsMade = 0;
 
 		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 			// キャンセルチェック
@@ -607,12 +649,15 @@ export class AITranslator implements Translator {
 				? this.appendToLastUserMessage(messages, retryPromptSuffix)
 				: messages;
 
+			attemptsMade++;
 			lastRawResponse = await this.aiService.sendMessage(
 				systemPrompt,
 				attemptMessages,
 				cancellationToken,
 			);
-			const validation = validateRevisionPatchResponse(lastRawResponse);
+			const validation = validateRevisionPatchResponse(lastRawResponse, {
+				detectJsonInContent,
+			});
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
@@ -650,7 +695,7 @@ export class AITranslator implements Translator {
 			"trans",
 			"Translation failed after all retry attempts (revision patch)",
 			{
-				totalAttempts: this.maxRetries + 1,
+				totalAttempts: attemptsMade,
 				lastError: lastError
 					? formatError(lastError)
 					: "No error details available",
@@ -659,13 +704,8 @@ export class AITranslator implements Translator {
 			},
 		);
 
-		// フォールバック処理
-		return this.createRevisionPatchFallbackResult(
-			lastRawResponse,
-			codeBlocks,
-			placeholders,
-			lastError,
-		);
+		// 検証に落ちた答えは**使わない**。ここで断ち切る
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
 	}
 
 	/**
@@ -723,56 +763,6 @@ export class AITranslator implements Translator {
 				...codeBlockLossWarnings(restored.missing),
 				...sanitized.warnings,
 				...(parsed.warnings ?? []),
-			],
-			droppedCodeBlocks: restored.missing.length,
-		};
-	}
-
-	/**
-	 * 翻訳フォールバック結果生成
-	 */
-	private createTranslationFallbackResult(
-		rawResponse: string,
-		codeBlocks: string[],
-		placeholders: string[],
-		error?: ValidationError,
-	): TranslationResult {
-		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
-
-		const sanitized = sanitizeTranslationOutput(restored.text);
-
-		return {
-			translatedText: sanitized.text,
-			termSuggestions: [],
-			warnings: [
-				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
-			],
-			droppedCodeBlocks: restored.missing.length,
-		};
-	}
-
-	/**
-	 * 改訂パッチフォールバック結果生成
-	 */
-	private createRevisionPatchFallbackResult(
-		rawResponse: string,
-		codeBlocks: string[],
-		placeholders: string[],
-		error?: ValidationError,
-	): RevisionPatchResult {
-		const restored = restoreCodeBlocks(rawResponse, placeholders, codeBlocks);
-
-		const sanitized = sanitizeTranslationOutput(restored.text);
-
-		return {
-			targetPatch: sanitized.text,
-			termSuggestions: [],
-			warnings: [
-				`AI response format was unexpected: ${error?.message ?? "unknown error"}`,
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
 			],
 			droppedCodeBlocks: restored.missing.length,
 		};

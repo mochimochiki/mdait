@@ -42,6 +42,10 @@ import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import {
+	type UnusableResponseReason,
+	isUnusableAIResponse,
+} from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
@@ -102,6 +106,13 @@ export interface PatchFailureInfo {
 	reason: PatchFailureReason;
 }
 
+/** AI の答えが使えず、訳さずに置いたユニット */
+export interface ResponseFailureInfo {
+	unitHash?: string;
+	title?: string;
+	reason: UnusableResponseReason;
+}
+
 /** 訳文をファイルへ書き戻せなかったユニット */
 export interface WriteFailureInfo {
 	unitHash?: string;
@@ -138,6 +149,11 @@ export interface TransCommandResult {
 	tmHits: number;
 	/** パッチ適用に失敗し、手修正を保って据え置いたユニット */
 	patchFailures: PatchFailureInfo[];
+	/**
+	 * AI の答えが使えず、訳さずに置いたユニット。
+	 * ここに載ったユニットは `translatedCount` に数えない（need も外していない）。
+	 */
+	responseFailures: ResponseFailureInfo[];
 	/** 訳文を書き戻せなかったユニット */
 	writeFailures: WriteFailureInfo[];
 }
@@ -152,6 +168,7 @@ function emptyResult(outcome: TransOutcome): TransCommandResult {
 		skippedCount: 0,
 		tmHits: 0,
 		patchFailures: [],
+		responseFailures: [],
 		writeFailures: [],
 	};
 }
@@ -373,6 +390,7 @@ async function transFile_Exclusive(
 				skippedCount: result.skippedCount,
 				tmHits: result.tmHits,
 				patchFailures: [],
+				responseFailures: [],
 				writeFailures: [],
 			};
 		} catch (error) {
@@ -433,6 +451,9 @@ async function transFile_Exclusive(
 	let loop: UnitLoopResult<MdaitUnit> | undefined;
 	// frontmatter だけ訳してユニットが0件、という場合も「訳した」に数える
 	let frontmatterTranslated = false;
+	// frontmatter の翻訳で使えない答えを受けたとき、それも「訳せなかったもの」として
+	// 数える（本文のユニットと同じ扱い。数えないと通知が実態と食い違う）
+	const frontmatterFailures: ResponseFailureInfo[] = [];
 
 	try {
 		// frontmatterの翻訳（必要な場合のみ）。frontmatter もツリー上の1行なので、
@@ -447,9 +468,9 @@ async function transFile_Exclusive(
 				scope: "frontmatter",
 				path: targetFilePath,
 			});
-			let updated: boolean;
+			let frontmatterOutcome: FrontmatterTranslationOutcome;
 			try {
-				updated = await translateFrontmatterIfNeeded(
+				frontmatterOutcome = await translateFrontmatterIfNeeded(
 					markdown,
 					sourceFilePath,
 					frontmatterKeys,
@@ -461,7 +482,13 @@ async function transFile_Exclusive(
 			} finally {
 				trackedFrontmatter.release();
 			}
-			if (updated) {
+			if (frontmatterOutcome.responseFailure) {
+				frontmatterFailures.push({
+					title: "frontmatter",
+					reason: frontmatterOutcome.responseFailure,
+				});
+			}
+			if (frontmatterOutcome.updated) {
 				frontmatterTranslated = true;
 				const encoder = new TextEncoder();
 				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
@@ -503,7 +530,7 @@ async function transFile_Exclusive(
 				// 最終的な整合は finally の refreshFileStatus が担う。
 				// 失敗の印付けはここでは行わない — refresh がディスク由来の状態で
 				// 上書きするため必ず消える。後始末のあとで markFailedUnit がまとめて行う
-				if (!metrics.patchFailure && oldHash && unit.marker) {
+				if (!metrics.patchFailure && !metrics.responseFailure && oldHash && unit.marker) {
 					statusManager.changeUnitStatus(
 						oldHash,
 						{
@@ -536,7 +563,12 @@ async function transFile_Exclusive(
 			cancelled: loop.cancelled,
 		});
 
-		return buildFileResult(unitsToTranslate, loop, frontmatterTranslated);
+		return buildFileResult(
+			unitsToTranslate,
+			loop,
+			frontmatterTranslated,
+			frontmatterFailures,
+		);
 	} finally {
 		// **後始末の単一経路。** 中断でも失敗でも必ずここを通る。
 		// (1) ここまでの成果を保存する（external は一括保存なので、これが無いと
@@ -611,11 +643,19 @@ function buildFileResult(
 	units: readonly MdaitUnit[],
 	loop: UnitLoopResult<MdaitUnit>,
 	frontmatterTranslated = false,
+	frontmatterFailures: ResponseFailureInfo[] = [],
 ): TransCommandResult {
 	const describe = (unit: MdaitUnit) => ({
 		unitHash: unit.marker?.hash,
 		title: unit.title,
 	});
+	const responseFailures: ResponseFailureInfo[] = [
+		...loop.responseFailures.map((f) => ({
+			...describe(f.unit),
+			reason: f.reason,
+		})),
+		...frontmatterFailures,
+	];
 	let outcome: TransOutcome = "completed";
 	if (loop.cancelled) {
 		outcome = "cancelled";
@@ -624,7 +664,10 @@ function buildFileResult(
 		loop.patchFailures.length === 0 &&
 		!frontmatterTranslated
 	) {
-		outcome = "nothing-to-do";
+		// 1件も訳せず、その原因が「AI の答えが使えなかった」ことなら、
+		// それは「訳すものが無かった」ではなく**失敗**である。取り違えると
+		// フォルダ翻訳が成功に数え、「翻訳できました」と嘘の報告になる
+		outcome = responseFailures.length > 0 ? "failed" : "nothing-to-do";
 	}
 	return {
 		outcome,
@@ -637,6 +680,7 @@ function buildFileResult(
 			...describe(f.unit),
 			reason: f.reason,
 		})),
+		responseFailures,
 		writeFailures: loop.writeFailures.map((f) => ({
 			...describe(f.unit),
 			reason: f.reason,
@@ -680,6 +724,13 @@ export interface TranslateUnitMetrics {
 	 * （手修正を保つ）に倒して理由だけを返し、報告と再実行の判断は区間の外で行う。
 	 */
 	patchFailure?: PatchFailureReason;
+	/**
+	 * AI の答えが使えなかったため、訳文にもマーカーにも触れずに置いた理由。
+	 *
+	 * パッチ失敗と同じ考え方で安全側に倒す。以前は検証に落ちた生応答をそのまま
+	 * 訳文にしていたため、途中で切れた JSON が本文になり、need まで外れていた。
+	 */
+	responseFailure?: UnusableResponseReason;
 }
 
 async function translateUnit(
@@ -960,11 +1011,26 @@ async function translateUnit(
 					patchFailure = patched.reason;
 				}
 			} catch (error) {
+				// AI の答えが使えなかった（途中で切れた・空・形が違う）ときは、
+				// パッチ失敗と同じく**訳文を据え置く**。理由が違うので別の旗で返す
+				if (isUnusableAIResponse(error)) {
+					logger.warn("trans", "Unusable AI response for revision patch, keeping current translation", {
+						unitHash: unit.marker?.hash,
+						reason: error.reason,
+						detail: error.detail,
+						message: error.message,
+					});
+					return {
+						patched: false,
+						tmHit: !!context.tmReferences,
+						responseFailure: error.reason,
+					};
+				}
 				// **パッチ失敗として握り潰さない。** ここへ来る例外は AI 到達不能・
-				// ネットワーク断・利用上限といった本物の失敗であり（応答形式の問題は
-				// translator 側でフォールバック済みで、適用可否は applySimplePatch が
-				// 理由つきで返す）、パッチ失敗に丸めると「差分の書き方が違う」という
-				// 誤った理由を出したうえで、そのユニットを黙って飛ばすことになる
+				// ネットワーク断・利用上限といった本物の失敗であり（答えが使えない場合は
+				// 直前で返しており、適用可否は applySimplePatch が理由つきで返す）、
+				// パッチ失敗に丸めると「差分の書き方が違う」という誤った理由を出したうえで、
+				// そのユニットを黙って飛ばすことになる
 				logger.warn("trans", "Patch translation request failed", {
 					unitHash: unit.marker?.hash,
 					patchContent:
@@ -986,17 +1052,37 @@ async function translateUnit(
 
 		if (!translationResult) {
 			// 翻訳実行（AIから翻訳テキストと用語候補を同時に取得）
-			translationResult = await translator.translate(
-				sourceContent,
-				sourceLang,
-				targetLang,
-				context,
-				cancellationToken,
-				{
-					unitHash: unit.marker?.hash,
-					title: unit.title,
-				},
-			);
+			try {
+				translationResult = await translator.translate(
+					sourceContent,
+					sourceLang,
+					targetLang,
+					context,
+					cancellationToken,
+					{
+						unitHash: unit.marker?.hash,
+						title: unit.title,
+					},
+				);
+			} catch (error) {
+				// 使えない答えは**採用しない**。原稿もマーカーも触らずに戻る。
+				// need:translate が残るので、人にも次の実行にも「まだ済んでいない」と伝わる
+				if (isUnusableAIResponse(error)) {
+					logger.warn("trans", "Unusable AI response, unit left untranslated", {
+						unitHash: unit.marker?.hash,
+						title: unit.title,
+						reason: error.reason,
+						detail: error.detail,
+						message: error.message,
+					});
+					return {
+						patched: false,
+						tmHit: !!context.tmReferences,
+						responseFailure: error.reason,
+					};
+				}
+				throw error;
+			}
 		}
 
 		const resolvedResult = translationResult;
@@ -1113,6 +1199,20 @@ async function translateUnit(
 	}
 }
 
+/**
+ * frontmatter 翻訳の終わり方。
+ *
+ * 本文のユニットと同じで、「AI の答えが使えなかった」は**訳さなかった**として返す。
+ * 真偽値ひとつでは「訳すものが無かった」と区別できず、need を外したまま
+ * 壊れた値を書くか、黙って「何もありませんでした」と報告するかしか選べない。
+ */
+interface FrontmatterTranslationOutcome {
+	/** frontmatter を書き換えたか（呼び出し側はこれが true のときだけ保存する） */
+	updated: boolean;
+	/** AI の答えが使えなかった理由（あれば） */
+	responseFailure?: UnusableResponseReason;
+}
+
 async function translateFrontmatterIfNeeded(
 	markdown: Markdown,
 	sourceFilePath: string | null,
@@ -1121,19 +1221,19 @@ async function translateFrontmatterIfNeeded(
 	sourceLang: string,
 	targetLang: string,
 	cancellationToken?: vscode.CancellationToken,
-): Promise<boolean> {
+): Promise<FrontmatterTranslationOutcome> {
 	const targetFrontMatter = markdown.frontMatter ?? FrontMatter.empty();
 	const marker = parseFrontmatterMarker(targetFrontMatter);
 
 	if (!marker || !marker.needsTranslation()) {
-		return false;
+		return { updated: false };
 	}
 
 	if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
 		logger.warn("trans", "Source file not found for frontmatter translation", {
 			sourceFilePath,
 		});
-		return false;
+		return { updated: false };
 	}
 
 	const decoder = new TextDecoder("utf-8");
@@ -1157,9 +1257,14 @@ async function translateFrontmatterIfNeeded(
 		marker.removeNeedTag();
 		setFrontmatterMarker(targetFrontMatter, marker);
 		markdown.frontMatter = targetFrontMatter;
-		return true;
+		return { updated: true };
 	}
 
+	// **訳し終えるまで frontmatter に書かない。** 鍵が複数あるとき、途中の鍵で
+	// 使えない答えを受けたら、そこまでの結果ごと捨てる。書きながら進めると、
+	// 半分だけ訳された frontmatter が need の外れた状態で残り、
+	// 「どこまで訳されているのか」が誰にも分からなくなる
+	const translatedValues: Record<string, string> = {};
 	const isRevision = marker.needsRevision();
 	for (const key of keys) {
 		const sourceValue = sourceValues[key];
@@ -1167,7 +1272,7 @@ async function translateFrontmatterIfNeeded(
 			continue;
 		}
 		if (cancellationToken?.isCancellationRequested) {
-			return false;
+			return { updated: false };
 		}
 
 		const previousTranslation = isRevision
@@ -1179,14 +1284,33 @@ async function translateFrontmatterIfNeeded(
 			undefined,
 			typeof previousTranslation === "string" ? previousTranslation : undefined,
 		);
-		const result = await translator.translate(
-			sourceValue,
-			sourceLang,
-			targetLang,
-			context,
-			cancellationToken,
-		);
-		targetFrontMatter.set(key, result.translatedText);
+		let result: TranslationResult;
+		try {
+			result = await translator.translate(
+				sourceValue,
+				sourceLang,
+				targetLang,
+				context,
+				cancellationToken,
+			);
+		} catch (error) {
+			// 使えない答えは採用しない。frontmatter も need も元のまま残す
+			if (isUnusableAIResponse(error)) {
+				logger.warn("trans", "Unusable AI response, frontmatter left untranslated", {
+					key,
+					reason: error.reason,
+					detail: error.detail,
+					message: error.message,
+				});
+				return { updated: false, responseFailure: error.reason };
+			}
+			throw error;
+		}
+		translatedValues[key] = result.translatedText;
+	}
+
+	for (const [key, value] of Object.entries(translatedValues)) {
+		targetFrontMatter.set(key, value);
 	}
 
 	const sourceHash =
@@ -1206,12 +1330,12 @@ async function translateFrontmatterIfNeeded(
 	markdown.frontMatter = targetFrontMatter;
 
 	logger.info("trans", "frontmatter translation completed", {
-		updatedKeys: Object.keys(sourceValues),
+		updatedKeys: Object.keys(translatedValues),
 		newHash: marker.hash,
 		newFrom: marker.from,
 	});
 
-	return true;
+	return { updated: true };
 }
 
 /**
@@ -1593,6 +1717,14 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Translation cancelled for {0}.", label),
 		);
+	} else if (outcome === "ai-response-unusable") {
+		// 黙らない。何も書いていないこと・まだ訳されていないことを伝える
+		vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Could not translate the frontmatter of {0}: the AI's answer could not be used. Nothing was changed; it still needs translation.",
+				label,
+			),
+		);
 	} else if (outcome === "nothing-to-do") {
 		vscode.window.showInformationMessage(
 			vscode.l10n.t("Nothing to translate in {0}.", label),
@@ -1615,7 +1747,9 @@ type FrontmatterOutcome =
 	| "nothing-to-do"
 	| "cancelled"
 	| "no-keys"
-	| "no-trans-pair";
+	| "no-trans-pair"
+	/** AI は答えたが、その答えが使えなかった（何も書いていない） */
+	| "ai-response-unusable";
 
 async function translateFrontmatter_CoreProc(
 	uri: vscode.Uri,
@@ -1685,7 +1819,7 @@ async function translateFrontmatter_Exclusive(
 	const markdown = markdownParser.parse(targetContent, config, io.provider, io.ctx);
 
 	// frontmatter翻訳を実行
-	const translated = await translateFrontmatterIfNeeded(
+	const frontmatterOutcome = await translateFrontmatterIfNeeded(
 		markdown,
 		sourceFilePath,
 		frontmatterKeys,
@@ -1699,7 +1833,12 @@ async function translateFrontmatter_Exclusive(
 		return "cancelled";
 	}
 
-	if (translated) {
+	// 使えない答えのときは何も書かない。「訳すものが無かった」と混ぜない
+	if (frontmatterOutcome.responseFailure) {
+		return "ai-response-unusable";
+	}
+
+	if (frontmatterOutcome.updated) {
 		// 翻訳結果をファイルに保存（external は本文にマーカーを出力せず store へ保存）
 		if (config.isExternalMarkers()) {
 			await saveExternalDocument(uri, markdown, io.provider, io.ctx);

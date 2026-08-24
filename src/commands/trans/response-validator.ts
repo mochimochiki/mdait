@@ -127,11 +127,34 @@ export function detectJsonInContent(text: string): JsonDetectionResult {
 }
 
 /**
+ * バリデーションのオプション
+ */
+export interface ValidateOptions {
+	/**
+	 * 本文への JSON 混入を検出するか。既定は true。
+	 *
+	 * **JSON そのものを訳すとき（.json / JSON の例を含む .txt など）は false にする。**
+	 * この検出は「AI が応答のエンベロープを本文へ漏らした」を捕まえる道具なので、
+	 * 訳す対象が JSON だと定義上つねに当たってしまう。Markdown ではフェンス付き
+	 * コードブロックが先に退避されるため、この偽陽性は起きない。
+	 *
+	 * 以前は偽陽性のたびに送り直し（3回）→ フォールバックへ落ちており、
+	 * フォールバックは生応答をそのまま訳文にしていた。つまり .json ファイルの翻訳は
+	 * 毎回3倍の費用を払ったうえで `{"translation": "…"}` を丸ごと書き込んでいた。
+	 */
+	detectJsonInContent?: boolean;
+}
+
+/**
  * 翻訳レスポンスをバリデート
  * @param rawResponse AIからの生レスポンス
+ * @param options 検出の切り替え
  * @returns バリデーション結果
  */
-export function validateTranslationResponse(rawResponse: string): ValidationResult<ParsedTranslationResponse> {
+export function validateTranslationResponse(
+	rawResponse: string,
+	options?: ValidateOptions,
+): ValidationResult<ParsedTranslationResponse> {
 	// Step 1: マークダウンコードブロック除去
 	const jsonString = extractJsonFromResponse(rawResponse);
 
@@ -174,7 +197,10 @@ export function validateTranslationResponse(rawResponse: string): ValidationResu
 	}
 
 	// Step 4: translationフィールド内のJSON混入検出
-	const jsonInContent = detectJsonInContent(parsed.translation);
+	const jsonInContent =
+		options?.detectJsonInContent === false
+			? { detected: false }
+			: detectJsonInContent(parsed.translation);
 	if (jsonInContent.detected) {
 		return {
 			valid: false,
@@ -199,9 +225,13 @@ export function validateTranslationResponse(rawResponse: string): ValidationResu
 /**
  * 改訂パッチレスポンスをバリデート
  * @param rawResponse AIからの生レスポンス
+ * @param options 検出の切り替え
  * @returns バリデーション結果
  */
-export function validateRevisionPatchResponse(rawResponse: string): ValidationResult<ParsedRevisionPatchResponse> {
+export function validateRevisionPatchResponse(
+	rawResponse: string,
+	options?: ValidateOptions,
+): ValidationResult<ParsedRevisionPatchResponse> {
 	// Step 1: マークダウンコードブロック除去
 	const jsonString = extractJsonFromResponse(rawResponse);
 
@@ -244,7 +274,10 @@ export function validateRevisionPatchResponse(rawResponse: string): ValidationRe
 	}
 
 	// Step 4: targetPatchフィールド内のJSON混入検出
-	const jsonInContent = detectJsonInContent(parsed.targetPatch);
+	const jsonInContent =
+		options?.detectJsonInContent === false
+			? { detected: false }
+			: detectJsonInContent(parsed.targetPatch);
 	if (jsonInContent.detected) {
 		return {
 			valid: false,

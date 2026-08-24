@@ -1,13 +1,21 @@
 ﻿/**
  * @file translator-retry.test.ts
  * @description DefaultTranslatorのリトライ機構テスト実装
- * バリデーション失敗時のリトライとフォールバック処理の検証
+ *
+ * バリデーション失敗時の送り直しと、**送り直しても直らなかったときの後始末**の検証。
+ *
+ * 後始末の約束は途中で変わっている。以前は「最後の生応答をそのまま訳文として返す」
+ * フォールバックだったが、それにより途中で切れた JSON や空文字がそのまま本文になり、
+ * need フラグまで外れて「翻訳できた」と報告されていた。いまは**失敗として投げる**
+ * （UnusableAIResponseError）。訳文を書かないことは呼び出し側の責任として、
+ * ここでは「使えない答えを訳文として返さない」ことだけを固定する。
  */
 
 import { strict as assert } from "node:assert";
 import { TranslationContext } from "../../../../commands/trans/translation-context";
 import { AITranslator, type RevisionPatchResult, type TranslationResult } from "../../../../commands/trans/translator";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 /**
  * モックAIサービス
@@ -84,7 +92,9 @@ suite("DefaultTranslator リトライ機構", () => {
 			assert.strictEqual(mockService.getCallCount(), 3);
 		});
 
-		test("3回すべて失敗でフォールバックが機能する", async () => {
+		test("3回すべて失敗したら、生応答を訳文にせず失敗として投げること", async () => {
+			// 旧仕様ではここで「フォールバックテキスト3」がそのまま訳文になっていた。
+			// 生応答が訳文へ回る道は残っていないことを固定する
 			const mockService = new MockAIService([
 				"フォールバックテキスト1",
 				"フォールバックテキスト2",
@@ -92,12 +102,38 @@ suite("DefaultTranslator リトライ機構", () => {
 			]);
 			const translator = createTranslator(mockService);
 
-			const result = await translator.translate("Hello", "en", "ja", defaultContext);
+			const error = await translator
+				.translate("Hello", "en", "ja", defaultContext)
+				.then(
+					() => undefined,
+					(e: unknown) => e,
+				);
 
-			// フォールバック時は最後の生レスポンスを使用
-			assert.strictEqual(result.translatedText, "フォールバックテキスト3");
+			assert.ok(error instanceof UnusableAIResponseError, "使えない答えとして投げること");
+			assert.strictEqual(error.reason, "invalid-format");
+			// 例外は「訳文の代わり」を持たない。JSON パーサのメッセージに生応答の断片が
+			// 混じることはあるが、それは記録用であって本文へ回る道ではない
+			assert.strictEqual(
+				(error as unknown as { translatedText?: string }).translatedText,
+				undefined,
+				"訳文として使える値を持たないこと",
+			);
 			assert.strictEqual(mockService.getCallCount(), 3);
-			assert.ok(result.warnings?.some((w) => w.includes("unexpected")));
+		});
+
+		test("空の応答は「空」として失敗すること（形が違うとは言わない）", async () => {
+			const mockService = new MockAIService(["", "", ""]);
+			const translator = createTranslator(mockService);
+
+			const error = await translator
+				.translate("Hello", "en", "ja", defaultContext)
+				.then(
+					() => undefined,
+					(e: unknown) => e,
+				);
+
+			assert.ok(error instanceof UnusableAIResponseError);
+			assert.strictEqual(error.reason, "empty");
 		});
 
 		test("translation フィールド欠落でリトライする", async () => {
@@ -202,14 +238,22 @@ suite("DefaultTranslator リトライ機構", () => {
 			assert.strictEqual(mockService.getCallCount(), 2);
 		});
 
-		test("3回すべて失敗でフォールバックが機能する", async () => {
+		test("3回すべて失敗したら、生応答をパッチにせず失敗として投げること", async () => {
+			// 旧仕様ではここで「フォールバック3」がパッチとして扱われ、
+			// 当てはめに失敗した理由が「差分の書き方が違う」にすり替わっていた
 			const mockService = new MockAIService(["フォールバック1", "フォールバック2", "フォールバック3"]);
 			const translator = createTranslator(mockService);
 
-			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
+			const error = await translator
+				.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious)
+				.then(
+					() => undefined,
+					(e: unknown) => e,
+				);
 
-			assert.strictEqual(result.targetPatch, "フォールバック3");
-			assert.ok(result.warnings?.some((w) => w.includes("unexpected")));
+			assert.ok(error instanceof UnusableAIResponseError, "使えない答えとして投げること");
+			assert.strictEqual(error.reason, "invalid-format");
+			assert.strictEqual(mockService.getCallCount(), 3);
 		});
 
 		test("warningsが正しく結合される", async () => {

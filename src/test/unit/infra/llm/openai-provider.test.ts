@@ -3,6 +3,7 @@ import type * as vscode from "vscode";
 import type { AIConfig } from "../../../../infra/config/configuration";
 import { Configuration } from "../../../../infra/config/configuration";
 import { OpenAIProvider } from "../../../../infra/llm/providers/openai-provider";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 /** テスト用AIConfig */
 function createConfig(): AIConfig {
@@ -20,6 +21,14 @@ function okResponse(content: string): Response {
 		status: 200,
 		headers: { "Content-Type": "application/json" },
 	});
+}
+
+/** 出力上限で途中打ち切りになった応答（finish_reason: "length"） */
+function truncatedResponse(content: string): Response {
+	return new Response(
+		JSON.stringify({ choices: [{ message: { role: "assistant", content }, finish_reason: "length" }] }),
+		{ status: 200, headers: { "Content-Type": "application/json" } },
+	);
 }
 
 /** エラーレスポンスを作成 */
@@ -61,6 +70,58 @@ suite("OpenAIProvider", () => {
 		const result = await provider.sendMessage("system", [{ role: "user", content: "hello" }]);
 		assert.strictEqual(result, "translated text");
 		assert.strictEqual(fetchCalls, 1);
+	});
+
+	test("途中で切れた応答（finish_reason: length）は使えない答えとして失敗すること", async () => {
+		stubFetch(() => truncatedResponse('{"translation": "ここまで訳したところで'));
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+
+		const error = await provider.sendMessage("system", [{ role: "user", content: "hello" }]).then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+
+		assert.ok(error instanceof UnusableAIResponseError, "使えない答えとして投げること");
+		assert.strictEqual(error.reason, "truncated");
+	});
+
+	test("途中で切れた応答は送り直さないこと（同じ上限に当たるだけなので）", async () => {
+		stubFetch(() => truncatedResponse("途中まで"));
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+
+		await provider.sendMessage("system", [{ role: "user", content: "hello" }]).catch(() => undefined);
+
+		assert.strictEqual(fetchCalls, 1, "429/503 と違って一時的な失敗ではない");
+	});
+
+	test("本文が空でも finish_reason が length なら「上限で切れた」として失敗すること", async () => {
+		// 推論する型のモデルでは、考えている分でトークンを使い切ると本文が空で返る。
+		// これを「空の答え」と呼ぶと、上限を上げれば直るという手掛かりが消える
+		stubFetch(() => truncatedResponse(""));
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+
+		const error = await provider.sendMessage("system", [{ role: "user", content: "hello" }]).then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+
+		assert.ok(error instanceof UnusableAIResponseError);
+		assert.strictEqual(error.reason, "truncated");
+	});
+
+	test("finish_reason が stop なら従来どおり本文をそのまま返すこと", async () => {
+		stubFetch(
+			() =>
+				new Response(
+					JSON.stringify({
+						choices: [{ message: { role: "assistant", content: "done" }, finish_reason: "stop" }],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
+		);
+		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+		const result = await provider.sendMessage("system", [{ role: "user", content: "hello" }]);
+		assert.strictEqual(result, "done");
 	});
 
 	test("429応答はRetry-Afterに従ってリトライし回復すること", async () => {

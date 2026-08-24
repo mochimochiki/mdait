@@ -24,6 +24,7 @@ function patchFailedResult(): TransCommandResult {
 		skippedCount: 1,
 		tmHits: 0,
 		patchFailures: [{ unitHash: "abc12345", title: "Section", reason: "anchor-not-found" }],
+		responseFailures: [],
 		writeFailures: [],
 	};
 }
@@ -38,6 +39,7 @@ function retriedResult(): TransCommandResult {
 		skippedCount: 0,
 		tmHits: 0,
 		patchFailures: [],
+		responseFailures: [],
 		writeFailures: [],
 	};
 }
