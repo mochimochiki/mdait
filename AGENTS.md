@@ -36,7 +36,7 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 - マーカー形式 `<!-- mdait hash from:xxx need:yyy -->` と CRC32 ハッシュアルゴリズム（既存マーカーとの互換性のため）
 - パーサーは markdown-it。ユニット境界は見出しレベルベース
 - ファイルパス構築は `Configuration` クラスに一元化 — コマンド層で `.mdait/` パスを直接構築しないこと
-- 生の正規表現によるマーカー境界探索は `getCodeBlockLineSet` でコードブロック行を除外すること（コードブロック内のサンプルマーカーへの誤マッチを防ぐ）
+- 生の正規表現によるマーカー境界探索は `getCodeBlockLineSet` でコードブロック行を除外すること（コードブロック内のサンプルマーカーへの誤マッチを防ぐ）。**開始位置の探索にも同じ判定を当てる** — 終端だけ外していた時期があり、マーカーの書き方を解説する原稿で訳文がコードブロックの中へ書き込まれ、コードフェンスが閉じなくなった
 - テキスト正規化（`normalizeForTm` など）はそれを必要とするモジュールの内部に閉じ込める。呼び出し側は生テキストを渡す
 - 定常 sync（autoSyncOnSave 含む）は AI 不使用・決定的・冪等を維持する。AI を使う処理（trans・term・tm・ai-sync 系）は必ず明示的な起動＋確認UIを経由する（ADR-260705-01）
 - 個別ユニットのマーカー／`unit-state` を書き換える操作は `getFileHandler()` の `resolveNeed` / `declareIsolate` / `deleteUnit` / `keepUnits` / `deleteAllVerifyDeletion` だけを通す。排他制御・未保存の反映・ストア保存・ステータス更新は `commands/markers/unit-mutation.ts` にしか無く、サーフェス（CodeLens・ツリー・LM Tool）側で書き換えを実装すると必ず取りこぼす。verify-deletion の Keep（独立化）は need と from を同時に外す必要があるため必ず `keepUnits` を使う — 別々に外すとレガシー形を再生産する（ADR-260805-01）。一括変換（markers-migration・sync・trans・ai-review のコア）は別枠（ADR-260726-01）。訳文ファイルごと手放す操作（孤立訳文の破棄）は `unit-mutation.ts` の `discardTargetFile` だけを通す — 削除は必ずごみ箱経由（`useTrash`）で、ファイルを消してから行を消す（逆順にすると削除失敗時に行だけ失われ、二度と気づけなくなる）
