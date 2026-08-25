@@ -137,10 +137,45 @@ function createFsProbe(baseDir: string): DoctorProbe {
 		return result;
 	};
 
+	// `.mdait/unit-state` に行を持つファイルの集合。読めなければ空（＝「まだ無い」と同じ）
+	let statePaths: Set<string> | undefined;
+	const unitStatePaths = (): Set<string> => {
+		if (statePaths) {
+			return statePaths;
+		}
+		const found = new Set<string>();
+		try {
+			const text = fs.readFileSync(path.join(baseDir, ".mdait", "unit-state"), "utf8");
+			for (const line of text.split(/\r?\n/)) {
+				if (line === "" || line.startsWith("#")) {
+					continue;
+				}
+				const filePath = line.split("\t")[0];
+				if (filePath) {
+					found.add(filePath.replace(/\\/g, "/"));
+				}
+			}
+		} catch {
+			// 無い・読めないときは0件。「Sync してください」は正しい案内になる
+		}
+		statePaths = found;
+		return found;
+	};
+
 	return {
 		dirExists: (rel) => directoryExists(resolveDir(rel)),
 		countMarkdownFiles: (rel) => scan(rel).md,
 		countFilesWithMarkers: (rel) => scan(rel).withMarkers,
+		countFilesWithUnitState: (rel) => {
+			const prefix = `${rel.replace(/\\/g, "/").replace(/\/+$/, "")}/`;
+			let count = 0;
+			for (const filePath of unitStatePaths()) {
+				if (filePath.startsWith(prefix)) {
+					count++;
+				}
+			}
+			return count;
+		},
 	};
 }
 

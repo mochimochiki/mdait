@@ -328,6 +328,8 @@
   "Source directory (sourceDir) is not set in translation pair.": "翻訳ペアでソースディレクトリ (sourceDir) が設定されていません。",
   "Target directory (targetDir) is not set in translation pair.": "翻訳ペアでターゲットディレクトリ (targetDir) が設定されていません。",
   "Primary language (primaryLang) is not configured.": "基準言語（primaryLang）が設定されていません。",
+  "targetLang is not set for {0} → {1}. Set the language to translate into.": "{0} → {1} のペアに targetLang（訳す先の言語）が設定されていません。訳したい言語を書いてください。",
+  "sourceLang and targetLang are the same ({0}) for {1} → {2}. They must differ.": "{1} → {2} のペアで、原文の言語と訳す先の言語がどちらも {0} になっています。別の言語にしてください。",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",
