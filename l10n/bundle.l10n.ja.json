@@ -1,6 +1,6 @@
 {
   "Failed to load mdait.json: {0}": "mdait.jsonの読み込みに失敗しました: {0}",
-  "Failed to sync and refresh: {0}": "同期と表示更新に失敗しました: {0}",
+  "Synchronization failed: {0}": "同期に失敗しました: {0}",
   "Failed to jump to unit: {0}": "ユニットへのジャンプに失敗しました: {0}",
   "No translation targets are configured.": "翻訳対象が設定されていません。",
   "Only one translation pair is configured ({0}); there is nothing to filter.": "設定されている翻訳ペアは1つだけです（{0}）。絞り込みの必要はありません。",
@@ -278,7 +278,7 @@
   "This will keep {0} unit(s) flagged need:verify-deletion in {1} as independent units. They will no longer be matched against the source; re-linking them later is a manual edit. No AI is used.": "{1} の need:verify-deletion が付いた {0} 件のユニットを独立ユニットとして残します。以後、原文との対応付けの対象にならず、後から結び直すのは手作業になります。AI は使用しません。",
   "Deleting unit(s)...": "ユニットを削除中...",
   "Confirm Unit Deletion": "ユニット削除の確認",
-  "This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.": "{1} から need:verify-deletion が付いた {0} 件のユニットを完全に削除します。mdait ではやり直せません — 必要であれば git の履歴から復元してください。AIは使用しません。",
+  "This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.{2}": "{1} から need:verify-deletion が付いた {0} 件のユニットを完全に削除します。mdait ではやり直せません — 必要であれば git の履歴から復元してください。AIは使用しません。{2}",
   "...and {0} more unit(s)": "...ほか {0} ユニット",
   "Resolving need flags...": "needフラグを解決中...",
   "Confirm Need Flag Resolution": "needフラグ解決の確認",

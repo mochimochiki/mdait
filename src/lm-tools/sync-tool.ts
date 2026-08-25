@@ -69,8 +69,22 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 			const align = adopt && options.input.align === true;
 			logger.info("LanguageModelTool", "Sync tool invoked", { adopt, align });
 
-			// 同期コマンドを実行
-			const syncResult = await syncCommand({ adopt, align });
+			// 同期コマンドを実行。
+			// **失敗の理由をそのまま返す。** 以前は理由がトーストにしか出ず、
+			// エージェントには中身の無い internal_error だけが届いていたので、
+			// 「どのフォルダが無いのか」を自力で突き止める手段が無かった
+			let syncResult: Awaited<ReturnType<typeof syncCommand>>;
+			try {
+				syncResult = await syncCommand({ adopt, align });
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : String(error);
+				const message = vscode.l10n.t("Synchronization failed: {0}", reason);
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InternalError, reason, [
+						"Fix the cause named above (most often a path in .mdait/mdait.json transPairs), then retry mdait_sync.",
+					]),
+				);
+			}
 			if (!syncResult) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(

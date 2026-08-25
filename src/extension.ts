@@ -13,6 +13,7 @@ import { needsAttentionNextCommand } from "./commands/markers/needs-attention-ne
 import { buildRenameFollowEdit, completeRenameFollow } from "./commands/markers/rename-follow";
 import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
 import { createConfigCommand, openExistingConfigCommand } from "./commands/setup/setup-command";
+import { showSyncError } from "./commands/shared/guidance";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -234,7 +235,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			// 全体再構築でしかツリーに反映されない
 			await statusManager.buildStatusItemTree();
 		} catch (error) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
+			// 理由と、設定を直す場所への導線をここで出す（syncCommand は投げ直すだけ）
+			await showSyncError(error);
 		} finally {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
 		}

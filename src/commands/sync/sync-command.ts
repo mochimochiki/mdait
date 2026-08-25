@@ -766,10 +766,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			durationMs,
 			...formatError(error),
 		});
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
-		);
-		return undefined;
+		// **理由を握り潰さない。** ここで `undefined` を返していたので、
+		// 「どのフォルダが無いのか」がトーストにしか出ず、LM ツール越しに叩いた
+		// エージェントには中身の無い internal_error だけが届いていた。
+		// 見せ方（文言とボタン）は呼び出し側の担当にする
+		throw error;
 	} finally {
 		storeLock.release();
 	}

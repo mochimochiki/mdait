@@ -50,6 +50,32 @@ export async function showConfigError(validationError: string): Promise<void> {
 }
 
 /**
+ * 同期の失敗を、診断・設定への導線付きで表示する。
+ *
+ * 「原文のフォルダが見つからない」は設定の打ち間違いで最も多い詰まり方なのに、
+ * ボタンの無いトーストが1本出るだけだった（`transPairs` が空のときは
+ * `[Diagnose] [Open mdait.json]` が付くのに、である）。同じ種類の詰まりには同じ導線を出す。
+ */
+export async function showSyncError(error: unknown): Promise<void> {
+	if (isOperationCancelled(error)) {
+		return;
+	}
+	const message = error instanceof Error ? error.message : String(error);
+	const diagnose = vscode.l10n.t("Diagnose");
+	const openConfig = vscode.l10n.t("Open mdait.json");
+	const choice = await vscode.window.showErrorMessage(
+		vscode.l10n.t("An error occurred during synchronization: {0}", message),
+		diagnose,
+		openConfig,
+	);
+	if (choice === diagnose) {
+		await vscode.commands.executeCommand("mdait.setup.diagnose");
+	} else if (choice === openConfig) {
+		await openConfigFile();
+	}
+}
+
+/**
  * 「先に Sync が必要」系のエラーを「Sync を実行」「ドキュメント」導線付きで表示する。
  * 原文ファイルを翻訳しようとした／未 sync などの混乱に対応する。
  */

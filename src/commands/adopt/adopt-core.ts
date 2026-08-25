@@ -74,7 +74,15 @@ export interface AdoptStages {
 
 /** 本番の各段実装（既存のプリミティブへ配線するだけ） */
 export const defaultAdoptStages: AdoptStages = {
-	runSync: (options) => syncCommand(options),
+	// sync が投げたら「走らなかった」として畳む（従来 undefined を返していたのと同じ意味）。
+	// 取り込みは後段を止めて aborted で安全に終わる
+	runSync: async (options) => {
+		try {
+			return await syncCommand(options);
+		} catch {
+			return undefined;
+		}
+	},
 	collectTargets: (config) => collectWorkspaceReviewTargets(config, new FileExplorer()),
 	runReview: (files, config, options, progress, token) =>
 		executeAiReviewForFiles(files, config, options, progress, token),
