@@ -332,6 +332,7 @@
   "sourceLang and targetLang are the same ({0}) for {1} → {2}. They must differ.": "{1} → {2} のペアで、原文の言語と訳す先の言語がどちらも {0} になっています。別の言語にしてください。",
   "Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.": "{0} の下に、管理下の訳文ファイルがありません。訳文側（翻訳された方）のファイルかフォルダを渡してください。",
   "Nothing to validate: no managed translation file was found. Run mdait_sync first.": "管理下の訳文ファイルが見つからないので、何も検証していません。先に mdait_sync を実行してください。",
+  "Removed: {0}{1}.": "消したもの: {0}{1}。",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",

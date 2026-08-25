@@ -259,17 +259,35 @@ function deletionWithheldNotice(count: number): SyncNotice | undefined {
 	};
 }
 
-/** 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6） */
-function orphanDeletedNotice(count: number): SyncNotice | undefined {
+/**
+ * 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6）。
+ *
+ * **何が消えたかを名前で言う。** 原稿を消す唯一の経路なのに件数しか出ていなかったので、
+ * 20 ファイルを回している人には「1件」が何なのか分からなかった（実測）。
+ * 消したものはもう画面のどこにも無いので、ここで名前を言わないと確かめる術がない。
+ *
+ * @param count 削除したユニット数
+ * @param labels 削除したユニットの呼び名（`<訳文の名前>: <見出し>`）
+ */
+function orphanDeletedNotice(count: number, labels: readonly string[] = []): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
 	}
+	// 名前は3件まで、1件は60字まで。トーストは長くすると読まれない
+	const shown = labels
+		.filter((label) => label.trim() !== "")
+		.slice(0, 3)
+		.map((label) => (label.length > 60 ? `${label.slice(0, 59)}…` : label));
+	const named =
+		shown.length > 0
+			? ` ${vscode.l10n.t("Removed: {0}{1}.", shown.join(" / "), labels.length > shown.length ? ` (+${labels.length - shown.length})` : "")}`
+			: "";
 	return {
 		kind: "orphan-deleted",
-		detail: vscode.l10n.t(
+		detail: `${vscode.l10n.t(
 			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
 			count,
-		),
+		)}${named}`,
 		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
 		action: {
 			label: vscode.l10n.t("How to restore"),
@@ -415,6 +433,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalAdded = 0;
 		let totalModified = 0;
 		let totalDeleted = 0;
+		/** 削除した孤立ユニットの呼び名（<訳文の名前>: <見出し>）。通知で何が消えたかを言う */
+		const deletedUnitLabels: string[] = [];
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
@@ -554,6 +574,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalAdded += syncResult.added;
 						totalModified += syncResult.modified;
 						totalDeleted += syncResult.deleted;
+						for (const title of syncResult.orphanDeletedTitles ?? []) {
+							deletedUnitLabels.push(`${path.basename(targetFile)}: ${title}`);
+						}
 						totalUnchanged += syncResult.unchanged;
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
@@ -712,7 +735,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				newOrphansNotice(freshOrphans),
-				config.getOrphanTargetPolicy() === "delete" ? orphanDeletedNotice(totalDeleted) : undefined,
+				config.getOrphanTargetPolicy() === "delete"
+					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
+					: undefined,
 			].filter((notice): notice is SyncNotice => notice !== undefined),
 		);
 
@@ -1437,6 +1462,7 @@ export async function sync_CoreProc(
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
 	diffResult.orphanDeletionWithheld = withheldPolicy.withheld ? syncedResult.orphanVerified : 0;
+	diffResult.orphanDeletedTitles = syncedResult.orphanDeletedTitles;
 	diffResult.alignCorrections = alignCorrections;
 
 	// 同期結果をMarkdownオブジェクトとして構築

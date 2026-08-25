@@ -19,6 +19,8 @@ export interface SyncedTargetsResult {
 	units: MdaitUnit[];
 	/** このsyncで削除した孤立ターゲット数 */
 	orphanDeleted: number;
+	/** 削除した孤立ターゲットの見出し（何が消えたかを人に伝えるため。本文は残さない） */
+	orphanDeletedTitles: string[];
 	/** need:verify-deletion を付与した（または維持した）孤立ターゲット数 */
 	orphanVerified: number;
 	/** 独立ユニット（need:isolate / fromなしの永続マーカー）としてパススルー保持した数 */
@@ -193,6 +195,7 @@ export class SectionMatcher {
 	): SyncedTargetsResult {
 		const result: MdaitUnit[] = [];
 		let orphanDeleted = 0;
+		const orphanDeletedTitles: string[] = [];
 		let orphanVerified = 0;
 		let orphanKept = 0;
 		let orphanReviewed = 0;
@@ -223,6 +226,7 @@ export class SectionMatcher {
 					if (orphanPolicy === "delete") {
 						// 何もしない（削除）
 						orphanDeleted++;
+						orphanDeletedTitles.push(pair.target.title || pair.target.marker?.hash || "");
 					} else {
 						marker.setNeed("verify-deletion");
 						result.push(pair.target);
@@ -242,6 +246,6 @@ export class SectionMatcher {
 				}
 			}
 		}
-		return { units: result, orphanDeleted, orphanVerified, orphanKept, orphanReviewed };
+		return { units: result, orphanDeleted, orphanDeletedTitles, orphanVerified, orphanKept, orphanReviewed };
 	}
 }
