@@ -512,7 +512,7 @@
   "• {0} managed Markdown file(s) will be rewritten": "• 管理下の {0} 個の Markdown ファイルを書き換えます",
   "• Markers move out of the files into .mdait/unit-state": "• マーカーを本文から .mdait/unit-state へ移動します",
   "• Markers in .mdait/unit-state are written back into the files": "• .mdait/unit-state のマーカーを本文へ書き戻します",
-  "• Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost": "• 手動のサブユニット境界マーカー（見出しを伴わないマーカー）は external モードでは非対応で、失われます",
+  "• Markers that do not sit on an external unit boundary — deeper than sync.level ({0}), or not on a heading — cannot be moved. They are dropped together with their from/need": "• 外部モードのユニット境界に乗っていないマーカーは移せません — sync.level（{0}）より深い見出しに付いたものと、見出しを伴わないものです。落ちたマーカーは from と need も一緒に失われます",
   "• Warning: {0} file(s) set 'mdait.sync.level: 0' (fully manual marker placement) in their frontmatter — their markers will be lost": "• 警告: {0} 個のファイルが frontmatter で 'mdait.sync.level: 0'（マーカーの完全手動配置）を指定しており、これらのマーカーは失われます",
   "Committing your workspace to git beforehand is recommended.": "事前にワークスペースを git にコミットしておくことを推奨します。",
   "Externalizing mdait markers...": "mdait マーカーを外部化しています...",
@@ -606,5 +606,6 @@
   "{0} file(s) skipped because the translation is empty": "訳文が空のため {0} 件を見送り",
   "{0} translation(s) lost their source file": "原文が見つからない訳文 {0} 件",
   "{0} unit(s) kept for your confirmation instead of being deleted": "削除せず確認待ちにしたユニット {0} 件",
-  "{0} orphaned unit(s) were removed": "原文を失ったユニット {0} 件を削除"
+  "{0} orphaned unit(s) were removed": "原文を失ったユニット {0} 件を削除",
+  "{0} marker(s) deeper than sync.level ({1}) could not be moved and were dropped along with their from/need.": "sync.level（{1}）より深い位置にあった {0} 件のマーカーは移せず、from と need ごと落としました。"
 }
