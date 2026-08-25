@@ -30,6 +30,19 @@ export interface DirectoryTranslationResult {
 const logger = Logger.getInstance();
 
 /**
+ * ダイアログに出すフォルダの呼び名。ワークスペースからの相対にする。
+ * 絶対パスは長いうえ、ワークスペース内のどこなのかがかえって読み取りにくい。
+ */
+function workspaceLabel(absPath: string): string {
+	const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!root) {
+		return absPath;
+	}
+	const rel = path.relative(root, absPath);
+	return rel === "" || rel.startsWith("..") ? absPath : rel.split(path.sep).join("/");
+}
+
+/**
  * ステータスツリーアイテムの翻訳アクションハンドラ
  */
 export class StatusTreeTranslationHandler {
@@ -120,8 +133,46 @@ export class StatusTreeTranslationHandler {
 				return { totalFiles: 0, successful: 0, failed: 0, skipped: 0 };
 			}
 
+			// **確認を出す前に、そこが訳文側かどうかを見る。** 見ないと、原文側のフォルダを
+			// 渡した人に「N ファイルを翻訳しますか？」と訊いてから全滅させることになる（実測）
+			const explorer = new FileExplorer();
+			const targetSide = files.some((file) => explorer.getTransPairFromTarget(file.fsPath, config) !== null);
+			if (!targetSide) {
+				const pair = config.transPairs.find(
+					(p) => path.resolve(config.getConfigBaseDir(), p.sourceDir) === path.resolve(directoryPath),
+				);
+				vscode.window.showWarningMessage(
+					pair
+						? vscode.l10n.t(
+								"'{0}' is the source folder. Translate the matching target folder '{1}' instead.",
+								workspaceLabel(directoryPath),
+								pair.targetDir,
+							)
+						: vscode.l10n.t("No translation pair found for: {0}", workspaceLabel(directoryPath)),
+				);
+				return { totalFiles: 0, successful: 0, failed: 0, skipped: 0 };
+			}
+
+			// 件数は「これから AI に投げるユニット数」も出す。ファイル数だけだと、
+			// 200 ファイルのうち 3 ユニットだけ古い場合に「(200 file(s))」と出て、
+			// いくらかかるのかを判断する材料にならない
+			const pendingUnits = StatusManager.getInstance()
+				.getStatusItemTree()
+				.countPendingTranslationUnits([directoryPath]);
+			if (pendingUnits === 0) {
+				vscode.window.showInformationMessage(
+					vscode.l10n.t("Nothing to translate in {0}.", workspaceLabel(directoryPath)),
+				);
+				return { totalFiles: files.length, successful: 0, failed: 0, skipped: files.length };
+			}
+
 			const confirmation = await vscode.window.showInformationMessage(
-				vscode.l10n.t("Translate all files in directory '{0}'? ({1} file(s))", directoryPath, files.length),
+				vscode.l10n.t(
+					"Translate {0}? ({1} unit(s) in {2} file(s))",
+					workspaceLabel(directoryPath),
+					pendingUnits,
+					files.length,
+				),
 				{ modal: true },
 				vscode.l10n.t("Yes"),
 				vscode.l10n.t("No"),

@@ -367,7 +367,7 @@
   "Which translation do you want to run?": "どの翻訳を実行しますか？",
   "Invalid directory item": "無効なディレクトリアイテムです",
   "No translatable files found in directory '{0}'": "ディレクトリ '{0}' に翻訳可能なファイルが見つかりませんでした",
-  "Translate all files in directory '{0}'? ({1} file(s))": "ディレクトリ '{0}' 内の全ファイルを翻訳しますか？（{1} ファイル）",
+  "Translate {0}? ({1} unit(s) in {2} file(s))": "{0} を翻訳しますか？（{2} ファイル中の {1} ユニット）",
   "Yes": "はい",
   "No": "いいえ",
   "{0} is already being translated. Wait for it to finish, or cancel it first.": "{0} はいま翻訳中です。終わるまで待つか、先にキャンセルしてください。",
@@ -608,5 +608,6 @@
   "{0} translation(s) lost their source file": "原文が見つからない訳文 {0} 件",
   "{0} unit(s) kept for your confirmation instead of being deleted": "削除せず確認待ちにしたユニット {0} 件",
   "{0} orphaned unit(s) were removed": "原文を失ったユニット {0} 件を削除",
-  "{0} marker(s) deeper than sync.level ({1}) could not be moved and were dropped along with their from/need.": "sync.level（{1}）より深い位置にあった {0} 件のマーカーは移せず、from と need ごと落としました。"
+  "{0} marker(s) deeper than sync.level ({1}) could not be moved and were dropped along with their from/need.": "sync.level（{1}）より深い位置にあった {0} 件のマーカーは移せず、from と need ごと落としました。",
+  "'{0}' is the source folder. Translate the matching target folder '{1}' instead.": "'{0}' は原文のフォルダです。対になる訳文のフォルダ '{1}' を選んでください。"
 }
