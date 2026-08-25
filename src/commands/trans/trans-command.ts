@@ -993,6 +993,24 @@ async function translateUnit(
 				hasPreviousTranslation: !!previousTranslation,
 				hasSourceDiff: !!context.sourceDiff,
 			});
+			// **守るものがあるときは、黙って全文で訳し直さない。**
+			// 改訂の翻訳は本来パッチで、当てはめに失敗したときは「訳文を据え置いて、
+			// 全文で訳し直すか一度だけ確認する」ことになっている。ところが *そもそも
+			// 差分が作れなかった* 場合だけ、その安全網を通らずに全文再翻訳が走り、
+			// 訳文の手直し（用語の言い回し・注記）が AI の善意次第で消えていた。
+			// 通知は成功としか言わないので、消えたことにも気づけない（実測）。
+			// 訳文がまだ無いとき（previousTranslation が空）は失うものが無いので、
+			// これまでどおり全文で訳す
+			if (previousTranslation && !context.sourceDiff) {
+				logger.info("trans", "Unit translation kept as-is: cannot build a diff for the revision", {
+					unitHash: unit.marker?.hash,
+				});
+				return {
+					patched: false,
+					tmHit: !!context.tmReferences,
+					patchFailure: "no-source-diff",
+				};
+			}
 		}
 
 		if (canPatch) {

@@ -333,6 +333,7 @@
   "Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.": "{0} の下に、管理下の訳文ファイルがありません。訳文側（翻訳された方）のファイルかフォルダを渡してください。",
   "Nothing to validate: no managed translation file was found. Run mdait_sync first.": "管理下の訳文ファイルが見つからないので、何も検証していません。先に mdait_sync を実行してください。",
   "Removed: {0}{1}.": "消したもの: {0}{1}。",
+  "The previous version of the source is no longer available, so only the changed part could not be identified.": "前の版の原文が手元に無いため、変わったところだけを見つけられませんでした。",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",

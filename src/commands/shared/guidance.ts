@@ -139,6 +139,10 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 			return vscode.l10n.t(
 				"The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.",
 			);
+		case "no-source-diff":
+			return vscode.l10n.t(
+				"The previous version of the source is no longer available, so only the changed part could not be identified.",
+			);
 	}
 }
 
@@ -177,6 +181,40 @@ export interface TransOutcomeActions {
 	label: string;
 	/** パッチを使わず全文で訳し直す */
 	retryFullTranslation?: () => Promise<unknown>;
+}
+
+/**
+ * 訳文を据え置いたことを伝え、**全文で訳し直す逃げ道**を一度だけ出す。
+ *
+ * ユニットごとに尋ねると連打になるので、1回の実行につき1回だけ聞く。
+ * 押した先でもう一度確認するのは、全文で訳し直すと手作業の修正が消えうるからである。
+ *
+ * @param body 何が起きたかの本文（理由まで書いたもの）
+ * @param actions 通知から呼び出せる次の一手
+ */
+async function offerFullRetry(body: string, actions: TransOutcomeActions): Promise<void> {
+	if (!actions.retryFullTranslation) {
+		vscode.window.showWarningMessage(body);
+		return;
+	}
+	// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
+	const retry = vscode.l10n.t("✨Re-translate in full");
+	const choice = await vscode.window.showWarningMessage(body, retry);
+	if (choice !== retry) {
+		return;
+	}
+	// 「これから何が起きるか・取り消せるか」は確認ダイアログの担当（ux.md §3.3）
+	const proceed = vscode.l10n.t("Re-translate");
+	const confirmed = await vscode.window.showWarningMessage(
+		vscode.l10n.t(
+			"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+		),
+		{ modal: true },
+		proceed,
+	);
+	if (confirmed === proceed) {
+		await actions.retryFullTranslation();
+	}
 }
 
 /**
@@ -243,7 +281,7 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	// showTranslationError は何も言っていない
 	if (result.responseFailures.length > 0) {
 		const reason = describeResponseFailure(result.responseFailures[0].reason);
-		vscode.window.showWarningMessage(
+		const body =
 			result.translatedCount > 0
 				? vscode.l10n.t(
 						"Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}",
@@ -257,8 +295,11 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 						actions.label,
 						result.responseFailures.length,
 						reason,
-					),
-		);
+					);
+		// 改訂のパッチは、モデルによっては毎回同じところで転ぶ。抜け道が無いと、
+		// 毎朝叩くたびに同じ1件が同じ理由で失敗し続ける状態に固定される。
+		// パッチ失敗のときと同じ逃げ道（全文で訳し直す）をここでも出す
+		await offerFullRetry(body, actions);
 		return;
 	}
 
@@ -275,35 +316,15 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	// パッチ適用に失敗したユニットは訳文を据え置いてある。理由を出したうえで、
 	// 全文で訳し直すかどうかを一度だけ尋ねる（ユニットごとに聞くと連打になる）
 	if (result.patchFailures.length > 0) {
-		const body = vscode.l10n.t(
-			"Kept the existing translation for {0} unit(s) in {1}. {2}",
-			result.patchFailures.length,
-			actions.label,
-			describePatchFailure(result.patchFailures[0].reason),
-		);
-		if (!actions.retryFullTranslation) {
-			vscode.window.showWarningMessage(body);
-			return;
-		}
-		// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
-		const retry = vscode.l10n.t("✨Re-translate in full");
-		const choice = await vscode.window.showWarningMessage(body, retry);
-		if (choice !== retry) {
-			return;
-		}
-		// 「これから何が起きるか・取り消せるか」は確認ダイアログの担当（ux.md §3.3）。
-		// 全文で訳し直すと手作業の修正が消えうるので、押した先で一度だけ確認する
-		const proceed = vscode.l10n.t("Re-translate");
-		const confirmed = await vscode.window.showWarningMessage(
+		await offerFullRetry(
 			vscode.l10n.t(
-				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+				"Kept the existing translation for {0} unit(s) in {1}. {2}",
+				result.patchFailures.length,
+				actions.label,
+				describePatchFailure(result.patchFailures[0].reason),
 			),
-			{ modal: true },
-			proceed,
+			actions,
 		);
-		if (confirmed === proceed) {
-			await actions.retryFullTranslation();
-		}
 		return;
 	}
 

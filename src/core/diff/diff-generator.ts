@@ -36,7 +36,12 @@ export type PatchFailureReason =
 	/** 形式は合っているが変更行（`-`/`+`）が1つも無い */
 	| "no-changes"
 	/** 目印にする周辺行が訳文側に見つからない（訳文が手で編集された等） */
-	| "anchor-not-found";
+	| "anchor-not-found"
+	/**
+	 * 旧原文が手元に無く、差分そのものを作れなかった（パッチを試すまで行かなかった）。
+	 * `applySimplePatch` は返さない。差分を作る前の段階で使う。
+	 */
+	| "no-source-diff";
 
 /** パッチ適用の結果。成功なら適用後テキスト、失敗なら理由を持つ */
 export type PatchApplyResult =
