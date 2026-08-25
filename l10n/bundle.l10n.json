@@ -212,6 +212,8 @@
   "Jump to source frontmatter failed: {0}": "Jump to source frontmatter failed: {0}",
   "Target file not found.": "Target file not found.",
   "No valid checks specified. Use \"structure\" and/or \"terms\".": "No valid checks specified. Use \"structure\" and/or \"terms\".",
+  "Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.": "Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.",
+  "Nothing to validate: no managed translation file was found. Run mdait_sync first.": "Nothing to validate: no managed translation file was found. Run mdait_sync first.",
   "Validation completed: {0} violation(s) ({1} structure, {2} terms) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).": "Validation completed: {0} violation(s) ({1} structure, {2} terms) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).",
   "Validation failed: {0}": "Validation failed: {0}",
   "Validating translations...": "Validating translations...",

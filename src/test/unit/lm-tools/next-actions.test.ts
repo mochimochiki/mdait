@@ -50,4 +50,18 @@ suite("buildNextActions（状態→推奨アクション対応表）", () => {
 		const actions = buildNextActions(needs({ isolate: 5 }));
 		assert.ok(actions[0].includes("All units are translated"));
 	});
+
+	test("スコープに管理ユニットが1つも無ければ「全部済んだ」と言わない", () => {
+		// 原文側のフォルダを渡したときがこれになる。「済んでいる」と読んだエージェントは
+		// 何もせずに「翻訳は完了済みでした」と報告して終わる（実測）
+		const actions = buildNextActions(needs(), 0, 0, 0);
+		assert.strictEqual(actions.length, 1);
+		assert.ok(!actions[0].includes("All units are translated"), `済んだとは言わないこと: ${actions[0]}`);
+		assert.ok(actions[0].includes("target"), "訳文側を渡すよう言うこと");
+	});
+
+	test("管理ユニットがあって need が無いときは、これまでどおり定常状態の案内を返す", () => {
+		const actions = buildNextActions(needs(), 0, 0, 12);
+		assert.ok(actions[0].includes("All units are translated"));
+	});
 });

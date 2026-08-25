@@ -261,7 +261,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 				translatedUnits,
 			);
 
-			const nextActions = buildNextActions(scopeStatus.needs, scopeStatus.errorUnits);
+			const nextActions = buildNextActions(scopeStatus.needs, scopeStatus.errorUnits, 0, scopeStatus.totalUnits);
 			if (failed > 0) {
 				nextActions.unshift(
 					`${failed} file(s) failed to translate. Inspect data.files[].error for causes, fix them, and run mdait_translate again for the same path (successful units are not re-translated).`,

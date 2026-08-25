@@ -127,7 +127,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 						syncResult.revisionsNeeded,
 					);
 
-			const nextActions = buildNextActions(status.needs, status.errorUnits);
+			const nextActions = buildNextActions(status.needs, status.errorUnits, 0, status.totalUnits);
 			if (syncResult.totalOrphanReviewed > 0) {
 				nextActions.unshift(
 					`${syncResult.totalOrphanReviewed} unmarked target-only unit(s) received need:review (no source counterpart found). For each, either run mdait_resolve to remove the need flag and keep it as an independent unit, or delete the unit.`,
