@@ -45,6 +45,15 @@ export async function diagnoseSetupCommand(): Promise<void> {
 
 	const diagnostics = runStaticChecks(snapshot, createFsProbe(baseDir));
 
+	// **設定ファイルそのものが読めないことを、いちばん先に言う。**
+	// static チェックが見るのは「最後に読み込みに成功した設定」なので、書き間違えた直後は
+	// 壊す前より綺麗な結果（問題なし）を返していた。設定を書き間違えた人が最初に押す道具が、
+	// 無罪放免を返すことになる（実測）
+	const parseError = readConfigParseError(config);
+	if (parseError) {
+		diagnostics.unshift({ level: "error", id: "config.unreadable", params: { reason: parseError } });
+	}
+
 	// AI 到達性（非同期 IO）は UI 層で追加実行する
 	const aiDiag = await checkAiReachability(config);
 	if (aiDiag) {
@@ -70,6 +79,25 @@ function readRawOpenAiApiKey(config: Configuration): string | undefined {
 	} catch {
 		// 設定が壊れている場合は static チェック側で別途検出されるため無視
 		return undefined;
+	}
+}
+
+/**
+ * 設定ファイルが JSON として読めないなら、その理由を返す。読めるなら undefined。
+ *
+ * 読み込み側は最後に成功した設定をメモリに持ち続けるので、**壊したことに気づく機会が
+ * 診断しかない**。ここで見ないと、書き間違えた直後の診断が「問題なし」と答える。
+ */
+function readConfigParseError(config: Configuration): string | undefined {
+	const configPath = config.getConfigFilePath();
+	if (!configPath || !fs.existsSync(configPath)) {
+		return undefined; // 未作成は別の診断（設定が無い）の担当
+	}
+	try {
+		JSON.parse(fs.readFileSync(configPath, "utf8"));
+		return undefined;
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
 	}
 }
 
@@ -361,6 +389,11 @@ function describe(d: Diagnostic): string {
 		case "ai.openaiKeyMissing":
 			return vscode.l10n.t(
 				"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
+			);
+		case "config.unreadable":
+			return vscode.l10n.t(
+				"Could not read .mdait/mdait.json as JSON ({0}). mdait is still running on the last settings it managed to read.",
+				p.reason ?? "",
 			);
 		case "ai.openaiUnreachable":
 			return vscode.l10n.t(

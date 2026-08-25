@@ -339,6 +339,7 @@
   "The model \"{0}\" is not in the list the endpoint returned. Check ai.model for a typo.": "モデル「{0}」は、エンドポイントが返した一覧にありません。ai.model の綴りを確かめてください。",
   "The endpoint at {0} answered with HTTP {1}. Translation will likely fail.": "{0} が HTTP {1} を返しました。このままでは翻訳は失敗します。",
   "{0} is on the source side. Translate the matching file under '{1}' instead.": "{0} は原文側のファイルです。'{1}' の下にある対のファイルを翻訳してください。",
+  "Could not read .mdait/mdait.json as JSON ({0}). mdait is still running on the last settings it managed to read.": ".mdait/mdait.json を JSON として読めませんでした（{0}）。mdait は最後に読めた設定のまま動いています。",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",
