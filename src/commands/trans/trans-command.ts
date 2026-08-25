@@ -1646,20 +1646,32 @@ export function getUnitPosition(
 	text: string,
 	markerText: string,
 ): { start: number; end: number; trailingNewlines: string } | null {
-	const startIdx = text.indexOf(markerText);
+	const codeBlockLines = getCodeBlockLineSet(text);
+	/** 文字位置が何行目か（0 起点） */
+	const lineOf = (charPos: number): number => text.slice(0, charPos).split("\n").length - 1;
+
+	// **書き込み先の探索でもコードブロック行を外す。** 外さないと、マーカーの書き方を
+	// 解説する原稿（コード例の中に本物のマーカーを貼ったもの）で、訳文がコードブロックの
+	// 中へ書き込まれる。コードフェンスが閉じなくなり、以降の構造ごと壊れる。
+	// 終端の探索は元から外していたので、片側だけが守られていた
+	let startIdx = -1;
+	for (let idx = text.indexOf(markerText); idx !== -1; idx = text.indexOf(markerText, idx + 1)) {
+		if (!codeBlockLines.has(lineOf(idx))) {
+			startIdx = idx;
+			break;
+		}
+	}
 	if (startIdx === -1) {
 		return null;
 	}
 	const markerLen = markerText.length;
 	const after = text.slice(startIdx + markerLen);
 
-	const codeBlockLines = getCodeBlockLineSet(text);
 	const globalRegex = new RegExp(MdaitMarker.MARKER_REGEX.source, "g");
 	let chosenIndex: number | null = null;
 	for (const m of after.matchAll(globalRegex)) {
 		const absCharPos = startIdx + markerLen + (m.index ?? 0);
-		const lineNo = text.slice(0, absCharPos).split("\n").length - 1; // 0-indexed
-		if (codeBlockLines.has(lineNo)) {
+		if (codeBlockLines.has(lineOf(absCharPos))) {
 			continue; // コードブロック内はスキップ
 		}
 		chosenIndex = m.index ?? 0;

@@ -1345,6 +1345,16 @@ export async function sync_CoreProc(
 	ensureMdaitMarkerHash(source.units);
 	ensureMdaitMarkerHash(target.units);
 
+	// 死んだ原文ハッシュを、対応付けの前に本文から付け直す（下の関数の説明を参照）
+	const repairedHashes = repairDeadSourceHashes(source.units, target.units);
+	if (repairedHashes > 0) {
+		logger.warn("sync", "Repaired source marker hashes that pointed nowhere", {
+			sourceFile,
+			repaired: repairedHashes,
+			note: "The hash matched neither the section body nor any from: in the translation. Left as-is, the translation would have been treated as orphaned and deleted",
+		});
+	}
+
 	// ユニットの対応付け（位置ベース。独立ユニットは対応付け対象外）
 	let matchResult = sectionMatcher.match(source.units, target.units, independentTargets);
 
@@ -1597,6 +1607,49 @@ function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 			unit.marker = new MdaitMarker(hash);
 		}
 	}
+}
+
+/**
+ * 誰も指していない原文マーカーのハッシュを、本文から付け直す。
+ *
+ * 原文の hash は2つの顔を持つ。**本文から計算できる値**であることと、
+ * **訳文の `from:` が指す宛先**であることだ。本文を書き換えた直後は前者と食い違うが、
+ * そのときは必ず後者として生きている（訳文の `from` がその値を指している）。
+ *
+ * どちらでもない hash は、誰も指していない死んだ値である。手編集の打ち間違いや
+ * マージの取りこぼしでこうなる。放っておくと対応付け（`from === hash`）が外れ、
+ * 位置ベースの救済も `from` を持つ訳文には効かないため、**完成した訳文が
+ * 「原文が消えた」として削除される**（ごみ箱を通らず、原文は目の前にあるのに、である）。
+ * 実測でそうなった。対応付けの前に本文から付け直せば、`from` が本文のハッシュを
+ * 指している通常の壊れ方はその場で元どおりつながる。
+ *
+ * 生きている hash には触らない。触ると本文を編集しただけで対応付けが外れ、
+ * note の引き継ぎ（`recordMigration`）も空振りする。
+ *
+ * @returns 付け直した件数
+ */
+export function repairDeadSourceHashes(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): number {
+	const referenced = new Set<string>();
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (from) {
+			referenced.add(from);
+		}
+	}
+	let repaired = 0;
+	for (const unit of sourceUnits) {
+		const stored = unit.marker?.hash;
+		if (!stored || referenced.has(stored)) {
+			continue;
+		}
+		const actual = calculateHash(unit.content);
+		if (stored === actual) {
+			continue;
+		}
+		unit.marker = new MdaitMarker(actual, unit.marker?.from ?? null, unit.marker?.need ?? null);
+		repaired++;
+	}
+	return repaired;
 }
 
 /**
