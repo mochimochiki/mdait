@@ -201,7 +201,13 @@ async function checkAiReachability(config: Configuration): Promise<Diagnostic | 
 				if (!resolved) {
 					return { level: "error", id: "ai.openaiKeyMissing" };
 				}
-				return undefined;
+				// **一度は本当に叩く。** キーの文字列があるかどうかしか見ていなかったので、
+				// エンドポイント不達・キー誤り・モデル名の綴り違いのどれもが「問題なし」と
+				// 返っていた。翻訳が失敗したとき最初に押す道具がこれなので、
+				// ここで切り分けられないと原因探しが振り出しに戻る（vscode-lm と ollama は
+				// 元から実際に叩いている。openai だけが見ていなかった）
+				const endpoint = (config.ai.openai?.baseURL as string) || "https://api.openai.com/v1";
+				return await probeOpenAi(endpoint, resolved, config.ai.model as string | undefined);
 			}
 			case "ollama": {
 				const endpoint = config.ai.ollama?.endpoint ?? "http://localhost:11434";
@@ -246,6 +252,57 @@ async function pingOllama(endpoint: string): Promise<boolean> {
 	} catch {
 		// 接続不可
 		return false;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * OpenAI 互換のエンドポイントへ1回だけ問い合わせ、届くか・キーが通るか・モデルが在るかを見る。
+ *
+ * 使うのは `GET {baseURL}/models`。翻訳の本番経路（`/chat/completions`）を叩くと
+ * 課金が発生するうえ、診断のたびに原稿と無関係な生成が走る。
+ *
+ * **分からないことは言わない。** `/models` を実装していないゲートウェイもあるので、
+ * その 404 は「モデルが無い」ではなく「確かめられない」として黙る。
+ *
+ * @param endpoint baseURL（末尾の `/` は無視する）
+ * @param apiKey 解決済みの API キー
+ * @param model 設定されているモデル名
+ * @returns 問題があれば診断、無ければ undefined
+ */
+export async function probeOpenAi(endpoint: string, apiKey: string, model?: string): Promise<Diagnostic | undefined> {
+	const base = endpoint.replace(/\/+$/, "");
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 3000);
+	try {
+		const res = await fetch(`${base}/models`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+			signal: controller.signal,
+		});
+		if (res.status === 401 || res.status === 403) {
+			return { level: "error", id: "ai.openaiKeyRejected", params: { status: String(res.status) } };
+		}
+		if (res.status === 404) {
+			return undefined; // 一覧を出せないゲートウェイ。確かめられないので黙る
+		}
+		if (!res.ok) {
+			return { level: "warn", id: "ai.openaiHttpError", params: { status: String(res.status), endpoint: base } };
+		}
+		if (!model) {
+			return undefined;
+		}
+		const body = (await res.json()) as { data?: Array<{ id?: unknown }> };
+		const ids = Array.isArray(body?.data)
+			? body.data.map((entry) => entry?.id).filter((id): id is string => typeof id === "string")
+			: [];
+		if (ids.length > 0 && !ids.includes(model)) {
+			return { level: "warn", id: "ai.openaiModelMissing", params: { model } };
+		}
+		return undefined;
+	} catch {
+		// 名前解決できない・繋がらない・時間切れ
+		return { level: "error", id: "ai.openaiUnreachable", params: { endpoint: base } };
 	} finally {
 		clearTimeout(timer);
 	}
@@ -304,6 +361,27 @@ function describe(d: Diagnostic): string {
 		case "ai.openaiKeyMissing":
 			return vscode.l10n.t(
 				"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
+			);
+		case "ai.openaiUnreachable":
+			return vscode.l10n.t(
+				"Could not reach the OpenAI-compatible endpoint at {0}. Check ai.openai.baseURL and your network.",
+				p.endpoint ?? "",
+			);
+		case "ai.openaiKeyRejected":
+			return vscode.l10n.t(
+				"The OpenAI API key was rejected ({0}). Check ai.openai.apiKey or the OPENAI_API_KEY environment variable.",
+				p.status ?? "",
+			);
+		case "ai.openaiModelMissing":
+			return vscode.l10n.t(
+				"The model \"{0}\" is not in the list the endpoint returned. Check ai.model for a typo.",
+				p.model ?? "",
+			);
+		case "ai.openaiHttpError":
+			return vscode.l10n.t(
+				"The endpoint at {0} answered with HTTP {1}. Translation will likely fail.",
+				p.endpoint ?? "",
+				p.status ?? "",
 			);
 		case "ai.ollamaUnreachable":
 			return vscode.l10n.t("Could not reach the Ollama server at {0}.", p.endpoint ?? "");
