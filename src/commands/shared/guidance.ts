@@ -71,7 +71,11 @@ function isAiUnavailableMessage(message: string): boolean {
 		m.includes("language model is not available") ||
 		m.includes("github copilot") ||
 		m.includes("api usage limit") ||
-		m.includes("permission is required")
+		m.includes("permission is required") ||
+		// 設定が原因の詰まり方。初回にいちばん多い（キー未設定・キー誤り・モデル名の綴り違い）。
+		// 診断と設定への導線が付かないと、正しい説明を持っている doctor まで辿り着けない
+		m.includes("api key is not set") ||
+		/openai api error \((?:400|401|403|404)\)/.test(m)
 	);
 }
 
@@ -98,17 +102,19 @@ export async function showTranslationError(error: unknown): Promise<void> {
 	}
 	const message = error instanceof Error ? error.message : String(error);
 	if (isAiUnavailableMessage(message)) {
+		// ボタンは2つまで（ux.md §3.3）。ドキュメントは診断レポートの末尾から辿れるので、
+		// ここでは主導線（診断）と、その場で直せる場所（設定）だけを出す
 		const diagnose = vscode.l10n.t("Diagnose");
-		const docs = vscode.l10n.t("Open docs");
+		const openConfig = vscode.l10n.t("Open mdait.json");
 		const choice = await vscode.window.showErrorMessage(
 			vscode.l10n.t("Error during translation: {0}", message),
 			diagnose,
-			docs,
+			openConfig,
 		);
 		if (choice === diagnose) {
 			await vscode.commands.executeCommand("mdait.setup.diagnose");
-		} else if (choice === docs) {
-			await openDocs();
+		} else if (choice === openConfig) {
+			await openConfigFile();
 		}
 		return;
 	}

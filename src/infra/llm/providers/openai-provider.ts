@@ -1,4 +1,4 @@
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import { calculateHash } from "../../../core/hash/hash-calculator";
 import type { AIConfig } from "../../config/configuration";
 import { OperationCancelledError, rethrowIfCancelled } from "../../errors/operation-cancelled";
@@ -47,6 +47,34 @@ interface OpenAIRequestResult {
 }
 
 /**
+ * エラー応答の本文から、人が読む一文を取り出す。
+ *
+ * OpenAI 互換のサーバーは `{"error":{"message":"..."}}` を返す。本文をそのまま繋ぐと
+ * トーストに生の JSON が出て、読むべき一文（「そのモデルは無い」「キーが違う」）が
+ * 入れ子の中に埋まる。1行しか見えない場所なので、`message` だけを取り出す。
+ * 形が違えば本文をそのまま返す（勝手に捨てない）。
+ *
+ * @param body 応答本文
+ * @param status HTTP ステータス
+ * @param statusText HTTP ステータスの語
+ */
+export function describeApiError(body: string, status: number, statusText: string): string {
+	if (body) {
+		try {
+			const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+			const message = parsed?.error?.message;
+			if (typeof message === "string" && message.trim() !== "") {
+				return `OpenAI API error (${status}): ${message}`;
+			}
+		} catch {
+			// JSON でなければ本文をそのまま使う
+		}
+		return `OpenAI API error: ${body}`;
+	}
+	return `OpenAI API error: HTTP error ${status} ${statusText}`;
+}
+
+/**
  * OpenAI Chat Completions APIを使用したAIプロバイダー実装。
  * fetchを使用して直接HTTPリクエストを送信します。
  */
@@ -69,7 +97,13 @@ export class OpenAIProvider implements AIService {
 		this.timeoutMs = timeoutSec * 1000;
 
 		if (!this.apiKey) {
-			throw new Error("OpenAI API key is not configured. Set openai.apiKey in OPENAI_API_KEY environment variable.");
+			// 診断（doctor）が出すのと同じ文にそろえる。初回にいちばん多い詰まり方なので、
+			// 押した場所で言うことが違うと「どちらが本当か」を確かめる手数が増える
+			throw new Error(
+				vscode.l10n.t(
+					"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
+				),
+			);
 		}
 	}
 
@@ -155,7 +189,12 @@ export class OpenAIProvider implements AIService {
 			if (isUnusableAIResponse(error)) {
 				throw error;
 			}
-			throw new Error(`OpenAI provider error: ${errorMessage}`);
+			// 既に "OpenAI ..." で始まる文をもう一度包まない。
+			// 包むと「provider error: API error: {…}」と接頭辞が二重になり、
+			// トーストの1行に収まる範囲から肝心の理由が押し出される
+			throw new Error(
+				errorMessage.startsWith("OpenAI ") ? errorMessage : `OpenAI provider error: ${errorMessage}`,
+			);
 		} finally {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
@@ -240,15 +279,15 @@ export class OpenAIProvider implements AIService {
 
 			if (!response.ok) {
 				const text = await response.text().catch(() => "");
-				const message = text || `HTTP error ${response.status} ${response.statusText}`;
+				const message = describeApiError(text, response.status, response.statusText);
 				if (isRetryableStatus(response.status)) {
 					throw new TransientHttpError(
-						`OpenAI API error: ${message}`,
+						message,
 						response.status,
 						parseRetryAfterMs(response.headers.get("retry-after")),
 					);
 				}
-				throw new Error(`OpenAI API error: ${message}`);
+				throw new Error(message);
 			}
 
 			// 非ストリーミング応答の処理
