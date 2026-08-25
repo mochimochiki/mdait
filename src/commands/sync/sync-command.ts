@@ -1703,6 +1703,11 @@ export function repairDeadSourceHashes(sourceUnits: MdaitUnit[], targetUnits: Md
  *
  * 繋ぎ直すのは **`from` の指す先がどこにも無い**訳文だけ。生きている `from` には触らない。
  *
+ * **既に誰かが指している原文は横取りしない。** 本文が一字一句同じ章は hash も同じになるので、
+ * 本当に消えた章の訳文が、生き残っている章へ繋ぎ直されうる。そうなると対応付けが入れ替わり、
+ * 生きている章の訳（手直し入り）のほうが孤立して消える — 直そうとした事故と同じものを、
+ * 別の場所で作ることになる。
+ *
  * @returns 繋ぎ直した件数
  */
 export function relinkRevertedTargets(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): number {
@@ -1710,6 +1715,14 @@ export function relinkRevertedTargets(sourceUnits: MdaitUnit[], targetUnits: Mda
 	for (const unit of sourceUnits) {
 		if (unit.marker?.hash) {
 			sourceHashes.add(unit.marker.hash);
+		}
+	}
+	// 既に生きた `from` で押さえられている原文。ここへは繋ぎ直さない
+	const claimed = new Set<string>();
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (from && sourceHashes.has(from)) {
+			claimed.add(from);
 		}
 	}
 	let relinked = 0;
@@ -1722,8 +1735,12 @@ export function relinkRevertedTargets(sourceUnits: MdaitUnit[], targetUnits: Mda
 		if (!snapshot || !sourceHashes.has(snapshot)) {
 			continue; // 戻り先が分からない。決めつけない
 		}
+		if (claimed.has(snapshot)) {
+			continue; // その原文は既に別の訳文のもの
+		}
 		if (target.marker) {
 			target.marker.from = snapshot;
+			claimed.add(snapshot);
 			relinked++;
 		}
 	}

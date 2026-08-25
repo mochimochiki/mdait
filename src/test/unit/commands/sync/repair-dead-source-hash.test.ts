@@ -121,4 +121,27 @@ suite("原文がファイルごと前の版へ戻ったときに繋ぎ直す", (
 
 		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 0);
 	});
+
+	test("その原文を既に指している訳文が居るなら、横取りしない", () => {
+		// 本文が一字一句同じ章は hash も同じになる。**本当に消えた章**の訳文が、
+		// 生き残っている章の hash へ繋ぎ直されると、対応付けが入れ替わり、
+		// 生きている章の訳（手直し入り）のほうが孤立して消える
+		const survivor = sourceUnit("same0000");
+		const deletedTarget = target("edited99", "revise@same0000"); // 消えた章の訳
+		const livingTarget = target("same0000", null); // 生きている章の訳
+
+		assert.strictEqual(relinkRevertedTargets([survivor], [deletedTarget, livingTarget]), 0);
+		assert.strictEqual(deletedTarget.marker?.from, "edited99", "消えた章の訳は孤立のまま扱われること");
+		assert.strictEqual(livingTarget.marker?.from, "same0000", "生きている章の訳は動かないこと");
+	});
+
+	test("同じ戻り先を持つ訳文が2つあれば、繋ぎ直すのは1つだけ", () => {
+		const survivor = sourceUnit("same0000");
+		const first = target("gone1111", "revise@same0000");
+		const second = target("gone2222", "revise@same0000");
+
+		assert.strictEqual(relinkRevertedTargets([survivor], [first, second]), 1);
+		assert.strictEqual(first.marker?.from, "same0000");
+		assert.strictEqual(second.marker?.from, "gone2222", "2つ目は横取りしない");
+	});
 });
