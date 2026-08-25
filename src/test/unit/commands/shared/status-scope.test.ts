@@ -53,8 +53,10 @@ suite("getSelectedScopeDirs（表示範囲の算出）", () => {
 	});
 
 	test("選択外のペアのディレクトリは含まれないこと", () => {
-		// 先頭ペア（ja）だけが選択された状態に補正される
+		// 選択は明示的に絞る。設定に書いたターゲットは既定で全部が対象なので
+		// （ADR-260825-01）、reconcileWith では「先頭だけ」の状態は作れない
 		SelectionState.getInstance().reconcileWith([jaPair, koPair]);
+		SelectionState.getInstance().updateSelection(["ja"]);
 
 		const dirs = getSelectedScopeDirs(makeConfig([jaPair, koPair]));
 

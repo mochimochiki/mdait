@@ -9,7 +9,7 @@
 // 逆に、生きている hash に触ってはいけない。本文を編集しただけで対応付けが外れる。
 
 import * as assert from "node:assert";
-import { repairDeadSourceHashes } from "../../../../commands/sync/sync-command";
+import { relinkRevertedTargets, repairDeadSourceHashes } from "../../../../commands/sync/sync-command";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
@@ -72,5 +72,53 @@ suite("誰も指していない原文ハッシュを本文から付け直す", (
 	test("hash を持たないユニットは対象外（付与は ensureMdaitMarkerHash の担当）", () => {
 		const source = new MdaitUnit(new MdaitMarker(""), "章", 2, BODY, 0, 0);
 		assert.strictEqual(repairDeadSourceHashes([source], []), 0);
+	});
+});
+
+suite("原文がファイルごと前の版へ戻ったときに繋ぎ直す", () => {
+	/** 訳文ユニット（from と need を指定できる） */
+	function target(from: string, need: string | null): MdaitUnit {
+		return new MdaitUnit(new MdaitMarker("tgt", from, need), "Section", 2, "## Section\n\ntranslated\n", 0, 0);
+	}
+
+	test("from の相手が居らず、revise@ の指す版が原文に在るなら、そこへ繋ぎ直す", () => {
+		// `git checkout --` やブランチの切り替えで原文をファイルごと戻すと、原文のマーカーも
+		// 前の版の hash に戻る。訳文の from は編集後の hash を指したままなので対応付けが外れ、
+		// 訳し終えた章が「原文が消えた」として削除されていた（実測。ごみ箱も通らない）
+		const source = sourceUnit("old11111");
+		const tgt = target("edited99", "revise@old11111");
+
+		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 1);
+		assert.strictEqual(tgt.marker?.from, "old11111", "元の相手へ戻ること");
+	});
+
+	test("from の相手が居るなら触らない（ふつうの改訂待ち）", () => {
+		const source = sourceUnit("edited99");
+		const tgt = target("edited99", "revise@old11111");
+
+		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 0);
+		assert.strictEqual(tgt.marker?.from, "edited99");
+	});
+
+	test("戻り先が原文に無ければ、決めつけずにそのままにする（本当に章が消えた場合）", () => {
+		const source = sourceUnit("other000");
+		const tgt = target("edited99", "revise@old11111");
+
+		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 0);
+		assert.strictEqual(tgt.marker?.from, "edited99", "孤立の判断は従来どおり行われる");
+	});
+
+	test("revise@ を持たない訳文は対象外（戻り先を知らない）", () => {
+		const source = sourceUnit("old11111");
+		const tgt = target("edited99", null);
+
+		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 0);
+	});
+
+	test("from を持たない訳文（独立ユニット）は対象外", () => {
+		const source = sourceUnit("old11111");
+		const tgt = target("", "revise@old11111");
+
+		assert.strictEqual(relinkRevertedTargets([source], [tgt]), 0);
 	});
 });

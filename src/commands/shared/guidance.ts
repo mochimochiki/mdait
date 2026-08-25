@@ -5,6 +5,7 @@
  */
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
@@ -101,7 +102,15 @@ function isAiUnavailableMessage(message: string): boolean {
 		// 設定が原因の詰まり方。初回にいちばん多い（キー未設定・キー誤り・モデル名の綴り違い）。
 		// 診断と設定への導線が付かないと、正しい説明を持っている doctor まで辿り着けない
 		m.includes("api key is not set") ||
-		/openai api error \((?:400|401|403|404)\)/.test(m)
+		/openai api error \((?:400|401|403|404)\)/.test(m) ||
+		// そもそも届かない場合（baseURL の打ち間違い・サーバーが落ちている・時間切れ）。
+		// 診断は同じ状況を正しく名指しできるので、そこへ行ける導線を必ず出す
+		m.includes("fetch failed") ||
+		m.includes("econnrefused") ||
+		m.includes("enotfound") ||
+		m.includes("network") ||
+		m.includes("timed out") ||
+		m.includes("timeout")
 	);
 }
 
@@ -207,6 +216,28 @@ export interface TransOutcomeActions {
 	label: string;
 	/** パッチを使わず全文で訳し直す */
 	retryFullTranslation?: () => Promise<unknown>;
+	/**
+	 * 渡されたファイルの絶対パス。
+	 * 「対が見つからない」ときに、それが原文側かどうかを見分けるためだけに使う。
+	 */
+	sourcePath?: string;
+}
+
+/**
+ * そのパスが設定上の原文ディレクトリ配下なら、対になる訳文ディレクトリを返す。
+ * 原文側でなければ undefined。
+ */
+function findTargetDirForSource(filePath: string): string | undefined {
+	const config = Configuration.getInstance();
+	const baseDir = config.getConfigBaseDir();
+	const abs = path.resolve(filePath);
+	for (const pair of config.transPairs) {
+		const sourceAbs = path.resolve(baseDir, pair.sourceDir);
+		if (abs === sourceAbs || abs.startsWith(`${sourceAbs}${path.sep}`)) {
+			return pair.targetDir;
+		}
+	}
+	return undefined;
 }
 
 /**
@@ -255,6 +286,20 @@ async function offerFullRetry(body: string, actions: TransOutcomeActions): Promi
  */
 export async function reportTransOutcome(result: TransOutcomeSummary, actions: TransOutcomeActions): Promise<void> {
 	if (result.outcome === "no-trans-pair") {
+		// 原文側のファイルを渡すのは、いちばん自然な間違いである。
+		// 「対がありません」とだけ言われても、対は在って渡す側が違うだけなので直しようがない。
+		// フォルダ版と同じく、対になる訳文の場所を名指しする
+		const targetDir = actions.sourcePath ? findTargetDirForSource(actions.sourcePath) : undefined;
+		if (targetDir) {
+			vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"{0} is on the source side. Translate the matching file under '{1}' instead.",
+					actions.label,
+					targetDir,
+				),
+			);
+			return;
+		}
 		await showNeedSyncError(vscode.l10n.t("No translation pair found for: {0}", actions.label));
 		return;
 	}

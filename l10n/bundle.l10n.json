@@ -475,6 +475,7 @@
   "✨Re-translate in full": "✨Re-translate in full",
   "Re-translate": "Re-translate",
   "Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.": "Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+  "{0} is on the source side. Translate the matching file under '{1}' instead.": "{0} is on the source side. Translate the matching file under '{1}' instead.",
   "Translation cancelled for {0}. {1} unit(s) translated before stopping were kept.": "Translation cancelled for {0}. {1} unit(s) translated before stopping were kept.",
   "Translated {0} unit(s) in {1}, but {2} of them could not be written back because their markers were not found (the file may have changed). Run Sync and translate again.": "Translated {0} unit(s) in {1}, but {2} of them could not be written back because their markers were not found (the file may have changed). Run Sync and translate again.",
   "Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}": "Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}",

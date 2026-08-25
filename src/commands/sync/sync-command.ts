@@ -1381,6 +1381,16 @@ export async function sync_CoreProc(
 		});
 	}
 
+	// 原文がファイルごと前の版へ戻ったときの繋ぎ直し（下の関数の説明を参照）
+	const relinked = relinkRevertedTargets(source.units, target.units);
+	if (relinked > 0) {
+		logger.info("sync", "Re-linked translations to the source version they were translated from", {
+			sourceFile,
+			relinked,
+			note: "The source went back to the version recorded in need:revise@. Left as-is, the translation would have been treated as orphaned and deleted",
+		});
+	}
+
 	// ユニットの対応付け（位置ベース。独立ユニットは対応付け対象外）
 	let matchResult = sectionMatcher.match(source.units, target.units, independentTargets);
 
@@ -1677,6 +1687,47 @@ export function repairDeadSourceHashes(sourceUnits: MdaitUnit[], targetUnits: Md
 		repaired++;
 	}
 	return repaired;
+}
+
+/**
+ * 原文が前の版へ戻ったときに、訳文を元の相手へ繋ぎ直す。
+ *
+ * 原文を**ファイルごと**戻すと（`git checkout --`・ブランチの切り替え・SCM の「変更を破棄」）、
+ * 原文のマーカーも前の版の hash に戻る。訳文の `from` は編集後の hash を指したままなので、
+ * 対応付け（`from === hash`）が外れる。位置ベースの救済は `from` を持つ訳文には効かないため、
+ * **訳し終えた章が「原文が消えた」として削除される**（実測。ごみ箱を通らず、原文は目の前にある）。
+ *
+ * だが戻り先は訳文自身が知っている。`need:revise@X` は「この訳文は原文の X 版に対応する」という
+ * 意味で、その X がいま原文に在るなら、それが元の相手である。`from` をそこへ繋ぎ直せば、
+ * 対応付けが戻り、改訂の必要も無くなったので `syncMarkerPair` が need を落とす。
+ *
+ * 繋ぎ直すのは **`from` の指す先がどこにも無い**訳文だけ。生きている `from` には触らない。
+ *
+ * @returns 繋ぎ直した件数
+ */
+export function relinkRevertedTargets(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): number {
+	const sourceHashes = new Set<string>();
+	for (const unit of sourceUnits) {
+		if (unit.marker?.hash) {
+			sourceHashes.add(unit.marker.hash);
+		}
+	}
+	let relinked = 0;
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (!from || sourceHashes.has(from)) {
+			continue; // 相手が居る（ふつうの状態）
+		}
+		const snapshot = target.marker?.getOldHashFromNeed();
+		if (!snapshot || !sourceHashes.has(snapshot)) {
+			continue; // 戻り先が分からない。決めつけない
+		}
+		if (target.marker) {
+			target.marker.from = snapshot;
+			relinked++;
+		}
+	}
+	return relinked;
 }
 
 /**

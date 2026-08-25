@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { StatusItemType } from "../../core/status/status-item";
+import { StatusItemType, isTranslateNeed } from "../../core/status/status-item";
 import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
@@ -121,23 +121,21 @@ export class StatusTreeTranslationHandler {
 				config.trans.extensions,
 			);
 			const pattern = new vscode.RelativePattern(directoryPath, globPattern);
-			const files = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
+			const found = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
-			if (files.length === 0) {
+			if (found.length === 0) {
 				vscode.window.showInformationMessage(
-					vscode.l10n.t(
-						"No translatable files found in directory '{0}'",
-						directoryPath,
-					),
+					vscode.l10n.t("No translatable files found in directory '{0}'", workspaceLabel(directoryPath)),
 				);
 				return { totalFiles: 0, successful: 0, failed: 0, skipped: 0 };
 			}
 
-			// **確認を出す前に、そこが訳文側かどうかを見る。** 見ないと、原文側のフォルダを
-			// 渡した人に「N ファイルを翻訳しますか？」と訊いてから全滅させることになる（実測）
+			// **確認を出す前に、訳文側のファイルだけへ絞る。** 絞らないと、原文と訳文の
+			// 両方を含む親フォルダを渡したときに、原文側が件数に混ざったまま確認に出て、
+			// そのぶんが全部「対がありません」で失敗として数えられる（実測）
 			const explorer = new FileExplorer();
-			const targetSide = files.some((file) => explorer.getTransPairFromTarget(file.fsPath, config) !== null);
-			if (!targetSide) {
+			const files = found.filter((file) => explorer.getTransPairFromTarget(file.fsPath, config) !== null);
+			if (files.length === 0) {
 				const pair = config.transPairs.find(
 					(p) => path.resolve(config.getConfigBaseDir(), p.sourceDir) === path.resolve(directoryPath),
 				);
@@ -166,12 +164,26 @@ export class StatusTreeTranslationHandler {
 				return { totalFiles: files.length, successful: 0, failed: 0, skipped: files.length };
 			}
 
+			// ファイル数も「手を入れる分」を数える。フォルダ内の全ファイル数を並べると、
+			// 40 ファイル中 10 ファイルだけ古いときに「40 file(s)」と出て過大に見える
+			const tree = StatusManager.getInstance().getStatusItemTree();
+			const pendingFiles = files.filter((file) => {
+				const item = tree.getFile(file.fsPath);
+				if (!item) {
+					return false;
+				}
+				// 非MD（プレーン）はファイル自体に need が載る。MD はユニット側に載る
+				return (
+					isTranslateNeed(item.needFlag) ||
+					tree.getUnitsInFile(file.fsPath).some((unit) => isTranslateNeed(unit.needFlag))
+				);
+			}).length;
 			const confirmation = await vscode.window.showInformationMessage(
 				vscode.l10n.t(
 					"Translate {0}? ({1} unit(s) in {2} file(s))",
 					workspaceLabel(directoryPath),
 					pendingUnits,
-					files.length,
+					pendingFiles,
 				),
 				{ modal: true },
 				vscode.l10n.t("Yes"),

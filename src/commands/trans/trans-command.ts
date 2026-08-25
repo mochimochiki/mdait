@@ -191,10 +191,12 @@ export async function reportTransOutcomeWithRetry(
 	result: TransCommandResult,
 	label: string,
 	retryFullTranslation: () => Promise<TransCommandResult | undefined>,
+	sourcePath?: string,
 ): Promise<TransCommandResult> {
 	let finalResult = result;
 	await reportTransOutcome(result, {
 		label,
+		sourcePath,
 		retryFullTranslation: async () => {
 			// やり直しが中断・失敗して結果を返さなかったときは、元の結果を保つ
 			finalResult = (await retryFullTranslation()) ?? finalResult;
@@ -244,8 +246,11 @@ export async function transCommand(
 	}
 
 	// 通知は必ず排他区間の外で出す（区間の中で人を待つとロックが解放されない）
-	return await reportTransOutcomeWithRetry(result, path.basename(targetFilePath), () =>
-		transCommand(uri, { forceFullTranslation: true }),
+	return await reportTransOutcomeWithRetry(
+		result,
+		path.basename(targetFilePath),
+		() => transCommand(uri, { forceFullTranslation: true }),
+		targetFilePath,
 	);
 }
 
