@@ -128,7 +128,7 @@ function preflight() {
 		missing.push("依存が入っていません（node_modules がありません） → `npm ci`");
 	}
 	if (!fs.existsSync(path.join(REPO, "out", "commands"))) {
-		missing.push("まだコンパイルされていません（out/ がありません） → `npm run compile`");
+		missing.push("まだコンパイルされていません（out/commands がありません） → `npm run compile`");
 	}
 	if (missing.length > 0) {
 		throw new UsageError(`実験場を起こす前に、次を済ませてください:\n  - ${missing.join("\n  - ")}`);
@@ -238,7 +238,6 @@ function stopShim(session) {
 // ===========================================================================
 
 async function verbUp(opts) {
-	preflight();
 	const existing = liveSession();
 	if (existing && !existing.hostDead) {
 		say("すでに動いています。作り直すときは先に `lab down` を実行してください。");
@@ -249,6 +248,8 @@ async function verbUp(opts) {
 		say("前のホストはもういないので、記録を捨ててやり直します。");
 		clearSession();
 	}
+	// 新しく起こすときだけ見る。動いているものの様子を聞かれただけなら邪魔をしない
+	preflight();
 
 	const host = oneOf(opts.host, HOSTS, "--host") ?? "headless";
 	const aiMode = oneOf(opts.ai, AI_MODES, "--ai") ?? "echo";
