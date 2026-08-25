@@ -96,13 +96,20 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 	const isTargetChanged =
 		targetHash !== null && existingMarker.hash !== targetHash;
 
+	// 原文が revise@ のスナップショットと同じところへ戻ったら、改訂すべき差分はもう無い
+	// （syncMarkerPair と同じ理由。落とさないと need が永久に消えない）
+	const revertedToTranslatedSource = existingMarker.getOldHashFromNeed() === sourceHash;
+	if (revertedToTranslatedSource) {
+		existingMarker.removeNeedTag();
+	}
+
 	// ソースが変更された場合: revise または translate（両方変更時も同様に処理）
 	if (isSourceChanged) {
 		const oldSourceHash = existingMarker.from;
 		existingMarker.from = sourceHash;
 
 		// 既存のrevise@{hash}がある場合、そのhashを保持する
-		const existingReviseHash = existingMarker.getOldHashFromNeed();
+		const existingReviseHash = revertedToTranslatedSource ? null : existingMarker.getOldHashFromNeed();
 		if (existingReviseHash) {
 			// すでにrevise待ち状態なので、スナップショットハッシュを保持
 			existingMarker.setReviseNeed(existingReviseHash);
@@ -135,6 +142,15 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 			marker: existingMarker,
 			changed: true,
 			changeType: "target-changed",
+		};
+	}
+
+	// need を落としただけの回。書き戻さないと次の sync でまた同じ判断をする
+	if (revertedToTranslatedSource) {
+		return {
+			marker: existingMarker,
+			changed: true,
+			changeType: "source-changed",
 		};
 	}
 
@@ -224,10 +240,19 @@ export function syncMarkerPair(
 
 	// ソースの変更をターゲットに反映（両方変更時も同様に処理）
 	const oldSourceHash = targetMarker.from;
+	// 原文が revise@ のスナップショットと同じところへ戻ったら、改訂すべき差分はもう無い。
+	// 打ち間違いの取り消し・ブランチの切り替え・`git checkout --` で日常的に起きる。
+	// 落とさないと「まだ N 件残っている」に永久に居座り（sync を何度回しても消えない）、
+	// しかも trans がその章を patch ではなく全文で訳し直して手直しを消す
+	const revertedToTranslatedSource =
+		!options?.suppressNeed && targetMarker.getOldHashFromNeed() === sourceMarker.hash;
+	if (revertedToTranslatedSource) {
+		targetMarker.removeNeedTag();
+	}
 	if (oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
 
-		if (!options?.suppressNeed) {
+		if (!options?.suppressNeed && !revertedToTranslatedSource) {
 			// 既存のrevise@{hash}がある場合、そのhashを保持する
 			const existingReviseHash = targetMarker.getOldHashFromNeed();
 			if (existingReviseHash) {
@@ -252,6 +277,9 @@ export function syncMarkerPair(
 		sourceMarker,
 		targetMarker,
 		changed:
-			isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash,
+			isSourceChanged ||
+			isTargetChanged ||
+			oldSourceHash !== sourceMarker.hash ||
+			revertedToTranslatedSource,
 	};
 }

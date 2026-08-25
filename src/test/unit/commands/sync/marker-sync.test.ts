@@ -96,6 +96,40 @@ suite("marker-sync", () => {
 			assert.strictEqual(result.changeType, "source-changed");
 		});
 
+		test("原文を元に戻すと need:revise が消えること（打ち消しの取り消し・ブランチ切り替え）", () => {
+			// 訳し終わった原文 src123 → 編集して src789（need:revise@src123）→ 元に戻して src123。
+			// スナップショットと原文が同じところへ戻ったのだから、改訂すべき差分はもう無い。
+			// 落とさないと sync を何度回しても消えず、翻訳待ちの数え上げに永久に居座り、
+			// trans がその章を全文で訳し直して手直しを消す（実測）
+			const existingSource = new MdaitMarker("src789");
+			const existingTarget = new MdaitMarker("tgt456", "src789", "revise@src123");
+
+			const result = syncMarkerPair("src123", "tgt456", existingSource, existingTarget);
+
+			assert.strictEqual(result.targetMarker.from, "src123");
+			assert.strictEqual(result.targetMarker.need, null, "need が落ちること");
+			assert.strictEqual(result.changed, true, "書き戻さないと次の sync でまた同じ判断をする");
+		});
+
+		test("from が既に揃っているのに revise@ が残っている行き止まりも、その場で解ける", () => {
+			// 以前の版が作った `from:X need:revise@X`。from が動かないので、
+			// 変更検出の中だけで直そうとすると永久に手が届かない
+			const existingTarget = new MdaitMarker("tgt456", "src123", "revise@src123");
+
+			const result = syncMarkerPair("src123", "tgt456", new MdaitMarker("src123"), existingTarget);
+
+			assert.strictEqual(result.targetMarker.need, null);
+			assert.strictEqual(result.changed, true);
+		});
+
+		test("スナップショットと違う原文へ変わったときは、これまでどおり revise を持ち回す", () => {
+			const existingTarget = new MdaitMarker("tgt456", "src789", "revise@src123");
+
+			const result = syncMarkerPair("srcABC", "tgt456", new MdaitMarker("src789"), existingTarget);
+
+			assert.strictEqual(result.targetMarker.need, "revise@src123", "最初の版を指したままにすること");
+		});
+
 		test("未翻訳状態（need:translate）でソースが変更された場合、need:translateが維持されること", () => {
 			// 初回sync済みだがまだ翻訳していない状態（from値あり、need:translate）
 			const existing = new MdaitMarker("tgt456", "src123");
