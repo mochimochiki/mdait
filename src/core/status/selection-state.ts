@@ -39,10 +39,11 @@ export class SelectionState {
 		if (validRestored.length > 0) {
 			this.activeKeys = new Set(validRestored);
 		} else {
-			// 初回: 先頭のターゲットを1つ選択
-			const first = keysInConfig[0];
-			if (first) this.activeKeys = new Set([first]);
-			else this.activeKeys.clear();
+			// 初回は**設定したターゲットを全部**選ぶ。
+			// 先頭1つだけにしていたので、2言語目を書いた人は sync しても
+			// その言語のフォルダが作られず、通知にも「素通りした」と出なかった。
+			// 設定に書いたことは本人の宣言なので、狭めるのは明示の操作だけにする
+			this.activeKeys = new Set(keysInConfig);
 		}
 
 		this.persist();

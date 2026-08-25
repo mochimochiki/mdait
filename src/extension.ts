@@ -579,8 +579,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			key: string;
 		}>();
 		pick.canSelectMany = true;
-		pick.title = vscode.l10n.t("Select translation targets to show");
-		pick.placeholder = vscode.l10n.t("Check the targets to show in the Status view");
+		// 「表示」ではない。ここで外した言語は sync も翻訳もされなくなる
+		pick.title = vscode.l10n.t("Select the target languages to work on");
+		pick.placeholder = vscode.l10n.t("Unchecked targets are excluded from Sync and translation");
 		pick.items = items;
 		// 既存選択を反映
 		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());
