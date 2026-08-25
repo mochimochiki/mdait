@@ -83,7 +83,9 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --only R1,R8   経路を絞る    --nasty N1,N4  意地悪を絞る
             **1周は20〜30分かかる。CI には入れていない**
   prompt   指示文の比べ読み（未実装。組み立て方だけ出ます）
-  ux       ブラウザ版 VS Code で mdait のビューを開いて撮る（未実装。組み立て方だけ出ます）
+  ux       実 UI にしか無いもの（ツリーのアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を
+           ブラウザ版 VS Code で撮り、文字にも落とす。**設営に数分・CI 対象外**
+            --only U1,U4   段を絞る    --keep 終わっても止めない
 
   どの段取りも --dry を付けると、実行せずに「実際には何をしているのか」だけを出します。
 
@@ -617,8 +619,16 @@ const PRESETS = {
 		],
 	},
 	ux: {
-		note: "ブラウザ版 VS Code を起こして mdait のビューを開き、初めの姿を撮る",
-		steps: ["lab up --host code-server --ai echo --ws tmp --reset --name ux", "lab shot 初期状態", "lab report"],
+		run: presetUx,
+		note: "実 UI でしか見えないもの（ツリーのアイコン・CodeLens・確認ダイアログ）を撮って文字に落とす",
+		steps: [
+			"lab up --host code-server --ai echo --delay 4000 --ws tmp --reset --name ux",
+			"lab run mdait.sync → ツリーの行とアイコンを読む（U1）",
+			"lab run mdait.translate.directory を出しっぱなしにして、立ちはだかる確認を撮る（U2）",
+			"走っている最中のツリーを繰り返し読み、回転アイコンを捉える（U3）",
+			"訳文と原文を開いて CodeLens のボタンを読む（U4）／通知の文言を拾う（U5）",
+			"lab report ／ lab down",
+		],
 	},
 };
 
@@ -656,6 +666,24 @@ async function presetResilience(opts) {
 		only: opts.only,
 		nasty: opts.nasty,
 	});
+	if (!opts.keep) await verbDown();
+	return failed > 0 ? 1 : 0;
+}
+
+/**
+ * 実 UI でしか見えないものを撮る。**ホストは code-server でなければ意味がない**ので、
+ * 別のホストが立っているときは黙って使わず、いったん落としてから起こし直す。
+ * echo をわざと遅らせるのは、翻訳中のツリーを撮るため（速いと1枚も捉えられない）。
+ */
+async function presetUx(opts) {
+	const { UP_ARGS, run } = await import("./scenarios/ux.mjs");
+	const session = liveSession();
+	if (session && !session.hostDead && session.host !== "code-server") await verbDown();
+	if (!liveSession() || readSession()?.host !== "code-server") {
+		// UP_ARGS は動詞 up の引数列。ここで組み直さず、シナリオ側の定義をそのまま使う
+		await verbUp(parseArgs(UP_ARGS.slice(1), { booleans: BOOLEANS }));
+	}
+	const { failed } = await run({ session: readSession(), verbose: opts.verbose, only: opts.only });
 	if (!opts.keep) await verbDown();
 	return failed > 0 ? 1 : 0;
 }

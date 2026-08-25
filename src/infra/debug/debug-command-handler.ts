@@ -65,11 +65,37 @@ const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.aiReview.directory",
 ]);
 
-function buildArgTransformer(command: string): ArgTransformer | undefined {
+/**
+ * 受け取ったパスを絶対パスに直す。
+ *
+ * 相対パスのまま渡すと**ホストによって結果が変わる**。実 Extension Host では
+ * `vscode.RelativePattern` も `Uri.file` も相対パスを解決できず、対象0件のまま
+ * 静かに終わる（実測: `mdait.translate.directory content/en/child/child2` が
+ * `totalFiles: 0` で done。呼び手からは「やることが無かった」と見分けが付かない）。
+ * lab の約束は「どのホストでも同じ書き方が通る」ことなので、ここで揃える。
+ *
+ * @param workspaceRoot ワークスペースのルート
+ * @param value 絶対パスか、ルートから見た相対パス
+ */
+function toAbsolutePath(workspaceRoot: string, value: string): string {
+	return path.isAbsolute(value) ? value : path.join(workspaceRoot, value);
+}
+
+/**
+ * コマンド名に応じて引数を実物の形へ組み直す（テストから直に確かめられるよう公開する）。
+ *
+ * @param command `mdait.` で始まるコマンド名
+ * @param workspaceRoot 相対パスを解決する基準
+ */
+export function buildArgTransformer(
+	command: string,
+	workspaceRoot: string,
+): ArgTransformer | undefined {
+	const absolute = (value: string) => toAbsolutePath(workspaceRoot, value);
 	if (URI_FILE_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {
-				return [vscode.Uri.file(args[0]), ...args.slice(1)];
+				return [vscode.Uri.file(absolute(args[0])), ...args.slice(1)];
 			}
 			return args;
 		};
@@ -78,11 +104,12 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 	if (FILE_ITEM_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {
+				const filePath = absolute(args[0]);
 				return [
 					{
 						type: "file",
-						filePath: args[0],
-						fileName: args[0].split(/[\\/]/).pop() ?? "",
+						filePath,
+						fileName: filePath.split(/[\\/]/).pop() ?? "",
 					},
 					...args.slice(1),
 				];
@@ -93,11 +120,12 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 	if (DIRECTORY_ITEM_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {
+				const directoryPath = absolute(args[0]);
 				return [
 					{
 						type: "directory",
-						directoryPath: args[0],
-						label: args[0].split(/[\\/]/).pop() ?? "",
+						directoryPath,
+						label: directoryPath.split(/[\\/]/).pop() ?? "",
 					},
 					...args.slice(1),
 				];
@@ -109,6 +137,8 @@ function buildArgTransformer(command: string): ArgTransformer | undefined {
 }
 
 export class DebugCommandHandler implements vscode.Disposable {
+	/** 相対パスで受けた引数を絶対パスへ直すときの基準 */
+	private readonly workspaceRoot: string;
 	private readonly debugDirPath: string;
 	private readonly commandFilePath: string;
 	private readonly resultFilePath: string;
@@ -118,6 +148,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 	private isProcessing = false;
 
 	constructor(workspaceRoot: string) {
+		this.workspaceRoot = workspaceRoot;
 		this.debugDirPath = path.join(workspaceRoot, DEBUG_DIR);
 		this.commandFilePath = path.join(this.debugDirPath, COMMAND_FILE);
 		this.resultFilePath = path.join(this.debugDirPath, RESULT_FILE);
@@ -223,7 +254,10 @@ export class DebugCommandHandler implements vscode.Disposable {
 
 		try {
 			let args = payload.args ?? [];
-			const transformer = buildArgTransformer(payload.command);
+			const transformer = buildArgTransformer(
+				payload.command,
+				this.workspaceRoot,
+			);
 			if (transformer) {
 				args = transformer(args);
 			}

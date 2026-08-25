@@ -4,15 +4,15 @@
 駆動（ホストの起こし方）・記録（run ディレクトリ）・判定の出し方は土台が持つので、
 新しいシナリオを足すときに書くのは**手順とアサーションだけ**でよい。
 
-## 2つの性格の違い
+## 3つの性格の違い
 
-| | `sweep`（`scenarios/sweep.mjs`） | `probe`（`scenarios/probe.mjs`） |
-|---|---|---|
-| 目的 | 決まった期待に対する**判定** | 何が起きるかの**観察** |
-| 出口 | FAIL があれば exit 1 | 常に 0。前回の run との差分を出す |
-| 中身 | P1〜P8（sync 冪等・マーカー整合・translate・revise・非MD・external・モード切替・無言削除の禁止・本文喪失の禁止） | S0〜S14（編集・章の挿入/削除/並べ替え・リネーム・フォルダ移動・削除・外部変更） |
-| 特徴 | AI は `echo`（決定的） | **embedded と external の両方を同じ手順で流して並べる** |
-| 入口 | `npm run test:explore` | `lab probe [--only S3,S13]` |
+| | `sweep`（`scenarios/sweep.mjs`） | `probe`（`scenarios/probe.mjs`） | `ux`（`scenarios/ux.mjs`） |
+|---|---|---|---|
+| 目的 | 決まった期待に対する**判定** | 何が起きるかの**観察** | **実 UI にしか無いもの**を撮って文字に落とす |
+| 出口 | FAIL があれば exit 1 | 常に 0。前回の run との差分を出す | FAIL があれば exit 1 |
+| 中身 | P1〜P14（sync 冪等・マーカー整合・translate・revise・非MD・external・モード切替・無言削除の禁止・本文喪失の禁止・用語・TM・レビュー・取り込み・端の原稿・見出しレベル） | S0〜S14（編集・章の挿入/削除/並べ替え・リネーム・フォルダ移動・削除・外部変更） | U1〜U5（ツリーの行とアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知） |
+| 特徴 | AI は `echo`（決定的） | **embedded と external の両方を同じ手順で流して並べる** | **code-server ホスト専用**。`echo --delay` で翻訳をわざと遅くする |
+| 入口 | `npm run test:explore` | `lab probe [--only S3,S13]` | `lab ux [--only U1,U4]` |
 
 `probe` が判定しないのは意図的である。両モードの性質は正反対で（embedded は文書の中の変化に強く、
 external は文書の外の処理に強い）、「どちらが正しい」と決められない差が出るため。差の意味は
@@ -22,12 +22,14 @@ external は文書の外の処理に強い）、「どちらが正しい」と�
 
 いま叩けていない経路。上から順に価値が高い。
 
-- `term.detect` / `term.expand` / `tm.commit` / `ai-review` / `adopt` の各経路
-- external マーカーモード（`markers.mode: "external"`）での sync / trans
-- 非 Markdown（csv / txt）の `PlainFileHandler` 分岐
-- エッジな原稿（`structure_mismatch` / 空マーカー / マーカー無し / frontmatter だけ / 見出しレベルの境界）
 - 多言語ペア・深い階層・大きめの入力での冪等性
-- 意地悪な台本（`--ai script`）を trans 以外の AI 経路にも当てる
+- 実 UI の続き（`lab ux` の U4 の先）— ホバーで出る行アクション、右クリックのメニュー、
+  QuickPick の候補一覧、設定画面（カスタムエディタ）
+- `MDAIT_LAB_DIALOG=no` で**取り消し側**（No / Cancel を押す）を通す
+
+済んだもの: `term` / `tm` / `ai-review` / `adopt`（sweep P9〜P12）、external での sync / trans（P5・P6）、
+非 Markdown（P4）、端の原稿と見出しレベル（P13・P14）、意地悪な台本の全 AI 経路への適用（`lab resilience`）、
+実 UI にしか無いもの（`lab ux`）。
 
 ## 書くときの型
 
@@ -46,6 +48,14 @@ external は文書の外の処理に強い）、「どちらが正しい」と�
 - **`--ws repo` を使うときだけ**、共有の `mdait.json` を退避して戻す必要がある。既定の `/tmp` では不要。
 - **モックに無い vscode API に当たったら `scripts/lab/vscode-shim.js` を足す**（`withProgress` /
   `commands` / `findFiles` の要領）。
+- **実 UI（code-server）では、見る操作に `innerText()` を使わない。** 無い要素を待ち続けて既定の
+  30 秒ぶら下がり、その間**見張りが待ち行列を握ったまま**になるので、ほかの頼まれごとが全部止まる
+  （実測: `dialog-policy` が 60 秒応答しなかった）。1回の `evaluateAll` で読み切る。
+- **確認ダイアログの文言は `message` に入るとは限らない。** フォルダ翻訳の確認は `message` が空で、
+  文言はすべて `detail` に入る（実測）。判定は `message || detail` で見る。
+- **VS Code のリストは見えている行しか DOM に置かない。** 全部開くと下の枝が画面からはみ出し、
+  はみ出した行は読むことも撮ることもできない。見たい枝だけ開き、要らない枝は畳む
+  （`set-row-expanded`）。
 - **revise のパッチは `echo` では作れない。** `echo` は `{"translation": ...}` の形しか返さないので、
   revise の trans 側は検証に失敗して全文再翻訳へ落ちる。これは**偽物の限界**であって退行ではない。
   パッチ適用そのものを確かめたいなら `--ai live` で手で返すか、`--ai agent` を使う。

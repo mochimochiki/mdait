@@ -31,7 +31,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | 実際に何を送っているか / 壊れた答えへの耐え方 | headless | `live` / `script` | 観察と注入 |
 | 指示文の改稿を比べる | headless | `agent` | **実費がかかる**。対象は1〜3ファイル |
 | 回帰（指示文の組み立てが変わっていないか） | headless | `replay` | `lab regress` の1行 |
-| ツリー・CodeLens・通知・ダイアログの見え方 | code-server | `echo --delay` | 設営に数分（初回のみ） |
+| ツリー・CodeLens・通知・ダイアログの見え方 | code-server | `echo --delay` | 設営に数分（初回のみ）。一通りなら `lab ux` |
 | 本物の `vscode.lm` / ブレークポイント | desktop | `none` | 手元の PC でのみ |
 
 **迷ったら headless ＋ echo。** それで足りない理由が言えるときだけ、他を選ぶ。
@@ -42,7 +42,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 |---|---|
 | `up` | ホストと AI の受け皿を起こし、ワークスペースを用意する |
 | `run <mdait.コマンド> [引数…]` | コマンドを叩き、**要約**を返す（全文は run ディレクトリ） |
-| `shot <名前>` | 画面を撮る（code-server ホストのみ） |
+| `shot <名前>` | 画面を撮る（code-server ホストのみ。**文字にも落とす**なら `lab ux`／`ui/driver.mjs` の `ask`） |
 | `ai wait｜digest｜reply｜stats` | AI の受け皿とやり取りする（`live` モードで使う） |
 | `status` | 今どうなっているかを1画面で出す |
 | `reset` | ワークスペースを作り直す（ホストは落とさない） |
@@ -53,12 +53,12 @@ node scripts/lab/lab.mjs down                    # 片付ける
 
 | プリセット | 中身 | 主なオプション |
 |---|---|---|
-| `lab sweep` | 決定的スイープ（P1〜P8）。FAIL があれば exit 1 | `--only P1,P5` / `--verbose` / `--keep` |
+| `lab sweep` | 決定的スイープ（P1〜P14）。FAIL があれば exit 1 | `--only P1,P5` / `--verbose` / `--keep` |
 | `lab probe` | 頑健性プローブ（S0〜S14）。判定せず観察し、前回 run と比べる | `--only S3,S13` / `--diff <run>` / `--time` |
 | `lab regress` | 録音の再生。LLM 0回。食い違えば exit 1 | `--replay <ファイル>` |
 | `lab resilience` | 壊れた応答への耐性（9経路 × 8種）。**1周20〜30分・CI 対象外** | `--only R1,R8` / `--nasty N1,N4` |
 | `lab prompt` | `agent` モードで走らせて指示文を比べる（未実装） | — |
-| `lab ux` | code-server を起こして mdait ビューを開き、初期状態を撮る（未実装） | — |
+| `lab ux` | 実 UI にしか無いもの（ツリーのアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を撮り、**文字にも落とす**。**設営に数分・CI 対象外** | `--only U1,U4` / `--keep` |
 
 どの段取りも `--dry` を付けると、実行せずに**「実際には何をしているのか」だけ**を出す。
 プリセットは低レベル動詞の組み立てしか持たないので、`--dry` の出力がそのまま中身の説明になる。
@@ -81,6 +81,10 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | 409 は送り直されず、その場で `outcome: "failed"` | replay の不一致が「失敗」として出る理由 |
 | コードブロックは `__CODE_BLOCK_PLACEHOLDER_n__` に置換されて送られる | 答えでこの目印をそのまま返さないと本文が落ちる |
 | `SelectionState` は初期状態が空 | 全ペアを選んでからでないと sync が何もしない（lab が自動でやる） |
+| **確認は2枚立ちはだかる**（フォルダ翻訳の確認 `[No / Cancel / Yes]` → AI 初回利用の説明 `[Cancel / Proceed]`） | 実ホストでは初回利用の説明も出る（headless は `MDAIT_DEBUG_IPC=1` で飛ばす）。並び順でボタンを選ばない |
+| フォルダ翻訳の確認は **`message` が空で、文言はすべて `detail`** に入る | ダイアログの文言は `message \|\| detail` で見る |
+| 翻訳中は**ファイルの行まで回転アイコンが出る**（`child2_1.md` / `child2_2.md`）。まとめの行の数字も `child (0/9)` → `(1/9)` と進む | 開いている枝しか DOM に無いので、見たい枝を開いてから撮る |
+| CodeLens は訳文側が `✨Translate / ✓Mark as Translated / ⎘Source / ⋮More`、原文側が `⎘Target / ⋮More` | 品揃えが変わったら `src/ui/codelens/codelens-provider.ts` を見る |
 | sync の `totalModified` は**訳文の内容の変更**を数える | 原文を変えて `need:revise` が付くのは modified に入らない。正常 |
 | commands 層はタイマーと watcher を残す | プロセスは自然終了しない。だからホストは常駐で、`down` で明示的に落とす |
 | mdait は `/v1/models` を叩かない | 実装はあるが、検証では使われない |
@@ -93,6 +97,8 @@ node scripts/lab/lab.mjs down                    # 片付ける
 - **`--ai live` の待ち時間はそのまま HTTP のタイムアウトに乗る。** 考えている間に mdait が諦めないよう `ai.openai.timeoutSec` を長めにする（`lab up` が既定で長めにする）。
 - **`--ws repo` を使ったときだけ**、リポジトリ内のワークスペースを書き換える。lab が終了時に戻すが、強制終了したら `git checkout -- src/test/unit/workspace/.mdait/mdait.json` を自分でやる。
 - **サンプルの `child2_1` / `child2_2` は title の接頭辞が衝突する。** 絞り込みは title の部分一致ではなく**パスの厳密一致**で行う。
+- **実 UI を見るときは Playwright の `innerText()` を使わない。** 無い要素を 30 秒待ち続け、その間ほかの
+  操作が全部止まる（実測）。`evaluateAll` で一度に読む。詳しくは references/hosts.md。
 
 ## 判定の規律（いちばん大事。狼少年を避ける）
 
@@ -118,12 +124,12 @@ node scripts/lab/lab.mjs down                    # 片付ける
 - AI の相手の選び方と作法 → [references/ai-modes.md](references/ai-modes.md)
 - IPC の規約とコマンド一覧 → [references/ipc.md](references/ipc.md)
 - シナリオのパターン集（P1〜P12） → [references/patterns.md](references/patterns.md)
-- シナリオの足し方（sweep / probe の広げ方） → [references/scenarios.md](references/scenarios.md)
+- シナリオの足し方（sweep / probe / ux の広げ方） → [references/scenarios.md](references/scenarios.md)
 
 ## リポジトリ側の参照
 
 - テスト戦略の中での位置づけ: `docs/design/test.md`
-- 決定の経緯: `docs/adr.md` の ADR-260823-01 / -02 / -03、ADR-260822-03
+- 決定の経緯: `docs/adr.md` の ADR-260824-03、ADR-260823-01 / -02 / -03、ADR-260822-03
 - 段階の計画: `docs/roadmaps/roadmap-v02_lab-consolidation.md`
 - プロバイダ層の実装: `src/infra/llm/providers/openai-provider.ts`、`src/infra/llm/retry.ts`
 - 指示文のテンプレート: `src/prompts/defaults.ts`（分割の考え方は `docs/design/prompt.md`）

@@ -58,29 +58,42 @@ function writeJsonAtomic(file, value) {
 }
 
 /**
- * 依頼を1つ出して、その結果が返るまで待つ。
+ * 依頼を1つ出して、返事は待たずに番号だけ返す。
  *
- * 待つ相手は「同じ番号（id）で、かつ実行中（running）でない結果」に限る。
- * 前回の結果がそのまま残っていても取り違えない。
+ * 走っている最中の画面を見たいときに使う（翻訳中のツリーの遷移など）。
+ * 待って受け取るところまで面倒を見るのは `sendCommand`。
  *
  * @param {string} ws ワークスペース
  * @param {string} command `mdait.` で始まるコマンド名
  * @param {unknown[]} args 引数
- * @param {{timeoutSec?: number}} options 待つ上限（既定 600 秒）
- * @returns {Promise<object>} result.json の中身
+ * @returns {string} 依頼につけた番号（`awaitCommand` に渡す）
  */
-export async function sendCommand(ws, command, args = [], options = {}) {
-	const timeoutSec = options.timeoutSec ?? 600;
+export function startCommand(ws, command, args = []) {
 	const { dir, commandFile, resultFile } = ipcPaths(ws);
 	fs.mkdirSync(dir, { recursive: true });
-
 	const id = newId();
 	// 前回の結果は消しておく（取り違えの二重の防ぎ）
 	try {
 		fs.unlinkSync(resultFile);
 	} catch {}
 	writeJsonAtomic(commandFile, { id, command, args });
+	return id;
+}
 
+/**
+ * 出した依頼の結果が返るまで待つ。
+ *
+ * 待つ相手は「同じ番号（id）で、かつ実行中（running）でない結果」に限る。
+ * 前回の結果がそのまま残っていても取り違えない。
+ *
+ * @param {string} ws ワークスペース
+ * @param {string} id `startCommand` が返した番号
+ * @param {{timeoutSec?: number, label?: string}} options 待つ上限（既定 600 秒）
+ * @returns {Promise<object>} result.json の中身
+ */
+export async function awaitCommand(ws, id, options = {}) {
+	const timeoutSec = options.timeoutSec ?? 600;
+	const { resultFile } = ipcPaths(ws);
 	const limit = Date.now() + timeoutSec * 1000;
 	let sawRunning = false;
 	while (Date.now() < limit) {
@@ -94,5 +107,21 @@ export async function sendCommand(ws, command, args = [], options = {}) {
 		}
 		await sleep(sawRunning ? 200 : 100);
 	}
-	throw new Error(`${command} の結果が ${timeoutSec} 秒たっても返りませんでした（${resultFile}）`);
+	throw new Error(
+		`${options.label ?? id} の結果が ${timeoutSec} 秒たっても返りませんでした（${resultFile}）`,
+	);
+}
+
+/**
+ * 依頼を1つ出して、その結果が返るまで待つ。
+ *
+ * @param {string} ws ワークスペース
+ * @param {string} command `mdait.` で始まるコマンド名
+ * @param {unknown[]} args 引数
+ * @param {{timeoutSec?: number}} options 待つ上限（既定 600 秒）
+ * @returns {Promise<object>} result.json の中身
+ */
+export async function sendCommand(ws, command, args = [], options = {}) {
+	const id = startCommand(ws, command, args);
+	return await awaitCommand(ws, id, { ...options, label: command });
 }

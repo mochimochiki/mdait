@@ -57,15 +57,39 @@ Extension Host は起動しない。
 
 ```bash
 lab shot <名前>          # run ディレクトリの shots/<名前>.png に保存
+lab ux                   # 実 UI にしか無いものを一通り撮って、文字にも落とす（U1〜U5）
 ```
 
-撮った画像は Read ツールで開いて目視評価する。細かい操作は `scripts/lab/ui/driver.mjs` を使う。
+撮った画像は Read ツールで開いて目視評価する。ただし**画像だけ残しても差分が取れない**ので、
+見えているものは必ず文字にも落とす。`scripts/lab/ui/driver.mjs` の `ask(<用事>)` が、常駐ページに
+用事を頼む唯一の入口である（別に画面を開くと拡張が2つ動いて `ready` を奪い合う）。
 
-- ツリーの行: `.part.sidebar .monaco-list-row`。ホバーでインラインアクションが出る
-- 右クリック: `row.click({ button: "right" })`
-- 通知トースト: `.notifications-toasts .notification-toast`／ダイアログ: `.monaco-dialog-box`
-- **コマンドの実行に `runCommand`（コマンドパレットに文字を打つ）を使わない**。IPC のほうが確実で、
+| 用事 | 返るもの |
+|---|---|
+| `tree-items` | ツリーの行（ラベル・副題・アイコンの codicon 名・回転しているか・読み上げラベル・深さ） |
+| `expand-tree` | 畳まれた行を**下から順に**開く（上から開くと深さ方向へ潜り続け、隣の枝に永久に届かない） |
+| `set-row-expanded` | 名前で指した1行だけを開く／畳む |
+| `codelens` | いま開いているエディタの CodeLens のボタン文字（行の上から順） |
+| `open-file` / `close-editors` | ファイルを開く／タブを全部閉じる |
+| `dialog` / `click-dialog` | 前面のダイアログの文言・ボタン・**主たるボタン**／文字で押す |
+| `notifications` / `dismiss-notifications` | 通知の文言・ボタン・重さ／押さずに閉じる |
+| `dialog-policy` | 見張りの答え方を走らせたまま切り替える（`decline` にするとダイアログを撮れる。**必ず戻す**） |
+| `shot` / `tree-rows` / `url` / `reload` | 画面の写し／行の文字／URL／読み直し |
+
+- **コマンドの実行に `run-command`（コマンドパレットに文字を打つ）を使わない**。IPC のほうが確実で、
   結果 JSON と全ログまで取れる。QuickPick やマウス操作でしか起きないことを起こす時だけ使う。
+- **見る操作に Playwright の `innerText()` を使わない。** 無い要素を待ち続けて既定の 30 秒
+  ぶら下がり、その間**見張りが待ち行列を握ったまま**なので、ほかの頼まれごとが全部止まる
+  （実測: `dialog-policy` が 60 秒応答しなかった）。1回の `evaluateAll` で読み切る。
+- **VS Code のリストは見えている行しか DOM に置かない。** 全部開くと下の枝がはみ出し、
+  はみ出した行は読むことも撮ることもできない（実測: 翻訳中に回っていたのは、見えていた
+  `en (5/90)` の1行だけだった）。見たい枝だけ開く。
+- **ツリーの行を押すと、開くだけでなくファイルも開く。** 写しにタブが写り込む。
+- **`Ctrl+P` は当てにしない**（ブラウザ側に取られる）。F1 を開いて頭の `>` を消し、ファイル検索に
+  切り替える（`open-file` がそうしている）。
+- 生の Playwright を書くときの目印: ツリーの行 `.part.sidebar .monaco-list-row`／
+  CodeLens `.monaco-editor .codelens-decoration`／通知 `.notifications-toasts .notification-toast`／
+  ダイアログ `.monaco-dialog-box`。右クリックは `row.click({ button: "right" })`。
 
 翻訳中の見え方（回転アイコン、1件ずつ緑になる遷移）を撮りたいときは `--ai echo --delay 6000` のように
 遅らせる。遅延が無いと一瞬で終わって撮れない。
@@ -88,7 +112,9 @@ lab shot <名前>          # run ディレクトリの shots/<名前>.png に保
 - **答えたことは必ず要約に出す**。`lab run` の出力に
   「### 出た確認ダイアログ（画面が無いので lab が代わりに答えた）」として並ぶ。黙って押さない
 - 取り消し側を試したいときは `MDAIT_LAB_DIALOG=no`（どれにも答えない。**放置したことも控える**ので、
-  何が立ちはだかったのかは後から分かる）
+  何が立ちはだかったのかは後から分かる）。code-server では走らせたまま
+  `ask("dialog-policy", {policy: "decline"})` でも切り替えられる（ダイアログを撮るときに使う。
+  **必ず `answer` に戻す** — 戻し忘れると以後のコマンドが誰にも答えてもらえず返らない）
 - **desktop だけは自動で答えられない**。本物の画面なので、そこに居る人が押す（押すまで `lab run` は
   返らない）。画面を見ていない場では headless か code-server を使う
 - code-server の見張りは**命令が動いている最中だけ**手を出す。ふだんの目視評価で通知が勝手に
