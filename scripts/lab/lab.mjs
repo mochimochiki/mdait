@@ -23,6 +23,7 @@ import { summarizeResult } from "./lib/digest.mjs";
 import { COMMANDS } from "./hosts/registry.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, "..", "..");
 const AI_DIR = path.join(HERE, "ai");
 const SHIM = path.join(AI_DIR, "shim.mjs");
 
@@ -112,6 +113,26 @@ function say(text = "") {
 
 function warn(text) {
 	process.stderr.write(`${text}\n`);
+}
+
+/**
+ * 走り出す前に、前提が揃っているかだけ見る。
+ *
+ * 揃っていないと `Cannot find module '.../out/...'` という、原因が読み取れない形で落ちる
+ * （実測: `out/` が無いだけで headless の起動が謎の module not found になる）。
+ * 落ちる前に「何が無くて、どう直すか」を1行で言う。
+ */
+function preflight() {
+	const missing = [];
+	if (!fs.existsSync(path.join(REPO, "node_modules"))) {
+		missing.push("依存が入っていません（node_modules がありません） → `npm ci`");
+	}
+	if (!fs.existsSync(path.join(REPO, "out", "commands"))) {
+		missing.push("まだコンパイルされていません（out/ がありません） → `npm run compile`");
+	}
+	if (missing.length > 0) {
+		throw new UsageError(`実験場を起こす前に、次を済ませてください:\n  - ${missing.join("\n  - ")}`);
+	}
 }
 
 /** ホストごとの実装を読み込む */
@@ -217,6 +238,7 @@ function stopShim(session) {
 // ===========================================================================
 
 async function verbUp(opts) {
+	preflight();
 	const existing = liveSession();
 	if (existing && !existing.hostDead) {
 		say("すでに動いています。作り直すときは先に `lab down` を実行してください。");
