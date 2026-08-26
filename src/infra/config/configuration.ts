@@ -882,6 +882,25 @@ export class Configuration {
 			const sourceAbs = resolveDir(pair.sourceDir);
 			const targetAbs = resolveDir(pair.targetDir);
 
+			// 訳す先の言語が無い／原文と同じだと、AI には「ja を ja へ訳せ」と伝わる。
+			// 原文がそのまま返り、need は解除され、状態としては翻訳済みになる。
+			// **課金だけされて何も訳されていない**ので、走らせる前にここで止める
+			if (!pair.targetLang || pair.targetLang.trim() === "") {
+				return vscode.l10n.t(
+					"targetLang is not set for {0} → {1}. Set the language to translate into.",
+					pair.sourceDir,
+					pair.targetDir,
+				);
+			}
+			if (pair.sourceLang.trim().toLowerCase() === pair.targetLang.trim().toLowerCase()) {
+				return vscode.l10n.t(
+					"sourceLang and targetLang are the same ({0}) for {1} → {2}. They must differ.",
+					pair.targetLang,
+					pair.sourceDir,
+					pair.targetDir,
+				);
+			}
+
 			if (isSamePath(sourceAbs, targetAbs)) {
 				return vscode.l10n.t("sourceDir and targetDir are the same ({0}). They must differ.", pair.sourceDir);
 			}

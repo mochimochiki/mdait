@@ -14,8 +14,15 @@ import type { NeedBreakdown } from "./status-data";
  * 現在の need 内訳から推奨アクションを生成する。
  * @param needs need 内訳
  * @param errorUnits エラーユニット数
+ * @param orphanTargets 原文の無い訳文ファイル数
+ * @param totalUnits スコープ内の管理ユニット数（0 なら「何も入っていない」）
  */
-export function buildNextActions(needs: NeedBreakdown, errorUnits = 0, orphanTargets = 0): string[] {
+export function buildNextActions(
+	needs: NeedBreakdown,
+	errorUnits = 0,
+	orphanTargets = 0,
+	totalUnits?: number,
+): string[] {
 	const actions: string[] = [];
 
 	// 孤立訳文には破棄の手段を渡さない（ADR-260806-01）。エージェントにできるのは
@@ -47,8 +54,13 @@ export function buildNextActions(needs: NeedBreakdown, errorUnits = 0, orphanTar
 		);
 	}
 	if (actions.length === 0) {
+		// 「調べた結果ぜんぶ済んでいた」と「そもそも中身が無かった」を混ぜない。
+		// 混ぜると、原文側のフォルダを渡したエージェントが「翻訳は完了済みでした」と
+		// 報告して何もせずに終わる（実測）。渡す先が違うことを言う
 		actions.push(
-			"All units are translated. Run mdait_sync after any source edits to keep markers up to date.",
+			totalUnits === 0
+				? "No managed unit is in this scope, so nothing was checked. mdait works on the target (translated) side — if you passed a source directory, pass the matching target directory instead. Run mdait_getStatus with no path to see the whole workspace, or mdait_sync if this is a new setup."
+				: "All units are translated. Run mdait_sync after any source edits to keep markers up to date.",
 		);
 	}
 	return actions;

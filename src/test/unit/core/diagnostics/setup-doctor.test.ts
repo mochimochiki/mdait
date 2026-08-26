@@ -17,6 +17,7 @@ function makeProbe(overrides: Partial<DoctorProbe> = {}): DoctorProbe {
 		dirExists: () => true,
 		countMarkdownFiles: () => 3,
 		countFilesWithMarkers: () => 3,
+		countFilesWithUnitState: () => 3,
 		...overrides,
 	};
 }
@@ -214,6 +215,26 @@ suite("setup-doctor 静的診断", () => {
 		assert.ok(hint, "pair.noMarkersRunSync が含まれること");
 		assert.equal(hint?.level, "info");
 		assert.equal(hasBlockingError(diags), false, "info なので blocking ではない");
+	});
+
+	test("external モードでは、本文にマーカーが無くても unit-state に行があれば『まず Sync』を出さない", () => {
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external" }),
+			makeProbe({ countFilesWithMarkers: () => 0, countFilesWithUnitState: () => 3 }),
+		);
+		assert.equal(
+			diags.some((d) => d.id === "pair.noMarkersRunSync"),
+			false,
+			"同期済みなのに『まず Sync』と言わないこと",
+		);
+	});
+
+	test("external モードで unit-state にも行が無ければ『まず Sync』を促す", () => {
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external" }),
+			makeProbe({ countFilesWithMarkers: () => 3, countFilesWithUnitState: () => 0 }),
+		);
+		assert.ok(diags.some((d) => d.id === "pair.noMarkersRunSync"));
 	});
 
 	test("targetDir 不在は info（Sync で生成され得るため）", () => {

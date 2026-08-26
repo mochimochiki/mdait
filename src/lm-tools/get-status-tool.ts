@@ -97,7 +97,7 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 					? `${summary} ${vscode.l10n.t("{0} translation file(s) have no source file.", data.orphanTargets.length)}`
 					: summary;
 
-			const nextActions = buildNextActions(data.needs, data.errorUnits, data.orphanTargets.length);
+			const nextActions = buildNextActions(data.needs, data.errorUnits, data.orphanTargets.length, data.totalUnits);
 			return toToolResult(createOkEnvelope(summaryWithOrphans, data, nextActions));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in getStatus tool", { error });

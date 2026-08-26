@@ -13,6 +13,7 @@ import { needsAttentionNextCommand } from "./commands/markers/needs-attention-ne
 import { buildRenameFollowEdit, completeRenameFollow } from "./commands/markers/rename-follow";
 import { StatusTreeNeedHandler } from "./commands/markers/status-tree-need-handler";
 import { createConfigCommand, openExistingConfigCommand } from "./commands/setup/setup-command";
+import { showSyncError } from "./commands/shared/guidance";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
@@ -234,7 +235,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			// 全体再構築でしかツリーに反映されない
 			await statusManager.buildStatusItemTree();
 		} catch (error) {
-			vscode.window.showErrorMessage(vscode.l10n.t("Failed to sync and refresh: {0}", (error as Error).message));
+			// 理由と、設定を直す場所への導線をここで出す（syncCommand は投げ直すだけ）
+			await showSyncError(error);
 		} finally {
 			await vscode.commands.executeCommand("setContext", "mdaitSyncProcessing", false);
 		}
@@ -579,8 +581,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			key: string;
 		}>();
 		pick.canSelectMany = true;
-		pick.title = vscode.l10n.t("Select translation targets to show");
-		pick.placeholder = vscode.l10n.t("Check the targets to show in the Status view");
+		// 「表示」ではない。ここで外した言語は sync も翻訳もされなくなる
+		pick.title = vscode.l10n.t("Select the target languages to work on");
+		pick.placeholder = vscode.l10n.t("Unchecked targets are excluded from Sync and translation");
 		pick.items = items;
 		// 既存選択を反映
 		const selectedKeys = Array.from(SelectionState.getInstance().getActiveKeys());

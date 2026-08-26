@@ -5,6 +5,7 @@
  */
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
@@ -50,6 +51,32 @@ export async function showConfigError(validationError: string): Promise<void> {
 }
 
 /**
+ * 同期の失敗を、診断・設定への導線付きで表示する。
+ *
+ * 「原文のフォルダが見つからない」は設定の打ち間違いで最も多い詰まり方なのに、
+ * ボタンの無いトーストが1本出るだけだった（`transPairs` が空のときは
+ * `[Diagnose] [Open mdait.json]` が付くのに、である）。同じ種類の詰まりには同じ導線を出す。
+ */
+export async function showSyncError(error: unknown): Promise<void> {
+	if (isOperationCancelled(error)) {
+		return;
+	}
+	const message = error instanceof Error ? error.message : String(error);
+	const diagnose = vscode.l10n.t("Diagnose");
+	const openConfig = vscode.l10n.t("Open mdait.json");
+	const choice = await vscode.window.showErrorMessage(
+		vscode.l10n.t("An error occurred during synchronization: {0}", message),
+		diagnose,
+		openConfig,
+	);
+	if (choice === diagnose) {
+		await vscode.commands.executeCommand("mdait.setup.diagnose");
+	} else if (choice === openConfig) {
+		await openConfigFile();
+	}
+}
+
+/**
  * 「先に Sync が必要」系のエラーを「Sync を実行」「ドキュメント」導線付きで表示する。
  * 原文ファイルを翻訳しようとした／未 sync などの混乱に対応する。
  */
@@ -71,7 +98,19 @@ function isAiUnavailableMessage(message: string): boolean {
 		m.includes("language model is not available") ||
 		m.includes("github copilot") ||
 		m.includes("api usage limit") ||
-		m.includes("permission is required")
+		m.includes("permission is required") ||
+		// 設定が原因の詰まり方。初回にいちばん多い（キー未設定・キー誤り・モデル名の綴り違い）。
+		// 診断と設定への導線が付かないと、正しい説明を持っている doctor まで辿り着けない
+		m.includes("api key is not set") ||
+		/openai api error \((?:400|401|403|404)\)/.test(m) ||
+		// そもそも届かない場合（baseURL の打ち間違い・サーバーが落ちている・時間切れ）。
+		// 診断は同じ状況を正しく名指しできるので、そこへ行ける導線を必ず出す
+		m.includes("fetch failed") ||
+		m.includes("econnrefused") ||
+		m.includes("enotfound") ||
+		m.includes("network") ||
+		m.includes("timed out") ||
+		m.includes("timeout")
 	);
 }
 
@@ -98,17 +137,19 @@ export async function showTranslationError(error: unknown): Promise<void> {
 	}
 	const message = error instanceof Error ? error.message : String(error);
 	if (isAiUnavailableMessage(message)) {
+		// ボタンは2つまで（ux.md §3.3）。ドキュメントは診断レポートの末尾から辿れるので、
+		// ここでは主導線（診断）と、その場で直せる場所（設定）だけを出す
 		const diagnose = vscode.l10n.t("Diagnose");
-		const docs = vscode.l10n.t("Open docs");
+		const openConfig = vscode.l10n.t("Open mdait.json");
 		const choice = await vscode.window.showErrorMessage(
 			vscode.l10n.t("Error during translation: {0}", message),
 			diagnose,
-			docs,
+			openConfig,
 		);
 		if (choice === diagnose) {
 			await vscode.commands.executeCommand("mdait.setup.diagnose");
-		} else if (choice === docs) {
-			await openDocs();
+		} else if (choice === openConfig) {
+			await openConfigFile();
 		}
 		return;
 	}
@@ -132,6 +173,10 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 		case "anchor-not-found":
 			return vscode.l10n.t(
 				"The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.",
+			);
+		case "no-source-diff":
+			return vscode.l10n.t(
+				"The previous version of the source is no longer available, so mdait could not tell which part changed.",
 			);
 	}
 }
@@ -171,6 +216,62 @@ export interface TransOutcomeActions {
 	label: string;
 	/** パッチを使わず全文で訳し直す */
 	retryFullTranslation?: () => Promise<unknown>;
+	/**
+	 * 渡されたファイルの絶対パス。
+	 * 「対が見つからない」ときに、それが原文側かどうかを見分けるためだけに使う。
+	 */
+	sourcePath?: string;
+}
+
+/**
+ * そのパスが設定上の原文ディレクトリ配下なら、対になる訳文ディレクトリを返す。
+ * 原文側でなければ undefined。
+ */
+function findTargetDirForSource(filePath: string): string | undefined {
+	const config = Configuration.getInstance();
+	const baseDir = config.getConfigBaseDir();
+	const abs = path.resolve(filePath);
+	for (const pair of config.transPairs) {
+		const sourceAbs = path.resolve(baseDir, pair.sourceDir);
+		if (abs === sourceAbs || abs.startsWith(`${sourceAbs}${path.sep}`)) {
+			return pair.targetDir;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * 訳文を据え置いたことを伝え、**全文で訳し直す逃げ道**を一度だけ出す。
+ *
+ * ユニットごとに尋ねると連打になるので、1回の実行につき1回だけ聞く。
+ * 押した先でもう一度確認するのは、全文で訳し直すと手作業の修正が消えうるからである。
+ *
+ * @param body 何が起きたかの本文（理由まで書いたもの）
+ * @param actions 通知から呼び出せる次の一手
+ */
+async function offerFullRetry(body: string, actions: TransOutcomeActions): Promise<void> {
+	if (!actions.retryFullTranslation) {
+		vscode.window.showWarningMessage(body);
+		return;
+	}
+	// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
+	const retry = vscode.l10n.t("✨Re-translate in full");
+	const choice = await vscode.window.showWarningMessage(body, retry);
+	if (choice !== retry) {
+		return;
+	}
+	// 「これから何が起きるか・取り消せるか」は確認ダイアログの担当（ux.md §3.3）
+	const proceed = vscode.l10n.t("Re-translate");
+	const confirmed = await vscode.window.showWarningMessage(
+		vscode.l10n.t(
+			"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+		),
+		{ modal: true },
+		proceed,
+	);
+	if (confirmed === proceed) {
+		await actions.retryFullTranslation();
+	}
 }
 
 /**
@@ -185,6 +286,20 @@ export interface TransOutcomeActions {
  */
 export async function reportTransOutcome(result: TransOutcomeSummary, actions: TransOutcomeActions): Promise<void> {
 	if (result.outcome === "no-trans-pair") {
+		// 原文側のファイルを渡すのは、いちばん自然な間違いである。
+		// 「対がありません」とだけ言われても、対は在って渡す側が違うだけなので直しようがない。
+		// フォルダ版と同じく、対になる訳文の場所を名指しする
+		const targetDir = actions.sourcePath ? findTargetDirForSource(actions.sourcePath) : undefined;
+		if (targetDir) {
+			vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"{0} is on the source side. Translate the matching file under '{1}' instead.",
+					actions.label,
+					targetDir,
+				),
+			);
+			return;
+		}
 		await showNeedSyncError(vscode.l10n.t("No translation pair found for: {0}", actions.label));
 		return;
 	}
@@ -237,7 +352,7 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	// showTranslationError は何も言っていない
 	if (result.responseFailures.length > 0) {
 		const reason = describeResponseFailure(result.responseFailures[0].reason);
-		vscode.window.showWarningMessage(
+		const body =
 			result.translatedCount > 0
 				? vscode.l10n.t(
 						"Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}",
@@ -251,8 +366,11 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 						actions.label,
 						result.responseFailures.length,
 						reason,
-					),
-		);
+					);
+		// 改訂のパッチは、モデルによっては毎回同じところで転ぶ。抜け道が無いと、
+		// 毎朝叩くたびに同じ1件が同じ理由で失敗し続ける状態に固定される。
+		// パッチ失敗のときと同じ逃げ道（全文で訳し直す）をここでも出す
+		await offerFullRetry(body, actions);
 		return;
 	}
 
@@ -269,35 +387,15 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	// パッチ適用に失敗したユニットは訳文を据え置いてある。理由を出したうえで、
 	// 全文で訳し直すかどうかを一度だけ尋ねる（ユニットごとに聞くと連打になる）
 	if (result.patchFailures.length > 0) {
-		const body = vscode.l10n.t(
-			"Kept the existing translation for {0} unit(s) in {1}. {2}",
-			result.patchFailures.length,
-			actions.label,
-			describePatchFailure(result.patchFailures[0].reason),
-		);
-		if (!actions.retryFullTranslation) {
-			vscode.window.showWarningMessage(body);
-			return;
-		}
-		// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
-		const retry = vscode.l10n.t("✨Re-translate in full");
-		const choice = await vscode.window.showWarningMessage(body, retry);
-		if (choice !== retry) {
-			return;
-		}
-		// 「これから何が起きるか・取り消せるか」は確認ダイアログの担当（ux.md §3.3）。
-		// 全文で訳し直すと手作業の修正が消えうるので、押した先で一度だけ確認する
-		const proceed = vscode.l10n.t("Re-translate");
-		const confirmed = await vscode.window.showWarningMessage(
+		await offerFullRetry(
 			vscode.l10n.t(
-				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+				"Kept the existing translation for {0} unit(s) in {1}. {2}",
+				result.patchFailures.length,
+				actions.label,
+				describePatchFailure(result.patchFailures[0].reason),
 			),
-			{ modal: true },
-			proceed,
+			actions,
 		);
-		if (confirmed === proceed) {
-			await actions.retryFullTranslation();
-		}
 		return;
 	}
 

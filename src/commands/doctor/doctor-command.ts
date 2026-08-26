@@ -45,6 +45,15 @@ export async function diagnoseSetupCommand(): Promise<void> {
 
 	const diagnostics = runStaticChecks(snapshot, createFsProbe(baseDir));
 
+	// **設定ファイルそのものが読めないことを、いちばん先に言う。**
+	// static チェックが見るのは「最後に読み込みに成功した設定」なので、書き間違えた直後は
+	// 壊す前より綺麗な結果（問題なし）を返していた。設定を書き間違えた人が最初に押す道具が、
+	// 無罪放免を返すことになる（実測）
+	const parseError = readConfigParseError(config);
+	if (parseError) {
+		diagnostics.unshift({ level: "error", id: "config.unreadable", params: { reason: parseError } });
+	}
+
 	// AI 到達性（非同期 IO）は UI 層で追加実行する
 	const aiDiag = await checkAiReachability(config);
 	if (aiDiag) {
@@ -70,6 +79,25 @@ function readRawOpenAiApiKey(config: Configuration): string | undefined {
 	} catch {
 		// 設定が壊れている場合は static チェック側で別途検出されるため無視
 		return undefined;
+	}
+}
+
+/**
+ * 設定ファイルが JSON として読めないなら、その理由を返す。読めるなら undefined。
+ *
+ * 読み込み側は最後に成功した設定をメモリに持ち続けるので、**壊したことに気づく機会が
+ * 診断しかない**。ここで見ないと、書き間違えた直後の診断が「問題なし」と答える。
+ */
+function readConfigParseError(config: Configuration): string | undefined {
+	const configPath = config.getConfigFilePath();
+	if (!configPath || !fs.existsSync(configPath)) {
+		return undefined; // 未作成は別の診断（設定が無い）の担当
+	}
+	try {
+		JSON.parse(fs.readFileSync(configPath, "utf8"));
+		return undefined;
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
 	}
 }
 
@@ -137,10 +165,45 @@ function createFsProbe(baseDir: string): DoctorProbe {
 		return result;
 	};
 
+	// `.mdait/unit-state` に行を持つファイルの集合。読めなければ空（＝「まだ無い」と同じ）
+	let statePaths: Set<string> | undefined;
+	const unitStatePaths = (): Set<string> => {
+		if (statePaths) {
+			return statePaths;
+		}
+		const found = new Set<string>();
+		try {
+			const text = fs.readFileSync(path.join(baseDir, ".mdait", "unit-state"), "utf8");
+			for (const line of text.split(/\r?\n/)) {
+				if (line === "" || line.startsWith("#")) {
+					continue;
+				}
+				const filePath = line.split("\t")[0];
+				if (filePath) {
+					found.add(filePath.replace(/\\/g, "/"));
+				}
+			}
+		} catch {
+			// 無い・読めないときは0件。「Sync してください」は正しい案内になる
+		}
+		statePaths = found;
+		return found;
+	};
+
 	return {
 		dirExists: (rel) => directoryExists(resolveDir(rel)),
 		countMarkdownFiles: (rel) => scan(rel).md,
 		countFilesWithMarkers: (rel) => scan(rel).withMarkers,
+		countFilesWithUnitState: (rel) => {
+			const prefix = `${rel.replace(/\\/g, "/").replace(/\/+$/, "")}/`;
+			let count = 0;
+			for (const filePath of unitStatePaths()) {
+				if (filePath.startsWith(prefix)) {
+					count++;
+				}
+			}
+			return count;
+		},
 	};
 }
 
@@ -166,7 +229,13 @@ async function checkAiReachability(config: Configuration): Promise<Diagnostic | 
 				if (!resolved) {
 					return { level: "error", id: "ai.openaiKeyMissing" };
 				}
-				return undefined;
+				// **一度は本当に叩く。** キーの文字列があるかどうかしか見ていなかったので、
+				// エンドポイント不達・キー誤り・モデル名の綴り違いのどれもが「問題なし」と
+				// 返っていた。翻訳が失敗したとき最初に押す道具がこれなので、
+				// ここで切り分けられないと原因探しが振り出しに戻る（vscode-lm と ollama は
+				// 元から実際に叩いている。openai だけが見ていなかった）
+				const endpoint = (config.ai.openai?.baseURL as string) || "https://api.openai.com/v1";
+				return await probeOpenAi(endpoint, resolved, config.ai.model as string | undefined);
 			}
 			case "ollama": {
 				const endpoint = config.ai.ollama?.endpoint ?? "http://localhost:11434";
@@ -211,6 +280,57 @@ async function pingOllama(endpoint: string): Promise<boolean> {
 	} catch {
 		// 接続不可
 		return false;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * OpenAI 互換のエンドポイントへ1回だけ問い合わせ、届くか・キーが通るか・モデルが在るかを見る。
+ *
+ * 使うのは `GET {baseURL}/models`。翻訳の本番経路（`/chat/completions`）を叩くと
+ * 課金が発生するうえ、診断のたびに原稿と無関係な生成が走る。
+ *
+ * **分からないことは言わない。** `/models` を実装していないゲートウェイもあるので、
+ * その 404 は「モデルが無い」ではなく「確かめられない」として黙る。
+ *
+ * @param endpoint baseURL（末尾の `/` は無視する）
+ * @param apiKey 解決済みの API キー
+ * @param model 設定されているモデル名
+ * @returns 問題があれば診断、無ければ undefined
+ */
+export async function probeOpenAi(endpoint: string, apiKey: string, model?: string): Promise<Diagnostic | undefined> {
+	const base = endpoint.replace(/\/+$/, "");
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 3000);
+	try {
+		const res = await fetch(`${base}/models`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+			signal: controller.signal,
+		});
+		if (res.status === 401 || res.status === 403) {
+			return { level: "error", id: "ai.openaiKeyRejected", params: { status: String(res.status) } };
+		}
+		if (res.status === 404) {
+			return undefined; // 一覧を出せないゲートウェイ。確かめられないので黙る
+		}
+		if (!res.ok) {
+			return { level: "warn", id: "ai.openaiHttpError", params: { status: String(res.status), endpoint: base } };
+		}
+		if (!model) {
+			return undefined;
+		}
+		const body = (await res.json()) as { data?: Array<{ id?: unknown }> };
+		const ids = Array.isArray(body?.data)
+			? body.data.map((entry) => entry?.id).filter((id): id is string => typeof id === "string")
+			: [];
+		if (ids.length > 0 && !ids.includes(model)) {
+			return { level: "warn", id: "ai.openaiModelMissing", params: { model } };
+		}
+		return undefined;
+	} catch {
+		// 名前解決できない・繋がらない・時間切れ
+		return { level: "error", id: "ai.openaiUnreachable", params: { endpoint: base } };
 	} finally {
 		clearTimeout(timer);
 	}
@@ -269,6 +389,32 @@ function describe(d: Diagnostic): string {
 		case "ai.openaiKeyMissing":
 			return vscode.l10n.t(
 				"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
+			);
+		case "config.unreadable":
+			return vscode.l10n.t(
+				"Could not read .mdait/mdait.json as JSON ({0}). mdait is still running on the last settings it managed to read.",
+				p.reason ?? "",
+			);
+		case "ai.openaiUnreachable":
+			return vscode.l10n.t(
+				"Could not reach the OpenAI-compatible endpoint at {0}. Check ai.openai.baseURL and your network.",
+				p.endpoint ?? "",
+			);
+		case "ai.openaiKeyRejected":
+			return vscode.l10n.t(
+				"The OpenAI API key was rejected ({0}). Check ai.openai.apiKey or the OPENAI_API_KEY environment variable.",
+				p.status ?? "",
+			);
+		case "ai.openaiModelMissing":
+			return vscode.l10n.t(
+				"The model \"{0}\" is not in the list the endpoint returned. Check ai.model for a typo.",
+				p.model ?? "",
+			);
+		case "ai.openaiHttpError":
+			return vscode.l10n.t(
+				"The endpoint at {0} answered with HTTP {1}. Translation will likely fail.",
+				p.endpoint ?? "",
+				p.status ?? "",
 			);
 		case "ai.ollamaUnreachable":
 			return vscode.l10n.t("Could not reach the Ollama server at {0}.", p.endpoint ?? "");

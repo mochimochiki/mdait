@@ -2,7 +2,7 @@ import * as assert from "node:assert";
 import type * as vscode from "vscode";
 import type { AIConfig } from "../../../../infra/config/configuration";
 import { Configuration } from "../../../../infra/config/configuration";
-import { OpenAIProvider } from "../../../../infra/llm/providers/openai-provider";
+import { OpenAIProvider, describeApiError } from "../../../../infra/llm/providers/openai-provider";
 import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 /** テスト用AIConfig */
@@ -38,6 +38,35 @@ function errorResponse(status: number, headers?: Record<string, string>): Respon
 
 /** テスト高速化用のリトライポリシー */
 const FAST_POLICY = { maxRetries: 2, initialDelayMs: 1, multiplier: 2, maxDelayMs: 50 };
+
+suite("エラー応答から人が読む一文を取り出す（describeApiError）", () => {
+	test("OpenAI 形式の JSON なら message だけを出し、ステータスを添えること", () => {
+		const body = JSON.stringify({
+			error: { message: "The model `gpt-4o-typo` does not exist.", type: "invalid_request_error" },
+		});
+		assert.strictEqual(
+			describeApiError(body, 404, "Not Found"),
+			"OpenAI API error (404): The model `gpt-4o-typo` does not exist.",
+			"生の JSON をそのまま出すと、1行しか見えないトーストで理由が押し出される",
+		);
+	});
+
+	test("JSON でない本文はそのまま残すこと（勝手に捨てない）", () => {
+		assert.strictEqual(describeApiError("upstream timeout", 502, "Bad Gateway"), "OpenAI API error: upstream timeout");
+	});
+
+	test("message が空なら本文をそのまま使うこと", () => {
+		const body = JSON.stringify({ error: { message: "   " } });
+		assert.strictEqual(describeApiError(body, 500, "Server Error"), `OpenAI API error: ${body}`);
+	});
+
+	test("本文が空ならステータスを言うこと", () => {
+		assert.strictEqual(
+			describeApiError("", 503, "Service Unavailable"),
+			"OpenAI API error: HTTP error 503 Service Unavailable",
+		);
+	});
+});
 
 suite("OpenAIProvider", () => {
 	let originalFetch: typeof globalThis.fetch;
@@ -145,9 +174,10 @@ suite("OpenAIProvider", () => {
 	test("401応答はリトライせず即失敗すること", async () => {
 		stubFetch(() => errorResponse(401));
 		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
+		// 接頭辞は1つだけ。二重に包むと、1行しか見えないトーストから理由が押し出される
 		await assert.rejects(
 			provider.sendMessage("system", [{ role: "user", content: "hello" }]),
-			/OpenAI provider error/,
+			(error: Error) => /^OpenAI API error/.test(error.message) && !error.message.includes("provider error"),
 		);
 		assert.strictEqual(fetchCalls, 1);
 	});
@@ -157,7 +187,7 @@ suite("OpenAIProvider", () => {
 		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
 		await assert.rejects(
 			provider.sendMessage("system", [{ role: "user", content: "hello" }]),
-			/OpenAI provider error/,
+			/OpenAI API error/,
 		);
 		// 初回 + maxRetries(2) = 3試行
 		assert.strictEqual(fetchCalls, 3);

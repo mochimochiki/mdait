@@ -408,15 +408,21 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		}
 
 		if (options.input.action === "delete") {
-			const hashes = options.input.unitHashes ?? [];
+			// **本文を消す操作こそ、何を消すのかを並べる。** 件数だけを出していたので、
+			// いちばん重い操作の確認がいちばん情報の少ない確認になっていた
+			// （無害な resolve は見出しつきで列挙していたのに、である）
+			const targets = collectConfirmationTargets(resolveInputPath(inputPath), options.input.unitHashes, [
+				"verify-deletion",
+			]);
 			return {
 				invocationMessage: vscode.l10n.t("Deleting unit(s)..."),
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm Unit Deletion"),
 					message: vscode.l10n.t(
-						"This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.",
-						hashes.length,
+						"This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.{2}",
+						targets.length,
 						inputPath,
+						formatUnitList(targets),
 					),
 				},
 			};
@@ -429,13 +435,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			options.input.needs,
 		);
 
-		const lines = targets.slice(0, MAX_CONFIRMATION_UNITS).map((t) => {
-			return t.title ? `- ${t.hash} need:${t.need} "${t.title}"` : `- ${t.hash} need:${t.need}`;
-		});
-		if (targets.length > MAX_CONFIRMATION_UNITS) {
-			lines.push(vscode.l10n.t("...and {0} more unit(s)", targets.length - MAX_CONFIRMATION_UNITS));
-		}
-		const unitList = lines.length > 0 ? `\n\n${lines.join("\n")}` : "";
+		const unitList = formatUnitList(targets);
 
 		return {
 			invocationMessage: vscode.l10n.t("Resolving need flags..."),
@@ -450,6 +450,17 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			},
 		};
 	}
+}
+
+/** 確認UI用: 対象ユニットを「hash・need・見出し」の箇条書きにする（多すぎるときは省略） */
+function formatUnitList(targets: ReadonlyArray<{ hash: string; title?: string; need: string }>): string {
+	const lines = targets
+		.slice(0, MAX_CONFIRMATION_UNITS)
+		.map((t) => (t.title ? `- ${t.hash} need:${t.need} "${t.title}"` : `- ${t.hash} need:${t.need}`));
+	if (targets.length > MAX_CONFIRMATION_UNITS) {
+		lines.push(vscode.l10n.t("...and {0} more unit(s)", targets.length - MAX_CONFIRMATION_UNITS));
+	}
+	return lines.length > 0 ? `\n\n${lines.join("\n")}` : "";
 }
 
 /** 確認UI用: ステータスツリーから解決対象になるユニットを列挙する */

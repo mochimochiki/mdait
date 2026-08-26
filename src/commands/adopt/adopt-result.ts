@@ -194,6 +194,15 @@ export function buildAdoptNextActions(
 		return actions;
 	}
 
+	// レビューが1件も成立しなかったことを、いちばん先に言う。
+	// ここを見落とすと `actions` が空のまま「取り込みは綺麗です」に落ち、
+	// 誰も見ていないペアを TM へ登録する導線だけが残る（実測: errors=4 でも clean と出た）
+	if (agg.errors > 0) {
+		actions.push(
+			`${agg.errors} unit(s) could not be reviewed (the AI errored or its answer could not be used) and still carry need:review. Re-run mdait_aiReview and confirm it succeeds before running mdait_tm (action:"commit").`,
+		);
+	}
+
 	if (agg.mismatch > 0) {
 		actions.push(
 			`${agg.mismatch} unit(s) look mis-paired (verdict:mismatch) even after AI align. Inspect the heading correspondence in the report, fix the document structure manually, then run mdait_adopt (or mdait_sync) again to re-pair.`,

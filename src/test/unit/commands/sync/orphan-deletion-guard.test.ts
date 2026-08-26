@@ -79,6 +79,38 @@ suite("孤立ユニット自動削除の見送りガード", () => {
 		fs.writeFileSync(sourceFile, content.replace(from, to), "utf-8");
 	}
 
+	test("章を消したとき、消したものの見出しが結果に載ること（通知で名前を言うため）", async () => {
+		// 原稿を消す唯一の経路なのに件数しか出ていなかった。消したものはもう画面のどこにも
+		// 無いので、名前を言わないと「1件」が何だったのか確かめる術がない
+		const config = await initConfig();
+		fs.writeFileSync(
+			sourceFile,
+			docOf([
+				{ title: "第1章", body: "第1章の本文。" },
+				{ title: "第2章", body: "第2章の本文。" },
+				{ title: "消える章", body: "消える章の本文。" },
+			]),
+			"utf-8",
+		);
+		await syncNew_CoreProc(sourceFile, targetFile, config);
+
+		fs.writeFileSync(
+			sourceFile,
+			docOf([
+				{ title: "第1章", body: "第1章の本文。" },
+				{ title: "第2章", body: "第2章の本文。" },
+			]),
+			"utf-8",
+		);
+		const diff = await sync_CoreProc(sourceFile, targetFile, config);
+
+		assert.deepStrictEqual(
+			diff.orphanDeletedTitles,
+			["消える章"],
+			`消した章の見出しが返ること: ${JSON.stringify(diff.orphanDeletedTitles)}`,
+		);
+	});
+
 	test("2ユニットの文書で1章を編集しても、訳文に古い章が残らないこと", async () => {
 		// 原文が2ユニット（H1 + 1章）しかないと、1章を編集しただけで
 		// 「対応が付いたのは1件」になる。これを崩れと読むと、古い章が

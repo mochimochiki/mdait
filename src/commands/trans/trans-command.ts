@@ -60,6 +60,7 @@ import { getFileHandler } from "../file-handler/file-handler-factory";
 import { OperationRegistry } from "../shared/operation-registry";
 import {
 	reportTransOutcome,
+	showConfigError,
 	showNeedSyncError,
 	showTranslationError,
 } from "../shared/guidance";
@@ -191,10 +192,12 @@ export async function reportTransOutcomeWithRetry(
 	result: TransCommandResult,
 	label: string,
 	retryFullTranslation: () => Promise<TransCommandResult | undefined>,
+	sourcePath?: string,
 ): Promise<TransCommandResult> {
 	let finalResult = result;
 	await reportTransOutcome(result, {
 		label,
+		sourcePath,
 		retryFullTranslation: async () => {
 			// やり直しが中断・失敗して結果を返さなかったときは、元の結果を保つ
 			finalResult = (await retryFullTranslation()) ?? finalResult;
@@ -227,6 +230,15 @@ export async function transCommand(
 		return;
 	}
 
+	// **走らせる前の検査は、AI を呼ぶ入口すべてに置く。** sync だけに置いていたので、
+	// 訳し先の言語が原文と同じ／空のままでもファイル単位の翻訳は素通りし、
+	// 原文がそのまま返って need が外れ、課金だけされていた（実測）
+	const validationError = Configuration.getInstance().validateForRun();
+	if (validationError) {
+		await showConfigError(validationError);
+		return;
+	}
+
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
@@ -244,8 +256,11 @@ export async function transCommand(
 	}
 
 	// 通知は必ず排他区間の外で出す（区間の中で人を待つとロックが解放されない）
-	return await reportTransOutcomeWithRetry(result, path.basename(targetFilePath), () =>
-		transCommand(uri, { forceFullTranslation: true }),
+	return await reportTransOutcomeWithRetry(
+		result,
+		path.basename(targetFilePath),
+		() => transCommand(uri, { forceFullTranslation: true }),
+		targetFilePath,
 	);
 }
 
@@ -993,6 +1008,24 @@ async function translateUnit(
 				hasPreviousTranslation: !!previousTranslation,
 				hasSourceDiff: !!context.sourceDiff,
 			});
+			// **守るものがあるときは、黙って全文で訳し直さない。**
+			// 改訂の翻訳は本来パッチで、当てはめに失敗したときは「訳文を据え置いて、
+			// 全文で訳し直すか一度だけ確認する」ことになっている。ところが *そもそも
+			// 差分が作れなかった* 場合だけ、その安全網を通らずに全文再翻訳が走り、
+			// 訳文の手直し（用語の言い回し・注記）が AI の善意次第で消えていた。
+			// 通知は成功としか言わないので、消えたことにも気づけない（実測）。
+			// 訳文がまだ無いとき（previousTranslation が空）は失うものが無いので、
+			// これまでどおり全文で訳す
+			if (previousTranslation && !context.sourceDiff) {
+				logger.info("trans", "Unit translation kept as-is: cannot build a diff for the revision", {
+					unitHash: unit.marker?.hash,
+				});
+				return {
+					patched: false,
+					tmHit: !!context.tmReferences,
+					patchFailure: "no-source-diff",
+				};
+			}
 		}
 
 		if (canPatch) {
@@ -1370,6 +1403,13 @@ export async function transUnitCommand(
 	unitHash: string,
 	options?: TransRunOptions,
 ): Promise<TransCommandResult> {
+	// 走らせる前の検査（transCommand と同じ理由。AI を呼ぶ入口すべてに置く）
+	const validationError = Configuration.getInstance().validateForRun();
+	if (validationError) {
+		await showConfigError(validationError);
+		return emptyResult("failed");
+	}
+
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();
@@ -1646,20 +1686,32 @@ export function getUnitPosition(
 	text: string,
 	markerText: string,
 ): { start: number; end: number; trailingNewlines: string } | null {
-	const startIdx = text.indexOf(markerText);
+	const codeBlockLines = getCodeBlockLineSet(text);
+	/** 文字位置が何行目か（0 起点） */
+	const lineOf = (charPos: number): number => text.slice(0, charPos).split("\n").length - 1;
+
+	// **書き込み先の探索でもコードブロック行を外す。** 外さないと、マーカーの書き方を
+	// 解説する原稿（コード例の中に本物のマーカーを貼ったもの）で、訳文がコードブロックの
+	// 中へ書き込まれる。コードフェンスが閉じなくなり、以降の構造ごと壊れる。
+	// 終端の探索は元から外していたので、片側だけが守られていた
+	let startIdx = -1;
+	for (let idx = text.indexOf(markerText); idx !== -1; idx = text.indexOf(markerText, idx + 1)) {
+		if (!codeBlockLines.has(lineOf(idx))) {
+			startIdx = idx;
+			break;
+		}
+	}
 	if (startIdx === -1) {
 		return null;
 	}
 	const markerLen = markerText.length;
 	const after = text.slice(startIdx + markerLen);
 
-	const codeBlockLines = getCodeBlockLineSet(text);
 	const globalRegex = new RegExp(MdaitMarker.MARKER_REGEX.source, "g");
 	let chosenIndex: number | null = null;
 	for (const m of after.matchAll(globalRegex)) {
 		const absCharPos = startIdx + markerLen + (m.index ?? 0);
-		const lineNo = text.slice(0, absCharPos).split("\n").length - 1; // 0-indexed
-		if (codeBlockLines.has(lineNo)) {
+		if (codeBlockLines.has(lineOf(absCharPos))) {
 			continue; // コードブロック内はスキップ
 		}
 		chosenIndex = m.index ?? 0;

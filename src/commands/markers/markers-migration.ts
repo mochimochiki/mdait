@@ -382,6 +382,11 @@ export function countManualSyncLevelZeroFiles(absPaths: readonly string[]): numb
 export interface MigrationLoopResult {
 	filesRewritten: number;
 	unitsMigrated: number;
+	/**
+	 * 移せずに落としたマーカーの数（externalize のみ）。
+	 * 落とすと `from` と `need` も一緒に消える。**必ず表に出すこと。**
+	 */
+	unitsDropped: number;
 	cancelled: boolean;
 }
 
@@ -405,6 +410,7 @@ export async function runMigrationLoop(
 ): Promise<MigrationLoopResult> {
 	let filesRewritten = 0;
 	let unitsMigrated = 0;
+	let unitsDropped = 0;
 	let cancelled = false;
 	try {
 		for (let i = 0; i < targets.length; i++) {
@@ -427,6 +433,7 @@ export async function runMigrationLoop(
 				filesRewritten++;
 			}
 			unitsMigrated += result.unitsMigrated;
+			unitsDropped += result.unitsDropped;
 		}
 	} finally {
 		// store を保存（external: 追加した detach、embedded: 削除を永続化）。
@@ -435,7 +442,7 @@ export async function runMigrationLoop(
 			store.save(mdaitDir);
 		}
 	}
-	return { filesRewritten, unitsMigrated, cancelled };
+	return { filesRewritten, unitsMigrated, unitsDropped, cancelled };
 }
 
 /**
@@ -488,9 +495,13 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 			: vscode.l10n.t("• Markers in .mdait/unit-state are written back into the files"),
 	];
 	if (toExternal) {
+		// 実測では、落ちるのは「見出しを伴わないマーカー」だけではない。
+		// sync.level より深い見出しに付いたマーカーも落ちる（level 3 の既定で #### が落ちた）。
+		// 実態と違う説明のまま「警告済み」として扱うのがいちばん危ない
 		detailLines.push(
 			vscode.l10n.t(
-				"• Manual sub-unit boundary markers (markers without a heading) are not supported in external mode and will be lost",
+				"• Markers that do not sit on an external unit boundary — deeper than sync.level ({0}), or not on a heading — cannot be moved. They are dropped together with their from/need",
+				config.sync?.level ?? 3,
 			),
 		);
 	}
@@ -521,6 +532,7 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 
 	let filesRewritten = 0;
 	let unitsMigrated = 0;
+	let unitsDropped = 0;
 	let cancelled = false;
 	try {
 		await vscode.window.withProgress(
@@ -537,6 +549,7 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 				const loopResult = await runMigrationLoop(targets, toExternal, config, store, mdaitDir, token, progress);
 				filesRewritten = loopResult.filesRewritten;
 				unitsMigrated = loopResult.unitsMigrated;
+				unitsDropped = loopResult.unitsDropped;
 				cancelled = loopResult.cancelled;
 
 				// mdait.json の markers.mode を更新（in-memory も即時反映）。
@@ -573,20 +586,35 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 		});
 	}
 
+	// 落としたマーカーは from と need も一緒に失われる。**必ず表に出す。**
+	// これまでは Output の INFO 1行にしか出ておらず、完了通知は「N 件移しました」としか
+	// 言わなかった。数十ファイルを一括変換すると、取りこぼしは文書数に比例して増える
+	const dropped =
+		toExternal && unitsDropped > 0
+			? ` ${vscode.l10n.t(
+					"{0} marker(s) deeper than sync.level ({1}) could not be moved and were dropped along with their from/need.",
+					unitsDropped,
+					config.sync?.level ?? 3,
+				)}`
+			: "";
 	const doneMsg = toExternal
 		? vscode.l10n.t(
 				"Markers externalized: {0} of {1} file(s) rewritten, {2} unit marker(s) moved to .mdait/unit-state. Run Sync to verify the result.",
 				filesRewritten,
 				targets.length,
 				unitsMigrated,
-			)
+			) + dropped
 		: vscode.l10n.t(
 				"Markers embedded: {0} of {1} file(s) rewritten, {2} unit marker(s) written back into the files. Run Sync to verify the result.",
 				filesRewritten,
 				targets.length,
 				unitsMigrated,
 			);
-	vscode.window.showInformationMessage(doneMsg);
+	if (dropped) {
+		vscode.window.showWarningMessage(doneMsg);
+	} else {
+		vscode.window.showInformationMessage(doneMsg);
+	}
 }
 
 /**

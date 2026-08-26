@@ -46,6 +46,24 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 
 			const report: ValidationReport = await validate_CoreProc(inputPath, checks);
 
+			// 1ファイルも見ていないのに「違反なし」と答えない。
+			// 「調べた結果きれいだった」と「調べる相手が居なかった」は別のことで、
+			// 混ぜるとエージェントは前者と読んで先へ進む（実測: 存在しないパスでも
+			// `ok:true / No violations.` が返り、原文側のフォルダを渡しても同じだった）
+			if (report.filesChecked === 0) {
+				const message = inputPath
+					? vscode.l10n.t(
+							"Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.",
+							inputPath,
+						)
+					: vscode.l10n.t("Nothing to validate: no managed translation file was found. Run mdait_sync first.");
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InvalidPath, message, [
+						"Check the path: mdait validates the target (translated) side. Run mdait_getStatus to see which files are managed.",
+					]),
+				);
+			}
+
 			const structureCount = report.violations.filter((v) => v.check === "structure").length;
 			const termsCount = report.violations.filter((v) => v.check === "terms").length;
 			const summary = vscode.l10n.t(

@@ -33,6 +33,8 @@ export interface FileSyncResult {
 	orphanReviewed?: number;
 	/** 崩れを疑って自動削除を見送り、確認待ちにした孤立ターゲット数 */
 	orphanDeletionWithheld?: number;
+	/** 削除した孤立ターゲットの見出し（通知で「何が消えたか」を言うため） */
+	orphanDeletedTitles?: string[];
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
 	/** 原文が空になったため訳文に触れずに中止したファイル数（0 or 1） */

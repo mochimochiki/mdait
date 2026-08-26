@@ -357,6 +357,36 @@ suite("runMigrationLoop（一括変換ループの store 保存保証）", () =>
 		assert.strictEqual(entries[1].need, "translate");
 	});
 
+	test("移せずに落としたマーカーの数を返すこと（黙って捨てない）", async () => {
+		// 落としたマーカーは from と need も一緒に失われる。以前はこの数がループで
+		// 加算されず捨てられていたので、完了通知は「N 件移しました」としか言わなかった。
+		// 実測では既定の見本で12件中6件が落ちていた
+		const rel = "docs/en/deep.md";
+		const abs = path.join(tempDir, rel);
+		fs.mkdirSync(path.dirname(abs), { recursive: true });
+		fs.writeFileSync(
+			abs,
+			[
+				"<!-- mdait aaaa1111 from:src00001 -->",
+				"# 見出し1",
+				"",
+				"本文1。",
+				"",
+				"<!-- mdait cccc3333 from:sub00001 need:translate -->",
+				"### 深すぎる見出し",
+				"",
+				"落ちる本文。",
+				"",
+			].join("\n"),
+			"utf-8",
+		);
+		const targets: MigrationTarget[] = [{ absPath: abs, role: "target" }];
+
+		const result = await runMigrationLoop(targets, true, makeConfig(2), store, tempDir);
+
+		assert.strictEqual(result.unitsDropped, 1, "落とした件数が呼び出し側へ届くこと");
+	});
+
 	test("全ファイル成功時は件数を返し、store も保存されること", async () => {
 		const rel = "docs/en/guide.md";
 		const abs = writeEmbedded(rel);
@@ -366,6 +396,7 @@ suite("runMigrationLoop（一括変換ループの store 保存保証）", () =>
 
 		assert.strictEqual(result.filesRewritten, 1);
 		assert.strictEqual(result.unitsMigrated, 2);
+		assert.strictEqual(result.unitsDropped, 0);
 		assert.strictEqual(result.cancelled, false);
 
 		UnitStateStore.dispose();

@@ -332,39 +332,10 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	}
 
 	/**
-	 * 書き出しで失われる「翻訳の状態」を数える。
-	 *
-	 * 数えるのは `from` か `need` を持っていた行だけである。それ以外（hash だけの行）は
-	 * 本文から計算し直せるので、消えても取り返しがつく。いまの本文のどこかに同じ hash が
-	 * あるなら、その行は位置が変わっただけで失われていない。
+	 * 書き出しで失われる「翻訳の状態」を数える。詳しくは `countLostStateEntries` を見ること。
 	 */
 	private countLostState(filePath: string, units: readonly MdaitUnit[]): number {
-		const previous = this.store.getEntriesByPath(filePath);
-		if (previous.length === 0) {
-			return 0;
-		}
-		const survivingHashes = new Set<string>();
-		for (const unit of units) {
-			if (unit.marker?.hash) {
-				survivingHashes.add(unit.marker.hash);
-			}
-		}
-		let lost = 0;
-		for (const entry of previous) {
-			if (isHeldBackEntry(entry)) {
-				continue; // 保留席は上書きされない（order が桁違いのため）
-			}
-			if (!entry.hash || (!entry.from && !entry.need)) {
-				continue; // 守るべき状態が無い
-			}
-			if (entry.order >= units.length) {
-				continue; // 末尾。刈り取り／保留の判断が別に下される
-			}
-			if (!survivingHashes.has(entry.hash)) {
-				lost++;
-			}
-		}
-		return lost;
+		return countLostStateEntries(this.store.getEntriesByPath(filePath), units);
 	}
 }
 
@@ -471,3 +442,58 @@ function hasStateWorthHolding(entry: UnitStateEntry): boolean {
  * 既定で使用する外部 Provider のシングルトンインスタンス。
  */
 export const externalMarkerProvider: MarkerProvider = new ExternalMarkerProvider();
+
+/**
+ * 書き出しで失われる「翻訳の状態」を数える（純関数）。
+ *
+ * 数えるのは `from` か `need` を持っていた行だけである。それ以外（hash だけの行）は
+ * 本文から計算し直せるので、消えても取り返しがつく。いまの本文のどこかに同じ hash が
+ * あるなら、その行は位置が変わっただけで失われていない。
+ *
+ * **同じ `from` を持つユニットが居ることも「失われていない」印である。** 訳文の hash は
+ * 訳し直せば必ず変わるので、hash だけで見ると翻訳が成功するたびに「失った」と数えて
+ * しまう（既定テンプレートは external なので、初回の翻訳で全員がこの警告を見ていた）。
+ * `from` は原文を指す値で訳し直しても変わらないから、章がまだそこに在ることが分かる。
+ * 狼少年をやめないと、本当に状態を落としたとき（マージの取りこぼしなど）に読まれない。
+ *
+ * @param previous 書き出す前にストアが持っていた行
+ * @param units これから書き出すユニット
+ */
+export function countLostStateEntries(
+	previous: readonly UnitStateEntry[],
+	units: readonly MdaitUnit[],
+): number {
+	if (previous.length === 0) {
+		return 0;
+	}
+	const survivingHashes = new Set<string>();
+	const survivingFroms = new Set<string>();
+	for (const unit of units) {
+		if (unit.marker?.hash) {
+			survivingHashes.add(unit.marker.hash);
+		}
+		if (unit.marker?.from) {
+			survivingFroms.add(unit.marker.from);
+		}
+	}
+	let lost = 0;
+	for (const entry of previous) {
+		if (isHeldBackEntry(entry)) {
+			continue; // 保留席は上書きされない（order が桁違いのため）
+		}
+		if (!entry.hash || (!entry.from && !entry.need)) {
+			continue; // 守るべき状態が無い
+		}
+		if (entry.order >= units.length) {
+			continue; // 末尾。刈り取り／保留の判断が別に下される
+		}
+		if (survivingHashes.has(entry.hash)) {
+			continue; // 位置が変わっただけ
+		}
+		if (entry.from && survivingFroms.has(entry.from)) {
+			continue; // 訳し直しただけ（章はまだそこに在る）
+		}
+		lost++;
+	}
+	return lost;
+}

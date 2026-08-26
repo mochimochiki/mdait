@@ -44,6 +44,8 @@ export interface DoctorProbe {
 	countMarkdownFiles(relDir: string): number;
 	/** 相対ディレクトリ配下で mdait マーカーを含むファイル数 */
 	countFilesWithMarkers(relDir: string): number;
+	/** 相対ディレクトリ配下で `.mdait/unit-state` に行を持つファイル数（external モード用） */
+	countFilesWithUnitState(relDir: string): number;
 }
 
 /**
@@ -172,7 +174,13 @@ export function runStaticChecks(
 			});
 		} else {
 			const mdCount = probe.countMarkdownFiles(pair.sourceDir);
-			const markerCount = probe.countFilesWithMarkers(pair.sourceDir);
+			// external モードでは本文にマーカーが入らない。本文だけを見ると、
+			// 何度 sync に成功しても「まだ同期していません」と言い続ける
+			// （既定テンプレートが external なので、新規利用者は全員これを踏む）
+			const markerCount =
+				config.markersMode === "external"
+					? probe.countFilesWithUnitState(pair.sourceDir)
+					: probe.countFilesWithMarkers(pair.sourceDir);
 			if (mdCount > 0 && markerCount === 0) {
 				// Markdown はあるがマーカーが無い → まず Sync（P2/P3）
 				out.push({

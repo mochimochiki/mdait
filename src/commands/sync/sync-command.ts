@@ -259,17 +259,35 @@ function deletionWithheldNotice(count: number): SyncNotice | undefined {
 	};
 }
 
-/** 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6） */
-function orphanDeletedNotice(count: number): SyncNotice | undefined {
+/**
+ * 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6）。
+ *
+ * **何が消えたかを名前で言う。** 原稿を消す唯一の経路なのに件数しか出ていなかったので、
+ * 20 ファイルを回している人には「1件」が何なのか分からなかった（実測）。
+ * 消したものはもう画面のどこにも無いので、ここで名前を言わないと確かめる術がない。
+ *
+ * @param count 削除したユニット数
+ * @param labels 削除したユニットの呼び名（`<訳文の名前>: <見出し>`）
+ */
+function orphanDeletedNotice(count: number, labels: readonly string[] = []): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
 	}
+	// 名前は3件まで、1件は60字まで。トーストは長くすると読まれない
+	const shown = labels
+		.filter((label) => label.trim() !== "")
+		.slice(0, 3)
+		.map((label) => (label.length > 60 ? `${label.slice(0, 59)}…` : label));
+	const named =
+		shown.length > 0
+			? ` ${vscode.l10n.t("Removed: {0}{1}.", shown.join(" / "), labels.length > shown.length ? ` (+${labels.length - shown.length})` : "")}`
+			: "";
 	return {
 		kind: "orphan-deleted",
-		detail: vscode.l10n.t(
+		detail: `${vscode.l10n.t(
 			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
 			count,
-		),
+		)}${named}`,
 		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
 		action: {
 			label: vscode.l10n.t("How to restore"),
@@ -415,6 +433,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalAdded = 0;
 		let totalModified = 0;
 		let totalDeleted = 0;
+		/** 削除した孤立ユニットの呼び名（<訳文の名前>: <見出し>）。通知で何が消えたかを言う */
+		const deletedUnitLabels: string[] = [];
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
@@ -554,6 +574,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalAdded += syncResult.added;
 						totalModified += syncResult.modified;
 						totalDeleted += syncResult.deleted;
+						for (const title of syncResult.orphanDeletedTitles ?? []) {
+							deletedUnitLabels.push(`${path.basename(targetFile)}: ${title}`);
+						}
 						totalUnchanged += syncResult.unchanged;
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
@@ -712,7 +735,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				newOrphansNotice(freshOrphans),
-				config.getOrphanTargetPolicy() === "delete" ? orphanDeletedNotice(totalDeleted) : undefined,
+				config.getOrphanTargetPolicy() === "delete"
+					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
+					: undefined,
 			].filter((notice): notice is SyncNotice => notice !== undefined),
 		);
 
@@ -741,10 +766,11 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			durationMs,
 			...formatError(error),
 		});
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("An error occurred during synchronization: {0}", (error as Error).message),
-		);
-		return undefined;
+		// **理由を握り潰さない。** ここで `undefined` を返していたので、
+		// 「どのフォルダが無いのか」がトーストにしか出ず、LM ツール越しに叩いた
+		// エージェントには中身の無い internal_error だけが届いていた。
+		// 見せ方（文言とボタン）は呼び出し側の担当にする
+		throw error;
 	} finally {
 		storeLock.release();
 	}
@@ -1345,6 +1371,26 @@ export async function sync_CoreProc(
 	ensureMdaitMarkerHash(source.units);
 	ensureMdaitMarkerHash(target.units);
 
+	// 死んだ原文ハッシュを、対応付けの前に本文から付け直す（下の関数の説明を参照）
+	const repairedHashes = repairDeadSourceHashes(source.units, target.units);
+	if (repairedHashes > 0) {
+		logger.warn("sync", "Repaired source marker hashes that pointed nowhere", {
+			sourceFile,
+			repaired: repairedHashes,
+			note: "The hash matched neither the section body nor any from: in the translation. Left as-is, the translation would have been treated as orphaned and deleted",
+		});
+	}
+
+	// 原文がファイルごと前の版へ戻ったときの繋ぎ直し（下の関数の説明を参照）
+	const relinked = relinkRevertedTargets(source.units, target.units);
+	if (relinked > 0) {
+		logger.info("sync", "Re-linked translations to the source version they were translated from", {
+			sourceFile,
+			relinked,
+			note: "The source went back to the version recorded in need:revise@. Left as-is, the translation would have been treated as orphaned and deleted",
+		});
+	}
+
 	// ユニットの対応付け（位置ベース。独立ユニットは対応付け対象外）
 	let matchResult = sectionMatcher.match(source.units, target.units, independentTargets);
 
@@ -1427,6 +1473,7 @@ export async function sync_CoreProc(
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
 	diffResult.orphanDeletionWithheld = withheldPolicy.withheld ? syncedResult.orphanVerified : 0;
+	diffResult.orphanDeletedTitles = syncedResult.orphanDeletedTitles;
 	diffResult.alignCorrections = alignCorrections;
 
 	// 同期結果をMarkdownオブジェクトとして構築
@@ -1597,6 +1644,107 @@ function ensureMdaitMarkerHash(units: MdaitUnit[]) {
 			unit.marker = new MdaitMarker(hash);
 		}
 	}
+}
+
+/**
+ * 誰も指していない原文マーカーのハッシュを、本文から付け直す。
+ *
+ * 原文の hash は2つの顔を持つ。**本文から計算できる値**であることと、
+ * **訳文の `from:` が指す宛先**であることだ。本文を書き換えた直後は前者と食い違うが、
+ * そのときは必ず後者として生きている（訳文の `from` がその値を指している）。
+ *
+ * どちらでもない hash は、誰も指していない死んだ値である。手編集の打ち間違いや
+ * マージの取りこぼしでこうなる。放っておくと対応付け（`from === hash`）が外れ、
+ * 位置ベースの救済も `from` を持つ訳文には効かないため、**完成した訳文が
+ * 「原文が消えた」として削除される**（ごみ箱を通らず、原文は目の前にあるのに、である）。
+ * 実測でそうなった。対応付けの前に本文から付け直せば、`from` が本文のハッシュを
+ * 指している通常の壊れ方はその場で元どおりつながる。
+ *
+ * 生きている hash には触らない。触ると本文を編集しただけで対応付けが外れ、
+ * note の引き継ぎ（`recordMigration`）も空振りする。
+ *
+ * @returns 付け直した件数
+ */
+export function repairDeadSourceHashes(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): number {
+	const referenced = new Set<string>();
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (from) {
+			referenced.add(from);
+		}
+	}
+	let repaired = 0;
+	for (const unit of sourceUnits) {
+		const stored = unit.marker?.hash;
+		if (!stored || referenced.has(stored)) {
+			continue;
+		}
+		const actual = calculateHash(unit.content);
+		if (stored === actual) {
+			continue;
+		}
+		unit.marker = new MdaitMarker(actual, unit.marker?.from ?? null, unit.marker?.need ?? null);
+		repaired++;
+	}
+	return repaired;
+}
+
+/**
+ * 原文が前の版へ戻ったときに、訳文を元の相手へ繋ぎ直す。
+ *
+ * 原文を**ファイルごと**戻すと（`git checkout --`・ブランチの切り替え・SCM の「変更を破棄」）、
+ * 原文のマーカーも前の版の hash に戻る。訳文の `from` は編集後の hash を指したままなので、
+ * 対応付け（`from === hash`）が外れる。位置ベースの救済は `from` を持つ訳文には効かないため、
+ * **訳し終えた章が「原文が消えた」として削除される**（実測。ごみ箱を通らず、原文は目の前にある）。
+ *
+ * だが戻り先は訳文自身が知っている。`need:revise@X` は「この訳文は原文の X 版に対応する」という
+ * 意味で、その X がいま原文に在るなら、それが元の相手である。`from` をそこへ繋ぎ直せば、
+ * 対応付けが戻り、改訂の必要も無くなったので `syncMarkerPair` が need を落とす。
+ *
+ * 繋ぎ直すのは **`from` の指す先がどこにも無い**訳文だけ。生きている `from` には触らない。
+ *
+ * **既に誰かが指している原文は横取りしない。** 本文が一字一句同じ章は hash も同じになるので、
+ * 本当に消えた章の訳文が、生き残っている章へ繋ぎ直されうる。そうなると対応付けが入れ替わり、
+ * 生きている章の訳（手直し入り）のほうが孤立して消える — 直そうとした事故と同じものを、
+ * 別の場所で作ることになる。
+ *
+ * @returns 繋ぎ直した件数
+ */
+export function relinkRevertedTargets(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[]): number {
+	const sourceHashes = new Set<string>();
+	for (const unit of sourceUnits) {
+		if (unit.marker?.hash) {
+			sourceHashes.add(unit.marker.hash);
+		}
+	}
+	// 既に生きた `from` で押さえられている原文。ここへは繋ぎ直さない
+	const claimed = new Set<string>();
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (from && sourceHashes.has(from)) {
+			claimed.add(from);
+		}
+	}
+	let relinked = 0;
+	for (const target of targetUnits) {
+		const from = target.getSourceHash();
+		if (!from || sourceHashes.has(from)) {
+			continue; // 相手が居る（ふつうの状態）
+		}
+		const snapshot = target.marker?.getOldHashFromNeed();
+		if (!snapshot || !sourceHashes.has(snapshot)) {
+			continue; // 戻り先が分からない。決めつけない
+		}
+		if (claimed.has(snapshot)) {
+			continue; // その原文は既に別の訳文のもの
+		}
+		if (target.marker) {
+			target.marker.from = snapshot;
+			claimed.add(snapshot);
+			relinked++;
+		}
+	}
+	return relinked;
 }
 
 /**

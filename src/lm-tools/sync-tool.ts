@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { syncCommand } from "../commands/sync/sync-command";
 import { getSelectedScopeFiles } from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
+import { Configuration } from "../infra/config/configuration";
 import { Logger } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { buildNextActions } from "./next-actions";
@@ -69,8 +70,35 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 			const align = adopt && options.input.align === true;
 			logger.info("LanguageModelTool", "Sync tool invoked", { adopt, align });
 
-			// 同期コマンドを実行
-			const syncResult = await syncCommand({ adopt, align });
+			// **走らせる前の検査で弾かれる設定も、理由を返す。**
+			// 例外になる失敗（フォルダが無い）は理由が届くのに、こちらだけ
+			// 中身の無い同じ文が返っていた。同じ「設定が悪い」で当たり外れがあった（実測）
+			const validationError = Configuration.getInstance().validateForRun();
+			if (validationError) {
+				const message = vscode.l10n.t("Synchronization did not run: {0}", validationError);
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InvalidInput, validationError, [
+						"Fix the cause named above in .mdait/mdait.json, then retry mdait_sync.",
+					]),
+				);
+			}
+
+			// 同期コマンドを実行。
+			// **失敗の理由をそのまま返す。** 以前は理由がトーストにしか出ず、
+			// エージェントには中身の無い internal_error だけが届いていたので、
+			// 「どのフォルダが無いのか」を自力で突き止める手段が無かった
+			let syncResult: Awaited<ReturnType<typeof syncCommand>>;
+			try {
+				syncResult = await syncCommand({ adopt, align });
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : String(error);
+				const message = vscode.l10n.t("Synchronization failed: {0}", reason);
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InternalError, reason, [
+						"Fix the cause named above (most often a path in .mdait/mdait.json transPairs), then retry mdait_sync.",
+					]),
+				);
+			}
 			if (!syncResult) {
 				const message = vscode.l10n.t("Synchronization did not run. Check the mdait configuration.");
 				return toToolResult(
@@ -127,7 +155,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 						syncResult.revisionsNeeded,
 					);
 
-			const nextActions = buildNextActions(status.needs, status.errorUnits);
+			const nextActions = buildNextActions(status.needs, status.errorUnits, 0, status.totalUnits);
 			if (syncResult.totalOrphanReviewed > 0) {
 				nextActions.unshift(
 					`${syncResult.totalOrphanReviewed} unmarked target-only unit(s) received need:review (no source counterpart found). For each, either run mdait_resolve to remove the need flag and keep it as an independent unit, or delete the unit.`,

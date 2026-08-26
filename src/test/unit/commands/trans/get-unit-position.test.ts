@@ -5,6 +5,41 @@ import { strict as assert } from "node:assert";
 import { getUnitPosition } from "../../../../commands/trans/trans-command";
 
 suite("getUnitPosition", () => {
+	test("同じマーカーがコードブロックの中にもあるとき、書き込み先は本物の方を指すこと", () => {
+		// マーカーの書き方を解説する原稿では、コード例に本物のマーカーを貼ることがある。
+		// 開始位置の探索がコードブロックを外していないと、訳文がコードブロックの中へ
+		// 書き込まれ、コードフェンスが閉じなくなって以降の構造ごと壊れる（実測）
+		const text = [
+			"<!-- mdait aaaa1111 from:aaaa1111 -->",
+			"# 書き方",
+			"",
+			"```md",
+			"<!-- mdait cccc3333 from:cccc3333 need:translate -->",
+			"```",
+			"",
+			"<!-- mdait cccc3333 from:cccc3333 need:translate -->",
+			"# 本物の見出し",
+			"",
+			"失いたくない本文",
+		].join("\n");
+
+		const markerText = "<!-- mdait cccc3333 from:cccc3333 need:translate -->";
+		const result = getUnitPosition(text, markerText);
+
+		assert.ok(result !== null, "結果がnullでないこと");
+		assert.strictEqual(
+			result.start,
+			text.lastIndexOf(markerText),
+			"コードブロックの中ではなく、その後ろにある本物のマーカーを指すこと",
+		);
+		assert.strictEqual(result.end, text.length, "本物のマーカー以降が1ユニットになること");
+	});
+
+	test("コードブロックの中にしかマーカーが無ければ、書き込み先なしとして null を返すこと", () => {
+		const text = ["# 書き方", "", "```md", "<!-- mdait cccc3333 from:cccc3333 -->", "```"].join("\n");
+		assert.strictEqual(getUnitPosition(text, "<!-- mdait cccc3333 from:cccc3333 -->"), null);
+	});
+
 	test("通常の2ユニット構成で正しい範囲を返すこと", () => {
 		const text = [
 			"<!-- mdait aaaa1111 from:aaaa1111 need:translate -->",
