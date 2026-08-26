@@ -60,6 +60,7 @@ import { getFileHandler } from "../file-handler/file-handler-factory";
 import { OperationRegistry } from "../shared/operation-registry";
 import {
 	reportTransOutcome,
+	showConfigError,
 	showNeedSyncError,
 	showTranslationError,
 } from "../shared/guidance";
@@ -226,6 +227,15 @@ export async function transCommand(
 		vscode.window.showErrorMessage(
 			vscode.l10n.t("No file selected for translation."),
 		);
+		return;
+	}
+
+	// **走らせる前の検査は、AI を呼ぶ入口すべてに置く。** sync だけに置いていたので、
+	// 訳し先の言語が原文と同じ／空のままでもファイル単位の翻訳は素通りし、
+	// 原文がそのまま返って need が外れ、課金だけされていた（実測）
+	const validationError = Configuration.getInstance().validateForRun();
+	if (validationError) {
+		await showConfigError(validationError);
 		return;
 	}
 
@@ -1393,6 +1403,13 @@ export async function transUnitCommand(
 	unitHash: string,
 	options?: TransRunOptions,
 ): Promise<TransCommandResult> {
+	// 走らせる前の検査（transCommand と同じ理由。AI を呼ぶ入口すべてに置く）
+	const validationError = Configuration.getInstance().validateForRun();
+	if (validationError) {
+		await showConfigError(validationError);
+		return emptyResult("failed");
+	}
+
 	// AI初回利用チェック
 	const aiOnboarding = AIOnboarding.getInstance();
 	const shouldProceed = await aiOnboarding.checkAndShowFirstUseDialog();

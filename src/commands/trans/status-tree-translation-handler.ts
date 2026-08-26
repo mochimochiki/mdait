@@ -10,7 +10,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
-import { showDirectoryTranslationFailure, showTranslationError } from "../shared/guidance";
+import { showConfigError, showDirectoryTranslationFailure, showTranslationError } from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
 import { getSelectedPairAbsDirs } from "../shared/status-scope";
 import {
@@ -112,6 +112,13 @@ export class StatusTreeTranslationHandler {
 		}
 
 		const directoryPath = item.directoryPath; // 型安全性のためローカル変数に保存
+
+		// 走らせる前の検査（transCommand と同じ理由。AI を呼ぶ入口すべてに置く）
+		const validationError = Configuration.getInstance().validateForRun();
+		if (validationError) {
+			await showConfigError(validationError);
+			return;
+		}
 
 		try {
 			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）。
