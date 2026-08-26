@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { StatusItemType, isTranslateNeed } from "../../core/status/status-item";
+import { StatusItemType } from "../../core/status/status-item";
 import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
@@ -171,26 +171,15 @@ export class StatusTreeTranslationHandler {
 				return { totalFiles: files.length, successful: 0, failed: 0, skipped: files.length };
 			}
 
-			// ファイル数も「手を入れる分」を数える。フォルダ内の全ファイル数を並べると、
-			// 40 ファイル中 10 ファイルだけ古いときに「40 file(s)」と出て過大に見える
-			const tree = StatusManager.getInstance().getStatusItemTree();
-			const pendingFiles = files.filter((file) => {
-				const item = tree.getFile(file.fsPath);
-				if (!item) {
-					return false;
-				}
-				// 非MD（プレーン）はファイル自体に need が載る。MD はユニット側に載る
-				return (
-					isTranslateNeed(item.needFlag) ||
-					tree.getUnitsInFile(file.fsPath).some((unit) => isTranslateNeed(unit.needFlag))
-				);
-			}).length;
+			// 費用の目安はユニット数が担う（AI を呼ぶ回数がこれ）。ファイル数は
+			// **これから見に行く範囲**を示すもので、完了通知が数えるのと同じ集合にする。
+			// 別々の数え方をすると「48 と言われて承諾したのに 49 と報告される」が起きる（実測）
 			const confirmation = await vscode.window.showInformationMessage(
 				vscode.l10n.t(
-					"Translate {0}? ({1} unit(s) in {2} file(s))",
+					"Translate {0}? ({1} unit(s) need translation in {2} file(s))",
 					workspaceLabel(directoryPath),
 					pendingUnits,
-					pendingFiles,
+					files.length,
 				),
 				{ modal: true },
 				vscode.l10n.t("Yes"),

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { syncCommand } from "../commands/sync/sync-command";
 import { getSelectedScopeFiles } from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
+import { Configuration } from "../infra/config/configuration";
 import { Logger } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { buildNextActions } from "./next-actions";
@@ -68,6 +69,19 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 			// align は adopt 時のみ有効（adopt でなければ無視する）
 			const align = adopt && options.input.align === true;
 			logger.info("LanguageModelTool", "Sync tool invoked", { adopt, align });
+
+			// **走らせる前の検査で弾かれる設定も、理由を返す。**
+			// 例外になる失敗（フォルダが無い）は理由が届くのに、こちらだけ
+			// 中身の無い同じ文が返っていた。同じ「設定が悪い」で当たり外れがあった（実測）
+			const validationError = Configuration.getInstance().validateForRun();
+			if (validationError) {
+				const message = vscode.l10n.t("Synchronization did not run: {0}", validationError);
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InvalidInput, validationError, [
+						"Fix the cause named above in .mdait/mdait.json, then retry mdait_sync.",
+					]),
+				);
+			}
 
 			// 同期コマンドを実行。
 			// **失敗の理由をそのまま返す。** 以前は理由がトーストにしか出ず、

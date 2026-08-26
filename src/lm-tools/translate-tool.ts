@@ -253,6 +253,21 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 				);
 			}
 
+			// 管理対象が1件も無かったスコープを成功として返さない。
+			// `ok` しか見ない相手には「0 file(s) succeeded」が成功に見え、
+			// 原文側のフォルダを渡したエージェントがそのまま完了報告して終わる（実測）
+			if (succeeded === 0 && failed === 0 && translatedUnits === 0 && scopeStatus.totalUnits === 0) {
+				const message = vscode.l10n.t(
+					"Nothing to translate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.",
+					inputPath,
+				);
+				return toToolResult(
+					createErrorEnvelope(message, ToolErrorCode.InvalidPath, message, [
+						"mdait translates the target (translated) side. Run mdait_getStatus with no path to see which files are managed.",
+					]),
+				);
+			}
+
 			const summary = vscode.l10n.t(
 				"Translation completed for {0}: {1} file(s) succeeded, {2} failed, {3} unit(s) translated.",
 				inputPath,
