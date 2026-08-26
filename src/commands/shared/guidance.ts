@@ -176,7 +176,7 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 			);
 		case "no-source-diff":
 			return vscode.l10n.t(
-				"The previous version of the source is no longer available, so only the changed part could not be identified.",
+				"The previous version of the source is no longer available, so mdait could not tell which part changed.",
 			);
 	}
 }

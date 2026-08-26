@@ -33,8 +33,8 @@ suite("パッチ失敗の理由の伝え方", () => {
 	test("旧原文が手元に無い場合は、そのことを言うこと", () => {
 		const message = describePatchFailure("no-source-diff");
 		assert.ok(
-			message.includes("previous version of the source"),
-			`旧原文が無いことを言うこと: ${message}`,
+			message.includes("previous version of the source") && message.includes("which part changed"),
+			`旧原文が無くて変更箇所を特定できなかったことを言うこと: ${message}`,
 		);
 	});
 });

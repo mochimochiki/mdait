@@ -333,7 +333,7 @@
   "Nothing to validate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.": "{0} の下に、管理下の訳文ファイルがありません。訳文側（翻訳された方）のファイルかフォルダを渡してください。",
   "Nothing to validate: no managed translation file was found. Run mdait_sync first.": "管理下の訳文ファイルが見つからないので、何も検証していません。先に mdait_sync を実行してください。",
   "Removed: {0}{1}.": "消したもの: {0}{1}。",
-  "The previous version of the source is no longer available, so only the changed part could not be identified.": "前の版の原文が手元に無いため、変わったところだけを見つけられませんでした。",
+  "The previous version of the source is no longer available, so mdait could not tell which part changed.": "前の版の原文が手元に無いため、どこが変わったのかを特定できませんでした。",
   "Could not reach the OpenAI-compatible endpoint at {0}. Check ai.openai.baseURL and your network.": "{0} に繋がりませんでした。ai.openai.baseURL とネットワークを確かめてください。",
   "The OpenAI API key was rejected ({0}). Check ai.openai.apiKey or the OPENAI_API_KEY environment variable.": "API キーが拒まれました（{0}）。ai.openai.apiKey か環境変数 OPENAI_API_KEY を確かめてください。",
   "The model \"{0}\" is not in the list the endpoint returned. Check ai.model for a typo.": "モデル「{0}」は、エンドポイントが返した一覧にありません。ai.model の綴りを確かめてください。",

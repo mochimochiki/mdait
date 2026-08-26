@@ -471,7 +471,7 @@
   "The AI did not answer in the expected format.": "The AI did not answer in the expected format.",
   "The AI's answer contained no changes to apply.": "The AI's answer contained no changes to apply.",
   "The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.": "The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.",
-  "The previous version of the source is no longer available, so only the changed part could not be identified.": "The previous version of the source is no longer available, so only the changed part could not be identified.",
+  "The previous version of the source is no longer available, so mdait could not tell which part changed.": "The previous version of the source is no longer available, so mdait could not tell which part changed.",
   "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.": "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.",
   "The AI returned an empty answer.": "The AI returned an empty answer.",
   "✨Re-translate in full": "✨Re-translate in full",
