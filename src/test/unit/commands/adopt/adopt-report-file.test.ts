@@ -24,6 +24,7 @@ function syncResult(): SyncResult {
 		totalKept: 0,
 		totalOrphanReviewed: 0,
 		totalOrphanDeletionWithheld: 0,
+		totalOrphanRollbackWithheld: 0,
 		totalAlignCorrections: 0,
 		durationMs: 1,
 	};

@@ -340,6 +340,8 @@
   "The endpoint at {0} answered with HTTP {1}. Translation will likely fail.": "{0} が HTTP {1} を返しました。このままでは翻訳は失敗します。",
   "{0} is on the source side. Translate the matching file under '{1}' instead.": "{0} は原文側のファイルです。'{1}' の下にある対のファイルを翻訳してください。",
   "Could not read .mdait/mdait.json as JSON ({0}). mdait is still running on the last settings it managed to read.": ".mdait/mdait.json を JSON として読めませんでした（{0}）。mdait は最後に読めた設定のまま動いています。",
+  "Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source with git). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.": "{0} 件の訳文を消さずに残しました。原文に、どの訳文も指していない過去のマーカーが付いており、原文だけを巻き戻したときの姿になっています（git で原文だけを戻した場合など）。確認待ちの印を付けて残してあります。原文と訳文をそろえて戻してから同期し直すと、元に戻ります。",
+  "{0} unit(s) kept: the source looks rolled back on its own": "{0} 件を残しました: 原文だけが巻き戻された可能性があります",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",
