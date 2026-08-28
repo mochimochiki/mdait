@@ -14,6 +14,7 @@ import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
+import { isOneSidedRollback } from "../../core/matching/one-sided-rollback";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
@@ -260,6 +261,31 @@ function deletionWithheldNotice(count: number): SyncNotice | undefined {
 }
 
 /**
+ * 原文だけが巻き戻された疑いで自動削除を見送ったことを伝える。
+ *
+ * **崩れ（コードフェンスの閉じ忘れ）とは原因が違うので、文を分ける。** 同じ「見送った」でも
+ * 直し方が正反対で、原稿を直せと言われた人は自分の原稿を疑って時間を溶かす。
+ * こちらの直し方は「原文と訳文をそろえて戻す」である。
+ */
+function rollbackWithheldNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "rollback-withheld",
+		detail: vscode.l10n.t(
+			"Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source with git). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} unit(s) kept: the source looks rolled back on its own", count),
+		action: {
+			label: vscode.l10n.t("Show units"),
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/**
  * 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6）。
  *
  * **何が消えたかを名前で言う。** 原稿を消す唯一の経路なのに件数しか出ていなかったので、
@@ -363,6 +389,8 @@ export interface SyncResult {
 	totalOrphanReviewed: number;
 	/** 崩れを疑って自動削除を見送り、確認待ちにした孤立ターゲット数 */
 	totalOrphanDeletionWithheld: number;
+	/** 原文だけが巻き戻された疑いで自動削除を見送った孤立ターゲット数 */
+	totalOrphanRollbackWithheld: number;
 	/** AIアラインが適用した修正提案数 */
 	totalAlignCorrections: number;
 	/** 原文が空になったため訳文に触れずに中止したファイル数 */
@@ -441,6 +469,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
 		let totalOrphanDeletionWithheld = 0;
+		let totalOrphanRollbackWithheld = 0;
 		let totalAlignCorrections = 0;
 		let totalSourceEmptied = 0;
 		let totalTargetEmptied = 0;
@@ -583,6 +612,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
+						totalOrphanRollbackWithheld += syncResult.orphanRollbackWithheld ?? 0;
 						totalAlignCorrections += syncResult.alignCorrections ?? 0;
 						totalSourceEmptied += syncResult.sourceEmptied ?? 0;
 						totalTargetEmptied += syncResult.targetEmptied ?? 0;
@@ -653,6 +683,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
+			totalOrphanRollbackWithheld,
 			totalAlignCorrections,
 			totalSourceEmptied,
 			totalTargetEmptied,
@@ -730,6 +761,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		showSyncNotices(
 			[
 				deletionWithheldNotice(totalOrphanDeletionWithheld),
+				rollbackWithheldNotice(totalOrphanRollbackWithheld),
 				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
 				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
 				sourceEmptiedNotice(totalSourceEmptied),
@@ -754,6 +786,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
+			totalOrphanRollbackWithheld,
 			totalAlignCorrections,
 			totalSourceEmptied,
 			totalTargetEmptied,
@@ -1348,6 +1381,19 @@ export async function sync_CoreProc(
 	// （パーサーはマーカーなしユニットに hash 空のマーカーを付けるため hash の有無で判定する）。
 	// from 付き need:isolate は独立ユニットにしない: 上流ペアは Phase 1 で維持され、
 	// need の凍結（suppressNeed）で伝播だけが止まる
+	// 原文と訳文が別々に巻き戻された疑いも、**同じく ensure 前**に見る。
+	// 判定の material は「ファイルに書かれていたマーカー」でなければならない
+	// （マーカーは sync しか書かない、という事実がそのまま証拠になる）
+	const oneSidedRollback = isOneSidedRollback({
+		persistedSourceHashes: source.units.map((u) => u.marker?.hash ?? "").filter((h) => h !== ""),
+		targetLinks: target.units
+			.filter((u) => u.marker?.from)
+			.map((u) => ({
+				from: u.marker?.from ?? "",
+				reviseSnapshot: u.marker?.getOldHashFromNeed() ?? null,
+			})),
+	});
+
 	const independentTargets = new Set(
 		target.units.filter((u) => u.marker?.hash && !u.marker.from && u.marker.need !== "verify-deletion"),
 	);
@@ -1457,6 +1503,7 @@ export async function sync_CoreProc(
 		countExportedSources(source.units),
 		orphanCandidates,
 		targetFile,
+		oneSidedRollback,
 	);
 	const syncedResult = sectionMatcher.createSyncedTargets(
 		matchResult,
@@ -1472,7 +1519,8 @@ export async function sync_CoreProc(
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
-	diffResult.orphanDeletionWithheld = withheldPolicy.withheld ? syncedResult.orphanVerified : 0;
+	diffResult.orphanDeletionWithheld = withheldPolicy.withheld === "collapse" ? syncedResult.orphanVerified : 0;
+	diffResult.orphanRollbackWithheld = withheldPolicy.withheld === "rollback" ? syncedResult.orphanVerified : 0;
 	diffResult.orphanDeletedTitles = syncedResult.orphanDeletedTitles;
 	diffResult.alignCorrections = alignCorrections;
 
@@ -1599,9 +1647,19 @@ function resolveOrphanPolicy(
 	sourceUnitCount: number,
 	orphanCandidates: number,
 	targetFile: string,
-): { policy: OrphanTargetPolicy; withheld: boolean } {
+	oneSidedRollback: boolean,
+): { policy: OrphanTargetPolicy; withheld: false | "collapse" | "rollback" } {
 	if (configured !== "delete" || orphanCandidates === 0) {
 		return { policy: configured, withheld: false };
+	}
+	// 原文だけが巻き戻された疑い。崩れとは原因が違うので、理由を分けて伝える
+	if (oneSidedRollback) {
+		logger.warn("sync", "Withheld automatic deletion of orphaned target units (the source looks rolled back on its own)", {
+			file: targetFile,
+			orphaned: orphanCandidates,
+			note: "The source carries markers from an earlier sync that no translation points at. Restore the source and the translation together (they are kept in step by sync), then sync again — the units recover automatically.",
+		});
+		return { policy: "verify", withheld: "rollback" };
 	}
 	if (!isSuspiciousShrink(managedTargetCount, sourceUnitCount, DELETE_SUSPICION)) {
 		return { policy: configured, withheld: false };
@@ -1613,7 +1671,7 @@ function resolveOrphanPolicy(
 		orphaned: orphanCandidates,
 		note: "Kept the translations and marked them need:verify-deletion. If the source is broken (unclosed code fence, sync.level change), fix it and sync again — the units recover automatically.",
 	});
-	return { policy: "verify", withheld: true };
+	return { policy: "verify", withheld: "collapse" };
 }
 
 /**

@@ -54,6 +54,8 @@ export interface DiffResult {
 	orphanDeletionWithheld?: number;
 	/** 削除した孤立ターゲットの見出し（通知で「何が消えたか」を言うため） */
 	orphanDeletedTitles?: string[];
+	/** 原文だけが巻き戻された疑いで自動削除を見送った孤立ターゲット数 */
+	orphanRollbackWithheld?: number;
 	/** AIアラインが適用した修正提案数 */
 	alignCorrections?: number;
 	/** 原文が空になったため訳文に触れずに中止したファイル数（0 or 1） */
