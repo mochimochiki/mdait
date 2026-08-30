@@ -125,6 +125,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 - IPC の規約とコマンド一覧 → [references/ipc.md](references/ipc.md)
 - シナリオのパターン集（P1〜P12） → [references/patterns.md](references/patterns.md)
 - シナリオの足し方（sweep / probe / ux の広げ方） → [references/scenarios.md](references/scenarios.md)
+- 妥当性確認（使い手を演じさせ、直したあとに聞き直す） → [references/validation.md](references/validation.md)
 
 ## リポジトリ側の参照
 
