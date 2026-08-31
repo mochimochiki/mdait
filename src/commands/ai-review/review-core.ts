@@ -22,6 +22,7 @@ import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { SummaryManager } from "../../ui/hover/summary-manager";
 import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
 import type { PairVerifier, VerifyResult } from "./pair-verifier";
@@ -203,211 +204,224 @@ export async function executeAiReviewForFile(
 		throw new Error(vscode.l10n.t("Source file not found for: {0}", targetFile));
 	}
 
-	// external マーカーの場合は unit-state ストアを先にロードする（sync と同じ経路）
-	if (config.isExternalMarkers()) {
-		const mdaitDir = await ensureMdaitDir();
-		if (mdaitDir) {
-			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+	// **表（unit-state）の読み込みから保存までを、表全体の排他で囲む。**
+	// この関数は表をロードし、AI の判定にしたがってマーカーを書き換え、最後に保存する。
+	// 途中で sync が走ると `load()` が表を丸ごと捨てて読み直すため、書き換えが読み捨てられるか
+	// 上書きで消える。どちらも無言で起きる（docs/design/unit-state.md §8）。
+	//
+	// ロックの順序は「表 → ファイル」で、sync・unit-mutation と同じである。
+	// **この順序でしか足せない。** 逆（ファイル → 表）にすると、表を持って FileMutex を待つ
+	// sync と、FileMutex を持って表を待つこちらとで待ち合いになり、どちらも進まなくなる。
+	// ここは表のロードも保存も FileMutex の外側にあったので、順序はそのまま揃う
+	const storeLock = await acquireUnitStateLock();
+	try {
+		if (config.isExternalMarkers()) {
+			const mdaitDir = await ensureMdaitDir();
+			if (mdaitDir) {
+				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+			}
 		}
-	}
 
-	// 読み取り〜書き戻しの間に sync/trans がファイルを変更しないよう、ペア単位で排他する
-	await FileMutex.getInstance().runExclusive([sourceFile, targetFile], async () => {
-		await flushDirtyDocument(sourceFile);
-		await flushDirtyDocument(targetFile);
+		// 読み取り〜書き戻しの間に sync/trans がファイルを変更しないよう、ペア単位で排他する
+		await FileMutex.getInstance().runExclusive([sourceFile, targetFile], async () => {
+			await flushDirtyDocument(sourceFile);
+			await flushDirtyDocument(targetFile);
 
-		const decoder = new TextDecoder("utf-8");
-		const sourceContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile)));
-		const targetContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile)));
+			const decoder = new TextDecoder("utf-8");
+			const sourceContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile)));
+			const targetContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile)));
 
-		const sourceIO = resolveMarkerIO(config, sourceFile, "source");
-		const targetIO = resolveMarkerIO(config, targetFile, "target");
-		const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
-		const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
+			const sourceIO = resolveMarkerIO(config, sourceFile, "source");
+			const targetIO = resolveMarkerIO(config, targetFile, "target");
+			const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
+			const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
-		const mode = options.mode ?? "pending";
-		const allPairs = collectReviewPairs(source.units, target.units, mode);
-		if (allPairs.length === 0) {
-			return;
-		}
-		// 1実行あたりの検証ユニット上限（全般設定 trans.maxUnitsPerRun。0 で上限なし）
-		const maxUnits = config.trans.maxUnitsPerRun;
-		const pairs = maxUnits > 0 ? allPairs.slice(0, maxUnits) : allPairs;
+			const mode = options.mode ?? "pending";
+			const allPairs = collectReviewPairs(source.units, target.units, mode);
+			if (allPairs.length === 0) {
+				return;
+			}
+			// 1実行あたりの検証ユニット上限（全般設定 trans.maxUnitsPerRun。0 で上限なし）
+			const maxUnits = config.trans.maxUnitsPerRun;
+			const pairs = maxUnits > 0 ? allPairs.slice(0, maxUnits) : allPairs;
 
-		const policy = {
-			autoApprove: options.dryRun ? false : config.aiReview.autoApprove,
-			threshold: AUTO_APPROVE_THRESHOLD,
-		};
-		const summaryManager = SummaryManager.getInstance();
-		// AI が返す reason / issues は VS Code の表示言語で書かせる（ADR-260719-01）
-		const responseLang = getResponseLanguage();
-		// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
-		let mutationCount = 0;
-
-		// 第1パス: 全ペアの unitResult を順序どおり用意し、ソース未解決は skipped として確定する。
-		// 未処理ペアは結果に現れない（キャンセル時の現行挙動を維持）ため processed フラグで管理する。
-		const entries: ReviewEntry[] = pairs.map((pair) => {
-			const marker = pair.targetUnit.marker;
-			return {
-				pair,
-				unitResult: {
-					filePath: targetFile,
-					unitHash: marker?.hash ?? "",
-					fromHash: marker?.from ?? "",
-					title: pair.targetUnit.title,
-					// レポートの行リンク用（startLine は 0 始まり、リンクは 1 始まり）
-					line: pair.targetUnit.startLine + 1,
-					issues: [],
-					action: "kept",
-				},
-				processed: false,
+			const policy = {
+				autoApprove: options.dryRun ? false : config.aiReview.autoApprove,
+				threshold: AUTO_APPROVE_THRESHOLD,
 			};
-		});
-		for (const entry of entries) {
-			if (!entry.pair.sourceUnit) {
-				entry.unitResult.action = "skipped";
-				entry.unitResult.reason = vscode.l10n.t("Source unit not found for from hash");
-				result.skipped++;
-				entry.processed = true;
-			}
-		}
-		const verifiable = entries.filter((entry) => !entry.processed);
+			const summaryManager = SummaryManager.getInstance();
+			// AI が返す reason / issues は VS Code の表示言語で書かせる（ADR-260719-01）
+			const responseLang = getResponseLanguage();
+			// removeNeedTag（承認）と setNeed（フラグ付与）の両方を数え、書き戻し要否のゲートに使う
+			let mutationCount = 0;
 
-		// 用語集・TM をファイル単位で1回ロード（ペア毎の双方向抽出・検索は同期の純計算）
-		const reviewContext = await ReviewContextProvider.create(config, transPair.sourceLang, transPair.targetLang);
-
-		const batchSize = config.aiReview.batchSize;
-		const batches = chunk(verifiable, batchSize);
-		let processedCount = 0;
-
-		for (const batch of batches) {
-			if (token?.isCancellationRequested) {
-				logger.info("aiReview", "AI review cancelled", { file: targetFile, processed: processedCount });
-				break;
-			}
-			progress?.report({
-				message: vscode.l10n.t("{0}/{1} units", processedCount + batch.length, verifiable.length),
+			// 第1パス: 全ペアの unitResult を順序どおり用意し、ソース未解決は skipped として確定する。
+			// 未処理ペアは結果に現れない（キャンセル時の現行挙動を維持）ため processed フラグで管理する。
+			const entries: ReviewEntry[] = pairs.map((pair) => {
+				const marker = pair.targetUnit.marker;
+				return {
+					pair,
+					unitResult: {
+						filePath: targetFile,
+						unitHash: marker?.hash ?? "",
+						fromHash: marker?.from ?? "",
+						title: pair.targetUnit.title,
+						// レポートの行リンク用（startLine は 0 始まり、リンクは 1 始まり）
+						line: pair.targetUnit.startLine + 1,
+						issues: [],
+						action: "kept",
+					},
+					processed: false,
+				};
 			});
-
-			try {
-				const startedAt = Date.now();
-				// ユニットに紐づく note（人間が記録した意図的乖離の説明など）と、
-				// 原文・訳文どちらかにヒットした用語集・TM参照をペア毎に集めて AI へ渡す。
-				const batchPairs: VerifyBatchPair[] = [];
-				for (let j = 0; j < batch.length; j++) {
-					const entry = batch[j];
-					const marker = entry.pair.targetUnit.marker;
-					const sourceText = entry.pair.sourceUnit?.content ?? "";
-					const targetText = entry.pair.targetUnit.content;
-					// 訳文ユニット（hash）と原文ユニット（from）の両方の note を集める。
-					// 原文側の note は CodeLens「その他」メニューから原文ユニットの hash キーで
-					// 保存されるため、ここで from を引かないと AI に届かない。
-					const humanNote = await loadPairNotes(marker?.hash, marker?.from);
-					const pairContext = reviewContext.getContextForPair(sourceText, targetText);
-					batchPairs.push({
-						index: j + 1,
-						sourceText,
-						targetText,
-						humanNote,
-						termsJson: pairContext.termsJson,
-						tmReferences: pairContext.tmReferences,
-						unitContext: { unitHash: marker?.hash, title: entry.pair.targetUnit.title },
-					});
-				}
-
-				// batchSize=1 は従来の単ペアプロンプト（aiReview.verifyPairing）を使い完全後方互換とする。
-				// 2以上はバッチプロンプト（aiReview.verifyPairingBatch）で1コールにまとめる。
-				let verifyResults: Map<number, VerifyResult>;
-				if (batchSize === 1) {
-					const single = batchPairs[0];
-					const verifyResult = await verifier.verify(
-						{
-							sourceLang: transPair.sourceLang,
-							targetLang: transPair.targetLang,
-							responseLang,
-							sourceText: single.sourceText,
-							targetText: single.targetText,
-							humanNote: single.humanNote,
-							termsJson: single.termsJson,
-							tmReferences: single.tmReferences,
-							unitContext: single.unitContext,
-						},
-						token,
-					);
-					verifyResults = new Map([[1, verifyResult]]);
-				} else {
-					verifyResults = await verifier.verifyBatch(
-						{
-							sourceLang: transPair.sourceLang,
-							targetLang: transPair.targetLang,
-							responseLang,
-							pairs: batchPairs,
-						},
-						token,
-					);
-				}
-				const durationSec = (Date.now() - startedAt) / 1000;
-
-				for (let j = 0; j < batch.length; j++) {
-					const entry = batch[j];
-					const verifyResult = verifyResults.get(j + 1);
-					if (!verifyResult) {
-						entry.unitResult.action = "error";
-						entry.unitResult.reason = vscode.l10n.t("No verdict returned for pair");
-						result.errors++;
-						entry.processed = true;
-						continue;
-					}
-					mutationCount += applyVerifyOutcome(entry, verifyResult, policy, result, summaryManager, durationSec);
+			for (const entry of entries) {
+				if (!entry.pair.sourceUnit) {
+					entry.unitResult.action = "skipped";
+					entry.unitResult.reason = vscode.l10n.t("Source unit not found for from hash");
+					result.skipped++;
 					entry.processed = true;
 				}
-			} catch (error) {
+			}
+			const verifiable = entries.filter((entry) => !entry.processed);
+
+			// 用語集・TM をファイル単位で1回ロード（ペア毎の双方向抽出・検索は同期の純計算）
+			const reviewContext = await ReviewContextProvider.create(config, transPair.sourceLang, transPair.targetLang);
+
+			const batchSize = config.aiReview.batchSize;
+			const batches = chunk(verifiable, batchSize);
+			let processedCount = 0;
+
+			for (const batch of batches) {
 				if (token?.isCancellationRequested) {
-					logger.info("aiReview", "AI review cancelled during verification", { file: targetFile });
+					logger.info("aiReview", "AI review cancelled", { file: targetFile, processed: processedCount });
 					break;
 				}
-				// バッチ呼び出しの失敗はバッチ内全ペアを error として続行する
-				// （現行の「1ユニットの失敗でファイルを止めない」をバッチ粒度に拡張）
-				logger.warn("aiReview", "Batch verification error", {
-					pairCount: batch.length,
-					...formatError(error),
+				progress?.report({
+					message: vscode.l10n.t("{0}/{1} units", processedCount + batch.length, verifiable.length),
 				});
-				for (const entry of batch) {
-					entry.unitResult.action = "error";
-					entry.unitResult.reason = (error as Error).message;
-					result.errors++;
-					entry.processed = true;
+
+				try {
+					const startedAt = Date.now();
+					// ユニットに紐づく note（人間が記録した意図的乖離の説明など）と、
+					// 原文・訳文どちらかにヒットした用語集・TM参照をペア毎に集めて AI へ渡す。
+					const batchPairs: VerifyBatchPair[] = [];
+					for (let j = 0; j < batch.length; j++) {
+						const entry = batch[j];
+						const marker = entry.pair.targetUnit.marker;
+						const sourceText = entry.pair.sourceUnit?.content ?? "";
+						const targetText = entry.pair.targetUnit.content;
+						// 訳文ユニット（hash）と原文ユニット（from）の両方の note を集める。
+						// 原文側の note は CodeLens「その他」メニューから原文ユニットの hash キーで
+						// 保存されるため、ここで from を引かないと AI に届かない。
+						const humanNote = await loadPairNotes(marker?.hash, marker?.from);
+						const pairContext = reviewContext.getContextForPair(sourceText, targetText);
+						batchPairs.push({
+							index: j + 1,
+							sourceText,
+							targetText,
+							humanNote,
+							termsJson: pairContext.termsJson,
+							tmReferences: pairContext.tmReferences,
+							unitContext: { unitHash: marker?.hash, title: entry.pair.targetUnit.title },
+						});
+					}
+
+					// batchSize=1 は従来の単ペアプロンプト（aiReview.verifyPairing）を使い完全後方互換とする。
+					// 2以上はバッチプロンプト（aiReview.verifyPairingBatch）で1コールにまとめる。
+					let verifyResults: Map<number, VerifyResult>;
+					if (batchSize === 1) {
+						const single = batchPairs[0];
+						const verifyResult = await verifier.verify(
+							{
+								sourceLang: transPair.sourceLang,
+								targetLang: transPair.targetLang,
+								responseLang,
+								sourceText: single.sourceText,
+								targetText: single.targetText,
+								humanNote: single.humanNote,
+								termsJson: single.termsJson,
+								tmReferences: single.tmReferences,
+								unitContext: single.unitContext,
+							},
+							token,
+						);
+						verifyResults = new Map([[1, verifyResult]]);
+					} else {
+						verifyResults = await verifier.verifyBatch(
+							{
+								sourceLang: transPair.sourceLang,
+								targetLang: transPair.targetLang,
+								responseLang,
+								pairs: batchPairs,
+							},
+							token,
+						);
+					}
+					const durationSec = (Date.now() - startedAt) / 1000;
+
+					for (let j = 0; j < batch.length; j++) {
+						const entry = batch[j];
+						const verifyResult = verifyResults.get(j + 1);
+						if (!verifyResult) {
+							entry.unitResult.action = "error";
+							entry.unitResult.reason = vscode.l10n.t("No verdict returned for pair");
+							result.errors++;
+							entry.processed = true;
+							continue;
+						}
+						mutationCount += applyVerifyOutcome(entry, verifyResult, policy, result, summaryManager, durationSec);
+						entry.processed = true;
+					}
+				} catch (error) {
+					if (token?.isCancellationRequested) {
+						logger.info("aiReview", "AI review cancelled during verification", { file: targetFile });
+						break;
+					}
+					// バッチ呼び出しの失敗はバッチ内全ペアを error として続行する
+					// （現行の「1ユニットの失敗でファイルを止めない」をバッチ粒度に拡張）
+					logger.warn("aiReview", "Batch verification error", {
+						pairCount: batch.length,
+						...formatError(error),
+					});
+					for (const entry of batch) {
+						entry.unitResult.action = "error";
+						entry.unitResult.reason = (error as Error).message;
+						result.errors++;
+						entry.processed = true;
+					}
+				}
+				processedCount += batch.length;
+			}
+
+			// 第1パスの順序どおりに、処理済みペアのみ結果へ反映する
+			for (const entry of entries) {
+				if (entry.processed) {
+					result.unitResults.push(entry.unitResult);
 				}
 			}
-			processedCount += batch.length;
-		}
 
-		// 第1パスの順序どおりに、処理済みペアのみ結果へ反映する
-		for (const entry of entries) {
-			if (entry.processed) {
-				result.unitResults.push(entry.unitResult);
+			// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
+			if (mutationCount > 0 && !options.dryRun) {
+				const encoder = new TextEncoder();
+				const updatedContent = markdownParser.stringify(
+					{ frontMatter: target.frontMatter, units: target.units },
+					targetIO.provider,
+					targetIO.ctx,
+				);
+				await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(updatedContent));
+				result.markersChanged = true;
+			}
+		});
+
+		// external マーカーの場合は unit-state ストアを保存する
+		if (result.markersChanged && config.isExternalMarkers()) {
+			const mdaitDir = await ensureMdaitDir();
+			if (mdaitDir) {
+				UnitStateStore.getInstance().save(mdaitDir);
 			}
 		}
-
-		// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
-		if (mutationCount > 0 && !options.dryRun) {
-			const encoder = new TextEncoder();
-			const updatedContent = markdownParser.stringify(
-				{ frontMatter: target.frontMatter, units: target.units },
-				targetIO.provider,
-				targetIO.ctx,
-			);
-			await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(updatedContent));
-			result.markersChanged = true;
-		}
-	});
-
-	// external マーカーの場合は unit-state ストアを保存する
-	if (result.markersChanged && config.isExternalMarkers()) {
-		const mdaitDir = await ensureMdaitDir();
-		if (mdaitDir) {
-			UnitStateStore.getInstance().save(mdaitDir);
-		}
+	} finally {
+		storeLock.release();
 	}
 
 	if (result.markersChanged) {

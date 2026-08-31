@@ -20,6 +20,7 @@ import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markd
 import { alignEntriesToUnits } from "../../core/unit-state/unit-state-align";
 import type { UnitStateEntry } from "../../core/unit-state/unit-state-store";
 import { UnitStateStore, isHeldBackEntry } from "../../core/unit-state/unit-state-store";
+import { withUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -526,40 +527,52 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 
 	const mdaitDir = await ensureMdaitDir();
 	const store = UnitStateStore.getInstance();
-	if (mdaitDir) {
-		store.ensureLoaded(mdaitDir);
-	}
 
 	let filesRewritten = 0;
 	let unitsMigrated = 0;
 	let unitsDropped = 0;
 	let cancelled = false;
 	try {
-		await vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.Notification,
-				title: toExternal
-					? vscode.l10n.t("Externalizing mdait markers...")
-					: vscode.l10n.t("Embedding mdait markers..."),
-				cancellable: true,
-			},
-			async (progress, token) => {
-				// ループ本体は runMigrationLoop に委譲。途中で例外が起きても store の保存は
-				// runMigrationLoop の finally が保証する（保存漏れ＝変換済みマーカーの喪失）。
-				const loopResult = await runMigrationLoop(targets, toExternal, config, store, mdaitDir, token, progress);
-				filesRewritten = loopResult.filesRewritten;
-				unitsMigrated = loopResult.unitsMigrated;
-				unitsDropped = loopResult.unitsDropped;
-				cancelled = loopResult.cancelled;
+		// **表（unit-state）全体の排他をここで取る。** 一括変換は本文からマーカーを剥がして
+		// ディスクへ書き、代わりの行はメモリの表にだけ足す。表の保存は全ファイル終わった
+		// あとの1回である（runMigrationLoop の finally）。この区間に sync が割り込むと
+		// `load()` が表を丸ごと捨ててディスクから読み直すため、それまでに足した行が消え、
+		// 最後の保存はその行を持たない表を書く。**本文からも表からもマーカーが失われるので
+		// 復旧できない。** sync は `load()` を FileMutex より先に呼ぶため、ファイル単位の
+		// 排他では止められない。
+		// この経路は FileMutex を取らないので、sync や unit-mutation と同じ
+		// 「表 → ファイル」の順序に自然に収まる（ロック順の逆転が起きない）。
+		// 人に問う確認はこの区間より前に済ませてある（区間の中で待つとロックが解けない）
+		await withUnitStateLock(async () => {
+			if (mdaitDir) {
+				store.ensureLoaded(mdaitDir);
+			}
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: toExternal
+						? vscode.l10n.t("Externalizing mdait markers...")
+						: vscode.l10n.t("Embedding mdait markers..."),
+					cancellable: true,
+				},
+				async (progress, token) => {
+					// ループ本体は runMigrationLoop に委譲。途中で例外が起きても store の保存は
+					// runMigrationLoop の finally が保証する（保存漏れ＝変換済みマーカーの喪失）。
+					const loopResult = await runMigrationLoop(targets, toExternal, config, store, mdaitDir, token, progress);
+					filesRewritten = loopResult.filesRewritten;
+					unitsMigrated = loopResult.unitsMigrated;
+					unitsDropped = loopResult.unitsDropped;
+					cancelled = loopResult.cancelled;
 
-				// mdait.json の markers.mode を更新（in-memory も即時反映）。
-				// キャンセル時（部分変換）はモードを変えず、残りは sync の自己修復に委ねる。
-				// ループが例外で中断した場合もここへ達しないため、モードは完全成功時のみ切り替わる。
-				if (!cancelled) {
-					await setMarkerModeInConfigFile(config, toMode);
-				}
-			},
-		);
+					// mdait.json の markers.mode を更新（in-memory も即時反映）。
+					// キャンセル時（部分変換）はモードを変えず、残りは sync の自己修復に委ねる。
+					// ループが例外で中断した場合もここへ達しないため、モードは完全成功時のみ切り替わる。
+					if (!cancelled) {
+						await setMarkerModeInConfigFile(config, toMode);
+					}
+				},
+			);
+		});
 	} catch (error) {
 		logger.error("markers", "Marker migration failed", formatError(error));
 		vscode.window.showErrorMessage(
