@@ -294,10 +294,13 @@ external になり、**突き合わせが全件「一致」になって、測っ
   一致している**（§10〜§16 で解消済み。probe の「想定内の差」に入っていない）。表のほうが古い。
 
 - **#102 から技術債へ移した4件（2026-08-22 の選別。既定を倒しても踏む確率が変わらないもの）**:
-  - ストア全体の排他（`unit-state-lock`）が trans・ai-review・markers-migration の経路に掛かっていない。
-    素直に `withUnitStateLock` で囲むとロックの順序が逆転して deadlock になる（`unit-mutation` は
-    `unitStateLock` → `FileMutex` の順だが、trans と ai-review の書き戻しは既に `FileMutex` の内側）。
-    **どちらのロックを外側にするか＝AI の実行が終わるまで sync を待たせるか**を決めるのが先。
+  - ~~ストア全体の排他（`unit-state-lock`）が trans・ai-review・markers-migration の経路に掛かっていない~~
+    **解消（2026-08-31）**: 「どちらのロックを外側にするか」という問いの立て方そのものを降りた。
+    trans を外側にすると**フォルダ翻訳の並列（既定3・最大8）が直列に落ちる**ため、代償が大きすぎる。
+    代わりに `load()` の側を割り込みに強くした（保存していない変更を覚えて当て直す。ADR-260831-01）。
+    ロックの順序が問題にならない markers-migration（FileMutex を使わない）と ai-review（表の区間が
+    FileMutex の外側）には、順序が揃うので排他も掛けた。順序は実行時にしか破れないため、
+    ソースを走査して固定する回帰テスト（`unit-state-lock-order.test.ts`）を置いた。
   - 段階4（内容による再リンク）の順序埋めに縮みのガードが無い。
   - `parkEntriesFrom` に「預ける値打ち」の判定が無く、保留席が単調に増える（ADR-260809-01 が
     `parkEntries` 側に入れた絞り込みが、こちらの経路には入っていない）。
