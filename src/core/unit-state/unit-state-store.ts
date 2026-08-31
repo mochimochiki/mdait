@@ -113,6 +113,26 @@ export class UnitStateStore {
 	 * 扱うようになった（以前は `--text` を付けないと差分が出なかった）。
 	 */
 	private byPath: Map<string, Map<number, UnitStateEntry>> = new Map();
+	/**
+	 * **まだディスクへ書いていない変更**。`path` → (`order` → 行、または `null`＝消したこと)。
+	 *
+	 * `load()` は表を丸ごと捨ててディスクから読み直す。この記録が無いと、読み直しに
+	 * 割り込まれた書き手の成果がそこで消える。**しかも消えたことは誰にも分からない** —
+	 * 書き手はそのあと `save()` を呼ぶので、欠けた表がそのまま永続化される。
+	 *
+	 * いちばん重いのは一括変換（markers-migration）で、本文からマーカーを剥がしてから
+	 * 表へ移し、保存は全ファイル終わったあとの1回である。読み直しに割り込まれると、
+	 * マーカーは**本文にも表にも残らず復旧できない**。
+	 *
+	 * 消したこと（`null`＝墓標）も覚える必要がある。覚えないと、読み直しで消したはずの行が
+	 * ディスクから復活する（embedded への一括変換は行を消す操作なので、まさにこれを踏む）。
+	 *
+	 * ロックで守る手もあるが、翻訳は AI の応答を待つあいだファイル単位の排他を握っており、
+	 * そこへ表の排他を足すと順序が逆転してデッドロックになる。外側へ出せばフォルダ翻訳の
+	 * 並列（既定3・最大8）が直列に落ちる。**読み直しの側を割り込みに強くすれば、
+	 * 書き手にロックを足さずに済む**（ADR-260831-01）。
+	 */
+	private pending: Map<string, Map<number, UnitStateEntry | null>> = new Map();
 	private dirty = false;
 	private loaded = false;
 	private mdaitDir: string | undefined;
@@ -168,15 +188,96 @@ export class UnitStateStore {
 		}
 	}
 
-	/** .mdait/unit-state を読み込み */
+	/** 保存待ちの変更を1件覚える（`null` は「消した」） */
+	private recordPending(filePath: string, order: number, entry: UnitStateEntry | null): void {
+		const rows = this.pending.get(filePath);
+		if (rows) {
+			rows.set(order, entry);
+			return;
+		}
+		this.pending.set(filePath, new Map([[order, entry]]));
+	}
+
+	/**
+	 * 1行を書く。**表を書き換える入口はここと `dropRow` / `dropPath` の3つだけ。**
+	 *
+	 * 直に `byPath` を触ると保存待ちの記録から漏れ、`load()` の割り込みでその変更だけが
+	 * 静かに消える。漏れは実行時にしか現れないので、入口を絞って構造的に防ぐ。
+	 */
+	private putRow(entry: UnitStateEntry): void {
+		this.ensureRows(entry.path).set(entry.order, entry);
+		this.recordPending(entry.path, entry.order, entry);
+		this.dirty = true;
+	}
+
+	/** 1行を消す。消したことも保存待ちとして覚える（`putRow` を見よ） */
+	private dropRow(filePath: string, order: number): boolean {
+		if (!this.deleteRow(filePath, order)) {
+			return false;
+		}
+		this.recordPending(filePath, order, null);
+		this.dirty = true;
+		return true;
+	}
+
+	/** そのファイルの行をすべて消す（`putRow` を見よ） */
+	private dropPath(filePath: string): number {
+		const rows = this.byPath.get(filePath);
+		if (!rows || rows.size === 0) {
+			return 0;
+		}
+		const removed = rows.size;
+		for (const order of rows.keys()) {
+			this.recordPending(filePath, order, null);
+		}
+		this.byPath.delete(filePath);
+		this.dirty = true;
+		return removed;
+	}
+
+	/**
+	 * 読み直したばかりの表へ、保存待ちの変更を当て直す。
+	 *
+	 * ディスクとメモリが食い違ったら**メモリを採る**。食い違うのは別のウィンドウや外部の
+	 * 道具が書いた場合だが、この表はもともと1つのプロセスが持つ前提で、そちらの安全は
+	 * 別に用意されていない。ここで採るべきは「いま書いている最中の変更」のほうである。
+	 */
+	private replayPending(): void {
+		if (this.pending.size === 0) {
+			this.dirty = false;
+			return;
+		}
+		for (const [filePath, rows] of this.pending) {
+			for (const [order, entry] of rows) {
+				if (entry === null) {
+					this.deleteRow(filePath, order);
+				} else {
+					this.ensureRows(filePath).set(order, entry);
+				}
+			}
+		}
+		// 当て直した変更はまだディスクに無い。`save()` が書き出すまで dirty のまま
+		this.dirty = true;
+		logger.debug("unit-state", "Replayed unsaved changes over a reload", {
+			paths: this.pending.size,
+		});
+	}
+
+	/**
+	 * `.mdait/unit-state` を読み込む。
+	 *
+	 * **保存待ちの変更は捨てない。** ディスクを読み終えたあとに当て直す（`replayPending`）。
+	 * sync はこの関数を無条件に呼ぶので、捨てると「翻訳や一括変換の最中に sync を回すと、
+	 * それまでの成果が無言で消える」という壊れ方になる。
+	 */
 	load(mdaitDir: string): void {
 		this.mdaitDir = mdaitDir;
 		this.byPath.clear();
-		this.dirty = false;
 
 		const filePath = path.join(mdaitDir, UNIT_STATE_FILENAME);
 		if (!fs.existsSync(filePath)) {
 			this.loaded = true;
+			this.replayPending();
 			return;
 		}
 
@@ -221,6 +322,7 @@ export class UnitStateStore {
 		}
 
 		this.loaded = true;
+		this.replayPending();
 	}
 
 	/** 変更があればファイルに書き戻し */
@@ -256,6 +358,8 @@ export class UnitStateStore {
 		const content = `${lines.join("\n")}\n`;
 		atomicWriteFileSync(filePath, content, "utf-8");
 		this.dirty = false;
+		// ディスクに載ったので、もう当て直す必要は無い
+		this.pending.clear();
 	}
 
 	/**
@@ -283,15 +387,12 @@ export class UnitStateStore {
 
 	setEntry(entry: UnitStateEntry): void {
 		this.autoLoad();
-		this.ensureRows(entry.path).set(entry.order, entry);
-		this.dirty = true;
+		this.putRow(entry);
 	}
 
 	removeEntry(filePath: string, order: number): void {
 		this.autoLoad();
-		if (this.deleteRow(filePath, order)) {
-			this.dirty = true;
-		}
+		this.dropRow(filePath, order);
 	}
 
 	/**
@@ -304,12 +405,7 @@ export class UnitStateStore {
 	 */
 	removeEntriesByPath(filePath: string): number {
 		this.autoLoad();
-		const removed = this.rowsOf(filePath)?.size ?? 0;
-		if (removed > 0) {
-			this.byPath.delete(filePath);
-			this.dirty = true;
-		}
-		return removed;
+		return this.dropPath(filePath);
 	}
 
 	/**
@@ -350,24 +446,22 @@ export class UnitStateStore {
 		// 取りこぼさないよう、動かす分を先に取り出してから行き先を消す
 		const detached = moving.map(({ from, to }) => {
 			const rows = this.byPath.get(from);
-			this.byPath.delete(from);
+			this.dropPath(from);
 			return { to, rows };
 		});
 		for (const { to } of detached) {
-			this.byPath.delete(to);
+			this.dropPath(to);
 		}
 		let moved = 0;
 		for (const { to, rows } of detached) {
 			if (!rows) {
 				continue;
 			}
-			const placed = this.ensureRows(to);
 			for (const entry of rows.values()) {
-				placed.set(entry.order, { ...entry, path: to });
+				this.putRow({ ...entry, path: to });
 				moved++;
 			}
 		}
-		this.dirty = true;
 		return moved;
 	}
 
@@ -443,10 +537,11 @@ export class UnitStateStore {
 		if (moving.length === 0) {
 			return 0;
 		}
-		const rows = this.ensureRows(filePath);
+		// ここで読むのは席の採番のためだけ。書き込みは putRow / dropRow を通す
+		const rows = this.rowsOf(filePath);
 		let nextSeat = HELD_ORDER_BASE;
 		const seatByHash = new Map<string, number>();
-		for (const entry of rows.values()) {
+		for (const entry of rows?.values() ?? []) {
 			if (isHeldBackEntry(entry)) {
 				nextSeat = Math.max(nextSeat, entry.order + 1);
 				if (entry.hash) {
@@ -456,12 +551,12 @@ export class UnitStateStore {
 		}
 		let parked = 0;
 		for (const entry of moving) {
-			rows.delete(entry.order);
+			this.dropRow(filePath, entry.order);
 			// 同じ本文の席が既にあるなら、席は増やさず中身を新しいほうで置き換える。
 			// hash が同じなら拾われ方は同じで、from / need は新しいほうが現在に近い
 			const taken = entry.hash ? seatByHash.get(entry.hash) : undefined;
 			const seat = taken ?? nextSeat++;
-			rows.set(seat, { ...entry, order: seat });
+			this.putRow({ ...entry, order: seat });
 			if (entry.hash) {
 				seatByHash.set(entry.hash, seat);
 			}
@@ -469,7 +564,6 @@ export class UnitStateStore {
 				parked++;
 			}
 		}
-		this.dirty = true;
 		return parked;
 	}
 
@@ -485,12 +579,9 @@ export class UnitStateStore {
 		this.autoLoad();
 		let removed = 0;
 		for (const order of orders) {
-			if (this.deleteRow(filePath, order)) {
+			if (this.dropRow(filePath, order)) {
 				removed++;
 			}
-		}
-		if (removed > 0) {
-			this.dirty = true;
 		}
 		return removed;
 	}
@@ -515,16 +606,9 @@ export class UnitStateStore {
 		}
 		let removed = 0;
 		for (const order of [...rows.keys()]) {
-			if (order >= fromOrder && order < HELD_ORDER_BASE) {
-				rows.delete(order);
+			if (order >= fromOrder && order < HELD_ORDER_BASE && this.dropRow(filePath, order)) {
 				removed++;
 			}
-		}
-		if (rows.size === 0) {
-			this.byPath.delete(filePath);
-		}
-		if (removed > 0) {
-			this.dirty = true;
 		}
 		return removed;
 	}
@@ -636,7 +720,7 @@ export class UnitStateStore {
 			this.removeFrontMatterEntry(filePath);
 			return;
 		}
-		this.ensureRows(filePath).set(FRONT_MATTER_ORDER, {
+		this.putRow({
 			path: filePath,
 			order: FRONT_MATTER_ORDER,
 			level: 0,
@@ -645,15 +729,12 @@ export class UnitStateStore {
 			from: marker.from,
 			need: marker.need,
 		});
-		this.dirty = true;
 	}
 
 	/** 指定パスの frontmatter マーカーの行を消す */
 	removeFrontMatterEntry(filePath: string): void {
 		this.autoLoad();
-		if (this.deleteRow(filePath, FRONT_MATTER_ORDER)) {
-			this.dirty = true;
-		}
+		this.dropRow(filePath, FRONT_MATTER_ORDER);
 	}
 
 	/** need != '' のエントリ一覧 */
@@ -705,10 +786,9 @@ export class UnitStateStore {
 			}
 			removed += rows.size;
 			removedPaths.push(filePath);
-			this.byPath.delete(filePath);
+			this.dropPath(filePath);
 		}
 		if (removed > 0) {
-			this.dirty = true;
 			logger.debug("unit-state", "Removed unit-state entries that are no longer part of the project", {
 				paths: removedPaths.slice(0, 20),
 				removed,
