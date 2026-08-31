@@ -71,6 +71,58 @@ export function syncSourceMarker(
 }
 
 /**
+ * 人の裁定を待っている印か。**原文が変わっても sync が動かしてはいけない印**である。
+ *
+ * `need:review` は「この訳文が原文の訳になっているかを、人がまだ確かめていない」を表す。
+ * 付ける経路は6つある（既訳の採用 adopt・AI 翻訳の品質チェック・マーカー無しで書かれた
+ * 訳文の一次受け・external 作り直しの安全網・旧 `need:backfill` の正規化・非 Markdown）。
+ * どれも「AI に渡す前に人が見る」ための印なので、これを `revise@` へ倒すと
+ * **確認の機会がその場で永久に失われ、人が一度も見ないまま AI が訳文を書き換える。**
+ * 対応付けが正しいかどうかも未確認なので、ずれた相手の差分を当てることにもなる。
+ *
+ * 同じ性質の `need:isolate` と `need:verify-deletion` は、この関数の呼び出し元
+ * （`updateSectionHashes`）が個別に手当てしている。`need:review` はその手当てが
+ * 書かれないまま残っていた — 守りが呼び出し元に散っているかぎり、印を増やすたびに
+ * 同じ抜けが起きる。**新しい「人が見るまで触らない印」はここに足すこと。**
+ */
+export function isAwaitingHumanDecision(need: string | null): boolean {
+	return need === "review";
+}
+
+/**
+ * 原文が変わった訳文の need を決める。**本文ユニットと frontmatter で唯一の実装。**
+ *
+ * 以前は `syncTargetMarker` と `syncMarkerPair` が同じ分岐を書き写しており、
+ * `need:review` の守りが両方から抜け、原文を戻したときの後始末は片方にしか入っていなかった。
+ *
+ * @param marker 更新するターゲット側マーカー（`from` は更新済みであること）
+ * @param oldSourceHash 更新前の `from`（＝この訳文が対応していた原文のハッシュ）
+ * @param adoptTarget 既訳の採用モードか
+ */
+function applyNeedForChangedSource(
+	marker: MdaitMarker,
+	oldSourceHash: string | null,
+	adoptTarget = false,
+): void {
+	const existingReviseHash = marker.getOldHashFromNeed();
+	if (existingReviseHash) {
+		// すでに revise 待ち。戻り先のスナップショットを動かさない
+		marker.setReviseNeed(existingReviseHash);
+	} else if (marker.need === "translate") {
+		// まだ翻訳されていない。from だけ更新済みで need は据え置き
+		marker.setNeed("translate");
+	} else if (oldSourceHash) {
+		// 翻訳済みで原文が変わった: 旧原文を戻り先にして改訂を要求する
+		marker.setReviseNeed(oldSourceHash);
+	} else if (adoptTarget) {
+		// adopt: from 新規確立＋本文ありの既訳はレビューに倒す（trans の上書きを防ぐ）
+		marker.setNeed("review");
+	} else {
+		marker.setNeed("translate");
+	}
+}
+
+/**
  * ターゲット側マーカーを同期する
  * - 変更検出を行い、適切なneedフラグを設定
  *
@@ -100,28 +152,41 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 	// （syncMarkerPair と同じ理由。落とさないと need が永久に消えない）
 	const revertedToTranslatedSource = existingMarker.getOldHashFromNeed() === sourceHash;
 	if (revertedToTranslatedSource) {
+		// **need を落としたらこの回はここで終える。** 下の分岐へ流すと、落としたそばから
+		// `revise@{いまの from}` を立て直してしまう。from はすでに新しい原文を指しているので、
+		// 立った印は**もう存在しない原文**を戻り先に持ち、以後 from === sourceHash で
+		// この関数に入らなくなるため永久に消えない（実測: sync を何度回しても
+		// `revise@S2` が残り続けた）。trans はその戻り先を引けず全文で訳し直すので、
+		// frontmatter の手直しが消える
 		existingMarker.removeNeedTag();
+		existingMarker.from = sourceHash;
+		if (targetHash) {
+			existingMarker.hash = targetHash;
+		}
+		return {
+			marker: existingMarker,
+			changed: true,
+			changeType: "source-changed",
+		};
+	}
+
+	// 人の裁定待ちは原文の変更で動かさない（下の freezeForHumanDecision を見よ）
+	if (isSourceChanged && isAwaitingHumanDecision(existingMarker.need)) {
+		if (targetHash) {
+			existingMarker.hash = targetHash;
+		}
+		return {
+			marker: existingMarker,
+			changed: isTargetChanged,
+			changeType: isTargetChanged ? "target-changed" : "none",
+		};
 	}
 
 	// ソースが変更された場合: revise または translate（両方変更時も同様に処理）
 	if (isSourceChanged) {
 		const oldSourceHash = existingMarker.from;
 		existingMarker.from = sourceHash;
-
-		// 既存のrevise@{hash}がある場合、そのhashを保持する
-		const existingReviseHash = revertedToTranslatedSource ? null : existingMarker.getOldHashFromNeed();
-		if (existingReviseHash) {
-			// すでにrevise待ち状態なので、スナップショットハッシュを保持
-			existingMarker.setReviseNeed(existingReviseHash);
-		} else if (existingMarker.need === "translate") {
-			// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
-			existingMarker.setNeed("translate");
-		} else if (oldSourceHash) {
-			// 翻訳済みでソースが変更された場合は新規revise設定
-			existingMarker.setReviseNeed(oldSourceHash);
-		} else {
-			existingMarker.setNeed("translate");
-		}
+		applyNeedForChangedSource(existingMarker, oldSourceHash);
 
 		// ターゲットハッシュを常に最新に更新
 		if (targetHash) {
@@ -142,15 +207,6 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 			marker: existingMarker,
 			changed: true,
 			changeType: "target-changed",
-		};
-	}
-
-	// need を落としただけの回。書き戻さないと次の sync でまた同じ判断をする
-	if (revertedToTranslatedSource) {
-		return {
-			marker: existingMarker,
-			changed: true,
-			changeType: "source-changed",
 		};
 	}
 
@@ -249,27 +305,24 @@ export function syncMarkerPair(
 	if (revertedToTranslatedSource) {
 		targetMarker.removeNeedTag();
 	}
-	if (oldSourceHash !== sourceMarker.hash) {
+
+	// **人の裁定待ちは from ごと凍結する。** need だけ守って from を進めると、
+	// 人が確認を終えて印を外したときには「どの原文から訳したか」が失われており、
+	// 改訂の要求そのものが消える（原文は変わったのに誰にも回されない）。
+	// from を据え置けば、印が外れた次の sync で from ≠ 現在の原文となり、
+	// **そこで初めて正しい戻り先を持つ `revise@` が立つ** — つまり改訂は消えず保留される。
+	// isolate 用の `suppressNeed` では代われない（あちらは from を進めてしまう）
+	const frozenForHumanDecision =
+		!options?.suppressNeed &&
+		!revertedToTranslatedSource &&
+		oldSourceHash !== sourceMarker.hash &&
+		isAwaitingHumanDecision(targetMarker.need);
+
+	if (!frozenForHumanDecision && oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
 
 		if (!options?.suppressNeed && !revertedToTranslatedSource) {
-			// 既存のrevise@{hash}がある場合、そのhashを保持する
-			const existingReviseHash = targetMarker.getOldHashFromNeed();
-			if (existingReviseHash) {
-				// すでにrevise待ち状態なので、スナップショットハッシュを保持
-				targetMarker.setReviseNeed(existingReviseHash);
-			} else if (targetMarker.need === "translate") {
-				// まだ翻訳されていない場合はneed:translateのまま維持（fromのみ更新済み）
-				targetMarker.setNeed("translate");
-			} else if (oldSourceHash) {
-				// 翻訳済みでソースが変更された場合は新規revise設定
-				targetMarker.setReviseNeed(oldSourceHash);
-			} else if (options?.adoptTarget) {
-				// adopt: from新規確立＋本文ありの既存訳文はレビューに倒す（既訳のtrans上書きを防ぐ）
-				targetMarker.setNeed("review");
-			} else {
-				targetMarker.setNeed("translate");
-			}
+			applyNeedForChangedSource(targetMarker, oldSourceHash, options?.adoptTarget === true);
 		}
 	}
 
@@ -279,7 +332,7 @@ export function syncMarkerPair(
 		changed:
 			isSourceChanged ||
 			isTargetChanged ||
-			oldSourceHash !== sourceMarker.hash ||
+			(!frozenForHumanDecision && oldSourceHash !== sourceMarker.hash) ||
 			revertedToTranslatedSource,
 	};
 }
