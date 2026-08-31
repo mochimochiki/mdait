@@ -435,5 +435,120 @@ suite("marker-sync", () => {
 				assert.strictEqual(result.targetMarker.need, null);
 			});
 		});
+
+		suite("人の裁定待ち（need:review）の凍結", () => {
+			test("need:review のまま原文が変わっても、need も from も動かないこと", () => {
+				// adopt で採用された既訳。人がまだ「この訳文で合っている」と言っていない
+				const target = new MdaitMarker("tgt456", "src123", "review");
+
+				const result = syncMarkerPair("src999", "tgt456", new MdaitMarker("src999"), target);
+
+				assert.strictEqual(
+					result.targetMarker.need,
+					"review",
+					"確認待ちの印が revise@ に化けると、人が一度も見ないまま AI が訳文を書き換える",
+				);
+				assert.strictEqual(
+					result.targetMarker.from,
+					"src123",
+					"from を進めると、印が外れたときに改訂の戻り先が失われる",
+				);
+			});
+
+			test("凍結中のユニットは trans の対象にならないこと", () => {
+				const target = new MdaitMarker("tgt456", "src123", "review");
+				const result = syncMarkerPair("src999", "tgt456", new MdaitMarker("src999"), target);
+				assert.strictEqual(result.targetMarker.needsTranslation(), false);
+			});
+
+			test("凍結中に原文を何度変えても、from は最初の原文のまま保たれること", () => {
+				let target = new MdaitMarker("tgt456", "src123", "review");
+				for (const hash of ["src777", "src888", "src999"]) {
+					target = syncMarkerPair(hash, "tgt456", new MdaitMarker(hash), target).targetMarker;
+				}
+				assert.strictEqual(target.from, "src123");
+				assert.strictEqual(target.need, "review");
+			});
+
+			test("人が確認を終えて印を外すと、次の sync で正しい戻り先の revise@ が立つこと", () => {
+				const target = new MdaitMarker("tgt456", "src123", "review");
+				const frozen = syncMarkerPair("src999", "tgt456", new MdaitMarker("src999"), target).targetMarker;
+
+				// 人が「この訳文で合っている」と確定した（need を外す）
+				frozen.removeNeedTag();
+
+				const result = syncMarkerPair("src999", "tgt456", new MdaitMarker("src999"), frozen);
+				assert.strictEqual(
+					result.targetMarker.need,
+					"revise@src123",
+					"凍結は改訂を消すのではなく保留する。確認が済んだら本来の改訂が立つ",
+				);
+				assert.strictEqual(result.targetMarker.from, "src999");
+			});
+
+			test("凍結中でも訳文の hash は最新化されること（人が訳文を直せる）", () => {
+				const target = new MdaitMarker("tgt456", "src123", "review");
+				const result = syncMarkerPair("src999", "tgt111", new MdaitMarker("src999"), target);
+				assert.strictEqual(result.targetMarker.hash, "tgt111");
+				assert.strictEqual(result.targetMarker.need, "review");
+			});
+
+			test("原文が変わっていなければ凍結は変更を報告しないこと（冪等）", () => {
+				const target = new MdaitMarker("tgt456", "src123", "review");
+				const result = syncMarkerPair("src123", "tgt456", new MdaitMarker("src123"), target);
+				assert.strictEqual(result.changed, false);
+				assert.strictEqual(result.targetMarker.need, "review");
+			});
+		});
+
+		suite("frontmatter 経路（syncTargetMarker）も同じ守りを持つ", () => {
+			test("need:review のまま原文が変わっても、need も from も動かないこと", () => {
+				const result = syncTargetMarker({
+					sourceHash: "src999",
+					targetHash: "tgt456",
+					existingMarker: new MdaitMarker("tgt456", "src123", "review"),
+				});
+				assert.strictEqual(result.marker.need, "review");
+				assert.strictEqual(result.marker.from, "src123");
+			});
+
+			test("原文が revise@ の戻り先へ戻ったら need が消えること", () => {
+				// 原文 src123 → src999 で revise が立ち、from は src999 を指している。
+				// そこへ原文が src123 へ戻された（打ち間違いの取り消し・git checkout）
+				const result = syncTargetMarker({
+					sourceHash: "src123",
+					targetHash: "tgt456",
+					existingMarker: new MdaitMarker("tgt456", "src999", "revise@src123"),
+				});
+				assert.strictEqual(
+					result.marker.need,
+					null,
+					"落とした印を立て直すと、もう存在しない原文を戻り先に持つ revise@ が永久に残る",
+				);
+				assert.strictEqual(result.marker.from, "src123");
+			});
+
+			test("原文を戻したあと sync を繰り返しても印は戻らないこと（冪等）", () => {
+				let marker = new MdaitMarker("tgt456", "src999", "revise@src123");
+				for (let i = 0; i < 3; i++) {
+					marker = syncTargetMarker({
+						sourceHash: "src123",
+						targetHash: "tgt456",
+						existingMarker: marker,
+					}).marker;
+				}
+				assert.strictEqual(marker.need, null);
+			});
+
+			test("ふつうの改訂は従来どおり立つこと（凍結が効きすぎていない）", () => {
+				const result = syncTargetMarker({
+					sourceHash: "src999",
+					targetHash: "tgt456",
+					existingMarker: new MdaitMarker("tgt456", "src123", null),
+				});
+				assert.strictEqual(result.marker.need, "revise@src123");
+				assert.strictEqual(result.marker.from, "src999");
+			});
+		});
 	});
 });

@@ -42,6 +42,133 @@ suite("UnitStateStore", () => {
 		cleanupTempDir(tempDir);
 	});
 
+	suite("読み直しに割り込まれても、保存していない変更が消えないこと", () => {
+		/**
+		 * sync は開始直後に load() を無条件に呼び、表を捨ててディスクから読み直す。
+		 * その区間に割り込まれた書き手（翻訳・一括変換）の成果がそこで消えると、
+		 * 書き手はそのあと save() を呼ぶので**欠けた表がそのまま永続化される**。
+		 */
+		test("書いてまだ保存していない行が、load() で消えないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));
+
+			// ここで sync が割り込んだ
+			store.load(tempDir);
+
+			assert.deepStrictEqual(store.getEntry("docs/a.md", 0)?.hash, "h1");
+		});
+
+		test("消した行が、load() でディスクから復活しないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));
+			store.setEntry(plainEntry("docs/b.md", "h2", "s2", ""));
+			store.save(tempDir);
+
+			// embedded への一括変換は「本文へ書き戻して行を消す」。保存は最後の1回
+			store.removeEntry("docs/a.md", 0);
+			store.load(tempDir);
+
+			assert.strictEqual(
+				store.getEntry("docs/a.md", 0),
+				undefined,
+				"消したことを覚えていないと、読み直しで行が戻り本文と二重に持つ",
+			);
+			assert.strictEqual(store.getEntry("docs/b.md", 0)?.hash, "h2");
+		});
+
+		test("割り込みのあいだにディスク側で増えた行も、ちゃんと読めること", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));
+			store.save(tempDir);
+			store.setEntry(plainEntry("docs/mine.md", "new", "s9", ""));
+
+			// 別の書き手がディスクへ行を足した状態を作る
+			const file = path.join(tempDir, "unit-state");
+			fs.appendFileSync(file, "docs/other.md\t0\t0\t\thx\tsx\t\n", "utf-8");
+			store.load(tempDir);
+
+			assert.strictEqual(store.getEntry("docs/other.md", 0)?.hash, "hx", "ディスクの行が読めていない");
+			assert.strictEqual(store.getEntry("docs/mine.md", 0)?.hash, "new", "自分の未保存の行が消えた");
+		});
+
+		test("同じ行がディスクとメモリで食い違ったら、書きかけのメモリを採ること", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/a.md", "old", "s1", ""));
+			store.save(tempDir);
+			store.setEntry(plainEntry("docs/a.md", "writing", "s1", ""));
+
+			store.load(tempDir);
+
+			assert.strictEqual(store.getEntry("docs/a.md", 0)?.hash, "writing");
+		});
+
+		test("保存し終えた変更は、次の load() で持ち越されないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));
+			store.save(tempDir);
+
+			// 保存済みなので、ディスクを直接書き換えたらそれが正になる
+			fs.writeFileSync(path.join(tempDir, "unit-state"), "docs/a.md\t0\t0\t\tfromdisk\ts1\t\n", "utf-8");
+			store.load(tempDir);
+
+			assert.strictEqual(
+				store.getEntry("docs/a.md", 0)?.hash,
+				"fromdisk",
+				"保存済みの変更まで当て直すと、外の変更を永久に受け付けなくなる",
+			);
+		});
+
+		test("一括変換の最中に sync が走っても、変換済みのマーカーが失われないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			// 一括変換: 本文からマーカーを剥がしながら行を足していく（保存は最後の1回）
+			store.setEntry(plainEntry("docs/a.md", "ha", "sa", ""));
+			store.setEntry(plainEntry("docs/b.md", "hb", "sb", ""));
+
+			// ここで利用者が sync を実行した
+			store.load(tempDir);
+
+			// 一括変換が残りを処理して保存する
+			store.setEntry(plainEntry("docs/c.md", "hc", "sc", ""));
+			store.save(tempDir);
+
+			UnitStateStore.dispose();
+			const reloaded = UnitStateStore.getInstance();
+			reloaded.load(tempDir);
+			assert.deepStrictEqual(
+				reloaded.getAllEntries().map((e) => e.path).sort(),
+				["docs/a.md", "docs/b.md", "docs/c.md"],
+				"消えた行のマーカーは本文からも剥がされており、どこにも残らない",
+			);
+		});
+
+		test("ファイルごと消した行も、読み直しで復活しないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));
+			store.setEntry({ path: "docs/a.md", order: 1, level: 1, titleHash: "t", hash: "h2", from: "s2", need: "" });
+			store.save(tempDir);
+
+			store.removeEntriesByPath("docs/a.md");
+			store.load(tempDir);
+
+			assert.deepStrictEqual(store.getEntriesByPath("docs/a.md"), []);
+		});
+
+		test("付け替えた行の移動元が、読み直しで戻らないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.setEntry(plainEntry("docs/old.md", "h1", "s1", ""));
+			store.save(tempDir);
+
+			store.movePath("docs/old.md", "docs/new.md");
+			store.load(tempDir);
+
+			assert.deepStrictEqual(store.getEntriesByPath("docs/old.md"), [], "移動元の行が復活している");
+			assert.strictEqual(store.getEntry("docs/new.md", 0)?.hash, "h1");
+		});
+	});
+
 	test("シングルトンインスタンスが同一であること", () => {
 		const a = UnitStateStore.getInstance();
 		const b = UnitStateStore.getInstance();
