@@ -212,10 +212,15 @@ export async function executeAiReviewForFile(
 	// ロックの順序は「表 → ファイル」で、sync・unit-mutation と同じである。
 	// **この順序でしか足せない。** 逆（ファイル → 表）にすると、表を持って FileMutex を待つ
 	// sync と、FileMutex を持って表を待つこちらとで待ち合いになり、どちらも進まなくなる。
-	// ここは表のロードも保存も FileMutex の外側にあったので、順序はそのまま揃う
-	const storeLock = await acquireUnitStateLock();
+	// ここは表のロードも保存も FileMutex の外側にあったので、順序はそのまま揃う。
+	//
+	// **embedded では取らない。** そのモードではマーカーが本文にあり、この関数は表に
+	// 一度も触らない。それでも取ると、AI の応答を待つあいだ表を押さえ続けることになり、
+	// sync や印の書き換えを理由なく待たせる（保存のたびに走る自動 sync も止まる）
+	const external = config.isExternalMarkers();
+	const storeLock = external ? await acquireUnitStateLock() : undefined;
 	try {
-		if (config.isExternalMarkers()) {
+		if (external) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
@@ -414,14 +419,14 @@ export async function executeAiReviewForFile(
 		});
 
 		// external マーカーの場合は unit-state ストアを保存する
-		if (result.markersChanged && config.isExternalMarkers()) {
+		if (result.markersChanged && external) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().save(mdaitDir);
 			}
 		}
 	} finally {
-		storeLock.release();
+		storeLock?.release();
 	}
 
 	if (result.markersChanged) {
