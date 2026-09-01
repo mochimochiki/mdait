@@ -1351,6 +1351,26 @@ async function phase12() {
 		);
 	}
 
+	// ---- frontmatter の既訳も取り込むこと（人の書いたタイトルを機械翻訳で上書きしない） ----
+	const fmRel = "content/en/20_no_marker.md";
+	const fmAbs = path.join(ws, fmRel);
+	if (fs.existsSync(fmAbs)) {
+		const front = /front:\s*'([^']*)'/.exec(read(fmAbs))?.[1] ?? "";
+		if (/need:review/.test(front)) {
+			ok(P, "訳された frontmatter が確認待ちで取り込まれるOK（翻訳待ちにしない）");
+		} else {
+			fail(P, fmRel, "訳された frontmatter が取り込まれていない（trans に上書きされる）", front || "front マーカー無し");
+		}
+		const transFront = await runCmd("mdait.translate.frontmatter", [fmAbs]);
+		if (transFront.status !== "error" && read(fmAbs).includes("English Test 2")) {
+			ok(P, "確認待ちの frontmatter は trans に上書きされないOK");
+		} else {
+			fail(P, fmRel, "確認待ちの frontmatter が翻訳で書き換えられた", read(fmAbs).slice(0, 200));
+		}
+	} else {
+		info(P, fmRel, "frontmatter を持つマーカー無しの既訳の見本が無い");
+	}
+
 	// ---- 取り込み → 今回の改訂 → レビュー完了（既訳が消えないこと。ADR-260901-01） ----
 	//
 	// かつてここで既訳の英文がまるごと消えた。確認待ちのあいだ訳文の from だけを止めていたため、
@@ -1481,6 +1501,36 @@ async function phase13() {
 		}
 	} else {
 		info(P, frontRel, "frontmatter だけの見本が無い");
+	}
+
+	// ---- Windows で書かれた（CRLF の）原稿を書き換えない ----
+	// `.gitattributes` が eol=lf なので、見本は置けない。ここで CRLF に直してから確かめる
+	const crlfRel = "content/en/10_test.md";
+	const crlfAbs = path.join(ws, crlfRel);
+	const crlfSrcAbs = path.join(ws, "content/ja/10_test.md");
+	if (fs.existsSync(crlfAbs) && fs.existsSync(crlfSrcAbs)) {
+		for (const target of [crlfAbs, crlfSrcAbs]) {
+			fs.writeFileSync(target, read(target).replace(/\r?\n/g, "\r\n"), "utf8");
+		}
+		const beforeCrlf = read(crlfAbs);
+		await reload();
+		await sync();
+		const afterCrlf = read(crlfAbs);
+		const lfOnly = /[^\r]\n/.test(afterCrlf);
+		if (afterCrlf === beforeCrlf) {
+			ok(P, "CRLF の訳文が sync で書き換わらないOK（1バイトも変わらない）");
+		} else if (!lfOnly) {
+			ok(P, "CRLF の訳文が CRLF のまま保たれるOK（マーカーの更新はある）");
+		} else {
+			fail(P, crlfRel, "CRLF の原稿が LF に書き換えられた", `LF だけの行が混ざっている（${afterCrlf.length}文字）`);
+		}
+		if (/[^\r]\n/.test(read(crlfSrcAbs))) {
+			fail(P, "content/ja/10_test.md", "原文の CRLF が LF に書き換えられた", "");
+		} else {
+			ok(P, "原文の CRLF も保たれるOK");
+		}
+	} else {
+		info(P, crlfRel, "CRLF に直せる見本が無い");
 	}
 
 	// ---- マーカー無しの既訳は、普通の sync では確定扱いにしない ----

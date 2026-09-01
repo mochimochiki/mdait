@@ -15,15 +15,24 @@ import { syncSourceMarker, syncTargetMarker } from "./marker-sync";
 
 /**
  * frontmatterマーカーを同期する
+ *
+ * **既訳の採用（adopt）は本文ユニットと同じ規則に従う。** 訳文側の frontmatter に対象キーの
+ * 値が入っていれば、それは人が書いた訳であって「まだ訳していない」ではない。`need:translate`
+ * を付けると次の trans が機械翻訳で上書きする（実測: 取り込み直後に人の付けた英語タイトルが
+ * 消えた）。訳文ファイルがまだ無い経路（`targetFrontMatter` が undefined）は原文から複製する
+ * だけなので、値があっても既訳ではない — 採用しない。
+ *
  * @param sourceFrontMatter ソース側のfrontmatter
  * @param targetFrontMatter ターゲット側のfrontmatter
  * @param keys 翻訳対象キー一覧
+ * @param options adopt: 既訳の採用モードか
  * @returns sourceFrontMatter, targetFrontMatter, processed
  */
 export function syncFrontmatterMarkers(
 	sourceFrontMatter: FrontMatter | undefined,
 	targetFrontMatter: FrontMatter | undefined,
 	keys: string[],
+	options: { adopt?: boolean } = {},
 ): { sourceFrontMatter: FrontMatter | undefined; targetFrontMatter: FrontMatter | undefined; processed: boolean } {
 	if (keys.length === 0) {
 		return { sourceFrontMatter, targetFrontMatter, processed: false };
@@ -55,11 +64,19 @@ export function syncFrontmatterMarkers(
 	const targetHash = calculateFrontmatterHash(workingTarget, keys, { allowEmpty: true });
 	const existingMarker = parseFrontmatterMarker(workingTarget);
 
+	// 既訳の採用: マーカーが無く、訳文側に自前の値が入っているときだけ
+	const adoptTarget =
+		options.adopt === true &&
+		!existingMarker &&
+		targetFrontMatter !== undefined &&
+		calculateFrontmatterHash(targetFrontMatter, keys) !== null;
+
 	// 共通ロジックを使用してターゲットマーカーを同期
 	const targetResult = syncTargetMarker({
 		sourceHash,
 		targetHash,
 		existingMarker,
+		adoptTarget,
 	});
 
 	setFrontmatterMarker(workingTarget, targetResult.marker);

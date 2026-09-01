@@ -26,6 +26,7 @@ import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
+import { writeManagedMarkdownSync } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
@@ -118,7 +119,7 @@ export function externalizeFileMarkers(
 	const out = markdownParser.stringify(externalParsed, externalMarkerProvider, { filePath: relPath, role });
 	const changed = out !== content;
 	if (changed) {
-		fs.writeFileSync(absPath, out, "utf-8");
+		writeManagedMarkdownSync(absPath, out);
 	}
 	return { changed, unitsMigrated, unitsDropped };
 }
@@ -194,7 +195,7 @@ export function embedFileMarkers(
 	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
 	const changed = out !== content;
 	if (changed) {
-		fs.writeFileSync(absPath, out, "utf-8");
+		writeManagedMarkdownSync(absPath, out);
 	}
 
 	if (frontEmbedded) {

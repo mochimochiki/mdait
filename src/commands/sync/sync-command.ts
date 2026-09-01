@@ -36,6 +36,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { createOrphanTargetProbe, createRelativeExistsProbe } from "../../infra/workspace/orphan-probe";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
@@ -1170,7 +1171,7 @@ async function persistSourceDocument(
 	if (config.isExternalMarkers()) {
 		return;
 	}
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(sourceFile), new TextEncoder().encode(content));
+	await writeManagedMarkdown(sourceFile, content);
 }
 
 export async function syncNew_CoreProc(
@@ -1233,10 +1234,9 @@ export async function syncNew_CoreProc(
 	};
 
 	// 4. ターゲットファイルとして保存
-	const encoder = new TextEncoder();
 	const targetContent = markdownParser.stringify(targetDoc, targetIO.provider, targetIO.ctx);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(targetContent));
+	await writeManagedMarkdown(targetFile, targetContent);
 
 	// 4.5. スナップショット保存（初回sync時も保存）
 	const unitRegistryManager = UnitRegistryManager.getInstance();
@@ -1432,7 +1432,19 @@ export async function sync_CoreProc(
 	);
 
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
-	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
+	// 確認待ちのまま原文が変わったかを数えるため、同期の前の印を控える（本文ユニットと同じ扱い）
+	const frontmatterMarkerBefore = parseFrontmatterMarker(target.frontMatter);
+	const frontmatterWasAwaitingReview = frontmatterMarkerBefore?.need === "review";
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys, {
+		adopt: options?.adopt === true,
+	});
+	// 取り込みで採用した frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）
+	const frontmatterAdopted =
+		!frontmatterMarkerBefore && parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review" ? 1 : 0;
+	const frontmatterReviewSuperseded =
+		frontmatterWasAwaitingReview && (parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.needsRevision() ?? false)
+			? 1
+			: 0;
 
 	// フロントマターのみのファイルは、frontmatter同期が無効なら処理しない
 	if (source.units.length === 0 && target.units.length === 0 && !frontmatterSync.processed) {
@@ -1548,8 +1560,8 @@ export async function sync_CoreProc(
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
 	diffResult.revisionsNeeded = revisionsNeeded;
-	diffResult.adopted = adopted;
-	diffResult.reviewsSuperseded = reviewsSuperseded;
+	diffResult.adopted = adopted + frontmatterAdopted;
+	diffResult.reviewsSuperseded = reviewsSuperseded + frontmatterReviewSuperseded;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
@@ -1570,9 +1582,8 @@ export async function sync_CoreProc(
 	// 出力先ディレクトリが存在するか確認し、なければ作成
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
 
-	// ファイル出力
-	const encoder = new TextEncoder();
-	await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(syncedContent));
+	// ファイル出力（原稿の改行のくせを保ち、同じ内容なら書かない）
+	await writeManagedMarkdown(targetFile, syncedContent);
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存（external では書かない）
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み
