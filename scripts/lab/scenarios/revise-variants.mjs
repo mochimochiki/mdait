@@ -175,8 +175,16 @@ function applyUdiff(previous, patch) {
 	if (!/^@@ /m.test(text)) return { ok: false, reason: "unrecognized-format" };
 	// 末尾に改行が無い diff は applyPatch が嫌がるので足しておく
 	const normalized = text.endsWith("\n") ? text : `${text}\n`;
+	// **applyPatch は「当たらなかった」を false で返すが、「diff として読めない」は
+	// 例外で知らせる**（実測: "Hunk at line 7 contained invalid line"）。弱いモデルは
+	// ハンクの中身を崩しがちなので、これは日常的に起きる。捕まえて書式違いへ寄せる
 	for (const fuzz of [0, 2]) {
-		const applied = applyUnifiedDiff(previous, normalized, { fuzzFactor: fuzz });
+		let applied;
+		try {
+			applied = applyUnifiedDiff(previous, normalized, { fuzzFactor: fuzz });
+		} catch {
+			return { ok: false, reason: "unrecognized-format" };
+		}
 		if (applied !== false) return { ok: true, text: applied };
 	}
 	return { ok: false, reason: "anchor-not-found" };

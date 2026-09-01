@@ -240,11 +240,26 @@ export function checkIntent(testCase, result) {
  *            health?:string[], intent?:object|null}}
  */
 export function judge(testCase, variant, raw) {
-	const envelope = variant.parseEnvelope(raw);
+	// **1件の悪い答えで 35 件の結果を道連れにしない。**
+	// 封筒を開く側も当てる側も、外の道具（JSON.parse・diff の applyPatch）を呼ぶので、
+	// 「読めない」を返り値ではなく例外で知らせてくることがある（実測: applyPatch は
+	// 壊れたハンクで throw する）。**ベンチにとって壊れた答えは観測対象であって異常事態ではない**
+	// ので、例外はその1マスの失敗として記録し、走行そのものは続ける
+	let envelope;
+	try {
+		envelope = variant.parseEnvelope(raw);
+	} catch (error) {
+		return { stage: "envelope", ok: false, reason: "envelope-threw", detail: String(error?.message ?? error) };
+	}
 	if (!envelope.ok) {
 		return { stage: "envelope", ok: false, reason: envelope.reason, detail: envelope.detail };
 	}
-	const applied = variant.applyPatch(testCase.previousTranslation, envelope.patch);
+	let applied;
+	try {
+		applied = variant.applyPatch(testCase.previousTranslation, envelope.patch);
+	} catch (error) {
+		return { stage: "format", ok: false, reason: "apply-threw", detail: String(error?.message ?? error) };
+	}
 	if (!applied.ok) {
 		// 書式そのものが違うのか、当てる場所が見つからなかったのかを分ける
 		const stage = ["unrecognized-format", "empty-patch", "no-changes", "unterminated-block", "bad-range"].includes(
@@ -376,13 +391,19 @@ export async function run(options = {}) {
 
 	let done = 0;
 	const records = await pool(jobs, concurrency, async ({ testCase, variant, attempt }) => {
-		const request = buildRequest(testCase, variant);
-		const answer = await askModel({ baseURL, model, apiKey, system: request.system, user: request.user, timeoutSec });
+		// 最後の砦。judge の中は個別に守ってあるが、依頼の組み立てや HTTP まわりで
+		// 想定外が出ても**この1マスだけを失敗にして走り切る**（36往復ぶんの枠を
+		// 1件の事故で捨てない）
+		let answer = { ok: false, reason: "bench-error", durationMs: 0 };
 		let verdict;
-		if (!answer.ok) {
-			verdict = { stage: "transport", ok: false, reason: answer.reason, detail: answer.detail };
-		} else {
-			verdict = judge(testCase, variant, answer.raw);
+		try {
+			const request = buildRequest(testCase, variant);
+			answer = await askModel({ baseURL, model, apiKey, system: request.system, user: request.user, timeoutSec });
+			verdict = answer.ok
+				? judge(testCase, variant, answer.raw)
+				: { stage: "transport", ok: false, reason: answer.reason, detail: answer.detail };
+		} catch (error) {
+			verdict = { stage: "transport", ok: false, reason: "bench-error", detail: String(error?.message ?? error) };
 		}
 		done += 1;
 		process.stderr.write(`\r  ${done}/${jobs.length} 完了`);
@@ -569,6 +590,36 @@ function selfTestChecks() {
 		`searchreplace: SEARCH の末尾に空白が紛れても、後ろの文字を食わない`,
 		trailing.ok && trailing.text === trailingWant,
 		trailing.ok ? `出来上がりが違う: ${JSON.stringify(trailing.text?.slice(100, 200))}` : String(trailing.reason),
+	);
+
+	// 壊れた unified diff は**例外ではなく判定**として返ること。
+	// diff の applyPatch は「当たらない」を false で返す一方、「diff として読めない」は
+	// throw で知らせる（実測: "Hunk at line 7 contained invalid line"）。捕まえ損ねると
+	// 1件の悪い答えが走行ごと落とし、36往復ぶんの枠が消える（実際に一度そうなった）
+	const brokenHunk = judge(
+		c1,
+		udiff,
+		`@@ -1,5 +1,5 @@\n ## Market Analysis\n\nthis line has no prefix at all\n+${goodLine}`,
+	);
+	add(
+		`udiff: ハンクが壊れていても例外にせず format で落とす`,
+		!brokenHunk.ok && brokenHunk.stage === "format",
+		`${brokenHunk.stage} / ${brokenHunk.reason}`,
+	);
+
+	// judge そのものが、道具の投げる例外を1マスの失敗に閉じ込めること
+	const throwing = {
+		id: "throwing",
+		parseEnvelope: () => {
+			throw new Error("boom");
+		},
+		applyPatch: () => ({ ok: true, text: "" }),
+	};
+	const contained = judge(c1, throwing, "anything");
+	add(
+		`封筒を開く側が投げても、走行を止めず1マスの失敗にする`,
+		!contained.ok && contained.reason === "envelope-threw",
+		String(contained.reason),
 	);
 
 	const outOfRange = judge(c1, linenum, `REPLACE 999\nnope\nEND`);
