@@ -102,6 +102,9 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --self-test    LLM を呼ばずに判定の筋道だけ確かめる（実費ゼロ）
             --model <名前> 翻訳役のモデル（既定 haiku）  --base-url <URL> 自前の OpenAI 互換の行き先
             --cases C1,C4  --variants current,linenum  --repeat <回数>
+            --response-format <off|json_object|json_schema>  JSON の封筒を使う候補にだけ
+                           response_format を付ける。**claude 経由では捨てられる**ので、
+                           効き目は自前の OpenAI 互換の口を --base-url で指したときだけ測れる
   ux       実 UI にしか無いもの（ツリーのアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を
            ブラウザ版 VS Code で撮り、文字にも落とす。**設営に数分・CI 対象外**
             --only U1,U4   段を絞る    --keep 終わっても止めない
@@ -787,6 +790,7 @@ async function presetBenchRevise(opts) {
 			// shim は model を見ないが、自前の行き先には渡す必要がある
 			model: opts.model ?? "haiku",
 			apiKey: opts["api-key"],
+			responseFormat: opts["response-format"],
 			out: path.join(runDir, "bench-revise.json"),
 			dry: opts.dry,
 		});
