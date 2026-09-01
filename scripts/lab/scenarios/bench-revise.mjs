@@ -40,6 +40,10 @@
  *     --concurrency <数>   同時に投げる数（既定 4）
  *     --timeout <秒>       1件あたりの上限（既定 180）
  *     --out <パス>         結果の JSON の書き出し先
+ *     --response-format <off|json_object|json_schema>
+ *                          JSON の封筒を使う候補にだけ response_format を付ける（既定 off）。
+ *                          **`claude -p` 経由では捨てられる。** 効き目を測れるのは OpenAI 互換の
+ *                          口を直接指したときだけ（llama.cpp / Ollama / OpenAI）
  *     --self-test          LLM を呼ばず、判定の筋道だけを確かめる
  *     --dry                何を送るつもりかだけを出して終わる
  */
@@ -281,7 +285,49 @@ export function judge(testCase, variant, raw) {
 // HTTP
 // ===========================================================================
 
-async function askModel({ baseURL, model, apiKey, system, user, timeoutSec }) {
+/**
+ * `--response-format` で渡された値を、送る `response_format` の形に直す。
+ *
+ * **JSON の封筒を使う候補にしか付けない。** 素のテキストを求める候補に JSON を強制すると、
+ * 出力そのものが別物になり、比べているものが「形式の差」でなくなる。
+ *
+ * `claude -p` 経由（lab の agent モード）ではこの指定は捨てられる。文法で縛れるのは
+ * OpenAI 互換の口を直接指したときだけなので、効き目は自前の行き先でしか測れない。
+ */
+const RESPONSE_FORMAT_MODES = ["off", "json_object", "json_schema"];
+
+function buildResponseFormat(mode, variant) {
+	// **値の検査を先に済ませる。** 候補の選び方より後に置くと、JSON の封筒を使う候補を
+	// 1つも選んでいないとき（`--variants linenum` など）に綴り間違いが素通りし、
+	// 指定が効いているつもりのまま全往復を投げることになる。
+	// **この PR が潰そうとしている「黙って無視される」失敗そのもの**なので、順序が要点。
+	if (mode !== undefined && !RESPONSE_FORMAT_MODES.includes(mode)) {
+		throw new Error(`--response-format に使えるのは ${RESPONSE_FORMAT_MODES.join(" / ")} です（渡された値: ${mode}）`);
+	}
+	if (!mode || mode === "off") return undefined;
+	// 封筒が JSON でない候補には付けない（付けると測る対象がずれる）
+	if (!variant.usesJsonEnvelope) return undefined;
+	if (mode === "json_object") return { type: "json_object" };
+	if (mode === "json_schema") {
+		return {
+			type: "json_schema",
+			json_schema: {
+				name: "revise_patch",
+				strict: true,
+				schema: {
+					type: "object",
+					properties: { targetPatch: { type: "string" } },
+					required: ["targetPatch"],
+					additionalProperties: false,
+				},
+			},
+		};
+	}
+	// 上の検査を通っている以上ここへは来ない。将来 MODES に足して分岐を忘れたら気づけるように残す
+	throw new Error(`--response-format の ${mode} を組み立てる分岐がありません`);
+}
+
+async function askModel({ baseURL, model, apiKey, system, user, timeoutSec, responseFormat }) {
 	const url = `${baseURL.replace(/\/$/, "")}/chat/completions`;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutSec * 1000);
@@ -297,6 +343,7 @@ async function askModel({ baseURL, model, apiKey, system, user, timeoutSec }) {
 					{ role: "user", content: user },
 				],
 				stream: false,
+				...(responseFormat ? { response_format: responseFormat } : {}),
 			}),
 			signal: controller.signal,
 		});
@@ -354,11 +401,18 @@ export async function run(options = {}) {
 	const baseURL = options.baseUrl ?? session?.ai?.baseURL;
 	const model = options.model ?? "bench";
 	const apiKey = options.apiKey ?? "lab-bench";
+	const responseFormatMode = options.responseFormat ?? "off";
+	// 値が不正なら、往復を1つも投げる前に落とす（枠を無駄にしない）
+	for (const variant of variants) buildResponseFormat(responseFormatMode, variant);
 
 	if (options.dry) {
 		say(`改訂ベンチ（送らずに中身だけ出します）`);
 		say(`  行き先: ${baseURL ?? "（未設定）"}   モデル: ${model}`);
 		say(`  ケース: ${cases.map((c) => c.id).join(" ")}`);
+		if (responseFormatMode !== "off") {
+			const targets = variants.filter((v) => buildResponseFormat(responseFormatMode, v)).map((v) => v.id);
+			say(`  response_format: ${responseFormatMode} → ${targets.length > 0 ? targets.join(" ") : "（付く候補なし）"}`);
+		}
 		say(`  候補  : ${variants.map((v) => v.id).join(" ")}`);
 		say(
 			`  往復数: ${cases.length * variants.length * repeat} 回（${cases.length}ケース × ${variants.length}候補 × ${repeat}回）`,
@@ -386,6 +440,9 @@ export async function run(options = {}) {
 
 	say(`========== 改訂ベンチ ==========`);
 	say(`行き先 ${baseURL}   モデル ${model}`);
+	if (responseFormatMode !== "off") {
+		say(`response_format: ${responseFormatMode}（JSON の封筒を使う候補にだけ付ける）`);
+	}
 	say(`${cases.length}ケース × ${variants.length}候補 × ${repeat}回 = ${jobs.length} 往復（同時 ${concurrency}）`);
 	say("");
 
@@ -398,7 +455,15 @@ export async function run(options = {}) {
 		let verdict;
 		try {
 			const request = buildRequest(testCase, variant);
-			answer = await askModel({ baseURL, model, apiKey, system: request.system, user: request.user, timeoutSec });
+			answer = await askModel({
+				baseURL,
+				model,
+				apiKey,
+				system: request.system,
+				user: request.user,
+				timeoutSec,
+				responseFormat: buildResponseFormat(responseFormatMode, variant),
+			});
 			verdict = answer.ok
 				? judge(testCase, variant, answer.raw)
 				: { stage: "transport", ok: false, reason: answer.reason, detail: answer.detail };
@@ -454,6 +519,22 @@ function report(records, variants, cases) {
 		say(
 			`  ${pad(variant.id, 15)}${pad(`${passed}/${mine.length} (${rate}%)`, 10)}${cells.join("")}${pad(`${intentOk}/${mine.length}`, 8)}`,
 		);
+	}
+
+	// 閾値の下の様子。**成功率が天井や床に張り付いても、ここには差が出る**（実測）。
+	// 手で集計し直さずに済むよう、最初から表に出す
+	say("");
+	say("出力の様子（成否とは別に見る）");
+	const median = (values) => (values.length === 0 ? 0 : values.slice().sort((a, b) => a - b)[values.length >> 1]);
+	say(`  ${pad("候補", 15)}${pad("フェンス包み", 16)}${pad("文字数(中央)", 14)}${pad("所要(中央)", 12)}`);
+	for (const variant of variants) {
+		const mine = records.filter((r) => r.variant === variant.id);
+		// 指示文はどの候補でもフェンスを禁じているので、包んで返した件数はそのまま
+		// 「指示に従わなかった件数」になる。JSON の封筒でこれが跳ね上がる
+		const fenced = mine.filter((r) => /^\s*```/.test(r.raw ?? "")).length;
+		const chars = median(mine.map((r) => (r.raw ?? "").length));
+		const secs = Math.round(median(mine.map((r) => r.durationMs ?? 0)) / 100) / 10;
+		say(`  ${pad(variant.id, 15)}${pad(`${fenced}/${mine.length}`, 16)}${pad(chars, 14)}${pad(`${secs}s`, 12)}`);
 	}
 
 	say("");
@@ -705,6 +786,33 @@ function selfTestChecks() {
 		add(`ケース ${c.id}（${c.tier}）が成り立っている`, problems.length === 0, problems.join(" / "));
 	}
 
+	// --- response_format の付け方 ---
+	// **JSON の封筒を使う候補にしか付けない。** 素のテキストを求める候補に JSON を強制すると、
+	// 出力が別物になり、比べているものが「形式の差」でなくなる
+	add(
+		"response_format は JSON の封筒を使う候補にだけ付く",
+		buildResponseFormat("json_object", current) !== undefined &&
+			buildResponseFormat("json_object", plain) === undefined &&
+			buildResponseFormat("json_object", linenum) === undefined,
+		"",
+	);
+	add("response_format は既定（off）では付かない", buildResponseFormat("off", current) === undefined, "");
+	// 綴り間違いは**候補の選び方によらず**落ちること。値の検査を封筒の判定より後に置くと、
+	// JSON の封筒を使う候補を1つも選んでいないときだけ素通りする（レビュー指摘・実バグだった）
+	const rejects = (variant) => {
+		try {
+			buildResponseFormat("json-ish", variant);
+			return false;
+		} catch {
+			return true;
+		}
+	};
+	add(
+		"response_format に知らない値を渡したら、候補の選び方によらず投げる前に落ちる",
+		rejects(current) && rejects(plain) && rejects(linenum),
+		`current=${rejects(current)} plain=${rejects(plain)} linenum=${rejects(linenum)}`,
+	);
+
 	// --- 送るものが本番と同じか ---
 	checks.push(guardTemplateFidelity());
 
@@ -764,6 +872,7 @@ async function main() {
 		baseUrl: opts["base-url"],
 		model: opts.model,
 		apiKey: opts["api-key"],
+		responseFormat: opts["response-format"],
 		out: opts.out,
 		dry: opts.dry,
 	});

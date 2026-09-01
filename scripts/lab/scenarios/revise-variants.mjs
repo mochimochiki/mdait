@@ -416,6 +416,7 @@ Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outs
  * @property {string} note
  * @property {string} template
  * @property {boolean} [numbered] 前回訳文に行番号を振って渡すか
+ * @property {boolean} [usesJsonEnvelope] 封筒が JSON か（`--response-format` を付ける対象の判定に使う）
  * @property {(raw:string)=>({ok:true,patch:string}|{ok:false,reason:string,detail?:string})} parseEnvelope
  * @property {(prev:string,patch:string)=>({ok:true,text:string}|{ok:false,reason:string})} applyPatch
  */
@@ -426,6 +427,7 @@ export const VARIANTS = [
 		id: "current",
 		note: "いまの本番。独自の =/-/+ 形式を JSON の targetPatch に詰める",
 		template: DEFAULT_TRANS_REVISE_PATCH,
+		usesJsonEnvelope: true,
 		parseEnvelope: openJsonEnvelope,
 		applyPatch: applySimplePatch,
 	},
@@ -462,6 +464,7 @@ export const VARIANTS = [
 		id: "udiff-json",
 		note: "unified diff を JSON の封筒に入れる。封筒だけの効き目を測る対照",
 		template: compose(FORMAT_UDIFF, JSON_TAIL),
+		usesJsonEnvelope: true,
 		parseEnvelope: openJsonEnvelope,
 		applyPatch: applyUdiff,
 	},
