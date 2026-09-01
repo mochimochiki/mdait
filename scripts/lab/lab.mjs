@@ -67,6 +67,7 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --replay <ファイル>       replay モードの録音
             --record <ファイル>       やり取りを録音する
             --agent-model <モデル>    agent モードで翻訳役に立てる claude のモデル
+            --agent-command <コマンド> 翻訳役として起こすコマンド（既定 claude）
   run     mdait のコマンドを1つ実行する（up していなければ既定で自動的に始める）
             node scripts/lab/lab.mjs run mdait.sync
             node scripts/lab/lab.mjs run mdait.trans content/en/10_test.md

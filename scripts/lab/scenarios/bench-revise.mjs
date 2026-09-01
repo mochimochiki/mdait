@@ -553,6 +553,24 @@ function selfTestChecks() {
 	);
 	add(`searchreplace: 目印が無ければ apply で落ちる`, !noAnchor.ok && noAnchor.stage === "apply", noAnchor.stage);
 
+	// SEARCH の末尾に空白が紛れても、余分な文字を食わないこと。
+	// 位置を「空白を落とした search」で探しながら長さを落とす前で数えていた時期があり、
+	// 差の分だけ後ろを食って**次の行と繋がっていた**（health は over-edit に届かず素通りする）。
+	// だから健全性ではなく、出来上がりの文字列そのものを突き合わせる
+	const c2 = selectCases("C2")[0];
+	const c2Lines = c2.previousTranslation.split("\n");
+	const trailing = judge(
+		c2,
+		searchreplace,
+		`<<<<<<< SEARCH\n${c2Lines[4]}  \n=======\n- Pd(PPh₃)₄ (1.0 mol%)\n>>>>>>> REPLACE`,
+	);
+	const trailingWant = [...c2Lines.slice(0, 4), "- Pd(PPh₃)₄ (1.0 mol%)", ...c2Lines.slice(5)].join("\n");
+	add(
+		`searchreplace: SEARCH の末尾に空白が紛れても、後ろの文字を食わない`,
+		trailing.ok && trailing.text === trailingWant,
+		trailing.ok ? `出来上がりが違う: ${JSON.stringify(trailing.text?.slice(100, 200))}` : String(trailing.reason),
+	);
+
 	const outOfRange = judge(c1, linenum, `REPLACE 999\nnope\nEND`);
 	add(
 		`linenum: 存在しない行番号は format で落ちる`,

@@ -196,11 +196,15 @@ function applySearchReplace(previous, patch) {
 		if (search === "") return { ok: false, reason: "no-changes" };
 		const at = result.indexOf(search);
 		if (at === -1) {
-			// 末尾の空白だけの食い違いは救う（本番の applySimplePatch と同じ寛容さ）
+			// 末尾の空白だけの食い違いは救う（本番の applySimplePatch と同じ寛容さ）。
+			// **探した文字列と、切り出しに使う長さを必ず揃える** — 位置は末尾空白を
+			// 落とした search で探すので、長さも落とした側で数えないと、差の分だけ
+			// 後ろの文字を食う（SEARCH に空白が1つ紛れるだけで次の行と繋がる）
 			const loose = result.replace(/[^\S\n]+$/gm, "");
-			const looseAt = loose.indexOf(search.replace(/[^\S\n]+$/gm, ""));
+			const looseSearch = search.replace(/[^\S\n]+$/gm, "");
+			const looseAt = loose.indexOf(looseSearch);
 			if (looseAt === -1) return { ok: false, reason: "search-not-found" };
-			result = loose.slice(0, looseAt) + replace + loose.slice(looseAt + search.length);
+			result = loose.slice(0, looseAt) + replace + loose.slice(looseAt + looseSearch.length);
 			continue;
 		}
 		result = result.slice(0, at) + replace + result.slice(at + search.length);
