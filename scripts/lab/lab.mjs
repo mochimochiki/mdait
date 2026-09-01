@@ -30,7 +30,19 @@ const SHIM = path.join(AI_DIR, "shim.mjs");
 const HOSTS = ["headless", "code-server", "desktop"];
 const AI_MODES = ["echo", "live", "agent", "script", "replay", "none"];
 
-const BOOLEANS = ["reset", "json", "help", "quiet", "dry", "verbose", "keep", "time", "no-diff", "script-loop"];
+const BOOLEANS = [
+	"reset",
+	"json",
+	"help",
+	"quiet",
+	"dry",
+	"verbose",
+	"keep",
+	"time",
+	"no-diff",
+	"script-loop",
+	"self-test",
+];
 
 const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
 
@@ -54,6 +66,8 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --script-loop             台本を使い切ったら先頭へ戻す（無いと 409 で止まる）
             --replay <ファイル>       replay モードの録音
             --record <ファイル>       やり取りを録音する
+            --agent-model <モデル>    agent モードで翻訳役に立てる claude のモデル
+            --agent-command <コマンド> 翻訳役として起こすコマンド（既定 claude）
   run     mdait のコマンドを1つ実行する（up していなければ既定で自動的に始める）
             node scripts/lab/lab.mjs run mdait.sync
             node scripts/lab/lab.mjs run mdait.trans content/en/10_test.md
@@ -84,6 +98,10 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             --only R1,R8   経路を絞る    --nasty N1,N4  意地悪を絞る
             **1周は20〜30分かかる。CI には入れていない**
   prompt   指示文の比べ読み（未実装。組み立て方だけ出ます）
+  bench-revise  改訂（revise）の出力形式を比べて数える。どこで落ちたかが段ごとに出る
+            --self-test    LLM を呼ばずに判定の筋道だけ確かめる（実費ゼロ）
+            --model <名前> 翻訳役のモデル（既定 haiku）  --base-url <URL> 自前の OpenAI 互換の行き先
+            --cases C1,C4  --variants current,linenum  --repeat <回数>
   ux       実 UI にしか無いもの（ツリーのアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を
            ブラウザ版 VS Code で撮り、文字にも落とす。**設営に数分・CI 対象外**
             --only U1,U4   段を絞る    --keep 終わっても止めない
@@ -186,6 +204,9 @@ async function startShim(mode, options) {
 	if (options.scriptLoop) argv.push("--script-loop");
 	if (options.replay) argv.push("--replay", path.resolve(options.replay));
 	if (options.record) argv.push("--record", path.resolve(options.record));
+	// agent モードで翻訳役に立てる claude の中身。指示文を比べるときは弱い段（haiku）を選ぶ
+	if (options.agentModel) argv.push("--agent-model", options.agentModel);
+	if (options.agentCommand) argv.push("--agent-command", options.agentCommand);
 	const mailbox = path.join(LAB_DIR, "mailbox");
 	argv.push("--mailbox", mailbox);
 
@@ -265,6 +286,8 @@ async function verbUp(opts) {
 		scriptLoop: opts["script-loop"],
 		replay: opts.replay,
 		record: opts.record,
+		agentModel: opts["agent-model"],
+		agentCommand: opts["agent-command"],
 	});
 	if (ai?.baseURL) {
 		configureAi(ws, { mode: aiMode, baseURL: ai.baseURL, model: opts.model, timeoutSec: asNumber(opts.timeout, 600) });
@@ -407,7 +430,8 @@ async function verbAi(opts) {
 	const what = opts._[0];
 	const session = liveSession();
 	const ai = session?.ai;
-	if (!ai || ai.mode === "none") throw new UsageError("AI の相手が立っていません（`lab up --ai echo` などで始めてください）");
+	if (!ai || ai.mode === "none")
+		throw new UsageError("AI の相手が立っていません（`lab up --ai echo` などで始めてください）");
 	if (ai.missing) throw new UsageError("AI の相手（scripts/lab/ai/shim.mjs）がまだありません");
 	const mailbox = ai.mailbox ?? path.join(LAB_DIR, "mailbox");
 
@@ -440,7 +464,10 @@ async function verbAi(opts) {
 function showNewest(mailbox, pattern, label) {
 	let names = [];
 	try {
-		names = fs.readdirSync(mailbox).filter((n) => pattern.test(n)).sort();
+		names = fs
+			.readdirSync(mailbox)
+			.filter((n) => pattern.test(n))
+			.sort();
 	} catch {}
 	if (names.length === 0) {
 		say(`${label}はまだありません（${mailbox}）`);
@@ -489,7 +516,10 @@ async function verbStatus() {
 	// 直近の手順を1つだけ短く
 	let names = [];
 	try {
-		names = fs.readdirSync(path.join(session.runDir, "steps")).filter((n) => n.endsWith(".json")).sort();
+		names = fs
+			.readdirSync(path.join(session.runDir, "steps"))
+			.filter((n) => n.endsWith(".json"))
+			.sort();
 	} catch {}
 	if (names.length === 0) {
 		say("手順はまだありません。");
@@ -557,7 +587,11 @@ async function verbDown() {
 		const hostModule = await loadHost(session.host);
 		// ホストによっては何も返さない。返事が無くても止まったものとして扱う
 		const result = (await hostModule.down(session)) ?? { stopped: true };
-		say(result.stopped ? `ホストを止めました（pid ${result.pid ?? session.hostPid}${result.forced ? " — 強く止めました" : ""}）` : `ホスト: ${result.reason}`);
+		say(
+			result.stopped
+				? `ホストを止めました（pid ${result.pid ?? session.hostPid}${result.forced ? " — 強く止めました" : ""}）`
+				: `ホスト: ${result.reason}`,
+		);
 	} catch (error) {
 		warn(`ホストを止められませんでした: ${error.message}`);
 	}
@@ -641,6 +675,16 @@ const PRESETS = {
 			"lab ai last ／ lab report",
 		],
 	},
+	"bench-revise": {
+		run: presetBenchRevise,
+		note: "改訂の出力形式を比べる。同じケースを候補ごとに投げ、どの段で落ちたかを数える",
+		steps: [
+			"（--base-url が無ければ）AI の受け皿を agent モードで立て、claude を翻訳役にする",
+			"ケース（原文の旧版・新版・前回訳文）× 候補（出力形式）の全組を組み立てる",
+			"1件ずつ OpenAI 互換の口へ投げ、transport → envelope → format → apply → health の順に判定する",
+			"候補ごとの成立数と、落ちた段の内訳を表にする（全文は run ディレクトリの bench-revise.json）",
+		],
+	},
 	ux: {
 		run: presetUx,
 		note: "実 UI でしか見えないもの（ツリーのアイコン・CodeLens・確認ダイアログ）を撮って文字に落とす",
@@ -712,6 +756,46 @@ async function presetUx(opts) {
 }
 
 /** 頑健性プローブ（観察するだけ）。判定はしない */
+/**
+ * 改訂の出力形式を比べる。
+ *
+ * **lab のセッションには触らない。** 見たいのは AI の答えだけで、VS Code もワークスペースも
+ * 要らないため、ホストは起こさず AI の受け皿だけを立てて、終わったら必ず落とす。
+ * 別の実験が立っていても邪魔をしない。
+ */
+async function presetBenchRevise(opts) {
+	const bench = await import("./scenarios/bench-revise.mjs");
+	if (opts["self-test"]) return bench.selfTestCommand();
+
+	// 自前の行き先（llama.cpp など）を渡されたら、受け皿は立てない
+	const external = opts["base-url"];
+	let ai = null;
+	if (!external) {
+		ai = await startShim("agent", { agentModel: opts.model ?? "haiku", agentCommand: opts["agent-command"] });
+		if (!ai?.baseURL) throw new Error("AI の受け皿が立ちませんでした");
+		say(`翻訳役: claude（--model ${opts.model ?? "haiku"}） ${ai.baseURL}`);
+	}
+	const { runDir } = createRun("bench-revise");
+	try {
+		const result = await bench.run({
+			cases: opts.cases,
+			variants: opts.variants,
+			repeat: opts.repeat,
+			concurrency: opts.concurrency,
+			timeout: opts.timeout,
+			baseUrl: external ?? ai.baseURL,
+			// shim は model を見ないが、自前の行き先には渡す必要がある
+			model: opts.model ?? "haiku",
+			apiKey: opts["api-key"],
+			out: path.join(runDir, "bench-revise.json"),
+			dry: opts.dry,
+		});
+		return result.failed > 0 ? 1 : 0;
+	} finally {
+		if (ai?.pid) stopShim({ ai });
+	}
+}
+
 async function presetProbe(opts) {
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "probe" });
 	const { run } = await import("./scenarios/probe.mjs");

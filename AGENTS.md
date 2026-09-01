@@ -17,7 +17,7 @@ npm run lint           # Biomeリント (設定: .config/biome.json)
 npm test               # compile + lint + 単体テスト + BYOK shim の単体テスト (mocha, TDD UI)
 npm run test:vscode    # VS Code統合テスト（手動実行、CI対象外）
 npm run test:byok      # BYOK shim 自身の単体テスト（npm test から呼ばれる、CI常時）
-npm run test:byok:e2e  # 録音した実機12往復の再生で trans を検証（手動実行、CI対象外）
+npm run test:byok:e2e  # 録音した実機12往復の再生で trans を検証（CI常時。改訂の往復はまだ入っていない）
 npm run watch          # 開発用esbuildウォッチ
 npm run bundle         # 本番バンドル (esbuild → dist/extension.js)
 npm run copy-test-files  # src/test/unit/sample-content からテストワークスペースをリセット
