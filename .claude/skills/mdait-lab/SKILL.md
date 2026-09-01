@@ -30,6 +30,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | trans / tm / term / ai-review の機構 | headless | `echo` | 数秒。費用なし |
 | 実際に何を送っているか / 壊れた答えへの耐え方 | headless | `live` / `script` | 観察と注入 |
 | 指示文の改稿を比べる | headless | `agent` | **実費がかかる**。対象は1〜3ファイル |
+| 改訂の出力形式を選び直す | （ホスト不要） | `agent` / 自前の口 | `lab bench-revise`。**判定の筋道だけなら `--self-test` で 0 回** |
 | 回帰（指示文の組み立てが変わっていないか） | headless | `replay` | `lab regress` の1行 |
 | ツリー・CodeLens・通知・ダイアログの見え方 | code-server | `echo --delay` | 設営に数分（初回のみ）。一通りなら `lab ux` |
 | 本物の `vscode.lm` / ブレークポイント | desktop | `none` | 手元の PC でのみ |
@@ -58,6 +59,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | `lab regress` | 録音の再生。LLM 0回。食い違えば exit 1 | `--replay <ファイル>` |
 | `lab resilience` | 壊れた応答への耐性（9経路 × 8種）。**1周20〜30分・CI 対象外** | `--only R1,R8` / `--nasty N1,N4` |
 | `lab prompt` | `agent` モードで走らせて指示文を比べる（未実装） | — |
+| `lab bench-revise` | **改訂（revise）の出力形式を比べて数える。** 同じケースを候補ごとに投げ、`transport → envelope → format → apply → health` の5段でどこまで通ったかを出す。**実費（利用枠）がかかる** | `--self-test`（LLM 0回）／ `--model haiku` ／ `--base-url <URL>` ／ `--cases C1,C4` ／ `--variants current,linenum` ／ `--repeat 3` |
 | `lab ux` | 実 UI にしか無いもの（ツリーのアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を撮り、**文字にも落とす**。**設営に数分・CI 対象外** | `--only U1,U4` / `--keep` |
 
 どの段取りも `--dry` を付けると、実行せずに**「実際には何をしているのか」だけ**を出す。
@@ -88,6 +90,11 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | sync の `totalModified` は**訳文の内容の変更**を数える | 原文を変えて `need:revise` が付くのは modified に入らない。正常 |
 | commands 層はタイマーと watcher を残す | プロセスは自然終了しない。だからホストは常駐で、`down` で明示的に落とす |
 | mdait は `/v1/models` を叩かない | 実装はあるが、検証では使われない |
+| **`response_format` はどのプロバイダにも送っていない**（JSON モードも json_schema も未使用）。既定の `vscode-lm` には送る口すら無い | 構造化出力の効き目を測るときは、OpenAI 互換の口を直接指すしかない。`claude -p` 経由では測れない |
+| 改訂（revise）は**独自形式のパッチを JSON の文字列に詰めて**返させる。指示文自身が "It is NOT a standard unified diff" と断っている | 弱いモデルが落ちる筋。`lab bench-revise` で形式ごとに数えられる |
+| **`applySimplePatch` はわざと寛容**（プレフィックスの無い行を文脈行として扱い、アンカーだけで位置を決める戦略も持つ） | 出鱈目なパッチが `ok: true` で当たりうる。「当たったか」だけを見ると原稿を壊す案が満点になる |
+| 録音による回帰（`lab regress`、CI 常時）は**新規翻訳の12往復だけ。改訂の往復は1件も無い** | `trans.revisePatch` を書き換えても CI は緑のまま通る |
+| 録音の再生は**順番ではなく中身で引く**（指紋は `model` + `stream` + `messages`） | 並列翻訳でも決定的。ただし system プロンプトを1文字変えれば必ず 409 で落ちる |
 
 ## 落とし穴
 
@@ -130,8 +137,8 @@ node scripts/lab/lab.mjs down                    # 片付ける
 ## リポジトリ側の参照
 
 - テスト戦略の中での位置づけ: `docs/design/test.md`
-- 決定の経緯: `docs/adr.md` の ADR-260824-03、ADR-260823-01 / -02 / -03、ADR-260822-03
-- 段階の計画: `docs/roadmaps/roadmap-v02_lab-consolidation.md`
+- 決定の経緯: `docs/adr.md` の ADR-260901-01、ADR-260824-03、ADR-260823-01 / -02 / -03、ADR-260822-03
+- 段階の計画: `docs/roadmaps/roadmap-v02_lab-consolidation.md`、`docs/roadmaps/roadmap-v03_revise-prompt-optimization.md`
 - プロバイダ層の実装: `src/infra/llm/providers/openai-provider.ts`、`src/infra/llm/retry.ts`
 - 指示文のテンプレート: `src/prompts/defaults.ts`（分割の考え方は `docs/design/prompt.md`）
 - IPC の実装（正）: `src/infra/debug/debug-command-handler.ts`
