@@ -1350,6 +1350,58 @@ async function phase12() {
 			"見本は原文と訳文の章数が同じなので、訳文だけにある章の一次受け（totalOrphanReviewed）を通せない。章数のずれた見本が要る",
 		);
 	}
+
+	// ---- 取り込み → 今回の改訂 → レビュー完了（既訳が消えないこと。ADR-260901-01） ----
+	//
+	// かつてここで既訳の英文がまるごと消えた。確認待ちのあいだ訳文の from だけを止めていたため、
+	// 原文側の hash が進んだ瞬間に紐が切れ、レビューを終えた次の sync で「原文が消えた孤立」と
+	// 見なされて削除されていた（同じ位置に日本語の原文が need:translate で置き直された）。
+	const srcRel = "content/ja/40_structure_mismatch.md";
+	const srcAbs = path.join(ws, srcRel);
+	const beforeRevision = bodyWithoutMarkers(read(abs));
+	const marker = "改訂で足した一文。";
+	fs.writeFileSync(srcAbs, read(srcAbs).replace("インストール手順を説明します。", `インストール手順を説明します。${marker}`), "utf8");
+	await reload();
+
+	const revised = await sync();
+	if (bodyWithoutMarkers(read(abs)) === beforeRevision && (revised.totalDeleted ?? 0) === 0) {
+		ok(P, "確認待ちのまま原文を改訂しても既訳の本文が変わらないOK");
+	} else {
+		fail(
+			P,
+			rel,
+			`確認待ちのまま原文を改訂したら訳文が変わった（deleted=${revised.totalDeleted}）`,
+			JSON.stringify(revised),
+		);
+	}
+	if ((revised.revisionsNeeded ?? 0) >= 1 && (revised.totalReviewsSuperseded ?? 0) >= 1) {
+		ok(P, `確認待ちから改訂待ちへ移り、件数が結果に出るOK（${revised.totalReviewsSuperseded}件）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`改訂待ちへ移らない、または件数が伝わらない（revise=${revised.revisionsNeeded} / superseded=${revised.totalReviewsSuperseded}）`,
+			JSON.stringify(revised),
+		);
+	}
+
+	// 人が「レビュー済み」を押す（CodeLens・ツリー・LM Tool と同じ入口を直に叩く）
+	await inprocReload();
+	const { getFileHandler } = out("commands/file-handler/file-handler-factory.js");
+	const resolved = await getFileHandler(abs).resolveNeed(abs, { needs: ["review"] });
+	await reload();
+	const afterReview = await sync();
+	const bodyAfterReview = bodyWithoutMarkers(read(abs));
+	if (bodyAfterReview === beforeRevision && (afterReview.totalDeleted ?? 0) === 0 && !bodyAfterReview.includes(marker)) {
+		ok(P, `レビュー完了のあとも既訳が残るOK（解決 ${resolved.resolved.length}件・削除0）`);
+	} else {
+		fail(
+			P,
+			rel,
+			`レビュー完了で既訳が消えた（deleted=${afterReview.totalDeleted} / 原文の混入=${bodyAfterReview.includes(marker)}）`,
+			JSON.stringify(afterReview),
+		);
+	}
 }
 
 // ===========================================================================

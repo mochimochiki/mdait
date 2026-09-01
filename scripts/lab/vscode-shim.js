@@ -84,18 +84,29 @@ vscode.__labResetDialogs = () => {
  *
  * 答えないと、選ばせてから始まる処理が丸ごと走らない。実測: `mdait.aiReview.file` は
  * 「未確認だけ / 全部」を選ばせる一覧で止まり、**ログ0行・返り値なしで done** になっていた。
- * 呼び手からは成功と区別が付かない。ここでは**先頭の選択肢**を選び、選んだことを控える。
+ * 呼び手からは成功と区別が付かない。1つだけ選ぶ一覧では**先頭の選択肢**を、複数選べる
+ * 一覧（`canPickMany`）では**既定で印の付いている項目を配列で**選び、選んだことを控える。
  */
 vscode.window.showQuickPick = async (items, options = {}) => {
 	const list = Array.isArray(items) ? items : await items;
-	const choice = process.env.MDAIT_LAB_DIALOG === "no" ? undefined : list?.[0];
+	const cancelled = process.env.MDAIT_LAB_DIALOG === "no";
+	// 複数選べる一覧（canPickMany）は**配列**を返す。単数の答えを返すと呼び手の
+	// `picked.some(...)` がその場で落ちる（実測: mdait.adopt.run が
+	// 「picked.some is not a function」で即エラーになり、取り込みウィザードを一度も通せなかった）。
+	// 既定で印の付いている項目（picked: true）を選ぶ＝画面で何も触らず OK を押したときと同じ。
+	const choice = cancelled
+		? undefined
+		: options.canPickMany
+			? (list ?? []).filter((item) => item?.picked)
+			: list?.[0];
 	const label = (value) => (value && typeof value === "object" ? (value.label ?? JSON.stringify(value)) : String(value));
+	const answered = choice === undefined ? null : Array.isArray(choice) ? choice.map(label).join(" + ") : label(choice);
 	answeredDialogs.push({
 		level: "quickpick",
 		modal: false,
 		message: String(options.title ?? options.placeHolder ?? "選択肢の一覧"),
 		buttons: (list ?? []).map(label),
-		answered: choice === undefined ? null : label(choice),
+		answered,
 	});
 	return choice;
 };
