@@ -670,6 +670,41 @@ function selfTestChecks() {
 		String(numberEcho.reason),
 	);
 
+	// --- ケース集合そのものが成り立っているか ---
+	// **枠を使う前にここで落とす。** ケースの設計を間違えると全候補がそのケースで落ち、
+	// 「候補が悪い」のか「ケースが悪い」のか区別できないまま往復ぶんの枠が消える
+	// （一次選抜で実際に36往復を無駄にした）
+	for (const c of selectCases()) {
+		const prev = c.previousTranslation;
+		const problems = [];
+		if (c.sourceOld === c.sourceNew) problems.push("原文の旧版と新版が同じ");
+		for (const [name, text] of [
+			["sourceOld", c.sourceOld],
+			["sourceNew", c.sourceNew],
+			["previousTranslation", prev],
+		]) {
+			if (text.split("\n").filter((l) => /^\s*```/.test(l)).length % 2 !== 0) {
+				problems.push(`${name} のコードフェンスが閉じていない`);
+			}
+		}
+		// 健全性の基準線。前回訳文そのものが健全でなければ、health は必ず誤報する
+		const baseline = checkHealth(c, prev);
+		if (baseline.length > 0) problems.push(`前回訳文が健全性を満たさない: ${baseline.join(",")}`);
+		// 目安が空振りしないこと（present が既にあれば無意味、absent が無ければ消すものが無い）
+		for (const pattern of c.expect?.present ?? []) {
+			if (new RegExp(pattern, "i").test(prev)) problems.push(`present の目安が既に訳文にある: ${pattern}`);
+		}
+		for (const pattern of c.expect?.absent ?? []) {
+			if (!new RegExp(pattern, "i").test(prev)) problems.push(`absent の目安が訳文に無い: ${pattern}`);
+		}
+		// 正しく直しても over-edit にならないこと
+		const needed = countChangedLines(c.sourceOld, c.sourceNew);
+		if (c.maxChangedLines < needed) {
+			problems.push(`maxChangedLines(${c.maxChangedLines}) が原文の変更行数(${needed})より小さい`);
+		}
+		add(`ケース ${c.id}（${c.tier}）が成り立っている`, problems.length === 0, problems.join(" / "));
+	}
+
 	// --- 送るものが本番と同じか ---
 	checks.push(guardTemplateFidelity());
 
