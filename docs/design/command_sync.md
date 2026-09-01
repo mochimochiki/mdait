@@ -50,6 +50,7 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | ターゲットのみ変更 | なし | hash更新のみ |
 | 両方変更 | `revise` | 原文優先で改訂扱い（[design.md](../design.md) 哲学3参照） |
 | ソースが `need:isolate` | 付与しない（凍結） | 伝播停止。hash/fromのみ更新し、target生成・translate/revise付与を行わない |
+| 確認待ち（`need:review`）のソース変更 | `revise@{oldhash}` | 他と同じ扱い。**`from` は原文と必ずそろえて進める**（片側だけ止めると紐が切れて訳文が消える。ADR-260901-01）。移した件数は sync の結果（`totalReviewsSuperseded`）で通知する |
 | レガシー `need:keep` / `need:backfill` | need除去 / `review` に変換 | `normalizeLegacyNeeds` による決定的マイグレーション |
 
 FrontMatterも同一ルールで管理されます（`mdait.front`マーカー、ソース側にも付与）。

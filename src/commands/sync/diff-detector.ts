@@ -44,6 +44,8 @@ export interface DiffResult {
 	revisionsNeeded?: number;
 	/** adoptで採用（need:review付与）したユニット数 */
 	adopted?: number;
+	/** 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数 */
+	reviewsSuperseded?: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	kept?: number;
 	/** need:verify-deletion を付与した孤立ターゲット数 */

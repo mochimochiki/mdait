@@ -23,6 +23,7 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 		totalUnchanged: 0,
 		revisionsNeeded: 0,
 		totalAdopted: 0,
+		totalReviewsSuperseded: 0,
 		totalKept: 0,
 		totalOrphanReviewed: 0,
 		totalOrphanDeletionWithheld: 0,

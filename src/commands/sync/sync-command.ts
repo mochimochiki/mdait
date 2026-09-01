@@ -286,6 +286,32 @@ function rollbackWithheldNotice(count: number): SyncNotice | undefined {
 }
 
 /**
+ * 確認待ちのまま原文が変わり、改訂待ちへ移したことを伝える（ADR-260901-01）。
+ *
+ * 取り込み直後は大量のユニットが確認待ちで並ぶ。そこで原文を直すと、そのユニットは
+ * 確認の列から改訂の列へ黙って移る。**移ったこと自体は正しい**（原文が先へ進んだ以上、
+ * 旧原文の訳として妥当かを聞いても仕方がない）が、黙って減ると「確認したつもり」の
+ * ユニットが生まれる。件数だけは必ず言う。
+ */
+function reviewSupersededNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "review-superseded",
+		detail: vscode.l10n.t(
+			"{0} unit(s) were waiting for your check when their source changed, so they moved to the revision queue. The existing translations were kept — translate them to apply the change, and review the result.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} unit(s) moved from your check to the revision queue", count),
+		action: {
+			label: vscode.l10n.t("Show units"),
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
+/**
  * 原文を失った訳文ユニットを削除したことと、その戻し方を伝える（訳文消失への気づき: P6）。
  *
  * **何が消えたかを名前で言う。** 原稿を消す唯一の経路なのに件数しか出ていなかったので、
@@ -383,6 +409,8 @@ export interface SyncResult {
 	revisionsNeeded: number;
 	/** adoptで採用（need:review付与）したユニット数 */
 	totalAdopted: number;
+	/** 確認待ちのまま原文が変わり、改訂待ちへ移ったユニット数 */
+	totalReviewsSuperseded: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	totalKept: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
@@ -466,6 +494,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalUnchanged = 0;
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
+		let totalReviewsSuperseded = 0;
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
 		let totalOrphanDeletionWithheld = 0;
@@ -609,6 +638,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalUnchanged += syncResult.unchanged;
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
+						totalReviewsSuperseded += syncResult.reviewsSuperseded ?? 0;
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
@@ -680,6 +710,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalUnchanged,
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
+			totalReviewsSuperseded,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -764,6 +795,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				rollbackWithheldNotice(totalOrphanRollbackWithheld),
 				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
 				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
+				reviewSupersededNotice(totalReviewsSuperseded),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				newOrphansNotice(freshOrphans),
@@ -783,6 +815,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalUnchanged,
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
+			totalReviewsSuperseded,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -1463,7 +1496,7 @@ export async function sync_CoreProc(
 	}
 
 	// ユニットのハッシュを更新
-	const { revisionsNeeded, adopted, noteMigrations } = updateSectionHashes(
+	const { revisionsNeeded, adopted, reviewsSuperseded, noteMigrations } = updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
@@ -1516,6 +1549,7 @@ export async function sync_CoreProc(
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
 	diffResult.revisionsNeeded = revisionsNeeded;
 	diffResult.adopted = adopted;
+	diffResult.reviewsSuperseded = reviewsSuperseded;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
@@ -1823,9 +1857,17 @@ function updateSectionHashes(
 	sourceFilePath: string,
 	targetFilePath: string,
 	adopt = false,
-): { revisionsNeeded: number; adopted: number; noteMigrations: Array<{ from: string; to: string }> } {
+): {
+	revisionsNeeded: number;
+	adopted: number;
+	reviewsSuperseded: number;
+	noteMigrations: Array<{ from: string; to: string }>;
+} {
 	let revisionsNeeded = 0;
 	let adopted = 0;
+	// 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数。
+	// 黙って確認の列から消えるので、件数だけは必ず伝える（ADR-260901-01）
+	let reviewsSuperseded = 0;
 	// 本文編集で hash が変わったユニットは、紐づく note を旧→新 hash へ移送する（unit-registry）。
 	// content は content-addressed で不変。note だけがユニットに追従する（決定的・AI 不使用）。
 	const noteMigrations: Array<{ from: string; to: string }> = [];
@@ -1852,6 +1894,7 @@ function updateSectionHashes(
 
 			// adopt判定: from未確立かつ本文のある既存targetのみが採用候補
 			const hadFrom = !!target.marker?.from;
+			const wasAwaitingReview = target.marker?.need === "review";
 			const adoptTarget = adopt && !hadFrom && target.content.trim() !== "";
 
 			// ペアのどちらか一方が isolate の場合は need を凍結する（hash/from のみ最新化し、
@@ -1870,6 +1913,9 @@ function updateSectionHashes(
 			}
 			if (adoptTarget && result.targetMarker.need === "review") {
 				adopted++;
+			}
+			if (wasAwaitingReview && result.targetMarker.needsRevision()) {
+				reviewsSuperseded++;
 			}
 			continue;
 		}
@@ -1892,7 +1938,7 @@ function updateSectionHashes(
 			target.marker = result.marker;
 		}
 	}
-	return { revisionsNeeded, adopted, noteMigrations };
+	return { revisionsNeeded, adopted, reviewsSuperseded, noteMigrations };
 }
 
 /**

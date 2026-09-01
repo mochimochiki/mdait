@@ -137,7 +137,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 ## リポジトリ側の参照
 
 - テスト戦略の中での位置づけ: `docs/design/test.md`
-- 決定の経緯: `docs/adr.md` の ADR-260901-01、ADR-260824-03、ADR-260823-01 / -02 / -03、ADR-260822-03
+- 決定の経緯: `docs/adr.md` の ADR-260901-02、ADR-260824-03、ADR-260823-01 / -02 / -03、ADR-260822-03
 - 段階の計画: `docs/roadmaps/roadmap-v02_lab-consolidation.md`、`docs/roadmaps/roadmap-v03_revise-prompt-optimization.md`
 - プロバイダ層の実装: `src/infra/llm/providers/openai-provider.ts`、`src/infra/llm/retry.ts`
 - 指示文のテンプレート: `src/prompts/defaults.ts`（分割の考え方は `docs/design/prompt.md`）

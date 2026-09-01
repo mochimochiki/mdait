@@ -231,7 +231,7 @@ Strategy 2（**前後のアンカーだけで位置を決め、その間を丸�
 
 ### 参照
 
-- 判定の分け方の決定: `docs/adr.md` の ADR-260901-01
+- 判定の分け方の決定: `docs/adr.md` の ADR-260901-02
 - ベンチの実装: `scripts/lab/scenarios/bench-revise.mjs`（動かし方はファイル先頭のコメント）
 - 使い方: `.claude/skills/mdait-lab/` の `mdait-lab` スキル
 - 本番の指示文: `src/prompts/defaults.ts` の `DEFAULT_TRANS_REVISE_PATCH`
