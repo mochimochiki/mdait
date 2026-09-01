@@ -84,7 +84,8 @@ vscode.__labResetDialogs = () => {
  *
  * 答えないと、選ばせてから始まる処理が丸ごと走らない。実測: `mdait.aiReview.file` は
  * 「未確認だけ / 全部」を選ばせる一覧で止まり、**ログ0行・返り値なしで done** になっていた。
- * 呼び手からは成功と区別が付かない。ここでは**先頭の選択肢**を選び、選んだことを控える。
+ * 呼び手からは成功と区別が付かない。1つだけ選ぶ一覧では**先頭の選択肢**を、複数選べる
+ * 一覧（`canPickMany`）では**既定で印の付いている項目を配列で**選び、選んだことを控える。
  */
 vscode.window.showQuickPick = async (items, options = {}) => {
 	const list = Array.isArray(items) ? items : await items;
