@@ -16,6 +16,12 @@ export interface MarkerSyncContext {
 	targetHash: string | null;
 	/** 既存のターゲットマーカー（ない場合はnull） */
 	existingMarker: MdaitMarker | null;
+	/**
+	 * 既訳の採用（adopt）モードか。**マーカーの無い訳文に中身があるとき**に真を渡す。
+	 * 本文ユニット側の `adoptTarget`（`applyNeedForChangedSource`）と同じ意味で、
+	 * `need:translate` の代わりに `need:review` を付けて trans の上書きから守る。
+	 */
+	adoptTarget?: boolean;
 }
 
 /**
@@ -116,7 +122,10 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 	// 新規マーカーの場合
 	if (!existingMarker) {
 		const marker = new MdaitMarker(targetHash ?? sourceHash, sourceHash);
-		marker.setNeed("translate");
+		// 既訳の採用では「まだ訳していない」ではなく「人がまだ確かめていない」。
+		// translate を付けると、次の trans が人の書いた訳を機械翻訳で上書きする
+		// （実測: adopt 直後の frontmatter で、人の付けた英語タイトルが消えた）
+		marker.setNeed(context.adoptTarget === true ? "review" : "translate");
 		return {
 			marker,
 			changed: true,
