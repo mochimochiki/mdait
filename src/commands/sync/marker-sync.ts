@@ -71,29 +71,10 @@ export function syncSourceMarker(
 }
 
 /**
- * 人の裁定を待っている印か。**原文が変わっても sync が動かしてはいけない印**である。
- *
- * `need:review` は「この訳文が原文の訳になっているかを、人がまだ確かめていない」を表す。
- * 付ける経路は6つある（既訳の採用 adopt・AI 翻訳の品質チェック・マーカー無しで書かれた
- * 訳文の一次受け・external 作り直しの安全網・旧 `need:backfill` の正規化・非 Markdown）。
- * どれも「AI に渡す前に人が見る」ための印なので、これを `revise@` へ倒すと
- * **確認の機会がその場で永久に失われ、人が一度も見ないまま AI が訳文を書き換える。**
- * 対応付けが正しいかどうかも未確認なので、ずれた相手の差分を当てることにもなる。
- *
- * 同じ性質の `need:isolate` と `need:verify-deletion` は、この関数の呼び出し元
- * （`updateSectionHashes`）が個別に手当てしている。`need:review` はその手当てが
- * 書かれないまま残っていた — 守りが呼び出し元に散っているかぎり、印を増やすたびに
- * 同じ抜けが起きる。**新しい「人が見るまで触らない印」はここに足すこと。**
- */
-export function isAwaitingHumanDecision(need: string | null): boolean {
-	return need === "review";
-}
-
-/**
  * 原文が変わった訳文の need を決める。**本文ユニットと frontmatter で唯一の実装。**
  *
- * 以前は `syncTargetMarker` と `syncMarkerPair` が同じ分岐を書き写しており、
- * `need:review` の守りが両方から抜け、原文を戻したときの後始末は片方にしか入っていなかった。
+ * 以前は `syncTargetMarker` と `syncMarkerPair` が同じ分岐を書き写しており、原文を戻した
+ * ときの後始末が片方にしか入っていなかった。決め方を増やすときは必ずここ1か所に書く。
  *
  * @param marker 更新するターゲット側マーカー（`from` は更新済みであること）
  * @param oldSourceHash 更新前の `from`（＝この訳文が対応していた原文のハッシュ）
@@ -170,18 +151,6 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 		};
 	}
 
-	// 人の裁定待ちは原文の変更で動かさない（下の freezeForHumanDecision を見よ）
-	if (isSourceChanged && isAwaitingHumanDecision(existingMarker.need)) {
-		if (targetHash) {
-			existingMarker.hash = targetHash;
-		}
-		return {
-			marker: existingMarker,
-			changed: isTargetChanged,
-			changeType: isTargetChanged ? "target-changed" : "none",
-		};
-	}
-
 	// ソースが変更された場合: revise または translate（両方変更時も同様に処理）
 	if (isSourceChanged) {
 		const oldSourceHash = existingMarker.from;
@@ -249,7 +218,19 @@ export interface PairSyncOptions {
 }
 
 /**
- * ソース・ターゲットペアのマーカーを同期する
+ * ソース・ターゲットペアのマーカーを同期する。
+ *
+ * **紐（原文マーカーの `hash` と訳文の `from`）は必ずそろえて動かす。** 片方だけ止めると
+ * 次の sync で対応が見つからず（`section-matcher.ts` の Phase 1 が外れ、Phase 2 は `from` を
+ * 持つ訳文を拾い直さない）、訳文は「原文が消えた孤立」に落ちて既定設定で物理削除される。
+ *
+ * かつて `need:review`（人がまだ確かめていない）だけは、確認の機会を守るために訳文側の
+ * `from` を据え置いていた（旧 ADR-260831-02）。だが同じ sync が原文側の `hash` は進めるため、
+ * **その場で紐が切れて既訳の本文がまるごと消えていた**（実測）。いま `review` は他の印と
+ * 同じく `revise@{旧原文hash}` へ倒れる。原文が先へ進んだ以上「この訳文は旧原文の訳として
+ * 妥当か」を人に聞くこと自体が現物と合っておらず、失う確認の機会より紐が切れて原稿が
+ * 消えることのほうが重い（ADR-260901-01）。凍結したい印を足したくなったら、`from` を
+ * 止める以外の道を探すこと。
  *
  * @param sourceHash ソースコンテンツのハッシュ
  * @param targetHash ターゲットコンテンツのハッシュ
@@ -306,19 +287,8 @@ export function syncMarkerPair(
 		targetMarker.removeNeedTag();
 	}
 
-	// **人の裁定待ちは from ごと凍結する。** need だけ守って from を進めると、
-	// 人が確認を終えて印を外したときには「どの原文から訳したか」が失われており、
-	// 改訂の要求そのものが消える（原文は変わったのに誰にも回されない）。
-	// from を据え置けば、印が外れた次の sync で from ≠ 現在の原文となり、
-	// **そこで初めて正しい戻り先を持つ `revise@` が立つ** — つまり改訂は消えず保留される。
-	// isolate 用の `suppressNeed` では代われない（あちらは from を進めてしまう）
-	const frozenForHumanDecision =
-		!options?.suppressNeed &&
-		!revertedToTranslatedSource &&
-		oldSourceHash !== sourceMarker.hash &&
-		isAwaitingHumanDecision(targetMarker.need);
-
-	if (!frozenForHumanDecision && oldSourceHash !== sourceMarker.hash) {
+	// 原文が変わったら `from` も必ず一緒に進める（この関数の説明の「紐」を見よ）
+	if (oldSourceHash !== sourceMarker.hash) {
 		targetMarker.from = sourceMarker.hash;
 
 		if (!options?.suppressNeed && !revertedToTranslatedSource) {
@@ -330,9 +300,6 @@ export function syncMarkerPair(
 		sourceMarker,
 		targetMarker,
 		changed:
-			isSourceChanged ||
-			isTargetChanged ||
-			(!frozenForHumanDecision && oldSourceHash !== sourceMarker.hash) ||
-			revertedToTranslatedSource,
+			isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash || revertedToTranslatedSource,
 	};
 }

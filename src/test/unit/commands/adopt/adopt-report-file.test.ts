@@ -21,6 +21,7 @@ function syncResult(): SyncResult {
 		totalUnchanged: 0,
 		revisionsNeeded: 0,
 		totalAdopted: 1,
+		totalReviewsSuperseded: 0,
 		totalKept: 0,
 		totalOrphanReviewed: 0,
 		totalOrphanDeletionWithheld: 0,

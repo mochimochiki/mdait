@@ -342,6 +342,8 @@
   "Could not read .mdait/mdait.json as JSON ({0}). mdait is still running on the last settings it managed to read.": ".mdait/mdait.json を JSON として読めませんでした（{0}）。mdait は最後に読めた設定のまま動いています。",
   "Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source with git). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.": "{0} 件の訳文を消さずに残しました。原文に、どの訳文も指していない過去のマーカーが付いており、原文だけを巻き戻したときの姿になっています（git で原文だけを戻した場合など）。確認待ちの印を付けて残してあります。原文と訳文をそろえて戻してから同期し直すと、元に戻ります。",
   "{0} unit(s) kept: the source looks rolled back on its own": "{0} 件を残しました: 原文だけが巻き戻された可能性があります",
+  "{0} unit(s) were waiting for your check when their source changed, so they moved to the revision queue. The existing translations were kept — translate them to apply the change, and review the result.": "確認待ちだった {0} 件のユニットで原文が変わったため、改訂待ちへ移しました。既存の訳文はそのまま残っています。翻訳を実行して変更を反映し、結果を確認してください。",
+  "{0} unit(s) moved from your check to the revision queue": "確認待ちの {0} 件が改訂待ちへ移りました",
   "sourceDir and targetDir are the same ({0}). They must differ.": "sourceDir と targetDir が同一です（{0}）。別のディレクトリにしてください。",
   "sourceDir and targetDir are nested ({0} / {1}). This can cause recursive processing.": "sourceDir と targetDir が入れ子になっています（{0} / {1}）。再帰的な処理の原因になります。",
   "Deterministic checks (structure & terminology)": "機械チェック（構造・用語）",
