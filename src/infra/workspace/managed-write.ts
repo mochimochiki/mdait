@@ -25,8 +25,13 @@ function prepare(absPath: string, content: string): { styled: string; skip: bool
 	let original: string | undefined;
 	try {
 		original = fs.readFileSync(absPath, "utf-8");
-	} catch {
-		// 新規ファイル。既定の書式（LF・末尾改行）で書く
+	} catch (error) {
+		// **「読めない」を「無い」と同じに扱わない。** 権限や I/O の失敗まで握りつぶすと、
+		// 中身を確かめられなかったファイルを既定の書式で上書きしてしまう（改行のくせも失う）。
+		// 無いときだけ新規として進み、それ以外は呼び手へ返す
+		if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+			throw error;
+		}
 	}
 	const style = detectDocumentStyle(original);
 	const styled = applyDocumentStyle(content, style);

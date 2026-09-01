@@ -117,10 +117,9 @@ export function externalizeFileMarkers(
 
 	// ctx 付きの external stringify で store へ detach（order は external 境界のユニット列と一致）
 	const out = markdownParser.stringify(externalParsed, externalMarkerProvider, { filePath: relPath, role });
-	const changed = out !== content;
-	if (changed) {
-		writeManagedMarkdownSync(absPath, out);
-	}
+	// 「書いたか」は書き出しの入口が決める。原稿の改行のくせへ揃えたうえで比べるので、
+	// 文字列を先に比べると（改行だけの差で）書いていないのに書いたと数えてしまう
+	const changed = writeManagedMarkdownSync(absPath, out);
 	return { changed, unitsMigrated, unitsDropped };
 }
 
@@ -193,10 +192,8 @@ export function embedFileMarkers(
 	const unitsMigrated = embeddedEntries.size;
 
 	const out = markdownParser.stringify(parsed, embeddedMarkerProvider);
-	const changed = out !== content;
-	if (changed) {
-		writeManagedMarkdownSync(absPath, out);
-	}
+	// 「書いたか」は書き出しの入口が決める（externalize 側と同じ理由）
+	const changed = writeManagedMarkdownSync(absPath, out);
 
 	if (frontEmbedded) {
 		store.removeFrontMatterEntry(relPath);
