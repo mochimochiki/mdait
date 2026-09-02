@@ -2,6 +2,7 @@
  * @file managed-write-only.test.ts
  * @description 管理下の原稿（訳文・原文のファイル本体）を書き換える経路が、
  * 必ず `infra/workspace/managed-write.ts` を通ることを、ソースを走査して固定する。
+ * Markdown だけでなく、Markdown 以外の管理下ファイル（.txt / .csv / .json）も対象。
  *
  * 素の `writeFile` で書くと2つの壊れ方が起きる。どちらも無言で、テストの
  * 「内容が同じ」という比較では捕まらない。
@@ -42,7 +43,7 @@ const ALLOWED = new Map<string, string>([
 	["ui/settings/settings-panel.ts", "mdait.json を設定画面から書き換える"],
 	[
 		"commands/file-handler/plain-file-handler.ts",
-		"Markdown 以外の管理下ファイル（.txt / .csv / .json）。改行のくせは同じ問題を抱えるが、ADR-260902-01 の範囲外",
+		"新規作成で原文をそのまま複製する1か所だけ（syncNew）。まだ無いファイルは書式が既定（LF）と測られるため、入口を通すと CRLF の原文が倒れる。訳文の書き込みは入口を通している",
 	],
 	["infra/llm/ai-stats-logger.ts", ".mdait/ の AI 統計ログ。原稿ではない"],
 ]);
@@ -92,7 +93,7 @@ suite("管理下の原稿の書き出しは唯一の入口を通る（ADR-260902
 		assert.deepStrictEqual(
 			offenders,
 			[],
-			`素の writeFile で書く経路が増えている: ${offenders.join(", ")}\n管理下の原稿なら infra/workspace/managed-write.ts の writeManagedMarkdown を通すこと。原稿でないなら、その理由を添えてこのテストの ALLOWED へ足すこと。`,
+			`素の writeFile で書く経路が増えている: ${offenders.join(", ")}\n管理下の原稿なら infra/workspace/managed-write.ts の writeManagedDocument を通すこと。原稿でないなら、その理由を添えてこのテストの ALLOWED へ足すこと。`,
 		);
 	});
 

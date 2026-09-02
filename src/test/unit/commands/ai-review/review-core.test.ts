@@ -164,7 +164,7 @@ suite("executeAiReviewForFile（AI翻訳レビューコア）", () => {
 	test("CRLF の訳文を承認しても改行コードと末尾改行が変わらない（ADR-260902-01）", async () => {
 		// 承認は本文に触らないが、書き出しが `stringify` の出力をそのまま置くと
 		// **CRLF の訳文が全行 LF へ書き換わる**。内容は同じなのにファイル全体が差分になる。
-		// 書き出しの唯一の入口（writeManagedMarkdown）を通っているかを、バイト列で見る。
+		// 書き出しの唯一の入口（writeManagedDocument）を通っているかを、バイト列で見る。
 		const config = await initConfig();
 		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
 		fs.mkdirSync(path.join(tempDir, "en"), { recursive: true });

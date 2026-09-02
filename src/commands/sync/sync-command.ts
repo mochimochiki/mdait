@@ -36,7 +36,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
-import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { createOrphanTargetProbe, createRelativeExistsProbe } from "../../infra/workspace/orphan-probe";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
@@ -1171,7 +1171,7 @@ async function persistSourceDocument(
 	if (config.isExternalMarkers()) {
 		return;
 	}
-	await writeManagedMarkdown(sourceFile, content);
+	await writeManagedDocument(sourceFile, content);
 }
 
 export async function syncNew_CoreProc(
@@ -1236,7 +1236,7 @@ export async function syncNew_CoreProc(
 	// 4. ターゲットファイルとして保存
 	const targetContent = markdownParser.stringify(targetDoc, targetIO.provider, targetIO.ctx);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	await writeManagedMarkdown(targetFile, targetContent);
+	await writeManagedDocument(targetFile, targetContent);
 
 	// 4.5. スナップショット保存（初回sync時も保存）
 	const unitRegistryManager = UnitRegistryManager.getInstance();
@@ -1583,7 +1583,7 @@ export async function sync_CoreProc(
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
 
 	// ファイル出力（原稿の改行のくせを保ち、同じ内容なら書かない）
-	await writeManagedMarkdown(targetFile, syncedContent);
+	await writeManagedDocument(targetFile, syncedContent);
 
 	// source側にもmdaitマーカー・hashを必ず付与・更新し、ファイル保存（external では書かない）
 	// frontmatterSync.sourceFrontMatterにはsource側のマーカーが設定済み

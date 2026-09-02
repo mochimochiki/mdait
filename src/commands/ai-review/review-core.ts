@@ -22,7 +22,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
-import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { SummaryManager } from "../../ui/hover/summary-manager";
@@ -440,7 +440,7 @@ export async function executeAiReviewForFile(
 				);
 				// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
 				// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
-				await writeManagedMarkdown(targetFile, updatedContent);
+				await writeManagedDocument(targetFile, updatedContent);
 				// 書いたかどうかでは分岐しない。external では印がストア側にあり、
 				// 本文が1バイトも変わらないまま印だけ動く（＝書き出しは見送られる）。
 				// 見送りを「変わっていない」と読むとストアの保存を落とす
