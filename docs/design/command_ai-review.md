@@ -24,7 +24,7 @@
 |------|------|------|------|
 | アライン | **AIアライン** | adopt 時、位置ベース対応付けの結果を AI が差分審査し修正提案（二段トリアージ。ADR-260705-02） | **実装済み** |
 | レビュー | **AI翻訳レビュー** | adopt 済みペアごとに「target は source の忠実で完全な翻訳か」を判定し、高確信 match の `need:review` を自動クリア、それ以外をエスカレーション | **実装済み** |
-| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。非MD・frontmatter も対象化。**穴あきユニットの孤立/漏れ 分類提案**（need:review 一次受けユニットに対し「独自章らしい / 訳漏れらしい」を AI が提案。確定はしない・将来増分） | 対象拡張のみ実装済み・他は未着手 |
+| レビュー | **AIレビュー拡張** | 対象を翻訳済みペア全般へ拡張（need:review 以外も監査＝**対象拡張モード・実装済み**・ADR-260706-03）、バッチ検証（複数ペア/1コール）、定期実行、partial の修正提案化。frontmatter は対象化済み（ADR-260902-03）、非MD は未着手。**穴あきユニットの孤立/漏れ 分類提案**（need:review 一次受けユニットに対し「独自章らしい / 訳漏れらしい」を AI が提案。確定はしない・将来増分） | 対象拡張のみ実装済み・他は未着手 |
 | 合成 | **既存翻訳の取り込みウィザード** | `sync(adopt+align) → AI翻訳レビュー → 用語集構築 → TM構築 → レポート` を束ねるオンボーディングウィザード | **実装済み**（正典: [command_adopt.md](command_adopt.md)・ADR-260711-06） |
 | 孤立 | **孤立の統合モデル（isolate・独立ユニット）** | 原文/訳文の意図的な独自章を一貫表現。`need:isolate`（伝播停止）・独立ユニット（from なし＝訳文役割の孤立）・マーカーなし孤立の need:review 一次受け。keep/backfill は廃止 | **実装済み**（[command_sync.md](command_sync.md) 孤立ユニットモデル・ADR-260711-05）。判断サーフェスは将来増分 |
 
@@ -94,7 +94,14 @@ sequenceDiagram
 
 ### 検証対象
 
-`target.marker.from` があり `target.marker.need === "review"` の Markdown ユニットのみ。ソースユニットは `from` ハッシュの一致で解決し、見つからない場合は skipped（`need:review` 維持）。frontmatter ユニット・非MDファイルはスコープ外（AIレビュー拡張で対応）。
+`target.marker.from` があり `target.marker.need === "review"` の Markdown ユニット、および **frontmatter** の1件。ソースは `from` ハッシュの一致で解決し、見つからない場合は skipped（`need:review` 維持）。非MDファイルはスコープ外（AIレビュー拡張で対応）。
+
+frontmatter は `collectFrontmatterReviewPair`（`pair-collector.ts`）が本文ユニットと同じ形の1ペアに組み立てる（ADR-260902-03）。
+
+- 判定にかけるのは翻訳対象キー（`trans.frontmatter.keys`）の値だけで、`key: value` の行に組み直して渡す。訳す対象でないキー（`weight`・`date` など）の差を「訳し漏れ」と読ませないため
+- 対象の条件（`from` あり ∧ pending/audit の need）と判定の使い方は本文とまったく同じ。検証プロンプトも共通
+- レポートには `front matter` という名前で1行として現れる（行リンクはファイル先頭）
+- 承認したら `setFrontmatterMarker` で frontmatter へ載せ直す。frontmatter のマーカーはパースのたびに作り直される別物で、`removeNeedTag()` だけでは戻らない
 
 ### verdict 語彙と判定→アクション対応
 

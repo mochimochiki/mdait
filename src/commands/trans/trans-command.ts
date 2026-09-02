@@ -51,7 +51,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
-import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import {
 	SummaryManager,
@@ -507,7 +507,7 @@ async function transFile_Exclusive(
 			if (frontmatterOutcome.updated) {
 				frontmatterTranslated = true;
 				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
-				await writeManagedMarkdown(uri.fsPath, updatedContent);
+				await writeManagedDocument(uri.fsPath, updatedContent);
 			}
 		}
 
@@ -1629,7 +1629,7 @@ async function saveExternalDocument(
 	ctx: MarkerFileContext | undefined,
 ): Promise<void> {
 	const updatedContent = markdownParser.stringify(markdown, provider, ctx);
-	await writeManagedMarkdown(uri.fsPath, updatedContent);
+	await writeManagedDocument(uri.fsPath, updatedContent);
 	const mdaitDir = await ensureMdaitDir();
 	if (mdaitDir) {
 		UnitStateStore.getInstance().save(mdaitDir);
@@ -1669,7 +1669,7 @@ async function updateAndSaveUnit(
 		offsets.trailingNewlines +
 		content.slice(offsets.end);
 	// 差し替えた本文は LF で組み立てられる。原稿が CRLF なら混ざるので、入口で揃え直す
-	await writeManagedMarkdown(file.fsPath, updated);
+	await writeManagedDocument(file.fsPath, updated);
 	return { written: true };
 }
 
@@ -1914,7 +1914,7 @@ async function translateFrontmatter_Exclusive(
 			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
 		} else {
 			const updatedContent = markdownParser.stringify(markdown);
-			await writeManagedMarkdown(uri.fsPath, updatedContent);
+			await writeManagedDocument(uri.fsPath, updatedContent);
 		}
 
 		// StatusManagerでファイルステータス更新

@@ -12,6 +12,7 @@ import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
 import type { PromptVariables } from "../../prompts/prompt-provider";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { extractJsonFromResponse } from "../trans/response-validator";
 
 const logger = Logger.getInstance();
 
@@ -83,11 +84,10 @@ export class LLMTmEntryGenerator {
 	 */
 	parseResponse(response: string): TmCommitEntry[] {
 		try {
-			// JSONコードブロックのマーカーを除去
-			const cleaned = response
-				.replace(/^```(?:json)?\s*/m, "")
-				.replace(/\s*```$/m, "")
-				.trim();
+			// **JSON の取り出しは trans と同じ関数を通す。** ここには前後のフェンスを1つずつ
+			// 剥がすだけの独自処理があり、フェンスのうしろに説明文を書いた応答
+			// （`` ```json\n[]\n``` `` ＋ "**Rationale:** …"）を落としていた（実測）。
+			const cleaned = extractJsonFromResponse(response);
 
 			const parsed: unknown = JSON.parse(cleaned);
 
