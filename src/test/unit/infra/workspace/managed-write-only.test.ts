@@ -44,10 +44,17 @@ const ALLOWED = new Map<string, string>([
 		"commands/file-handler/plain-file-handler.ts",
 		"Markdown 以外の管理下ファイル（.txt / .csv / .json）。改行のくせは同じ問題を抱えるが、ADR-260902-01 の範囲外",
 	],
+	["infra/llm/ai-stats-logger.ts", ".mdait/ の AI 統計ログ。原稿ではない"],
 ]);
 
-/** 素の書き出しと読めるもの */
-const RAW_WRITE = /\b(?:vscode\.workspace\.fs\.writeFile|fs\.writeFileSync|fs\.promises\.writeFile)\s*\(/;
+/**
+ * 素の書き出しと読めるもの。
+ *
+ * `node:fs` を同期で使う書き方（`fs.writeFileSync`）だけでなく、**`node:fs/promises` を
+ * `fs` として import した `fs.writeFile` も拾う**。名前で見分けられないので、`fs.` に
+ * 続く writeFile 系はすべて素の書き出しとして数える。
+ */
+const RAW_WRITE = /\b(?:vscode\.workspace\.fs\.writeFile|fs\.(?:promises\.)?writeFile(?:Sync)?)\s*\(/;
 
 /** src 以下の .ts を集める（テストは対象外） */
 function collectSources(dir: string, found: string[] = []): string[] {
