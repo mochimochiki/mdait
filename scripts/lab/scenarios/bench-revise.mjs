@@ -50,7 +50,7 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { asNumber, parseArgs } from "../lib/args.mjs";
 import { readSession } from "../lib/session.mjs";
 import { selectCases } from "./revise-cases.mjs";
@@ -296,6 +296,39 @@ export function judge(testCase, variant, raw) {
  */
 const RESPONSE_FORMAT_MODES = ["off", "json_object", "json_schema"];
 
+/**
+ * `json_schema` で送る枠。**本番テンプレートが求める形と揃える。**
+ *
+ * `targetPatch` だけを許して `additionalProperties: false` を付けていた時期があり、
+ * termSuggestions を返そうとしたモデルが行き場を失って、封筒ごと文字列の中へ押し込んできた
+ * （実測で `nested-json` として落ちた）。それでは構造化出力の効き目ではなく、
+ * 指示文と食い違う枠を押し付けた結果を測ることになる。
+ * 枠と指示文が離れたら `selfTest` の「json_schema の枠が本番の指示文と揃っている」が気づく。
+ */
+const REVISE_PATCH_SCHEMA = {
+	type: "object",
+	properties: {
+		targetPatch: { type: "string" },
+		termSuggestions: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					source: { type: "string" },
+					target: { type: "string" },
+					context: { type: "string" },
+					reason: { type: "string" },
+				},
+				required: ["source", "target", "context"],
+				additionalProperties: false,
+			},
+		},
+		warnings: { type: "array", items: { type: "string" } },
+	},
+	required: ["targetPatch"],
+	additionalProperties: false,
+};
+
 function buildResponseFormat(mode, variant) {
 	// **値の検査を先に済ませる。** 候補の選び方より後に置くと、JSON の封筒を使う候補を
 	// 1つも選んでいないとき（`--variants linenum` など）に綴り間違いが素通りし、
@@ -314,12 +347,7 @@ function buildResponseFormat(mode, variant) {
 			json_schema: {
 				name: "revise_patch",
 				strict: true,
-				schema: {
-					type: "object",
-					properties: { targetPatch: { type: "string" } },
-					required: ["targetPatch"],
-					additionalProperties: false,
-				},
+				schema: REVISE_PATCH_SCHEMA,
 			},
 		};
 	}
@@ -813,6 +841,17 @@ function selfTestChecks() {
 		`current=${rejects(current)} plain=${rejects(plain)} linenum=${rejects(linenum)}`,
 	);
 
+	// 枠が指示文と食い違うと、モデルは返したい欄の行き場を失って封筒を文字列へ押し込む。
+	// 「構造化出力が効くか」を測るつもりが、食い違う枠を押し付けた結果を測ることになる
+	const advertised = [...current.template.matchAll(/^ {2}"(\w+)":/gm)].map((m) => m[1]);
+	const allowed = Object.keys(REVISE_PATCH_SCHEMA.properties);
+	const missing = advertised.filter((key) => !allowed.includes(key));
+	add(
+		"json_schema の枠が本番の指示文と揃っている",
+		advertised.length > 0 && missing.length === 0,
+		advertised.length === 0 ? "指示文から欄を読み取れなかった" : `枠に無い欄: ${missing.join(" ")}`,
+	);
+
 	// --- 送るものが本番と同じか ---
 	checks.push(guardTemplateFidelity());
 
@@ -879,7 +918,9 @@ async function main() {
 	return result.failed > 0 ? 1 : 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedDirectly = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+
+if (invokedDirectly) {
 	main()
 		.then((code) => process.exit(code ?? 0))
 		.catch((error) => {
