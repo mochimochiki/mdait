@@ -10,6 +10,7 @@
 
 import * as fs from "node:fs";
 import * as vscode from "vscode";
+import { getFrontmatterTranslationKeys, setFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -25,7 +26,12 @@ import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { SummaryManager } from "../../ui/hover/summary-manager";
-import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
+import {
+	type ReviewCollectMode,
+	type ReviewPair,
+	collectFrontmatterReviewPair,
+	collectReviewPairs,
+} from "./pair-collector";
 import type { PairVerifier, VerifyResult } from "./pair-verifier";
 import { AUTO_APPROVE_THRESHOLD } from "./review-constants";
 import { ReviewContextProvider } from "./review-context";
@@ -243,7 +249,17 @@ export async function executeAiReviewForFile(
 			const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
 			const mode = options.mode ?? "pending";
-			const allPairs = collectReviewPairs(source.units, target.units, mode);
+			// frontmatter を先頭に置く（ファイルの並び順と同じ。上限で切られるときも先に通る）
+			const frontmatterPair = collectFrontmatterReviewPair(
+				source.frontMatter,
+				target.frontMatter,
+				getFrontmatterTranslationKeys(config),
+				mode,
+			);
+			const allPairs = [
+				...(frontmatterPair ? [frontmatterPair] : []),
+				...collectReviewPairs(source.units, target.units, mode),
+			];
 			if (allPairs.length === 0) {
 				return;
 			}
@@ -403,6 +419,15 @@ export async function executeAiReviewForFile(
 			for (const entry of entries) {
 				if (entry.processed) {
 					result.unitResults.push(entry.unitResult);
+				}
+			}
+
+			// frontmatter のマーカーは本文ユニットと違い、パースのたびに作り直される別物なので、
+			// 承認で need を外しただけでは frontmatter へ戻らない。ここで明示的に載せ直す
+			if (frontmatterPair && !options.dryRun && target.frontMatter) {
+				const approved = entries.find((entry) => entry.pair === frontmatterPair)?.unitResult.action === "approved";
+				if (approved) {
+					setFrontmatterMarker(target.frontMatter, frontmatterPair.targetUnit.marker);
 				}
 			}
 

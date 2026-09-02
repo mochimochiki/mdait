@@ -12,6 +12,16 @@
 
 ## ADR
 
+### ADR-260902-03: frontmatter も AI 翻訳レビューが片づける
+
+**背景** : adopt は本文にも frontmatter にも `need:review` を付ける（ADR-260902-02）。ところが AI 翻訳レビューは本文ユニットだけを列挙していた。実 LLM で取り込みを一気通しすると（`--ai agent`・haiku）、本文8件は判定されて6件が自動承認されたのに、**frontmatter は一度も見られずツリーに確認待ちとして残った**。「AI が整える」が最後の1件で途切れる。
+
+**決定** : `collectFrontmatterReviewPair` を足し、frontmatter を本文ユニットと同じ形の1ペアとして列挙する。判定にかけるのは翻訳対象キー（`trans.frontmatter.keys`）の値だけで、`key: value` の行に組み直して渡す。承認されたら `setFrontmatterMarker` で frontmatter へ載せ直す。
+
+**理由** : 判断の材料は本文と同じ「そこに人の書いたものがあるか」で、規則を分ける理由が無い。frontmatter 全体を渡さないのは、訳す対象でないキー（`weight`・`date` など）の差まで「訳し漏れ」として拾われるため。検証プロンプトは変えない — 短文が `uncertain` に倒れるかは実測で決める話で、いま推測で書き換えると何が効いたのか読めなくなる。
+
+**備考** : frontmatter のマーカーはパースのたびに作り直される別物なので、`removeNeedTag()` だけでは frontmatter へ戻らない。書き戻しを忘れると確認待ちが残り続ける（番人: `frontmatter-review.test.ts`、embedded / external の両方）。
+
 ### ADR-260902-02: 既訳の採用は frontmatter にも同じ規則で効かせる
 
 **背景** : 取り込み（adopt）は本文ユニットには `need:review` を付けて trans の上書きから守るが、frontmatter だけはその規則が書かれておらず `need:translate` のままだった。**最初の翻訳で人の書いた英語タイトルが機械翻訳に置き換わっていた**（実測）。adopt が掲げる「既訳の不可侵」が本文にしか効いていなかった。
@@ -20,7 +30,7 @@
 
 **理由** : 判断の材料は本文と同じ「そこに人の書いたものがあるか」で、規則を分ける理由が無かった。`review` にすれば trans は `needsTranslation()` で弾き、確認は CodeLens・ツリー・LM Tool の既存の入口で外せる。原文のタイトルが変われば ADR-260901-01 の経路で `revise@` へ倒れる。
 
-**備考** : 採用した frontmatter は `adopted` の件数に数える（レポートの件数を実態に合わせる）。AI 翻訳レビューは本文ユニットだけを見るので、frontmatter の確認待ちは人が外すことになる。
+**備考** : 採用した frontmatter は `adopted` の件数に数える（レポートの件数を実態に合わせる）。~~AI 翻訳レビューは本文ユニットだけを見るので、frontmatter の確認待ちは人が外すことになる~~（ADR-260902-03 で対象に含めた）。
 
 ### ADR-260902-01: 原稿の書き出しは1つの入口を通し、改行のくせを保つ
 

@@ -1,5 +1,10 @@
 import * as assert from "node:assert";
-import { collectReviewPairs } from "../../../../commands/ai-review/pair-collector";
+import {
+	FRONTMATTER_PAIR_TITLE,
+	collectFrontmatterReviewPair,
+	collectReviewPairs,
+} from "../../../../commands/ai-review/pair-collector";
+import { FrontMatter } from "../../../../core/markdown/front-matter";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 
@@ -85,5 +90,76 @@ suite("collectReviewPairs（audit モードの対象拡張）", () => {
 		const isolate = unitOf("## I\n\nx", new MdaitMarker("i1", "srcA", "isolate"), "I");
 		const verifyDeletion = unitOf("## V\n\nx", new MdaitMarker("v1", "srcA", "verify-deletion"), "V");
 		assert.deepStrictEqual(collectReviewPairs([src], [translate, revise, isolate, verifyDeletion], "audit"), []);
+	});
+});
+
+/** frontmatter を YAML から組み立てる（実ファイルと同じ経路を通す） */
+function frontMatterOf(yaml: string): FrontMatter | undefined {
+	return FrontMatter.parse(`---\n${yaml}\n---\n\n本文\n`).frontMatter;
+}
+
+const KEYS = ["title", "description"];
+
+suite("collectFrontmatterReviewPair（frontmatter の確認待ちも AI 翻訳レビューにかける）", () => {
+	const source = frontMatterOf("title: 日本語テスト2\nmdait:\n  front: 'srcF'");
+
+	test("from と need:review を持つ frontmatter が1ペアとして列挙される", () => {
+		const target = frontMatterOf("title: English Test 2\nmdait:\n  front: 'tgtF from:srcF need:review'");
+
+		const pair = collectFrontmatterReviewPair(source, target, KEYS);
+
+		assert.ok(pair);
+		assert.strictEqual(pair.kind, "frontmatter");
+		assert.strictEqual(pair.targetUnit.title, FRONTMATTER_PAIR_TITLE);
+		assert.strictEqual(pair.targetUnit.marker.hash, "tgtF");
+		assert.strictEqual(pair.sourceUnit?.marker.hash, "srcF");
+	});
+
+	test("判定にかけるのは翻訳対象キーの値だけで、key: value の行に組み直される", () => {
+		const target = frontMatterOf(
+			"title: English Test 2\nweight: 20\nmdait:\n  front: 'tgtF from:srcF need:review'",
+		);
+
+		const pair = collectFrontmatterReviewPair(source, target, KEYS);
+
+		// weight は訳す対象ではないので渡さない（差を「訳し漏れ」と読まれないため）。
+		// description は値が無いので行ごと出さない
+		assert.strictEqual(pair?.targetUnit.content, "title: English Test 2");
+		assert.strictEqual(pair?.sourceUnit?.content, "title: 日本語テスト2");
+	});
+
+	test("確認待ちでない frontmatter は対象にならない（pending）", () => {
+		const settled = frontMatterOf("title: English Test 2\nmdait:\n  front: 'tgtF from:srcF'");
+		const translate = frontMatterOf("title: 日本語テスト2\nmdait:\n  front: 'tgtF from:srcF need:translate'");
+
+		assert.strictEqual(collectFrontmatterReviewPair(source, settled, KEYS), null);
+		assert.strictEqual(collectFrontmatterReviewPair(source, translate, KEYS), null);
+	});
+
+	test("audit では確定済みの frontmatter も監査対象になる", () => {
+		const settled = frontMatterOf("title: English Test 2\nmdait:\n  front: 'tgtF from:srcF'");
+
+		assert.ok(collectFrontmatterReviewPair(source, settled, KEYS, "audit"));
+	});
+
+	test("紐が切れていれば原文側は解決されない（skipped 扱いにする）", () => {
+		const target = frontMatterOf("title: English Test 2\nmdait:\n  front: 'tgtF from:other need:review'");
+
+		const pair = collectFrontmatterReviewPair(source, target, KEYS);
+
+		assert.ok(pair);
+		assert.strictEqual(pair.sourceUnit, null);
+	});
+
+	test("翻訳対象キーが未設定なら何も列挙しない", () => {
+		const target = frontMatterOf("title: English Test 2\nmdait:\n  front: 'tgtF from:srcF need:review'");
+
+		assert.strictEqual(collectFrontmatterReviewPair(source, target, []), null);
+	});
+
+	test("翻訳対象キーに値が無い frontmatter は列挙しない（比べるものが無い）", () => {
+		const target = frontMatterOf("weight: 20\nmdait:\n  front: 'tgtF from:srcF need:review'");
+
+		assert.strictEqual(collectFrontmatterReviewPair(source, target, KEYS), null);
 	});
 });
