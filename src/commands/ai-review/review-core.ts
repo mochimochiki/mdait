@@ -21,6 +21,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { SummaryManager } from "../../ui/hover/summary-manager";
@@ -407,13 +408,17 @@ export async function executeAiReviewForFile(
 
 			// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
 			if (mutationCount > 0 && !options.dryRun) {
-				const encoder = new TextEncoder();
 				const updatedContent = markdownParser.stringify(
 					{ frontMatter: target.frontMatter, units: target.units },
 					targetIO.provider,
 					targetIO.ctx,
 				);
-				await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(updatedContent));
+				// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
+				// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
+				await writeManagedMarkdown(targetFile, updatedContent);
+				// 書いたかどうかでは分岐しない。external では印がストア側にあり、
+				// 本文が1バイトも変わらないまま印だけ動く（＝書き出しは見送られる）。
+				// 見送りを「変わっていない」と読むとストアの保存を落とす
 				result.markersChanged = true;
 			}
 		});

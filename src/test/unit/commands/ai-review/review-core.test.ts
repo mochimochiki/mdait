@@ -161,6 +161,27 @@ suite("executeAiReviewForFile（AI翻訳レビューコア）", () => {
 		assert.ok(written.includes("Content B."));
 	});
 
+	test("CRLF の訳文を承認しても改行コードと末尾改行が変わらない（ADR-260902-01）", async () => {
+		// 承認は本文に触らないが、書き出しが `stringify` の出力をそのまま置くと
+		// **CRLF の訳文が全行 LF へ書き換わる**。内容は同じなのにファイル全体が差分になる。
+		// 書き出しの唯一の入口（writeManagedMarkdown）を通っているかを、バイト列で見る。
+		const config = await initConfig();
+		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
+		fs.mkdirSync(path.join(tempDir, "en"), { recursive: true });
+		fs.writeFileSync(sourceFile, SOURCE_CONTENT, "utf-8");
+		// CRLF ＋ 末尾改行なし
+		const crlfTarget = TARGET_CONTENT.replace(/\n/g, "\r\n").replace(/\r\n$/, "");
+		fs.writeFileSync(targetFile, crlfTarget, "utf-8");
+
+		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MATCH])));
+		assert.strictEqual(result.approved, 2);
+
+		const written = fs.readFileSync(targetFile, "utf-8");
+		assert.ok(written.includes("<!-- mdait tgtA from:srcA -->\r\n"), "承認後も CRLF のままであること");
+		assert.strictEqual(/(?<!\r)\n/.test(written), false, "LF 単独の行が生まれていないこと");
+		assert.strictEqual(/\n$/.test(written), false, "無かった末尾改行が足されていないこと");
+	});
+
 	test("2回目の実行では検証対象が無く無変更（冪等性）", async () => {
 		const config = await initConfig();
 		writePair();

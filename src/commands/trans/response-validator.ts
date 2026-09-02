@@ -70,12 +70,19 @@ export interface JsonDetectionResult {
 
 /**
  * レスポンスからJSON部分を抽出
+ *
+ * **オブジェクト `{...}` と配列 `[...]` の両方を拾う。** 配列を待つ経路（TM登録計画）で
+ * フェンスを剥がせず、`[]` のうしろに説明文を書いた応答を丸ごと落としていた
+ * （実測: haiku が「```json\n[]\n```\n\n**Rationale:** …」と答え、tm.commit が
+ * `Failed to parse LLM alignment response` で件数0のまま無言で終わった）。
+ * フェンスの外にある前置き・後書きは、ここで一緒に落ちる。
+ *
  * @param rawResponse AIからの生レスポンス
  * @returns 抽出されたJSON文字列
  */
 export function extractJsonFromResponse(rawResponse: string): string {
 	// パターン1: ```json ... ``` または ``` ... ```
-	const codeBlockMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+	const codeBlockMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```/);
 	if (codeBlockMatch) {
 		return codeBlockMatch[1];
 	}

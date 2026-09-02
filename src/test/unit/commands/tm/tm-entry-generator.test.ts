@@ -60,6 +60,26 @@ suite("LLMTmEntryGenerator", () => {
 			assert.strictEqual(result[0].local, "テスト文。");
 		});
 
+		test("コードブロックのうしろに説明文が続く応答でもパースできる", () => {
+			// 実測（haiku・取り込みの tm.commit）: フェンスで包んだ配列のあとに
+			// "**Rationale:** …" を書いてきた。前後を1つずつ剥がすだけの処理では
+			// 説明文が残って JSON.parse が落ち、登録計画が丸ごと消えていた
+			const entries = JSON.stringify([{ type: "new", tuid: "-", primary: "Test sentence.", local: "テスト文。" }]);
+			const response = `\`\`\`json\n${entries}\n\`\`\`\n\n**Rationale:** These fragments are complete sentences.`;
+
+			const result = generator.parseResponse(response);
+
+			assert.strictEqual(result.length, 1);
+			assert.strictEqual(result[0].primary, "Test sentence.");
+		});
+
+		test("説明文が続く空配列の応答は、失敗ではなく「登録なし」として読める", () => {
+			// 同じ実測の元の形。空配列そのものは正しい答えなので、警告を出さず 0 件で終わること
+			const response = "```json\n[]\n```\n\n**Rationale:** All fragments are headings or UI labels.";
+
+			assert.deepStrictEqual(generator.parseResponse(response), []);
+		});
+
 		test("空のprimaryまたはlocalを含む応答は fail-closed で空配列になる", () => {
 			const response = JSON.stringify([
 				{ type: "new", tuid: "-", primary: "Valid.", local: "有効。" },
