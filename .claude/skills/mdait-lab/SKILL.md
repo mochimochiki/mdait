@@ -47,6 +47,7 @@ node scripts/lab/lab.mjs down                    # 片付ける
 | `ai wait｜digest｜reply｜stats` | AI の受け皿とやり取りする（`live` モードで使う） |
 | `status` | 今どうなっているかを1画面で出す |
 | `reset` | ワークスペースを作り直す（ホストは落とさない） |
+| `site` | 規模のある見本サイト（対訳47ファイル）を書き出す。`--out`（既定 `/tmp/mdait-site`）・`--markers embedded\|external` |
 | `report` | run ディレクトリから `report.md` を組み立てる |
 | `down` | 片付ける |
 
@@ -102,6 +103,9 @@ node scripts/lab/lab.mjs down                    # 片付ける
 - **code-server の起動をパイプ（`| head` など）に繋がない。** サーバーごと死ぬ。
 - **desktop はシステム版と同じバージョンの VS Code を避ける。** 同バージョンだと mutex 転送で既存インスタンスに渡り、`MDAIT_DEBUG_IPC` が伝わらず ready にならない（保険として `.ipc-enabled` ファイルも置いている）。
 - **`--ai live` の待ち時間はそのまま HTTP のタイムアウトに乗る。** 考えている間に mdait が諦めないよう `ai.openai.timeoutSec` を長めにする（`lab up` が既定で長めにする）。
+- **見本サイトの置き場を `/tmp/mdait-lab` の下にしない。** その下は「使い捨て」と見なされ、`--reset` で
+  原稿が単体テストの見本に置き換わる（`lib/workspace.mjs` の `isDisposable`）。`lab site` の既定
+  （`/tmp/mdait-site`）はそのために外へ出してある。
 - **`--ws repo` を使ったときだけ**、リポジトリ内のワークスペースを書き換える。lab が終了時に戻すが、強制終了したら `git checkout -- src/test/unit/workspace/.mdait/mdait.json` を自分でやる。
 - **サンプルの `child2_1` / `child2_2` は title の接頭辞が衝突する。** 絞り込みは title の部分一致ではなく**パスの厳密一致**で行う。
 - **実 UI を見るときは Playwright の `innerText()` を使わない。** 無い要素を 30 秒待ち続け、その間ほかの

@@ -1231,6 +1231,8 @@ export async function syncNew_CoreProc(
 	const targetDoc = {
 		frontMatter: frontmatterSync.targetFrontMatter ?? source.frontMatter,
 		units: targetUnits,
+		// 新しく作る訳文は原文の書き方（frontmatter 直後の空行）を引き継ぐ
+		frontMatterGap: source.frontMatterGap,
 	};
 
 	// 4. ターゲットファイルとして保存
@@ -1252,6 +1254,7 @@ export async function syncNew_CoreProc(
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
+			frontMatterGap: source.frontMatterGap,
 		},
 		sourceIO,
 		config,
@@ -1574,6 +1577,8 @@ export async function sync_CoreProc(
 	const syncedDoc = {
 		frontMatter: frontmatterSync.targetFrontMatter ?? target.frontMatter,
 		units: syncedUnits,
+		// すでにある訳文は、その原稿自身の書き方をそのまま保つ
+		frontMatterGap: target.frontMatterGap,
 	};
 
 	// 同期結果を文字列に変換（external では本文にマーカーを出力せず store へ detach）
@@ -1592,6 +1597,7 @@ export async function sync_CoreProc(
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
+			frontMatterGap: source.frontMatterGap,
 		},
 		sourceIO,
 		config,

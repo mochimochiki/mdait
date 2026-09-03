@@ -17,12 +17,23 @@ node scripts/lab/lab.mjs down                    # 片付ける
 作業場は既定で `/tmp/mdait-lab/ws`（`MDAIT_LAB_DIR` で変えられる）。**リポジトリの中は既定にしない**ので、
 何をしても `git status` は汚れない。
 
+規模のある見本サイト（対訳47ファイル）で取り込みを試すときは `lab site` で書き出してから、その場所を
+作業場として指す。**`/tmp/mdait-lab` の下には置かない** — その下は使い捨てと見なされ、原稿が単体テストの
+見本で上書きされる。
+
+```bash
+node scripts/lab/lab.mjs site --markers external      # /tmp/mdait-site に書き出す
+node scripts/lab/lab.mjs up --ws /tmp/mdait-site --ai agent --agent-model haiku
+node scripts/lab/lab.mjs run mdait.adopt.run
+```
+
 ## 中身
 
 | 場所 | 役割 |
 |---|---|
-| `lab.mjs` | 入口。動詞（up / run / shot / ai / status / reset / report / down）と段取り |
+| `lab.mjs` | 入口。動詞（up / run / shot / ai / status / reset / site / report / down）と段取り |
 | `lib/` | セッション・IPC・作業場・run 記録・要約づくり |
+| `lib/site-content.mjs` | 規模のある見本サイトの原稿（対訳47ファイル）。`lab site` が書き出す |
 | `hosts/` | headless（vscode モックの上で常駐）／code-server（ブラウザ版）／desktop（本物）／コマンド対応表 |
 | `ai/` | OpenAI 互換のローカル受け皿。echo / live / script / replay / agent |
 | `ui/` | Playwright で画面を触る・撮る（code-server のとき） |

@@ -160,7 +160,7 @@ data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` �
 | 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
 | 8 | ja に無いファイルが en にある | **sync はソースファイル起点のため触らない＝管理外のまま放置**（削除も検出もされない）。既知の限界 | 将来課題（未計画） |
 | 9 | 見出しレベル設定の不一致 | `validateAndSyncLevel` が target の `mdait.sync.level` をソースに自動同期 | **実装済みで完結** |
-| 9.5 | frontmatter に既訳がある（`title` / `description`） | 本文と同じ規則で採用し `need:review` を付ける。trans は `needsTranslation()` で弾くので人の書いたタイトルを上書きしない。原文が変われば `revise@` へ倒れる（ADR-260902-02） | **実装済みで完結**（AI翻訳レビューは本文のみ見るため、確認は人が外す） |
+| 9.5 | frontmatter に既訳がある（`title` / `description`） | 本文と同じ規則で採用し `need:review` を付ける。trans は `needsTranslation()` で弾くので人の書いたタイトルを上書きしない。原文が変われば `revise@` へ倒れる（ADR-260902-02） | **実装済みで完結**（AI翻訳レビューが本文と同じ1ペアとして判定し、承認されれば確認も外れる・ADR-260902-03） |
 | 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AI翻訳レビューは対象外のため解除は手動 | AIレビュー拡張 |
 | 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[command_sync.md](command_sync.md) 孤立ユニットモデル）。宣言 CodeLens UI は将来増分 |
 
