@@ -170,7 +170,17 @@ lab shot during-translation
 ```
 
 `--delay` が無いと翻訳が一瞬で終わり、回転アイコンや1件ずつ緑になる遷移を撮れない。
-取り消しは IPC からは起こせないので、Playwright で通知トーストの取り消しボタンを押す。
+実 UI の取り消しは Playwright で通知トーストのボタンを押す。
+
+headless では `lab cancel` を別のシェルから叩く（目印のファイルを置き、`withProgress` が
+渡す token を倒す）。中断からの再開を確かめるときはこちらを使う:
+
+```bash
+lab up --ai echo --delay 3000
+lab run mdait.adopt.run &     # 走らせておく
+lab cancel                    # 次の節目で止まる
+lab run mdait.adopt.run       # 続きから。二重に課金されず、マーカーも壊れないこと
+```
 
 ---
 

@@ -19,6 +19,8 @@ export function ipcPaths(ws) {
 		commandFile: path.join(dir, "command.json"),
 		resultFile: path.join(dir, "result.json"),
 		readyFile: path.join(dir, "ready"),
+		// 走っている最中のコマンドに「やめてくれ」と伝える目印（headless のみ。lab cancel が置く）
+		cancelFile: path.join(dir, "cancel"),
 		// 同じ版の VS Code が既に走っているときは環境変数が届かないため、この空ファイルで IPC を有効にする
 		enableFile: path.join(dir, ".ipc-enabled"),
 	};
@@ -69,12 +71,16 @@ function writeJsonAtomic(file, value) {
  * @returns {string} 依頼につけた番号（`awaitCommand` に渡す）
  */
 export function startCommand(ws, command, args = []) {
-	const { dir, commandFile, resultFile } = ipcPaths(ws);
+	const { dir, commandFile, resultFile, cancelFile } = ipcPaths(ws);
 	fs.mkdirSync(dir, { recursive: true });
 	const id = newId();
 	// 前回の結果は消しておく（取り違えの二重の防ぎ）
 	try {
 		fs.unlinkSync(resultFile);
+	} catch {}
+	// 前回の中断の指示も消しておく。残っていると次の依頼が始まった瞬間に止まる
+	try {
+		fs.unlinkSync(cancelFile);
 	} catch {}
 	writeJsonAtomic(commandFile, { id, command, args });
 	return id;

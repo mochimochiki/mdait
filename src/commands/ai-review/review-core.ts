@@ -433,11 +433,9 @@ export async function executeAiReviewForFile(
 
 			// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
 			if (mutationCount > 0 && !options.dryRun) {
-				const updatedContent = markdownParser.stringify(
-					{ frontMatter: target.frontMatter, units: target.units },
-					targetIO.provider,
-					targetIO.ctx,
-				);
+				// パースした文書をそのまま渡す。項目を選んで組み直すと、あとから増えた
+				// 書式の情報（frontMatter 直後の空行など）が黙って落ちる（ADR-260903-02）
+				const updatedContent = markdownParser.stringify(target, targetIO.provider, targetIO.ctx);
 				// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
 				// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
 				await writeManagedDocument(targetFile, updatedContent);

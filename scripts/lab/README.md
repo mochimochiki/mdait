@@ -31,7 +31,7 @@ node scripts/lab/lab.mjs run mdait.adopt.run
 
 | 場所 | 役割 |
 |---|---|
-| `lab.mjs` | 入口。動詞（up / run / shot / ai / status / reset / site / report / down）と段取り |
+| `lab.mjs` | 入口。動詞（up / run / shot / ai / cancel / status / reset / site / report / down）と段取り |
 | `lib/` | セッション・IPC・作業場・run 記録・要約づくり |
 | `lib/site-content.mjs` | 規模のある見本サイトの原稿（対訳47ファイル）。`lab site` が書き出す |
 | `hosts/` | headless（vscode モックの上で常駐）／code-server（ブラウザ版）／desktop（本物）／コマンド対応表 |

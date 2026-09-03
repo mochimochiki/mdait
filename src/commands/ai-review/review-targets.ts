@@ -12,7 +12,26 @@ import type { Configuration } from "../../infra/config/configuration";
 import type { FileExplorer } from "../../infra/workspace/file-explorer";
 
 /**
+ * 原文のある訳文かどうか。
+ *
+ * 原文の無い訳文（孤立訳文）は、レビューが見ても「原文が見つからない」と失敗するしかない。
+ * その事実は sync が孤立訳文の通知とツリーで既に伝えているので、レビューが同じことを
+ * **エラーとして数え直す**と、取り込みの結果が理由の分からない「errors: 1」になる
+ * （実測。原文に無い訳文を1本混ぜた見本サイトで、レビューの唯一のエラーがこれだった）。
+ */
+function hasSource(file: string, config: Configuration, fileExplorer: FileExplorer): boolean {
+	const pair = fileExplorer.getTransPairFromTarget(file, config);
+	if (!pair) return false;
+	const sourceFile = fileExplorer.getSourcePath(file, pair);
+	return !!sourceFile && fs.existsSync(sourceFile);
+}
+
+/**
  * ディレクトリ配下のターゲットMDファイルを列挙する。
+ *
+ * 孤立訳文は外す。**名指しで渡されたときは外さない**（`resolveReviewTargets` の
+ * ファイル指定）— そちらは利用者がそのファイルを指したのだから、黙って何もしないより
+ * 「原文が見つからない」と言うほうが正しい。
  */
 async function collectFromDir(
 	dir: string,
@@ -21,7 +40,9 @@ async function collectFromDir(
 ): Promise<string[]> {
 	const pattern = new vscode.RelativePattern(dir, "**/*.md");
 	const found = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
-	return found.map((f) => f.fsPath).filter((f) => fileExplorer.isTargetFile(f, config));
+	return found
+		.map((f) => f.fsPath)
+		.filter((f) => fileExplorer.isTargetFile(f, config) && hasSource(f, config, fileExplorer));
 }
 
 /**

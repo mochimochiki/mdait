@@ -83,6 +83,8 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             ai reply --translation "訳文"   答えを返す
             ai stats    何件受けたかを見る
             ai last     直近の質問の全文を見る
+  cancel  走っている最中のコマンドに「やめてくれ」と伝える（headless ホストのみ）
+            別のシェルから叩く。中断からの再開を確かめるときに使う
   status  いまの様子と直近の手順を出す
   reset   作業場を見本から作り直す（ホストは止めない）
   site    規模のある見本サイトを書き出す（取り込みを実運用に近い数で走らせるため）
@@ -416,6 +418,30 @@ function resolvePathArgs(entry, args, ws) {
 	if (!entry || !takesPath.includes(entry.args)) return args;
 	if (args.length === 0 || typeof args[0] !== "string" || path.isAbsolute(args[0])) return args;
 	return [path.resolve(ws, args[0]), ...args.slice(1)];
+}
+
+/**
+ * 走っている最中のコマンドを止める。
+ *
+ * 実 VS Code なら進捗の通知の「取り消し」を押すところ。画面の無い headless では
+ * 目印のファイルを置いて伝える（読む側は vscode-shim.js の withProgress）。
+ * 依頼を出すたびに目印は消えるので、次の実行に持ち越されることはない。
+ */
+function verbCancel() {
+	const session = liveSession();
+	if (!session) throw new UsageError("まだ始まっていません。止める相手がいません");
+	if (session.host !== "headless") {
+		throw new UsageError(
+			`中断を送れるのは headless ホストのときだけです（いまは ${session.host}）。` +
+				"実 VS Code では進捗の通知に付く「取り消し」を押してください",
+		);
+	}
+	const { dir, cancelFile } = ipcPaths(session.ws);
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(cancelFile, `${new Date().toISOString()}\n`, "utf8");
+	say("中断を伝えました。コマンドは次の節目で止まります。");
+	say(`  目印: ${cancelFile}（次の依頼で自動的に消えます）`);
+	return 0;
 }
 
 async function verbShot(opts) {
@@ -914,6 +940,8 @@ async function main() {
 			return await verbShot(opts);
 		case "ai":
 			return await verbAi(opts);
+		case "cancel":
+			return verbCancel();
 		case "status":
 			return await verbStatus(opts);
 		case "reset":

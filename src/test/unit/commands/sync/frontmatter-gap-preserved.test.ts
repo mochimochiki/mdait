@@ -14,6 +14,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getFileHandler } from "../../../../commands/file-handler/file-handler-factory";
 import { syncNew_CoreProc, sync_CoreProc } from "../../../../commands/sync/sync-command";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
@@ -143,6 +144,17 @@ for (const mode of ["embedded", "external"] as const) {
 
 			assert.strictEqual(gapOf(targetFile), 1);
 			assert.strictEqual(gapOf(sourceFile), 1);
+		});
+
+		test("マーカーだけを変える操作でも空行が残ること", async () => {
+			const config = await bootstrap();
+			fs.writeFileSync(sourceFile, build("製品ガイド", SOURCE_BODY, 1), "utf-8");
+			fs.writeFileSync(targetFile, build("Product Guide", TARGET_BODY, 1), "utf-8");
+			await sync_CoreProc(sourceFile, targetFile, config, { adopt: true });
+
+			await getFileHandler(targetFile).resolveNeed(targetFile, { needs: ["review"] });
+
+			assert.strictEqual(gapOf(targetFile), 1, "need を外したら空行が消えた");
 		});
 
 		test("新しく作る訳文は原文の書き方を引き継ぐこと", async () => {

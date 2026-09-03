@@ -405,11 +405,9 @@ async function runMarkdownMutation<T extends UnitMutationResult>(
 		if (result.changed) {
 			// stringify は「文字列を作る」だけの関数ではない。external では detachMarkers が
 			// ここでマーカーをストアへ引き取るため、書き込みを見送るときも必ず呼ぶ
-			const updated = markdownParser.stringify(
-				{ frontMatter: parsed.frontMatter, units: parsed.units },
-				io.provider,
-				io.ctx,
-			);
+			// パースした文書をそのまま渡す（項目を選んで組み直すと書式の情報が落ちる。
+			// ADR-260903-02 の frontMatter 直後の空行がそれで消えた）
+			const updated = markdownParser.stringify(parsed, io.provider, io.ctx);
 			// マーカーしか変えない操作は、external では本文に用が無い。原稿がどう書かれて
 			// いても書かない（比較では止まらない。理由は withMarkerOnlyMutation の JSDoc）
 			const forbidden = scope === "marker-only" && config.isExternalMarkers();

@@ -53,6 +53,11 @@ export interface FileSyncOptions {
 	adopt?: boolean;
 	/** AIアライン: adopt 時の位置ベース対応付けを AI で差分審査する（明示指定時のみ） */
 	align?: boolean;
+	/**
+	 * 取り消しの合図。**AIアラインを止められる唯一の道**なので、呼び手は必ず渡す。
+	 * 渡さないと、利用者が取り消しても最後のファイルまで AI を呼び続ける（ADR-260903-04）。
+	 */
+	token?: vscode.CancellationToken;
 }
 
 /** translate結果 */

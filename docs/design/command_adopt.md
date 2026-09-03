@@ -111,6 +111,7 @@ executeAdopt(config, options, progress, token, stages = defaultAdoptStages): Pro
 ### 実行制御
 
 - **キャンセル**: 各段間で `token.isCancellationRequested` を確認して即 return。各 CoreProc 内部のキャンセル対応（完了分書き込み）はそのまま享受。全段冪等なので再実行で残りから再開できる（approve 済みは再列挙されない・term は重複マージ・TM は upsert）。
+- **1段目（sync + AIアライン）にも token を渡す**（`SyncCommandOptions.token`）。sync 自体は AI を使わないが AIアラインは使うので、渡さないと取り消しても最後のファイルまで AI を呼び続ける（実測: 47ファイルで取り消しの12秒後から171秒ぶん。渡したあとは4秒で止まった・ADR-260903-04）。取り消した瞬間に送信中だったファイルは `OperationCancelledError` で1件の失敗として数えられる（原稿は変わらない。次の実行でやり直される）。
 - **中断**: sync が undefined（設定不正等）なら `aborted: true` で全段中断（後段は一切実行しない）。
 - **部分失敗**: オプション段（term/tm）の例外は `stageErrors` に記録して続行する。tm は term に依存しないため、term 失敗でも tm を実行する。レビュー段のバッチ単位エラーは従来どおり review 結果の error として扱う。
 - **dryRun**: レビューはレポートのみ（マーカー不変）、term/tm 段はスキップ（用語集・TM に書き込まない）。レポートに dryRun であることを明記する。
@@ -158,10 +159,10 @@ data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` �
 | 5 | ペアは正しいが訳抜け・原文改訂に未追随 | レビューが **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで孤立/漏れ 確定（将来増分） |
 | 6 | en が原文コピーのまま（未翻訳） | 検証プロンプトの verdict 定義で match を禁止 — 全文未翻訳は mismatch、部分残留は partial に倒す | **実装済み** |
 | 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
-| 8 | ja に無いファイルが en にある | **sync はソースファイル起点のため触らない＝管理外のまま放置**（削除も検出もされない）。既知の限界 | 将来課題（未計画） |
+| 8 | ja に無いファイルが en にある | sync はソースファイル起点なので**取り込まない**（`unit-state` に行は作られない）。ただし**気づかないわけではない** — 孤立訳文として数え、「原文の無い訳文が N 件。消さずに残した」と通知しツリーに出す（`isOrphanTarget`）。AI翻訳レビューはワークスペース全体を見るときこれを対象から外す（原文が無いので「原文が見つからない」と失敗するしかなく、取り込みの結果が理由の分からない `errors: 1` になっていた・ADR-260903-03） | 管理下に載せる機能は将来課題（未計画） |
 | 9 | 見出しレベル設定の不一致 | `validateAndSyncLevel` が target の `mdait.sync.level` をソースに自動同期 | **実装済みで完結** |
 | 9.5 | frontmatter に既訳がある（`title` / `description`） | 本文と同じ規則で採用し `need:review` を付ける。trans は `needsTranslation()` で弾くので人の書いたタイトルを上書きしない。原文が変われば `revise@` へ倒れる（ADR-260902-02） | **実装済みで完結**（AI翻訳レビューが本文と同じ1ペアとして判定し、承認されれば確認も外れる・ADR-260902-03） |
-| 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AI翻訳レビューは対象外のため解除は手動 | AIレビュー拡張 |
+| 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 安全網が `need:review` を付与（既訳保護）。AI翻訳レビューは対象外のため解除は手動（実 LLM の走行でも .txt / .csv / .json の3本だけが確認待ちで残った） | AIレビュー拡張 |
 | 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[command_sync.md](command_sync.md) 孤立ユニットモデル）。宣言 CodeLens UI は将来増分 |
 
 パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [guide-admin.md](../guide-admin.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [command_sync.md](command_sync.md) の「孤立ユニットモデル」を参照。
