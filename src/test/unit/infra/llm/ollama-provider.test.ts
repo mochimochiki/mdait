@@ -27,7 +27,10 @@ interface FakeChatChunk {
 }
 
 /** チャンク列を返すフェイクのAbortableAsyncIterator風オブジェクトを作成 */
-function createFakeStream(chunks: FakeChatChunk[], options?: { stallAfter?: number }) {
+function createFakeStream(
+	chunks: FakeChatChunk[],
+	options?: { stallAfter?: number },
+) {
 	let aborted = false;
 	let index = 0;
 	const stream = {
@@ -99,7 +102,10 @@ suite("OllamaProvider", () => {
 		const { client, wasClientAborted } = createFakeClient(() => never());
 		const provider = new OllamaProvider(createConfig(), client);
 
-		await assert.rejects(provider.sendMessage("system", [{ role: "user", content: "hi" }]), /timed out/);
+		await assert.rejects(
+			provider.sendMessage("system", [{ role: "user", content: "hi" }]),
+			/timed out/,
+		);
 		assert.strictEqual(wasClientAborted(), true);
 	});
 
@@ -114,7 +120,10 @@ suite("OllamaProvider", () => {
 		const { client } = createFakeClient(async () => stream);
 		const provider = new OllamaProvider(createConfig(), client);
 
-		await assert.rejects(provider.sendMessage("system", [{ role: "user", content: "hi" }]), /timed out/);
+		await assert.rejects(
+			provider.sendMessage("system", [{ role: "user", content: "hi" }]),
+			/timed out/,
+		);
 		assert.strictEqual(wasAborted(), true);
 	});
 

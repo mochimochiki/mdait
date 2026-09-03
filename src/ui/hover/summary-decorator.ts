@@ -127,7 +127,9 @@ export class SummaryDecorator {
 	 */
 	private buildSummaryText(duration: number, tokens?: number, needFlag?: string | null): string {
 		// need:reviewの場合は「要レビュー」を表示
-		const status = needFlag === "review" ? vscode.l10n.t("Needs Review") : vscode.l10n.t("Translation completed");
+		const status = needFlag === "review" 
+			? vscode.l10n.t("Needs Review") 
+			: vscode.l10n.t("Translation completed");
 		const parts: string[] = [`${status} :`];
 
 		// 処理時間

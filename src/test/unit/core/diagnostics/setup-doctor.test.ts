@@ -22,7 +22,9 @@ function makeProbe(overrides: Partial<DoctorProbe> = {}): DoctorProbe {
 	};
 }
 
-function makeConfig(overrides: Partial<DoctorConfigSnapshot> = {}): DoctorConfigSnapshot {
+function makeConfig(
+	overrides: Partial<DoctorConfigSnapshot> = {},
+): DoctorConfigSnapshot {
 	return {
 		transPairs: [
 			{
@@ -54,43 +56,73 @@ suite("setup-doctor 静的診断", () => {
 	});
 
 	test("external マーカーモード × sync.level 0 の非互換組み合わせを error として検出する", () => {
-		const diags = runStaticChecks(makeConfig({ markersMode: "external", syncLevel: 0 }), makeProbe());
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external", syncLevel: 0 }),
+			makeProbe(),
+		);
 		const diag = diags.find((d) => d.id === "config.externalMarkersManualSyncLevel");
 		assert.ok(diag, "config.externalMarkersManualSyncLevel が含まれること");
 		assert.equal(diag?.level, "error");
 	});
 
 	test("external マーカーモードでも sync.level が 1 以上なら非互換診断を出さない", () => {
-		const diags = runStaticChecks(makeConfig({ markersMode: "external", syncLevel: 2 }), makeProbe());
-		assert.equal(ids(diags).includes("config.externalMarkersManualSyncLevel"), false);
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "external", syncLevel: 2 }),
+			makeProbe(),
+		);
+		assert.equal(
+			ids(diags).includes("config.externalMarkersManualSyncLevel"),
+			false,
+		);
 	});
 
 	test("embedded マーカーモードなら sync.level 0 でも非互換診断を出さない", () => {
-		const diags = runStaticChecks(makeConfig({ markersMode: "embedded", syncLevel: 0 }), makeProbe());
-		assert.equal(ids(diags).includes("config.externalMarkersManualSyncLevel"), false);
+		const diags = runStaticChecks(
+			makeConfig({ markersMode: "embedded", syncLevel: 0 }),
+			makeProbe(),
+		);
+		assert.equal(
+			ids(diags).includes("config.externalMarkersManualSyncLevel"),
+			false,
+		);
 	});
 
 	test("P1: primaryLang 欠落を error として検出する", () => {
-		const diags = runStaticChecks(makeConfig({ primaryLang: "" }), makeProbe());
-		assert.ok(ids(diags).includes("config.noPrimaryLang"), "config.noPrimaryLang が含まれること");
+		const diags = runStaticChecks(
+			makeConfig({ primaryLang: "" }),
+			makeProbe(),
+		);
+		assert.ok(
+			ids(diags).includes("config.noPrimaryLang"),
+			"config.noPrimaryLang が含まれること",
+		);
 		assert.equal(hasBlockingError(diags), true);
 	});
 
 	test("P1関連: primaryLang がペアの言語と不一致なら warn", () => {
-		const diags = runStaticChecks(makeConfig({ primaryLang: "fr" }), makeProbe());
+		const diags = runStaticChecks(
+			makeConfig({ primaryLang: "fr" }),
+			makeProbe(),
+		);
 		const mismatch = diags.find((d) => d.id === "config.primaryLangMismatch");
 		assert.ok(mismatch, "primaryLangMismatch が含まれること");
 		assert.equal(mismatch?.level, "warn");
 	});
 
 	test("transPairs が空なら error", () => {
-		const diags = runStaticChecks(makeConfig({ transPairs: [] }), makeProbe());
+		const diags = runStaticChecks(
+			makeConfig({ transPairs: [] }),
+			makeProbe(),
+		);
 		assert.ok(ids(diags).includes("config.noTransPairs"));
 		assert.equal(hasBlockingError(diags), true);
 	});
 
 	test("sourceDir が存在しなければ error", () => {
-		const diags = runStaticChecks(makeConfig(), makeProbe({ dirExists: (d) => d !== "docs/ja" }));
+		const diags = runStaticChecks(
+			makeConfig(),
+			makeProbe({ dirExists: (d) => d !== "docs/ja" }),
+		);
 		const missing = diags.find((d) => d.id === "pair.sourceMissing");
 		assert.ok(missing, "pair.sourceMissing が含まれること");
 		assert.equal(missing?.params?.dir, "docs/ja");
@@ -175,7 +207,10 @@ suite("setup-doctor 静的診断", () => {
 	});
 
 	test("P2/P3: Markdown はあるがマーカーが無ければ『まず Sync』を info で促す", () => {
-		const diags = runStaticChecks(makeConfig(), makeProbe({ countFilesWithMarkers: () => 0 }));
+		const diags = runStaticChecks(
+			makeConfig(),
+			makeProbe({ countFilesWithMarkers: () => 0 }),
+		);
 		const hint = diags.find((d) => d.id === "pair.noMarkersRunSync");
 		assert.ok(hint, "pair.noMarkersRunSync が含まれること");
 		assert.equal(hint?.level, "info");
@@ -203,7 +238,10 @@ suite("setup-doctor 静的診断", () => {
 	});
 
 	test("targetDir 不在は info（Sync で生成され得るため）", () => {
-		const diags = runStaticChecks(makeConfig(), makeProbe({ dirExists: (d) => d !== "docs/en" }));
+		const diags = runStaticChecks(
+			makeConfig(),
+			makeProbe({ dirExists: (d) => d !== "docs/en" }),
+		);
 		const missing = diags.find((d) => d.id === "pair.targetMissing");
 		assert.ok(missing, "pair.targetMissing が含まれること");
 		assert.equal(missing?.level, "info");
@@ -227,11 +265,18 @@ suite("setup-doctor 静的診断", () => {
 			}),
 			makeProbe(),
 		);
-		assert.equal(ids(diags).includes("ai.apiKeyLiteral"), false, "環境変数参照は安全");
+		assert.equal(
+			ids(diags).includes("ai.apiKeyLiteral"),
+			false,
+			"環境変数参照は安全",
+		);
 	});
 
 	test("vscode-lm では apiKey 直書きでも openai 警告は出ない", () => {
-		const diags = runStaticChecks(makeConfig({ aiProvider: "vscode-lm", openaiApiKey: "sk-xxx" }), makeProbe());
+		const diags = runStaticChecks(
+			makeConfig({ aiProvider: "vscode-lm", openaiApiKey: "sk-xxx" }),
+			makeProbe(),
+		);
 		assert.equal(ids(diags).includes("ai.apiKeyLiteral"), false);
 	});
 });

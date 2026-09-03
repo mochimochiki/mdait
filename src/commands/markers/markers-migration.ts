@@ -14,20 +14,20 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
-import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
+import { embeddedMarkerProvider, externalMarkerProvider } from "../../core/markdown/marker-provider";
 import { alignEntriesToUnits } from "../../core/unit-state/unit-state-align";
 import type { UnitStateEntry } from "../../core/unit-state/unit-state-store";
 import { UnitStateStore, isHeldBackEntry } from "../../core/unit-state/unit-state-store";
+import { withUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
-import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { writeManagedDocumentSync } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
-import { withUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 
 const logger = Logger.getInstance();
@@ -480,7 +480,9 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 	// 件数を確認ダイアログに含め、明示的な確認を経てのみ続行する
 	const manualLevelFiles = toExternal ? countManualSyncLevelZeroFiles(targets.map((t) => t.absPath)) : 0;
 
-	const confirmLabel = toExternal ? vscode.l10n.t("Externalize markers") : vscode.l10n.t("Embed markers");
+	const confirmLabel = toExternal
+		? vscode.l10n.t("Externalize markers")
+		: vscode.l10n.t("Embed markers");
 	// adopt の確認と同じ「短い質問 + detail 箇条書き」形式（ADR-260705-01 の確認UI規約）
 	const question = toExternal
 		? vscode.l10n.t("Externalize markers (embedded → external)?")
@@ -571,7 +573,9 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 		});
 	} catch (error) {
 		logger.error("markers", "Marker migration failed", formatError(error));
-		vscode.window.showErrorMessage(vscode.l10n.t("Marker conversion failed: {0}", (error as Error).message));
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Marker conversion failed: {0}", (error as Error).message),
+		);
 		return;
 	}
 

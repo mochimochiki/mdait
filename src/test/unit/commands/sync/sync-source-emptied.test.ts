@@ -170,11 +170,7 @@ suite("sync: 原文が空になったとき訳文を守る", () => {
 		// もう一度空にしたら、また通知する
 		fs.writeFileSync(sourceFile, "", "utf-8");
 		const again = await sync_CoreProc(sourceFile, targetFile, config);
-		assert.strictEqual(
-			updateSourceEmptiedMemory(targetFile, again.sourceEmptied ?? 0),
-			true,
-			"2度目の事故でも黙らない",
-		);
+		assert.strictEqual(updateSourceEmptiedMemory(targetFile, again.sourceEmptied ?? 0), true, "2度目の事故でも黙らない");
 	});
 
 	test("原文も訳文も空のままなら中止扱いにしないこと", async () => {

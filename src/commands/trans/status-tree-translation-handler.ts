@@ -13,7 +13,12 @@ import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
 import { showConfigError, showDirectoryTranslationFailure, showTranslationError } from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
 import { getSelectedPairAbsDirs } from "../shared/status-scope";
-import { type TransCommandResult, transCommand, transFile_CoreProc, transUnitCommand } from "./trans-command";
+import {
+	type TransCommandResult,
+	transCommand,
+	transFile_CoreProc,
+	transUnitCommand,
+} from "./trans-command";
 
 export interface DirectoryTranslationResult {
 	totalFiles: number;
@@ -67,10 +72,15 @@ export class StatusTreeTranslationHandler {
 				dirItem: tree.getDirectory(pair.targetDirAbs),
 				pending: tree.countPendingTranslationUnits([pair.targetDirAbs]),
 			}))
-			.filter((c): c is { dirItem: DirectoryStatusItem; pending: number } => c.dirItem !== undefined && c.pending > 0);
+			.filter(
+				(c): c is { dirItem: DirectoryStatusItem; pending: number } =>
+					c.dirItem !== undefined && c.pending > 0,
+			);
 
 		if (candidates.length === 0) {
-			vscode.window.showInformationMessage(vscode.l10n.t("No units are waiting for translation."));
+			vscode.window.showInformationMessage(
+				vscode.l10n.t("No units are waiting for translation."),
+			);
 			return;
 		}
 
@@ -114,7 +124,9 @@ export class StatusTreeTranslationHandler {
 			// ディレクトリ配下の翻訳対象ファイルを取得（.md + trans.extensions）。
 			// 確認ダイアログに対象ファイル数を出すため、確認より先に列挙する
 			const config = Configuration.getInstance();
-			const globPattern = FileExplorer.buildExtensionGlob(config.trans.extensions);
+			const globPattern = FileExplorer.buildExtensionGlob(
+				config.trans.extensions,
+			);
 			const pattern = new vscode.RelativePattern(directoryPath, globPattern);
 			const found = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 
@@ -240,7 +252,9 @@ export class StatusTreeTranslationHandler {
 										if (fileResult.outcome === "no-trans-pair") {
 											failed++;
 											if (!firstError) {
-												firstError = new Error(vscode.l10n.t("No translation pair found for file: {0}", file.fsPath));
+												firstError = new Error(
+													vscode.l10n.t("No translation pair found for file: {0}", file.fsPath),
+												);
 											}
 										} else if (fileResult.outcome === "cancelled") {
 											cancelledFiles++;
@@ -253,7 +267,10 @@ export class StatusTreeTranslationHandler {
 											if (!firstError) {
 												firstError = new Error(
 													fileResult.responseFailures.length > 0
-														? vscode.l10n.t("The AI's answer could not be used for {0}.", path.basename(file.fsPath))
+														? vscode.l10n.t(
+																"The AI's answer could not be used for {0}.",
+																path.basename(file.fsPath),
+															)
 														: vscode.l10n.t("Translation failed for {0}.", path.basename(file.fsPath)),
 												);
 											}
@@ -294,7 +311,10 @@ export class StatusTreeTranslationHandler {
 
 							// キャンセル時は未着手ファイル数を報告
 							if (token.isCancellationRequested) {
-								logger.info("trans", "Directory translation cancelled, skipping remaining files");
+								logger.info(
+									"trans",
+									"Directory translation cancelled, skipping remaining files",
+								);
 								const skipped = files.length - successful - failed + cancelledFiles;
 								vscode.window.showInformationMessage(
 									vscode.l10n.t(
@@ -338,7 +358,10 @@ export class StatusTreeTranslationHandler {
 		} catch (error) {
 			logger.error("trans", "Error during directory translation", formatError(error));
 			vscode.window.showErrorMessage(
-				vscode.l10n.t("Error during directory translation: {0}", (error as Error).message),
+				vscode.l10n.t(
+					"Error during directory translation: {0}",
+					(error as Error).message,
+				),
 			);
 			return undefined;
 		}
@@ -347,7 +370,9 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * 単一ファイルを翻訳する
 	 */
-	public async translateFile(item: StatusItem): Promise<TransCommandResult | undefined> {
+	public async translateFile(
+		item: StatusItem,
+	): Promise<TransCommandResult | undefined> {
 		if (item.type !== StatusItemType.File || !item.filePath) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid file item"));
 			return;
@@ -361,7 +386,9 @@ export class StatusTreeTranslationHandler {
 	/**
 	 * 単一ユニットを翻訳する
 	 */
-	public async translateUnit(item: StatusItem): Promise<TransCommandResult | undefined> {
+	public async translateUnit(
+		item: StatusItem,
+	): Promise<TransCommandResult | undefined> {
 		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;

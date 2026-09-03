@@ -17,9 +17,9 @@ import { showSyncError } from "./commands/shared/guidance";
 import { syncCommand, syncSingleFile } from "./commands/sync/sync-command";
 import { addToGlossaryCommand } from "./commands/term/command-add";
 import { detectTermCommand } from "./commands/term/command-detect";
+import { updateGlossaryCommand } from "./commands/term/command-update";
 import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
-import { updateGlossaryCommand } from "./commands/term/command-update";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
 import { tmOptimizeCommand } from "./commands/tm/command-optimize";
@@ -249,6 +249,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// trans command
 	const transDisposable = vscode.commands.registerCommand("mdait.trans", transCommand);
 
+
 	// マーカー外部化 / 埋め込み戻し コマンド
 	const externalizeMarkersDisposable = vscode.commands.registerCommand(
 		"mdait.markers.externalize",
@@ -295,8 +296,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		(item?: StatusItem) => needHandler.deleteAllInFile(item),
 	);
 	// 原文と結びついていない訳文の破棄（ごみ箱へ移動。ADR-260806-01）
-	const fileDiscardOrphanDisposable = vscode.commands.registerCommand("mdait.file.discardOrphan", (item?: StatusItem) =>
-		discardOrphanTargetCommand(item),
+	const fileDiscardOrphanDisposable = vscode.commands.registerCommand(
+		"mdait.file.discardOrphan",
+		(item?: StatusItem) => discardOrphanTargetCommand(item),
 	);
 	const unitMarkIsolatedDisposable = vscode.commands.registerCommand("mdait.unit.markIsolated", (item?: StatusItem) =>
 		needHandler.markIsolated(item),

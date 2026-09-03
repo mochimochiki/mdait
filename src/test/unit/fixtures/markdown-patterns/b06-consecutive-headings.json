@@ -1,5 +1,5 @@
 {
-	"description": "連続する同レベル見出し、本文なし（level=2）→ 各見出しが独立ユニット",
-	"syncLevel": 2,
-	"expectedUnits": 4
+  "description": "連続する同レベル見出し、本文なし（level=2）→ 各見出しが独立ユニット",
+  "syncLevel": 2,
+  "expectedUnits": 4
 }

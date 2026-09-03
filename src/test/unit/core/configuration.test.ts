@@ -2,9 +2,12 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { embeddedMarkerProvider, externalMarkerProvider } from "../../../core/markdown/marker-provider";
 import { Configuration } from "../../../infra/config/configuration";
 import { Logger } from "../../../infra/logging/logger";
+import {
+	embeddedMarkerProvider,
+	externalMarkerProvider,
+} from "../../../core/markdown/marker-provider";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -82,7 +85,11 @@ suite("Configuration", () => {
 		// デフォルトパスに設定を作成
 		const defaultDir = path.join(tempDir, ".mdait");
 		fs.mkdirSync(defaultDir, { recursive: true });
-		fs.writeFileSync(path.join(defaultDir, "mdait.json"), minimalConfig("en"), "utf-8");
+		fs.writeFileSync(
+			path.join(defaultDir, "mdait.json"),
+			minimalConfig("en"),
+			"utf-8",
+		);
 
 		// カスタムパスに設定を作成
 		const customDir = path.join(tempDir, "sub", ".mdait");
@@ -103,7 +110,11 @@ suite("Configuration", () => {
 		// デフォルトパスに設定を作成
 		const defaultDir = path.join(tempDir, ".mdait");
 		fs.mkdirSync(defaultDir, { recursive: true });
-		fs.writeFileSync(path.join(defaultDir, "mdait.json"), minimalConfig("en"), "utf-8");
+		fs.writeFileSync(
+			path.join(defaultDir, "mdait.json"),
+			minimalConfig("en"),
+			"utf-8",
+		);
 
 		const config = Configuration.getInstance();
 		await config.initialize(); // デフォルトパスで初期化（customConfigPath は undefined）
@@ -194,7 +205,9 @@ suite("Configuration", () => {
 	});
 
 	/** trans.extensions を含むコンフィグを customPath に書いて初期化する */
-	async function initWithExtensions(extensions: unknown): Promise<Configuration> {
+	async function initWithExtensions(
+		extensions: unknown,
+	): Promise<Configuration> {
 		const customDir = path.join(tempDir, ".mdait");
 		fs.mkdirSync(customDir, { recursive: true });
 		const customPath = path.join(customDir, "mdait.json");

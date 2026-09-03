@@ -55,11 +55,7 @@ suite("searchTmBidirectional（原文・訳文の双方向TM検索）", () => {
 			// forward: 原文 "The quick brown fox..." にヒット
 			makeEntry("fwd", "The quick brown fox jumps over the lazy dog", "素早い茶色の狐が怠けた犬を飛び越える"),
 			// reverse: 訳文 "ウェブサイトからインストーラーを..." にヒット
-			makeEntry(
-				"rev",
-				"Download the installer from the website",
-				"ウェブサイトからインストーラーをダウンロードしてください",
-			),
+			makeEntry("rev", "Download the installer from the website", "ウェブサイトからインストーラーをダウンロードしてください"),
 		];
 		const store = new StubTmxStore(entries);
 		const result = searchTmBidirectional(
@@ -75,11 +71,7 @@ suite("searchTmBidirectional（原文・訳文の双方向TM検索）", () => {
 
 	test("訳文側ヒットの結果も source=原文言語 / target=訳文言語 の向きで返る", () => {
 		const entries = [
-			makeEntry(
-				"rev",
-				"Download the installer from the website",
-				"ウェブサイトからインストーラーをダウンロードしてください",
-			),
+			makeEntry("rev", "Download the installer from the website", "ウェブサイトからインストーラーをダウンロードしてください"),
 		];
 		const store = new StubTmxStore(entries);
 		const result = searchTmBidirectional(
@@ -99,11 +91,7 @@ suite("searchTmBidirectional（原文・訳文の双方向TM検索）", () => {
 
 	test("両方向でヒットした同一エントリは tuid で重複排除される", () => {
 		const entries = [
-			makeEntry(
-				"both",
-				"Download the installer from the website",
-				"ウェブサイトからインストーラーをダウンロードしてください",
-			),
+			makeEntry("both", "Download the installer from the website", "ウェブサイトからインストーラーをダウンロードしてください"),
 		];
 		const store = new StubTmxStore(entries);
 		const result = searchTmBidirectional(

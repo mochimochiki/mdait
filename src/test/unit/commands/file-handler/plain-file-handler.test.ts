@@ -3,14 +3,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type * as vscode from "vscode";
+import { isOperationCancelled } from "../../../../infra/errors/operation-cancelled";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import type { Translator } from "../../../../commands/trans/translator";
+import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { Status, StatusItemType } from "../../../../core/status/status-item";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
-import { isOperationCancelled } from "../../../../infra/errors/operation-cancelled";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -467,7 +467,13 @@ suite("PlainFileHandler", () => {
 				targetLang: "en",
 			};
 
-			const result = await handler.translate(targetFile, dummyTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				dummyTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.ok(result);
 			assert.strictEqual(result.skippedCount, 1);
@@ -488,7 +494,13 @@ suite("PlainFileHandler", () => {
 				targetLang: "en",
 			};
 
-			const result = await handler.translate(targetFile, dummyTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				dummyTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.strictEqual(result, undefined);
 		});
@@ -516,7 +528,13 @@ suite("PlainFileHandler", () => {
 				targetLang: "en",
 			};
 
-			const result = await handler.translate(targetFile, dummyTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				dummyTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.strictEqual(result, undefined);
 		});
@@ -558,7 +576,14 @@ suite("PlainFileHandler", () => {
 			// 「訳す対象が無かった」と区別できず、止めたのに
 			// 「翻訳するものはありませんでした」と表示されていた
 			await assert.rejects(
-				() => handler.translate(targetFile, dummyTranslator, pair, dummyProgress, cancelledToken),
+				() =>
+					handler.translate(
+						targetFile,
+						dummyTranslator,
+						pair,
+						dummyProgress,
+						cancelledToken,
+					),
 				(error: unknown) => isOperationCancelled(error),
 			);
 		});
@@ -633,7 +658,8 @@ suite("PlainFileHandler", () => {
 
 			const mockTranslator = {
 				translateRevisionPatch: async () => ({
-					targetPatch: "=translated1\n-translated2\n+translated2 updated\n=translated3",
+					targetPatch:
+						"=translated1\n-translated2\n+translated2 updated\n=translated3",
 					termSuggestions: [],
 					warnings: [],
 				}),
@@ -642,7 +668,13 @@ suite("PlainFileHandler", () => {
 				},
 			} as unknown as Translator;
 
-			const result = await handler.translate(targetFile, mockTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.ok(result);
 			assert.strictEqual(result.patchedCount, 1);
@@ -659,7 +691,8 @@ suite("PlainFileHandler", () => {
 			const mockTranslator = {
 				translateRevisionPatch: async () => ({
 					// コンテキスト行が一致しない不正なパッチ → applySimplePatch が null を返す
-					targetPatch: "=WRONG_CONTEXT\n-translated2\n+translated2 updated\n=WRONG",
+					targetPatch:
+						"=WRONG_CONTEXT\n-translated2\n+translated2 updated\n=WRONG",
 					termSuggestions: [],
 					warnings: [],
 				}),
@@ -669,7 +702,13 @@ suite("PlainFileHandler", () => {
 				}),
 			} as unknown as Translator;
 
-			const result = await handler.translate(targetFile, mockTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.ok(result);
 			assert.strictEqual(result.translatedCount, 1);
@@ -693,7 +732,13 @@ suite("PlainFileHandler", () => {
 				}),
 			} as unknown as Translator;
 
-			const result = await handler.translate(targetFile, mockTranslator, pair, dummyProgress, dummyToken);
+			const result = await handler.translate(
+				targetFile,
+				mockTranslator,
+				pair,
+				dummyProgress,
+				dummyToken,
+			);
 
 			assert.ok(result);
 			assert.strictEqual(result.translatedCount, 1);

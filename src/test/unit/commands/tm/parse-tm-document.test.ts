@@ -88,7 +88,11 @@ suite("parseTmDocument（tm-commit のマーカー読取経路）", () => {
 		const targetRel = "docs/ja/guide.md";
 		const targetAbs = path.join(tempDir, targetRel);
 		fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
-		fs.writeFileSync(targetAbs, "<!-- mdait tgt00001 from:src00001 -->\n# タイトル\n\n確定済みの訳文。\n", "utf-8");
+		fs.writeFileSync(
+			targetAbs,
+			"<!-- mdait tgt00001 from:src00001 -->\n# タイトル\n\n確定済みの訳文。\n",
+			"utf-8",
+		);
 
 		const markdown = await parseTmDocument(targetAbs, config);
 

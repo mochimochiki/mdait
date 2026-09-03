@@ -1,6 +1,10 @@
 import * as assert from "node:assert";
 import { type TermLintTerm, lintUnitPair } from "../../../../core/term/term-lint";
-import { anyTermVariantAppears, stripCodeSegments, textContainsTerm } from "../../../../core/term/term-matcher";
+import {
+	anyTermVariantAppears,
+	stripCodeSegments,
+	textContainsTerm,
+} from "../../../../core/term/term-matcher";
 
 function term(overrides: Partial<TermLintTerm> = {}): TermLintTerm {
 	return {
@@ -46,21 +50,29 @@ suite("term-matcher（用語照合の純関数）", () => {
 
 suite("term-lint（用語一貫性検証）", () => {
 	test("原文に用語が出現し訳文に期待訳語がない → 違反", () => {
-		const violations = lintUnitPair("## 概要\n\n翻訳メモリを使います。", "## Overview\n\nWe use the TM database.", [
-			term(),
-		]);
+		const violations = lintUnitPair(
+			"## 概要\n\n翻訳メモリを使います。",
+			"## Overview\n\nWe use the TM database.",
+			[term()],
+		);
 		assert.strictEqual(violations.length, 1);
 		assert.strictEqual(violations[0].term, "翻訳メモリ");
 		assert.strictEqual(violations[0].expected, "translation memory");
 	});
 
 	test("訳文に期待訳語がある → 違反なし", () => {
-		const violations = lintUnitPair("翻訳メモリを使います。", "We use the translation memory.", [term()]);
+		const violations = lintUnitPair(
+			"翻訳メモリを使います。",
+			"We use the translation memory.",
+			[term()],
+		);
 		assert.strictEqual(violations.length, 0);
 	});
 
 	test("訳文にvariantsが出現する → 違反なし（揺れの正当化）", () => {
-		const violations = lintUnitPair("翻訳メモリを使います。", "We use the TM.", [term({ expectedVariants: ["TM"] })]);
+		const violations = lintUnitPair("翻訳メモリを使います。", "We use the TM.", [
+			term({ expectedVariants: ["TM"] }),
+		]);
 		assert.strictEqual(violations.length, 0);
 	});
 
@@ -77,27 +89,38 @@ suite("term-lint（用語一貫性検証）", () => {
 	});
 
 	test("偽陽性防止: コードブロック内の用語出現は照合対象外", () => {
-		const violations = lintUnitPair("```\n翻訳メモリ\n```\nコード以外に用語なし。", "No terms in prose.", [term()]);
+		const violations = lintUnitPair(
+			"```\n翻訳メモリ\n```\nコード以外に用語なし。",
+			"No terms in prose.",
+			[term()],
+		);
 		assert.strictEqual(violations.length, 0);
 	});
 
 	test("偽陽性防止: インラインコード内の用語出現は照合対象外", () => {
-		const violations = lintUnitPair("`翻訳メモリ` という識別子。", "The identifier `translation memory`.", [term()]);
+		const violations = lintUnitPair(
+			"`翻訳メモリ` という識別子。",
+			"The identifier `translation memory`.",
+			[term()],
+		);
 		assert.strictEqual(violations.length, 0);
 	});
 
 	test("訳文側のコードブロック内の期待訳語はカウントされない（本文に必要）", () => {
-		const violations = lintUnitPair("翻訳メモリを使います。", "```\ntranslation memory\n```\nProse without the term.", [
-			term(),
-		]);
+		const violations = lintUnitPair(
+			"翻訳メモリを使います。",
+			"```\ntranslation memory\n```\nProse without the term.",
+			[term()],
+		);
 		assert.strictEqual(violations.length, 1);
 	});
 
 	test("複数用語の違反が個別にレポートされる", () => {
-		const violations = lintUnitPair("翻訳メモリと用語集を使います。", "We use nothing relevant.", [
-			term(),
-			term({ source: "用語集", expected: "glossary" }),
-		]);
+		const violations = lintUnitPair(
+			"翻訳メモリと用語集を使います。",
+			"We use nothing relevant.",
+			[term(), term({ source: "用語集", expected: "glossary" })],
+		);
 		assert.strictEqual(violations.length, 2);
 	});
 

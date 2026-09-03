@@ -14,7 +14,11 @@ import type { FileExplorer } from "../../infra/workspace/file-explorer";
 /**
  * ディレクトリ配下のターゲットMDファイルを列挙する。
  */
-async function collectFromDir(dir: string, config: Configuration, fileExplorer: FileExplorer): Promise<string[]> {
+async function collectFromDir(
+	dir: string,
+	config: Configuration,
+	fileExplorer: FileExplorer,
+): Promise<string[]> {
 	const pattern = new vscode.RelativePattern(dir, "**/*.md");
 	const found = await vscode.workspace.findFiles(pattern, config.ignoredPatterns);
 	return found.map((f) => f.fsPath).filter((f) => fileExplorer.isTargetFile(f, config));

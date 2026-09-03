@@ -32,7 +32,8 @@ function makeModeConfig(level: number, mode: "embedded" | "external"): Configura
 	return {
 		sync: { level },
 		isExternalMarkers: () => mode === "external",
-		getMarkerProvider: () => (mode === "external" ? externalMarkerProvider : embeddedMarkerProvider),
+		getMarkerProvider: () =>
+			mode === "external" ? externalMarkerProvider : embeddedMarkerProvider,
 	} as unknown as Configuration;
 }
 
@@ -426,7 +427,7 @@ suite("setMarkerModeInConfigFile（mdait.json の整形保持）", () => {
 
 	test("2スペースインデントの mdait.json が、markers.mode 更新後もタブ化されず 2スペースのまま保たれること", async () => {
 		const configPath = path.join(tempDir, "mdait.json");
-		const original = ["{", '  "primaryLang": "en",', '  "sync": {', '    "level": 2', "  }", "}", ""].join("\n");
+		const original = ['{', '  "primaryLang": "en",', '  "sync": {', '    "level": 2', '  }', '}', ''].join("\n");
 		fs.writeFileSync(configPath, original, "utf-8");
 		const config = fakeConfig(configPath);
 
@@ -653,7 +654,10 @@ suite("reconcileMarkerModeForFile (mode-switch self-heal)", () => {
 		// embedded 設定 × 本文にマーカーあり × store 空 → no-op
 		fs.writeFileSync(absPath, buildEmbeddedDoc(), "utf-8");
 		const before = fs.readFileSync(absPath, "utf-8");
-		assert.strictEqual(reconcileMarkerModeForFile(absPath, "target", makeModeConfig(2, "embedded"), store), false);
+		assert.strictEqual(
+			reconcileMarkerModeForFile(absPath, "target", makeModeConfig(2, "embedded"), store),
+			false,
+		);
 		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), before);
 
 		// external 設定 × 本文にマーカー無し → no-op
@@ -664,7 +668,10 @@ suite("reconcileMarkerModeForFile (mode-switch self-heal)", () => {
 		);
 		fs.writeFileSync(absPath, externalized, "utf-8");
 		const before2 = fs.readFileSync(absPath, "utf-8");
-		assert.strictEqual(reconcileMarkerModeForFile(absPath, "target", makeModeConfig(2, "external"), store), false);
+		assert.strictEqual(
+			reconcileMarkerModeForFile(absPath, "target", makeModeConfig(2, "external"), store),
+			false,
+		);
 		assert.strictEqual(fs.readFileSync(absPath, "utf-8"), before2);
 	});
 });

@@ -10,5 +10,7 @@ import { type ToolEnvelope, serializeEnvelope } from "./envelope";
  * エンベロープをシリアライズして LanguageModelToolResult に包む
  */
 export function toToolResult(envelope: ToolEnvelope<unknown>): vscode.LanguageModelToolResult {
-	return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(serializeEnvelope(envelope))]);
+	return new vscode.LanguageModelToolResult([
+		new vscode.LanguageModelTextPart(serializeEnvelope(envelope)),
+	]);
 }

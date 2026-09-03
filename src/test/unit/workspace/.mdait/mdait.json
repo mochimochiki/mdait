@@ -1,35 +1,38 @@
 {
-	"transPairs": [
-		{
-			"sourceLang": "ja",
-			"sourceDir": "content/ja",
-			"targetLang": "en",
-			"targetDir": "content/en"
-		}
-	],
-	"ai": {
-		"provider": "vscode-lm",
-		"vendor": "customendpoint",
-		"model": "gemma-4-E4B"
-	},
-	"trans": {
-		"contextSize": 1,
-		"retryLimit": 1,
-		"frontmatter": {
-			"keys": ["title", "description"]
-		}
-	},
-	"primaryLang": "ja",
-	"sync": {
-		"level": 3,
-		"autoDelete": true,
-		"autoSyncOnSave": true
-	},
-	"tm": {
-		"retryLimit": 1,
-		"maxReferences": 5
-	},
-	"terms": {
-		"filename": "terms.csv"
-	}
+  "transPairs": [
+    {
+      "sourceLang": "ja",
+      "sourceDir": "content/ja",
+      "targetLang": "en",
+      "targetDir": "content/en"
+    }
+  ],
+  "ai": {
+    "provider": "vscode-lm",
+    "vendor": "customendpoint",
+    "model": "gemma-4-E4B"
+  },
+  "trans": {
+    "contextSize": 1,
+    "retryLimit": 1,
+    "frontmatter": {
+      "keys": [
+        "title",
+        "description"
+      ]
+    }
+  },
+  "primaryLang": "ja",
+  "sync": {
+    "level": 3,
+    "autoDelete": true,
+    "autoSyncOnSave": true
+  },
+  "tm": {
+    "retryLimit": 1,
+    "maxReferences": 5
+  },
+  "terms": {
+    "filename": "terms.csv"
+  }
 }

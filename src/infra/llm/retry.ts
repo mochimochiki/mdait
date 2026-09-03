@@ -73,7 +73,10 @@ export function parseRetryAfterMs(headerValue: string | null): number | undefine
  * キャンセルに即応するsleep
  * 待機中にキャンセルされた場合は即座にrejectする
  */
-export function delayWithCancellation(ms: number, token?: vscode.CancellationToken): Promise<void> {
+export function delayWithCancellation(
+	ms: number,
+	token?: vscode.CancellationToken,
+): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		if (token?.isCancellationRequested) {
 			reject(new OperationCancelledError());
@@ -133,7 +136,8 @@ export async function withTransportRetry<T>(
 			: DEFAULT_RETRY_POLICY.maxRetries,
 	};
 	const isRetryable =
-		options?.isRetryable ?? ((error: unknown) => error instanceof TransientHttpError || isNetworkError(error));
+		options?.isRetryable ??
+		((error: unknown) => error instanceof TransientHttpError || isNetworkError(error));
 	const token = options?.cancellationToken;
 
 	let lastError: unknown;
@@ -151,7 +155,10 @@ export async function withTransportRetry<T>(
 				throw error;
 			}
 
-			const backoffMs = Math.min(policy.initialDelayMs * policy.multiplier ** attempt, policy.maxDelayMs);
+			const backoffMs = Math.min(
+				policy.initialDelayMs * policy.multiplier ** attempt,
+				policy.maxDelayMs,
+			);
 			const retryAfterMs =
 				error instanceof TransientHttpError && error.retryAfterMs !== undefined
 					? Math.min(error.retryAfterMs, policy.maxDelayMs)

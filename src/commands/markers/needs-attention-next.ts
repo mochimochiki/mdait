@@ -24,23 +24,34 @@ export interface NeedsAttentionOrigin {
  *   動かさないため、押した行を起点にするにはこの引数が要る（無いとカーソル位置が起点になり、
  *   スクロールして押したときに前へ戻る）。
  */
-export async function needsAttentionNextCommand(range?: vscode.Range): Promise<void> {
+export async function needsAttentionNextCommand(
+	range?: vscode.Range,
+): Promise<void> {
 	const units = collectSortedNeedsAttentionUnits();
 
 	if (units.length === 0) {
 		// 「要対応」= review / verify-deletion のみ。need:translate は含まれないため、
 		// 「対応すべきものは何もない」と誤読されない文言で何を調べたかを明示する。
-		vscode.window.showInformationMessage(vscode.l10n.t("No units are awaiting review or deletion verification."));
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("No units are awaiting review or deletion verification."),
+		);
 		return;
 	}
 
 	const index = findNextIndex(units, resolveOrigin(range));
 	const target = units[index];
 
-	await vscode.commands.executeCommand("mdait.jumpToUnit", target.filePath, target.startLine ?? 0);
+	await vscode.commands.executeCommand(
+		"mdait.jumpToUnit",
+		target.filePath,
+		target.startLine ?? 0,
+	);
 
 	// キューの何件目かを一時的に示す（通知を増やさず視界の隅で進捗が分かるようにする）
-	vscode.window.setStatusBarMessage(vscode.l10n.t("Needs Attention: {0} of {1}", index + 1, units.length), 4000);
+	vscode.window.setStatusBarMessage(
+		vscode.l10n.t("Needs Attention: {0} of {1}", index + 1, units.length),
+		4000,
+	);
 }
 
 /**
@@ -48,7 +59,9 @@ export async function needsAttentionNextCommand(range?: vscode.Range): Promise<v
  */
 function collectSortedNeedsAttentionUnits(): UnitStatusItem[] {
 	const config = Configuration.getInstance();
-	return StatusManager.getInstance().getStatusItemTree().getNeedsAttentionUnits(getSelectedScopeDirs(config));
+	return StatusManager.getInstance()
+		.getStatusItemTree()
+		.getNeedsAttentionUnits(getSelectedScopeDirs(config));
 }
 
 /**
@@ -72,7 +85,10 @@ function resolveOrigin(range?: vscode.Range): NeedsAttentionOrigin | undefined {
  * units は `compareNeedsAttentionUnits`（ファイルパス昇順→開始行昇順）でソート済みである
  * ことを前提とし、比較規則もそれに一致させる。
  */
-export function findNextIndex(units: UnitStatusItem[], origin: NeedsAttentionOrigin | undefined): number {
+export function findNextIndex(
+	units: UnitStatusItem[],
+	origin: NeedsAttentionOrigin | undefined,
+): number {
 	if (!origin) {
 		return 0;
 	}

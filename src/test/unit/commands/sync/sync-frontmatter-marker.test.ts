@@ -3,6 +3,7 @@
 
 import { strict as assert } from "node:assert";
 import { syncFrontmatterMarkers } from "../../../../commands/sync/sync-frontmatter";
+import type { Configuration } from "../../../../infra/config/configuration";
 import { FrontMatter } from "../../../../core/markdown/front-matter";
 import {
 	calculateFrontmatterHash,
@@ -11,7 +12,6 @@ import {
 } from "../../../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { markdownParser } from "../../../../core/markdown/parser";
-import type { Configuration } from "../../../../infra/config/configuration";
 
 const testConfig = {
 	sync: { level: 2 },

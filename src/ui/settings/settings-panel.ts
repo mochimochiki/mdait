@@ -6,11 +6,20 @@
  */
 import * as fs from "node:fs";
 import * as vscode from "vscode";
-import { removeConfigValue, setConfigValue } from "../../infra/config/config-json-editor";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
-import { deriveSettingLabel, getCategoryDoc, getSettingDescription, getUiStrings } from "./settings-doc";
-import { type JsonSchemaNode, type SettingDescriptor, buildSettingsModel } from "./settings-model";
+import { removeConfigValue, setConfigValue } from "../../infra/config/config-json-editor";
+import {
+	deriveSettingLabel,
+	getCategoryDoc,
+	getSettingDescription,
+	getUiStrings,
+} from "./settings-doc";
+import {
+	type JsonSchemaNode,
+	type SettingDescriptor,
+	buildSettingsModel,
+} from "./settings-model";
 
 /** webview へ渡す、解説を付与した設定ディスクリプタ */
 interface LocalizedSettingDescriptor extends SettingDescriptor {
@@ -55,7 +64,9 @@ export class SettingsPanel {
 		if (!configPath || !fs.existsSync(configPath)) {
 			const create = vscode.l10n.t("Create mdait.json");
 			const choice = await vscode.window.showInformationMessage(
-				vscode.l10n.t("mdait.json does not exist yet. Create it first to use the settings editor."),
+				vscode.l10n.t(
+					"mdait.json does not exist yet. Create it first to use the settings editor.",
+				),
 				create,
 			);
 			if (choice === create) {
@@ -64,14 +75,21 @@ export class SettingsPanel {
 			return;
 		}
 		// 既に mdait.json が JSON 表示で開かれていても確実に設定UIへ切り替える
-		await vscode.commands.executeCommand("vscode.openWith", vscode.Uri.file(configPath), SettingsPanel.viewType);
+		await vscode.commands.executeCommand(
+			"vscode.openWith",
+			vscode.Uri.file(configPath),
+			SettingsPanel.viewType,
+		);
 	}
 
 	/**
 	 * SettingsEditorProvider（CustomTextEditorProvider）から渡される既存の
 	 * WebviewPanel にこのクラスのロジックをバインドする。
 	 */
-	public static bind(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): SettingsPanel {
+	public static bind(
+		panel: vscode.WebviewPanel,
+		extensionUri: vscode.Uri,
+	): SettingsPanel {
 		const instance = new SettingsPanel(panel, extensionUri);
 		SettingsPanel.current = instance;
 
@@ -107,8 +125,15 @@ export class SettingsPanel {
 
 	/** スキーマを読み込み、解説付きモデルを構築する */
 	private buildModel(): void {
-		const schemaUri = vscode.Uri.joinPath(this.extensionUri, "assets", "schemas", "mdait-config.schema.json");
-		const schema = JSON.parse(fs.readFileSync(schemaUri.fsPath, "utf8")) as JsonSchemaNode;
+		const schemaUri = vscode.Uri.joinPath(
+			this.extensionUri,
+			"assets",
+			"schemas",
+			"mdait-config.schema.json",
+		);
+		const schema = JSON.parse(
+			fs.readFileSync(schemaUri.fsPath, "utf8"),
+		) as JsonSchemaNode;
 		const model = buildSettingsModel(schema);
 
 		this.categories = model.map((category) => {
@@ -122,7 +147,8 @@ export class SettingsPanel {
 					return {
 						...setting,
 						label: deriveSettingLabel(setting.id, setting.category),
-						localizedDescription: getSettingDescription(setting.id) ?? setting.description,
+						localizedDescription:
+							getSettingDescription(setting.id) ?? setting.description,
 					};
 				}),
 			};
@@ -148,12 +174,20 @@ export class SettingsPanel {
 					break;
 				case "openJson": {
 					const configPath = this.getConfigFilePath();
-					vscode.commands.executeCommand("vscode.openWith", vscode.Uri.file(configPath), "default");
+					vscode.commands.executeCommand(
+						"vscode.openWith",
+						vscode.Uri.file(configPath),
+						"default",
+					);
 					break;
 				}
 			}
 		} catch (error) {
-			Logger.getInstance().error("settings-ui", "Failed to handle settings editor message", formatError(error));
+			Logger.getInstance().error(
+				"settings-ui",
+				"Failed to handle settings editor message",
+				formatError(error),
+			);
 			this.panel.webview.postMessage({
 				type: "error",
 				message: (error as Error).message,
@@ -177,7 +211,10 @@ export class SettingsPanel {
 		const configPath = this.getConfigFilePath();
 		let root: Record<string, unknown> = {};
 		try {
-			root = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+			root = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<
+				string,
+				unknown
+			>;
 		} catch {
 			// 構文エラー中の外部編集など。値は「未設定」として返し UI は既定値を表示する
 			root = {};
@@ -232,7 +269,11 @@ export class SettingsPanel {
 	}
 
 	/** webview からの値をディスクリプタの型へ変換する。不正値は例外 */
-	private coerceValue(descriptor: SettingDescriptor, rawValue: unknown, currentText: string): unknown {
+	private coerceValue(
+		descriptor: SettingDescriptor,
+		rawValue: unknown,
+		currentText: string,
+	): unknown {
 		switch (descriptor.type) {
 			case "boolean":
 				if (typeof rawValue !== "boolean") {
@@ -257,7 +298,10 @@ export class SettingsPanel {
 				return rawValue;
 			}
 			case "enum": {
-				if (typeof rawValue !== "string" || !descriptor.enum?.includes(rawValue)) {
+				if (
+					typeof rawValue !== "string" ||
+					!descriptor.enum?.includes(rawValue)
+				) {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
 				return rawValue;
@@ -268,10 +312,15 @@ export class SettingsPanel {
 				}
 				return rawValue;
 			case "stringArray": {
-				if (!Array.isArray(rawValue) || rawValue.some((item) => typeof item !== "string")) {
+				if (
+					!Array.isArray(rawValue) ||
+					rawValue.some((item) => typeof item !== "string")
+				) {
 					throw new Error(vscode.l10n.t("Invalid value"));
 				}
-				return rawValue.map((item) => (item as string).trim()).filter((item) => item.length > 0);
+				return rawValue
+					.map((item) => (item as string).trim())
+					.filter((item) => item.length > 0);
 			}
 			case "objectArray":
 				return this.coerceObjectArray(descriptor, rawValue, currentText);
@@ -287,7 +336,11 @@ export class SettingsPanel {
 	 * 描画時の配列インデックス）で特定する。行の削除・追加が起きても
 	 * 別の行の hidden キーを誤って引き継がない。
 	 */
-	private coerceObjectArray(descriptor: SettingDescriptor, rawValue: unknown, currentText: string): unknown[] {
+	private coerceObjectArray(
+		descriptor: SettingDescriptor,
+		rawValue: unknown,
+		currentText: string,
+	): unknown[] {
 		if (!Array.isArray(rawValue)) {
 			throw new Error(vscode.l10n.t("Invalid value"));
 		}
@@ -313,7 +366,10 @@ export class SettingsPanel {
 			const source = row as Record<string, unknown>;
 			// __origIndex は「この行が描画時にどの既存行だったか」。UI で追加された行には無い
 			const origIndex = source.__origIndex;
-			const base = typeof origIndex === "number" && Number.isInteger(origIndex) ? existing[origIndex] : undefined;
+			const base =
+				typeof origIndex === "number" && Number.isInteger(origIndex)
+					? existing[origIndex]
+					: undefined;
 			const result: Record<string, unknown> =
 				base !== null && typeof base === "object" && !Array.isArray(base)
 					? { ...(base as Record<string, unknown>) }
@@ -351,7 +407,11 @@ export class SettingsPanel {
 				values: this.readValues(),
 			});
 		} catch (error) {
-			Logger.getInstance().warn("settings-ui", "Failed to post values to settings editor", formatError(error));
+			Logger.getInstance().warn(
+				"settings-ui",
+				"Failed to post values to settings editor",
+				formatError(error),
+			);
 		}
 	}
 
@@ -360,10 +420,14 @@ export class SettingsPanel {
 		const styleUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this.extensionUri, "assets", "settings-ui", "settings.css"),
 		);
-		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "assets", "settings-ui", "main.js"));
+		const scriptUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(this.extensionUri, "assets", "settings-ui", "main.js"),
+		);
 		const nonce = generateNonce();
 		// スクリーンリーダー等が表示言語を正しく扱えるよう VS Code の表示言語を反映する
-		const displayLanguage = /^[a-zA-Z][a-zA-Z-]*$/.test(vscode.env.language) ? vscode.env.language : "en";
+		const displayLanguage = /^[a-zA-Z][a-zA-Z-]*$/.test(vscode.env.language)
+			? vscode.env.language
+			: "en";
 		return `<!DOCTYPE html>
 <html lang="${displayLanguage}">
 <head>
@@ -382,7 +446,8 @@ export class SettingsPanel {
 }
 
 function generateNonce(): string {
-	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+	const chars =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 	let nonce = "";
 	for (let i = 0; i < 32; i++) {
 		nonce += chars.charAt(Math.floor(Math.random() * chars.length));

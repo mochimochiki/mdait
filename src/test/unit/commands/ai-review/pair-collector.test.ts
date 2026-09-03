@@ -116,7 +116,9 @@ suite("collectFrontmatterReviewPair（frontmatter の確認待ちも AI 翻訳�
 	});
 
 	test("判定にかけるのは翻訳対象キーの値だけで、key: value の行に組み直される", () => {
-		const target = frontMatterOf("title: English Test 2\nweight: 20\nmdait:\n  front: 'tgtF from:srcF need:review'");
+		const target = frontMatterOf(
+			"title: English Test 2\nweight: 20\nmdait:\n  front: 'tgtF from:srcF need:review'",
+		);
 
 		const pair = collectFrontmatterReviewPair(source, target, KEYS);
 

@@ -36,7 +36,11 @@ function normalizeIndentUnit(indent: string): string {
  * 中間オブジェクトが存在しない場合は作成する。
  * @throws JSON として不正なテキストの場合
  */
-export function setConfigValue(text: string, path: string[], value: unknown): string {
+export function setConfigValue(
+	text: string,
+	path: string[],
+	value: unknown,
+): string {
 	if (path.length === 0) {
 		throw new Error("Empty setting path");
 	}

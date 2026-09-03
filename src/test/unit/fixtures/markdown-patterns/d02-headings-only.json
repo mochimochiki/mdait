@@ -1,5 +1,5 @@
 {
-	"description": "見出しのみ（本文なし）→ 各見出しがユニット",
-	"syncLevel": 2,
-	"expectedUnits": 3
+  "description": "見出しのみ（本文なし）→ 各見出しがユニット",
+  "syncLevel": 2,
+  "expectedUnits": 3
 }

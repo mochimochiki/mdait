@@ -142,7 +142,7 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown(`${sourceDiff}\n\n`);
 			md.appendMarkdown(
 				`${vscode.l10n.t(
-					"Press “{0}” to translate it again, or fix it by hand and press “{1}”.",
+					'Press “{0}” to translate it again, or fix it by hand and press “{1}”.',
 					vscode.l10n.t("✨Translate"),
 					vscode.l10n.t("Mark as Revised"),
 				)}\n\n`,
@@ -158,7 +158,9 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			md.appendMarkdown(
 				`${vscode.l10n.t(
 					"If you finished the translation by hand, press “{0}”.",
-					needFlag?.startsWith("revise@") ? vscode.l10n.t("Mark as Revised") : vscode.l10n.t("Mark as Translated"),
+					needFlag?.startsWith("revise@")
+						? vscode.l10n.t("Mark as Revised")
+						: vscode.l10n.t("Mark as Translated"),
 				)}\n\n`,
 			);
 			return md;

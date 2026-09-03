@@ -13,8 +13,8 @@
  * @module ui/status/status-bar-summary
  */
 import * as vscode from "vscode";
-import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import type { StatusManager } from "../../core/status/status-manager";
+import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import type { Configuration } from "../../infra/config/configuration";
 
 /** 集計結果（表示の組み立てをテストできるように分離する） */

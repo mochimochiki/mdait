@@ -1,5 +1,5 @@
 {
-	"description": "コードブロック内の#が見出しとして誤検出されない",
-	"syncLevel": 2,
-	"expectedUnits": 2
+  "description": "コードブロック内の#が見出しとして誤検出されない",
+  "syncLevel": 2,
+  "expectedUnits": 2
 }

@@ -277,10 +277,7 @@ Reaction conditions were investigated to improve the yield of the Suzuki-Miyaura
 		fileExtension: ".md",
 		intent: "引用の但し書きが変わり、入れ子の番号リストに1項目足された",
 		maxChangedLines: 4,
-		expect: {
-			present: ["contract period|contract term|duration", "rganized crime|ntisocial|nti-social|rganised crime"],
-			absent: [],
-		},
+		expect: { present: ["contract period|contract term|duration", "rganized crime|ntisocial|nti-social|rganised crime"], absent: [] },
 		sourceOld: `## 第2条（利用契約の成立）
 
 1. 利用契約は、利用者が本規約に同意し所定の手続きを完了した時点で成立する。

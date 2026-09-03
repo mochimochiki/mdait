@@ -6,8 +6,8 @@ import * as vscode from "vscode";
 import { PairVerifier } from "../../../../commands/ai-review/pair-verifier";
 import { executeAiReviewForFile } from "../../../../commands/ai-review/review-core";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
-import { Configuration } from "../../../../infra/config/configuration";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
+import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -404,10 +404,7 @@ Content A.
 				const stub = new StubAIService([MATCH, MATCH]);
 				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
 
-				assert.ok(
-					stub.userMessages.some((m) => m.includes("Japanese (ja)")),
-					stub.userMessages[0],
-				);
+				assert.ok(stub.userMessages.some((m) => m.includes("Japanese (ja)")), stub.userMessages[0]);
 			});
 		});
 
@@ -422,7 +419,9 @@ Content A.
 				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
 
 				// tgtA の検証メッセージに note が <humanNote> として含まれる
-				assert.ok(stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("intentionally condensed")));
+				assert.ok(
+					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("intentionally condensed")),
+				);
 			});
 
 			test("原文ユニット（from）の note も <humanNote> として渡る", async () => {
@@ -434,7 +433,9 @@ Content A.
 				const stub = new StubAIService([MATCH, MATCH]);
 				await executeAiReviewForFile(targetFile, config, buildVerifier(stub), { mode: "audit" });
 
-				assert.ok(stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("only exists in the source")));
+				assert.ok(
+					stub.userMessages.some((m) => m.includes("<humanNote>") && m.includes("only exists in the source")),
+				);
 			});
 
 			test("訳文・原文の両方に note があれば、どちら側かを明示して両方渡る", async () => {
@@ -546,7 +547,9 @@ Content D.
 		test("user message に <pair index> ブロックで両ユニット本文が含まれる", async () => {
 			const config = await initConfig({ batchSize: 3 });
 			writePair();
-			const stub = new StubAIService([batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" })]);
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
 			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
 
 			const user = stub.userMessages[0];
@@ -560,7 +563,9 @@ Content D.
 			const config = await initConfig({ batchSize: 2 });
 			writePair(SOURCE_CONTENT_4, TARGET_CONTENT_4);
 			const cts = new vscode.CancellationTokenSource();
-			const stub = new StubAIService([batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" })]);
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
 			stub.afterResponse = () => cts.cancel();
 
 			const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub), {}, undefined, cts.token);
@@ -595,10 +600,16 @@ Content D.
 		test("用語集にヒットしたエントリが <terms> としてペア内に注入される（原文側ヒット）", async () => {
 			writeConfig({ batchSize: 3 });
 			// 原文の「本文A」を含む用語エントリ（en 訳語つき）
-			fs.writeFileSync(path.join(tempDir, ".mdait", "terms.csv"), "context,ja,en\ntest term,本文A,Body A\n", "utf-8");
+			fs.writeFileSync(
+				path.join(tempDir, ".mdait", "terms.csv"),
+				"context,ja,en\ntest term,本文A,Body A\n",
+				"utf-8",
+			);
 			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
 			writePair();
-			const stub = new StubAIService([batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" })]);
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
 			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
 
 			const user = stub.userMessages[0];
@@ -611,7 +622,11 @@ Content D.
 
 		test("batchSize=1 の単ペア経路でも用語集が <terms> として注入される", async () => {
 			writeConfig({ batchSize: 1 });
-			fs.writeFileSync(path.join(tempDir, ".mdait", "terms.csv"), "context,ja,en\ntest term,本文A,Body A\n", "utf-8");
+			fs.writeFileSync(
+				path.join(tempDir, ".mdait", "terms.csv"),
+				"context,ja,en\ntest term,本文A,Body A\n",
+				"utf-8",
+			);
 			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
 			writePair();
 			const stub = new StubAIService([MATCH, MATCH]);
@@ -633,7 +648,9 @@ Content D.
 			);
 			const config = await Configuration.getInstance().initialize(path.join(tempDir, ".mdait", "mdait.json"));
 			writePair();
-			const stub = new StubAIService([batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" })]);
+			const stub = new StubAIService([
+				batchResponse({ index: 1, verdict: "match" }, { index: 2, verdict: "match" }),
+			]);
 			await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
 
 			const user = stub.userMessages[0];

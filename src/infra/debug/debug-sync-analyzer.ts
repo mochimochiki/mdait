@@ -55,7 +55,9 @@ export function snapshotState(): StateSnapshot {
 
 /** ファイルの状態シグネチャ。表示に影響する主要フィールドを連結する。 */
 function signatureOf(file: FileStatusItem): string {
-	const needFlags = (file.children ?? []).map((u) => u.needFlag ?? "-").join(",");
+	const needFlags = (file.children ?? [])
+		.map((u) => u.needFlag ?? "-")
+		.join(",");
 	return [
 		file.status,
 		`t${file.translatedUnits}/${file.totalUnits}`,
@@ -67,7 +69,10 @@ function signatureOf(file: FileStatusItem): string {
 }
 
 /** before/after スナップショットの差分を算出する。 */
-export function diffSnapshots(before: StateSnapshot, after: StateSnapshot): StateDiffEntry[] {
+export function diffSnapshots(
+	before: StateSnapshot,
+	after: StateSnapshot,
+): StateDiffEntry[] {
 	const paths = new Set([...Object.keys(before), ...Object.keys(after)]);
 	const diffs: StateDiffEntry[] = [];
 	for (const p of paths) {
@@ -96,7 +101,10 @@ export function diffSnapshots(before: StateSnapshot, after: StateSnapshot): Stat
  *   fire が1つも観測されない」ケース（ツリーの変更メソッドを経由しない書き換え等）の検出に
  *   移った。path 一致・directory-only の判定は、部分通知を再導入した場合に備えて残している。
  */
-export function analyzeSync(diffs: StateDiffEntry[], fires: FireEvent[]): SyncAnalysis {
+export function analyzeSync(
+	diffs: StateDiffEntry[],
+	fires: FireEvent[],
+): SyncAnalysis {
 	const hasFullRefresh = fires.some((f) => f.kind === "all");
 	const syncGaps: Array<{ path: string; reason: string }> = [];
 
@@ -116,12 +124,14 @@ export function analyzeSync(diffs: StateDiffEntry[], fires: FireEvent[]): SyncAn
 		if (dirOnly) {
 			syncGaps.push({
 				path: diff.path,
-				reason: "directory-only: ディレクトリ通知のみでファイルノード個別の fire が無い（表示が古いまま残る懸念）",
+				reason:
+					"directory-only: ディレクトリ通知のみでファイルノード個別の fire が無い（表示が古いまま残る懸念）",
 			});
 		} else {
 			syncGaps.push({
 				path: diff.path,
-				reason: "NOT-FIRED: 状態は変化したが、これを通知する fire が一切観測されなかった（同期ギャップ）",
+				reason:
+					"NOT-FIRED: 状態は変化したが、これを通知する fire が一切観測されなかった（同期ギャップ）",
 			});
 		}
 	}

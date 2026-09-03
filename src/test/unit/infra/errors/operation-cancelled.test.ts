@@ -23,7 +23,10 @@ suite("OperationCancelledError（中断の単一表現）", () => {
 	test("メッセージに cancel と書いてあるだけの失敗を中断と誤判定しない", () => {
 		// 原稿や API のメッセージにたまたま含まれる語で誤判定しないこと。
 		// 以前は文字列一致で判定しており、プロバイダが文言を変えるだけで壊れていた
-		assert.strictEqual(isOperationCancelled(new Error("The subscription was cancelled by the provider")), false);
+		assert.strictEqual(
+			isOperationCancelled(new Error("The subscription was cancelled by the provider")),
+			false,
+		);
 	});
 
 	test("Error でない値は中断と判定されない", () => {

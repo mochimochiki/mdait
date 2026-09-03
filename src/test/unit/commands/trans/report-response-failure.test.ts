@@ -12,9 +12,14 @@
  */
 
 import { strict as assert } from "node:assert";
-import { type TransOutcomeSummary, reportTransOutcome } from "../../../../commands/shared/guidance";
+import {
+	type TransOutcomeSummary,
+	reportTransOutcome,
+} from "../../../../commands/shared/guidance";
 
-declare let __vscodeMockShownMessages: Array<{ level: string; message: string; items: string[] }> | undefined;
+declare let __vscodeMockShownMessages:
+	| Array<{ level: string; message: string; items: string[] }>
+	| undefined;
 
 /** 通知に必要な最小限の結果を作る */
 function summary(overrides: Partial<TransOutcomeSummary> = {}): TransOutcomeSummary {
@@ -53,8 +58,14 @@ suite("使えない答えを受けたときの通知", () => {
 
 		assert.equal(shown().length, 1, "黙って終わらないこと");
 		assert.equal(shown()[0].level, "warning");
-		assert.ok(!shown()[0].message.includes("Translation completed"), "「翻訳できました」と言わないこと");
-		assert.ok(shown()[0].message.includes("still need translation"), "まだ訳されていないことを伝えること");
+		assert.ok(
+			!shown()[0].message.includes("Translation completed"),
+			"「翻訳できました」と言わないこと",
+		);
+		assert.ok(
+			shown()[0].message.includes("still need translation"),
+			"まだ訳されていないことを伝えること",
+		);
 	});
 
 	test("何も書いていないのに「訳すものが無かった」と言わないこと", async () => {
@@ -96,7 +107,10 @@ suite("使えない答えを受けたときの通知", () => {
 			{ label: "doc.md" },
 		);
 
-		assert.ok(shown()[0].message.includes("maxTokens"), "どの設定を触ればよいかを伝えること");
+		assert.ok(
+			shown()[0].message.includes("maxTokens"),
+			"どの設定を触ればよいかを伝えること",
+		);
 	});
 
 	test("使えない答えが無ければ、これまでどおり成功として報告すること", async () => {

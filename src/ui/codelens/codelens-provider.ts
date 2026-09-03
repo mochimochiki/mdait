@@ -10,13 +10,13 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
+import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
-import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
@@ -277,7 +277,8 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 		// 裁定待ち（review / verify-deletion）には「次へ」を添え、裁定→次へ をその場で回せるようにする
 		// （UX-R4: ツリーへ戻る往復をなくす）
-		const isAwaitingDecision = marker.need === "review" || marker.need === "verify-deletion";
+		const isAwaitingDecision =
+			marker.need === "review" || marker.need === "verify-deletion";
 
 		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）。
 		// Keep は need を外すだけでなく独立ユニット化する（恒久化。clearNeed だと次の sync で復活する）
@@ -478,4 +479,5 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			plainTitle: vscode.l10n.t("Mark as Completed"),
 		};
 	}
+
 }

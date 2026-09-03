@@ -65,12 +65,18 @@ export class AIOnboarding {
 
 		if (!this.globalState) {
 			// 初期化されていない場合はスキップ
-			Logger.getInstance().warn("ai-onboarding", "globalState is not initialized");
+			Logger.getInstance().warn(
+				"ai-onboarding",
+				"globalState is not initialized",
+			);
 			return true;
 		}
 
 		// 初回利用フラグを確認
-		const hasUsedAIBefore = this.globalState.get<boolean>(this.FIRST_USE_KEY, false);
+		const hasUsedAIBefore = this.globalState.get<boolean>(
+			this.FIRST_USE_KEY,
+			false,
+		);
 
 		if (hasUsedAIBefore) {
 			// 既に利用経験がある場合はそのまま処理を続行
@@ -90,7 +96,11 @@ export class AIOnboarding {
 			describeAiService(Configuration.getInstance().ai),
 		);
 
-		const result = await vscode.window.showInformationMessage(message, { modal: true, detail }, proceedButton);
+		const result = await vscode.window.showInformationMessage(
+			message,
+			{ modal: true, detail },
+			proceedButton,
+		);
 
 		if (result === proceedButton) {
 			// ユーザーが承認した場合、フラグを保存

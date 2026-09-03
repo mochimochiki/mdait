@@ -3,9 +3,9 @@ import {
 	collectCurrentPrimaryUnits,
 	collectPrimarySourceFilePathsForCleanup,
 } from "../../../../commands/sync/current-primary-unit-collector";
+import type { TransPair } from "../../../../infra/config/configuration";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
-import type { TransPair } from "../../../../infra/config/configuration";
 
 suite("collectCurrentPrimaryUnits", () => {
 	test("marker hash を持つユニットだけを収集する", () => {
@@ -39,7 +39,12 @@ suite("collectCurrentPrimaryUnits", () => {
 			targetLang: "en",
 		};
 
-		const result = collectPrimarySourceFilePathsForCleanup(["c:/repo/docs/ja/guide.md"], pair, "en", new Set());
+		const result = collectPrimarySourceFilePathsForCleanup(
+			["c:/repo/docs/ja/guide.md"],
+			pair,
+			"en",
+			new Set(),
+		);
 
 		assert.deepStrictEqual(result, []);
 	});

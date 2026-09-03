@@ -1,14 +1,14 @@
 import * as assert from "node:assert";
 import { alignMatchResult } from "../../../../commands/adopt/align-core";
 import type {
+	SectionAligner,
 	SectionAlignRequest,
 	SectionAlignResult,
-	SectionAligner,
 } from "../../../../commands/adopt/section-aligner";
-import { SectionMatcher } from "../../../../commands/sync/section-matcher";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import type { Configuration } from "../../../../infra/config/configuration";
+import { SectionMatcher } from "../../../../commands/sync/section-matcher";
 
 function unit(
 	hash: string,

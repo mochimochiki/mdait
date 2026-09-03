@@ -10,15 +10,14 @@ import {
 	parseFrontmatterMarker,
 	setFrontmatterMarker,
 } from "../../core/markdown/frontmatter-translation";
-import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { isOneSidedRollback } from "../../core/matching/one-sided-rollback";
 import { DELETE_SUSPICION, isSuspiciousShrink } from "../../core/matching/shrink-guard";
 import { SelectionState } from "../../core/status/selection-state";
 import { StatusManager } from "../../core/status/status-manager";
-import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import {
 	type LostPathCandidate,
 	type NewTargetCandidate,
@@ -26,6 +25,7 @@ import {
 	planContentRelink,
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
+import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore, isLiveBodyEntry } from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
@@ -53,8 +53,8 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
-import { syncFrontmatterMarkers } from "./sync-frontmatter";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
+import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
 const logger = Logger.getInstance();
 
@@ -800,7 +800,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				newOrphansNotice(freshOrphans),
-				config.getOrphanTargetPolicy() === "delete" ? orphanDeletedNotice(totalDeleted, deletedUnitLabels) : undefined,
+				config.getOrphanTargetPolicy() === "delete"
+					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
+					: undefined,
 			].filter((notice): notice is SyncNotice => notice !== undefined),
 		);
 
@@ -1388,7 +1390,8 @@ export async function sync_CoreProc(
 	// 数えるのは**本文の行**だけである。frontmatter の行は本文が1つも無くても在りうるので
 	// （P05a で置き場所が unit-state へ移った）、全部を数えると frontmatter しか無い訳文が
 	// 常に「状態が残っている」と読まれ、原文にあとから足した章が永久に訳文へ現れない（probe S90）
-	const storedEntryCount = targetRel === undefined ? 0 : UnitStateStore.getInstance().countBodyEntriesByPath(targetRel);
+	const storedEntryCount =
+		targetRel === undefined ? 0 : UnitStateStore.getInstance().countBodyEntriesByPath(targetRel);
 	if (target.units.length === 0 && source.units.length > 0 && storedEntryCount > 0) {
 		logger.warn("sync", "Target has no units while its state is still on record; skipped to avoid losing it", {
 			sourceFile,
@@ -1439,8 +1442,7 @@ export async function sync_CoreProc(
 	const frontmatterAdopted =
 		!frontmatterMarkerBefore && parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review" ? 1 : 0;
 	const frontmatterReviewSuperseded =
-		frontmatterWasAwaitingReview &&
-		(parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.needsRevision() ?? false)
+		frontmatterWasAwaitingReview && (parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.needsRevision() ?? false)
 			? 1
 			: 0;
 
@@ -1548,7 +1550,11 @@ export async function sync_CoreProc(
 		targetFile,
 		oneSidedRollback,
 	);
-	const syncedResult = sectionMatcher.createSyncedTargets(matchResult, withheldPolicy.policy, independentTargets);
+	const syncedResult = sectionMatcher.createSyncedTargets(
+		matchResult,
+		withheldPolicy.policy,
+		independentTargets,
+	);
 	const syncedUnits = syncedResult.units;
 
 	// 差分検出
@@ -1693,15 +1699,11 @@ function resolveOrphanPolicy(
 	}
 	// 原文だけが巻き戻された疑い。崩れとは原因が違うので、理由を分けて伝える
 	if (oneSidedRollback) {
-		logger.warn(
-			"sync",
-			"Withheld automatic deletion of orphaned target units (the source looks rolled back on its own)",
-			{
-				file: targetFile,
-				orphaned: orphanCandidates,
-				note: "The source carries markers from an earlier sync that no translation points at. Restore the source and the translation together (they are kept in step by sync), then sync again — the units recover automatically.",
-			},
-		);
+		logger.warn("sync", "Withheld automatic deletion of orphaned target units (the source looks rolled back on its own)", {
+			file: targetFile,
+			orphaned: orphanCandidates,
+			note: "The source carries markers from an earlier sync that no translation points at. Restore the source and the translation together (they are kept in step by sync), then sync again — the units recover automatically.",
+		});
 		return { policy: "verify", withheld: "rollback" };
 	}
 	if (!isSuspiciousShrink(managedTargetCount, sourceUnitCount, DELETE_SUSPICION)) {

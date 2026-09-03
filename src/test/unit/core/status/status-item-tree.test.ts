@@ -1,6 +1,11 @@
 import * as assert from "node:assert";
 import * as path from "node:path";
-import { type FileStatusItem, Status, StatusItemType, type UnitStatusItem } from "../../../../core/status/status-item";
+import {
+	type FileStatusItem,
+	Status,
+	StatusItemType,
+	type UnitStatusItem,
+} from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -67,7 +72,10 @@ suite("StatusItemTree", () => {
 
 			// サブフォルダ基準で ja ディレクトリが登録されていること
 			const jaItem = tree.getDirectory(jaDir);
-			assert.ok(jaItem, "configBaseDirのサブフォルダ基準でjaディレクトリが登録されていること");
+			assert.ok(
+				jaItem,
+				"configBaseDirのサブフォルダ基準でjaディレクトリが登録されていること",
+			);
 		});
 
 		test("configBaseDir なしの場合でもワークスペースルート基準で動作すること", () => {
@@ -80,7 +88,10 @@ suite("StatusItemTree", () => {
 			});
 
 			const jaItem = tree.getDirectory(jaDir);
-			assert.ok(jaItem, "ワークスペースルート基準でjaディレクトリが登録されていること");
+			assert.ok(
+				jaItem,
+				"ワークスペースルート基準でjaディレクトリが登録されていること",
+			);
 		});
 
 		test("buildTree後にclearすると全データがリセットされること", () => {
@@ -101,8 +112,14 @@ suite("StatusItemTree", () => {
 			const configBaseDir = path.resolve("/mock-workspace/sub");
 			const enDir = path.resolve(configBaseDir, "en");
 			const jaDir = path.resolve(configBaseDir, "ja");
-			const sourceFile = makeFileItem(path.join(enDir, "doc.md"), Status.Source);
-			const targetFile = makeFileItem(path.join(jaDir, "doc.md"), Status.NeedsTranslation);
+			const sourceFile = makeFileItem(
+				path.join(enDir, "doc.md"),
+				Status.Source,
+			);
+			const targetFile = makeFileItem(
+				path.join(jaDir, "doc.md"),
+				Status.NeedsTranslation,
+			);
 
 			tree.buildTree([sourceFile, targetFile], ["en", "ja"], configBaseDir);
 
@@ -127,10 +144,17 @@ suite("StatusItemTree", () => {
 			});
 
 			// 翻訳完了後にrefreshFileStatusから呼ばれるシナリオを再現
-			const translatedFileItem = makeFileItem(path.join(jaDir, "file1.md"), Status.Translated);
+			const translatedFileItem = makeFileItem(
+				path.join(jaDir, "file1.md"),
+				Status.Translated,
+			);
 			tree.addOrUpdateFile(translatedFileItem);
 
-			assert.strictEqual(firedCount, 1, "addOrUpdateFile後にonTreeChangedイベントが1回発火すること");
+			assert.strictEqual(
+				firedCount,
+				1,
+				"addOrUpdateFile後にonTreeChangedイベントが1回発火すること",
+			);
 		});
 	});
 
@@ -150,7 +174,10 @@ suite("StatusItemTree", () => {
 			tree.buildTree([fileA, fileB], ["ja"]);
 
 			const matches = tree.getNeedsAttentionUnits();
-			assert.deepStrictEqual(matches.map((u) => u.unitHash).sort(), ["deletionUnit", "reviewUnit"]);
+			assert.deepStrictEqual(
+				matches.map((u) => u.unitHash).sort(),
+				["deletionUnit", "reviewUnit"],
+			);
 		});
 
 		test("該当ユニットが無ければ空配列を返す", () => {
@@ -182,7 +209,11 @@ suite("StatusItemTree", () => {
 				["jaUnit"],
 				"選択外のディレクトリのユニットは集約されないこと",
 			);
-			assert.strictEqual(tree.getNeedsAttentionUnits().length, 2, "scopeDirs未指定なら全ファイルが対象であること");
+			assert.strictEqual(
+				tree.getNeedsAttentionUnits().length,
+				2,
+				"scopeDirs未指定なら全ファイルが対象であること",
+			);
 		});
 
 		test("scopeDirsの比較がパス境界で行われ、en と en-US が混ざらないこと", () => {
@@ -191,9 +222,11 @@ suite("StatusItemTree", () => {
 			const enFile = makeFileItem(path.join(enDir, "a.md"), Status.Translated, [
 				makeUnitItem(path.join(enDir, "a.md"), "enUnit", "review"),
 			]);
-			const enUsFile = makeFileItem(path.join(enUsDir, "a.md"), Status.Translated, [
-				makeUnitItem(path.join(enUsDir, "a.md"), "enUsUnit", "review"),
-			]);
+			const enUsFile = makeFileItem(
+				path.join(enUsDir, "a.md"),
+				Status.Translated,
+				[makeUnitItem(path.join(enUsDir, "a.md"), "enUsUnit", "review")],
+			);
 
 			tree.buildTree([enFile, enUsFile], ["en", "en-US"]);
 
@@ -266,7 +299,11 @@ suite("StatusItemTree", () => {
 				]),
 			);
 
-			assert.strictEqual(tree.getUnitByHash("oldHash"), undefined, "旧ハッシュのユニットが索引に残っていないこと");
+			assert.strictEqual(
+				tree.getUnitByHash("oldHash"),
+				undefined,
+				"旧ハッシュのユニットが索引に残っていないこと",
+			);
 			assert.strictEqual(
 				tree.getTargetUnitByFromHash("oldFrom"),
 				undefined,
@@ -280,7 +317,11 @@ suite("StatusItemTree", () => {
 			const jaDir = path.resolve("/mock-workspace/ja");
 			const filePath = path.join(jaDir, "a.md");
 			tree.buildTree(
-				[makeFileItem(filePath, Status.Translated, [makeUnitItem(filePath, "u1", "review", Status.NeedsTranslation)])],
+				[
+					makeFileItem(filePath, Status.Translated, [
+						makeUnitItem(filePath, "u1", "review", Status.NeedsTranslation),
+					]),
+				],
 				["ja"],
 			);
 
@@ -292,7 +333,11 @@ suite("StatusItemTree", () => {
 				undefined,
 				"children側にも同じ更新が反映されること",
 			);
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), [], "need解決後は要対応から外れること");
+			assert.deepStrictEqual(
+				tree.getNeedsAttentionUnits(),
+				[],
+				"need解決後は要対応から外れること",
+			);
 		});
 	});
 
@@ -303,8 +348,12 @@ suite("StatusItemTree", () => {
 			const bPath = path.join(jaDir, "b.md");
 			tree.buildTree(
 				[
-					makeFileItem(aPath, Status.Translated, [makeUnitItem(aPath, "aUnit", "review", Status.NeedsTranslation)]),
-					makeFileItem(bPath, Status.Translated, [makeUnitItem(bPath, "bUnit", "review", Status.NeedsTranslation)]),
+					makeFileItem(aPath, Status.Translated, [
+						makeUnitItem(aPath, "aUnit", "review", Status.NeedsTranslation),
+					]),
+					makeFileItem(bPath, Status.Translated, [
+						makeUnitItem(bPath, "bUnit", "review", Status.NeedsTranslation),
+					]),
 				],
 				["ja"],
 			);
@@ -314,7 +363,11 @@ suite("StatusItemTree", () => {
 
 			assert.strictEqual(removed, true);
 			assert.strictEqual(tree.getFile(aPath), undefined, "ファイルが消えること");
-			assert.strictEqual(tree.getUnitByHash("aUnit"), undefined, "ユニット索引からも消えること");
+			assert.strictEqual(
+				tree.getUnitByHash("aUnit"),
+				undefined,
+				"ユニット索引からも消えること",
+			);
 			assert.deepStrictEqual(
 				tree.getNeedsAttentionUnits().map((u) => u.unitHash),
 				["bUnit"],
@@ -347,15 +400,25 @@ suite("StatusItemTree", () => {
 			const srcPath = path.join(docsDir, "a.md");
 			const tgtPath = path.join(jaSubDir, "a.md");
 			tree.buildTree(
-				[makeFileItem(srcPath, Status.Source), makeFileItem(tgtPath, Status.Translated)],
+				[
+					makeFileItem(srcPath, Status.Source),
+					makeFileItem(tgtPath, Status.Translated),
+				],
 				["docs", "docs/ja"],
 				"/mock-workspace",
 			);
 
 			tree.removeFile(tgtPath);
 
-			assert.ok(tree.getDirectory(jaSubDir), "ターゲットのルートディレクトリは空になっても残ること");
-			assert.strictEqual(tree.getRootDirectoryItems([jaSubDir]).length, 1, "ツリーのルート一覧からも消えないこと");
+			assert.ok(
+				tree.getDirectory(jaSubDir),
+				"ターゲットのルートディレクトリは空になっても残ること",
+			);
+			assert.strictEqual(
+				tree.getRootDirectoryItems([jaSubDir]).length,
+				1,
+				"ツリーのルート一覧からも消えないこと",
+			);
 		});
 
 		test("配下が空になったサブディレクトリは取り除かれ、ルートは残ること", () => {
@@ -367,8 +430,15 @@ suite("StatusItemTree", () => {
 
 			tree.removeFile(subPath);
 
-			assert.strictEqual(tree.getDirectory(subDir), undefined, "空になったサブディレクトリが消えること");
-			assert.ok(tree.getDirectory(jaDir), "ルートディレクトリは空でも残ること（選択中の対象は常に表示する）");
+			assert.strictEqual(
+				tree.getDirectory(subDir),
+				undefined,
+				"空になったサブディレクトリが消えること",
+			);
+			assert.ok(
+				tree.getDirectory(jaDir),
+				"ルートディレクトリは空でも残ること（選択中の対象は常に表示する）",
+			);
 		});
 	});
 
@@ -381,8 +451,16 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree([enFile, enUsFile], ["en", "en-US"], "/mock-workspace");
 
-			assert.strictEqual(tree.getFilesInDirectoryRecursive(enDir).length, 1, "en 配下のファイルは1件であること");
-			assert.strictEqual(tree.getDirectory(enDir)?.totalUnits, 1, "en の集計に en-US のユニットが加算されないこと");
+			assert.strictEqual(
+				tree.getFilesInDirectoryRecursive(enDir).length,
+				1,
+				"en 配下のファイルは1件であること",
+			);
+			assert.strictEqual(
+				tree.getDirectory(enDir)?.totalUnits,
+				1,
+				"en の集計に en-US のユニットが加算されないこと",
+			);
 			assert.deepStrictEqual(
 				tree.getDirectoryChildren(enDir).map((i) => i.label),
 				["a.md"],
@@ -430,7 +508,11 @@ suite("StatusItemTree", () => {
 				]),
 			);
 
-			assert.strictEqual(tree.countPendingTranslationUnits(), 1, "変更なしの再sync後も翻訳待ち件数が維持されること");
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				1,
+				"変更なしの再sync後も翻訳待ち件数が維持されること",
+			);
 		});
 
 		test("非MD（プレーン）ファイルのファイルレベル翻訳待ち（needFlag）が数えられること", () => {
@@ -489,7 +571,11 @@ suite("StatusItemTree", () => {
 			);
 
 			assert.strictEqual(tree.countPendingTranslationUnits([jaDir]), 1);
-			assert.strictEqual(tree.countPendingTranslationUnits(), 2, "scopeDirs未指定なら全ファイルが対象であること");
+			assert.strictEqual(
+				tree.countPendingTranslationUnits(),
+				2,
+				"scopeDirs未指定なら全ファイルが対象であること",
+			);
 		});
 	});
 
@@ -507,7 +593,9 @@ suite("StatusItemTree", () => {
 							fromHash: "from1",
 						}),
 					]),
-					makeFileItem(markerlessPath, Status.Source, [makeUnitItem(markerlessPath, "", undefined, Status.Source)]),
+					makeFileItem(markerlessPath, Status.Source, [
+						makeUnitItem(markerlessPath, "", undefined, Status.Source),
+					]),
 				],
 				["en", "ja"],
 			);
@@ -582,7 +670,9 @@ suite("StatusItemTree", () => {
 			tree.buildTree(
 				[
 					makeFileItem(srcPath, Status.Source),
-					makeFileItem(tgtPath, Status.Source, [makeUnitItem(tgtPath, "", undefined, Status.Source)]),
+					makeFileItem(tgtPath, Status.Source, [
+						makeUnitItem(tgtPath, "", undefined, Status.Source),
+					]),
 				],
 				["docs", "docs/ja"],
 				"/mock-workspace",
@@ -621,7 +711,11 @@ suite("StatusItemTree", () => {
 			const jaDir = path.resolve("/mock-workspace/ja");
 			const filePath = path.join(jaDir, "a.md");
 			tree.buildTree(
-				[makeFileItem(filePath, Status.Translated, [makeUnitItem(filePath, "u1", undefined, Status.Translated)])],
+				[
+					makeFileItem(filePath, Status.Translated, [
+						makeUnitItem(filePath, "u1", undefined, Status.Translated),
+					]),
+				],
 				["ja"],
 			);
 			assert.strictEqual(tree.getNeedsAttentionUnits().length, 0);
@@ -639,7 +733,11 @@ suite("StatusItemTree", () => {
 			);
 
 			assert.strictEqual(fired, 1, "変更が1回通知されること");
-			assert.strictEqual(tree.getNeedsAttentionUnits().length, 1, "通知後の集約結果に新しい要対応が含まれること");
+			assert.strictEqual(
+				tree.getNeedsAttentionUnits().length,
+				1,
+				"通知後の集約結果に新しい要対応が含まれること",
+			);
 		});
 
 		test("removeFile でも通知が発行されること", () => {
@@ -685,7 +783,11 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree([fileItem], ["docs"]);
 
-			assert.strictEqual(tree.hasTargetUnits(), false, "原文が見つかっただけでは同期済みとは言えない");
+			assert.strictEqual(
+				tree.hasTargetUnits(),
+				false,
+				"原文が見つかっただけでは同期済みとは言えない",
+			);
 			assert.strictEqual(tree.isEmpty(), false, "ツリー自体は空ではない");
 		});
 
@@ -697,7 +799,9 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree(
 				[
-					makeFileItem(srcPath, Status.Source, [makeUnitItem(srcPath, "src1", undefined, Status.Source)]),
+					makeFileItem(srcPath, Status.Source, [
+						makeUnitItem(srcPath, "src1", undefined, Status.Source),
+					]),
 					makeFileItem(tgtPath, Status.NeedsTranslation, [
 						makeUnitItem(tgtPath, "tgt1", "translate", Status.NeedsTranslation),
 					]),

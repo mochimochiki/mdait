@@ -1,8 +1,11 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getSelectedScopeFiles, getSelectedTargetLabels } from "../commands/shared/status-scope";
-import type { FileStatusItem } from "../core/status/status-item";
+import {
+	getSelectedScopeFiles,
+	getSelectedTargetLabels,
+} from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
+import type { FileStatusItem } from "../core/status/status-item";
 import { Logger } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { buildNextActions } from "./next-actions";
@@ -74,7 +77,8 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 				// （明示的にパスを指定された場合はその指定を尊重し、絞り込まない）。
 				files = getSelectedScopeFiles(tree);
 				const targets = getSelectedTargetLabels();
-				scopeLabel = targets.length > 0 ? `workspace (targets: ${targets.join(", ")})` : "workspace";
+				scopeLabel =
+					targets.length > 0 ? `workspace (targets: ${targets.join(", ")})` : "workspace";
 			}
 
 			const data = buildStatusData(files, detail);
@@ -98,7 +102,9 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in getStatus tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to get translation status: {0}", (error as Error).message);
-			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
+			return toToolResult(
+				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
+			);
 		}
 	}
 

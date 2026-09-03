@@ -79,7 +79,8 @@ const vscodeMock = {
 		}),
 		// 実ファイルを読む最小の TextDocument（外部マーカー等の parse 経路テスト用）
 		openTextDocument: async (uriOrPath) => {
-			const target = typeof uriOrPath === "string" ? uriOrPath : (uriOrPath.fsPath ?? String(uriOrPath));
+			const target =
+				typeof uriOrPath === "string" ? uriOrPath : (uriOrPath.fsPath ?? String(uriOrPath));
 			const text = fs.readFileSync(target, "utf-8");
 			const lines = text.split(/\r?\n/);
 			return {
@@ -100,7 +101,10 @@ const vscodeMock = {
 	l10n: {
 		t: (message, ...args) => {
 			if (typeof message !== "string") return String(message);
-			return args.reduce((s, a, i) => s.replace(`{${i}}`, String(a)), message);
+			return args.reduce(
+				(s, a, i) => s.replace(`{${i}}`, String(a)),
+				message,
+			);
 		},
 	},
 	commands: {
@@ -219,9 +223,7 @@ const vscodeMock = {
 		constructor() {
 			this.token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => {} }) };
 		}
-		cancel() {
-			this.token.isCancellationRequested = true;
-		}
+		cancel() { this.token.isCancellationRequested = true; }
 		dispose() {}
 	},
 	// 実VS Codeと同じく name/message が "Canceled" のエラー（キャンセル判定のテスト用）

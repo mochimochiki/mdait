@@ -27,7 +27,9 @@ function collectToolSources(): Array<{ name: string; content: string }> {
 suite("LM Toolsのエンベロープ契約（ソース走査）", () => {
 	test("ツール実装ファイル数が package.json の languageModelTools 宣言数と一致する", () => {
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
-		const declared: string[] = (pkg.contributes?.languageModelTools ?? []).map((t: { name: string }) => t.name);
+		const declared: string[] = (pkg.contributes?.languageModelTools ?? []).map(
+			(t: { name: string }) => t.name,
+		);
 		const sources = collectToolSources();
 		assert.strictEqual(
 			sources.length,
@@ -65,7 +67,10 @@ suite("LM Toolsのエンベロープ契約（ソース走査）", () => {
 		// nextActions はエージェントの観測→行動ループの誘導装置であり、欠落したツールは
 		// 「気の利かないエージェント」を行き止まりにする（docs/design/agent-orchestration.md）。
 		for (const { name, content } of collectToolSources()) {
-			assert.ok(/nextActions|NextActions/.test(content), `${name}: 成功エンベロープに nextActions を渡していること`);
+			assert.ok(
+				/nextActions|NextActions/.test(content),
+				`${name}: 成功エンベロープに nextActions を渡していること`,
+			);
 		}
 	});
 });

@@ -252,7 +252,11 @@ function toLintTerms(terms: readonly TermEntry[], pair: TransPair): TermLintTerm
 /**
  * ファイルをパースしてユニットを返す
  */
-function parseUnits(filePath: string, config: Configuration, role: "source" | "target"): readonly MdaitUnit[] {
+function parseUnits(
+	filePath: string,
+	config: Configuration,
+	role: "source" | "target",
+): readonly MdaitUnit[] {
 	const content = fs.readFileSync(filePath, "utf-8");
 	const io = resolveMarkerIO(config, filePath, role);
 	return markdownParser.parse(content, config, io.provider, io.ctx).units;

@@ -2,8 +2,8 @@ import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュール�
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeTmCommitForFile } from "../commands/tm/command-commit";
-import { tmOptimizeCommand } from "../commands/tm/command-optimize";
 import type { TmSkipReasonBreakdown } from "../commands/tm/commit-filter";
+import { tmOptimizeCommand } from "../commands/tm/command-optimize";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
 import { AIOnboarding } from "../infra/onboarding/ai-onboarding";
@@ -67,7 +67,9 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 			const config = Configuration.getInstance();
 			const validationError = config.validate();
 			if (validationError) {
-				return toToolResult(createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError));
+				return toToolResult(
+					createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError),
+				);
 			}
 			if (!config.getTmEnabled()) {
 				const message = vscode.l10n.t("TM feature is disabled. Enable it in mdait.json.");
@@ -85,7 +87,9 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 					return toToolResult(createErrorEnvelope(message, ToolErrorCode.InternalError, message));
 				}
 				const summary = vscode.l10n.t("TM optimize completed: {0} entries reweighted.", result.entryCount);
-				return toToolResult(createOkEnvelope(summary, { action, entryCount: result.entryCount } satisfies TmData));
+				return toToolResult(
+					createOkEnvelope(summary, { action, entryCount: result.entryCount } satisfies TmData),
+				);
 			}
 
 			// commit
@@ -202,7 +206,9 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in TM tool", formatError(error));
 			const errorMessage = vscode.l10n.t("TM operation failed: {0}", (error as Error).message);
-			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
+			return toToolResult(
+				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
+			);
 		}
 	}
 

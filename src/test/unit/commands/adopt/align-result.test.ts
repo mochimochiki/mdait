@@ -1,4 +1,6 @@
 import * as assert from "node:assert";
+import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import {
 	type AlignCorrection,
 	type CorrectionValidationContext,
@@ -9,8 +11,6 @@ import {
 	validateCorrections,
 } from "../../../../commands/adopt/align-result";
 import type { MatchResult } from "../../../../commands/sync/section-matcher";
-import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
-import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 
 /** テスト用ユニット生成ヘルパー */
 function unit(

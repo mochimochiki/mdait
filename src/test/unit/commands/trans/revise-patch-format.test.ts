@@ -97,6 +97,48 @@ suite("改訂パッチの形式は指示文の出どころで決まる", () => {
 		assert.strictEqual(result.format, "linenum");
 	});
 
+	test("やり直しの補足が、求めている形式と揃っている", async () => {
+		// **ここを見ないと捕まらない。** 作り物は2回目に必ず正解を返すので、
+		// 補足が「JSON を返せ」と矛盾していても既存のリトライ試験は通ってしまう
+		// （レビュー指摘で見つかった実バグ）
+		const sent: string[] = [];
+		const service: AIService = {
+			async sendMessage(_system: string, messages: AIMessage[]): Promise<string> {
+				const user = messages.map((m) => (Array.isArray(m.content) ? m.content.join("") : m.content)).join("\n");
+				sent.push(user);
+				return sent.length === 1 ? "壊れた答え" : "REPLACE 2\n- Real-time sync\nEND";
+			},
+		};
+		const translator = new AITranslator(service, "ja", () => ({ ...stubParts }), undefined, 2, () => false);
+
+		await translator.translateRevisionPatch("本文", "ja", "en", makeContext());
+
+		assert.strictEqual(sent.length, 2, "やり直しが起きていない");
+		const retry = sent[1];
+		assert.ok(retry.includes("RETRY INSTRUCTION"), "やり直しの補足が付いていない");
+		assert.ok(retry.includes("Do NOT output JSON"), "行番号方式なのに JSON を求めていない補足になっていない");
+		assert.ok(
+			!/Return ONLY a valid JSON object/.test(retry),
+			"行番号方式のやり直しで「JSON を返せ」と矛盾した指示が付いている",
+		);
+	});
+
+	test("旧形式のやり直しでは、これまでどおり JSON を求める", async () => {
+		const sent: string[] = [];
+		const service: AIService = {
+			async sendMessage(_system: string, messages: AIMessage[]): Promise<string> {
+				const user = messages.map((m) => (Array.isArray(m.content) ? m.content.join("") : m.content)).join("\n");
+				sent.push(user);
+				return sent.length === 1 ? "壊れた答え" : '{"targetPatch": "=## Features\\n-- Sync support\\n+- Real-time sync"}';
+			},
+		};
+		const translator = new AITranslator(service, "ja", () => ({ ...stubParts }), undefined, 2, () => true);
+
+		await translator.translateRevisionPatch("本文", "ja", "en", makeContext());
+
+		assert.ok(sent[1].includes("Return ONLY a valid JSON object"), "旧形式の補足が変わってしまっている");
+	});
+
 	test("行番号方式では、旧形式の答えを受け取らずにやり直しを頼む", async () => {
 		// 黙って当てにいくと、prefixed の寛容な当てはめ器が「読めてしまう」
 		const service = new StubAIService('{"targetPatch": "=## Features\\n-- Sync support"}');

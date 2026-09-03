@@ -1,5 +1,5 @@
 {
-	"description": "sync.level=1 → H1でのみ分割",
-	"syncLevel": 1,
-	"expectedUnits": 2
+  "description": "sync.level=1 → H1でのみ分割",
+  "syncLevel": 1,
+  "expectedUnits": 2
 }

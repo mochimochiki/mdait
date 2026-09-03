@@ -70,7 +70,9 @@ export async function discardOrphanTargetCommand(item?: StatusItem): Promise<voi
 	try {
 		await discardTargetFile(filePath, config);
 	} catch (error) {
-		vscode.window.showErrorMessage(vscode.l10n.t("Could not discard '{0}': {1}", fileName, (error as Error).message));
+		vscode.window.showErrorMessage(
+			vscode.l10n.t("Could not discard '{0}': {1}", fileName, (error as Error).message),
+		);
 		return;
 	}
 	// 記憶に残したままだと、同じパスに訳文が作り直されて再び孤立しても黙ることになる

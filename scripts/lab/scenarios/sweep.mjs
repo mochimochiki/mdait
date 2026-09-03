@@ -1369,12 +1369,7 @@ async function phase12() {
 		if (/need:review/.test(front)) {
 			ok(P, "訳された frontmatter が確認待ちで取り込まれるOK（翻訳待ちにしない）");
 		} else {
-			fail(
-				P,
-				fmRel,
-				"訳された frontmatter が取り込まれていない（trans に上書きされる）",
-				front || "front マーカー無し",
-			);
+			fail(P, fmRel, "訳された frontmatter が取り込まれていない（trans に上書きされる）", front || "front マーカー無し");
 		}
 		const transFront = await runCmd("mdait.translate.frontmatter", [fmAbs]);
 		if (transFront.status !== "error" && read(fmAbs).includes("English Test 2")) {
@@ -1395,11 +1390,7 @@ async function phase12() {
 	const srcAbs = path.join(ws, srcRel);
 	const beforeRevision = bodyWithoutMarkers(read(abs));
 	const marker = "改訂で足した一文。";
-	fs.writeFileSync(
-		srcAbs,
-		read(srcAbs).replace("インストール手順を説明します。", `インストール手順を説明します。${marker}`),
-		"utf8",
-	);
+	fs.writeFileSync(srcAbs, read(srcAbs).replace("インストール手順を説明します。", `インストール手順を説明します。${marker}`), "utf8");
 	await reload();
 
 	const revised = await sync();
@@ -1431,11 +1422,7 @@ async function phase12() {
 	await reload();
 	const afterReview = await sync();
 	const bodyAfterReview = bodyWithoutMarkers(read(abs));
-	if (
-		bodyAfterReview === beforeRevision &&
-		(afterReview.totalDeleted ?? 0) === 0 &&
-		!bodyAfterReview.includes(marker)
-	) {
+	if (bodyAfterReview === beforeRevision && (afterReview.totalDeleted ?? 0) === 0 && !bodyAfterReview.includes(marker)) {
 		ok(P, `レビュー完了のあとも既訳が残るOK（解決 ${resolved.resolved.length}件・削除0）`);
 	} else {
 		fail(

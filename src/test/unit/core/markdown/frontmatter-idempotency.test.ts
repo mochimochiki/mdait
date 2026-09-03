@@ -59,7 +59,7 @@ suite("frontmatter マーカー同期の冪等性", () => {
 
 		test("reconcileRaw: _data と _raw が整合していれば非mdaitキーのフォーマットを変更しない（no-op）", () => {
 			// 空行を含む non-mdait フォーマットを保持することを保証する（過剰な再フォーマット防止）
-			const raw = "---\ntitle: テスト\nauthor: 太郎\n\n\nmdait:\n  front: deadbeef\n---";
+			const raw = '---\ntitle: テスト\nauthor: 太郎\n\n\nmdait:\n  front: deadbeef\n---';
 			const parsed = FrontMatter.parse(`${raw}\n# body\n`);
 			const fm = parsed.frontMatter;
 			assert.ok(fm);
@@ -71,8 +71,7 @@ suite("frontmatter マーカー同期の冪等性", () => {
 
 	suite("frontmatter + 本文 + マーカーの stringify 冪等性", () => {
 		test("本文ありファイルでも stringify を繰り返して安定する", () => {
-			const md =
-				'---\ntitle: "タイトル"\nmdait:\n  front: 12345678\n---\n<!-- mdait 6647337d -->\n# 見出し\n\n本文。\n';
+			const md = '---\ntitle: "タイトル"\nmdait:\n  front: 12345678\n---\n<!-- mdait 6647337d -->\n# 見出し\n\n本文。\n';
 			const out1 = markdownParser.stringify(markdownParser.parse(md, makeConfig(2)));
 			const out2 = markdownParser.stringify(markdownParser.parse(out1, makeConfig(2)));
 			assert.strictEqual(out1, out2, "本文ありファイルで非冪等");

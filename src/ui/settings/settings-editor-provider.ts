@@ -10,7 +10,10 @@ import { SettingsPanel } from "./settings-panel";
 export class SettingsEditorProvider implements vscode.CustomTextEditorProvider {
 	constructor(private readonly extensionUri: vscode.Uri) {}
 
-	public resolveCustomTextEditor(_document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel): void {
+	public resolveCustomTextEditor(
+		_document: vscode.TextDocument,
+		webviewPanel: vscode.WebviewPanel,
+	): void {
 		webviewPanel.webview.options = {
 			enableScripts: true,
 			localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "assets")],
@@ -26,7 +29,10 @@ export class SettingsEditorProvider implements vscode.CustomTextEditorProvider {
  */
 function getActiveEditorUri(): vscode.Uri | undefined {
 	const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-	if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom) {
+	if (
+		input instanceof vscode.TabInputText ||
+		input instanceof vscode.TabInputCustom
+	) {
 		return input.uri;
 	}
 	return vscode.window.activeTextEditor?.document.uri;
@@ -52,7 +58,11 @@ export function openSettingsAsUiCommand(uri?: vscode.Uri): void {
 	const target = uri ?? getActiveEditorUri();
 	const configPath = Configuration.getInstance().getConfigFilePath();
 	if (target && configPath && target.fsPath === configPath) {
-		vscode.commands.executeCommand("vscode.openWith", target, SettingsPanel.viewType);
+		vscode.commands.executeCommand(
+			"vscode.openWith",
+			target,
+			SettingsPanel.viewType,
+		);
 		return;
 	}
 	SettingsPanel.open();

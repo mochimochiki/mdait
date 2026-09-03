@@ -4,8 +4,8 @@
  */
 
 import { strict as assert } from "node:assert";
-import { formatTmReferences } from "../../../../core/tm/tm-reference-formatter";
 import type { TmMatch } from "../../../../core/tm/types";
+import { formatTmReferences } from "../../../../core/tm/tm-reference-formatter";
 
 suite("formatTmReferences", () => {
 	test("単一のTM参照をフォーマットできる", () => {

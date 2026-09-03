@@ -1,5 +1,9 @@
 import * as assert from "node:assert";
-import { classifyTmSkipReason, isTmCommitTarget, summarizeTmSkipReasons } from "../../../../commands/tm/commit-filter";
+import {
+	classifyTmSkipReason,
+	isTmCommitTarget,
+	summarizeTmSkipReasons,
+} from "../../../../commands/tm/commit-filter";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 

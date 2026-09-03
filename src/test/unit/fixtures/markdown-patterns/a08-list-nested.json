@@ -1,5 +1,5 @@
 {
-	"description": "ネストリスト（引用、コードブロック含む）がユニット内に保持される",
-	"syncLevel": 2,
-	"expectedUnits": 2
+  "description": "ネストリスト（引用、コードブロック含む）がユニット内に保持される",
+  "syncLevel": 2,
+  "expectedUnits": 2
 }

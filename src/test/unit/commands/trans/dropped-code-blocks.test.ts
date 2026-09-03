@@ -117,7 +117,9 @@ suite("droppedCodeBlocks（本文が失われた件数）", () => {
 		// 偽陽性を消すために検出そのものを外していないことの裏取り。
 		// Markdown ではフェンス付きコードブロックが先に退避されるので、
 		// 本文に残った `{"translation": ...}` は「AI がエンベロープを漏らした」しかない。
-		const service = new CountingStubAIService(JSON.stringify({ translation: '{"translation": "ネストされた"}' }));
+		const service = new CountingStubAIService(
+			JSON.stringify({ translation: '{"translation": "ネストされた"}' }),
+		);
 		const translator = new AITranslator(service, "en", stubGetPromptParts);
 
 		const error = await translator.translate("本文。", "ja", "en", new TranslationContext()).then(

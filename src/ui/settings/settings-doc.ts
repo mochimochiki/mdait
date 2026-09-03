@@ -57,7 +57,9 @@ export function getCategoryDoc(id: string): CategoryDoc {
 		case "tm":
 			return {
 				label: vscode.l10n.t("Translation Memory"),
-				description: vscode.l10n.t("Reuse of confirmed past translations stored in .mdait/translations.tmx."),
+				description: vscode.l10n.t(
+					"Reuse of confirmed past translations stored in .mdait/translations.tmx.",
+				),
 			};
 		case "aiReview":
 			return {
@@ -83,10 +85,17 @@ export function getCategoryDoc(id: string): CategoryDoc {
  * 例: "ai.ollama.endpoint" → "Ollama › Endpoint"
  */
 export function deriveSettingLabel(id: string, category: string): string {
-	const withoutCategory = category !== "general" && id.startsWith(`${category}.`) ? id.slice(category.length + 1) : id;
+	const withoutCategory =
+		category !== "general" && id.startsWith(`${category}.`)
+			? id.slice(category.length + 1)
+			: id;
 	return withoutCategory
 		.split(".")
-		.map((segment) => segment.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()))
+		.map((segment) =>
+			segment
+				.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+				.replace(/^./, (c) => c.toUpperCase()),
+		)
 		.join(" › ");
 }
 
@@ -202,7 +211,9 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 			"How many neighboring units (before and after) are sent to the AI as reading context. More context improves consistency across section boundaries but increases token usage. 0 sends the unit alone.",
 		),
 	"trans.retryLimit": () =>
-		vscode.l10n.t("How many times a failed unit translation is retried before it is reported as an error (1-5)."),
+		vscode.l10n.t(
+			"How many times a failed unit translation is retried before it is reported as an error (1-5).",
+		),
 	"trans.maxFileSize": () =>
 		vscode.l10n.t(
 			"Size limit in bytes for translating non-Markdown files. Larger files are skipped with a warning so a single huge file cannot cause runaway AI cost.",
@@ -234,30 +245,42 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 			"Maximum number of similar past translations attached to a translation prompt. More references can improve consistency but increase token usage.",
 		),
 	"tm.retryLimit": () =>
-		vscode.l10n.t("How many focused retries are attempted when a TM commit fails its alignment guard (1-5)."),
+		vscode.l10n.t(
+			"How many focused retries are attempted when a TM commit fails its alignment guard (1-5).",
+		),
 	"tm.minQueryLength": () =>
 		vscode.l10n.t(
 			"Minimum number of characters (after normalization) a line needs to be used as a TM search query. Filters out noise from short fragments such as table cells.",
 		),
 	// --- prompts ---
-	"prompts.trans.translate": () => vscode.l10n.t("Custom prompt file for initial unit translation."),
+	"prompts.trans.translate": () =>
+		vscode.l10n.t("Custom prompt file for initial unit translation."),
 	"prompts.trans.revisePatch": () =>
 		vscode.l10n.t(
 			"Custom prompt file for diff-aware revision — updating an existing translation from a source diff while preserving manual edits.",
 		),
-	"prompts.term.detect": () => vscode.l10n.t("Custom prompt file for glossary term detection."),
+	"prompts.term.detect": () =>
+		vscode.l10n.t("Custom prompt file for glossary term detection."),
 	"prompts.term.extractFromTranslations": () =>
-		vscode.l10n.t("Custom prompt file for extracting term translations from already-translated documents."),
-	"prompts.term.translateTerms": () => vscode.l10n.t("Custom prompt file for translating glossary terms."),
-	"prompts.tm.splitSentences": () => vscode.l10n.t("Custom prompt file for TM sentence alignment."),
+		vscode.l10n.t(
+			"Custom prompt file for extracting term translations from already-translated documents.",
+		),
+	"prompts.term.translateTerms": () =>
+		vscode.l10n.t("Custom prompt file for translating glossary terms."),
+	"prompts.tm.splitSentences": () =>
+		vscode.l10n.t("Custom prompt file for TM sentence alignment."),
 	"prompts.aiReview.verifyPairing": () =>
-		vscode.l10n.t("Custom prompt file for single-pair AI translation review (used when the review batch size is 1)."),
+		vscode.l10n.t(
+			"Custom prompt file for single-pair AI translation review (used when the review batch size is 1).",
+		),
 	"prompts.aiReview.verifyPairingBatch": () =>
 		vscode.l10n.t(
 			"Custom prompt file for batched AI translation review (used when the review batch size is 2 or more).",
 		),
 	"prompts.adopt.align": () =>
-		vscode.l10n.t("Custom prompt file for the AI align step (differential review of the unit mapping during adopt)."),
+		vscode.l10n.t(
+			"Custom prompt file for the AI align step (differential review of the unit mapping during adopt).",
+		),
 	// --- aiReview ---
 	"aiReview.autoApprove": () =>
 		vscode.l10n.t(
@@ -283,6 +306,8 @@ export function getUiStrings(): Record<string, string> {
 		noResults: vscode.l10n.t("No settings matched your search."),
 		requiredBadge: vscode.l10n.t("Required"),
 		invalidValue: vscode.l10n.t("Invalid value"),
-		incompletePairHint: vscode.l10n.t("Rows with empty fields are not saved until all fields are filled."),
+		incompletePairHint: vscode.l10n.t(
+			"Rows with empty fields are not saved until all fields are filled.",
+		),
 	};
 }

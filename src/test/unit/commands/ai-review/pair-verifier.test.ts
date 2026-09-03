@@ -138,7 +138,10 @@ suite("PairVerifier（AI呼び出しとリトライ）", () => {
 		const cts = new vscode.CancellationTokenSource();
 		cts.cancel();
 		const stub = new StubAIService([validMatch]);
-		await assert.rejects(async () => await buildVerifier(stub).verify(request, cts.token), /cancelled/i);
+		await assert.rejects(
+			async () => await buildVerifier(stub).verify(request, cts.token),
+			/cancelled/i,
+		);
 		assert.strictEqual(stub.calls.length, 0);
 	});
 });
@@ -190,9 +193,7 @@ suite("PairVerifier（AI応答の記述言語指示）", () => {
 	});
 
 	test("バッチ経路でも responseLang が user message に入る", async () => {
-		const stub = new StubAIService([
-			'{"results": [{"index": 1, "verdict": "match", "confidence": 0.9, "issues": [], "reason": "OK"}]}',
-		]);
+		const stub = new StubAIService(['{"results": [{"index": 1, "verdict": "match", "confidence": 0.9, "issues": [], "reason": "OK"}]}']);
 		await buildVerifier(stub).verifyBatch({
 			sourceLang: "ja",
 			targetLang: "en",

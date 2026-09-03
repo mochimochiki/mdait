@@ -220,9 +220,7 @@ suite("buildAdoptNextActions（取り込み nextActions・純関数）", () => {
 
 suite("formatSyncLine（sync サマリ行・純関数）", () => {
 	test("採用・アライン補正・追加・削除・保持・一次受けレビューを含む", () => {
-		const line = formatSyncLine(
-			syncResult({ totalAdopted: 5, totalAlignCorrections: 2, totalKept: 1, totalOrphanReviewed: 3 }),
-		);
+		const line = formatSyncLine(syncResult({ totalAdopted: 5, totalAlignCorrections: 2, totalKept: 1, totalOrphanReviewed: 3 }));
 		assert.ok(line.includes("adopted: 5"));
 		assert.ok(line.includes("align-corrected: 2"));
 		assert.ok(line.includes("kept: 1"));

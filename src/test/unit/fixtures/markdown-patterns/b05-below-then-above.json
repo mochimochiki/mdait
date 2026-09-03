@@ -1,5 +1,5 @@
 {
-	"description": "level以下が先→後からlevel以上（level=2）→ level以上でのみ分割",
-	"syncLevel": 2,
-	"expectedUnits": 2
+  "description": "level以下が先→後からlevel以上（level=2）→ level以上でのみ分割",
+  "syncLevel": 2,
+  "expectedUnits": 2
 }

@@ -124,7 +124,8 @@ export async function copyDiffAssets(params: CopyDiffAssetsParams): Promise<void
 		sourceFile,
 		config,
 		extractor = new MarkdownAssetPathExtractor(),
-		loadOldSource = (hash: string) => UnitRegistryManager.getInstance().loadUnitRegistry(hash),
+		loadOldSource = (hash: string) =>
+			UnitRegistryManager.getInstance().loadUnitRegistry(hash),
 	} = params;
 
 	const pair = config.getTransPairForSourceFile(sourceFile);
@@ -267,7 +268,11 @@ async function copyAssetFile(
 	absoluteTargetDir: string,
 ): Promise<void> {
 	// 外部URLをスキップ
-	if (assetPath.startsWith("http://") || assetPath.startsWith("https://") || assetPath.startsWith("//")) {
+	if (
+		assetPath.startsWith("http://") ||
+		assetPath.startsWith("https://") ||
+		assetPath.startsWith("//")
+	) {
 		return;
 	}
 

@@ -8,10 +8,10 @@
 import type * as vscode from "vscode";
 import type { ExistingTmEntriesItem, TmCommitEntry } from "../../core/tm/types";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
-import { Logger, formatError } from "../../infra/logging/logger";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
 import type { PromptVariables } from "../../prompts/prompt-provider";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { extractJsonFromResponse } from "../trans/response-validator";
 
 const logger = Logger.getInstance();

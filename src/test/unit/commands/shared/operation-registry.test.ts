@@ -115,7 +115,11 @@ suite("OperationRegistry（実行中操作の台帳）", () => {
 			assert.strictEqual(registry.isBusy({ scope: "file", path: FILE_A }), true);
 
 			handle?.release();
-			assert.strictEqual(registry.isBusy({ scope: "file", path: FILE_A }), false, "解放後は処理中に見えないこと");
+			assert.strictEqual(
+				registry.isBusy({ scope: "file", path: FILE_A }),
+				false,
+				"解放後は処理中に見えないこと",
+			);
 		});
 
 		test("ユニット翻訳中は親ファイルも処理中に見える", () => {
@@ -140,7 +144,10 @@ suite("OperationRegistry（実行中操作の台帳）", () => {
 				unitHash: "aaaa1111",
 			});
 
-			assert.strictEqual(registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }), false);
+			assert.strictEqual(
+				registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }),
+				false,
+			);
 		});
 
 		test("ファイル翻訳中でも、着手していないユニットは処理中に見えない", () => {
@@ -164,8 +171,14 @@ suite("OperationRegistry（実行中操作の台帳）", () => {
 				unitHash: "aaaa1111",
 			});
 
-			assert.strictEqual(registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "aaaa1111" }), true);
-			assert.strictEqual(registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }), false);
+			assert.strictEqual(
+				registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "aaaa1111" }),
+				true,
+			);
+			assert.strictEqual(
+				registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }),
+				false,
+			);
 
 			// 1件目を終えて2件目へ進む
 			first.release();
@@ -181,7 +194,10 @@ suite("OperationRegistry（実行中操作の台帳）", () => {
 				false,
 				"訳し終えたユニットは処理中に見えないこと",
 			);
-			assert.strictEqual(registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }), true);
+			assert.strictEqual(
+				registry.isBusy({ scope: "unit", path: FILE_A, unitHash: "bbbb2222" }),
+				true,
+			);
 		});
 
 		test("frontmatter 行は frontmatter を訳している間だけ処理中に見える", () => {

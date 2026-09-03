@@ -689,7 +689,8 @@ export class AITranslator implements Translator {
 
 			// リトライ時は補足プロンプトを user message 側に追加する
 			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
-			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const retryPromptSuffix =
+				attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt, format) : "";
 			const attemptMessages = retryPromptSuffix ? this.appendToLastUserMessage(messages, retryPromptSuffix) : messages;
 
 			attemptsMade++;
@@ -800,15 +801,24 @@ export class AITranslator implements Translator {
 	/**
 	 * リトライ用補足プロンプト生成
 	 */
-	private buildRetryPromptSuffix(error: ValidationError, attemptNumber: number): string {
+	private buildRetryPromptSuffix(error: ValidationError, attemptNumber: number, format?: PatchFormat): string {
+		// **やり直しの補足は、求めている形式と揃っていなければならない。**
+		// 行番号方式（素のテキスト）で失敗した直後に「JSON を返せ」と言うと、
+		// 2回目以降がかえって失敗しやすくなる（レビュー指摘・実バグだった）
+		const reminder =
+			format === "linenum"
+				? `- Answer with edit blocks in PLAIN TEXT. Do NOT output JSON.
+- Each block starts with REPLACE <from>-<to>, INSERT AFTER <n>, or DELETE <from>-<to>, and ends with a line containing only END.
+- Do NOT wrap the answer in a Markdown code block.`
+				: `- Return ONLY a valid JSON object with the required fields.
+- The "translation" or "targetPatch" field must contain PLAIN TEXT, not JSON.
+- Do NOT nest JSON inside the translation or targetPatch field.`;
 		return `
 
 RETRY INSTRUCTION (Attempt ${attemptNumber}):
 The previous response was invalid: ${error.message}
 
 CRITICAL REMINDER:
-- Return ONLY a valid JSON object with the required fields.
-- The "translation" or "targetPatch" field must contain PLAIN TEXT, not JSON.
-- Do NOT nest JSON inside the translation or targetPatch field.`;
+${reminder}`;
 	}
 }

@@ -1,5 +1,8 @@
 import * as assert from "node:assert";
-import { clampConcurrency, runWithConcurrency } from "../../../../commands/shared/concurrency";
+import {
+	clampConcurrency,
+	runWithConcurrency,
+} from "../../../../commands/shared/concurrency";
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));

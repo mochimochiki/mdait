@@ -124,11 +124,7 @@ suite("孤立ユニット自動削除の見送りガード", () => {
 		const diff = await sync_CoreProc(sourceFile, targetFile, config);
 
 		const units = parseUnits(targetFile);
-		assert.strictEqual(
-			units.length,
-			2,
-			`訳文は2ユニットのまま（重複しない）: ${units.map((u) => u.title).join(" / ")}`,
-		);
+		assert.strictEqual(units.length, 2, `訳文は2ユニットのまま（重複しない）: ${units.map((u) => u.title).join(" / ")}`);
 		assert.strictEqual(
 			units.filter((u) => u.marker?.need === "verify-deletion").length,
 			0,
@@ -151,11 +147,7 @@ suite("孤立ユニット自動削除の見送りガード", () => {
 		const diff = await sync_CoreProc(sourceFile, targetFile, config);
 
 		const units = parseUnits(targetFile);
-		assert.strictEqual(
-			units.length,
-			2,
-			`訳文は2ユニットのまま（重複しない）: ${units.map((u) => u.title).join(" / ")}`,
-		);
+		assert.strictEqual(units.length, 2, `訳文は2ユニットのまま（重複しない）: ${units.map((u) => u.title).join(" / ")}`);
 		assert.strictEqual(diff.orphanDeletionWithheld ?? 0, 0, "原文の構造は潰れていないので見送らない");
 	});
 

@@ -23,13 +23,13 @@ import type { PathRename } from "../../core/unit-state/rename-plan";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
-import { Logger } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { writeManagedDocument } from "../../infra/workspace/managed-write";
-import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
+import { Logger } from "../../infra/logging/logger";
 import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
+import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { withUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { isUnitStateBacked } from "../file-handler/file-type";
@@ -226,7 +226,10 @@ export async function relocateUnitEntries(
 		await FileMutex.getInstance().runExclusive(lockKeys, async () => {
 			for (const move of moves) {
 				try {
-					movedEntries += store.movePath(toWorkspaceRelativePath(move.oldPath), toWorkspaceRelativePath(move.newPath));
+					movedEntries += store.movePath(
+						toWorkspaceRelativePath(move.oldPath),
+						toWorkspaceRelativePath(move.newPath),
+					);
 				} catch (error) {
 					// ワークスペース未設定などでパスを相対化できない。行は動かせないが、
 					// 他の移動まで巻き添えにしない（残った行は孤立としてツリーに出る）

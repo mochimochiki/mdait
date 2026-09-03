@@ -149,11 +149,7 @@ export class StatusTreeNeedHandler {
 		}
 		const confirmLabel = vscode.l10n.t("Keep All");
 		const choice = await vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Keep {0} unit(s) awaiting deletion review in '{1}' as independent?",
-				pending.length,
-				file.fileName,
-			),
+			vscode.l10n.t("Keep {0} unit(s) awaiting deletion review in '{1}' as independent?", pending.length, file.fileName),
 			{
 				modal: true,
 				detail: `${vscode.l10n.t(

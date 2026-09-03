@@ -6,7 +6,12 @@ import {
 	generateReviewTableSection,
 } from "../../../../commands/ai-review/review-table";
 
-function unit(action: UnitReviewResult["action"], unitHash: string, title: string, line?: number): UnitReviewResult {
+function unit(
+	action: UnitReviewResult["action"],
+	unitHash: string,
+	title: string,
+	line?: number,
+): UnitReviewResult {
 	return {
 		filePath: "/ws/en/doc.md",
 		unitHash,

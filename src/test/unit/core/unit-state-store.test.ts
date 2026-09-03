@@ -138,10 +138,7 @@ suite("UnitStateStore", () => {
 			const reloaded = UnitStateStore.getInstance();
 			reloaded.load(tempDir);
 			assert.deepStrictEqual(
-				reloaded
-					.getAllEntries()
-					.map((e) => e.path)
-					.sort(),
+				reloaded.getAllEntries().map((e) => e.path).sort(),
 				["docs/a.md", "docs/b.md", "docs/c.md"],
 				"消えた行のマーカーは本文からも剥がされており、どこにも残らない",
 			);
@@ -289,10 +286,7 @@ suite("UnitStateStore", () => {
 			from: "dddd",
 			need: "translate",
 		});
-		assert.deepStrictEqual(
-			store2.getEntry("docs/ja/data.csv", 0),
-			plainEntry("docs/ja/data.csv", "eeee", "ffff", "review"),
-		);
+		assert.deepStrictEqual(store2.getEntry("docs/ja/data.csv", 0), plainEntry("docs/ja/data.csv", "eeee", "ffff", "review"));
 	});
 
 	test("getEntriesByPathがorder昇順で返すこと", () => {
@@ -336,15 +330,7 @@ suite("UnitStateStore", () => {
 
 		store.setEntry({ path: "ja/keep.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
 		store.setEntry({ path: "ja/orphan.md", order: 0, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
-		store.setEntry({
-			path: "ja/orphan.md",
-			order: 1,
-			level: 2,
-			titleHash: "h",
-			hash: "5",
-			from: "6",
-			need: "translate",
-		});
+		store.setEntry({ path: "ja/orphan.md", order: 1, level: 2, titleHash: "h", hash: "5", from: "6", need: "translate" });
 
 		const removed = store.cleanupOrphansInScope({
 			configuredDirs: ["ja", "en"],
@@ -487,15 +473,7 @@ suite("UnitStateStore", () => {
 		store.load(tempDir);
 
 		store.setEntry({ path: "en/gone.md", order: 0, level: 1, titleHash: "h", hash: "1", from: "2", need: "" });
-		store.setEntry({
-			path: "en/gone.md",
-			order: HELD_ORDER_BASE,
-			level: 1,
-			titleHash: "h",
-			hash: "3",
-			from: "4",
-			need: "",
-		});
+		store.setEntry({ path: "en/gone.md", order: HELD_ORDER_BASE, level: 1, titleHash: "h", hash: "3", from: "4", need: "" });
 		store.setEntry({ path: "en/keep.md", order: 0, level: 1, titleHash: "h", hash: "5", from: "6", need: "" });
 
 		assert.strictEqual(store.removeEntriesByPath("en/gone.md"), 2);

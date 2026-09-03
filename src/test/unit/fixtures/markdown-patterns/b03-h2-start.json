@@ -1,5 +1,5 @@
 {
-	"description": "H2から始まる、H1なし（level=2）→ H2で分割",
-	"syncLevel": 2,
-	"expectedUnits": 3
+  "description": "H2から始まる、H1なし（level=2）→ H2で分割",
+  "syncLevel": 2,
+  "expectedUnits": 3
 }

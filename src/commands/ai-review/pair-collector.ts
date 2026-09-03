@@ -12,7 +12,10 @@
  */
 
 import type { FrontMatter } from "../../core/markdown/front-matter";
-import { getFrontmatterTranslationValues, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
+import {
+	getFrontmatterTranslationValues,
+	parseFrontmatterMarker,
+} from "../../core/markdown/frontmatter-translation";
 import { MdaitUnit } from "../../core/markdown/mdait-unit";
 
 /** レビュー対象ペアの列挙モード */

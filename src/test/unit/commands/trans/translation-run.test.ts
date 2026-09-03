@@ -127,7 +127,11 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 			assert.strictEqual(result.patchFailures.length, 1);
 			assert.strictEqual(result.patchFailures[0].reason, "anchor-not-found");
 			assert.strictEqual(result.patchFailures[0].unit.name, "u2");
-			assert.deepStrictEqual(ports.persisted, ["u1", "u3"], "据え置いたユニットは書き戻さないこと");
+			assert.deepStrictEqual(
+				ports.persisted,
+				["u1", "u3"],
+				"据え置いたユニットは書き戻さないこと",
+			);
 		});
 
 		test("パッチ失敗が続いても、途中で止まらず最後まで処理する", async () => {
@@ -263,7 +267,14 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 
 			await runUnitLoop(units, ports);
 
-			assert.deepStrictEqual(trace, ["begin:u1", "end:u1", "begin:u2", "end:u2", "begin:u3", "end:u3"]);
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
 		});
 
 		test("翻訳が失敗しても、そのユニットの区間は閉じる", async () => {
@@ -307,7 +318,14 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 
 			await runUnitLoop(units, ports);
 
-			assert.deepStrictEqual(trace, ["begin:u1", "end:u1", "begin:u2", "end:u2", "begin:u3", "end:u3"]);
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
 		});
 
 		test("書き戻しが例外を投げても区間は閉じる", async () => {
@@ -322,7 +340,14 @@ suite("runUnitLoop（翻訳の進行制御）", () => {
 
 			await runUnitLoop(units, ports);
 
-			assert.deepStrictEqual(trace, ["begin:u1", "end:u1", "begin:u2", "end:u2", "begin:u3", "end:u3"]);
+			assert.deepStrictEqual(trace, [
+				"begin:u1",
+				"end:u1",
+				"begin:u2",
+				"end:u2",
+				"begin:u3",
+				"end:u3",
+			]);
 		});
 
 		test("区間の登録が例外を投げても翻訳は止まらない（表示だけの処理のため）", async () => {

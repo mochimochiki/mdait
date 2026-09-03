@@ -64,7 +64,9 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+		const unitsToTranslate = markdown.units.filter((unit) =>
+			unit.needsTranslation(),
+		);
 
 		// 検証
 		assert.strictEqual(unitsToTranslate.length, 2);
@@ -93,12 +95,16 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを取得
-		const targetUnit = markdown.units.find((unit) => unit.marker?.hash === "target456");
+		const targetUnit = markdown.units.find(
+			(unit) => unit.marker?.hash === "target456",
+		);
 		assert.ok(targetUnit);
 		assert.strictEqual(targetUnit.marker?.from, "source123");
 
 		// from属性を使って翻訳元ユニットを検索
-		const sourceUnit = markdown.units.find((unit) => unit.marker?.hash === targetUnit.marker?.from);
+		const sourceUnit = markdown.units.find(
+			(unit) => unit.marker?.hash === targetUnit.marker?.from,
+		);
 		assert.ok(sourceUnit);
 		assert.strictEqual(sourceUnit.marker?.hash, "source123");
 		assert.strictEqual(sourceUnit.title, "Original Heading");
@@ -159,7 +165,9 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+		const unitsToTranslate = markdown.units.filter((unit) =>
+			unit.needsTranslation(),
+		);
 
 		// 検証：翻訳対象ユニットが0個であること
 		assert.strictEqual(unitsToTranslate.length, 0);
@@ -193,7 +201,9 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// need:translateフラグを持つユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+		const unitsToTranslate = markdown.units.filter((unit) =>
+			unit.needsTranslation(),
+		);
 
 		// 検証：順序が保持されていること
 		assert.strictEqual(unitsToTranslate.length, 3);
@@ -252,14 +262,21 @@ suite("TransCommand", () => {
 			): Promise<{ translatedText: string }> {
 				// テスト用の簡易翻訳（日英変換）
 				if (sourceLang === "ja" && targetLang === "en") {
-					const translated = content.replace("見出し", "Heading").replace("コンテンツ", "Content");
+					const translated = content
+						.replace("見出し", "Heading")
+						.replace("コンテンツ", "Content");
 					return { translatedText: translated };
 				}
 				return { translatedText: `[${targetLang}] ${content}` };
 			}
 		}
 
-		const testContent = ["<!-- mdait abc12345 need:translate -->", "# 見出し", "", "これはコンテンツです。"].join("\n");
+		const testContent = [
+			"<!-- mdait abc12345 need:translate -->",
+			"# 見出し",
+			"",
+			"これはコンテンツです。",
+		].join("\n");
 		const config = Configuration.getInstance();
 		const markdown = markdownParser.parse(testContent, config);
 		const unit = markdown.units[0];
@@ -294,12 +311,16 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを取得
-		const targetUnit = markdown.units.find((unit) => unit.marker?.hash === "target123");
+		const targetUnit = markdown.units.find(
+			(unit) => unit.marker?.hash === "target123",
+		);
 		assert.ok(targetUnit);
 		assert.strictEqual(targetUnit.marker?.from, "nonexistent456");
 
 		// from属性で指定されたハッシュのユニットを検索
-		const sourceUnit = markdown.units.find((unit) => unit.marker?.hash === targetUnit.marker?.from);
+		const sourceUnit = markdown.units.find(
+			(unit) => unit.marker?.hash === targetUnit.marker?.from,
+		);
 		assert.strictEqual(sourceUnit, undefined); // 見つからないことを確認
 	});
 
@@ -319,7 +340,9 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+		const unitsToTranslate = markdown.units.filter((unit) =>
+			unit.needsTranslation(),
+		);
 
 		// 検証：10個のユニットが正しく特定されること
 		assert.strictEqual(unitsToTranslate.length, 10);
@@ -329,7 +352,9 @@ suite("TransCommand", () => {
 			const expectedHash = `unit${i.toString().padStart(3, "0")}`;
 			assert.strictEqual(unitsToTranslate[i].marker?.hash, expectedHash);
 			assert.strictEqual(unitsToTranslate[i].title, `見出し${i + 1}`);
-			assert.ok(unitsToTranslate[i].content.includes(`${i + 1}番目のコンテンツ`));
+			assert.ok(
+				unitsToTranslate[i].content.includes(`${i + 1}番目のコンテンツ`),
+			);
 		}
 	});
 
@@ -340,7 +365,9 @@ suite("TransCommand", () => {
 		const markdown = markdownParser.parse(testContent, config);
 
 		// 翻訳対象ユニットを抽出
-		const unitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
+		const unitsToTranslate = markdown.units.filter((unit) =>
+			unit.needsTranslation(),
+		);
 
 		// 検証：翻訳対象ユニットが0個であること
 		assert.strictEqual(unitsToTranslate.length, 0);

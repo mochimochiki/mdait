@@ -1,5 +1,5 @@
 {
-	"description": "脚注定義がユニット内に保持される",
-	"syncLevel": 2,
-	"expectedUnits": 2
+  "description": "脚注定義がユニット内に保持される",
+  "syncLevel": 2,
+  "expectedUnits": 2
 }

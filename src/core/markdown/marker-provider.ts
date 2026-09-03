@@ -4,7 +4,11 @@ import { isSuspiciousShrink } from "../matching/shrink-guard";
 import { alignEntriesToUnits } from "../unit-state/unit-state-align";
 import { type UnitStateEntry, UnitStateStore, isHeldBackEntry } from "../unit-state/unit-state-store";
 import type { FrontMatter } from "./front-matter";
-import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker, serializeFrontmatterMarker } from "./frontmatter-translation";
+import {
+	FRONTMATTER_MARKER_KEY,
+	parseFrontmatterMarker,
+	serializeFrontmatterMarker,
+} from "./frontmatter-translation";
 import { MdaitMarker } from "./mdait-marker";
 import type { MdaitUnit } from "./mdait-unit";
 
@@ -455,7 +459,10 @@ export const externalMarkerProvider: MarkerProvider = new ExternalMarkerProvider
  * @param previous 書き出す前にストアが持っていた行
  * @param units これから書き出すユニット
  */
-export function countLostStateEntries(previous: readonly UnitStateEntry[], units: readonly MdaitUnit[]): number {
+export function countLostStateEntries(
+	previous: readonly UnitStateEntry[],
+	units: readonly MdaitUnit[],
+): number {
 	if (previous.length === 0) {
 		return 0;
 	}

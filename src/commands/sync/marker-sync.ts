@@ -45,7 +45,10 @@ export interface MarkerSyncResult {
  * @param existingMarker 既存のマーカー（ない場合はnull）
  * @returns 同期結果
  */
-export function syncSourceMarker(currentHash: string, existingMarker: MdaitMarker | null): MarkerSyncResult {
+export function syncSourceMarker(
+	currentHash: string,
+	existingMarker: MdaitMarker | null,
+): MarkerSyncResult {
 	if (!existingMarker) {
 		// 新規マーカー作成
 		return {
@@ -83,7 +86,11 @@ export function syncSourceMarker(currentHash: string, existingMarker: MdaitMarke
  * @param oldSourceHash 更新前の `from`（＝この訳文が対応していた原文のハッシュ）
  * @param adoptTarget 既訳の採用モードか
  */
-function applyNeedForChangedSource(marker: MdaitMarker, oldSourceHash: string | null, adoptTarget = false): void {
+function applyNeedForChangedSource(
+	marker: MdaitMarker,
+	oldSourceHash: string | null,
+	adoptTarget = false,
+): void {
 	const existingReviseHash = marker.getOldHashFromNeed();
 	if (existingReviseHash) {
 		// すでに revise 待ち。戻り先のスナップショットを動かさない
@@ -128,7 +135,8 @@ export function syncTargetMarker(context: MarkerSyncContext): MarkerSyncResult {
 
 	// 変更検出
 	const isSourceChanged = existingMarker.from !== sourceHash;
-	const isTargetChanged = targetHash !== null && existingMarker.hash !== targetHash;
+	const isTargetChanged =
+		targetHash !== null && existingMarker.hash !== targetHash;
 
 	// 原文が revise@ のスナップショットと同じところへ戻ったら、改訂すべき差分はもう無い
 	// （syncMarkerPair と同じ理由。落とさないと need が永久に消えない）
@@ -252,7 +260,8 @@ export function syncMarkerPair(
 
 	// ソースマーカーを作成/更新
 	const sourceMarker = existingSourceMarker ?? new MdaitMarker(sourceHash);
-	const targetMarker = existingTargetMarker ?? new MdaitMarker(targetHash, sourceMarker.hash);
+	const targetMarker =
+		existingTargetMarker ?? new MdaitMarker(targetHash, sourceMarker.hash);
 
 	const isSourceChanged = sourceMarker.hash !== sourceHash;
 	const isTargetChanged = targetMarker.hash !== targetHash;
@@ -281,7 +290,8 @@ export function syncMarkerPair(
 	// 打ち間違いの取り消し・ブランチの切り替え・`git checkout --` で日常的に起きる。
 	// 落とさないと「まだ N 件残っている」に永久に居座り（sync を何度回しても消えない）、
 	// しかも trans がその章を patch ではなく全文で訳し直して手直しを消す
-	const revertedToTranslatedSource = !options?.suppressNeed && targetMarker.getOldHashFromNeed() === sourceMarker.hash;
+	const revertedToTranslatedSource =
+		!options?.suppressNeed && targetMarker.getOldHashFromNeed() === sourceMarker.hash;
 	if (revertedToTranslatedSource) {
 		targetMarker.removeNeedTag();
 	}
@@ -298,6 +308,7 @@ export function syncMarkerPair(
 	return {
 		sourceMarker,
 		targetMarker,
-		changed: isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash || revertedToTranslatedSource,
+		changed:
+			isSourceChanged || isTargetChanged || oldSourceHash !== sourceMarker.hash || revertedToTranslatedSource,
 	};
 }

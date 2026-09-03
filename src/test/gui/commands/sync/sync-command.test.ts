@@ -3,7 +3,15 @@
 
 import assert from "node:assert";
 import { execSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { resetMdaitState } from "../../test-utils";
 
@@ -25,8 +33,14 @@ function copyDirSync(src: string, dest: string) {
 }
 
 suite("syncコマンドE2E", () => {
-	const sampleContentDir = join(__dirname, "../../../../../src/test/unit/sample-content");
-	const workspaceDir = join(__dirname, "../../../../../src/test/unit/workspace");
+	const sampleContentDir = join(
+		__dirname,
+		"../../../../../src/test/unit/sample-content",
+	);
+	const workspaceDir = join(
+		__dirname,
+		"../../../../../src/test/unit/workspace",
+	);
 	const contentDir = join(workspaceDir, "content");
 	const tmpEnDir = join(contentDir, "en");
 	const tmpJaDir = join(contentDir, "ja");
@@ -98,15 +112,22 @@ suite("syncコマンドE2E", () => {
 			const enText = readFileSync(tmpEnTest, "utf8");
 
 			// ja側の全mdaitマーカーのハッシュを取得
-			const jaHashes = Array.from(jaText.matchAll(/<!-- mdait ([a-f0-9]{8}) -->/g)).map((m) => m[1]);
+			const jaHashes = Array.from(
+				jaText.matchAll(/<!-- mdait ([a-f0-9]{8}) -->/g),
+			).map((m) => m[1]);
 			assert.ok(jaHashes.length > 0);
 
 			// en側の全mdaitマーカーのfrom:ハッシュを取得
-			const enFromHashes = Array.from(enText.matchAll(/<!-- mdait [^\s]+ from:([a-f0-9]{8})/g)).map((m) => m[1]);
+			const enFromHashes = Array.from(
+				enText.matchAll(/<!-- mdait [^\s]+ from:([a-f0-9]{8})/g),
+			).map((m) => m[1]);
 
 			// ja側の各ハッシュがen側のfrom:にすべて含まれていることを確認
 			for (const jaHash of jaHashes) {
-				assert.ok(enFromHashes.includes(jaHash), `en側のfrom:にjaのハッシュ${jaHash}が含まれていません`);
+				assert.ok(
+					enFromHashes.includes(jaHash),
+					`en側のfrom:にjaのハッシュ${jaHash}が含まれていません`,
+				);
 			}
 		});
 
@@ -225,7 +246,8 @@ suite("syncコマンドE2E", () => {
 			let jaText = readFileSync(tmpJaTest, "utf8");
 			const insertIndex = jaText.indexOf("<!-- mdait 0641b670"); // Heading 4の直前
 			const newUnits = `\n## 追加見出しA\n\n追加ユニットAの内容です。\n\n## 追加見出しB\n\n追加ユニットBの内容です。\n`;
-			jaText = jaText.slice(0, insertIndex) + newUnits + jaText.slice(insertIndex);
+			jaText =
+				jaText.slice(0, insertIndex) + newUnits + jaText.slice(insertIndex);
 			writeFileSync(tmpJaTest, jaText, "utf8");
 
 			const vscode = require("vscode");
@@ -242,9 +264,18 @@ suite("syncコマンドE2E", () => {
 			const addedAIndex = enText.indexOf("## 追加見出しA");
 			const addedBIndex = enText.indexOf("## 追加見出しB");
 			const heading4Index = enText.indexOf("#### Heading 4");
-			assert.ok(heading3Index < addedAIndex, "追加見出しAがHeading 3の後にありません");
-			assert.ok(addedAIndex < addedBIndex, "追加見出しBが追加見出しAの後にありません");
-			assert.ok(addedBIndex < heading4Index, "追加見出しBがHeading 4の前にありません");
+			assert.ok(
+				heading3Index < addedAIndex,
+				"追加見出しAがHeading 3の後にありません",
+			);
+			assert.ok(
+				addedAIndex < addedBIndex,
+				"追加見出しBが追加見出しAの後にありません",
+			);
+			assert.ok(
+				addedBIndex < heading4Index,
+				"追加見出しBがHeading 4の前にありません",
+			);
 
 			// それぞれneed:translateが付与されていること
 			assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/);
@@ -258,7 +289,8 @@ suite("syncコマンドE2E", () => {
 			// Heading 5の後に空ユニットを追加
 			const insertIndex = jaText.indexOf("<!-- mdait dc5d14d1");
 			const newUnit = `\n## 空見出し\n`;
-			jaText = jaText.slice(0, insertIndex) + newUnit + jaText.slice(insertIndex);
+			jaText =
+				jaText.slice(0, insertIndex) + newUnit + jaText.slice(insertIndex);
 			writeFileSync(tmpJaTest, jaText, "utf8");
 
 			const vscode = require("vscode");
@@ -278,7 +310,10 @@ suite("syncコマンドE2E", () => {
 			let jaText = readFileSync(tmpJaTest, "utf8");
 			const frontMatterEnd = jaText.indexOf("---", 3) + 3;
 			const newUnit = `\n# Front直後見出し\n\nFront Matter直後のユニットです。\n`;
-			jaText = jaText.slice(0, frontMatterEnd) + newUnit + jaText.slice(frontMatterEnd);
+			jaText =
+				jaText.slice(0, frontMatterEnd) +
+				newUnit +
+				jaText.slice(frontMatterEnd);
 			writeFileSync(tmpJaTest, jaText, "utf8");
 
 			const vscode = require("vscode");
@@ -346,10 +381,15 @@ suite("syncコマンドE2E", () => {
 			assert.notStrictEqual(jaNewHash, "9e3b618c"); // 元のハッシュと異なる
 
 			// 2. en側の対応するユニットにneed:translateが付与されていること
-			assert.match(enText, /<!-- mdait [^\s]+ from:[^\s]+ need:revise@[^\s]+ -->/);
+			assert.match(
+				enText,
+				/<!-- mdait [^\s]+ from:[^\s]+ need:revise@[^\s]+ -->/,
+			);
 
 			// 3. en側のfromが更新されたjaのハッシュと一致していること
-			const enFirstUnit = enText.match(/<!-- mdait ([^\s]+) from:([^\s]+) need:revise@[^\s]+ -->/);
+			const enFirstUnit = enText.match(
+				/<!-- mdait ([^\s]+) from:([^\s]+) need:revise@[^\s]+ -->/,
+			);
 			assert.ok(enFirstUnit);
 			assert.strictEqual(enFirstUnit[2], jaNewHash);
 
@@ -396,7 +436,8 @@ suite("syncコマンドE2E", () => {
 			// 複数のユニットを追加 (中間と末尾)
 			const insertIndex = jaText.indexOf("<!-- mdait 2507a192"); // Heading 6 の前
 			const newUnit1 = `\n\n## 複合テスト用追加見出し1\n\nこれは複合テストで追加されたユニットです。\n`;
-			jaText = jaText.slice(0, insertIndex) + newUnit1 + jaText.slice(insertIndex);
+			jaText =
+				jaText.slice(0, insertIndex) + newUnit1 + jaText.slice(insertIndex);
 
 			const newUnit2 = `\n## 複合テスト用追加見出し2\n\nこれも複合テストで追加されたユニットです。\n`;
 			jaText += newUnit2;
@@ -419,9 +460,14 @@ suite("syncコマンドE2E", () => {
 			assert.ok(enText.includes("## 複合テスト用追加見出し0"));
 			assert.ok(enText.includes("## 複合テスト用追加見出し1"));
 			assert.ok(enText.includes("## 複合テスト用追加見出し2"));
-			const addedUnits = enText.match(/<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/g) || [];
+			const addedUnits =
+				enText.match(/<!-- mdait [^\s]+ from:[^\s]+ need:translate -->/g) || [];
 			// もともと1つ+3つ追加されているはず
-			assert.strictEqual(addedUnits.length, 4, "追加されたユニットの数が正しくありません");
+			assert.strictEqual(
+				addedUnits.length,
+				4,
+				"追加されたユニットの数が正しくありません",
+			);
 		});
 
 		test("双方向編集: 両方変更時にneed:reviseが設定されること", async () => {
@@ -440,7 +486,10 @@ suite("syncコマンドE2E", () => {
 			);
 
 			// en側も編集（同じユニット）
-			enText = enText.replace("This is a test Markdown file in English.", "This is a file edited on the English side.");
+			enText = enText.replace(
+				"This is a test Markdown file in English.",
+				"This is a file edited on the English side.",
+			);
 
 			writeFileSync(tmpJaTest, jaText, "utf8");
 			writeFileSync(tmpEnTest, enText, "utf8");
@@ -455,7 +504,10 @@ suite("syncコマンドE2E", () => {
 
 			// ターゲットファイルに "need:revise@" タグが付与されていることを確認
 			// conflict は使用しない仕様に変更
-			assert.ok(updatedEnText.includes("need:revise@"), "英語ファイル（ターゲット）に 'need:revise@' が見つかりません");
+			assert.ok(
+				updatedEnText.includes("need:revise@"),
+				"英語ファイル（ターゲット）に 'need:revise@' が見つかりません",
+			);
 			// ソース側には need が付与されない
 			assert.ok(
 				!updatedJaText.includes("need:solve-conflict"),

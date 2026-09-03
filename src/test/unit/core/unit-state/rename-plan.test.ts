@@ -52,7 +52,9 @@ suite("移動の前に立てる計画（連れて動かす訳文）", () => {
 		const probe = probeOf(JA_EN, ["content/ja/guide.md", "content/en/guide.md"]);
 		const plan = planRenameFollow([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
-		assert.deepStrictEqual(plan.companions, [{ oldPath: "content/en/guide.md", newPath: "content/en/handbook.md" }]);
+		assert.deepStrictEqual(plan.companions, [
+			{ oldPath: "content/en/guide.md", newPath: "content/en/handbook.md" },
+		]);
 		assert.deepStrictEqual(plan.blocked, []);
 	});
 
@@ -163,7 +165,11 @@ suite("移動のあとに立てる計画（unit-state の行の付け替え）",
 
 	test("訳文が旧パスに残っているなら行も残すこと（連れて行けなかった場合）", () => {
 		// 行き先が塞がっていて訳文を動かせなかった世界
-		const probe = probeOf(JA_EN, ["content/ja/handbook.md", "content/en/guide.md", "content/en/handbook.md"]);
+		const probe = probeOf(JA_EN, [
+			"content/ja/handbook.md",
+			"content/en/guide.md",
+			"content/en/handbook.md",
+		]);
 		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
 		assert.deepStrictEqual(moves, [{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }]);
@@ -233,7 +239,11 @@ suite("移動のあとに立てる計画（unit-state の行の付け替え）",
 	});
 
 	test("ピボット構成では、連鎖して動いた訳文の行まで付け替えること", () => {
-		const probe = probeOf(PIVOT, ["content/ja/handbook.md", "content/en/handbook.md", "content/fr/handbook.md"]);
+		const probe = probeOf(PIVOT, [
+			"content/ja/handbook.md",
+			"content/en/handbook.md",
+			"content/fr/handbook.md",
+		]);
 		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
 		assert.deepStrictEqual(

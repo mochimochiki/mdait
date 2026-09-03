@@ -2,7 +2,10 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { embeddedMarkerProvider, externalMarkerProvider } from "../../../../core/markdown/marker-provider";
+import {
+	embeddedMarkerProvider,
+	externalMarkerProvider,
+} from "../../../../core/markdown/marker-provider";
 import { Configuration } from "../../../../infra/config/configuration";
 import { resolveMarkerIO, resolveMarkerIOForFile } from "../../../../infra/config/marker-io";
 

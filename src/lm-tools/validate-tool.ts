@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { type ValidateCheck, type ValidationReport, validate_CoreProc } from "../commands/validate/validate-command";
+import {
+	type ValidateCheck,
+	type ValidationReport,
+	validate_CoreProc,
+} from "../commands/validate/validate-command";
 import { Logger, formatError } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { toToolResult } from "./tool-result";
@@ -34,7 +38,7 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 					? requested.filter((c): c is ValidateCheck => c === "structure" || c === "terms")
 					: ["structure", "terms"];
 			if (checks.length === 0) {
-				const message = vscode.l10n.t('No valid checks specified. Use "structure" and/or "terms".');
+				const message = vscode.l10n.t("No valid checks specified. Use \"structure\" and/or \"terms\".");
 				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
 
@@ -98,7 +102,9 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in validate tool", formatError(error));
 			const errorMessage = vscode.l10n.t("Validation failed: {0}", (error as Error).message);
-			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
+			return toToolResult(
+				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
+			);
 		}
 	}
 
