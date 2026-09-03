@@ -900,6 +900,25 @@ function doubleQuoted(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * 裸で書いた値が、**同じ文字列として読み直せるか**を確かめる。
+ *
+ * **規則を数え上げない。** YAML が裸の値をどう読むかは条件が多く（`Yes` は真、`1.0` は数、
+ * `-` で始まれば並び、`~` は null、前後の空白は落ちる…）、書き出す側で数え上げれば必ず抜ける。
+ * 実際に書いて読み直し、同じ文字列で戻らなければ裸では書けない、と決める。
+ *
+ * これが無いと、訳が `Yes` や `1.0` になった瞬間に、**値が真偽値や数値へ化けたまま**
+ * 原稿に書かれる。静的サイトの生成側から見れば型が変わっているので、表示が崩れる。
+ */
+function readsBackAsSameString(value: string): boolean {
+	try {
+		return matter(`---\nv: ${value}\n---\n`).data.v === value;
+	} catch {
+		// 読めない＝裸では書けない
+		return false;
+	}
+}
+
 /** 一重引用符で囲む。YAML の一重引用符の中では `'` を2つ重ねて逃がす */
 function singleQuoted(value: string): string {
 	return `'${value.replace(/'/g, "''")}'`;
@@ -921,14 +940,14 @@ function formatSimpleValue(value: string | number | boolean, quoteStyle?: QuoteS
 	if (quoteStyle === "'") {
 		return singleQuoted(value);
 	}
-	// 特殊文字を含む場合はクォート
-	if (
+	// 特殊文字を含む場合、または裸で書くと別の値として読み直される場合はクォート
+	const hasSpecialChar =
 		value.includes(":") ||
 		value.includes("#") ||
 		value.includes("'") ||
 		value.includes('"') ||
-		value.includes("\n")
-	) {
+		value.includes("\n");
+	if (hasSpecialChar || !readsBackAsSameString(value)) {
 		// シングルクォート内のシングルクォートはエスケープ
 		if (value.includes("'")) {
 			return doubleQuoted(value);

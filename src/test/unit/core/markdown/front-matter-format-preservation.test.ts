@@ -495,3 +495,55 @@ suite("FrontMatter - 引用符の付け方を保つ", () => {
 		assert.equal(reparsedSingle?.get("title"), "It's here", "一重引用符の中の引用符が壊れている");
 	});
 });
+
+/**
+ * 裸で書くと YAML が別の値として読み直すものは、裸で書かない。
+ *
+ * 背景: 元が裸だった値は裸のまま書き戻す（上の suite）。ところが訳文は原文と姿が変わるので、
+ * 裸で安全だった値の訳が `Yes`（真）や `1.0`（数）や `- ...`（並び）になることがある。
+ * そのまま裸で書くと、**値が別の型へ化けたまま原稿に残る** — 静的サイトの生成側から見れば
+ * 型が変わっているので、表示が崩れる。ADR-260903-07 の備考に穴として残していたもの。
+ *
+ * 判定は規則の数え上げではなく、**書いて読み直して同じ文字列で戻るか**で行う
+ * （`readsBackAsSameString`）。だからこの番人も、読み直した結果だけを見る。
+ */
+suite("FrontMatter - 裸で書けない値はクォートする", () => {
+	/** 値を差し替えて書き出し、読み直したものを返す */
+	function roundTrip(original: string, newValue: string): unknown {
+		const { frontMatter } = FrontMatter.parse(`---\ntitle: ${original}\n---\nContent`);
+		assert.ok(frontMatter);
+		frontMatter.set("title", newValue);
+		// stringify() は区切りの `---` まで返すので、そのまま本文を足せば1つの文書になる
+		const reparsed = FrontMatter.parse(`${frontMatter.stringify()}\nContent`).frontMatter;
+		return reparsed?.get("title");
+	}
+
+	for (const value of ["Yes", "No", "true", "false", "null", "~", "1.0", "42", "-3", "0x1F"]) {
+		test(`裸だと別の型になる値（${value}）が、文字列のまま読み直せること`, () => {
+			assert.strictEqual(roundTrip("Old Title", value), value);
+		});
+	}
+
+	for (const [label, value] of [
+		["並びの始まりに見える", "- item"],
+		["対応表の始まりに見える", "{ a: 1 }"],
+		["参照の印で始まる", "*anchor"],
+		["末尾に空白がある", "Title "],
+		["空である", ""],
+	] as const) {
+		test(`裸だと壊れる値（${label}）が、文字列のまま読み直せること`, () => {
+			assert.strictEqual(roundTrip("Old Title", value), value);
+		});
+	}
+
+	test("ふつうの文字列には引用符を足さないこと（足しすぎない）", () => {
+		const { frontMatter } = FrontMatter.parse("---\ntitle: Old Title\n---\nContent");
+		assert.ok(frontMatter);
+		frontMatter.set("title", "A New Title");
+		const line = frontMatter
+			.stringify()
+			.split("\n")
+			.find((l) => l.startsWith("title:"));
+		assert.equal(line, "title: A New Title");
+	});
+});
