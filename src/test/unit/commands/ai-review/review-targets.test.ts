@@ -32,7 +32,7 @@ suite("レビュー対象の列挙（ワークスペース全体）", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	async function initConfig(): Promise<Configuration> {
+	async function initConfig(trans: Record<string, unknown> = {}): Promise<Configuration> {
 		const mdaitDir = path.join(tempDir, ".mdait");
 		fs.mkdirSync(mdaitDir, { recursive: true });
 		const configPath = path.join(mdaitDir, "mdait.json");
@@ -41,6 +41,7 @@ suite("レビュー対象の列挙（ワークスペース全体）", () => {
 			JSON.stringify({
 				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
 				primaryLang: "ja",
+				trans,
 			}),
 			"utf-8",
 		);
@@ -80,6 +81,52 @@ suite("レビュー対象の列挙（ワークスペース全体）", () => {
 			targets.map((f) => path.relative(tempDir, f)),
 			[path.join("en", "doc.md")],
 			"孤立訳文がレビュー対象に混ざっている（レビューは原文が無いと失敗するしかない）",
+		);
+	});
+
+	/**
+	 * 非Markdown（`trans.extensions`）もレビューの対象にする。
+	 *
+	 * 列挙が Markdown だけに閉じていたため、非Markdownは翻訳されるのにレビューだけ素通りし、
+	 * 取り込みのあと**確認待ちが人手でしか外れなかった**（実測: 見本サイトの取り込みで
+	 * .txt / .csv / .json の3本が残った）。
+	 */
+	test("管理下の非Markdownも対象に入ること", async () => {
+		const config = await initConfig({ extensions: [".txt", ".csv"] });
+		for (const [dir, name] of [
+			["ja", "doc.md"],
+			["en", "doc.md"],
+			["ja", "notice.txt"],
+			["en", "notice.txt"],
+			["ja", "contacts.csv"],
+			["en", "contacts.csv"],
+		] as const) {
+			fs.writeFileSync(path.join(tempDir, dir, name), "body\n", "utf-8");
+		}
+
+		const targets = await collectWorkspaceReviewTargets(config, new FileExplorer());
+
+		const names = targets.map((f) => path.basename(f)).sort();
+		assert.deepStrictEqual(names, ["contacts.csv", "doc.md", "notice.txt"]);
+	});
+
+	test("管理下にない拡張子は対象に入らないこと", async () => {
+		const config = await initConfig({ extensions: [".txt"] });
+		for (const [dir, name] of [
+			["ja", "notice.txt"],
+			["en", "notice.txt"],
+			["ja", "data.json"],
+			["en", "data.json"],
+		] as const) {
+			fs.writeFileSync(path.join(tempDir, dir, name), "body\n", "utf-8");
+		}
+
+		const targets = await collectWorkspaceReviewTargets(config, new FileExplorer());
+
+		assert.deepStrictEqual(
+			targets.map((f) => path.basename(f)),
+			["notice.txt"],
+			"trans.extensions に無い拡張子まで拾っている",
 		);
 	});
 });

@@ -6,6 +6,7 @@ import * as vscode from "vscode";
 import { PairVerifier } from "../../../../commands/ai-review/pair-verifier";
 import { executeAiReviewForFile } from "../../../../commands/ai-review/review-core";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
@@ -691,5 +692,130 @@ Content D.
 			assert.ok(written.includes("<!-- mdait tgtA from:srcA -->"));
 			assert.ok(written.includes("<!-- mdait tgtB from:srcB need:review -->"));
 		});
+	});
+});
+
+/**
+ * 非Markdown（`trans.extensions` で管理するファイル）も Markdown と同じようにレビューする。
+ *
+ * 背景: 非Markdownは翻訳されるのにレビューだけ素通りしていた。取り込みのあと確認待ちが
+ * **人手でしか外れない**（実測: 見本サイトの取り込みで .txt / .csv / .json の3本が残った）。
+ *
+ * 非Markdownはファイル1本が1ユニットで、マーカーを本文に埋め込めないため状態は
+ * `unit-state` の行にしか無い。だから承認しても**原稿は1バイトも変わらない** — 変わるのは
+ * 表の need だけである。ここを Markdown と同じに「本文を書き出す」作りにすると、
+ * 内容が同じでも改行や書式が動く危険をわざわざ作ることになる。
+ */
+suite("executeAiReviewForFile（非Markdown）", () => {
+	let tempDir: string;
+	let sourceFile: string;
+	let targetFile: string;
+	const TARGET_REL = "en/notice.txt";
+	const SOURCE_TXT = "お知らせ\n\n明日は休みです。\n";
+	const TARGET_TXT = "Notice\n\nWe are closed tomorrow.\n";
+
+	/** 訳文の行を表に置く。非Markdownの状態はここにしか無い */
+	function putEntry(need: string): void {
+		const mdaitDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(mdaitDir, { recursive: true });
+		const store = UnitStateStore.getInstance();
+		store.load(mdaitDir);
+		store.setEntry({ path: TARGET_REL, order: 0, level: 0, titleHash: "", hash: "tgt1", from: "src1", need });
+		store.save(mdaitDir);
+	}
+
+	function needInStore(): string | undefined {
+		return UnitStateStore.getInstance().getEntry(TARGET_REL, 0)?.need;
+	}
+
+	async function initConfig(): Promise<Configuration> {
+		const mdaitDir = path.join(tempDir, ".mdait");
+		fs.mkdirSync(mdaitDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(mdaitDir, "mdait.json"),
+			JSON.stringify({
+				transPairs: [{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }],
+				primaryLang: "ja",
+				ai: { provider: "default" },
+				trans: { extensions: [".txt"] },
+				aiReview: { batchSize: 1 },
+			}),
+			"utf-8",
+		);
+		return await Configuration.getInstance().initialize(path.join(mdaitDir, "mdait.json"));
+	}
+
+	function buildVerifier(stub: StubAIService): PairVerifier {
+		const promptProvider = PromptProvider.getInstance();
+		return new PairVerifier(stub, (id, variables) => promptProvider.getPromptParts(id, variables));
+	}
+
+	setup(() => {
+		Configuration.dispose();
+		PromptProvider.dispose();
+		UnitRegistryManager.resetInstance();
+		UnitStateStore.dispose();
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-ai-review-plain-"));
+		__vscodeMockWorkspaceRoot = tempDir;
+		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
+		fs.mkdirSync(path.join(tempDir, "en"), { recursive: true });
+		sourceFile = path.join(tempDir, "ja", "notice.txt");
+		targetFile = path.join(tempDir, "en", "notice.txt");
+		fs.writeFileSync(sourceFile, SOURCE_TXT, "utf-8");
+		fs.writeFileSync(targetFile, TARGET_TXT, "utf-8");
+	});
+
+	teardown(() => {
+		Configuration.dispose();
+		PromptProvider.dispose();
+		UnitRegistryManager.resetInstance();
+		UnitStateStore.dispose();
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	test("確認待ちの非Markdownがレビューされ、承認で表の need が外れること", async () => {
+		const config = await initConfig();
+		putEntry("review");
+		const before = fs.readFileSync(targetFile);
+
+		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MATCH])));
+
+		assert.strictEqual(result.verified, 1, "非Markdownがレビューされていない");
+		assert.strictEqual(result.approved, 1);
+		assert.strictEqual(result.markersChanged, true);
+		assert.strictEqual(needInStore(), "", "承認したのに表の確認待ちが外れていない");
+		assert.deepStrictEqual(fs.readFileSync(targetFile), before, "原稿が書き換わっている");
+	});
+
+	test("食い違いと判定されたら、確認待ちが表に残ること", async () => {
+		const config = await initConfig();
+		putEntry("review");
+
+		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MISMATCH])));
+
+		assert.strictEqual(result.escalated, 1);
+		assert.strictEqual(needInStore(), "review", "食い違いなのに確認待ちが外れている");
+	});
+
+	test("外した need が読み直しても戻らないこと（表が保存されている）", async () => {
+		const config = await initConfig();
+		putEntry("review");
+
+		await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MATCH])));
+
+		// ディスクから読み直す。保存されていなければ確認待ちが復活する
+		UnitStateStore.dispose();
+		UnitStateStore.getInstance().load(path.join(tempDir, ".mdait"));
+		assert.strictEqual(needInStore(), "", "保存されておらず、読み直しで確認待ちが復活した");
+	});
+
+	test("表に行が無ければ何もしないこと", async () => {
+		const config = await initConfig();
+		const stub = new StubAIService([MATCH]);
+
+		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(stub));
+
+		assert.strictEqual(result.verified, 0);
+		assert.strictEqual(stub.callCount, 0, "対象が無いのに AI を呼んでいる");
 	});
 });

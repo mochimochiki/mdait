@@ -9,14 +9,16 @@
  */
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { getFrontmatterTranslationKeys, setFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
-import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
 import { getResponseLanguage } from "../../infra/llm/response-language";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
@@ -25,7 +27,10 @@ import { FileMutex } from "../../infra/workspace/file-mutex";
 import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
+import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import { SummaryManager } from "../../ui/hover/summary-manager";
+import { isUnitStateBacked, resolveFileType } from "../file-handler/file-type";
+import { buildPlainReviewPair } from "./plain-review-pair";
 import {
 	type ReviewCollectMode,
 	type ReviewPair,
@@ -191,6 +196,24 @@ export interface AiReviewOptions {
  * @param progress 進捗レポーター
  * @param token キャンセルトークン
  */
+/**
+ * 非Markdownのレビュー結果を表（`unit-state`）へ書き戻す。
+ *
+ * **原稿は1バイトも変えない。** 非Markdownは状態が行にしか無いので、判定で動いた need を
+ * 写すだけでよい。Markdown と同じように本文を書き出すと、内容が同じでも改行や書式が動く
+ * 危険をわざわざ作ることになる（ADR-260902-01 / -260903-02）。
+ *
+ * hash と from には触れない。レビューが変えてよいのは need だけである（ADR-260704-07）。
+ */
+function writePlainReviewOutcome(targetRelPath: string, pair: ReviewPair): void {
+	const store = UnitStateStore.getInstance();
+	const entry = store.getEntry(targetRelPath, 0);
+	if (!entry) {
+		return;
+	}
+	store.setEntry({ ...entry, need: pair.targetUnit.marker?.need ?? "" });
+}
+
 export async function executeAiReviewForFile(
 	targetFile: string,
 	config: Configuration,
@@ -225,9 +248,13 @@ export async function executeAiReviewForFile(
 	// 一度も触らない。それでも取ると、AI の応答を待つあいだ表を押さえ続けることになり、
 	// sync や印の書き換えを理由なく待たせる（保存のたびに走る自動 sync も止まる）
 	const external = config.isExternalMarkers();
-	const storeLock = external ? await acquireUnitStateLock() : undefined;
+	// **非Markdown は常に表に載る。** 本文にマーカーを埋め込めないので、embedded でも状態は
+	// 表にしかない（`file-type.ts` の `isUnitStateBacked`）。`external` だけで判定すると、
+	// embedded モードで非Markdownの need 解除が保存されず、読み直しで確認待ちが復活する
+	const storeBacked = isUnitStateBacked(targetFile, external);
+	const storeLock = storeBacked ? await acquireUnitStateLock() : undefined;
 	try {
-		if (external) {
+		if (storeBacked) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().ensureLoaded(mdaitDir);
@@ -243,23 +270,46 @@ export async function executeAiReviewForFile(
 			const sourceContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFile)));
 			const targetContent = decoder.decode(await vscode.workspace.fs.readFile(vscode.Uri.file(targetFile)));
 
-			const sourceIO = resolveMarkerIO(config, sourceFile, "source");
-			const targetIO = resolveMarkerIO(config, targetFile, "target");
-			const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
-			const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
-
 			const mode = options.mode ?? "pending";
-			// frontmatter を先頭に置く（ファイルの並び順と同じ。上限で切られるときも先に通る）
-			const frontmatterPair = collectFrontmatterReviewPair(
-				source.frontMatter,
-				target.frontMatter,
-				getFrontmatterTranslationKeys(config),
-				mode,
-			);
-			const allPairs = [
-				...(frontmatterPair ? [frontmatterPair] : []),
-				...collectReviewPairs(source.units, target.units, mode),
-			];
+			const targetRelPath = toWorkspaceRelativePath(targetFile);
+			const plain = resolveFileType(targetFile) === "plain";
+
+			// Markdown のときだけ持つ、承認の書き戻しに要る一式
+			let target: Markdown | undefined;
+			let targetIO: MarkerIO | undefined;
+			let frontmatterPair: ReviewPair | null = null;
+			let allPairs: ReviewPair[];
+
+			if (plain) {
+				// **非Markdown は本文をパースしない。** ファイル1本が1ユニットで、状態は表の
+				// 行にしか無い。そこから同じ形のペアを組み立てれば、あとの検証も判定も
+				// ファイルの種類を知らずに済む
+				const pair = buildPlainReviewPair(
+					UnitStateStore.getInstance().getEntry(targetRelPath, 0),
+					sourceContent,
+					targetContent,
+					path.basename(targetFile),
+					mode,
+				);
+				allPairs = pair ? [pair] : [];
+			} else {
+				const sourceIO = resolveMarkerIO(config, sourceFile, "source");
+				targetIO = resolveMarkerIO(config, targetFile, "target");
+				const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
+				target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
+
+				// frontmatter を先頭に置く（ファイルの並び順と同じ。上限で切られるときも先に通る）
+				frontmatterPair = collectFrontmatterReviewPair(
+					source.frontMatter,
+					target.frontMatter,
+					getFrontmatterTranslationKeys(config),
+					mode,
+				);
+				allPairs = [
+					...(frontmatterPair ? [frontmatterPair] : []),
+					...collectReviewPairs(source.units, target.units, mode),
+				];
+			}
 			if (allPairs.length === 0) {
 				return;
 			}
@@ -424,7 +474,7 @@ export async function executeAiReviewForFile(
 
 			// frontmatter のマーカーは本文ユニットと違い、パースのたびに作り直される別物なので、
 			// 承認で need を外しただけでは frontmatter へ戻らない。ここで明示的に載せ直す
-			if (frontmatterPair && !options.dryRun && target.frontMatter) {
+			if (frontmatterPair && !options.dryRun && target?.frontMatter) {
 				const approved = entries.find((entry) => entry.pair === frontmatterPair)?.unitResult.action === "approved";
 				if (approved) {
 					setFrontmatterMarker(target.frontMatter, frontmatterPair.targetUnit.marker);
@@ -433,12 +483,19 @@ export async function executeAiReviewForFile(
 
 			// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
 			if (mutationCount > 0 && !options.dryRun) {
-				// パースした文書をそのまま渡す。項目を選んで組み直すと、あとから増えた
-				// 書式の情報（frontMatter 直後の空行など）が黙って落ちる（ADR-260903-02）
-				const updatedContent = markdownParser.stringify(target, targetIO.provider, targetIO.ctx);
-				// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
-				// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
-				await writeManagedDocument(targetFile, updatedContent);
+				if (plain) {
+					// **原稿は1バイトも変えない。** 非Markdownの状態は表の行にしか無いので、
+					// 判定で動いた need を行へ写すだけでよい。本文を書き出すと、内容が同じでも
+					// 改行や書式が動く危険をわざわざ作ることになる（ADR-260902-01 / -260903-02）
+					writePlainReviewOutcome(targetRelPath, allPairs[0]);
+				} else if (target && targetIO) {
+					// パースした文書をそのまま渡す。項目を選んで組み直すと、あとから増えた
+					// 書式の情報（frontMatter 直後の空行など）が黙って落ちる（ADR-260903-02）
+					const updatedContent = markdownParser.stringify(target, targetIO.provider, targetIO.ctx);
+					// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
+					// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
+					await writeManagedDocument(targetFile, updatedContent);
+				}
 				// 書いたかどうかでは分岐しない。external では印がストア側にあり、
 				// 本文が1バイトも変わらないまま印だけ動く（＝書き出しは見送られる）。
 				// 見送りを「変わっていない」と読むとストアの保存を落とす
@@ -446,8 +503,8 @@ export async function executeAiReviewForFile(
 			}
 		});
 
-		// external マーカーの場合は unit-state ストアを保存する
-		if (result.markersChanged && external) {
+		// 状態が表に載るファイル（external の Markdown・すべての非Markdown）は表を保存する
+		if (result.markersChanged && storeBacked) {
 			const mdaitDir = await ensureMdaitDir();
 			if (mdaitDir) {
 				UnitStateStore.getInstance().save(mdaitDir);
