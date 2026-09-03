@@ -11,6 +11,7 @@
 
 import type * as vscode from "vscode";
 import type { Configuration } from "../../infra/config/configuration";
+import { OperationCancelledError } from "../../infra/errors/operation-cancelled";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { Logger } from "../../infra/logging/logger";
@@ -167,7 +168,10 @@ export class SectionAligner {
 		let raw = "";
 		for (let attempt = 0; attempt <= this.limits.maxRetries; attempt++) {
 			if (token?.isCancellationRequested) {
-				throw new Error("AI align cancelled");
+				// **中断は専用の型で投げる**（`infra/errors/operation-cancelled.ts` の決まり）。
+				// 素の Error だと受け手が中断だと見分けられず、sync では利用者が押した
+				// 取り消しが「1 failed」として数えられていた
+				throw new OperationCancelledError("AI align cancelled");
 			}
 			const attemptMessages =
 				attempt > 0 && lastError ? appendRetryInstruction(messages, lastError, attempt) : messages;

@@ -83,8 +83,13 @@ export interface AdoptReportLabels {
 	title: string;
 	syncHeading: string;
 	syncNotRun: string;
-	/** `files: {0} processed, {1} failed` 相当 */
-	filesLine: (processed: number, failed: number) => string;
+	/**
+	 * `files: {0} processed, {1} failed` 相当。
+	 *
+	 * `cancelled` は「この実行が取り消されたか」。**取り消していないときは触れない** —
+	 * ふつうの取り込みで毎回「中断なし」と並ぶと、読む人が意味を探すだけになる
+	 */
+	filesLine: (processed: number, failed: number, cancelled: boolean) => string;
 	reviewHeading: string;
 	dryRunNote: string;
 	glossaryHeading: string;
@@ -97,7 +102,10 @@ export const DEFAULT_ADOPT_REPORT_LABELS: AdoptReportLabels = {
 	title: "mdait Adopt Existing Translations",
 	syncHeading: "Sync (adopt + AI align)",
 	syncNotRun: "Sync did not run (check the mdait configuration).",
-	filesLine: (processed, failed) => `files: ${processed} processed, ${failed} failed`,
+	filesLine: (processed, failed, cancelled) =>
+		cancelled
+			? `files: ${processed} processed, ${failed} failed (cancelled partway)`
+			: `files: ${processed} processed, ${failed} failed`,
 	reviewHeading: "AI Translation Review",
 	dryRunNote: "_dry run: no markers were changed; glossary and TM steps were skipped._",
 	glossaryHeading: "Glossary",
@@ -128,7 +136,7 @@ export function generateAdoptReportContent(outcome: AdoptOutcome, options: Adopt
 		lines.push(labels.syncNotRun, "");
 	} else {
 		lines.push(
-			labels.filesLine(outcome.sync.totalFileCount, outcome.sync.errorCount),
+			labels.filesLine(outcome.sync.totalFileCount, outcome.sync.errorCount, outcome.sync.cancelled),
 			formatSyncLine(outcome.sync),
 			"",
 		);

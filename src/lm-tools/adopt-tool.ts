@@ -39,6 +39,8 @@ interface AdoptData {
 	sync: {
 		filesProcessed: number;
 		filesFailed: number;
+		/** この実行が取り消されたか。**失敗ではない**（ADR-260903-05） */
+		cancelled: boolean;
 		adopted: number;
 		alignCorrections: number;
 		added: number;
@@ -249,6 +251,7 @@ function buildAdoptData(outcome: AdoptOutcome, config: Configuration, reportFile
 		sync: {
 			filesProcessed: sync?.totalFileCount ?? 0,
 			filesFailed: sync?.errorCount ?? 0,
+			cancelled: sync?.cancelled ?? false,
 			adopted: sync?.totalAdopted ?? 0,
 			alignCorrections: sync?.totalAlignCorrections ?? 0,
 			added: sync?.totalAdded ?? 0,

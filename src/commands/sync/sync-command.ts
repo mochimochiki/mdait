@@ -30,6 +30,7 @@ import { UnitStateStore, isLiveBodyEntry } from "../../core/unit-state/unit-stat
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
+import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
@@ -402,6 +403,23 @@ export interface SyncResult {
 	totalFileCount: number;
 	successCount: number;
 	errorCount: number;
+	/**
+	 * この実行が取り消されたか。
+	 *
+	 * **件数（`cancelledCount`）では代用できない。** 取り消しがファイルの合間に届くと、
+	 * 例外は投げられず、ワーカーが次のファイルを取らずに抜けるだけで終わる（AI を使わない
+	 * 定常 sync では、むしろこちらが普通）。件数だけを見ると 0 のままで、止めたのに
+	 * 「完了しました」と出る。
+	 */
+	cancelled: boolean;
+	/**
+	 * 取り消しによって**送信の途中で止まった**ファイル数。合間で止まれば 0 になる。
+	 *
+	 * **`errorCount` とは別に数える。** 利用者が押した取り消しを「失敗」と呼ぶのは
+	 * 事実に反するうえ、次に何をすればよいか（もう一度 sync すれば続きから進む）も
+	 * 伝わらない（ADR-260903-05）。
+	 */
+	cancelledCount: number;
 	totalAdded: number;
 	totalModified: number;
 	totalDeleted: number;
@@ -452,6 +470,53 @@ export interface SyncCommandOptions {
 }
 
 /**
+ * 捕まえた例外が「利用者が止めた」ものかを判定する。
+ *
+ * **型で見分けるのが基本**（`infra/errors/operation-cancelled.ts` の決まり）だが、
+ * 取り消し済みの合図が立っていれば型を問わず中断と読む。中断の投げ方が層ごとに
+ * 揃っていない歴史があり、実際に素の `Error("AI align cancelled")` を投げていた箇所が
+ * 残っていた。型だけに頼ると、同じ穴がまた別の場所で開く。
+ *
+ * 取り消し後の走行はどのみち途中で捨てるので、まぎれ込んだ本物の失敗を中断と
+ * 読み違えても害はない。逆（中断を失敗と読む）は、押した本人に「1 failed」と
+ * 見せることになるので害がある。
+ */
+export function isCancelledFailure(error: unknown, token?: vscode.CancellationToken): boolean {
+	return isOperationCancelled(error) || token?.isCancellationRequested === true;
+}
+
+/** 完了時に出す通知1本の選び方（出すのは呼び手の仕事） */
+export type SyncCompletionNotice =
+	/** 取り消された。どこまで進んだかと、続きから進める旨だけを言う */
+	| { kind: "cancelled"; syncedCount: number }
+	/** 翻訳待ちが残っている。件数と「今すぐ翻訳」の導線を出す */
+	| { kind: "translatable"; successCount: number; errorCount: number; translatableCount: number }
+	/** ふつうの完了サマリ */
+	| { kind: "plain"; successCount: number; errorCount: number };
+
+/**
+ * 完了時にどの通知を出すかを決める。
+ *
+ * **取り消しが最優先。** 実行の結果そのものなので、完了サマリの代わりにこれだけを出す。
+ * 「今すぐ翻訳」も出さない — 止めた直後に次の AI 実行を勧めるのは、取り消しの意思と食い違う。
+ */
+export function chooseSyncCompletionNotice(args: {
+	cancelled: boolean;
+	successCount: number;
+	errorCount: number;
+	translatableCount: number;
+}): SyncCompletionNotice {
+	const { cancelled, successCount, errorCount, translatableCount } = args;
+	if (cancelled) {
+		return { kind: "cancelled", syncedCount: successCount };
+	}
+	if (translatableCount > 0) {
+		return { kind: "translatable", successCount, errorCount, translatableCount };
+	}
+	return { kind: "plain", successCount, errorCount };
+}
+
+/**
  * sync command
  * Markdownユニットの同期を行う
  */
@@ -492,6 +557,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 
 		let successCount = 0;
 		let errorCount = 0;
+		let cancelledCount = 0;
 		let totalFileCount = 0;
 		let totalAdded = 0;
 		let totalModified = 0;
@@ -663,6 +729,19 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						// 次に同じことが起きたときに黙ってしまう。
 						updateSourceEmptiedMemory(targetFile, syncResult.sourceEmptied ?? 0);
 					} catch (error) {
+						// **取り消しは失敗ではない。** ステータスに Error を刻まず、失敗の数にも
+						// 入れない。刻むと、利用者が止めただけのファイルが赤いまま残り、
+						// 次の sync まで「壊れている」と読めてしまう。ディスクの実態から
+						// 測り直して、止まる前の姿へ戻す
+						if (isCancelledFailure(error, options?.token)) {
+							logger.info("sync", "File sync cancelled", {
+								pair: `${pair.sourceDir} -> ${pair.targetDir}`,
+								file: sourceFile,
+							});
+							await statusManager.refreshFileStatus(sourceFile);
+							cancelledCount++;
+							break;
+						}
 						logger.error("sync", "File sync error", {
 							pair: `${pair.sourceDir} -> ${pair.targetDir}`,
 							file: sourceFile,
@@ -710,10 +789,17 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const endTime = Date.now();
 		const durationMs = endTime - startTime;
 
+		// **取り消しは合図で判定する。** 件数だけを見ると、ファイルの合間で取り消されたとき
+		// （例外は投げられず、ワーカーが次を取らずに抜けるだけ）に 0 のままになり、
+		// 止めたのに「完了しました」と出る。AI を使わない定常 sync ではそちらが普通の経路
+		const cancelled = options?.token?.isCancellationRequested === true || cancelledCount > 0;
+
 		logger.info("sync", "Sync completed", {
 			totalFileCount,
 			successCount,
 			errorCount,
+			cancelled,
+			cancelledCount,
 			totalAdded,
 			totalModified,
 			totalDeleted,
@@ -743,7 +829,16 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const translatableCount = statusManager
 			.getStatusItemTree()
 			.countPendingTranslationUnits(getSelectedScopeDirs(config));
-		if (translatableCount > 0) {
+		const notice = chooseSyncCompletionNotice({ cancelled, successCount, errorCount, translatableCount });
+		if (notice.kind === "cancelled") {
+			// 途中まで済んだ分は残るので、次の一手は「もう一度 sync」だと言い切る
+			void vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"Synchronization cancelled: {0} file(s) were synced before stopping. Sync again to continue from there.",
+					notice.syncedCount,
+				),
+			);
+		} else if (notice.kind === "translatable") {
 			const translateNow = vscode.l10n.t("✨Translate now");
 			void vscode.window
 				.showInformationMessage(
@@ -819,6 +914,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalFileCount,
 			successCount,
 			errorCount,
+			cancelled,
+			cancelledCount,
 			totalAdded,
 			totalModified,
 			totalDeleted,
