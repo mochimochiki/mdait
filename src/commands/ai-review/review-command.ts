@@ -23,6 +23,7 @@ import { PairVerifier } from "./pair-verifier";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
 import type { AiReviewFileResult } from "./review-result";
 import { writeAiReviewReport } from "./review-result-provider";
+import { resolveReviewTargets } from "./review-targets";
 
 const logger = Logger.getInstance();
 
@@ -129,10 +130,10 @@ export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiRev
 		return;
 	}
 
+	// 列挙は `resolveReviewTargets` に寄せる。ここで別に数え上げると、対象の拡張子
+	// （`trans.extensions` の非Markdown）と孤立訳文の扱いが LM ツール側とずれる
 	const fileExplorer = new FileExplorer();
-	const files = (await fileExplorer.findFilesInDirectory(dirPath, [".md"], "**/*.md", config.ignoredPatterns)).filter(
-		(file) => fileExplorer.isTargetFile(file, config),
-	);
+	const files = await resolveReviewTargets(dirPath, config, fileExplorer);
 	if (files.length === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No target files found in directory."));
 		return;
