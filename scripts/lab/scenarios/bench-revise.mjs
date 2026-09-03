@@ -217,6 +217,18 @@ export function checkHealth(testCase, result) {
 	const previousLines = previous.split("\n").length;
 	if (result.split("\n").length < previousLines * 0.6) problems.push("truncated");
 
+	// **行数が合っているか。** 「古い行を残したまま新しい行を足す」という壊れ方は、
+	// 出来上がりが正しい Markdown なので上のどの判定にも掛からず、変更行数も上限に届かない
+	// （足した1行だけが差分になる）。それでも文書は古い記述と新しい記述が並ぶ矛盾した状態で、
+	// **改訂としては仕事をしていない**。実測（Qwen3.6-35B-A3B・n=36）で、`current` が
+	// 「成立」した15件のうち8件がこの形だった — 成立率だけを見ていると気づけない。
+	//
+	// ケース集合は全件で「原文の行数＝訳文の行数」が成り立つように作ってあるので
+	// （`--self-test` が毎回確かめる）、期待する行数は原文の増減から決まる。
+	const expectedLines = previousLines + (testCase.sourceNew.split("\n").length - testCase.sourceOld.split("\n").length);
+	const actualLines = result.split("\n").length;
+	if (actualLines !== expectedLines) problems.push(`line-count(${actualLines}≠${expectedLines})`);
+
 	return problems;
 }
 
@@ -689,9 +701,11 @@ function selfTestChecks() {
 	// だから健全性ではなく、出来上がりの文字列そのものを突き合わせる
 	const c2 = selectCases("C2")[0];
 	const c2Lines = c2.previousTranslation.split("\n");
-	const trailing = judge(
-		c2,
-		searchreplace,
+	// **健全性を通さず、当てはめ器を直に見る。** これは applySearchReplace の切り出しについての
+	// 回帰であって、改訂として完全かどうかの話ではない（この作り物は置換しかしていないので、
+	// judge を通すと行数の判定に引っかかり、本来見たい食い込みが隠れる）
+	const trailing = searchreplace.applyPatch(
+		c2.previousTranslation,
 		`<<<<<<< SEARCH\n${c2Lines[4]}  \n=======\n- Pd(PPh₃)₄ (1.0 mol%)\n>>>>>>> REPLACE`,
 	);
 	const trailingWant = [...c2Lines.slice(0, 4), "- Pd(PPh₃)₄ (1.0 mol%)", ...c2Lines.slice(5)].join("\n");
@@ -753,6 +767,23 @@ function selfTestChecks() {
 		`${wholeRewrite.stage} / ${wholeRewrite.reason}`,
 	);
 
+	// **「古い行を残したまま新しい行を足す」** — 実測（Qwen3.6-35B-A3B・n=36）で
+	// `current` が「成立」した15件のうち8件がこの形だった。出来上がりは正しい Markdown で、
+	// 変更行数も1行（足した分だけ）なので over-edit にも掛からない。**成立率だけを見ていると
+	// 気づけない**ので、行数の判定で捕まえる
+	const keptOld = judge(c1, plain, `=${oldLine}\n+${goodLine}`);
+	add(
+		"古い行を残したまま新しい行を足したら health で落ちる（成立率には現れない壊れ方）",
+		!keptOld.ok && String(keptOld.reason).includes("line-count"),
+		`${keptOld.stage} / ${keptOld.reason}`,
+	);
+	// over-edit では捕まらないことも併せて示す（だから行数の判定が要る）
+	add(
+		"その壊れ方は over-edit では捕まらない（変更は足した1行だけなので上限に届かない）",
+		countChangedLines(c1.previousTranslation, `${c1.previousTranslation}\n${goodLine}`) <= c1.maxChangedLines,
+		"",
+	);
+
 	const leaked = judge(c1, plain, `=\n-${oldLine}\n+グローバル市場は620億ドル規模と予測されている。`);
 	add(
 		`原文の言語が漏れたら health で落ちる`,
@@ -796,9 +827,15 @@ function selfTestChecks() {
 				problems.push(`${name} のコードフェンスが閉じていない`);
 			}
 		}
-		// 健全性の基準線。前回訳文そのものが健全でなければ、health は必ず誤報する
-		const baseline = checkHealth(c, prev);
+		// 健全性の基準線。前回訳文そのものが健全でなければ、health は必ず誤報する。
+		// ただし `line-count` は**改訂後**の行数についての判定なので、改訂前の訳文には当てない
+		// （原文が行を増やすケースでは、前回訳文がその分だけ少ないのが正しい姿）
+		const baseline = checkHealth(c, prev).filter((problem) => !problem.startsWith("line-count"));
 		if (baseline.length > 0) problems.push(`前回訳文が健全性を満たさない: ${baseline.join(",")}`);
+		// 代わりに「原文の行数＝訳文の行数」を直に確かめる。`line-count` の期待値はこれを前提にしている
+		if (c.sourceOld.split("\n").length !== prev.split("\n").length) {
+			problems.push("原文（旧）と前回訳文の行数が違う（line-count の期待値が立たない）");
+		}
 		// 目安が空振りしないこと（present が既にあれば無意味、absent が無ければ消すものが無い）
 		for (const pattern of c.expect?.present ?? []) {
 			if (new RegExp(pattern, "i").test(prev)) problems.push(`present の目安が既に訳文にある: ${pattern}`);
