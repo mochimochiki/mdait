@@ -13,6 +13,7 @@ import {
 } from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
@@ -133,7 +134,11 @@ export class PlainFileHandler implements FileHandler {
 		const sourceContent = fs.readFileSync(sourceFile, "utf-8");
 		const sourceHash = calculateHash(sourceContent, false);
 
-		// 2. ターゲットファイルにソース内容をコピー
+		// 2. ターゲットファイルにソース内容をコピー。
+		// **ここは唯一の入口（writeManagedDocument）を通さない。** まだファイルが無いので
+		// 書式は既定（LF）と測られ、CRLF の原文がその場で LF へ倒れる。複製はバイト列を
+		// そのまま写すのが正しい。書式を保つ話が効いてくるのは、次にこのファイルへ
+		// 訳文を書くとき（translateFile）で、そこは入口を通している
 		fileExplorer.ensureTargetDirectoryExists(targetFile);
 		fs.writeFileSync(targetFile, sourceContent, "utf-8");
 
@@ -380,9 +385,11 @@ export class PlainFileHandler implements FileHandler {
 		// かかっており、捨てると「止めたのに何も残らない」うえ再実行でもう一度課金される。
 		// 中断はAI呼び出し前・呼び出し中に効く（上のチェックとトークン伝播）
 
-		// 11. 結果書き込み
-		const encoder = new TextEncoder();
-		await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFilePath), encoder.encode(translatedText));
+		// 11. 結果書き込み。
+		// **唯一の入口を通す（ADR-260902-01）。** AI の返す訳文は必ず LF なので、素の書き込みだと
+		// Windows で書かれた（CRLF の）訳文が翻訳のたびに全行 LF へ倒れる。非MD でも原稿は原稿で、
+		// 拡張子は「勝手に書き換わった」かどうかと関係がない
+		await writeManagedDocument(targetFilePath, translatedText);
 
 		// 12. UnitStateStore更新してディスクに保存
 		const sourceHash = calculateHash(sourceContent, false);

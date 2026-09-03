@@ -10,6 +10,7 @@
 
 import * as fs from "node:fs";
 import * as vscode from "vscode";
+import { getFrontmatterTranslationKeys, setFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { markdownParser } from "../../core/markdown/parser";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -21,10 +22,16 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { acquireUnitStateLock } from "../../infra/workspace/unit-state-lock";
 import { SummaryManager } from "../../ui/hover/summary-manager";
-import { type ReviewCollectMode, type ReviewPair, collectReviewPairs } from "./pair-collector";
+import {
+	type ReviewCollectMode,
+	type ReviewPair,
+	collectFrontmatterReviewPair,
+	collectReviewPairs,
+} from "./pair-collector";
 import type { PairVerifier, VerifyResult } from "./pair-verifier";
 import { AUTO_APPROVE_THRESHOLD } from "./review-constants";
 import { ReviewContextProvider } from "./review-context";
@@ -242,7 +249,17 @@ export async function executeAiReviewForFile(
 			const target = markdownParser.parse(targetContent, config, targetIO.provider, targetIO.ctx);
 
 			const mode = options.mode ?? "pending";
-			const allPairs = collectReviewPairs(source.units, target.units, mode);
+			// frontmatter を先頭に置く（ファイルの並び順と同じ。上限で切られるときも先に通る）
+			const frontmatterPair = collectFrontmatterReviewPair(
+				source.frontMatter,
+				target.frontMatter,
+				getFrontmatterTranslationKeys(config),
+				mode,
+			);
+			const allPairs = [
+				...(frontmatterPair ? [frontmatterPair] : []),
+				...collectReviewPairs(source.units, target.units, mode),
+			];
 			if (allPairs.length === 0) {
 				return;
 			}
@@ -405,15 +422,28 @@ export async function executeAiReviewForFile(
 				}
 			}
 
+			// frontmatter のマーカーは本文ユニットと違い、パースのたびに作り直される別物なので、
+			// 承認で need を外しただけでは frontmatter へ戻らない。ここで明示的に載せ直す
+			if (frontmatterPair && !options.dryRun && target.frontMatter) {
+				const approved = entries.find((entry) => entry.pair === frontmatterPair)?.unitResult.action === "approved";
+				if (approved) {
+					setFrontmatterMarker(target.frontMatter, frontmatterPair.targetUnit.marker);
+				}
+			}
+
 			// キャンセル時も完了分のマーカー変異（承認・フラグ）は書き込む（冪等なので再実行で残りを処理できる）
 			if (mutationCount > 0 && !options.dryRun) {
-				const encoder = new TextEncoder();
 				const updatedContent = markdownParser.stringify(
 					{ frontMatter: target.frontMatter, units: target.units },
 					targetIO.provider,
 					targetIO.ctx,
 				);
-				await vscode.workspace.fs.writeFile(vscode.Uri.file(targetFile), encoder.encode(updatedContent));
+				// 書き出しは唯一の入口を通す（ADR-260902-01）。素の writeFile で書くと、
+				// Windows で書かれた（CRLF の）訳文が承認のたびに全行 LF へ書き換わる
+				await writeManagedDocument(targetFile, updatedContent);
+				// 書いたかどうかでは分岐しない。external では印がストア側にあり、
+				// 本文が1バイトも変わらないまま印だけ動く（＝書き出しは見送られる）。
+				// 見送りを「変わっていない」と読むとストアの保存を落とす
 				result.markersChanged = true;
 			}
 		});

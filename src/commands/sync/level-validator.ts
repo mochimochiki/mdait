@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { syncLevelSettings } from "../../core/markdown/level-sync";
-import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 
 /**
  * 原文と訳文のfrontmatterでmdait.sync.levelの設定値を検証し、不一致の場合は訳文を原文に合わせて修正する
@@ -29,7 +29,7 @@ export async function validateAndSyncLevel(sourceFile: string, targetFile: strin
 
 		// 修正が必要な場合はファイルを保存
 		if (result.modified && result.updatedTargetContent) {
-			await writeManagedMarkdown(targetFile, result.updatedTargetContent);
+			await writeManagedDocument(targetFile, result.updatedTargetContent);
 			const sourceLevel = sourceFrontMatter?.get<number>("mdait.sync.level");
 			console.log(`mdait: Synced level setting in ${targetFile} to match source (${sourceLevel ?? "undefined"})`);
 		}

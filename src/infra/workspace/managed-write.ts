@@ -1,7 +1,9 @@
 /**
  * @file managed-write.ts
  * @description
- *   管理下 Markdown を書き出す**唯一の入口**。
+ *   管理下の原稿（訳文・原文のファイル本体）を書き出す**唯一の入口**。Markdown も、
+ *   Markdown 以外の管理下ファイル（.txt / .csv / .json）も同じ扱いにする — 原稿を預ける
+ *   相手にとって、拡張子は「勝手に書き換わった」かどうかと何の関係もない。
  *
  *   ここを通す理由は2つある。
  *
@@ -13,7 +15,10 @@
  *      — 以前は正規化のせいで CRLF の原稿が毎回「変わった」と答えていた。
  *
  *   書き手ごとに同じ処理を書くと必ず取りこぼすので、**新しい書き出し口はここへ足すこと**。
- *   例外は `.mdait/` の中（`unit-state` などの管理ファイル）で、あちらは原稿ではない。
+ *   例外は2つ。`.mdait/` の中（`unit-state` などの管理ファイル）は原稿ではない。もう1つは
+ *   **まだ無いファイルへ原文をそのまま複製する経路**で、そこはここを通してはいけない
+ *   — ディスクに何も無いと書式は既定（LF）と測られるので、CRLF の原文が LF へ倒れる。
+ *   複製は素の書き込みでバイト列を写すのが正しい（`plain-file-handler.syncNew`）。
  * @module infra/workspace/managed-write
  */
 import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
@@ -39,11 +44,11 @@ function prepare(absPath: string, content: string): { styled: string; skip: bool
 }
 
 /**
- * 管理下 Markdown を書き出す（VS Code のファイルシステム経由）。
+ * 管理下の原稿を書き出す（VS Code のファイルシステム経由）。
  *
  * @returns 実際に書いたら true、内容が同じで見送ったら false
  */
-export async function writeManagedMarkdown(absPath: string, content: string): Promise<boolean> {
+export async function writeManagedDocument(absPath: string, content: string): Promise<boolean> {
 	const { styled, skip } = prepare(absPath, content);
 	if (skip) {
 		return false;
@@ -53,11 +58,11 @@ export async function writeManagedMarkdown(absPath: string, content: string): Pr
 }
 
 /**
- * 管理下 Markdown を書き出す（同期版）。マーカーの引っ越しなど、同期処理の中から呼ぶ経路用。
+ * 管理下の原稿を書き出す（同期版）。マーカーの引っ越しなど、同期処理の中から呼ぶ経路用。
  *
  * @returns 実際に書いたら true、内容が同じで見送ったら false
  */
-export function writeManagedMarkdownSync(absPath: string, content: string): boolean {
+export function writeManagedDocumentSync(absPath: string, content: string): boolean {
 	const { styled, skip } = prepare(absPath, content);
 	if (skip) {
 		return false;

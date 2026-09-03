@@ -26,7 +26,7 @@ import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
-import { writeManagedMarkdown } from "../../infra/workspace/managed-write";
+import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { Logger } from "../../infra/logging/logger";
 import { createOrphanTargetProbe } from "../../infra/workspace/orphan-probe";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
@@ -413,10 +413,10 @@ async function runMarkdownMutation<T extends UnitMutationResult>(
 			// マーカーしか変えない操作は、external では本文に用が無い。原稿がどう書かれて
 			// いても書かない（比較では止まらない。理由は withMarkerOnlyMutation の JSDoc）
 			const forbidden = scope === "marker-only" && config.isExternalMarkers();
-			// 「同じなら書かない」の判断は書き出しの入口（writeManagedMarkdown）が持つ。
+			// 「同じなら書かない」の判断は書き出しの入口（writeManagedDocument）が持つ。
 			// あちらは原稿の改行のくせへ揃えてから比べるので、CRLF の原稿でも正しく止まる。
 			if (!forbidden) {
-				await writeManagedMarkdown(absPath, updated);
+				await writeManagedDocument(absPath, updated);
 			}
 		}
 		return result;

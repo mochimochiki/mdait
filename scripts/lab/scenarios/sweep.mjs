@@ -1343,12 +1343,22 @@ async function phase12() {
 	if (read(abs) === afterFirst) ok(P, "取り込み後 sync を重ねても訳文が変わらないOK（冪等）");
 	else fail(P, rel, "取り込み後の sync が非冪等（訳文が変わる）", "byte diff");
 
-	if ((value.totalOrphanReviewed ?? 0) === 0) {
-		info(
-			P,
-			rel,
-			"見本は原文と訳文の章数が同じなので、訳文だけにある章の一次受け（totalOrphanReviewed）を通せない。章数のずれた見本が要る",
-		);
+	// 訳文だけにある章（原文に対応が無い章）は、消さずに一次受けする。
+	// 見本は content/en/50_target_extra.md の "Availability in your region"（原文に無い章）。
+	const extraRel = "content/en/50_target_extra.md";
+	const extraAbs = path.join(ws, extraRel);
+	if ((value.totalOrphanReviewed ?? 0) > 0) {
+		ok(P, `訳文だけにある章を消さずに一次受けするOK（${value.totalOrphanReviewed}件）`);
+	} else {
+		fail(P, extraRel, "訳文だけにある章の一次受け（totalOrphanReviewed）が働かない", JSON.stringify(value));
+	}
+	if (fs.existsSync(extraAbs)) {
+		const extraBody = read(extraAbs);
+		if (extraBody.includes("Availability in your region")) {
+			ok(P, "原文に無い章が取り込みで消えないOK");
+		} else {
+			fail(P, extraRel, "原文に無い章が取り込みで消えた", extraBody.slice(0, 300));
+		}
 	}
 
 	// ---- frontmatter の既訳も取り込むこと（人の書いたタイトルを機械翻訳で上書きしない） ----
