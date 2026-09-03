@@ -2,13 +2,7 @@
 // テストガイドラインに従いテスト実装します。
 
 import { strict as assert } from "node:assert";
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as vscode from "vscode";
 import { AIServiceBuilder } from "../../../../infra/llm/ai-service-builder";
@@ -33,14 +27,8 @@ function copyDirSync(src: string, dest: string) {
 }
 
 suite("transコマンドE2E", () => {
-	const sampleContentDir = join(
-		__dirname,
-		"../../../../../src/test/unit/sample-content",
-	);
-	const workspaceDir = join(
-		__dirname,
-		"../../../../../src/test/unit/workspace",
-	);
+	const sampleContentDir = join(__dirname, "../../../../../src/test/unit/sample-content");
+	const workspaceDir = join(__dirname, "../../../../../src/test/unit/workspace");
 	const contentDir = join(workspaceDir, "content");
 	const tmpEnDir = join(contentDir, "en");
 	const tmpJaDir = join(contentDir, "ja");
@@ -135,8 +123,7 @@ suite("transコマンドE2E", () => {
 		};
 
 		// AIOnboardingをモック化して初回利用ダイアログをスキップ
-		const originalCheckAndShowFirstUseDialog =
-			AIOnboarding.prototype.checkAndShowFirstUseDialog;
+		const originalCheckAndShowFirstUseDialog = AIOnboarding.prototype.checkAndShowFirstUseDialog;
 		AIOnboarding.prototype.checkAndShowFirstUseDialog = async () => {
 			// テスト時は常に承認されたものとして扱う
 			return true;
@@ -173,15 +160,11 @@ suite("transコマンドE2E", () => {
 			assert.ok(updatedContent.includes("title: 'テスト翻訳'"));
 
 			// 2. 通常のユニット（翻訳対象外）は変更されていないこと
-			assert.ok(
-				updatedContent.includes("<!-- mdait abc12345 from:abc12345 -->"),
-			);
+			assert.ok(updatedContent.includes("<!-- mdait abc12345 from:abc12345 -->"));
 			assert.ok(updatedContent.includes("# 通常の見出し"));
 			assert.ok(updatedContent.includes("これは翻訳不要なコンテンツです。"));
 
-			assert.ok(
-				updatedContent.includes("<!-- mdait ghi09876 from:ghi09876 -->"),
-			);
+			assert.ok(updatedContent.includes("<!-- mdait ghi09876 from:ghi09876 -->"));
 			assert.ok(updatedContent.includes("### 別の通常見出し"));
 			assert.ok(updatedContent.includes("こちらも翻訳不要です。"));
 
@@ -196,26 +179,18 @@ suite("transコマンドE2E", () => {
 			const translatedUnitMatch = updatedContent.match(
 				/<!-- mdait ([a-z0-9]+)(?: from:[a-z0-9]+)? -->\s*## [^\n]*\s*\s*[^<]+/,
 			);
-			assert.ok(
-				translatedUnitMatch,
-				"翻訳されたユニットのマーカーが見つかりません",
-			);
+			assert.ok(translatedUnitMatch, "翻訳されたユニットのマーカーが見つかりません");
 
 			// 翻訳されたユニットのハッシュが元のハッシュと異なることを確認
 			const newHash = translatedUnitMatch[1];
-			assert.notStrictEqual(
-				newHash,
-				"def67890",
-				"翻訳後のハッシュが更新されていません",
-			);
+			assert.notStrictEqual(newHash, "def67890", "翻訳後のハッシュが更新されていません");
 
 			// コマンドが正常に完了したことを確認
 			// 結果が false の厳密チェックは削除（ファイル内容による検証で十分とする）
 		} finally {
 			// モックを復元
 			AIServiceBuilder.prototype.build = originalBuild;
-			AIOnboarding.prototype.checkAndShowFirstUseDialog =
-				originalCheckAndShowFirstUseDialog;
+			AIOnboarding.prototype.checkAndShowFirstUseDialog = originalCheckAndShowFirstUseDialog;
 			vscode.window.showInputBox = originalShowInputBox;
 		}
 	});

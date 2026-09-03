@@ -1,5 +1,5 @@
 {
-  "description": "フロントマターにmdait.sync.level=3指定 → FM値(3)が優先される",
-  "syncLevel": 2,
-  "expectedUnits": 3
+	"description": "フロントマターにmdait.sync.level=3指定 → FM値(3)が優先される",
+	"syncLevel": 2,
+	"expectedUnits": 3
 }

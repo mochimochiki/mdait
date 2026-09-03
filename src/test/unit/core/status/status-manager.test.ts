@@ -9,12 +9,7 @@
 import * as assert from "node:assert";
 import * as path from "node:path";
 import type { StatusCollectorPort } from "../../../../core/status/status-collector-port";
-import {
-	type FileStatusItem,
-	Status,
-	StatusItemType,
-	type UnitStatusItem,
-} from "../../../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType, type UnitStatusItem } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 import { StatusManager } from "../../../../core/status/status-manager";
 
@@ -23,11 +18,7 @@ declare let __vscodeMockWorkspaceRoot: string;
 /** 実時間待ちのマージン倍率（CIのイベントループ遅延に対する余裕） */
 const WAIT_FACTOR = 20;
 
-function makeUnitItem(
-	filePath: string,
-	unitHash: string,
-	needFlag: string | undefined,
-): UnitStatusItem {
+function makeUnitItem(filePath: string, unitHash: string, needFlag: string | undefined): UnitStatusItem {
 	return {
 		type: StatusItemType.Unit,
 		label: unitHash,
@@ -38,10 +29,7 @@ function makeUnitItem(
 	};
 }
 
-function makeFileItem(
-	filePath: string,
-	children: UnitStatusItem[] = [],
-): FileStatusItem {
+function makeFileItem(filePath: string, children: UnitStatusItem[] = []): FileStatusItem {
 	return {
 		type: StatusItemType.File,
 		label: path.basename(filePath),
@@ -156,10 +144,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 			await sleep(2);
 		}
 
-		assert.ok(
-			fired >= 1,
-			`一括処理の途中でも通知されること（実際の通知回数: ${fired}）`,
-		);
+		assert.ok(fired >= 1, `一括処理の途中でも通知されること（実際の通知回数: ${fired}）`);
 	});
 
 	test("flushPendingNotificationで保留中の通知が即座に発行されること", () => {
@@ -169,9 +154,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 			fired++;
 		});
 
-		manager
-			.getStatusItemTree()
-			.addOrUpdateFile(makeFileItem(path.join(jaDir, "a.md")));
+		manager.getStatusItemTree().addOrUpdateFile(makeFileItem(path.join(jaDir, "a.md")));
 		assert.strictEqual(fired, 0);
 
 		manager.flushPendingNotification();
@@ -187,29 +170,19 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 		// 本番と同じデバウンス経路を通す（即時通知に切り替えると経路が変わってしまう）。
 		const debounce = 20;
 		const filePath = path.join(jaDir, "a.md");
-		const collector = new StubCollector(
-			[jaDir],
-			[makeFileItem(filePath, [makeUnitItem(filePath, "u1", undefined)])],
-		);
+		const collector = new StubCollector([jaDir], [makeFileItem(filePath, [makeUnitItem(filePath, "u1", undefined)])]);
 		manager.setCollector(collector);
 		manager.setNotifyDebounceMs(debounce, 10_000);
 		await manager.buildStatusItemTree();
 
-		assert.strictEqual(
-			manager.getStatusItemTree().getNeedsAttentionUnits().length,
-			0,
-			"翻訳前は要対応が0件であること",
-		);
+		assert.strictEqual(manager.getStatusItemTree().getNeedsAttentionUnits().length, 0, "翻訳前は要対応が0件であること");
 
 		let fired = 0;
 		manager.onStatusTreeChanged(() => {
 			fired++;
 		});
 
-		collector.nextStatus.set(
-			filePath,
-			makeFileItem(filePath, [makeUnitItem(filePath, "u1", "review")]),
-		);
+		collector.nextStatus.set(filePath, makeFileItem(filePath, [makeUnitItem(filePath, "u1", "review")]));
 		await manager.refreshFileStatus(filePath);
 		await sleep(debounce * WAIT_FACTOR);
 
@@ -223,10 +196,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 
 	test("ファイルが消えている場合はツリーから取り除かれること", async () => {
 		const filePath = path.join(jaDir, "a.md");
-		const collector = new StubCollector(
-			[jaDir],
-			[makeFileItem(filePath, [makeUnitItem(filePath, "u1", "review")])],
-		);
+		const collector = new StubCollector([jaDir], [makeFileItem(filePath, [makeUnitItem(filePath, "u1", "review")])]);
 		manager.setCollector(collector);
 		manager.setNotifyDebounceMs(0);
 		await manager.buildStatusItemTree();
@@ -260,9 +230,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 		});
 
 		// 保留中の通知がある状態で全体再構築する
-		manager
-			.getStatusItemTree()
-			.addOrUpdateFile(makeFileItem(path.join(jaDir, "pending.md")));
+		manager.getStatusItemTree().addOrUpdateFile(makeFileItem(path.join(jaDir, "pending.md")));
 		await manager.buildStatusItemTree();
 
 		assert.strictEqual(fired, 1, "再構築直後に1回だけ通知されること");

@@ -11,12 +11,13 @@
 
 import type * as vscode from "vscode";
 import type { Configuration } from "../../infra/config/configuration";
-import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
+import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { Logger } from "../../infra/logging/logger";
 import { PromptIds, PromptProvider } from "../../prompts";
 import type { PromptId, PromptParts, PromptVariables } from "../../prompts";
 import type { ValidationError } from "../trans/response-validator";
+import { validateAlignResponse } from "./align-response-validator";
 import type {
 	AlignCorrection,
 	CorrespondenceEntry,
@@ -24,7 +25,6 @@ import type {
 	ParsedAlignResponse,
 	UnitSkeleton,
 } from "./align-result";
-import { validateAlignResponse } from "./align-response-validator";
 
 /** アライン要求 */
 export interface SectionAlignRequest {
@@ -102,9 +102,7 @@ export class SectionAligner {
 			correspondence: formatCorrespondence(request.correspondence),
 		});
 
-		const round1User = promptParts.isLegacy
-			? this.buildLegacyUserMessage(request)
-			: promptParts.userContext;
+		const round1User = promptParts.isLegacy ? this.buildLegacyUserMessage(request) : promptParts.userContext;
 
 		// ラウンド1
 		const r1 = await this.requestRound(promptParts.system, [{ role: "user", content: round1User }], token);
@@ -226,10 +224,7 @@ export class SectionAligner {
 /** スケルトンを1行ずつ整形する */
 export function formatSkeletons(skeletons: readonly UnitSkeleton[]): string {
 	return skeletons
-		.map(
-			(s) =>
-				`[${s.index}] L${s.level} "${s.title}" (${s.length} chars)${s.locked ? " [locked]" : ""}: ${s.digest}`,
-		)
+		.map((s) => `[${s.index}] L${s.level} "${s.title}" (${s.length} chars)${s.locked ? " [locked]" : ""}: ${s.digest}`)
 		.join("\n");
 }
 
@@ -238,9 +233,7 @@ export function formatCorrespondence(entries: readonly CorrespondenceEntry[]): s
 	if (entries.length === 0) {
 		return "(none)";
 	}
-	return entries
-		.map((e) => `s${e.sourceIndex} <-> t${e.targetIndex}${e.locked ? " [locked]" : ""}`)
-		.join("\n");
+	return entries.map((e) => `s${e.sourceIndex} <-> t${e.targetIndex}${e.locked ? " [locked]" : ""}`).join("\n");
 }
 
 function truncate(text: string, maxLen: number): string {

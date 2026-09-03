@@ -77,9 +77,7 @@ suite("初回に選ぶ対象言語", () => {
 		await loadConfig();
 		const selection = SelectionState.getInstance();
 
-		await selection.initialize(
-			memoryContext({ "mdait.activeTargets": ["fr"], "mdait.knownTargets": ["en", "fr"] }),
-		);
+		await selection.initialize(memoryContext({ "mdait.activeTargets": ["fr"], "mdait.knownTargets": ["en", "fr"] }));
 
 		assert.deepStrictEqual([...selection.getActiveKeys()], ["fr"]);
 	});
@@ -99,9 +97,7 @@ suite("初回に選ぶ対象言語", () => {
 		await loadConfig();
 		const selection = SelectionState.getInstance();
 
-		await selection.initialize(
-			memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en"] }),
-		);
+		await selection.initialize(memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en"] }));
 
 		assert.deepStrictEqual([...selection.getActiveKeys()].sort(), ["en", "fr"]);
 	});
@@ -111,9 +107,7 @@ suite("初回に選ぶ対象言語", () => {
 		// （実測: 拡張を開き直すまで、その言語のフォルダが作られなかった）
 		await loadConfig();
 		const selection = SelectionState.getInstance();
-		await selection.initialize(
-			memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en", "fr"] }),
-		);
+		await selection.initialize(memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en", "fr"] }));
 		assert.deepStrictEqual([...selection.getActiveKeys()], ["en"], "前提: en だけを選んでいる");
 
 		selection.reconcileWith([
@@ -128,9 +122,7 @@ suite("初回に選ぶ対象言語", () => {
 	test("本人が外した言語は、追随のたびに戻ってこない", async () => {
 		await loadConfig();
 		const selection = SelectionState.getInstance();
-		await selection.initialize(
-			memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en", "fr"] }),
-		);
+		await selection.initialize(memoryContext({ "mdait.activeTargets": ["en"], "mdait.knownTargets": ["en", "fr"] }));
 
 		const pairs = [
 			{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" },
@@ -145,9 +137,7 @@ suite("初回に選ぶ対象言語", () => {
 	test("設定から言語が消えても、選択が空になって何も動かなくならない", async () => {
 		await loadConfig();
 		const selection = SelectionState.getInstance();
-		await selection.initialize(
-			memoryContext({ "mdait.activeTargets": ["fr"], "mdait.knownTargets": ["en", "fr"] }),
-		);
+		await selection.initialize(memoryContext({ "mdait.activeTargets": ["fr"], "mdait.knownTargets": ["en", "fr"] }));
 
 		selection.reconcileWith([{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" }]);
 

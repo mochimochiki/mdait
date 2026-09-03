@@ -82,17 +82,7 @@ export interface SettingsCategory {
 }
 
 /** カテゴリの表示順。スカラー設定は general に集約し、未知のトップレベルキーは末尾に追加する */
-const CATEGORY_ORDER = [
-	"general",
-	"sync",
-	"markers",
-	"ai",
-	"trans",
-	"terms",
-	"tm",
-	"aiReview",
-	"prompts",
-];
+const CATEGORY_ORDER = ["general", "sync", "markers", "ai", "trans", "terms", "tm", "aiReview", "prompts"];
 
 /** UI に出さないトップレベルキー */
 const EXCLUDED_TOP_LEVEL_KEYS = new Set(["$schema"]);
@@ -153,15 +143,7 @@ function collectLeaves(
 		if (isCategoryObject(child)) {
 			collectLeaves(child, childPath, category, add);
 		} else {
-			add(
-				toDescriptor(
-					childPath.join("."),
-					child,
-					childPath,
-					category,
-					required.has(key),
-				),
-			);
+			add(toDescriptor(childPath.join("."), child, childPath, category, required.has(key)));
 		}
 	}
 }
@@ -219,9 +201,7 @@ function resolveWidgetType(node: JsonSchemaNode): SettingWidgetType {
 		if (
 			types.length === 2 &&
 			types.includes("string") &&
-			node.oneOf.some(
-				(variant) => variant.type === "array" && variant.items?.type === "string",
-			)
+			node.oneOf.some((variant) => variant.type === "array" && variant.items?.type === "string")
 		) {
 			return "stringArray";
 		}

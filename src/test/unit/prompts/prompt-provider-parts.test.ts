@@ -5,17 +5,9 @@
  */
 
 import { strict as assert } from "node:assert";
-import {
-	DEFAULT_PROMPTS,
-	PromptIds,
-	SOURCE_TEXT_SEPARATOR,
-	USER_SECTION_MARKER,
-} from "../../../prompts/defaults";
-import {
-	PromptProvider,
-	buildUserMessage,
-} from "../../../prompts/prompt-provider";
 import { Configuration } from "../../../infra/config/configuration";
+import { DEFAULT_PROMPTS, PromptIds, SOURCE_TEXT_SEPARATOR, USER_SECTION_MARKER } from "../../../prompts/defaults";
+import { PromptProvider, buildUserMessage } from "../../../prompts/prompt-provider";
 
 /** 翻訳系4テンプレート（system/user-section分割の対象） */
 const TRANS_PROMPT_IDS = [
@@ -38,10 +30,7 @@ suite("プロンプトのsystem/user-section分割", () => {
 
 	test("翻訳系4テンプレートすべてにuser-sectionマーカーが含まれる", () => {
 		for (const promptId of TRANS_PROMPT_IDS) {
-			assert.ok(
-				DEFAULT_PROMPTS[promptId].includes(USER_SECTION_MARKER),
-				`${promptId} にマーカーが含まれること`,
-			);
+			assert.ok(DEFAULT_PROMPTS[promptId].includes(USER_SECTION_MARKER), `${promptId} にマーカーが含まれること`);
 		}
 	});
 
@@ -87,11 +76,7 @@ suite("プロンプトのsystem/user-section分割", () => {
 				previousTranslation: "old translation 2",
 				sourceDiff: "-x\n+y",
 			});
-			assert.strictEqual(
-				parts1.system,
-				parts2.system,
-				`${promptId} のsystem部が可変データ・言語ペアに依存しないこと`,
-			);
+			assert.strictEqual(parts1.system, parts2.system, `${promptId} のsystem部が可変データ・言語ペアに依存しないこと`);
 		}
 	});
 
@@ -99,12 +84,8 @@ suite("プロンプトのsystem/user-section分割", () => {
 		// system部が完全静的であること（プロンプト種別ごとに全ワークスペース共通の
 		// 単一キャッシュエントリになる）をテンプレートレベルで保証する
 		for (const promptId of TRANS_PROMPT_IDS) {
-			const systemTemplate =
-				DEFAULT_PROMPTS[promptId].split(USER_SECTION_MARKER)[0];
-			assert.ok(
-				!systemTemplate.includes("{{"),
-				`${promptId} のsystem部に {{...}} が残っていないこと`,
-			);
+			const systemTemplate = DEFAULT_PROMPTS[promptId].split(USER_SECTION_MARKER)[0];
+			assert.ok(!systemTemplate.includes("{{"), `${promptId} のsystem部に {{...}} が残っていないこと`);
 		}
 	});
 
@@ -188,26 +169,17 @@ suite("プロンプトのsystem/user-section分割", () => {
 
 suite("buildUserMessage", () => {
 	test("コンテキストありの場合は区切り行を挟んで本文を連結する", () => {
-		const message = buildUserMessage(
-			{ system: "sys", userContext: "CONTEXT", isLegacy: false },
-			"BODY",
-		);
+		const message = buildUserMessage({ system: "sys", userContext: "CONTEXT", isLegacy: false }, "BODY");
 		assert.strictEqual(message, `CONTEXT\n\n${SOURCE_TEXT_SEPARATOR}\nBODY`);
 	});
 
 	test("コンテキストが空でも区切り行は付与される", () => {
-		const message = buildUserMessage(
-			{ system: "sys", userContext: "", isLegacy: false },
-			"BODY",
-		);
+		const message = buildUserMessage({ system: "sys", userContext: "", isLegacy: false }, "BODY");
 		assert.strictEqual(message, `${SOURCE_TEXT_SEPARATOR}\nBODY`);
 	});
 
 	test("レガシーテンプレートの場合は本文のみを返す（従来挙動）", () => {
-		const message = buildUserMessage(
-			{ system: "sys", userContext: "", isLegacy: true },
-			"BODY",
-		);
+		const message = buildUserMessage({ system: "sys", userContext: "", isLegacy: true }, "BODY");
 		assert.strictEqual(message, "BODY");
 	});
 });

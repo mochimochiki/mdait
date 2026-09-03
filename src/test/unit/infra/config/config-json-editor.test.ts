@@ -1,9 +1,5 @@
 import * as assert from "node:assert";
-import {
-	detectIndent,
-	removeConfigValue,
-	setConfigValue,
-} from "../../../../infra/config/config-json-editor";
+import { detectIndent, removeConfigValue, setConfigValue } from "../../../../infra/config/config-json-editor";
 
 const SAMPLE = `{
   "transPairs": [
@@ -86,9 +82,7 @@ suite("config-json-editor: mdait.json テキストのキー単位更新", () => 
 	});
 
 	test("配列値（transPairs）を丸ごと設定できる", () => {
-		const pairs = [
-			{ sourceLang: "en", sourceDir: "docs/en", targetLang: "de", targetDir: "docs/de" },
-		];
+		const pairs = [{ sourceLang: "en", sourceDir: "docs/en", targetLang: "de", targetDir: "docs/de" }];
 		const result = setConfigValue(SAMPLE, ["transPairs"], pairs);
 		const parsed = JSON.parse(result);
 		assert.deepStrictEqual(parsed.transPairs, pairs);

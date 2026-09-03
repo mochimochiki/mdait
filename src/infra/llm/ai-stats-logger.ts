@@ -176,9 +176,7 @@ export class AIStatsLogger {
 	 * レコードをTSV形式の文字列に変換
 	 */
 	private formatAsTSV(record: AIStatsRecord): string {
-		const errorMsg = record.errorMessage
-			? record.errorMessage.replace(/[\t\n\r]/g, " ")
-			: "";
+		const errorMsg = record.errorMessage ? record.errorMessage.replace(/[\t\n\r]/g, " ") : "";
 		return [
 			record.timestamp,
 			record.provider,

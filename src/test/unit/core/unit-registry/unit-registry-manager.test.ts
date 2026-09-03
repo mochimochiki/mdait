@@ -2,8 +2,8 @@ import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Configuration } from "../../../../infra/config/configuration";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
+import { Configuration } from "../../../../infra/config/configuration";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -90,7 +90,11 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 
 		UnitRegistryManager.resetInstance();
 		const reloaded = UnitRegistryManager.getInstance();
-		assert.equal(await reloaded.loadUnitRegistry("aaaa1111"), "buffered content", "バッファ content が取りこぼされている");
+		assert.equal(
+			await reloaded.loadUnitRegistry("aaaa1111"),
+			"buffered content",
+			"バッファ content が取りこぼされている",
+		);
 		assert.equal(await reloaded.loadNote("bbbb2222"), "a note");
 	});
 

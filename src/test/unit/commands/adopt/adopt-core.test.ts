@@ -128,13 +128,7 @@ suite("executeAdopt（取り込みウィザードオーケストレーター）"
 		const stages = new StubStages(syncResult(), ["/ws/en/a.md", "/ws/en/b.md"]);
 		const token = new vscode.CancellationTokenSource().token;
 
-		const outcome = await executeAdopt(
-			CONFIG,
-			{ buildGlossary: true, buildTm: true },
-			NOOP_PROGRESS,
-			token,
-			stages,
-		);
+		const outcome = await executeAdopt(CONFIG, { buildGlossary: true, buildTm: true }, NOOP_PROGRESS, token, stages);
 
 		assert.deepStrictEqual(stages.calls, [
 			"sync",
@@ -248,13 +242,7 @@ suite("executeAdopt（取り込みウィザードオーケストレーター）"
 		stages.termDetectError = new Error("detect boom");
 		const token = new vscode.CancellationTokenSource().token;
 
-		const outcome = await executeAdopt(
-			CONFIG,
-			{ buildGlossary: true, buildTm: true },
-			NOOP_PROGRESS,
-			token,
-			stages,
-		);
+		const outcome = await executeAdopt(CONFIG, { buildGlossary: true, buildTm: true }, NOOP_PROGRESS, token, stages);
 
 		assert.strictEqual(outcome.stageErrors.length, 1);
 		assert.strictEqual(outcome.stageErrors[0].stage, "termDetect");

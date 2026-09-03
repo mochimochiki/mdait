@@ -14,7 +14,9 @@ function createConfig(overrides: Partial<AIConfig> = {}): AIConfig {
 
 suite("describeAiService", () => {
 	test("vscode-lmはprovider・vendor・modelを「 / 」区切りで表示すること", () => {
-		const label = describeAiService(createConfig({ provider: "vscode-lm", vendor: "customendpoint", model: "gemma-4-E4B" }));
+		const label = describeAiService(
+			createConfig({ provider: "vscode-lm", vendor: "customendpoint", model: "gemma-4-E4B" }),
+		);
 		assert.strictEqual(label, "vscode-lm / customendpoint / gemma-4-E4B");
 	});
 

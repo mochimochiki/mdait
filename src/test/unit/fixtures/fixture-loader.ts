@@ -22,8 +22,11 @@ export interface Fixture {
 export function loadFixtures(subDir: string): Fixture[] {
 	// コンパイル後はout/test/unit/fixtures/にいるため、src/test/unit/fixtures/を参照する
 	const dir = path.resolve(__dirname, "../../../../src/test/unit/fixtures", subDir);
-	const mdFiles = fs.readdirSync(dir).filter(f => f.endsWith(".md")).sort();
-	return mdFiles.map(mdFile => {
+	const mdFiles = fs
+		.readdirSync(dir)
+		.filter((f) => f.endsWith(".md"))
+		.sort();
+	return mdFiles.map((mdFile) => {
 		const name = path.basename(mdFile, ".md");
 		const markdown = fs.readFileSync(path.join(dir, mdFile), "utf-8");
 		const jsonFile = path.join(dir, `${name}.json`);

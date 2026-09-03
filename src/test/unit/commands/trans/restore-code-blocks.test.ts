@@ -24,13 +24,19 @@ function roundTripGlued(source: string): string {
 suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と復元）", () => {
 	suite("AI が形を変えなければ往復で元に戻る", () => {
 		const cases: Array<[string, string]> = [
-			[
-				"字下げなしのコードブロック",
-				["説明。", "", "```js", "console.log(1);", "```", "", "続き。", ""].join("\n"),
-			],
+			["字下げなしのコードブロック", ["説明。", "", "```js", "console.log(1);", "```", "", "続き。", ""].join("\n")],
 			[
 				"リスト項目の中のコードブロック（2スペース字下げ）",
-				["手順は次のとおり。", "", "- 手順1: 実行する", "  ```js", "  console.log(1);", "  ```", "- 手順2: 確認する", ""].join("\n"),
+				[
+					"手順は次のとおり。",
+					"",
+					"- 手順1: 実行する",
+					"  ```js",
+					"  console.log(1);",
+					"  ```",
+					"- 手順2: 確認する",
+					"",
+				].join("\n"),
 			],
 			[
 				"番号付きリストの中のコードブロック（3スペース字下げ）",
@@ -183,7 +189,9 @@ suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と
 		});
 
 		test("Markdown でなくても往復して1バイトも変わらないこと", () => {
-			const source = ["リリースノート", "", "変更点:", "", "    - 速くなりました", "", "```", "v2.0.0", "```", ""].join("\n");
+			const source = ["リリースノート", "", "変更点:", "", "    - 速くなりました", "", "```", "v2.0.0", "```", ""].join(
+				"\n",
+			);
 			const { text, codeBlocks, placeholders } = protectCodeBlocks(source, { markdown: false });
 
 			assert.strictEqual(restoreCodeBlocks(text, placeholders, codeBlocks).text, source);
@@ -224,7 +232,11 @@ suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と
 
 	suite("復元そのものの決まりごと", () => {
 		test("1行のコードブロックは行の途中でも改行を足さない", () => {
-			const restored = restoreCodeBlocks("前 __CODE_BLOCK_PLACEHOLDER_0__ 後", ["__CODE_BLOCK_PLACEHOLDER_0__"], ["``````"]);
+			const restored = restoreCodeBlocks(
+				"前 __CODE_BLOCK_PLACEHOLDER_0__ 後",
+				["__CODE_BLOCK_PLACEHOLDER_0__"],
+				["``````"],
+			);
 			assert.strictEqual(restored.text, "前 `````` 後");
 		});
 
@@ -245,20 +257,25 @@ suite("protectCodeBlocks / restoreCodeBlocks（コードブロックの退避と
 				["__CODE_BLOCK_PLACEHOLDER_0__", "__CODE_BLOCK_PLACEHOLDER_1__"],
 				["```a\n1\n```", "```b\n2\n```"],
 			);
-			assert.deepStrictEqual(restored.missing, [
-				"__CODE_BLOCK_PLACEHOLDER_0__",
-				"__CODE_BLOCK_PLACEHOLDER_1__",
-			]);
+			assert.deepStrictEqual(restored.missing, ["__CODE_BLOCK_PLACEHOLDER_0__", "__CODE_BLOCK_PLACEHOLDER_1__"]);
 		});
 
 		test("すべて復元できたら missing は空になること", () => {
-			const restored = restoreCodeBlocks("__CODE_BLOCK_PLACEHOLDER_0__", ["__CODE_BLOCK_PLACEHOLDER_0__"], ["```a\n1\n```"]);
+			const restored = restoreCodeBlocks(
+				"__CODE_BLOCK_PLACEHOLDER_0__",
+				["__CODE_BLOCK_PLACEHOLDER_0__"],
+				["```a\n1\n```"],
+			);
 			assert.deepStrictEqual(restored.missing, []);
 		});
 
 		test("復元は冪等（同じ入力を2度通しても同じ結果）", () => {
 			const block = ["```js", "console.log(1);", "```"].join("\n");
-			const once = restoreCodeBlocks("説明。 __CODE_BLOCK_PLACEHOLDER_0__ 続き。", ["__CODE_BLOCK_PLACEHOLDER_0__"], [block]).text;
+			const once = restoreCodeBlocks(
+				"説明。 __CODE_BLOCK_PLACEHOLDER_0__ 続き。",
+				["__CODE_BLOCK_PLACEHOLDER_0__"],
+				[block],
+			).text;
 			const twice = restoreCodeBlocks(once, ["__CODE_BLOCK_PLACEHOLDER_0__"], [block]).text;
 			assert.strictEqual(twice, once);
 		});

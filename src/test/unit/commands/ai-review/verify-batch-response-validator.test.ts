@@ -19,10 +19,7 @@ suite("validateVerifyBatchResponse（バッチ検証応答のバリデーショ�
 	});
 
 	test("コードブロックで包まれた応答も抽出できる", () => {
-		const result = validateVerifyBatchResponse(
-			`\`\`\`json\n${JSON.stringify({ results: [entry(1)] })}\n\`\`\``,
-			[1],
-		);
+		const result = validateVerifyBatchResponse(`\`\`\`json\n${JSON.stringify({ results: [entry(1)] })}\n\`\`\``, [1]);
 		assert.strictEqual(result.error, undefined);
 		assert.strictEqual(result.entries.get(1)?.verdict, "match");
 	});
@@ -54,10 +51,7 @@ suite("validateVerifyBatchResponse（バッチ検証応答のバリデーショ�
 	});
 
 	test("verdict 語彙外のエントリは無効として欠落扱いになる", () => {
-		const result = validateVerifyBatchResponse(
-			JSON.stringify({ results: [entry(1), entry(2, "ok")] }),
-			[1, 2],
-		);
+		const result = validateVerifyBatchResponse(JSON.stringify({ results: [entry(1), entry(2, "ok")] }), [1, 2]);
 		assert.strictEqual(result.entries.size, 1);
 		assert.ok(result.error?.message.includes("2"));
 	});
@@ -72,10 +66,7 @@ suite("validateVerifyBatchResponse（バッチ検証応答のバリデーショ�
 	});
 
 	test("期待範囲外の index は無視される", () => {
-		const result = validateVerifyBatchResponse(
-			JSON.stringify({ results: [entry(1), entry(99)] }),
-			[1],
-		);
+		const result = validateVerifyBatchResponse(JSON.stringify({ results: [entry(1), entry(99)] }), [1]);
 		assert.strictEqual(result.error, undefined);
 		assert.strictEqual(result.entries.size, 1);
 	});

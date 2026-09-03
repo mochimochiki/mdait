@@ -5,19 +5,13 @@
  *   stripMarkdownとisWorthyForTmの動作を検証する。
  */
 import { strict as assert } from "node:assert";
-import {
-	isWorthyForTm,
-	stripMarkdown,
-} from "../../../../core/tm/tm-text-normalizer";
+import { isWorthyForTm, stripMarkdown } from "../../../../core/tm/tm-text-normalizer";
 
 suite("core/tm/tm-text-normalizer", () => {
 	suite("stripMarkdown", () => {
 		test("リンクを除去してテキストのみ抽出", () => {
 			assert.equal(stripMarkdown("[text](url)"), "text");
-			assert.equal(
-				stripMarkdown("Visit [Google](https://google.com) now"),
-				"Visit Google now",
-			);
+			assert.equal(stripMarkdown("Visit [Google](https://google.com) now"), "Visit Google now");
 		});
 
 		test("画像はalt含めて完全にスキップ", () => {
@@ -25,9 +19,7 @@ suite("core/tm/tm-text-normalizer", () => {
 			assert.equal(stripMarkdown("See ![diagram](url) here"), "See here");
 			// 前行テキスト＋次行画像がTMに混入しないことを確認（ソフトブレーク対策）
 			assert.equal(
-				stripMarkdown(
-					"Absolute path image links should work\n![Caption](/path/to/image.png)",
-				),
+				stripMarkdown("Absolute path image links should work\n![Caption](/path/to/image.png)"),
 				"Absolute path image links should work",
 			);
 		});
@@ -41,53 +33,34 @@ suite("core/tm/tm-text-normalizer", () => {
 		test("強調を除去してテキストのみ抽出", () => {
 			assert.equal(stripMarkdown("*italic*"), "italic");
 			assert.equal(stripMarkdown("_italic_"), "italic");
-			assert.equal(
-				stripMarkdown("This is *emphasized* text"),
-				"This is emphasized text",
-			);
+			assert.equal(stripMarkdown("This is *emphasized* text"), "This is emphasized text");
 		});
 
 		test("削除線を除去してテキストのみ抽出", () => {
 			assert.equal(stripMarkdown("~~strikethrough~~"), "strikethrough");
-			assert.equal(
-				stripMarkdown("This is ~~deleted~~ text"),
-				"This is deleted text",
-			);
+			assert.equal(stripMarkdown("This is ~~deleted~~ text"), "This is deleted text");
 		});
 
 		test("インラインコードは保持", () => {
 			assert.equal(stripMarkdown("`code`"), "`code`");
 			assert.equal(stripMarkdown("This is `code` here"), "This is `code` here");
-			assert.equal(
-				stripMarkdown("Use `npm install` command"),
-				"Use `npm install` command",
-			);
+			assert.equal(stripMarkdown("Use `npm install` command"), "Use `npm install` command");
 		});
 
 		test("コードブロックを完全除外", () => {
 			assert.equal(stripMarkdown("```\ncode block\n```"), "");
-			assert.equal(
-				stripMarkdown("Before\n```\ncode block\n```\nAfter"),
-				"Before\n\nAfter",
-			);
-			assert.equal(
-				stripMarkdown("Text ```javascript\nconst x = 1;\n``` more"),
-				"Text more",
-			);
+			assert.equal(stripMarkdown("Before\n```\ncode block\n```\nAfter"), "Before\n\nAfter");
+			assert.equal(stripMarkdown("Text ```javascript\nconst x = 1;\n``` more"), "Text more");
 		});
 
 		test("HTMLタグを除去してcontentのみ抽出", () => {
 			assert.equal(stripMarkdown("<tag>content</tag>"), "content");
-			assert.equal(
-				stripMarkdown("This is <strong>bold</strong> text"),
-				"This is bold text",
-			);
+			assert.equal(stripMarkdown("This is <strong>bold</strong> text"), "This is bold text");
 			assert.equal(stripMarkdown("<br>"), "");
 		});
 
 		test("複数要素が混在する複雑なケース", () => {
-			const input =
-				"Visit **[Google](https://google.com)** for `code` examples";
+			const input = "Visit **[Google](https://google.com)** for `code` examples";
 			const expected = "Visit Google for `code` examples";
 			assert.equal(stripMarkdown(input), expected);
 		});
@@ -114,8 +87,7 @@ suite("core/tm/tm-text-normalizer", () => {
 		});
 
 		test("先頭のYAML frontmatterを除外する", () => {
-			const input =
-				"---\ntitle: Sample\ntags:\n  - tm\n---\n\n本文の `code` です";
+			const input = "---\ntitle: Sample\ntags:\n  - tm\n---\n\n本文の `code` です";
 			const expected = "本文の `code` です";
 			assert.equal(stripMarkdown(input), expected);
 		});
@@ -128,18 +100,14 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		suite("見出しの処理", () => {
 			test("見出しと本文を改行2つで区切る", () => {
-				const input =
-					"## 結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
-				const expected =
-					"結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
+				const input = "## 結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
+				const expected = "結論\n\nAI技術の進化とグローバル化の加速により、翻訳市場は大きな変革期を迎えています。";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
 			test("複数の見出しをそれぞれ改行2つで区切る", () => {
-				const input =
-					"# タイトル\n\n## セクション1\n\n本文1\n\n## セクション2\n\n本文2";
-				const expected =
-					"タイトル\n\nセクション1\n\n本文1\n\nセクション2\n\n本文2";
+				const input = "# タイトル\n\n## セクション1\n\n本文1\n\n## セクション2\n\n本文2";
+				const expected = "タイトル\n\nセクション1\n\n本文1\n\nセクション2\n\n本文2";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
@@ -200,17 +168,14 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		suite("混在ケース", () => {
 			test("見出し、段落、リスト、引用の混在", () => {
-				const input =
-					"## 見出し\n\n段落1\n\n- リスト1\n- リスト2\n\n> 引用\n\n段落2";
+				const input = "## 見出し\n\n段落1\n\n- リスト1\n- リスト2\n\n> 引用\n\n段落2";
 				const expected = "見出し\n\n段落1\n\nリスト1\nリスト2\n\n引用\n\n段落2";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
 			test("複雑な構造", () => {
-				const input =
-					"# タイトル\n\n本文です。\n\n## セクション\n\n- 項目A\n- 項目B\n\n> 注意事項\n\n最後の段落。";
-				const expected =
-					"タイトル\n\n本文です。\n\nセクション\n\n項目A\n項目B\n\n注意事項\n\n最後の段落。";
+				const input = "# タイトル\n\n本文です。\n\n## セクション\n\n- 項目A\n- 項目B\n\n> 注意事項\n\n最後の段落。";
+				const expected = "タイトル\n\n本文です。\n\nセクション\n\n項目A\n項目B\n\n注意事項\n\n最後の段落。";
 				assert.equal(stripMarkdown(input), expected);
 			});
 
@@ -226,15 +191,13 @@ suite("core/tm/tm-text-normalizer", () => {
 
 	suite("表の処理", () => {
 		test("基本的な表から各セルごとに改行で分離", () => {
-			const input =
-				"| Header1 | Header2 |\n|---------|----------|\n| Cell1   | Cell2   |";
+			const input = "| Header1 | Header2 |\n|---------|----------|\n| Cell1   | Cell2   |";
 			const expected = "Header1\nHeader2\nCell1\nCell2";
 			assert.equal(stripMarkdown(input), expected);
 		});
 
 		test("複数行の表", () => {
-			const input =
-				"| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+			const input = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
 			const expected = "Name\nAge\nAlice\n30\nBob\n25";
 			assert.equal(stripMarkdown(input), expected);
 		});
@@ -246,8 +209,7 @@ suite("core/tm/tm-text-normalizer", () => {
 		});
 
 		test("セル内にMarkdown記法を含む表", () => {
-			const input =
-				"| **Bold** | *Italic* |\n|----------|----------|\n| [Link](url) | `code` |";
+			const input = "| **Bold** | *Italic* |\n|----------|----------|\n| [Link](url) | `code` |";
 			const expected = "Bold\nItalic\nLink\n`code`";
 			assert.equal(stripMarkdown(input), expected);
 		});
@@ -272,8 +234,7 @@ suite("core/tm/tm-text-normalizer", () => {
 		});
 
 		test("表の前後にテキストがある場合", () => {
-			const input =
-				"Before table\n\n| Col1 | Col2 |\n|------|------|\n| A | B |\n\nAfter table";
+			const input = "Before table\n\n| Col1 | Col2 |\n|------|------|\n| A | B |\n\nAfter table";
 			const expected = "Before table\n\nCol1\nCol2\nA\nB\n\nAfter table";
 			assert.equal(stripMarkdown(input), expected);
 		});
@@ -360,14 +321,8 @@ suite("core/tm/tm-text-normalizer", () => {
 			});
 
 			test("URL/パスを含むが文章の場合は通過", () => {
-				assert.equal(
-					isWorthyForTm("Visit https://example.com for more", "en"),
-					true,
-				);
-				assert.equal(
-					isWorthyForTm("The file ./path/to/file exists", "en"),
-					true,
-				);
+				assert.equal(isWorthyForTm("Visit https://example.com for more", "en"), true);
+				assert.equal(isWorthyForTm("The file ./path/to/file exists", "en"), true);
 			});
 		});
 
@@ -399,28 +354,13 @@ suite("core/tm/tm-text-normalizer", () => {
 
 		suite("正常な文は通過", () => {
 			test("英語の正常な文", () => {
-				assert.equal(
-					isWorthyForTm(
-						"This is a good sentence for translation memory.",
-						"en",
-					),
-					true,
-				);
-				assert.equal(
-					isWorthyForTm("Please configure your settings properly.", "en"),
-					true,
-				);
+				assert.equal(isWorthyForTm("This is a good sentence for translation memory.", "en"), true);
+				assert.equal(isWorthyForTm("Please configure your settings properly.", "en"), true);
 			});
 
 			test("日本語の正常な文", () => {
-				assert.equal(
-					isWorthyForTm("これは翻訳メモリに登録する価値のある文章です。", "ja"),
-					true,
-				);
-				assert.equal(
-					isWorthyForTm("設定を適切に構成してください。", "ja"),
-					true,
-				);
+				assert.equal(isWorthyForTm("これは翻訳メモリに登録する価値のある文章です。", "ja"), true);
+				assert.equal(isWorthyForTm("設定を適切に構成してください。", "ja"), true);
 			});
 		});
 

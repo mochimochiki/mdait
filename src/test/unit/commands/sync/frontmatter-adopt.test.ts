@@ -22,9 +22,16 @@ import { FileMutex } from "../../../../infra/workspace/file-mutex";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
-const SOURCE = ["---", 'title: "インストール"', 'description: "動作環境と導入手順"', "---", "# インストール", "", "手順を説明します。", ""].join(
-	"\n",
-);
+const SOURCE = [
+	"---",
+	'title: "インストール"',
+	'description: "動作環境と導入手順"',
+	"---",
+	"# インストール",
+	"",
+	"手順を説明します。",
+	"",
+].join("\n");
 
 /** 人が訳した frontmatter を持つ既訳 */
 const TARGET = [
@@ -137,7 +144,11 @@ for (const mode of ["embedded", "external"] as const) {
 
 		test("訳文に対象キーが無ければ翻訳待ちのままであること", async () => {
 			const config = await bootstrap();
-			fs.writeFileSync(targetFile, ["---", "draft: false", "---", "# Installation", "", "Body.", ""].join("\n"), "utf-8");
+			fs.writeFileSync(
+				targetFile,
+				["---", "draft: false", "---", "# Installation", "", "Body.", ""].join("\n"),
+				"utf-8",
+			);
 
 			await sync_CoreProc(sourceFile, targetFile, config, { adopt: true });
 

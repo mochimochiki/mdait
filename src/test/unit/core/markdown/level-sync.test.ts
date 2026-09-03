@@ -1,8 +1,8 @@
 ﻿// level-validatorのテスト
 
 import { strict as assert } from "node:assert";
-import { syncLevelSettings } from "../../../../core/markdown/level-sync";
 import { FrontMatter } from "../../../../core/markdown/front-matter";
+import { syncLevelSettings } from "../../../../core/markdown/level-sync";
 
 suite("level-validator", () => {
 	test("level設定が一致している場合、コンテンツを変更しない", () => {

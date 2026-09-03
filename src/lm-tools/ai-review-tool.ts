@@ -2,8 +2,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeAiReviewForFiles } from "../commands/ai-review/review-command";
 import { AUTO_APPROVE_THRESHOLD } from "../commands/ai-review/review-constants";
-import { resolveReviewTargets } from "../commands/ai-review/review-targets";
 import { type AiReviewFileResult, type PairVerdict, aggregateReviewResults } from "../commands/ai-review/review-result";
+import { resolveReviewTargets } from "../commands/ai-review/review-targets";
 import { getSelectedScopeFiles } from "../commands/shared/status-scope";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
@@ -96,9 +96,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 			const config = Configuration.getInstance();
 			const validationError = config.validate();
 			if (validationError) {
-				return toToolResult(
-					createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError),
-				);
+				return toToolResult(createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError));
 			}
 
 			let fileExplorer: FileExplorer;
@@ -150,9 +148,7 @@ export class MdaitAiReviewTool implements vscode.LanguageModelTool<AiReviewInput
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in AI review tool", formatError(error));
 			const errorMessage = vscode.l10n.t("AI review failed: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -285,7 +281,7 @@ function buildAiReviewNextActions(data: AiReviewData): string[] {
 	}
 	if (data.dryRun && data.units.approved === 0 && data.units.verified > 0) {
 		nextActions.push(
-			'This was a dry run: no markers were changed. Re-run mdait_aiReview without dryRun to apply auto-approval.',
+			"This was a dry run: no markers were changed. Re-run mdait_aiReview without dryRun to apply auto-approval.",
 		);
 	}
 	if (data.units.approved > 0) {

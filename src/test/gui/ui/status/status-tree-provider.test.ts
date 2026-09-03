@@ -33,10 +33,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		const fileStatuses = tree.getFilesAll();
 
 		// 結果の検証
-		assert.ok(
-			Array.isArray(fileStatuses),
-			"fileStatusesは配列である必要があります",
-		);
+		assert.ok(Array.isArray(fileStatuses), "fileStatusesは配列である必要があります");
 
 		// サンプルファイルが存在する場合の検証
 		if (fileStatuses.length > 0) {
@@ -44,22 +41,11 @@ suite("StatusTreeProvider Test Suite", () => {
 			assert.ok(firstFile.filePath, "filePathが設定されている必要があります");
 			assert.ok(firstFile.fileName, "fileNameが設定されている必要があります");
 			assert.ok(
-				[
-					Status.Translated,
-					Status.NeedsTranslation,
-					Status.Error,
-					Status.Unknown,
-				].includes(firstFile.status),
+				[Status.Translated, Status.NeedsTranslation, Status.Error, Status.Unknown].includes(firstFile.status),
 				"statusは有効な値である必要があります",
 			);
-			assert.ok(
-				typeof firstFile.translatedUnits === "number",
-				"translatedUnitsは数値である必要があります",
-			);
-			assert.ok(
-				typeof firstFile.totalUnits === "number",
-				"totalUnitsは数値である必要があります",
-			);
+			assert.ok(typeof firstFile.translatedUnits === "number", "translatedUnitsは数値である必要があります");
+			assert.ok(typeof firstFile.totalUnits === "number", "totalUnitsは数値である必要があります");
 		}
 	});
 
@@ -84,22 +70,14 @@ suite("StatusTreeProvider Test Suite", () => {
 		const fileStatuses = tree.getFilesAll();
 
 		// エラーにならずに空配列が返されることを確認
-		assert.strictEqual(
-			fileStatuses.length,
-			0,
-			"存在しないディレクトリの場合は空配列が返される必要があります",
-		);
+		assert.strictEqual(fileStatuses.length, 0, "存在しないディレクトリの場合は空配列が返される必要があります");
 	});
 
 	test("StatusManagerがシングルトンパターンで動作する", () => {
 		const instance1 = StatusManager.getInstance();
 		const instance2 = StatusManager.getInstance();
 
-		assert.strictEqual(
-			instance1,
-			instance2,
-			"同じインスタンスが返される必要があります",
-		);
+		assert.strictEqual(instance1, instance2, "同じインスタンスが返される必要があります");
 	});
 
 	test("StatusManagerの初期化フラグが正しく動作する", async () => {
@@ -123,11 +101,7 @@ suite("StatusTreeProvider Test Suite", () => {
 		await statusManager.buildStatusItemTree();
 		const afterRebuild = statusManager.isInitialized();
 
-		assert.strictEqual(
-			afterRebuild,
-			true,
-			"rebuildStatusItemAll実行後は初期化済みになる必要があります",
-		);
+		assert.strictEqual(afterRebuild, true, "rebuildStatusItemAll実行後は初期化済みになる必要があります");
 	});
 
 	test("StatusManagerの進捗集計機能が正しく動作する", async () => {
@@ -149,29 +123,11 @@ suite("StatusTreeProvider Test Suite", () => {
 		const tree = statusManager.getStatusItemTree();
 		const progress = tree.aggregateProgress();
 
-		assert.ok(
-			typeof progress.totalUnits === "number",
-			"totalUnitsは数値である必要があります",
-		);
-		assert.ok(
-			typeof progress.translatedUnits === "number",
-			"translatedUnitsは数値である必要があります",
-		);
-		assert.ok(
-			typeof progress.errorUnits === "number",
-			"errorUnitsは数値である必要があります",
-		);
-		assert.ok(
-			progress.totalUnits >= 0,
-			"totalUnitsは0以上である必要があります",
-		);
-		assert.ok(
-			progress.translatedUnits >= 0,
-			"translatedUnitsは0以上である必要があります",
-		);
-		assert.ok(
-			progress.errorUnits >= 0,
-			"errorUnitsは0以上である必要があります",
-		);
+		assert.ok(typeof progress.totalUnits === "number", "totalUnitsは数値である必要があります");
+		assert.ok(typeof progress.translatedUnits === "number", "translatedUnitsは数値である必要があります");
+		assert.ok(typeof progress.errorUnits === "number", "errorUnitsは数値である必要があります");
+		assert.ok(progress.totalUnits >= 0, "totalUnitsは0以上である必要があります");
+		assert.ok(progress.translatedUnits >= 0, "translatedUnitsは0以上である必要があります");
+		assert.ok(progress.errorUnits >= 0, "errorUnitsは0以上である必要があります");
 	});
 });

@@ -16,9 +16,7 @@ suite("デバッグIPCの引数の組み直し", () => {
 	test("フォルダ指定のコマンドは、相対パスをワークスペース基準の絶対パスへ直す", () => {
 		const transform = buildArgTransformer("mdait.translate.directory", root);
 		assert.ok(transform, "変換が要るコマンドである");
-		const [item] = transform(["content/en/child"]) as [
-			{ type: string; directoryPath: string; label: string },
-		];
+		const [item] = transform(["content/en/child"]) as [{ type: string; directoryPath: string; label: string }];
 		assert.strictEqual(item.type, "directory");
 		assert.strictEqual(item.directoryPath, path.join(root, "content/en/child"));
 		assert.strictEqual(item.label, "child");
@@ -27,9 +25,7 @@ suite("デバッグIPCの引数の組み直し", () => {
 	test("ファイル指定のコマンドも、相対パスを絶対パスへ直す", () => {
 		const transform = buildArgTransformer("mdait.translate.file", root);
 		assert.ok(transform);
-		const [item] = transform(["content/en/10_test.md"]) as [
-			{ type: string; filePath: string; fileName: string },
-		];
+		const [item] = transform(["content/en/10_test.md"]) as [{ type: string; filePath: string; fileName: string }];
 		assert.strictEqual(item.type, "file");
 		assert.strictEqual(item.filePath, path.join(root, "content/en/10_test.md"));
 		assert.strictEqual(item.fileName, "10_test.md");

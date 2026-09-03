@@ -154,9 +154,7 @@ suite("OpenAIProvider", () => {
 	});
 
 	test("429応答はRetry-Afterに従ってリトライし回復すること", async () => {
-		stubFetch((call) =>
-			call === 1 ? errorResponse(429, { "retry-after": "0" }) : okResponse("recovered"),
-		);
+		stubFetch((call) => (call === 1 ? errorResponse(429, { "retry-after": "0" }) : okResponse("recovered")));
 		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
 		const result = await provider.sendMessage("system", [{ role: "user", content: "hello" }]);
 		assert.strictEqual(result, "recovered");
@@ -185,10 +183,7 @@ suite("OpenAIProvider", () => {
 	test("リトライ上限超過で失敗すること", async () => {
 		stubFetch(() => errorResponse(500));
 		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
-		await assert.rejects(
-			provider.sendMessage("system", [{ role: "user", content: "hello" }]),
-			/OpenAI API error/,
-		);
+		await assert.rejects(provider.sendMessage("system", [{ role: "user", content: "hello" }]), /OpenAI API error/);
 		// 初回 + maxRetries(2) = 3試行
 		assert.strictEqual(fetchCalls, 3);
 	});
@@ -213,10 +208,7 @@ suite("OpenAIProvider", () => {
 			isCancellationRequested: true,
 			onCancellationRequested: () => ({ dispose() {} }),
 		} as unknown as vscode.CancellationToken;
-		await assert.rejects(
-			provider.sendMessage("system", [{ role: "user", content: "hello" }], token),
-			/cancelled/i,
-		);
+		await assert.rejects(provider.sendMessage("system", [{ role: "user", content: "hello" }], token), /cancelled/i);
 		assert.strictEqual(fetchCalls, 0);
 	});
 
@@ -257,18 +249,19 @@ suite("OpenAIProvider", () => {
 	});
 
 	test("usage付き応答でもcontentが正しく返ること", async () => {
-		stubFetch(() =>
-			new Response(
-				JSON.stringify({
-					choices: [{ message: { role: "assistant", content: "with usage" } }],
-					usage: {
-						prompt_tokens: 1200,
-						completion_tokens: 80,
-						prompt_tokens_details: { cached_tokens: 1024 },
-					},
-				}),
-				{ status: 200, headers: { "Content-Type": "application/json" } },
-			),
+		stubFetch(
+			() =>
+				new Response(
+					JSON.stringify({
+						choices: [{ message: { role: "assistant", content: "with usage" } }],
+						usage: {
+							prompt_tokens: 1200,
+							completion_tokens: 80,
+							prompt_tokens_details: { cached_tokens: 1024 },
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
 		);
 		const provider = new OpenAIProvider(createConfig(), FAST_POLICY);
 		const result = await provider.sendMessage("system", [{ role: "user", content: "hello" }]);

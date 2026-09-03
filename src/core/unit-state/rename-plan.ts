@@ -63,7 +63,7 @@ export interface RenameFollowProbe {
 	 * 「mdait が以前から知っている場所か」を問うために要る。移動が済んだあとの世界では
 	 * 「旧パスに無い・新パスに在る」だけでは**動いてきたのか、前から在ったのか**を
 	 * 区別できない（{@link planEntryMoves} を見よ）。ディレクトリの移動も扱うので
-     * 配下まで含めて答えること。
+	 * 配下まで含めて答えること。
 	 */
 	hasEntriesAt(path: string): boolean;
 	/** 同じ場所を指すパスを同じ文字列にする（重複の排除に使う） */
@@ -149,10 +149,7 @@ function walkFollow(
  * @param renames ユーザーが行おうとしている移動
  * @param probe ペアの導出と実在確認
  */
-export function planRenameFollow(
-	renames: readonly PathRename[],
-	probe: RenameFollowProbe,
-): RenameFollowPlan {
+export function planRenameFollow(renames: readonly PathRename[], probe: RenameFollowProbe): RenameFollowPlan {
 	const { taken, blocked } = walkFollow(renames, probe, (candidate, claimedDestinations) => {
 		if (!probe.exists(candidate.oldPath)) {
 			return "skip"; // 訳文がまだ無い。sync が原文から作る

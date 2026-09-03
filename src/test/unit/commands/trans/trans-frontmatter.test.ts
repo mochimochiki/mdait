@@ -2,7 +2,6 @@
 // transコマンドでfrontmatterが翻訳されることを確認するテスト
 
 import { strict as assert } from "node:assert";
-import type { Configuration } from "../../../../infra/config/configuration";
 import { FrontMatter } from "../../../../core/markdown/front-matter";
 import {
 	getFrontmatterTranslationValues,
@@ -11,6 +10,7 @@ import {
 } from "../../../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { markdownParser } from "../../../../core/markdown/parser";
+import type { Configuration } from "../../../../infra/config/configuration";
 
 const testConfig = {
 	sync: { level: 2 },

@@ -1,6 +1,6 @@
-import type { TransPair } from "../../infra/config/configuration";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { CurrentPrimaryUnit } from "../../core/tm/types";
+import type { TransPair } from "../../infra/config/configuration";
 
 export function collectCurrentPrimaryUnits(units: readonly MdaitUnit[], unitPath: string): CurrentPrimaryUnit[] {
 	return units

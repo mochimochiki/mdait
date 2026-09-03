@@ -4,19 +4,12 @@
  */
 
 import { strict as assert } from "node:assert";
-import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
-import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { UnitPair } from "../../../../commands/term/unit-pair";
+import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 
 suite("UnitPair", () => {
-	const mockSourceUnit = new MdaitUnit(
-		new MdaitMarker("abc123"),
-		"見出し",
-		1,
-		"# 見出し\n\nソースコンテンツ",
-		0,
-		2,
-	);
+	const mockSourceUnit = new MdaitUnit(new MdaitMarker("abc123"), "見出し", 1, "# 見出し\n\nソースコンテンツ", 0, 2);
 
 	const mockTargetUnit = new MdaitUnit(
 		new MdaitMarker("def456", "abc123"),

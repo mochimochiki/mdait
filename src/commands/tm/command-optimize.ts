@@ -87,9 +87,7 @@ export async function tmOptimizeCommand(): Promise<TmOptimizeResult | undefined>
 		return;
 	}
 	if (!config.getTmEnabled()) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("TM feature is disabled. Enable it in mdait.json."));
 		return;
 	}
 
@@ -103,9 +101,7 @@ export async function tmOptimizeCommand(): Promise<TmOptimizeResult | undefined>
 				ensureMdaitDir();
 				const entryCount = await optimizeTmWeights(config);
 				if (entryCount === 0) {
-					vscode.window.showInformationMessage(
-						vscode.l10n.t("TM optimize skipped: no entries found."),
-					);
+					vscode.window.showInformationMessage(vscode.l10n.t("TM optimize skipped: no entries found."));
 					return { entryCount: 0 };
 				}
 				vscode.window.showInformationMessage(
@@ -116,9 +112,7 @@ export async function tmOptimizeCommand(): Promise<TmOptimizeResult | undefined>
 		);
 	} catch (error) {
 		logger.error("tm.optimize", "TM optimize failed", formatError(error));
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("TM optimize failed: {0}", (error as Error).message),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("TM optimize failed: {0}", (error as Error).message));
 		return undefined;
 	}
 }

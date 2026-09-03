@@ -41,11 +41,7 @@ export class OllamaProvider implements AIService {
 				} catch {
 					// abort失敗は無視（タイムアウトエラーを優先）
 				}
-				reject(
-					new Error(
-						`Ollama request timed out after ${this.timeoutMs / 1000}s (no response or stalled stream)`,
-					),
-				);
+				reject(new Error(`Ollama request timed out after ${this.timeoutMs / 1000}s (no response or stalled stream)`));
 			}, this.timeoutMs);
 
 			promise.then(

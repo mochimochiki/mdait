@@ -36,9 +36,16 @@ declare let __vscodeMockWorkspaceRoot: string;
 const MATCH = '{"verdict": "match", "confidence": 0.95, "issues": [], "reason": "Complete."}';
 const MISMATCH = '{"verdict": "mismatch", "confidence": 0.9, "issues": [], "reason": "Different topics."}';
 
-const SOURCE = ["---", 'title: "インストール"', 'description: "動作環境と導入手順"', "---", "# インストール", "", "手順を説明します。", ""].join(
-	"\n",
-);
+const SOURCE = [
+	"---",
+	'title: "インストール"',
+	'description: "動作環境と導入手順"',
+	"---",
+	"# インストール",
+	"",
+	"手順を説明します。",
+	"",
+].join("\n");
 
 const TARGET = [
 	"---",

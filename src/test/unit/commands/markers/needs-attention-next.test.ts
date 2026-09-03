@@ -5,12 +5,7 @@
 import * as assert from "node:assert";
 import * as path from "node:path";
 import { findNextIndex } from "../../../../commands/markers/needs-attention-next";
-import {
-	type FileStatusItem,
-	Status,
-	StatusItemType,
-	type UnitStatusItem,
-} from "../../../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType, type UnitStatusItem } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -19,11 +14,7 @@ const jaDir = path.resolve("/mock-workspace/ja");
 const aPath = path.join(jaDir, "a.md");
 const bPath = path.join(jaDir, "b.md");
 
-function makeUnit(
-	filePath: string,
-	unitHash: string,
-	startLine: number,
-): UnitStatusItem {
+function makeUnit(filePath: string, unitHash: string, startLine: number): UnitStatusItem {
 	return {
 		type: StatusItemType.Unit,
 		label: unitHash,
@@ -35,10 +26,7 @@ function makeUnit(
 	};
 }
 
-function makeFile(
-	filePath: string,
-	children: UnitStatusItem[],
-): FileStatusItem {
+function makeFile(filePath: string, children: UnitStatusItem[]): FileStatusItem {
 	return {
 		type: StatusItemType.File,
 		label: path.basename(filePath),
@@ -107,15 +95,8 @@ suite("findNextIndex（次の要対応へ）", () => {
 
 	test("要対応と無関係なファイルを開いている場合もパス順で次の項目を選ぶこと", () => {
 		const otherPath = path.join(jaDir, "0-other.md"); // a.md より前
-		assert.strictEqual(
-			findNextIndex(units, { filePath: otherPath, line: 0 }),
-			0,
-		);
+		assert.strictEqual(findNextIndex(units, { filePath: otherPath, line: 0 }), 0);
 		const laterPath = path.join(jaDir, "z-other.md"); // b.md より後
-		assert.strictEqual(
-			findNextIndex(units, { filePath: laterPath, line: 0 }),
-			0,
-			"以降に項目が無ければ先頭へ回ること",
-		);
+		assert.strictEqual(findNextIndex(units, { filePath: laterPath, line: 0 }), 0, "以降に項目が無ければ先頭へ回ること");
 	});
 });

@@ -27,9 +27,7 @@ suite("validateAlignResponse（アライン応答のバリデーション）", (
 	});
 
 	test("corrections を配列として解釈する", () => {
-		const result = validateAlignResponse(
-			'{"corrections": [{"sourceIndex": 5, "targetIndex": 4, "confidence": 0.9}]}',
-		);
+		const result = validateAlignResponse('{"corrections": [{"sourceIndex": 5, "targetIndex": 4, "confidence": 0.9}]}');
 		assert.strictEqual(result.valid, true);
 		assert.strictEqual(result.parsed?.kind, "corrections");
 		if (result.parsed?.kind === "corrections") {

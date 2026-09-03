@@ -39,11 +39,7 @@ export class SectionMatcher {
 	 * @param targetUnits 対象のユニット配列
 	 * @param independentTargets 独立ユニット（ファイルに永続化されたマーカーを持つパススルー対象）の集合
 	 */
-	match(
-		sourceUnits: MdaitUnit[],
-		targetUnits: MdaitUnit[],
-		independentTargets?: ReadonlySet<MdaitUnit>,
-	): MatchResult {
+	match(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[], independentTargets?: ReadonlySet<MdaitUnit>): MatchResult {
 		const result: SectionPair[] = [];
 		const matchedTargetIndexes = new Set<number>();
 		const matchedSourceIndexes = new Set<number>();

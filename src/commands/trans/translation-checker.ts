@@ -165,11 +165,7 @@ export class TranslationChecker {
 	/**
 	 * 見出し構造をチェック
 	 */
-	private checkHeadings(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkHeadings(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		// 各レベルの見出し数を比較
 		const allLevels = new Set([...source.headings.keys(), ...translated.headings.keys()]);
 
@@ -189,11 +185,7 @@ export class TranslationChecker {
 	/**
 	 * リスト項目数をチェック
 	 */
-	private checkListItems(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkListItems(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.listItems !== translated.listItems) {
 			reasons.push({
 				category: "list_mismatch",
@@ -205,11 +197,7 @@ export class TranslationChecker {
 	/**
 	 * コードブロック数をチェック
 	 */
-	private checkCodeBlocks(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkCodeBlocks(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.codeBlocks !== translated.codeBlocks) {
 			reasons.push({
 				category: "code_block_mismatch",
@@ -221,11 +209,7 @@ export class TranslationChecker {
 	/**
 	 * 引用ブロック数をチェック
 	 */
-	private checkBlockquotes(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkBlockquotes(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.blockquotes !== translated.blockquotes) {
 			reasons.push({
 				category: "blockquote_mismatch",
@@ -237,11 +221,7 @@ export class TranslationChecker {
 	/**
 	 * テーブル数をチェック
 	 */
-	private checkTables(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkTables(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.tables !== translated.tables) {
 			reasons.push({
 				category: "table_mismatch",
@@ -253,11 +233,7 @@ export class TranslationChecker {
 	/**
 	 * リンク数をチェック
 	 */
-	private checkLinks(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkLinks(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.links !== translated.links) {
 			reasons.push({
 				category: "link_mismatch",
@@ -269,11 +245,7 @@ export class TranslationChecker {
 	/**
 	 * 画像数をチェック
 	 */
-	private checkImages(
-		source: MarkdownStructure,
-		translated: MarkdownStructure,
-		reasons: ReviewReason[],
-	): void {
+	private checkImages(source: MarkdownStructure, translated: MarkdownStructure, reasons: ReviewReason[]): void {
 		if (source.images !== translated.images) {
 			reasons.push({
 				category: "image_mismatch",

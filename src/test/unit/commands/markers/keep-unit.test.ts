@@ -263,7 +263,11 @@ suite("Keepの恒久性（sync統合。unit-state.md §14(6)-(a) の解消）", 
 
 	test("Keepしたユニットは次のsyncで確認待ちが復活せず、独立ユニットとして保持される", async () => {
 		const config = await initConfig();
-		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"), "utf-8");
+		fs.writeFileSync(
+			sourceFile,
+			["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"),
+			"utf-8",
+		);
 		await syncNew_CoreProc(sourceFile, targetFile, config);
 
 		// 原文から「付録」を削除して sync → 訳文側が確認待ちになる
@@ -296,7 +300,11 @@ suite("Keepの恒久性（sync統合。unit-state.md §14(6)-(a) の解消）", 
 		// 独立化は「機械の対応付けから外す」という人の宣言なので、原文が戻っても再連結しない。
 		// 同名章が2本並ぶのは宣言どおりの挙動 — この帰結が変わったら ADR の再訪が要る
 		const config = await initConfig();
-		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"), "utf-8");
+		fs.writeFileSync(
+			sourceFile,
+			["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"),
+			"utf-8",
+		);
 		await syncNew_CoreProc(sourceFile, targetFile, config);
 
 		// 原文から「付録」を削除 → sync → Keep（独立化）
@@ -307,7 +315,11 @@ suite("Keepの恒久性（sync統合。unit-state.md §14(6)-(a) の解消）", 
 		await keepUnitsAsIndependent(targetFile, config, [pending.marker.hash]);
 
 		// 原文の「付録」を復活させて sync
-		fs.writeFileSync(sourceFile, ["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"), "utf-8");
+		fs.writeFileSync(
+			sourceFile,
+			["## 概要", "", "概要の本文。", "", "## 付録", "", "付録の本文。", ""].join("\n"),
+			"utf-8",
+		);
 		await sync_CoreProc(sourceFile, targetFile, config);
 
 		const appendixUnits = parseUnits(targetFile).filter((u) => u.title === "付録");

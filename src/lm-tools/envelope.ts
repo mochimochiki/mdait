@@ -49,11 +49,7 @@ export const ToolErrorCode = {
 /**
  * 成功エンベロープを生成する
  */
-export function createOkEnvelope<TData>(
-	summary: string,
-	data?: TData,
-	nextActions?: string[],
-): ToolEnvelope<TData> {
+export function createOkEnvelope<TData>(summary: string, data?: TData, nextActions?: string[]): ToolEnvelope<TData> {
 	const envelope: ToolEnvelope<TData> = {
 		schemaVersion: TOOL_SCHEMA_VERSION,
 		ok: true,

@@ -1,5 +1,5 @@
 {
-  "description": "フロントマターなし + テーブル（level=2）",
-  "syncLevel": 2,
-  "expectedUnits": 2
+	"description": "フロントマターなし + テーブル（level=2）",
+	"syncLevel": 2,
+	"expectedUnits": 2
 }

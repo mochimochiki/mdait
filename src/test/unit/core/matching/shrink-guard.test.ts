@@ -3,11 +3,7 @@
 // 述語は1つだが、判断を誤ったときの代償が違うので慎重さの度合いは用途で変える。
 
 import { strict as assert } from "node:assert";
-import {
-	DELETE_SUSPICION,
-	PRUNE_SUSPICION,
-	isSuspiciousShrink,
-} from "../../../../core/matching/shrink-guard";
+import { DELETE_SUSPICION, PRUNE_SUSPICION, isSuspiciousShrink } from "../../../../core/matching/shrink-guard";
 
 suite("isSuspiciousShrink（刈り取り側の慎重さ）", () => {
 	const suspicious = (before: number, after: number) => isSuspiciousShrink(before, after, PRUNE_SUSPICION);

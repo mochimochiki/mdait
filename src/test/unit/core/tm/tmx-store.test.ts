@@ -80,7 +80,7 @@ suite("TmxStore", () => {
 		assert.strictEqual(entry.variants.get("ja")?.text, "こんにちは世界");
 	});
 
-test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-wt は出力する", () => {
+	test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-wt は出力する", () => {
 		store.addEntry(createTestEntry());
 		store.save(tempFilePath);
 

@@ -71,9 +71,7 @@ export class MdaitTermTool implements vscode.LanguageModelTool<TermInput> {
 			const config = Configuration.getInstance();
 			const validationError = config.validate();
 			if (validationError) {
-				return toToolResult(
-					createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError),
-				);
+				return toToolResult(createErrorEnvelope(validationError, ToolErrorCode.InternalError, validationError));
 			}
 
 			let fileExplorer: FileExplorer;
@@ -179,9 +177,7 @@ export class MdaitTermTool implements vscode.LanguageModelTool<TermInput> {
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in term tool", formatError(error));
 			const errorMessage = vscode.l10n.t("Term operation failed: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -301,9 +297,7 @@ async function countUnexpanded(config: Configuration, pair: TransPair): Promise<
 	try {
 		const repository = await TermsRepository.load(config.getTermsFilePath());
 		const entries = await repository.getAllEntries();
-		return entries.filter(
-			(entry) => entry.languages[pair.sourceLang] && !entry.languages[pair.targetLang],
-		).length;
+		return entries.filter((entry) => entry.languages[pair.sourceLang] && !entry.languages[pair.targetLang]).length;
 	} catch {
 		return 0;
 	}

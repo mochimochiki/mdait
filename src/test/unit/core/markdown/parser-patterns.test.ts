@@ -2,8 +2,8 @@
 // 特殊Markdown構文と見出しレベル分割を網羅的に検証する
 
 import { strict as assert } from "node:assert";
-import type { Configuration } from "../../../../infra/config/configuration";
 import { markdownParser } from "../../../../core/markdown/parser";
+import type { Configuration } from "../../../../infra/config/configuration";
 import { loadFixtures } from "../../fixtures/fixture-loader";
 
 function makeConfig(level: number): Configuration {
@@ -14,7 +14,7 @@ const fixtures = loadFixtures("markdown-patterns");
 
 suite("MarkdownParser パターンテスト", () => {
 	suite("A. 特殊Markdown構文", () => {
-		for (const fixture of fixtures.filter(f => f.name.startsWith("a"))) {
+		for (const fixture of fixtures.filter((f) => f.name.startsWith("a"))) {
 			test(`${fixture.name}: ${fixture.metadata.description}`, () => {
 				const config = makeConfig(fixture.metadata.syncLevel);
 				const parsed = markdownParser.parse(fixture.markdown, config);
@@ -40,7 +40,7 @@ suite("MarkdownParser パターンテスト", () => {
 	});
 
 	suite("B. 見出しレベル×sync.level", () => {
-		for (const fixture of fixtures.filter(f => f.name.startsWith("b"))) {
+		for (const fixture of fixtures.filter((f) => f.name.startsWith("b"))) {
 			test(`${fixture.name}: ${fixture.metadata.description}`, () => {
 				const config = makeConfig(fixture.metadata.syncLevel);
 				const parsed = markdownParser.parse(fixture.markdown, config);
@@ -66,7 +66,7 @@ suite("MarkdownParser パターンテスト", () => {
 	});
 
 	suite("C. フロントマター組み合わせ", () => {
-		for (const fixture of fixtures.filter(f => f.name.startsWith("c"))) {
+		for (const fixture of fixtures.filter((f) => f.name.startsWith("c"))) {
 			test(`${fixture.name}: ${fixture.metadata.description}`, () => {
 				const config = makeConfig(fixture.metadata.syncLevel);
 				const parsed = markdownParser.parse(fixture.markdown, config);
@@ -107,7 +107,7 @@ suite("MarkdownParser パターンテスト", () => {
 	});
 
 	suite("D. エッジケース", () => {
-		for (const fixture of fixtures.filter(f => f.name.startsWith("d"))) {
+		for (const fixture of fixtures.filter((f) => f.name.startsWith("d"))) {
 			test(`${fixture.name}: ${fixture.metadata.description}`, () => {
 				const config = makeConfig(fixture.metadata.syncLevel);
 				const parsed = markdownParser.parse(fixture.markdown, config);

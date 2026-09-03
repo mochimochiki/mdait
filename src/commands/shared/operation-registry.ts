@@ -181,11 +181,7 @@ export class OperationRegistry {
 				case "frontmatter":
 					return entry.key === key && entry.target.scope === "frontmatter";
 				case "unit":
-					return (
-						entry.key === key &&
-						entry.target.scope === "unit" &&
-						entry.target.unitHash === query.unitHash
-					);
+					return entry.key === key && entry.target.scope === "unit" && entry.target.unitHash === query.unitHash;
 			}
 		});
 	}

@@ -57,10 +57,7 @@ export class FileExplorer {
 	/**
 	 * ターゲットファイルから対応する翻訳ペアを取得
 	 */
-	public getTransPairFromTarget(
-		filePath: string,
-		config: Configuration,
-	): TransPair | null {
+	public getTransPairFromTarget(filePath: string, config: Configuration): TransPair | null {
 		const normalizedPath = this.normalizePath(filePath);
 
 		for (const transPair of config.transPairs) {
@@ -78,10 +75,7 @@ export class FileExplorer {
 	 * ソースファイルから対応する翻訳ペア配列を取得（設定順を維持）
 	 * 1つのソースに対して複数のターゲット言語がある場合があるため配列で返す
 	 */
-	public getTransPairsFromSource(
-		filePath: string,
-		config: Configuration,
-	): TransPair[] {
+	public getTransPairsFromSource(filePath: string, config: Configuration): TransPair[] {
 		const normalizedPath = this.normalizePath(filePath);
 		const result: TransPair[] = [];
 
@@ -148,10 +142,7 @@ export class FileExplorer {
 	): Promise<string[]> {
 		// VS Code APIを使用してファイルを検索
 		const includeGlob = new vscode.RelativePattern(sourceDir, includePattern);
-		const files: vscode.Uri[] = await vscode.workspace.findFiles(
-			includeGlob,
-			excludePattern,
-		);
+		const files: vscode.Uri[] = await vscode.workspace.findFiles(includeGlob, excludePattern);
 
 		// 指定された拡張子のファイルだけをフィルタリング
 		return files
@@ -192,20 +183,13 @@ export class FileExplorer {
 
 		// ディレクトリの存在を確認
 		if (!this.directoryExists(sourceDir)) {
-			throw new Error(
-				vscode.l10n.t("Source directory does not exist: {0}", sourceDir),
-			);
+			throw new Error(vscode.l10n.t("Source directory does not exist: {0}", sourceDir));
 		}
 
 		const allExtensions = [".md", ...(extensions ?? [])];
 		const uniqueExtensions = [...new Set(allExtensions)];
 		const globPattern = FileExplorer.buildExtensionGlob(extensions);
-		return await this.findFilesInDirectory(
-			sourceDir,
-			uniqueExtensions,
-			globPattern,
-			config.ignoredPatterns,
-		);
+		return await this.findFilesInDirectory(sourceDir, uniqueExtensions, globPattern, config.ignoredPatterns);
 	}
 
 	/**
@@ -225,10 +209,7 @@ export class FileExplorer {
 	public getTargetPath(sourceFilePath: string, pair: TransPair): string | null {
 		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
 		const normalizedTargetDir = this.normalizePath(pair.targetDir);
-		const relativePath = this.getRelativePathFromDirectory(
-			this.normalizePath(sourceFilePath),
-			normalizedSourceDir,
-		);
+		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(sourceFilePath), normalizedSourceDir);
 
 		if (!relativePath) {
 			return null;
@@ -245,10 +226,7 @@ export class FileExplorer {
 	public getSourcePath(targetFilePath: string, pair: TransPair): string | null {
 		const normalizedSourceDir = this.normalizePath(pair.sourceDir);
 		const normalizedTargetDir = this.normalizePath(pair.targetDir);
-		const relativePath = this.getRelativePathFromDirectory(
-			this.normalizePath(targetFilePath),
-			normalizedTargetDir,
-		);
+		const relativePath = this.getRelativePathFromDirectory(this.normalizePath(targetFilePath), normalizedTargetDir);
 
 		if (!relativePath) {
 			return null;
@@ -305,17 +283,10 @@ export class FileExplorer {
 			const baseDirNormalized = this.configBaseDir.replace(/\\/g, "/");
 			// path.relative を用いることで Windows のドライブレター大文字小文字差や
 			// 兄弟ディレクトリのプレフィックス誤一致に左右されず判定できる。
-			const relative = path
-				.relative(baseDirNormalized, normalizedPath)
-				.replace(/\\/g, "/");
+			const relative = path.relative(baseDirNormalized, normalizedPath).replace(/\\/g, "/");
 			// ベースディレクトリ配下にある場合のみ相対パス化（外部・別ドライブは絶対のまま）。
 			// relative==="" はベース自身を指すため配下外扱い（相対化せず絶対のまま残す）。
-			if (
-				relative !== "" &&
-				relative !== ".." &&
-				!relative.startsWith("../") &&
-				!path.isAbsolute(relative)
-			) {
+			if (relative !== "" && relative !== ".." && !relative.startsWith("../") && !path.isAbsolute(relative)) {
 				normalizedPath = collapsePathNotation(relative);
 			}
 		}
@@ -340,18 +311,13 @@ export class FileExplorer {
 	 * パスが指定ディレクトリ配下にあるかチェック
 	 */
 	private isPathInDirectory(filePath: string, directoryPath: string): boolean {
-		return (
-			filePath.startsWith(`${directoryPath}/`) || filePath === directoryPath
-		);
+		return filePath.startsWith(`${directoryPath}/`) || filePath === directoryPath;
 	}
 
 	/**
 	 * ディレクトリからの相対パスを取得
 	 */
-	private getRelativePathFromDirectory(
-		filePath: string,
-		directoryPath: string,
-	): string | null {
+	private getRelativePathFromDirectory(filePath: string, directoryPath: string): string | null {
 		if (filePath === directoryPath) {
 			return "";
 		}

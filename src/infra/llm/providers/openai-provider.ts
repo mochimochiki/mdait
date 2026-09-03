@@ -100,9 +100,7 @@ export class OpenAIProvider implements AIService {
 			// 診断（doctor）が出すのと同じ文にそろえる。初回にいちばん多い詰まり方なので、
 			// 押した場所で言うことが違うと「どちらが本当か」を確かめる手数が増える
 			throw new Error(
-				vscode.l10n.t(
-					"OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable.",
-				),
+				vscode.l10n.t("OpenAI API key is not set. Configure openai.apiKey or the OPENAI_API_KEY environment variable."),
 			);
 		}
 	}
@@ -157,8 +155,7 @@ export class OpenAIProvider implements AIService {
 		try {
 			// 429/5xx・ネットワークエラー・タイムアウトは指数バックオフでリトライする
 			const result = await withTransportRetry(
-				() =>
-					this.performRequest(openaiMessages, promptCacheKey, cancellationToken),
+				() => this.performRequest(openaiMessages, promptCacheKey, cancellationToken),
 				{
 					policy: this.retryPolicy,
 					cancellationToken,
@@ -192,9 +189,7 @@ export class OpenAIProvider implements AIService {
 			// 既に "OpenAI ..." で始まる文をもう一度包まない。
 			// 包むと「provider error: API error: {…}」と接頭辞が二重になり、
 			// トーストの1行に収まる範囲から肝心の理由が押し出される
-			throw new Error(
-				errorMessage.startsWith("OpenAI ") ? errorMessage : `OpenAI provider error: ${errorMessage}`,
-			);
+			throw new Error(errorMessage.startsWith("OpenAI ") ? errorMessage : `OpenAI provider error: ${errorMessage}`);
 		} finally {
 			// 統計情報をログに記録
 			const durationMs = Date.now() - startTime;
@@ -325,9 +320,7 @@ export class OpenAIProvider implements AIService {
 			if (unknownErr?.name === "AbortError" || controller.signal.aborted) {
 				if (timedOut) {
 					// タイムアウト起因のabortは一時的エラーとしてリトライ対象にする
-					throw new TransientHttpError(
-						`Request timed out after ${this.timeoutMs / 1000}s`,
-					);
+					throw new TransientHttpError(`Request timed out after ${this.timeoutMs / 1000}s`);
 				}
 				// ユーザーキャンセル起因のabortはリトライしない。
 				// 失敗ではなく中断として扱わせるため専用の型で投げる

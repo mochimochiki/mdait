@@ -1,5 +1,5 @@
 {
-  "description": "ネストしたコードブロック内の#が誤検出されない",
-  "syncLevel": 2,
-  "expectedUnits": 2
+	"description": "ネストしたコードブロック内の#が誤検出されない",
+	"syncLevel": 2,
+	"expectedUnits": 2
 }

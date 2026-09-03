@@ -17,8 +17,8 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import type { TranslationResult, Translator } from "../../../../commands/trans/translator";
-import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
+import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -112,13 +112,7 @@ suite("非Markdown翻訳で need:review を立てる条件", () => {
 	});
 
 	test("警告が無ければ need を立てないこと", async () => {
-		await handler.translate(
-			targetFile,
-			stubTranslator({ translatedText: "translated" }),
-			pair,
-			progress,
-			token,
-		);
+		await handler.translate(targetFile, stubTranslator({ translatedText: "translated" }), pair, progress, token);
 
 		assert.strictEqual(needAfterTranslate(), "");
 	});

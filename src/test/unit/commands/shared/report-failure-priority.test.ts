@@ -14,9 +14,7 @@
 import { strict as assert } from "node:assert";
 import { type TransOutcomeSummary, reportTransOutcome } from "../../../../commands/shared/guidance";
 
-declare let __vscodeMockShownMessages:
-	| Array<{ level: string; message: string; items: string[] }>
-	| undefined;
+declare let __vscodeMockShownMessages: Array<{ level: string; message: string; items: string[] }> | undefined;
 
 function summary(overrides: Partial<TransOutcomeSummary> = {}): TransOutcomeSummary {
 	return {

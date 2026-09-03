@@ -116,7 +116,10 @@ suite("rankTmEntries", () => {
 	});
 
 	test("weight 補正により同一類似度なら高weightが優先される", () => {
-		const entries = [makeEntry("low", "Download the installer", undefined, 0), makeEntry("high", "Download the installer", undefined, 1)];
+		const entries = [
+			makeEntry("low", "Download the installer", undefined, 0),
+			makeEntry("high", "Download the installer", undefined, 1),
+		];
 		const result = rankTmEntries("Download the installer", entries, { lang: "en", topK: 2, lambda: 1.0 });
 		assert.strictEqual(result[0].tuid, "high");
 		assert.ok(result[0].score > result[1].score);

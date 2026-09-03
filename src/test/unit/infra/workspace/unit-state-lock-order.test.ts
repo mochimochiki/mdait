@@ -44,9 +44,7 @@ function read(relPath: string): string {
 
 /** ロックを取る呼び出しの、ファイル内での最初の位置（無ければ -1） */
 function firstIndexOfAny(source: string, needles: readonly string[]): number {
-	const found = needles
-		.map((needle) => source.indexOf(needle))
-		.filter((index) => index >= 0);
+	const found = needles.map((needle) => source.indexOf(needle)).filter((index) => index >= 0);
 	return found.length === 0 ? -1 : Math.min(...found);
 }
 

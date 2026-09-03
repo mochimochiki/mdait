@@ -47,18 +47,11 @@ interface ResultPayload {
 
 type ArgTransformer = (args: unknown[]) => unknown[];
 
-const URI_FILE_COMMANDS = new Set([
-	"mdait.trans",
-	"mdait.translate.frontmatter",
-]);
+const URI_FILE_COMMANDS = new Set(["mdait.trans", "mdait.translate.frontmatter"]);
 // 注意: かつて mdait.term.detect.file / .directory と mdait.term.expand.file / .directory を
 // ここに並べていたが、この4つはどこにも registerCommand されていない（実在しないコマンド名）。
 // 実在するのは mdait.term.detect と mdait.term.expand の2つだけなので、表から外した。
-const FILE_ITEM_COMMANDS = new Set([
-	"mdait.translate.file",
-	"mdait.tm.commit.file",
-	"mdait.aiReview.file",
-]);
+const FILE_ITEM_COMMANDS = new Set(["mdait.translate.file", "mdait.tm.commit.file", "mdait.aiReview.file"]);
 const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.translate.directory",
 	"mdait.tm.commit.directory",
@@ -87,10 +80,7 @@ function toAbsolutePath(workspaceRoot: string, value: string): string {
  * @param command `mdait.` で始まるコマンド名
  * @param workspaceRoot 相対パスを解決する基準
  */
-export function buildArgTransformer(
-	command: string,
-	workspaceRoot: string,
-): ArgTransformer | undefined {
+export function buildArgTransformer(command: string, workspaceRoot: string): ArgTransformer | undefined {
 	const absolute = (value: string) => toAbsolutePath(workspaceRoot, value);
 	if (URI_FILE_COMMANDS.has(command)) {
 		return (args) => {
@@ -156,10 +146,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 
 		this.ensureDebugDirectory();
 
-		const pattern = new vscode.RelativePattern(
-			workspaceRoot,
-			`${DEBUG_DIR}/${COMMAND_FILE}`,
-		);
+		const pattern = new vscode.RelativePattern(workspaceRoot, `${DEBUG_DIR}/${COMMAND_FILE}`);
 		this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
 		this.watcher.onDidCreate(() => this.onCommandFileDetected());
 		this.watcher.onDidChange(() => this.onCommandFileDetected());
@@ -254,10 +241,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 
 		try {
 			let args = payload.args ?? [];
-			const transformer = buildArgTransformer(
-				payload.command,
-				this.workspaceRoot,
-			);
+			const transformer = buildArgTransformer(payload.command, this.workspaceRoot);
 			if (transformer) {
 				args = transformer(args);
 			}
@@ -267,10 +251,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 			const recorder = DebugFireRecorder.getInstance();
 			recorder.start();
 
-			const result = await vscode.commands.executeCommand(
-				payload.command,
-				...args,
-			);
+			const result = await vscode.commands.executeCommand(payload.command, ...args);
 			const completedAt = new Date().toISOString();
 
 			// デバッグ計装: 実行後の状態スナップ + fire 履歴取得 + 突合
@@ -332,9 +313,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 				if (!fs.existsSync(this.commandFilePath)) {
 					return null;
 				}
-				const raw = fs
-					.readFileSync(this.commandFilePath, "utf-8")
-					.replace(/^\uFEFF/, "");
+				const raw = fs.readFileSync(this.commandFilePath, "utf-8").replace(/^\uFEFF/, "");
 				const parsed = JSON.parse(raw);
 				if (this.isValidPayload(parsed)) {
 					return parsed;
@@ -360,11 +339,7 @@ export class DebugCommandHandler implements vscode.Disposable {
 
 	private async writeResult(result: ResultPayload): Promise<void> {
 		try {
-			fs.writeFileSync(
-				this.resultFilePath,
-				JSON.stringify(result, null, 2),
-				"utf-8",
-			);
+			fs.writeFileSync(this.resultFilePath, JSON.stringify(result, null, 2), "utf-8");
 		} catch (error) {
 			this.logger.error("debug", "Failed to write result.json", {
 				error: error instanceof Error ? error.message : String(error),

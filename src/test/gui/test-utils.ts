@@ -4,13 +4,7 @@
  * 各テストスイートが独立したワークスペースディレクトリを使用できるようにする。
  * これにより、テスト間の干渉を防止し、テストの安定性を向上させる。
  */
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	rmSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
@@ -38,10 +32,7 @@ export function copyDirSync(src: string, dest: string): void {
  * テストワークスペースのベースパスを取得する
  */
 export function getTestBasePaths() {
-	const sampleContentDir = join(
-		__dirname,
-		"../../../src/test/unit/sample-content",
-	);
+	const sampleContentDir = join(__dirname, "../../../src/test/unit/sample-content");
 	const workspaceDir = join(__dirname, "../../../src/test/unit/workspace");
 	return { sampleContentDir, workspaceDir };
 }

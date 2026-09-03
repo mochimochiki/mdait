@@ -1,19 +1,11 @@
 import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-	type JsonSchemaNode,
-	type SettingsCategory,
-	buildSettingsModel,
-} from "../../../../ui/settings/settings-model";
+import { type JsonSchemaNode, type SettingsCategory, buildSettingsModel } from "../../../../ui/settings/settings-model";
 
 /** 実スキーマ（assets/schemas/mdait-config.schema.json）を読み込む */
 function loadRealSchema(): JsonSchemaNode {
-	const schemaPath = path.join(
-		__dirname,
-		"../../../../..",
-		"assets/schemas/mdait-config.schema.json",
-	);
+	const schemaPath = path.join(__dirname, "../../../../..", "assets/schemas/mdait-config.schema.json");
 	return JSON.parse(fs.readFileSync(schemaPath, "utf8")) as JsonSchemaNode;
 }
 
@@ -77,12 +69,7 @@ suite("settings-model: スキーマから設定モデルを生成する", () => 
 		assert.strictEqual(transPairs.type, "objectArray");
 		assert.strictEqual(transPairs.required, true);
 		const fieldKeys = (transPairs.itemFields ?? []).map((field) => field.key);
-		assert.deepStrictEqual(fieldKeys, [
-			"sourceLang",
-			"sourceDir",
-			"targetLang",
-			"targetDir",
-		]);
+		assert.deepStrictEqual(fieldKeys, ["sourceLang", "sourceDir", "targetLang", "targetDir"]);
 		for (const field of transPairs.itemFields ?? []) {
 			assert.strictEqual(field.required, true, `${field.key} は必須`);
 		}
@@ -116,20 +103,14 @@ suite("settings-model: スキーマから設定モデルを生成する", () => 
 
 	test("すべてのカテゴリが 1 件以上の設定を持つ", () => {
 		for (const category of categories) {
-			assert.ok(
-				category.settings.length > 0,
-				`カテゴリ ${category.id} が空でない`,
-			);
+			assert.ok(category.settings.length > 0, `カテゴリ ${category.id} が空でない`);
 		}
 	});
 
 	test("すべての設定が説明文を持つ（スキーマ description の網羅性）", () => {
 		for (const category of categories) {
 			for (const setting of category.settings) {
-				assert.ok(
-					setting.description.length > 0,
-					`${setting.id} に description がある`,
-				);
+				assert.ok(setting.description.length > 0, `${setting.id} に description がある`);
 			}
 		}
 	});

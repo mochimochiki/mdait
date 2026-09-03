@@ -94,7 +94,13 @@ suite("非Markdown: 原稿の改行コードを書き換えない", () => {
 		registerTranslateEntry();
 
 		// AI の返す訳文は必ず LF
-		await handler.translate(targetFile, stubTranslator({ translatedText: "Line one\nLine two\n" }), pair, progress, token);
+		await handler.translate(
+			targetFile,
+			stubTranslator({ translatedText: "Line one\nLine two\n" }),
+			pair,
+			progress,
+			token,
+		);
 
 		const written = fs.readFileSync(targetFile, "utf-8");
 		assert.ok(written.includes("Line one\r\n"), "CRLF のまま書かれること");
@@ -116,7 +122,13 @@ suite("非Markdown: 原稿の改行コードを書き換えない", () => {
 		fs.writeFileSync(targetFile, "First line\nSecond line\n", "utf-8");
 		registerTranslateEntry();
 
-		await handler.translate(targetFile, stubTranslator({ translatedText: "Line one\nLine two\n" }), pair, progress, token);
+		await handler.translate(
+			targetFile,
+			stubTranslator({ translatedText: "Line one\nLine two\n" }),
+			pair,
+			progress,
+			token,
+		);
 
 		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), "Line one\nLine two\n");
 	});

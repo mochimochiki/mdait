@@ -31,10 +31,7 @@ export function atomicWriteFileSync(
 		// 新規ファイルの場合はデフォルトのmodeを使用
 	}
 
-	const tmpPath = path.join(
-		dir,
-		`.tmp-${path.basename(filePath)}-${crypto.randomBytes(6).toString("hex")}`,
-	);
+	const tmpPath = path.join(dir, `.tmp-${path.basename(filePath)}-${crypto.randomBytes(6).toString("hex")}`);
 
 	try {
 		fs.writeFileSync(tmpPath, data, options);

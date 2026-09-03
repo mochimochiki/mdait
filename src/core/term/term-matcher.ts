@@ -25,11 +25,7 @@ export function textContainsTerm(text: string, term: string): boolean {
 /**
  * 用語（正規形＋variants）のいずれかがテキストに含まれるかチェック
  */
-export function anyTermVariantAppears(
-	text: string,
-	term: string,
-	variants: readonly string[] = [],
-): boolean {
+export function anyTermVariantAppears(text: string, term: string, variants: readonly string[] = []): boolean {
 	if (textContainsTerm(text, term)) {
 		return true;
 	}

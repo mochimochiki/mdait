@@ -5,12 +5,12 @@
  */
 
 import { strict as assert } from "node:assert";
-import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { AITermDetector } from "../../../../commands/term/term-detector";
-import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
-import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { TermEntry } from "../../../../commands/term/term-entry";
 import { UnitPair } from "../../../../commands/term/unit-pair";
+import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
+import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
+import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 
 /**
  * systemPrompt の種別に応じて定型JSONを返す fake AIService

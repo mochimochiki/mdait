@@ -4,11 +4,7 @@
  */
 
 import { strict as assert } from "node:assert";
-import {
-	syncMarkerPair,
-	syncSourceMarker,
-	syncTargetMarker,
-} from "../../../../commands/sync/marker-sync";
+import { syncMarkerPair, syncSourceMarker, syncTargetMarker } from "../../../../commands/sync/marker-sync";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 
 suite("marker-sync", () => {
@@ -142,11 +138,7 @@ suite("marker-sync", () => {
 
 			// 未翻訳なのでreviseではなくtranslateのまま維持されるべき
 			assert.strictEqual(result.marker.from, "src789");
-			assert.strictEqual(
-				result.marker.need,
-				"translate",
-				"未翻訳ファイルはneed:reviseにならないこと",
-			);
+			assert.strictEqual(result.marker.need, "translate", "未翻訳ファイルはneed:reviseにならないこと");
 			assert.strictEqual(result.changeType, "source-changed");
 		});
 
@@ -205,11 +197,7 @@ suite("marker-sync", () => {
 
 			// fromは最新に更新されるが、needのスナップショットハッシュは保持される
 			assert.strictEqual(result.marker.from, "src999");
-			assert.strictEqual(
-				result.marker.need,
-				"revise@src123",
-				"改訂前の再変更時はneed:revise@src123が保持されるべき",
-			);
+			assert.strictEqual(result.marker.need, "revise@src123", "改訂前の再変更時はneed:revise@src123が保持されるべき");
 			assert.strictEqual(result.changeType, "source-changed");
 		});
 	});
@@ -233,12 +221,7 @@ suite("marker-sync", () => {
 			const existingSource = new MdaitMarker("src123");
 			const existingTarget = new MdaitMarker("tgt456", "src123");
 
-			const result = syncMarkerPair(
-				"src789",
-				"tgt456",
-				existingSource,
-				existingTarget,
-			);
+			const result = syncMarkerPair("src789", "tgt456", existingSource, existingTarget);
 
 			assert.strictEqual(result.sourceMarker.hash, "src789");
 			assert.strictEqual(result.targetMarker.from, "src789");
@@ -251,32 +234,18 @@ suite("marker-sync", () => {
 			const existingTarget = new MdaitMarker("tgt456", "src123");
 			existingTarget.setNeed("translate");
 
-			const result = syncMarkerPair(
-				"src789",
-				"tgt456",
-				existingSource,
-				existingTarget,
-			);
+			const result = syncMarkerPair("src789", "tgt456", existingSource, existingTarget);
 
 			// 未翻訳なのでreviseではなくtranslateのまま維持されるべき
 			assert.strictEqual(result.targetMarker.from, "src789");
-			assert.strictEqual(
-				result.targetMarker.need,
-				"translate",
-				"未翻訳ファイルはneed:reviseにならないこと",
-			);
+			assert.strictEqual(result.targetMarker.need, "translate", "未翻訳ファイルはneed:reviseにならないこと");
 		});
 
 		test("両方変更時、ターゲットにneed:revise@{oldhash}が設定されハッシュも更新されること", () => {
 			const existingSource = new MdaitMarker("src123");
 			const existingTarget = new MdaitMarker("tgt456", "src123");
 
-			const result = syncMarkerPair(
-				"src789",
-				"tgt999",
-				existingSource,
-				existingTarget,
-			);
+			const result = syncMarkerPair("src789", "tgt999", existingSource, existingTarget);
 
 			// ソースはneedを設定しない
 			assert.strictEqual(result.sourceMarker.need, null);
@@ -292,12 +261,7 @@ suite("marker-sync", () => {
 			const existingSource = new MdaitMarker("src123");
 			const existingTarget = new MdaitMarker("tgt456", "src123");
 
-			const result = syncMarkerPair(
-				"src123",
-				"tgt456",
-				existingSource,
-				existingTarget,
-			);
+			const result = syncMarkerPair("src123", "tgt456", existingSource, existingTarget);
 
 			assert.strictEqual(result.changed, false);
 		});
@@ -309,12 +273,7 @@ suite("marker-sync", () => {
 			existingTarget.setReviseNeed("src123");
 
 			// 原文変更②が発生
-			const result = syncMarkerPair(
-				"src999",
-				"tgt456",
-				existingSource,
-				existingTarget,
-			);
+			const result = syncMarkerPair("src999", "tgt456", existingSource, existingTarget);
 
 			// fromは最新に更新されるが、needのスナップショットハッシュは保持される
 			assert.strictEqual(result.targetMarker.from, "src999");

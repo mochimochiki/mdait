@@ -12,8 +12,8 @@
  * @module commands/trans/translation-run
  */
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
-import type { UnusableResponseReason } from "../../infra/llm/unusable-response";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
+import type { UnusableResponseReason } from "../../infra/llm/unusable-response";
 
 /** 1ユニットの翻訳結果 */
 export interface UnitTranslationOutcome {
@@ -126,10 +126,7 @@ export interface UnitLoopResult<T> {
  * @param units 翻訳対象
  * @param ports 外界へ触るための口
  */
-export async function runUnitLoop<T>(
-	units: readonly T[],
-	ports: UnitLoopPorts<T>,
-): Promise<UnitLoopResult<T>> {
+export async function runUnitLoop<T>(units: readonly T[], ports: UnitLoopPorts<T>): Promise<UnitLoopResult<T>> {
 	const result: UnitLoopResult<T> = {
 		processed: 0,
 		translated: 0,

@@ -104,9 +104,7 @@ suite("SectionAligner（二段トリアージ・リトライ）", () => {
 	});
 
 	test("needBodies が上限Kを超えたら1ラウンドでフォールバック", async () => {
-		const ai = new StubAIService([
-			'{"needBodies": [{"side": "source", "index": 0}, {"side": "source", "index": 1}]}',
-		]);
+		const ai = new StubAIService(['{"needBodies": [{"side": "source", "index": 0}, {"side": "source", "index": 1}]}']);
 		const result = await buildAligner(ai, { maxNeedBodies: 1 }).align(request());
 		assert.strictEqual(result.fallback, true);
 		assert.strictEqual(result.rounds, 1);

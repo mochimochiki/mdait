@@ -1,23 +1,13 @@
 import * as assert from "node:assert";
 import * as path from "node:path";
-import {
-	type FileStatusItem,
-	Status,
-	StatusItemType,
-} from "../../../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 import { DebugFireRecorder } from "../../../../infra/debug/debug-fire-recorder";
-import {
-	analyzeSync,
-	diffSnapshots,
-} from "../../../../infra/debug/debug-sync-analyzer";
+import { analyzeSync, diffSnapshots } from "../../../../infra/debug/debug-sync-analyzer";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
-function makeFileItem(
-	filePath: string,
-	status: Status = Status.NeedsTranslation,
-): FileStatusItem {
+function makeFileItem(filePath: string, status: Status = Status.NeedsTranslation): FileStatusItem {
 	return {
 		type: StatusItemType.File,
 		label: path.basename(filePath),
@@ -54,11 +44,7 @@ suite("DebugFireRecorder / sync-analyzer", () => {
 			recorder.record("tree", undefined); // recording=false の間は無視
 			recorder.start();
 			const events = recorder.stop();
-			assert.strictEqual(
-				events.length,
-				0,
-				"recording停止中の record は履歴に残らない",
-			);
+			assert.strictEqual(events.length, 0, "recording停止中の record は履歴に残らない");
 		});
 
 		test("StatusItemTree の fire が tree ソースとして記録される", () => {
@@ -127,10 +113,7 @@ suite("DebugFireRecorder / sync-analyzer", () => {
 		});
 
 		test("全体更新(all) fire があればギャップ無し", () => {
-			const result = analyzeSync(
-				[fileDiff],
-				[{ seq: 0, source: "tree", kind: "all", at: "t" }],
-			);
+			const result = analyzeSync([fileDiff], [{ seq: 0, source: "tree", kind: "all", at: "t" }]);
 			assert.strictEqual(result.syncGaps.length, 0);
 		});
 
@@ -172,10 +155,7 @@ suite("DebugFireRecorder / sync-analyzer", () => {
 				],
 			);
 			assert.strictEqual(result.syncGaps.length, 1);
-			assert.ok(
-				result.syncGaps[0].reason.startsWith("NOT-FIRED"),
-				"兄弟ディレクトリ通知は親通知とみなさず NOT-FIRED",
-			);
+			assert.ok(result.syncGaps[0].reason.startsWith("NOT-FIRED"), "兄弟ディレクトリ通知は親通知とみなさず NOT-FIRED");
 		});
 	});
 });

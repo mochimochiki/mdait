@@ -4,11 +4,7 @@
 
 import * as assert from "node:assert";
 import type * as vscode from "vscode";
-import {
-	Status,
-	StatusItemType,
-	type UnitStatusItem,
-} from "../../../../core/status/status-item";
+import { Status, StatusItemType, type UnitStatusItem } from "../../../../core/status/status-item";
 import { StatusTreeProvider } from "../../../../ui/status/status-tree-provider";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -35,11 +31,7 @@ suite("StatusTreeProvider 読み上げラベル（accessibilityInformation）", 
 	test("ユニットの読み上げラベルに名前と状態の両方が含まれる", () => {
 		const treeItem = provider.getTreeItem(makeUnitItem());
 		const accessible = treeItem.accessibilityInformation?.label ?? "";
-		assert.strictEqual(
-			accessible,
-			"Introduction — Translation needed",
-			"「名前 — 状態」の形で読み上げられること",
-		);
+		assert.strictEqual(accessible, "Introduction — Translation needed", "「名前 — 状態」の形で読み上げられること");
 	});
 
 	test("needフラグ付きユニットは状態としてneedの説明が読み上げられる", () => {

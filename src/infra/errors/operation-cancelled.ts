@@ -53,8 +53,6 @@ export function isOperationCancelled(error: unknown): boolean {
  */
 export function rethrowIfCancelled(error: unknown): void {
 	if (isOperationCancelled(error)) {
-		throw error instanceof OperationCancelledError
-			? error
-			: new OperationCancelledError((error as Error).message);
+		throw error instanceof OperationCancelledError ? error : new OperationCancelledError((error as Error).message);
 	}
 }

@@ -33,10 +33,7 @@ suite("FileExplorer.normalizePath", () => {
 		__vscodeMockWorkspaceRoot = "/ws";
 		const explorer = new FileExplorer();
 
-		assert.strictEqual(
-			explorer.normalizePath("/ws/content/en/x.md"),
-			"content/en/x.md",
-		);
+		assert.strictEqual(explorer.normalizePath("/ws/content/en/x.md"), "content/en/x.md");
 	});
 
 	test("兄弟ディレクトリのプレフィックス誤一致を起こさず絶対パスのまま返す", () => {
@@ -45,10 +42,7 @@ suite("FileExplorer.normalizePath", () => {
 		__vscodeMockWorkspaceRoot = "/ws/ja";
 		const explorer = new FileExplorer();
 
-		assert.strictEqual(
-			explorer.normalizePath("/ws/ja-backup/a.md"),
-			"/ws/ja-backup/a.md",
-		);
+		assert.strictEqual(explorer.normalizePath("/ws/ja-backup/a.md"), "/ws/ja-backup/a.md");
 	});
 
 	test('"./" 付きの相対パスは畳まれること', () => {
@@ -78,7 +72,10 @@ suite("FileExplorer.normalizePath", () => {
 
 		const forms = ["content/ja", "./content/ja", "content/ja/", "./content/ja/", "content//ja"];
 		const normalized = forms.map((f) => explorer.normalizePath(f));
-		assert.deepStrictEqual(normalized, forms.map(() => "content/ja"));
+		assert.deepStrictEqual(
+			normalized,
+			forms.map(() => "content/ja"),
+		);
 		// 絶対パス表記も同じ結果に落ちる
 		assert.strictEqual(explorer.normalizePath("/ws/content/ja"), "content/ja");
 	});
@@ -94,10 +91,7 @@ suite("FileExplorer.normalizePath", () => {
 		__vscodeMockWorkspaceRoot = "/ws";
 		const explorer = new FileExplorer();
 
-		assert.strictEqual(
-			explorer.normalizePath("content\\en\\x.md"),
-			"content/en/x.md",
-		);
+		assert.strictEqual(explorer.normalizePath("content\\en\\x.md"), "content/en/x.md");
 	});
 
 	// path.relative はプラットフォーム依存。ドライブレターの大小無視は Windows のみ。

@@ -26,22 +26,14 @@ function readEnvelope(result: vscode.LanguageModelToolResult): ToolEnvelope<unkn
 }
 
 /** invoke を最小の呼び出し形で叩く */
-async function invoke(
-	tool: MdaitResolveTool,
-	input: Record<string, unknown>,
-): Promise<ToolEnvelope<unknown>> {
-	const options = { input, toolInvocationToken: undefined } as unknown as Parameters<
-		MdaitResolveTool["invoke"]
-	>[0];
+async function invoke(tool: MdaitResolveTool, input: Record<string, unknown>): Promise<ToolEnvelope<unknown>> {
+	const options = { input, toolInvocationToken: undefined } as unknown as Parameters<MdaitResolveTool["invoke"]>[0];
 	const token = { isCancellationRequested: false } as unknown as vscode.CancellationToken;
 	return readEnvelope(await tool.invoke(options, token));
 }
 
 /** prepareInvocation を最小の呼び出し形で叩く */
-async function prepare(
-	tool: MdaitResolveTool,
-	input: Record<string, unknown>,
-): Promise<vscode.PreparedToolInvocation> {
+async function prepare(tool: MdaitResolveTool, input: Record<string, unknown>): Promise<vscode.PreparedToolInvocation> {
 	const options = { input } as unknown as Parameters<MdaitResolveTool["prepareInvocation"]>[0];
 	const token = { isCancellationRequested: false } as unknown as vscode.CancellationToken;
 	return await tool.prepareInvocation(options, token);

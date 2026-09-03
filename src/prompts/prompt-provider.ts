@@ -9,12 +9,7 @@ import * as path from "node:path";
 import matter from "gray-matter";
 import * as vscode from "vscode";
 import { Configuration } from "../infra/config/configuration";
-import {
-	DEFAULT_PROMPTS,
-	type PromptId,
-	SOURCE_TEXT_SEPARATOR,
-	USER_SECTION_MARKER,
-} from "./defaults";
+import { DEFAULT_PROMPTS, type PromptId, SOURCE_TEXT_SEPARATOR, USER_SECTION_MARKER } from "./defaults";
 
 /**
  * プロンプト内の変数を表す型
@@ -114,10 +109,7 @@ export class PromptProvider {
 	 * @param variables 変数置換用のマッピング
 	 * @returns 変数置換済みのプロンプト文字列
 	 */
-	public getPrompt(
-		promptId: PromptId,
-		variables: PromptVariables = {},
-	): string {
+	public getPrompt(promptId: PromptId, variables: PromptVariables = {}): string {
 		const parts = this.getPromptParts(promptId, variables);
 		if (parts.isLegacy || !parts.userContext) {
 			return parts.system;
@@ -135,10 +127,7 @@ export class PromptProvider {
 	 * @param variables 変数置換用のマッピング
 	 * @returns 分割済みプロンプト
 	 */
-	public getPromptParts(
-		promptId: PromptId,
-		variables: PromptVariables = {},
-	): PromptParts {
+	public getPromptParts(promptId: PromptId, variables: PromptVariables = {}): PromptParts {
 		const template = this.getPromptTemplate(promptId);
 		const instruction = this.getInstruction(promptId);
 		const markerIndex = template.indexOf(USER_SECTION_MARKER);
@@ -192,10 +181,7 @@ export class PromptProvider {
 				this.promptCache.set(promptId, customPrompt);
 				return customPrompt;
 			} catch (error) {
-				console.warn(
-					`Failed to load custom prompt for ${promptId} from ${customPath}, using default:`,
-					error,
-				);
+				console.warn(`Failed to load custom prompt for ${promptId} from ${customPath}, using default:`, error);
 			}
 		}
 
@@ -215,6 +201,18 @@ export class PromptProvider {
 	 * @param promptId プロンプトID
 	 * @returns ファイルパス（設定されていなければundefined）
 	 */
+	/**
+	 * その指示文が利用者に上書きされているかを返す。
+	 *
+	 * **改訂パッチの読み方を決めるのに使う。** 上書きされた指示文は旧来の `=`/`-`/`+` 形式に
+	 * 向けて書かれているので、その形式として読まなければならない（ADR-260903-01）。
+	 * 読み込みに失敗して既定へ落ちた場合も「上書きあり」と答える — 落ちたことは
+	 * `getPromptTemplate` が警告するが、形式の判断はファイルの有無で決める方が安全側に倒れる。
+	 */
+	public hasCustomPrompt(promptId: PromptId): boolean {
+		return this.getCustomPromptPath(promptId) !== undefined;
+	}
+
 	private getCustomPromptPath(promptId: PromptId): string | undefined {
 		const config = Configuration.getInstance();
 		const promptsConfig = config.prompts;
@@ -258,10 +256,7 @@ export class PromptProvider {
 			return undefined;
 		}
 
-		return path.join(
-			Configuration.getInstance().getMdaitDir(),
-			"mdait-instructions.md",
-		);
+		return path.join(Configuration.getInstance().getMdaitDir(), "mdait-instructions.md");
 	}
 
 	/**
@@ -329,25 +324,19 @@ export class PromptProvider {
 	 * @param variables 変数マッピング
 	 * @returns 置換済みプロンプト
 	 */
-	private replaceVariables(
-		template: string,
-		variables: PromptVariables,
-	): string {
+	private replaceVariables(template: string, variables: PromptVariables): string {
 		let result = template;
 
 		// 条件ブロックを処理: {{#variable}}...{{/variable}}
 		// 変数が存在する場合はブロック内容を展開、なければブロック全体を削除
-		result = result.replace(
-			/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
-			(_, key, content) => {
-				const value = variables[key];
-				if (value !== undefined && value !== "") {
-					// ブロック内容を展開し、内部の変数も置換
-					return content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-				}
-				return "";
-			},
-		);
+		result = result.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
+			const value = variables[key];
+			if (value !== undefined && value !== "") {
+				// ブロック内容を展開し、内部の変数も置換
+				return content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+			}
+			return "";
+		});
 
 		// 単純変数置換: {{variable}}
 		result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => {

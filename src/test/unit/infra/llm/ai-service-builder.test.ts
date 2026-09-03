@@ -1,8 +1,5 @@
 import * as assert from "node:assert";
-import {
-	type AIConfig,
-	Configuration,
-} from "../../../../infra/config/configuration";
+import { type AIConfig, Configuration } from "../../../../infra/config/configuration";
 import { AIServiceBuilder } from "../../../../infra/llm/ai-service-builder";
 import { DefaultAIProvider } from "../../../../infra/llm/providers/default-ai-provider";
 import { VSCodeLanguageModelProvider } from "../../../../infra/llm/providers/vscode-lm-provider";
@@ -32,9 +29,7 @@ suite("AIServiceBuilder", () => {
 	});
 
 	test("vscode-lmはVS Code Language Modelプロバイダーを生成すること", async () => {
-		const service = await new AIServiceBuilder().build(
-			createConfig("vscode-lm"),
-		);
+		const service = await new AIServiceBuilder().build(createConfig("vscode-lm"));
 
 		assert.ok(service instanceof VSCodeLanguageModelProvider);
 		assert.ok(!(service instanceof DefaultAIProvider));

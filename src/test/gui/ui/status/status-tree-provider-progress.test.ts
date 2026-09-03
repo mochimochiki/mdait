@@ -1,7 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { OperationRegistry } from "../../../../commands/shared/operation-registry";
-import { Status, type FileStatusItem, StatusItemType } from "../../../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType } from "../../../../core/status/status-item";
 import { StatusTreeProvider } from "../../../../ui/status/status-tree-provider";
 
 function fileItem(filePath: string): FileStatusItem {

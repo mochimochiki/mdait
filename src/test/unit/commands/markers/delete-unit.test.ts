@@ -129,9 +129,25 @@ Content C.
 
 		const store = UnitStateStore.getInstance();
 		store.load(path.join(tempDir, ".mdait"));
-		store.setEntry({ path: "en/doc.md", order: 0, level: 2, titleHash: "", hash: "tgtA", from: "srcA", need: "verify-deletion" });
+		store.setEntry({
+			path: "en/doc.md",
+			order: 0,
+			level: 2,
+			titleHash: "",
+			hash: "tgtA",
+			from: "srcA",
+			need: "verify-deletion",
+		});
 		store.setEntry({ path: "en/doc.md", order: 1, level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
-		store.setEntry({ path: "en/doc.md", order: 2, level: 2, titleHash: "", hash: "tgtC", from: "srcC", need: "review" });
+		store.setEntry({
+			path: "en/doc.md",
+			order: 2,
+			level: 2,
+			titleHash: "",
+			hash: "tgtC",
+			from: "srcC",
+			need: "review",
+		});
 
 		const result = await deleteUnitFromFile(targetFile, "tgtA", config);
 

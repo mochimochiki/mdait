@@ -2,10 +2,7 @@
 // フェーズ0では embedded（既定）が no-op で、provider 注入が振る舞いを変えないことを検証する
 
 import { strict as assert } from "node:assert";
-import {
-	EmbeddedMarkerProvider,
-	embeddedMarkerProvider,
-} from "../../../../core/markdown/marker-provider";
+import { EmbeddedMarkerProvider, embeddedMarkerProvider } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
 import type { Configuration } from "../../../../infra/config/configuration";
 

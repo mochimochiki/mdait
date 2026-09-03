@@ -1,5 +1,5 @@
 {
-  "description": "深いネスト H1→H5（level=3）→ H1/H2/H3で分割",
-  "syncLevel": 3,
-  "expectedUnits": 3
+	"description": "深いネスト H1→H5（level=3）→ H1/H2/H3で分割",
+	"syncLevel": 3,
+	"expectedUnits": 3
 }

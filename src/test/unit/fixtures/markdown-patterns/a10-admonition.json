@@ -1,5 +1,5 @@
 {
-  "description": "Admonition/callout構文がユニット内に保持される",
-  "syncLevel": 2,
-  "expectedUnits": 2
+	"description": "Admonition/callout構文がユニット内に保持される",
+	"syncLevel": 2,
+	"expectedUnits": 2
 }

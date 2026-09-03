@@ -11,12 +11,12 @@ import * as vscode from "vscode";
 import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
-import { resolveMarkerIOForFile } from "../../infra/config/marker-io";
 import type { StatusItem, UnitStatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
 import { TmxStore } from "../../core/tm/tmx-store";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
+import { resolveMarkerIOForFile } from "../../infra/config/marker-io";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
@@ -24,6 +24,7 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { PromptProvider } from "../../prompts";
 import { notifyWithReport } from "../shared/report-file";
+import { optimizeTmWeights } from "./command-optimize";
 import { isTmCommitTarget, summarizeTmSkipReasons } from "./commit-filter";
 import type { TmSkipReasonBreakdown } from "./commit-filter";
 import { TmCommitProcessor, type TmCommitResolvedUnit, type TmCommitResult } from "./commit-processor";
@@ -34,7 +35,6 @@ import {
 	prepareTmCommitUnit,
 } from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
-import { optimizeTmWeights } from "./command-optimize";
 import { writeTmReport } from "./tm-report-file";
 
 export {

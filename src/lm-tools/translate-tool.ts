@@ -211,9 +211,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 				() => token.isCancellationRequested,
 			);
 
-			const fileResults: TranslateFileResult[] = outcomes.filter(
-				(r): r is TranslateFileResult => r !== undefined,
-			);
+			const fileResults: TranslateFileResult[] = outcomes.filter((r): r is TranslateFileResult => r !== undefined);
 			const succeeded = fileResults.filter((r) => r.ok).length;
 			const failed = fileResults.filter((r) => !r.ok).length;
 			const translatedUnits = fileResults.reduce((sum, r) => sum + (r.translatedUnits ?? 0), 0);
@@ -286,9 +284,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in translate tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to translate: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -329,11 +325,7 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 							needCount,
 							fileCount,
 						)
-					: vscode.l10n.t(
-							"Translate file: {0}?\n\nThis will translate {1} units using AI.",
-							inputPath,
-							needCount,
-						),
+					: vscode.l10n.t("Translate file: {0}?\n\nThis will translate {1} units using AI.", inputPath, needCount),
 			},
 		};
 	}

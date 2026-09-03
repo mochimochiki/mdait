@@ -23,7 +23,15 @@ import { FileMutex } from "../../../../infra/workspace/file-mutex";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
-const SOURCE_LINES = ["# 製品ガイド", "", "この製品の概要を説明します。", "", "## インストール", "", "手順を説明します。"];
+const SOURCE_LINES = [
+	"# 製品ガイド",
+	"",
+	"この製品の概要を説明します。",
+	"",
+	"## インストール",
+	"",
+	"手順を説明します。",
+];
 const TARGET_LINES = [
 	"# Product Guide",
 	"",

@@ -10,11 +10,8 @@ import * as vscode from "vscode";
 import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
-import {
-	type UnusableResponseReason,
-	isUnusableAIResponse,
-} from "../../infra/llm/unusable-response";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
+import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { openConfigInSettingsEditor } from "./open-config-editor";
 
 /** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
@@ -178,6 +175,12 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 			return vscode.l10n.t(
 				"The previous version of the source is no longer available, so mdait could not tell which part changed.",
 			);
+		case "unterminated-block":
+			return vscode.l10n.t("The AI's answer had an edit block that was never closed.");
+		case "bad-range":
+			return vscode.l10n.t("The AI pointed at line numbers that do not exist in the translation.");
+		case "overlapping-ops":
+			return vscode.l10n.t("The AI's edits pointed at the same lines twice, so mdait could not apply them safely.");
 	}
 }
 

@@ -46,8 +46,6 @@ export class UnusableAIResponseError extends Error {
 }
 
 /** 「答えが使えない」失敗か */
-export function isUnusableAIResponse(
-	error: unknown,
-): error is UnusableAIResponseError {
+export function isUnusableAIResponse(error: unknown): error is UnusableAIResponseError {
 	return error instanceof UnusableAIResponseError;
 }

@@ -6,26 +6,17 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-	MarkdownAssetPathExtractor,
-	copyDiffAssets,
-	resolveCopyAssets,
-} from "../../../../commands/sync/asset-copier";
+import { MarkdownAssetPathExtractor, copyDiffAssets, resolveCopyAssets } from "../../../../commands/sync/asset-copier";
 import { DiffType, type UnitDiff } from "../../../../commands/sync/diff-detector";
-import type { Configuration } from "../../../../infra/config/configuration";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
+import type { Configuration } from "../../../../infra/config/configuration";
 
 // ---------------------------------------------------------------------------
 // ヘルパー
 // ---------------------------------------------------------------------------
 
-function makeUnit(
-	hash: string,
-	content: string,
-	need: string | null = null,
-	from: string | null = null,
-): MdaitUnit {
+function makeUnit(hash: string, content: string, need: string | null = null, from: string | null = null): MdaitUnit {
 	return new MdaitUnit(new MdaitMarker(hash, from, need), "title", 1, content);
 }
 
@@ -125,7 +116,7 @@ suite("resolveCopyAssets()", () => {
 		assert.strictEqual(resolveCopyAssets([], true), null);
 	});
 
-	test("pair優先: global=[] でも pair=[\".png\"] ならホワイトリスト", () => {
+	test('pair優先: global=[] でも pair=[".png"] ならホワイトリスト', () => {
 		const result = resolveCopyAssets([".png"], []);
 		assert.ok(result !== null);
 		assert.ok(result.whitelist?.has(".png"));
@@ -251,10 +242,7 @@ suite("copyDiffAssets()", () => {
 
 		oldSourceMap.set("oldhash", "![img](./assets/old.png)");
 
-		const newSourceUnit = makeUnit(
-			"newhash",
-			"![img](./assets/old.png)\n![img2](./assets/new.png)",
-		);
+		const newSourceUnit = makeUnit("newhash", "![img](./assets/old.png)\n![img2](./assets/new.png)");
 
 		// target 側の marker は revise@oldhash、from=newhash
 		const diff: UnitDiff = {
@@ -418,9 +406,7 @@ suite("copyDiffAssets()", () => {
 		fs.mkdirSync(path.dirname(tgtMd), { recursive: true });
 		fs.writeFileSync(tgtMd, "# translated\n");
 
-		const diffs: UnitDiff[] = [
-			makeAddedDiff("[関連](./docs/other.md)\n![img](./assets/img.png)"),
-		];
+		const diffs: UnitDiff[] = [makeAddedDiff("[関連](./docs/other.md)\n![img](./assets/img.png)")];
 
 		await copyDiffAssets({
 			diffs,
@@ -432,11 +418,7 @@ suite("copyDiffAssets()", () => {
 
 		const tgtImg = path.join(absoluteTargetDir, "assets", "img.png");
 		assert.ok(fs.existsSync(tgtImg), "画像はコピーされるべき");
-		assert.strictEqual(
-			fs.readFileSync(tgtMd, "utf-8"),
-			"# translated\n",
-			".md は翻訳対象なので上書きされてはいけない",
-		);
+		assert.strictEqual(fs.readFileSync(tgtMd, "utf-8"), "# translated\n", ".md は翻訳対象なので上書きされてはいけない");
 	});
 
 	test("sync.copyAssets が拡張子ホワイトリストの場合、リストにない拡張子はスキップ", async () => {
@@ -457,9 +439,7 @@ suite("copyDiffAssets()", () => {
 		fs.writeFileSync(srcPng, "image");
 		fs.writeFileSync(srcCsv, "csv-data");
 
-		const diffs: UnitDiff[] = [
-			makeAddedDiff("![img](./img.png) [data](./data.csv)"),
-		];
+		const diffs: UnitDiff[] = [makeAddedDiff("![img](./img.png) [data](./data.csv)")];
 
 		await copyDiffAssets({
 			diffs,
@@ -506,7 +486,7 @@ suite("copyDiffAssets()", () => {
 		assert.ok(!fs.existsSync(tgt), "ペア単位の copyAssets:false が優先されるべき");
 	});
 
-	test("transPairs[].copyAssets=[\".png\"] がグローバル true を上書き（拡張子絞り込み）", async () => {
+	test('transPairs[].copyAssets=[".png"] がグローバル true を上書き（拡張子絞り込み）', async () => {
 		mockConfig = {
 			getTransPairForSourceFile: (_: string) => ({
 				sourceDir: "src",
@@ -525,9 +505,7 @@ suite("copyDiffAssets()", () => {
 		fs.writeFileSync(srcPng, "image");
 		fs.writeFileSync(srcSvg, "svg");
 
-		const diffs: UnitDiff[] = [
-			makeAddedDiff("![img](./img.png) ![dia](./diagram.svg)"),
-		];
+		const diffs: UnitDiff[] = [makeAddedDiff("![img](./img.png) ![dia](./diagram.svg)")];
 
 		await copyDiffAssets({
 			diffs,
@@ -538,10 +516,7 @@ suite("copyDiffAssets()", () => {
 		});
 
 		assert.ok(fs.existsSync(path.join(absoluteTargetDir, "img.png")), ".png はコピー");
-		assert.ok(
-			!fs.existsSync(path.join(absoluteTargetDir, "diagram.svg")),
-			"ホワイトリスト外の .svg はコピーされない",
-		);
+		assert.ok(!fs.existsSync(path.join(absoluteTargetDir, "diagram.svg")), "ホワイトリスト外の .svg はコピーされない");
 	});
 
 	test("config.trans.extensions 指定拡張子はスキップされる（大文字小文字非依存）", async () => {
@@ -563,9 +538,7 @@ suite("copyDiffAssets()", () => {
 		fs.writeFileSync(srcTxt, "original");
 		fs.writeFileSync(srcImg, "image");
 
-		const diffs: UnitDiff[] = [
-			makeAddedDiff("[data](./data.TXT) ![img](./img.png)"),
-		];
+		const diffs: UnitDiff[] = [makeAddedDiff("[data](./data.TXT) ![img](./img.png)")];
 
 		await copyDiffAssets({
 			diffs,

@@ -50,11 +50,7 @@ function emptyResult(tooLarge = false): SourceDiffResult {
  *
  * 変更行の周りだけを文脈つきで返す。ユニット1件ぶんの本文を想定した規模（数十行）で使う。
  */
-export function diffSourceLines(
-	oldText: string,
-	newText: string,
-	options: SourceDiffOptions = {},
-): SourceDiffResult {
+export function diffSourceLines(oldText: string, newText: string, options: SourceDiffOptions = {}): SourceDiffResult {
 	const contextLines = options.contextLines ?? 1;
 	const maxLines = options.maxLines ?? 40;
 	const maxInputLines = options.maxInputLines ?? 400;

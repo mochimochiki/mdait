@@ -1,5 +1,5 @@
 {
-  "description": "Windows改行（CRLF）→ 正常にパース",
-  "syncLevel": 2,
-  "expectedUnits": 2
+	"description": "Windows改行（CRLF）→ 正常にパース",
+	"syncLevel": 2,
+	"expectedUnits": 2
 }

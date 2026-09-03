@@ -11,8 +11,8 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
-import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
+import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { showTranslationError } from "../../commands/shared/guidance";
 import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
@@ -652,7 +652,10 @@ let _highlightInfo:
  * @param startLine ユニットの開始行
  * @returns ユニットの終了行
  */
-export function findUnitEndLine(document: Pick<vscode.TextDocument, "getText" | "lineAt" | "lineCount" | "uri">, startLine: number): number {
+export function findUnitEndLine(
+	document: Pick<vscode.TextDocument, "getText" | "lineAt" | "lineCount" | "uri">,
+	startLine: number,
+): number {
 	const config = Configuration.getInstance();
 	if (config.isExternalMarkers()) {
 		const io = resolveMarkerIOForFile(config, document.uri.fsPath);

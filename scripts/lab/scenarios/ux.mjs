@@ -121,7 +121,9 @@ async function readTree() {
 
 /** ツリーの行を「ラベル → アイコン」の1行で書く（差分を目で追うため） */
 function renderTree(rows) {
-	return rows.map((r) => `${"  ".repeat(Math.max(0, r.depth - 1))}${r.label}${r.description ? ` ${r.description}` : ""} [${r.icon}]`);
+	return rows.map(
+		(r) => `${"  ".repeat(Math.max(0, r.depth - 1))}${r.label}${r.description ? ` ${r.description}` : ""} [${r.icon}]`,
+	);
 }
 
 // ===========================================================================
@@ -165,7 +167,10 @@ async function phaseTree() {
 			"U1",
 			"tree",
 			`読み上げラベルの無い行が ${missingAria.length} 件（スクリーンリーダーに状態が伝わらない）`,
-			missingAria.slice(0, 5).map((r) => r.label).join(" / "),
+			missingAria
+				.slice(0, 5)
+				.map((r) => r.label)
+				.join(" / "),
 		);
 	} else {
 		ok("U1", "すべての行に読み上げラベルが付いている");
@@ -230,11 +235,7 @@ async function phaseDialogAndProgress() {
 
 	// --- U2 の判定 ---
 	if (dialogs.length === 0) {
-		fail(
-			"U2",
-			"dialog",
-			"AI を使うフォルダ翻訳が、確認を1つも出さずに走った（ADR-260705-01 に反する）",
-		);
+		fail("U2", "dialog", "AI を使うフォルダ翻訳が、確認を1つも出さずに走った（ADR-260705-01 に反する）");
 	} else {
 		ok("U2", `確認が ${dialogs.length} 件立ちはだかった`);
 		// 文言は message と detail のどちらに入ることもある（実測: フォルダ翻訳の確認は
@@ -402,7 +403,9 @@ async function phaseNotify() {
 	}
 	say(`  終わったときに出ていた通知: ${toasts.length}`);
 	for (const toast of toasts) {
-		say(`    [${toast.level}] ${toast.text.split("\n")[0].slice(0, 70)}${toast.buttons.length ? ` [${toast.buttons.join(" / ")}]` : ""}`);
+		say(
+			`    [${toast.level}] ${toast.text.split("\n")[0].slice(0, 70)}${toast.buttons.length ? ` [${toast.buttons.join(" / ")}]` : ""}`,
+		);
 	}
 	if (toasts.length === 0) {
 		fail("U5", "notification", "翻訳が終わっても通知が1つも出ない（終わったことが画面から分からない）");

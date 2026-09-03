@@ -1,16 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { applySimplePatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
+import { applyRevisionPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { type FileStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
-import {
-	OperationCancelledError,
-	isOperationCancelled,
-} from "../../infra/errors/operation-cancelled";
+import { OperationCancelledError, isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { writeManagedDocument } from "../../infra/workspace/managed-write";
@@ -323,7 +320,8 @@ export class PlainFileHandler implements FileHandler {
 					context,
 					token,
 				);
-				const patched = applySimplePatch(previousTranslation, patchResult.targetPatch);
+				// 形式は AI に投げた指示文が決めている。**中身から推測しない**（ADR-260903-01）
+				const patched = applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
 				if (patched.ok) {
 					translatedText = patched.text;
 					termSuggestions = patchResult.termSuggestions;

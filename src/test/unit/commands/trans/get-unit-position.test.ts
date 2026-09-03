@@ -115,15 +115,8 @@ suite("getUnitPosition", () => {
 		// コードブロック外の "<!-- mdait cccc3333 ..." が境界になること
 		const codeBlockMarkerPos = text.indexOf("<!-- mdait a1b2c3d4");
 		const realNextMarkerPos = text.indexOf("<!-- mdait cccc3333");
-		assert.ok(
-			result.end !== codeBlockMarkerPos,
-			"コードブロック内のマーカーを境界にしていないこと",
-		);
-		assert.strictEqual(
-			result.end,
-			realNextMarkerPos,
-			"コードブロック外の次のマーカーを境界に選択していること",
-		);
+		assert.ok(result.end !== codeBlockMarkerPos, "コードブロック内のマーカーを境界にしていないこと");
+		assert.strictEqual(result.end, realNextMarkerPos, "コードブロック外の次のマーカーを境界に選択していること");
 	});
 
 	test("コードブロックのみにマーカーがある場合、end がテキスト末尾を指すこと", () => {
@@ -143,10 +136,6 @@ suite("getUnitPosition", () => {
 		const result = getUnitPosition(text, markerText);
 
 		assert.ok(result !== null, "結果がnullでないこと");
-		assert.strictEqual(
-			result.end,
-			text.length,
-			"コードブロック内マーカーをスキップしてファイル末尾を返すこと",
-		);
+		assert.strictEqual(result.end, text.length, "コードブロック内マーカーをスキップしてファイル末尾を返すこと");
 	});
 });

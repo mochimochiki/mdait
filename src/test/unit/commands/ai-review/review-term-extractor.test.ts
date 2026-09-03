@@ -16,7 +16,13 @@ function makeEntry(
 suite("extractBidirectionalTerms（原文・訳文の双方向用語抽出）", () => {
 	test("原文側だけにヒットしたエントリが抽出される（訳語不使用の疑い）", () => {
 		const terms = [makeEntry("キャッシュ", "cache")];
-		const result = extractBidirectionalTerms("キャッシュを削除する。", "Remove the temporary store.", terms, "ja", "en");
+		const result = extractBidirectionalTerms(
+			"キャッシュを削除する。",
+			"Remove the temporary store.",
+			terms,
+			"ja",
+			"en",
+		);
 		assert.strictEqual(result.length, 1);
 		assert.strictEqual(result[0].term, "キャッシュ");
 		assert.strictEqual(result[0].translation, "cache");

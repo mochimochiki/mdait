@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
-import { syncCommand } from "../commands/sync/sync-command";
 import { getSelectedScopeFiles } from "../commands/shared/status-scope";
+import { syncCommand } from "../commands/sync/sync-command";
 import { StatusManager } from "../core/status/status-manager";
 import { Configuration } from "../infra/config/configuration";
 import { Logger } from "../infra/logging/logger";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { buildNextActions } from "./next-actions";
-import { buildStatusData, type StatusData } from "./status-data";
+import { type StatusData, buildStatusData } from "./status-data";
 import { toToolResult } from "./tool-result";
 
 const logger = Logger.getInstance();
@@ -175,9 +175,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in sync tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to synchronize: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -198,9 +196,7 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 				"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
 			);
 		} else {
-			message = vscode.l10n.t(
-				"This will update translation markers in your Markdown files. Do you want to proceed?",
-			);
+			message = vscode.l10n.t("This will update translation markers in your Markdown files. Do you want to proceed?");
 		}
 		return {
 			invocationMessage: vscode.l10n.t("Synchronizing translation markers..."),

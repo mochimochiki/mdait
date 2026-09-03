@@ -124,10 +124,7 @@ export function hasBlockingError(diagnostics: Diagnostic[]): boolean {
  * 設定スナップショットとファイルシステムプローブから静的診断を実行する。
  * AI プロバイダの実到達性など非同期 IO を要する確認は UI 層（doctor-command）が別途行う。
  */
-export function runStaticChecks(
-	config: DoctorConfigSnapshot,
-	probe: DoctorProbe,
-): Diagnostic[] {
+export function runStaticChecks(config: DoctorConfigSnapshot, probe: DoctorProbe): Diagnostic[] {
 	const out: Diagnostic[] = [];
 
 	// 1. 翻訳ペアの有無

@@ -12,7 +12,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import {
 	type PatchFailureReason,
-	applySimplePatch,
+	applyRevisionPatch,
 	createUnifiedDiff,
 	hasDiff,
 } from "../../core/diff/diff-generator";
@@ -26,8 +26,8 @@ import {
 	parseFrontmatterMarker,
 	setFrontmatterMarker,
 } from "../../core/markdown/frontmatter-translation";
-import type { Markdown } from "../../core/markdown/mdait-markdown";
 import type { MarkerFileContext, MarkerProvider } from "../../core/markdown/marker-provider";
+import type { Markdown } from "../../core/markdown/mdait-markdown";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { markdownParser } from "../../core/markdown/parser";
@@ -42,10 +42,7 @@ import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
-import {
-	type UnusableResponseReason,
-	isUnusableAIResponse,
-} from "../../infra/llm/unusable-response";
+import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { flushDirtyDocument } from "../../infra/workspace/dirty-document";
@@ -53,31 +50,15 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { FileMutex } from "../../infra/workspace/file-mutex";
 import { writeManagedDocument } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
-import {
-	SummaryManager,
-	type TmReferenceInfo,
-} from "../../ui/hover/summary-manager";
+import { SummaryManager, type TmReferenceInfo } from "../../ui/hover/summary-manager";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { reportTransOutcome, showConfigError, showNeedSyncError, showTranslationError } from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
-import {
-	reportTransOutcome,
-	showConfigError,
-	showNeedSyncError,
-	showTranslationError,
-} from "../shared/guidance";
-import {
-	type TranslationTerm,
-	extractRelevantTerms,
-	termsToJson,
-} from "./term-extractor";
+import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
-import {
-	type UnitLoopResult,
-	type UnitPersistOutcome,
-	runUnitLoop,
-} from "./translation-run";
+import { type UnitLoopResult, type UnitPersistOutcome, runUnitLoop } from "./translation-run";
 import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 
@@ -216,18 +197,13 @@ export async function transCommand(
 	options?: TransRunOptions,
 ): Promise<TransCommandResult | undefined> {
 	if (!uri) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("No file selected for translation."),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
 	}
 
-	const targetFilePath =
-		uri.fsPath || vscode.window.activeTextEditor?.document.fileName;
+	const targetFilePath = uri.fsPath || vscode.window.activeTextEditor?.document.fileName;
 	if (!targetFilePath) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("No file selected for translation."),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
 	}
 
@@ -271,10 +247,7 @@ export async function transCommand(
  * 排他区間（FileMutex）の中では人に問わず他コマンドも起こさない。判断が要る事象は
  * 結果に載せて返し、呼び出し側が区間の外で扱う。
  */
-async function runFileTranslation(
-	uri: vscode.Uri,
-	options?: TransRunOptions,
-): Promise<TransCommandResult> {
+async function runFileTranslation(uri: vscode.Uri, options?: TransRunOptions): Promise<TransCommandResult> {
 	const targetFilePath = uri.fsPath;
 
 	// 多重起動の拒否。ここで断ることで、2本目の進捗表示が出て
@@ -333,10 +306,7 @@ export async function transFile_CoreProc(
 	// 読む」「後の保存で翻訳結果が消える」という dirty-document.ts が防いでいる失敗が戻る。
 	// 保存が誘発する autoSyncOnSave は VS Code が待たない非同期リスナで、
 	// 同じロックの待ち行列に並ぶだけなのでデッドロックにはならない（sync/ai-review と同じ作法）
-	const transPair = new FileExplorer().getTransPairFromTarget(
-		targetFilePath,
-		Configuration.getInstance(),
-	);
+	const transPair = new FileExplorer().getTransPairFromTarget(targetFilePath, Configuration.getInstance());
 	if (!transPair) {
 		return emptyResult("no-trans-pair");
 	}
@@ -386,13 +356,7 @@ async function transFile_Exclusive(
 	if (handler.fileType !== "md") {
 		const translator = await new TranslatorBuilder().buildPlain();
 		try {
-			const result = await handler.translate(
-				targetFilePath,
-				translator,
-				transPair,
-				progress,
-				token,
-			);
+			const result = await handler.translate(targetFilePath, translator, transPair, progress, token);
 			if (!result) return emptyResult("nothing-to-do");
 			// パッチ適用での更新も「訳した」に数える。非MDハンドラは patch 成功時に
 			// translatedCount=0 / patchedCount=1 を返すため、translatedCount だけを見ると
@@ -445,19 +409,14 @@ async function transFile_Exclusive(
 	const markdown = markdownParser.parse(content, config, io.provider, io.ctx);
 	const frontmatterKeys = getFrontmatterTranslationKeys(config);
 	const frontmatterMarker = parseFrontmatterMarker(markdown.frontMatter);
-	const needsFrontmatterTranslation =
-		frontmatterKeys.length > 0 &&
-		(frontmatterMarker?.needsTranslation() ?? false);
+	const needsFrontmatterTranslation = frontmatterKeys.length > 0 && (frontmatterMarker?.needsTranslation() ?? false);
 
 	// need:translate フラグを持つユニットを抽出
 	// 全般コストガード trans.maxUnitsPerRun で1ファイルあたりの翻訳件数を制限する（0 で上限なし）。
 	// 超過分は need:translate のまま残り、次回実行で処理される（冪等）。
-	const allUnitsToTranslate = markdown.units.filter((unit) =>
-		unit.needsTranslation(),
-	);
+	const allUnitsToTranslate = markdown.units.filter((unit) => unit.needsTranslation());
 	const maxUnitsPerRun = config.trans.maxUnitsPerRun;
-	const unitsToTranslate =
-		maxUnitsPerRun > 0 ? allUnitsToTranslate.slice(0, maxUnitsPerRun) : allUnitsToTranslate;
+	const unitsToTranslate = maxUnitsPerRun > 0 ? allUnitsToTranslate.slice(0, maxUnitsPerRun) : allUnitsToTranslate;
 
 	if (!needsFrontmatterTranslation && unitsToTranslate.length === 0) {
 		return emptyResult("nothing-to-do");
@@ -475,10 +434,7 @@ async function transFile_Exclusive(
 		// frontmatterの翻訳（必要な場合のみ）。frontmatter もツリー上の1行なので、
 		// 訳している間だけその行を処理中として登録する
 		if (needsFrontmatterTranslation) {
-			const sourceFilePath = fileExplorer.getSourcePath(
-				targetFilePath,
-				transPair,
-			);
+			const sourceFilePath = fileExplorer.getSourcePath(targetFilePath, transPair);
 			const trackedFrontmatter = OperationRegistry.getInstance().track({
 				kind: "translate",
 				scope: "frontmatter",
@@ -512,9 +468,7 @@ async function transFile_Exclusive(
 		}
 
 		// 置換用に旧マーカー文字列を保持しておく（翻訳するとマーカーが変わるため）
-		const oldMarkerTexts = unitsToTranslate.map(
-			(unit) => unit.marker?.toString() ?? "",
-		);
+		const oldMarkerTexts = unitsToTranslate.map((unit) => unit.marker?.toString() ?? "");
 
 		// 進行制御は VS Code 非依存の runUnitLoop に委ねる（単体テストで固定できる）。
 		// ここが持つのは「外界へどう触るか」だけ
@@ -529,15 +483,7 @@ async function transFile_Exclusive(
 			beginUnit: (unit) => trackUnit(targetFilePath, unit.marker?.hash),
 			translateUnit: async (unit) => {
 				const oldHash = unit.marker?.hash;
-				const metrics = await translateUnit(
-					unit,
-					translator,
-					sourceLang,
-					targetLang,
-					targetFilePath,
-					token,
-					options,
-				);
+				const metrics = await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath, token, options);
 				// 訳し終えたユニットは、進行中の見え方を先に更新する（1件ずつ緑になる）。
 				// 最終的な整合は finally の refreshFileStatus が担う。
 				// 失敗の印付けはここでは行わない — refresh がディスク由来の状態で
@@ -575,12 +521,7 @@ async function transFile_Exclusive(
 			cancelled: loop.cancelled,
 		});
 
-		return buildFileResult(
-			unitsToTranslate,
-			loop,
-			frontmatterTranslated,
-			frontmatterFailures,
-		);
+		return buildFileResult(unitsToTranslate, loop, frontmatterTranslated, frontmatterFailures);
 	} finally {
 		// **後始末の単一経路。** 中断でも失敗でも必ずここを通る。
 		// (1) ここまでの成果を保存する（external は一括保存なので、これが無いと
@@ -632,10 +573,7 @@ function trackUnit(targetFilePath: string, unitHash: string | undefined): (() =>
  * 失敗したユニットに Status.Error を刻む（状態の作り直しのあとに呼ぶ）。
  * どのユニットで落ちたかがツリーから読めないと、利用者は原稿のどこを直せばよいか分からない。
  */
-function markFailedUnit(
-	targetFilePath: string,
-	loop: UnitLoopResult<MdaitUnit> | undefined,
-): void {
+function markFailedUnit(targetFilePath: string, loop: UnitLoopResult<MdaitUnit> | undefined): void {
 	const hash = loop?.errorUnit?.marker?.hash;
 	if (!loop?.error || !hash) {
 		return;
@@ -671,11 +609,7 @@ function buildFileResult(
 	let outcome: TransOutcome = "completed";
 	if (loop.cancelled) {
 		outcome = "cancelled";
-	} else if (
-		loop.translated === 0 &&
-		loop.patchFailures.length === 0 &&
-		!frontmatterTranslated
-	) {
+	} else if (loop.translated === 0 && loop.patchFailures.length === 0 && !frontmatterTranslated) {
 		// 1件も訳せず、その原因が「AI の答えが使えなかった」ことなら、
 		// それは「訳すものが無かった」ではなく**失敗**である。取り違えると
 		// フォルダ翻訳が成功に数え、「翻訳できました」と嘘の報告になる
@@ -799,17 +733,9 @@ async function translateUnit(
 		try {
 			const termsFilePath = config.getTermsFilePath();
 			const cacheManager = TermsCacheManager.getInstance();
-			const allTerms = await cacheManager.getTerms(
-				termsFilePath,
-				config.transPairs,
-			);
+			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
 			if (allTerms.length > 0) {
-				const extractedTerms = extractRelevantTerms(
-					unit.content,
-					allTerms,
-					sourceLang,
-					targetLang,
-				);
+				const extractedTerms = extractRelevantTerms(unit.content, allTerms, sourceLang, targetLang);
 				relevantTerms.push(...extractedTerms);
 				if (extractedTerms.length > 0) {
 					termsJson = termsToJson(extractedTerms);
@@ -819,11 +745,7 @@ async function translateUnit(
 				}
 			}
 		} catch (error) {
-			logger.warn(
-				"trans",
-				"Failed to load terms for translation",
-				formatError(error),
-			);
+			logger.warn("trans", "Failed to load terms for translation", formatError(error));
 		}
 
 		// 前回の訳文を取得（**原文が改訂された場合だけ**。判断は resolvePreviousTranslation）
@@ -848,20 +770,12 @@ async function translateUnit(
 
 				if (currentStatusUnit?.filePath) {
 					const currentUri = vscode.Uri.file(currentStatusUnit.filePath);
-					const currentDoc =
-						await vscode.workspace.openTextDocument(currentUri);
+					const currentDoc = await vscode.workspace.openTextDocument(currentUri);
 					const currentFileContent = currentDoc.getText();
 					const currentIo = resolveMarkerIO(config, currentStatusUnit.filePath, "target");
-					const currentMarkdown = markdownParser.parse(
-						currentFileContent,
-						config,
-						currentIo.provider,
-						currentIo.ctx,
-					);
+					const currentMarkdown = markdownParser.parse(currentFileContent, config, currentIo.provider, currentIo.ctx);
 
-					const currentIndex = currentMarkdown.units.findIndex(
-						(u) => u.marker?.hash === unit.marker.hash,
-					);
+					const currentIndex = currentMarkdown.units.findIndex((u) => u.marker?.hash === unit.marker.hash);
 
 					if (currentIndex !== -1) {
 						// 前方のユニットを取得
@@ -882,20 +796,11 @@ async function translateUnit(
 					}
 				}
 			} catch (error) {
-				logger.warn(
-					"trans",
-					"Failed to get surrounding units for context",
-					formatError(error),
-				);
+				logger.warn("trans", "Failed to get surrounding units for context", formatError(error));
 			}
 		}
 
-		const context = new TranslationContext(
-			previousTexts,
-			nextTexts,
-			termsJson,
-			previousTranslation,
-		);
+		const context = new TranslationContext(previousTexts, nextTexts, termsJson, previousTranslation);
 
 		let sourceContent = unit.content;
 
@@ -909,20 +814,12 @@ async function translateUnit(
 					try {
 						if (sourceUnit.filePath) {
 							const sourceUri = vscode.Uri.file(sourceUnit.filePath);
-							const sourceDoc =
-								await vscode.workspace.openTextDocument(sourceUri);
+							const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
 							const sourceFileContent = sourceDoc.getText();
 							const sourceIo = resolveMarkerIO(config, sourceUnit.filePath, "source");
-							const sourceMarkdown = markdownParser.parse(
-								sourceFileContent,
-								config,
-								sourceIo.provider,
-								sourceIo.ctx,
-							);
+							const sourceMarkdown = markdownParser.parse(sourceFileContent, config, sourceIo.provider, sourceIo.ctx);
 							// unitHashでユニットを特定
-							const sourceUnitData = sourceMarkdown.units.find(
-								(u) => u.marker?.hash === sourceUnit.unitHash,
-							);
+							const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
 							if (sourceUnitData) {
 								sourceContent = sourceUnitData.content;
 							}
@@ -948,8 +845,7 @@ async function translateUnit(
 			if (oldhash) {
 				try {
 					const unitRegistryManager = UnitRegistryManager.getInstance();
-					const oldContent =
-						await unitRegistryManager.loadUnitRegistry(oldhash);
+					const oldContent = await unitRegistryManager.loadUnitRegistry(oldhash);
 					if (oldContent && hasDiff(oldContent, sourceContent)) {
 						context.sourceDiff = createUnifiedDiff(oldContent, sourceContent);
 						oldSourceContent = oldContent;
@@ -973,12 +869,7 @@ async function translateUnit(
 		// TM参照の検索（tm.enabledかつTmxStoreが利用可能な場合）
 		let tmReferenceMatches: TmReferenceInfo[] | undefined;
 		try {
-			const tmResult = lookupTmReferences(
-				sourceContent,
-				sourceLang,
-				targetLang,
-				oldSourceContent,
-			);
+			const tmResult = lookupTmReferences(sourceContent, sourceLang, targetLang, oldSourceContent);
 			if (tmResult) {
 				context.tmReferences = tmResult.formatted;
 				tmReferenceMatches = tmResult.matches;
@@ -995,10 +886,7 @@ async function translateUnit(
 		let patchFailure: PatchFailureReason | undefined;
 
 		const canPatch =
-			!options?.forceFullTranslation &&
-			unit.marker?.needsRevision() &&
-			previousTranslation &&
-			context.sourceDiff;
+			!options?.forceFullTranslation && unit.marker?.needsRevision() && previousTranslation && context.sourceDiff;
 		if (!canPatch && unit.marker?.needsRevision() && !options?.forceFullTranslation) {
 			logger.debug("trans", "Patch mode unavailable for revision unit", {
 				unitHash: unit.marker?.hash,
@@ -1039,10 +927,8 @@ async function translateUnit(
 					},
 				);
 
-				const patched = applySimplePatch(
-					previousTranslation,
-					patchResult.targetPatch,
-				);
+				// 形式は AI に投げた指示文が決めている。**中身から推測しない**（ADR-260903-01）
+				const patched = applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
 				if (patched.ok) {
 					translationResult = {
 						translatedText: patched.text,
@@ -1080,13 +966,12 @@ async function translateUnit(
 				}
 				// **パッチ失敗として握り潰さない。** ここへ来る例外は AI 到達不能・
 				// ネットワーク断・利用上限といった本物の失敗であり（答えが使えない場合は
-				// 直前で返しており、適用可否は applySimplePatch が理由つきで返す）、
+				// 直前で返しており、適用可否は applyRevisionPatch が理由つきで返す）、
 				// パッチ失敗に丸めると「差分の書き方が違う」という誤った理由を出したうえで、
 				// そのユニットを黙って飛ばすことになる
 				logger.warn("trans", "Patch translation request failed", {
 					unitHash: unit.marker?.hash,
-					patchContent:
-						(error as { patchContent?: string }).patchContent ?? "N/A",
+					patchContent: (error as { patchContent?: string }).patchContent ?? "N/A",
 					...formatError(error),
 				});
 				throw error;
@@ -1154,12 +1039,8 @@ async function translateUnit(
 			const appliedTerms = relevantTerms
 				.filter((term) => {
 					// 原文に用語の原語が含まれ、訳文に用語の訳語が含まれているかチェック
-					const sourceIncludes = sourceContent
-						.toLowerCase()
-						.includes(term.term.toLowerCase());
-					const targetIncludes = resolvedResult.translatedText
-						.toLowerCase()
-						.includes(term.translation.toLowerCase());
+					const sourceIncludes = sourceContent.toLowerCase().includes(term.term.toLowerCase());
+					const targetIncludes = resolvedResult.translatedText.toLowerCase().includes(term.translation.toLowerCase());
 					return sourceIncludes && targetIncludes;
 				})
 				.map((term) => ({
@@ -1190,19 +1071,12 @@ async function translateUnit(
 
 			// 翻訳品質チェック
 			const checker = new TranslationChecker();
-			const checkResult = checker.checkTranslationQuality(
-				sourceContent,
-				resolvedResult.translatedText,
-			);
+			const checkResult = checker.checkTranslationQuality(sourceContent, resolvedResult.translatedText);
 
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (checkResult.needsReview) {
 				unit.marker.setNeed("review");
-				logger.info(
-					"trans",
-					"Setting need:review for unit due to quality concerns",
-					{ unitHash: newHash },
-				);
+				logger.info("trans", "Setting need:review for unit due to quality concerns", { unitHash: newHash });
 			} else {
 				// 問題がない場合はneedフラグを削除
 				unit.marker.removeNeedTag();
@@ -1289,19 +1163,12 @@ async function translateFrontmatterIfNeeded(
 	}
 
 	const decoder = new TextDecoder("utf-8");
-	const sourceDoc = await vscode.workspace.fs.readFile(
-		vscode.Uri.file(sourceFilePath),
-	);
+	const sourceDoc = await vscode.workspace.fs.readFile(vscode.Uri.file(sourceFilePath));
 	const sourceContent = decoder.decode(sourceDoc);
 	// frontmatter のみ使用するが、マーカー読取の単一経路（resolveMarkerIO）を通しておく
 	const sourceConfig = Configuration.getInstance();
 	const sourceIO = resolveMarkerIO(sourceConfig, sourceFilePath, "source");
-	const sourceMarkdown = markdownParser.parse(
-		sourceContent,
-		sourceConfig,
-		sourceIO.provider,
-		sourceIO.ctx,
-	);
+	const sourceMarkdown = markdownParser.parse(sourceContent, sourceConfig, sourceIO.provider, sourceIO.ctx);
 	const sourceFrontMatter = sourceMarkdown.frontMatter;
 
 	const sourceValues = getFrontmatterTranslationValues(sourceFrontMatter, keys);
@@ -1327,9 +1194,7 @@ async function translateFrontmatterIfNeeded(
 			return { updated: false };
 		}
 
-		const previousTranslation = isRevision
-			? targetFrontMatter.get(key)
-			: undefined;
+		const previousTranslation = isRevision ? targetFrontMatter.get(key) : undefined;
 		const context = new TranslationContext(
 			[],
 			[],
@@ -1338,13 +1203,7 @@ async function translateFrontmatterIfNeeded(
 		);
 		let result: TranslationResult;
 		try {
-			result = await translator.translate(
-				sourceValue,
-				sourceLang,
-				targetLang,
-				context,
-				cancellationToken,
-			);
+			result = await translator.translate(sourceValue, sourceLang, targetLang, context, cancellationToken);
 		} catch (error) {
 			// 使えない答えは採用しない。frontmatter も need も元のまま残す
 			if (isUnusableAIResponse(error)) {
@@ -1365,12 +1224,8 @@ async function translateFrontmatterIfNeeded(
 		targetFrontMatter.set(key, value);
 	}
 
-	const sourceHash =
-		calculateFrontmatterHash(sourceFrontMatter, keys, { allowEmpty: false }) ??
-		marker.from;
-	const targetHash =
-		calculateFrontmatterHash(targetFrontMatter, keys, { allowEmpty: true }) ??
-		marker.hash;
+	const sourceHash = calculateFrontmatterHash(sourceFrontMatter, keys, { allowEmpty: false }) ?? marker.from;
+	const targetHash = calculateFrontmatterHash(targetFrontMatter, keys, { allowEmpty: true }) ?? marker.hash;
 	if (sourceHash) {
 		marker.from = sourceHash;
 	}
@@ -1432,8 +1287,7 @@ export async function transUnitCommand(
 					title: vscode.l10n.t("Translating unit {0}", unitHash.substring(0, 8)),
 					cancellable: true,
 				},
-				(progress, token) =>
-					transUnit_CoreProc(targetPath, unitHash, progress, token, options),
+				(progress, token) => transUnit_CoreProc(targetPath, unitHash, progress, token, options),
 			);
 		} catch (error) {
 			await showTranslationError(error);
@@ -1472,10 +1326,7 @@ export async function transUnit_CoreProc(
 ): Promise<TransCommandResult> {
 	// 翻訳ペアの解決だけ区間の外で行う（見つからないときの案内が「Sync を実行」
 	// ボタンを持つため）。未保存の反映は区間の中で行う
-	const transPair = new FileExplorer().getTransPairFromTarget(
-		targetPath,
-		Configuration.getInstance(),
-	);
+	const transPair = new FileExplorer().getTransPairFromTarget(targetPath, Configuration.getInstance());
 	if (!transPair) {
 		return emptyResult("no-trans-pair");
 	}
@@ -1543,44 +1394,32 @@ async function transUnit_Exclusive(
 	try {
 		const oldMarkerText = targetUnit.marker.toString();
 		loop = await runUnitLoop([targetUnit], {
-				isCancelled: () => token.isCancellationRequested,
-				onProgress: () => {
-					progress.report({ message: vscode.l10n.t("{0}/{1} units", 1, 1) });
-				},
-				beginUnit: (unit) => trackUnit(targetPath, unit.marker?.hash),
-				translateUnit: async (unit) => {
-					const metrics = await translateUnit(
-						unit,
-						translator,
-						sourceLang,
-						targetLang,
+			isCancelled: () => token.isCancellationRequested,
+			onProgress: () => {
+				progress.report({ message: vscode.l10n.t("{0}/{1} units", 1, 1) });
+			},
+			beginUnit: (unit) => trackUnit(targetPath, unit.marker?.hash),
+			translateUnit: async (unit) => {
+				const metrics = await translateUnit(unit, translator, sourceLang, targetLang, targetPath, token, options);
+				// 失敗の印付けは後始末のあと（markFailedUnit）にまとめる
+				if (!metrics.patchFailure) {
+					statusManager.changeUnitStatus(
+						unitHash,
+						{
+							status: Status.Translated,
+							needFlag: undefined,
+							unitHash: unit.marker.hash,
+						},
 						targetPath,
-						token,
-						options,
 					);
-					// 失敗の印付けは後始末のあと（markFailedUnit）にまとめる
-					if (!metrics.patchFailure) {
-						statusManager.changeUnitStatus(
-							unitHash,
-							{
-								status: Status.Translated,
-								needFlag: undefined,
-								unitHash: unit.marker.hash,
-							},
-							targetPath,
-						);
-					}
-					return metrics;
-				},
-				persistUnit: async (unit) => {
-					if (external) {
-						return { written: true };
-					}
-					return updateAndSaveUnit(
-						vscode.Uri.file(targetPath),
-						oldMarkerText,
-						unit,
-					);
+				}
+				return metrics;
+			},
+			persistUnit: async (unit) => {
+				if (external) {
+					return { written: true };
+				}
+				return updateAndSaveUnit(vscode.Uri.file(targetPath), oldMarkerText, unit);
 			},
 		});
 	} finally {
@@ -1645,11 +1484,7 @@ async function saveExternalDocument(
  * 再入非対応であるためロックが永久に解放されなくなっていた。
  * 失敗は結果として返し、呼び出し側が区間の外で報告する。
  */
-async function updateAndSaveUnit(
-	file: vscode.Uri,
-	markerText: string,
-	unit: MdaitUnit,
-): Promise<UnitPersistOutcome> {
+async function updateAndSaveUnit(file: vscode.Uri, markerText: string, unit: MdaitUnit): Promise<UnitPersistOutcome> {
 	const replacement = unit.toString();
 	// 文字列でオフセット計算し、fs.writeFileでサイレント更新
 	const document = await vscode.workspace.fs.readFile(file);
@@ -1663,11 +1498,7 @@ async function updateAndSaveUnit(
 		return { written: false, reason: "marker-not-found" };
 	}
 	// 元のユニットの末尾改行を保持
-	const updated =
-		content.slice(0, offsets.start) +
-		replacement +
-		offsets.trailingNewlines +
-		content.slice(offsets.end);
+	const updated = content.slice(0, offsets.start) + replacement + offsets.trailingNewlines + content.slice(offsets.end);
 	// 差し替えた本文は LF で組み立てられる。原稿が CRLF なら混ざるので、入口で揃え直す
 	await writeManagedDocument(file.fsPath, updated);
 	return { written: true };
@@ -1714,16 +1545,12 @@ export function getUnitPosition(
 		break;
 	}
 
-	const endIdx = chosenIndex !== null
-		? startIdx + markerLen + chosenIndex
-		: text.length;
+	const endIdx = chosenIndex !== null ? startIdx + markerLen + chosenIndex : text.length;
 
 	// 末尾の改行を検出（次のマーカーまたはファイル末尾までの改行を保持）
 	const unitContent = text.slice(startIdx, endIdx);
 	const trailingNewlinesMatch = unitContent.match(/(\r?\n)+$/);
-	const trailingNewlines = trailingNewlinesMatch
-		? trailingNewlinesMatch[0]
-		: "";
+	const trailingNewlines = trailingNewlinesMatch ? trailingNewlinesMatch[0] : "";
 
 	return { start: startIdx, end: endIdx, trailingNewlines };
 }
@@ -1735,17 +1562,13 @@ export function getUnitPosition(
  */
 export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 	if (!uri) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("No file selected for translation."),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
 	}
 
 	const targetFilePath = uri.fsPath;
 	if (!targetFilePath) {
-		vscode.window.showErrorMessage(
-			vscode.l10n.t("No file selected for translation."),
-		);
+		vscode.window.showErrorMessage(vscode.l10n.t("No file selected for translation."));
 		return;
 	}
 
@@ -1776,17 +1599,11 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 	// 通知は排他区間の外で1回だけ出す。どの終わり方でも黙らない（UX-P7）
 	const label = path.basename(targetFilePath);
 	if (outcome === "no-trans-pair") {
-		await showNeedSyncError(
-			vscode.l10n.t("No translation pair found for file: {0}", targetFilePath),
-		);
+		await showNeedSyncError(vscode.l10n.t("No translation pair found for file: {0}", targetFilePath));
 	} else if (outcome === "no-keys") {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("No frontmatter keys configured for translation."),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("No frontmatter keys configured for translation."));
 	} else if (outcome === "cancelled") {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Translation cancelled for {0}.", label),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("Translation cancelled for {0}.", label));
 	} else if (outcome === "ai-response-unusable") {
 		// 黙らない。何も書いていないこと・まだ訳されていないことを伝える
 		vscode.window.showWarningMessage(
@@ -1796,9 +1613,7 @@ export async function translateFrontmatterCommand(uri?: vscode.Uri) {
 			),
 		);
 	} else if (outcome === "nothing-to-do") {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Nothing to translate in {0}.", label),
-		);
+		vscode.window.showInformationMessage(vscode.l10n.t("Nothing to translate in {0}.", label));
 	} else if (outcome === "completed") {
 		vscode.window.showInformationMessage(vscode.l10n.t("Translation completed"));
 	}
@@ -1829,10 +1644,7 @@ async function translateFrontmatter_CoreProc(
 	const targetFilePath = uri.fsPath;
 
 	// 翻訳ペアの解決だけ区間の外で行う。未保存の反映は区間の中
-	const transPair = new FileExplorer().getTransPairFromTarget(
-		targetFilePath,
-		Configuration.getInstance(),
-	);
+	const transPair = new FileExplorer().getTransPairFromTarget(targetFilePath, Configuration.getInstance());
 	if (!transPair) {
 		return "no-trans-pair";
 	}

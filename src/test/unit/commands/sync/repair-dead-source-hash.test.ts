@@ -35,11 +35,7 @@ suite("誰も指していない原文ハッシュを本文から付け直す", (
 		const repaired = repairDeadSourceHashes([source], [target]);
 
 		assert.strictEqual(repaired, 1);
-		assert.strictEqual(
-			source.marker?.hash,
-			BODY_HASH,
-			"付け直せば from と一致し、訳文が孤立扱いで消されなくなる",
-		);
+		assert.strictEqual(source.marker?.hash, BODY_HASH, "付け直せば from と一致し、訳文が孤立扱いで消されなくなる");
 	});
 
 	test("訳文の from が指している hash には触らない（本文を編集した直後の正常な姿）", () => {

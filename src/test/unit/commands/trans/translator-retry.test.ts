@@ -102,12 +102,10 @@ suite("DefaultTranslator リトライ機構", () => {
 			]);
 			const translator = createTranslator(mockService);
 
-			const error = await translator
-				.translate("Hello", "en", "ja", defaultContext)
-				.then(
-					() => undefined,
-					(e: unknown) => e,
-				);
+			const error = await translator.translate("Hello", "en", "ja", defaultContext).then(
+				() => undefined,
+				(e: unknown) => e,
+			);
 
 			assert.ok(error instanceof UnusableAIResponseError, "使えない答えとして投げること");
 			assert.strictEqual(error.reason, "invalid-format");
@@ -125,12 +123,10 @@ suite("DefaultTranslator リトライ機構", () => {
 			const mockService = new MockAIService(["", "", ""]);
 			const translator = createTranslator(mockService);
 
-			const error = await translator
-				.translate("Hello", "en", "ja", defaultContext)
-				.then(
-					() => undefined,
-					(e: unknown) => e,
-				);
+			const error = await translator.translate("Hello", "en", "ja", defaultContext).then(
+				() => undefined,
+				(e: unknown) => e,
+			);
 
 			assert.ok(error instanceof UnusableAIResponseError);
 			assert.strictEqual(error.reason, "empty");
@@ -201,40 +197,34 @@ suite("DefaultTranslator リトライ機構", () => {
 		});
 
 		test("正常なレスポンスは1回で成功する", async () => {
-			const mockService = new MockAIService([
-				'{"targetPatch": "--- content\\n+++ content\\n@@ -1 +1 @@\\n-old\\n+new", "termSuggestions": []}',
-			]);
+			// 改訂は行番号方式の素のテキストで返る（ADR-260903-01）
+			const mockService = new MockAIService(["REPLACE 1\nnew content\nEND"]);
 			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
-			assert.ok(result.targetPatch.includes("--- content"));
+			assert.ok(result.targetPatch.includes("REPLACE 1"));
+			assert.strictEqual(result.format, "linenum", "形式が結果に同梱されること");
 			assert.strictEqual(mockService.getCallCount(), 1);
 		});
 
 		test("1回目失敗→2回目成功でリトライが機能する", async () => {
-			const mockService = new MockAIService([
-				"これはJSONではありません",
-				'{"targetPatch": "--- content\\n+++ content", "termSuggestions": []}',
-			]);
+			const mockService = new MockAIService(["指示ブロックのない散文", "REPLACE 1\nnew content\nEND"]);
 			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
-			assert.ok(result.targetPatch.includes("--- content"));
+			assert.ok(result.targetPatch.includes("REPLACE 1"));
 			assert.strictEqual(mockService.getCallCount(), 2);
 		});
 
-		test("targetPatch フィールド欠落でリトライする", async () => {
-			const mockService = new MockAIService([
-				'{"patch": "間違ったフィールド名"}',
-				'{"targetPatch": "正しいパッチ", "termSuggestions": []}',
-			]);
+		test("JSON で返してきたらリトライする（素のテキストを求めているため）", async () => {
+			const mockService = new MockAIService(['{"targetPatch": "指示に反した JSON"}', "REPLACE 1\n正しいパッチ\nEND"]);
 			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
-			assert.strictEqual(result.targetPatch, "正しいパッチ");
+			assert.ok(result.targetPatch.includes("正しいパッチ"));
 			assert.strictEqual(mockService.getCallCount(), 2);
 		});
 
@@ -244,30 +234,24 @@ suite("DefaultTranslator リトライ機構", () => {
 			const mockService = new MockAIService(["フォールバック1", "フォールバック2", "フォールバック3"]);
 			const translator = createTranslator(mockService);
 
-			const error = await translator
-				.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious)
-				.then(
-					() => undefined,
-					(e: unknown) => e,
-				);
+			const error = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious).then(
+				() => undefined,
+				(e: unknown) => e,
+			);
 
 			assert.ok(error instanceof UnusableAIResponseError, "使えない答えとして投げること");
 			assert.strictEqual(error.reason, "invalid-format");
 			assert.strictEqual(mockService.getCallCount(), 3);
 		});
 
-		test("warningsが正しく結合される", async () => {
-			const mockService = new MockAIService([
-				JSON.stringify({
-					targetPatch: "パッチ",
-					warnings: ["AIからの警告"],
-				}),
-			]);
+		test("コードフェンスで包まれていても読み取る（指示文は禁じているが、包んでくる相手がいる）", async () => {
+			const mockService = new MockAIService(["```\nREPLACE 1\nnew content\nEND\n```"]);
 			const translator = createTranslator(mockService);
 
 			const result = await translator.translateRevisionPatch("Hello", "en", "ja", contextWithPrevious);
 
-			assert.ok(result.warnings?.includes("AIからの警告"));
+			assert.ok(result.targetPatch.startsWith("REPLACE 1"), "フェンスが剥がれていない");
+			assert.strictEqual(mockService.getCallCount(), 1);
 		});
 	});
 });

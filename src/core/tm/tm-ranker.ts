@@ -82,8 +82,7 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 			if (text === undefined) {
 				return null;
 			}
-			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`)
-				?? computeTrigrams(normalizeForTm(text));
+			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`) ?? computeTrigrams(normalizeForTm(text));
 			const querySim = jaccard(queryTrigrams, trigrams);
 			const finalScore = applyWeightBoost(querySim, entry.weight);
 			return { entry, trigrams, querySim, finalScore };

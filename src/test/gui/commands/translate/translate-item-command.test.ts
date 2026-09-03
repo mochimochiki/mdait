@@ -2,12 +2,12 @@
 import * as vscode from "vscode";
 import { StatusTreeTranslationHandler } from "../../../../commands/trans/status-tree-translation-handler";
 import {
+	type DirectoryStatusItem,
+	type FileStatusItem,
 	Status,
 	type StatusItem,
-	type FileStatusItem,
-	type UnitStatusItem,
-	type DirectoryStatusItem,
 	StatusItemType,
+	type UnitStatusItem,
 } from "../../../../core/status/status-item";
 
 suite("翻訳アイテムコマンドテスト", () => {

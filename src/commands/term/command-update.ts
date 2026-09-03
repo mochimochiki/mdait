@@ -185,7 +185,6 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 					),
 					uri,
 				);
-
 			} catch (error) {
 				logger.error("term.update", "Glossary update failed", { ...formatError(error) });
 				vscode.window.showErrorMessage(

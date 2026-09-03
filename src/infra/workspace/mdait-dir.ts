@@ -43,11 +43,7 @@ export async function ensureMdaitDir(): Promise<string | null> {
 		}
 	} catch (error) {
 		// .gitignore/.gitattributes 作成失敗はベストエフォートなので警告のみ
-		Logger.getInstance().warn(
-			"mdait-dir",
-			"failed to create .mdait/.gitignore or .gitattributes",
-			formatError(error),
-		);
+		Logger.getInstance().warn("mdait-dir", "failed to create .mdait/.gitignore or .gitattributes", formatError(error));
 	}
 
 	return mdaitDir;

@@ -6,11 +6,7 @@ import * as assert from "node:assert";
 import * as path from "node:path";
 import { getSelectedScopeDirs } from "../../../../commands/shared/status-scope";
 import { SelectionState } from "../../../../core/status/selection-state";
-import {
-	type FileStatusItem,
-	Status,
-	StatusItemType,
-} from "../../../../core/status/status-item";
+import { type FileStatusItem, Status, StatusItemType } from "../../../../core/status/status-item";
 import { StatusItemTree } from "../../../../core/status/status-item-tree";
 import type { TransPair } from "../../../../infra/config/configuration";
 
@@ -61,10 +57,7 @@ suite("getSelectedScopeDirs（表示範囲の算出）", () => {
 		const dirs = getSelectedScopeDirs(makeConfig([jaPair, koPair]));
 
 		assert.ok(dirs.includes(path.join(BASE_DIR, "ja")));
-		assert.ok(
-			!dirs.includes(path.join(BASE_DIR, "ko")),
-			"選択外の ko が含まれないこと",
-		);
+		assert.ok(!dirs.includes(path.join(BASE_DIR, "ko")), "選択外の ko が含まれないこと");
 	});
 
 	test("複数ペアで共有される source ディレクトリが重複しないこと", () => {
@@ -73,11 +66,7 @@ suite("getSelectedScopeDirs（表示範囲の算出）", () => {
 
 		const dirs = getSelectedScopeDirs(makeConfig([jaPair, koPair]));
 
-		assert.deepStrictEqual(dirs, [
-			path.join(BASE_DIR, "en"),
-			path.join(BASE_DIR, "ja"),
-			path.join(BASE_DIR, "ko"),
-		]);
+		assert.deepStrictEqual(dirs, [path.join(BASE_DIR, "en"), path.join(BASE_DIR, "ja"), path.join(BASE_DIR, "ko")]);
 	});
 });
 
@@ -117,15 +106,9 @@ suite("StatusItemTree.getFilesInScope（集計範囲の絞り込み）", () => {
 	test("対象ディレクトリ配下のファイルだけが返ること", () => {
 		// LM Tools の全体集計を人間のツリーと同じ範囲に揃えるための絞り込み。
 		// 範囲が食い違うと、エージェントだけが「誰も処理しない件数」を報告する
-		const files = tree.getFilesInScope([
-			path.join(BASE_DIR, "en"),
-			path.join(BASE_DIR, "ja"),
-		]);
+		const files = tree.getFilesInScope([path.join(BASE_DIR, "en"), path.join(BASE_DIR, "ja")]);
 
-		assert.deepStrictEqual(
-			files.map((f) => path.basename(path.dirname(f.filePath))).sort(),
-			["en", "ja"],
-		);
+		assert.deepStrictEqual(files.map((f) => path.basename(path.dirname(f.filePath))).sort(), ["en", "ja"]);
 	});
 
 	test("未指定なら全ファイルが返ること", () => {

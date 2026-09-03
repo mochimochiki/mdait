@@ -23,9 +23,7 @@ export interface ScopeConfig {
  */
 export function getSelectedScopeDirs(config: ScopeConfig): string[] {
 	const configBaseDir = config.getConfigBaseDir();
-	const pairs = SelectionState.getInstance().filterTransPairs(
-		config.transPairs,
-	);
+	const pairs = SelectionState.getInstance().filterTransPairs(config.transPairs);
 	return Array.from(
 		new Set(
 			pairs.flatMap((pair) => [
@@ -41,9 +39,7 @@ export function getSelectedScopeDirs(config: ScopeConfig): string[] {
  * ペア単位の集計（未同期ファイル数の表示など）が getSelectedScopeDirs と
  * 同じ選択状態・同じパス解決を共有するための算出点。
  */
-export function getSelectedPairAbsDirs(
-	config: ScopeConfig,
-): { sourceDirAbs: string; targetDirAbs: string }[] {
+export function getSelectedPairAbsDirs(config: ScopeConfig): { sourceDirAbs: string; targetDirAbs: string }[] {
 	const configBaseDir = config.getConfigBaseDir();
 	return SelectionState.getInstance()
 		.filterTransPairs(config.transPairs)
@@ -61,9 +57,7 @@ export function getSelectedPairAbsDirs(
  * 「エージェントには見えるが誰も処理しない件数」が報告されることになる。
  */
 export function getSelectedScopeFiles(tree: StatusItemTree): FileStatusItem[] {
-	return tree.getFilesInScope(
-		getSelectedScopeDirs(Configuration.getInstance()),
-	);
+	return tree.getFilesInScope(getSelectedScopeDirs(Configuration.getInstance()));
 }
 
 /**

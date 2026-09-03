@@ -407,7 +407,7 @@ function describe(d: Diagnostic): string {
 			);
 		case "ai.openaiModelMissing":
 			return vscode.l10n.t(
-				"The model \"{0}\" is not in the list the endpoint returned. Check ai.model for a typo.",
+				'The model "{0}" is not in the list the endpoint returned. Check ai.model for a typo.',
 				p.model ?? "",
 			);
 		case "ai.openaiHttpError":

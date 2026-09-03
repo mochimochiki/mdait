@@ -6,9 +6,9 @@
  * @module core/tm/tm-line-search
  */
 
+import { buildSentenceQueries } from "./tm-query";
 import type { ScoredTmEntry } from "./tm-ranker";
 import { rankTmEntries } from "./tm-ranker";
-import { buildSentenceQueries } from "./tm-query";
 import { normalizeForTm } from "./tm-text-normalizer";
 import type { TmxStore } from "./tmx-store";
 import type { TmMatch } from "./types";

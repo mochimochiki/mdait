@@ -34,14 +34,14 @@ suite("decideReviewAction（判定→アクションの純関数）", () => {
 	});
 
 	test("match でも issues がある場合は keep（三重条件）", () => {
-		assert.strictEqual(
-			decideReviewAction(response({ issues: ["terminology inconsistency"] }), defaultPolicy),
-			"keep",
-		);
+		assert.strictEqual(decideReviewAction(response({ issues: ["terminology inconsistency"] }), defaultPolicy), "keep");
 	});
 
 	test("mismatch は confidence にかかわらず escalate", () => {
-		assert.strictEqual(decideReviewAction(response({ verdict: "mismatch", confidence: 0.99 }), defaultPolicy), "escalate");
+		assert.strictEqual(
+			decideReviewAction(response({ verdict: "mismatch", confidence: 0.99 }), defaultPolicy),
+			"escalate",
+		);
 	});
 
 	test("partial は escalate", () => {

@@ -337,10 +337,7 @@ Content C.
 
 		assert.strictEqual(result.resolved.length, 0);
 		assert.deepStrictEqual(result.skipped, [{ hash: "srcA", reason: "same-as-source" }]);
-		assert.ok(
-			fs.readFileSync(targetFile, "utf-8").includes("need:translate"),
-			"need は残る",
-		);
+		assert.ok(fs.readFileSync(targetFile, "utf-8").includes("need:translate"), "need は残る");
 	});
 
 	test("訳してあれば通る（同一テキスト検査は訳文を止めない）", async () => {

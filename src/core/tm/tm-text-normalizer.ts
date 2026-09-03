@@ -12,8 +12,7 @@ import MarkdownIt from "markdown-it";
 /** markdown-itインスタンス（モジュールスコープで再利用） */
 const md = new MarkdownIt("default");
 
-const LEADING_YAML_FRONTMATTER_PATTERN =
-	/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+const LEADING_YAML_FRONTMATTER_PATTERN = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 const BLOCK_SEPARATOR = "\n\n";
 
 function appendTopLevelBlockSeparator(textParts: string[]): void {
@@ -45,10 +44,7 @@ function appendTopLevelBlockSeparator(textParts: string[]): void {
  * @param isTopLevel トップレベルのトークン走査かどうか
  * @returns 抽出されたテキスト配列
  */
-function extractTextFromTokens(
-	tokens: MarkdownIt.Token[],
-	isTopLevel = true,
-): string[] {
+function extractTextFromTokens(tokens: MarkdownIt.Token[], isTopLevel = true): string[] {
 	const textParts: string[] = [];
 
 	for (let i = 0; i < tokens.length; i++) {

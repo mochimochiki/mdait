@@ -113,10 +113,7 @@ export function buildReviewReport(
  * 取り込みウィザードの統合レポート（adopt-result）からも再利用する。
  * unitResults が空のファイルはスキップし、mismatch/partial を先頭に並べる。
  */
-export function generateReviewTableSection(
-	results: AiReviewFileResult[],
-	options: ReviewTableOptions = {},
-): string {
+export function generateReviewTableSection(results: AiReviewFileResult[], options: ReviewTableOptions = {}): string {
 	const lines: string[] = [];
 	for (const fileResult of results) {
 		appendFileTable(lines, fileResult, undefined, options);
