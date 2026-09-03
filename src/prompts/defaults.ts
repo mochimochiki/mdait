@@ -257,7 +257,7 @@ Use them as reference for consistency, but prioritize accuracy and context.
  */
 export const DEFAULT_TRANS_REVISE_PATCH = `You are a professional translator specializing in Markdown documents.
 
-Your task is to update the previous translation by returning ONLY a patch.
+Your task is to update the previous translation to reflect changes made to the source text.
 
 CRITICAL RULE (HIGHEST PRIORITY):
 - You MUST preserve the original Markdown structure EXACTLY.
@@ -272,132 +272,61 @@ A line containing only "=== SOURCE TEXT ===" marks the start of the current (rev
 
 CODE BLOCKS:
 - Code blocks in the source text appear as __CODE_BLOCK_PLACEHOLDER_n__, while the Previous Translation shows its code blocks in full. The two shapes describe the SAME code: this is an artifact of preparing the source text, not a source change.
-- Never patch a code block into a placeholder or a placeholder into code, and never translate either form.
-- Code blocks in the Surrounding Text section are collapsed to __CODE_BLOCK_OMITTED__; never copy that marker into the patch.
+- Never turn a code block into a placeholder or a placeholder into code, and never translate either form.
+- Code blocks in the Surrounding Text section are collapsed to __CODE_BLOCK_OMITTED__; never copy that marker into your answer.
 
 Instructions:
-1. Produce a patch that transforms the PREVIOUS TRANSLATION to reflect the source changes.
+1. Update the PREVIOUS TRANSLATION so that it reflects the source changes.
 2. Only change the parts required by the source diff. Keep unchanged parts intact.
-3. Do NOT output the full translated text. Output ONLY the patch.
-4. Do NOT alter Markdown syntax, line breaks, or indentation.
+3. Do NOT alter Markdown syntax, line breaks, or indentation.
 
-PATCH FORMAT (read every rule carefully):
-This PATCH FORMAT is a custom, prefix-based format specifically for this task.
-It is NOT a standard unified diff or any other existing diff format.
-Do NOT use unified diff syntax here; always follow the = / - / + rules below.
+PATCH FORMAT:
+The Previous Translation is shown with a line number and a tab at the start of every line.
+Those numbers are NOT part of the text — never repeat them in your answer.
 
-Each line in the patch MUST start with exactly one of these prefixes:
-  "="  = context line — copied verbatim from the previous translation
-  "-"  = old line to remove
-  "+"  = new line to insert
+Return a list of edit blocks that refer to the previous translation BY LINE NUMBER.
+You do not need to copy any existing line: name the lines and give the new text.
+
+  REPLACE <from>-<to>      replace lines <from> through <to>
+  (the new lines, without line numbers)
+  END
+
+  INSERT AFTER <n>         insert new lines directly after line <n>
+  (the new lines, without line numbers)
+  END
+
+  DELETE <from>-<to>       delete lines <from> through <to>
+  END
 
 Rules:
-1. Show 3 lines of context before and after each change. If fewer than 3 lines exist, show as many as available.
-2. Context lines MUST start with "=" immediately followed by the content (no space between "=" and content).
-3. Old lines start with "-" immediately followed by the content to remove.
-4. New lines start with "+" immediately followed by the content to insert.
-5. If multiple changes are within 3 lines of each other, merge them into one block.
-6. Empty lines in the original text become context lines containing only "=" (just the prefix, no content).
-7. For insert-only changes (no lines removed), use only "+" lines between context lines.
-8. For delete-only changes (no lines added), use only "-" lines between context lines.
+1. Line numbers count from 1 and refer to the Previous Translation exactly as shown.
+2. A single line is written as "REPLACE 7-7" or just "REPLACE 7".
+3. Every block MUST be closed with a line containing only "END".
+4. Blocks may be given in any order, but two blocks must NEVER cover the same line.
+5. The lines inside a block are the FINAL text for that place, written exactly as they should
+   appear in the document. Do NOT add diff markers such as a leading "-" or "+" to show what
+   changed, and NEVER leave the old wording next to the new one. (A leading "-" that belongs to
+   the text itself, such as a Markdown list item, is fine — write it as it should appear.)
 
-CRITICAL — Markdown content can start with "-" or "+":
-Markdown list items (- item), horizontal rules (---), etc. naturally start with "-" or "+".
-You MUST still add the prefix:
-  Context list item:  "=- item"     (equals + dash + space + item)
-  Remove list item:   "-- item"     (dash + dash + space + item)
-  Add list item:      "+- item"     (plus + dash + space + item)
+EXAMPLE (previous translation lines 1-4 are "## Features", "", "- Translation support", "- Sync support"):
+REPLACE 4
+- Real-time sync
+END
+INSERT AFTER 4
+- Term management
+END
 
-EXAMPLE 1 — Simple text change:
-Previous Translation:
-  ## Introduction
-  This is a sample document.
-  > Original quote here.
-  Some more text.
+OUTPUT RULES:
+1. Output the edit blocks and nothing else.
+2. Do NOT wrap your answer in a Markdown code block.
+3. Do NOT write any explanation before or after the blocks.
+4. Do NOT output JSON.
 
-Patch (source changed the quote):
-=## Introduction
-=This is a sample document.
--> Original quote here.
-+> Updated quote with new meaning.
-=Some more text.
-
-EXAMPLE 2 — List item changes:
-Previous Translation:
-  ## Features
-  - Translation support
-  - Sync support
-  - Term management
-
-Patch (source changed "Sync support" to "Real-time sync"):
-=## Features
-=
-=- Translation support
--- Sync support
-+- Real-time sync
-=- Term management
-
-EXAMPLE 3 — Insert-only (adding a new list item):
-Previous Translation:
-  ## Features
-  - Translation support
-  - Sync support
-
-Patch (source added a new item):
-=## Features
-=
-=- Translation support
-=- Sync support
-+- Term management
-
-EXAMPLE 4 — Delete-only (removing a line):
-Previous Translation:
-  ## Notes
-  This line will be removed.
-  Keep this line.
-
-Patch:
-=## Notes
--This line will be removed.
-=Keep this line.
-
-Self-Check (MANDATORY before responding):
-1. Every context line starts with "=".
-2. Every old line starts with "-" and matches the previous translation exactly.
-3. Every new line starts with "+".
-4. No line is left without a prefix (=, -, or +).
-5. Markdown structure is preserved in the "+" lines.
-
-CRITICAL OUTPUT FORMAT RULES:
-
-1. The "targetPatch" field must contain ONLY the patch text.
-2. Do NOT wrap the patch in code blocks or add extra formatting.
-3. Do NOT escape quotes or add backslashes.
-
-Response Format:
-Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outside JSON.
-
-{
-  "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
-  "termSuggestions": [
-    {
-      "source": "original term in the source language",
-      "target": "translated term in the target language",
-      "context": "an actual sentence or phrase quoted directly from the text including the term (in the context language specified in Translation Direction)",
-      "reason": "(optional) brief explanation why this term should be added to glossary"
-    }
-  ],
-  "warnings": ["(optional) patch risk or ambiguity"]
-}
-
-Important Notes:
-- The "context" field in termSuggestions MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
 Translation Direction:
 - Source language: {{sourceLang}}
 - Target language: {{targetLang}}
-- Context language (for termSuggestions "context" quotes): {{contextLang}}
+- Context language: {{contextLang}}
 {{#surroundingText}}
 Surrounding Text (for reference only, do NOT translate):
 {{surroundingText}}
@@ -406,8 +335,8 @@ Surrounding Text (for reference only, do NOT translate):
 Terminology (preferred translations):
 {{terms}}
 {{/terms}}
-Previous Translation (target to patch):
-{{previousTranslation}}
+Previous Translation (target to patch), with a line number and a tab before each line:
+{{numberedPreviousTranslation}}
 {{#tmReferences}}
 
 ## Translation Memory Reference
@@ -909,7 +838,7 @@ TRANSLATION MEMORY REFERENCES:
  * }
  * ```
  */
-export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source file has been modified. Update the existing translation by returning ONLY a patch.
+export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source file has been modified. Update the existing translation by returning ONLY the edits.
 
 ABSOLUTE LANGUAGE CONSTRAINT:
 - All updated text MUST be written in the target language specified in the user message.
@@ -923,101 +852,76 @@ CRITICAL RULES:
 - Do NOT modify parts of the translation that are unaffected by the source changes.
 - Preserve the original file format and structure EXACTLY.
 - For tabular data (.csv, .tsv): preserve all delimiters, column count, and row count.
-- Do NOT output the full translated text. Output ONLY the patch.
 - Translate ALL human-readable text cells, including the HEADER ROW. Do NOT skip any cell because it looks like a header or column name.
 - Preserve without translating: empty cells, the literal value "||", and any [[...]] bracket markers.
 
-PATCH FORMAT (read every rule carefully):
-This PATCH FORMAT is a custom, prefix-based format specifically for this task.
-It is NOT a standard unified diff or any other existing diff format.
-Do NOT use unified diff syntax here; always follow the = / - / + rules below.
+PATCH FORMAT:
+The Previous Translation is shown with a line number and a tab at the start of every line.
+Those numbers are NOT part of the text — never repeat them in your answer.
 
-Each line in the patch MUST start with exactly one of these prefixes:
-  "="  = context line — copied verbatim from the previous translation
-  "-"  = old line to remove
-  "+"  = new line to insert
+Return a list of edit blocks that refer to the previous translation BY LINE NUMBER.
+You do not need to copy any existing line: name the lines and give the new text.
+
+  REPLACE <from>-<to>      replace lines <from> through <to>
+  (the new lines, without line numbers)
+  END
+
+  INSERT AFTER <n>         insert new lines directly after line <n>
+  (the new lines, without line numbers)
+  END
+
+  DELETE <from>-<to>       delete lines <from> through <to>
+  END
 
 Rules:
-1. Show 3 lines of context before and after each change. If fewer than 3 lines exist, show as many as available.
-2. Context lines MUST start with "=" immediately followed by the content (no space between "=" and content).
-3. Old lines start with "-" immediately followed by the content to remove.
-4. New lines start with "+" immediately followed by the content to insert.
-5. If multiple changes are within 3 lines of each other, merge them into one block.
-6. Empty lines in the original text become context lines containing only "=" (just the prefix, no content).
-7. For insert-only changes (no lines removed), use only "+" lines between context lines.
-8. For delete-only changes (no lines added), use only "-" lines between context lines.
+1. Line numbers count from 1 and refer to the Previous Translation exactly as shown.
+2. A single line is written as "REPLACE 7-7" or just "REPLACE 7".
+3. Every block MUST be closed with a line containing only "END".
+4. Blocks may be given in any order, but two blocks must NEVER cover the same line.
+5. The lines inside a block are the FINAL text for that place, written exactly as they should
+   appear in the document. Do NOT add diff markers such as a leading "-" or "+" to show what
+   changed, and NEVER leave the old wording next to the new one. (A leading "-" that belongs to
+   the text itself, such as a Markdown list item, is fine — write it as it should appear.)
 
-EXAMPLE 1 — Simple text change:
-Previous Translation:
-  header1,header2
-  value1,value2
-  old data,info
+EXAMPLE (previous translation lines 1-3 are "header1,header2", "value1,value2", "old data,info"):
+REPLACE 3
+new data,info
+END
+INSERT AFTER 3
+row2,data2
+END
 
-Patch (source changed "old data"):
-=header1,header2
-=value1,value2
--old data,info
-+new data,info
+OUTPUT RULES:
+1. Output the edit blocks and nothing else.
+2. Do NOT wrap your answer in a Markdown code block.
+3. Do NOT write any explanation before or after the blocks.
+4. Do NOT output JSON.
 
-EXAMPLE 2 — Insert-only (adding a new row):
-Previous Translation:
-  header1,header2
-  row1,data1
-
-Patch:
-=header1,header2
-=row1,data1
-+row2,data2
-
-Self-Check (MANDATORY before responding):
-1. Every context line starts with "=".
-2. Every old line starts with "-" and matches the previous translation exactly.
-3. Every new line starts with "+".
-4. No line is left without a prefix (=, -, or +).
-5. File format structure is preserved in the "+" lines.
-
-CRITICAL OUTPUT FORMAT RULES:
-
-1. The "targetPatch" field must contain ONLY the patch text.
-2. Do NOT wrap the patch in code blocks or add extra formatting.
-3. Do NOT escape quotes or add backslashes.
-
-Response Format:
-Return ONLY valid JSON. Do NOT include markdown code blocks or explanations outside JSON.
-
-{
-  "targetPatch": "the patch text with =-prefixed context lines and -/+ change lines",
-  "termSuggestions": [
-    {
-      "source": "original term in the source language",
-      "target": "translated term in the target language",
-      "context": "an actual phrase from the text including the term (in the context language specified in Translation Direction)",
-      "reason": "(optional) brief explanation"
-    }
-  ],
-  "warnings": ["(optional) patch risk or ambiguity"]
-}
-
-Important Notes:
-- The "context" field in termSuggestions MUST quote the original text verbatim.
-- Return ONLY valid JSON. Any extra text invalidates the response.
 <!-- mdait:user-section -->
 Translation Direction:
 - Source language: {{sourceLang}}
 - Target language: {{targetLang}}
-- Context language (for termSuggestions "context" quotes): {{contextLang}}
+- Context language: {{contextLang}}
 {{#fileExtension}}
 - File type: {{fileExtension}}
 {{/fileExtension}}
+{{#surroundingText}}
+Surrounding Text (for reference only, do NOT translate):
+{{surroundingText}}
+{{/surroundingText}}
 {{#terms}}
 Terminology (preferred translations):
 {{terms}}
 {{/terms}}
-Previous Translation (target to patch):
-{{previousTranslation}}
+Previous Translation (target to patch), with a line number and a tab before each line:
+{{numberedPreviousTranslation}}
 {{#tmReferences}}
 
-Translation Memory References:
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Use them as reference for consistency, but prioritize accuracy and context.
+
 {{tmReferences}}
 {{/tmReferences}}
 
@@ -1295,7 +1199,6 @@ POSITION-BASED CORRESPONDENCE (audit the non-locked entries):
 
 Return exactly one JSON object: {"ok": true} | {"corrections": [...]} | {"needBodies": [...]}.`;
 
-
 /**
  * デフォルトプロンプトのマッピング
  */
@@ -1306,8 +1209,7 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_REVISE_PATCH_PLAIN]: DEFAULT_TRANS_REVISE_PATCH_PLAIN,
 	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,
 	[PromptIds.TERM_DETECT_SOURCE_ONLY]: DEFAULT_TERM_DETECT_SOURCE_ONLY,
-	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]:
-		DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
+	[PromptIds.TERM_EXTRACT_FROM_TRANSLATIONS]: DEFAULT_TERM_EXTRACT_FROM_TRANSLATIONS,
 	[PromptIds.TERM_TRANSLATE_TERMS]: DEFAULT_TERM_TRANSLATE_TERMS,
 	[PromptIds.TM_SPLIT_SENTENCES]: DEFAULT_TM_SPLIT_SENTENCES,
 	[PromptIds.AI_REVIEW_VERIFY_PAIRING]: DEFAULT_AI_REVIEW_VERIFY_PAIRING,

@@ -69,10 +69,7 @@ suite("AITranslator メッセージ構成", () => {
 	});
 
 	test("改訂パッチでもリトライ時にsystemが不変", async () => {
-		const mockService = new CapturingMockAIService([
-			"無効な応答",
-			'{"targetPatch": "=ctx\\n-old\\n+new", "termSuggestions": []}',
-		]);
+		const mockService = new CapturingMockAIService(["無効な応答", "REPLACE 1\nnew\nEND"]);
 		const translator = new AITranslator(mockService, "en", () => createParts("CTX"));
 
 		const context = new TranslationContext();

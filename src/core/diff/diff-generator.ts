@@ -41,12 +41,142 @@ export type PatchFailureReason =
 	 * 旧原文が手元に無く、差分そのものを作れなかった（パッチを試すまで行かなかった）。
 	 * `applySimplePatch` は返さない。差分を作る前の段階で使う。
 	 */
-	| "no-source-diff";
+	| "no-source-diff"
+	/** 行番号方式で、ブロックが `END` で閉じられていない */
+	| "unterminated-block"
+	/** 行番号方式で、指された行が訳文に存在しない（範囲外・逆順） */
+	| "bad-range"
+	/** 行番号方式で、指示どうしが同じ行を取り合っている（当てる順序で結果が変わる） */
+	| "overlapping-ops";
 
 /** パッチ適用の結果。成功なら適用後テキスト、失敗なら理由を持つ */
-export type PatchApplyResult =
-	| { ok: true; text: string }
-	| { ok: false; reason: PatchFailureReason };
+export type PatchApplyResult = { ok: true; text: string } | { ok: false; reason: PatchFailureReason };
+
+/**
+ * 改訂パッチの書き方。**推測させないための型**。
+ *
+ * `linenum` … 前回訳文に行番号を振って渡し、`REPLACE` / `INSERT AFTER` / `DELETE` で指させる。
+ *             前回訳文を1行も写させないので、目印が Markdown とぶつかる問題を構造的に持たない。
+ *             既定（ADR-260903-01）。
+ * `prefixed` … 旧来の `=`/`-`/`+`。**利用者が指示文を上書きしているときだけ**使う
+ *             （既存の上書きはこの形式に向けて書かれているため）。
+ */
+export type PatchFormat = "linenum" | "prefixed";
+
+/**
+ * 改訂パッチを当てる**唯一の入口**。
+ *
+ * **どちらの形式で読むかは引数で決まり、中身からは推測しない。** 推測させると、
+ * 一方の形式のつもりで書かれた答えをもう一方として「読めてしまう」ことがある
+ * （たとえば `prefixed` の当てはめ器はプレフィックスの無い行を黙って文脈行として扱うので、
+ * 別形式のパッチでも当たったように見えて本文が壊れる）。
+ */
+export function applyRevisionPatch(baseContent: string, patch: string, format: PatchFormat): PatchApplyResult {
+	return format === "linenum" ? applyLineNumberPatch(baseContent, patch) : applySimplePatch(baseContent, patch);
+}
+
+/** 行番号方式の1つの指示 */
+interface LineOp {
+	kind: "replace" | "insert" | "delete";
+	/** 1始まりの開始行。`insert` は「この行の後ろへ」の意味で 0（先頭）も許す */
+	from: number;
+	/** 1始まりの終了行（`from` と同じなら1行だけ） */
+	to: number;
+	body: string[];
+}
+
+/**
+ * 行番号方式のパッチを当てる。
+ *
+ *   REPLACE 12-14 / REPLACE 7   … その行を body で置き換える
+ *   INSERT AFTER 20             … その行の後ろへ body を差し込む（0 は先頭）
+ *   DELETE 30-31                … その行を消す
+ *   各ブロックは END で閉じる
+ *
+ * 前回訳文を1行も写させないので、`anchor-not-found` という失敗の形が存在しない。
+ * 代わりに数え間違いが `bad-range` として出る。
+ */
+export function applyLineNumberPatch(baseContent: string, patch: string): PatchApplyResult {
+	const text = patch.trim();
+	if (!text) return { ok: false, reason: "empty-patch" };
+
+	const lines = baseContent.split("\n");
+	const tokens = text.split("\n");
+	const ops: LineOp[] = [];
+
+	for (let at = 0; at < tokens.length; at += 1) {
+		const head = tokens[at].trim();
+		const replace = /^REPLACE\s+(\d+)\s*(?:-\s*(\d+))?$/i.exec(head);
+		const insert = /^INSERT\s+AFTER\s+(\d+)$/i.exec(head);
+		const remove = /^DELETE\s+(\d+)\s*(?:-\s*(\d+))?$/i.exec(head);
+		if (!replace && !insert && !remove) continue;
+
+		const body: string[] = [];
+		let cursor = at + 1;
+		while (cursor < tokens.length && tokens[cursor].trim().toUpperCase() !== "END") {
+			body.push(tokens[cursor]);
+			cursor += 1;
+		}
+		// 閉じ忘れを「残り全部が本文」として飲み込むと、訳文の末尾が丸ごと入れ替わる
+		if (cursor >= tokens.length) return { ok: false, reason: "unterminated-block" };
+		at = cursor;
+
+		if (replace) {
+			const from = Number(replace[1]);
+			ops.push({ kind: "replace", from, to: replace[2] ? Number(replace[2]) : from, body });
+		} else if (insert) {
+			const from = Number(insert[1]);
+			ops.push({ kind: "insert", from, to: from, body });
+		} else if (remove) {
+			const from = Number(remove[1]);
+			ops.push({ kind: "delete", from, to: remove[2] ? Number(remove[2]) : from, body: [] });
+		}
+	}
+
+	if (ops.length === 0) return { ok: false, reason: "unrecognized-format" };
+
+	for (const op of ops) {
+		if (!Number.isInteger(op.from) || !Number.isInteger(op.to) || op.to < op.from) {
+			return { ok: false, reason: "bad-range" };
+		}
+		// 差し込みは「0 行目の後ろ」＝先頭を許す。置換と削除は実在する行だけ
+		const lowest = op.kind === "insert" ? 0 : 1;
+		if (op.from < lowest || op.to > lines.length) return { ok: false, reason: "bad-range" };
+	}
+
+	// **同じ行を2つの指示が取り合っていたら当てない。** 後ろから当てる実装なので、
+	// 重なったまま進めると当てる順序で結果が変わる（黙って別の文書ができる）
+	const spans = ops
+		.filter((op) => op.kind !== "insert")
+		.map((op) => ({ from: op.from, to: op.to }))
+		.sort((a, b) => a.from - b.from);
+	for (let at = 1; at < spans.length; at += 1) {
+		if (spans[at].from <= spans[at - 1].to) return { ok: false, reason: "overlapping-ops" };
+	}
+
+	// 後ろから当てる。前から当てると、当てた分だけ後ろの行番号がずれる
+	const ordered = [...ops].sort((a, b) => b.from - a.from);
+	const result = [...lines];
+	for (const op of ordered) {
+		if (op.kind === "insert") {
+			result.splice(op.from, 0, ...op.body);
+		} else {
+			result.splice(op.from - 1, op.to - op.from + 1, ...op.body);
+		}
+	}
+
+	const applied = result.join("\n");
+	if (applied === baseContent) return { ok: false, reason: "no-changes" };
+	return { ok: true, text: applied };
+}
+
+/** 前回訳文に1始まりの行番号とタブを付ける（行番号方式でモデルへ渡す形） */
+export function numberLinesForPatch(text: string): string {
+	return text
+		.split("\n")
+		.map((line, at) => `${at + 1}\t${line}`)
+		.join("\n");
+}
 
 /**
  * シンプルパッチを適用する。

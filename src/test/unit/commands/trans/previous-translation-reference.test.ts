@@ -68,10 +68,7 @@ suite("前回の訳文を参考として送る条件", () => {
 suite("参考として添える文のコードブロック", () => {
 	test("参考文のコードブロックは目印ひとつに畳まれる", () => {
 		const text = ["説明の行", "", "```js", 'console.log("hi");', "```", "", "続きの行"].join("\n");
-		assert.strictEqual(
-			elideCodeBlocks(text),
-			["説明の行", "", CODE_BLOCK_OMITTED_MARK, "", "続きの行"].join("\n"),
-		);
+		assert.strictEqual(elideCodeBlocks(text), ["説明の行", "", CODE_BLOCK_OMITTED_MARK, "", "続きの行"].join("\n"));
 	});
 
 	test("畳んだ目印は復元用のプレースホルダと取り違えない形をしている", () => {
@@ -99,7 +96,7 @@ suite("参考として添える文のコードブロック", () => {
 	});
 
 	test("差分パッチでは前回訳文を生のまま送る（1行ずつ突き合わせる土台なので畳めない）", async () => {
-		const service = new CapturingAIService('{"targetPatch": "=a", "termSuggestions": []}');
+		const service = new CapturingAIService("REPLACE 1\na\nEND");
 		const translator = new AITranslator(service, "ja", (_id, variables) => echoParts(variables));
 
 		const previous = ["Previous heading", "", "```js", 'console.log("old");', "```"].join("\n");
@@ -111,10 +108,14 @@ suite("参考として添える文のコードブロック", () => {
 		await translator.translateRevisionPatch("本文", "ja", "en", context);
 
 		const sent = service.calls[0].messages[0].content as string;
-		assert.ok(
-			sent.includes(`<previousTranslation>${previous}</previousTranslation>`),
-			"前回訳文が生のまま渡っていない",
+		// 行番号は付くが、コードブロックは畳まれず生のまま渡る（ADR-260903-01）
+		assert.ok(sent.includes("<numberedPreviousTranslation>"), "行番号付きの前回訳文が渡っていない");
+		const numbered = sent.slice(
+			sent.indexOf("<numberedPreviousTranslation>"),
+			sent.indexOf("</numberedPreviousTranslation>"),
 		);
+		assert.ok(numbered.includes('console.log("old");'), "前回訳文のコードブロックが畳まれている");
+		assert.ok(numbered.includes("1\t"), "行番号が付いていない");
 		// 周辺テキストのほうは畳まれている
 		assert.ok(sent.includes(`<surroundingText>`));
 		const surrounding = sent.slice(sent.indexOf("<surroundingText>"), sent.indexOf("</surroundingText>"));

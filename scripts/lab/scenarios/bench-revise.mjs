@@ -75,8 +75,8 @@ const say = (text = "") => process.stdout.write(`${text}\n`);
  * `{{変数}}` と `{{#変数}}…{{/変数}}` を展開する。
  *
  * **本番（PromptProvider.replaceVariables）と同じ規則**。写しなので離れうるが、
- * 離れたことは self-test の `guardTemplateFidelity` が気づく（`current` の
- * レンダリング結果を本番の PromptProvider と1バイトずつ突き合わせている）。
+ * 離れたことは self-test の `guardTemplateFidelity` が気づく（本番を指す候補の
+ * レンダリング結果を、本番の PromptProvider と1バイトずつ突き合わせている）。
  */
 function replaceVariables(template, variables) {
 	let result = template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
@@ -619,7 +619,8 @@ function guardTemplateFidelity() {
 	const { PromptProvider } = require(path.join(REPO, "out", "prompts", "prompt-provider.js"));
 	const { PromptIds } = require(path.join(REPO, "out", "prompts", "defaults.js"));
 	const testCase = selectCases("C1")[0];
-	const variant = selectVariants("current")[0];
+	// **本番の現物を指している候補**に向ける。本番が行番号方式へ移ったので linenum
+	const variant = selectVariants("linenum")[0];
 
 	const markdown = testCase.fileExtension === ".md";
 	const variables = {
@@ -652,15 +653,17 @@ function selfTestChecks() {
 	const add = (name, ok, detail = "") => checks.push({ name, ok, detail });
 
 	const c1 = selectCases("C1")[0];
-	const [current, plain, udiff, searchreplace, linenum] = selectVariants("current,plain,udiff,searchreplace,linenum");
+	const [legacy, plain, udiff, searchreplace, linenum] = selectVariants(
+		"legacy-prefixed,plain,udiff,searchreplace,linenum",
+	);
 	const prev = c1.previousTranslation;
 	const goodLine =
 		"We target small and medium-sized enterprises and startups seeking global expansion. The domestic translation market is worth approximately 300 billion yen (of which business documents account for 40%), while the global market is projected at 62 billion dollars with an annual growth rate of about 9%.";
 	const oldLine = prev.split("\n")[4];
 
 	// --- 成立する答え（候補ごとに1つずつ） ---
-	const okCurrent = judge(c1, current, JSON.stringify({ targetPatch: `=\n-${oldLine}\n+${goodLine}` }));
-	add(`current: 正しいパッチが成立する`, okCurrent.ok, okCurrent.reason ?? "");
+	const okCurrent = judge(c1, legacy, JSON.stringify({ targetPatch: `=\n-${oldLine}\n+${goodLine}` }));
+	add(`legacy-prefixed: 正しいパッチが成立する`, okCurrent.ok, okCurrent.reason ?? "");
 
 	const okPlain = judge(c1, plain, `=\n-${oldLine}\n+${goodLine}`);
 	add(`plain: 正しいパッチが成立する`, okPlain.ok, okPlain.reason ?? "");
@@ -675,15 +678,19 @@ function selfTestChecks() {
 	add(`linenum: 行番号の指示が成立する`, okLine.ok, okLine.reason ?? "");
 
 	// --- 落ちるべき答え ---
-	const brokenJson = judge(c1, current, '{"targetPatch": "=\n-broken');
-	add(`current: 壊れた JSON は envelope で落ちる`, !brokenJson.ok && brokenJson.stage === "envelope", brokenJson.stage);
+	const brokenJson = judge(c1, legacy, '{"targetPatch": "=\n-broken');
+	add(
+		`legacy-prefixed: 壊れた JSON は envelope で落ちる`,
+		!brokenJson.ok && brokenJson.stage === "envelope",
+		brokenJson.stage,
+	);
 
 	const fenced = judge(
 		c1,
-		current,
+		legacy,
 		`\`\`\`json\n${JSON.stringify({ targetPatch: `=\n-${oldLine}\n+${goodLine}` })}\n\`\`\``,
 	);
-	add(`current: コードフェンスで包まれても開ける`, fenced.ok, fenced.reason ?? "");
+	add(`legacy-prefixed: コードフェンスで包まれても開ける`, fenced.ok, fenced.reason ?? "");
 
 	const wrongShape = judge(c1, udiff, `=\n-${oldLine}\n+${goodLine}`);
 	add(`udiff: 別の書式で返したら format で落ちる`, !wrongShape.ok && wrongShape.stage === "format", wrongShape.stage);
@@ -856,12 +863,12 @@ function selfTestChecks() {
 	// 出力が別物になり、比べているものが「形式の差」でなくなる
 	add(
 		"response_format は JSON の封筒を使う候補にだけ付く",
-		buildResponseFormat("json_object", current) !== undefined &&
+		buildResponseFormat("json_object", legacy) !== undefined &&
 			buildResponseFormat("json_object", plain) === undefined &&
 			buildResponseFormat("json_object", linenum) === undefined,
 		"",
 	);
-	add("response_format は既定（off）では付かない", buildResponseFormat("off", current) === undefined, "");
+	add("response_format は既定（off）では付かない", buildResponseFormat("off", legacy) === undefined, "");
 	// 綴り間違いは**候補の選び方によらず**落ちること。値の検査を封筒の判定より後に置くと、
 	// JSON の封筒を使う候補を1つも選んでいないときだけ素通りする（レビュー指摘・実バグだった）
 	const rejects = (variant) => {
@@ -874,17 +881,19 @@ function selfTestChecks() {
 	};
 	add(
 		"response_format に知らない値を渡したら、候補の選び方によらず投げる前に落ちる",
-		rejects(current) && rejects(plain) && rejects(linenum),
-		`current=${rejects(current)} plain=${rejects(plain)} linenum=${rejects(linenum)}`,
+		rejects(legacy) && rejects(plain) && rejects(linenum),
+		`legacy=${rejects(legacy)} plain=${rejects(plain)} linenum=${rejects(linenum)}`,
 	);
 
 	// 枠が指示文と食い違うと、モデルは返したい欄の行き場を失って封筒を文字列へ押し込む。
 	// 「構造化出力が効くか」を測るつもりが、食い違う枠を押し付けた結果を測ることになる
-	const advertised = [...current.template.matchAll(/^ {2}"(\w+)":/gm)].map((m) => m[1]);
+	// **本番はもう JSON を求めていない**（ADR-260903-01）。枠を突き合わせる相手は、
+	// いまも JSON の封筒を使う候補 — 凍結した旧本番と、対照の udiff-json
+	const advertised = [...legacy.template.matchAll(/^ {2}"(\w+)":/gm)].map((m) => m[1]);
 	const allowed = Object.keys(REVISE_PATCH_SCHEMA.properties);
 	const missing = advertised.filter((key) => !allowed.includes(key));
 	add(
-		"json_schema の枠が本番の指示文と揃っている",
+		"json_schema の枠が、JSON を求める指示文と揃っている",
 		advertised.length > 0 && missing.length === 0,
 		advertised.length === 0 ? "指示文から欄を読み取れなかった" : `枠に無い欄: ${missing.join(" ")}`,
 	);
@@ -893,7 +902,8 @@ function selfTestChecks() {
 	checks.push(guardTemplateFidelity());
 
 	// --- コードブロックが目印に畳まれて送られているか ---
-	const request = buildRequest(c4, current);
+	// 本番を指す候補（linenum）で確かめる
+	const request = buildRequest(c4, linenum);
 	add(
 		`コードブロックは目印に畳んで送る（訳文側は実物のまま）`,
 		request.user.includes("__CODE_BLOCK_PLACEHOLDER_0__") && request.user.includes('"RATE_LIMIT_EXCEEDED"'),

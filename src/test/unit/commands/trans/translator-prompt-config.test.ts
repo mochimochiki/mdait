@@ -6,10 +6,7 @@
 
 import { strict as assert } from "node:assert";
 import { TranslationContext } from "../../../../commands/trans/translation-context";
-import {
-	AITranslator,
-	PLAIN_PROMPT_CONFIG,
-} from "../../../../commands/trans/translator";
+import { AITranslator, PLAIN_PROMPT_CONFIG } from "../../../../commands/trans/translator";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { PromptIds } from "../../../../prompts/defaults";
 import type { PromptId } from "../../../../prompts/defaults";
@@ -20,10 +17,7 @@ import type { PromptId } from "../../../../prompts/defaults";
 class PromptCapturingMockAIService implements AIService {
 	lastSystemPrompt = "";
 
-	async sendMessage(
-		systemPrompt: string,
-		_messages: AIMessage[],
-	): Promise<string> {
+	async sendMessage(systemPrompt: string, _messages: AIMessage[]): Promise<string> {
 		this.lastSystemPrompt = systemPrompt;
 		return '{"translation": "translated", "termSuggestions": []}';
 	}
@@ -68,7 +62,7 @@ suite("AITranslator プロンプト設定", () => {
 		// translateRevisionPatchのレスポンス用に調整
 		mockService.sendMessage = async (systemPrompt, _msgs) => {
 			mockService.lastSystemPrompt = systemPrompt;
-			return '{"targetPatch": "patch", "termSuggestions": []}';
+			return "REPLACE 1\npatch\nEND";
 		};
 
 		const translator = new AITranslator(

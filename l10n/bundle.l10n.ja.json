@@ -621,5 +621,8 @@
   "{0} marker(s) deeper than sync.level ({1}) could not be moved and were dropped along with their from/need.": "sync.level（{1}）より深い位置にあった {0} 件のマーカーは移せず、from と need ごと落としました。",
   "'{0}' is the source folder. Translate the matching target folder '{1}' instead.": "'{0}' は原文のフォルダです。対になる訳文のフォルダ '{1}' を選んでください。",
   "Nothing to translate under {0}: no managed translation file matched. Pass a target-side (translated) file or directory.": "{0} の下に、管理下の訳文ファイルがありません。訳文側（翻訳された方）のファイルかフォルダを渡してください。",
-  "Synchronization did not run: {0}": "同期は実行されませんでした: {0}"
+  "Synchronization did not run: {0}": "同期は実行されませんでした: {0}",
+  "The AI's answer had an edit block that was never closed.": "AI の答えに、閉じられていない編集ブロックがありました。",
+  "The AI pointed at line numbers that do not exist in the translation.": "AI が、訳文に存在しない行番号を指しました。",
+  "The AI's edits pointed at the same lines twice, so mdait could not apply them safely.": "AI の編集が同じ行を二重に指したため、安全に当てはめられませんでした。"
 }

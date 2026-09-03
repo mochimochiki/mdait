@@ -864,22 +864,85 @@ async function presetProbe(opts) {
  * 録音の再生。要求が録音と1文字でも違えば shim が 409 を返し、ここで落ちる。
  * つまり「指示文の組み立てが変わった」ことに気づける。
  */
+/**
+ * 改訂（revise）を誘発するために原文へ加える編集。
+ *
+ * **録音と1文字でも違ってはいけない** — 違うと原文差分が変わり、送る指示文も変わって
+ * 再生が 409 で止まる。録音を録り直すときも同じ編集を使うこと。
+ */
+const REVISE_EDIT = {
+	file: "content/ja/10_test.md",
+	from: "これは日本語のテスト用 Markdown ファイルです。",
+	to: "これは日本語のテスト用 Markdown ファイルです。改訂の録音のために一文を足した。",
+};
+
 async function presetRegress(opts) {
+	let code = 0;
+
+	// --- 新規翻訳の往復 ---
 	const recording = opts.replay ?? path.join(HERE, "ai/recordings/trans-en-child.jsonl");
 	if (liveSession()) await verbDown();
 	await verbUp({ host: "headless", ai: "replay", replay: recording, ws: "tmp", reset: true, name: "regress" });
-	let code = 0;
 	try {
 		await runOne({ _: ["mdait.sync"] });
 		const { result } = await runOne({ _: ["mdait.translate.directory", "content/en/child"] });
-		const summary = result?.result;
-		const failedFiles = summary?.failed ?? 0;
+		const failedFiles = result?.result?.failed ?? 0;
 		if (failedFiles > 0) {
-			warn(`再生が食い違いました（${failedFiles} ファイルが失敗）。指示文の組み立てが変わっています。`);
+			warn(`新規翻訳の再生が食い違いました（${failedFiles} ファイルが失敗）。指示文の組み立てが変わっています。`);
 			warn("意図した変更なら録り直す。意図しないなら変更を戻す。どちらかを決めてから進むこと。");
 			code = 1;
 		} else {
-			say("録音のとおりに再生できました（LLM 呼び出し 0 回）。指示文の組み立ては変わっていません。");
+			say("新規翻訳: 録音のとおりに再生できました（LLM 呼び出し 0 回）。");
+		}
+	} finally {
+		await verbDown();
+	}
+
+	// --- 改訂の往復（`--replay` で別の録音を指したときは、そちらだけを見る） ---
+	if (opts.replay) return code;
+	const reviseRecording = path.join(HERE, "ai/recordings/trans-revise-10test.jsonl");
+	if (!fs.existsSync(reviseRecording)) {
+		warn(`改訂の録音がありません: ${reviseRecording}`);
+		return 1;
+	}
+	await verbUp({
+		host: "headless",
+		ai: "replay",
+		replay: reviseRecording,
+		ws: "tmp",
+		reset: true,
+		name: "regress-revise",
+	});
+	try {
+		await runOne({ _: ["mdait.sync"] });
+		await runOne({ _: ["mdait.trans", "content/en/10_test.md"] });
+
+		// 原文を変えて need:revise を立てる。編集は録音時とまったく同じでなければならない
+		const session = readSession();
+		const target = path.join(session.ws, REVISE_EDIT.file);
+		const before = fs.readFileSync(target, "utf8");
+		if (!before.includes(REVISE_EDIT.from)) {
+			warn(`改訂を誘発する編集の目印が見つかりません: ${REVISE_EDIT.file}`);
+			return 1;
+		}
+		fs.writeFileSync(target, before.replace(REVISE_EDIT.from, REVISE_EDIT.to), "utf8");
+		await runOne({ _: ["mdait.sync"] });
+
+		const { result } = await runOne({ _: ["mdait.trans", "content/en/10_test.md"] });
+		const summary = result?.result ?? {};
+		// **当たったことまで見る。** 往復が録音と合っていても、当てはめに失敗していれば
+		// 改訂は成立していない（形式を変えたときにいちばん壊れるのがここ）
+		const patched = summary.patchedCount ?? 0;
+		const patchFailures = summary.patchFailures?.length ?? 0;
+		if (patched !== 1 || patchFailures > 0) {
+			warn(
+				`改訂の再生が食い違いました（当たった件数 ${patched} / 当てはめ失敗 ${patchFailures}）。` +
+					"指示文かパッチの読み方が変わっています。",
+			);
+			warn("意図した変更なら録り直す。意図しないなら変更を戻す。どちらかを決めてから進むこと。");
+			code = 1;
+		} else {
+			say("改訂: 録音のとおりに再生でき、パッチも当たりました（LLM 呼び出し 0 回）。");
 		}
 	} finally {
 		if (!opts.keep) await verbDown();

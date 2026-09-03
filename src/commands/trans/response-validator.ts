@@ -40,7 +40,8 @@ export type ValidationErrorCode =
 	| "MISSING_REQUIRED_FIELD" // 必須フィールド欠落
 	| "INVALID_FIELD_TYPE" // フィールド型不正
 	| "JSON_IN_CONTENT" // コンテンツ内にJSON混入
-	| "NESTED_JSON"; // ネストされたJSON構造
+	| "NESTED_JSON" // ネストされたJSON構造
+	| "EMPTY_RESPONSE"; // answer が空（素のテキストで受けるときに使う）
 
 /**
  * 翻訳レスポンスの内部表現
@@ -205,9 +206,7 @@ export function validateTranslationResponse(
 
 	// Step 4: translationフィールド内のJSON混入検出
 	const jsonInContent =
-		options?.detectJsonInContent === false
-			? { detected: false }
-			: detectJsonInContent(parsed.translation);
+		options?.detectJsonInContent === false ? { detected: false } : detectJsonInContent(parsed.translation);
 	if (jsonInContent.detected) {
 		return {
 			valid: false,
@@ -227,6 +226,56 @@ export function validateTranslationResponse(
 			warnings: Array.isArray(parsed.warnings) ? parsed.warnings : undefined,
 		},
 	};
+}
+
+/** 前後のコードフェンスを剥がす。指示文で禁じていてもモデルは包んでくることがある */
+function stripCodeFence(text: string): string {
+	const trimmed = text.trim();
+	const match = /^```[^\n]*\n([\s\S]*?)\n?```$/.exec(trimmed);
+	return match ? match[1] : trimmed;
+}
+
+/** 行番号方式の指示ブロックの見出し */
+const LINE_OP_HEAD = /^\s*(REPLACE\s+\d|INSERT\s+AFTER\s+\d|DELETE\s+\d)/im;
+
+/**
+ * 行番号方式（素のテキスト）の改訂パッチをバリデートする。
+ *
+ * JSON の封筒を使わないので、`validateRevisionPatchResponse` とは別の入口にする。
+ * **ここで形を確かめるのは、当てはめる前にやり直しを頼めるようにするため。** 当てはめ器も
+ * 同じ失敗を返せるが、そこまで行くとリトライの機会が無い。
+ */
+export function validateRevisionPatchPlainResponse(rawResponse: string): ValidationResult<ParsedRevisionPatchResponse> {
+	const body = stripCodeFence(rawResponse ?? "");
+	if (!body.trim()) {
+		return {
+			valid: false,
+			error: { code: "EMPTY_RESPONSE", message: "The answer was empty", retryable: true },
+		};
+	}
+	// JSON で返してきたら指示に従っていない（素のテキストを求めている）
+	if (/^\s*\{\s*"\w+"\s*:/.test(body)) {
+		return {
+			valid: false,
+			error: {
+				code: "JSON_IN_CONTENT",
+				message: "The answer was JSON, but plain edit blocks were requested",
+				retryable: true,
+			},
+		};
+	}
+	if (!LINE_OP_HEAD.test(body)) {
+		return {
+			valid: false,
+			error: {
+				code: "INVALID_FIELD_TYPE",
+				message: "The answer contained no REPLACE / INSERT AFTER / DELETE block",
+				retryable: true,
+			},
+		};
+	}
+	// 用語候補は改訂では集めない（ADR-260903-01。測った指示文に含まれていない）
+	return { valid: true, parsed: { targetPatch: body, termSuggestions: [], warnings: [] } };
 }
 
 /**
@@ -282,9 +331,7 @@ export function validateRevisionPatchResponse(
 
 	// Step 4: targetPatchフィールド内のJSON混入検出
 	const jsonInContent =
-		options?.detectJsonInContent === false
-			? { detected: false }
-			: detectJsonInContent(parsed.targetPatch);
+		options?.detectJsonInContent === false ? { detected: false } : detectJsonInContent(parsed.targetPatch);
 	if (jsonInContent.detected) {
 		return {
 			valid: false,

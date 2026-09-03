@@ -1,23 +1,22 @@
 import type * as vscode from "vscode";
+import { type PatchFormat, numberLinesForPatch } from "../../core/diff/diff-generator";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { OperationCancelledError } from "../../infra/errors/operation-cancelled";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
+import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { PromptIds } from "../../prompts/defaults";
 import type { PromptId } from "../../prompts/defaults";
-import type {
-	PromptParts,
-	PromptVariables,
-} from "../../prompts/prompt-provider";
+import type { PromptParts, PromptVariables } from "../../prompts/prompt-provider";
 import { buildUserMessage } from "../../prompts/prompt-provider";
-import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { resolveFileTypeFromExtension } from "../file-handler/file-type";
-import { Logger, formatError } from "../../infra/logging/logger";
-import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { sanitizeTranslationOutput } from "./output-sanitizer";
 import {
 	type ParsedRevisionPatchResponse,
 	type ParsedTranslationResponse,
 	type ValidationError,
 	type ValidationResult,
+	validateRevisionPatchPlainResponse,
 	validateRevisionPatchResponse,
 	validateTranslationResponse,
 } from "./response-validator";
@@ -188,10 +187,7 @@ export const CODE_BLOCK_OMITTED_MARK = "__CODE_BLOCK_OMITTED__";
  * @param options 判定オプション（`protectCodeBlocks` と同じ）
  * @returns コードブロックを目印に畳んだ文
  */
-export function elideCodeBlocks(
-	text: string | undefined,
-	options?: ProtectCodeBlocksOptions,
-): string | undefined {
+export function elideCodeBlocks(text: string | undefined, options?: ProtectCodeBlocksOptions): string | undefined {
 	if (text === undefined) {
 		return undefined;
 	}
@@ -218,11 +214,7 @@ export function elideCodeBlocks(
  * @param codeBlocks 元のコードブロック文字列
  * @returns 復元したテキストと、戻せなかったプレースホルダ
  */
-export function restoreCodeBlocks(
-	text: string,
-	placeholders: string[],
-	codeBlocks: string[],
-): RestoredCodeBlocks {
+export function restoreCodeBlocks(text: string, placeholders: string[], codeBlocks: string[]): RestoredCodeBlocks {
 	let result = text;
 	const missing: string[] = [];
 
@@ -290,9 +282,7 @@ function codeBlockLossWarnings(missing: string[]): string[] {
 	if (missing.length === 0) {
 		return [];
 	}
-	return [
-		`AI response dropped ${missing.length} code block(s); they could not be restored: ${missing.join(", ")}`,
-	];
+	return [`AI response dropped ${missing.length} code block(s); they could not be restored: ${missing.join(", ")}`];
 }
 
 /**
@@ -339,6 +329,11 @@ export interface TranslationResult {
 export interface RevisionPatchResult {
 	/** 前回訳文に対するunified diffパッチ */
 	targetPatch: string;
+	/**
+	 * このパッチをどの形式として読むか。**中身から推測させないために結果へ同梱する**
+	 * （ADR-260903-01）。当てはめは `applyRevisionPatch(prev, targetPatch, format)` を通す。
+	 */
+	format: PatchFormat;
 	/** AIが提案する用語候補のリスト */
 	termSuggestions?: TermSuggestion[];
 	/** 警告メッセージ */
@@ -422,13 +417,12 @@ export const PLAIN_PROMPT_CONFIG: TranslatorPromptConfig = {
 export class AITranslator implements Translator {
 	private readonly aiService: AIService;
 	private readonly primaryLang: string;
-	private readonly getPromptParts: (
-		id: PromptId,
-		variables?: PromptVariables,
-	) => PromptParts;
+	private readonly getPromptParts: (id: PromptId, variables?: PromptVariables) => PromptParts;
 	private readonly promptConfig: TranslatorPromptConfig;
 	/** 最大リトライ回数。通常は `TranslatorBuilder` が `trans.retryLimit` を渡す（コンストラクタ引数省略時のみ 2） */
 	private readonly maxRetries: number;
+	/** その指示文が利用者に上書きされているか（改訂パッチの形式の決定に使う） */
+	private readonly hasCustomPrompt: (id: PromptId) => boolean;
 
 	constructor(
 		aiService: AIService,
@@ -436,12 +430,25 @@ export class AITranslator implements Translator {
 		getPromptParts: (id: PromptId, variables?: PromptVariables) => PromptParts,
 		promptConfig?: TranslatorPromptConfig,
 		retryLimit?: number,
+		hasCustomPrompt?: (id: PromptId) => boolean,
 	) {
 		this.aiService = aiService;
 		this.primaryLang = primaryLang;
 		this.getPromptParts = getPromptParts;
 		this.promptConfig = promptConfig ?? DEFAULT_MD_PROMPT_CONFIG;
 		this.maxRetries = retryLimit ?? 2;
+		this.hasCustomPrompt = hasCustomPrompt ?? (() => false);
+	}
+
+	/**
+	 * 改訂パッチをどの形式で読むかを決める。
+	 *
+	 * 組み込みの指示文は行番号方式（ADR-260903-01）。**利用者が指示文を上書きしている
+	 * ときだけ旧来の `=`/`-`/`+` として読む** — 既存の上書きはその形式に向けて書かれており、
+	 * 新形式として読むと必ず失敗するため（`docs/design/prompt.md`）。
+	 */
+	private resolvePatchFormat(): PatchFormat {
+		return this.hasCustomPrompt(this.promptConfig.revisePatchPromptId) ? "prefixed" : "linenum";
 	}
 
 	/**
@@ -464,36 +471,34 @@ export class AITranslator implements Translator {
 	): Promise<TranslationResult> {
 		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）。
 		// Markdown でないファイル（trans.extensions）には Markdown 固有の規則を当てない
-		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text, {
+		const {
+			text: textWithoutCodeBlocks,
+			codeBlocks,
+			placeholders,
+		} = protectCodeBlocks(text, {
 			markdown: isMarkdownExtension(context.fileExtension),
 		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
-		const contextLang =
-			primaryLang === sourceLang || primaryLang === targetLang
-				? primaryLang
-				: sourceLang;
+		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		// systemPrompt（静的）と user message（可変コンテキスト＋本文）の構築。
 		// 参考として添える文（周辺テキスト・前回訳文）は、本文と同じくコードブロックを
 		// 伏せてから渡す。ここは参考にしかならないので中身は要らず、生のまま乗せると
 		// 本文側のプレースホルダとの食い違いが「変更点」に見える（elideCodeBlocks 参照）
 		const markdown = isMarkdownExtension(context.fileExtension);
-		const promptParts = this.getPromptParts(
-			this.promptConfig.translatePromptId,
-			{
-				sourceLang,
-				targetLang,
-				contextLang,
-				surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
-				terms: context.terms,
-				previousTranslation: elideCodeBlocks(context.previousTranslation, { markdown }),
-				sourceDiff: context.sourceDiff,
-				tmReferences: context.tmReferences,
-				fileExtension: context.fileExtension,
-			},
-		);
+		const promptParts = this.getPromptParts(this.promptConfig.translatePromptId, {
+			sourceLang,
+			targetLang,
+			contextLang,
+			surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
+			terms: context.terms,
+			previousTranslation: elideCodeBlocks(context.previousTranslation, { markdown }),
+			sourceDiff: context.sourceDiff,
+			tmReferences: context.tmReferences,
+			fileExtension: context.fileExtension,
+		});
 
 		const messages: AIMessage[] = [
 			{
@@ -527,36 +532,38 @@ export class AITranslator implements Translator {
 	): Promise<RevisionPatchResult> {
 		// コードブロックは翻訳させずに退避する（判定はパーサーと同じ getCodeBlockLineSet）。
 		// Markdown でないファイル（trans.extensions）には Markdown 固有の規則を当てない
-		const { text: textWithoutCodeBlocks, codeBlocks, placeholders } = protectCodeBlocks(text, {
+		const {
+			text: textWithoutCodeBlocks,
+			codeBlocks,
+			placeholders,
+		} = protectCodeBlocks(text, {
 			markdown: isMarkdownExtension(context.fileExtension),
 		});
 
 		// contextLangを決定: primaryLangがsourceLangかtargetLangなら使用、そうでなければsourceLang
 		const primaryLang = this.primaryLang;
-		const contextLang =
-			primaryLang === sourceLang || primaryLang === targetLang
-				? primaryLang
-				: sourceLang;
+		const contextLang = primaryLang === sourceLang || primaryLang === targetLang ? primaryLang : sourceLang;
 
 		// 周辺テキストは参考にしかならないのでコードブロックを伏せる。
 		// **前回訳文だけは生のまま渡す** — 差分パッチはこの文と1行ずつ突き合わせて
 		// 当てはめる（`applySimplePatch`）ので、目印に畳むと "=" の文脈行が
 		// 実物と一致しなくなり、パッチが必ず外れる
 		const markdown = isMarkdownExtension(context.fileExtension);
-		const promptParts = this.getPromptParts(
-			this.promptConfig.revisePatchPromptId,
-			{
-				sourceLang,
-				targetLang,
-				contextLang,
-				surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
-				terms: context.terms,
-				previousTranslation: context.previousTranslation,
-				sourceDiff: context.sourceDiff,
-				tmReferences: context.tmReferences,
-				fileExtension: context.fileExtension,
-			},
-		);
+		const promptParts = this.getPromptParts(this.promptConfig.revisePatchPromptId, {
+			sourceLang,
+			targetLang,
+			contextLang,
+			surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
+			terms: context.terms,
+			previousTranslation: context.previousTranslation,
+			// 行番号方式の指示文はこちらを使う。両方渡しておき、使う側（テンプレート）が選ぶ
+			numberedPreviousTranslation: context.previousTranslation
+				? numberLinesForPatch(context.previousTranslation)
+				: undefined,
+			sourceDiff: context.sourceDiff,
+			tmReferences: context.tmReferences,
+			fileExtension: context.fileExtension,
+		});
 
 		const messages: AIMessage[] = [
 			{
@@ -572,6 +579,7 @@ export class AITranslator implements Translator {
 			codeBlocks,
 			placeholders,
 			markdown,
+			this.resolvePatchFormat(),
 			cancellationToken,
 			unitContext,
 		);
@@ -604,31 +612,18 @@ export class AITranslator implements Translator {
 
 			// リトライ時は補足プロンプトを user message 側に追加する
 			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
-			const retryPromptSuffix =
-				attempt > 0 && lastError
-					? this.buildRetryPromptSuffix(lastError, attempt)
-					: "";
-			const attemptMessages = retryPromptSuffix
-				? this.appendToLastUserMessage(messages, retryPromptSuffix)
-				: messages;
+			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt) : "";
+			const attemptMessages = retryPromptSuffix ? this.appendToLastUserMessage(messages, retryPromptSuffix) : messages;
 
 			attemptsMade++;
-			lastRawResponse = await this.aiService.sendMessage(
-				systemPrompt,
-				attemptMessages,
-				cancellationToken,
-			);
+			lastRawResponse = await this.aiService.sendMessage(systemPrompt, attemptMessages, cancellationToken);
 			const validation = validateTranslationResponse(lastRawResponse, {
 				detectJsonInContent,
 			});
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
-				return this.processValidTranslationResponse(
-					validation.parsed,
-					codeBlocks,
-					placeholders,
-				);
+				return this.processValidTranslationResponse(validation.parsed, codeBlocks, placeholders);
 			}
 
 			lastError = validation.error;
@@ -656,9 +651,7 @@ export class AITranslator implements Translator {
 		const logger = Logger.getInstance();
 		logger.error("trans", "Translation failed after all retry attempts", {
 			totalAttempts: attemptsMade,
-			lastError: lastError
-				? formatError(lastError)
-				: "No error details available",
+			lastError: lastError ? formatError(lastError) : "No error details available",
 			unitHash: unitContext?.unitHash,
 			title: unitContext?.title,
 		});
@@ -677,6 +670,8 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 		/** 本文への JSON 混入を検出するか（Markdown 以外では偽陽性になるので見ない） */
 		detectJsonInContent: boolean,
+		/** どの形式で読むか。**推測しない**（ADR-260903-01） */
+		format: PatchFormat,
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult> {
@@ -695,30 +690,20 @@ export class AITranslator implements Translator {
 			// リトライ時は補足プロンプトを user message 側に追加する
 			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
 			const retryPromptSuffix =
-				attempt > 0 && lastError
-					? this.buildRetryPromptSuffix(lastError, attempt)
-					: "";
-			const attemptMessages = retryPromptSuffix
-				? this.appendToLastUserMessage(messages, retryPromptSuffix)
-				: messages;
+				attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt, format) : "";
+			const attemptMessages = retryPromptSuffix ? this.appendToLastUserMessage(messages, retryPromptSuffix) : messages;
 
 			attemptsMade++;
-			lastRawResponse = await this.aiService.sendMessage(
-				systemPrompt,
-				attemptMessages,
-				cancellationToken,
-			);
-			const validation = validateRevisionPatchResponse(lastRawResponse, {
-				detectJsonInContent,
-			});
+			lastRawResponse = await this.aiService.sendMessage(systemPrompt, attemptMessages, cancellationToken);
+			// 行番号方式は素のテキストで返る。JSON の封筒を前提にした検証は当てられない
+			const validation =
+				format === "linenum"
+					? validateRevisionPatchPlainResponse(lastRawResponse)
+					: validateRevisionPatchResponse(lastRawResponse, { detectJsonInContent });
 
 			if (validation.valid && validation.parsed) {
 				// バリデーション成功 → サニタイズ処理
-				return this.processValidRevisionPatchResponse(
-					validation.parsed,
-					codeBlocks,
-					placeholders,
-				);
+				return this.processValidRevisionPatchResponse(validation.parsed, codeBlocks, placeholders, format);
 			}
 
 			lastError = validation.error;
@@ -744,18 +729,12 @@ export class AITranslator implements Translator {
 
 		// リトライ上限到達後のエラーログ
 		const logger = Logger.getInstance();
-		logger.error(
-			"trans",
-			"Translation failed after all retry attempts (revision patch)",
-			{
-				totalAttempts: attemptsMade,
-				lastError: lastError
-					? formatError(lastError)
-					: "No error details available",
-				unitHash: unitContext?.unitHash,
-				title: unitContext?.title,
-			},
-		);
+		logger.error("trans", "Translation failed after all retry attempts (revision patch)", {
+			totalAttempts: attemptsMade,
+			lastError: lastError ? formatError(lastError) : "No error details available",
+			unitHash: unitContext?.unitHash,
+			title: unitContext?.title,
+		});
 
 		// 検証に落ちた答えは**使わない**。ここで断ち切る
 		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
@@ -770,11 +749,7 @@ export class AITranslator implements Translator {
 		placeholders: string[],
 	): TranslationResult {
 		// プレースホルダー復元
-		const restored = restoreCodeBlocks(
-			parsed.translation,
-			placeholders,
-			codeBlocks,
-		);
+		const restored = restoreCodeBlocks(parsed.translation, placeholders, codeBlocks);
 
 		// サニタイズ処理
 		const sanitized = sanitizeTranslationOutput(restored.text);
@@ -782,11 +757,7 @@ export class AITranslator implements Translator {
 		return {
 			translatedText: sanitized.text,
 			termSuggestions: parsed.termSuggestions ?? [],
-			warnings: [
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
-				...(parsed.warnings ?? []),
-			],
+			warnings: [...codeBlockLossWarnings(restored.missing), ...sanitized.warnings, ...(parsed.warnings ?? [])],
 			droppedCodeBlocks: restored.missing.length,
 		};
 	}
@@ -798,25 +769,19 @@ export class AITranslator implements Translator {
 		parsed: ParsedRevisionPatchResponse,
 		codeBlocks: string[],
 		placeholders: string[],
+		format: PatchFormat,
 	): RevisionPatchResult {
 		// プレースホルダー復元
-		const restored = restoreCodeBlocks(
-			parsed.targetPatch,
-			placeholders,
-			codeBlocks,
-		);
+		const restored = restoreCodeBlocks(parsed.targetPatch, placeholders, codeBlocks);
 
 		// サニタイズ処理
 		const sanitized = sanitizeTranslationOutput(restored.text);
 
 		return {
 			targetPatch: sanitized.text,
+			format,
 			termSuggestions: parsed.termSuggestions ?? [],
-			warnings: [
-				...codeBlockLossWarnings(restored.missing),
-				...sanitized.warnings,
-				...(parsed.warnings ?? []),
-			],
+			warnings: [...codeBlockLossWarnings(restored.missing), ...sanitized.warnings, ...(parsed.warnings ?? [])],
 			droppedCodeBlocks: restored.missing.length,
 		};
 	}
@@ -824,35 +789,36 @@ export class AITranslator implements Translator {
 	/**
 	 * 末尾のuserメッセージにリトライ補足を連結した新しいメッセージ配列を返す
 	 */
-	private appendToLastUserMessage(
-		messages: AIMessage[],
-		suffix: string,
-	): AIMessage[] {
+	private appendToLastUserMessage(messages: AIMessage[], suffix: string): AIMessage[] {
 		if (messages.length === 0) {
 			return messages;
 		}
 		const last = messages[messages.length - 1];
-		const content = Array.isArray(last.content)
-			? last.content.join("")
-			: last.content;
+		const content = Array.isArray(last.content) ? last.content.join("") : last.content;
 		return [...messages.slice(0, -1), { ...last, content: content + suffix }];
 	}
 
 	/**
 	 * リトライ用補足プロンプト生成
 	 */
-	private buildRetryPromptSuffix(
-		error: ValidationError,
-		attemptNumber: number,
-	): string {
+	private buildRetryPromptSuffix(error: ValidationError, attemptNumber: number, format?: PatchFormat): string {
+		// **やり直しの補足は、求めている形式と揃っていなければならない。**
+		// 行番号方式（素のテキスト）で失敗した直後に「JSON を返せ」と言うと、
+		// 2回目以降がかえって失敗しやすくなる（レビュー指摘・実バグだった）
+		const reminder =
+			format === "linenum"
+				? `- Answer with edit blocks in PLAIN TEXT. Do NOT output JSON.
+- Each block starts with REPLACE <from>-<to>, INSERT AFTER <n>, or DELETE <from>-<to>, and ends with a line containing only END.
+- Do NOT wrap the answer in a Markdown code block.`
+				: `- Return ONLY a valid JSON object with the required fields.
+- The "translation" or "targetPatch" field must contain PLAIN TEXT, not JSON.
+- Do NOT nest JSON inside the translation or targetPatch field.`;
 		return `
 
 RETRY INSTRUCTION (Attempt ${attemptNumber}):
 The previous response was invalid: ${error.message}
 
 CRITICAL REMINDER:
-- Return ONLY a valid JSON object with the required fields.
-- The "translation" or "targetPatch" field must contain PLAIN TEXT, not JSON.
-- Do NOT nest JSON inside the translation or targetPatch field.`;
+${reminder}`;
 	}
 }

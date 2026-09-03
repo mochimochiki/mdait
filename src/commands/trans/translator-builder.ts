@@ -1,11 +1,7 @@
 import { Configuration } from "../../infra/config/configuration";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { PromptProvider } from "../../prompts";
-import {
-	AITranslator,
-	PLAIN_PROMPT_CONFIG,
-	type Translator,
-} from "./translator";
+import { AITranslator, PLAIN_PROMPT_CONFIG, type Translator } from "./translator";
 
 /**
  * 翻訳サービスの構築を担当するビルダークラス。
@@ -28,6 +24,7 @@ export class TranslatorBuilder {
 			(id, variables) => promptProvider.getPromptParts(id, variables),
 			undefined,
 			config.trans.retryLimit,
+			(id) => promptProvider.hasCustomPrompt(id),
 		);
 	}
 
@@ -47,6 +44,7 @@ export class TranslatorBuilder {
 			(id, variables) => promptProvider.getPromptParts(id, variables),
 			PLAIN_PROMPT_CONFIG,
 			config.trans.retryLimit,
+			(id) => promptProvider.hasCustomPrompt(id),
 		);
 	}
 }
