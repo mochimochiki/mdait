@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 /*
  * mdait-lab — mdait の動きを実際に走らせて確かめるための入口。
  *
@@ -11,16 +12,16 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
-import { UsageError, asNumber, oneOf, parseArgs } from "./lib/args.mjs";
-import { LAB_DIR, clearSession, ensureLabDir, readSession, writeSession } from "./lib/session.mjs";
-import { ipcPaths, sendCommand } from "./lib/ipc.mjs";
-import { configureAi, prepareWorkspace, restoreConfig } from "./lib/workspace.mjs";
-import { buildReport, createRun, saveStep, snapshotBaseline } from "./lib/runs.mjs";
-import { summarizeResult } from "./lib/digest.mjs";
+import { fileURLToPath } from "node:url";
 import { COMMANDS } from "./hosts/registry.mjs";
+import { UsageError, asNumber, oneOf, parseArgs } from "./lib/args.mjs";
+import { summarizeResult } from "./lib/digest.mjs";
+import { ipcPaths, sendCommand } from "./lib/ipc.mjs";
+import { buildReport, createRun, saveStep, snapshotBaseline } from "./lib/runs.mjs";
+import { LAB_DIR, clearSession, ensureLabDir, readSession, writeSession } from "./lib/session.mjs";
+import { DEFAULT_SITE_DIR, generateSite } from "./lib/site.mjs";
+import { configureAi, prepareWorkspace, restoreConfig } from "./lib/workspace.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -82,8 +83,16 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
             ai reply --translation "訳文"   答えを返す
             ai stats    何件受けたかを見る
             ai last     直近の質問の全文を見る
+  cancel  走っている最中のコマンドに「やめてくれ」と伝える（headless ホストのみ）
+            別のシェルから叩く。中断からの再開を確かめるときに使う
   status  いまの様子と直近の手順を出す
   reset   作業場を見本から作り直す（ホストは止めない）
+  site    規模のある見本サイトを書き出す（取り込みを実運用に近い数で走らせるため）
+            --out <パス>              置き場（既定: ${DEFAULT_SITE_DIR}）
+            --markers <embedded|external>  マーカーの置き場（既定: embedded）
+            そのあと --ws <パス> で作業場として指す:
+              node scripts/lab/lab.mjs site --markers external
+              node scripts/lab/lab.mjs up --ws ${DEFAULT_SITE_DIR} --ai agent --agent-model haiku
   report  run ディレクトリから report.md を組み立てて場所を出す
   down    ホストと AI の相手を止め、退避した設定を戻す
 
@@ -411,6 +420,30 @@ function resolvePathArgs(entry, args, ws) {
 	return [path.resolve(ws, args[0]), ...args.slice(1)];
 }
 
+/**
+ * 走っている最中のコマンドを止める。
+ *
+ * 実 VS Code なら進捗の通知の「取り消し」を押すところ。画面の無い headless では
+ * 目印のファイルを置いて伝える（読む側は vscode-shim.js の withProgress）。
+ * 依頼を出すたびに目印は消えるので、次の実行に持ち越されることはない。
+ */
+function verbCancel() {
+	const session = liveSession();
+	if (!session) throw new UsageError("まだ始まっていません。止める相手がいません");
+	if (session.host !== "headless") {
+		throw new UsageError(
+			`中断を送れるのは headless ホストのときだけです（いまは ${session.host}）。` +
+				"実 VS Code では進捗の通知に付く「取り消し」を押してください",
+		);
+	}
+	const { dir, cancelFile } = ipcPaths(session.ws);
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(cancelFile, `${new Date().toISOString()}\n`, "utf8");
+	say("中断を伝えました。コマンドは次の節目で止まります。");
+	say(`  目印: ${cancelFile}（次の依頼で自動的に消えます）`);
+	return 0;
+}
+
 async function verbShot(opts) {
 	const name = opts._[0] ?? "shot";
 	const session = liveSession();
@@ -714,8 +747,25 @@ async function runPreset(name, opts) {
 	return await preset.run(opts);
 }
 
+/**
+ * 段取り（sweep / probe / resilience）は既定の作業場（tmp）の原稿を前提に判定する。
+ * ほかの作業場を指したセッションが立ったままだと、**別の原稿に対して黙って判定が走り**、
+ * 読み手には原因の分からない例外だけが出る（実測: 見本サイトを指したまま sweep を回して
+ * phase4 が readFileSync で落ちた）。立ち上げ直しは勝手にせず、何が起きているかを言って止める。
+ */
+function requireTmpWorkspace(name) {
+	const session = liveSession();
+	if (!session) return true;
+	if (session.wsMode === undefined || session.wsMode === "tmp") return true;
+	warn(`いま立っている作業場は ${session.ws}（--ws ${session.wsMode}）です。`);
+	warn(`${name} は既定の作業場（tmp）の原稿で判定するので、このままでは別の原稿を測ってしまいます。`);
+	warn("片付けてから回し直してください: node scripts/lab/lab.mjs down");
+	return false;
+}
+
 /** スイープ（決定的な総なめ）。判定は scenarios/sweep.mjs が持つ */
 async function presetSweep(opts) {
+	if (!requireTmpWorkspace("sweep")) return 2;
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "sweep" });
 	const { run } = await import("./scenarios/sweep.mjs");
 	const { failed } = await run({ session: readSession(), verbose: opts.verbose, only: opts.only });
@@ -728,6 +778,7 @@ async function presetSweep(opts) {
  * タイムアウトが経路の数だけ乗るため）。CI には入れず、--only / --nasty で絞って使う。
  */
 async function presetResilience(opts) {
+	if (!requireTmpWorkspace("resilience")) return 2;
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "resilience" });
 	const { run } = await import("./scenarios/resilience.mjs");
 	const { failed } = await run({
@@ -801,6 +852,7 @@ async function presetBenchRevise(opts) {
 }
 
 async function presetProbe(opts) {
+	if (!requireTmpWorkspace("probe")) return 2;
 	if (!liveSession()) await verbUp({ host: "headless", ai: "echo", ws: "tmp", reset: true, name: "probe" });
 	const { run } = await import("./scenarios/probe.mjs");
 	await run({ session: readSession(), only: opts.only, diff: opts.diff, time: opts.time, noDiff: opts["no-diff"] });
@@ -835,6 +887,31 @@ async function presetRegress(opts) {
 	return code;
 }
 
+/**
+ * 規模のある見本サイトを書き出す。
+ *
+ * 単体テストの見本（src/test/unit/sample-content）は小さく保つ設計なので、
+ * 規模のあるものはそこへ置かずここで作る。作った先は `--ws <パス>` で作業場として指す。
+ */
+function verbSite(opts) {
+	const out = opts.out ?? DEFAULT_SITE_DIR;
+	const markers = oneOf(opts.markers ?? "embedded", ["embedded", "external"], "--markers");
+	const stats = generateSite({ out, markers });
+	say(`見本サイトを書き出しました: ${stats.dir}`);
+	say(`  ファイル ${stats.files}（原文 ${stats.ja} / 訳文 ${stats.en}、うち CRLF ${stats.crlf}）`);
+	say(
+		`  内訳: ${Object.entries(stats.byKind)
+			.map(([k, n]) => `${k} ${n}`)
+			.join(" / ")}`,
+	);
+	say(`  マーカーの置き場: ${markers}`);
+	say("");
+	say("次にすること:");
+	say(`  node scripts/lab/lab.mjs up --ws ${stats.dir} --ai agent --agent-model haiku`);
+	say("  node scripts/lab/lab.mjs run mdait.adopt.run");
+	return 0;
+}
+
 // ===========================================================================
 // 入口
 // ===========================================================================
@@ -863,10 +940,14 @@ async function main() {
 			return await verbShot(opts);
 		case "ai":
 			return await verbAi(opts);
+		case "cancel":
+			return verbCancel();
 		case "status":
 			return await verbStatus(opts);
 		case "reset":
 			return await verbReset(opts);
+		case "site":
+			return verbSite(opts);
 		case "report":
 			return await verbReport(opts);
 		case "down":

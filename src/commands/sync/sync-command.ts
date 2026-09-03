@@ -443,6 +443,12 @@ export interface SyncCommandOptions {
 	 * adopt かつ明示指定時のみ発動し、定常 sync では動かない（ADR-260705-01）。
 	 */
 	align?: boolean;
+	/**
+	 * 取り消しの合図。sync 自体は AI を使わないが、**AIアライン（adopt + align）だけは使う**。
+	 * これを渡さないと、利用者が取り消しても最後のファイルまで AI を呼び続ける
+	 * （実測: 47ファイルの取り込みで、取り消しの12秒後から171秒ぶん呼び続けた・ADR-260903-04）。
+	 */
+	token?: vscode.CancellationToken;
 }
 
 /**
@@ -573,6 +579,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			// ワーカー関数（並列実行処理）
 			const worker = async () => {
 				while (true) {
+					// 取り消されたら新しいファイルを取らない。途中まで済んだ分はそのまま残る
+					// （1ファイルの同期は排他の中で完結し、sync は冪等なので再実行で続きから進む）
+					if (options?.token?.isCancellationRequested) break;
 					const i = index++;
 					if (i >= files.length) break;
 					const sourceFile = files[i];
@@ -1231,6 +1240,8 @@ export async function syncNew_CoreProc(
 	const targetDoc = {
 		frontMatter: frontmatterSync.targetFrontMatter ?? source.frontMatter,
 		units: targetUnits,
+		// 新しく作る訳文は原文の書き方（frontmatter 直後の空行）を引き継ぐ
+		frontMatterGap: source.frontMatterGap,
 	};
 
 	// 4. ターゲットファイルとして保存
@@ -1252,6 +1263,7 @@ export async function syncNew_CoreProc(
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
+			frontMatterGap: source.frontMatterGap,
 		},
 		sourceIO,
 		config,
@@ -1488,7 +1500,9 @@ export async function sync_CoreProc(
 	// AIアライン: adopt + align 指定かつ aligner 注入時のみ、位置ベース結果を AI で差分審査する。
 	// 応答不正・候補なし・上限超過は matchResult をそのまま使う（位置ベースへフォールバック）。
 	let alignCorrections = 0;
-	if (options?.adopt === true && options?.align === true && aligner) {
+	// 取り消し済みなら AI アラインへ入らない。ここが「送らない」を決める最後の関所で、
+	// 位置ベースの対応付けはそのまま使われる（決定的なので取り消しても壊れない）
+	if (options?.adopt === true && options?.align === true && aligner && !options.token?.isCancellationRequested) {
 		const transPair = fileExplorer.getTransPairFromTarget(targetFile, config);
 		if (transPair) {
 			const aligned = await alignMatchResult(
@@ -1499,7 +1513,7 @@ export async function sync_CoreProc(
 				config,
 				{ sourceLang: transPair.sourceLang, targetLang: transPair.targetLang },
 				targetFile,
-				undefined,
+				options.token,
 				independentTargets,
 			);
 			matchResult = aligned.matchResult;
@@ -1574,6 +1588,8 @@ export async function sync_CoreProc(
 	const syncedDoc = {
 		frontMatter: frontmatterSync.targetFrontMatter ?? target.frontMatter,
 		units: syncedUnits,
+		// すでにある訳文は、その原稿自身の書き方をそのまま保つ
+		frontMatterGap: target.frontMatterGap,
 	};
 
 	// 同期結果を文字列に変換（external では本文にマーカーを出力せず store へ detach）
@@ -1592,6 +1608,7 @@ export async function sync_CoreProc(
 		{
 			frontMatter: frontmatterSync.sourceFrontMatter ?? source.frontMatter,
 			units: source.units,
+			frontMatterGap: source.frontMatterGap,
 		},
 		sourceIO,
 		config,

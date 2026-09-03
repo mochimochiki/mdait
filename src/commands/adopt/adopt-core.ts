@@ -133,7 +133,8 @@ export async function executeAdopt(
 
 	// Phase 1: sync(adopt+align)
 	progress.report({ message: vscode.l10n.t("({0}/{1}) Sync (adopt + AI align)...", 1, totalStages) });
-	const sync = await stages.runSync({ adopt: true, align: true });
+	// token を渡さないと、取り消しても AIアラインが最後のファイルまで走り続ける（ADR-260903-04）
+	const sync = await stages.runSync({ adopt: true, align: true, token });
 	if (!sync) {
 		return { sync: undefined, review: [], term: undefined, tm: undefined, stageErrors, dryRun, aborted: true };
 	}

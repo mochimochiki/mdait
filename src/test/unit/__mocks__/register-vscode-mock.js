@@ -71,6 +71,47 @@ const vscodeMock = {
 				return { type: s.isDirectory() ? 2 : 1, ctime: s.ctimeMs, mtime: s.mtimeMs, size: s.size };
 			},
 		},
+		// 対象ファイルの探索。実 VS Code の findFiles に寄せて、RelativePattern の base 配下を
+		// 走査し、パターンの拡張子だけを返す（`**/*.md` と `**/*.{md,txt}` の2つの書き方に対応）。
+		//
+		// **除外（第2引数）も見る。** 実コード（FileExplorer / StatusCollector）は
+		// `config.ignoredPatterns`（既定 `**/node_modules/**`）を渡すので、無視すると
+		// 実運用では出てこないファイルを見たままテストが通ってしまう。
+		// 解釈するのは `**/<名前>/**` 形のディレクトリ除外だけで、それ以外の書き方は素通しする
+		// （必要になったときに、必要な形だけ足す）。
+		findFiles: async (pattern, exclude) => {
+			const base = pattern?.base ?? pattern?.baseUri?.fsPath;
+			if (!base || !fs.existsSync(base)) return [];
+			const raw = String(pattern?.pattern ?? "**/*");
+			const brace = raw.match(/\.\{([^}]+)\}\s*$/);
+			const single = raw.match(/\.([A-Za-z0-9]+)\s*$/);
+			const exts = brace
+				? brace[1].split(",").map((e) => `.${e.trim().toLowerCase()}`)
+				: single
+					? [`.${single[1].toLowerCase()}`]
+					: null;
+			// 除外は文字列でも配列でも来る。`**/{a,b}/**` のまとめ書きもほどく
+			const excludedDirs = new Set();
+			for (const entry of Array.isArray(exclude) ? exclude : exclude ? [exclude] : []) {
+				const match = String(entry).match(/^\*\*\/(?:\{([^}]+)\}|([^*/{}]+))\/\*\*$/);
+				if (!match) continue;
+				for (const name of (match[1] ?? match[2]).split(",")) excludedDirs.add(name.trim());
+			}
+			const found = [];
+			const walk = (dir) => {
+				for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+					const full = path.join(dir, entry.name);
+					if (entry.isDirectory()) {
+						if (excludedDirs.has(entry.name)) continue;
+						walk(full);
+					} else if (entry.isFile()) {
+						if (!exts || exts.includes(path.extname(entry.name).toLowerCase())) found.push(full);
+					}
+				}
+			};
+			walk(base);
+			return found.sort().map((file) => ({ fsPath: file, path: file, scheme: "file" }));
+		},
 		getConfiguration: () => ({
 			get: () => undefined,
 			has: () => false,
@@ -217,6 +258,14 @@ const vscodeMock = {
 		}
 		dispose() {
 			this._listeners = [];
+		}
+	},
+	// findFiles に渡す探索の起点と型。実 VS Code と同じく base と pattern を持つ
+	RelativePattern: class {
+		constructor(base, pattern) {
+			this.base = typeof base === "string" ? base : (base?.uri?.fsPath ?? base?.fsPath);
+			this.baseUri = { fsPath: this.base };
+			this.pattern = pattern;
 		}
 	},
 	CancellationTokenSource: class {

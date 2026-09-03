@@ -1811,7 +1811,8 @@ ADR-260801-01 に違反しかけていた（external では frontmatter の Code
 
 sync は原文も `stringify` して書き戻していた。external ではマーカーの置き場所が
 `.mdait/unit-state` なので、原文の中身に mdait の状態は1つも乗っていない。**書き戻す理由が無いのに
-書き戻すと、`stringify` の連結規則（frontmatter の直後に空行を置かない等）で原文が静かに整形される。**
+書き戻すと、`stringify` の連結規則（ユニット間を空行1つに詰める等）で原文が静かに整形される。**
+（frontmatter の直後の空行そのものは、いまは原稿どおりに再現する — ADR-260903-02）
 
 `stringify` そのものは external でも必ず通す。ユニットと frontmatter のマーカーをストアへ引き取る
 唯一の経路がここだからで、止めてよいのは書き込みだけである（`persistSourceDocument`）。

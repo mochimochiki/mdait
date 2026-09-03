@@ -182,6 +182,23 @@ suite("executeAiReviewForFile（AI翻訳レビューコア）", () => {
 		assert.strictEqual(/\n$/.test(written), false, "無かった末尾改行が足されていないこと");
 	});
 
+	test("frontmatter 直後の空行が承認で消えないこと（ADR-260903-02）", async () => {
+		// 承認は本文に触らないはずだが、書き出す文書を項目ごとに組み直していたため
+		// 書式の情報（空行の数）が落ち、**閉じの `---` の次の空行が全ファイルから消えていた**
+		// （実測。規模のある見本サイトを実 LLM で取り込んだときに訳文19本が差分になった）。
+		const config = await initConfig();
+		fs.mkdirSync(path.join(tempDir, "ja"), { recursive: true });
+		fs.mkdirSync(path.join(tempDir, "en"), { recursive: true });
+		fs.writeFileSync(sourceFile, `---\ntitle: "見出し"\n---\n\n${SOURCE_CONTENT}`, "utf-8");
+		fs.writeFileSync(targetFile, `---\ntitle: "Heading"\n---\n\n${TARGET_CONTENT}`, "utf-8");
+
+		const result = await executeAiReviewForFile(targetFile, config, buildVerifier(new StubAIService([MATCH])));
+		assert.strictEqual(result.approved, 2);
+
+		const written = fs.readFileSync(targetFile, "utf-8");
+		assert.ok(written.includes("---\n\n<!-- mdait tgtA"), `空行が消えている: ${JSON.stringify(written.slice(0, 60))}`);
+	});
+
 	test("2回目の実行では検証対象が無く無変更（冪等性）", async () => {
 		const config = await initConfig();
 		writePair();

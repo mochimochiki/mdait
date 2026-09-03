@@ -32,10 +32,76 @@ vscode.commands = vscode.commands || {};
 
 // ProgressLocation / withProgress
 vscode.ProgressLocation = { SourceControl: 1, Window: 10, Notification: 15 };
+
+/*
+ * 実行中のコマンドを途中で止められるようにする。
+ *
+ * 実 VS Code では進捗の通知に付く「取り消し」ボタンが token を倒す。画面が無いここでは
+ * 代わりに目印のファイル（`.mdait/debug/cancel`。`lab cancel` が置く）を見る。
+ * commands 層はどこも `token.isCancellationRequested` を**節目ごとに読む**ので、
+ * getter にしておけば読まれたその場でディスクを見に行き、待ち受けの仕組みが要らない。
+ * 依頼を出すたびに目印は消される（lib/ipc.mjs の startCommand）ので、前回の中断が
+ * 次の実行に持ち越されることはない。
+ */
+const CANCEL_FILE = path.join(WS, ".mdait", "debug", "cancel");
+
+function createCancellation() {
+	const listeners = [];
+	let fired = false;
+	let timer;
+	const stop = () => {
+		if (timer) clearInterval(timer);
+		timer = undefined;
+	};
+	const check = () => {
+		if (fired) return true;
+		if (!fs.existsSync(CANCEL_FILE)) return false;
+		fired = true;
+		stop();
+		for (const listener of listeners.splice(0)) {
+			try {
+				listener();
+			} catch {}
+		}
+		return true;
+	};
+	const token = {
+		get isCancellationRequested() {
+			return check();
+		},
+		onCancellationRequested(listener) {
+			if (check()) {
+				try {
+					listener();
+				} catch {}
+				return { dispose: () => {} };
+			}
+			listeners.push(listener);
+			if (!timer) {
+				// 節目を読みに来ない相手のために、こちらからも見に行く
+				timer = setInterval(check, 200);
+				timer.unref?.();
+			}
+			return {
+				dispose: () => {
+					const at = listeners.indexOf(listener);
+					if (at >= 0) listeners.splice(at, 1);
+					if (listeners.length === 0) stop();
+				},
+			};
+		},
+	};
+	return { token, stop };
+}
+
 vscode.window.withProgress = async (_opts, task) => {
 	const progress = { report: () => {} };
-	const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => {} }) };
-	return await task(progress, token);
+	const { token, stop } = createCancellation();
+	try {
+		return await task(progress, token);
+	} finally {
+		stop();
+	}
 };
 vscode.window.showTextDocument = async () => ({});
 // 開いているエディタは無いことにする。

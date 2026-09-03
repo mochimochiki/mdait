@@ -8,6 +8,19 @@ import { MdaitMarker } from "./mdait-marker";
 import { MdaitUnit } from "./mdait-unit";
 
 /**
+ * 本文の先頭にいくつ空行があるかを数える。
+ *
+ * `FrontMatter.parse` が返す content は、閉じ `---` の直後の改行を取り除いた残りである。
+ * したがって先頭に残っている改行の数が、そのまま frontmatter と本文のあいだの空行の数になる。
+ * 改行コードは CRLF もありうるので、どちらも1つと数える。
+ */
+function countLeadingBlankLines(content: string): number {
+	const leading = content.match(/^(?:\r?\n)*/);
+	if (!leading) return 0;
+	return (leading[0].match(/\n/g) ?? []).length;
+}
+
+/**
  * HTMLコメント範囲を表す内部構造
  */
 interface HtmlCommentRange {
@@ -127,6 +140,11 @@ export class MarkdownItParser implements IMarkdownParser {
 	): Markdown {
 		const { frontMatter, content, frontMatterLineOffset } = FrontMatter.parse(markdown);
 
+		// frontmatter と本文のあいだの空行を数えておく（書き出しでそのまま再現するため）。
+		// gray-matter は閉じ `---` の次の改行までを取り除くので、content の先頭に残っている
+		// 改行がそのまま空行の数になる。
+		const frontMatterGap = frontMatter ? countLeadingBlankLines(content) : 0;
+
 		// 外部ストアの frontmatter マーカーを載せる（embedded は no-op）。
 		// これより後は、読み手はモードを意識せず frontMatter.get() でマーカーを引ける
 		provider.attachFrontMatter(frontMatter, ctx);
@@ -157,7 +175,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		// 外部由来マーカーをユニットに後付けする（embedded は no-op）
 		provider.attachMarkers(units, ctx);
 
-		return { frontMatter, units: units };
+		return { frontMatter, units: units, frontMatterGap };
 	}
 
 	/**
@@ -580,7 +598,9 @@ export class MarkdownItParser implements IMarkdownParser {
 		);
 
 		if (result) {
-			// frontmatterがある場合、最初のユニットは直後に配置（空白行なし）
+			// frontmatterがある場合、最初のユニットは元の原稿と同じ数の空行を置いてから配置する
+			// （既定は空行なし。空行を詰めると内容が同じでもファイル全体が差分になる）
+			result += "\n".repeat(doc.frontMatterGap ?? 0);
 			result += unitStrings[0];
 			// 2番目以降のユニットは\n\nで連結
 			for (let i = 1; i < unitStrings.length; i++) {

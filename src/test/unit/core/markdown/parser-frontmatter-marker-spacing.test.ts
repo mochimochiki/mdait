@@ -162,3 +162,23 @@ Content 2.
 		);
 	});
 });
+
+suite("MarkdownParser（frontmatter 直後の空行）", () => {
+	// 原稿の書き方をそのまま残す。空行を詰めると、内容が同じでもファイル全体が差分になる
+	// （ADR-260903-02）。書き足すのも同じ事故なので、両方向を見る。
+	for (const gap of [0, 1, 2, 3]) {
+		test(`frontmatter の直後の空行 ${gap} 個がそのまま残り、2回書き出しても増減しないこと`, () => {
+			const md = `---\ntitle: Test Document\n---\n${"\n".repeat(gap)}# Heading 1\n\nContent here.\n`;
+
+			const once = markdownParser.stringify(markdownParser.parse(md, testConfig));
+			const twice = markdownParser.stringify(markdownParser.parse(once, testConfig));
+
+			const lines = once.split("\n");
+			const close = lines.indexOf("---", 1);
+			let observed = 0;
+			while (lines[close + 1 + observed] === "") observed += 1;
+			assert.equal(observed, gap, `frontmatter 直後の空行の数が変わっている: ${JSON.stringify(once)}`);
+			assert.equal(twice, once, "2回目の書き出しで結果が動いている（冪等でない）");
+		});
+	}
+});
