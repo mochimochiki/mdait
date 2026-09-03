@@ -20,7 +20,10 @@ export function createAdoptReportLabels(): AdoptReportLabels {
 		title: vscode.l10n.t("mdait Adopt Existing Translations"),
 		syncHeading: vscode.l10n.t("Sync (adopt + AI align)"),
 		syncNotRun: vscode.l10n.t("Sync did not run (check the mdait configuration)."),
-		filesLine: (processed, failed) => vscode.l10n.t("files: {0} processed, {1} failed", processed, failed),
+		filesLine: (processed, failed, cancelled) =>
+			cancelled > 0
+				? vscode.l10n.t("files: {0} processed, {1} failed, {2} cancelled", processed, failed, cancelled)
+				: vscode.l10n.t("files: {0} processed, {1} failed", processed, failed),
 		reviewHeading: vscode.l10n.t("AI Translation Review"),
 		dryRunNote: vscode.l10n.t("_dry run: no markers were changed; glossary and TM steps were skipped._"),
 		glossaryHeading: vscode.l10n.t("Glossary"),

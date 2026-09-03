@@ -111,7 +111,7 @@ executeAdopt(config, options, progress, token, stages = defaultAdoptStages): Pro
 ### 実行制御
 
 - **キャンセル**: 各段間で `token.isCancellationRequested` を確認して即 return。各 CoreProc 内部のキャンセル対応（完了分書き込み）はそのまま享受。全段冪等なので再実行で残りから再開できる（approve 済みは再列挙されない・term は重複マージ・TM は upsert）。
-- **1段目（sync + AIアライン）にも token を渡す**（`SyncCommandOptions.token`）。sync 自体は AI を使わないが AIアラインは使うので、渡さないと取り消しても最後のファイルまで AI を呼び続ける（実測: 47ファイルで取り消しの12秒後から171秒ぶん。渡したあとは4秒で止まった・ADR-260903-04）。取り消した瞬間に送信中だったファイルは `OperationCancelledError` で1件の失敗として数えられる（原稿は変わらない。次の実行でやり直される）。
+- **1段目（sync + AIアライン）にも token を渡す**（`SyncCommandOptions.token`）。sync 自体は AI を使わないが AIアラインは使うので、渡さないと取り消しても最後のファイルまで AI を呼び続ける（実測: 47ファイルで取り消しの12秒後から171秒ぶん。渡したあとは4秒で止まった・ADR-260903-04）。取り消した瞬間に送信中だったファイルは、失敗ではなく**中断**として別に数える（`SyncResult.cancelledCount`。ステータスにエラーは刻まない・ADR-260903-05）。原稿は変わらないので、もう一度同期すれば続きから進む。
 - **中断**: sync が undefined（設定不正等）なら `aborted: true` で全段中断（後段は一切実行しない）。
 - **部分失敗**: オプション段（term/tm）の例外は `stageErrors` に記録して続行する。tm は term に依存しないため、term 失敗でも tm を実行する。レビュー段のバッチ単位エラーは従来どおり review 結果の error として扱う。
 - **dryRun**: レビューはレポートのみ（マーカー不変）、term/tm 段はスキップ（用語集・TM に書き込まない）。レポートに dryRun であることを明記する。

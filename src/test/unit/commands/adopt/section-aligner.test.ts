@@ -3,6 +3,7 @@ import type * as vscode from "vscode";
 import { SectionAligner } from "../../../../commands/adopt/section-aligner";
 import type { SectionAlignRequest } from "../../../../commands/adopt/section-aligner";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
+import { isOperationCancelled } from "../../../../infra/errors/operation-cancelled";
 import { PromptProvider } from "../../../../prompts";
 
 /** 応答列を順に返し、system と messages 全体を記録するスタブAIService */
@@ -131,5 +132,36 @@ suite("SectionAligner（二段トリアージ・リトライ）", () => {
 		assert.strictEqual(result.fallback, false);
 		assert.strictEqual(result.corrections.length, 1);
 		assert.strictEqual(ai.calls.length, 2);
+	});
+});
+
+/**
+ * 取り消しの投げ方を固定する。
+ *
+ * 背景: ここは素の `new Error("AI align cancelled")` を投げていた。受け手（sync のワーカー）は
+ * 中断だと見分けられず、利用者が押した取り消しが「1 failed」として数えられていた。
+ * 中断を投げる層は `OperationCancelledError` だけを投げる（`infra/errors/operation-cancelled.ts`）。
+ */
+suite("SectionAligner（取り消しの投げ方）", () => {
+	teardown(() => {
+		PromptProvider.dispose();
+	});
+
+	/** 取り消し済みの合図 */
+	function cancelledToken(): vscode.CancellationToken {
+		return {
+			isCancellationRequested: true,
+			onCancellationRequested: () => ({ dispose: () => {} }),
+		} as unknown as vscode.CancellationToken;
+	}
+
+	test("取り消し済みなら中断の型で投げること（素の Error では見分けられない）", async () => {
+		const ai = new StubAIService(['{"ok": true}']);
+		await assert.rejects(
+			() => buildAligner(ai).align(request(), cancelledToken()),
+			(thrown: unknown) => isOperationCancelled(thrown),
+			"中断だと見分けられない例外を投げている",
+		);
+		assert.strictEqual(ai.calls.length, 0, "取り消したのに AI へ送っている");
 	});
 });
