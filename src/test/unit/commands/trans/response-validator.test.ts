@@ -8,6 +8,7 @@ import { strict as assert } from "node:assert";
 import {
 	detectJsonInContent,
 	extractJsonFromResponse,
+	sanitizeTermSuggestions,
 	validateRevisionPatchResponse,
 	validateTranslationResponse,
 } from "../../../../commands/trans/response-validator";
@@ -215,5 +216,91 @@ suite("ResponseValidator", () => {
 			assert.strictEqual(result.valid, false);
 			assert.strictEqual(result.error?.code, "JSON_PARSE_ERROR");
 		});
+	});
+});
+
+/**
+ * AI が返した用語候補の形を、受け手に渡す前に確かめる。
+ *
+ * 背景: 以前は「配列かどうか」しか見ずに `TermSuggestion[]` として通していた。実測
+ * （haiku・対訳47ファイルの見本サイトの改訂）で `source` の無い候補が返り、受け手の
+ * `candidate.source.toLowerCase()` が **TypeError でファイル1本の翻訳ごと落とした**
+ * （`reference/plugins.md`。訳文は1文字も書かれず、need も外れないまま残った）。
+ * 型が「必ずある」と言っているのに、その保証をどこも作っていなかった。
+ *
+ * 直し方の要点は、**壊れた候補だけを落として翻訳は通す**こと。用語候補は翻訳の応答に
+ * 相乗りしているおまけなので、応答ごと捨てると良い訳文をおまけの都合で失う。
+ */
+suite("用語候補の形を確かめる", () => {
+	test("配列でなければ undefined を返すこと（従来どおり）", () => {
+		assert.strictEqual(sanitizeTermSuggestions(undefined), undefined);
+		assert.strictEqual(sanitizeTermSuggestions("term"), undefined);
+		assert.strictEqual(sanitizeTermSuggestions({ source: "a", target: "b" }), undefined);
+	});
+
+	test("source の無い候補を落とすこと（実測で落ちた形）", () => {
+		const result = sanitizeTermSuggestions([
+			{ target: "note", context: "..." },
+			{ source: "ノート", target: "note", context: "ノートを開く" },
+		]);
+		assert.deepStrictEqual(result, [{ source: "ノート", target: "note", context: "ノートを開く" }]);
+	});
+
+	test("target が無い・空・文字列でない候補も落とすこと", () => {
+		const result = sanitizeTermSuggestions([
+			{ source: "ノート" },
+			{ source: "ノート", target: "" },
+			{ source: "ノート", target: "   " },
+			{ source: "ノート", target: 42 },
+			{ source: "", target: "note" },
+			"ノート",
+			null,
+			{ source: "タグ", target: "tag", context: "タグを付ける" },
+		]);
+		assert.deepStrictEqual(result, [{ source: "タグ", target: "tag", context: "タグを付ける" }]);
+	});
+
+	test("引用（context）が無いだけで用語を捨てないこと", () => {
+		const result = sanitizeTermSuggestions([{ source: "ノート", target: "note" }]);
+		assert.deepStrictEqual(result, [{ source: "ノート", target: "note", context: "" }]);
+	});
+
+	test("返す候補は source と target と context がすべて文字列であること（受け手の前提）", () => {
+		const result = sanitizeTermSuggestions([
+			{ source: "ノート", target: "note" },
+			{ target: "tag" },
+			{ source: "タグ", target: "tag", context: 1 },
+		]);
+		assert.ok(result);
+		for (const candidate of result) {
+			assert.strictEqual(typeof candidate.source, "string");
+			assert.strictEqual(typeof candidate.target, "string");
+			assert.strictEqual(typeof candidate.context, "string");
+			// 受け手はこれを呼ぶ。ここで落ちないことが、この番人のすべて
+			assert.doesNotThrow(() => candidate.source.toLowerCase());
+		}
+	});
+
+	test("壊れた候補があっても、翻訳そのものは通すこと", () => {
+		const response = JSON.stringify({
+			translation: "This is the translated text.",
+			termSuggestions: [{ target: "note" }],
+		});
+		const result = validateTranslationResponse(response);
+		assert.strictEqual(result.valid, true, "おまけが壊れていただけで訳文を捨てている");
+		assert.strictEqual(result.parsed?.translation, "This is the translated text.");
+		assert.deepStrictEqual(result.parsed?.termSuggestions, []);
+	});
+
+	test("改訂の応答でも同じであること", () => {
+		const response = JSON.stringify({
+			targetPatch: "REPLACE 3\nnew line\nEND",
+			termSuggestions: [{ source: "ノート", target: "note" }, { target: "tag" }],
+		});
+		const result = validateRevisionPatchResponse(response);
+		assert.strictEqual(result.valid, true);
+		assert.deepStrictEqual(result.parsed?.termSuggestions, [
+			{ source: "ノート", target: "note", context: "" },
+		]);
 	});
 });

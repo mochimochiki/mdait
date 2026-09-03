@@ -426,3 +426,72 @@ Content`;
 		assert.ok(result.includes("category: Category"), "categoryが保持されること");
 	});
 });
+
+/**
+ * 引用符の付け方は原稿のものなので、値を差し替えるついでに変えない。
+ *
+ * 背景: 翻訳対象の frontmatter キー（`trans.frontmatter.keys`）は、訳が変わっていなくても
+ * 毎回 `set()` を通る。値を書き出す `formatSimpleValue` が「YAML として必要なときだけ
+ * 引用符を付ける」作りだったため、**改訂を1回通しただけで `title: "..."` が `title: ...` へ
+ * 変わった**（実測。実 LLM で見本サイトの改訂を通したとき、差し替えたのは description だけ
+ * なのに title の引用符まで落ちた）。原稿を預ける相手にとっては、内容が同じでも
+ * 「勝手に書き換わった」ことに変わりはない（ADR-260902-01 / -260903-02 と同じ理由）。
+ */
+suite("FrontMatter - 引用符の付け方を保つ", () => {
+	/** 差し替えたあとの1行を取り出す */
+	function lineOf(result: string, key: string): string {
+		const line = result.split("\n").find((l) => l.startsWith(`${key}:`));
+		assert.ok(line, `${key} の行が見つからない`);
+		return line;
+	}
+
+	test("二重引用符の値を差し替えても、二重引用符のままであること", () => {
+		const { frontMatter } = FrontMatter.parse('---\ntitle: "Old Title"\n---\nContent');
+		assert.ok(frontMatter);
+		frontMatter.set("title", "New Title");
+		assert.equal(lineOf(frontMatter.stringify(), "title"), 'title: "New Title"');
+	});
+
+	test("一重引用符の値を差し替えても、一重引用符のままであること", () => {
+		const { frontMatter } = FrontMatter.parse("---\ntitle: 'Old Title'\n---\nContent");
+		assert.ok(frontMatter);
+		frontMatter.set("title", "New Title");
+		assert.equal(lineOf(frontMatter.stringify(), "title"), "title: 'New Title'");
+	});
+
+	test("裸の値は裸のままであること（引用符を足しもしない）", () => {
+		const { frontMatter } = FrontMatter.parse("---\ntitle: Old Title\n---\nContent");
+		assert.ok(frontMatter);
+		frontMatter.set("title", "New Title");
+		assert.equal(lineOf(frontMatter.stringify(), "title"), "title: New Title");
+	});
+
+	test("差し替えていないキーの引用符が落ちないこと（実測で壊れた形）", () => {
+		const { frontMatter } = FrontMatter.parse(
+			'---\ntitle: "Kumo Note Documentation"\ndescription: "A guide."\nweight: 1\n---\nContent',
+		);
+		assert.ok(frontMatter);
+		// 訳が変わらなくても、翻訳対象のキーは毎回 set() を通る
+		frontMatter.set("title", "Kumo Note Documentation");
+		frontMatter.set("description", "A guide. From introduction to daily usage.");
+		const result = frontMatter.stringify();
+		assert.equal(lineOf(result, "title"), 'title: "Kumo Note Documentation"');
+		assert.equal(lineOf(result, "description"), 'description: "A guide. From introduction to daily usage."');
+		assert.equal(lineOf(result, "weight"), "weight: 1", "触っていない行が動いている");
+	});
+
+	test("引用符の中に同じ引用符が来ても、読み直せる形で書くこと", () => {
+		const withDouble = FrontMatter.parse('---\ntitle: "Old"\n---\nContent').frontMatter;
+		assert.ok(withDouble);
+		withDouble.set("title", 'He said "hello"');
+		// stringify() は区切りの `---` まで返すので、そのまま本文を足せば1つの文書になる
+		const reparsedDouble = FrontMatter.parse(`${withDouble.stringify()}\nContent`).frontMatter;
+		assert.equal(reparsedDouble?.get("title"), 'He said "hello"', "二重引用符の中の引用符が壊れている");
+
+		const withSingle = FrontMatter.parse("---\ntitle: 'Old'\n---\nContent").frontMatter;
+		assert.ok(withSingle);
+		withSingle.set("title", "It's here");
+		const reparsedSingle = FrontMatter.parse(`${withSingle.stringify()}\nContent`).frontMatter;
+		assert.equal(reparsedSingle?.get("title"), "It's here", "一重引用符の中の引用符が壊れている");
+	});
+});
