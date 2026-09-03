@@ -829,10 +829,13 @@ function replaceKeysInRaw(raw: string, newValues: Record<string, unknown>): stri
 					// このキーの値を置換
 					currentKey = keyName;
 					const newValue = newValues[keyName];
+					// **元の書き方に合わせる。** 引用符の有無は原稿のものなので、
+					// 値を差し替えるついでに変えてはいけない（下の detectQuoteStyle を参照）
+					const quoteStyle = detectQuoteStyle(trimmed.substring(colonIdx + 1).trim());
 
 					// 単純な値（文字列、数値、ブール）の場合は1行で置換
 					if (typeof newValue === "string" || typeof newValue === "number" || typeof newValue === "boolean") {
-						result.push(`${keyName}: ${formatSimpleValue(newValue)}`);
+						result.push(`${keyName}: ${formatSimpleValue(newValue, quoteStyle)}`);
 						skipNestedLines = true;
 					} else {
 						// 複雑な値（オブジェクト、配列）の場合はgray-matterで生成
@@ -867,26 +870,89 @@ function replaceKeysInRaw(raw: string, newValues: Record<string, unknown>): stri
 	return result.join("\n");
 }
 
+/** YAML の引用符の付け方（原稿にあったもの） */
+type QuoteStyle = '"' | "'" | undefined;
+
 /**
- * 単純な値をYAML形式でフォーマット
+ * 値の書き方から、引用符の付け方を測る。
+ *
+ * **引用符の有無は原稿のものである。** 値を差し替えるついでに落とすと、内容が同じでも
+ * ファイルが差分になる（実測: 改訂を1回通しただけで `title: "..."` が `title: ...` へ
+ * 変わった。原稿を預ける相手にとっては「勝手に書き換わった」ことに変わりはない。
+ * ADR-260902-01 / -260903-02 と同じ理由）。
+ *
+ * @param rawValue 元の行の、コロンより後ろ（前後の空白を落としたもの）
  */
-function formatSimpleValue(value: string | number | boolean): string {
-	if (typeof value === "string") {
-		// 特殊文字を含む場合はクォート
-		if (
-			value.includes(":") ||
-			value.includes("#") ||
-			value.includes("'") ||
-			value.includes('"') ||
-			value.includes("\n")
-		) {
-			// シングルクォート内のシングルクォートはエスケープ
-			if (value.includes("'")) {
-				return `"${value.replace(/"/g, '\\"')}"`;
-			}
-			return `'${value}'`;
+function detectQuoteStyle(rawValue: string): QuoteStyle {
+	if (rawValue.length >= 2) {
+		if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+			return '"';
 		}
-		return value;
+		if (rawValue.startsWith("'") && rawValue.endsWith("'")) {
+			return "'";
+		}
 	}
-	return String(value);
+	return undefined;
+}
+
+/** 二重引用符で囲む。YAML の二重引用符の中では `\` と `"` を逃がす */
+function doubleQuoted(value: string): string {
+	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * 裸で書いた値が、**同じ文字列として読み直せるか**を確かめる。
+ *
+ * **規則を数え上げない。** YAML が裸の値をどう読むかは条件が多く（`Yes` は真、`1.0` は数、
+ * `-` で始まれば並び、`~` は null、前後の空白は落ちる…）、書き出す側で数え上げれば必ず抜ける。
+ * 実際に書いて読み直し、同じ文字列で戻らなければ裸では書けない、と決める。
+ *
+ * これが無いと、訳が `Yes` や `1.0` になった瞬間に、**値が真偽値や数値へ化けたまま**
+ * 原稿に書かれる。静的サイトの生成側から見れば型が変わっているので、表示が崩れる。
+ */
+function readsBackAsSameString(value: string): boolean {
+	try {
+		return matter(`---\nv: ${value}\n---\n`).data.v === value;
+	} catch {
+		// 読めない＝裸では書けない
+		return false;
+	}
+}
+
+/** 一重引用符で囲む。YAML の一重引用符の中では `'` を2つ重ねて逃がす */
+function singleQuoted(value: string): string {
+	return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * 単純な値をYAML形式でフォーマットする。
+ *
+ * `quoteStyle` は**元の行にあった引用符**。渡されたらそれに合わせる。
+ * 渡されないとき（元が裸だったとき）だけ、裸で書けるかを判断する。
+ */
+function formatSimpleValue(value: string | number | boolean, quoteStyle?: QuoteStyle): string {
+	if (typeof value !== "string") {
+		return String(value);
+	}
+	if (quoteStyle === '"') {
+		return doubleQuoted(value);
+	}
+	if (quoteStyle === "'") {
+		return singleQuoted(value);
+	}
+	// 特殊文字を含む場合、または裸で書くと別の値として読み直される場合はクォート
+	const hasSpecialChar =
+		value.includes(":") ||
+		value.includes("#") ||
+		value.includes("'") ||
+		value.includes('"') ||
+		value.includes("\n");
+	if (hasSpecialChar || !readsBackAsSameString(value)) {
+		// シングルクォート内のシングルクォートはエスケープ
+		if (value.includes("'")) {
+			return doubleQuoted(value);
+		}
+		return singleQuoted(value);
+	}
+	return value;
 }

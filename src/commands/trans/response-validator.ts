@@ -222,10 +222,59 @@ export function validateTranslationResponse(
 		valid: true,
 		parsed: {
 			translation: parsed.translation,
-			termSuggestions: Array.isArray(parsed.termSuggestions) ? parsed.termSuggestions : undefined,
+			termSuggestions: sanitizeTermSuggestions(parsed.termSuggestions),
 			warnings: Array.isArray(parsed.warnings) ? parsed.warnings : undefined,
 		},
 	};
+}
+
+/**
+ * AI が返した用語候補を、使える形のものだけに絞る。
+ *
+ * **翻訳そのものを巻き添えにしない。** 用語候補は翻訳の応答に相乗りしているおまけで、
+ * ここが崩れていても訳文は使える。1件でも形が違えば応答ごと捨てる作りにすると、
+ * 良い訳文を「おまけが壊れていた」という理由で捨てることになる。
+ *
+ * 以前は配列かどうかしか見ずに `TermSuggestion[]` として通していた。実測（haiku・
+ * 対訳47ファイルの見本サイト）で `source` の無い候補が返り、受け手の
+ * `candidate.source.toLowerCase()` が**ファイル1本の翻訳ごと**落とした。
+ * 型が「必ずある」と言っているのに、その保証をどこも作っていなかった。
+ *
+ * `context` は引用で、無くても用語としては使える。**引用が無いだけで用語を捨てない** —
+ * 用語集の文脈欄が空になるだけである。
+ *
+ * 落とした候補は黙って消える。件数はもともと AI 次第で増減するものなので、
+ * 「何件落とした」を伝えても読み手が判断に使えない。
+ *
+ * @param raw AI 応答の termSuggestions（未検証）
+ * @returns 配列でなければ `undefined`、配列なら使える候補だけの配列（空もありうる）
+ */
+export function sanitizeTermSuggestions(raw: unknown): TermSuggestion[] | undefined {
+	if (!Array.isArray(raw)) {
+		return undefined;
+	}
+	const suggestions: TermSuggestion[] = [];
+	for (const item of raw) {
+		if (typeof item !== "object" || item === null) {
+			continue;
+		}
+		const candidate = item as Record<string, unknown>;
+		const source = candidate.source;
+		const target = candidate.target;
+		if (typeof source !== "string" || source.trim() === "") {
+			continue;
+		}
+		if (typeof target !== "string" || target.trim() === "") {
+			continue;
+		}
+		suggestions.push({
+			source,
+			target,
+			context: typeof candidate.context === "string" ? candidate.context : "",
+			...(typeof candidate.reason === "string" ? { reason: candidate.reason } : {}),
+		});
+	}
+	return suggestions;
 }
 
 /** 前後のコードフェンスを剥がす。指示文で禁じていてもモデルは包んでくることがある */
@@ -347,7 +396,7 @@ export function validateRevisionPatchResponse(
 		valid: true,
 		parsed: {
 			targetPatch: parsed.targetPatch,
-			termSuggestions: Array.isArray(parsed.termSuggestions) ? parsed.termSuggestions : undefined,
+			termSuggestions: sanitizeTermSuggestions(parsed.termSuggestions),
 			warnings: Array.isArray(parsed.warnings) ? parsed.warnings : undefined,
 		},
 	};
