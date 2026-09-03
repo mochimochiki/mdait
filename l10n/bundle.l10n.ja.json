@@ -587,7 +587,7 @@
   "Sync (adopt + AI align)": "同期（取り込み＋AIアライン）",
   "Sync did not run (check the mdait configuration).": "同期が実行されませんでした（mdait の設定を確認してください）。",
   "files: {0} processed, {1} failed": "ファイル: {0} 件処理、{1} 件失敗",
-  "files: {0} processed, {1} failed, {2} cancelled": "ファイル: {0} 件処理、{1} 件失敗、{2} 件中断",
+  "files: {0} processed, {1} failed (cancelled partway)": "ファイル: {0} 件処理、{1} 件失敗（途中で中断）",
   "_dry run: no markers were changed; glossary and TM steps were skipped._": "_ドライラン: マーカーは変更していません。用語集・TM の段はスキップされました。_",
   "Stage errors": "段のエラー",
   "({0}/{1}) Sync (adopt + AI align)...": "({0}/{1}) 同期（採用 + AIアライン）...",

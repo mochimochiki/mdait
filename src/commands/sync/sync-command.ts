@@ -404,7 +404,16 @@ export interface SyncResult {
 	successCount: number;
 	errorCount: number;
 	/**
-	 * 取り消しによって途中で止まったファイル数。
+	 * この実行が取り消されたか。
+	 *
+	 * **件数（`cancelledCount`）では代用できない。** 取り消しがファイルの合間に届くと、
+	 * 例外は投げられず、ワーカーが次のファイルを取らずに抜けるだけで終わる（AI を使わない
+	 * 定常 sync では、むしろこちらが普通）。件数だけを見ると 0 のままで、止めたのに
+	 * 「完了しました」と出る。
+	 */
+	cancelled: boolean;
+	/**
+	 * 取り消しによって**送信の途中で止まった**ファイル数。合間で止まれば 0 になる。
 	 *
 	 * **`errorCount` とは別に数える。** 利用者が押した取り消しを「失敗」と呼ぶのは
 	 * 事実に反するうえ、次に何をすればよいか（もう一度 sync すれば続きから進む）も
@@ -474,6 +483,37 @@ export interface SyncCommandOptions {
  */
 export function isCancelledFailure(error: unknown, token?: vscode.CancellationToken): boolean {
 	return isOperationCancelled(error) || token?.isCancellationRequested === true;
+}
+
+/** 完了時に出す通知1本の選び方（出すのは呼び手の仕事） */
+export type SyncCompletionNotice =
+	/** 取り消された。どこまで進んだかと、続きから進める旨だけを言う */
+	| { kind: "cancelled"; syncedCount: number }
+	/** 翻訳待ちが残っている。件数と「今すぐ翻訳」の導線を出す */
+	| { kind: "translatable"; successCount: number; errorCount: number; translatableCount: number }
+	/** ふつうの完了サマリ */
+	| { kind: "plain"; successCount: number; errorCount: number };
+
+/**
+ * 完了時にどの通知を出すかを決める。
+ *
+ * **取り消しが最優先。** 実行の結果そのものなので、完了サマリの代わりにこれだけを出す。
+ * 「今すぐ翻訳」も出さない — 止めた直後に次の AI 実行を勧めるのは、取り消しの意思と食い違う。
+ */
+export function chooseSyncCompletionNotice(args: {
+	cancelled: boolean;
+	successCount: number;
+	errorCount: number;
+	translatableCount: number;
+}): SyncCompletionNotice {
+	const { cancelled, successCount, errorCount, translatableCount } = args;
+	if (cancelled) {
+		return { kind: "cancelled", syncedCount: successCount };
+	}
+	if (translatableCount > 0) {
+		return { kind: "translatable", successCount, errorCount, translatableCount };
+	}
+	return { kind: "plain", successCount, errorCount };
 }
 
 /**
@@ -749,10 +789,16 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const endTime = Date.now();
 		const durationMs = endTime - startTime;
 
+		// **取り消しは合図で判定する。** 件数だけを見ると、ファイルの合間で取り消されたとき
+		// （例外は投げられず、ワーカーが次を取らずに抜けるだけ）に 0 のままになり、
+		// 止めたのに「完了しました」と出る。AI を使わない定常 sync ではそちらが普通の経路
+		const cancelled = options?.token?.isCancellationRequested === true || cancelledCount > 0;
+
 		logger.info("sync", "Sync completed", {
 			totalFileCount,
 			successCount,
 			errorCount,
+			cancelled,
 			cancelledCount,
 			totalAdded,
 			totalModified,
@@ -783,17 +829,16 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const translatableCount = statusManager
 			.getStatusItemTree()
 			.countPendingTranslationUnits(getSelectedScopeDirs(config));
-		if (cancelledCount > 0) {
-			// **取り消しは実行の結果そのもの**なので、完了サマリの代わりにこれだけを出す。
-			// 「今すぐ翻訳」は出さない — 止めた直後に次の AI 実行を勧めることになる。
+		const notice = chooseSyncCompletionNotice({ cancelled, successCount, errorCount, translatableCount });
+		if (notice.kind === "cancelled") {
 			// 途中まで済んだ分は残るので、次の一手は「もう一度 sync」だと言い切る
 			void vscode.window.showInformationMessage(
 				vscode.l10n.t(
 					"Synchronization cancelled: {0} file(s) were synced before stopping. Sync again to continue from there.",
-					successCount,
+					notice.syncedCount,
 				),
 			);
-		} else if (translatableCount > 0) {
+		} else if (notice.kind === "translatable") {
 			const translateNow = vscode.l10n.t("✨Translate now");
 			void vscode.window
 				.showInformationMessage(
@@ -869,6 +914,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			totalFileCount,
 			successCount,
 			errorCount,
+			cancelled,
 			cancelledCount,
 			totalAdded,
 			totalModified,

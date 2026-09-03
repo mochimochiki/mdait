@@ -33,9 +33,12 @@ interface SyncData {
 		total: number;
 		succeeded: number;
 		failed: number;
-		/** 取り消しで途中で止まったファイル数。**失敗とは別に数える**（ADR-260903-04 の備考） */
-		cancelled: number;
 	};
+	/**
+	 * この実行が取り消されたか。**件数では代用できない** — 取り消しがファイルの合間に
+	 * 届くと、途中で止まったファイルは 0 件のまま実行だけが止まる（ADR-260903-05）
+	 */
+	cancelled: boolean;
 	units: {
 		added: number;
 		modified: number;
@@ -121,8 +124,8 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					total: syncResult.totalFileCount,
 					succeeded: syncResult.successCount,
 					failed: syncResult.errorCount,
-					cancelled: syncResult.cancelledCount,
 				},
+				cancelled: syncResult.cancelled,
 				units: {
 					added: syncResult.totalAdded,
 					modified: syncResult.totalModified,
@@ -159,9 +162,9 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					);
 
 			const nextActions = buildNextActions(status.needs, status.errorUnits, 0, status.totalUnits);
-			if (syncResult.cancelledCount > 0) {
+			if (syncResult.cancelled) {
 				nextActions.unshift(
-					`The user cancelled this run: ${syncResult.cancelledCount} file(s) stopped partway. This is not a failure. Files synced before the stop were kept; run mdait_sync again to continue from there.`,
+					"The user cancelled this run. This is not a failure. Files synced before the stop were kept; run mdait_sync again to continue from there.",
 				);
 			}
 			if (syncResult.totalOrphanReviewed > 0) {

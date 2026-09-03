@@ -599,7 +599,7 @@
   "mdait Adopt Existing Translations": "mdait Adopt Existing Translations",
   "Sync (adopt + AI align)": "Sync (adopt + AI align)",
   "Sync did not run (check the mdait configuration).": "Sync did not run (check the mdait configuration).",
-  "files: {0} processed, {1} failed, {2} cancelled": "files: {0} processed, {1} failed, {2} cancelled",
+  "files: {0} processed, {1} failed (cancelled partway)": "files: {0} processed, {1} failed (cancelled partway)",
   "files: {0} processed, {1} failed": "files: {0} processed, {1} failed",
   "_dry run: no markers were changed; glossary and TM steps were skipped._": "_dry run: no markers were changed; glossary and TM steps were skipped._",
   "Stage errors": "Stage errors",

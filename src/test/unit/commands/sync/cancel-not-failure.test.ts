@@ -20,7 +20,7 @@ import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type * as vscode from "vscode";
-import { isCancelledFailure } from "../../../../commands/sync/sync-command";
+import { chooseSyncCompletionNotice, isCancelledFailure } from "../../../../commands/sync/sync-command";
 import { OperationCancelledError } from "../../../../infra/errors/operation-cancelled";
 
 /** 取り消し済み／未取り消しの合図 */
@@ -43,6 +43,49 @@ suite("取り消しは sync の失敗ではない", () => {
 	test("取り消していなければ、ふつうの失敗は失敗のままであること", () => {
 		assert.equal(isCancelledFailure(new Error("ENOENT"), tokenOf(false)), false);
 		assert.equal(isCancelledFailure(new Error("ENOENT")), false);
+	});
+});
+
+/**
+ * 完了時に出す通知の選び方。
+ *
+ * 取り消しは**合図で判定する**。件数（`cancelledCount`）だけを見ると、取り消しがファイルの
+ * 合間に届いたときに 0 のままになる — そのときは例外が投げられず、ワーカーが次のファイルを
+ * 取らずに抜けるだけだからである。AI を使わない定常 sync ではむしろこちらが普通の経路で、
+ * 止めたのに「完了しました」と、場合によっては「今すぐ翻訳」まで出ていた。
+ */
+suite("取り消したときの完了通知", () => {
+	test("取り消したら、翻訳待ちが残っていても中断だけを伝えること", () => {
+		const notice = chooseSyncCompletionNotice({
+			cancelled: true,
+			successCount: 3,
+			errorCount: 0,
+			translatableCount: 42,
+		});
+		assert.equal(notice.kind, "cancelled", "止めた直後に次の AI 実行を勧めている");
+		assert.deepEqual(notice, { kind: "cancelled", syncedCount: 3 });
+	});
+
+	test("1ファイルも途中で止まらなくても、取り消したなら中断と伝えること", () => {
+		// ファイルの合間で取り消された場合。例外が投げられないので件数は 0 のまま
+		const notice = chooseSyncCompletionNotice({
+			cancelled: true,
+			successCount: 5,
+			errorCount: 0,
+			translatableCount: 0,
+		});
+		assert.equal(notice.kind, "cancelled");
+	});
+
+	test("取り消していなければ、これまでどおりの完了サマリであること", () => {
+		assert.equal(
+			chooseSyncCompletionNotice({ cancelled: false, successCount: 3, errorCount: 1, translatableCount: 7 }).kind,
+			"translatable",
+		);
+		assert.equal(
+			chooseSyncCompletionNotice({ cancelled: false, successCount: 3, errorCount: 1, translatableCount: 0 }).kind,
+			"plain",
+		);
 	});
 });
 
@@ -87,6 +130,15 @@ suite("取り消しの数え先（ソース走査）", () => {
 		assert.ok(
 			!catchBlock().cancelled.includes("changeFileStatusWithError"),
 			"取り消しただけのファイルに赤いエラーを刻んでいる。刻むと次の sync まで「壊れている」と読める",
+		);
+	});
+
+	test("取り消しの判定は件数ではなく合図を見ていること", () => {
+		const line = source.split("\n").find((l) => l.includes("const cancelled ="));
+		assert.ok(line, "取り消しの判定が見つからない（目印が変わった）");
+		assert.ok(
+			line.includes("isCancellationRequested"),
+			"件数だけで取り消しを判定している。合間で取り消されると 0 のままで「完了しました」と出る",
 		);
 	});
 

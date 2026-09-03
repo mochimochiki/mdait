@@ -17,6 +17,7 @@ function syncResult(overrides: Partial<SyncResult> = {}): SyncResult {
 		totalFileCount: 1,
 		successCount: 1,
 		errorCount: 0,
+		cancelled: false,
 		cancelledCount: 0,
 		totalAdded: 0,
 		totalModified: 0,
