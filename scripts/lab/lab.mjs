@@ -20,6 +20,7 @@ import { summarizeResult } from "./lib/digest.mjs";
 import { ipcPaths, sendCommand } from "./lib/ipc.mjs";
 import { buildReport, createRun, saveStep, snapshotBaseline } from "./lib/runs.mjs";
 import { LAB_DIR, clearSession, ensureLabDir, readSession, writeSession } from "./lib/session.mjs";
+import { buildSite, compareDigests } from "./lib/site-hugo.mjs";
 import { DEFAULT_SITE_DIR, generateSite } from "./lib/site.mjs";
 import { configureAi, prepareWorkspace, restoreConfig } from "./lib/workspace.mjs";
 
@@ -90,9 +91,17 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
   site    規模のある見本サイトを書き出す（取り込みを実運用に近い数で走らせるため）
             --out <パス>              置き場（既定: ${DEFAULT_SITE_DIR}）
             --markers <embedded|external>  マーカーの置き場（既定: embedded）
+            --extra-langs <ko,...>    対象言語を足す（既定なし＝ ja → en の1対だけ）
+                                      足した言語は一部のページにしか訳文が無い
+                                      （実サイトで言語を増やす途中の形）
             そのあと --ws <パス> で作業場として指す:
               node scripts/lab/lab.mjs site --markers external
               node scripts/lab/lab.mjs up --ws ${DEFAULT_SITE_DIR} --ai agent --agent-model haiku
+  hugo    見本サイトを静的サイトジェネレータで建て、通るかを見る（Hugo が要る）
+            --ws <パス>      建てる場所（既定: ${DEFAULT_SITE_DIR}）
+            --save <ファイル>    出力の指紋を残す（取り込みの前に取る）
+            --baseline <ファイル> 残した指紋と比べ、増減と変化したページを出す
+            Hugo は PATH か MDAIT_HUGO_BIN から探す。無ければ「試せなかった」として素通りする
   report  run ディレクトリから report.md を組み立てて場所を出す
   down    ホストと AI の相手を止め、退避した設定を戻す
 
@@ -959,19 +968,96 @@ async function presetRegress(opts) {
 function verbSite(opts) {
 	const out = opts.out ?? DEFAULT_SITE_DIR;
 	const markers = oneOf(opts.markers ?? "embedded", ["embedded", "external"], "--markers");
-	const stats = generateSite({ out, markers });
+	const extraLangs = opts["extra-langs"] ? String(opts["extra-langs"]).split(",") : [];
+	const stats = generateSite({ out, markers, extraLangs });
+	const [source, ...targets] = stats.langs;
 	say(`見本サイトを書き出しました: ${stats.dir}`);
-	say(`  ファイル ${stats.files}（原文 ${stats.ja} / 訳文 ${stats.en}、うち CRLF ${stats.crlf}）`);
+	say(
+		`  ファイル ${stats.files}（原文 ${source} ${stats.byLang[source]} / 訳文 ${targets
+			.map((code) => `${code} ${stats.byLang[code] ?? 0}`)
+			.join(" ・ ")}、うち CRLF ${stats.crlf}）`,
+	);
 	say(
 		`  内訳: ${Object.entries(stats.byKind)
 			.map(([k, n]) => `${k} ${n}`)
 			.join(" / ")}`,
 	);
 	say(`  マーカーの置き場: ${markers}`);
+	say(`  対象言語: ${targets.join(" ・ ")}（${targets.length} 対）`);
 	say("");
 	say("次にすること:");
 	say(`  node scripts/lab/lab.mjs up --ws ${stats.dir} --ai agent --agent-model haiku`);
 	say("  node scripts/lab/lab.mjs run mdait.adopt.run");
+	return 0;
+}
+
+/**
+ * 前に残した出力の指紋を読む。
+ *
+ * 無い・壊れている・形が違うのは**使い方の間違い**なので、lab の他の引数エラーと同じく
+ * 短く出して終わる（スタックを出しても、指したファイルが違っただけのときに読む値が無い）。
+ */
+function readDigest(file) {
+	let text;
+	try {
+		text = fs.readFileSync(file, "utf8");
+	} catch (error) {
+		throw new UsageError(`--baseline のファイルを読めません: ${file}（${error.code ?? error.message}）`);
+	}
+	let parsed;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		throw new UsageError(`--baseline のファイルが JSON として読めません: ${file}`);
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new UsageError(`--baseline のファイルが指紋の形（ファイル名 → ハッシュ）ではありません: ${file}`);
+	}
+	return parsed;
+}
+
+/**
+ * 見本サイトを静的サイトジェネレータで建てる。
+ *
+ * 書式を守れているかは、これまで原稿のバイト列でしか測っていなかった。サイトの持ち主が
+ * 本当に見るのは建ったサイトなので、取り込みの前後で建てて比べる。frontmatter の型が崩れれば
+ * その場で失敗し、本文の構造が崩れれば出力の HTML が変わる。
+ */
+function verbHugo(opts) {
+	const dir = opts.ws ?? DEFAULT_SITE_DIR;
+	// 比べる相手は**建てる前に**読む。指し間違いに気づくのが、ビルドを待ったあとでは遅い
+	const before = opts.baseline ? readDigest(opts.baseline) : null;
+	const result = buildSite({ dir });
+	if (result.skipped) {
+		say(`Hugo を試せませんでした: ${result.skipped}`);
+		return 0;
+	}
+	if (!result.ok) {
+		say(`ビルドが失敗しました（終了コード ${result.code}）: ${dir}`);
+		say(result.stderr.split("\n").slice(0, 20).join("\n"));
+		return 1;
+	}
+	say(`建ちました: ${dir}/public（HTML ${result.pages} 本・${result.seconds} 秒）`);
+
+	if (before) {
+		const diff = compareDigests(before, result.digest);
+		const total = diff.added.length + diff.removed.length + diff.changed.length;
+		say(
+			total === 0
+				? `  ${path.basename(opts.baseline)} と比べて、出力は1バイトも変わっていません`
+				: `  ${path.basename(opts.baseline)} と比べて: 増 ${diff.added.length} / 減 ${diff.removed.length} / 変化 ${diff.changed.length}`,
+		);
+		for (const kind of ["added", "removed", "changed"]) {
+			for (const rel of diff[kind].slice(0, 12))
+				say(`    ${kind === "added" ? "+" : kind === "removed" ? "-" : "~"} ${rel}`);
+			if (diff[kind].length > 12) say(`    … ほか ${diff[kind].length - 12} 件`);
+		}
+	}
+	if (opts.save) {
+		fs.mkdirSync(path.dirname(path.resolve(opts.save)), { recursive: true });
+		fs.writeFileSync(opts.save, `${JSON.stringify(result.digest, null, 2)}\n`, "utf8");
+		say(`  指紋を残しました: ${opts.save}`);
+	}
 	return 0;
 }
 
@@ -1011,6 +1097,8 @@ async function main() {
 			return await verbReset(opts);
 		case "site":
 			return verbSite(opts);
+		case "hugo":
+			return verbHugo(opts);
 		case "report":
 			return await verbReport(opts);
 		case "down":

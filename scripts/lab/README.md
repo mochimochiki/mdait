@@ -17,23 +17,32 @@ node scripts/lab/lab.mjs down                    # 片付ける
 作業場は既定で `/tmp/mdait-lab/ws`（`MDAIT_LAB_DIR` で変えられる）。**リポジトリの中は既定にしない**ので、
 何をしても `git status` は汚れない。
 
-規模のある見本サイト（対訳47ファイル）で取り込みを試すときは `lab site` で書き出してから、その場所を
+規模のある見本サイト（対訳49ファイル）で取り込みを試すときは `lab site` で書き出してから、その場所を
 作業場として指す。**`/tmp/mdait-lab` の下には置かない** — その下は使い捨てと見なされ、原稿が単体テストの
 見本で上書きされる。
 
 ```bash
 node scripts/lab/lab.mjs site --markers external      # /tmp/mdait-site に書き出す
+# 対象言語を足すなら（足した言語は一部のページにしか訳文が無い）:
+#   node scripts/lab/lab.mjs site --markers external --extra-langs ko
+node scripts/lab/lab.mjs hugo --save /tmp/before.json  # 取り込む前に建てて、出力の指紋を取る
 node scripts/lab/lab.mjs up --ws /tmp/mdait-site --ai agent --agent-model haiku
 node scripts/lab/lab.mjs run mdait.adopt.run
+node scripts/lab/lab.mjs hugo --baseline /tmp/before.json  # 建て直して、何が変わったかを見る
 ```
+
+見本サイトには静的サイトジェネレータ（Hugo）の最小設定が同梱してある。`lab hugo` は
+それを建てて、通るかと、出力がどう変わったかを出す。**Hugo 本体はリポジトリに入れていない** —
+PATH か `MDAIT_HUGO_BIN` から探し、無ければ「試せなかった」として素通りする（CI では必須にしない）。
 
 ## 中身
 
 | 場所 | 役割 |
 |---|---|
-| `lab.mjs` | 入口。動詞（up / run / shot / ai / cancel / status / reset / site / report / down）と段取り |
+| `lab.mjs` | 入口。動詞（up / run / shot / ai / cancel / status / reset / site / hugo / report / down）と段取り |
 | `lib/` | セッション・IPC・作業場・run 記録・要約づくり |
-| `lib/site-content.mjs` | 規模のある見本サイトの原稿（対訳47ファイル）。`lab site` が書き出す |
+| `lib/site-content.mjs` | 規模のある見本サイトの原稿（対訳49ファイル）。`lab site` が書き出す |
+| `lib/site-hugo.mjs` | 見本サイトを Hugo で建てる足場（設定・レイアウト・ビルド・出力の指紋）。`lab hugo` が使う |
 | `hosts/` | headless（vscode モックの上で常駐）／code-server（ブラウザ版）／desktop（本物）／コマンド対応表 |
 | `ai/` | OpenAI 互換のローカル受け皿。echo / live / script / replay / agent |
 | `ui/` | Playwright で画面を触る・撮る（code-server のとき） |
