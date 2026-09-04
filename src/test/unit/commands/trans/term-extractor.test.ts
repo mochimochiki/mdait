@@ -86,6 +86,73 @@ suite("TermExtractor", () => {
 		});
 	});
 
+	/*
+	 * 訳してはいけない場所（コードブロック・インラインコード）にしか用語が無いのに
+	 * 「この語はこう訳せ」が翻訳の指示文へ載ると、コードの中の識別子まで訳されうる。
+	 * term-lint と AIレビューの用語抽出は最初から除外していたが、翻訳の経路だけ
+	 * 生の本文を照合していた（実測で確認）。3経路の判定を揃えたので、ここで固定する。
+	 */
+	suite("コードの中だけに出てくる用語は照合しない", () => {
+		const noteTerm = [
+			TermEntry.create("ノート", {
+				ja: LangTerm.create("ノート"),
+				en: LangTerm.create("note"),
+			}),
+		];
+
+		test("コードブロックの中にしか無い用語は拾わない", () => {
+			const unitContent = [
+				"## 拡張を作る",
+				"",
+				"拡張は JavaScript で書きます。外部への通信は管理者の許可が要ります。",
+				"",
+				"```js",
+				"console.log(`開いたノート: ${item.title}`);",
+				"```",
+			].join("\n");
+
+			const result = extractRelevantTerms(unitContent, noteTerm, "ja", "en");
+
+			assert.deepStrictEqual(result, []);
+		});
+
+		test("チルダのコードフェンスでも拾わない", () => {
+			const unitContent = ["拡張は JavaScript で書きます。", "", "~~~js", "const ノート = load();", "~~~"].join("\n");
+
+			const result = extractRelevantTerms(unitContent, noteTerm, "ja", "en");
+
+			assert.deepStrictEqual(result, []);
+		});
+
+		test("インラインコードの中にしか無い用語は拾わない", () => {
+			const unitContent = "設定画面から `ノート` を選んでください。";
+
+			const result = extractRelevantTerms(unitContent, noteTerm, "ja", "en");
+
+			assert.deepStrictEqual(result, []);
+		});
+
+		test("本文にもコードにもあるなら拾う", () => {
+			const unitContent = ["ノートは1か所に集まります。", "", "```js", "load(`ノート`);", "```"].join("\n");
+
+			const result = extractRelevantTerms(unitContent, noteTerm, "ja", "en");
+
+			assert.strictEqual(result.length, 1);
+			assert.strictEqual(result[0].translation, "note");
+		});
+
+		test("非Markdown（markdown: false）ではコードの規則を当てない", () => {
+			// .txt / .csv / .json にはコードフェンスという考え方が無い。
+			// Markdown の規則を当てると、逆に拾えるはずの用語を落とす。
+			const unitContent = ["部署,担当,連絡先", "サポート,`ノート`の問い合わせ,support@example.com"].join("\n");
+
+			const result = extractRelevantTerms(unitContent, noteTerm, "ja", "en", { markdown: false });
+
+			assert.strictEqual(result.length, 1);
+			assert.strictEqual(result[0].translation, "note");
+		});
+	});
+
 	suite("termsToJson", () => {
 		test("用語リストをJSON文字列に変換できる", () => {
 			const terms = [

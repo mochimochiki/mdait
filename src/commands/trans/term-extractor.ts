@@ -3,7 +3,7 @@
  * @description ユニット内容から用語を抽出し、翻訳コンテキスト用の形式に変換
  */
 
-import { anyTermVariantAppears } from "../../core/term/term-matcher";
+import { anyTermVariantAppears, stripCodeSegments } from "../../core/term/term-matcher";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
 
@@ -20,11 +20,29 @@ export interface TranslationTerm {
 }
 
 /**
+ * 用語を探す範囲の指定。
+ */
+export interface TermExtractionOptions {
+	/**
+	 * 本文を Markdown として扱うか（既定 true）。
+	 *
+	 * true のときはコードブロックとインラインコードを照合から外す。訳してはいけない場所に
+	 * 用語があるだけで「この語はこう訳せ」が指示文に載ってしまうのを防ぐためで、
+	 * term-lint・AIレビューの用語抽出と同じ判定になる（ADR-260704-04）。
+	 *
+	 * 非Markdown の管理下ファイル（.txt / .csv / .json）では false を渡す。
+	 * Markdown のコードフェンスの規則を JSON や CSV に当てるのは筋が違うため。
+	 */
+	markdown?: boolean;
+}
+
+/**
  * ユニット内容から該当する用語を抽出し、翻訳用の形式に変換
- * @param unitContent ユニットの本文
+ * @param unitContent ユニットの本文（生のまま渡してよい。範囲の切り出しはこの関数の中で行う）
  * @param allTerms 全用語エントリ
  * @param sourceLang 原文の言語コード
  * @param targetLang 訳文の言語コード
+ * @param options 探す範囲の指定
  * @returns 翻訳プロンプトに含める用語リスト
  */
 export function extractRelevantTerms(
@@ -32,7 +50,10 @@ export function extractRelevantTerms(
 	allTerms: readonly TermEntry[],
 	sourceLang: string,
 	targetLang: string,
+	options: TermExtractionOptions = {},
 ): TranslationTerm[] {
+	// 照合の範囲は用語ごとではなく**一度だけ**切り出す（用語数ぶん繰り返さない）
+	const haystack = options.markdown === false ? unitContent : stripCodeSegments(unitContent);
 	const relevantTerms: TranslationTerm[] = [];
 
 	for (const entry of allTerms) {
@@ -45,7 +66,7 @@ export function extractRelevantTerms(
 		}
 
 		// ユニット内容に原語またはその表記揺れが含まれるかチェック
-		if (isTermRelevant(unitContent, entry, sourceLang)) {
+		if (isTermRelevant(haystack, entry, sourceLang)) {
 			relevantTerms.push({
 				term: sourceTerm,
 				translation: targetTerm,
