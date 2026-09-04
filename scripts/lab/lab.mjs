@@ -992,6 +992,31 @@ function verbSite(opts) {
 }
 
 /**
+ * 前に残した出力の指紋を読む。
+ *
+ * 無い・壊れている・形が違うのは**使い方の間違い**なので、lab の他の引数エラーと同じく
+ * 短く出して終わる（スタックを出しても、指したファイルが違っただけのときに読む値が無い）。
+ */
+function readDigest(file) {
+	let text;
+	try {
+		text = fs.readFileSync(file, "utf8");
+	} catch (error) {
+		throw new UsageError(`--baseline のファイルを読めません: ${file}（${error.code ?? error.message}）`);
+	}
+	let parsed;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		throw new UsageError(`--baseline のファイルが JSON として読めません: ${file}`);
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new UsageError(`--baseline のファイルが指紋の形（ファイル名 → ハッシュ）ではありません: ${file}`);
+	}
+	return parsed;
+}
+
+/**
  * 見本サイトを静的サイトジェネレータで建てる。
  *
  * 書式を守れているかは、これまで原稿のバイト列でしか測っていなかった。サイトの持ち主が
@@ -1000,6 +1025,8 @@ function verbSite(opts) {
  */
 function verbHugo(opts) {
 	const dir = opts.ws ?? DEFAULT_SITE_DIR;
+	// 比べる相手は**建てる前に**読む。指し間違いに気づくのが、ビルドを待ったあとでは遅い
+	const before = opts.baseline ? readDigest(opts.baseline) : null;
 	const result = buildSite({ dir });
 	if (result.skipped) {
 		say(`Hugo を試せませんでした: ${result.skipped}`);
@@ -1012,8 +1039,7 @@ function verbHugo(opts) {
 	}
 	say(`建ちました: ${dir}/public（HTML ${result.pages} 本・${result.seconds} 秒）`);
 
-	if (opts.baseline) {
-		const before = JSON.parse(fs.readFileSync(opts.baseline, "utf8"));
+	if (before) {
 		const diff = compareDigests(before, result.digest);
 		const total = diff.added.length + diff.removed.length + diff.changed.length;
 		say(

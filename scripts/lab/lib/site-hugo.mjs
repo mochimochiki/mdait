@@ -145,11 +145,15 @@ export function buildSite(options) {
 	const seconds = Math.round((Date.now() - started) / 100) / 10;
 	const digest = digestPublic(publicDir);
 	const pages = Object.keys(digest).filter((rel) => rel.endsWith(".html")).length;
+	// そもそも起こせなかったとき（実行ファイルが無い・権限が無い・出力が上限を超えた）は
+	// status が null で stderr も空になる。**理由は result.error にしか無い**ので、
+	// 拾わないと呼び手には「終了コード null」としか出ない。
+	const failedToStart = result.error ? `Hugo を起こせませんでした: ${result.error.message}` : "";
 	return {
-		ok: result.status === 0,
+		ok: !result.error && result.status === 0,
 		code: result.status,
 		seconds,
-		stderr: `${result.stderr ?? ""}${result.stdout ?? ""}`.trim(),
+		stderr: [failedToStart, result.stderr ?? "", result.stdout ?? ""].join("").trim(),
 		pages,
 		digest,
 	};
