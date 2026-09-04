@@ -29,9 +29,27 @@ function s(hJa, hEn, bJa, bEn) {
  */
 export const PAGES = [
 	{
-		path: "index.md",
+		path: "_index.md",
 		kind: "aligned",
 		weight: 1,
+		fm: {
+			ja: [
+				"date: 2025-03-04",
+				"draft: false",
+				"keywords: [ノート, 共有, チーム]",
+				"summary: |",
+				"  チームでノートを共有するためのサービスです。",
+				"  この手引きは導入から日々の操作までを扱います。",
+			],
+			en: [
+				"date: 2025-03-04",
+				"draft: false",
+				"keywords: [notes, sharing, team]",
+				"summary: |",
+				"  A service for sharing notes across a team.",
+				"  This guide covers everything from installing it to daily use.",
+			],
+		},
 		title: { ja: "クモノート ドキュメント", en: "Kumo Note Documentation" },
 		description: {
 			ja: "チームでノートを共有するためのサービスの手引き。",
@@ -59,10 +77,54 @@ export const PAGES = [
 		],
 	},
 	{
+		// 章の索引ページ（静的サイトジェネレータでいう branch bundle）。実サイトには必ずある形で、
+		// 本文が短く、リンクの一覧が主になる。
+		path: "guide/_index.md",
+		kind: "aligned",
+		weight: 19,
+		quote: "none",
+		title: { ja: "使い方", en: "Guide" },
+		description: { ja: "日々の操作をひととおり。", en: "The day-to-day operations, end to end." },
+		fm: {
+			ja: ["draft: false", "date: 2025-03-04", "tags:", "  - 使い方", "  - 手引き"],
+			en: ["draft: false", "date: 2025-03-04", "tags:", "  - guide", "  - handbook"],
+		},
+		sections: [
+			s(
+				"使い方",
+				"Guide",
+				"ノートを書く・整理する・探す・共有する。日々の操作はこの章にまとまっています。",
+				"Writing, organizing, finding, and sharing notes. The day-to-day operations are collected in this chapter.",
+			),
+			s(
+				"この章の中身",
+				"What Is in This Chapter",
+				[
+					"1. [ノートを扱う](notes/) — 編集・複製・削除",
+					"2. [タグで整理する](tags/) — タグの付け方と絞り込み",
+					"3. [探す](search/) — 全文検索と絞り込みの記号",
+					"4. [同期のしくみ](sync/) — 複数の端末で同じノートを見る",
+					"5. [共有する](share/) — 範囲と権限",
+					"6. [控えを取る](backup/) — 手元へ書き出す",
+				].join("\n"),
+				[
+					"1. [Working with Notes](notes/) — editing, duplicating, deleting",
+					"2. [Organizing with Tags](tags/) — applying tags and filtering",
+					"3. [Searching](search/) — full-text search and filter syntax",
+					"4. [How Syncing Works](sync/) — the same notes on several devices",
+					"5. [Sharing](share/) — scope and permissions",
+					"6. [Backing Up](backup/) — exporting to your own machine",
+				].join("\n"),
+			),
+		],
+	},
+	{
 		path: "start/install.md",
 		kind: "aligned",
 		crlf: true,
 		weight: 10,
+		quote: "single",
+		fm: ["date: 2025-01-20", "draft: false"],
 		title: { ja: "導入する", en: "Installing" },
 		description: {
 			ja: "クモノートを手元の環境に入れる手順。",
@@ -156,8 +218,26 @@ export const PAGES = [
 			s(
 				"取り込みの手順",
 				"Import Steps",
-				"設定画面の「取り込み」から、ノートの入ったフォルダーを選びます。件数が多いときは時間がかかるので、終わるまで待ってください。",
-				"Choose the folder that holds your notes from Import in the settings screen. It takes a while when there are many notes, so wait until it finishes.",
+				[
+					"設定画面の「取り込み」から、ノートの入ったフォルダーを選びます。",
+					"",
+					"1. 設定画面を開く",
+					"2. 「取り込み」を選ぶ",
+					"3. ノートの入ったフォルダーを指す",
+					"4. 件数を確かめて「はじめる」を押す",
+					"",
+					"件数が多いときは時間がかかるので、終わるまで待ってください。",
+				].join("\n"),
+				[
+					"Choose the folder that holds your notes from Import in the settings screen.",
+					"",
+					"1. Open the settings screen",
+					"2. Choose Import",
+					"3. Point at the folder holding your notes",
+					"4. Check the count and press Start",
+					"",
+					"It takes a while when there are many notes, so wait until it finishes.",
+				].join("\n"),
 			),
 		],
 	},
@@ -181,8 +261,20 @@ export const PAGES = [
 			s(
 				"編集する",
 				"Editing",
-				"ノートを開いて本文をそのまま書き換えると、数秒ごとに自動で保存されます。保存の操作は要りません。",
-				"Open a note and edit the body directly; it saves automatically every few seconds. There is no save command to press.",
+				[
+					"ノートを開いて本文をそのまま書き換えると、数秒ごとに自動で保存されます。**保存の操作は要りません**。",
+					"",
+					"> 書きかけのまま閉じても失われません。次に開いたとき、そのまま続きから書けます。",
+					"",
+					"直前の状態へ戻すには `Ctrl + Z`、やり直すには `Ctrl + Shift + Z` を押してください。",
+				].join("\n"),
+				[
+					"Open a note and edit the body directly; it saves automatically every few seconds. **There is no save command to press.**",
+					"",
+					"> Closing a note mid-sentence loses nothing. Open it again and pick up where you left off.",
+					"",
+					"Press `Ctrl + Z` to step back and `Ctrl + Shift + Z` to step forward again.",
+				].join("\n"),
 			),
 			s(
 				"複製と移動",
@@ -218,8 +310,28 @@ export const PAGES = [
 			s(
 				"タグを付ける",
 				"Adding Tags",
-				"本文のどこかに半角の # に続けて言葉を書くと、そのままタグになります。題名の下の欄から選んで付けることもできます。",
-				"Type a word after a hash mark anywhere in the body and it becomes a tag. You can also pick tags from the field under the title.",
+				[
+					"本文のどこかに半角の # に続けて言葉を書くと、そのままタグになります。付け方は3通りあります。",
+					"",
+					"- 本文に直接書く",
+					"  - 半角の # に続けて言葉を書く",
+					'  - 空白を含めたいときは `#"打ち合わせ 議事録"` のように囲む',
+					"- 題名の下の欄から選ぶ",
+					"  - よく使うものが上に並ぶ",
+					"  - 新しい言葉を入れると、その場で作られる",
+					"- 一覧の画面からまとめて付ける",
+				].join("\n"),
+				[
+					"Type a word after a hash mark anywhere in the body and it becomes a tag. There are three ways to apply one.",
+					"",
+					"- Write it in the body",
+					"  - Type a word after a hash mark",
+					'  - To include a space, wrap it as `#"meeting notes"`',
+					"- Pick it from the field under the title",
+					"  - The ones you use often come first",
+					"  - Typing a new word creates it on the spot",
+					"- Apply them in bulk from the list screen",
+				].join("\n"),
 			),
 			s(
 				"タグを並べ替える",
@@ -257,8 +369,20 @@ export const PAGES = [
 			s(
 				"絞り込みの記号",
 				"Filter Syntax",
-				"tag: に続けてタグ名を、from: に続けて日付を書くと、その条件で絞り込めます。条件は空白で区切っていくつでも並べられます。",
-				"Write a tag name after tag: or a date after from: to narrow the results. Separate as many conditions as you like with spaces.",
+				[
+					"`tag:` に続けてタグ名を、`from:` に続けて日付を書くと、その条件で絞り込めます。",
+					"条件は空白で区切っていくつでも並べられます。",
+					"",
+					"タグそのものの付け方は [タグで整理する](../tags/) を、",
+					"保存の仕方は[この下の章](#よく使う検索を保存する)をご覧ください。",
+				].join("\n"),
+				[
+					"Write a tag name after `tag:` or a date after `from:` to narrow the results.",
+					"Separate as many conditions as you like with spaces.",
+					"",
+					"For applying tags themselves see [Organizing with Tags](../tags/), and",
+					"for keeping a search see [the chapter below](#saving-searches-you-use-often).",
+				].join("\n"),
 			),
 			s(
 				"よく使う検索を保存する",
@@ -287,8 +411,24 @@ export const PAGES = [
 			s(
 				"つながっていないとき",
 				"When You Are Offline",
-				"通信できないあいだも、ノートの読み書きはそのまま続けられます。つながり直した時点で、書いた内容がまとめて送られます。",
-				"You can keep reading and writing notes while you have no connection. Once you are back online, everything you wrote is sent at once.",
+				[
+					"通信できないあいだも、ノートの読み書きはそのまま続けられます。",
+					"つながり直した時点で、書いた内容がまとめて送られます。",
+					"",
+					"{{< note >}}",
+					"端末を替えるときは、**つながった状態で**閉じてください。",
+					"送りきる前に電源を落とすと、次に開くまで反映されません。",
+					"{{< /note >}}",
+				].join("\n"),
+				[
+					"You can keep reading and writing notes while you have no connection.",
+					"Once you are back online, everything you wrote is sent at once.",
+					"",
+					"{{< note >}}",
+					"When you switch devices, close the app **while you are online**.",
+					"Powering off before everything is sent delays it until you open the app again.",
+					"{{< /note >}}",
+				].join("\n"),
 			),
 			s(
 				"衝突したとき",
@@ -320,8 +460,16 @@ export const PAGES = [
 			s(
 				"読み書きの権限",
 				"Read and Write Permissions",
-				"共有した相手ごとに、読むだけか書き換えてよいかを決められます。書き換えを許した相手も、ノートを消すことはできません。",
-				"For each person you share with, you decide whether they can only read or may also edit. Even people allowed to edit cannot delete the note.",
+				[
+					"共有した相手ごとに、読むだけか書き換えてよいかを決められます。  ",
+					"書き換えを許した相手も、ノートを消すことはできません。  ",
+					"消せるのは、そのノートを作った本人と、チームの管理者だけです。",
+				].join("\n"),
+				[
+					"For each person you share with, you decide whether they can only read or may also edit.  ",
+					"Even people allowed to edit cannot delete the note.  ",
+					"Only the person who created it and the team administrator can delete it.",
+				].join("\n"),
 			),
 		],
 		// 原文に無い章（訳文の側だけにある独自の章）
@@ -347,8 +495,22 @@ export const PAGES = [
 			s(
 				"書き出す",
 				"Exporting",
-				"設定画面の「書き出し」から、すべてのノートを Markdown のファイルとして受け取れます。画像も同じ場所へ入ります。",
-				"From Export in the settings screen you can receive all of your notes as Markdown files. Images are placed in the same folder.",
+				[
+					"設定画面の「書き出し」から、すべてのノートを Markdown のファイルとして受け取れます。",
+					"画像も同じ場所へ入ります。",
+					"",
+					'![書き出しの画面](/images/export.png "書き出しの画面")',
+					"",
+					"書き出したファイルの並びは [仕様の一覧](https://example.com/spec/export) に載せています。",
+				].join("\n"),
+				[
+					"From Export in the settings screen you can receive all of your notes as Markdown files.",
+					"Images are placed in the same folder.",
+					"",
+					'![The export screen](/images/export.png "The export screen")',
+					"",
+					"The layout of the exported files is documented in the [specification](https://example.com/spec/export).",
+				].join("\n"),
 			),
 			s(
 				"戻す",
@@ -415,8 +577,34 @@ export const PAGES = [
 			s(
 				"作る",
 				"Building Your Own",
-				"拡張は JavaScript で書きます。ノートの読み書きと画面への追加ができ、外部への通信は管理者の許可が要ります。",
-				"Extensions are written in JavaScript. They can read and write notes and add to the screen; talking to the outside requires an administrator's permission.",
+				[
+					"拡張は JavaScript で書きます。ノートの読み書きと画面への追加ができ、",
+					"外部への通信は管理者の許可が要ります。",
+					"",
+					"~~~js",
+					"// # ここは見出しではありません（コードブロックの中の飾り）",
+					"// <!-- mdait hash from:00000000 need:translate --> も、ただの文字列です",
+					"export function activate(app) {",
+					"\tapp.onNoteOpen((note) => {",
+					"\t\tconsole.log(`開いたノート: ${note.title}`);",
+					"\t});",
+					"}",
+					"~~~",
+				].join("\n"),
+				[
+					"Extensions are written in JavaScript. They can read and write notes and add to the screen;",
+					"talking to the outside requires an administrator's permission.",
+					"",
+					"~~~js",
+					"// # This is not a heading (it is decoration inside a code block)",
+					"// <!-- mdait hash from:00000000 need:translate --> is just a string here too",
+					"export function activate(app) {",
+					"\tapp.onNoteOpen((note) => {",
+					"\t\tconsole.log(`Opened note: ${note.title}`);",
+					"\t});",
+					"}",
+					"~~~",
+				].join("\n"),
 			),
 			s(
 				"外す",
@@ -430,7 +618,9 @@ export const PAGES = [
 		path: "reference/api.md",
 		kind: "aligned",
 		weight: 32,
-		title: { ja: "外から呼ぶ", en: "Calling from Outside" },
+		fm: ["date: 2025-02-11", "aliases: [/old/api/]"],
+		// 題名にコロンが入る。**裸で書くと YAML として壊れる**ので、引用符を落とすことは許されない。
+		title: { ja: "外から呼ぶ: HTTP の口", en: "Calling from Outside: The HTTP API" },
 		description: { ja: "HTTP でノートを読み書きする。", en: "Reading and writing notes over HTTP." },
 		sections: [
 			s(
@@ -483,8 +673,30 @@ export const PAGES = [
 			s(
 				"サインインできない",
 				"You Cannot Sign In",
-				"合言葉を3回間違えると、15分のあいだ受け付けなくなります。時間を置いても入れないときは、管理者に招待をやり直してもらってください。",
-				"After three wrong passphrases, sign-in is refused for fifteen minutes. If waiting does not help, ask your administrator to send the invitation again.",
+				[
+					"合言葉を3回間違えると、15分のあいだ受け付けなくなります。<br>",
+					"時間を置いても入れないときは、管理者に招待をやり直してもらってください。",
+					"",
+					"<details>",
+					"<summary>それでも入れないとき</summary>",
+					"",
+					"社内の通信の設定で、サインインの行き先だけが遮られていることがあります。",
+					"管理者に <code>auth.example.com</code> への通信を確かめてもらってください。",
+					"",
+					"</details>",
+				].join("\n"),
+				[
+					"After three wrong passphrases, sign-in is refused for fifteen minutes.<br>",
+					"If waiting does not help, ask your administrator to send the invitation again.",
+					"",
+					"<details>",
+					"<summary>Still cannot get in</summary>",
+					"",
+					"Your company network may be blocking the sign-in endpoint alone.",
+					"Ask your administrator to check that <code>auth.example.com</code> is reachable.",
+					"",
+					"</details>",
+				].join("\n"),
 			),
 			s(
 				"ノートが古いまま",
@@ -505,7 +717,8 @@ export const PAGES = [
 		kind: "missingSection",
 		weight: 41,
 		title: { ja: "料金と支払い", en: "Pricing and Payment" },
-		description: { ja: "契約の種類と支払いの流れ。", en: "Plan types and how payment works." },
+		// 説明が角括弧で始まる。**裸で書くと YAML が配列として読み直す**（文字列でなくなる）。
+		description: { ja: "[重要] 契約の種類と支払いの流れ。", en: "[Important] Plan types and how payment works." },
 		sections: [
 			s(
 				"料金と支払い",
@@ -516,8 +729,24 @@ export const PAGES = [
 			s(
 				"契約の種類",
 				"Plan Types",
-				"無料・標準・上位の3つがあります。無料はノート1000本まで、標準からは上限がありません。",
-				"There are three plans: free, standard, and premium. The free plan holds up to a thousand notes; from standard upward there is no limit.",
+				[
+					"無料・標準・上位の3つがあります。",
+					"",
+					"| 契約 | 月額 | ノートの上限 | 備考 |",
+					"| :--- | ---: | :---: | --- |",
+					"| 無料 | 0 円 | 1000 本 | |",
+					"| 標準 | 800 円 | 上限なし | 変更の履歴が付く |",
+					"| 上位 | 1,600 円 | 上限なし | 外部との連携（`読み` \\| `書き`）が付く |",
+				].join("\n"),
+				[
+					"There are three plans: free, standard, and premium.",
+					"",
+					"| Plan | Monthly | Note limit | Notes |",
+					"| :--- | ---: | :---: | --- |",
+					"| Free | $0 | 1,000 | |",
+					"| Standard | $8 | none | adds change history |",
+					"| Premium | $16 | none | adds outside connections (`read` \\| `write`) |",
+				].join("\n"),
 			),
 			s(
 				"支払いの方法",
@@ -549,8 +778,26 @@ export const PAGES = [
 			s(
 				"通信と保管",
 				"In Transit and at Rest",
-				"通信はすべて暗号化しています。保管する側でも暗号化しており、鍵はノートの内容とは別の場所に置いています。",
-				"All communication is encrypted. Stored data is encrypted as well, and the keys are held separately from the note contents.",
+				[
+					"通信はすべて暗号化しています（TLS 1.3・AES-256-GCM）。",
+					"保管する側でも暗号化しており、鍵はノートの内容とは**別の場所**に置いています。",
+					"",
+					"- 🔒 通信中 … TLS 1.3",
+					"- 🗄️ 保管中 … AES-256-GCM",
+					"- 🔑 鍵の保管 … 別系統（鍵の入れ替えは 90 日ごと）",
+					"",
+					"合言葉は 12 文字以上（英字＋数字＋記号のうち 2 種類以上）を必須にしています。",
+				].join("\n"),
+				[
+					"All communication is encrypted (TLS 1.3, AES-256-GCM).",
+					"Stored data is encrypted as well, and the keys are held **somewhere separate** from the note contents.",
+					"",
+					"- 🔒 In transit — TLS 1.3",
+					"- 🗄️ At rest — AES-256-GCM",
+					"- 🔑 Key storage — a separate system (keys rotate every 90 days)",
+					"",
+					"Passphrases must be at least 12 characters and mix at least two of letters, digits, and symbols.",
+				].join("\n"),
 			),
 			s(
 				"誰が見られるか",
@@ -581,8 +828,18 @@ export const PAGES = [
 			s(
 				"できないこと",
 				"What You May Not Do",
-				"法に触れる内容や、他人の権利を侵す内容を置くことはできません。見つけた場合は、予告なくノートを止めることがあります。",
-				"You may not store unlawful content or content that infringes the rights of others. If we find such content, we may suspend the note without notice.",
+				[
+					"法に触れる内容や、他人の権利を侵す内容を置くことはできません[^1]。",
+					"見つけた場合は、予告なくノートを止めることがあります。",
+					"",
+					"[^1]: 判断に迷う内容は、止める前に管理者へ問い合わせます。",
+				].join("\n"),
+				[
+					"You may not store unlawful content or content that infringes the rights of others[^1].",
+					"If we find such content, we may suspend the note without notice.",
+					"",
+					"[^1]: Where the call is not clear-cut, we ask your administrator before suspending anything.",
+				].join("\n"),
 			),
 			s(
 				"止まったときの扱い",
@@ -615,8 +872,26 @@ export const PAGES = [
 			s(
 				"集める情報",
 				"What We Collect",
-				"名前とメールアドレス、それに接続した時刻と端末の種類を記録します。ノートの中身は集計の対象にしません。",
-				"We record your name and email address, along with when you connect and what kind of device you use. The contents of your notes are never included in our statistics.",
+				[
+					"名前とメールアドレス、それに接続した時刻と端末の種類を記録します。",
+					"ノートの中身は集計の対象にしません。",
+					"",
+					"---",
+					"",
+					"記録の中身について尋ねたいときは、[相談の窓口][contact]までご連絡ください。",
+					"",
+					"[contact]: mailto:privacy@example.com",
+				].join("\n"),
+				[
+					"We record your name and email address, along with when you connect and what kind of device you use.",
+					"The contents of your notes are never included in our statistics.",
+					"",
+					"---",
+					"",
+					"To ask what exactly is recorded, write to our [privacy desk][contact].",
+					"",
+					"[contact]: mailto:privacy@example.com",
+				].join("\n"),
 			),
 			s(
 				"消してほしいとき",
@@ -630,6 +905,8 @@ export const PAGES = [
 		path: "notes/release-notes.md",
 		kind: "aligned",
 		weight: 60,
+		quote: "none",
+		fm: ["date: 2025-03-04", "draft: false"],
 		title: { ja: "更新の記録", en: "Release Notes" },
 		description: { ja: "各版で変わったところ。", en: "What changed in each release." },
 		sections: [
@@ -703,12 +980,16 @@ export const PAGES = [
 				"主要な画面は読み上げに対応しています。見出しの階層をたどって、目的の場所まで移動できます。",
 				null,
 			),
+			// 見出しだけで本文が無い章。実サイトの原稿には「書きかけ」として残っていることがある。
+			s("配色", null, "", null),
 		],
 	},
 	{
 		path: "legacy/old-guide.md",
 		kind: "targetOnly",
 		weight: 90,
+		quote: "single",
+		fm: ["date: 2024-09-30", "draft: false", "aliases: [/v2/]"],
 		title: { ja: null, en: "Legacy Guide (Version 2)" },
 		description: { ja: null, en: "Kept for teams still on version 2." },
 		sections: [

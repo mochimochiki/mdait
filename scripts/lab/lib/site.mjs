@@ -13,6 +13,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ASSETS, PAGES } from "./site-content.mjs";
+import { writeHugoScaffold } from "./site-hugo.mjs";
+
+/**
+ * 見本サイトの言語。原稿の生成と Hugo の設定は**同じこの一覧から**作る（食い違わせない）。
+ * 先頭が原文の言語。
+ */
+export const LANGS = [
+	{ code: "ja", name: "日本語" },
+	{ code: "en", name: "English" },
+];
 
 /** 既定の置き場（lab の作業場の外） */
 export const DEFAULT_SITE_DIR = process.env.MDAIT_SITE_DIR || "/tmp/mdait-site";
@@ -24,22 +34,49 @@ function writeText(file, text, crlf) {
 	fs.writeFileSync(file, body, "utf8");
 }
 
-/** frontmatter を組み立てる。weight は訳す対象ではない鍵（判定に混ざらないことの確認用） */
+/**
+ * 訳す対象の値を1つ書く。
+ *
+ * 引用符の付け方は原稿ごとに違う（裸・シングル・ダブル）。実サイトの原稿はどれも混ざっているし、
+ * mdait は「原稿にあった形のまま返す」と決めている（ADR-260903-07）ので、見本にも3通りを混ぜる。
+ */
+function fmValue(key, value, quote) {
+	if (quote === "none") return `${key}: ${value}`;
+	if (quote === "single") return `${key}: '${value}'`;
+	return `${key}: "${value}"`;
+}
+
+/**
+ * frontmatter を組み立てる。
+ *
+ * `title` と `description` だけが訳す対象（`.mdait/mdait.json` の `trans.frontmatter.keys`）。
+ * それ以外の鍵は「訳す対象ではないものが混ざっても判定に巻き込まれない」ことを見るために置いてある。
+ * 型もわざと散らしてある（数値・真偽値・日付・配列・複数行）— 静的サイトジェネレータは
+ * これらを型として読むので、引用符が落ちたり型が変わったりすればビルドがその場で失敗する。
+ */
 function frontmatter(page, lang) {
+	const quote = page.quote ?? "double";
 	const lines = ["---"];
-	lines.push(`title: "${page.title[lang]}"`);
-	lines.push(`description: "${page.description[lang]}"`);
+	lines.push(fmValue("title", page.title[lang], quote));
+	lines.push(fmValue("description", page.description[lang], quote));
 	if (page.weight !== undefined) lines.push(`weight: ${page.weight}`);
+	const extra = page.fm ? (Array.isArray(page.fm) ? page.fm : page.fm[lang]) : undefined;
+	if (extra) lines.push(...extra);
 	lines.push("---");
 	return lines.join("\n");
 }
 
-/** 章1つ分の本文。先頭の章だけ H1、以降は H2 */
+/**
+ * 章1つ分の本文。先頭の章だけ H1、以降は H2。
+ *
+ * 本文が空の章（見出しだけ）も作れる。実サイトの原稿には「書きかけ」として残っていることがあり、
+ * 中身の無いユニットが翻訳の経路をどう通るかは、小さな見本では出てこない。
+ */
 function renderSection(section, lang, index) {
 	const hash = index === 0 ? "#" : "##";
 	const heading = typeof section.h === "string" ? section.h : section.h[lang];
 	const body = typeof section.b === "string" ? section.b : section.b[lang];
-	return `${hash} ${heading}\n\n${body}`;
+	return body ? `${hash} ${heading}\n\n${body}` : `${hash} ${heading}`;
 }
 
 /**
@@ -148,5 +185,9 @@ export function generateSite(options = {}) {
 
 	fs.mkdirSync(path.join(dir, ".mdait"), { recursive: true });
 	fs.writeFileSync(path.join(dir, ".mdait", "mdait.json"), renderConfig(markers), "utf8");
+
+	// 静的サイトジェネレータの足場。content/ の外なので、取り込みの対象には入らない。
+	// 「翻訳したあとサイトが建つか」を実物で測るために置いてある（site-hugo.mjs）。
+	writeHugoScaffold(dir, LANGS);
 	return stats;
 }
