@@ -12,17 +12,38 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { ASSETS, PAGES } from "./site-content.mjs";
+import { ASSETS, EXTRA_LANGS, PAGES } from "./site-content.mjs";
 import { writeHugoScaffold } from "./site-hugo.mjs";
 
 /**
- * 見本サイトの言語。原稿の生成と Hugo の設定は**同じこの一覧から**作る（食い違わせない）。
- * 先頭が原文の言語。
+ * 見本サイトの土台になる対。先頭が原文の言語。
+ * 原稿の生成と Hugo の設定は**同じこの一覧から**作る（食い違わせない）。
  */
-export const LANGS = [
+export const BASE_LANGS = [
 	{ code: "ja", name: "日本語" },
 	{ code: "en", name: "English" },
 ];
+
+/**
+ * 使う言語を決める。土台の対（ja → en）は常にあり、そこへ対象言語を足せる。
+ *
+ * 足した言語は**一部のページにしか訳文が無い**（site-content.mjs の `EXTRA_LANGS`）。
+ * 実サイトで言語を増やす途中がその形だからで、`ADR-260825-01` が決めた
+ * 「設定した対象言語は初回から全部が対象」を、揃い方の違う2本の対で確かめられる。
+ */
+function resolveLangs(extra) {
+	const wanted = (extra ?? []).map((code) => code.trim()).filter(Boolean);
+	const langs = [...BASE_LANGS];
+	for (const code of wanted) {
+		const found = EXTRA_LANGS.find((lang) => lang.code === code);
+		if (!found) {
+			throw new Error(`知らない対象言語です: ${code}（選べるのは ${EXTRA_LANGS.map((l) => l.code).join(", ")}）`);
+		}
+		if (!langs.some((lang) => lang.code === code))
+			langs.push({ code: found.code, name: found.name, pages: found.pages });
+	}
+	return langs;
+}
 
 /** 既定の置き場（lab の作業場の外） */
 export const DEFAULT_SITE_DIR = process.env.MDAIT_SITE_DIR || "/tmp/mdait-site";
@@ -120,11 +141,22 @@ function renderPage(page, lang, sections) {
 	return `${parts.join("\n\n")}\n`;
 }
 
-/** 設定ファイル。AI の差し向けは lab up（configureAi）が上書きするので、ここでは書かない */
-function renderConfig(markers) {
+/**
+ * 設定ファイル。AI の差し向けは lab up（configureAi）が上書きするので、ここでは書かない。
+ *
+ * `transPairs` は言語の一覧から作る。**対象言語を足せば対も増える** — 1つのコマンドが
+ * 何言語ぶん走るかは、ここが決めている。
+ */
+function renderConfig(markers, langs) {
+	const [source, ...targets] = langs;
 	return `${JSON.stringify(
 		{
-			transPairs: [{ sourceLang: "ja", sourceDir: "content/ja", targetLang: "en", targetDir: "content/en" }],
+			transPairs: targets.map((target) => ({
+				sourceLang: source.code,
+				sourceDir: `content/${source.code}`,
+				targetLang: target.code,
+				targetDir: `content/${target.code}`,
+			})),
 			markers: { mode: markers },
 			trans: {
 				contextSize: 1,
@@ -132,7 +164,7 @@ function renderConfig(markers) {
 				extensions: [".txt", ".csv", ".json"],
 				frontmatter: { keys: ["title", "description"] },
 			},
-			primaryLang: "ja",
+			primaryLang: source.code,
 			sync: { level: 3, autoDelete: true, autoSyncOnSave: false },
 			tm: { retryLimit: 1, maxReferences: 5 },
 			terms: { filename: "terms.csv" },
@@ -143,51 +175,78 @@ function renderConfig(markers) {
 }
 
 /**
+ * 足した対象言語のページを、既存の書き出しに載る形へ整える。
+ *
+ * 書式に関わる指定（引用符の付け方・weight・改行コード）は原文のページから引き継ぐ。
+ * 訳す対象ではない frontmatter の鍵は、言語ごとの指定があればそれを、無ければ原文のものを使う。
+ */
+function asTranslated(page, lang, translated) {
+	const fm = Array.isArray(page.fm) ? page.fm : (translated.fm ?? page.fm?.[Object.keys(page.fm)[0]]);
+	return {
+		...page,
+		fm,
+		title: { [lang]: translated.title },
+		description: { [lang]: translated.description },
+	};
+}
+
+/**
  * 見本サイトを書き出す。
  *
- * @param {{out?: string, markers?: "embedded"|"external"}} options
- * @returns {{dir: string, files: number, ja: number, en: number, crlf: number, byKind: Record<string, number>}}
+ * @param {{out?: string, markers?: "embedded"|"external", extraLangs?: string[]}} options
+ * @returns {{dir: string, files: number, byLang: Record<string, number>, crlf: number, byKind: Record<string, number>, langs: string[]}}
  */
 export function generateSite(options = {}) {
 	const dir = path.resolve(options.out || DEFAULT_SITE_DIR);
 	const markers = options.markers === "external" ? "external" : "embedded";
+	const langs = resolveLangs(options.extraLangs);
+	const [source, base, ...extras] = langs;
 	const content = path.join(dir, "content");
 
 	fs.rmSync(content, { recursive: true, force: true });
 	fs.rmSync(path.join(dir, ".mdait"), { recursive: true, force: true });
 
-	const stats = { dir, files: 0, ja: 0, en: 0, crlf: 0, byKind: {} };
-	const count = (kind, lang, crlf) => {
+	const stats = { dir, files: 0, byLang: {}, crlf: 0, byKind: {}, langs: langs.map((lang) => lang.code) };
+	const write = (lang, rel, text, crlf, kind) => {
+		writeText(path.join(content, lang, rel), text, crlf);
 		stats.files += 1;
-		stats[lang] += 1;
+		stats.byLang[lang] = (stats.byLang[lang] ?? 0) + 1;
 		if (crlf) stats.crlf += 1;
 		stats.byKind[kind] = (stats.byKind[kind] ?? 0) + 1;
 	};
 
 	for (const page of PAGES) {
 		if (page.kind !== "targetOnly") {
-			writeText(path.join(content, "ja", page.path), renderPage(page, "ja", page.sections), page.crlf);
-			count(page.kind, "ja", page.crlf);
+			write(source.code, page.path, renderPage(page, source.code, page.sections), page.crlf, page.kind);
 		}
 		if (page.kind !== "sourceOnly") {
 			const sections = page.kind === "targetOnly" ? page.sections : targetSections(page);
-			writeText(path.join(content, "en", page.path), renderPage(page, "en", sections), page.crlf);
-			count(page.kind, "en", page.crlf);
+			write(base.code, page.path, renderPage(page, base.code, sections), page.crlf, page.kind);
+		}
+		// 足した対象言語。**訳文があるページだけ**書く（無いページは、これから訳す扱いになる）
+		for (const lang of extras) {
+			const translated = lang.pages?.[page.path];
+			if (!translated) continue;
+			write(
+				lang.code,
+				page.path,
+				renderPage(asTranslated(page, lang.code, translated), lang.code, translated.sections),
+				page.crlf,
+				"extraLang",
+			);
 		}
 	}
 
 	for (const asset of ASSETS) {
-		writeText(path.join(content, "ja", asset.path), `${asset.ja}\n`, asset.crlf);
-		count("asset", "ja", asset.crlf);
-		writeText(path.join(content, "en", asset.path), `${asset.en}\n`, asset.crlf);
-		count("asset", "en", asset.crlf);
+		write(source.code, asset.path, `${asset[source.code]}\n`, asset.crlf, "asset");
+		write(base.code, asset.path, `${asset[base.code]}\n`, asset.crlf, "asset");
 	}
 
 	fs.mkdirSync(path.join(dir, ".mdait"), { recursive: true });
-	fs.writeFileSync(path.join(dir, ".mdait", "mdait.json"), renderConfig(markers), "utf8");
+	fs.writeFileSync(path.join(dir, ".mdait", "mdait.json"), renderConfig(markers, langs), "utf8");
 
 	// 静的サイトジェネレータの足場。content/ の外なので、取り込みの対象には入らない。
 	// 「翻訳したあとサイトが建つか」を実物で測るために置いてある（site-hugo.mjs）。
-	writeHugoScaffold(dir, LANGS);
+	writeHugoScaffold(dir, langs);
 	return stats;
 }

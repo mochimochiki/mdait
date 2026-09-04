@@ -23,6 +23,8 @@ node scripts/lab/lab.mjs down                    # 片付ける
 
 ```bash
 node scripts/lab/lab.mjs site --markers external      # /tmp/mdait-site に書き出す
+# 対象言語を足すなら（足した言語は一部のページにしか訳文が無い）:
+#   node scripts/lab/lab.mjs site --markers external --extra-langs ko
 node scripts/lab/lab.mjs hugo --save /tmp/before.json  # 取り込む前に建てて、出力の指紋を取る
 node scripts/lab/lab.mjs up --ws /tmp/mdait-site --ai agent --agent-model haiku
 node scripts/lab/lab.mjs run mdait.adopt.run

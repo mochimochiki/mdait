@@ -91,6 +91,9 @@ const HELP = `mdait-lab — mdait を実際に走らせて確かめる実験場
   site    規模のある見本サイトを書き出す（取り込みを実運用に近い数で走らせるため）
             --out <パス>              置き場（既定: ${DEFAULT_SITE_DIR}）
             --markers <embedded|external>  マーカーの置き場（既定: embedded）
+            --extra-langs <ko,...>    対象言語を足す（既定なし＝ ja → en の1対だけ）
+                                      足した言語は一部のページにしか訳文が無い
+                                      （実サイトで言語を増やす途中の形）
             そのあと --ws <パス> で作業場として指す:
               node scripts/lab/lab.mjs site --markers external
               node scripts/lab/lab.mjs up --ws ${DEFAULT_SITE_DIR} --ai agent --agent-model haiku
@@ -965,15 +968,22 @@ async function presetRegress(opts) {
 function verbSite(opts) {
 	const out = opts.out ?? DEFAULT_SITE_DIR;
 	const markers = oneOf(opts.markers ?? "embedded", ["embedded", "external"], "--markers");
-	const stats = generateSite({ out, markers });
+	const extraLangs = opts["extra-langs"] ? String(opts["extra-langs"]).split(",") : [];
+	const stats = generateSite({ out, markers, extraLangs });
+	const [source, ...targets] = stats.langs;
 	say(`見本サイトを書き出しました: ${stats.dir}`);
-	say(`  ファイル ${stats.files}（原文 ${stats.ja} / 訳文 ${stats.en}、うち CRLF ${stats.crlf}）`);
+	say(
+		`  ファイル ${stats.files}（原文 ${source} ${stats.byLang[source]} / 訳文 ${targets
+			.map((code) => `${code} ${stats.byLang[code] ?? 0}`)
+			.join(" ・ ")}、うち CRLF ${stats.crlf}）`,
+	);
 	say(
 		`  内訳: ${Object.entries(stats.byKind)
 			.map(([k, n]) => `${k} ${n}`)
 			.join(" / ")}`,
 	);
 	say(`  マーカーの置き場: ${markers}`);
+	say(`  対象言語: ${targets.join(" ・ ")}（${targets.length} 対）`);
 	say("");
 	say("次にすること:");
 	say(`  node scripts/lab/lab.mjs up --ws ${stats.dir} --ai agent --agent-model haiku`);
