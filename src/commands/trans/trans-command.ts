@@ -54,6 +54,8 @@ import { SummaryManager, type TmReferenceInfo } from "../../ui/hover/summary-man
 import { getFileHandler } from "../file-handler/file-handler-factory";
 import { reportTransOutcome, showConfigError, showNeedSyncError, showTranslationError } from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
+import type { TermEntry } from "../term/term-entry";
+import { buildFrontmatterContext } from "./frontmatter-context";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
@@ -1183,6 +1185,16 @@ async function translateFrontmatterIfNeeded(
 	// 使えない答えを受けたら、そこまでの結果ごと捨てる。書きながら進めると、
 	// 半分だけ訳された frontmatter が need の外れた状態で残り、
 	// 「どこまで訳されているのか」が誰にも分からなくなる
+	// 用語集は**ファイルにつき1回**だけ読む。鍵ごとに読み直しても中身は同じで、
+	// mtime を見に行く回数だけが増える。
+	let allTerms: readonly TermEntry[] = [];
+	try {
+		const config = Configuration.getInstance();
+		allTerms = await TermsCacheManager.getInstance().getTerms(config.getTermsFilePath(), config.transPairs);
+	} catch (error) {
+		logger.debug("trans", "Terms lookup skipped for frontmatter", formatError(error));
+	}
+
 	const translatedValues: Record<string, string> = {};
 	const isRevision = marker.needsRevision();
 	for (const key of keys) {
@@ -1195,12 +1207,28 @@ async function translateFrontmatterIfNeeded(
 		}
 
 		const previousTranslation = isRevision ? targetFrontMatter.get(key) : undefined;
-		const context = new TranslationContext(
-			[],
-			[],
-			undefined,
+		const context = buildFrontmatterContext(
+			sourceValue,
+			allTerms,
+			sourceLang,
+			targetLang,
 			typeof previousTranslation === "string" ? previousTranslation : undefined,
 		);
+		if (context.terms) {
+			logger.info("trans", "Term references found for frontmatter", { key });
+		}
+
+		// TM は minQueryLength（既定10）に満たない短い題名では自然に何も引かない。
+		// 引けるのは主に description の側になる。
+		try {
+			const tmResult = lookupTmReferences(sourceValue, sourceLang, targetLang);
+			if (tmResult) {
+				context.tmReferences = tmResult.formatted;
+				logger.info("trans", "TM references found for frontmatter", { key, count: tmResult.matches.length });
+			}
+		} catch (error) {
+			logger.debug("trans", "TM reference lookup skipped for frontmatter", formatError(error));
+		}
 		let result: TranslationResult;
 		try {
 			result = await translator.translate(sourceValue, sourceLang, targetLang, context, cancellationToken);
