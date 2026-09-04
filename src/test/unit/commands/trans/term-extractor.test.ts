@@ -132,6 +132,18 @@ suite("TermExtractor", () => {
 			assert.deepStrictEqual(result, []);
 		});
 
+		test("バッククォートを2つ以上並べたコードスパンでも拾わない", () => {
+			// CommonMark ではバッククォートを何個並べてもよい。1個決め打ちで除去していた頃は
+			// 偶数個で囲むと中身が残り、コードの中の語に訳語の指示が付いていた。
+			for (const unitContent of [
+				"設定画面から ``ノート`` を選んでください。",
+				"書き方は `` `ノート` `` です。",
+				"設定画面から ```ノート``` を選んでください。",
+			]) {
+				assert.deepStrictEqual(extractRelevantTerms(unitContent, noteTerm, "ja", "en"), [], unitContent);
+			}
+		});
+
 		test("本文にもコードにもあるなら拾う", () => {
 			const unitContent = ["ノートは1か所に集まります。", "", "```js", "load(`ノート`);", "```"].join("\n");
 

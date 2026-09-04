@@ -37,11 +37,26 @@ export function anyTermVariantAppears(
 }
 
 /**
+ * インラインコード（コードスパン）にあたる部分。
+ *
+ * CommonMark のコードスパンは**バッククォートを何個並べてもよく、閉じるのは同じ個数**である。
+ * 中にバッククォートを含めたいときに2個以上で囲む書き方（`` `foo` `` など）は実際の原稿に出る。
+ *
+ * 先頭の `` `+ `` は貪欲に取るので開き側の連なりが丸ごと1つの区切りになり、中身は最短一致で
+ * 同じ個数の連なりまで進む。`` `[^`]*` `` と1個決め打ちにすると、偶数個で囲んだときに
+ * **開きの対と閉じの対だけが消えて中身が残る**（実測: ``ノート`` が「ノート」を残した）。
+ */
+const INLINE_CODE_SPAN = /(`+)[\s\S]*?\1/g;
+
+/**
  * Markdownコンテンツからコードセグメントを除去したテキストを返す。
  * - フェンス付きコードブロックの行（getCodeBlockLineSet 準拠）を除去
- * - インラインコード（`...`）を除去
+ * - インラインコード（コードスパン）を除去
  *
  * 用語照合でコード内のシンボル・サンプルマーカー等への誤マッチを防ぐために使う。
+ *
+ * 除去は行ごとに行う。行をまたぐコードスパンは CommonMark では書けるが、複数行に
+ * わたるコードはフェンスで書くのがふつうで、そちらは行の集合として先に落としている。
  */
 export function stripCodeSegments(content: string): string {
 	const codeBlockLines = getCodeBlockLineSet(content);
@@ -51,8 +66,7 @@ export function stripCodeSegments(content: string): string {
 		if (codeBlockLines.has(i)) {
 			continue;
 		}
-		// インラインコードを除去（行内の `...` スパン）
-		kept.push(lines[i].replace(/`[^`]*`/g, ""));
+		kept.push(lines[i].replace(INLINE_CODE_SPAN, ""));
 	}
 	return kept.join("\n");
 }
