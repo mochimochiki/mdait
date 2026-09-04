@@ -258,7 +258,10 @@ export class PlainFileHandler implements FileHandler {
 			const cacheManager = TermsCacheManager.getInstance();
 			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
 			if (allTerms.length > 0) {
-				const extracted = extractRelevantTerms(sourceContent, allTerms, pair.sourceLang, pair.targetLang);
+				// 非Markdown なので、コードフェンスやインラインコードの規則は当てない
+				const extracted = extractRelevantTerms(sourceContent, allTerms, pair.sourceLang, pair.targetLang, {
+					markdown: false,
+				});
 				if (extracted.length > 0) {
 					termsJson = termsToJson(extracted);
 				}
