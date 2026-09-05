@@ -475,6 +475,7 @@
   "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.": "AI の返事が最後まで届かず途中で切れました。ai.openai.maxTokens を大きくするか、章をもっと小さく分けてください。",
   "The AI returned an empty answer.": "AI の返事が空でした。",
   "No translation pair found for: {0}": "{0} に対応する翻訳ペアが見つかりません",
+  "Translation cancelled for {0}. {1} unit(s) were kept, and {2} unit(s) were left as they were (the answer could not be used, or it could not be written back). They still need translation.": "{0} の翻訳を中止しました。{1} 件は残しましたが、{2} 件はそのままです（答えが使えなかったか、ファイルに書き戻せませんでした）。まだ翻訳が必要です。",
   "Translation cancelled for {0}. {1} unit(s) translated before stopping were kept.": "{0} の翻訳を中断しました。中断までに訳し終えた {1} 件はそのまま残しています。",
   "Translated {0} unit(s) in {1}, but {2} unit(s) were left untranslated because the AI's answer could not be used. {3}": "{1} のうち {0} 件を訳しました。ただし {2} 件は AI の返事が使えない内容だったため、訳さずに残しています。{3}",
   "Could not translate {0}: the AI's answer could not be used for {1} unit(s). Nothing was changed; they still need translation. {2}": "{0} を翻訳できませんでした。{1} 件とも AI の返事が使えない内容だったため、何も書き換えていません。まだ翻訳待ちのままです。{2}",

@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
 	calculateFrontmatterHash,
@@ -1619,7 +1620,7 @@ export async function sync_CoreProc(
 	}
 
 	// ユニットのハッシュを更新
-	const { revisionsNeeded, adopted, reviewsSuperseded, noteMigrations } = updateSectionHashes(
+	const { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations } = await updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
@@ -1670,6 +1671,9 @@ export async function sync_CoreProc(
 
 	// 差分検出
 	const diffResult = diffDetector.detect(target.units, syncedUnits);
+	// 丸写しの写し直しは訳文の**中身**が変わった件数なので modified に合流させる。
+	// 差分検出は同じユニット実体を前後で見るため、この書き換えを自力では拾えない
+	diffResult.modified += refreshedCopies;
 	diffResult.revisionsNeeded = revisionsNeeded;
 	diffResult.adopted = adopted + frontmatterAdopted;
 	diffResult.reviewsSuperseded = reviewsSuperseded + frontmatterReviewSuperseded;
@@ -1976,20 +1980,23 @@ export { syncFrontmatterMarkers } from "./sync-frontmatter";
  * @param adopt adoptモード（マーカーなし既訳を need:review で採用）
  * @returns need:revise付与件数とadopt採用件数
  */
-function updateSectionHashes(
+async function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 	config: Configuration,
 	sourceFilePath: string,
 	targetFilePath: string,
 	adopt = false,
-): {
+): Promise<{
 	revisionsNeeded: number;
 	adopted: number;
 	reviewsSuperseded: number;
+	/** まだ訳していない丸写しを、変わった原文へ写し直した件数 */
+	refreshedCopies: number;
 	noteMigrations: Array<{ from: string; to: string }>;
-} {
+}> {
 	let revisionsNeeded = 0;
 	let adopted = 0;
+	let refreshedCopies = 0;
 	// 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数。
 	// 黙って確認の列から消えるので、件数だけは必ず伝える（ADR-260901-01）
 	let reviewsSuperseded = 0;
@@ -2013,9 +2020,8 @@ function updateSectionHashes(
 				target.marker.removeNeedTag();
 			}
 			const sourceHash = calculateHash(source.content);
-			const targetHash = calculateHash(target.content);
+			let targetHash = calculateHash(target.content);
 			recordMigration(source.marker?.hash, sourceHash);
-			recordMigration(target.marker?.hash, targetHash);
 
 			// adopt判定: from未確立かつ本文のある既存targetのみが採用候補
 			const hadFrom = !!target.marker?.from;
@@ -2025,6 +2031,19 @@ function updateSectionHashes(
 			// ペアのどちらか一方が isolate の場合は need を凍結する（hash/from のみ最新化し、
 			// 新しい翻訳需要を流さない。target 側 isolate は revise による isolate 上書きも防ぐ）
 			const suppressNeed = source.marker?.need === "isolate" || target.marker?.need === "isolate";
+
+			// **まだ訳していない訳文は原文の丸写しである。** 原文が変わったらその丸写しも写し直す。
+			// 写し直さないと `hash`（訳文の中身）と `from`（原文の中身）が食い違ったまま
+			// `need:translate` が残り、**人が一度も触っていないユニットが「編集済み」を名乗る**
+			// （`MdaitMarker.hasUnconfirmedEdit()` はこの食い違いを手編集の証拠として読む）。
+			// ツリーは同じユニットを「未翻訳」と出すので、2つのサーフェスが食い違う。しかも
+			// 案内どおり「翻訳済みにする」を押すと、原文のままの本文が完成品として確定される（実測）。
+			// 訳文には古い原文の丸写しが残り続けるという実害もある。
+			if (!suppressNeed && (await refreshUntranslatedCopy(source, target, sourceHash, targetHash))) {
+				refreshedCopies++;
+				targetHash = calculateHash(target.content);
+			}
+			recordMigration(target.marker?.hash, targetHash);
 
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker, {
@@ -2063,7 +2082,60 @@ function updateSectionHashes(
 			target.marker = result.marker;
 		}
 	}
-	return { revisionsNeeded, adopted, reviewsSuperseded, noteMigrations };
+	return { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations };
+}
+
+/**
+ * まだ訳していない訳文が原文の丸写しのままなら、変わった原文へ写し直す。
+ *
+ * 写し直してよい根拠は**その訳文に人の仕事が入っていないこと**だけであり、それは
+ * ハッシュで確かめられる。`from` は「この訳文が写した原文の中身」のハッシュなので、
+ * いまの訳文の中身のハッシュが `from` と一致するなら、訳文は一字一句その原文のままである。
+ * 一致しなければ誰かが書いている（手訳の途中・既訳の取り込み）ので触らない。
+ *
+ * `need:translate` に限る。`revise` は訳し終えた本文を守る話で、`review` は人の確認待ち、
+ * `isolate` は追随しないという宣言であり、どれも写し直してよい状態ではない。
+ *
+ * @returns 写し直したら true
+ */
+async function refreshUntranslatedCopy(
+	source: MdaitUnit,
+	target: MdaitUnit,
+	sourceHash: string,
+	targetHash: string,
+): Promise<boolean> {
+	const marker = target.marker;
+	if (marker?.need !== "translate") {
+		return false;
+	}
+	if (!marker.from || targetHash === sourceHash) {
+		return false; // 訳文はもう今の原文の丸写しである。することは無い
+	}
+	if (spillsIntoFollowingUnits(source.content)) {
+		// **原文が閉じ忘れたフェンスを抱えている。** そのまま写すと、続く訳文ユニットが
+		// フェンスに飲まれて章の切れ目ごと消える（実測: 訳文が3ユニットから1ユニットになった）。
+		// 原文の構造が潰れている回は写し直さない。直せば次の sync で追いつく
+		return false;
+	}
+	if (targetHash === marker.from) {
+		// 直前の原文の丸写しである（いちばん多い形。ディスクを読まずに決まる）
+		target.content = source.content;
+		return true;
+	}
+	// `from` が既に先へ進んでしまった訳文の救済。この修正が入る前の sync は、
+	// 原文が変わっても丸写しを写し直さないまま `from` だけ進めていたため、
+	// 「一度も触っていないのに hash≠from」というユニットが既に手元にある
+	// （`from` は今の原文を指しているので、上の安い判定では拾えない）。
+	// その形は手編集と見分けが付かないので、**過去の原文そのものだったか**を
+	// スナップショットに問い合わせて確かめる（`unit-registry` は sync のたびに
+	// 原文ユニットの中身を hash キーで控えている）。中身まで突き合わせるので、
+	// ハッシュがたまたま衝突しても人の書いた訳文を捨てることはない
+	const snapshot = await UnitRegistryManager.getInstance().loadUnitRegistry(targetHash);
+	if (snapshot === null || snapshot !== target.content) {
+		return false; // 過去の原文ではない。誰かが書いている
+	}
+	target.content = source.content;
+	return true;
 }
 
 /**
@@ -2101,4 +2173,18 @@ async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
 	}
 
 	await unitRegistryManager.garbageCollect(activeHashes);
+}
+
+/**
+ * その本文を訳文へ写すと、続くユニットまで巻き込むか。
+ *
+ * 閉じ忘れたコードフェンスは、書き込んだ先で**あとに続く行を全部飲み込む**。原文の
+ * 構造が潰れている回に丸写しを写し直すと、訳文の章の切れ目ごと消える。
+ * 目印の見出しを後ろに足してパースし、それがコードブロックの中へ入るかで判定する
+ * （フェンスの数を数えるより、実際のパーサーの読み方に一致する）。
+ */
+function spillsIntoFollowingUnits(content: string): boolean {
+	const probeLine = `${content}\n`.split("\n").length;
+	const codeBlockLines = getCodeBlockLineSet(`${content}\n\n## mdait-probe\n`);
+	return codeBlockLines.has(probeLine);
 }

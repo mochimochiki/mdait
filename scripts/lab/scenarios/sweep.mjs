@@ -486,6 +486,63 @@ async function phase1() {
 		}
 	}
 	if (diffed === 0 && second.totalAdded === 0 && second.totalModified === 0) ok(P, "sync 冪等性OK（2回目で無変化）");
+
+	await untranslatedCopyFollowsSource(P);
+}
+
+/**
+ * **まだ訳していない訳文は、いまの原文の丸写しである。**
+ *
+ * この不変条件が破れると、`need:translate` のまま `hash`（訳文の中身）と `from`（原文の中身）が
+ * 食い違い、人が一度も触っていないユニットが Decoration で「編集済み」を名乗る（ツリーは同じ
+ * ユニットを「未翻訳」と出すので、2つのサーフェスが食い違う）。訳文に古い原文の丸写しが
+ * 残り続けるという実害もある。
+ *
+ * 原文を書き換えて sync し、訳文が追いついたかを見る。見終わったら原文を1バイト単位で戻し、
+ * 続く段（P2・P3）が前提としている初期状態を崩さない。
+ */
+async function untranslatedCopyFollowsSource(P) {
+	const srcFile = path.join(contentDir(), "ja/business.md");
+	const tgtFile = path.join(contentDir(), "en/business.md");
+	if (!fs.existsSync(srcFile) || !fs.existsSync(tgtFile)) {
+		info(P, "ja/business.md", "見本が無いので未訳の追随を確かめられない", "");
+		return;
+	}
+	const srcBefore = read(srcFile);
+	const tgtBefore = read(tgtFile);
+	const marker = "## エグゼクティブサマリー";
+	if (!srcBefore.includes(marker)) {
+		info(P, "ja/business.md", "目印の見出しが見本に無い", marker);
+		return;
+	}
+
+	fs.writeFileSync(srcFile, srcBefore.replace(marker, `${marker}（改訂）`), "utf8");
+	await sync();
+
+	const tgtAfter = read(tgtFile);
+	if (!tgtAfter.includes(`${marker}（改訂）`)) {
+		fail(P, "en/business.md", "未訳の丸写しが古い原文のまま取り残された", marker);
+	} else {
+		ok(P, "未訳の丸写しが変わった原文へ追随した");
+	}
+	const broken = markerInfo(tgtAfter).filter((m) => m.need === "translate" && m.from && m.hash !== m.from);
+	if (broken.length > 0) {
+		fail(
+			P,
+			"en/business.md",
+			`未訳なのに hash≠from のユニットが ${broken.length}件（触っていないのに「編集済み」と出る）`,
+			JSON.stringify(broken[0]),
+		);
+	} else {
+		ok(P, "未訳ユニットの hash と from が一致している");
+	}
+
+	// 続く段のために原文を戻す（戻せば訳文の丸写しも元へ追随する）
+	fs.writeFileSync(srcFile, srcBefore, "utf8");
+	await sync();
+	if (read(srcFile) !== srcBefore || read(tgtFile) !== tgtBefore) {
+		fail(P, "business.md", "原文を戻しても初期状態に戻らない（後片付けの失敗）", "byte diff");
+	}
 }
 
 // ===========================================================================

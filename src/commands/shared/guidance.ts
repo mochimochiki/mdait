@@ -252,7 +252,7 @@ function findTargetDirForSource(filePath: string): string | undefined {
  * @param body 何が起きたかの本文（理由まで書いたもの）
  * @param actions 通知から呼び出せる次の一手
  */
-async function offerFullRetry(body: string, actions: TransOutcomeActions): Promise<void> {
+export async function offerFullRetry(body: string, actions: TransOutcomeActions): Promise<void> {
 	if (!actions.retryFullTranslation) {
 		vscode.window.showWarningMessage(body);
 		return;
@@ -315,12 +315,28 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	}
 
 	if (result.outcome === "cancelled") {
+		// **「N 件は残しました」と言う前に、書き戻せなかったぶんを引く。**
+		// 中断の分岐が他の失敗より先に return していたため、訳した成果がファイルに
+		// 書けていなくても「残しました」と報告していた。中断は失敗の免罪符ではない
+		const kept = Math.max(0, result.translatedCount - result.writeFailures.length);
+		const leftBehind = result.writeFailures.length + result.responseFailures.length + result.patchFailures.length;
+		if (leftBehind > 0) {
+			vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"Translation cancelled for {0}. {1} unit(s) were kept, and {2} unit(s) were left as they were (the answer could not be used, or it could not be written back). They still need translation.",
+					actions.label,
+					kept,
+					leftBehind,
+				),
+			);
+			return;
+		}
 		vscode.window.showInformationMessage(
-			result.translatedCount > 0
+			kept > 0
 				? vscode.l10n.t(
 						"Translation cancelled for {0}. {1} unit(s) translated before stopping were kept.",
 						actions.label,
-						result.translatedCount,
+						kept,
 					)
 				: vscode.l10n.t("Translation cancelled for {0}.", actions.label),
 		);
