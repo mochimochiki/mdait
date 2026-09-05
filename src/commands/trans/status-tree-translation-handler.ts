@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { StatusItemType } from "../../core/status/status-item";
 import type { DirectoryStatusItem, StatusItem } from "../../core/status/status-item";
 import { StatusManager } from "../../core/status/status-manager";
@@ -10,7 +11,13 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
-import { showConfigError, showDirectoryTranslationFailure, showTranslationError } from "../shared/guidance";
+import {
+	describePatchFailure,
+	offerFullRetry,
+	showConfigError,
+	showDirectoryTranslationFailure,
+	showTranslationError,
+} from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
 import { getSelectedPairAbsDirs } from "../shared/status-scope";
 import {
@@ -238,6 +245,13 @@ export class StatusTreeTranslationHandler {
 							// 最初の失敗理由を保持して結果通知に載せる。件数だけを出すと、
 							// AI が使えないだけなのか原稿の問題なのかが利用者に分からない
 							let firstError: unknown;
+							// **パッチ適用に失敗して訳文を据え置いたユニット。**
+							// ここを数えないと、そのファイルは outcome:"completed" のまま
+							// 「翻訳が完了しました」に合流し、据え置かれたことがどこにも出ない。
+							// 利用者からは「改訂翻訳をかけてもいつまでも要改訂のまま」に見え、
+							// しかも原因の手がかりが一つも残らない（実測）
+							const patchFailures: Array<{ title?: string; reason: PatchFailureReason }> = [];
+							const patchFailureFiles: vscode.Uri[] = [];
 							const concurrency = clampConcurrency(config.trans.concurrency);
 
 							await runWithConcurrency(
@@ -276,6 +290,10 @@ export class StatusTreeTranslationHandler {
 											}
 										} else {
 											successful++;
+											if (fileResult.patchFailures.length > 0) {
+												patchFailures.push(...fileResult.patchFailures);
+												patchFailureFiles.push(file);
+											}
 											// 一部のユニットだけ訳せなかったファイルも黙って通さない。
 											// ファイル単位の通知は出していないので、ここで残さないと誰も気づけない
 											if (fileResult.responseFailures.length > 0) {
@@ -327,11 +345,42 @@ export class StatusTreeTranslationHandler {
 								return { totalFiles: files.length, successful, failed, skipped };
 							}
 
+							if (patchFailures.length > 0) {
+								logger.warn("trans", "Some units kept their existing translation (patch apply failed)", {
+									directory: directoryPath,
+									count: patchFailures.length,
+									reasons: patchFailures.map((f) => f.reason),
+								});
+							}
+
 							// 結果を通知（失敗があれば理由と次の一手を添える）。
 							// 成功しても黙らない — ここは sync 完了通知の「✨今すぐ翻訳」から
 							// 来る主導線で、無言で終わると次の工程へ手渡せない（UX-P6）
 							if (failed > 0) {
 								void showDirectoryTranslationFailure(successful, failed, firstError);
+							} else if (patchFailures.length > 0) {
+								// **パッチ適用に失敗して据え置いたユニットを、成功の件数に埋もれさせない。**
+								// 理由を出したうえで、全文で訳し直す逃げ道を1回だけ出す（ファイル単位の
+								// 通知と同じ作法）。これが無いと `no-source-diff`（旧原文の控えが引けない）
+								// のように**次も必ず同じところで止まる**種類の据え置きが、何度叩いても
+								// 黙って残り続ける。実測では「Translation completed」とだけ出て、
+								// 要改訂のユニットは一言も報告されないまま何も変わらなかった
+								void offerFullRetry(
+									vscode.l10n.t(
+										"Kept the existing translation for {0} unit(s) in {1}. {2}",
+										patchFailures.length,
+										path.basename(directoryPath),
+										describePatchFailure(patchFailures[0].reason),
+									),
+									{
+										label: path.basename(directoryPath),
+										retryFullTranslation: async () => {
+											for (const file of patchFailureFiles) {
+												await transCommand(file, { forceFullTranslation: true });
+											}
+										},
+									},
+								);
 							} else if (successful > 0) {
 								vscode.window.showInformationMessage(
 									vscode.l10n.t(

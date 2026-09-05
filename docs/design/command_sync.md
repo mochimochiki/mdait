@@ -122,6 +122,7 @@ sequenceDiagram
 - **レガシーneedの正規化**: パース直後に `normalizeLegacyNeeds` が `keep`→need除去・`backfill`→`review` へ決定的に変換する（後述の「孤立ユニットモデル」節参照）
 - **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除
+- **未訳の丸写しは原文に追随する**（ADR-260905-02）: `need:translate` のユニットの訳文は「原文の丸写し」であり、原文が変わったら sync が写し直す（[`refreshUntranslatedCopy()`](../../src/commands/sync/sync-command.ts)）。写してよいのは**中身が丸写しだと確かめられた**ユニットだけで、判定は `hash === from`、古い壊れ方は `unit-registry` のスナップショットと中身まで突き合わせる。人が書きかけた訳文・訳し終えた訳文には触らない。原文が閉じ忘れたコードフェンスを抱えている回は写さない（続く訳文ユニットが飲まれるため）。これが崩れると、訳文に古い原文が残り続け、未訳の丸写しと人が書きかけた訳文が同じ形になって区別が付かなくなる
 
 ### 孤立ユニットモデル（isolate と独立ユニット）
 

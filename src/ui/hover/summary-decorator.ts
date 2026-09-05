@@ -61,16 +61,17 @@ export class SummaryDecorator {
 
 		const addDecoration = (lineIndex: number, marker: MdaitMarker): void => {
 			const summary = this.summaryManager.getSummary(marker.hash);
-			// AI のサマリが無くても状態は出す（気づける場所に一言。詳細と対処は hover 側）:
-			// - 原文が変わった（need:revise）: 訳が古くなったことを、原文を編集した人でなくても知れるように
-			// - 手で訳して未確定: 書いただけでは need は落ちない
+			// AI のサマリが無くても、**原文が変わったこと**（need:revise）だけは出す。
+			// 訳が古くなったことを、原文を編集した人でなくても知れるようにするためである。
+			//
+			// **人が訳文を手で直したことは出さない**（ADR-260905-04）。触った本人はいちばんよく
+			// 知っているので知らせる意味が薄く、少し直して保存するたびに「編集済み」と出るのは
+			// かえって不安にさせる。締めくくり方は CodeLens の「✓翻訳済みにする」が常に隣にある
 			const summaryText = summary
 				? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
 				: marker.needsRevision()
 					? vscode.l10n.t("The source has changed")
-					: marker.hasUnconfirmedEdit()
-						? vscode.l10n.t("Edited — not marked done yet")
-						: undefined;
+					: undefined;
 			if (!summaryText) {
 				return;
 			}
