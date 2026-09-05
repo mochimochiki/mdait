@@ -120,6 +120,7 @@ export function searchTmByLines(
 				source: entry.variants.get(sourceLang)?.text ?? "",
 				target: entry.variants.get(targetLang)?.text ?? "",
 				firstUsedIn: "",
+				similarity: entry.similarity,
 			});
 		}
 	}

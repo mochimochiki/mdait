@@ -219,6 +219,7 @@ IMPORTANT: The diff above shows exactly what changed in the source text.
 ## Translation Memory Reference
 
 The following are past translations of similar sentences.
+Each entry is prefixed with how closely its source matches the current text (100% means the same sentence).
 Use them as reference for consistency, but prioritize accuracy and context.
 
 {{tmReferences}}
@@ -342,6 +343,7 @@ Previous Translation (target to patch), with a line number and a tab before each
 ## Translation Memory Reference
 
 The following are past translations of similar sentences.
+Each entry is prefixed with how closely its source matches the current text (100% means the same sentence).
 Use them as reference for consistency, but prioritize accuracy and context.
 
 {{tmReferences}}
@@ -920,6 +922,7 @@ Previous Translation (target to patch), with a line number and a tab before each
 ## Translation Memory Reference
 
 The following are past translations of similar sentences.
+Each entry is prefixed with how closely its source matches the current text (100% means the same sentence).
 Use them as reference for consistency, but prioritize accuracy and context.
 
 {{tmReferences}}

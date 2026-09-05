@@ -404,6 +404,8 @@ export class TmxStore {
 			source,
 			target,
 			firstUsedIn: "",
+			// ハッシュで引き当てたということは、正規化した本文が同じということ
+			similarity: 1,
 		};
 	}
 
