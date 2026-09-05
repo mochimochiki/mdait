@@ -11,7 +11,14 @@ import { computeTrigrams, normalizeForTm } from "./tm-text-normalizer";
 import type { TmEntry } from "./types";
 
 /** スコア付き TmEntry */
-export type ScoredTmEntry = TmEntry & { score: number };
+/**
+ * スコア付きの TM エントリ。
+ *
+ * `score` は**選び方**のスコア（MMR。似すぎた候補を外す調整が入っており負にもなる）。
+ * `similarity` はクエリとの**素の類似度**（trigram の Jaccard・0〜1）。
+ * 「どれだけ近いか」を人や AI に見せるのは後者で、前者は並べ替えにしか使えない。
+ */
+export type ScoredTmEntry = TmEntry & { score: number; similarity: number };
 
 /** rankTmEntries のオプション */
 export interface RankOptions {
@@ -120,5 +127,5 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 		selected.push({ ...best, score: bestScore });
 	}
 
-	return selected.map(({ entry, score }) => ({ ...entry, score }));
+	return selected.map(({ entry, score, querySim }) => ({ ...entry, score, similarity: querySim }));
 }
