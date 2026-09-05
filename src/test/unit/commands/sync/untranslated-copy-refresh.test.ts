@@ -164,13 +164,14 @@ for (const mode of ["embedded", "external"] as const) {
 
 		test("人が書きかけた訳文には触らない（未訳でも中身が丸写しでなければ守る）", async () => {
 			const config = await bootstrap();
-			const handwritten = targetBody().replace("## インストール", "## Installation (draft by hand)");
 			fs.writeFileSync(
 				targetFile,
 				fs.readFileSync(targetFile, "utf-8").replace("## インストール", "## Installation (draft by hand)"),
 				"utf-8",
 			);
-			assert.ok(handwritten.includes("Installation (draft by hand)"), "書きかけの訳文を置いた（前提）");
+			// 前提はディスクから読み直して確かめる。書き込む前の文字列で確かめると、
+			// 書けていなくてもこのテストが通ってしまう（レビュー指摘）
+			assert.ok(targetBody().includes("## Installation (draft by hand)"), "書きかけの訳文を置いた（前提）");
 			reviseSource(sourceFile);
 
 			await sync_CoreProc(sourceFile, targetFile, config);
