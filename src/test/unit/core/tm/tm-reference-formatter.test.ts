@@ -71,16 +71,17 @@ suite("formatTmReferences", () => {
 			assert.ok(formatTmReferences([match({ similarity: 0.155 })]).includes("[15% match]"));
 		});
 
-		test("壊れた値でも 0〜100 に収まり、数にならない値は弱いほうへ倒れる", () => {
-			// NaN と Infinity は「計算が壊れた」合図なので 0% にする。100% に倒すと、
-			// 壊れたときにいちばん強い合図（同じ文だ）が出てしまう。
+		test("0〜1 の外にある値はすべて 0% に倒れる", () => {
+			// 一致度は Jaccard 係数なので数学的に 0〜1 を出ない。外に出ているのは計算が
+			// 壊れた合図なので、NaN も 1.5 も同じく 0% にする。100% に倒すと、壊れたときに
+			// いちばん強い合図（同じ文だ）が出てしまう。
 			for (const [similarity, expected] of [
 				[Number.NaN, 0],
 				[Number.POSITIVE_INFINITY, 0],
 				[Number.NEGATIVE_INFINITY, 0],
 				[-1, 0],
+				[1.5, 0],
 				[0, 0],
-				[1.5, 100],
 			] as const) {
 				assert.ok(
 					formatTmReferences([match({ similarity })]).includes(`[${expected}% match]`),
