@@ -2033,12 +2033,13 @@ async function updateSectionHashes(
 			const suppressNeed = source.marker?.need === "isolate" || target.marker?.need === "isolate";
 
 			// **まだ訳していない訳文は原文の丸写しである。** 原文が変わったらその丸写しも写し直す。
-			// 写し直さないと `hash`（訳文の中身）と `from`（原文の中身）が食い違ったまま
-			// `need:translate` が残り、**人が一度も触っていないユニットが「編集済み」を名乗る**
-			// （`MdaitMarker.hasUnconfirmedEdit()` はこの食い違いを手編集の証拠として読む）。
-			// ツリーは同じユニットを「未翻訳」と出すので、2つのサーフェスが食い違う。しかも
-			// 案内どおり「翻訳済みにする」を押すと、原文のままの本文が完成品として確定される（実測）。
-			// 訳文には古い原文の丸写しが残り続けるという実害もある。
+			// 写し直さないと訳文に**古い原文の丸写しが残り続ける**。読む人にはそれが訳文に見え、
+			// サイトを建てれば古い内容がそのまま公開される。
+			//
+			// あわせて「未訳なら `hash === from`」という読み取りやすい不変条件が保たれる。
+			// 崩れたままだと、未訳の丸写しと人が書きかけた訳文が同じ形になり、
+			// 訳文を見ただけではどちらか分からなくなる（かつては表示がそれを手編集と読み違え、
+			// 触っていないユニットに「編集済み」と出していた）。
 			if (!suppressNeed && (await refreshUntranslatedCopy(source, target, sourceHash, targetHash))) {
 				refreshedCopies++;
 				targetHash = calculateHash(target.content);

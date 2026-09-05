@@ -76,17 +76,15 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 
 		// サマリデータを取得
 		const summary = this.summaryManager.getSummary(marker.hash);
-		// 手で訳したが未確定のユニットは、サマリが無くても締めくくり方を説明する
-		const unconfirmedEdit = !summary && marker.hasUnconfirmedEdit();
 		// 原文が変わったユニットは「どこが変わったか」を出す（旧原文は unit-registry にある）
 		const sourceDiff = marker.needsRevision() ? await this.buildSourceDiff(marker) : "";
-		// サマリも note も未確定編集も差分も無ければ hover を出さない
-		if (!summary && !note && !unconfirmedEdit && !sourceDiff) {
+		// サマリも note も差分も無ければ hover を出さない
+		if (!summary && !note && !sourceDiff) {
 			return null;
 		}
 
 		// MarkdownStringを生成（needフラグ・note も考慮）
-		const markdown = this.buildMarkdownString(summary, marker.need, note, unconfirmedEdit, sourceDiff);
+		const markdown = this.buildMarkdownString(summary, marker.need, note, sourceDiff);
 
 		// Hoverオブジェクトを返す
 		return new vscode.Hover(markdown);
@@ -129,7 +127,6 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		summary: TranslationSummary | undefined,
 		needFlag?: string | null,
 		note?: string | null,
-		unconfirmedEdit = false,
 		sourceDiff = "",
 	): vscode.MarkdownString {
 		const md = new vscode.MarkdownString();
@@ -150,21 +147,10 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 			return md;
 		}
 
+		// **人が訳文を手で直したことは出さない**（ADR-260905-04）。締めくくり方は
+		// CodeLens の「✓翻訳済みにする」が常に隣にあり、そちらが唯一の案内である
+
 		// ヘッダー（need:reviewの場合は「要確認」と表示）
-		if (unconfirmedEdit) {
-			// 訳せたかどうかは機械には判定できないため、完了は人の宣言で決まる。
-			// それを知らないと「訳したのに進捗が動かない」で手が止まる
-			md.appendMarkdown(`### ✏️ ${vscode.l10n.t("Edited — not marked done yet")}\n\n`);
-			md.appendMarkdown(
-				`${vscode.l10n.t(
-					"If you finished the translation by hand, press “{0}”.",
-					needFlag?.startsWith("revise@")
-						? vscode.l10n.t("Mark as Revised")
-						: vscode.l10n.t("Mark as Translated"),
-				)}\n\n`,
-			);
-			return md;
-		}
 		if (needFlag === "review") {
 			md.appendMarkdown(`### ${vscode.l10n.t("Needs Review")}\n\n`);
 		} else {
