@@ -423,7 +423,7 @@ function parseArgValue(value) {
  * `content/ja/10_test.md` のように打てるようにするため（打った場所によって意味が変わらない）。
  */
 function resolvePathArgs(entry, args, ws) {
-	const takesPath = ["uri", "file-item", "dir-item", "auto-item"];
+	const takesPath = ["uri", "file-item", "dir-item", "auto-item", "unit-item"];
 	if (!entry || !takesPath.includes(entry.args)) return args;
 	if (args.length === 0 || typeof args[0] !== "string" || path.isAbsolute(args[0])) return args;
 	return [path.resolve(ws, args[0]), ...args.slice(1)];

@@ -327,12 +327,13 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 		}
 
-		// 低頻度アクション（isolate 宣言・note 編集）は「その他」メニューへ集約する（ADR-260719-01）
+		// 低頻度アクション（全文で訳し直す・isolate 宣言・note 編集）は
+		// 「その他」メニューへ集約する（ADR-260719-01・ADR-260906-01）
 		if (shouldShowOtherActions(marker, isSourceFile)) {
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title: vscode.l10n.t("$(kebab-vertical) More"),
-					tooltip: vscode.l10n.t("Tooltip: Other actions for this unit (isolate, note)"),
+					tooltip: vscode.l10n.t("Tooltip: Other actions for this unit (re-translate, isolate, note)"),
 					command: "mdait.codelens.otherActions",
 					arguments: [range],
 				}),

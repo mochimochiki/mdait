@@ -1409,7 +1409,7 @@ async function transUnit_Exclusive(
 	// 見つからない／訳す必要がない、はどちらも「訳すものが無かった」。
 	// 以前はここで別々のトーストを出しつつ、呼び出し口が結果を見ずに
 	// 「翻訳完了」を重ねて出していた
-	if (!targetUnit || !targetUnit.needsTranslation()) {
+	if (!targetUnit || !(targetUnit.needsTranslation() || canForceRetranslate(targetUnit, options))) {
 		logger.info("trans", "Unit translation skipped", {
 			targetPath,
 			unitHash,
@@ -1470,6 +1470,38 @@ async function transUnit_Exclusive(
 		throw loop.error;
 	}
 	return buildFileResult([targetUnit], loop);
+}
+
+/**
+ * いまの訳文を捨てて全文から訳し直してよいユニットか。**表示と実行の唯一の判断**。
+ *
+ * ふつう trans は need を見て動くので、訳し終えたユニットには触らない。だが
+ * 「訳が古びたので丸ごと訳し直したい」は素の要求としてあり、CodeLens の
+ * 「✨全文で訳し直す」がここへ来る（ADR-260906-01）。
+ *
+ * 対象は2つだけ。
+ * - `need` 空（訳し終えた）— 古びた訳を丸ごと入れ替える
+ * - `revise@…`（原文が変わった）— 改訂のパッチが据え置かれたときに抜ける道
+ *
+ * 除くもの。
+ * - `from` の無いユニット（原文側・独立ユニット）— 訳し直すもとが無い
+ * - `translate`（まだ訳していない）— ふつうの翻訳がそのまま全文翻訳なので重複する
+ * - `review`（取り込んだ既訳の確認待ち）— AI の上書きから守るための状態である
+ * - `verify-deletion` / `isolate` — 判断待ちと宣言。翻訳の対象ではない
+ *
+ * **UI 側の出し分けもこれを使う**（`ui/codelens/codelens-command.ts`）。サーフェスごとに
+ * 書き写すと、出していない状態をコマンド経由で踏み越えられる形になる。
+ */
+export function isRetranslatableUnit(marker: Pick<MdaitMarker, "from" | "need"> | null | undefined): boolean {
+	if (!marker?.from) {
+		return false;
+	}
+	return !marker.need || marker.need.startsWith("revise@");
+}
+
+/** 明示の指示（確認ダイアログを通った `forceFullTranslation`）で訳し直す対象か */
+function canForceRetranslate(unit: MdaitUnit, options?: TransRunOptions): boolean {
+	return options?.forceFullTranslation === true && isRetranslatableUnit(unit.marker);
 }
 
 /**

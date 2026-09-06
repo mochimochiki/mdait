@@ -28,6 +28,7 @@
   "mdait.file.deleteVerifyDeletion.title": "確認待ちのユニットをまとめて削除",
   "mdait.file.discardOrphan.title": "訳文を破棄（ごみ箱へ移動）",
   "mdait.unit.markIsolated.title": "独立扱いにする",
+  "mdait.unit.retranslate.title": "全文で訳し直す",
   "mdait.unit.unisolate.title": "独立扱いを解除",
   "mdait.needsAttention.next.title": "次の要対応へ",
   "mdait.translate.frontmatter.title": "✨Frontmatterを翻訳",

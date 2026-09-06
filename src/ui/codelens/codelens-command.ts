@@ -14,7 +14,7 @@ import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
 import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
-import { transCommand, transUnitCommand } from "../../commands/trans/trans-command";
+import { isRetranslatableUnit, transCommand, transUnitCommand } from "../../commands/trans/trans-command";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
@@ -238,11 +238,21 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 }
 
 /** 「その他」メニューで選べるアクション */
-export type OtherAction = "isolate" | "note";
+export type OtherAction = "isolate" | "retranslate" | "note";
 
 /** 「その他」メニューの項目 */
 interface OtherActionItem extends vscode.QuickPickItem {
 	action: OtherAction;
+}
+
+/**
+ * 「全文で訳し直す」をメニューに出してよいユニットか（純関数）。
+ *
+ * どの状態を訳し直せるかは `isRetranslatableUnit` が唯一の判断で、ここはそれに
+ * 「原文側には出さない」を重ねるだけ。原文に訳し直すものは無い。
+ */
+export function canRetranslateInFull(marker: Pick<MdaitMarker, "from" | "need">, isSourceFile: boolean): boolean {
+	return !isSourceFile && isRetranslatableUnit(marker);
 }
 
 /**
@@ -252,9 +262,15 @@ interface OtherActionItem extends vscode.QuickPickItem {
  * （凍結宣言側の need-already-set スキップと対になる）。
  *
  * @param hasNeed 対象ユニットに need が付いているか
+ * @param canRetranslate 全文で訳し直せるユニットか（`canRetranslateInFull`）
  */
-export function buildOtherActions(hasNeed: boolean): OtherAction[] {
-	return hasNeed ? ["note"] : ["isolate", "note"];
+export function buildOtherActions(hasNeed: boolean, canRetranslate = false): OtherAction[] {
+	const actions: OtherAction[] = hasNeed ? [] : ["isolate"];
+	if (canRetranslate) {
+		actions.push("retranslate");
+	}
+	actions.push("note");
+	return actions;
 }
 
 /**
@@ -282,21 +298,33 @@ export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<
 		// isolate の意味は方向で異なる（訳文は原文更新に追従しない・原文は訳文へ伝播しない）ため文言を分ける
 		const isSourceFile = isSourceDocument(document);
 
-		const items: OtherActionItem[] = buildOtherActions(Boolean(marker.need)).map((action) =>
-			action === "isolate"
-				? {
-						label: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
-						detail: isSourceFile
-							? vscode.l10n.t("Freeze this unit and stop propagating it to the translations.")
-							: vscode.l10n.t("Freeze this unit and stop following source updates."),
-						action,
-					}
-				: {
-						label: vscode.l10n.t("$(comment) Note"),
-						detail: vscode.l10n.t("Add or edit a note for this unit (shown to the AI during audit)."),
-						action,
-					},
-		);
+		const items: OtherActionItem[] = buildOtherActions(
+			Boolean(marker.need),
+			canRetranslateInFull(marker, isSourceFile),
+		).map((action) => {
+			if (action === "isolate") {
+				return {
+					label: vscode.l10n.t("$(circle-slash) Mark as Isolated"),
+					detail: isSourceFile
+						? vscode.l10n.t("Freeze this unit and stop propagating it to the translations.")
+						: vscode.l10n.t("Freeze this unit and stop following source updates."),
+					action,
+				};
+			}
+			if (action === "retranslate") {
+				// AI を呼ぶ操作には ✨ を付ける（ux.md §3.3）
+				return {
+					label: vscode.l10n.t("$(sparkle) Re-translate in full"),
+					detail: vscode.l10n.t("Translate this unit again from scratch, ignoring the current translation."),
+					action,
+				};
+			}
+			return {
+				label: vscode.l10n.t("$(comment) Note"),
+				detail: vscode.l10n.t("Add or edit a note for this unit (shown to the AI during audit)."),
+				action,
+			};
+		});
 
 		const picked = await vscode.window.showQuickPick(items, {
 			title: vscode.l10n.t("Unit actions"),
@@ -308,6 +336,16 @@ export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<
 
 		if (picked.action === "isolate") {
 			await declareIsolateAtMarker(document.uri.fsPath, marker.hash, isSourceFile);
+			return;
+		}
+		if (picked.action === "retranslate") {
+			// 実体はコマンド（`mdait.unit.retranslate`）。ここで直に呼ばないのは、
+			// 同じ操作の入口をサーフェスごとに書き写さないためである
+			await vscode.commands.executeCommand("mdait.unit.retranslate", {
+				type: "unit",
+				filePath: document.uri.fsPath,
+				unitHash: marker.hash,
+			});
 			return;
 		}
 		await promptAndSaveNote(marker.hash, document.uri.fsPath);

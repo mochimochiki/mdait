@@ -29,6 +29,8 @@ const FILE_ITEM_COMMANDS = new Set([
 	"mdait.tm.commit.file",
 	"mdait.aiReview.file",
 ]);
+/** 1つ目の文字列と2つ目のハッシュを「ユニットの StatusItem」にする */
+const UNIT_ITEM_COMMANDS = new Set(["mdait.translate.unit", "mdait.unit.retranslate"]);
 /** 1つ目の文字列を「フォルダの StatusItem」にする */
 const DIRECTORY_ITEM_COMMANDS = new Set([
 	"mdait.translate.directory",
@@ -39,6 +41,11 @@ const DIRECTORY_ITEM_COMMANDS = new Set([
 /** ファイルの StatusItem を組む（StatusItemType.File の文字列表現は "file"） */
 export function fileStatusItem(filePath) {
 	return { type: "file", filePath, fileName: filePath.split(/[\\/]/).pop() ?? "" };
+}
+
+/** ユニットの StatusItem を組む（`mdait.translate.unit` は訳文のパスとユニットのハッシュで指す） */
+export function unitStatusItem(filePath, unitHash) {
+	return { type: "unit", filePath, fileName: filePath.split(/[\\/]/).pop() ?? "", unitHash };
 }
 
 /** フォルダの StatusItem を組む */
@@ -71,6 +78,10 @@ export function transformArgs(command, args, vscode) {
 	if (URI_FILE_COMMANDS.has(command)) return [vscode.Uri.file(args[0]), ...args.slice(1)];
 	if (FILE_ITEM_COMMANDS.has(command)) return [fileStatusItem(args[0]), ...args.slice(1)];
 	if (DIRECTORY_ITEM_COMMANDS.has(command)) return [directoryStatusItem(args[0]), ...args.slice(1)];
+	// ユニットは1つの文字列では指せないので、2つ目にハッシュを取る
+	if (UNIT_ITEM_COMMANDS.has(command) && typeof args[1] === "string") {
+		return [unitStatusItem(args[0], args[1]), ...args.slice(2)];
+	}
 	const entry = COMMANDS[command];
 	// パスの姿（ファイルかフォルダか）を見て決めるもの
 	if (entry?.args === "auto-item") return [statusItemForPath(args[0]), ...args.slice(1)];
@@ -121,6 +132,22 @@ export const COMMANDS = {
 		args: "file-item",
 		hosts: ALL,
 		note: "ツリーの「ファイルを翻訳」。引数は訳文の側のファイルのパス",
+	},
+	"mdait.translate.unit": {
+		module: "out/commands/trans/status-tree-translation-handler.js",
+		export: "StatusTreeTranslationHandler",
+		method: "translateUnit",
+		args: "unit-item",
+		hosts: ALL,
+		note: "ツリーの「ユニットを翻訳」。引数は訳文の側のファイルのパスと、ユニットのハッシュの2つ",
+	},
+	"mdait.unit.retranslate": {
+		module: "out/commands/trans/status-tree-translation-handler.js",
+		export: "StatusTreeTranslationHandler",
+		method: "retranslateUnit",
+		args: "unit-item",
+		hosts: ALL,
+		note: "いまの訳文を使わず1ユニットを全文で訳し直す。引数は訳文の側のパスとユニットのハッシュ。確認ダイアログを1枚挟む",
 	},
 	"mdait.translate.directory": {
 		module: "out/commands/trans/status-tree-translation-handler.js",
