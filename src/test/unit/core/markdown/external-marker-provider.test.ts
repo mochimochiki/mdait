@@ -437,7 +437,7 @@ suite("ExternalMarkerProvider", () => {
 				{ path: TARGET_PATH, kind: "unit" as const, seat: seat(0), level: 1, titleHash: "t0", hash: "h0", from: "s0", need: "" },
 				{ path: TARGET_PATH, kind: "unit" as const, seat: seat(1), level: 2, titleHash: "t1", hash: "h1", from: "s1", need: "" },
 			];
-			const memo = buildAlignmentMemo(entries, 0, new Set());
+			const memo = buildAlignmentMemo(entries, [], new Set());
 			assert.deepStrictEqual(memo.unmatchedSeats, [], "1件も預けない");
 			assert.deepStrictEqual(memo.recoveredHeldHashes, []);
 		});
@@ -532,6 +532,35 @@ suite("ExternalMarkerProvider", () => {
 		assert.strictEqual(after[0], before[0], "先頭の章の席は動かない");
 		assert.strictEqual(after[2], before[1], "後ろの章の席も動かない");
 		assert.ok(after[1] > before[0] && after[1] < before[1], "新しい章は前後のあいだに座る");
+	});
+
+	test("detach: 章を1つ消して1つ足しても、残った章の席は動かないこと", () => {
+		// 読み込みと書き出しのあいだで sync がユニットを差し替えるので、控えを**添字**で
+		// 覚えていると「消して足す」だけでずれる（長さは同じままなので気づけない）。
+		// ずれると削除点より後ろの席が全部書き換わり、合流の効きが消える
+		const doc = (titles: string[]) =>
+			titles.map((t) => `## ${t}\n\n${t}の本文。\n`).join("\n");
+		const provider = new ExternalMarkerProvider(store);
+
+		const first = markdownParser.parse(doc(["A", "B", "C"]), makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx1 = { filePath: TARGET_PATH };
+		provider.attachMarkers(first.units, ctx1);
+		provider.detachMarkers(first.units, ctx1);
+		const before = store.getEntriesByPath(TARGET_PATH).map((e) => e.seat);
+
+		// 読み込んだあとで「B を消して D を足す」（ユニット数は変わらない）
+		const second = markdownParser.parse(doc(["A", "B", "C"]), makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx2 = { filePath: TARGET_PATH };
+		provider.attachMarkers(second.units, ctx2);
+		second.units.splice(1, 1);
+		const added = markdownParser.parse(doc(["D"]), makeConfig(2), provider, { filePath: "other.md" });
+		second.units.push(added.units[0]);
+		provider.detachMarkers(second.units, ctx2);
+
+		const after = store.getEntriesByPath(TARGET_PATH).filter((e) => e.kind === "unit").map((e) => e.seat);
+		assert.strictEqual(after[0], before[0], "A の席は動かない");
+		assert.strictEqual(after[1], before[2], "C の席も動かない");
+		assert.ok(after[2] > before[2], "D は後ろへ座る");
 	});
 
 	test("detach: ユニットが少し減っただけなら末尾の余った行を刈ること", () => {

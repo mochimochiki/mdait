@@ -130,9 +130,11 @@ export function isLiveBodyEntry(entry: UnitStateEntry): boolean {
  * 行の身元。ファイルの中で1行を指す鍵になる。
  *
  * - `unit` … 席のキー。二度と動かないので、章を1つ挿しても他の行は書き換わらない
- * - `held` … 本文の hash。**同じ本文の行は席に1つしか要らない**（拾い戻しは完全一致
- *   だけなので、同じ hash が2つあっても片方は永遠に使われない）。鍵にしておけば、
- *   同じ章を消して貼り戻すたびに行が増えることが構造的に起きない
+ * - `held` … 本文の hash と、預かっている状態（`from` / `need`）。**状態まで鍵に入れる**
+ *   のが要点である。hash だけを鍵にすると、**合流のあとのファイルを読んだときに、同じ
+ *   本文で状態だけ違う行が黙って消える**（実測: 同じ席に3行来るファイルで1行が消えた）。
+ *   「同じ本文の行は1つでよい」は**預けるとき**の決まりであって、**読むとき**の決まりでは
+ *   ない — 読み取りは1行でも多く拾うのが原則で、絞るのは `parkEntries` の仕事である
  * - `front` … 1ファイルに1つなので、種別そのものが鍵になる
  */
 export function entryKey(entry: UnitStateEntry): string {
@@ -140,7 +142,7 @@ export function entryKey(entry: UnitStateEntry): string {
 		return `u${entry.seat}`;
 	}
 	if (entry.kind === "held") {
-		return `h${entry.hash}`;
+		return `h${entry.hash}\t${entry.from}\t${entry.need}`;
 	}
 	return "f";
 }
@@ -486,10 +488,17 @@ export class UnitStateStore {
 				continue;
 			}
 			if (kind === "unit" && !isSeatKey(seat)) {
+				// **席のキーが読めなくても、行は捨てない。** 席に着いていない行として預かる。
+				// 位置は分からなくなるが、`from` / `need` はこのファイルにしか無く、本文から
+				// 計算し直せない。本文が同じままなら次の sync で拾い戻される
 				report.skipped++;
-				logger.warn("unit-state", "Skipping unit line with a malformed seat key", {
+				logger.warn("unit-state", "Kept a unit line with a malformed seat key as an unseated row", {
 					line: line.substring(0, 100),
 				});
+				this.seatOnLoad(
+					{ path: filePathCol, kind: "held", seat: "", level, titleHash, hash, from, need },
+					report,
+				);
 				continue;
 			}
 
@@ -504,12 +513,14 @@ export class UnitStateStore {
 		for (const rows of legacy.values()) {
 			rows.sort((a, b) => a.order - b.order || compareCodePoints(seatPriority(a.entry), seatPriority(b.entry)));
 			const winners: UnitStateEntry[] = [];
+			let prevOrder: number | undefined;
 			for (const row of rows) {
-				if (winners.length > 0 && row.order === rows[rows.indexOf(row) - 1].order) {
+				if (prevOrder === row.order) {
 					report.duplicates++;
 					this.seatOnLoad({ ...row.entry, kind: "held", seat: "" }, report);
 					continue;
 				}
+				prevOrder = row.order;
 				winners.push(row.entry);
 			}
 			const seats = assignSeats(new Array(winners.length).fill(undefined));
@@ -554,11 +565,9 @@ export class UnitStateStore {
 		const [stays, leaves] = seatPriority(entry) < seatPriority(sitting) ? [entry, sitting] : [sitting, entry];
 		rows.set(key, stays);
 
-		// 降ろしたほうは席を持たない行（`held`）にする。**本文の hash が身元**なので、
-		// 同じ本文の行が既に居れば増えないし、次に本文が戻ってくれば拾い戻される
-		if (!leaves.hash) {
-			return; // 本文 hash が無い行は拾い戻せない。預けても席が埋まるだけ
-		}
+		// 降ろしたほうは席を持たない行（`held`）にする。**捨てない。**
+		// 本文 hash が無い行も預かる — 拾い戻せはしないが、`from` / `need` は
+		// このファイルにしか無く、本文から計算し直せない
 		const held: UnitStateEntry = { ...leaves, kind: "held", seat: "" };
 		const heldKey = entryKey(held);
 		if (!rows.has(heldKey)) {
@@ -764,12 +773,16 @@ export class UnitStateStore {
 	 */
 	getSoleEntry(filePath: string): UnitStateEntry | undefined {
 		this.autoLoad();
+		// **席の小さいほうを採る。** 表の走査順（入れた順）で決めると、行が2つできてしまった
+		// ファイル（`.md` → `.txt` の改名で行が運ばれた等）で「どれが唯一の行か」が
+		// 読み込みの経緯で変わる
+		let found: UnitStateEntry | undefined;
 		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
-			if (isLiveBodyEntry(entry)) {
-				return entry;
+			if (isLiveBodyEntry(entry) && (found === undefined || entry.seat < found.seat)) {
+				found = entry;
 			}
 		}
-		return undefined;
+		return found;
 	}
 
 	/** 席のキーで本文の行を引く（無ければ undefined） */
@@ -781,7 +794,7 @@ export class UnitStateStore {
 	/** 本文の hash で、席に着いていない行を引く（無ければ undefined） */
 	getHeldEntry(filePath: string, hash: string): UnitStateEntry | undefined {
 		this.autoLoad();
-		return this.rowsOf(filePath)?.get(`h${hash}`);
+		return this.heldEntriesWithHash(filePath, hash)[0];
 	}
 
 	/** 席のキーで本文の行を消す */
@@ -911,10 +924,9 @@ export class UnitStateStore {
 		if (seats.length === 0) {
 			return 0;
 		}
-		const rows = this.rowsOf(filePath);
 		let parked = 0;
 		for (const seat of [...new Set(seats)].sort()) {
-			const entry = rows?.get(`u${seat}`);
+			const entry = this.rowsOf(filePath)?.get(`u${seat}`);
 			if (!entry) {
 				continue;
 			}
@@ -922,16 +934,33 @@ export class UnitStateStore {
 			if (!entry.hash) {
 				continue; // 本文 hash が無い行は拾い戻せない。預けても行が増えるだけ
 			}
-			const held: UnitStateEntry = { ...entry, kind: "held", seat: "" };
-			// 同じ本文を既に預かっているなら、中身を新しいほうで置き換える（数には入れない）。
-			// hash が同じなら拾われ方は同じで、from / need は新しいほうが現在に近い
-			const taken = rows?.has(entryKey(held)) ?? false;
-			this.putRow(held);
-			if (!taken) {
+			// **同じ本文を預かる行は1つに絞る。** 拾い戻しは本文 hash の完全一致だけなので、
+			// 同じ hash の行が2つあっても片方は永遠に使われない。同じ章を消して貼り戻すたびに
+			// 行が増えるのも防ぐ。`from` / `need` は新しいほうが現在に近いので、そちらを残す。
+			//
+			// 絞るのは**ここ（預けるとき）だけ**である。読み取り（`seatOnLoad`）で絞ると、
+			// 合流のあとのファイルで「同じ本文・違う状態」の行が黙って消える
+			const older = this.heldEntriesWithHash(filePath, entry.hash);
+			for (const row of older) {
+				this.dropRow(filePath, entryKey(row));
+			}
+			this.putRow({ ...entry, kind: "held", seat: "" });
+			if (older.length === 0) {
 				parked++;
 			}
 		}
 		return parked;
+	}
+
+	/** そのファイルの、本文 hash が一致する「席に着いていない行」 */
+	private heldEntriesWithHash(filePath: string, hash: string): UnitStateEntry[] {
+		const found: UnitStateEntry[] = [];
+		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
+			if (entry.kind === "held" && entry.hash === hash) {
+				found.push(entry);
+			}
+		}
+		return found;
 	}
 
 	/**
@@ -945,9 +974,11 @@ export class UnitStateStore {
 	dropHeldEntries(filePath: string, hashes: readonly string[]): number {
 		this.autoLoad();
 		let removed = 0;
-		for (const hash of hashes) {
-			if (this.dropRow(filePath, `h${hash}`)) {
-				removed++;
+		for (const hash of new Set(hashes)) {
+			for (const entry of this.heldEntriesWithHash(filePath, hash)) {
+				if (this.dropRow(filePath, entryKey(entry))) {
+					removed++;
+				}
 			}
 		}
 		return removed;

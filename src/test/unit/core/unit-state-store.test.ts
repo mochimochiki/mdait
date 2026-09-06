@@ -1198,6 +1198,43 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(store.getLastParseReport().duplicates, 1);
 		});
 
+		test("同じ本文で状態だけ違う行が3つ来ても、1つも捨てないこと", () => {
+			// 席から降ろした行の身元を「本文 hash」だけにすると、同じ本文で `from` / `need`
+			// だけ違う行が黙って消える。読み取りは1行でも多く拾うのが原則で、
+			// 「同じ本文は1つでよい」は**預けるとき**の決まりである
+			write(tempDir, [
+				"# mdait unit-state",
+				`a.md\tunit\t${seat(0)}\t1\tth\tHHHH\tsrc1\t`,
+				`a.md\tunit\t${seat(0)}\t1\tth\tHHHH\t\trevise@src0`,
+				`a.md\tunit\t${seat(0)}\t1\tth\tHHHH\tsrc2\treview`,
+			]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			const meanings = store
+				.getEntriesByPath("a.md")
+				.map((e) => `${e.from}/${e.need}`)
+				.sort();
+			assert.deepStrictEqual(meanings, ["/revise@src0", "src1/", "src2/review"]);
+		});
+
+		test("席のキーが読めない行も、席に着いていない行として預かること", () => {
+			// `from` / `need` はこのファイルにしか無く、本文から計算し直せない。
+			// 位置が分からなくなっても、行そのものは捨てない
+			write(tempDir, [
+				"# mdait unit-state",
+				"a.md\tunit\t5000000\t2\tta\tHA\tsrcA\trevise@X",
+				`a.md\tunit\t${seat(1)}\t2\ttb\tHB\tsrcB\t`,
+			]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			const rows = store.getEntriesByPath("a.md");
+			assert.strictEqual(rows.length, 2, "読めない席の行が捨てられている");
+			assert.ok(rows.some((e) => e.kind === "held" && e.need === "revise@X"));
+			assert.strictEqual(store.getLastParseReport().skipped, 1);
+		});
+
 		test("どちらの順で並んでいても、同じ結果になること", () => {
 			const rowA = `a.md\tunit\t${seat(0)}\t1\tth\thash1\tfrom1\t`;
 			const rowB = `a.md\tunit\t${seat(0)}\t1\tth\thash2\tfrom2\trevise@old`;

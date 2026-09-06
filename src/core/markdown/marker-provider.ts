@@ -75,12 +75,17 @@ export interface MarkerAlignmentMemo {
 	 */
 	readonly recoveredHeldHashes: readonly string[];
 	/**
-	 * ユニットごとの「いま座っている席」（`units` と同じ長さ。対応が無ければ `undefined`）。
+	 * ユニットごとの「いま座っている席」。**添字ではなくユニットそのものを鍵にする。**
 	 *
-	 * 書き出しはこれを見て席を据え置く。**読み込み時にしか分からない**（書き出し側は
-	 * sync が作り直したあとの姿しか見ていない）ので、控えとして運ぶ。
+	 * 書き出しはこれを見て席を据え置く。読み込み時にしか分からない（書き出し側は sync が
+	 * 作り直したあとの姿しか見ていない）ので、控えとして運ぶ。
+	 *
+	 * 添字で覚えてはいけない。読み込みと書き出しのあいだで sync がユニットを差し替えるため、
+	 * **「章を1つ消して1つ足す」だけで添字がずれる**（長さは同じままなので気づけない）。
+	 * 実測では、それだけで削除点より後ろの席が全部書き換わっていた — つまりこの仕組みが
+	 * いちばん潰したかった「ブロック丸ごとの書き換え」がそのまま残っていた。
 	 */
-	readonly seatByUnitIndex: readonly (string | undefined)[];
+	readonly seatByUnit: ReadonlyMap<MdaitUnit, string>;
 }
 
 /**
@@ -200,7 +205,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			units[i].marker = new MdaitMarker(entry.hash, entry.from || null, entry.need || null);
 		}
 		if (ctx) {
-			ctx.alignment = buildAlignmentMemo(entries, units.length, matched, aligned);
+			ctx.alignment = buildAlignmentMemo(entries, units, matched, aligned);
 		}
 		if (unmatchedUnits > 0 || entries.length !== units.length) {
 			logger.debug("marker", "attached external markers", {
@@ -225,45 +230,26 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			this.applyAlignmentMemo(filePath, memo);
 		}
 
-		// 席番号を決める。**いま座っている行は据え置く**（`seat-numbers.ts`）。
+		// 席のキーを決める。**いま座っている行は据え置く**（`seat-keys.ts`）。
 		// 毎回 0..N-1 に振り直していた頃は、章を1つ挿すだけでその記事のブロックが
 		// 丸ごと書き換わり、同じ記事への別の編集と必ず領域が重なっていた。
 		const before = this.store.getEntriesByPath(filePath);
-		const seats = assignSeats(this.seatPreferences(before, units, memo));
-		const taken = new Set(seats);
+		const preferred = this.seatPreferences(before, units, memo);
+		const seats = assignSeats(preferred);
+		// **据え置かれた席**（もとの行がそのまま座り続ける席）。ここに無い席の行には、
+		// どのユニットも座っていない
+		const kept = new Set(seats.filter((seat, i) => seat === preferred[i]));
 
 		// それでも上書きで失われる状態を数える。控えが無い呼び出し（ctx を共有しない parse →
 		// stringify）でも席は動かないが、章そのものが消えていれば行の行き先は無い
-		// （docs/design/unit-state.md §17）。刈り取りにも保留にもログがあるのに、
+		// （docs/design/unit-state.md §17）。刈り取りにも退避にもログがあるのに、
 		// 実際に状態を失う経路だけ記録が無いと追跡できない。
-		const lostState = countLostStateEntries(before, units, taken);
+		const lostState = countLostStateEntries(before, units, kept);
 
-		for (let i = 0; i < units.length; i++) {
-			const unit = units[i];
-			this.store.setEntry({
-				path: filePath,
-				kind: "unit",
-				seat: seats[i],
-				level: unit.headingLevel,
-				titleHash: calculateHash(unit.title),
-				hash: unit.marker?.hash ?? "",
-				from: unit.marker?.from ?? "",
-				need: unit.marker?.need ?? "",
-			});
-		}
-		if (lostState > 0) {
-			logger.warn("marker", "Overwrote unit-state entries whose translation state has no place left", {
-				path: filePath,
-				units: units.length,
-				lostState,
-				note: "A unit was removed from the document and its from/need is gone. Pasting the text back will not restore it (docs/design/unit-state.md §17).",
-			});
-		}
-
-		// どのユニットにも席を譲らなかった行の始末。ユニットが減ったときにこれが残ると、
-		// 次に増えたときそれを拾ってしまう。ただし「一時的に減っただけ」のときは刈らず、
-		// 席から降ろして位置の意味だけを剥がす（下記 shouldPruneTail）。
-		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !taken.has(e.seat)).map((e) => e.seat);
+		// **どのユニットも座らなかった行の始末を、書き込みより先に済ませる。**
+		// あとにすると、新しい章に配った席がその行を踏み、預けも刈りもされないまま
+		// 黙って消える（実測: 3章のうち2章が照合できず、片方の状態が消えた）。
+		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !kept.has(e.seat)).map((e) => e.seat);
 		const entryCount = this.store.countLiveEntriesByPath(filePath);
 		if (leftovers.length > 0) {
 			if (ctx.deliberateDeletion || shouldPruneTail(entryCount, units.length)) {
@@ -292,6 +278,28 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				}
 			}
 		}
+
+		for (let i = 0; i < units.length; i++) {
+			const unit = units[i];
+			this.store.setEntry({
+				path: filePath,
+				kind: "unit",
+				seat: seats[i],
+				level: unit.headingLevel,
+				titleHash: calculateHash(unit.title),
+				hash: unit.marker?.hash ?? "",
+				from: unit.marker?.from ?? "",
+				need: unit.marker?.need ?? "",
+			});
+		}
+		if (lostState > 0) {
+			logger.warn("marker", "Overwrote unit-state entries whose translation state has no place left", {
+				path: filePath,
+				units: units.length,
+				lostState,
+				note: "A unit was removed from the document and its from/need is gone. Pasting the text back will not restore it (docs/design/unit-state.md §17).",
+			});
+		}
 		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
 	}
 
@@ -313,8 +321,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	): Array<string | undefined> {
 		const live = new Set(before.filter(isLiveBodyEntry).map((e) => e.seat));
 		const keepLive = (seat: string | undefined) => (seat !== undefined && live.has(seat) ? seat : undefined);
-		if (memo && memo.seatByUnitIndex.length === units.length) {
-			return memo.seatByUnitIndex.map(keepLive);
+		if (memo) {
+			return units.map((unit) => keepLive(memo.seatByUnit.get(unit)));
 		}
 		const held = new Set<number>();
 		for (let i = 0; i < before.length; i++) {
@@ -439,23 +447,27 @@ export function shouldPruneTail(entryCount: number, unitCount: number): boolean 
  * 同じ理由で、ここでも証拠として扱わない。
  *
  * @param entries そのファイルの行（並び順）
- * @param unitCount いまパースしたユニット数
+ * @param units いまパースしたユニット
  * @param matchedEntries 対応が付いた行
  * @param aligned ユニットごとに対応が付いた行（`units` と同じ長さ）
  */
 export function buildAlignmentMemo(
 	entries: readonly UnitStateEntry[],
-	unitCount: number,
+	units: readonly MdaitUnit[],
 	matchedEntries: ReadonlySet<UnitStateEntry>,
 	aligned: ReadonlyArray<UnitStateEntry | undefined> = [],
 ): MarkerAlignmentMemo {
 	const unmatchedSeats: string[] = [];
 	const recoveredHeldHashes: string[] = [];
-	const seatByUnitIndex = Array.from({ length: unitCount }, (_, i) =>
-		aligned[i] && isLiveBodyEntry(aligned[i] as UnitStateEntry) ? (aligned[i] as UnitStateEntry).seat : undefined,
-	);
-	if (unitCount === 0) {
-		return { unmatchedSeats, recoveredHeldHashes, seatByUnitIndex };
+	const seatByUnit = new Map<MdaitUnit, string>();
+	for (let i = 0; i < units.length; i++) {
+		const entry = aligned[i];
+		if (entry && isLiveBodyEntry(entry)) {
+			seatByUnit.set(units[i], entry.seat);
+		}
+	}
+	if (units.length === 0) {
+		return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
 	}
 	for (const entry of entries) {
 		const matched = matchedEntries.has(entry);
@@ -477,7 +489,7 @@ export function buildAlignmentMemo(
 		}
 		unmatchedSeats.push(entry.seat);
 	}
-	return { unmatchedSeats, recoveredHeldHashes, seatByUnitIndex };
+	return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
 }
 
 /**
