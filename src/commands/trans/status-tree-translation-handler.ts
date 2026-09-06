@@ -465,8 +465,9 @@ export class StatusTreeTranslationHandler {
 	 * 走らせる前に1度だけ尋ねる。文言は翻訳の通知から出す逃げ道と同じものを使う —
 	 * 起こることが同じなのに言い方が違うと、同じ操作だと分からなくなる。
 	 */
-	public async retranslateUnit(item: StatusItem): Promise<TransCommandResult | undefined> {
-		if (item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
+	public async retranslateUnit(item?: StatusItem): Promise<TransCommandResult | undefined> {
+		// コマンドは引数なしでも叩けるので、受け取ってから確かめる（他の StatusItem 系と同じ作法）
+		if (!item || item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
 			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
 		}
