@@ -61,6 +61,17 @@ suite(".mdait の初期化", () => {
 		assert.match(read(".gitignore"), /^unit-registry\.broken$/m);
 	});
 
+	test("CRLF のファイルには CRLF で書き足す（改行を混ぜない）", async () => {
+		fs.mkdirSync(path.join(tempDir, ".mdait"), { recursive: true });
+		fs.writeFileSync(path.join(tempDir, ".mdait", ".gitattributes"), "unit-state merge=union\r\n", "utf-8");
+
+		await ensureMdaitDir();
+
+		const attributes = read(".gitattributes");
+		assert.ok(attributes.includes("unit-registry merge=union"));
+		assert.doesNotMatch(attributes, /[^\r]\n/, "CRLF のファイルに LF が混ざっている");
+	});
+
 	test("利用者が書き換えた指定は上書きしない", async () => {
 		fs.mkdirSync(path.join(tempDir, ".mdait"), { recursive: true });
 		fs.writeFileSync(path.join(tempDir, ".mdait", ".gitattributes"), "unit-state merge=ours\n", "utf-8");

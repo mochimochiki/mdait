@@ -43,8 +43,11 @@ function ensureLines(filePath: string, requiredLines: string[]): void {
 	if (missing.length === 0) {
 		return;
 	}
-	const prefix = existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`;
-	fs.writeFileSync(filePath, `${prefix}${missing.join("\n")}\n`, "utf-8");
+	// 書き足す行は、そのファイルがいま使っている改行に揃える。既定で LF を足すと、
+	// CRLF のファイル（Windows の編集・git の `core.autocrlf`）が混在改行になる
+	const eol = existing.includes("\r\n") ? "\r\n" : "\n";
+	const prefix = existing === "" || existing.endsWith("\n") ? existing : `${existing}${eol}`;
+	fs.writeFileSync(filePath, `${prefix}${missing.join(eol)}${eol}`, "utf-8");
 }
 
 /**

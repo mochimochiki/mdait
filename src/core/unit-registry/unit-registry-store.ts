@@ -107,7 +107,10 @@ export class UnitRegistryStore {
 			return report;
 		}
 
-		const lines = content.split("\n");
+		// **CRLF でも同じに読む。** ファイルは LF で書き出すが、git の `core.autocrlf` は
+		// 取り出すときに CRLF へ変えうる。`\n` だけで切ると行末の `\r` が payload に混ざり、
+		// 旧形式のバケット行は「読めない行」に数えられて、傷が無いのに原本の避難が走る
+		const lines = content.split(/\r?\n/);
 
 		for (const line of lines) {
 			// 空行はスキップ

@@ -237,6 +237,28 @@ abc00002 theirs
 			assert.equal(report.skipped, 0);
 		});
 
+		test("CRLF のファイルでも、傷なく読めて payload に \\r が混ざらない", () => {
+			const content = ["abc00000 ", "abc00001 contentA1", "abc00002 contentA2 noteA2"].join("\r\n");
+
+			const store = new UnitRegistryStore();
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "contentA1");
+			assert.equal(store.get("abc00002"), "contentA2");
+			assert.equal(store.getNote("abc00002"), "noteA2");
+			assert.ok(isCleanParse(report), "CRLF というだけで原本の避難が走ってしまう");
+		});
+
+		test("CRLF の旧形式（バケット行あり）でも読めない行に数えない", () => {
+			const content = ["abc ", "abc00001 contentA1"].join("\r\n");
+
+			const store = new UnitRegistryStore();
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "contentA1");
+			assert.equal(report.skipped, 0);
+		});
+
 		test("傷なく読めた回は isCleanParse が真になる", () => {
 			const store = new UnitRegistryStore();
 			assert.ok(isCleanParse(store.parse("abc00001 contentA1")));
