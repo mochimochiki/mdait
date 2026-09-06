@@ -146,6 +146,18 @@ export function entryKey(entry: UnitStateEntry): string {
 }
 
 /**
+ * 文字列を**符号位置の順**で比べる。
+ *
+ * `localeCompare` を使ってはいけない。**実行環境のロケールで答えが変わる**からである
+ * （en-US では `a.md` < `B.md`、符号位置では `B.md` < `a.md`）。このファイルは全員が
+ * 同じバイト列を書くことが前提で、並べ方が人によって違うと**中身が同じなのに全行が
+ * 差分になり、必ず合流でぶつかる**。符号位置の比較は環境に依らない。
+ */
+function compareCodePoints(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
  * ファイルの中で行を並べる順。**席のある行が先、席に着いていない行が後ろ。**
  *
  * 席に着いていない行は「増えたり減ったりする行」なので、まとめて後ろへ置き、
@@ -490,7 +502,7 @@ export class UnitStateStore {
 		// 旧形式の本文行を、並びの順に席へ着ける。**同じ `order` の行が2つあれば
 		// 合流の取りこぼしなので、片方は席から降ろす**（どちらも捨てない）
 		for (const rows of legacy.values()) {
-			rows.sort((a, b) => a.order - b.order || seatPriority(a.entry).localeCompare(seatPriority(b.entry)));
+			rows.sort((a, b) => a.order - b.order || compareCodePoints(seatPriority(a.entry), seatPriority(b.entry)));
 			const winners: UnitStateEntry[] = [];
 			for (const row of rows) {
 				if (winners.length > 0 && row.order === rows[rows.indexOf(row) - 1].order) {
@@ -599,13 +611,13 @@ export class UnitStateStore {
 		const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
 		const bucketOf = (p: string) => (Number.parseInt(calculateHash(p.slice(dirOf(p).length), false).substring(0, 2), 16) % BUCKETS_PER_DIR);
 		const sortedEntries = [...this.allEntries()].sort((a, b) => {
-			const d = dirOf(a.path).localeCompare(dirOf(b.path));
+			const d = compareCodePoints(dirOf(a.path), dirOf(b.path));
 			if (d !== 0) return d;
 			const ba = bucketOf(a.path);
 			const bb = bucketOf(b.path);
 			if (ba !== bb) return ba < bb ? -1 : 1;
-			const c = a.path.localeCompare(b.path);
-			return c !== 0 ? c : rowOrder(a).localeCompare(rowOrder(b));
+			const c = compareCodePoints(a.path, b.path);
+			return c !== 0 ? c : compareCodePoints(rowOrder(a), rowOrder(b));
 		});
 
 		const lines: string[] = [...HEADER_LINES];
@@ -1023,7 +1035,7 @@ export class UnitStateStore {
 		this.autoLoad();
 		return [...(this.rowsOf(filePath)?.values() ?? [])]
 			.filter((entry) => !isFrontMatterEntry(entry))
-			.sort((a, b) => rowOrder(a).localeCompare(rowOrder(b)));
+			.sort((a, b) => compareCodePoints(rowOrder(a), rowOrder(b)));
 	}
 
 	/**

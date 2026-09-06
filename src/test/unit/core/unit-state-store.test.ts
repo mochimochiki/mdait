@@ -11,6 +11,7 @@ import {
 	shouldRemoveEntryPath,
 } from "../../../core/unit-state/unit-state-store";
 import type { UnitStateEntry } from "../../../core/unit-state/unit-state-store";
+import { calculateHash } from "../../../core/hash/hash-calculator";
 import { seat } from "../helpers/unit-state";
 
 /** テスト用一時ディレクトリを作成 */
@@ -1059,6 +1060,46 @@ suite("UnitStateStore", () => {
 			between.some((l) => /^# d\/\[[0-9a-f]{2}\]$/.test(l)),
 			`区画の行が挟まっていない: ${JSON.stringify(between)}`,
 		);
+	});
+
+	test("行の並べ方が、実行環境のロケールに依らないこと", () => {
+		// `localeCompare` は en-US では `a.md` < `B.md`、符号位置では `B.md` < `a.md` になる。
+		// 並べ方が人によって違うと、中身が同じなのに全行が差分になり、必ず合流でぶつかる。
+		//
+		// 並びはまず区画（ファイル名のハッシュ）で決まるので、比べ方の違いが表に出るのは
+		// **同じ区画に入った2つ**だけである。そういう組を探して、符号位置の順であることを見る。
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		const names: string[] = [];
+		for (let i = 0; i < 60; i++) {
+			names.push(`a${i}.md`, `A${i}.md`);
+		}
+		for (const name of names) {
+			store.setEntry(plainEntry(`d/${name}`, `h-${name}`, "f", ""));
+		}
+		store.save(tempDir);
+
+		const emitted = fs
+			.readFileSync(path.join(tempDir, "unit-state"), "utf-8")
+			.split("\n")
+			.filter((l) => l.trim() !== "" && !l.startsWith("#"))
+			.map((l) => l.split("\t")[0]);
+		assert.strictEqual(emitted.length, names.length);
+
+		// 区画は「ファイル名のハッシュの先頭2桁 % 64」で決まる（save の bucketOf と同じ規則）。
+		// 同じ区画に入った隣り合わせだけが、パスの比べ方で順番が決まっている
+		const bucketOf = (p: string) =>
+			Number.parseInt(calculateHash(p.slice(p.lastIndexOf("/") + 1), false).substring(0, 2), 16) % 64;
+		let disagreements = 0;
+		for (let i = 1; i < emitted.length; i++) {
+			const [prev, next] = [emitted[i - 1], emitted[i]];
+			if (bucketOf(prev) !== bucketOf(next)) continue;
+			if (prev.localeCompare(next) > 0) {
+				disagreements++;
+				assert.ok(prev < next, `符号位置の順になっていない: ${prev} → ${next}`);
+			}
+		}
+		assert.ok(disagreements > 0, "比べ方の違いが出る組が1つも無く、この検査が働いていない");
 	});
 
 	suite("旧形式（7列）の読み替え", () => {
