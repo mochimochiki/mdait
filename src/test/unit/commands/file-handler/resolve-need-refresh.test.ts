@@ -21,6 +21,7 @@ import { StatusManager } from "../../../../core/status/status-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -126,7 +127,7 @@ suite("need 解決後のステータス更新（どのファイル種別でも�
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.txt",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 0,
 			titleHash: "",
 			hash: "tgtA",
@@ -142,7 +143,7 @@ suite("need 解決後のステータス更新（どのファイル種別でも�
 		assert.strictEqual(result.resolved.length, 1);
 		assert.ok(collector.refreshed.includes(file), "ステータス更新が呼ばれること");
 		assert.strictEqual(
-			UnitStateStore.getInstance().getEntry("en/doc.txt", 0)?.need,
+			UnitStateStore.getInstance().getSoleEntry("en/doc.txt")?.need,
 			"",
 			"unit-state の need が空になること",
 		);

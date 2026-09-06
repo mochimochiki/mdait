@@ -25,6 +25,7 @@ import { resolveNeedForFile } from "../../../../commands/markers/resolve-need";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -95,11 +96,12 @@ suite("マーカー書き換え4経路: 中身が変わらないならファイ�
 	function setEntries(relPath: string, entries: { hash: string; from?: string; need?: string }[]): void {
 		const store = UnitStateStore.getInstance();
 		store.load(mdaitDir);
-		entries.forEach((entry, order) => {
+		entries.forEach((entry, at) => {
 			store.setEntry({
 				path: relPath,
-				order,
-				level: order === 0 ? 1 : 2,
+				kind: "unit",
+				seat: seat(at),
+				level: at === 0 ? 1 : 2,
 				titleHash: "",
 				hash: entry.hash,
 				from: entry.from ?? "",
@@ -316,11 +318,12 @@ suite("マーカーしか変えない操作: externalでは原稿の書かれ方
 	function setEntries(relPath: string, entries: { hash: string; from?: string; need?: string }[]): void {
 		const store = UnitStateStore.getInstance();
 		store.load(mdaitDir);
-		entries.forEach((entry, order) => {
+		entries.forEach((entry, at) => {
 			store.setEntry({
 				path: relPath,
-				order,
-				level: order === 0 ? 1 : 2,
+				kind: "unit",
+				seat: seat(at),
+				level: at === 0 ? 1 : 2,
 				titleHash: "",
 				hash: entry.hash,
 				from: entry.from ?? "",

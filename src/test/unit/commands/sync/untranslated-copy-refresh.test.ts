@@ -108,7 +108,7 @@ for (const mode of ["embedded", "external"] as const) {
 			}
 			return UnitStateStore.getInstance()
 				.getEntriesByPath("en/doc.md")
-				.filter((entry) => entry.order < 1_000_000) // frontmatter の予約席は本文ユニットではない
+				.filter((entry) => entry.kind === "unit")
 				.map((entry) => ({ hash: entry.hash, from: entry.from, need: entry.need }));
 		}
 

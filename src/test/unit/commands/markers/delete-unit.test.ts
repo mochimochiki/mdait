@@ -11,6 +11,7 @@ import { deleteAllVerifyDeletionUnits, deleteUnitFromFile } from "../../../../co
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -129,9 +130,9 @@ Content C.
 
 		const store = UnitStateStore.getInstance();
 		store.load(path.join(tempDir, ".mdait"));
-		store.setEntry({ path: "en/doc.md", order: 0, level: 2, titleHash: "", hash: "tgtA", from: "srcA", need: "verify-deletion" });
-		store.setEntry({ path: "en/doc.md", order: 1, level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
-		store.setEntry({ path: "en/doc.md", order: 2, level: 2, titleHash: "", hash: "tgtC", from: "srcC", need: "review" });
+		store.setEntry({ path: "en/doc.md", kind: "unit" as const, seat: seat(0), level: 2, titleHash: "", hash: "tgtA", from: "srcA", need: "verify-deletion" });
+		store.setEntry({ path: "en/doc.md", kind: "unit" as const, seat: seat(1), level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
+		store.setEntry({ path: "en/doc.md", kind: "unit" as const, seat: seat(2), level: 2, titleHash: "", hash: "tgtC", from: "srcC", need: "review" });
 
 		const result = await deleteUnitFromFile(targetFile, "tgtA", config);
 
@@ -142,16 +143,13 @@ Content C.
 		assert.ok(written.includes("Content C."));
 
 		const entries = UnitStateStore.getInstance().getEntriesByPath("en/doc.md");
-		assert.strictEqual(entries.length, 2, "削除後は2エントリのみ残ること（末尾の古いエントリが刈り取られること）");
+		assert.strictEqual(entries.length, 2, "削除後は2エントリのみ残ること（消えた章の行が刈り取られること）");
 		assert.deepStrictEqual(
 			entries.map((e) => e.hash),
 			["tgtB", "tgtC"],
 		);
-		assert.deepStrictEqual(
-			entries.map((e) => e.order),
-			[0, 1],
-			"order が詰め直されること",
-		);
+		// 席のキーは動かない。消えた章の行だけが無くなり、残った章は元の席に座ったまま
+		assert.ok(entries[0].seat < entries[1].seat, "並びは保たれること");
 	});
 
 	test("一括削除: ファイル内の全verify-deletionユニットが1回の操作で除去され、他は保持される", async () => {
@@ -238,7 +236,7 @@ Content B.
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.md",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 2,
 			titleHash: "",
 			hash: "tgtA",
@@ -247,7 +245,7 @@ Content B.
 		});
 		store.setEntry({
 			path: "en/doc.md",
-			order: 1,
+			kind: "unit" as const, seat: seat(1),
 			level: 2,
 			titleHash: "",
 			hash: "tgtB",
@@ -270,7 +268,7 @@ Content B.
 		assert.strictEqual(second.changed, false);
 	});
 
-	test("externalマーカーモードの一括削除: 部分削除では残存ユニットの行がorder 0から再構成される", async () => {
+	test("externalマーカーモードの一括削除: 部分削除では残存ユニットの行だけが残る", async () => {
 		const config = await initConfig({ mode: "external" });
 		const externalContent = "## Section A\n\nContent A.\n\n## Section B\n\nContent B.\n\n## Section C\n\nContent C.\n";
 		writeTarget(externalContent);
@@ -279,17 +277,17 @@ Content B.
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.md",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 2,
 			titleHash: "",
 			hash: "tgtA",
 			from: "srcA",
 			need: "verify-deletion",
 		});
-		store.setEntry({ path: "en/doc.md", order: 1, level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
+		store.setEntry({ path: "en/doc.md", kind: "unit" as const, seat: seat(1), level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
 		store.setEntry({
 			path: "en/doc.md",
-			order: 2,
+			kind: "unit" as const, seat: seat(2),
 			level: 2,
 			titleHash: "",
 			hash: "tgtC",
@@ -312,6 +310,6 @@ Content B.
 		assert.strictEqual(entries.length, 1, "残存ユニットの行だけになること");
 		assert.strictEqual(entries[0].hash, "tgtB");
 		assert.strictEqual(entries[0].from, "srcB");
-		assert.strictEqual(entries[0].order, 0, "orderが詰め直されること");
+		assert.strictEqual(entries[0].kind, "unit", "残った章は席に座ったまま");
 	});
 });

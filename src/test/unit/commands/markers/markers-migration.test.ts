@@ -20,6 +20,7 @@ import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { markdownParser } from "../../../../core/markdown/parser";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -103,7 +104,7 @@ suite("markers-migration roundtrip", () => {
 
 		// MD ファイルの store エントリ削除
 		for (const entry of store.getEntriesByPath(REL_PATH)) {
-			store.removeEntry(REL_PATH, entry.order);
+			store.removeEntry(entry);
 		}
 		assert.strictEqual(store.getEntriesByPath(REL_PATH).length, 0);
 	});
@@ -232,7 +233,7 @@ suite("マーカー移行コマンドの per-file 変換（外部化 / 埋め込
 		fs.writeFileSync(absPath, headingDoc, "utf-8");
 		store.setEntry({
 			path: REL,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: "",
 			hash: "aaaa1111",
@@ -260,7 +261,7 @@ suite("マーカー移行コマンドの per-file 変換（外部化 / 埋め込
 		for (let i = 0; i < 3; i++) {
 			store.setEntry({
 				path: REL,
-				order: i,
+				kind: "unit" as const, seat: seat(i),
 				level: i === 0 ? 1 : 2,
 				titleHash: "",
 				hash: `hash000${i}`,
@@ -278,8 +279,8 @@ suite("マーカー移行コマンドの per-file 変換（外部化 / 埋め込
 		const remaining = store.getEntriesByPath(REL);
 		assert.strictEqual(remaining.length, 2, "書き戻せなかった2行は残る");
 		assert.deepStrictEqual(
-			remaining.map((e) => e.order),
-			[1, 2],
+			remaining.map((e) => e.hash),
+			["hash0001", "hash0002"],
 		);
 		assert.strictEqual(remaining[1].need, "translate", "need も失われない");
 	});

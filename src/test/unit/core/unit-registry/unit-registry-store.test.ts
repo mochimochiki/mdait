@@ -1,5 +1,6 @@
 ﻿import { strict as assert } from "node:assert";
 import {
+	BUCKET_COUNT,
 	UnitRegistryStore,
 	getBucketId,
 	isCleanParse,
@@ -7,11 +8,11 @@ import {
 
 suite("UnitRegistryStore", () => {
 	suite("getBucketId", () => {
-		test("ハッシュの先頭3桁を小文字で返す", () => {
-			assert.equal(getBucketId("abc12345"), "abc");
-			assert.equal(getBucketId("ABC12345"), "abc");
-			assert.equal(getBucketId("00012345"), "000");
-			assert.equal(getBucketId("fff12345"), "fff");
+		test("ハッシュの先頭4桁を小文字で返す", () => {
+			assert.equal(getBucketId("abc12345"), "abc1");
+			assert.equal(getBucketId("ABC12345"), "abc1");
+			assert.equal(getBucketId("00012345"), "0001");
+			assert.equal(getBucketId("ffff2345"), "ffff");
 		});
 	});
 
@@ -62,47 +63,38 @@ suite("UnitRegistryStore", () => {
 	});
 
 	suite("serialize", () => {
-		test("全バケット（000〜fff）が出力され、各バケットに初期エントリが配置される", () => {
+		test("全区画（0000〜ffff）の目印が出力され、控えはその後ろに並ぶ", () => {
 			const store = new UnitRegistryStore();
 			// 逆順で追加
-			store.upsert("fff00001", "contentF");
-			store.upsert("abc00002", "contentA2");
-			store.upsert("abc00001", "contentA1");
-			store.upsert("000fffff", "content0");
+			store.upsert("ffff0001", "contentF");
+			store.upsert("abc10002", "contentA2");
+			store.upsert("abc10001", "contentA1");
+			store.upsert("0000ffff", "content0");
 
 			const result = store.serialize();
 			const lines = result.split("\n");
 
-			// 全4096バケットが出力される: 各バケットに初期エントリ1行
-			// 4096個の初期エントリ + 4個の追加エントリ = 4100行
-			assert.equal(lines.length, 4096 + 4); // 4100行
+			// 65536個の目印 + 4個の控え
+			assert.equal(lines.length, BUCKET_COUNT + 4);
 
-			// 000バケット（初期エントリ+追加エントリ）
-			assert.ok(lines[0].startsWith("00000000 ")); // 初期エントリ
-			assert.equal(lines[1], "000fffff content0");
+			assert.equal(lines[0], "0000");
+			assert.equal(lines[1], "0000ffff content0");
+			assert.equal(lines[2], "0001", "控えの無い区画にも目印を置く");
 
-			// 001バケットは空（初期エントリのみ）
-			assert.ok(lines[2].startsWith("00100000 ")); // 初期エントリ
-
-			// abcバケット（0xabc = 2748番目のバケット）
-			// 000: 2行（初期エントリ + 000fffff）
-			// 001〜abb: 2747バケット * 1行 = 2747行
-			// 合計: 2 + 2747 = 2749行目がabcバケット初期エントリ（インデックス2749）
-			const abcBucketIndex = 2 + 2747;
-			assert.ok(lines[abcBucketIndex].startsWith("abc00000 ")); // 初期エントリ
-			assert.equal(lines[abcBucketIndex + 1], "abc00001 contentA1");
-			assert.equal(lines[abcBucketIndex + 2], "abc00002 contentA2");
+			const abc1 = lines.indexOf("abc1");
+			assert.ok(abc1 > 0);
+			assert.equal(lines[abc1 + 1], "abc10001 contentA1");
+			assert.equal(lines[abc1 + 2], "abc10002 contentA2");
 		});
 
-		test("空のストアでも全初期エントリが出力される", () => {
+		test("空のストアでも全区画の目印が出力される", () => {
 			const store = new UnitRegistryStore();
 			const result = store.serialize();
 			const lines = result.split("\n");
 
-			// 4096個のバケット * 1行（初期エントリのみ） = 4096行
-			assert.equal(lines.length, 4096);
-			assert.ok(lines[0].startsWith("00000000 ")); // 初期エントリ
-			assert.ok(lines[4095].startsWith("fff00000 ")); // 最後の初期エントリ
+			assert.equal(lines.length, BUCKET_COUNT);
+			assert.equal(lines[0], "0000");
+			assert.equal(lines[BUCKET_COUNT - 1], "ffff");
 		});
 
 		test("決定論的出力: 同じ入力からは同じ出力", () => {
@@ -173,8 +165,8 @@ abc00002 contentA2`;
 			assert.equal(store.get("abc00002"), "contentA2");
 		});
 
-		test("バケット行の名乗りに関わらず、ハッシュから区画を決めて読み取る", () => {
-			const content = `000 
+		test("区画の目印の名乗りに関わらず、ハッシュから区画を決めて読み取る", () => {
+			const content = `0000
 abc00001 contentA1`;
 
 			const store = new UnitRegistryStore();
@@ -185,7 +177,7 @@ abc00001 contentA1`;
 		});
 
 		test("重複ハッシュは捨てずに1つへ畳む（先に出たほうの content を採る）", () => {
-			const content = `abc 
+			const content = `abc0
 abc00001 content1
 abc00001 content2`;
 
@@ -261,8 +253,8 @@ abc00002 theirs
 			assert.ok(isCleanParse(report), "CRLF というだけで原本の避難が走ってしまう");
 		});
 
-		test("CRLF の旧形式（バケット行あり）でも読めない行に数えない", () => {
-			const content = ["abc ", "abc00001 contentA1"].join("\r\n");
+		test("CRLF でも読めない行に数えない", () => {
+			const content = ["abc0", "abc00001 contentA1"].join("\r\n");
 
 			const store = new UnitRegistryStore();
 			const report = store.parse(content);
@@ -332,7 +324,7 @@ fff12345 contentF`;
 			assert.equal(store.get("abc12345"), "content1");
 		});
 
-		test("GC後も初期エントリは全て出力される", () => {
+		test("GC後も全区画の目印は出力される", () => {
 			const store = new UnitRegistryStore();
 			store.upsertMany([
 				["abc12345", "content1"],
@@ -342,8 +334,7 @@ fff12345 contentF`;
 			store.retainOnly(new Set(["abc12345"]));
 
 			const result = store.serialize();
-			// def初期エントリは存在するが、def67890エントリは削除される
-			assert.ok(result.includes("def00000 "));
+			assert.ok(result.includes("\ndef6\n"), "控えが空になった区画にも目印は残る");
 			assert.ok(!result.includes("def67890"));
 		});
 

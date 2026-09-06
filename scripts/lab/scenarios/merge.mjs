@@ -45,9 +45,6 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
 const { UnitRegistryStore } = require(path.join(REPO, "out/core/unit-registry/unit-registry-store.js"));
 const { calculateHash } = require(path.join(REPO, "out/core/hash/hash-calculator.js"));
-const { HELD_ORDER_BASE, FRONT_MATTER_ORDER } = require(
-	path.join(REPO, "out/core/unit-state/unit-state-store.js"),
-);
 const { ExternalMarkerProvider } = require(path.join(REPO, "out/core/markdown/marker-provider.js"));
 const { MdaitMarker } = require(path.join(REPO, "out/core/markdown/mdait-marker.js"));
 const { MdaitUnit } = require(path.join(REPO, "out/core/markdown/mdait-unit.js"));
@@ -145,10 +142,9 @@ const apply = (w, ...edits) => edits.reduce((acc, edit) => edit(acc) ?? acc, clo
 function toEntries(w) {
 	const entries = [];
 	for (const a of w) {
-		a.units.forEach((u, i) => {
+		a.units.forEach((u) => {
 			entries.push({
 				path: a.path,
-				order: i,
 				level: u.level,
 				titleHash: calculateHash(u.title),
 				hash: calculateHash(u.body),
@@ -286,7 +282,7 @@ function compare(expected, actual) {
 		const key = identity(e);
 		if (!got.has(key)) got.set(key, new Set());
 		got.get(key).add(meaning(e));
-		if (e.order >= HELD_ORDER_BASE && e.order !== FRONT_MATTER_ORDER) {
+		if (e.kind === "held") {
 			held.set(key, (held.get(key) ?? 0) + 1);
 		}
 	}
@@ -295,7 +291,7 @@ function compare(expected, actual) {
 	for (const [key, value] of want) {
 		if (!got.get(key)?.has(value)) lost++;
 	}
-	// 保留席の行は「位置は無いが状態は預かっている」ので、増えた行としては数えない。
+	// 席に着いていない行は「位置は無いが状態は預かっている」ので、増えた行としては数えない。
 	// 次の sync が本文と突き合わせて拾い直すか、拾われなければそのまま静かに残る
 	let ghost = 0;
 	for (const [key, values] of got) {

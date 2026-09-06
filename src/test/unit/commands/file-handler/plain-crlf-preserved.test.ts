@@ -23,6 +23,7 @@ import type { TranslationResult, Translator } from "../../../../commands/trans/t
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -79,7 +80,7 @@ suite("非Markdown: 原稿の改行コードを書き換えない", () => {
 	function registerTranslateEntry(): void {
 		UnitStateStore.getInstance().setEntry({
 			path: "target/notice.txt",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 0,
 			titleHash: "",
 			hash: "",

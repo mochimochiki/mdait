@@ -942,7 +942,7 @@ function ghostRows(unitState) {
 	for (const line of unitState.split("\n")) {
 		if (line.trim() === "" || line.startsWith("#")) continue;
 		const cols = line.split("\t");
-		if (cols.length !== 7) continue;
+		if (cols.length !== 8) continue;
 		if (!fs.existsSync(path.join(ws, cols[0]))) rows.push(line);
 	}
 	return rows;
