@@ -163,8 +163,11 @@ export class UnitRegistryStore {
 			if (!existing.content && encodedContent) {
 				existing.content = encodedContent;
 			}
+			// note は同じハッシュに別々のものが書かれうる（両陣営が別の note を付けた合流）。
+			// **読んだ順で決めない** — 順で決めると、同じ競合を2人が別々に片付けたときに
+			// 違うバイト列が出て、それがまた競合する。文字列の順で決めれば誰がやっても同じ
 			if (encodedNote) {
-				existing.note = encodedNote;
+				existing.note = existing.note && existing.note > encodedNote ? existing.note : encodedNote;
 			}
 		}
 

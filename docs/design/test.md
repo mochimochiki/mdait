@@ -74,6 +74,7 @@ AI の相手はどれも **OpenAI 互換のローカルサーバー**（`scripts
 - `npm run test:explore` → `lab sweep`: `sample-content` 全ファイルに対する機構の決定的検証（マーカー整合・need フラグのライフサイクル・**sync 冪等性**・trans/revise の sync 側挙動）。判定は FAIL（本物のバグ）と INFO（偽物の限界）に分ける
 - `npm run test:byok:e2e` → `lab regress`: 録ってある実機の12往復を再生し、`trans` が同じ結果になることを確かめる。LLM は1回も呼ばない。要求が録音と1文字でも違えば 409 で止まるので、**指示文の組み立てが変わったことに気づける**
 - `npm run test:byok`: shim 自身の単体テスト（CI 常時。①に含まれる）
+- `lab merge`: 合流の実験場。`.mdait/unit-state` と `.mdait/unit-registry` を枝ごとに違う編集で書き出し、git の3方向マージ・GNU diff3（SVN 相当）・union の3通りで合流させて、**製品と同じローダー**で読み直す。競合の数だけでなく「競合ゼロなのに状態が消えた」行を数えるのが本体（`docs/design/unit-state.md` §20）。VS Code も AI も使わないのでセッションを立てずに走る
 - `lab probe`: 頑健性プローブ（編集・章の挿入/削除/並べ替え・リネーム・移動・削除・外部変更を embedded と external の両方で流す）。判定はせず観察結果を出し、前回の run との差分を取る
 - `lab resilience`: AI を使う9経路に8種の壊れた応答を当て、原稿・用語集・翻訳メモリが壊れないかを見る（1周20〜30分・CI 対象外）
 - `lab ux`: **実 UI にしか無いもの**（ツリーの行とアイコン・確認ダイアログ・翻訳中の回転・CodeLens・通知）を code-server ホストで撮り、`ux.json` に文字でも落とす。画像だけでは前回と比べられないため（設営に数分・CI 対象外）

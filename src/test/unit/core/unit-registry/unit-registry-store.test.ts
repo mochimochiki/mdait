@@ -207,6 +207,18 @@ abc00001 realContent`;
 			assert.equal(store.get("abc00001"), "realContent");
 		});
 
+		test("重複ハッシュの note は、読んだ順に依らず同じほうが残る", () => {
+			// 同じハッシュに別々の note が付いた合流。順で決めると、同じ競合を2人が別々に
+			// 片付けたときに違うバイト列が出て、それがまた競合する
+			const forward = new UnitRegistryStore();
+			forward.parse("abc00001 c noteA\nabc00001 c noteB");
+			const backward = new UnitRegistryStore();
+			backward.parse("abc00001 c noteB\nabc00001 c noteA");
+
+			assert.equal(forward.getNote("abc00001"), backward.getNote("abc00001"));
+			assert.equal(forward.serialize(), backward.serialize());
+		});
+
 		test("読めない行は読み飛ばし、読める行はすべて残す", () => {
 			const content = `abc00001 contentA1
 this line is garbage

@@ -912,62 +912,185 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(fs.existsSync(filePath), false);
 	});
 
-	test("冪等性: load→save→loadで内容が同一であること（path境界の空行アンカー込み）", () => {
-		const filePath = path.join(tempDir, "unit-state");
-		// 正準形: path が変わる境界（a.md → b.csv）に空行アンカーが入る
-		const originalContent = `${[
-			"# mdait unit-state — 翻訳ユニットの状態管理",
-			"# path\torder\tlevel\ttitleHash\thash\tfrom\tneed",
-			"docs/en/a.md\t0\t1\tth0\taaaa\tbbbb\t",
-			"docs/en/a.md\t1\t2\tth1\tcccc\tdddd\ttranslate",
-			"",
-			"docs/en/b.csv\t0\t0\t\teeee\tffff\t",
-		].join("\n")}\n`;
-		fs.writeFileSync(filePath, originalContent, "utf-8");
-
+	test("冪等性: 書き出して読み直してまた書き出すと、1バイトも変わらないこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
-
-		// setEntryで同じ値を再設定してdirtyにする
-		const entry = store.getEntry("docs/en/a.md", 0);
-		assert.ok(entry);
-		store.setEntry(entry);
-
+		store.setEntry({ path: "docs/en/a.md", order: 0, level: 1, titleHash: "th0", hash: "aaaa", from: "bbbb", need: "" });
+		store.setEntry({ path: "docs/en/a.md", order: 1, level: 2, titleHash: "th1", hash: "cccc", from: "dddd", need: "translate" });
+		store.setEntry(plainEntry("docs/en/b.csv", "eeee", "ffff", ""));
 		store.save(tempDir);
+		const first = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
 
-		const savedContent = fs.readFileSync(filePath, "utf-8");
-		assert.strictEqual(savedContent, originalContent);
-	});
-
-	test("path境界に空行アンカーが挿入され、同一path内には挿入されないこと", () => {
-		const store = UnitStateStore.getInstance();
-		store.load(tempDir);
-
-		// a.md（複数order）→ b.md → c.csv の3グループ
-		store.setEntry({ path: "a.md", order: 0, level: 1, titleHash: "h", hash: "a0", from: "f", need: "" });
-		store.setEntry({ path: "a.md", order: 1, level: 2, titleHash: "h", hash: "a1", from: "f", need: "" });
-		store.setEntry({ path: "b.md", order: 0, level: 1, titleHash: "h", hash: "b0", from: "f", need: "" });
-		store.setEntry(plainEntry("c.csv", "c0", "f", "translate"));
-		store.save(tempDir);
-
-		const content = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
-		const bodyLines = content.split("\n").slice(2); // ヘッダー2行を除く
-
-		// 先頭グループの前には空行が無いこと
-		assert.notStrictEqual(bodyLines[0], "");
-		// 同一path内（a.md の order 0→1）に空行が無いこと
-		assert.ok(bodyLines[0].startsWith("a.md\t0\t"));
-		assert.ok(bodyLines[1].startsWith("a.md\t1\t"));
-		// path 境界ごとに空行が1行入ること
-		const blankCount = bodyLines.filter((l) => l === "").length;
-		// a→b, b→c の2境界 + 末尾改行由来の1行 = 3
-		assert.strictEqual(blankCount, 3);
-
-		// 空行込みでも再ロードで全エントリが復元されること
 		UnitStateStore.dispose();
 		const store2 = UnitStateStore.getInstance();
 		store2.load(tempDir);
-		assert.strictEqual(store2.getAllEntries().length, 4);
+		const entry = store2.getEntry("docs/en/a.md", 0);
+		assert.ok(entry);
+		store2.setEntry(entry); // 同じ値を入れ直して dirty にする
+		store2.save(tempDir);
+
+		assert.strictEqual(fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8"), first);
+	});
+
+	test("ファイルごとのブロックが、空行と見出しで挟まれること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		store.setEntry({ path: "d/a.md", order: 0, level: 1, titleHash: "h", hash: "a0", from: "f", need: "" });
+		store.setEntry({ path: "d/a.md", order: 1, level: 2, titleHash: "h", hash: "a1", from: "f", need: "" });
+		store.setEntry({ path: "d/b.md", order: 0, level: 1, titleHash: "h", hash: "b0", from: "f", need: "" });
+		store.save(tempDir);
+
+		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const rowIndex = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix));
+
+		// 各ブロックの直前は「空行 → # <path> → 空行」の3行
+		for (const filePath of ["d/a.md", "d/b.md"]) {
+			const at = rowIndex(`${filePath}\t0\t`);
+			assert.ok(at >= 3, `${filePath} のブロックが見つからない`);
+			assert.strictEqual(lines[at - 1], "");
+			assert.strictEqual(lines[at - 2], `# ${filePath}`);
+			assert.strictEqual(lines[at - 3], "");
+		}
+		// 同じファイルの行のあいだには何も挟まない
+		assert.strictEqual(rowIndex("d/a.md\t1\t"), rowIndex("d/a.md\t0\t") + 1);
+
+		// 骨格や見出しが増えても、読み直せば全エントリが戻る
+		UnitStateStore.dispose();
+		const store2 = UnitStateStore.getInstance();
+		store2.load(tempDir);
+		assert.strictEqual(store2.getAllEntries().length, 3);
+	});
+
+	test("同じディレクトリの2ファイルが、別々の区画に置かれること（同じ場所への追記を避ける）", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		store.setEntry(plainEntry("d/n1.md", "x", "f", ""));
+		store.setEntry(plainEntry("d/n2.md", "y", "f", ""));
+		store.save(tempDir);
+
+		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const between = lines.slice(
+			lines.findIndex((l) => l.startsWith("d/n1.md\t")),
+			lines.findIndex((l) => l.startsWith("d/n2.md\t")),
+		);
+		// 2つのブロックのあいだに、動かない区画の行が挟まっている
+		assert.ok(
+			between.some((l) => /^# d\/\[[0-9a-f]{2}\]$/.test(l)),
+			`区画の行が挟まっていない: ${JSON.stringify(between)}`,
+		);
+	});
+
+	suite("合流のあとのファイルを読む", () => {
+		const write = (dir: string, lines: string[]) =>
+			fs.writeFileSync(path.join(dir, "unit-state"), `${lines.join("\n")}\n`, "utf-8");
+
+		test("同じ席に2行来ても、どちらも捨てないこと", () => {
+			write(tempDir, [
+				"# mdait unit-state",
+				"a.md\t0\t1\tth\thash1\tfrom1\t",
+				"a.md\t0\t1\tth\thash2\tfrom2\trevise@old",
+			]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			const entries = store.getEntriesByPath("a.md");
+			assert.strictEqual(entries.length, 2, "片方が消えている");
+			assert.ok(entries.some((e) => e.from === "from1"));
+			assert.ok(entries.some((e) => e.from === "from2" && e.need === "revise@old"));
+			// 溢れたほうは保留席へ逃がす（位置は持たないが状態は預かる）
+			assert.strictEqual(entries.filter((e) => isHeldBackEntry(e)).length, 1);
+			assert.strictEqual(store.getLastParseReport().duplicates, 1);
+		});
+
+		test("どちらの順で並んでいても、同じ結果になること", () => {
+			const rowA = "a.md\t0\t1\tth\thash1\tfrom1\t";
+			const rowB = "a.md\t0\t1\tth\thash2\tfrom2\trevise@old";
+			const read = (rows: string[]) => {
+				const dir = createTempDir();
+				write(dir, ["# mdait unit-state", ...rows]);
+				UnitStateStore.dispose();
+				const store = UnitStateStore.getInstance();
+				store.load(dir);
+				const seated = store.getEntriesByPath("a.md").map((e) => `${e.order}\t${e.hash}\t${e.from}\t${e.need}`);
+				cleanupTempDir(dir);
+				return seated.sort();
+			};
+			assert.deepStrictEqual(read([rowA, rowB]), read([rowB, rowA]));
+		});
+
+		test("競合マーカーを読み飛ばし、両陣営の行を拾うこと", () => {
+			write(tempDir, [
+				"# mdait unit-state",
+				"<<<<<<< .mine",
+				"a.md\t0\t1\tth\thash1\tfrom1\t",
+				"=======",
+				"a.md\t0\t1\tth\thash2\tfrom2\trevise@old",
+				">>>>>>> .r42",
+			]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			assert.strictEqual(store.getEntriesByPath("a.md").length, 2);
+			assert.strictEqual(store.getLastParseReport().conflictMarkers, 3);
+		});
+
+		test("CRLF のファイルでも need に \\r が混ざらないこと", () => {
+			fs.writeFileSync(
+				path.join(tempDir, "unit-state"),
+				"# mdait unit-state\r\na.md\t0\t1\tth\thash1\tfrom1\t\r\n",
+				"utf-8",
+			);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+
+			const entry = store.getEntry("a.md", 0);
+			assert.ok(entry);
+			assert.strictEqual(entry.need, "", "need に \\r が残っている");
+			assert.strictEqual(store.getLastParseReport().skipped, 0);
+		});
+
+		test("傷があった回は、上書きの前に原本を横へ写すこと", () => {
+			write(tempDir, [
+				"# mdait unit-state",
+				"a.md\t0\t1\tth\thash1\tfrom1\t",
+				"a.md\t0\t1\tth\thash2\tfrom2\trevise@old",
+			]);
+			const original = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
+
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.save(tempDir); // 傷があった回は dirty が立つので書き戻る
+
+			const salvaged = path.join(tempDir, "unit-state.broken");
+			assert.ok(fs.existsSync(salvaged), "原本が写されていない");
+			assert.strictEqual(fs.readFileSync(salvaged, "utf-8"), original);
+		});
+
+		test("傷が無い回は、原本を写さないこと", () => {
+			write(tempDir, ["# mdait unit-state", "a.md\t0\t1\tth\thash1\tfrom1\t"]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			const entry = store.getEntry("a.md", 0);
+			assert.ok(entry);
+			store.setEntry(entry);
+			store.save(tempDir);
+
+			assert.ok(!fs.existsSync(path.join(tempDir, "unit-state.broken")));
+		});
+
+		test("既にある避難先は上書きしないこと（最初の事故の姿を残す）", () => {
+			fs.writeFileSync(path.join(tempDir, "unit-state.broken"), "最初の事故", "utf-8");
+			write(tempDir, [
+				"# mdait unit-state",
+				"a.md\t0\t1\tth\thash1\tfrom1\t",
+				"a.md\t0\t1\tth\thash2\tfrom2\t",
+			]);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.save(tempDir);
+
+			assert.strictEqual(fs.readFileSync(path.join(tempDir, "unit-state.broken"), "utf-8"), "最初の事故");
+		});
 	});
 
 	suite("行の持ち方（path → order の二段）", () => {
