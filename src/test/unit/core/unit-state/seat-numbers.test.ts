@@ -91,4 +91,16 @@ suite("席番号の決め方", () => {
 		assert.strictEqual(seats.length, 5000);
 		assertWellFormed(seats);
 	});
+
+	test("席の数より多いユニットは、黙って番号を重ねずに失敗する", () => {
+		// 越えた行は保留席の番号に化け、順序では拾われない行として扱われてしまう。
+		// 壊れた unit-state を書くより、そのファイルだけ失敗させる
+		assert.throws(() => assignSeats(new Array(8).fill(undefined), 8), RangeError);
+		// ぎりぎり収まる側は通る
+		const seats = assignSeats(new Array(7).fill(undefined), 8);
+		assert.strictEqual(seats.length, 7);
+		for (const seat of seats) {
+			assert.ok(seat >= 0 && seat < 8, `席が範囲の外: ${seat}`);
+		}
+	});
 });

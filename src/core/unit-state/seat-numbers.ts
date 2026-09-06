@@ -33,11 +33,24 @@ export const SEAT_STRIDE = 256;
  * @param preferred ユニットごとの「いま座っている席」。対応する行が無ければ `undefined`
  * @param limit 席番号の上限（この値**未満**に収める。保留席の始まり）
  * @returns ユニットと同じ長さの、狭義単調増加な席番号の配列
+ * @throws ユニットの数が席の数を超えているとき。**黙って番号を重ねない**（下記）
  */
 export function assignSeats(preferred: readonly (number | undefined)[], limit: number): number[] {
 	const count = preferred.length;
 	if (count === 0) {
 		return [];
+	}
+	// ユニットが席より多ければ、狭義単調増加な番号は原理的に配れない。
+	//
+	// **ここで黙って上限を越えると、越えた行は保留席の番号に化ける** —
+	// 保留席の行は「本文のどこにも対応する場所が無い行」として扱われ、順序では
+	// 拾われなくなる（`isHeldBackEntry`）。壊れた `unit-state` を書くより、
+	// そのファイルだけ失敗させたほうがよい（sync は1ファイルの失敗を数えて先へ進む）。
+	//
+	// 実際に届く数ではない（上限は 100 万で、1ファイルの章の数は多くて数百）。
+	// 届かない前提そのものを書き留めておくための番人である。
+	if (count >= limit) {
+		throw new RangeError(`Cannot seat ${count} units: unit-state has only ${limit} seats per file`);
 	}
 
 	// 1. 据え置ける席だけを残す。並びが逆転しているもの（＝章が移動した）は手放す。
