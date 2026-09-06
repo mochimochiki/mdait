@@ -148,7 +148,9 @@ a2b5c7d8 <encoded_content> <encoded_note>
 - **content**: content-addressed で不変（旧内容は revise の差分生成に必要なので残す）
 - **note**: ユニットに追従する恒久メタ。本文編集で hash が変わると sync（`updateSectionHashes`→`migrateNotes`）が旧→新 hash へ移送する（決定的・冪等・AI 不使用）
 
-**GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリ（content・note とも）を削除します。
+**GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリ（content・note とも）を削除します。ただし**使用中のhashが1つも集まらなかった回は何もしません** — ステータスツリーが組み上がっていない回に空集合で走ると、控えを全部消してしまうためです。
+
+**壊れたファイルの扱い**（ADR-260906-02）: 読み取りは例外を投げず、読めない行を読み飛ばして読めた行はすべて残します。重複ハッシュは1つに畳み、git の競合マーカーも読み飛ばします。傷があった回は、**上書きする前に原本を `.mdait/unit-registry.broken` へ1度だけ写して**警告を残します。ここに控えてある旧原文はどこにも複製が無く、失うと `need:revise@X` の戻り先が永久に引けなくなるためです。`.mdait/.gitattributes` の `unit-registry merge=union` は、マージで片方の陣営の行が落ちるのを防ぎます。
 
 **実装**: [`src/core/unit-registry/`](../../src/core/unit-registry/)
 

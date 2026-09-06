@@ -105,4 +105,59 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 		assert.equal(await reloaded.loadUnitRegistry("cccc3333"), "buffered");
 		assert.equal(await reloaded.loadNote("a0b02222"), "carry");
 	});
+	test("控えの1行が壊れても、読める控えは残り、原本は unit-registry.broken へ避難する", async () => {
+		const mgr = UnitRegistryManager.getInstance();
+		mgr.saveUnitRegistry("aaaa1111", "old source A");
+		mgr.saveUnitRegistry("bbbb2222", "old source B");
+		await mgr.flushBuffer();
+
+		// git のマージが同じ行を2度残した形（実測ではこれ1行で控えが丸ごと消えていた）
+		const registryPath = path.join(tempDir, ".mdait", "unit-registry");
+		const original = fs.readFileSync(registryPath, "utf-8");
+		const lines = original.split("\n");
+		const duplicated = lines.findIndex((line) => line.startsWith("aaaa1111 "));
+		lines.splice(duplicated, 0, lines[duplicated]);
+		fs.writeFileSync(registryPath, lines.join("\n"), "utf-8");
+
+		// 読み直して、別のユニットの控えを1つ足して書き戻す（sync 1回分に相当）
+		UnitRegistryManager.resetInstance();
+		const reopened = UnitRegistryManager.getInstance();
+		reopened.saveUnitRegistry("cccc3333", "new source C");
+		await reopened.flushBuffer();
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry("aaaa1111"), "old source A", "壊れた行のあった控えが消えている");
+		assert.equal(await reloaded.loadUnitRegistry("bbbb2222"), "old source B", "無関係な控えまで消えている");
+		assert.equal(await reloaded.loadUnitRegistry("cccc3333"), "new source C");
+		assert.ok(
+			fs.existsSync(path.join(tempDir, ".mdait", "unit-registry.broken")),
+			"上書きする前に原本が避難していない",
+		);
+	});
+
+	test("読めない行だけが混ざったファイルでも、読める控えは1つも失われない", async () => {
+		const mgr = UnitRegistryManager.getInstance();
+		mgr.saveUnitRegistry("aaaa1111", "old source A");
+		await mgr.flushBuffer();
+
+		const registryPath = path.join(tempDir, ".mdait", "unit-registry");
+		fs.writeFileSync(registryPath, `${fs.readFileSync(registryPath, "utf-8")}\n<<<<<<< HEAD\n`, "utf-8");
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry("aaaa1111"), "old source A");
+	});
+
+	test("使用中のハッシュが1つも渡されなければ GC は何もしない", async () => {
+		const mgr = UnitRegistryManager.getInstance();
+		mgr.saveUnitRegistry("aaaa1111", "old source A");
+		await mgr.flushBuffer();
+
+		await mgr.garbageCollect(new Set());
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry("aaaa1111"), "old source A", "空の集合で控えが消された");
+	});
 });
