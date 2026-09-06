@@ -35,7 +35,7 @@ export interface MarkerFileContext {
 	 * 読み込み時の照合結果の控え。`attachMarkers` が書き、`detachMarkers` が読んで消す。
 	 *
 	 * 「この行はいまの本文のどこにも対応が付かなかった」と分かるのは**読み込み時**だけで、
-	 * 保留席へ移すかどうかを決めているのは**書き出し時**である。あいだで sync が原文から
+	 * 席から降ろすかどうかを決めているのは**書き出し時**である。あいだで sync が原文から
 	 * 消えた章を作り直すため、書き出し側はユニット数が元に戻った姿しか見ておらず、
 	 * 「減った」という事実に一度も触れない（roadmap-v01 の P03）。その事実を運ぶための控え。
 	 *
@@ -47,7 +47,7 @@ export interface MarkerFileContext {
 	/**
 	 * この書き換えが「人が明示的に頼んだ削除」か（ユニットの削除・verify-deletion の一括削除）。
 	 *
-	 * 立っていると、どのユニットにも対応しなかった行を**保留席へ逃がさず刈る**。
+	 * 立っていると、どのユニットにも対応しなかった行を**席へ預けず刈る**。
 	 * 走査の副作用で減ったのではなく人が消したと分かっているので、預ける相手がいない。
 	 * ユニットが0件になる形（最後の1ユニットを消した）も含めて刈る。
 	 */
@@ -178,7 +178,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		const entries = this.store.getEntriesByPath(filePath);
 		// 「何番目か」ではなく中身で突き合わせる。章の挿入・削除・並べ替えで
 		// 対応がずれないようにするため（詳細は unit-state-align.ts）。
-		// 保留席の行（＝前回の刈り取りを見送って取り残された行）は、順序で機械的に埋める段から外す。
+		// 席に着いていない行（＝前回の刈り取りを見送って取り残された行）は、順序で機械的に埋める段から外す。
 		// 内容が一致すれば拾えるので、章が戻ってくれば正しく復帰する。
 		const held = new Set<number>();
 		for (let i = 0; i < entries.length; i++) {
@@ -217,7 +217,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		if (!filePath) {
 			return;
 		}
-		// 読み込み時に「対応が付かなかった」と分かった行を、上書きされる前に保留席へ移す。
+		// 読み込み時に「対応が付かなかった」と分かった行を、上書きされる前に席から降ろす。
 		// 控えは一度だけ使う（同じ ctx で二度書き出しても二重に効かないように消す）。
 		const memo = ctx.alignment;
 		ctx.alignment = undefined;
@@ -262,7 +262,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 
 		// どのユニットにも席を譲らなかった行の始末。ユニットが減ったときにこれが残ると、
 		// 次に増えたときそれを拾ってしまう。ただし「一時的に減っただけ」のときは刈らず、
-		// 保留席へ移して位置の意味だけを剥がす（下記 shouldPruneTail）。
+		// 席から降ろして位置の意味だけを剥がす（下記 shouldPruneTail）。
 		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !taken.has(e.seat)).map((e) => e.seat);
 		const entryCount = this.store.countLiveEntriesByPath(filePath);
 		if (leftovers.length > 0) {
@@ -279,7 +279,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				}
 			} else {
 				const parked = this.store.parkEntries(filePath, leftovers);
-				// 新たに保留した分があるときだけ警告する。保留席がある状態は安定なので、
+				// 新たに預かった分があるときだけ警告する。預かっている状態は安定なので、
 				// 毎 sync（autoSyncOnSave を含む）同じ警告を積むと読む価値が無くなる
 				if (parked > 0) {
 					logger.warn("marker", "Skipped pruning unit-state entries: unit count dropped sharply", {
@@ -304,7 +304,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	 * 古い席と番号が混ざって「余った行」が湧く。
 	 *
 	 * どちらの場合も、**いまストアに生きている席だけ**を採る。控えを取ってからここへ
-	 * 来るまでのあいだに行が動いている（保留席へ逃がした・席から拾い戻した）ためである。
+	 * 来るまでのあいだに行が動いている（席から降ろした・席へ戻した）ためである。
 	 */
 	private seatPreferences(
 		before: readonly UnitStateEntry[],
@@ -401,8 +401,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * 変わる、といった理由でユニット数は簡単に激減する。その状態で刈ると、原因を直して
  * ユニット数が戻っても、消えた `from`/`need` は戻らない。
  *
- * 刈らないと決めた行は捨て置かれるのではなく、**保留席へ移して位置の意味を剥がす**
- * （`UnitStateStore.parkEntries`）。保留席の行は順序では拾われず、内容（本文の hash・
+ * 刈らないと決めた行は捨て置かれるのではなく、**席から降ろして位置の意味を剥がす**
+ * （`UnitStateStore.parkEntries`）。席に着いていない行は順序では拾われず、内容（本文の hash・
  * 見出しの hash とレベル）が一致したときだけ拾われる。だから章が戻ってくれば正しく復帰し、
  * 戻ってこなければ無害に居座るだけになる。この保証があって初めて
  * 「消す側の失敗は取り返せず、残す側の失敗は取り返せる」という非対称が成り立つ。
@@ -415,7 +415,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * 行だけ守って本文を消したら意味が無いので、疑うかどうかの基準は1つでなければならない。
  *
  * **この判定は「余った行」にしか効かない。** 刈るかどうかを問われるのは、書き出しで
- * どのユニットにも席を譲らなかった行だけである（保留席の行はそもそも席を争っていない
+ * どのユニットにも席を譲らなかった行だけである（席に着いていない行はそもそも席を争っていない
  * ので、ユニット数がいくら増えても消えない）。人が明示的に頼んだ削除は判定を通さず必ず
  * 刈る（`MarkerFileContext.deliberateDeletion`）。詳しくは docs/design/unit-state.md §14。
  */

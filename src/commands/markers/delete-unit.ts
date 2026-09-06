@@ -6,7 +6,7 @@
  *   embedded では本文から該当セクションが消え、external では unit-state ストアの行も整合させる
  *   （detachMarkers は「ユニット数が急に減った回は刈らない」安全弁を持つので、人が明示的に頼んだ
  *   削除であることを `MarkerFileContext.deliberateDeletion` で伝える。伝えないと消したはずの行が
- *   保留席へ逃げて残る）。
+ *   席へ預けられて残る）。
  *   安全弁として need:verify-deletion のユニットのみを対象とする（任意ユニットの誤削除を防ぐ）。
  *
  *   呼び出し口は `MdFileHandler.deleteUnit` に一本化されている
