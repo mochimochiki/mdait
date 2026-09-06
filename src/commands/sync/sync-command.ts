@@ -176,13 +176,6 @@ export function resetOrphanMemory(): void {
 }
 
 /**
- * 原文が空で同期を中止したことを伝える（訳文消失の予防: P6）。
- * 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため黙らない。
- * fire-and-forget（await すると呼び出し側の処理中フラグが残る）。
- *
- * @param count 中止したファイル数。0 のときは何もしない
- */
-/**
  * 合流の途中の原稿を飛ばしたことを伝える。
  *
  * 飛ばさずに進むと、`<<<<<<< HEAD` の行を本文として hash を取り、全ユニットに
@@ -230,6 +223,13 @@ async function isMidMerge(sourceFile: string, targetFile: string): Promise<boole
 	return false;
 }
 
+/**
+ * 原文が空で同期を中止したことを伝える（訳文消失の予防: P6）。
+ * 「何も起きなかった」ように見えると、原文を戻さないまま作業を続けてしまうため黙らない。
+ * fire-and-forget（await すると呼び出し側の処理中フラグが残る）。
+ *
+ * @param count 中止したファイル数。0 のときは何もしない
+ */
 function sourceEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
