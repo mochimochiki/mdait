@@ -99,14 +99,32 @@ export class UnitRegistryManager {
 			return;
 		}
 		const store = await this.getOrLoadStore();
+		const added = this.mergeWriteBufferInto(store);
+		// **控えが1件も増えていないなら、同じバイト列を書き直さない。**
+		//
+		// 控えは content-addressed で不変なので、既にあるハッシュを入れ直しても中身は
+		// 変わらない。それでも書いていたため、**何も翻訳していない sync でも
+		// `.mdait/unit-registry` の更新時刻が動き**、SVN や git から見て「変わった」
+		// ファイルになっていた（実測: 変更なしの sync を4回流すと1回書き直していた）。
+		//
+		// 読み取りに傷があった回だけは書く。畳んだ結果を書き戻さないと、
+		// 競合マーカーや重複の残った原本がそのまま残り続ける。
+		if (!added && !this.needsSalvage) {
+			return;
+		}
 		await this.persistStore(store);
 	}
 
-	/** 保留中の writeBuffer（content スナップショット）をストアへマージしてクリアする */
-	private mergeWriteBufferInto(store: UnitRegistryStore): void {
+	/**
+	 * 保留中の writeBuffer（content スナップショット）をストアへマージしてクリアする。
+	 *
+	 * @returns 控えが1件でも増えたか（増えていなければ、ストアの中身は1バイトも変わっていない）
+	 */
+	private mergeWriteBufferInto(store: UnitRegistryStore): boolean {
 		if (this.writeBuffer.size === 0) {
-			return;
+			return false;
 		}
+		let added = false;
 		for (const [hash, encoded] of this.writeBuffer) {
 			// **既にある控えは書き換えない。** 控えは content-addressed で不変なので、同じ
 			// ハッシュには同じ本文しか入らない。にもかかわらず毎 sync で入れ直していたため、
@@ -116,8 +134,10 @@ export class UnitRegistryManager {
 				continue;
 			}
 			store.upsert(hash, encoded);
+			added = true;
 		}
 		this.writeBuffer.clear();
+		return added;
 	}
 
 	/**

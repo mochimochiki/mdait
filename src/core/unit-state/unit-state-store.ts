@@ -62,6 +62,19 @@ function seatPriority(entry: UnitStateEntry): string {
 	return `${9 - rank}\t${entry.hash}\t${entry.from}\t${entry.need}`;
 }
 
+/** 2つの行が7列すべて同じか（＝ファイルに書けば1バイトも違わないか） */
+function sameRow(a: UnitStateEntry, b: UnitStateEntry): boolean {
+	return (
+		a.path === b.path &&
+		a.order === b.order &&
+		a.level === b.level &&
+		a.titleHash === b.titleHash &&
+		a.hash === b.hash &&
+		a.from === b.from &&
+		a.need === b.need
+	);
+}
+
 /**
  * 「保留席」の order の始まり。
  *
@@ -254,7 +267,23 @@ export class UnitStateStore {
 	 * 静かに消える。漏れは実行時にしか現れないので、入口を絞って構造的に防ぐ。
 	 */
 	private putRow(entry: UnitStateEntry): void {
-		this.ensureRows(entry.path).set(entry.order, entry);
+		const rows = this.ensureRows(entry.path);
+		const sitting = rows.get(entry.order);
+		if (sitting && sameRow(sitting, entry)) {
+			// **同じ値を入れ直しただけなら、何も起きなかったことにする。**
+			//
+			// sync は毎回すべてのユニットを書き戻すので、1文字も変わっていない回でも
+			// ここが全行分呼ばれる。無条件に `dirty` を立てると、そのたびに
+			// `.mdait/unit-state` の更新時刻が動き、SVN や git から見て「変わった」
+			// ファイルになる。翻訳を1つも触っていない日でもコミットに載り、
+			// 中身が同じ行同士の合流を毎回起こすことになる。
+			//
+			// `pending` にも積まない。積むと `load()` の割り込みのあとで
+			// 「読み直した値を、同じ値で上書きする」だけの当て直しが走り、
+			// `replayPending` が `dirty` を立てるので結局書いてしまう。
+			return;
+		}
+		rows.set(entry.order, entry);
 		this.recordPending(entry.path, entry.order, entry);
 		this.dirty = true;
 	}
@@ -504,6 +533,18 @@ export class UnitStateStore {
 				}
 				fillBuckets(dir, bucketOf(entry.path) + 1);
 				lines.push("", `# ${entry.path}`, "");
+			} else {
+				// **行と行のあいだにも空行を1つ置く。**
+				//
+				// 3方向マージは「変えた行が隣り合っている」だけで競合を出す。挟むものが
+				// 何も無いと、同じ記事の**隣り合う章**を2人が別々に訳しただけで人の手が
+				// 要る（実測 S6: 第1章と第2章をそれぞれ改訂 → git も diff3 も競合）。
+				// あいだに1行でも変わらない行があれば、どちらの変更もそのまま通る。
+				//
+				// 空行はローダーが読み飛ばすので、**形式は1バイトも変わらない**
+				// （古い版の mdait もそのまま読める）。増えるのは行数だけで、
+				// 1行あたり1バイトしか太らない。
+				lines.push("");
 			}
 			lines.push(
 				`${entry.path}\t${entry.order}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,

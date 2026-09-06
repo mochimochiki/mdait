@@ -926,10 +926,34 @@ suite("UnitStateStore", () => {
 		store2.load(tempDir);
 		const entry = store2.getEntry("docs/en/a.md", 0);
 		assert.ok(entry);
-		store2.setEntry(entry); // 同じ値を入れ直して dirty にする
+		// いったん別の値にしてから戻す（同じ値を入れ直すだけでは書き直さないため）
+		store2.setEntry({ ...entry, hash: "9999" });
+		store2.setEntry(entry);
 		store2.save(tempDir);
 
 		assert.strictEqual(fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8"), first);
+	});
+
+	test("同じ値を入れ直しただけなら、ファイルを書き直さないこと", () => {
+		const filePath = path.join(tempDir, "unit-state");
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		store.setEntry({ path: "docs/en/a.md", order: 0, level: 1, titleHash: "th0", hash: "aaaa", from: "bbbb", need: "" });
+		store.setEntry(plainEntry("docs/en/b.csv", "eeee", "ffff", ""));
+		store.save(tempDir);
+
+		// 書き直したかどうかを、ファイルが生え直すかで見る
+		fs.unlinkSync(filePath);
+		for (const entry of store.getAllEntries()) {
+			store.setEntry({ ...entry });
+		}
+		store.save(tempDir);
+		assert.strictEqual(fs.existsSync(filePath), false, "何も変わっていないのに書き直している");
+
+		// 1列でも違えば書く
+		store.setEntry({ path: "docs/en/a.md", order: 0, level: 1, titleHash: "th0", hash: "aaaa", from: "bbbb", need: "review" });
+		store.save(tempDir);
+		assert.strictEqual(fs.existsSync(filePath), true);
 	});
 
 	test("ファイルごとのブロックが、空行と見出しで挟まれること", () => {
@@ -951,8 +975,9 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(lines[at - 2], `# ${filePath}`);
 			assert.strictEqual(lines[at - 3], "");
 		}
-		// 同じファイルの行のあいだには何も挟まない
-		assert.strictEqual(rowIndex("d/a.md\t1\t"), rowIndex("d/a.md\t0\t") + 1);
+		// 同じファイルの行のあいだには空行を1つ挟む（隣り合う章の変更が競合しないように）
+		assert.strictEqual(rowIndex("d/a.md\t1\t"), rowIndex("d/a.md\t0\t") + 2);
+		assert.strictEqual(lines[rowIndex("d/a.md\t0\t") + 1], "");
 
 		// 骨格や見出しが増えても、読み直せば全エントリが戻る
 		UnitStateStore.dispose();
