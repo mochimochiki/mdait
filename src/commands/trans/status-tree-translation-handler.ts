@@ -452,4 +452,44 @@ export class StatusTreeTranslationHandler {
 			return undefined;
 		}
 	}
+
+	/**
+	 * いまある訳文を使わず、1ユニットを全文で訳し直す。
+	 *
+	 * 改訂（`need:revise`）はふつうパッチで当てるが、旧原文の控えが引けないなどで
+	 * 据え置かれると**次も必ず同じところで止まる**。そこから抜ける道が要る。
+	 * 訳し終えたユニット（`need` 空）にも出すのは、「訳が古びたので丸ごと訳し直したい」が
+	 * 素の要求としてあるからである（ADR-260906-01）。
+	 *
+	 * **これから何が起きるか・取り消せるかは確認ダイアログの担当**（ux.md §3.3）なので、
+	 * 走らせる前に1度だけ尋ねる。文言は翻訳の通知から出す逃げ道と同じものを使う —
+	 * 起こることが同じなのに言い方が違うと、同じ操作だと分からなくなる。
+	 */
+	public async retranslateUnit(item?: StatusItem): Promise<TransCommandResult | undefined> {
+		// コマンドは引数なしでも叩けるので、受け取ってから確かめる（他の StatusItem 系と同じ作法）
+		if (!item || item.type !== StatusItemType.Unit || !item.filePath || !item.unitHash) {
+			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
+			return;
+		}
+
+		const proceed = vscode.l10n.t("Re-translate");
+		const confirmed = await vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+			),
+			{ modal: true },
+			proceed,
+		);
+		if (confirmed !== proceed) {
+			return;
+		}
+
+		try {
+			return await transUnitCommand(item.filePath, item.unitHash, { forceFullTranslation: true });
+		} catch (error) {
+			logger.error("trans", "Error during unit re-translation", formatError(error));
+			await showTranslationError(error);
+			return undefined;
+		}
+	}
 }

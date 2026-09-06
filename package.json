@@ -96,6 +96,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.unit.retranslate",
+        "title": "%mdait.unit.retranslate.title%",
+        "icon": "$(sparkle)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.unit.unisolate",
         "title": "%mdait.unit.unisolate.title%",
         "icon": "$(circle-slash)",
@@ -331,6 +337,10 @@
         },
         {
           "command": "mdait.unit.markIsolated",
+          "when": "false"
+        },
+        {
+          "command": "mdait.unit.retranslate",
           "when": "false"
         },
         {

@@ -117,6 +117,25 @@ export function buildArgTransformer(
 			return args;
 		};
 	}
+	// ユニットを指すコマンドは StatusItem に unitHash まで要る。lab からは
+	// `<コマンド> <訳文のパス> <ユニットのハッシュ>` の2引数で渡す
+	if (command === "mdait.translate.unit" || command === "mdait.unit.retranslate") {
+		return (args) => {
+			if (args.length >= 2 && typeof args[0] === "string" && typeof args[1] === "string") {
+				const filePath = absolute(args[0]);
+				return [
+					{
+						type: "unit",
+						filePath,
+						fileName: filePath.split(/[\\/]/).pop() ?? "",
+						unitHash: args[1],
+					},
+					...args.slice(2),
+				];
+			}
+			return args;
+		};
+	}
 	if (DIRECTORY_ITEM_COMMANDS.has(command)) {
 		return (args) => {
 			if (args.length > 0 && typeof args[0] === "string") {

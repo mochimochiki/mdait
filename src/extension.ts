@@ -306,6 +306,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	const unitUnisolateDisposable = vscode.commands.registerCommand("mdait.unit.unisolate", (item?: StatusItem) =>
 		needHandler.unisolate(item),
 	);
+	// いまある訳文を使わず1ユニットを訳し直す（CodeLens の「その他」から。ADR-260906-01）
+	const unitRetranslateDisposable = vscode.commands.registerCommand("mdait.unit.retranslate", (item?: StatusItem) =>
+		translateItemCommand.retranslateUnit(item),
+	);
 	// 要対応キューの連続裁定（UX-R4: 裁定→次へ の往復をなくす）
 	const needsAttentionNextDisposable = vscode.commands.registerCommand(
 		"mdait.needsAttention.next",
@@ -794,6 +798,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		fileDiscardOrphanDisposable,
 		unitMarkIsolatedDisposable,
 		unitUnisolateDisposable,
+		unitRetranslateDisposable,
 		needsAttentionNextDisposable,
 		translateSelectionDisposable,
 		translateFrontmatterDisposable,
