@@ -201,8 +201,11 @@ suite("ExternalMarkerProvider", () => {
 		const content = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
 		const dataLines = content.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"));
 		assert.strictEqual(dataLines.length, 2);
-		assert.ok(dataLines[0].startsWith(`${TARGET_PATH}\t0\t`));
-		assert.ok(dataLines[1].startsWith(`${TARGET_PATH}\t1\t`));
+		// 席番号は「二度と動かない背番号」なので 0..N-1 とは限らない。7列で、
+		// パスが同じで、番号が増える向きに並んでいることを見る
+		const columns = dataLines.map((l) => l.split("\t"));
+		assert.ok(columns.every((c) => c.length === 7 && c[0] === TARGET_PATH));
+		assert.ok(Number(columns[0][1]) < Number(columns[1][1]));
 	});
 
 	test("detach: ユニットが急減したときは末尾の余った行を刈らず保留席へ移すこと", () => {
@@ -489,6 +492,45 @@ suite("ExternalMarkerProvider", () => {
 			assert.strictEqual(parsed.units[1].marker.from, null, "見出しが同じでも席の行は付かない");
 			assert.strictEqual(parsed.units[1].marker.hash, "", "本文hashも付かない");
 		});
+	});
+
+	test("detach: 章を1つ挿し込んでも、前後の行の席は動かないこと", () => {
+		// 席番号を毎回 0..N-1 に振り直していた頃は、章を1つ挿すだけでその記事のブロックが
+		// 丸ごと書き換わり、同じ記事への別の編集と必ず領域が重なっていた（実測 S2 / S9）
+		const twoChapters = ["# 見出し1", "", "本文1。", "", "## 見出し2", "", "本文2。", ""].join("\n");
+		const threeChapters = [
+			"# 見出し1",
+			"",
+			"本文1。",
+			"",
+			"## 割り込みの章",
+			"",
+			"あとから挿し込んだ本文。",
+			"",
+			"## 見出し2",
+			"",
+			"本文2。",
+			"",
+		].join("\n");
+
+		const provider = new ExternalMarkerProvider(store);
+		const first = markdownParser.parse(twoChapters, makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx1 = { filePath: TARGET_PATH };
+		provider.attachMarkers(first.units, ctx1);
+		provider.detachMarkers(first.units, ctx1);
+		const before = store.getEntriesByPath(TARGET_PATH).map((e) => e.order);
+		assert.strictEqual(before.length, 2);
+
+		const second = markdownParser.parse(threeChapters, makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx2 = { filePath: TARGET_PATH };
+		provider.attachMarkers(second.units, ctx2);
+		provider.detachMarkers(second.units, ctx2);
+
+		const after = store.getEntriesByPath(TARGET_PATH).map((e) => e.order);
+		assert.strictEqual(after.length, 3);
+		assert.strictEqual(after[0], before[0], "先頭の章の席は動かない");
+		assert.strictEqual(after[2], before[1], "後ろの章の席も動かない");
+		assert.ok(after[1] > before[0] && after[1] < before[1], "新しい章は前後のあいだに座る");
 	});
 
 	test("detach: ユニットが少し減っただけなら末尾の余った行を刈ること", () => {

@@ -24,6 +24,9 @@ const SALVAGE_FILENAME = "unit-state.broken";
 /** ディレクトリごとに置く区画の数 */
 const BUCKETS_PER_DIR = 64;
 
+/** ファイルごとの「席の行を置く区画」の見出しに付ける印 */
+const HELD_SECTION_SUFFIX = "[held]";
+
 /** 合流で残る競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
 function isConflictMarkerLine(line: string): boolean {
 	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
@@ -517,14 +520,32 @@ export class UnitStateStore {
 		let prevPath: string | undefined;
 		let prevDir: string | undefined;
 		let bucketCursor = 0;
+		let tailOpened = false;
+		let needBlank = false;
 		const fillBuckets = (dir: string, upTo: number) => {
 			while (bucketCursor < upTo) {
 				lines.push(`# ${dir}[${bucketCursor.toString(16).padStart(2, "0")}]`);
 				bucketCursor++;
 			}
 		};
+		// ファイルごとに「席の行（保留席・frontmatter）を置く区画」を、**行が1つも無くても常に開ける。**
+		//
+		// 席の行は本文の行のうしろに並ぶ。章を1つ消すと、その行が席へ移って**ブロックの
+		// 末尾に1行増える** — 増える場所がちょうど最後の章の行の隣なので、同じ記事の
+		// 最後の章を別の枝が直していると必ず競合する（実測 S10）。区画をいつも開けて
+		// おけば、増える行は「見出しと空行のうしろ」に入るので、最後の章の行とのあいだに
+		// 変わらない行が3つ挟まる。見出しはローダーが読み飛ばすので形式は変わらない。
+		const openTail = () => {
+			if (prevPath === undefined || tailOpened) {
+				return;
+			}
+			lines.push("", `# ${prevPath} ${HELD_SECTION_SUFFIX}`, "");
+			tailOpened = true;
+			needBlank = false;
+		};
 		for (const entry of sortedEntries) {
 			if (entry.path !== prevPath) {
+				openTail();
 				const dir = dirOf(entry.path);
 				if (dir !== prevDir) {
 					if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
@@ -533,7 +554,14 @@ export class UnitStateStore {
 				}
 				fillBuckets(dir, bucketOf(entry.path) + 1);
 				lines.push("", `# ${entry.path}`, "");
-			} else {
+				prevPath = entry.path;
+				tailOpened = false;
+				needBlank = false;
+			}
+			if (!isLiveBodyEntry(entry)) {
+				openTail();
+			}
+			if (needBlank) {
 				// **行と行のあいだにも空行を1つ置く。**
 				//
 				// 3方向マージは「変えた行が隣り合っている」だけで競合を出す。挟むものが
@@ -549,9 +577,10 @@ export class UnitStateStore {
 			lines.push(
 				`${entry.path}\t${entry.order}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
 			);
-			prevPath = entry.path;
+			needBlank = true;
 		}
 
+		openTail();
 		if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
@@ -696,35 +725,11 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 刈り取りを見送った末尾のエントリを「保留席」へ移す（detachMarkers から呼ぶ）。
-	 *
-	 * order を `HELD_ORDER_BASE` 以降へ付け替えるだけで、内容（hash / from / need）は変えない。
-	 * こうしておくと、次に読むときその行が「取り残された行」だと**行そのものから分かる**。
-	 * 列を増やさずに覚えられるので、7列固定の形式を崩さずに済む。
-	 *
-	 * これが無いと、いまのユニット数との比率でしか保留を推し量れず、ユニットが少し増えた
-	 * だけで取り残された行が「普通の余り」に見え、順序で新しい章に貼り付いてしまう。
-	 *
-	 * @returns 保留席へ移したエントリ数
-	 */
-	parkEntriesFrom(filePath: string, fromOrder: number): number {
-		this.autoLoad();
-		const moving: UnitStateEntry[] = [];
-		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
-			if (entry.order < HELD_ORDER_BASE && entry.order >= fromOrder) {
-				moving.push(entry);
-			}
-		}
-		moving.sort((a, b) => a.order - b.order);
-		return this.moveToHeldSeats(filePath, moving);
-	}
-
-	/**
-	 * 指定した order の行を「保留席」へ移す（`parkEntriesFrom` の位置によらない版）。
+	 * 指定した order の行を「保留席」へ移す。
 	 *
 	 * 末尾かどうかではなく「**いまの本文に対応が付かなかった**」ことを根拠に退避する。
 	 * 文書の途中の章が1つ消えたとき、sync が原文からその章を作り直すのでユニット数は
-	 * 元に戻り、末尾を見る `parkEntriesFrom` は何も拾えない。対応が付かなかった事実を
+	 * 元に戻るため、位置で見ていると何も拾えない。対応が付かなかった事実を
 	 * 知っているのは読み込み時（`alignEntriesToUnits`）だけなので、そこから運ばれた
 	 * order をそのまま受け取る（`MarkerFileContext.alignment`）。
 	 *
@@ -810,33 +815,6 @@ export class UnitStateStore {
 		let removed = 0;
 		for (const order of orders) {
 			if (this.dropRow(filePath, order)) {
-				removed++;
-			}
-		}
-		return removed;
-	}
-
-	/**
-	 * 指定パスの、order が fromOrder 以上の**通常の行**を削除する。
-	 * ユニットが減ったときに末尾の旧エントリが残るのを防ぐ（detachMarkers から呼ぶ）。
-	 *
-	 * **保留席（`HELD_ORDER_BASE` 以降）の行は消さない。** 保留席の order は必ず
-	 * いまのユニット数より大きいので、範囲で消すと「ユニット数が元に戻った瞬間に
-	 * 保留席が全部消える」ことになり、席が本来の役目（本文が戻ってくるまで状態を
-	 * 預かる）を果たせない。席の行を消すのは、拾い戻されたとき（`dropEntries`）と
-	 * ファイルそのものを手放すとき（`removeEntriesByPath`）だけである（ADR-260809-01）。
-	 *
-	 * @returns 削除されたエントリ数
-	 */
-	pruneEntriesFrom(filePath: string, fromOrder: number): number {
-		this.autoLoad();
-		const rows = this.rowsOf(filePath);
-		if (!rows) {
-			return 0;
-		}
-		let removed = 0;
-		for (const order of [...rows.keys()]) {
-			if (order >= fromOrder && order < HELD_ORDER_BASE && this.dropRow(filePath, order)) {
 				removed++;
 			}
 		}

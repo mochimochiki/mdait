@@ -1536,7 +1536,7 @@ export async function sync_CoreProc(
 	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
 	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
 	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
-	// unit-state の末尾行を刈らない条件（unit-state-align の pruneEntriesFrom）と同じ考え方。
+	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneTail）と同じ考え方。
 	//
 	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
 	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
