@@ -148,6 +148,8 @@ a2b5c7d8 <encoded_content> <encoded_note>
 - **content**: content-addressed で不変（旧内容は revise の差分生成に必要なので残す）
 - **note**: ユニットに追従する恒久メタ。本文編集で hash が変わると sync（`updateSectionHashes`→`migrateNotes`）が旧→新 hash へ移送する（決定的・冪等・AI 不使用）
 
+**既にある控えは書き換えません**（ADR-260906-03）。控えは content-addressed で不変なのに毎 sync で入れ直しており、圧縮の出力が環境で1バイトでも違うと**中身が同じなのにファイル全体が差分になる**（全行の差分は必ず合流でぶつかります）。同じハッシュに別々の note が来たときも、読んだ順ではなく文字列の順で決めます。
+
 **GC処理**: sync完了後、ファイルサイズが5MB超過時に使用中のhash以外のレジストリ（content・note とも）を削除します。ただし**使用中のhashが1つも集まらなかった回は何もしません** — ステータスツリーが組み上がっていない回に空集合で走ると、控えを全部消してしまうためです。
 
 **壊れたファイルの扱い**（ADR-260906-02）: 読み取りは例外を投げず、読めない行を読み飛ばして読めた行はすべて残します。重複ハッシュは1つに畳み、git の競合マーカーも読み飛ばします。傷があった回は、**上書きする前に原本を `.mdait/unit-registry.broken` へ1度だけ写して**警告を残します。ここに控えてある旧原文はどこにも複製が無く、失うと `need:revise@X` の戻り先が永久に引けなくなるためです。`.mdait/.gitattributes` の `unit-registry merge=union` は、マージで片方の陣営の行が落ちるのを防ぎます。
@@ -158,16 +160,29 @@ a2b5c7d8 <encoded_content> <encoded_note>
 
 翻訳ユニットの状態を `.mdait/unit-state` で管理します。非Markdownファイル（.txt, .csv等）はファイル内にHTMLコメントマーカーを埋め込めないため、また MD-external モード（マーカー外部化）でも本文にマーカーを残さないため、外部ストアで状態を永続化します。**非MDファイルは「ファイル＝単一ユニット」= MDユニットの N=1 特殊形**として同じストアで扱います。
 
-**保存形式**: TSV（タブ区切り）。`path・order・level・titleHash・hash・from・need` の7カラム。複合キー `(path, order)` でユニットを識別し、`path → order` の二段で昇順ソートしてgit diffを読みやすくします。非MDファイルは `order=0, level=0, titleHash=""` の1行、MD-external は同一 path に複数 order 行を持ちます。
+**保存形式**: TSV（タブ区切り）。`path・order・level・titleHash・hash・from・need` の7カラム。複合キー `(path, order)` でユニットを識別します。非MDファイルは `order=0, level=0, titleHash=""` の1行、MD-external は同一 path に複数 order 行を持ちます。
+
+**並べ方と骨格**（ADR-260906-03）: ディレクトリ昇順 → 区画（そのファイル名の hash を 64 で割った余り）→ パス → order。ファイルごとのブロックは「空行・`# <path>`・空行」で挟み、**区画の見出し（`# <dir>/[NN]`）は中身が空でも必ず出します**。どちらも合流のための骨組みです。見出しと空行が挟まっていないと、記事を1本消した枝を合流させたときに**触ってもいない記事の行が競合します**（3方向マージが手掛かりに使う行が隣のブロックへ食い込むため）。区画が無いと、両方の枝が新しい記事を足したときに**同じ挿入位置**へ2つの追加が来て必ず競合します。ローダーは空行と `#` 行を読み飛ばすので、形式そのものは7列のまま変わりません。
 
 ```
 # mdait unit-state — 翻訳ユニットの状態管理
 # path	order	level	titleHash	hash	from	need
+# docs/en/[00]
+# docs/en/[01]
+
+# docs/en/data.csv
+
 docs/en/data.csv	0	0		11223344	55667788	translate
+
+# docs/en/[02]
+
+# docs/en/guide.md
 
 docs/en/guide.md	0	1	aa11bb22	a1b2c3d4	ff03a1b2	
 docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 ```
+
+**壊れたファイルの扱い**（ADR-260906-03）: 読み取りは、同じ席（`path` と `order`）に2行来ても**どちらも捨てません**。溢れたほうは保留席（`HELD_ORDER_BASE` 以降）へ逃がし、本文 hash の完全一致でだけ拾われるようにします。席に残すほうは**読んだ順ではなく値で決める**ので、同じ競合を2人が別々に片付けても同じバイト列になります。競合マーカーの行は読み飛ばし、CRLF でも同じに読みます。傷があった回は、上書きする前に原本を `.mdait/unit-state.broken` へ1度だけ写します。
 
 （path 境界に空行アンカーを入れてファイルごとのブロックを分離する。下記「git 競合回避」を参照）
 

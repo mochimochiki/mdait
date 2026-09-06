@@ -108,6 +108,13 @@ export class UnitRegistryManager {
 			return;
 		}
 		for (const [hash, encoded] of this.writeBuffer) {
+			// **既にある控えは書き換えない。** 控えは content-addressed で不変なので、同じ
+			// ハッシュには同じ本文しか入らない。にもかかわらず毎 sync で入れ直していたため、
+			// **圧縮の出力が環境で1バイトでも違うと、中身が同じなのにファイル全体が差分になる**
+			// （zlib の版はヘッダの1バイトが違う時期があった）。全行の差分は必ず合流でぶつかる
+			if (store.get(hash)) {
+				continue;
+			}
 			store.upsert(hash, encoded);
 		}
 		this.writeBuffer.clear();

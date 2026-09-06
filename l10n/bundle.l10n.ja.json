@@ -616,6 +616,8 @@
   "Adoption completed: {0} adopted, {1} align-corrected; review {2} approved, {3} escalated, {4} kept, {5} errors.": "取り込み完了: 採用 {0}・アライン補正 {1}。レビュー: 承認 {2}・エスカレーション {3}・保留 {4}・エラー {5}。",
   "{0} step error(s) — see the report.": "{0} 件の段エラー — レポートを確認してください。",
   "Synchronization completed, but {0} things need a look: {1}": "同期は完了しましたが、確認したいことが {0} 件あります: {1}",
+  "Sync skipped {0} file(s) that still contain merge conflict markers. Resolve the conflict in your version control tool, then run sync again.": "合流の途中（競合マーカーが残っている）のファイル {0} 件を同期しませんでした。バージョン管理の側で競合を解いてから、もう一度 sync してください。",
+  "{0} file(s) skipped because a merge is unfinished": "合流の途中のため {0} 件を見送り",
   "{0} file(s) skipped because the source is empty": "原文が空のため {0} 件を見送り",
   "{0} file(s) skipped because the translation is empty": "訳文が空のため {0} 件を見送り",
   "{0} translation(s) lost their source file": "原文が見つからない訳文 {0} 件",

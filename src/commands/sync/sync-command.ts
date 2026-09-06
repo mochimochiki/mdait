@@ -55,6 +55,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
@@ -181,6 +182,54 @@ export function resetOrphanMemory(): void {
  *
  * @param count 中止したファイル数。0 のときは何もしない
  */
+/**
+ * 合流の途中の原稿を飛ばしたことを伝える。
+ *
+ * 飛ばさずに進むと、`<<<<<<< HEAD` の行を本文として hash を取り、全ユニットに
+ * `need:revise` を付けたうえで、**その姿のまま訳文へ写す**。訳文にも競合マーカーが
+ * 生えるので、原稿の競合を解く前に訳文の競合まで増える。
+ */
+function conflictInSourceNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "conflict-markers",
+		detail: vscode.l10n.t(
+			"Sync skipped {0} file(s) that still contain merge conflict markers. Resolve the conflict in your version control tool, then run sync again.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} file(s) skipped because a merge is unfinished", count),
+	};
+}
+
+/**
+ * 原文か訳文のどちらかに競合マーカーが残っているか。
+ *
+ * 訳文も見るのは、訳文だけが競合している状態で sync すると、マーカー入りの本文が
+ * ユニットとして読まれ、`from` の食い違いから全ユニットが改訂待ちに倒れるためである。
+ */
+async function isMidMerge(sourceFile: string, targetFile: string): Promise<boolean> {
+	const read = async (filePath: string): Promise<string | undefined> => {
+		try {
+			if (!fs.existsSync(filePath)) {
+				return undefined;
+			}
+			return new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(filePath)));
+		} catch {
+			// 読めないファイルはここでは判断しない。後段の処理が同じ失敗をちゃんと報告する
+			return undefined;
+		}
+	};
+	for (const filePath of [sourceFile, targetFile]) {
+		const content = await read(filePath);
+		if (content !== undefined && hasConflictMarkers(content)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function sourceEmptiedNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
@@ -576,6 +625,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalAlignCorrections = 0;
 		let totalSourceEmptied = 0;
 		let totalTargetEmptied = 0;
+		/** 合流の途中（競合マーカーが残っている）で飛ばしたファイル数 */
+		let totalConflicted = 0;
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -659,6 +710,16 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 							logger.warn("sync", "Target path could not be determined", {
 								sourceFile,
 							});
+							continue;
+						}
+
+						// **合流の途中の原稿には触らない。** `<<<<<<< HEAD` を本文として hash を
+						// 取ると、全ユニットに need:revise が付き、その姿のまま訳文へ写る。
+						// 原稿の競合はここでは解けない（どちらが正しいかは人にしか分からない）
+						if (await isMidMerge(sourceFile, targetFile)) {
+							logger.info("sync", "Skipped a file that is still mid-merge", { sourceFile });
+							totalConflicted++;
+							totalFileCount++;
 							continue;
 						}
 
@@ -904,6 +965,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				reviewSupersededNotice(totalReviewsSuperseded),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
+				conflictInSourceNotice(totalConflicted),
 				newOrphansNotice(freshOrphans),
 				config.getOrphanTargetPolicy() === "delete"
 					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
@@ -1166,6 +1228,15 @@ export async function syncSingleFile(filePath: string): Promise<void> {
 		// 二度と戻らない**（probe S87）。渡す原文はこの1本だけでよい — 結び直しの相手は
 		// そこから導いた訳文1つに絞られ、迷ったら結ばない判断はそのまま効く
 		await relinkMovedFilesForPair(config, matchedPair, [sourceFile], fileExplorer);
+
+		// **合流の途中の原稿には触らない**（明示 sync と同じ理由）。
+		// ここは保存のたびに走るので**黙って見送る** — 競合マーカーは編集中の画面にそのまま
+		// 見えており、保存のたびにトーストを出すのは §3.3 の「変化のたびにトーストを出さない」
+		// に反する。競合を解いて保存すれば、そのまま次の保存で同期される
+		if (await isMidMerge(sourceFile, targetFile)) {
+			logger.info("sync", "Skipped a file that is still mid-merge", { sourceFile });
+			return;
+		}
 
 		// FileHandlerを使って同期処理を実行
 		// 翻訳・他のsyncと同一ファイルへの書き込みが交錯しないよう排他する

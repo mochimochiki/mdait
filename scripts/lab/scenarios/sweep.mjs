@@ -856,9 +856,19 @@ async function phase7() {
 		perPath[entry.path].total += 1;
 		if (entry.from !== "") perPath[entry.path].withFrom += 1;
 	}
-	const relPath = Object.keys(perPath).find((p) => perPath[p].total >= 4 && perPath[p].withFrom >= 3);
+	// **選び方を決め打ちにする。** かつては Map の走査順に頼っていたので、`unit-state` の
+	// 並べ方を変えただけで対象ファイルが入れ替わり、判定が揺れた（実測: 並べ方を変えた回だけ
+	// この検査が落ち、製品の振る舞いは何も変わっていなかった）。
+	//
+	// 元からコードフェンスを含むファイルは除く — 下で `\`\`\`text` で包んでも**その
+	// ファイル自身のフェンスで早々に閉じてしまい**、狙った「以降が全部飲まれる」状態に
+	// ならない（実測: 11ユニットが9ユニットにしか減らず、刈り取りが正当に働いて落ちた）。
+	const relPath = Object.keys(perPath)
+		.filter((p) => perPath[p].total >= 4 && perPath[p].withFrom >= 3)
+		.filter((p) => !read(path.join(ws, p)).includes("```"))
+		.sort()[0];
 	if (!relPath) {
-		info(P, "-", "from を持つ行が4件以上ある訳文 .md が無く、刈り取り閾値まわりを検証できない");
+		info(P, "-", "from を持つ行が4件以上でコードフェンスを含まない訳文 .md が無く、刈り取り閾値まわりを検証できない");
 		return;
 	}
 	const absPath = path.join(ws, relPath);

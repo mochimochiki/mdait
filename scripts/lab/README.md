@@ -46,7 +46,7 @@ PATH か `MDAIT_HUGO_BIN` から探し、無ければ「試せなかった」と
 | `hosts/` | headless（vscode モックの上で常駐）／code-server（ブラウザ版）／desktop（本物）／コマンド対応表 |
 | `ai/` | OpenAI 互換のローカル受け皿。echo / live / script / replay / agent |
 | `ui/` | Playwright で画面を触る・撮る（code-server のとき） |
-| `scenarios/` | sweep（決定的な総なめ・判定する）／probe（頑健性の観察・判定しない） |
+| `scenarios/` | sweep（決定的な総なめ・判定する）／probe（頑健性の観察・判定しない）／merge（合流で状態が消えないか・VS Code も AI も使わない） |
 | `vscode-shim.js` | headless 用の vscode モック（`src/test/unit/__mocks__` を増補） |
 
 ## 入口の別名

@@ -14,6 +14,7 @@ declare let __vscodeMockWorkspaceRoot: string;
  */
 suite("UnitRegistryManager（note の永続化・移送）", () => {
 	let tempDir: string;
+	const registryPath = () => path.join(tempDir, ".mdait", "unit-registry");
 
 	setup(() => {
 		Configuration.dispose();
@@ -57,6 +58,21 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 
 		assert.equal(await mgr.loadNote("aaaa1111"), "my note");
 		assert.equal(await mgr.loadUnitRegistry("aaaa1111"), "unit body content");
+	});
+
+	test("既にある控えは書き換えない（ファイルのバイト列が動かない）", async () => {
+		// 控えは content-addressed で不変。にもかかわらず毎 sync で入れ直していたため、
+		// 圧縮の出力が環境で1バイトでも違うと、中身が同じなのにファイル全体が差分になった。
+		// 全行の差分は必ず合流でぶつかるので、ここは「書かない」ことが要点である
+		UnitRegistryManager.getInstance().saveUnitRegistry("aaaa1111", "最初の本文");
+		await UnitRegistryManager.getInstance().flushBuffer();
+		const first = fs.readFileSync(registryPath(), "utf-8");
+
+		UnitRegistryManager.resetInstance(); // キャッシュを空にして、ストア経由の判断を見る
+		UnitRegistryManager.getInstance().saveUnitRegistry("aaaa1111", "あとから来た別の本文");
+		await UnitRegistryManager.getInstance().flushBuffer();
+
+		assert.equal(fs.readFileSync(registryPath(), "utf-8"), first);
 	});
 
 	test("migrateNotes で note を旧→新 hash へ移送し、旧 hash からは消える", async () => {

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
+import { calculateHash } from "../hash/hash-calculator";
 
 const logger = Logger.getInstance();
 
@@ -16,6 +17,50 @@ const HEADER_LINES = [
 
 /** TSVのカラム数 */
 const EXPECTED_COLUMN_COUNT = 7;
+
+/** 読み取りに傷があった回に、上書きの直前で原本を写す先 */
+const SALVAGE_FILENAME = "unit-state.broken";
+
+/** ディレクトリごとに置く区画の数 */
+const BUCKETS_PER_DIR = 64;
+
+/** 合流で残る競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
+function isConflictMarkerLine(line: string): boolean {
+	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
+}
+
+/**
+ * 読み取れなかったもの・畳んだものの内訳。すべて 0 なら、ファイルは丸ごと読めている。
+ */
+export interface UnitStateParseReport {
+	/** 形が分からず読み飛ばした行数 */
+	skipped: number;
+	/** 合流の競合マーカーとして読み飛ばした行数 */
+	conflictMarkers: number;
+	/** 同じ席（path と order）に2行以上来たので、席を分けた回数 */
+	duplicates: number;
+}
+
+/** 傷なく読み切れたか */
+export function isCleanParse(report: UnitStateParseReport): boolean {
+	return report.skipped === 0 && report.conflictMarkers === 0 && report.duplicates === 0;
+}
+
+/**
+ * 同じ席に2行来たとき、席に残すほうを決める。
+ *
+ * **どちらを選んでも正しさは変わらない。** 席の意味（何番目か）は次の sync が
+ * `alignEntriesToUnits` で本文と突き合わせて付け直すので、ここでの選択は
+ * 「どちらが先に本文と照合されるか」しか変えない。大事なのは**どちらも捨てないこと**と、
+ * **誰がどの順で合流させても同じ答えになること**の2つである。順で決めると（＝先勝ち・
+ * 後勝ち）、同じ競合を2人が別々に片付けたときに違うバイト列が出て、それがまた競合する。
+ *
+ * 情報の多いほう（`from` があるか、`need` があるか）を残し、並んだら文字列の順で決める。
+ */
+function seatPriority(entry: UnitStateEntry): string {
+	const rank = (entry.from ? 2 : 0) + (entry.need ? 1 : 0);
+	return `${9 - rank}\t${entry.hash}\t${entry.from}\t${entry.need}`;
+}
 
 /**
  * 「保留席」の order の始まり。
@@ -136,6 +181,10 @@ export class UnitStateStore {
 	private dirty = false;
 	private loaded = false;
 	private mdaitDir: string | undefined;
+	/** 直近の読み取りの内訳 */
+	private lastParseReport: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0 };
+	/** 読み取りに傷があったので、次の上書きの前に原本を写す */
+	private needsSalvage = false;
 
 	private constructor() {}
 
@@ -282,7 +331,11 @@ export class UnitStateStore {
 		}
 
 		const content = fs.readFileSync(filePath, "utf-8");
-		const lines = content.split("\n");
+		// **CRLF でも同じに読む。** 書き出しは LF だが、git の `core.autocrlf` や SVN の
+		// `svn:eol-style=native` は取り出すときに CRLF へ変えうる。`\n` だけで切ると
+		// 7列目 `need` の末尾に `\r` が残り、`need !== ""` が全行で真になる
+		const lines = content.split(/\r?\n/);
+		const report: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0 };
 
 		for (const line of lines) {
 			// 空行・コメント行をスキップ
@@ -290,8 +343,14 @@ export class UnitStateStore {
 				continue;
 			}
 
+			if (isConflictMarkerLine(line)) {
+				report.conflictMarkers++;
+				continue;
+			}
+
 			const columns = line.split("\t");
 			if (columns.length !== EXPECTED_COLUMN_COUNT) {
+				report.skipped++;
 				logger.warn("unit-state", "Skipping malformed line (expected 7 columns)", {
 					columnCount: columns.length,
 					line: line.substring(0, 100),
@@ -303,6 +362,7 @@ export class UnitStateStore {
 			const order = Number.parseInt(orderStr, 10);
 			const level = Number.parseInt(levelStr, 10);
 			if (Number.isNaN(order) || Number.isNaN(level)) {
+				report.skipped++;
 				logger.warn("unit-state", "Skipping line with invalid order/level", {
 					line: line.substring(0, 100),
 				});
@@ -318,11 +378,80 @@ export class UnitStateStore {
 				from,
 				need,
 			};
-			this.ensureRows(filePathCol).set(order, entry);
+			this.seatOnLoad(entry, report);
 		}
 
 		this.loaded = true;
+		// `replayPending` は保存待ちが無ければ dirty を落とす（＝ディスクと同じ、の意）。
+		// 傷を畳んだ回はディスクと同じではないので、後始末はそのあとに置く
 		this.replayPending();
+		this.afterLoad(report);
+	}
+
+	/**
+	 * 読み込みで1行を席に着ける。**同じ席に2行来ても、どちらも捨てない。**
+	 *
+	 * 合流のあとのファイルには、同じ `(path, order)` の行が2つ並ぶ（`merge=union` は
+	 * 両陣営の行を残し、競合マーカー入りのファイルでも両陣営の行はどちらも読めるため）。
+	 * かつてはここで後勝ちに潰しており、**負けた側の `from` / `need` / `revise@` が
+	 * 警告も残さず消えていた** — 控えが他所に無いので、消えたことに気づく手掛かりも無い。
+	 *
+	 * 溢れた行は保留席（`HELD_ORDER_BASE` 以降）へ逃がす。保留席の行は本文 hash の
+	 * 完全一致でしか拾われないので（`unit-state-align.ts`）、**弱い手掛かりで取り違える
+	 * ことが構造的に起きない**。原稿がその陣営の版だったときだけ、自動で戻る。
+	 */
+	private seatOnLoad(entry: UnitStateEntry, report: UnitStateParseReport): void {
+		const rows = this.ensureRows(entry.path);
+		const sitting = rows.get(entry.order);
+		if (!sitting) {
+			rows.set(entry.order, entry);
+			return;
+		}
+
+		report.duplicates++;
+		// 席に残すほうと、保留席へ回すほうを、読んだ順に依らず決める
+		const [stays, leaves] =
+			seatPriority(entry) < seatPriority(sitting) ? [entry, sitting] : [sitting, entry];
+		rows.set(entry.order, stays);
+
+		// 同じ中身の行が既に保留席に居るなら席は増やさない（同じ hash の席は1つで足りる）
+		let nextSeat = HELD_ORDER_BASE;
+		for (const row of rows.values()) {
+			if (!isHeldBackEntry(row)) {
+				continue;
+			}
+			nextSeat = Math.max(nextSeat, row.order + 1);
+			if (row.hash === leaves.hash && row.from === leaves.from && row.need === leaves.need) {
+				return;
+			}
+		}
+		rows.set(nextSeat, { ...leaves, order: nextSeat });
+	}
+
+	/**
+	 * 読み終わったあとの後始末。**傷があった回だけ**、原本を横へ写す予約をして、
+	 * 畳んだ結果を書き戻せるようにする。
+	 *
+	 * `dirty` を立てるのが要点である。立てないと `save()` が何も書かず、席を分けた結果は
+	 * メモリの中だけで消える。次に誰かが書いた瞬間、また同じ後勝ちのファイルが残る。
+	 */
+	private afterLoad(report: UnitStateParseReport): void {
+		this.lastParseReport = report;
+		if (isCleanParse(report)) {
+			return;
+		}
+		this.needsSalvage = true;
+		this.dirty = true;
+		logger.warn("unit-state", "Read a damaged unit-state; kept every row that could be read", {
+			skipped: report.skipped,
+			conflictMarkers: report.conflictMarkers,
+			duplicates: report.duplicates,
+		});
+	}
+
+	/** 直近の読み取りの内訳（傷の有無を呼び出し側が知るため） */
+	getLastParseReport(): UnitStateParseReport {
+		return { ...this.lastParseReport };
 	}
 
 	/** 変更があればファイルに書き戻し */
@@ -333,20 +462,48 @@ export class UnitStateStore {
 
 		const filePath = path.join(mdaitDir, UNIT_STATE_FILENAME);
 
-		// path → order の二段ソート
+		const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
+		const bucketOf = (p: string) => (Number.parseInt(calculateHash(p.slice(dirOf(p).length), false).substring(0, 2), 16) % BUCKETS_PER_DIR);
 		const sortedEntries = [...this.allEntries()].sort((a, b) => {
+			const d = dirOf(a.path).localeCompare(dirOf(b.path));
+			if (d !== 0) return d;
+			const ba = bucketOf(a.path);
+			const bb = bucketOf(b.path);
+			if (ba !== bb) return ba < bb ? -1 : 1;
 			const c = a.path.localeCompare(b.path);
 			return c !== 0 ? c : a.order - b.order;
 		});
 
 		const lines: string[] = [...HEADER_LINES];
-		// path 境界に空行アンカーを挿入し、ファイルごとのブロックを分離する。
-		// git の 3-way / union マージでファイル間の編集が安定して分離され、diff も読みやすくなる。
-		// （ローダーは空行をスキップするため読み込みには影響しない）
+		// ファイルごとのブロックを「空行・見出し・空行」の3行で挟む。
+		//
+		// **空行1つでは隣のブロックを守れない。** 3方向マージは変更のまわりの数行を手掛かりに
+		// 使うので、ブロックが丸ごと消えると（記事を1本消した枝を合流させたとき）その手掛かりが
+		// 隣のブロックの行まで食い込み、**触ってもいない記事の行が競合する**。実測では、
+		// 記事を1本消した枝と、別の記事を訳した枝を合わせると、訳した側の行が二重になって
+		// 後勝ちで翻訳前に巻き戻り、消したはずの記事の行も復活した。
+		//
+		// 見出し行はローダーが `#` として読み飛ばすので、**形式は1バイトも変わらない**
+		// （古い版の mdait もそのまま読める）。人が diff を見るときの目印にもなる。
 		let prevPath: string | undefined;
+		let prevDir: string | undefined;
+		let bucketCursor = 0;
+		const fillBuckets = (dir: string, upTo: number) => {
+			while (bucketCursor < upTo) {
+				lines.push(`# ${dir}[${bucketCursor.toString(16).padStart(2, "0")}]`);
+				bucketCursor++;
+			}
+		};
 		for (const entry of sortedEntries) {
-			if (prevPath !== undefined && entry.path !== prevPath) {
-				lines.push("");
+			if (entry.path !== prevPath) {
+				const dir = dirOf(entry.path);
+				if (dir !== prevDir) {
+					if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
+					bucketCursor = 0;
+					prevDir = dir;
+				}
+				fillBuckets(dir, bucketOf(entry.path) + 1);
+				lines.push("", `# ${entry.path}`, "");
 			}
 			lines.push(
 				`${entry.path}\t${entry.order}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
@@ -354,12 +511,44 @@ export class UnitStateStore {
 			prevPath = entry.path;
 		}
 
+		if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
+		this.salvageBeforeOverwrite(filePath, mdaitDir);
 		atomicWriteFileSync(filePath, content, "utf-8");
 		this.dirty = false;
 		// ディスクに載ったので、もう当て直す必要は無い
 		this.pending.clear();
+	}
+
+	/**
+	 * 読み取りに傷があった回だけ、上書きの直前に原本を横へ写す。
+	 *
+	 * 畳んだ結果は正しいはずだが、**間違っていたときに戻る先がどこにも無い** — `from` と
+	 * `need` はこのファイルにしか無く、本文から計算し直せない（`revise@X` の X はなおさら）。
+	 *
+	 * 既に `unit-state.broken` があるなら**上書きしない**。まだ誰も片付けていない避難先を、
+	 * 次に壊れた回のもので潰すと、最初の事故の姿が消える（`unit-registry` と同じ作法）。
+	 */
+	private salvageBeforeOverwrite(filePath: string, mdaitDir: string): void {
+		if (!this.needsSalvage) {
+			return;
+		}
+		this.needsSalvage = false;
+		const salvagePath = path.join(mdaitDir, SALVAGE_FILENAME);
+		try {
+			if (!fs.existsSync(filePath)) {
+				return;
+			}
+			if (fs.existsSync(salvagePath)) {
+				logger.warn("unit-state", `Kept the existing ${SALVAGE_FILENAME}; this run's file was not saved aside`);
+				return;
+			}
+			fs.copyFileSync(filePath, salvagePath);
+			logger.warn("unit-state", `Saved the unit-state as it was read to ${SALVAGE_FILENAME} before overwriting it`);
+		} catch (error) {
+			logger.warn("unit-state", "Failed to save the original unit-state", { error: String(error) });
+		}
 	}
 
 	/**

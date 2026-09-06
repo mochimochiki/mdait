@@ -702,6 +702,15 @@ const PRESETS = {
 			"lab report ／ lab down",
 		],
 	},
+	merge: {
+		run: presetMerge,
+		note: "合流の実験場。別々の枝で編集した .mdait を合わせ、状態が消えないかを見る",
+		steps: [
+			"unit-state / unit-registry を、枝ごとに違う編集を加えて3通り書き出す",
+			"git の3方向マージ・GNU diff3（SVN 相当）・union の3通りで合流させる",
+			"合流の結果を製品と同じローダーで読み、消えた状態と余計に生えた行を数える",
+		],
+	},
 	resilience: {
 		run: presetResilience,
 		note: "壊れた応答への耐性。AI を使う9経路に8種の意地悪を当て、原稿が壊れないかを見る",
@@ -858,6 +867,16 @@ async function presetBenchRevise(opts) {
 	} finally {
 		if (ai?.pid) stopShim({ ai });
 	}
+}
+
+/**
+ * 合流の実験場。VS Code も AI も要らない（`.mdait` のバイト列と製品のローダーだけを使う）ので、
+ * セッションを立てずにそのまま走る。
+ */
+async function presetMerge(opts) {
+	const { run } = await import("./scenarios/merge.mjs");
+	run({ only: opts.only, trials: asNumber(opts.trials, 30), out: opts.out });
+	return 0;
 }
 
 async function presetProbe(opts) {
