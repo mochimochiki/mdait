@@ -17,6 +17,11 @@ import { encodeUnitRegistry } from "./unit-registry-encoder";
  * - content のみ: `<8桁hash> <encodedContent>`
  * - content + note: `<8桁hash> <encodedContent> <encodedNote>`
  * - note のみ（content 未登録）: `<8桁hash>  <encodedNote>`（content トークンは空）
+ *
+ * **読み取りは1行でも多く拾う。** ここに控えてある旧原文は、どこにも複製が無い唯一の原本で、
+ * 失うと `need:revise@X` が永久に当てはめられなくなる。読めない行があっても読める行は残す
+ * （かつては1行の重複で `parse` が例外を投げ、呼び出し側が空のストアで続けて**次の書き込みで
+ * 控えが丸ごと消えていた** — 実測で `revise@` の戻り先が1件、跡形もなく消えた）。
  */
 
 /** 1ハッシュのレジストリエントリ（値は encoded 文字列） */
@@ -49,12 +54,26 @@ function isEntryLine(line: string): boolean {
 	return /^[0-9a-f]{8} /i.test(line);
 }
 
-/** パースエラー */
-export class UnitRegistryParseError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "UnitRegistryParseError";
-	}
+/** git がマージで残す競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
+function isConflictMarkerLine(line: string): boolean {
+	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
+}
+
+/**
+ * 読み取れなかったものの内訳。すべて 0 なら、ファイルは丸ごと読めている。
+ */
+export interface UnitRegistryParseReport {
+	/** 形が分からず読み飛ばした行数 */
+	skipped: number;
+	/** git の競合マーカーとして読み飛ばした行数 */
+	conflictMarkers: number;
+	/** 同じハッシュが2度以上出てきたので1つに畳んだ回数 */
+	duplicates: number;
+}
+
+/** 傷なく読み切れたか */
+export function isCleanParse(report: UnitRegistryParseReport): boolean {
+	return report.skipped === 0 && report.conflictMarkers === 0 && report.duplicates === 0;
 }
 
 /**
@@ -70,79 +89,83 @@ export class UnitRegistryStore {
 	 * - 新形式: バケット行なし、エントリ行のみ（ハッシュから自動判定）
 	 * - 旧形式: バケット行あり（後方互換性のため対応）
 	 * - note 列（3つ目のトークン）は任意。無い行は content のみ（旧来のファイルと互換）
+	 *
+	 * **例外は投げない。** 読めない行は読み飛ばし、読めた行はすべて残す。同じハッシュが
+	 * 2度出てきたら畳む（content は content-addressed なので中身は同じはずで、食い違うなら
+	 * 片方が壊れている。先に出たほうを採り、note は後から出た空でないほうを採る）。
+	 * git の競合マーカーも読み飛ばす — マージの後始末が済んでいないファイルでも、
+	 * 両方の陣営が書いた控えはどちらも拾える。
+	 *
 	 * @param content ファイル内容
-	 * @throws UnitRegistryParseError 形式不正の場合
+	 * @returns 読み取れなかったものの内訳（すべて 0 なら丸ごと読めている）
 	 */
-	parse(content: string): void {
+	parse(content: string): UnitRegistryParseReport {
 		this.buckets.clear();
+		const report: UnitRegistryParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0 };
 
 		if (!content.trim()) {
-			return;
+			return report;
 		}
 
 		const lines = content.split("\n");
-		let currentBucket: string | null = null;
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-
+		for (const line of lines) {
 			// 空行はスキップ
 			if (!line.trim()) {
 				continue;
 			}
 
 			if (isBucketLine(line)) {
-				// バケット行（旧形式との互換性）
-				currentBucket = line.substring(0, 3).toLowerCase();
-				if (!this.buckets.has(currentBucket)) {
-					this.buckets.set(currentBucket, new Map());
-				}
-			} else if (isEntryLine(line)) {
-				// エントリ行: `<hash> <encContent>[ <encNote>]`
-				// encoded 値は base64 のため空白を含まず、スペース分割で安全に列を切れる
-				const parts = line.split(" ");
-				const hash = normalizeHash(parts[0]);
-				const encodedContent = parts[1] ?? "";
-				const encodedNote = parts[2];
+				// バケット行（旧形式との互換性）。区画はハッシュから決まるので、
+				// この行が何を名乗っていても読み取りには使わない
+				continue;
+			}
 
-				// 初期エントリ（payload空・note無し）はスキップ
-				const bucketId = getBucketId(hash);
-				if (hash === `${bucketId}00000` && encodedContent.trim() === "" && !encodedNote) {
-					// 初期エントリはストアに保存しない（serializeで自動生成される）
-					continue;
-				}
+			if (isConflictMarkerLine(line)) {
+				report.conflictMarkers++;
+				continue;
+			}
 
-				// ハッシュからバケットIDを自動判定
-				// 旧形式でバケット行があった場合は整合性チェック
-				if (currentBucket !== null && bucketId !== currentBucket) {
-					throw new UnitRegistryParseError(
-						`Line ${i + 1}: Hash ${hash} should be in bucket ${bucketId}, but found in ${currentBucket}`,
-					);
-				}
+			if (!isEntryLine(line)) {
+				report.skipped++;
+				continue;
+			}
 
-				// 新形式の場合: currentBucketを自動設定
-				if (currentBucket === null) {
-					currentBucket = bucketId;
-				}
+			// エントリ行: `<hash> <encContent>[ <encNote>]`
+			// encoded 値は base64 のため空白を含まず、スペース分割で安全に列を切れる
+			const parts = line.split(" ");
+			const hash = normalizeHash(parts[0]);
+			const encodedContent = parts[1] ?? "";
+			const encodedNote = parts[2];
 
-				// バケットを作成（存在しなければ）
-				if (!this.buckets.has(bucketId)) {
-					this.buckets.set(bucketId, new Map());
-				}
+			// 初期エントリ（payload空・note無し）はスキップ
+			const bucketId = getBucketId(hash);
+			if (hash === `${bucketId}00000` && encodedContent.trim() === "" && !encodedNote) {
+				// 初期エントリはストアに保存しない（serializeで自動生成される）
+				continue;
+			}
 
-				const bucketMap = this.buckets.get(bucketId);
-				if (bucketMap?.has(hash)) {
-					throw new UnitRegistryParseError(`Line ${i + 1}: Duplicate hash ${hash}`);
-				}
+			if (!this.buckets.has(bucketId)) {
+				this.buckets.set(bucketId, new Map());
+			}
+			const bucketMap = this.buckets.get(bucketId);
+			const existing = bucketMap?.get(hash);
+			if (!existing) {
 				bucketMap?.set(hash, { content: encodedContent, note: encodedNote || undefined });
+				continue;
+			}
 
-				// 次のバケットに移行する可能性があるのでリセット
-				currentBucket = null;
-			} else {
-				// 不正な行
-				throw new UnitRegistryParseError(`Line ${i + 1}: Invalid line format: ${line.substring(0, 50)}...`);
+			// 同じハッシュが2度以上。捨てずに畳む
+			report.duplicates++;
+			if (!existing.content && encodedContent) {
+				existing.content = encodedContent;
+			}
+			if (encodedNote) {
+				existing.note = encodedNote;
 			}
 		}
+
+		return report;
 	}
 
 	/** 指定ハッシュのエントリを取得（存在しなければ生成前の undefined） */

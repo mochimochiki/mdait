@@ -2,15 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
+import { Logger, formatError } from "../../infra/logging/logger";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import {
 	decodeUnitRegistry,
 	encodeUnitRegistry,
 } from "./unit-registry-encoder";
-import {
-	UnitRegistryParseError,
-	UnitRegistryStore,
-} from "./unit-registry-store";
+import { isCleanParse, UnitRegistryStore } from "./unit-registry-store";
 
 /**
  * ユニットレジストリマネージャー
@@ -39,6 +37,12 @@ export class UnitRegistryManager {
 
 	/** GC閾値（バイト） */
 	private static readonly GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
+	/** 読み取りに傷があったとき、上書きする前に元のバイト列を避難させる先 */
+	private static readonly SALVAGE_FILE_NAME = "unit-registry.broken";
+
+	/** 次にファイルを書く前に、いまディスクにあるバイト列を避難させるか */
+	private needsSalvage = false;
 
 	private constructor() {}
 
@@ -126,18 +130,27 @@ export class UnitRegistryManager {
 					vscode.Uri.file(filePath),
 				);
 				const content = new TextDecoder().decode(fileContent);
-				this.store.parse(content);
-			} catch (error) {
-				if (error instanceof UnitRegistryParseError) {
-					console.warn(
-						"Unit-registry file is in invalid format (possibly v1). Starting fresh:",
-						error.message,
+				const report = this.store.parse(content);
+				if (!isCleanParse(report)) {
+					// 読める行はすべて残っている。残りは避難させた原本にしか無い
+					this.needsSalvage = true;
+					Logger.getInstance().warn(
+						"unit-registry",
+						`Could not read every line of the unit registry; kept ${this.store.size()} snapshot(s)`,
+						report,
 					);
-				} else {
-					console.warn("Failed to load unit-registry file:", error);
 				}
-				// パース失敗時は空のストアで継続
+			} catch (error) {
+				// **空のストアで続けるが、上書きする前に原本は必ず避難させる。**
+				// ここに控えてある旧原文はどこにも複製が無く、黙って上書きすると
+				// `need:revise@X` の戻り先が永久に引けなくなる
+				this.needsSalvage = true;
 				this.store = new UnitRegistryStore();
+				Logger.getInstance().warn(
+					"unit-registry",
+					"Failed to read the unit registry; continuing with an empty one",
+					formatError(error),
+				);
 			}
 		}
 
@@ -241,16 +254,68 @@ export class UnitRegistryManager {
 		}
 		this.mergeWriteBufferInto(store);
 		const filePath = path.join(mdaitDir, "unit-registry");
+		this.salvageBeforeOverwrite(filePath, mdaitDir);
 		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(store.serialize()));
 	}
 
 	/**
+	 * 読み取りに傷があった回だけ、上書きの直前に原本を横へ写す。
+	 *
+	 * 控えは content-addressed の圧縮文字列なので、行が壊れると人の目でも直せない。
+	 * それでも**原本が残っていれば直せる見込みがある**が、上書きしてしまえば何も残らない。
+	 *
+	 * 既に `unit-registry.broken` があるなら**上書きしない** — まだ誰も片付けていない
+	 * 避難先を、次に壊れた回のもので潰すと、最初の事故の姿が消える。
+	 */
+	private salvageBeforeOverwrite(filePath: string, mdaitDir: string): void {
+		if (!this.needsSalvage) {
+			return;
+		}
+		this.needsSalvage = false;
+		const logger = Logger.getInstance();
+		const salvagePath = path.join(mdaitDir, UnitRegistryManager.SALVAGE_FILE_NAME);
+		try {
+			if (!fs.existsSync(filePath)) {
+				return;
+			}
+			if (fs.existsSync(salvagePath)) {
+				logger.warn(
+					"unit-registry",
+					`Kept the existing ${UnitRegistryManager.SALVAGE_FILE_NAME}; this run's registry was not saved aside`,
+				);
+				return;
+			}
+			fs.copyFileSync(filePath, salvagePath);
+			logger.warn(
+				"unit-registry",
+				`Saved the registry as it was read to ${UnitRegistryManager.SALVAGE_FILE_NAME} before overwriting it`,
+			);
+		} catch (error) {
+			logger.warn("unit-registry", "Failed to save the original unit registry", formatError(error));
+		}
+	}
+
+	/**
 	 * 不要なユニットレジストリを削除（GC）
+	 *
+	 * **使用中のハッシュが1つも渡されなかったら何もしない。** 渡されるのはステータスツリーから
+	 * 集めた印で、ツリーがまだ組み上がっていない・収集に失敗した回は空で来る。それを
+	 * 「どれも使われていない」と読むと控えを全部消してしまい、`need:revise@X` の戻り先が
+	 * 二度と引けなくなる。**残しすぎは次の GC で減らせるが、消しすぎは取り返せない。**
+	 *
 	 * @param activeHashes 現在使用中のハッシュセット
 	 */
 	async garbageCollect(activeHashes: Set<string>): Promise<void> {
 		const filePath = this.getUnitRegistryFilePath();
 		if (!filePath || !fs.existsSync(filePath)) {
+			return;
+		}
+
+		if (activeHashes.size === 0) {
+			Logger.getInstance().warn(
+				"unit-registry",
+				"Skipped unit-registry GC: no active hashes were collected (an empty set would delete every snapshot)",
+			);
 			return;
 		}
 
@@ -292,6 +357,7 @@ export class UnitRegistryManager {
 
 		// 正規形でファイルに書き込み
 		const content = store.serialize();
+		this.salvageBeforeOverwrite(filePath, path.dirname(filePath));
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(filePath),
 			new TextEncoder().encode(content),
@@ -323,5 +389,6 @@ export class UnitRegistryManager {
 		this.writeBuffer.clear();
 		this.store = null;
 		this.storeLoaded = false;
+		this.needsSalvage = false;
 	}
 }

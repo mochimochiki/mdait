@@ -1,8 +1,8 @@
 ﻿import { strict as assert } from "node:assert";
 import {
-	UnitRegistryParseError,
 	UnitRegistryStore,
 	getBucketId,
+	isCleanParse,
 } from "../../../../core/unit-registry/unit-registry-store";
 
 suite("UnitRegistryStore", () => {
@@ -173,21 +173,74 @@ abc00002 contentA2`;
 			assert.equal(store.get("abc00002"), "contentA2");
 		});
 
-		test("ハッシュが間違ったバケットにあるとエラー", () => {
+		test("バケット行の名乗りに関わらず、ハッシュから区画を決めて読み取る", () => {
 			const content = `000 
 abc00001 contentA1`;
 
 			const store = new UnitRegistryStore();
-			assert.throws(() => store.parse(content), UnitRegistryParseError);
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "contentA1");
+			assert.ok(isCleanParse(report));
 		});
 
-		test("重複ハッシュがあるとエラー", () => {
+		test("重複ハッシュは捨てずに1つへ畳む（先に出たほうの content を採る）", () => {
 			const content = `abc 
 abc00001 content1
 abc00001 content2`;
 
 			const store = new UnitRegistryStore();
-			assert.throws(() => store.parse(content), UnitRegistryParseError);
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "content1");
+			assert.equal(report.duplicates, 1);
+			assert.equal(store.size(), 1);
+		});
+
+		test("重複ハッシュのうち content が空の行があっても、中身のあるほうが残る", () => {
+			const content = `abc00001 
+abc00001 realContent`;
+
+			const store = new UnitRegistryStore();
+			store.parse(content);
+
+			assert.equal(store.get("abc00001"), "realContent");
+		});
+
+		test("読めない行は読み飛ばし、読める行はすべて残す", () => {
+			const content = `abc00001 contentA1
+this line is garbage
+abc00002 contentA2`;
+
+			const store = new UnitRegistryStore();
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "contentA1");
+			assert.equal(store.get("abc00002"), "contentA2");
+			assert.equal(report.skipped, 1);
+		});
+
+		test("git の競合マーカーが残っていても、両方の陣営のエントリを拾う", () => {
+			const content = `abc00000 
+<<<<<<< HEAD
+abc00001 mine
+=======
+abc00002 theirs
+>>>>>>> feature/other`;
+
+			const store = new UnitRegistryStore();
+			const report = store.parse(content);
+
+			assert.equal(store.get("abc00001"), "mine");
+			assert.equal(store.get("abc00002"), "theirs");
+			assert.equal(report.conflictMarkers, 3);
+			assert.equal(report.skipped, 0);
+		});
+
+		test("傷なく読めた回は isCleanParse が真になる", () => {
+			const store = new UnitRegistryStore();
+			assert.ok(isCleanParse(store.parse("abc00001 contentA1")));
+			assert.ok(isCleanParse(store.parse("")));
 		});
 	});
 
