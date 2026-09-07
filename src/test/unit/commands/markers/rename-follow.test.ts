@@ -17,6 +17,7 @@ import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
 import { resetUnitStateLock } from "../../../../infra/workspace/unit-state-lock";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -68,7 +69,7 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 	function seedEntry(relPath: string, need = "review"): void {
 		UnitStateStore.getInstance().setEntry({
 			path: relPath,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 0,
 			titleHash: "",
 			hash: "h0",
@@ -145,10 +146,10 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 		await completeRenameFollow(files);
 
 		const store = UnitStateStore.getInstance();
-		assert.strictEqual(store.getEntry("ja/guide.md", 0), undefined);
-		assert.strictEqual(store.getEntry("en/guide.md", 0), undefined);
-		assert.ok(store.getEntry("ja/handbook.md", 0), "原文の行が追随すること");
-		assert.strictEqual(store.getEntry("en/handbook.md", 0)?.need, "review", "need を保ったまま追随すること");
+		assert.strictEqual(store.getSoleEntry("ja/guide.md"), undefined);
+		assert.strictEqual(store.getSoleEntry("en/guide.md"), undefined);
+		assert.ok(store.getSoleEntry("ja/handbook.md"), "原文の行が追随すること");
+		assert.strictEqual(store.getSoleEntry("en/handbook.md")?.need, "review", "need を保ったまま追随すること");
 	});
 
 	test("付け替えた結果がディスクへ保存されること（次の sync の load に捨てられない）", async () => {
@@ -164,8 +165,8 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 
 		// syncCommand は毎回 load() を無条件に呼ぶ。保存されていなければここで消える
 		UnitStateStore.getInstance().load(mdaitDir);
-		assert.strictEqual(UnitStateStore.getInstance().getEntry("ja/guide.md", 0), undefined);
-		assert.strictEqual(UnitStateStore.getInstance().getEntry("en/handbook.md", 0)?.need, "review");
+		assert.strictEqual(UnitStateStore.getInstance().getSoleEntry("ja/guide.md"), undefined);
+		assert.strictEqual(UnitStateStore.getInstance().getSoleEntry("en/handbook.md")?.need, "review");
 	});
 
 	test("onWillRenameFiles を通っていない移動でも、届いたぶんの行は付け替えること", async () => {
@@ -176,8 +177,8 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 		await completeRenameFollow(uris(["en/guide.md", "en/handbook.md"]));
 
 		const store = UnitStateStore.getInstance();
-		assert.strictEqual(store.getEntry("en/guide.md", 0), undefined);
-		assert.strictEqual(store.getEntry("en/handbook.md", 0)?.need, "review");
+		assert.strictEqual(store.getSoleEntry("en/guide.md"), undefined);
+		assert.strictEqual(store.getSoleEntry("en/handbook.md")?.need, "review");
 	});
 
 	test("取り消しで戻ったとき、報せに訳文が無くても訳文の行が一緒に戻ること", async () => {
@@ -191,9 +192,9 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 		await completeRenameFollow(uris(["ja/handbook.md", "ja/guide.md"]));
 
 		const store = UnitStateStore.getInstance();
-		assert.strictEqual(store.getEntry("en/handbook.md", 0), undefined, "訳文の行が取り残されないこと");
-		assert.strictEqual(store.getEntry("en/guide.md", 0)?.need, "review");
-		assert.ok(store.getEntry("ja/guide.md", 0), "原文の行も戻ること");
+		assert.strictEqual(store.getSoleEntry("en/handbook.md"), undefined, "訳文の行が取り残されないこと");
+		assert.strictEqual(store.getSoleEntry("en/guide.md")?.need, "review");
+		assert.ok(store.getSoleEntry("ja/guide.md"), "原文の行も戻ること");
 	});
 
 	test("訳文だけを動かしたときは原文を動かさないこと（原文が正・訳文が従）", () => {
@@ -223,8 +224,8 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 		await completeRenameFollow(files);
 
 		const store = UnitStateStore.getInstance();
-		assert.strictEqual(store.getEntry("en/moved/a.md", 0)?.need, "review");
-		assert.strictEqual(store.getEntry("en/moved/deep/b.md", 0)?.need, "translate");
+		assert.strictEqual(store.getSoleEntry("en/moved/a.md")?.need, "review");
+		assert.strictEqual(store.getSoleEntry("en/moved/deep/b.md")?.need, "translate");
 	});
 
 	test("ピボット構成（ja→en, en→fr）で、連鎖する訳文まで連れて動かすこと", async () => {

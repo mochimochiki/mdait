@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import { calculateHash } from "../hash/hash-calculator";
+import { assignSeats, isSeatKey } from "./seat-keys";
 
 const logger = Logger.getInstance();
 
@@ -12,11 +13,14 @@ const UNIT_STATE_FILENAME = "unit-state";
 /** ヘッダーコメント行 */
 const HEADER_LINES = [
 	"# mdait unit-state — 翻訳ユニットの状態管理",
-	"# path\torder\tlevel\ttitleHash\thash\tfrom\tneed",
+	"# path\tkind\tseat\tlevel\ttitleHash\thash\tfrom\tneed",
 ];
 
 /** TSVのカラム数 */
-const EXPECTED_COLUMN_COUNT = 7;
+const EXPECTED_COLUMN_COUNT = 8;
+
+/** 旧形式（`path order level titleHash hash from need`）のカラム数 */
+const LEGACY_COLUMN_COUNT = 7;
 
 /** 読み取りに傷があった回に、上書きの直前で原本を写す先 */
 const SALVAGE_FILENAME = "unit-state.broken";
@@ -24,9 +28,32 @@ const SALVAGE_FILENAME = "unit-state.broken";
 /** ディレクトリごとに置く区画の数 */
 const BUCKETS_PER_DIR = 64;
 
+/** ファイルごとの「席に着いていない行を置く区画」の見出しに付ける印 */
+const UNSEATED_SECTION_SUFFIX = "[unseated]";
+
 /** 合流で残る競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
 function isConflictMarkerLine(line: string): boolean {
 	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
+}
+
+/**
+ * 行の種別。**桁のトリックではなく、独立した列で表す。**
+ *
+ * かつては `order` の桁で見分けていた（100万以上なら保留席、200万なら frontmatter）。
+ * 種別が1つ増えるたびに桁を読む場所を全部直して回ることになり、必ずどこかが取り残される
+ * （実測: frontmatter の行が増えたとき、数える側が2箇所取り残された）。
+ *
+ * - `unit` … いまの本文のどこかに対応する行。席のキー（`seat`）で並ぶ
+ * - `held` … 消えた章の状態を預かっている行。位置は持たない。**本文の hash が身元**
+ * - `front` … frontmatter マーカーの行。1ファイルに1つだけ。本文の並びに属さない
+ */
+export type UnitStateKind = "unit" | "held" | "front";
+
+const KINDS: readonly UnitStateKind[] = ["unit", "held", "front"];
+
+/** その文字列が行の種別か */
+function toKind(value: string): UnitStateKind | undefined {
+	return (KINDS as readonly string[]).includes(value) ? (value as UnitStateKind) : undefined;
 }
 
 /**
@@ -37,8 +64,10 @@ export interface UnitStateParseReport {
 	skipped: number;
 	/** 合流の競合マーカーとして読み飛ばした行数 */
 	conflictMarkers: number;
-	/** 同じ席（path と order）に2行以上来たので、席を分けた回数 */
+	/** 同じ席に2行以上来たので、席を分けた回数 */
 	duplicates: number;
+	/** 旧形式（7列）から読み替えた行数 */
+	migrated: number;
 }
 
 /** 傷なく読み切れたか */
@@ -49,7 +78,7 @@ export function isCleanParse(report: UnitStateParseReport): boolean {
 /**
  * 同じ席に2行来たとき、席に残すほうを決める。
  *
- * **どちらを選んでも正しさは変わらない。** 席の意味（何番目か）は次の sync が
+ * **どちらを選んでも正しさは変わらない。** 席の意味（本文の何番目か）は次の sync が
  * `alignEntriesToUnits` で本文と突き合わせて付け直すので、ここでの選択は
  * 「どちらが先に本文と照合されるか」しか変えない。大事なのは**どちらも捨てないこと**と、
  * **誰がどの順で合流させても同じ答えになること**の2つである。順で決めると（＝先勝ち・
@@ -62,71 +91,120 @@ function seatPriority(entry: UnitStateEntry): string {
 	return `${9 - rank}\t${entry.hash}\t${entry.from}\t${entry.need}`;
 }
 
-/**
- * 「保留席」の order の始まり。
- *
- * 刈り取りを見送った行をここ以降の order へ移すことで、「本文のどこにも対応する場所が無い行」
- * だと行そのものから分かるようにする。列を増やすと既存の `unit-state` が警告なく全行
- * スキップされるため（7列固定）、覚えるための場所は既存の列の中に作る必要がある。
- * 実運用のユニット数（1ファイル数百件）とは桁が違うので、生きている order と衝突しない。
- */
-export const HELD_ORDER_BASE = 1_000_000;
-
-/**
- * frontmatter マーカー（`mdait.front`）の行の `order`。1ファイルに1つだけ。
- *
- * frontmatter は本文の並びに属さないので、本文ユニットの `order`（0..N-1）とも
- * 保留席（`HELD_ORDER_BASE` 以降）とも重ならない席をここに予約する。列を増やすと
- * 既存の `unit-state` が警告付きで全行スキップされる（7列固定）ため、目印は既存の
- * 列の中に作る必要がある。
- *
- * 保留席より**上**に置くのが要点である。末尾の刈り取り・保留への退避はどちらも
- * `order < HELD_ORDER_BASE` の行だけを対象にするので、ここに居る限り
- * 「ユニットが減った」という理由で消されることが構造的に起こらない。
- */
-export const FRONT_MATTER_ORDER = 2_000_000;
+/** 2つの行が全列とも同じか（＝ファイルに書けば1バイトも違わないか） */
+function sameRow(a: UnitStateEntry, b: UnitStateEntry): boolean {
+	return (
+		a.path === b.path &&
+		a.kind === b.kind &&
+		a.seat === b.seat &&
+		a.level === b.level &&
+		a.titleHash === b.titleHash &&
+		a.hash === b.hash &&
+		a.from === b.from &&
+		a.need === b.need
+	);
+}
 
 /** frontmatter マーカーの行か */
 export function isFrontMatterEntry(entry: UnitStateEntry): boolean {
-	return entry.order === FRONT_MATTER_ORDER;
+	return entry.kind === "front";
 }
 
 /**
- * 保留席に居る（＝いまの本文に対応する場所が無い）行か。
+ * 席に着いていない行か（＝いまの本文に対応する場所が無い行）。
  *
- * frontmatter の行は order が桁で見れば保留席より上だが、席ではない。除かないと
- * 本文 hash の一致で本文ユニットへ拾われうるし、席の採番が毎回その上へ逃げていく。
+ * 順序では拾われず、**本文の hash が完全に一致したときだけ**拾い戻される
+ * （`unit-state-align.ts`）。だから章が戻ってくれば正しく復帰し、戻ってこなければ
+ * 無害に居座るだけになる。
  */
 export function isHeldBackEntry(entry: UnitStateEntry): boolean {
-	return entry.order >= HELD_ORDER_BASE && !isFrontMatterEntry(entry);
+	return entry.kind === "held";
+}
+
+/** いまの本文の**位置**を持っている行か */
+export function isLiveBodyEntry(entry: UnitStateEntry): boolean {
+	return entry.kind === "unit";
 }
 
 /**
- * いまの本文の**位置**を持っている行か（＝保留席でも frontmatter でもない）。
+ * 行の身元。ファイルの中で1行を指す鍵になる。
  *
- * 行には3つの種別がある。`order` の桁で見分けられるが、桁を各所で書き下すと
- * 種別が1つ増えるたびに全部を直して回ることになり、必ずどこかが取り残される
- * （実測: P05a で frontmatter の行が増えたとき、数える側が2箇所取り残された）。
- * 見分けは必ずこの3つの述語を通す。
- *
- * - `isLiveBodyEntry` … いまの本文の何番目か、という意味を持つ行
- * - `isHeldBackEntry` … 保留席。意味は持つが位置は持たない
- * - `isFrontMatterEntry` … frontmatter。本文の並びに属さない
+ * - `unit` … 席のキー。二度と動かないので、章を1つ挿しても他の行は書き換わらない
+ * - `held` … 本文の hash と、預かっている状態（`from` / `need`）。**状態まで鍵に入れる**
+ *   のが要点である。hash だけを鍵にすると、**合流のあとのファイルを読んだときに、同じ
+ *   本文で状態だけ違う行が黙って消える**（実測: 同じ席に3行来るファイルで1行が消えた）。
+ *   「同じ本文の行は1つでよい」は**預けるとき**の決まりであって、**読むとき**の決まりでは
+ *   ない — 読み取りは1行でも多く拾うのが原則で、絞るのは `parkEntries` の仕事である
+ * - `front` … 1ファイルに1つなので、種別そのものが鍵になる
  */
-export function isLiveBodyEntry(entry: UnitStateEntry): boolean {
-	return entry.order < HELD_ORDER_BASE;
+export function entryKey(entry: UnitStateEntry): string {
+	if (entry.kind === "unit") {
+		return `u${entry.seat}`;
+	}
+	if (entry.kind === "held") {
+		return `h${entry.hash}\t${entry.from}\t${entry.need}`;
+	}
+	return "f";
+}
+
+/**
+ * 文字列を**符号位置の順**で比べる。
+ *
+ * `localeCompare` を使ってはいけない。**実行環境のロケールで答えが変わる**からである
+ * （en-US では `a.md` < `B.md`、符号位置では `B.md` < `a.md`）。このファイルは全員が
+ * 同じバイト列を書くことが前提で、並べ方が人によって違うと**中身が同じなのに全行が
+ * 差分になり、必ず合流でぶつかる**。符号位置の比較は環境に依らない。
+ */
+function compareCodePoints(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * ファイルの中で行を並べる順。**席のある行が先、席に着いていない行が後ろ。**
+ *
+ * 席に着いていない行は「増えたり減ったりする行」なので、まとめて後ろへ置き、
+ * 手前に区画の見出しを挟む。そうしないと、増える場所が最後の章の行の隣になって
+ * 合流でぶつかる（`save` の `openTail` を見よ）。
+ */
+function rowOrder(entry: UnitStateEntry): string {
+	if (entry.kind === "unit") {
+		return `0${entry.seat}`;
+	}
+	return entry.kind === "front" ? "1" : `2${entry.hash}`;
+}
+
+/**
+ * 旧形式（`path order level titleHash hash from need`）の1行を読み替える。
+ *
+ * 旧形式は行の種別を `order` の桁で表していた（100万以上なら保留席、200万なら
+ * frontmatter）。本文の行の席のキーは、そのファイルの行をすべて読んで並びが
+ * 決まってからでないと配れないので、ここでは `order` をそのまま返す。
+ *
+ * @returns 読めなければ `undefined`
+ */
+function readLegacyLine(columns: readonly string[]): { order: number; entry: UnitStateEntry } | undefined {
+	const [filePath, orderStr, levelStr, titleHash, hash, from, need] = columns;
+	const order = Number.parseInt(orderStr, 10);
+	const level = Number.parseInt(levelStr, 10);
+	if (Number.isNaN(order) || Number.isNaN(level)) {
+		return undefined;
+	}
+	const kind: UnitStateKind = order >= 2_000_000 ? "front" : order >= 1_000_000 ? "held" : "unit";
+	return { order, entry: { path: filePath, kind, seat: "", level, titleHash, hash, from, need } };
 }
 
 /**
  * unit-stateエントリ。
- * 非MDファイルは「ファイル＝単一ユニット」（order=0, level=0, titleHash=""）の特殊形、
- * MD-external は同一 path に複数 order 行を持つ。
+ * 非MDファイルは「ファイル＝単一ユニット」（`unit` 1行・level=0・titleHash=""）の特殊形、
+ * MD-external は同一 path に複数の `unit` 行を持つ。
  */
 export interface UnitStateEntry {
 	/** ワークスペース相対パス（/区切り） */
 	path: string;
-	/** ファイル内ユニット順序（0始まり） */
-	order: number;
+	/** 行の種別 */
+	kind: UnitStateKind;
+	/** 席のキー（`unit` のときだけ意味を持つ。`held` / `front` は ""） */
+	seat: string;
 	/** 見出しレベル（非MD・先頭本文ユニット=0） */
 	level: number;
 	/** タイトルのhash（非MD・本文ユニット=""） */
@@ -148,18 +226,18 @@ export interface UnitStateEntry {
 export class UnitStateStore {
 	private static instance: UnitStateStore | undefined;
 	/**
-	 * `path` → (`order` → 行) の二段。
+	 * `path` → (行の身元 → 行) の二段。
 	 *
-	 * ファイル単位の操作（読み出し・件数・保留席・刈り取り・移動）が**ワークスペース全体の
+	 * ファイル単位の操作（読み出し・件数・席の上げ下ろし・刈り取り・移動）が**ワークスペース全体の
 	 * 行数ではなく、そのファイルの行数にしか比例しない**ようにするための形である。
 	 * 平坦な `Map` に索引を別途持たせる手もあるが、索引と本体がずれる余地を作らずに済む。
 	 *
 	 * 副次的に、キーに NUL を使わなくなったので `git diff` がこのファイルをテキストとして
 	 * 扱うようになった（以前は `--text` を付けないと差分が出なかった）。
 	 */
-	private byPath: Map<string, Map<number, UnitStateEntry>> = new Map();
+	private byPath: Map<string, Map<string, UnitStateEntry>> = new Map();
 	/**
-	 * **まだディスクへ書いていない変更**。`path` → (`order` → 行、または `null`＝消したこと)。
+	 * **まだディスクへ書いていない変更**。`path` → (行の身元 → 行、または `null`＝消したこと)。
 	 *
 	 * `load()` は表を丸ごと捨ててディスクから読み直す。この記録が無いと、読み直しに
 	 * 割り込まれた書き手の成果がそこで消える。**しかも消えたことは誰にも分からない** —
@@ -177,12 +255,12 @@ export class UnitStateStore {
 	 * 並列（既定3・最大8）が直列に落ちる。**読み直しの側を割り込みに強くすれば、
 	 * 書き手にロックを足さずに済む**（ADR-260831-01）。
 	 */
-	private pending: Map<string, Map<number, UnitStateEntry | null>> = new Map();
+	private pending: Map<string, Map<string, UnitStateEntry | null>> = new Map();
 	private dirty = false;
 	private loaded = false;
 	private mdaitDir: string | undefined;
 	/** 直近の読み取りの内訳 */
-	private lastParseReport: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0 };
+	private lastParseReport: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0, migrated: 0 };
 	/** 読み取りに傷があったので、次の上書きの前に原本を写す */
 	private needsSalvage = false;
 
@@ -200,17 +278,17 @@ export class UnitStateStore {
 	}
 
 	/** そのファイルの行（無ければ undefined）。読み取り専用の用途に使う */
-	private rowsOf(filePath: string): Map<number, UnitStateEntry> | undefined {
+	private rowsOf(filePath: string): Map<string, UnitStateEntry> | undefined {
 		return this.byPath.get(filePath);
 	}
 
 	/** そのファイルの行（無ければ作る）。書き込みの用途に使う */
-	private ensureRows(filePath: string): Map<number, UnitStateEntry> {
+	private ensureRows(filePath: string): Map<string, UnitStateEntry> {
 		const rows = this.byPath.get(filePath);
 		if (rows) {
 			return rows;
 		}
-		const created = new Map<number, UnitStateEntry>();
+		const created = new Map<string, UnitStateEntry>();
 		this.byPath.set(filePath, created);
 		return created;
 	}
@@ -219,9 +297,9 @@ export class UnitStateStore {
 	 * 1行を消す。**そのファイルの行が空になったら path ごと畳む。**
 	 * 畳まないと、消えたファイルの分だけ空の入れ物が残り、全走査がその数に比例して重くなる。
 	 */
-	private deleteRow(filePath: string, order: number): boolean {
+	private deleteRow(filePath: string, key: string): boolean {
 		const rows = this.byPath.get(filePath);
-		if (!rows?.delete(order)) {
+		if (!rows?.delete(key)) {
 			return false;
 		}
 		if (rows.size === 0) {
@@ -238,13 +316,13 @@ export class UnitStateStore {
 	}
 
 	/** 保存待ちの変更を1件覚える（`null` は「消した」） */
-	private recordPending(filePath: string, order: number, entry: UnitStateEntry | null): void {
+	private recordPending(filePath: string, key: string, entry: UnitStateEntry | null): void {
 		const rows = this.pending.get(filePath);
 		if (rows) {
-			rows.set(order, entry);
+			rows.set(key, entry);
 			return;
 		}
-		this.pending.set(filePath, new Map([[order, entry]]));
+		this.pending.set(filePath, new Map([[key, entry]]));
 	}
 
 	/**
@@ -254,17 +332,34 @@ export class UnitStateStore {
 	 * 静かに消える。漏れは実行時にしか現れないので、入口を絞って構造的に防ぐ。
 	 */
 	private putRow(entry: UnitStateEntry): void {
-		this.ensureRows(entry.path).set(entry.order, entry);
-		this.recordPending(entry.path, entry.order, entry);
+		const rows = this.ensureRows(entry.path);
+		const key = entryKey(entry);
+		const sitting = rows.get(key);
+		if (sitting && sameRow(sitting, entry)) {
+			// **同じ値を入れ直しただけなら、何も起きなかったことにする。**
+			//
+			// sync は毎回すべてのユニットを書き戻すので、1文字も変わっていない回でも
+			// ここが全行分呼ばれる。無条件に `dirty` を立てると、そのたびに
+			// `.mdait/unit-state` の更新時刻が動き、SVN や git から見て「変わった」
+			// ファイルになる。翻訳を1つも触っていない日でもコミットに載り、
+			// 中身が同じ行同士の合流を毎回起こすことになる。
+			//
+			// `pending` にも積まない。積むと `load()` の割り込みのあとで
+			// 「読み直した値を、同じ値で上書きする」だけの当て直しが走り、
+			// `replayPending` が `dirty` を立てるので結局書いてしまう。
+			return;
+		}
+		rows.set(key, entry);
+		this.recordPending(entry.path, key, entry);
 		this.dirty = true;
 	}
 
 	/** 1行を消す。消したことも保存待ちとして覚える（`putRow` を見よ） */
-	private dropRow(filePath: string, order: number): boolean {
-		if (!this.deleteRow(filePath, order)) {
+	private dropRow(filePath: string, key: string): boolean {
+		if (!this.deleteRow(filePath, key)) {
 			return false;
 		}
-		this.recordPending(filePath, order, null);
+		this.recordPending(filePath, key, null);
 		this.dirty = true;
 		return true;
 	}
@@ -276,8 +371,8 @@ export class UnitStateStore {
 			return 0;
 		}
 		const removed = rows.size;
-		for (const order of rows.keys()) {
-			this.recordPending(filePath, order, null);
+		for (const key of rows.keys()) {
+			this.recordPending(filePath, key, null);
 		}
 		this.byPath.delete(filePath);
 		this.dirty = true;
@@ -297,11 +392,11 @@ export class UnitStateStore {
 			return;
 		}
 		for (const [filePath, rows] of this.pending) {
-			for (const [order, entry] of rows) {
+			for (const [key, entry] of rows) {
 				if (entry === null) {
-					this.deleteRow(filePath, order);
+					this.deleteRow(filePath, key);
 				} else {
-					this.ensureRows(filePath).set(order, entry);
+					this.ensureRows(filePath).set(key, entry);
 				}
 			}
 		}
@@ -335,7 +430,10 @@ export class UnitStateStore {
 		// `svn:eol-style=native` は取り出すときに CRLF へ変えうる。`\n` だけで切ると
 		// 7列目 `need` の末尾に `\r` が残り、`need !== ""` が全行で真になる
 		const lines = content.split(/\r?\n/);
-		const report: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0 };
+		const report: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0, migrated: 0 };
+		// 旧形式（7列・`order` が数）の行は、そのファイルの分をすべて読んでからでないと
+		// 席のキーへ読み替えられない（並びが分からないと隣が決まらない）ので、いったん貯める
+		const legacy = new Map<string, Array<{ order: number; entry: UnitStateEntry }>>();
 
 		for (const line of lines) {
 			// 空行・コメント行をスキップ
@@ -349,36 +447,86 @@ export class UnitStateStore {
 			}
 
 			const columns = line.split("\t");
+			if (columns.length === LEGACY_COLUMN_COUNT) {
+				const converted = readLegacyLine(columns);
+				if (!converted) {
+					report.skipped++;
+					logger.warn("unit-state", "Skipping malformed legacy line", { line: line.substring(0, 100) });
+					continue;
+				}
+				report.migrated++;
+				if (converted.entry.kind === "unit") {
+					const bucket = legacy.get(converted.entry.path);
+					if (bucket) {
+						bucket.push(converted);
+					} else {
+						legacy.set(converted.entry.path, [converted]);
+					}
+				} else {
+					this.seatOnLoad(converted.entry, report);
+				}
+				continue;
+			}
+
 			if (columns.length !== EXPECTED_COLUMN_COUNT) {
 				report.skipped++;
-				logger.warn("unit-state", "Skipping malformed line (expected 7 columns)", {
+				logger.warn("unit-state", "Skipping malformed line (expected 8 columns)", {
 					columnCount: columns.length,
 					line: line.substring(0, 100),
 				});
 				continue;
 			}
 
-			const [filePathCol, orderStr, levelStr, titleHash, hash, from, need] = columns;
-			const order = Number.parseInt(orderStr, 10);
+			const [filePathCol, kindStr, seat, levelStr, titleHash, hash, from, need] = columns;
+			const kind = toKind(kindStr);
 			const level = Number.parseInt(levelStr, 10);
-			if (Number.isNaN(order) || Number.isNaN(level)) {
+			if (!kind || Number.isNaN(level)) {
 				report.skipped++;
-				logger.warn("unit-state", "Skipping line with invalid order/level", {
+				logger.warn("unit-state", "Skipping line with an unknown kind or level", {
 					line: line.substring(0, 100),
 				});
 				continue;
 			}
+			if (kind === "unit" && !isSeatKey(seat)) {
+				// **席のキーが読めなくても、行は捨てない。** 席に着いていない行として預かる。
+				// 位置は分からなくなるが、`from` / `need` はこのファイルにしか無く、本文から
+				// 計算し直せない。本文が同じままなら次の sync で拾い戻される
+				report.skipped++;
+				logger.warn("unit-state", "Kept a unit line with a malformed seat key as an unseated row", {
+					line: line.substring(0, 100),
+				});
+				this.seatOnLoad(
+					{ path: filePathCol, kind: "held", seat: "", level, titleHash, hash, from, need },
+					report,
+				);
+				continue;
+			}
 
-			const entry: UnitStateEntry = {
-				path: filePathCol,
-				order,
-				level,
-				titleHash,
-				hash,
-				from,
-				need,
-			};
-			this.seatOnLoad(entry, report);
+			this.seatOnLoad(
+				{ path: filePathCol, kind, seat: kind === "unit" ? seat : "", level, titleHash, hash, from, need },
+				report,
+			);
+		}
+
+		// 旧形式の本文行を、並びの順に席へ着ける。**同じ `order` の行が2つあれば
+		// 合流の取りこぼしなので、片方は席から降ろす**（どちらも捨てない）
+		for (const rows of legacy.values()) {
+			rows.sort((a, b) => a.order - b.order || compareCodePoints(seatPriority(a.entry), seatPriority(b.entry)));
+			const winners: UnitStateEntry[] = [];
+			let prevOrder: number | undefined;
+			for (const row of rows) {
+				if (prevOrder === row.order) {
+					report.duplicates++;
+					this.seatOnLoad({ ...row.entry, kind: "held", seat: "" }, report);
+					continue;
+				}
+				prevOrder = row.order;
+				winners.push(row.entry);
+			}
+			const seats = assignSeats(new Array(winners.length).fill(undefined));
+			winners.forEach((entry, i) => {
+				this.seatOnLoad({ ...entry, seat: seats[i] }, report);
+			});
 		}
 
 		this.loaded = true;
@@ -396,36 +544,35 @@ export class UnitStateStore {
 	 * かつてはここで後勝ちに潰しており、**負けた側の `from` / `need` / `revise@` が
 	 * 警告も残さず消えていた** — 控えが他所に無いので、消えたことに気づく手掛かりも無い。
 	 *
-	 * 溢れた行は保留席（`HELD_ORDER_BASE` 以降）へ逃がす。保留席の行は本文 hash の
+	 * 溢れた行は席から降ろす（`kind: "held"`）。席に着いていない行は本文 hash の
 	 * 完全一致でしか拾われないので（`unit-state-align.ts`）、**弱い手掛かりで取り違える
 	 * ことが構造的に起きない**。原稿がその陣営の版だったときだけ、自動で戻る。
 	 */
 	private seatOnLoad(entry: UnitStateEntry, report: UnitStateParseReport): void {
 		const rows = this.ensureRows(entry.path);
-		const sitting = rows.get(entry.order);
+		const key = entryKey(entry);
+		const sitting = rows.get(key);
 		if (!sitting) {
-			rows.set(entry.order, entry);
+			rows.set(key, entry);
 			return;
+		}
+		if (sameRow(sitting, entry)) {
+			return; // まったく同じ行が2度来ただけ。畳んでも何も失われない
 		}
 
 		report.duplicates++;
-		// 席に残すほうと、保留席へ回すほうを、読んだ順に依らず決める
-		const [stays, leaves] =
-			seatPriority(entry) < seatPriority(sitting) ? [entry, sitting] : [sitting, entry];
-		rows.set(entry.order, stays);
+		// 席に残すほうと、席から降ろすほうを、読んだ順に依らず決める
+		const [stays, leaves] = seatPriority(entry) < seatPriority(sitting) ? [entry, sitting] : [sitting, entry];
+		rows.set(key, stays);
 
-		// 同じ中身の行が既に保留席に居るなら席は増やさない（同じ hash の席は1つで足りる）
-		let nextSeat = HELD_ORDER_BASE;
-		for (const row of rows.values()) {
-			if (!isHeldBackEntry(row)) {
-				continue;
-			}
-			nextSeat = Math.max(nextSeat, row.order + 1);
-			if (row.hash === leaves.hash && row.from === leaves.from && row.need === leaves.need) {
-				return;
-			}
+		// 降ろしたほうは席を持たない行（`held`）にする。**捨てない。**
+		// 本文 hash が無い行も預かる — 拾い戻せはしないが、`from` / `need` は
+		// このファイルにしか無く、本文から計算し直せない
+		const held: UnitStateEntry = { ...leaves, kind: "held", seat: "" };
+		const heldKey = entryKey(held);
+		if (!rows.has(heldKey)) {
+			rows.set(heldKey, held);
 		}
-		rows.set(nextSeat, { ...leaves, order: nextSeat });
 	}
 
 	/**
@@ -437,6 +584,14 @@ export class UnitStateStore {
 	 */
 	private afterLoad(report: UnitStateParseReport): void {
 		this.lastParseReport = report;
+		if (report.migrated > 0) {
+			// 旧形式を読み替えただけで、失ったものは無い。新しい形で書き戻したいので
+			// `dirty` は立てるが、原本の避難（`needsSalvage`）は要らない
+			this.dirty = true;
+			logger.info("unit-state", "Read rows written in the previous format and converted them", {
+				migrated: report.migrated,
+			});
+		}
 		if (isCleanParse(report)) {
 			return;
 		}
@@ -465,13 +620,13 @@ export class UnitStateStore {
 		const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
 		const bucketOf = (p: string) => (Number.parseInt(calculateHash(p.slice(dirOf(p).length), false).substring(0, 2), 16) % BUCKETS_PER_DIR);
 		const sortedEntries = [...this.allEntries()].sort((a, b) => {
-			const d = dirOf(a.path).localeCompare(dirOf(b.path));
+			const d = compareCodePoints(dirOf(a.path), dirOf(b.path));
 			if (d !== 0) return d;
 			const ba = bucketOf(a.path);
 			const bb = bucketOf(b.path);
 			if (ba !== bb) return ba < bb ? -1 : 1;
-			const c = a.path.localeCompare(b.path);
-			return c !== 0 ? c : a.order - b.order;
+			const c = compareCodePoints(a.path, b.path);
+			return c !== 0 ? c : compareCodePoints(rowOrder(a), rowOrder(b));
 		});
 
 		const lines: string[] = [...HEADER_LINES];
@@ -488,14 +643,33 @@ export class UnitStateStore {
 		let prevPath: string | undefined;
 		let prevDir: string | undefined;
 		let bucketCursor = 0;
+		let tailOpened = false;
+		let needBlank = false;
 		const fillBuckets = (dir: string, upTo: number) => {
 			while (bucketCursor < upTo) {
 				lines.push(`# ${dir}[${bucketCursor.toString(16).padStart(2, "0")}]`);
 				bucketCursor++;
 			}
 		};
+		// ファイルごとに「席に着いていない行（`held` / `front`）を置く区画」を、**行が1つも
+		// 無くても常に開ける。**
+		//
+		// それらの行は本文の行のうしろに並ぶ。章を1つ消すと、その行が `held` へ移って
+		// **ブロックの末尾に1行増える** — 増える場所がちょうど最後の章の行の隣なので、
+		// 同じ記事の最後の章を別の枝が直していると必ず競合する（実測 S10）。区画をいつも
+		// 開けておけば、増える行は「見出しと空行のうしろ」に入るので、最後の章の行との
+		// あいだに変わらない行が3つ挟まる。見出しはローダーが読み飛ばす。
+		const openTail = () => {
+			if (prevPath === undefined || tailOpened) {
+				return;
+			}
+			lines.push("", `# ${prevPath} ${UNSEATED_SECTION_SUFFIX}`, "");
+			tailOpened = true;
+			needBlank = false;
+		};
 		for (const entry of sortedEntries) {
 			if (entry.path !== prevPath) {
+				openTail();
 				const dir = dirOf(entry.path);
 				if (dir !== prevDir) {
 					if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
@@ -504,13 +678,33 @@ export class UnitStateStore {
 				}
 				fillBuckets(dir, bucketOf(entry.path) + 1);
 				lines.push("", `# ${entry.path}`, "");
+				prevPath = entry.path;
+				tailOpened = false;
+				needBlank = false;
+			}
+			if (!isLiveBodyEntry(entry)) {
+				openTail();
+			}
+			if (needBlank) {
+				// **行と行のあいだにも空行を1つ置く。**
+				//
+				// 3方向マージは「変えた行が隣り合っている」だけで競合を出す。挟むものが
+				// 何も無いと、同じ記事の**隣り合う章**を2人が別々に訳しただけで人の手が
+				// 要る（実測 S6: 第1章と第2章をそれぞれ改訂 → git も diff3 も競合）。
+				// あいだに1行でも変わらない行があれば、どちらの変更もそのまま通る。
+				//
+				// 空行はローダーが読み飛ばすので、**形式は1バイトも変わらない**
+				// （古い版の mdait もそのまま読める）。増えるのは行数だけで、
+				// 1行あたり1バイトしか太らない。
+				lines.push("");
 			}
 			lines.push(
-				`${entry.path}\t${entry.order}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
+				`${entry.path}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
 			);
-			prevPath = entry.path;
+			needBlank = true;
 		}
 
+		openTail();
 		if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
@@ -569,9 +763,60 @@ export class UnitStateStore {
 		}
 	}
 
-	getEntry(filePath: string, order: number): UnitStateEntry | undefined {
+	/**
+	 * 「ファイル＝単一ユニット」の行を返す（非Markdown の訳文・原文）。
+	 *
+	 * かつては `getEntry(path, 0)` と書いていた。`0` が「先頭の席」ではなく「その
+	 * ファイルの唯一の行」を意味していることは呼び出し側にしか無く、席のキーが
+	 * 位置を表さなくなった今は名前で言うほうが正しい。**Markdown には使わない**
+	 * （複数の席があるので「唯一の行」が定義できない）。
+	 */
+	getSoleEntry(filePath: string): UnitStateEntry | undefined {
 		this.autoLoad();
-		return this.rowsOf(filePath)?.get(order);
+		// **席の小さいほうを採る。** 表の走査順（入れた順）で決めると、行が2つできてしまった
+		// ファイル（`.md` → `.txt` の改名で行が運ばれた等）で「どれが唯一の行か」が
+		// 読み込みの経緯で変わる
+		let found: UnitStateEntry | undefined;
+		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
+			if (isLiveBodyEntry(entry) && (found === undefined || entry.seat < found.seat)) {
+				found = entry;
+			}
+		}
+		return found;
+	}
+
+	/** 席のキーで本文の行を引く（無ければ undefined） */
+	getUnitEntry(filePath: string, seat: string): UnitStateEntry | undefined {
+		this.autoLoad();
+		return this.rowsOf(filePath)?.get(`u${seat}`);
+	}
+
+	/** 本文の hash で、席に着いていない行を引く（無ければ undefined） */
+	getHeldEntry(filePath: string, hash: string): UnitStateEntry | undefined {
+		this.autoLoad();
+		return this.heldEntriesWithHash(filePath, hash)[0];
+	}
+
+	/** 席のキーで本文の行を消す */
+	removeUnitEntry(filePath: string, seat: string): void {
+		this.autoLoad();
+		this.dropRow(filePath, `u${seat}`);
+	}
+
+	/** 「ファイル＝単一ユニット」の行を書く（`getSoleEntry` を見よ） */
+	setSoleEntry(filePath: string, marker: { hash: string; from: string; need: string }): void {
+		this.autoLoad();
+		const sitting = this.getSoleEntry(filePath);
+		this.putRow({
+			path: filePath,
+			kind: "unit",
+			seat: sitting?.seat ?? assignSeats([undefined])[0],
+			level: 0,
+			titleHash: "",
+			hash: marker.hash,
+			from: marker.from,
+			need: marker.need,
+		});
 	}
 
 	setEntry(entry: UnitStateEntry): void {
@@ -579,13 +824,14 @@ export class UnitStateStore {
 		this.putRow(entry);
 	}
 
-	removeEntry(filePath: string, order: number): void {
+	/** 1行を消す */
+	removeEntry(entry: UnitStateEntry): void {
 		this.autoLoad();
-		this.dropRow(filePath, order);
+		this.dropRow(entry.path, entryKey(entry));
 	}
 
 	/**
-	 * 指定パスの行をすべて削除する（保留席の行も含む）。
+	 * 指定パスの行をすべて削除する（席に着いていない行も含む）。
 	 *
 	 * ファイルそのものを手放すとき（孤立訳文の破棄）に使う。走査の副作用ではなく
 	 * 人の明示的な宣言に対応する操作なので、`cleanupOrphansInScope` の3分割は通さない。
@@ -605,8 +851,8 @@ export class UnitStateStore {
 	 * ファイル単位の呼び出しに割り戻していると取りこぼす。
 	 *
 	 * 行き先に既に行があれば**先に消してから**移す。上書きで移すと、移動先のファイルが
-	 * 元々持っていた行のうち order が大きいものだけが残り、次の parse で「余った行」として
-	 * 別の章に拾われる。移動は上書きであって併合ではない。
+	 * 元々持っていた行のうち席のキーが重ならなかったものだけが残り、次の parse で
+	 * 「余った行」として別の章に拾われる。移動は上書きであって併合ではない。
 	 *
 	 * @param oldPath 移動元（ワークスペース相対・/区切り）
 	 * @param newPath 移動先（同上）
@@ -655,120 +901,99 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 刈り取りを見送った末尾のエントリを「保留席」へ移す（detachMarkers から呼ぶ）。
-	 *
-	 * order を `HELD_ORDER_BASE` 以降へ付け替えるだけで、内容（hash / from / need）は変えない。
-	 * こうしておくと、次に読むときその行が「取り残された行」だと**行そのものから分かる**。
-	 * 列を増やさずに覚えられるので、7列固定の形式を崩さずに済む。
-	 *
-	 * これが無いと、いまのユニット数との比率でしか保留を推し量れず、ユニットが少し増えた
-	 * だけで取り残された行が「普通の余り」に見え、順序で新しい章に貼り付いてしまう。
-	 *
-	 * @returns 保留席へ移したエントリ数
-	 */
-	parkEntriesFrom(filePath: string, fromOrder: number): number {
-		this.autoLoad();
-		const moving: UnitStateEntry[] = [];
-		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
-			if (entry.order < HELD_ORDER_BASE && entry.order >= fromOrder) {
-				moving.push(entry);
-			}
-		}
-		moving.sort((a, b) => a.order - b.order);
-		return this.moveToHeldSeats(filePath, moving);
-	}
-
-	/**
-	 * 指定した order の行を「保留席」へ移す（`parkEntriesFrom` の位置によらない版）。
+	 * 指定した席の行を、席から降ろす（`held` にする）。
 	 *
 	 * 末尾かどうかではなく「**いまの本文に対応が付かなかった**」ことを根拠に退避する。
 	 * 文書の途中の章が1つ消えたとき、sync が原文からその章を作り直すのでユニット数は
-	 * 元に戻り、末尾を見る `parkEntriesFrom` は何も拾えない。対応が付かなかった事実を
+	 * 元に戻るため、位置で見ていると何も拾えない。対応が付かなかった事実を
 	 * 知っているのは読み込み時（`alignEntriesToUnits`）だけなので、そこから運ばれた
-	 * order をそのまま受け取る（`MarkerFileContext.alignment`）。
+	 * 席のキーをそのまま受け取る（`MarkerFileContext.alignment`）。
 	 *
-	 * 既に保留席に居る行と、指定に無い行は動かさない。
+	 * **同じ本文 hash の行は1つしか置かない。** 席に着いていない行は本文 hash の完全一致
+	 * でしか拾われないため、同じ hash の行が2つあっても片方は永遠に使われない。同じ章を
+	 * 消して貼り戻すたびに行が増えるのを防ぐ意味もある（増えるのは「消えたきり戻って
+	 * こなかった、内容の異なる章」の数だけになる）。身元が hash なので、この重複除去は
+	 * 数える必要すらなく**構造的に**起きる。
 	 *
 	 * @param filePath 対象ファイル（ワークスペース相対）
-	 * @param orders 退避する行の order（保留席の order を渡しても無視する）
-	 * @returns 保留席へ移したエントリ数
+	 * @param seats 退避する行の席のキー
+	 * @returns 新たに預かった行の数（既に同じ本文を預かっていた分は数えない）
 	 */
-	parkEntries(filePath: string, orders: readonly number[]): number {
+	parkEntries(filePath: string, seats: readonly string[]): number {
 		this.autoLoad();
-		if (orders.length === 0) {
+		if (seats.length === 0) {
 			return 0;
-		}
-		const wanted = new Set(orders);
-		const moving: UnitStateEntry[] = [];
-		for (const order of [...wanted].sort((a, b) => a - b)) {
-			if (order >= HELD_ORDER_BASE) {
-				continue;
-			}
-			const entry = this.rowsOf(filePath)?.get(order);
-			if (entry) {
-				moving.push(entry);
-			}
-		}
-		return this.moveToHeldSeats(filePath, moving);
-	}
-
-	/**
-	 * 行を保留席（`HELD_ORDER_BASE` 以降）へ移す共通処理。
-	 *
-	 * **同じ本文 hash の行は保留席に1つしか置かない。** 保留席の行は本文 hash の完全一致
-	 * でしか拾われないため、同じ hash の行が2つあっても片方は永遠に使われない。同じ章を
-	 * 消して貼り戻すたびに席が増えるのを防ぐ意味もある（増えるのは「消えたきり戻って
-	 * こなかった、内容の異なる章」の数だけになる）。
-	 *
-	 * @param moving order 昇順に並んだ、保留席へ移す行
-	 */
-	private moveToHeldSeats(filePath: string, moving: readonly UnitStateEntry[]): number {
-		if (moving.length === 0) {
-			return 0;
-		}
-		// ここで読むのは席の採番のためだけ。書き込みは putRow / dropRow を通す
-		const rows = this.rowsOf(filePath);
-		let nextSeat = HELD_ORDER_BASE;
-		const seatByHash = new Map<string, number>();
-		for (const entry of rows?.values() ?? []) {
-			if (isHeldBackEntry(entry)) {
-				nextSeat = Math.max(nextSeat, entry.order + 1);
-				if (entry.hash) {
-					seatByHash.set(entry.hash, entry.order);
-				}
-			}
 		}
 		let parked = 0;
-		for (const entry of moving) {
-			this.dropRow(filePath, entry.order);
-			// 同じ本文の席が既にあるなら、席は増やさず中身を新しいほうで置き換える。
-			// hash が同じなら拾われ方は同じで、from / need は新しいほうが現在に近い
-			const taken = entry.hash ? seatByHash.get(entry.hash) : undefined;
-			const seat = taken ?? nextSeat++;
-			this.putRow({ ...entry, order: seat });
-			if (entry.hash) {
-				seatByHash.set(entry.hash, seat);
+		for (const seat of [...new Set(seats)].sort()) {
+			const entry = this.rowsOf(filePath)?.get(`u${seat}`);
+			if (!entry) {
+				continue;
 			}
-			if (taken === undefined) {
+			this.dropRow(filePath, `u${seat}`);
+			if (!entry.hash) {
+				continue; // 本文 hash が無い行は拾い戻せない。預けても行が増えるだけ
+			}
+			// **同じ本文を預かる行は1つに絞る。** 拾い戻しは本文 hash の完全一致だけなので、
+			// 同じ hash の行が2つあっても片方は永遠に使われない。同じ章を消して貼り戻すたびに
+			// 行が増えるのも防ぐ。`from` / `need` は新しいほうが現在に近いので、そちらを残す。
+			//
+			// 絞るのは**ここ（預けるとき）だけ**である。読み取り（`seatOnLoad`）で絞ると、
+			// 合流のあとのファイルで「同じ本文・違う状態」の行が黙って消える
+			const older = this.heldEntriesWithHash(filePath, entry.hash);
+			for (const row of older) {
+				this.dropRow(filePath, entryKey(row));
+			}
+			this.putRow({ ...entry, kind: "held", seat: "" });
+			if (older.length === 0) {
 				parked++;
 			}
 		}
 		return parked;
 	}
 
+	/** そのファイルの、本文 hash が一致する「席に着いていない行」 */
+	private heldEntriesWithHash(filePath: string, hash: string): UnitStateEntry[] {
+		const found: UnitStateEntry[] = [];
+		for (const entry of this.rowsOf(filePath)?.values() ?? []) {
+			if (entry.kind === "held" && entry.hash === hash) {
+				found.push(entry);
+			}
+		}
+		return found;
+	}
+
 	/**
-	 * 指定した order の行を削除する。
+	 * 席に着いていない行を、本文 hash を指定して消す。
 	 *
-	 * 保留席から拾い戻された行を席から外すために使う（`detachMarkers` が通常の order で
-	 * 書き直すので、席に残すと同じ状態の行が二重になる）。
+	 * 本文が戻ってきて拾い戻された行を外すために使う（`detachMarkers` が席のキーで
+	 * 書き直すので、残すと同じ状態の行が二重になる）。
 	 *
 	 * @returns 削除されたエントリ数
 	 */
-	dropEntries(filePath: string, orders: readonly number[]): number {
+	dropHeldEntries(filePath: string, hashes: readonly string[]): number {
 		this.autoLoad();
 		let removed = 0;
-		for (const order of orders) {
-			if (this.dropRow(filePath, order)) {
+		for (const hash of new Set(hashes)) {
+			for (const entry of this.heldEntriesWithHash(filePath, hash)) {
+				if (this.dropRow(filePath, entryKey(entry))) {
+					removed++;
+				}
+			}
+		}
+		return removed;
+	}
+
+	/**
+	 * 指定した席の行を消す。
+	 *
+	 * @returns 削除されたエントリ数
+	 */
+	dropEntries(filePath: string, seats: readonly string[]): number {
+		this.autoLoad();
+		let removed = 0;
+		for (const seat of seats) {
+			if (this.dropRow(filePath, `u${seat}`)) {
 				removed++;
 			}
 		}
@@ -776,34 +1001,7 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 指定パスの、order が fromOrder 以上の**通常の行**を削除する。
-	 * ユニットが減ったときに末尾の旧エントリが残るのを防ぐ（detachMarkers から呼ぶ）。
-	 *
-	 * **保留席（`HELD_ORDER_BASE` 以降）の行は消さない。** 保留席の order は必ず
-	 * いまのユニット数より大きいので、範囲で消すと「ユニット数が元に戻った瞬間に
-	 * 保留席が全部消える」ことになり、席が本来の役目（本文が戻ってくるまで状態を
-	 * 預かる）を果たせない。席の行を消すのは、拾い戻されたとき（`dropEntries`）と
-	 * ファイルそのものを手放すとき（`removeEntriesByPath`）だけである（ADR-260809-01）。
-	 *
-	 * @returns 削除されたエントリ数
-	 */
-	pruneEntriesFrom(filePath: string, fromOrder: number): number {
-		this.autoLoad();
-		const rows = this.rowsOf(filePath);
-		if (!rows) {
-			return 0;
-		}
-		let removed = 0;
-		for (const order of [...rows.keys()]) {
-			if (order >= fromOrder && order < HELD_ORDER_BASE && this.dropRow(filePath, order)) {
-				removed++;
-			}
-		}
-		return removed;
-	}
-
-	/**
-	 * 指定パスの**すべての**行の数（frontmatter の行も保留席も含む）。
+	 * 指定パスの**すべての**行の数（frontmatter の行も、席に着いていない行も含む）。
 	 *
 	 * 「そのパスに行が1つでも在るか」を問うときだけ使う。**「訳文に守るべき状態が
 	 * 残っているか」を問うのに使ってはならない** — frontmatter の行は本文が1つも
@@ -816,13 +1014,13 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 指定パスの**本文の行**の数（frontmatter の行を除く。保留席は含む）。
+	 * 指定パスの**本文の行**の数（frontmatter の行を除く。席に着いていない行は含む）。
 	 *
 	 * 数え方は `getEntriesByPath` と同じで、配列を作らないだけの版である。
 	 * 「訳文が空になったが状態は残っているか」「この訳文はまだ行を持っていないか」
 	 * といった、**本文ユニットについての問い**はすべてこちらを通す。
 	 *
-	 * 保留席を含めるのは、席の行が「消えた章の from / need を預かっている」＝
+	 * 席に着いていない行を含めるのは、その行が「消えた章の from / need を預かっている」＝
 	 * 守るべき状態そのものだからである。位置の話（末尾を刈るか）だけが席を
 	 * 除いて数える（`countLiveEntriesByPath`）。
 	 */
@@ -838,11 +1036,11 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 指定パスの、保留席に居ない行の数を返す。
+	 * 指定パスの、席に着いている行の数を返す。
 	 *
-	 * 末尾を刈るかどうかの判定（`shouldPruneTail`）はこちらを使う。保留席の行を数に
-	 * 入れると、席がある間ずっと「行がユニットより多い」ことになり、席の数だけ
-	 * 「減った」と誤って見える。席の行はもう位置を持っていないので、位置の話には数えない。
+	 * 刈るかどうかの判定（`shouldPruneTail`）はこちらを使う。席に着いていない行を数に
+	 * 入れると、預かっている間ずっと「行がユニットより多い」ことになり、その数だけ
+	 * 「減った」と誤って見える。預かりの行はもう位置を持っていないので、位置の話には数えない。
 	 */
 	countLiveEntriesByPath(filePath: string): number {
 		this.autoLoad();
@@ -856,7 +1054,8 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 指定パスの**本文の行**を order 昇順で返す（attachMarkers 用）。
+	 * 指定パスの**本文の行**を並び順で返す（attachMarkers 用）。席のある行が先、
+	 * 席に着いていない行が後ろに来る。
 	 *
 	 * frontmatter の行は含めない。呼び出し側はどれも「本文ユニットの並び」を欲しがって
 	 * いて、混ざると本文ユニットに化ける。frontmatter が要るときは
@@ -867,7 +1066,7 @@ export class UnitStateStore {
 		this.autoLoad();
 		return [...(this.rowsOf(filePath)?.values() ?? [])]
 			.filter((entry) => !isFrontMatterEntry(entry))
-			.sort((a, b) => a.order - b.order);
+			.sort((a, b) => compareCodePoints(rowOrder(a), rowOrder(b)));
 	}
 
 	/**
@@ -895,7 +1094,7 @@ export class UnitStateStore {
 	/** 指定パスの frontmatter マーカーの行（無ければ undefined） */
 	getFrontMatterEntry(filePath: string): UnitStateEntry | undefined {
 		this.autoLoad();
-		return this.rowsOf(filePath)?.get(FRONT_MATTER_ORDER);
+		return this.rowsOf(filePath)?.get("f");
 	}
 
 	/**
@@ -911,7 +1110,8 @@ export class UnitStateStore {
 		}
 		this.putRow({
 			path: filePath,
-			order: FRONT_MATTER_ORDER,
+			kind: "front",
+			seat: "",
 			level: 0,
 			titleHash: "",
 			hash: marker.hash,
@@ -923,7 +1123,7 @@ export class UnitStateStore {
 	/** 指定パスの frontmatter マーカーの行を消す */
 	removeFrontMatterEntry(filePath: string): void {
 		this.autoLoad();
-		this.dropRow(filePath, FRONT_MATTER_ORDER);
+		this.dropRow(filePath, "f");
 	}
 
 	/** need != '' のエントリ一覧 */

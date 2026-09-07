@@ -207,7 +207,7 @@ export interface AiReviewOptions {
  */
 function writePlainReviewOutcome(targetRelPath: string, pair: ReviewPair): void {
 	const store = UnitStateStore.getInstance();
-	const entry = store.getEntry(targetRelPath, 0);
+	const entry = store.getSoleEntry(targetRelPath);
 	if (!entry) {
 		return;
 	}
@@ -285,7 +285,7 @@ export async function executeAiReviewForFile(
 				// 行にしか無い。そこから同じ形のペアを組み立てれば、あとの検証も判定も
 				// ファイルの種類を知らずに済む
 				const pair = buildPlainReviewPair(
-					UnitStateStore.getInstance().getEntry(targetRelPath, 0),
+					UnitStateStore.getInstance().getSoleEntry(targetRelPath),
 					sourceContent,
 					targetContent,
 					path.basename(targetFile),

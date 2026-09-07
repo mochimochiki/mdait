@@ -14,6 +14,7 @@ import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registr
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -193,14 +194,14 @@ Same content.
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.md",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 2,
 			titleHash: "",
 			hash: "tgtA",
 			from: "srcA",
 			need: "verify-deletion",
 		});
-		store.setEntry({ path: "en/doc.md", order: 1, level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
+		store.setEntry({ path: "en/doc.md", kind: "unit" as const, seat: seat(1), level: 2, titleHash: "", hash: "tgtB", from: "srcB", need: "" });
 
 		const result = await keepUnitsAsIndependent(targetFile, config, ["tgtA"]);
 

@@ -10,6 +10,7 @@ import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { Configuration } from "../../../../infra/config/configuration";
 import { PromptProvider } from "../../../../prompts";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 declare let __vscodeMockLanguage: string | undefined;
@@ -720,12 +721,12 @@ suite("executeAiReviewForFile（非Markdown）", () => {
 		fs.mkdirSync(mdaitDir, { recursive: true });
 		const store = UnitStateStore.getInstance();
 		store.load(mdaitDir);
-		store.setEntry({ path: TARGET_REL, order: 0, level: 0, titleHash: "", hash: "tgt1", from: "src1", need });
+		store.setEntry({ path: TARGET_REL, kind: "unit" as const, seat: seat(0), level: 0, titleHash: "", hash: "tgt1", from: "src1", need });
 		store.save(mdaitDir);
 	}
 
 	function needInStore(): string | undefined {
-		return UnitStateStore.getInstance().getEntry(TARGET_REL, 0)?.need;
+		return UnitStateStore.getInstance().getSoleEntry(TARGET_REL)?.need;
 	}
 
 	async function initConfig(): Promise<Configuration> {

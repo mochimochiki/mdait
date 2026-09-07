@@ -45,9 +45,9 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const { UnitStateStore } = require(path.join(REPO, "out/core/unit-state/unit-state-store.js"));
 const { UnitRegistryStore } = require(path.join(REPO, "out/core/unit-registry/unit-registry-store.js"));
 const { calculateHash } = require(path.join(REPO, "out/core/hash/hash-calculator.js"));
-const { HELD_ORDER_BASE, FRONT_MATTER_ORDER } = require(
-	path.join(REPO, "out/core/unit-state/unit-state-store.js"),
-);
+const { ExternalMarkerProvider } = require(path.join(REPO, "out/core/markdown/marker-provider.js"));
+const { MdaitMarker } = require(path.join(REPO, "out/core/markdown/mdait-marker.js"));
+const { MdaitUnit } = require(path.join(REPO, "out/core/markdown/mdait-unit.js"));
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-merge-"));
 
@@ -142,10 +142,9 @@ const apply = (w, ...edits) => edits.reduce((acc, edit) => edit(acc) ?? acc, clo
 function toEntries(w) {
 	const entries = [];
 	for (const a of w) {
-		a.units.forEach((u, i) => {
+		a.units.forEach((u) => {
 			entries.push({
 				path: a.path,
-				order: i,
 				level: u.level,
 				titleHash: calculateHash(u.title),
 				hash: calculateHash(u.body),
@@ -164,15 +163,50 @@ function freshMdaitDir() {
 	return dir;
 }
 
-/** 世界を、製品の `save()` が書くのと同じバイト列にする */
-function serializeState(w) {
+/**
+ * 世界を、**製品と同じ道を通して** `.mdait/unit-state` のバイト列にする。
+ *
+ * 行を直に組み立てないのが要点である。席番号（`order`）を誰がどう決めるかは
+ * `ExternalMarkerProvider.detachMarkers` の中にあり、そこを通さずに「配列の添字＝席」で
+ * 書くと、**製品が席を据え置くようになっても台の数字は動かない**。枝の状態は
+ * 「合流元（base）の行を読み込んでから、枝の原稿で sync し直したもの」として作る。
+ *
+ * @param w いまの世界（枝の上での原稿の状態）
+ * @param prior 合流元の `unit-state` のバイト列（新規なら空文字）
+ */
+function stateOf(w, prior) {
+	const dir = freshMdaitDir();
+	const filePath = path.join(dir, "unit-state");
+	if (prior) fs.writeFileSync(filePath, prior, "utf-8");
+
 	UnitStateStore.dispose();
 	const store = UnitStateStore.getInstance();
-	for (const entry of toEntries(w)) store.setEntry(entry);
-	const dir = freshMdaitDir();
+	store.load(dir);
+	const provider = new ExternalMarkerProvider(store);
+
+	// 消えた記事の行を落とす（sync の掃除にあたる）
+	const alive = new Set(w.map((a) => a.path));
+	for (const entry of store.getAllEntries()) {
+		if (!alive.has(entry.path)) store.removeEntriesByPath(entry.path);
+	}
+
+	for (const a of w) {
+		const units = a.units.map(
+			(u) => new MdaitUnit(new MdaitMarker(calculateHash(u.body), null, null), u.title, u.level, u.body, 0, 0),
+		);
+		const ctx = { filePath: a.path, role: "target" };
+		provider.attachMarkers(units, ctx);
+		// 枝の上で決まった状態を載せる（sync や翻訳がマーカーへ書くのと同じ位置）
+		units.forEach((unit, i) => {
+			const u = a.units[i];
+			unit.marker = new MdaitMarker(calculateHash(u.body), u.from || null, u.need || null);
+		});
+		provider.detachMarkers(units, ctx);
+	}
+
 	store.save(dir);
 	UnitStateStore.dispose();
-	return fs.readFileSync(path.join(dir, "unit-state"), "utf-8");
+	return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : prior;
 }
 
 /** 合流のあとのバイト列を、製品の `load()` が読むとおりに読む */
@@ -248,7 +282,7 @@ function compare(expected, actual) {
 		const key = identity(e);
 		if (!got.has(key)) got.set(key, new Set());
 		got.get(key).add(meaning(e));
-		if (e.order >= HELD_ORDER_BASE && e.order !== FRONT_MATTER_ORDER) {
+		if (e.kind === "held") {
 			held.set(key, (held.get(key) ?? 0) + 1);
 		}
 	}
@@ -257,7 +291,7 @@ function compare(expected, actual) {
 	for (const [key, value] of want) {
 		if (!got.get(key)?.has(value)) lost++;
 	}
-	// 保留席の行は「位置は無いが状態は預かっている」ので、増えた行としては数えない。
+	// 席に着いていない行は「位置は無いが状態は預かっている」ので、増えた行としては数えない。
 	// 次の sync が本文と突き合わせて拾い直すか、拾われなければそのまま静かに残る
 	let ghost = 0;
 	for (const [key, values] of got) {
@@ -342,7 +376,9 @@ function runScenario(scenario) {
 	const theirs = apply(base, ...scenario.b);
 	const expected = apply(mine, ...scenario.b);
 
-  const files = writeTriplet(serializeState(base), serializeState(mine), serializeState(theirs));
+	// 枝は base から分かれる。base の行を読み込んだうえで、枝の原稿で sync し直す
+	const baseState = stateOf(base, "");
+	const files = writeTriplet(baseState, stateOf(mine, baseState), stateOf(theirs, baseState));
 	const result = { id: scenario.id, name: scenario.name, expectConflict: !!scenario.expectConflict, ways: {} };
 	for (const [way, merger] of Object.entries(MERGERS)) {
 		const merged = merger(files);

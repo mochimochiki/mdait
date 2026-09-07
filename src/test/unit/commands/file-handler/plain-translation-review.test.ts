@@ -20,6 +20,7 @@ import type { TranslationResult, Translator } from "../../../../commands/trans/t
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -63,7 +64,7 @@ suite("非Markdown翻訳で need:review を立てる条件", () => {
 
 		UnitStateStore.getInstance().setEntry({
 			path: "target/sample.json",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 0,
 			titleHash: "",
 			hash: "",
@@ -80,7 +81,7 @@ suite("非Markdown翻訳で need:review を立てる条件", () => {
 	});
 
 	function needAfterTranslate(): string {
-		return UnitStateStore.getInstance().getEntry("target/sample.json", 0)?.need ?? "";
+		return UnitStateStore.getInstance().getSoleEntry("target/sample.json")?.need ?? "";
 	}
 
 	test("コードブロックが失われたら need:review を立てること", async () => {

@@ -268,23 +268,24 @@ function readUnitState() {
  * 頭がぶつかる名前があり、「含む」で探すと別のファイルの行まで拾ってしまう。
  *
  * @param {string} relPath 作業場から見た相対パス
- * @returns {Array<{path:string, order:number, level:number, titleHash:string, hash:string, from:string, need:string}>}
+ * @returns {Array<{path:string, kind:string, seat:string, level:number, titleHash:string, hash:string, from:string, need:string}>}
  */
 function unitStateRows(relPath) {
 	const rows = [];
 	for (const line of readUnitState().split("\n")) {
 		if (line.trim() === "" || line.startsWith("#")) continue;
 		const cols = line.split("\t");
-		if (cols.length !== 7) continue;
+		if (cols.length !== 8) continue;
 		if (relPath !== undefined && cols[0] !== relPath) continue;
 		rows.push({
 			path: cols[0],
-			order: Number(cols[1]),
-			level: Number(cols[2]),
-			titleHash: cols[3],
-			hash: cols[4],
-			from: cols[5],
-			need: cols[6],
+			kind: cols[1],
+			seat: cols[2],
+			level: Number(cols[3]),
+			titleHash: cols[4],
+			hash: cols[5],
+			from: cols[6],
+			need: cols[7],
 		});
 	}
 	return rows;

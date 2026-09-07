@@ -17,6 +17,7 @@ import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -428,7 +429,7 @@ Body A.
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.md",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 2,
 			titleHash: "",
 			hash: "tgtA",
@@ -437,7 +438,7 @@ Body A.
 		});
 		store.setEntry({
 			path: "en/doc.md",
-			order: 1,
+			kind: "unit" as const, seat: seat(1),
 			level: 2,
 			titleHash: "",
 			hash: "tgtB",

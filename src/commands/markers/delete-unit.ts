@@ -3,16 +3,16 @@
  * @description
  *   verify-deletion 判定で「削除」を選んだユニットをドキュメントから除去する。
  *   hash/from の書き換えに留まる resolve-need.ts と異なり、ユニット（本文＋マーカー）自体を取り除く。
- *   embedded では本文から該当セクションが消え、external では unit-state ストアのエントリも整合させる
- *   （detachMarkers は 0..newLength-1 のみ order 振り直しで書き戻すため、配列が縮んだ分の末尾エントリを
- *   明示的に removeEntry で刈り取らないと古いエントリが残留する）。
+ *   embedded では本文から該当セクションが消え、external では unit-state ストアの行も整合させる
+ *   （detachMarkers は「ユニット数が急に減った回は刈らない」安全弁を持つので、人が明示的に頼んだ
+ *   削除であることを `MarkerFileContext.deliberateDeletion` で伝える。伝えないと消したはずの行が
+ *   席へ預けられて残る）。
  *   安全弁として need:verify-deletion のユニットのみを対象とする（任意ユニットの誤削除を防ぐ）。
  *
  *   呼び出し口は `MdFileHandler.deleteUnit` に一本化されている
  *   （サーフェスごとに書き換えを実装しないこと。理由は unit-mutation.ts を参照）。
  * @module commands/markers/delete-unit
  */
-import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
 import { type UnitMutationResult, withMarkdownMutation } from "./unit-mutation";
@@ -73,10 +73,11 @@ export async function deleteUnitFromFile(
 		const title = target.title;
 		parsed.units.splice(index, 1);
 
-		// external: detachMarkers の刈り取りは units が空のとき働かない（誤って全行を失わないため）。
-		// ここは「最後の1ユニットを消した」場合も含めて意図的な削除なので、明示的に刈る。
-		if (config.isExternalMarkers() && io.ctx?.filePath) {
-			UnitStateStore.getInstance().pruneEntriesFrom(io.ctx.filePath, parsed.units.length);
+		// external: detachMarkers の刈り取りは、ユニット数が急に減った回は働かない
+		// （コードブロックの閉じ忘れなどで誤って全行を失わないため）。ここは
+		// 「最後の1ユニットを消した」場合も含めて意図的な削除なので、そう伝える。
+		if (io.ctx) {
+			io.ctx.deliberateDeletion = true;
 		}
 
 		const result: DeleteUnitResult = {
@@ -141,9 +142,9 @@ export async function deleteAllVerifyDeletionUnits(
 			return { deleted, changed: false };
 		}
 
-		// external: 単体削除と同じく、意図的な削除なので「最後の1ユニットを消した」場合も含めて明示的に刈る
-		if (config.isExternalMarkers() && io.ctx?.filePath) {
-			UnitStateStore.getInstance().pruneEntriesFrom(io.ctx.filePath, parsed.units.length);
+		// external: 単体削除と同じく、意図的な削除なので「最後の1ユニットを消した」場合も含めて刈る
+		if (io.ctx) {
+			io.ctx.deliberateDeletion = true;
 		}
 		return { deleted, changed: true };
 	});

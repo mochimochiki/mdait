@@ -124,7 +124,7 @@ suite("frontmatter マーカーはモードの往復で失われない", () => {
 
 		const bodyRows = store.getEntriesByPath(relPath);
 		assert.ok(
-			bodyRows.every((entry) => entry.order < 1_000_000),
+			bodyRows.every((entry) => entry.kind === "unit"),
 			"本文の行として frontmatter が返らないこと",
 		);
 	});

@@ -8,8 +8,9 @@ import * as path from "node:path";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { ExternalMarkerProvider, buildAlignmentMemo, shouldPruneTail } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
-import { HELD_ORDER_BASE, UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
+import { UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 function makeConfig(level: number): Configuration {
 	return { sync: { level } } as unknown as Configuration;
@@ -54,7 +55,7 @@ suite("ExternalMarkerProvider", () => {
 		// 見出しユニットの title に合わせた titleHash を登録
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: "aaaa1111",
@@ -63,7 +64,7 @@ suite("ExternalMarkerProvider", () => {
 		});
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 1,
+			kind: "unit" as const, seat: seat(1),
 			level: 2,
 			titleHash: calculateHash("見出し2"),
 			hash: "bbbb2222",
@@ -89,7 +90,7 @@ suite("ExternalMarkerProvider", () => {
 	test("attach: エントリ不足時に余ユニットが空マーカーのままになること", () => {
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: "aaaa1111",
@@ -111,7 +112,7 @@ suite("ExternalMarkerProvider", () => {
 	test("attach: titleHash 不一致でも index マッチでマーカー適用されること", () => {
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: "deadbeef", // 意図的に不一致
 			hash: "aaaa1111",
@@ -144,7 +145,7 @@ suite("ExternalMarkerProvider", () => {
 		// マーカー付きで parse → detach がそのマーカーを store に書き込む
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: "aaaa1111",
@@ -153,7 +154,7 @@ suite("ExternalMarkerProvider", () => {
 		});
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 1,
+			kind: "unit" as const, seat: seat(1),
 			level: 2,
 			titleHash: calculateHash("見出し2"),
 			hash: "bbbb2222",
@@ -179,10 +180,10 @@ suite("ExternalMarkerProvider", () => {
 		assert.strictEqual(fs.existsSync(path.join(tempDir, "unit-state")), false);
 	});
 
-	test("roundtrip: parse(external) → stringify で本文マーカー無し・store save で7カラム行が書かれること", () => {
+	test("roundtrip: parse(external) → stringify で本文マーカー無し・store save で8カラム行が書かれること", () => {
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: "aaaa1111",
@@ -201,8 +202,11 @@ suite("ExternalMarkerProvider", () => {
 		const content = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
 		const dataLines = content.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"));
 		assert.strictEqual(dataLines.length, 2);
-		assert.ok(dataLines[0].startsWith(`${TARGET_PATH}\t0\t`));
-		assert.ok(dataLines[1].startsWith(`${TARGET_PATH}\t1\t`));
+		// 席のキーは「二度と動かない背番号」なので値は決め打ちできない。8列で、
+		// パスが同じで、種別が本文で、キーが増える向きに並んでいることを見る
+		const columns = dataLines.map((l) => l.split("\t"));
+		assert.ok(columns.every((c) => c.length === 8 && c[0] === TARGET_PATH && c[1] === "unit"));
+		assert.ok(columns[0][2] < columns[1][2]);
 	});
 
 	test("detach: ユニットが急減したときは末尾の余った行を刈らず保留席へ移すこと", () => {
@@ -210,7 +214,7 @@ suite("ExternalMarkerProvider", () => {
 		for (let i = 0; i < 6; i++) {
 			store.setEntry({
 				path: TARGET_PATH,
-				order: i,
+				kind: "unit" as const, seat: seat(i),
 				level: 2,
 				titleHash: `t${i}`,
 				hash: `hash000${i}`,
@@ -237,7 +241,7 @@ suite("ExternalMarkerProvider", () => {
 		// 保留席の行が順序で拾われると、新章に削除済みの章の from が付き need:revise になる。
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: calculateHash("# 見出し1\n\n本文1。\n"),
@@ -247,7 +251,7 @@ suite("ExternalMarkerProvider", () => {
 		for (let i = 0; i < 3; i++) {
 			store.setEntry({
 				path: TARGET_PATH,
-				order: HELD_ORDER_BASE + i,
+				kind: "held" as const, seat: "",
 				level: 2,
 				titleHash: `old${i}`,
 				hash: `oldhash${i}`,
@@ -269,7 +273,7 @@ suite("ExternalMarkerProvider", () => {
 		const bodyHash = calculateHash("## 見出し2\n\n本文2。\n");
 		store.setEntry({
 			path: TARGET_PATH,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: calculateHash("見出し1"),
 			hash: "aaaa1111",
@@ -278,7 +282,7 @@ suite("ExternalMarkerProvider", () => {
 		});
 		store.setEntry({
 			path: TARGET_PATH,
-			order: HELD_ORDER_BASE,
+			kind: "held" as const, seat: "",
 			level: 2,
 			titleHash: calculateHash("見出し2"),
 			hash: bodyHash,
@@ -309,7 +313,7 @@ suite("ExternalMarkerProvider", () => {
 			for (let i = 0; i < probe.units.length; i++) {
 				store.setEntry({
 					path: TARGET_PATH,
-					order: i,
+					kind: "unit" as const, seat: seat(i),
 					level: probe.units[i].headingLevel,
 					titleHash: calculateHash(probe.units[i].title),
 					hash: hashes[i],
@@ -405,7 +409,7 @@ suite("ExternalMarkerProvider", () => {
 			for (let i = 0; i < probe.units.length; i++) {
 				store.setEntry({
 					path: TARGET_PATH,
-					order: i,
+					kind: "unit" as const, seat: seat(i),
 					level: probe.units[i].headingLevel,
 					titleHash: calculateHash(probe.units[i].title),
 					hash: calculateHash(probe.units[i].content),
@@ -430,12 +434,12 @@ suite("ExternalMarkerProvider", () => {
 			// すべての行が「対応なし」になるが、それは章が消えた証拠ではない。
 			// （0件のとき行を席へ預けること自体は、従来からある末尾側の守り）
 			const entries = [
-				{ path: TARGET_PATH, order: 0, level: 1, titleHash: "t0", hash: "h0", from: "s0", need: "" },
-				{ path: TARGET_PATH, order: 1, level: 2, titleHash: "t1", hash: "h1", from: "s1", need: "" },
+				{ path: TARGET_PATH, kind: "unit" as const, seat: seat(0), level: 1, titleHash: "t0", hash: "h0", from: "s0", need: "" },
+				{ path: TARGET_PATH, kind: "unit" as const, seat: seat(1), level: 2, titleHash: "t1", hash: "h1", from: "s1", need: "" },
 			];
-			const memo = buildAlignmentMemo(entries, 0, new Set());
-			assert.deepStrictEqual(memo.unmatchedOrders, [], "1件も預けない");
-			assert.deepStrictEqual(memo.recoveredHeldOrders, []);
+			const memo = buildAlignmentMemo(entries, [], new Set());
+			assert.deepStrictEqual(memo.unmatchedSeats, [], "1件も預けない");
+			assert.deepStrictEqual(memo.recoveredHeldHashes, []);
 		});
 
 		test("本文を空にして貼り戻しても、行が二重にならず状態が戻ること", () => {
@@ -466,7 +470,7 @@ suite("ExternalMarkerProvider", () => {
 			store.removeEntriesByPath("tmp/probe.md");
 			store.setEntry({
 				path: TARGET_PATH,
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: probe.units[0].headingLevel,
 				titleHash: calculateHash(probe.units[0].title),
 				hash: calculateHash(probe.units[0].content),
@@ -476,7 +480,7 @@ suite("ExternalMarkerProvider", () => {
 			// 見出しは同じだが本文が違う行を席に置く
 			store.setEntry({
 				path: TARGET_PATH,
-				order: HELD_ORDER_BASE,
+				kind: "held" as const, seat: "",
 				level: probe.units[1].headingLevel,
 				titleHash: calculateHash(probe.units[1].title),
 				hash: "ちがう本文のhash",
@@ -491,11 +495,79 @@ suite("ExternalMarkerProvider", () => {
 		});
 	});
 
+	test("detach: 章を1つ挿し込んでも、前後の行の席は動かないこと", () => {
+		// 席番号を毎回 0..N-1 に振り直していた頃は、章を1つ挿すだけでその記事のブロックが
+		// 丸ごと書き換わり、同じ記事への別の編集と必ず領域が重なっていた（実測 S2 / S9）
+		const twoChapters = ["# 見出し1", "", "本文1。", "", "## 見出し2", "", "本文2。", ""].join("\n");
+		const threeChapters = [
+			"# 見出し1",
+			"",
+			"本文1。",
+			"",
+			"## 割り込みの章",
+			"",
+			"あとから挿し込んだ本文。",
+			"",
+			"## 見出し2",
+			"",
+			"本文2。",
+			"",
+		].join("\n");
+
+		const provider = new ExternalMarkerProvider(store);
+		const first = markdownParser.parse(twoChapters, makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx1 = { filePath: TARGET_PATH };
+		provider.attachMarkers(first.units, ctx1);
+		provider.detachMarkers(first.units, ctx1);
+		const before = store.getEntriesByPath(TARGET_PATH).map((e) => e.seat);
+		assert.strictEqual(before.length, 2);
+
+		const second = markdownParser.parse(threeChapters, makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx2 = { filePath: TARGET_PATH };
+		provider.attachMarkers(second.units, ctx2);
+		provider.detachMarkers(second.units, ctx2);
+
+		const after = store.getEntriesByPath(TARGET_PATH).map((e) => e.seat);
+		assert.strictEqual(after.length, 3);
+		assert.strictEqual(after[0], before[0], "先頭の章の席は動かない");
+		assert.strictEqual(after[2], before[1], "後ろの章の席も動かない");
+		assert.ok(after[1] > before[0] && after[1] < before[1], "新しい章は前後のあいだに座る");
+	});
+
+	test("detach: 章を1つ消して1つ足しても、残った章の席は動かないこと", () => {
+		// 読み込みと書き出しのあいだで sync がユニットを差し替えるので、控えを**添字**で
+		// 覚えていると「消して足す」だけでずれる（長さは同じままなので気づけない）。
+		// ずれると削除点より後ろの席が全部書き換わり、合流の効きが消える
+		const doc = (titles: string[]) =>
+			titles.map((t) => `## ${t}\n\n${t}の本文。\n`).join("\n");
+		const provider = new ExternalMarkerProvider(store);
+
+		const first = markdownParser.parse(doc(["A", "B", "C"]), makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx1 = { filePath: TARGET_PATH };
+		provider.attachMarkers(first.units, ctx1);
+		provider.detachMarkers(first.units, ctx1);
+		const before = store.getEntriesByPath(TARGET_PATH).map((e) => e.seat);
+
+		// 読み込んだあとで「B を消して D を足す」（ユニット数は変わらない）
+		const second = markdownParser.parse(doc(["A", "B", "C"]), makeConfig(2), provider, { filePath: TARGET_PATH });
+		const ctx2 = { filePath: TARGET_PATH };
+		provider.attachMarkers(second.units, ctx2);
+		second.units.splice(1, 1);
+		const added = markdownParser.parse(doc(["D"]), makeConfig(2), provider, { filePath: "other.md" });
+		second.units.push(added.units[0]);
+		provider.detachMarkers(second.units, ctx2);
+
+		const after = store.getEntriesByPath(TARGET_PATH).filter((e) => e.kind === "unit").map((e) => e.seat);
+		assert.strictEqual(after[0], before[0], "A の席は動かない");
+		assert.strictEqual(after[1], before[2], "C の席も動かない");
+		assert.ok(after[2] > before[2], "D は後ろへ座る");
+	});
+
 	test("detach: ユニットが少し減っただけなら末尾の余った行を刈ること", () => {
 		for (let i = 0; i < 3; i++) {
 			store.setEntry({
 				path: TARGET_PATH,
-				order: i,
+				kind: "unit" as const, seat: seat(i),
 				level: i === 0 ? 1 : 2,
 				titleHash: `t${i}`,
 				hash: `hash000${i}`,

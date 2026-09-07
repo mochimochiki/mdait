@@ -695,7 +695,7 @@ export async function activate(context: vscode.ExtensionContext) {
 								}
 							}
 						}
-						if (!store.getEntry(lookupRelPath, 0)) {
+						if (!store.getSoleEntry(lookupRelPath)) {
 							logger.debug("extension", "Skipping file save sync (no unit-state entry)", { filePath });
 							return;
 						}

@@ -13,6 +13,7 @@ import * as path from "node:path";
 import { MdFileHandler } from "../../../../commands/file-handler/md-file-handler";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -60,7 +61,7 @@ suite("MdFileHandler.isInitialized（保存時 sync の初期化判定）", () =
 
 		const store = UnitStateStore.getInstance();
 		store.load(path.join(tempDir, ".mdait"));
-		store.setEntry({ path: rel, order: 0, level: 1, titleHash: "", hash: "tgt00001", from: "src00001", need: "" });
+		store.setEntry({ path: rel, kind: "unit" as const, seat: seat(0), level: 1, titleHash: "", hash: "tgt00001", from: "src00001", need: "" });
 
 		assert.strictEqual(await handler.isInitialized(abs), true);
 	});

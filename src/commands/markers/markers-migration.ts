@@ -202,7 +202,7 @@ export function embedFileMarkers(
 	const orphanedEntries = entries.filter((e) => !embeddedEntries.has(e));
 	for (const entry of entries) {
 		if (embeddedEntries.has(entry)) {
-			store.removeEntry(relPath, entry.order);
+			store.removeEntry(entry);
 		}
 	}
 	// 抑制はしない。「一度出したら二度と出さない」にすると、原因を直したのにまた起きたときに
@@ -212,7 +212,7 @@ export function embedFileMarkers(
 		logger.warn(
 			"markers",
 			"Kept unit-state entries that could not be written back into the file (no matching unit in the body)",
-			{ file: relPath, kept: orphanedEntries.length, orders: orphanedEntries.map((e) => e.order) },
+			{ file: relPath, kept: orphanedEntries.length, hashes: orphanedEntries.map((e) => e.hash) },
 		);
 	}
 	return { changed, unitsMigrated, unitsDropped: 0 };

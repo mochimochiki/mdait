@@ -3,8 +3,20 @@ import { encodeUnitRegistry } from "./unit-registry-encoder";
 /**
  * Unit Registry Store
  *
- * CRC32ハッシュの先頭3桁（000〜fff）でバケット化し、
- * 決定的な順序（バケット昇順＋エントリ昇順）で出力することでgit競合を軽減する。
+ * CRC32ハッシュの先頭4桁（0000〜ffff）で区画に分け、決定的な順序（区画の昇順＋
+ * ハッシュの昇順）で書き出す。
+ *
+ * **区画の目印の行は、1つも控えの無い区画にも必ず置く。** 合流で新しい控えの行が
+ * ぶつかるのは「両方の枝が同じ隙間へ差し込んだ」ときなので、隙間を細かく割るほど
+ * ぶつからなくなる。実測（2000件の台帳へ両方が30件ずつ足す合流を20回）:
+ *
+ * | 区画の数 | 競合した回 | 骨格込みの寸法 |
+ * |---|---|---|
+ * | 4096（3桁） | 2/20 | 71 KB |
+ * | 65536（4桁） | **0/20** | 351 KB |
+ *
+ * 骨格の重さと引き換えに、SVN 利用者が base64 の塊を手で解く場面を無くしている
+ * （SVN にはリポジトリに置けるマージ指定が無いので、形式そのもので減らすしかない）。
  *
  * 1エントリは content（ユニット内容のスナップショット）と、任意の note（ユニットに
  * 紐づく人間/ツールのメタ情報）を持つ。both encoded（base64+gzip）。
@@ -12,8 +24,7 @@ import { encodeUnitRegistry } from "./unit-registry-encoder";
  * - note: そのハッシュのユニットに追従する恒久メタ。sync が編集時に旧→新ハッシュへ移送する
  *
  * フォーマット（行はスペース区切り。encoded 値は base64 のため空白を含まない）:
- * - バケット行: `<3桁hex> ` (末尾スペース、payloadなし) ※旧形式、互換性のため残存
- * - 初期エントリ: `<3桁hex>00000 ` (各バケットの先頭、payload空)
+ * - 区画の目印: `<4桁hex>`（それだけの行）
  * - content のみ: `<8桁hash> <encodedContent>`
  * - content + note: `<8桁hash> <encodedContent> <encodedNote>`
  * - note のみ（content 未登録）: `<8桁hash>  <encodedNote>`（content トークンは空）
@@ -32,9 +43,12 @@ export interface UnitRegistryEntry {
 	note?: string;
 }
 
-/** バケットID（3桁hex）を抽出 */
+/** 区画の数（ハッシュの先頭4桁hex） */
+export const BUCKET_COUNT = 0x10000;
+
+/** 区画の目印（4桁hex）を抽出 */
 export function getBucketId(hash: string): string {
-	return hash.substring(0, 3).toLowerCase();
+	return hash.substring(0, 4).toLowerCase();
 }
 
 /** ハッシュを正規化（小文字8桁） */
@@ -42,10 +56,9 @@ function normalizeHash(hash: string): string {
 	return hash.toLowerCase();
 }
 
-/** バケット行かどうかを判定 */
+/** 区画の目印の行かどうかを判定（4桁hex だけの行） */
 function isBucketLine(line: string): boolean {
-	// 3桁hex + スペース + 何もない
-	return /^[0-9a-f]{3} $/i.test(line);
+	return /^[0-9a-f]{4}$/i.test(line);
 }
 
 /** エントリ行かどうかを判定 */
@@ -85,10 +98,9 @@ export class UnitRegistryStore {
 	private buckets = new Map<string, Map<string, UnitRegistryEntry>>();
 
 	/**
-	 * バケット化形式の文字列をパースしてストアに読み込む
-	 * - 新形式: バケット行なし、エントリ行のみ（ハッシュから自動判定）
-	 * - 旧形式: バケット行あり（後方互換性のため対応）
-	 * - note 列（3つ目のトークン）は任意。無い行は content のみ（旧来のファイルと互換）
+	 * 区画分けされた文字列をパースしてストアに読み込む
+	 * - 区画の目印の行（4桁hex だけの行）は読み飛ばす（区画はハッシュから決まる）
+	 * - note 列（3つ目のトークン）は任意
 	 *
 	 * **例外は投げない。** 読めない行は読み飛ばし、読めた行はすべて残す。同じハッシュが
 	 * 2度出てきたら畳む（content は content-addressed なので中身は同じはずで、食い違うなら
@@ -119,8 +131,8 @@ export class UnitRegistryStore {
 			}
 
 			if (isBucketLine(line)) {
-				// バケット行（旧形式との互換性）。区画はハッシュから決まるので、
-				// この行が何を名乗っていても読み取りには使わない
+				// 区画の目印。区画はハッシュから決まるので、この行が何を名乗っていても
+				// 読み取りには使わない（合流で行を引き離すためだけに置いてある）
 				continue;
 			}
 
@@ -141,13 +153,7 @@ export class UnitRegistryStore {
 			const encodedContent = parts[1] ?? "";
 			const encodedNote = parts[2];
 
-			// 初期エントリ（payload空・note無し）はスキップ
 			const bucketId = getBucketId(hash);
-			if (hash === `${bucketId}00000` && encodedContent.trim() === "" && !encodedNote) {
-				// 初期エントリはストアに保存しない（serializeで自動生成される）
-				continue;
-			}
-
 			if (!this.buckets.has(bucketId)) {
 				this.buckets.set(bucketId, new Map());
 			}
@@ -278,41 +284,29 @@ export class UnitRegistryStore {
 
 	/**
 	 * 正規形でシリアライズ
-	 * - 全バケット（000〜fff）を昇順で出力
-	 * - 各バケットの先頭に初期エントリ（<bucketId>00000）を配置（payload空）
-	 * - バケット内エントリはハッシュ昇順。note があれば3列目に付与
-	 * @returns バケット化形式の文字列
+	 * - 全区画（0000〜ffff）を昇順で出力し、区画の目印の行を必ず置く
+	 * - 区画内のエントリはハッシュ昇順。note があれば3列目に付与
+	 * @returns 区画分けされた文字列
 	 */
 	serialize(): string {
 		const lines: string[] = [];
 
-		// 全バケット（000〜fff）を昇順で出力
-		for (let i = 0; i < 4096; i++) {
-			const bucketId = i.toString(16).padStart(3, "0");
-			const initialHash = `${bucketId}00000`;
+		for (let i = 0; i < BUCKET_COUNT; i++) {
+			const bucketId = i.toString(16).padStart(4, "0");
+			// 目印の行は**控えが1つも無い区画にも置く**。合流で行を引き離すのが仕事なので、
+			// 中身のある区画にだけ置いたのでは隙間が割れない（クラスの説明を見よ）
+			lines.push(bucketId);
 
-			// このバケットにエントリがあるか確認
 			const entries = this.buckets.get(bucketId);
-			const hasInitialEntry = entries?.has(initialHash);
-
-			// 初期エントリ（<bucketId>00000）を追加
-			// - 実エントリがない場合: payload空で出力（ファイルサイズ削減）
-			// - 実エントリがある場合: スキップ（実エントリで上書き）
-			if (!hasInitialEntry) {
-				lines.push(`${initialHash} `);
+			if (!entries || entries.size === 0) {
+				continue;
 			}
-
-			// このバケットにエントリがあれば出力
-			if (entries && entries.size > 0) {
-				// エントリをハッシュ昇順でソート
-				const sortedHashes = Array.from(entries.keys()).sort();
-				for (const hash of sortedHashes) {
-					const entry = entries.get(hash);
-					if (!entry) {
-						continue;
-					}
-					lines.push(entry.note ? `${hash} ${entry.content} ${entry.note}` : `${hash} ${entry.content}`);
+			for (const hash of Array.from(entries.keys()).sort()) {
+				const entry = entries.get(hash);
+				if (!entry) {
+					continue;
 				}
+				lines.push(entry.note ? `${hash} ${entry.content} ${entry.note}` : `${hash} ${entry.content}`);
 			}
 		}
 

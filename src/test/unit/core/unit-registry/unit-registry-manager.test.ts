@@ -75,6 +75,24 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 		assert.equal(fs.readFileSync(registryPath(), "utf-8"), first);
 	});
 
+	test("控えが1件も増えなければ、ファイルを書き直さないこと", async () => {
+		// 何も翻訳していない sync でもファイルの更新時刻が動くと、SVN や git から見て
+		// 「変わった」ファイルになり、触っていない日でもコミットに載る
+		UnitRegistryManager.getInstance().saveUnitRegistry("aaaa1111", "最初の本文");
+		await UnitRegistryManager.getInstance().flushBuffer();
+
+		// 書き直したかどうかを、ファイルが生え直すかで見る
+		fs.unlinkSync(registryPath());
+		UnitRegistryManager.getInstance().saveUnitRegistry("aaaa1111", "最初の本文");
+		await UnitRegistryManager.getInstance().flushBuffer();
+		assert.equal(fs.existsSync(registryPath()), false, "控えが増えていないのに書き直している");
+
+		// 新しい控えが1件でもあれば書く
+		UnitRegistryManager.getInstance().saveUnitRegistry("bbbb2222", "別の本文");
+		await UnitRegistryManager.getInstance().flushBuffer();
+		assert.equal(fs.existsSync(registryPath()), true);
+	});
+
 	test("migrateNotes で note を旧→新 hash へ移送し、旧 hash からは消える", async () => {
 		const mgr = UnitRegistryManager.getInstance();
 		await mgr.saveNote("a0b01111", "carry me");

@@ -94,14 +94,14 @@ suite("sync: 訳文が空になったとき翻訳の状態を守る", () => {
 		await sync_CoreProc(sourceFile, targetFile, config);
 		const before = UnitStateStore.getInstance()
 			.getEntriesByPath("en/doc.md")
-			.map((entry) => `${entry.order}:${entry.hash}:${entry.from}:${entry.need}`);
+			.map((entry) => `${entry.seat}:${entry.hash}:${entry.from}:${entry.need}`);
 
 		fs.writeFileSync(targetFile, "", "utf-8");
 		await sync_CoreProc(sourceFile, targetFile, config);
 
 		const after = UnitStateStore.getInstance()
 			.getEntriesByPath("en/doc.md")
-			.map((entry) => `${entry.order}:${entry.hash}:${entry.from}:${entry.need}`);
+			.map((entry) => `${entry.seat}:${entry.hash}:${entry.from}:${entry.need}`);
 		assert.deepStrictEqual(after, before);
 	});
 

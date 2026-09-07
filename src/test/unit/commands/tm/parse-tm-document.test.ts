@@ -13,6 +13,7 @@ import { parseTmDocument } from "../../../../commands/tm/command-commit";
 import { isTmCommitTarget } from "../../../../commands/tm/commit-filter";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -63,7 +64,7 @@ suite("parseTmDocument（tm-commit のマーカー読取経路）", () => {
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: targetRel,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: "",
 			hash: "tgt00001",
