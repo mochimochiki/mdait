@@ -193,6 +193,35 @@ suite("AITermDetector - 使えない答えは0件にしない", () => {
 		await rejects('{"terms": "none"}', "配列が無ければ断ち切ること");
 	});
 
+	test("コードフェンスに包まれた答えは読める（前置き・後書きがあっても）", async () => {
+		const response = [
+			"用語を拾いました。",
+			"```json",
+			JSON.stringify([{ sourceTerm: "Endpoint", variants: ["endpoints"], context: "Endpoint content" }]),
+			"```",
+			"**補足:** 以上です。",
+		].join("\n");
+		const detector = new AITermDetector(new FakeAIService("[]", response));
+
+		const terms = await detector.detectTerms([pair], "en", "ja", "en");
+
+		assert.strictEqual(terms.length, 1);
+		assert.strictEqual(TermEntry.getTerm(terms[0], "en"), "Endpoint");
+	});
+
+	test("説明文に挟まれた答えも読める（入れ子の配列を途中で切らない）", async () => {
+		// variants が入れ子の配列なので、最初の `]` で切ると必ず壊れる
+		const response = `見つかった用語です:\n${JSON.stringify([
+			{ sourceTerm: "Endpoint", variants: ["endpoints", "Endpoints"], context: "Endpoint content" },
+		])}\n以上。`;
+		const detector = new AITermDetector(new FakeAIService("[]", response));
+
+		const terms = await detector.detectTerms([pair], "en", "ja", "en");
+
+		assert.strictEqual(terms.length, 1);
+		assert.deepStrictEqual([...TermEntry.getvariants(terms[0], "en")], ["endpoints", "Endpoints"]);
+	});
+
 	test("項目はあるのに形が1つも合わない答えは断ち切る", async () => {
 		await rejects(JSON.stringify([{ word: "Endpoint" }, { word: "Payload" }]), "拾えるものが無ければ断ち切ること");
 	});

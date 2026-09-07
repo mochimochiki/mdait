@@ -83,6 +83,26 @@ suite("AITermExpander - 使えない答えは0件にしない", () => {
 		await rejects("no json here", "対応表が無ければ断ち切ること");
 	});
 
+	test("空の答えは「使えない」ではなく「空」として伝える", async () => {
+		const expander = new AITermExpander(new FixedAIService("   "));
+		await assert.rejects(
+			expander.extractFromTranslationsBatch([createContext()], "en", "ja"),
+			(error: unknown) => error instanceof UnusableAIResponseError && error.reason === "empty",
+			"理由が empty であること（利用者への案内文が変わる）",
+		);
+	});
+
+	test("コードフェンスに包まれた答えは読める（前置き・後書きがあっても）", async () => {
+		const response = ['訳語を拾いました。', "```json", '{"API endpoint": "APIエンドポイント"}', "```", "以上。"].join(
+			"\n",
+		);
+		const expander = new AITermExpander(new FixedAIService(response));
+
+		const result = await expander.extractFromTranslationsBatch([createContext()], "en", "ja");
+
+		assert.strictEqual(result.get("API endpoint"), "APIエンドポイント");
+	});
+
 	test("途中で切れた JSON は断ち切る", async () => {
 		await rejects('{"API endpoint": "APIエンド', "閉じていない JSON を断ち切ること");
 	});

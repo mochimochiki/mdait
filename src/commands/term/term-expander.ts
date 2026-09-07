@@ -10,6 +10,7 @@ import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
+import { parseJsonAnswer } from "../shared/ai-json";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 
@@ -245,17 +246,8 @@ Return the result as a JSON object mapping source terms to target terms.`;
 	 * 用語集のせいだと読める形で終わる。正しい0件は**空のオブジェクト**だけである。
 	 */
 	private parseTermMap(response: string): Map<string, string> {
-		const jsonMatch = response.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) {
-			throw this.unusableResponse(response, "no JSON object found");
-		}
-
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(jsonMatch[0]);
-		} catch (error) {
-			throw this.unusableResponse(response, `JSON could not be parsed: ${(error as Error).message}`);
-		}
+		// JSON の読み方は `commands/shared/ai-json.ts` に寄せてある（フェンス優先・空は empty）
+		const parsed = parseJsonAnswer(response, "Term expansion");
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
 			throw this.unusableResponse(response, "the JSON was not an object");
 		}

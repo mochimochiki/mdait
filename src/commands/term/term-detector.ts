@@ -9,6 +9,7 @@ import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
+import { parseJsonAnswer } from "../shared/ai-json";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
 import { LangTerm, TermEntry as TermEntryUtils } from "./term-entry";
@@ -131,7 +132,6 @@ export class AITermDetector implements TermDetector {
 Return JSON array only, no commentary.`;
 
 		const response = await this.callAI(systemPrompt, userPrompt, cancellationToken);
-		this.rejectEmpty(response);
 
 		return this.parseDetectPairsResponse(response, sourceLang, targetLang);
 	}
@@ -159,7 +159,6 @@ Return JSON array only, no commentary.`;
 Return JSON array only, no commentary.`;
 
 		const response = await this.callAI(systemPrompt, userPrompt, cancellationToken);
-		this.rejectEmpty(response);
 
 		return this.parseDetectSourceOnlyResponse(response, sourceLang);
 	}
@@ -302,31 +301,16 @@ ${pair.target?.content || "(no translation)"}`;
 	 * 利用者には「用語集を更新しました（新しい用語 0 件）」としか伝わらない。何をしても
 	 * 進まないのに、原稿のせいだと読める形で終わる（実測: 意地悪シナリオ R6-N5/N7/N8）。
 	 * 正しい0件は**空の配列**（AI が「用語なし」と答えた）だけである。
+	 *
+	 * JSON の読み方は `commands/shared/ai-json.ts` に寄せてある（フェンス優先）。
 	 */
 	// biome-ignore lint/suspicious/noExplicitAny: AI の答えは形が保証されないため、項目ごとに型を見る
 	private parseTermArray(response: string): any[] {
-		const jsonMatch = response.match(/\[[\s\S]*\]/);
-		if (!jsonMatch) {
-			throw this.unusableResponse(response, "no JSON array found");
-		}
-
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(jsonMatch[0]);
-		} catch (error) {
-			throw this.unusableResponse(response, `JSON could not be parsed: ${(error as Error).message}`);
-		}
+		const parsed = parseJsonAnswer(response, "Term detection");
 		if (!Array.isArray(parsed)) {
 			throw this.unusableResponse(response, "the JSON was not an array");
 		}
 		return parsed;
-	}
-
-	/** 本文が空の答えも0件ではない（何も答えていないので、用語の有無は分からない） */
-	private rejectEmpty(response: string): void {
-		if (!response || response.trim().length === 0) {
-			throw new UnusableAIResponseError("empty", "Term detection response was empty", "responseChars=0");
-		}
 	}
 
 	/** 項目は入っているのに1つも形が合わなかったなら、それは0件ではなく使えない答え */
