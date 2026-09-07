@@ -8,8 +8,12 @@ import { Logger, formatError } from "../logging/logger";
  * `.mdait/.gitignore` に必ず載っている行。
  * `unit-registry.broken` と `unit-state.broken` は、読み取りに傷があったときだけ横へ写す
  * 原本の避難先で、中身は壊れた回のスナップショットそのもの。共有するものではない。
+ *
+ * `reports/` は各コマンドの実行レポート。**個人の実行結果であって共有する資産ではない**
+ * ので追跡しない（ADR-260907-04）。ファイル名が種類ごとに固定で、実行のたびに全文を
+ * 上書きするため、共有すると2人が同じコマンドを走らせるだけで必ず競合する。
  */
-const GITIGNORE_LINES = ["logs/", "unit-registry.broken", "unit-state.broken"];
+const GITIGNORE_LINES = ["logs/", "reports/", "unit-registry.broken", "unit-state.broken"];
 
 /**
  * `.mdait/.gitattributes` に必ず載っている行。
