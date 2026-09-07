@@ -273,6 +273,9 @@ function filesOf(w, mode, prior) {
 	const files = {};
 	for (const a of w) {
 		if (!isMd(a.path)) {
+			// 非MD（.txt / .csv）も**ファイルとして合流させる**。中身は本文そのもので、
+			// マーカーはどちらのモードでも入らない（状態は `unit-state` の1行）
+			files[a.path] = `${a.units.map(unitBody).join("\n\n")}\n`;
 			continue;
 		}
 		const parts = a.units.map((u) => {
@@ -287,8 +290,13 @@ function filesOf(w, mode, prior) {
 		if (a.front) {
 			const lines = ["---", `title: ${a.path}`];
 			if (mode === "embedded") {
+				// 製品と同じ形にする。キーは**ドットパス `mdait.front`** なので、YAML では
+				// `mdait:` と `  front: '...'` の**2行のブロック**になる（1行のスカラーではない）。
+				// 行数と隣り合い方が変わると競合の出方も変わるので、ここは製品に合わせる
+				// （`core/markdown/frontmatter-translation.ts` の FRONTMATTER_MARKER_KEY）
 				const m = new MdaitMarker(a.front.hash, a.front.from || null, a.front.need || null);
-				lines.push(`mdait: '${m.toString().replace(/^<!-- mdait ?/, "").replace(/ ?-->$/, "")}'`);
+				const value = m.toString().replace(/^<!-- mdait ?/, "").replace(/ ?-->$/, "");
+				lines.push("mdait:", `  front: '${value}'`);
 			}
 			lines.push("---", "");
 			head = `${lines.join("\n")}\n`;
@@ -433,7 +441,8 @@ function gotOf(files, mode) {
 						inFront = false;
 						continue;
 					}
-					const fm = line.match(/^mdait:\s*'(.*)'\s*$/);
+					// `mdait:` の下にぶら下がる `  front: '...'` を読む（製品の形）
+					const fm = line.match(/^\s+front:\s*'?([^']*?)'?\s*$/);
 					if (fm) {
 						const m = MdaitMarker.parse(`<!-- mdait ${fm[1]} -->`);
 						if (m) {
@@ -539,6 +548,8 @@ const SCENARIOS = [
 	// --- MD と非MD が混ざる ---
 	{ id: "X29", name: "混在: .md の章を改訂／.txt を改訂", base: MIXED, a: [editChapter("a3", "a3第2章")], b: [editFlat("t02")] },
 	{ id: "X30", name: "混在: .txt を1本削除／.md へ章を挿入", base: MIXED, a: [deleteFlat("t03")], b: [insertChapter("a2", "a2第1章", "割り込み章")] },
+	{ id: "X37", name: "混在: 同じ .txt を片方が削除／片方が改訂（本物の競合）", base: MIXED, a: [deleteFlat("t03")], b: [editFlat("t03")], expectConflict: true, expected: [deleteFlat("t03")] },
+	{ id: "X38", name: "混在: 同じ .txt を両方が別々に改訂（本物の競合）", base: MIXED, a: [editFlat("t03")], b: [(w) => { const f = w.find((x) => x.path === "content/en/t03.txt"); f.units[0].body = `${f.units[0].body}（別の人が直した）`; f.units[0].need = `revise@${calculateHash(f.units[0].body)}`; return w; }], expectConflict: true },
 	// --- 大きな作業場 ---
 	// --- 翻訳そのもの（`merge.mjs` の S4 は base が全章翻訳済みのため無変化だった） ---
 	{ id: "X32", name: "別々の記事の章をそれぞれ翻訳", base: SMALL_TODO, a: [transChapter("a1", "a1第2章")], b: [transChapter("a4", "a4第2章")] },
