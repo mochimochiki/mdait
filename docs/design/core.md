@@ -192,7 +192,7 @@ docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
 
 > 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（非MDの rebuild は `need:review` 付与で安全網）。旧ファイルは手動削除して構いません。
 
-**git 競合回避（ADR-260624-01 / ADR-260906-03〜07 / ADR-260907-01）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `ensureMdaitDir()` が `.mdait/.gitattributes` に `unit-state merge=union` を冪等生成し、(2) `save()` がファイルごとのブロックを「空行・見出し・空行」で挟み、行と行のあいだにも空行を1つ置き、**各行の1つ手前にその行だけの目印**（`# u<席の背番号>`）を書く。空行も `#` の行もローダーが読み飛ばすので読み込みは変わらない。合流で同じ席の行が2つ並んだら、後勝ちで潰さず片方を席から降ろして両方残す（読み取りは1行でも多く拾う）。並べ方ごとの競合数の実測は [merge-resilience.md](merge-resilience.md) にある。
+**git 競合回避（ADR-260624-01 / ADR-260906-03〜07 / ADR-260907-04）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `ensureMdaitDir()` が `.mdait/.gitattributes` に `unit-state merge=union` を冪等生成し、(2) `save()` がファイルごとのブロックを「空行・見出し・空行」で挟み、行と行のあいだにも空行を1つ置き、**各行の1つ手前にその行だけの目印**（`# u<席の背番号>`）を書く。空行も `#` の行もローダーが読み飛ばすので読み込みは変わらない。合流で同じ席の行が2つ並んだら、後勝ちで潰さず片方を席から降ろして両方残す（読み取りは1行でも多く拾う）。並べ方ごとの競合数の実測は [merge-resilience.md](merge-resilience.md) にある。
 
 ### MD-external モードの配線
 

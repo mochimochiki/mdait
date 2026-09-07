@@ -318,6 +318,7 @@
   "✨ Commands marked with the sparkle icon use AI.\n\n  • The AI service specified in mdait.json will be used\n  • AI usage statistics are recorded in .mdait/ai-stats.log\n\nDo you want to continue?": "✨ Commands marked with the sparkle icon use AI.\n\n  • The AI service specified in mdait.json will be used\n  • AI usage statistics are recorded in .mdait/ai-stats.log\n\nDo you want to continue?",
   "Proceed": "Proceed",
   "AI service: {0} (from mdait.json)": "AI service: {0} (from mdait.json)",
+  "Stopped calling the AI: it was being called over and over without getting anywhere, so mdait stopped instead of spending more. Check the API key, model name and output limit in mdait.json, then run it again - the parts already done are kept.": "Stopped calling the AI: it was being called over and over without getting anywhere, so mdait stopped instead of spending more. Check the API key, model name and output limit in mdait.json, then run it again - the parts already done are kept.",
   "Language model is not available. Please ensure GitHub Copilot is enabled.": "Language model is not available. Please ensure GitHub Copilot is enabled.",
   "No language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json.": "No language model is available for vendor '{0}'. Check the AI settings (ai.vendor / ai.model) in mdait.json.",
   "Sorry, I cannot answer that question.": "Sorry, I cannot answer that question.",

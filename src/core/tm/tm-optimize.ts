@@ -20,10 +20,13 @@ export function recomputeTmWeights(
 	const usefulness = new Map<string, number>();
 
 	for (const query of queries) {
+		// **いま入っている重みは見ない。** 見ると「重みを入力にして重みを出す」ことになり、
+		// 同じ TM でも流した回数で答えが変わる（ADR-260907-03）
 		const ranked = rankTmEntries(query, [...entries], {
 			lang: primaryLang,
 			topK: TOP_K,
 			lambda: 1,
+			ignoreWeight: true,
 		});
 		for (let i = 0; i < ranked.length && i < RANK_POINTS.length; i++) {
 			const point = RANK_POINTS[i];
