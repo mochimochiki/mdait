@@ -157,24 +157,38 @@ function answerTermMap(messages) {
 }
 
 /**
+ * TM に登録できる文か（mdait の `isWorthyForTm` と同じ決まり）。
+ *
+ * 最小の長さは言語で違う（日本語 8 文字・それ以外 12 文字）。英語は2語以下も落とす。
+ * ここを厳しくしすぎると、本当は登録できる文まで返さなくなり、検証が甘くなる。
+ */
+function isWorthyForTm(sentence, lang) {
+	if (sentence.length < (lang === "ja" ? 8 : 12)) return false;
+	if (/^[\d,.\s-]+$/.test(sentence)) return false;
+	if (/^(https?:\/\/|\.\.?\/|\/)\S+$/.test(sentence)) return false;
+	if (lang === "en" && sentence.split(/\s+/).filter(Boolean).length <= 2) return false;
+	return true;
+}
+
+/**
  * 文の対を作る仕事の答え。
  *
  * mdait 側の検査（`commands/tm/commit-processor.ts`）が厳しい。
  *   - 1行であること
  *   - 原文ユニット・訳文ユニットの**一部そのまま**であること
- *   - 短すぎる文は登録しない（日本語 8 文字・英語 12 文字より短いもの）
+ *   - 短すぎる文は登録しない（日本語 8 文字・それ以外 12 文字より短いもの）
  * だから、原文から切り出した文が訳文のほうにもそのまま入っているものだけを返す。
  * echo の訳文は原文を1行に潰したものなので、たいていの文はそのまま見つかる。
  */
 function answerTmPairs(messages) {
 	const system = systemText(messages);
+	const primaryLang = /^-\s*Primary language:\s*(\S+)/m.exec(system)?.[1] ?? "";
 	const primaryUnit = between(system, "<primaryLanguageUnit>", "</primaryLanguageUnit>");
 	const localUnit = between(system, "<localLanguageUnit>", "</localLanguageUnit>");
 	const pairs = [];
 	for (const sentence of splitSentences(primaryUnit)) {
 		if (pairs.length >= MAX_TM_PAIRS) break;
-		if (sentence.length < 12) continue;
-		if (/^[\d,.\s-]+$/.test(sentence)) continue;
+		if (!isWorthyForTm(sentence, primaryLang)) continue;
 		if (!localUnit.includes(sentence)) continue;
 		if (pairs.some((pair) => pair.primary === sentence)) continue;
 		pairs.push({ type: "new", tuid: "-", primary: sentence, local: sentence });

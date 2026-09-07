@@ -14,9 +14,11 @@ import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import {
 	MAX_CONSECUTIVE_FAILURES,
 	MAX_SAME_REQUEST,
+	QUIET_RESET_MS,
 	aiCallGuardState,
 	isAiCallsStopped,
 	resetAiCallGuard,
+	setAiCallGuardClock,
 	withAiCallGuard,
 } from "../../../../infra/llm/call-budget";
 
@@ -55,6 +57,7 @@ suite("AI 呼び出しの歯止め", () => {
 	});
 
 	teardown(() => {
+		setAiCallGuardClock();
 		resetAiCallGuard();
 	});
 
@@ -124,6 +127,45 @@ suite("AI 呼び出しの歯止め", () => {
 		failNext = false;
 		await guarded.sendMessage("system", messages(9999));
 		assert.equal(aiCallGuardState().consecutiveFailures, 0, "成功したら 0 に戻ること");
+	});
+
+	test("呼び出しに時間がかかっても、待っていた時間として数え直さない", async () => {
+		// 実測で見つかった弱点の回帰固定: 呼び始めた時刻だけを覚えていたため、1回の呼び出しに
+		// QUIET_RESET_MS より長くかかる相手（実際の AI ではふつう）では毎回「間が空いた」と
+		// 読めてしまい、失敗の数がまったく積み上がらなかった
+		let fakeNow = 1_000_000;
+		setAiCallGuardClock(() => fakeNow);
+		const slowAndFailing: AIService = {
+			async sendMessage(): Promise<string> {
+				// 1回の呼び出しが「数え直す時間」より長くかかる
+				fakeNow += QUIET_RESET_MS * 2;
+				throw new Error("boom");
+			},
+		};
+		const guarded = withAiCallGuard(slowAndFailing);
+
+		for (let i = 0; i < 5; i++) {
+			await guarded.sendMessage("system", messages(i)).catch(() => undefined);
+		}
+
+		assert.equal(aiCallGuardState().consecutiveFailures, 5, "遅い相手でも失敗が積み上がること");
+	});
+
+	test("しばらく呼ばずにいたら数え直す", async () => {
+		let fakeNow = 1_000_000;
+		setAiCallGuardClock(() => fakeNow);
+		const inner = alwaysThrows(() => new Error("boom"));
+		const guarded = withAiCallGuard(inner);
+
+		for (let i = 0; i < 5; i++) {
+			await guarded.sendMessage("system", messages(i)).catch(() => undefined);
+		}
+		assert.equal(aiCallGuardState().consecutiveFailures, 5);
+
+		// 設定を直して、しばらく置いてから叩き直す
+		fakeNow += QUIET_RESET_MS + 1;
+		await guarded.sendMessage("system", messages(99)).catch(() => undefined);
+		assert.equal(aiCallGuardState().consecutiveFailures, 1, "数え直したうえで1回ぶんだけ数えること");
 	});
 
 	test("人が止めた分は失敗に数えない", async () => {

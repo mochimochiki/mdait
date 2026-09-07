@@ -52,15 +52,41 @@ Return JSON object mapping source terms to translated terms:
   "source term 1": "translated term 1"
 }`;
 
+/** 原文が日本語のときの依頼（最小の長さは 8 文字） */
 const tmPrompt = `You are a senior professional translator and translation-memory (TM) curator.
+
+### Language Configuration
+- Primary language: ja
+- Local language: en
 
 <primaryLanguageUnit>
 マイクロサービスは独立して配備できる設計である。
+設計を見直した。
 短い。
 </primaryLanguageUnit>
 
 <localLanguageUnit>
-マイクロサービスは独立して配備できる設計である。 短い。 [MT]
+マイクロサービスは独立して配備できる設計である。 設計を見直した。 短い。 [MT]
+</localLanguageUnit>
+
+<ExistingTmEntries>
+[]
+</ExistingTmEntries>`;
+
+/** 原文が英語のときの依頼（最小の長さは 12 文字。2語以下も落とす） */
+const tmPromptEn = `You are a senior professional translator and translation-memory (TM) curator.
+
+### Language Configuration
+- Primary language: en
+- Local language: ja
+
+<primaryLanguageUnit>
+Each service can be deployed on its own.
+Two words.
+</primaryLanguageUnit>
+
+<localLanguageUnit>
+Each service can be deployed on its own. Two words. [MT]
 </localLanguageUnit>
 
 <ExistingTmEntries>
@@ -147,13 +173,29 @@ suite("echo: 文の対を作る", () => {
 			assert.equal(item.tuid, "-");
 			assert.ok(!item.primary.includes("\n"), "1行であること");
 			assert.ok(tmPrompt.includes(item.primary), "原文の一部そのままであること");
-			assert.ok(item.primary.length >= 12, "短すぎる文は返さないこと");
+			assert.ok(item.primary.length >= 8, "短すぎる文は返さないこと");
 		}
 	});
 
 	test("短い文（TM に登録できないもの）は返さない", () => {
 		const answer = JSON.parse(buildEchoAnswer(ask(tmPrompt, "Create TM commit plan items.")));
 		assert.ok(!answer.some((item) => item.primary === "短い。"));
+	});
+
+	test("日本語の最小の長さは 8 文字（12 文字で切ると登録できる文まで落ちる）", () => {
+		const answer = JSON.parse(buildEchoAnswer(ask(tmPrompt, "Create TM commit plan items.")));
+		assert.ok(
+			answer.some((item) => item.primary === "設計を見直した。"),
+			"8 文字の日本語の文は返すこと",
+		);
+	});
+
+	test("英語は 12 文字未満と2語以下を落とす", () => {
+		const answer = JSON.parse(buildEchoAnswer(ask(tmPromptEn, "Create TM commit plan items.")));
+		assert.deepEqual(
+			answer.map((item) => item.primary),
+			["Each service can be deployed on its own."],
+		);
 	});
 });
 

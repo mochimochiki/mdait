@@ -42,21 +42,41 @@ export const MAX_CONSECUTIVE_FAILURES = 50;
 /** 覚えておく「送った内容」の種類の上限。超えたら覚え直す（際限なく溜めない） */
 export const MAX_TRACKED_REQUESTS = 5000;
 
-/** これだけの時間まったく呼ばなければ、数えていたものを捨てる */
+/**
+ * これだけの時間まったく AI とやり取りしなければ、数えていたものを捨てる。
+ *
+ * 測るのは**待っていた時間**であって、呼び出しにかかった時間ではない。呼び始めた時刻だけを
+ * 覚えると、1回の呼び出しに 10 秒以上かかる相手（実際の AI ではふつうにある）では毎回
+ * 「間が空いた」と読めてしまい、数がまったく積み上がらない。だから呼び終わった時刻でも
+ * 覚え直す（`lastActivityAt`）。
+ */
 export const QUIET_RESET_MS = 10_000;
 
 /** 送った内容ごとの回数 */
 let sentCounts = new Map<number, number>();
 /** 続けて失敗した回数 */
 let consecutiveFailures = 0;
-/** 最後に呼ぼうとした時刻（打ち切られた分も含む） */
-let lastAttemptAt = 0;
+/** 最後に AI とやり取りしていた時刻。呼び始めと呼び終わりの両方で更新する（打ち切った分も含む） */
+let lastActivityAt = 0;
+
+/** いまの時刻を返す。テストで時計を進めるために差し替えられるようにしてある */
+let clock: () => number = () => Date.now();
 
 /** 数えていたものを捨てる（テスト用。ふつうは間が空いたときに自動で捨てる） */
 export function resetAiCallGuard(): void {
 	sentCounts = new Map();
 	consecutiveFailures = 0;
-	lastAttemptAt = 0;
+	lastActivityAt = 0;
+}
+
+/**
+ * 時計を差し替える（テスト専用）。
+ *
+ * 「10 秒待ったら数え直す」を確かめるのに本当に 10 秒待つわけにはいかないため。
+ * 引数なしで呼ぶと本物の時計へ戻る。
+ */
+export function setAiCallGuardClock(next?: () => number): void {
+	clock = next ?? (() => Date.now());
 }
 
 /** いまの数え（テスト・診断用） */
@@ -130,12 +150,12 @@ class GuardedAIService implements AIService {
 		messages: AIMessage[],
 		cancellationToken?: vscode.CancellationToken,
 	): Promise<string> {
-		const now = Date.now();
+		const startedAt = clock();
 		// 間が空いていたら数え直す。輪は間を置かずに回るので、ここでは戻らない
-		if (lastAttemptAt !== 0 && now - lastAttemptAt > QUIET_RESET_MS) {
+		if (lastActivityAt !== 0 && startedAt - lastActivityAt > QUIET_RESET_MS) {
 			resetAiCallGuard();
 		}
-		lastAttemptAt = now;
+		lastActivityAt = startedAt;
 
 		if (sentCounts.size >= MAX_TRACKED_REQUESTS) sentCounts = new Map();
 		const key = fingerprint(systemPrompt, messages);
@@ -166,8 +186,11 @@ class GuardedAIService implements AIService {
 			if (!isOperationCancelled(error)) {
 				consecutiveFailures += 1;
 			}
-			lastAttemptAt = Date.now();
 			throw error;
+		} finally {
+			// 呼び終わった時刻でも覚え直す。呼び出しにかかった時間を「待っていた時間」と
+			// 読み違えると、遅い相手ほど歯止めが効かなくなる
+			lastActivityAt = clock();
 		}
 	}
 }
