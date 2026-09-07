@@ -107,10 +107,16 @@ function contextLineFor(text, term) {
 	return line && line.length > 0 ? line : term;
 }
 
-/** 依頼文に `- 用語` / `- **用語** (context: …)` の形で並んだ語を拾う */
+/**
+ * 依頼文に `- 用語` / `- **用語** (context: …)` の形で並んだ語を拾う。
+ *
+ * 訳語を埋める依頼には、語の一覧のあとに対訳の見本が続く（`From these translation pairs:`）。
+ * 見本の中の箇条書きまで語として拾わないよう、そこで切る。
+ */
 function listedTerms(text) {
 	const terms = [];
-	for (const line of String(text ?? "").split(/\r?\n/)) {
+	const [head] = String(text ?? "").split("From these translation pairs:");
+	for (const line of head.split(/\r?\n/)) {
 		const matched = /^\s*-\s+(?:\*\*(.+?)\*\*|(.+?))\s*(?:\(context:.*)?$/.exec(line);
 		if (!matched) continue;
 		const term = cleanWord(matched[1] ?? matched[2] ?? "");

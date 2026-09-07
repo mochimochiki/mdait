@@ -111,6 +111,20 @@ suite("echo: 用語を拾う", () => {
 });
 
 suite("echo: 訳語を埋める", () => {
+	test("対訳の見本に混ざった箇条書きは語として拾わない", () => {
+		const user = `Extract the en translations for these ja terms:
+- マイクロサービス
+
+From these translation pairs:
+
+### Pair 1
+**Source (ja):**
+- 箇条書きの行
+`;
+		const answer = JSON.parse(buildEchoAnswer(ask(translateTermsPrompt, user)));
+		assert.deepEqual(Object.keys(answer), ["マイクロサービス"]);
+	});
+
 	test("依頼文に並んだ語を、そのまま鍵にした対応表を返す", () => {
 		const user = `Translate these ja terms to en:
 - **マイクロサービス** (context: 分散システムの設計手法)
