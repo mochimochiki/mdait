@@ -17,3 +17,4 @@ src/test/unit/workspace/.mdait/unit-registry
 # タスクチケットはローカルの持ち物（リポジトリには載せない）
 docs/tasks/
 
+__pycache__/
