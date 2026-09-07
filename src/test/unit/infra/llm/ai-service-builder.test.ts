@@ -4,6 +4,7 @@ import {
 	Configuration,
 } from "../../../../infra/config/configuration";
 import { AIServiceBuilder } from "../../../../infra/llm/ai-service-builder";
+import { hasAiCallGuard, unwrapAiCallGuard } from "../../../../infra/llm/call-budget";
 import { DefaultAIProvider } from "../../../../infra/llm/providers/default-ai-provider";
 import { VSCodeLanguageModelProvider } from "../../../../infra/llm/providers/vscode-lm-provider";
 
@@ -25,25 +26,32 @@ suite("AIServiceBuilder", () => {
 	});
 
 	test("defaultは外部LLMを呼ばないモックプロバイダーを生成すること", async () => {
-		const service = await new AIServiceBuilder().build(createConfig("default"));
+		const provider = unwrapAiCallGuard(await new AIServiceBuilder().build(createConfig("default")));
 
-		assert.ok(service instanceof DefaultAIProvider);
-		assert.ok(!(service instanceof VSCodeLanguageModelProvider));
+		assert.ok(provider instanceof DefaultAIProvider);
+		assert.ok(!(provider instanceof VSCodeLanguageModelProvider));
 	});
 
 	test("vscode-lmはVS Code Language Modelプロバイダーを生成すること", async () => {
-		const service = await new AIServiceBuilder().build(
-			createConfig("vscode-lm"),
-		);
+		const provider = unwrapAiCallGuard(await new AIServiceBuilder().build(createConfig("vscode-lm")));
 
-		assert.ok(service instanceof VSCodeLanguageModelProvider);
-		assert.ok(!(service instanceof DefaultAIProvider));
+		assert.ok(provider instanceof VSCodeLanguageModelProvider);
+		assert.ok(!(provider instanceof DefaultAIProvider));
 	});
 
 	test("設定未指定時の既定値はvscode-lmであること", async () => {
 		const service = await new AIServiceBuilder().build();
 
 		assert.strictEqual(Configuration.getInstance().ai.provider, "vscode-lm");
-		assert.ok(service instanceof VSCodeLanguageModelProvider);
+		assert.ok(unwrapAiCallGuard(service) instanceof VSCodeLanguageModelProvider);
+	});
+
+	test("どのプロバイダでも、返るのは歯止め付きのAIServiceであること", async () => {
+		// 呼び過ぎの歯止めはここ1か所にしかない。素のプロバイダをそのまま返す道ができると、
+		// その経路だけ誰も見ていない状態に戻る
+		for (const provider of ["default", "vscode-lm", "ollama"] as const) {
+			const service = await new AIServiceBuilder().build(createConfig(provider));
+			assert.ok(hasAiCallGuard(service), `${provider} に歯止めが付いていること`);
+		}
 	});
 });

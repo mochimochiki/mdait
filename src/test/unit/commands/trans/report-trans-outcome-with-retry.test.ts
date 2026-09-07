@@ -87,6 +87,20 @@ suite("reportTransOutcomeWithRetry", () => {
 		assert.equal(result.patchFailures.length, 1);
 	});
 
+	test("やり直しの手を渡されなければ、「全文で訳し直す」を出さない", async () => {
+		// 訳し直しから来た実行で同じ提案を出すと、失敗 → 提案 → 同じ失敗 という輪ができ、
+		// 押し続けるかぎり AI を呼び続ける（実測で5分に11万回）
+		answerRetryThenConfirm();
+
+		const result = await reportTransOutcomeWithRetry(patchFailedResult(), "guide.md", undefined);
+
+		const offered = (__vscodeMockShownMessages ?? []).some((shown) =>
+			shown.items.some((item) => typeof item === "string" && item.includes("Re-translate")),
+		);
+		assert.equal(offered, false, "訳し直しのボタンが出ていないこと");
+		assert.equal(result.skippedCount, 1, "元の結果をそのまま返すこと");
+	});
+
 	test("訳し直しを選ばなかったときは、やり直さず元の結果を返す", async () => {
 		__vscodeMockMessageChoice = undefined;
 		let retried = 0;

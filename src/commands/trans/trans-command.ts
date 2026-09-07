@@ -111,7 +111,10 @@ export interface WriteFailureInfo {
 export interface TransRunOptions {
 	/**
 	 * パッチ適用を使わず必ず全文で訳し直す。
-	 * パッチ失敗の報告から「全文で訳し直す」を選んだときだけ true になる。
+	 * パッチ失敗の報告から「全文で訳し直す」を選んだとき、およびツリーの「訳し直す」から true になる。
+	 *
+	 * この旗が立っている実行は**それ自体が訳し直し**なので、終わったあとに
+	 * もう一度「全文で訳し直す」を提案しない（`mayOfferFullRetry`）。
 	 */
 	forceFullTranslation?: boolean;
 }
@@ -170,24 +173,40 @@ function emptyResult(outcome: TransOutcome): TransCommandResult {
  *
  * @param result 通知の対象になる、やり直し前の結果
  * @param label 対象の呼び名（ファイル名・ユニット名）
- * @param retryFullTranslation 全文で訳し直す処理。返り値がそのまま呼び手への結果になる
+ * @param retryFullTranslation 全文で訳し直す処理。返り値がそのまま呼び手への結果になる。
+ *   `undefined` を渡すと「全文で訳し直す」を出さず、理由だけを伝える
  */
 export async function reportTransOutcomeWithRetry(
 	result: TransCommandResult,
 	label: string,
-	retryFullTranslation: () => Promise<TransCommandResult | undefined>,
+	retryFullTranslation: (() => Promise<TransCommandResult | undefined>) | undefined,
 	sourcePath?: string,
 ): Promise<TransCommandResult> {
 	let finalResult = result;
 	await reportTransOutcome(result, {
 		label,
 		sourcePath,
-		retryFullTranslation: async () => {
-			// やり直しが中断・失敗して結果を返さなかったときは、元の結果を保つ
-			finalResult = (await retryFullTranslation()) ?? finalResult;
-		},
+		retryFullTranslation: retryFullTranslation
+			? async () => {
+					// やり直しが中断・失敗して結果を返さなかったときは、元の結果を保つ
+					finalResult = (await retryFullTranslation()) ?? finalResult;
+				}
+			: undefined,
 	});
 	return finalResult;
+}
+
+/**
+ * この実行のあとで「全文で訳し直す」を提案してよいか。
+ *
+ * 提案から始まった実行（`forceFullTranslation`）で、また同じ提案を出してはいけない。
+ * 出すと、失敗 →「全文で訳し直す」→ 同じ失敗 → また同じ提案、という輪ができる。
+ * 押し続けるかぎり AI を呼び続けるので、実測では 1 回のコマンドから 5 分で
+ * 11 万回を超える呼び出しが出た（意地悪シナリオ R1-N4）。
+ * 提案は**同じ理由につき 1 回きり**にする。
+ */
+function mayOfferFullRetry(options?: TransRunOptions): boolean {
+	return options?.forceFullTranslation !== true;
 }
 
 /**
@@ -238,7 +257,7 @@ export async function transCommand(
 	return await reportTransOutcomeWithRetry(
 		result,
 		path.basename(targetFilePath),
-		() => transCommand(uri, { forceFullTranslation: true }),
+		mayOfferFullRetry(options) ? () => transCommand(uri, { forceFullTranslation: true }) : undefined,
 		targetFilePath,
 	);
 }
@@ -1326,8 +1345,12 @@ export async function transUnitCommand(
 	}
 
 	// 通知は排他区間の外で1回だけ出す（結果を見ずに成功を出す呼び出し口を無くす）
-	return await reportTransOutcomeWithRetry(result, vscode.l10n.t("unit {0}", unitHash.substring(0, 8)), () =>
-		transUnitCommand(targetPath, unitHash, { forceFullTranslation: true }),
+	return await reportTransOutcomeWithRetry(
+		result,
+		vscode.l10n.t("unit {0}", unitHash.substring(0, 8)),
+		mayOfferFullRetry(options)
+			? () => transUnitCommand(targetPath, unitHash, { forceFullTranslation: true })
+			: undefined,
 	);
 }
 
