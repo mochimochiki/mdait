@@ -1103,12 +1103,14 @@ async function checkMarkerlessSourceEdit(P) {
 // ===========================================================================
 
 /*
- * 偽の AI（echo）は「訳文を1つ返す」形しか作れない。用語の検出も展開も答えは JSON の配列なので、
- * ここでは**用語が増えること自体は確かめられない**（実物の AI が要る）。増えないことを FAIL に
- * すると狼少年になるので INFO で控える。
+ * 偽の AI（echo）は、用語の一覧（JSON 配列）と訳語の対応表（JSON オブジェクト）も返せる
+ * （`scripts/lab/ai/lib/echo-answers.mjs`）。原文に実際に出てくる語しか返さないので、
+ * mdait 側の検査も通る。だから**用語が増えること自体もここで見る**。
  *
- * その代わり、AI を通さなくても決まる次の3つは FAIL として見る。
+ * 見るのは次の5つ。どれも AI の賢さには寄りかかっていないので FAIL として見てよい。
  *   ・用語の検出・展開は原稿（Markdown）を1文字も書き換えない
+ *   ・検出は用語集に行を足す
+ *   ・展開は空いていた訳語を埋める
  *   ・展開は既にある用語集の行を失わない
  *   ・二度流しても用語集が変わらない（冪等）
  */
@@ -1129,7 +1131,7 @@ async function phase9() {
 
 		const newTerms = detected.result?.newTerms ?? 0;
 		if (newTerms > 0) ok(P, `term.detect が用語を ${newTerms} 件足した`);
-		else info(P, "-", "偽の AI は用語の一覧（JSON 配列）を返せず、用語集が増えない（実物の AI で要確認）");
+		else fail(P, "-", "term.detect が用語を1件も足さなかった", JSON.stringify(detected.result ?? {}));
 	}
 
 	// 用語集を手で1行だけ用意する（訳語が空＝展開待ち）。検出では増やせないため、展開の入口をここで作る。
@@ -1161,7 +1163,7 @@ async function phase9() {
 	if (/([1-9]\d*) term\(s\) expanded/.test(expandMessage ?? "")) {
 		ok(P, `term.expand が訳語を埋めた（${expandMessage}）`);
 	} else {
-		info(P, "-", "偽の AI は訳語の一覧（JSON 配列）を返せず、用語の展開が0件になる（実物の AI で要確認）");
+		fail(P, "-", "term.expand が訳語を1件も埋めなかった", String(expandMessage ?? "(通知なし)"));
 	}
 
 	// 二度目。用語が増えないのは同じでも、書き出しが揺れていないかはここで分かる
@@ -1185,8 +1187,8 @@ async function phase9() {
 
 /*
  * 登録の可否は「from があって need が付いていない」だけで決まる（commit-filter）。ここは AI を
- * 通らないので FAIL として見る。実際に文の対を作るところは AI の答え（JSON の配列）が要るため、
- * 偽の AI では必ず0件になる。それは INFO で控える。
+ * 通らない。文の対を作るところは AI の答え（JSON の配列）が要るが、偽の AI もその形を返せる
+ * （`scripts/lab/ai/lib/echo-answers.mjs`）ので、**登録が1件も増えないことも FAIL として見る**。
  */
 async function phase10() {
 	const P = "P10-tm";
@@ -1241,7 +1243,7 @@ async function phase10() {
 	}
 
 	if ((afterValue.newEntries ?? 0) > 0) ok(P, `TM へ ${afterValue.newEntries} 件登録`);
-	else info(P, "-", "偽の AI は文の対（JSON 配列）を返せず、TM が1件も増えない（実物の AI で要確認）");
+	else fail(P, "-", "tm.commit が翻訳メモリへ1件も登録しなかった", JSON.stringify(afterValue));
 
 	// ---- (c) 二度流しても翻訳メモリが変わらない ----
 	const tmxOnce = readIfExists(tmxFile());

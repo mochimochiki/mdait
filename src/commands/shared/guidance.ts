@@ -11,6 +11,7 @@ import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
+import { isAiCallsStopped } from "../../infra/llm/call-budget";
 import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { openConfigInSettingsEditor } from "./open-config-editor";
 
@@ -133,7 +134,9 @@ export async function showTranslationError(error: unknown): Promise<void> {
 		return;
 	}
 	const message = error instanceof Error ? error.message : String(error);
-	if (isAiUnavailableMessage(message)) {
+	// 呼び過ぎで打ち切ったときも、行き先は同じ（診断と設定）。何をしても進まない状態で
+	// 止めているので、次の一手は必ず「設定を見る」になる（`infra/llm/call-budget.ts`）
+	if (isAiUnavailableMessage(message) || isAiCallsStopped(error)) {
 		// ボタンは2つまで（ux.md §3.3）。ドキュメントは診断レポートの末尾から辿れるので、
 		// ここでは主導線（診断）と、その場で直せる場所（設定）だけを出す
 		const diagnose = vscode.l10n.t("Diagnose");

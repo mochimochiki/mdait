@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { buildDigest } from "./digest.mjs";
+import { buildEchoAnswer } from "./echo-answers.mjs";
 import { readJsonl } from "./transcript.mjs";
 
 /** 要求が録音と食い違ったときに投げる。呼び出し側は 409 に変換する */
@@ -144,6 +145,10 @@ export class EchoBackend {
 	async respond(body) {
 		if (this.delayMs > 0) await sleep(this.delayMs);
 		this.answered += 1;
+		// 翻訳以外の仕事（用語を拾う・訳語を埋める・文の対を作る）は答えの形が違う。
+		// 見分けが付いたときだけ、その形で答える（echo-answers.mjs）
+		const other = buildEchoAnswer(body.messages);
+		if (other !== null) return { text: other };
 		const translation = buildEchoTranslation(extractSourceText(body.messages), { limit: this.limit });
 		return { text: JSON.stringify({ translation, termSuggestions: [] }) };
 	}
