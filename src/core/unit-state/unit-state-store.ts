@@ -698,6 +698,23 @@ export class UnitStateStore {
 				// 1行あたり1バイトしか太らない。
 				lines.push("");
 			}
+			// **行の1つ手前に、その行だけを指す目印を置く。**
+			//
+			// 空行だけでは足りない。3方向マージは共通の接頭辞を先に食うので、**挿入された
+			// かたまりは「新しい行＋空行」となって直後の行に接する**。同じ記事に章を1つ挿し込む
+			// 枝と、そのすぐ次の章を訳した枝は、それだけで競合した（実測。空行を2つに増やしても
+			// 直らない）。手前に行ごとの目印があると、挿入のかたまりの外側に「変わらない行」が
+			// 残るので、どちらの変更もそのまま通る。
+			//
+			// 目印は席の背番号（`unit`）か本文の hash（`held`）で、どちらも行の身元そのものなので
+			// **本文や状態を直しても動かない**。目印だけでは「すぐ前の行を直した」形が新たに
+			// ぶつかるので、空行と併せて置く（実測: 目印のみ 1件 → 目印＋空行 0件）。
+			//
+			// 見出し行はローダーが `#` として読み飛ばすので、**形式は1バイトも変わらない**。
+			// 太るのは 100ユニットあたり 8637 → 9837 バイト（+13.9%）。
+			// 末尾の空白は落とす。残すと「行末の空白を削る」設定のエディタが目印を書き換え、
+			// 中身が同じなのに差分になる。
+			lines.push(`# ${entryKey(entry).replace(/\t/g, " ").trimEnd()}`);
 			lines.push(
 				`${entry.path}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
 			);
@@ -1211,7 +1228,15 @@ export interface UnitStateScanScope {
 /** 1行を消すべきか（`cleanupOrphansInScope` の判定本体。テスト用に公開） */
 export function shouldRemoveEntryPath(filePath: string, scope: UnitStateScanScope): boolean {
 	if (!isPathInDirs(filePath, scope.configuredDirs)) {
-		return true; // 1. もうプロジェクトの一部ではない
+		// 1. もうプロジェクトの一部ではない。**ただしファイルが実在するなら消さない**（規則4と同じ扱い）。
+		//
+		//    設定と手元のディスクは食い違うことがある。設定の変更が他の人からまだ届いていない、
+		//    翻訳者が手元で一時的に対象言語を絞った、といった場面で、**ファイルはそこに在るのに
+		//    行だけが消える**。消えるのは `from`（どの原文から訳したか）で、本文から計算し直せない。
+		//    しかも削除は競合を出さずに他の人へそのまま伝わる。
+		//
+		//    設定から外したディレクトリの行は、ファイルが実際に消えたときに片付く。
+		return !(scope.fileExists?.(filePath) ?? false);
 	}
 	if (!isPathInDirs(filePath, scope.scannedDirs)) {
 		return false; // 2. 見に行っていないので分からない

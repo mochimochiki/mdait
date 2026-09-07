@@ -166,7 +166,7 @@ for (const mode of ["embedded", "external"] as const) {
 			assert.strictEqual(fs.statSync(targetFile).mtimeMs, stamp, "内容が同じなのにファイルへ書いている");
 		});
 
-		test("新しく作る訳文は LF ＋末尾改行になること（既定の書式）", async () => {
+		test("新しく作る訳文は、原文が CRLF なら CRLF で作られること", async () => {
 			const config = await bootstrap();
 			const newSource = path.join(tempDir, "ja", "new.md");
 			const newTarget = path.join(tempDir, "en", "new.md");
@@ -175,7 +175,20 @@ for (const mode of ["embedded", "external"] as const) {
 			await syncNew_CoreProc(newSource, newTarget, config);
 
 			const created = fs.readFileSync(newTarget, "utf-8");
-			assert.strictEqual((created.match(/\r\n/g) ?? []).length, 0, "新規ファイルは LF で作る");
+			assert.ok(!/[^\r]\n/.test(created), "CRLF の原文から作った訳文に LF だけの行が混ざっている");
+			assert.ok(created.endsWith("\n"));
+		});
+
+		test("新しく作る訳文は、原文が LF なら LF で作られること", async () => {
+			const config = await bootstrap();
+			const newSource = path.join(tempDir, "ja", "new-lf.md");
+			const newTarget = path.join(tempDir, "en", "new-lf.md");
+			fs.writeFileSync(newSource, build(SOURCE_LINES, "\n", true), "utf-8");
+
+			await syncNew_CoreProc(newSource, newTarget, config);
+
+			const created = fs.readFileSync(newTarget, "utf-8");
+			assert.strictEqual((created.match(/\r\n/g) ?? []).length, 0, "LF の原文から作った訳文に CRLF が混ざっている");
 			assert.ok(created.endsWith("\n"));
 		});
 	});

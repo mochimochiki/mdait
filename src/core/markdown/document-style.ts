@@ -26,9 +26,15 @@ export const DEFAULT_DOCUMENT_STYLE: DocumentStyle = { eol: "\n", endsWithNewlin
 /**
  * 元の内容から書式のくせを測る。
  *
- * **改行が1つでも CRLF なら CRLF とみなす。** 混在した原稿（手で直したところだけ LF など）を
- * LF 側へ倒すと、そのファイルは全行書き換えになる。CRLF 側へ倒せば、書き換わるのは
- * もともと LF だった数行で済む。
+ * **多数派の改行コードを採る。** 混在した原稿を少数派の側へ倒すと、そのファイルは全行
+ * 書き換えになる。多数派へ倒せば、書き換わるのは少数派だった数行で済む。
+ *
+ * かつては「1つでも CRLF なら CRLF」と測っていた。CRLF が多数派のときは正しいが、
+ * **LF の訳文に CRLF の行が1つ混ざるとファイル全体が CRLF へ倒れる** — Windows の
+ * エディタや貼り付けでふつうに起きる。実測では20行の訳文の差分が `+2/-1` から
+ * `+20/-19` になり、他人のどの編集ともぶつかる形になっていた。
+ *
+ * 同数なら LF を採る（新しく作るファイルと同じ側）。
  *
  * @param original 元のファイルの内容。ファイルが無いときは undefined
  */
@@ -36,8 +42,10 @@ export function detectDocumentStyle(original: string | undefined): DocumentStyle
 	if (original === undefined || original === "") {
 		return DEFAULT_DOCUMENT_STYLE;
 	}
+	const crlfCount = (original.match(/\r\n/g) ?? []).length;
+	const lfCount = (original.match(/\n/g) ?? []).length - crlfCount;
 	return {
-		eol: original.includes("\r\n") ? "\r\n" : "\n",
+		eol: crlfCount > lfCount ? "\r\n" : "\n",
 		endsWithNewline: /\n$/.test(original),
 	};
 }

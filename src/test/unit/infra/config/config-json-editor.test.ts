@@ -101,4 +101,17 @@ suite("config-json-editor: mdait.json テキストのキー単位更新", () => 
 	test("detectIndent: インデントが検出できない場合は2スペースを返す", () => {
 		assert.strictEqual(detectIndent("{}"), "  ");
 	});
+
+	test("CRLF の設定ファイルは CRLF のまま書き戻されること", () => {
+		// `JSON.stringify` は必ず LF で書くので、引き継がないと1項目の変更で全行が差分になる
+		const original = '{\r\n  "primaryLang": "en"\r\n}\r\n';
+		const updated = setConfigValue(original, ["primaryLang"], "ja");
+		assert.ok(!/[^\r]\n/.test(updated), "LF だけの行が混ざっている");
+		assert.ok(updated.includes('"ja"'));
+	});
+
+	test("LF の設定ファイルに CRLF が混ざらないこと", () => {
+		const updated = setConfigValue('{\n  "primaryLang": "en"\n}\n', ["primaryLang"], "ja");
+		assert.strictEqual((updated.match(/\r/g) ?? []).length, 0);
+	});
 });

@@ -5,6 +5,8 @@
  * mdait.json を書き換えるコードは必ずここを経由し、ファイル全体の再整形を起こさない。
  * VS Code API 非依存（単体テスト対象）。
  */
+import { detectDocumentStyle } from "../../core/markdown/document-style";
+
 
 /**
  * JSON テキストからインデント文字列を検出する。
@@ -105,9 +107,17 @@ function parseObject(text: string): Record<string, unknown> {
 	return parsed as Record<string, unknown>;
 }
 
-/** 元テキストのインデント・末尾改行スタイルを引き継いで stringify する */
+/**
+ * 元テキストのインデント・改行コード・末尾改行を引き継いで stringify する。
+ *
+ * 改行コードを引き継がないと、**Windows で書かれた設定ファイルが1項目の変更で全行 LF へ
+ * 倒れる**（`JSON.stringify` は必ず LF で書く）。この形は原稿では `managed-write` が
+ * 防いでいるが、`.mdait/` の中はその対象外なので、ここで同じことをする。
+ */
 function stringifyLike(originalText: string, value: unknown): string {
 	const indent = detectIndent(originalText);
+	const eol = detectDocumentStyle(originalText).eol;
 	const serialized = JSON.stringify(value, null, indent);
-	return originalText.endsWith("\n") ? `${serialized}\n` : serialized;
+	const body = eol === "\r\n" ? serialized.replace(/\n/g, "\r\n") : serialized;
+	return originalText.endsWith("\n") ? `${body}${eol}` : body;
 }
