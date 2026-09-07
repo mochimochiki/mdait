@@ -7,6 +7,7 @@
 import type * as vscode from "vscode";
 import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
+import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
@@ -130,9 +131,7 @@ export class AITermDetector implements TermDetector {
 Return JSON array only, no commentary.`;
 
 		const response = await this.callAI(systemPrompt, userPrompt, cancellationToken);
-		if (!response) {
-			return [];
-		}
+		this.rejectEmpty(response);
 
 		return this.parseDetectPairsResponse(response, sourceLang, targetLang);
 	}
@@ -160,9 +159,7 @@ Return JSON array only, no commentary.`;
 Return JSON array only, no commentary.`;
 
 		const response = await this.callAI(systemPrompt, userPrompt, cancellationToken);
-		if (!response) {
-			return [];
-		}
+		this.rejectEmpty(response);
 
 		return this.parseDetectSourceOnlyResponse(response, sourceLang);
 	}
@@ -259,67 +256,93 @@ ${pair.target?.content || "(no translation)"}`;
 	 * 対訳ペア用のAI応答をパース
 	 */
 	private parseDetectPairsResponse(response: string, sourceLang: string, targetLang: string): TermEntry[] {
-		try {
-			const jsonMatch = response.match(/\[[\s\S]*\]/);
-			if (!jsonMatch) {
-				throw new Error("JSONブロックが見つかりません");
-			}
+		const parsed = this.parseTermArray(response);
+		const usable = parsed.filter(
+			(item) =>
+				this.isNonEmptyString(item?.sourceTerm) &&
+				this.isNonEmptyString(item?.targetTerm) &&
+				this.isNonEmptyString(item?.context),
+		);
+		this.rejectIfNothingUsable(parsed, usable, response);
 
-			const parsed = JSON.parse(jsonMatch[0]);
-			if (!Array.isArray(parsed)) {
-				throw new Error("配列形式ではありません");
-			}
+		return usable.map((item) => {
+			// variantsはソース言語のみに付与（ソース言語中心）
+			const languages: Record<string, LangTerm> = {
+				[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
+				[targetLang]: LangTerm.create(item.targetTerm),
+			};
 
-			return parsed
-				.filter(
-					(item) =>
-						this.isNonEmptyString(item?.sourceTerm) &&
-						this.isNonEmptyString(item?.targetTerm) &&
-						this.isNonEmptyString(item?.context),
-				)
-				.map((item) => {
-					// variantsはソース言語のみに付与（ソース言語中心）
-					const languages: Record<string, LangTerm> = {
-						[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
-						[targetLang]: LangTerm.create(item.targetTerm),
-					};
-
-					return TermEntryUtils.create(item.context, languages);
-				});
-		} catch (error) {
-			console.warn("対訳ペア用語検出のパースに失敗しました:", error);
-			return [];
-		}
+			return TermEntryUtils.create(item.context, languages);
+		});
 	}
 
 	/**
 	 * ソース単独用のAI応答をパース
 	 */
 	private parseDetectSourceOnlyResponse(response: string, sourceLang: string): TermEntry[] {
-		try {
-			const jsonMatch = response.match(/\[[\s\S]*\]/);
-			if (!jsonMatch) {
-				throw new Error("JSONブロックが見つかりません");
-			}
+		const parsed = this.parseTermArray(response);
+		const usable = parsed.filter(
+			(item) => this.isNonEmptyString(item?.sourceTerm) && this.isNonEmptyString(item?.context),
+		);
+		this.rejectIfNothingUsable(parsed, usable, response);
 
-			const parsed = JSON.parse(jsonMatch[0]);
-			if (!Array.isArray(parsed)) {
-				throw new Error("配列形式ではありません");
-			}
+		return usable.map((item) => {
+			const languages: Record<string, LangTerm> = {
+				[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
+			};
 
-			return parsed
-				.filter((item) => this.isNonEmptyString(item?.sourceTerm) && this.isNonEmptyString(item?.context))
-				.map((item) => {
-					const languages: Record<string, LangTerm> = {
-						[sourceLang]: LangTerm.create(item.sourceTerm, this.sanitizeVariants(item.variants, item.sourceTerm)),
-					};
+			return TermEntryUtils.create(item.context, languages);
+		});
+	}
 
-					return TermEntryUtils.create(item.context, languages);
-				});
-		} catch (error) {
-			console.warn("ソース単独用語検出のパースに失敗しました:", error);
-			return [];
+	/**
+	 * 応答から用語の配列を取り出す。取り出せなければ**使えない答え**として断ち切る。
+	 *
+	 * **0件として飲み込まない。** 飲み込むと「用語が見つからなかった」と区別が付かず、
+	 * 利用者には「用語集を更新しました（新しい用語 0 件）」としか伝わらない。何をしても
+	 * 進まないのに、原稿のせいだと読める形で終わる（実測: 意地悪シナリオ R6-N5/N7/N8）。
+	 * 正しい0件は**空の配列**（AI が「用語なし」と答えた）だけである。
+	 */
+	// biome-ignore lint/suspicious/noExplicitAny: AI の答えは形が保証されないため、項目ごとに型を見る
+	private parseTermArray(response: string): any[] {
+		const jsonMatch = response.match(/\[[\s\S]*\]/);
+		if (!jsonMatch) {
+			throw this.unusableResponse(response, "no JSON array found");
 		}
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(jsonMatch[0]);
+		} catch (error) {
+			throw this.unusableResponse(response, `JSON could not be parsed: ${(error as Error).message}`);
+		}
+		if (!Array.isArray(parsed)) {
+			throw this.unusableResponse(response, "the JSON was not an array");
+		}
+		return parsed;
+	}
+
+	/** 本文が空の答えも0件ではない（何も答えていないので、用語の有無は分からない） */
+	private rejectEmpty(response: string): void {
+		if (!response || response.trim().length === 0) {
+			throw new UnusableAIResponseError("empty", "Term detection response was empty", "responseChars=0");
+		}
+	}
+
+	/** 項目は入っているのに1つも形が合わなかったなら、それは0件ではなく使えない答え */
+	private rejectIfNothingUsable(parsed: readonly unknown[], usable: readonly unknown[], response: string): void {
+		if (parsed.length > 0 && usable.length === 0) {
+			throw this.unusableResponse(response, `none of the ${parsed.length} item(s) had the expected fields`);
+		}
+	}
+
+	/** 使えない答えを表す例外を作る（message は記録用の英語。利用者向けの文は呼び出し側が組む） */
+	private unusableResponse(response: string, why: string): UnusableAIResponseError {
+		return new UnusableAIResponseError(
+			"invalid-format",
+			`Term detection response was not usable: ${why}`,
+			`responseChars=${response.length}`,
+		);
 	}
 
 	/**

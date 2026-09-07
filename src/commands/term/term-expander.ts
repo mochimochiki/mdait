@@ -8,6 +8,7 @@ import type * as vscode from "vscode";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
+import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
@@ -226,38 +227,55 @@ Return the result as a JSON object mapping source terms to target terms.`;
 	 * Phase 1のAIレスポンスをパース
 	 */
 	private parseExtractionResponse(response: string): Map<string, string> {
-		try {
-			// JSONブロックを抽出
-			const jsonMatch = response.match(/\{[\s\S]*\}/);
-			if (!jsonMatch) {
-				return new Map();
-			}
-
-			const parsed = JSON.parse(jsonMatch[0]);
-			return new Map(Object.entries(parsed) as Array<[string, string]>);
-		} catch (error) {
-			console.error("Failed to parse extraction response:", error);
-			return new Map();
-		}
+		return this.parseTermMap(response);
 	}
 
 	/**
 	 * Phase 2のAIレスポンスをパース
 	 */
 	private parseTranslationResponse(response: string): Map<string, string> {
-		try {
-			// JSONブロックを抽出
-			const jsonMatch = response.match(/\{[\s\S]*\}/);
-			if (!jsonMatch) {
-				return new Map();
-			}
+		return this.parseTermMap(response);
+	}
 
-			const parsed = JSON.parse(jsonMatch[0]);
-			return new Map(Object.entries(parsed) as Array<[string, string]>);
-		} catch (error) {
-			console.error("Failed to parse translation response:", error);
-			return new Map();
+	/**
+	 * 応答から「原語 → 訳語」の対応表を取り出す。取り出せなければ**使えない答え**として断ち切る。
+	 *
+	 * **0件として飲み込まない。** 飲み込むと「訳語を埋められる用語が無かった」と区別が付かず、
+	 * 利用者には「訳語 0 件を埋めました」としか伝わらない。何をしても進まないのに、
+	 * 用語集のせいだと読める形で終わる。正しい0件は**空のオブジェクト**だけである。
+	 */
+	private parseTermMap(response: string): Map<string, string> {
+		const jsonMatch = response.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) {
+			throw this.unusableResponse(response, "no JSON object found");
 		}
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(jsonMatch[0]);
+		} catch (error) {
+			throw this.unusableResponse(response, `JSON could not be parsed: ${(error as Error).message}`);
+		}
+		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+			throw this.unusableResponse(response, "the JSON was not an object");
+		}
+
+		const pairs = Object.entries(parsed).filter(
+			(entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0,
+		);
+		if (Object.keys(parsed).length > 0 && pairs.length === 0) {
+			throw this.unusableResponse(response, "no entry mapped a term to a non-empty string");
+		}
+		return new Map(pairs);
+	}
+
+	/** 使えない答えを表す例外を作る（message は記録用の英語。利用者向けの文は呼び出し側が組む） */
+	private unusableResponse(response: string, why: string): UnusableAIResponseError {
+		return new UnusableAIResponseError(
+			"invalid-format",
+			`Term expansion response was not usable: ${why}`,
+			`responseChars=${response.length}`,
+		);
 	}
 }
 

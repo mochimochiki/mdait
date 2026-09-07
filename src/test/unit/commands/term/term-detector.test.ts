@@ -6,6 +6,7 @@
 
 import { strict as assert } from "node:assert";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 import { AITermDetector } from "../../../../commands/term/term-detector";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
@@ -157,5 +158,48 @@ suite("AITermDetector - variants検出", () => {
 		assert.strictEqual(terms.length, 2);
 		assert.deepStrictEqual([...TermEntry.getvariants(terms[0], "en")], []);
 		assert.deepStrictEqual([...TermEntry.getvariants(terms[1], "en")], []);
+	});
+});
+
+/**
+ * 使えない答えを 0 件として飲み込まないことのテスト。
+ *
+ * 実測で見つかった欠陥の回帰固定: パースに失敗すると空配列を返していたため、
+ * 「用語が1つも無かった」と「AI の答えが使えなかった」が同じ顔で終わっていた
+ * （意地悪シナリオ R6-N5 / N7 / N8。利用者には「新しい用語 0 件」としか出ない）。
+ */
+suite("AITermDetector - 使えない答えは0件にしない", () => {
+	const sourceUnit = new MdaitUnit(new MdaitMarker("abc123"), "Section", 1, "# Section\n\nAPI endpoint content", 0, 2);
+	const pair = UnitPair.create(sourceUnit, undefined);
+
+	const rejects = async (response: string, why: string, reason = "invalid-format") => {
+		const detector = new AITermDetector(new FakeAIService("[]", response));
+		await assert.rejects(
+			detector.detectTerms([pair], "en", "ja", "en"),
+			(error: unknown) => error instanceof UnusableAIResponseError && error.reason === reason,
+			why,
+		);
+	};
+
+	test("空の答えは使えない答えとして断ち切る", async () => {
+		await rejects("", "本文が空なら断ち切ること", "empty");
+	});
+
+	test("途中で切れた JSON は使えない答えとして断ち切る", async () => {
+		await rejects('[{"sourceTerm": "Endpoint", "context": "Endpoint co', "閉じていない JSON を断ち切ること");
+	});
+
+	test("配列がどこにも無い答えは使えない答えとして断ち切る", async () => {
+		await rejects('{"terms": "none"}', "配列が無ければ断ち切ること");
+	});
+
+	test("項目はあるのに形が1つも合わない答えは断ち切る", async () => {
+		await rejects(JSON.stringify([{ word: "Endpoint" }, { word: "Payload" }]), "拾えるものが無ければ断ち切ること");
+	});
+
+	test("空の配列は「用語なし」として受け入れる（0件は正しい答え）", async () => {
+		const detector = new AITermDetector(new FakeAIService("[]", "[]"));
+		const terms = await detector.detectTerms([pair], "en", "ja", "en");
+		assert.strictEqual(terms.length, 0);
 	});
 });

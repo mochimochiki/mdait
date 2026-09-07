@@ -15,6 +15,7 @@ import {
 	type TransPair,
 } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -122,7 +123,16 @@ export interface TermExpandResult {
 	expanded: number;
 	/** 展開対象だが今回解決できなかった残数 */
 	remaining: number;
+	/** 試したバッチの数 */
+	totalBatches: number;
+	/** 答えが使えなくて捨てたバッチの数 */
+	unusableBatches: number;
+	/** 最初に使えなかった理由。利用者向けの文はここから組む */
+	unusableReason?: UnusableResponseReason;
 }
+
+/** 使えなかったバッチが無かったことを表す（読み飛ばせる形で書けるようにする） */
+const NO_UNUSABLE_BATCHES = { totalBatches: 0, unusableBatches: 0 } as const;
 
 /**
  * 用語展開処理（中核プロセス）
@@ -172,7 +182,7 @@ export async function expandTerm_CoreProc(
 				targetLang,
 			),
 		);
-		return { expanded: 0, remaining: 0 };
+		return { expanded: 0, remaining: 0, ...NO_UNUSABLE_BATCHES };
 	}
 
 	// 用語を含むファイルの事前フィルタリング
@@ -199,7 +209,7 @@ export async function expandTerm_CoreProc(
 		);
 	}
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length };
+		return { expanded: 0, remaining: termsToExpand.length, ...NO_UNUSABLE_BATCHES };
 	}
 
 	// 用語展開コンテキストの収集
@@ -211,25 +221,30 @@ export async function expandTerm_CoreProc(
 		cancellationToken,
 	);
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length };
+		return { expanded: 0, remaining: termsToExpand.length, ...NO_UNUSABLE_BATCHES };
 	}
 
 	// グローバルバッチ分割と一括抽出。
 	// キャンセルされた場合も途中まで解決できたバッチの結果は破棄せず、後続の保存へ回す
 	// （以前はここで早期リターンし、解決済みの結果まで捨てていた）。
-	const extractResults = await extractFromBatches(
+	const extraction = await extractFromBatches(
 		transPair,
 		contexts,
 		progress,
 		cancellationToken,
 	);
+	const batches = {
+		totalBatches: extraction.totalBatches,
+		unusableBatches: extraction.unusableBatches,
+		unusableReason: extraction.unusableReason,
+	};
 
 	// 用語集を更新
-	const allResults = extractResults;
+	const allResults = extraction.results;
 
 	if (allResults.size === 0) {
 		// 通知は呼び出し側の件数付き完了通知（0 expanded / N remaining）に一本化する
-		return { expanded: 0, remaining: termsToExpand.length };
+		return { expanded: 0, remaining: termsToExpand.length, ...batches };
 	}
 
 	// 用語エントリを更新
@@ -259,6 +274,7 @@ export async function expandTerm_CoreProc(
 	return {
 		expanded: updatedTerms.length,
 		remaining: termsToExpand.length - updatedTerms.length,
+		...batches,
 	};
 }
 
@@ -391,7 +407,12 @@ export async function extractFromBatches(
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 	injectedExpander?: TermExpander,
-): Promise<Map<string, string>> {
+): Promise<{
+	results: Map<string, string>;
+	totalBatches: number;
+	unusableBatches: number;
+	unusableReason?: UnusableResponseReason;
+}> {
 	progress?.report({
 		message: vscode.l10n.t("Phase 2: Extracting terms from translations..."),
 		increment: 0,
@@ -405,7 +426,7 @@ export async function extractFromBatches(
 			message: vscode.l10n.t("Phase 2 completed: {0} terms resolved", 0),
 			increment: 50,
 		});
-		return results;
+		return { results, ...NO_UNUSABLE_BATCHES };
 	}
 
 	const batches = splitIntoBatches(contexts);
@@ -413,6 +434,8 @@ export async function extractFromBatches(
 
 	let attemptedBatches = 0;
 	let failedBatches = 0;
+	let unusableBatches = 0;
+	let unusableReason: UnusableResponseReason | undefined;
 	let firstBatchError: unknown;
 
 	for (const batch of batches) {
@@ -455,6 +478,12 @@ export async function extractFromBatches(
 			// 失敗したバッチは飛ばして続行する。最初の失敗で全体を中断すると、
 			// 既に解決済みのバッチの結果まで破棄されてしまう
 			failedBatches++;
+			// 「AI は答えたが使えなかった」は、届かなかった失敗と分けて数える。
+			// 一部だけ使えなかったときに、埋まった件数だけを出して黙る形を無くす
+			if (isUnusableAIResponse(error)) {
+				unusableBatches++;
+				unusableReason ??= error.reason;
+			}
 			if (firstBatchError === undefined) {
 				firstBatchError = error;
 			}
@@ -483,7 +512,7 @@ export async function extractFromBatches(
 		increment: 50,
 	});
 
-	return results;
+	return { results, totalBatches: attemptedBatches, unusableBatches, unusableReason };
 }
 
 /**

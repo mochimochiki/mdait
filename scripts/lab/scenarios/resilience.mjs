@@ -529,6 +529,11 @@ const ROUTES = [
 		command: "mdait.term.detect",
 		shape: "terms",
 		watch: [`ja/${FIXTURE}/doc.md`],
+		// 登録されている `mdait.term.detect` は引数にパスを取らないため、headless では
+		// lab の身代わり（`hosts/headless.mjs` の termDetect）が中核処理を直に呼んでいる。
+		// **身代わりには通知の層が無い**ので、この経路では通知を観測できない。
+		// 代わりに返り値の `unusableBatches` を見る（下の judge）。
+		reportsInResult: "unusableBatches",
 		act: () => runCmd("mdait.term.detect", [srcDir()], 600),
 	},
 	{
@@ -668,6 +673,32 @@ function claimsSuccess(result) {
 
 /** 応答の生テキストが本文へ入り込んでいないか（台本に書いた目印で探す） */
 const RAW_FINGERPRINTS = ['{"translation"', '{"answer"', "力尽き", "これは訳文ではありません"];
+
+/**
+ * 通知を観測できない経路で、「壊れた答えを受けたこと」が返り値に出ているかを見る。
+ *
+ * 例外で終わったなら、それ自体が「黙っていない」ことの証拠なので通す。
+ * 正常に終わったのに `route.reportsInResult` の数が 0 なら、壊れた答えを 0 件として
+ * 飲み込んだということ — 利用者には「何も無かった」としか伝わらない。
+ */
+function judgeReportedInResult(phase, route, result) {
+	const field = route.reportsInResult;
+	if (result.status === "error") {
+		ok(phase, `壊れた応答を例外として伝えた（${String(result.error ?? "").slice(0, 60)}）`);
+		return;
+	}
+	const reported = result.result?.[field];
+	if (typeof reported === "number" && reported > 0) {
+		ok(phase, `壊れた応答を受けたことが返り値に出た（${field}=${reported}）`);
+	} else {
+		fail(
+			phase,
+			route.watch[0],
+			`壊れた応答を受けたのに、返り値が何も伝えていない（${field}=${JSON.stringify(reported)}）`,
+			JSON.stringify(result.result),
+		);
+	}
+}
 
 function judge(phase, route, nasty, ctx) {
 	const { before, after, result, elapsed, requests } = ctx;
@@ -884,6 +915,10 @@ function judge(phase, route, nasty, ctx) {
 	const wrongClaim = spoken.find((message) => SUCCESS_WORDS.some((word) => message.includes(word)));
 	if (wrongClaim) {
 		fail(phase, route.watch[0], "壊れた応答しか受けていないのに、通知が成功を語った", wrongClaim);
+	} else if (route.reportsInResult) {
+		// 通知を観測できない経路（lab の身代わりで動かしているもの）は、返り値で見る。
+		// 「壊れた答えを受けたのに、結果が何も言っていない」を見逃さないための代わりの目。
+		judgeReportedInResult(phase, route, result);
 	} else if (spoken.length === 0) {
 		info(phase, route.watch[0], "壊れた応答を受けたが、通知が1本も出なかった（黙って終わった）");
 	} else {

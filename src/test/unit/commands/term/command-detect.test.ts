@@ -10,12 +10,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { detectTerm_CoreProc } from "../../../../commands/term/command-detect";
+import { describeUnusableBatches } from "../../../../commands/shared/guidance";
 import { LangTerm, TermEntry } from "../../../../commands/term/term-entry";
 import type { TermDetector } from "../../../../commands/term/term-detector";
 import { UnitPair } from "../../../../commands/term/unit-pair";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { Configuration, type TransPair } from "../../../../infra/config/configuration";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -23,6 +25,13 @@ declare let __vscodeMockWorkspaceRoot: string;
 class FailingTermDetector implements TermDetector {
 	async detectTerms(): Promise<readonly TermEntry[]> {
 		throw new Error("Language model is not available. Please ensure GitHub Copilot is enabled.");
+	}
+}
+
+/** 「AI は答えたが、その答えは使えない」を返す用語検出サービス */
+class UnusableTermDetector implements TermDetector {
+	async detectTerms(): Promise<readonly TermEntry[]> {
+		throw new UnusableAIResponseError("invalid-format", "Term detection response was not usable: no JSON array found");
 	}
 }
 
@@ -82,8 +91,8 @@ suite("detectTerm_CoreProc", () => {
 			new FixedTermDetector(),
 		);
 
-		assert.equal(result.length, 1);
-		assert.equal(TermEntry.getTerm(result[0], "en"), "API endpoint");
+		assert.equal(result.entries.length, 1);
+		assert.equal(TermEntry.getTerm(result.entries[0], "en"), "API endpoint");
 
 		const termsPath = path.join(tempDir, ".mdait", "terms.csv");
 		assert.ok(fs.existsSync(termsPath), "用語集ファイルが保存されていること");
@@ -108,7 +117,7 @@ suite("detectTerm_CoreProc", () => {
 			new CancellingTermDetector(),
 		);
 
-		assert.deepEqual(result, [], "キャンセルは0件の正常終了として扱われること");
+		assert.deepEqual(result.entries, [], "キャンセルは0件の正常終了として扱われること");
 	});
 
 	test("トークンがキャンセル済みで素のエラーが投げられた場合もキャンセルとして扱う", async () => {
@@ -128,7 +137,7 @@ suite("detectTerm_CoreProc", () => {
 			new AbortingTermDetector(),
 		);
 
-		assert.deepEqual(result, [], "キャンセルとして途中結果が返り、エラーにならないこと");
+		assert.deepEqual(result.entries, [], "キャンセルとして途中結果が返り、エラーにならないこと");
 	});
 
 	test("用語が検出されなかった場合（AIは成功）は空配列を返しエラーにしない", async () => {
@@ -146,6 +155,30 @@ suite("detectTerm_CoreProc", () => {
 			new EmptyTermDetector(),
 		);
 
-		assert.equal(result.length, 0);
+		assert.equal(result.entries.length, 0);
+		assert.equal(result.unusableBatches, 0, "答えは使えたので、使えなかった数は 0 であること");
+		assert.equal(describeUnusableBatches(result), "", "何も言い足さないこと");
+	});
+
+	test("答えが使えなかったバッチは「0件検出」に混ぜず、数えて返す", async () => {
+		// 実測で見つかった欠陥の回帰固定: 壊れた答えを 0 件として飲み込んでいたため、
+		// 利用者には「新しい用語 0 件」としか伝わらず、原稿のせいだと読める形で終わっていた
+		// （意地悪シナリオ R6-N5 / N7 / N8）
+		await assert.rejects(
+			detectTerm_CoreProc([createPair()], transPair, progressStub, undefined, new UnusableTermDetector()),
+			(error: unknown) => error instanceof UnusableAIResponseError,
+			"全バッチが使えなかったときはエラーとして伝わること",
+		);
+	});
+
+	test("使えなかったバッチがあれば、通知に足す一文が組める", () => {
+		const sentence = describeUnusableBatches({
+			totalBatches: 3,
+			unusableBatches: 1,
+			unusableReason: "invalid-format",
+		});
+		assert.ok(sentence.includes("1"), "使えなかった数が入っていること");
+		assert.ok(sentence.includes("3"), "試した数が入っていること");
+		assert.ok(sentence.length > 0);
 	});
 });

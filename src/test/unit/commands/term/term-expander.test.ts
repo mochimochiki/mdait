@@ -10,6 +10,7 @@ import { AITermExpander, type TermExpansionContext } from "../../../../commands/
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import type { AIService } from "../../../../infra/llm/ai-service";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 /** 常に失敗する AIService（AI未接続などを模擬） */
 class FailingAIService implements AIService {
@@ -51,5 +52,48 @@ suite("AITermExpander - AIエラーの伝播", () => {
 		});
 
 		await assert.rejects(expander.translateTerms([term], "en", "ja"), /Language model is not available/);
+	});
+});
+
+/**
+ * 使えない答えを 0 件として飲み込まないことのテスト。
+ *
+ * 実測で見つかった欠陥の回帰固定: パースに失敗すると空の対応表を返していたため、
+ * 「埋められる用語が無かった」と「AI の答えが使えなかった」が同じ顔で終わっていた。
+ */
+suite("AITermExpander - 使えない答えは0件にしない", () => {
+	/** 決まった文字列を返す AIService */
+	class FixedAIService implements AIService {
+		constructor(private readonly response: string) {}
+		async sendMessage(): Promise<string> {
+			return this.response;
+		}
+	}
+
+	const rejects = async (response: string, why: string) => {
+		const expander = new AITermExpander(new FixedAIService(response));
+		await assert.rejects(
+			expander.extractFromTranslationsBatch([createContext()], "en", "ja"),
+			(error: unknown) => error instanceof UnusableAIResponseError && error.reason === "invalid-format",
+			why,
+		);
+	};
+
+	test("オブジェクトがどこにも無い答えは断ち切る", async () => {
+		await rejects("no json here", "対応表が無ければ断ち切ること");
+	});
+
+	test("途中で切れた JSON は断ち切る", async () => {
+		await rejects('{"API endpoint": "APIエンド', "閉じていない JSON を断ち切ること");
+	});
+
+	test("値が1つも文字列でない答えは断ち切る", async () => {
+		await rejects('{"API endpoint": null, "Payload": 12}', "拾えるものが無ければ断ち切ること");
+	});
+
+	test("空のオブジェクトは「埋められる用語なし」として受け入れる", async () => {
+		const expander = new AITermExpander(new FixedAIService("{}"));
+		const result = await expander.extractFromTranslationsBatch([createContext()], "en", "ja");
+		assert.strictEqual(result.size, 0);
 	});
 });

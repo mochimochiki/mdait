@@ -206,6 +206,30 @@ export function describeResponseFailure(reason: UnusableResponseReason): string 
 	}
 }
 
+/**
+ * 「AI の答えが使えなかった回がある」ことを伝える一文を組む。無ければ空文字。
+ *
+ * 用語を拾う・訳語を埋めるのように、仕事をいくつかに分けて AI へ投げる処理のためのもの。
+ * **件数だけを出すと「見つからなかった」と区別が付かない。** 次の一手が
+ * 「原稿を見る」なのか「設定を見る」なのかが変わるので、必ず言い添える。
+ */
+export function describeUnusableBatches(result: {
+	totalBatches: number;
+	unusableBatches: number;
+	unusableReason?: UnusableResponseReason;
+}): string {
+	if (result.unusableBatches === 0) {
+		return "";
+	}
+	const reason = result.unusableReason ? describeResponseFailure(result.unusableReason) : "";
+	const body = vscode.l10n.t(
+		"The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.",
+		result.unusableBatches,
+		result.totalBatches,
+	);
+	return reason ? `${body} ${reason}` : body;
+}
+
 /** 翻訳結果のうち、通知に必要な部分だけの形 */
 export interface TransOutcomeSummary {
 	outcome: "completed" | "nothing-to-do" | "cancelled" | "no-trans-pair" | "busy" | "failed";

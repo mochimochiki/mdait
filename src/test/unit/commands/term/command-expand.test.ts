@@ -60,7 +60,7 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 			async () => new Map([["beta", "ベータ"]]),
 		]);
 
-		const results = await extractFromBatches(
+		const { results } = await extractFromBatches(
 			transPair,
 			[createLargeContext("alpha"), createLargeContext("beta")],
 			undefined,
@@ -105,7 +105,7 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 			},
 		]);
 
-		const results = await extractFromBatches(
+		const { results } = await extractFromBatches(
 			transPair,
 			[createLargeContext("alpha"), createLargeContext("beta")],
 			undefined,
@@ -127,7 +127,7 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 			},
 		]);
 
-		const results = await extractFromBatches(
+		const { results } = await extractFromBatches(
 			transPair,
 			[createLargeContext("alpha"), createLargeContext("beta")],
 			undefined,

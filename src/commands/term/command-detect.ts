@@ -8,9 +8,11 @@ import * as vscode from "vscode";
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
+import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { isCancellationError } from "../shared/cancellation";
+import { describeUnusableBatches } from "../shared/guidance";
 import { notifyWithReport } from "../shared/report-file";
 import { type TermDetector, createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
@@ -22,6 +24,24 @@ import { UnitPair, UnitPairCollector } from "./unit-pair-collector";
 const MAX_BATCH_CHARS = 8000;
 
 /**
+ * 用語検出の結果。
+ *
+ * **件数だけを返さない。** 「用語が1つも無かった」と「AI の答えが使えなかった」は
+ * 利用者にとってまったく違う話で、次の一手も違う（原稿を見る／設定を見る）。
+ * 件数だけを返していたころは、どちらも「新しい用語 0 件」として同じ顔で終わっていた。
+ */
+export interface TermDetectionResult {
+	/** 見つかった用語 */
+	entries: TermEntry[];
+	/** 試したバッチの数 */
+	totalBatches: number;
+	/** 答えが使えなくて捨てたバッチの数 */
+	unusableBatches: number;
+	/** 最初に使えなかった理由。利用者向けの文はここから組む（`describeResponseFailure`） */
+	unusableReason?: UnusableResponseReason;
+}
+
+/**
  * 用語検出コマンド（パブリックAPI）
  * MDaitUnit配列から重要用語を検出し、用語集に追加
  * ソースユニットに対応するターゲットユニットがあれば両言語から用語を抽出
@@ -29,7 +49,10 @@ const MAX_BATCH_CHARS = 8000;
  * @param units 対象のMDaitUnit配列（ソース言語）
  * @param transPair 翻訳ペア設定
  */
-export async function detectTermCommand(units: readonly MdaitUnit[], transPair: TransPair): Promise<void> {
+export async function detectTermCommand(
+	units: readonly MdaitUnit[],
+	transPair: TransPair,
+): Promise<TermDetectionResult | undefined> {
 	if (units.length === 0) {
 		vscode.window.showInformationMessage(vscode.l10n.t("No content found for term detection."));
 		return;
@@ -54,7 +77,7 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 	const pairs = collector.collectFromUnits(units);
 
 	// withProgressで進捗表示とキャンセル機能を提供
-	const detectedTerms = await vscode.window.withProgress(
+	const detected = await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("Detecting terms..."),
@@ -79,22 +102,31 @@ export async function detectTermCommand(units: readonly MdaitUnit[], transPair: 
 		},
 	);
 
-	if (detectedTerms === undefined) {
+	if (detected === undefined) {
 		return; // エラーは通知済み
 	}
 
 	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
 	// （自動で開かないのは実ファイルでいつでも開き直せるため。ux.md E-6）
-	if (detectedTerms.length === 0) {
-		vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed: no terms detected."));
-		return;
+	const unusable = describeUnusableBatches(detected);
+	if (detected.entries.length === 0) {
+		// 「用語が無かった」と「答えが使えなかった」を同じ文で終わらせない。
+		// 前者はふつうの結末（情報）、後者は手を打つべきこと（警告）
+		if (unusable) {
+			vscode.window.showWarningMessage(unusable);
+		} else {
+			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed: no terms detected."));
+		}
+		return detected;
 	}
 	const uri = await writeTermReport({
-		entries: detectedTerms,
+		entries: detected.entries,
 		sourceLang: transPair.sourceLang,
 		targetLang: transPair.targetLang,
 	});
-	notifyWithReport(vscode.l10n.t("Term detection completed: {0} term(s) detected.", detectedTerms.length), uri);
+	const body = vscode.l10n.t("Term detection completed: {0} term(s) detected.", detected.entries.length);
+	notifyWithReport(unusable ? `${body} ${unusable}` : body, uri);
+	return detected;
 }
 
 /**
@@ -123,7 +155,7 @@ export async function detectTerm_CoreProc(
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 	injectedDetector?: TermDetector,
-): Promise<TermEntry[]> {
+): Promise<TermDetectionResult> {
 	const config = Configuration.getInstance();
 	const sourceLang = transPair.sourceLang;
 	const targetLang = transPair.targetLang;
@@ -159,14 +191,24 @@ export async function detectTerm_CoreProc(
 	const totalBatches = batches.length;
 	let processedBatches = 0;
 	let failedBatches = 0;
+	let unusableBatches = 0;
+	let unusableReason: UnusableResponseReason | undefined;
 	let firstBatchError: unknown;
 	const allDetectedTerms: TermEntry[] = [];
+
+	/** ここまでの結果を、使えなかったバッチの数と一緒に返す */
+	const summarize = (): TermDetectionResult => ({
+		entries: allDetectedTerms,
+		totalBatches,
+		unusableBatches,
+		unusableReason,
+	});
 
 	// Phase 2: バッチごとに用語検出
 	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
 			console.log("Term detection was cancelled by user");
-			return allDetectedTerms; // キャンセルされた（途中結果を返却）
+			return summarize(); // キャンセルされた（途中結果を返却）
 		}
 
 		progress.report({
@@ -211,9 +253,15 @@ export async function detectTerm_CoreProc(
 			// エラー通知になる。ループ先頭のキャンセル検出と同じ「途中結果の返却」で終える。
 			if (cancellationToken?.isCancellationRequested || isCancellationError(error)) {
 				console.log("Term detection was cancelled by user");
-				return allDetectedTerms;
+				return summarize();
 			}
 			failedBatches++;
+			// 「AI は答えたが使えなかった」は、届かなかった失敗と分けて数える。
+			// 一部のバッチだけ使えなかったときに、成功した分の件数だけを出して黙る形を無くす
+			if (isUnusableAIResponse(error)) {
+				unusableBatches++;
+				unusableReason ??= error.reason;
+			}
 			if (firstBatchError === undefined) {
 				firstBatchError = error;
 			}
@@ -245,7 +293,7 @@ export async function detectTerm_CoreProc(
 		console.log("新しい用語は検出されませんでした");
 	}
 
-	return allDetectedTerms;
+	return summarize();
 }
 
 /**
