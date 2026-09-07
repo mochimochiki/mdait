@@ -7,6 +7,7 @@ import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { alignEntriesToUnits } from "../../../../core/unit-state/unit-state-align";
 import type { UnitStateEntry } from "../../../../core/unit-state/unit-state-store";
+import { seat } from "../../helpers/unit-state";
 
 const PATH = "content/en/guide.md";
 
@@ -17,10 +18,11 @@ function unit(title: string, body: string, level = 2): MdaitUnit {
 }
 
 /** そのユニットが「前回 sync された姿」であるとして行を作る */
-function rowOf(u: MdaitUnit, order: number, from: string, need = ""): UnitStateEntry {
+function rowOf(u: MdaitUnit, at: number, from: string, need = ""): UnitStateEntry {
 	return {
 		path: PATH,
-		order,
+		kind: "unit",
+		seat: seat(at),
 		level: u.headingLevel,
 		titleHash: calculateHash(u.title),
 		hash: calculateHash(u.content),

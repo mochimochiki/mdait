@@ -1,8 +1,14 @@
 import { Logger } from "../../infra/logging/logger";
 import { calculateHash } from "../hash/hash-calculator";
 import { isSuspiciousShrink } from "../matching/shrink-guard";
+import { assignSeats } from "../unit-state/seat-keys";
 import { alignEntriesToUnits } from "../unit-state/unit-state-align";
-import { type UnitStateEntry, UnitStateStore, isHeldBackEntry } from "../unit-state/unit-state-store";
+import {
+	type UnitStateEntry,
+	UnitStateStore,
+	isHeldBackEntry,
+	isLiveBodyEntry,
+} from "../unit-state/unit-state-store";
 import type { FrontMatter } from "./front-matter";
 import {
 	FRONTMATTER_MARKER_KEY,
@@ -29,15 +35,23 @@ export interface MarkerFileContext {
 	 * 読み込み時の照合結果の控え。`attachMarkers` が書き、`detachMarkers` が読んで消す。
 	 *
 	 * 「この行はいまの本文のどこにも対応が付かなかった」と分かるのは**読み込み時**だけで、
-	 * 保留席へ移すかどうかを決めているのは**書き出し時**である。あいだで sync が原文から
+	 * 席から降ろすかどうかを決めているのは**書き出し時**である。あいだで sync が原文から
 	 * 消えた章を作り直すため、書き出し側はユニット数が元に戻った姿しか見ておらず、
 	 * 「減った」という事実に一度も触れない（roadmap-v01 の P03）。その事実を運ぶための控え。
 	 *
-	 * 同じ ctx で parse → stringify する呼び出しでだけ効く。控えが無ければ従来どおり
-	 * 末尾を見る判定に落ちるので、ctx を共有しない呼び出し（markers-migration の中間
-	 * stringify・embed 経路）は挙動が変わらない。
+	 * 同じ ctx で parse → stringify する呼び出しでだけ効く。控えが無ければ書き出し側が
+	 * その場で照合し直すので、ctx を共有しない呼び出し（markers-migration の中間
+	 * stringify・embed 経路）でも席は動かない。
 	 */
 	alignment?: MarkerAlignmentMemo;
+	/**
+	 * この書き換えが「人が明示的に頼んだ削除」か（ユニットの削除・verify-deletion の一括削除）。
+	 *
+	 * 立っていると、どのユニットにも対応しなかった行を**席へ預けず刈る**。
+	 * 走査の副作用で減ったのではなく人が消したと分かっているので、預ける相手がいない。
+	 * ユニットが0件になる形（最後の1ユニットを消した）も含めて刈る。
+	 */
+	deliberateDeletion?: boolean;
 }
 
 /**
@@ -48,20 +62,30 @@ export interface MarkerFileContext {
  */
 export interface MarkerAlignmentMemo {
 	/**
-	 * 対応が付かなかった通常の行の `order`。保留席へ移す候補。
+	 * 対応が付かなかった行の席のキー。席から降ろす候補。
 	 *
-	 * `from` も `need` も持たない行は含めない。本文から計算し直せる行を席に置いても、
-	 * 守るものが無いまま席が埋まるだけである。
+	 * `from` も `need` も持たない行は含めない。本文から計算し直せる行を預かっても、
+	 * 守るものが無いまま行が増えるだけである。
 	 */
-	readonly unmatchedOrders: readonly number[];
+	readonly unmatchedSeats: readonly string[];
 	/**
-	 * 保留席から拾い戻された行の `order`。席から外す。
+	 * 席に着いていない行から拾い戻された行の本文 hash。その行を消す。
 	 *
-	 * 書き出しで通常の `order` に書き直されるため、席に残すと同じ状態の行が二重になる。
-	 * 刈り取りが席の行を巻き込まなくなった（`pruneEntriesFrom`）ぶん、ここで外さないと
-	 * 二重のまま居座る。
+	 * 書き出しが席のキーで書き直すため、残すと同じ状態の行が二重になる。
 	 */
-	readonly recoveredHeldOrders: readonly number[];
+	readonly recoveredHeldHashes: readonly string[];
+	/**
+	 * ユニットごとの「いま座っている席」。**添字ではなくユニットそのものを鍵にする。**
+	 *
+	 * 書き出しはこれを見て席を据え置く。読み込み時にしか分からない（書き出し側は sync が
+	 * 作り直したあとの姿しか見ていない）ので、控えとして運ぶ。
+	 *
+	 * 添字で覚えてはいけない。読み込みと書き出しのあいだで sync がユニットを差し替えるため、
+	 * **「章を1つ消して1つ足す」だけで添字がずれる**（長さは同じままなので気づけない）。
+	 * 実測では、それだけで削除点より後ろの席が全部書き換わっていた — つまりこの仕組みが
+	 * いちばん潰したかった「ブロック丸ごとの書き換え」がそのまま残っていた。
+	 */
+	readonly seatByUnit: ReadonlyMap<MdaitUnit, string>;
 }
 
 /**
@@ -159,7 +183,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		const entries = this.store.getEntriesByPath(filePath);
 		// 「何番目か」ではなく中身で突き合わせる。章の挿入・削除・並べ替えで
 		// 対応がずれないようにするため（詳細は unit-state-align.ts）。
-		// 保留席の行（＝前回の刈り取りを見送って取り残された行）は、順序で機械的に埋める段から外す。
+		// 席に着いていない行（＝前回の刈り取りを見送って取り残された行）は、順序で機械的に埋める段から外す。
 		// 内容が一致すれば拾えるので、章が戻ってくれば正しく復帰する。
 		const held = new Set<number>();
 		for (let i = 0; i < entries.length; i++) {
@@ -169,7 +193,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		}
 		const aligned = alignEntriesToUnits(entries, units, held);
 		let unmatchedUnits = 0;
-		const matchedOrders = new Set<number>();
+		const matched = new Set<UnitStateEntry>();
 		for (let i = 0; i < units.length; i++) {
 			const entry = aligned[i];
 			if (!entry) {
@@ -177,11 +201,11 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				unmatchedUnits++;
 				continue;
 			}
-			matchedOrders.add(entry.order);
+			matched.add(entry);
 			units[i].marker = new MdaitMarker(entry.hash, entry.from || null, entry.need || null);
 		}
 		if (ctx) {
-			ctx.alignment = buildAlignmentMemo(entries, units.length, matchedOrders);
+			ctx.alignment = buildAlignmentMemo(entries, units, matched, aligned);
 		}
 		if (unmatchedUnits > 0 || entries.length !== units.length) {
 			logger.debug("marker", "attached external markers", {
@@ -198,7 +222,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		if (!filePath) {
 			return;
 		}
-		// 読み込み時に「対応が付かなかった」と分かった行を、上書きされる前に保留席へ移す。
+		// 読み込み時に「対応が付かなかった」と分かった行を、上書きされる前に席から降ろす。
 		// 控えは一度だけ使う（同じ ctx で二度書き出しても二重に効かないように消す）。
 		const memo = ctx.alignment;
 		ctx.alignment = undefined;
@@ -206,17 +230,61 @@ export class ExternalMarkerProvider implements MarkerProvider {
 			this.applyAlignmentMemo(filePath, memo);
 		}
 
+		// 席のキーを決める。**いま座っている行は据え置く**（`seat-keys.ts`）。
+		// 毎回 0..N-1 に振り直していた頃は、章を1つ挿すだけでその記事のブロックが
+		// 丸ごと書き換わり、同じ記事への別の編集と必ず領域が重なっていた。
+		const before = this.store.getEntriesByPath(filePath);
+		const preferred = this.seatPreferences(before, units, memo);
+		const seats = assignSeats(preferred);
+		// **据え置かれた席**（もとの行がそのまま座り続ける席）。ここに無い席の行には、
+		// どのユニットも座っていない
+		const kept = new Set(seats.filter((seat, i) => seat === preferred[i]));
+
 		// それでも上書きで失われる状態を数える。控えが無い呼び出し（ctx を共有しない parse →
-		// stringify）では、行がユニットの並び順でそのまま上書きされ、ユニット数が元に戻ると
-		// 保留も刈り取りも起きないまま消える（docs/design/unit-state.md §17）。
-		// 刈り取りにも保留にもログがあるのに、実際に状態を失う経路だけ記録が無いと追跡できない。
-		const lostState = this.countLostState(filePath, units);
+		// stringify）でも席は動かないが、章そのものが消えていれば行の行き先は無い
+		// （docs/design/unit-state.md §17）。刈り取りにも退避にもログがあるのに、
+		// 実際に状態を失う経路だけ記録が無いと追跡できない。
+		const lostState = countLostStateEntries(before, units, kept);
+
+		// **どのユニットも座らなかった行の始末を、書き込みより先に済ませる。**
+		// あとにすると、新しい章に配った席がその行を踏み、預けも刈りもされないまま
+		// 黙って消える（実測: 3章のうち2章が照合できず、片方の状態が消えた）。
+		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !kept.has(e.seat)).map((e) => e.seat);
+		const entryCount = this.store.countLiveEntriesByPath(filePath);
+		if (leftovers.length > 0) {
+			if (ctx.deliberateDeletion || shouldPruneTail(entryCount, units.length)) {
+				// 消す側は今まで無言だった。掃除も刈り取り見送りもログを出すのに、
+				// 実際に状態を失う操作だけが記録に残らないのは追跡のしようがない
+				const removed = this.store.dropEntries(filePath, leftovers);
+				if (removed > 0) {
+					logger.info("marker", "Pruned unit-state entries that no unit claimed", {
+						path: filePath,
+						units: units.length,
+						removed,
+					});
+				}
+			} else {
+				const parked = this.store.parkEntries(filePath, leftovers);
+				// 新たに預かった分があるときだけ警告する。預かっている状態は安定なので、
+				// 毎 sync（autoSyncOnSave を含む）同じ警告を積むと読む価値が無くなる
+				if (parked > 0) {
+					logger.warn("marker", "Skipped pruning unit-state entries: unit count dropped sharply", {
+						path: filePath,
+						entries: entryCount,
+						units: units.length,
+						parked,
+						note: "If this is not a real deletion (unclosed code fence, sync.level change), fix it and sync again — the state is kept.",
+					});
+				}
+			}
+		}
 
 		for (let i = 0; i < units.length; i++) {
 			const unit = units[i];
 			this.store.setEntry({
 				path: filePath,
-				order: i,
+				kind: "unit",
+				seat: seats[i],
 				level: unit.headingLevel,
 				titleHash: calculateHash(unit.title),
 				hash: unit.marker?.hash ?? "",
@@ -232,37 +300,37 @@ export class ExternalMarkerProvider implements MarkerProvider {
 				note: "A unit was removed from the document and its from/need is gone. Pasting the text back will not restore it (docs/design/unit-state.md §17).",
 			});
 		}
+		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
+	}
 
-		// ユニットが減ったときに末尾の旧エントリが残ると、次に増えたときそれを拾ってしまう。
-		// ただし「一時的に減っただけ」のときは刈らず、保留席へ移して位置の意味だけを剥がす
-		// （下記 shouldPruneTail / UnitStateStore.parkEntriesFrom）。
-		const entryCount = this.store.countLiveEntriesByPath(filePath);
-		if (shouldPruneTail(entryCount, units.length)) {
-			const removed = this.store.pruneEntriesFrom(filePath, units.length);
-			if (removed > 0) {
-				// 消す側は今まで無言だった。掃除も刈り取り見送りもログを出すのに、
-				// 実際に状態を失う操作だけが記録に残らないのは追跡のしようがない
-				logger.info("marker", "Pruned unit-state entries beyond the current unit count", {
-					path: filePath,
-					units: units.length,
-					removed,
-				});
-			}
-		} else {
-			const parked = this.store.parkEntriesFrom(filePath, units.length);
-			// 新たに保留した分があるときだけ警告する。保留席がある状態は安定なので、
-			// 毎 sync（autoSyncOnSave を含む）同じ警告を積むと読む価値が無くなる
-			if (parked > 0) {
-				logger.warn("marker", "Skipped pruning unit-state entries: unit count dropped sharply", {
-					path: filePath,
-					entries: entryCount,
-					units: units.length,
-					parked,
-					note: "If this is not a real deletion (unclosed code fence, sync.level change), fix it and sync again — the state is kept.",
-				});
+	/**
+	 * ユニットごとの「いま座っている席」を出す。
+	 *
+	 * 読み込み時の控え（`attachMarkers` が置く）があればそれを使う。無い呼び出し
+	 * （ctx を共有しない parse → stringify）では**その場で照合し直す** — ここで
+	 * 0..N-1 に落とすと、席を据え置く意味がその経路だけ消えるうえ、ストアに残っている
+	 * 古い席と番号が混ざって「余った行」が湧く。
+	 *
+	 * どちらの場合も、**いまストアに生きている席だけ**を採る。控えを取ってからここへ
+	 * 来るまでのあいだに行が動いている（席から降ろした・席へ戻した）ためである。
+	 */
+	private seatPreferences(
+		before: readonly UnitStateEntry[],
+		units: readonly MdaitUnit[],
+		memo: MarkerAlignmentMemo | undefined,
+	): Array<string | undefined> {
+		const live = new Set(before.filter(isLiveBodyEntry).map((e) => e.seat));
+		const keepLive = (seat: string | undefined) => (seat !== undefined && live.has(seat) ? seat : undefined);
+		if (memo) {
+			return units.map((unit) => keepLive(memo.seatByUnit.get(unit)));
+		}
+		const held = new Set<number>();
+		for (let i = 0; i < before.length; i++) {
+			if (isHeldBackEntry(before[i])) {
+				held.add(i);
 			}
 		}
-		// store.save() は呼ばない。sync 完了時に1回だけ保存する。
+		return alignEntriesToUnits(before, units, held).map((entry) => keepLive(entry?.seat));
 	}
 
 	/**
@@ -320,8 +388,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	private applyAlignmentMemo(filePath: string, memo: MarkerAlignmentMemo): void {
 		// 先に席から外す。外す前に席へ移すと、同じ本文 hash の突き合わせ（席は1本文1席）で
 		// 拾い戻したばかりの行が「既にある席」と見なされ、退避したい行が置けなくなる
-		const recovered = this.store.dropEntries(filePath, memo.recoveredHeldOrders);
-		const parked = this.store.parkEntries(filePath, memo.unmatchedOrders);
+		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldHashes);
+		const parked = this.store.parkEntries(filePath, memo.unmatchedSeats);
 		if (recovered > 0 || parked > 0) {
 			logger.info("marker", "Applied held seats from the parse-time alignment", {
 				path: filePath,
@@ -331,12 +399,6 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		}
 	}
 
-	/**
-	 * 書き出しで失われる「翻訳の状態」を数える。詳しくは `countLostStateEntries` を見ること。
-	 */
-	private countLostState(filePath: string, units: readonly MdaitUnit[]): number {
-		return countLostStateEntries(this.store.getEntriesByPath(filePath), units);
-	}
 }
 
 /**
@@ -347,8 +409,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * 変わる、といった理由でユニット数は簡単に激減する。その状態で刈ると、原因を直して
  * ユニット数が戻っても、消えた `from`/`need` は戻らない。
  *
- * 刈らないと決めた行は捨て置かれるのではなく、**保留席へ移して位置の意味を剥がす**
- * （`UnitStateStore.parkEntriesFrom`）。保留席の行は順序では拾われず、内容（本文の hash・
+ * 刈らないと決めた行は捨て置かれるのではなく、**席から降ろして位置の意味を剥がす**
+ * （`UnitStateStore.parkEntries`）。席に着いていない行は順序では拾われず、内容（本文の hash・
  * 見出しの hash とレベル）が一致したときだけ拾われる。だから章が戻ってくれば正しく復帰し、
  * 戻ってこなければ無害に居座るだけになる。この保証があって初めて
  * 「消す側の失敗は取り返せず、残す側の失敗は取り返せる」という非対称が成り立つ。
@@ -360,9 +422,10 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * 判定（`isSuspiciousShrink`）は sync の孤立ユニット自動削除と**同じものを使う**。
  * 行だけ守って本文を消したら意味が無いので、疑うかどうかの基準は1つでなければならない。
  *
- * **保留席には寿命がある。** 保留席の order は必ず `units.length` より大きいので、いったん
- * この関数が真を返すと（＝ユニット数が保留席の数に追いつくと）保留席は全部消える。
- * `delete-unit.ts` の刈り取りも同じ経路を通る。詳しくは docs/design/unit-state.md §14。
+ * **この判定は「余った行」にしか効かない。** 刈るかどうかを問われるのは、書き出しで
+ * どのユニットにも席を譲らなかった行だけである（席に着いていない行はそもそも席を争っていない
+ * ので、ユニット数がいくら増えても消えない）。人が明示的に頼んだ削除は判定を通さず必ず
+ * 刈る（`MarkerFileContext.deliberateDeletion`）。詳しくは docs/design/unit-state.md §14。
  */
 export function shouldPruneTail(entryCount: number, unitCount: number): boolean {
 	if (unitCount === 0) {
@@ -383,26 +446,35 @@ export function shouldPruneTail(entryCount: number, unitCount: number): boolean 
  * それは章が消えた証拠ではない。`shouldPruneTail` が「ユニット0件なら刈らない」を先に返すのと
  * 同じ理由で、ここでも証拠として扱わない。
  *
- * @param entries そのファイルの行（order 昇順）
- * @param unitCount いまパースしたユニット数
- * @param matchedOrders 対応が付いた行の order
+ * @param entries そのファイルの行（並び順）
+ * @param units いまパースしたユニット
+ * @param matchedEntries 対応が付いた行
+ * @param aligned ユニットごとに対応が付いた行（`units` と同じ長さ）
  */
 export function buildAlignmentMemo(
 	entries: readonly UnitStateEntry[],
-	unitCount: number,
-	matchedOrders: ReadonlySet<number>,
+	units: readonly MdaitUnit[],
+	matchedEntries: ReadonlySet<UnitStateEntry>,
+	aligned: ReadonlyArray<UnitStateEntry | undefined> = [],
 ): MarkerAlignmentMemo {
-	const unmatchedOrders: number[] = [];
-	const recoveredHeldOrders: number[] = [];
-	if (unitCount === 0) {
-		return { unmatchedOrders, recoveredHeldOrders };
+	const unmatchedSeats: string[] = [];
+	const recoveredHeldHashes: string[] = [];
+	const seatByUnit = new Map<MdaitUnit, string>();
+	for (let i = 0; i < units.length; i++) {
+		const entry = aligned[i];
+		if (entry && isLiveBodyEntry(entry)) {
+			seatByUnit.set(units[i], entry.seat);
+		}
+	}
+	if (units.length === 0) {
+		return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
 	}
 	for (const entry of entries) {
-		const matched = matchedOrders.has(entry.order);
+		const matched = matchedEntries.has(entry);
 		if (isHeldBackEntry(entry)) {
 			if (matched) {
-				// 本文が戻ってきて席から拾われた。書き出しが通常の order で書き直すので席を空ける
-				recoveredHeldOrders.push(entry.order);
+				// 本文が戻ってきて拾われた。書き出しが席のキーで書き直すので、こちらは消す
+				recoveredHeldHashes.push(entry.hash);
 			}
 			continue;
 		}
@@ -410,14 +482,14 @@ export function buildAlignmentMemo(
 			continue;
 		}
 		if (!entry.hash) {
-			continue; // 本文 hash が無い行は席に置いても拾い戻せない（拾うのは完全一致だけ）
+			continue; // 本文 hash が無い行は預けても拾い戻せない（拾うのは完全一致だけ）
 		}
 		if (!hasStateWorthHolding(entry)) {
 			continue;
 		}
-		unmatchedOrders.push(entry.order);
+		unmatchedSeats.push(entry.seat);
 	}
-	return { unmatchedOrders, recoveredHeldOrders };
+	return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
 }
 
 /**
@@ -458,10 +530,13 @@ export const externalMarkerProvider: MarkerProvider = new ExternalMarkerProvider
  *
  * @param previous 書き出す前にストアが持っていた行
  * @param units これから書き出すユニット
+ * @param taken これから書き出す席のキー。ここに無い行は上書きされないので、
+ *   刈り取り／退避の判断が別に下される（数に入れない）
  */
 export function countLostStateEntries(
 	previous: readonly UnitStateEntry[],
 	units: readonly MdaitUnit[],
+	taken: ReadonlySet<string>,
 ): number {
 	if (previous.length === 0) {
 		return 0;
@@ -479,13 +554,13 @@ export function countLostStateEntries(
 	let lost = 0;
 	for (const entry of previous) {
 		if (isHeldBackEntry(entry)) {
-			continue; // 保留席は上書きされない（order が桁違いのため）
+			continue; // 席に着いていない行は上書きされない（席のキーを持たないため）
 		}
 		if (!entry.hash || (!entry.from && !entry.need)) {
 			continue; // 守るべき状態が無い
 		}
-		if (entry.order >= units.length) {
-			continue; // 末尾。刈り取り／保留の判断が別に下される
+		if (!taken.has(entry.seat)) {
+			continue; // どのユニットにも席を譲っていない。刈り取り／保留の判断が別に下される
 		}
 		if (survivingHashes.has(entry.hash)) {
 			continue; // 位置が変わっただけ

@@ -11,6 +11,7 @@ import { resolveNeedForFile, unitTargets } from "../../../../commands/markers/re
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import { FileMutex } from "../../../../infra/workspace/file-mutex";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -146,7 +147,7 @@ Content C.
 		store.load(path.join(tempDir, ".mdait"));
 		store.setEntry({
 			path: "en/doc.md",
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 2,
 			titleHash: "",
 			hash: "tgtA",

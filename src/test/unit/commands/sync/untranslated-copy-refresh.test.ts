@@ -108,7 +108,7 @@ for (const mode of ["embedded", "external"] as const) {
 			}
 			return UnitStateStore.getInstance()
 				.getEntriesByPath("en/doc.md")
-				.filter((entry) => entry.order < 1_000_000) // frontmatter の予約席は本文ユニットではない
+				.filter((entry) => entry.kind === "unit")
 				.map((entry) => ({ hash: entry.hash, from: entry.from, need: entry.need }));
 		}
 
@@ -196,8 +196,10 @@ for (const mode of ["embedded", "external"] as const) {
 				);
 			} else {
 				const store = UnitStateStore.getInstance();
+				// 行は order 昇順で返る。席番号は「二度と動かない背番号」で 0..N-1 ではないので、
+				// 番号ではなく並びで指す（真ん中の章＝2番目）
 				const entries = store.getEntriesByPath("en/doc.md");
-				const target = entries.find((entry) => entry.order === 1);
+				const target = entries[1];
 				if (target) {
 					store.setEntry({ ...target, need: "" });
 				}

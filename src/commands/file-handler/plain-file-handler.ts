@@ -65,7 +65,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 3. UnitStateStoreからターゲットのエントリを取得（非MD=order:0）
 		const store = UnitStateStore.getInstance();
-		const existing = store.getEntry(targetRelPath, 0);
+		const existing = store.getSoleEntry(targetRelPath);
 
 		// 4. need判定
 		let need: string;
@@ -103,16 +103,8 @@ export class PlainFileHandler implements FileHandler {
 		const unitRegistryManager = UnitRegistryManager.getInstance();
 		unitRegistryManager.saveUnitRegistry(sourceHash, sourceContent);
 
-		// 7. UnitStateStoreのエントリ更新（非MD=ファイル1ユニット: order:0, level:0, titleHash:""）
-		store.setEntry({
-			path: targetRelPath,
-			order: 0,
-			level: 0,
-			titleHash: "",
-			hash: targetHash,
-			from: sourceHash,
-			need,
-		});
+		// 7. UnitStateStoreのエントリ更新（非MD＝ファイル1ユニット）
+		store.setSoleEntry(targetRelPath, { hash: targetHash, from: sourceHash, need });
 
 		// 8. FileSyncResultを返す
 		return {
@@ -142,11 +134,7 @@ export class PlainFileHandler implements FileHandler {
 		// 3. UnitStateStoreにエントリ登録（hash=ソースhash, from=ソースhash, need=translate）
 		const targetRelPath = toWorkspaceRelativePath(targetFile);
 		const store = UnitStateStore.getInstance();
-		store.setEntry({
-			path: targetRelPath,
-			order: 0,
-			level: 0,
-			titleHash: "",
+		store.setSoleEntry(targetRelPath, {
 			hash: sourceHash,
 			from: sourceHash,
 			need: "translate",
@@ -195,7 +183,7 @@ export class PlainFileHandler implements FileHandler {
 		}
 
 		// 2. UnitStateStoreからエントリ取得（非MD=order:0）
-		const entry = store.getEntry(targetRelPath, 0);
+		const entry = store.getSoleEntry(targetRelPath);
 		if (!entry || !entry.need) {
 			// 翻訳不要
 			return undefined;
@@ -394,11 +382,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 12. UnitStateStore更新してディスクに保存
 		const sourceHash = calculateHash(sourceContent, false);
-		store.setEntry({
-			path: targetRelPath,
-			order: 0,
-			level: 0,
-			titleHash: "",
+		store.setSoleEntry(targetRelPath, {
 			hash: calculateHash(translatedText, false),
 			from: sourceHash,
 			need: droppedCodeBlocks > 0 ? "review" : "",
@@ -429,7 +413,7 @@ export class PlainFileHandler implements FileHandler {
 		const fileName = path.basename(filePath);
 		const targetRelPath = toWorkspaceRelativePath(filePath);
 		const store = UnitStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath, 0);
+		const entry = store.getSoleEntry(targetRelPath);
 
 		if (!entry) {
 			// unit-stateに未登録 → Source扱い
@@ -482,7 +466,7 @@ export class PlainFileHandler implements FileHandler {
 	async isInitialized(filePath: string): Promise<boolean> {
 		const targetRelPath = toWorkspaceRelativePath(filePath);
 		const store = UnitStateStore.getInstance();
-		return store.getEntry(targetRelPath, 0) !== undefined;
+		return store.getSoleEntry(targetRelPath) !== undefined;
 	}
 
 	// ===== マーカー／ユニット状態の書き換え =====
@@ -494,7 +478,7 @@ export class PlainFileHandler implements FileHandler {
 
 		return withFileMutation<ResolveNeedFileResult>(filePath, Configuration.getInstance(), async () => {
 			const store = UnitStateStore.getInstance();
-			const entry = store.getEntry(relPath, 0);
+			const entry = store.getSoleEntry(relPath);
 			const empty: ResolveNeedFileResult = {
 				resolved: [],
 				skipped: [],

@@ -367,7 +367,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		const targetRelPath = toWorkspaceRelativePath(document.uri.fsPath);
 
 		const store = UnitStateStore.getInstance();
-		const entry = store.getEntry(targetRelPath, 0);
+		const entry = store.getSoleEntry(targetRelPath);
 
 		const codeLenses: vscode.CodeLens[] = [];
 

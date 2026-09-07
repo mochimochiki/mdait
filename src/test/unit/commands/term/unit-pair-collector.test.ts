@@ -13,6 +13,7 @@ import { UnitPairCollector } from "../../../../commands/term/unit-pair-collector
 import { UnitPair } from "../../../../commands/term/unit-pair";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration, type TransPair } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -74,10 +75,10 @@ suite("UnitPairCollector（external マーカーモード）", () => {
 		fs.writeFileSync(targetAbs, "# タイトル\n\n訳文本文。\n", "utf-8");
 
 		// マーカーは unit-state 側にのみ存在する
-		store.setEntry({ path: sourceRel, order: 0, level: 1, titleHash: "", hash: "src00001", from: "", need: "" });
+		store.setEntry({ path: sourceRel, kind: "unit" as const, seat: seat(0), level: 1, titleHash: "", hash: "src00001", from: "", need: "" });
 		store.setEntry({
 			path: targetRel,
-			order: 0,
+			kind: "unit" as const, seat: seat(0),
 			level: 1,
 			titleHash: "",
 			hash: "tgt00001",

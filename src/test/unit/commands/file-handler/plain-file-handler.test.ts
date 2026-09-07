@@ -11,6 +11,7 @@ import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { Status, StatusItemType } from "../../../../core/status/status-item";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../../../infra/config/configuration";
+import { seat } from "../../helpers/unit-state";
 
 declare let __vscodeMockWorkspaceRoot: string;
 
@@ -72,7 +73,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: calculateHash("translated content", false),
@@ -86,7 +87,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.modified, 0);
 			assert.strictEqual(result.revisionsNeeded, 0);
 
-			const entry = store.getEntry("target/test.txt", 0);
+			const entry = store.getSoleEntry("target/test.txt");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "");
 		});
@@ -108,7 +109,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: calculateHash("translated content", false),
@@ -122,7 +123,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.revisionsNeeded, 1);
 			assert.strictEqual(result.unchanged, 0);
 
-			const entry = store.getEntry("target/test.txt", 0);
+			const entry = store.getSoleEntry("target/test.txt");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, `revise@${oldHash}`);
 		});
@@ -144,7 +145,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.revisionsNeeded, 1);
 
 			const store = UnitStateStore.getInstance();
-			const entry = store.getEntry("target/test.txt", 0);
+			const entry = store.getSoleEntry("target/test.txt");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "review");
 			assert.strictEqual(entry.from, calculateHash("source text", false));
@@ -168,7 +169,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: calculateHash("translated content", false),
@@ -179,7 +180,7 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, secondContent, "utf-8");
 			await handler.sync(sourceFile, targetFile);
 
-			const entryAfterFirst = store.getEntry("target/test.txt", 0);
+			const entryAfterFirst = store.getSoleEntry("target/test.txt");
 			assert.ok(entryAfterFirst);
 			assert.strictEqual(entryAfterFirst.need, `revise@${originalHash}`);
 
@@ -188,7 +189,7 @@ suite("PlainFileHandler", () => {
 			fs.writeFileSync(sourceFile, thirdContent, "utf-8");
 			await handler.sync(sourceFile, targetFile);
 
-			const entryAfterSecond = store.getEntry("target/test.txt", 0);
+			const entryAfterSecond = store.getSoleEntry("target/test.txt");
 			assert.ok(entryAfterSecond);
 			assert.strictEqual(
 				entryAfterSecond.need,
@@ -216,7 +217,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/data.csv",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash,
@@ -229,7 +230,7 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.unchanged, 1);
 			assert.strictEqual(result.modified, 0);
 
-			const entry = store.getEntry("target/data.csv", 0);
+			const entry = store.getSoleEntry("target/data.csv");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "translate");
 		});
@@ -263,7 +264,7 @@ suite("PlainFileHandler", () => {
 			await handler.syncNew(sourceFile, targetFile);
 
 			const store = UnitStateStore.getInstance();
-			const entry = store.getEntry("target/new.txt", 0);
+			const entry = store.getSoleEntry("target/new.txt");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "translate");
 			assert.strictEqual(entry.from, calculateHash(content, false));
@@ -294,7 +295,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -318,7 +319,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -344,7 +345,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -366,7 +367,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -389,7 +390,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/large.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -411,7 +412,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -452,7 +453,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/large.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -513,7 +514,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/done.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: "aaaa",
@@ -552,7 +553,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/cancel.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: calculateHash(content, false),
@@ -630,7 +631,7 @@ suite("PlainFileHandler", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry({
 				path: "target/test.txt",
-				order: 0,
+				kind: "unit" as const, seat: seat(0),
 				level: 0,
 				titleHash: "",
 				hash: calculateHash(opts.previousTranslation, false),
