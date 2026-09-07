@@ -18,11 +18,23 @@ const GITIGNORE_LINES = ["logs/", "reports/", "unit-registry.broken", "unit-stat
 /**
  * `.mdait/.gitattributes` に必ず載っている行。
  *
- * どちらも「1つのファイルへ全員が書き込む」形なので、ブランチをまたぐと同じ場所が動く。
+ * どれも「1つのファイルへ全員が書き込む」形なので、ブランチをまたぐと同じ場所が動く。
  * union merge なら両方の陣営の行が残る — 残しすぎは次の sync / GC が正規形へ均すが、
  * **落とした行は取り返せない**（`unit-registry` の各行は、どこにも複製の無い旧原文である）。
+ *
+ * `translations.tmx` は XML だが **1 TU = 1 行**で書くので、行を足し合わせても壊れない
+ * （整形して1つの TU を10行に散らしていた頃に union を掛けると、入れ子が壊れて TU の
+ * 2〜3割が読めなくなった）。同じ tuid の行が2つ並んだら、読み込みが訳を拾い集めて畳む。
+ *
+ * `terms.csv` は用語集の**既定の名前**である。`terms.filename` で名前を変えている作業場では
+ * この指定は効かないので、そこは利用者が自分で書く（`.gitattributes` に書けるのは決まった名前だけ）。
  */
-const GITATTRIBUTES_LINES = ["unit-state merge=union", "unit-registry merge=union"];
+const GITATTRIBUTES_LINES = [
+	"unit-state merge=union",
+	"unit-registry merge=union",
+	"translations.tmx merge=union",
+	"terms.csv merge=union",
+];
 
 /** 行の見出し（.gitignore ならパターン、.gitattributes なら対象パス）を取り出す */
 function leadingToken(line: string): string {

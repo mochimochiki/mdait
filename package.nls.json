@@ -40,7 +40,6 @@
   "mdait.logLevel.description": "Set the log level for mdait extension output",
   "mdait.tm.commit.file.title": "✨TM Commit File",
   "mdait.tm.commit.directory.title": "✨TM Commit Directory",
-  "mdait.tm.optimize.title": "✨TM Optimize",
   "mdait.aiReview.file.title": "✨AI Translation Review (File)",
   "mdait.aiReview.directory.title": "✨AI Translation Review (Directory)",
   "mdait.adopt.run.title": "✨Adopt Existing Translations",

@@ -39,6 +39,8 @@ suite(".mdait の初期化", () => {
 		assert.match(read(".gitignore"), /^unit-registry\.broken$/m);
 		assert.match(read(".gitattributes"), /^unit-state merge=union$/m);
 		assert.match(read(".gitattributes"), /^unit-registry merge=union$/m);
+		assert.match(read(".gitattributes"), /^translations\.tmx merge=union$/m);
+		assert.match(read(".gitattributes"), /^terms\.csv merge=union$/m);
 	});
 
 	test("既にあるファイルにも、足りない行だけを書き足す", async () => {

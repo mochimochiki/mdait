@@ -1,8 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
+import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import { calculateHash } from "../hash/hash-calculator";
+import { hasConflictMarkersInDataFile } from "../markdown/conflict-markers";
 import { computeTrigrams, normalizeForTm } from "./tm-text-normalizer";
 import type { ExistingTmEntriesItem, LegacyTmEntry, TmEntry, TmMatch, TmVariant } from "./types";
 
@@ -12,7 +14,6 @@ const TMX_VERSION = "1.4";
 /** XMLプロパティタイプ定数 */
 const PROP_TYPE_HASH = "x-hash";
 const PROP_TYPE_PRIMARY = "x-primary";
-const PROP_TYPE_WEIGHT = "x-wt";
 
 /** XML宣言 */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -22,6 +23,8 @@ const ATTR_PREFIX = "@_";
 
 /** 配列として強制するタグ名 */
 const ARRAY_TAG_NAMES = new Set(["tu", "tuv", "prop"]);
+
+const logger = Logger.getInstance();
 
 function inferPrimaryFromVariants(tuid: string, variants: Iterable<TmVariant>): string | null {
 	const candidates = [...variants].map((variant) => variant.text).filter((text) => text.length > 0);
@@ -57,6 +60,29 @@ export function unescapeXml(text: string): string {
 		.replace(/&amp;/g, "&");
 }
 
+/**
+ * TU 1つを**1行**に組み立てる builder（モジュールスコープで再利用）。
+ *
+ * **1 TU = 1 行にするのは、合流で競合させないためである。** 整形して1つの TU を10行ほどに
+ * 散らすと、2人が別々の文を登録しただけで行が隣り合ってぶつかる（実測: 500件へ両側20件ずつで
+ * 16/20、2000件へ50件ずつで 18/20）。1行なら `.gitattributes` の `merge=union` が効き、
+ * 両方の行が残る。重複した TU は読み込みが畳む。
+ */
+const tuBuilder = new XMLBuilder({
+	ignoreAttributes: false,
+	attributeNamePrefix: ATTR_PREFIX,
+	format: false,
+	suppressEmptyNode: true,
+	processEntities: true,
+});
+
+/**
+ * 文字列を符号位置の順で比べる（`localeCompare` は実行環境のロケールで答えが変わる）。
+ */
+function compareCodePoints(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** fast-xml-parser パーサー（モジュールスコープで再利用） */
 const tmxParser = new XMLParser({
 	ignoreAttributes: false,
@@ -75,7 +101,6 @@ const tmxParser = new XMLParser({
 function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	let tuid = String(tuNode[`${ATTR_PREFIX}tuid`] ?? "");
 	let primary = "";
-	let weight = 1;
 	const variants = new Map<string, TmVariant>();
 
 	// <prop> 要素を処理
@@ -92,13 +117,6 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 			case PROP_TYPE_PRIMARY:
 				primary = value;
 				break;
-			case PROP_TYPE_WEIGHT: {
-				const parsedWeight = Number.parseFloat(value);
-				if (Number.isFinite(parsedWeight)) {
-					weight = Math.min(1, Math.max(0, parsedWeight));
-				}
-				break;
-			}
 		}
 	}
 
@@ -127,7 +145,6 @@ function parseTuNode(tuNode: Record<string, unknown>): TmEntry | null {
 	const entry: TmEntry = {
 		tuid,
 		primary,
-		weight,
 		variants,
 	};
 	return entry;
@@ -139,10 +156,7 @@ function isLegacyTmEntry(entry: TmEntry | LegacyTmEntry): entry is LegacyTmEntry
 
 function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 	if (!isLegacyTmEntry(entry)) {
-		return {
-			...entry,
-			weight: entry.weight ?? 1,
-		};
+		return { ...entry };
 	}
 
 	const sortedVariants = [...entry.segments.entries()];
@@ -154,7 +168,6 @@ function normalizeEntry(entry: TmEntry | LegacyTmEntry): TmEntry {
 	return {
 		tuid: entry.sentenceHash,
 		primary,
-		weight: 1,
 		variants: new Map(sortedVariants.map(([lang, text]) => [lang, { text }])),
 	};
 }
@@ -170,8 +183,29 @@ function parseTmx(xml: string): Map<string, TmEntry> {
 	if (Array.isArray(tuArray)) {
 		for (const tuNode of tuArray) {
 			const entry = parseTuNode(tuNode);
-			if (entry) {
+			if (!entry) {
+				continue;
+			}
+			const existing = entries.get(entry.tuid);
+			if (!existing) {
 				entries.set(entry.tuid, entry);
+				continue;
+			}
+			// **同じ tuid の TU が2つ並ぶのは、合流（`merge=union`）のあとの姿である。**
+			// 後勝ちで潰すと、片方の枝で登録した訳が警告も無く消える（`unit-state` で
+			// 同じことが起きていた。ADR-260906-03）。言語ごとに拾い集める。
+			for (const [lang, variant] of entry.variants) {
+				const kept = existing.variants.get(lang);
+				if (!kept) {
+					existing.variants.set(lang, variant);
+				} else if (kept.text !== variant.text) {
+					// 同じ原文に違う訳が2つ。TMX は1つしか持てないので先に出てきたほうを残す。
+					// 黙って捨てないよう跡を残す（次の保存で片方が消えるため）
+					logger.warn("tm", "Conflicting translations for the same source sentence; keeping the first", {
+						tuid: entry.tuid,
+						lang,
+					});
+				}
 			}
 		}
 	}
@@ -194,19 +228,8 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
 		});
 	}
 
-	// weight は非finite の可能性があるため、保存時にもサニタイズしてから使用する
-	const rawWeight = entry.weight;
-	const finiteWeight = Number.isFinite(rawWeight) ? (rawWeight as number) : 1;
-	const safeWeight = Math.max(0, Math.min(1, finiteWeight));
-
 	return {
 		[`${ATTR_PREFIX}tuid`]: entry.tuid,
-		prop: [
-			{
-				[`${ATTR_PREFIX}type`]: PROP_TYPE_WEIGHT,
-				"#text": safeWeight.toFixed(6),
-			},
-		],
 		tuv: tuvs,
 	};
 }
@@ -215,28 +238,15 @@ function buildTuObject(entry: TmEntry): Record<string, unknown> {
  * エントリーMap を完全なTMX XML文字列にシリアライズする
  */
 function serializeTmx(entries: Map<string, TmEntry>): string {
-	// エントリーをtuid順でソート（決定的出力、git差分最小化）
-	const sortedEntries = [...entries.values()].sort((a, b) => a.tuid.localeCompare(b.tuid));
-	const tuArray = sortedEntries.map((entry) => buildTuObject(entry));
+	// 並べ替えは符号位置で比べる。`localeCompare` は**実行環境のロケールで答えが変わる**ので、
+	// 全員が同じバイト列を書く前提のファイルには使えない（ADR-260906-07 と同じ理由）。
+	const sortedEntries = [...entries.values()].sort((a, b) => compareCodePoints(a.tuid, b.tuid));
+	// 行と行のあいだに空行や目印を挟むのは**効かない**。ここで出る競合は「両方が同じ隙間へ
+	// 足した」形で、`unit-state` の実測でもこの形だけは並べ方をどう変えても消えなかった。
+	// TU は tuid の順に並ぶので、20件ずつ足せばどこかは必ず隣り合う。union で解く。
+	const tuLines = sortedEntries.map((entry) => tuBuilder.build({ tu: buildTuObject(entry) }).trim());
 
-	const tmxObject = {
-		tmx: {
-			[`${ATTR_PREFIX}version`]: TMX_VERSION,
-			body: tuArray.length > 0 ? { tu: tuArray } : {},
-		},
-	};
-
-	const builder = new XMLBuilder({
-		ignoreAttributes: false,
-		attributeNamePrefix: ATTR_PREFIX,
-		format: true,
-		indentBy: "  ",
-		suppressEmptyNode: true,
-		processEntities: true,
-	});
-
-	const xmlBody = builder.build(tmxObject);
-	return `${XML_DECLARATION}\n${xmlBody}`;
+	return [XML_DECLARATION, `<tmx version="${TMX_VERSION}">`, "<body>", ...tuLines, "</body>", "</tmx>", ""].join("\n");
 }
 
 /**
@@ -254,6 +264,9 @@ export class TmxStore {
 
 	/** tuid → TmEntry */
 	private index = new Map<string, TmEntry>();
+
+	/** 合流の途中で読み込みを見送ったか */
+	private conflicted = false;
 
 	/** lang → (trigram → Set<tuid>)（言語別転置インデックス） */
 	private trigramIndex = new Map<string, Map<string, Set<string>>>();
@@ -314,14 +327,29 @@ export class TmxStore {
 	 */
 	load(filePath: string): void {
 		this.index.clear();
+		this.conflicted = false;
 
 		if (!fs.existsSync(filePath)) {
 			return;
 		}
 
 		const xml = fs.readFileSync(filePath, "utf-8");
+		if (hasConflictMarkersInDataFile(xml)) {
+			// **合流の途中の TM は読まない。** XML パーサーは競合マーカーを本文の一部として
+			// 飲み込み、読めたところまでを返す（実測: 22件が21件になった）。そのまま次の登録で
+			// 書き戻すと、失われたことに気づく手掛かりが1つも残らない。原稿に対する
+			// 「合流の途中は触らない」（ADR-260906-04）と同じ扱いにする。
+			this.conflicted = true;
+			logger.warn("tm", "Translation memory is mid-merge; leaving it untouched", { filePath });
+			return;
+		}
 		this.index = parseTmx(xml);
 		this.rebuildTrigramIndex();
+	}
+
+	/** 合流の途中（競合マーカーが残っている）で、読み込みを見送ったか */
+	get isConflicted(): boolean {
+		return this.conflicted;
 	}
 
 	/**
@@ -330,6 +358,10 @@ export class TmxStore {
 	 * @param filePath TMXファイルのパス
 	 */
 	save(filePath: string): void {
+		if (this.conflicted) {
+			// 読めなかったものの上に書くと、解いていない競合ごと消える
+			throw new Error("Translation memory is mid-merge; resolve the conflict before writing.");
+		}
 		const dir = path.dirname(filePath);
 		if (!fs.existsSync(dir)) {
 			fs.mkdirSync(dir, { recursive: true });

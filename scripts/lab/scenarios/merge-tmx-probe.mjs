@@ -34,7 +34,6 @@ function tmxOf(sentences) {
 		store.addEntry({
 			tuid: calculateHash(s),
 			primary: s,
-			weight: 0.5,
 			variants: new Map([
 				["en", { text: s }],
 				["ja", { text: `${s} の訳` }],
@@ -103,7 +102,7 @@ function trial(seed, baseCount, addCount) {
 	return { out, want: new Set([...mine, ...theirs]).size };
 }
 
-console.log("translations.tmx の合流（`merge=union` の指定は無い）\n");
+console.log("translations.tmx の合流（`.mdait/.gitattributes` に `merge=union` を書き出す）\n");
 console.log("  形                              git                diff3              union");
 console.log(`  ${"-".repeat(76)}`);
 for (const [baseCount, addCount] of [

@@ -6,7 +6,7 @@ import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { TmxStore, escapeXml, unescapeXml } from "../../../../core/tm/tmx-store";
 import type { TmEntry } from "../../../../core/tm/types";
 
-type TmEntryOverrides = Partial<Pick<TmEntry, "tuid" | "primary" | "weight" | "variants">>;
+type TmEntryOverrides = Partial<Pick<TmEntry, "tuid" | "primary" | "variants">>;
 
 const SAMPLE_TMX = `<?xml version="1.0" encoding="UTF-8"?>
 <tmx version="1.4">
@@ -33,7 +33,6 @@ function createTestEntry(overrides?: TmEntryOverrides): TmEntry {
 	return {
 		tuid: overrides?.tuid ?? calculateHash(primary, true),
 		primary,
-		weight: overrides?.weight ?? 1,
 		variants:
 			overrides?.variants ??
 			new Map([
@@ -80,15 +79,51 @@ suite("TmxStore", () => {
 		assert.strictEqual(entry.variants.get("ja")?.text, "こんにちは世界");
 	});
 
-test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-wt は出力する", () => {
+	test("save したTMXに prop を1つも出力しないこと（x-wt は廃止した）", () => {
 		store.addEntry(createTestEntry());
 		store.save(tempFilePath);
 
 		const xml = fs.readFileSync(tempFilePath, "utf-8");
-		assert.strictEqual(xml.includes("x-wt"), true);
+		assert.strictEqual(xml.includes("<prop"), false);
+		assert.strictEqual(xml.includes("x-wt"), false);
 		assert.strictEqual(xml.includes("x-source-hash"), false);
 		assert.strictEqual(xml.includes("x-unit"), false);
 		assert.strictEqual(xml.includes("x-unit-hash"), false);
+	});
+
+	test("save した TMX は 1 TU が 1 行になること（合流で union を効かせるため）", () => {
+		store.addEntry(createTestEntry({ tuid: "aaaaaaaa" }));
+		store.addEntry(createTestEntry({ tuid: "bbbbbbbb" }));
+		store.save(tempFilePath);
+
+		const tuLines = fs
+			.readFileSync(tempFilePath, "utf-8")
+			.split("\n")
+			.filter((line) => line.startsWith("<tu "));
+		assert.strictEqual(tuLines.length, 2, "TU の行数");
+		for (const line of tuLines) {
+			assert.ok(line.endsWith("</tu>"), `1行で閉じていない: ${line}`);
+		}
+	});
+
+	test("同じ tuid の TU が2つ並ぶ合流のあとでも、両方の訳が残ること", () => {
+		// `merge=union` は両方の陣営の行を残す。後勝ちで潰すと片方の訳が黙って消える
+		const tuid = calculateHash("Hello", true);
+		const merged = `<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+<body>
+<tu tuid="${tuid}"><tuv xml:lang="en"><seg>Hello</seg></tuv><tuv xml:lang="ja"><seg>こんにちは</seg></tuv></tu>
+<tu tuid="${tuid}"><tuv xml:lang="en"><seg>Hello</seg></tuv><tuv xml:lang="fr"><seg>Bonjour</seg></tuv></tu>
+</body>
+</tmx>
+`;
+		fs.mkdirSync(path.dirname(tempFilePath), { recursive: true });
+		fs.writeFileSync(tempFilePath, merged, "utf-8");
+		store.load(tempFilePath);
+
+		const entry = store.findByTuid(tuid);
+		assert.strictEqual(entry?.variants.get("ja")?.text, "こんにちは");
+		assert.strictEqual(entry?.variants.get("fr")?.text, "Bonjour");
 	});
 
 	test("同一tuidの addEntry は variants をマージする", () => {
@@ -137,10 +172,9 @@ test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-w
 			store.findByTuid(calculateHash("Download the installer", true))?.primary,
 			"Download the installer",
 		);
-		assert.strictEqual(store.findByTuid(calculateHash("Download the installer", true))?.weight, 1);
 	});
 
-	test("x-wt がある TMX を読める", () => {
+	test("重みが残っている古い TMX も、重みを読み飛ばして読めること", () => {
 		const weightedTmx = `<?xml version="1.0" encoding="UTF-8"?>
 <tmx version="1.4">
   <body>
@@ -155,7 +189,7 @@ test("save したTMXに x-source-hash / x-unit / x-unit-hash を出力せず x-w
 		fs.mkdirSync(path.dirname(tempFilePath), { recursive: true });
 		fs.writeFileSync(tempFilePath, weightedTmx, "utf-8");
 		store.load(tempFilePath);
-		assert.strictEqual(store.findByTuid("a1b2c3d4")?.weight, 0.25);
+		assert.strictEqual(store.findByTuid("a1b2c3d4")?.primary, "Download the installer");
 	});
 
 	test("x-source-hash が残る旧TMXも通常読込できる", () => {
@@ -478,5 +512,50 @@ suite("TmxStore.getTrigramCache", () => {
 			count += trigrams.size;
 		}
 		assert.ok(count > 0, "ReadonlyMap からトリグラムを読み取れること");
+	});
+});
+
+suite("TmxStore（合流の途中の TM）", () => {
+	let store: TmxStore;
+	let tmxPath: string;
+
+	setup(() => {
+		store = new TmxStore();
+		tmxPath = createTempFilePath();
+	});
+
+	teardown(() => {
+		const dir = path.dirname(tmxPath);
+		if (fs.existsSync(dir)) {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	const conflicted = `<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+<body>
+<<<<<<< HEAD
+<tu tuid="aaaaaaaa"><tuv xml:lang="en"><seg>Hello</seg></tuv></tu>
+=======
+<tu tuid="bbbbbbbb"><tuv xml:lang="en"><seg>Bye</seg></tuv></tu>
+>>>>>>> theirs
+</body>
+</tmx>
+`;
+
+	test("競合マーカーが残っていたら、読まずに見送ること", () => {
+		fs.writeFileSync(tmxPath, conflicted, "utf-8");
+		store.load(tmxPath);
+
+		assert.strictEqual(store.isConflicted, true);
+		assert.strictEqual(store.entries.size, 0, "壊れた内容を読み込んでいる");
+	});
+
+	test("見送ったあとに書こうとしたら、上書きせずに失敗すること", () => {
+		fs.writeFileSync(tmxPath, conflicted, "utf-8");
+		store.load(tmxPath);
+
+		assert.throws(() => store.save(tmxPath));
+		assert.strictEqual(fs.readFileSync(tmxPath, "utf-8"), conflicted, "解いていない競合を上書きした");
 	});
 });

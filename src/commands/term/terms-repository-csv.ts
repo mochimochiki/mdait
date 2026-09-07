@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 
+import { hasConflictMarkersInDataFile } from "../../core/markdown/conflict-markers";
 import type { TransPair } from "../../infra/config/configuration";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import type { TermEntry } from "./term-entry";
@@ -160,7 +161,9 @@ export class TermsRepositoryCSV implements TermsRepository {
 			mergedEntries.sort((a, b) => {
 				const termA = TermEntryUtils.getTerm(a, primaryLanguage) || "";
 				const termB = TermEntryUtils.getTerm(b, primaryLanguage) || "";
-				return termA.localeCompare(termB);
+				// 符号位置で比べる。`localeCompare` は**実行環境のロケールで答えが変わる**ので、
+				// 全員が同じバイト列を書く前提のファイルには使えない（ADR-260906-07 と同じ理由）
+				return termA < termB ? -1 : termA > termB ? 1 : 0;
 			});
 		}
 
@@ -407,6 +410,13 @@ export class TermsRepositoryCSV implements TermsRepository {
 			content = content.slice(1); // BOM除去
 		}
 
+		// **合流の途中の用語集は読まない。** 競合マーカーの行は CSV としては列数の合わない行で、
+		// パーサーが投げるか、投げずに壊れた語を1つ増やす。どちらにせよそのまま書き戻すと
+		// 用語が消える。原稿に対する「合流の途中は触らない」（ADR-260906-04）と同じ扱いにする。
+		if (hasConflictMarkersInDataFile(content)) {
+			throw new Error(`The glossary is in the middle of a merge. Resolve the conflict in ${this.path} first.`);
+		}
+
 		// CSVパース
 		const records = parse(content, {
 			columns: true,
@@ -439,13 +449,20 @@ export class TermsRepositoryCSV implements TermsRepository {
 		this.preservedHeaders = headers.filter((h) => !managed.has(h));
 		this.preservedPerKey.clear();
 
-		// 各行をTermEntryに変換しつつ未知列を保持
+		// 各行をTermEntryに変換しつつ未知列を保持。
+		//
+		// **同じ語の行が2つ並ぶのは、合流（`merge=union`）のあとの姿である。** union は両方の
+		// 陣営の行を残すので、2人が同じ語を足すと同じ鍵の行が並ぶ。先に出てきたほうを残して畳む
+		// （残さないと、書き戻すたびに同じ語が増えていく）。
 		const tmpEntries: TermEntry[] = [];
+		const seenKeys = new Set<string>();
 		for (const row of records) {
 			const entry = TermEntryConverter.fromCsvRow(row, this.allLanguages);
 			if (TermEntryUtils.isEmpty(entry)) continue;
-			tmpEntries.push(entry);
 			const key = this.computeEntryKey(entry);
+			if (seenKeys.has(key)) continue;
+			seenKeys.add(key);
+			tmpEntries.push(entry);
 			const preserved: Record<string, string> = {};
 			for (const h of this.preservedHeaders) {
 				preserved[h] = row[h] ?? "";
