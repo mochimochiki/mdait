@@ -28,7 +28,11 @@ import {
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore, isLiveBodyEntry } from "../../core/unit-state/unit-state-store";
+import {
+	UnitStateStore,
+	isCleanParse as isUnitStateCleanParse,
+	isLiveBodyEntry,
+} from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
@@ -846,9 +850,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			unitStateStore.save(mdaitDir);
 		}
 
-		// 全ファイル処理完了後、GC処理
-		await runUnitRegistryGC(statusManager);
-
 		const endTime = Date.now();
 		const durationMs = endTime - startTime;
 
@@ -856,6 +857,14 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// （例外は投げられず、ワーカーが次を取らずに抜けるだけ）に 0 のままになり、
 		// 止めたのに「完了しました」と出る。AI を使わない定常 sync ではそちらが普通の経路
 		const cancelled = options?.token?.isCancellationRequested === true || cancelledCount > 0;
+
+		// 全ファイル処理完了後、GC処理。**取り消しの判定より後**に置く — 途中で止まった回は
+		// 走査が全部に届いていないので、掃除の判断材料としては欠けている
+		await runUnitRegistryGC(statusManager, {
+			configuredDirs,
+			scannedDirs: [...scannedDirs],
+			cancelled,
+		});
 
 		logger.info("sync", "Sync completed", {
 			totalFileCount,
@@ -2213,11 +2222,42 @@ async function refreshUntranslatedCopy(
 }
 
 /**
- * ユニットレジストリのGC処理
- * StatusItemTreeから全ユニットのハッシュを収集し、不要なユニットレジストリを削除
- * @param statusManager StatusManagerインスタンス
+ * 掃除を走らせてよいかを決める、この回の走査の届いた範囲。
  */
-async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
+export interface RegistrySweepScope {
+	/** config の全 pair のディレクトリ（ワークスペースルート相対） */
+	configuredDirs: readonly string[];
+	/** 今回実際に走査し、1件以上見つけたディレクトリ */
+	scannedDirs: readonly string[];
+	/** 途中で取り消されたか */
+	cancelled: boolean;
+}
+
+/**
+ * ユニットレジストリのGC処理。
+ *
+ * **消してよいのは、この回の走査が届いた範囲だけである。** 控えはハッシュだけを鍵にした
+ * content-addressed の表で、どのファイルの控えかを持っていない。だから「いま手元で
+ * 使われているハッシュ」以外を消すと、**見に行かなかった場所から参照されている控えも
+ * 一緒に消える**。削除は競合を出さないふつうの差分なので、そのまま全員へ伝播し、
+ * `need:revise@X` の戻り先が誰の手元からも消える。
+ *
+ * そこで、走査が全部に届いた回にだけ走らせる。届かなかった回は台帳が育つだけで、
+ * 次に届いた回に減らせる — **残しすぎは取り返せるが、消しすぎは取り返せない。**
+ *
+ * 守る印は、ステータスツリーだけでなく `unit-state` の**全行**からも集める。ツリーに
+ * 載るのは今回走査したファイルだけだが、行はそれより広く残っている（設定から外れたが
+ * ファイルは在る・`ignoredPatterns` で外した・拡張子を外した・孤立訳文）。手元で対象言語を
+ * 一時的に絞った翻訳者の掃除が、絞った先の言語の控えを消すのはこの差からである。
+ *
+ * **まだ合流していない枝の控えだけは、これでも守れない。** その枝の行はこの作業ツリーの
+ * どこにも無く、手元から見えるものが1つも無い。台帳が閾値へ育つのは長く使った現場なので、
+ * そこでは合流を先に済ませてから sync するしかない（docs/design/merge-resilience.md）。
+ *
+ * @param statusManager StatusManagerインスタンス
+ * @param sweep この回の走査が届いた範囲
+ */
+async function runUnitRegistryGC(statusManager: StatusManager, sweep: RegistrySweepScope): Promise<void> {
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
@@ -2225,28 +2265,58 @@ async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
 		return;
 	}
 
+	const skipReason = describeIncompleteSweep(sweep);
+	if (skipReason) {
+		logger.info("sync", "Skipped unit-registry GC", { reason: skipReason });
+		return;
+	}
+
 	// 全StatusItemから使用中のhashを収集
 	const activeHashes = new Set<string>();
+	const addHash = (hash: string | undefined): void => {
+		if (hash) {
+			activeHashes.add(hash.toLowerCase());
+		}
+	};
 	const tree = statusManager.getStatusItemTree();
 	const files = tree.getFilesAll();
 
 	for (const file of files) {
 		for (const unit of file.children ?? []) {
-			if (unit.unitHash) {
-				activeHashes.add(unit.unitHash);
-			}
-			if (unit.fromHash) {
-				activeHashes.add(unit.fromHash);
-			}
+			addHash(unit.unitHash);
+			addHash(unit.fromHash);
 			// need:revise@{oldhash}形式からoldhashを抽出
-			const oldhash = MdaitMarker.extractOldHashFromNeed(unit.needFlag);
-			if (oldhash) {
-				activeHashes.add(oldhash);
-			}
+			addHash(MdaitMarker.extractOldHashFromNeed(unit.needFlag) ?? undefined);
 		}
 	}
 
+	// ツリーに載らない行からも集める（上の説明のとおり、行のほうが広い）
+	for (const entry of UnitStateStore.getInstance().getAllEntries()) {
+		addHash(entry.hash);
+		addHash(entry.from);
+		addHash(MdaitMarker.extractOldHashFromNeed(entry.need) ?? undefined);
+	}
+
 	await unitRegistryManager.garbageCollect(activeHashes);
+}
+
+/**
+ * この回の走査が全部に届いていなければ、その理由を返す（届いていれば null）。
+ */
+export function describeIncompleteSweep(sweep: RegistrySweepScope): string | null {
+	if (sweep.cancelled) {
+		return "the sync was cancelled, so the sweep did not reach every file";
+	}
+	const scanned = new Set(sweep.scannedDirs);
+	const missed = sweep.configuredDirs.filter((dir) => !scanned.has(dir));
+	if (missed.length > 0) {
+		return `configured directories were not scanned: ${missed.join(", ")}`;
+	}
+	const report = UnitStateStore.getInstance().getLastParseReport();
+	if (!isUnitStateCleanParse(report)) {
+		return "unit-state could not be read in full (a merge may be in progress)";
+	}
+	return null;
 }
 
 /**
