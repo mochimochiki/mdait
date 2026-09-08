@@ -47,7 +47,9 @@ export type PatchFailureReason =
 	/** 行番号方式で、指された行が訳文に存在しない（範囲外・逆順） */
 	| "bad-range"
 	/** 行番号方式で、指示どうしが同じ行を取り合っている（当てる順序で結果が変わる） */
-	| "overlapping-ops";
+	| "overlapping-ops"
+	/** 行番号方式で、こちらが振った行番号を本文にそのまま書き戻している */
+	| "line-number-residue";
 
 /** パッチ適用の結果。成功なら適用後テキスト、失敗なら理由を持つ */
 export type PatchApplyResult = { ok: true; text: string } | { ok: false; reason: PatchFailureReason };
@@ -85,22 +87,19 @@ interface LineOp {
 	body: string[];
 }
 
+/** 行番号方式のパッチを読んだ結果。読めなければ理由を持つ */
+type LineOpsParseResult = { ok: true; ops: LineOp[] } | { ok: false; reason: PatchFailureReason };
+
 /**
- * 行番号方式のパッチを当てる。
+ * 行番号方式のパッチを指示の列として読む。**当てはめる前の段** — ここでは訳文を見ない。
  *
- *   REPLACE 12-14 / REPLACE 7   … その行を body で置き換える
- *   INSERT AFTER 20             … その行の後ろへ body を差し込む（0 は先頭）
- *   DELETE 30-31                … その行を消す
- *   各ブロックは END で閉じる
- *
- * 前回訳文を1行も写させないので、`anchor-not-found` という失敗の形が存在しない。
- * 代わりに数え間違いが `bad-range` として出る。
+ * 当てはめ器とやり直し判定の両方がこれを通る。別々に読み方を持たせると、
+ * 「やり直しでは見逃したものが当てはめでは落ちる」というちぐはぐが生まれる。
  */
-export function applyLineNumberPatch(baseContent: string, patch: string): PatchApplyResult {
+function parseLineOps(patch: string): LineOpsParseResult {
 	const text = patch.trim();
 	if (!text) return { ok: false, reason: "empty-patch" };
 
-	const lines = baseContent.split("\n");
 	const tokens = text.split("\n");
 	const ops: LineOp[] = [];
 
@@ -134,6 +133,73 @@ export function applyLineNumberPatch(baseContent: string, patch: string): PatchA
 	}
 
 	if (ops.length === 0) return { ok: false, reason: "unrecognized-format" };
+	return { ok: true, ops };
+}
+
+/**
+ * ブロックの本文が、こちらで振った行番号をそのまま書き戻していないか。
+ *
+ * 前回訳文は `12\t本文` の形で渡すので、モデルが指示に反して番号ごと書き写すと
+ * その番号が訳文に残る。**当てはめ器から見れば正しいパッチ**なので、放っておくと
+ * 壊れた訳文が保存される（ADR-260908-05）。
+ *
+ * 判定は**位置まで見て**行う — 「数字とタブで始まる」だけを根拠にすると、
+ * 1列目が数字のタブ区切りデータ（.tsv も訳す対象である）を巻き込む。
+ * 本文の全行が `数字＋タブ` で始まり、その数字が1ずつ増え、しかも**先頭の数字が
+ * その指示の指す場所と一致する**ときだけ residue と見なす。データがたまたま
+ * この3つを同時に満たすことは実質的に無い。
+ */
+function echoesLineNumbers(op: LineOp): boolean {
+	if (op.body.length === 0) return false;
+
+	const numbers: number[] = [];
+	for (const line of op.body) {
+		const numbered = /^(\d+)\t/.exec(line);
+		if (!numbered) return false;
+		numbers.push(Number(numbered[1]));
+	}
+	for (let at = 1; at < numbers.length; at += 1) {
+		if (numbers[at] !== numbers[at - 1] + 1) return false;
+	}
+
+	// 差し込みの本文が受け取る番号は「その行の次」だが、`INSERT AFTER 20` の 20 を
+	// そのまま先頭に付ける書き方も出る。どちらも residue なので両方を見る
+	return op.kind === "insert" ? numbers[0] === op.from || numbers[0] === op.from + 1 : numbers[0] === op.from;
+}
+
+/**
+ * 行番号方式の答えが、渡した行番号を本文に書き戻しているか。
+ *
+ * 当てはめる前（AI の答えを検証する段）で使う。ここで気づけば**同じ形式のまま
+ * もう一度聞き直せる**ので、訳文を据え置いて利用者に投げ返さずに済む。
+ */
+export function patchEchoesLineNumbers(patch: string): boolean {
+	const parsed = parseLineOps(patch);
+	return parsed.ok && parsed.ops.some(echoesLineNumbers);
+}
+
+/**
+ * 行番号方式のパッチを当てる。
+ *
+ *   REPLACE 12-14 / REPLACE 7   … その行を body で置き換える
+ *   INSERT AFTER 20             … その行の後ろへ body を差し込む（0 は先頭）
+ *   DELETE 30-31                … その行を消す
+ *   各ブロックは END で閉じる
+ *
+ * 前回訳文を1行も写させないので、`anchor-not-found` という失敗の形が存在しない。
+ * 代わりに数え間違いが `bad-range` として出る。
+ */
+export function applyLineNumberPatch(baseContent: string, patch: string): PatchApplyResult {
+	const parsed = parseLineOps(patch);
+	if (!parsed.ok) return parsed;
+	const ops = parsed.ops;
+
+	const lines = baseContent.split("\n");
+
+	// **こちらが振った行番号を本文に書き戻していたら当てない。**
+	// 実測（qwen3.6-35B-A3B・n=36）で1件出た壊れ方で、当てはめ自体は通ってしまう
+	// （行番号ごと本文として保存され、出来上がりは壊れているのに成功に見える）。
+	if (ops.some(echoesLineNumbers)) return { ok: false, reason: "line-number-residue" };
 
 	for (const op of ops) {
 		if (!Number.isInteger(op.from) || !Number.isInteger(op.to) || op.to < op.from) {

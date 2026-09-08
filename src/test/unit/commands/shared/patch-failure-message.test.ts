@@ -9,13 +9,21 @@ import * as assert from "node:assert";
 import { describePatchFailure } from "../../../../commands/shared/guidance";
 import type { PatchFailureReason } from "../../../../core/diff/diff-generator";
 
-const ALL_REASONS: PatchFailureReason[] = [
-	"empty-patch",
-	"unrecognized-format",
-	"no-changes",
-	"anchor-not-found",
-	"no-source-diff",
-];
+// **理由を1つ足したらここも足さないとコンパイルが通らない形にする。**
+// 以前はただの配列だったので、行番号方式で理由が3つ増えたときに列挙が置いていかれ、
+// 「全部の理由に説明がある」ことを確かめているつもりで半分しか見ていなかった
+const REASON_SET: Record<PatchFailureReason, true> = {
+	"empty-patch": true,
+	"unrecognized-format": true,
+	"no-changes": true,
+	"anchor-not-found": true,
+	"no-source-diff": true,
+	"unterminated-block": true,
+	"bad-range": true,
+	"overlapping-ops": true,
+	"line-number-residue": true,
+};
+const ALL_REASONS = Object.keys(REASON_SET) as PatchFailureReason[];
 
 suite("パッチ失敗の理由の伝え方", () => {
 	test("どの理由にも空でない説明があること", () => {
@@ -28,6 +36,13 @@ suite("パッチ失敗の理由の伝え方", () => {
 	test("理由ごとに違う説明であること（取り違えた説明が出ない）", () => {
 		const messages = ALL_REASONS.map(describePatchFailure);
 		assert.strictEqual(new Set(messages).size, ALL_REASONS.length, `重複: ${messages.join(" | ")}`);
+	});
+
+	test("行番号を本文へ書き戻したときは、そのことを言うこと", () => {
+		// 当てはめには通るのに出来上がりが壊れる形なので、「形式が違う」と一緒くたにすると
+		// 次の一手（もう一度翻訳を走らせる）が読めない
+		const message = describePatchFailure("line-number-residue");
+		assert.ok(message.includes("line numbers"), `行番号の書き戻しだと分かること: ${message}`);
 	});
 
 	test("旧原文が手元に無い場合は、そのことを言うこと", () => {

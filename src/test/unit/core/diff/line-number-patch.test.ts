@@ -144,6 +144,55 @@ suite("行番号方式のパッチ", () => {
 		});
 	});
 
+	/**
+	 * **当てはめには通るのに、出来上がりが壊れている**という壊れ方（ADR-260908-05）。
+	 * 実測（qwen3.6-35B-A3B/Q4_K_M・n=36）で1件出た。当てはめ器から見れば正しいパッチなので、
+	 * ここで止めないと `12\t...` という行がそのまま訳文として保存される。
+	 */
+	suite("渡した行番号を本文へ書き戻したら当てない", () => {
+		test("置き換えの本文に行番号が残っていたら当てない", () => {
+			const result = applyLineNumberPatch(previous, "REPLACE 4\n4\t- Real-time sync\nEND");
+			assert.deepStrictEqual(result, { ok: false, reason: "line-number-residue" });
+		});
+
+		test("差し込みの本文に、続きの行番号が振られていたら当てない", () => {
+			const result = applyLineNumberPatch(previous, "INSERT AFTER 5\n6\t- Glossary\n7\t- TM\nEND");
+			assert.deepStrictEqual(result, { ok: false, reason: "line-number-residue" });
+		});
+
+		test("差し込みの本文に、指した行の番号がそのまま付いていても当てない", () => {
+			const result = applyLineNumberPatch(previous, "INSERT AFTER 5\n5\t- Glossary\nEND");
+			assert.deepStrictEqual(result, { ok: false, reason: "line-number-residue" });
+		});
+
+		test("複数のうち1つでも書き戻していたら、パッチ全体を当てない", () => {
+			// 一部だけ当てると、訳文が「半分だけ改訂された」状態で保存される
+			const result = applyLineNumberPatch(previous, "REPLACE 3\n- A\nEND\nREPLACE 5\n5\t- C\nEND");
+			assert.deepStrictEqual(result, { ok: false, reason: "line-number-residue" });
+		});
+
+		/**
+		 * ここから下は**巻き込まないこと**の確認。`.tsv` も訳す対象なので、
+		 * 「数字とタブで始まる」だけを根拠にすると本物のデータを弾いてしまう。
+		 */
+		test("1列目が数字のタブ区切りデータは、位置が合わなければ当てる", () => {
+			const table = ["id\tname", "1\tapple", "2\tbanana"].join("\n");
+			const result = applyLineNumberPatch(table, "REPLACE 3\n2\tblueberry\nEND");
+			assert.ok(result.ok, `本物のデータを residue と誤判定した: ${JSON.stringify(result)}`);
+			assert.strictEqual(result.text, ["id\tname", "1\tapple", "2\tblueberry"].join("\n"));
+		});
+
+		test("番号が飛んでいれば書き戻しとは見なさない", () => {
+			const result = applyLineNumberPatch(previous, "REPLACE 3-4\n3\t- A\n9\t- B\nEND");
+			assert.ok(result.ok, `本物のデータを residue と誤判定した: ${JSON.stringify(result)}`);
+		});
+
+		test("一部の行にしか番号が無ければ書き戻しとは見なさない", () => {
+			const result = applyLineNumberPatch(previous, "REPLACE 3-4\n3\t- A\n- B\nEND");
+			assert.ok(result.ok, `本物のデータを residue と誤判定した: ${JSON.stringify(result)}`);
+		});
+	});
+
 	suite("形式は引数で決まり、中身から推測しない", () => {
 		test("行番号のパッチを prefixed として読ませても、当たったことにしない", () => {
 			// **推測させると危ない。** prefixed の当てはめ器はプレフィックスの無い行を

@@ -9,6 +9,7 @@ import {
 	detectJsonInContent,
 	extractJsonFromResponse,
 	sanitizeTermSuggestions,
+	validateRevisionPatchPlainResponse,
 	validateRevisionPatchResponse,
 	validateTranslationResponse,
 } from "../../../../commands/trans/response-validator";
@@ -216,6 +217,46 @@ suite("ResponseValidator", () => {
 			assert.strictEqual(result.valid, false);
 			assert.strictEqual(result.error?.code, "JSON_PARSE_ERROR");
 		});
+	});
+});
+
+/**
+ * 行番号方式の答えを、当てる前に確かめる（ADR-260903-01 / ADR-260908-05）。
+ *
+ * ここで落としたものは**同じ形式のまま聞き直せる**。当てはめの段まで持って行くと
+ * 訳文を据え置いて利用者に投げ返すことになるので、気づける失敗は手前で気づく。
+ */
+suite("行番号方式の答えの検証", () => {
+	test("編集ブロックが1つでもあれば受け入れる", () => {
+		const result = validateRevisionPatchPlainResponse("REPLACE 4\n- Real-time sync\nEND");
+		assert.strictEqual(result.valid, true);
+		assert.strictEqual(result.parsed?.targetPatch, "REPLACE 4\n- Real-time sync\nEND");
+	});
+
+	test("編集ブロックが1つも無ければ、やり直せる失敗として返す", () => {
+		const result = validateRevisionPatchPlainResponse("ここを直しました。");
+		assert.strictEqual(result.valid, false);
+		assert.strictEqual(result.error?.retryable, true);
+	});
+
+	test("JSON で返してきたら、やり直せる失敗として返す", () => {
+		const result = validateRevisionPatchPlainResponse('{"targetPatch": "REPLACE 4\\n- x\\nEND"}');
+		assert.strictEqual(result.valid, false);
+		assert.strictEqual(result.error?.code, "JSON_IN_CONTENT");
+	});
+
+	test("渡した行番号を本文へ書き戻していたら、当てる前に聞き直す", () => {
+		// 当てはめ器から見れば正しいパッチなので、ここで気づかないと
+		// `4\t- Real-time sync` がそのまま訳文として保存される（実測で1件出た形）
+		const result = validateRevisionPatchPlainResponse("REPLACE 4\n4\t- Real-time sync\nEND");
+		assert.strictEqual(result.valid, false);
+		assert.strictEqual(result.error?.retryable, true);
+		assert.match(String(result.error?.message), /line numbers/);
+	});
+
+	test("1列目が数字のタブ区切りデータは巻き込まない", () => {
+		const result = validateRevisionPatchPlainResponse("REPLACE 3\n2\tblueberry\nEND");
+		assert.strictEqual(result.valid, true);
 	});
 });
 
