@@ -36,3 +36,15 @@ export function hasConflictMarkers(content: string): boolean {
 	}
 	return false;
 }
+
+/**
+ * 原稿ではない管理ファイル（`translations.tmx` / `terms.csv`）が合流の途中かどうか。
+ *
+ * 原稿と違って**コードブロックを見ない**。TMX の `<seg>` にも CSV の値にも、コードブロックの
+ * 目印（```）を含む文が入りうるが、そこを数えると正常なファイルを永久に触れなくしてしまう。
+ * 一方でこれらの形式では、行頭に生の `<<<<<<<` が現れるのは合流の結果だけである
+ * （TMX は本文をエスケープして書き、CSV の値は引用符に包まれる）。
+ */
+export function hasConflictMarkersInDataFile(content: string): boolean {
+	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/m.test(content);
+}

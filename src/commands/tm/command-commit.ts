@@ -34,7 +34,6 @@ import {
 	prepareTmCommitUnit,
 } from "./tm-commit-unit-resolution";
 import { LLMTmEntryGenerator } from "./tm-entry-generator";
-import { optimizeTmWeights } from "./command-optimize";
 import { writeTmReport } from "./tm-report-file";
 
 export {
@@ -284,6 +283,12 @@ async function executeTmCommitForUnits(
 	const tmxFilePath = config.getTmFilePath();
 	await ensureMdaitDir();
 	const store = TmxStore.getInstance(tmxFilePath);
+	if (store.isConflicted) {
+		// AI を呼ぶ前に止める。読めなかった TM の上に書くと、解いていない競合ごと消える
+		throw new Error(
+			vscode.l10n.t("The translation memory is in the middle of a merge. Resolve the conflict in {0} first.", "translations.tmx"),
+		);
+	}
 
 	// AIServiceとLLMTmEntryGeneratorの構築
 	const aiService = await new AIServiceBuilder().build();
@@ -379,14 +384,6 @@ async function executeTmCommitForUnits(
 
 	// 永続化
 	store.save(tmxFilePath);
-
-	// 検索重みの再計算は登録の後段で自動実行する（ユーザー操作として見せない。ADR-260802-02）。
-	// 純粋な計算で AI を呼ばず、TM が空なら即座に何もしない
-	try {
-		await optimizeTmWeights(config);
-	} catch (error) {
-		logger.warn("tm.commit", "TM weight recomputation failed (entries are saved)", { ...formatError(error) });
-	}
 
 	logger.info("tm.commit", "TM commit completed", {
 		file: relativePath,

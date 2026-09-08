@@ -3,6 +3,7 @@
  * @description 用語集に新しい用語を追加するコマンド
  * @module commands/term/command-add
  */
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { TermEntry } from "./term-entry";
@@ -68,14 +69,14 @@ export async function addToGlossaryCommand(args?: AddToGlossaryArgs): Promise<vo
 			};
 		}
 
-		// 用語集リポジトリを読み込みまたは作成
-		let termsRepository: TermsRepository;
-		try {
-			termsRepository = await TermsRepository.load(termFilePath);
-		} catch {
-			// 用語集ファイルが存在しない場合は新規作成
-			termsRepository = await TermsRepository.create(termFilePath, config.transPairs);
-		}
+		// 用語集リポジトリを読み込みまたは作成。
+		//
+		// **読めなかったときに作り直してはいけない。** 以前は `catch` で新規作成に倒しており、
+		// 合流の途中（競合マーカーが残っている）用語集を触ると**7語が1語になって成功の
+		// トーストが出た**。読めない理由は「無い」だけではないので、無いときだけ作る。
+		const termsRepository: TermsRepository = fs.existsSync(termFilePath)
+			? await TermsRepository.load(termFilePath)
+			: await TermsRepository.create(termFilePath, config.transPairs);
 
 		// 新しい用語エントリを作成
 		const newEntry = TermEntry.create(termArgs.context || termArgs.source, {

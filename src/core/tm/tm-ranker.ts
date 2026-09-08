@@ -31,14 +31,6 @@ export interface RankOptions {
 	/** TmxStore.getTrigramCache() から渡されるキャッシュ（省略可）。
 	 * キー: "${tuid}:${lang}" — 存在する場合は候補の trigram 再計算をスキップする */
 	trigramCache?: ReadonlyMap<string, ReadonlySet<string>>;
-	/**
-	 * 重みによる補正をかけない（既定は false ＝ かける）。
-	 *
-	 * **重みそのものを計算し直すときに使う。** 重みを入力にして重みを出すと、答えが
-	 * 「何回流したか」で変わってしまい、同じ TM に対して 1 回目と 2 回目で違う値が出た
-	 * （実測: 2 回目まで値が動き、3 回目で落ち着く。translations.tmx が毎回差分になる）。
-	 */
-	ignoreWeight?: boolean;
 }
 
 /** trigram インデックス用の内部候補型 */
@@ -48,11 +40,6 @@ type CandidateWithTrigrams = {
 	querySim: number;
 	finalScore: number;
 };
-
-function applyWeightBoost(similarityScore: number, weight: number): number {
-	const safeWeight = Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 1;
-	return similarityScore * (0.7 + 0.3 * safeWeight);
-}
 
 /**
  * 2つの trigram 集合の Jaccard 係数を計算する。
@@ -86,7 +73,7 @@ function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
  * @returns スコア付き TmEntry の配列（topK 件以内）
  */
 export function rankTmEntries(query: string, candidates: TmEntry[], options: RankOptions): ScoredTmEntry[] {
-	const { topK = 5, lambda = 0.7, lang, ignoreWeight = false } = options;
+	const { topK = 5, lambda = 0.7, lang } = options;
 
 	const queryTrigrams = computeTrigrams(normalizeForTm(query));
 
@@ -100,7 +87,7 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`)
 				?? computeTrigrams(normalizeForTm(text));
 			const querySim = jaccard(queryTrigrams, trigrams);
-			const finalScore = ignoreWeight ? querySim : applyWeightBoost(querySim, entry.weight);
+			const finalScore = querySim;
 			return { entry, trigrams, querySim, finalScore };
 		})
 		.filter((c): c is CandidateWithTrigrams => c !== null);

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
+import { detectDocumentStyle } from "../../core/markdown/document-style";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
 	calculateFrontmatterHash,
@@ -1416,7 +1417,8 @@ export async function syncNew_CoreProc(
 	// 4. ターゲットファイルとして保存
 	const targetContent = markdownParser.stringify(targetDoc, targetIO.provider, targetIO.ctx);
 	fileExplorer.ensureTargetDirectoryExists(targetFile);
-	await writeManagedDocument(targetFile, targetContent);
+	// 新しく作る訳文は原文の改行コードも引き継ぐ（非MDの複製と揃える）
+	await writeManagedDocument(targetFile, targetContent, detectDocumentStyle(sourceContent));
 
 	// 4.5. スナップショット保存（初回sync時も保存）
 	const unitRegistryManager = UnitRegistryManager.getInstance();

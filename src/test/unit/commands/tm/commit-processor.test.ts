@@ -37,7 +37,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: PRIMARY_TUID,
 			primary: PRIMARY_SENTENCE,
-			weight: 1,
 			variants: new Map([
 				["en", { text: PRIMARY_SENTENCE }],
 				["ja", { text: "旧訳文" }],
@@ -46,7 +45,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: "b2c3d4e5",
 			primary: "Another sentence.",
-			weight: 1,
 			variants: new Map([["en", { text: "Another sentence." }]]),
 		});
 
@@ -77,7 +75,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: PRIMARY_TUID,
 			primary: PRIMARY_SENTENCE,
-			weight: 1,
 			variants: new Map([
 				["en", { text: PRIMARY_SENTENCE }],
 				["ja", { text: "現在訳文" }],
@@ -107,7 +104,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: PRIMARY_TUID,
 			primary: PRIMARY_SENTENCE,
-			weight: 1,
 			variants: new Map([
 				["en", { text: PRIMARY_SENTENCE }],
 				["ja", { text: "旧訳文" }],
@@ -144,7 +140,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: PRIMARY_TUID,
 			primary: PRIMARY_SENTENCE,
-			weight: 1,
 			variants: new Map([
 				["en", { text: PRIMARY_SENTENCE }],
 				["ja", { text: "旧訳文" }],
@@ -177,7 +172,6 @@ suite("TmCommitProcessor", () => {
 		store.addEntry({
 			tuid: PRIMARY_TUID,
 			primary: PRIMARY_SENTENCE,
-			weight: 1,
 			variants: new Map([
 				["en", { text: PRIMARY_SENTENCE }],
 				["ja", { text: "旧訳文" }],

@@ -218,4 +218,38 @@ suite("TermsRepositoryCSV", () => {
 			assert.ok(vcIndex > contextIndex2, `${vc}はcontextの後にある`);
 		}
 	});
+
+	test("競合マーカーが残っている用語集は、読まずに失敗すること", async () => {
+		// 以前は読み込みの例外を「ファイルが無い」と読み替えて作り直しており、
+		// 合流の途中の用語集を触ると7語が1語になって成功のトーストが出ていた
+		const conflicted = [
+			"en,ja,context,variants_en",
+			"apple,りんご,fruit,",
+			"<<<<<<< HEAD",
+			"banana,バナナ,fruit,",
+			"=======",
+			"cherry,さくらんぼ,fruit,",
+			">>>>>>> theirs",
+			"",
+		].join("\n");
+		fs.writeFileSync(testFilePath, conflicted, "utf-8");
+
+		await assert.rejects(() => TermsRepositoryCSV.load(testFilePath, testTransPairs));
+	});
+
+	test("合流で同じ語の行が2つ並んでも、読み込みで1つに畳むこと", async () => {
+		// `merge=union` は両方の陣営の行を残すので、2人が同じ語を足すと行が並ぶ
+		const merged = [
+			"en,ja,context,variants_en",
+			"apple,りんご,fruit,",
+			"apple,りんご,fruit,",
+			"banana,バナナ,fruit,",
+			"",
+		].join("\n");
+		fs.writeFileSync(testFilePath, merged, "utf-8");
+
+		const repository = await TermsRepositoryCSV.load(testFilePath, testTransPairs);
+		const entries = await repository.getAllEntries();
+		assert.equal(entries.length, 2, "同じ語が2つ残っている");
+	});
 });

@@ -22,7 +22,6 @@ import { expandTermCommand } from "./commands/term/command-expand";
 import { openTermCommand } from "./commands/term/command-open";
 import { tmCommitDirectoryCommand, tmCommitFileCommand } from "./commands/tm/command-commit";
 import { openTmCommand } from "./commands/tm/command-open";
-import { tmOptimizeCommand } from "./commands/tm/command-optimize";
 import { translateSelectionCommand } from "./commands/trans-selection/trans-selection-command";
 import { StatusTreeTranslationHandler } from "./commands/trans/status-tree-translation-handler";
 import { transCommand, translateFrontmatterCommand } from "./commands/trans/trans-command";
@@ -347,7 +346,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait.tm.commit.directory",
 		(item?: StatusItem) => tmCommitDirectoryCommand(item),
 	);
-	const tmOptimizeDisposable = vscode.commands.registerCommand("mdait.tm.optimize", tmOptimizeCommand);
 
 	// AI Review commands
 	const aiReviewFileDisposable = vscode.commands.registerCommand("mdait.aiReview.file", (item?: StatusItem) =>
@@ -810,7 +808,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToTargetFileDisposable,
 		tmCommitFileDisposable,
 		tmCommitDirectoryDisposable,
-		tmOptimizeDisposable,
 		aiReviewFileDisposable,
 		aiReviewDirectoryDisposable,
 		adoptDisposable,

@@ -171,22 +171,21 @@ interface TermInput {
 
 ### 5. TM Tool (`mdait_tm`)
 
-**機能**: 翻訳メモリのコミット・最適化
+**機能**: 翻訳メモリへのコミット
 
 **入力パラメータ**:
 ```typescript
 interface TmInput {
-  action: "commit" | "optimize";
-  path?: string;  // ターゲットファイル/ディレクトリ。省略時は全transPair（commitのみ）
+  action: "commit";
+  path?: string;  // ターゲットファイル/ディレクトリ。省略時は全transPair
 }
 ```
 
 **実装**:
 - `commit`: ターゲットMDファイルを列挙し `executeTmCommitForFile` を実行
-- `optimize`: `tmOptimizeCommand` を実行（AI不使用・重み再計算）
 - `data`: 新規/更新TU数と**スキップ理由内訳**（`commit-filter.ts` の `classifyTmSkipReason` による need別・from欠落の集計）。エージェントが「なぜコミットされないか」を診断し、`nextActions` が「先に translate / review解消」を案内する
 
-**確認UI**: あり（commit: AI使用＋tmx書換 / optimize: tmx書換）
+**確認UI**: あり（AI使用＋tmx書換）
 
 **実装**: [`src/lm-tools/tm-tool.ts`](../../src/lm-tools/tm-tool.ts)
 
