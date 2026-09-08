@@ -725,6 +725,15 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(shouldRemoveEntryPath("old/a.md", scope), true);
 		});
 
+		test("configのどこにも無くても、実体があれば残す", () => {
+			// 設定と手元のディスクは食い違うことがある（設定の変更がまだ届いていない、
+			// 手元で一時的に対象言語を絞った）。ファイルが在るのに行だけ消すと、本文から
+			// 計算し直せない `from` が失われ、その削除が競合も出さずに他の人へ伝わる
+			const withExists = { ...scope, fileExists: (p: string) => p === "content/de/a.md" };
+			assert.strictEqual(shouldRemoveEntryPath("content/de/a.md", withExists), false);
+			assert.strictEqual(shouldRemoveEntryPath("old/a.md", withExists), true);
+		});
+
 		test("configにはあるが今回走査していない行は残す", () => {
 			assert.strictEqual(shouldRemoveEntryPath("content/fr/a.md", scope), false);
 		});
@@ -968,7 +977,7 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(fs.existsSync(filePath), true);
 	});
 
-	test("ファイルごとのブロックが、空行と見出しで挟まれること", () => {
+	test("ファイルごとのブロックが空行と見出しで挟まれ、行の1つ手前に目印が付くこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
 		store.setEntry({ path: "d/a.md", kind: "unit" as const, seat: seat(0), level: 1, titleHash: "h", hash: "a0", from: "f", need: "" });
@@ -979,17 +988,21 @@ suite("UnitStateStore", () => {
 		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
 		const rowIndex = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix));
 
-		// 各ブロックの直前は「空行 → # <path> → 空行」の3行
+		// 各ブロックの直前は「空行 → # <path> → 空行 → # <行の目印>」の4行
 		for (const filePath of ["d/a.md", "d/b.md"]) {
 			const at = rowIndex(`${filePath}\tunit\t${seat(0)}\t`);
-			assert.ok(at >= 3, `${filePath} のブロックが見つからない`);
-			assert.strictEqual(lines[at - 1], "");
-			assert.strictEqual(lines[at - 2], `# ${filePath}`);
-			assert.strictEqual(lines[at - 3], "");
+			assert.ok(at >= 4, `${filePath} のブロックが見つからない`);
+			assert.strictEqual(lines[at - 1], `# u${seat(0)}`);
+			assert.strictEqual(lines[at - 2], "");
+			assert.strictEqual(lines[at - 3], `# ${filePath}`);
+			assert.strictEqual(lines[at - 4], "");
 		}
-		// 同じファイルの行のあいだには空行を1つ挟む（隣り合う章の変更が競合しないように）
-		assert.strictEqual(rowIndex(`d/a.md\tunit\t${seat(1)}\t`), rowIndex(`d/a.md\tunit\t${seat(0)}\t`) + 2);
-		assert.strictEqual(lines[rowIndex(`d/a.md\tunit\t${seat(0)}\t`) + 1], "");
+		// 同じファイルの行のあいだには「空行 → その行の目印」を挟む
+		// （隣り合う章の変更も、章を挿し込んだ枝との合流も競合しないように）
+		const first = rowIndex(`d/a.md\tunit\t${seat(0)}\t`);
+		assert.strictEqual(rowIndex(`d/a.md\tunit\t${seat(1)}\t`), first + 3);
+		assert.strictEqual(lines[first + 1], "");
+		assert.strictEqual(lines[first + 2], `# u${seat(1)}`);
 
 		// 骨格や見出しが増えても、読み直せば全エントリが戻る
 		UnitStateStore.dispose();
@@ -1033,8 +1046,9 @@ suite("UnitStateStore", () => {
 		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
 		const held = lines.findIndex((l) => l.startsWith("d/a.md\theld\t"));
 		assert.ok(held > 0);
-		assert.strictEqual(lines[held - 1], "");
-		assert.strictEqual(lines[held - 2], "# d/a.md [unseated]");
+		assert.strictEqual(lines[held - 1], "# ha9 f"); // 席に着いていない行の目印は本文の hash と from / need
+		assert.strictEqual(lines[held - 2], "");
+		assert.strictEqual(lines[held - 3], "# d/a.md [unseated]");
 
 		// 読み直せば行はすべて戻る（見出しはローダーが読み飛ばす）
 		UnitStateStore.dispose();

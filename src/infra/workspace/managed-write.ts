@@ -23,10 +23,23 @@
  */
 import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
-import { type DocumentStyle, applyDocumentStyle, detectDocumentStyle } from "../../core/markdown/document-style";
+import {
+	type DocumentStyle,
+	DEFAULT_DOCUMENT_STYLE,
+	applyDocumentStyle,
+	detectDocumentStyle,
+} from "../../core/markdown/document-style";
 
-/** 書き出す内容を、ディスク上の原稿の書式へ揃える。同じなら書かないことも決める */
-function prepare(absPath: string, content: string): { styled: string; skip: boolean; style: DocumentStyle } {
+/**
+ * 書き出す内容を、ディスク上の原稿の書式へ揃える。同じなら書かないことも決める。
+ *
+ * @param fallbackStyle まだファイルが無いときに使う書式。省略すると既定（LF・末尾改行あり）
+ */
+function prepare(
+	absPath: string,
+	content: string,
+	fallbackStyle?: DocumentStyle,
+): { styled: string; skip: boolean; style: DocumentStyle } {
 	let original: string | undefined;
 	try {
 		original = fs.readFileSync(absPath, "utf-8");
@@ -38,7 +51,10 @@ function prepare(absPath: string, content: string): { styled: string; skip: bool
 			throw error;
 		}
 	}
-	const style = detectDocumentStyle(original);
+	// まだ無いファイルは書式を測れない。呼び手が「元にした原稿の書式」を知っているなら
+	// それを使う — 原文が CRLF なのに新しい訳文が LF で生まれると、その訳文はあとで
+	// 手を入れた瞬間に全行書き換えの火種になる。
+	const style = original === undefined ? (fallbackStyle ?? DEFAULT_DOCUMENT_STYLE) : detectDocumentStyle(original);
 	const styled = applyDocumentStyle(content, style);
 	return { styled, skip: original === styled, style };
 }
@@ -46,10 +62,15 @@ function prepare(absPath: string, content: string): { styled: string; skip: bool
 /**
  * 管理下の原稿を書き出す（VS Code のファイルシステム経由）。
  *
+ * @param fallbackStyle まだファイルが無いときに使う書式。新しい訳文を原文の書式で作るときに渡す
  * @returns 実際に書いたら true、内容が同じで見送ったら false
  */
-export async function writeManagedDocument(absPath: string, content: string): Promise<boolean> {
-	const { styled, skip } = prepare(absPath, content);
+export async function writeManagedDocument(
+	absPath: string,
+	content: string,
+	fallbackStyle?: DocumentStyle,
+): Promise<boolean> {
+	const { styled, skip } = prepare(absPath, content, fallbackStyle);
 	if (skip) {
 		return false;
 	}
@@ -62,8 +83,8 @@ export async function writeManagedDocument(absPath: string, content: string): Pr
  *
  * @returns 実際に書いたら true、内容が同じで見送ったら false
  */
-export function writeManagedDocumentSync(absPath: string, content: string): boolean {
-	const { styled, skip } = prepare(absPath, content);
+export function writeManagedDocumentSync(absPath: string, content: string, fallbackStyle?: DocumentStyle): boolean {
+	const { styled, skip } = prepare(absPath, content, fallbackStyle);
 	if (skip) {
 		return false;
 	}

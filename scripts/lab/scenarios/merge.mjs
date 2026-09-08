@@ -49,14 +49,14 @@ const { ExternalMarkerProvider } = require(path.join(REPO, "out/core/markdown/ma
 const { MdaitMarker } = require(path.join(REPO, "out/core/markdown/mdait-marker.js"));
 const { MdaitUnit } = require(path.join(REPO, "out/core/markdown/mdait-unit.js"));
 
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-merge-"));
+export const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-merge-"));
 
 /* ------------------------------------------------------------------ *
  * 世界（原稿の状態）の作り方
  * ------------------------------------------------------------------ */
 
 /** 記事1本 = path と、その中の章の並び。章は「題」で見分ける（順番が変わっても同じ章） */
-function article(name, chapterTitles, { translated = false } = {}) {
+export function article(name, chapterTitles, { translated = false } = {}) {
 	return {
 		path: `content/en/${name}.md`,
 		units: chapterTitles.map((title, i) => ({
@@ -69,13 +69,13 @@ function article(name, chapterTitles, { translated = false } = {}) {
 	};
 }
 
-function world(articles) {
+export function world(articles) {
 	return articles.map((a) => ({ path: a.path, units: a.units.map((u) => ({ ...u })) }));
 }
 
-const clone = (w) => world(w);
+export const clone = (w) => world(w);
 
-const findArticle = (w, name) => {
+export const findArticle = (w, name) => {
 	const found = w.find((a) => a.path === `content/en/${name}.md`);
 	if (!found) throw new Error(`記事が見つかりません: ${name}`);
 	return found;
@@ -83,7 +83,7 @@ const findArticle = (w, name) => {
 
 /* --- 編集の部品（枝の上で起きること） --- */
 
-const addArticle = (name, titles) => (w) => {
+export const addArticle = (name, titles) => (w) => {
 	w.push(article(name, titles));
 	w.sort((a, b) => a.path.localeCompare(b.path));
 	return w;
@@ -96,14 +96,14 @@ const chapterIndex = (a, title) => {
 };
 
 /** 章は題で指す。枝の上で順番が変わっても同じ章を指し続けるため（index では追えない） */
-const insertChapter = (name, beforeTitle, title) => (w) => {
+export const insertChapter = (name, beforeTitle, title) => (w) => {
 	const a = findArticle(w, name);
 	const at = beforeTitle === null ? a.units.length : chapterIndex(a, beforeTitle);
 	a.units.splice(at, 0, { title, level: 2, body: `${title} の本文`, from: "", need: "translate" });
 	return w;
 };
 
-const editChapter = (name, title) => (w) => {
+export const editChapter = (name, title) => (w) => {
 	const a = findArticle(w, name);
 	const unit = a.units[chapterIndex(a, title)];
 	unit.body = `${unit.body}（書き手が直した）`;
@@ -111,7 +111,7 @@ const editChapter = (name, title) => (w) => {
 	return w;
 };
 
-const translateChapter = (name, title) => (w) => {
+export const translateChapter = (name, title) => (w) => {
 	const a = findArticle(w, name);
 	const unit = a.units[chapterIndex(a, title)];
 	unit.from = calculateHash(unit.body);
@@ -119,27 +119,27 @@ const translateChapter = (name, title) => (w) => {
 	return w;
 };
 
-const deleteChapter = (name, title) => (w) => {
+export const deleteChapter = (name, title) => (w) => {
 	const a = findArticle(w, name);
 	a.units.splice(chapterIndex(a, title), 1);
 	return w;
 };
 
-const deleteArticle = (name) => (w) => w.filter((a) => a.path !== `content/en/${name}.md`);
+export const deleteArticle = (name) => (w) => w.filter((a) => a.path !== `content/en/${name}.md`);
 
-const renameArticle = (name, to) => (w) => {
+export const renameArticle = (name, to) => (w) => {
 	findArticle(w, name).path = `content/en/${to}.md`;
 	w.sort((a, b) => a.path.localeCompare(b.path));
 	return w;
 };
 
-const apply = (w, ...edits) => edits.reduce((acc, edit) => edit(acc) ?? acc, clone(w));
+export const apply = (w, ...edits) => edits.reduce((acc, edit) => edit(acc) ?? acc, clone(w));
 
 /* ------------------------------------------------------------------ *
  * 製品コードを通した書き出し・読み込み
  * ------------------------------------------------------------------ */
 
-function toEntries(w) {
+export function toEntries(w) {
 	const entries = [];
 	for (const a of w) {
 		a.units.forEach((u) => {
@@ -157,7 +157,7 @@ function toEntries(w) {
 }
 
 let dirSeq = 0;
-function freshMdaitDir() {
+export function freshMdaitDir() {
 	const dir = path.join(TMP, `d${dirSeq++}`);
 	fs.mkdirSync(dir, { recursive: true });
 	return dir;
@@ -174,7 +174,7 @@ function freshMdaitDir() {
  * @param w いまの世界（枝の上での原稿の状態）
  * @param prior 合流元の `unit-state` のバイト列（新規なら空文字）
  */
-function stateOf(w, prior) {
+export function stateOf(w, prior) {
 	const dir = freshMdaitDir();
 	const filePath = path.join(dir, "unit-state");
 	if (prior) fs.writeFileSync(filePath, prior, "utf-8");
@@ -210,7 +210,7 @@ function stateOf(w, prior) {
 }
 
 /** 合流のあとのバイト列を、製品の `load()` が読むとおりに読む */
-function loadState(content) {
+export function loadState(content) {
 	const dir = freshMdaitDir();
 	fs.writeFileSync(path.join(dir, "unit-state"), content, "utf-8");
 	UnitStateStore.dispose();
@@ -225,7 +225,7 @@ function loadState(content) {
  * 3通りの合流
  * ------------------------------------------------------------------ */
 
-function writeTriplet(base, mine, theirs) {
+export function writeTriplet(base, mine, theirs) {
 	const dir = freshMdaitDir();
 	const files = {
 		base: path.join(dir, "base"),
@@ -252,13 +252,13 @@ function runMerge(argv, files, { stdoutIsResult }) {
 	}
 }
 
-const MERGERS = {
+export const MERGERS = {
 	git: (files) => runMerge(["git", "merge-file", "-p", "--diff3"], files, { stdoutIsResult: true }),
 	diff3: (files) => runMerge(["diff3", "-m"], files, { stdoutIsResult: true }),
 	union: (files) => runMerge(["git", "merge-file", "-p", "--union"], files, { stdoutIsResult: true }),
 };
 
-const countConflicts = (text) => (text.match(/^<{7}/gm) ?? []).length;
+export const countConflicts = (text) => (text.match(/^<{7}/gm) ?? []).length;
 
 /* ------------------------------------------------------------------ *
  * 「あったはずの状態」との突き合わせ
@@ -272,7 +272,7 @@ const countConflicts = (text) => (text.match(/^<{7}/gm) ?? []).length;
 const identity = (e) => `${e.path}\t${e.titleHash}`;
 const meaning = (e) => `${e.hash}\t${e.from}\t${e.need}`;
 
-function compare(expected, actual) {
+export function compare(expected, actual) {
 	const want = new Map();
 	for (const e of toEntries(expected)) want.set(identity(e), meaning(e));
 
@@ -305,7 +305,7 @@ function compare(expected, actual) {
  * 手順（何を合流させるか）
  * ------------------------------------------------------------------ */
 
-const SMALL = world([
+export const SMALL = world([
 	article("a1", ["記事1", "a1第1章", "a1第2章", "a1第3章"], { translated: true }),
 	article("a2", ["記事2", "a2第1章", "a2第2章", "a2第3章"], { translated: true }),
 	article("a3", ["記事3", "a3第1章", "a3第2章", "a3第3章"], { translated: true }),
@@ -314,24 +314,24 @@ const SMALL = world([
 ]);
 
 /** 非MDファイル（.txt / .csv）は「ファイル＝1ユニット」の1行ブロックになる */
-function flatFile(name) {
+export function flatFile(name) {
 	return {
 		path: `content/en/${name}.txt`,
 		units: [{ title: "", level: 0, body: `${name} の中身`, from: calculateHash(`${name} の中身`), need: "" }],
 	};
 }
 
-const FLAT = world(Array.from({ length: 12 }, (_, i) => flatFile(`t${String(i + 1).padStart(2, "0")}`)));
+export const FLAT = world(Array.from({ length: 12 }, (_, i) => flatFile(`t${String(i + 1).padStart(2, "0")}`)));
 
-const addFlat = (name) => (w) => {
+export const addFlat = (name) => (w) => {
 	w.push(flatFile(name));
 	w.sort((a, b) => a.path.localeCompare(b.path));
 	return w;
 };
 
-const deleteFlat = (name) => (w) => w.filter((a) => a.path !== `content/en/${name}.txt`);
+export const deleteFlat = (name) => (w) => w.filter((a) => a.path !== `content/en/${name}.txt`);
 
-const editFlat = (name) => (w) => {
+export const editFlat = (name) => (w) => {
 	const a = w.find((x) => x.path === `content/en/${name}.txt`);
 	if (!a) throw new Error(`ファイルが見つかりません: ${name}`);
 	a.units[0].body = `${a.units[0].body}（直した）`;
@@ -339,7 +339,7 @@ const editFlat = (name) => (w) => {
 	return w;
 };
 
-const BIG = world(
+export const BIG = world(
 	Array.from({ length: 20 }, (_, i) =>
 		article(`b${String(i + 1).padStart(2, "0")}`, [`b${i}導入`, `b${i}第1章`, `b${i}第2章`, `b${i}第3章`, `b${i}第4章`], {
 			translated: true,
@@ -370,7 +370,7 @@ const SCENARIOS = [
 	{ id: "S16", name: "20記事: 両方が8本ずつ追加（重い日）", base: BIG, a: Array.from({ length: 8 }, (_, i) => addArticle(`e${i}`, [`新e${i}`, `新e${i}章`])), b: Array.from({ length: 8 }, (_, i) => addArticle(`f${i}`, [`新f${i}`, `新f${i}章`])) },
 ];
 
-function runScenario(scenario) {
+export function runScenario(scenario) {
 	const base = scenario.base;
 	const mine = apply(base, ...scenario.a);
 	const theirs = apply(base, ...scenario.b);
@@ -455,12 +455,12 @@ function runRegistry(trials, { baseCount = 2000, addCount = 30 } = {}) {
  * 出力
  * ------------------------------------------------------------------ */
 
-function pad(text, width) {
+export function pad(text, width) {
 	const w = [...text].reduce((n, c) => n + (/[^\x00-\x7F]/.test(c) ? 2 : 1), 0);
 	return text + " ".repeat(Math.max(0, width - w));
 }
 
-function report(results, registry) {
+export function report(results, registry) {
 	console.log("\n合流のあとに何が残るか（競合 / 消失 / 増殖）");
 	console.log("  競合 = 人が手で解く箇所の数、消失 = あったはずの状態が消えた行、増殖 = 余計に生えた行\n");
 	console.log(`  ${pad("", 4)}${pad("手順", 44)}${pad("git", 16)}${pad("diff3(SVN)", 16)}${pad("union", 16)}`);

@@ -3,7 +3,6 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { executeTmCommitForFile } from "../commands/tm/command-commit";
 import type { TmSkipReasonBreakdown } from "../commands/tm/commit-filter";
-import { tmOptimizeCommand } from "../commands/tm/command-optimize";
 import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
 import { AIOnboarding } from "../infra/onboarding/ai-onboarding";
@@ -18,14 +17,14 @@ const logger = Logger.getInstance();
  */
 interface TmInput {
 	/** 実行するアクション */
-	action: "commit" | "optimize";
-	/** 対象スコープ（ファイル/ディレクトリ）。省略時は全ターゲットディレクトリ（commitのみ） */
+	action: "commit";
+	/** 対象スコープ（ファイル/ディレクトリ）。省略時は全ターゲットディレクトリ */
 	path?: string;
 }
 
 /** mdait_tm の data 形式 */
 interface TmData {
-	action: "commit" | "optimize";
+	action: "commit";
 	/** commit: 処理したファイル数 */
 	files?: number;
 	/** commit: 処理したユニット数 */
@@ -40,13 +39,11 @@ interface TmData {
 	errorUnits?: number;
 	/** commit: スキップ理由内訳（なぜコミットされないかの診断用） */
 	skipped?: TmSkipReasonBreakdown;
-	/** optimize: 再重み付けしたTMエントリ数 */
-	entryCount?: number;
 }
 
 /**
- * mdaitの翻訳メモリツール（commit / optimize）
- * GitHub Copilot ChatからTM登録・TM最適化を実行する。
+ * mdaitの翻訳メモリツール（commit）
+ * GitHub Copilot ChatからTM登録を実行する。
  * 出力は共通エンベロープのJSON文字列（docs/design/agent-orchestration.md 参照）
  */
 export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
@@ -59,7 +56,7 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 			const inputPath = options.input.path;
 			logger.info("LanguageModelTool", "TM tool invoked", { action, inputPath });
 
-			if (action !== "commit" && action !== "optimize") {
+			if (action !== "commit") {
 				const message = vscode.l10n.t("Unknown action: {0}", String(action));
 				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
@@ -77,18 +74,6 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 					createErrorEnvelope(message, ToolErrorCode.InternalError, message, [
 						'Set "tm": { "enabled": true } in .mdait/mdait.json, then retry.',
 					]),
-				);
-			}
-
-			if (action === "optimize") {
-				const result = await tmOptimizeCommand();
-				if (!result) {
-					const message = vscode.l10n.t("TM optimize failed.");
-					return toToolResult(createErrorEnvelope(message, ToolErrorCode.InternalError, message));
-				}
-				const summary = vscode.l10n.t("TM optimize completed: {0} entries reweighted.", result.entryCount);
-				return toToolResult(
-					createOkEnvelope(summary, { action, entryCount: result.entryCount } satisfies TmData),
 				);
 			}
 
@@ -216,19 +201,7 @@ export class MdaitTmTool implements vscode.LanguageModelTool<TmInput> {
 		options: vscode.LanguageModelToolInvocationPrepareOptions<TmInput>,
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
-		const { action } = options.input;
 		const scopeLabel = options.input.path ?? vscode.l10n.t("all translation pairs");
-		if (action === "optimize") {
-			return {
-				invocationMessage: vscode.l10n.t("Optimizing translation memory..."),
-				confirmationMessages: {
-					title: vscode.l10n.t("Confirm TM Optimize"),
-					message: vscode.l10n.t(
-						"Recompute TM entry weights from current source content? This rewrites translations.tmx (no AI is used).",
-					),
-				},
-			};
-		}
 		return {
 			invocationMessage: vscode.l10n.t("Committing to translation memory..."),
 			confirmationMessages: {

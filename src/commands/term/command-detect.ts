@@ -4,6 +4,7 @@
  * 原文から重要用語を検出し、context情報と共に用語候補リストを生成
  */
 
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
@@ -164,14 +165,13 @@ export async function detectTerm_CoreProc(
 	// 用語検出サービスを初期化
 	const termDetector = injectedDetector ?? (await createTermDetector());
 
-	// 用語集リポジトリを初期化（既存ファイルがあれば読み込み、なければ作成）
+	// 用語集リポジトリを初期化（既存ファイルがあれば読み込み、なければ作成）。
+	//
+	// **読めなかったときに作り直してはいけない**（`command-add.ts` と同じ理由）。
 	const termsPath = config.getTermsFilePath();
-	let termsRepository: TermsRepository;
-	try {
-		termsRepository = await TermsRepository.load(termsPath);
-	} catch {
-		termsRepository = await TermsRepository.create(termsPath, config.transPairs);
-	}
+	const termsRepository: TermsRepository = fs.existsSync(termsPath)
+		? await TermsRepository.load(termsPath)
+		: await TermsRepository.create(termsPath, config.transPairs);
 
 	// 既存用語を読み込み
 	let existingTerms = await termsRepository.getAllEntries();

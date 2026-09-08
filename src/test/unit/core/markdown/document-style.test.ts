@@ -21,8 +21,18 @@ suite("原稿の書式のくせを測る（detectDocumentStyle）", () => {
 		});
 	});
 
-	test("混在した原稿は CRLF に倒すこと（LF に倒すと全行書き換えになる）", () => {
+	test("混在した原稿は多数派に倒すこと（少数派へ倒すと全行書き換えになる）", () => {
 		assert.strictEqual(detectDocumentStyle("a\r\nb\nc\r\n").eol, "\r\n");
+	});
+
+	test("LF が多数の原稿に CRLF が1行混ざっても LF のままであること", () => {
+		// Windows のエディタや貼り付けで1行だけ CRLF になることがある。ここで CRLF に
+		// 倒すと、次の sync がファイル全体を書き換えて他人のどの編集ともぶつかる
+		assert.strictEqual(detectDocumentStyle("a\nb\r\nc\nd\ne\n").eol, "\n");
+	});
+
+	test("同数なら LF を採ること（新しく作るファイルと同じ側）", () => {
+		assert.strictEqual(detectDocumentStyle("a\r\nb\n").eol, "\n");
 	});
 
 	test("末尾に改行が無いことを覚えること", () => {

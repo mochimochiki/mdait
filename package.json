@@ -227,12 +227,6 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.tm.optimize",
-        "title": "%mdait.tm.optimize.title%",
-        "icon": "$(sparkle)",
-        "category": "mdait"
-      },
-      {
         "command": "mdait.aiReview.file",
         "title": "%mdait.aiReview.file.title%",
         "icon": "$(verified)",
@@ -409,10 +403,6 @@
         },
         {
           "command": "mdait.markers.embed",
-          "when": "false"
-        },
-        {
-          "command": "mdait.tm.optimize",
           "when": "false"
         }
       ],
@@ -777,7 +767,7 @@
         "name": "mdait_tm",
         "displayName": "mdait: Translation Memory",
         "toolReferenceName": "mdaitTm",
-        "modelDescription": "Manage the mdait translation memory (translations.tmx). action:\"commit\" registers sentence pairs from translated units (units with a from link and no need flag) using AI sentence alignment; units that still have need flags are skipped and reported in data.skipped with reasons, so resolve translation/review first. action:\"optimize\" recomputes TM entry weights from current source content (no AI). Pass an optional path (target file or directory) to scope a commit; omit it to commit all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains new/updated entry counts and the skip-reason breakdown. Idempotent: re-running commit on an unchanged workspace reports zero new entries.",
+        "modelDescription": "Manage the mdait translation memory (translations.tmx). action:\"commit\" registers sentence pairs from translated units (units with a from link and no need flag) using AI sentence alignment; units that still have need flags are skipped and reported in data.skipped with reasons, so resolve translation/review first. Pass an optional path (target file or directory) to scope a commit; omit it to commit all translation pairs. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains new/updated entry counts and the skip-reason breakdown. Idempotent: re-running commit on an unchanged workspace reports zero new entries.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -794,14 +784,13 @@
             "action": {
               "type": "string",
               "enum": [
-                "commit",
-                "optimize"
+                "commit"
               ],
-              "description": "\"commit\": register translated units into the TM. \"optimize\": recompute TM entry weights."
+              "description": "\"commit\": register translated units into the TM."
             },
             "path": {
               "type": "string",
-              "description": "Optional target file or directory to scope a commit. Omit to process all translation pairs. Ignored for optimize."
+              "description": "Optional target file or directory to scope a commit. Omit to process all translation pairs."
             }
           }
         }

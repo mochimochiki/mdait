@@ -69,6 +69,7 @@ graph TD
 | プロンプト | プロンプトID一覧・変数・カスタマイズ | [prompt.md](design/prompt.md) |
 | ユーティリティ | FileExplorer・Logger使用方針（infra/配下） | [utils.md](design/utils.md) |
 | テスト | テスト戦略・実行方法 | [test.md](design/test.md) |
+| 合流の頑健性 | 複数人で編集して合流させたときに競合・消失が起きる経路と、その実測 | [merge-resilience.md](design/merge-resilience.md) |
 
 ### リポジトリ構成
 
