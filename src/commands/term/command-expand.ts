@@ -4,6 +4,7 @@
  * 検出済み用語を対象言語に展開する
  */
 
+import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュールのimportでは`node:`を使用
 import * as vscode from "vscode";
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
@@ -20,6 +21,7 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { isCancellationError } from "../shared/cancellation";
+import { describeUnusableBatches } from "../shared/guidance";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { type TermExpander, type TermExpansionContext, createTermExpander } from "./term-expander";
@@ -88,13 +90,20 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 					!token.isCancellationRequested &&
 					(result.expanded > 0 || result.remaining > 0)
 				) {
-					vscode.window.showInformationMessage(
-						vscode.l10n.t(
-							"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
-							result.expanded,
-							result.remaining,
-						),
+					// 「訳語が付かなかった」と「AI の答えが使えなかった」を同じ文で終わらせない。
+					// 件数だけを出していたころは、壊れた答えしか受けていない回も
+					// 「0 件展開しました」と読めていた（実測: 意地悪シナリオ R7-N8）
+					const unusable = describeUnusableBatches(result);
+					const body = vscode.l10n.t(
+						"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
+						result.expanded,
+						result.remaining,
 					);
+					if (unusable) {
+						vscode.window.showWarningMessage(`${body} ${unusable}`);
+					} else {
+						vscode.window.showInformationMessage(body);
+					}
 				}
 			} catch (error) {
 				// ユーザーのキャンセルはエラーではない（解決済みの部分結果は CoreProc 内で保存済み）。
@@ -160,14 +169,16 @@ export async function expandTerm_CoreProc(
 
 	// termsRepositoryの読み込み
 	const termsPath = config.getTermsFilePath();
-	let termsRepository: TermsRepository;
-	try {
-		termsRepository = await TermsRepository.load(termsPath);
-	} catch {
+	// **読めなかったときに「無い」と言い換えてはいけない。** 以前は `catch` で
+	// 「用語集がありません。先に用語検出を実行してください」に倒しており、合流の途中で
+	// 競合マーカーが残っている用語集でも同じ文が出た（読めないのに検出をやり直させる）。
+	// 無いときだけその案内を出し、読めなかった理由はそのまま上へ返す（ADR-260908-02）。
+	if (!fs.existsSync(termsPath)) {
 		throw new Error(
 			vscode.l10n.t("Terms file not found. Please run term detection first."),
 		);
 	}
+	const termsRepository: TermsRepository = await TermsRepository.load(termsPath);
 
 	// 全用語を取得し未展開用語を抽出
 	const allTerms = await termsRepository.getAllEntries();

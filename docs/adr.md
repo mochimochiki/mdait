@@ -16,11 +16,11 @@
 
 **背景** : 用語を拾う・訳語を埋める処理は、AI の答えを読めなかったとき空の配列（空の対応表）を返していた。そのため「用語が1つも無かった」と「AI の答えが使えなかった」が同じ顔で終わり、利用者には「用語集を更新しました: 新しい用語 0 件、訳語 0 件」としか出ない。次の一手が原稿を見ることなのか設定を見ることなのか、手掛かりが消えていた（実測: 意地悪シナリオ R6-N5 / N7 / N8）。
 
-**決定** : (1) `term-detector.ts` / `term-expander.ts` の解析は、読めない答え・形の合わない答え・空の答えを `UnusableAIResponseError` として断ち切る。**空の配列（空のオブジェクト）だけが正しい0件**。(2) `detectTerm_CoreProc` は件数ではなく結果（`TermDetectionResult`）を返し、使えなかった回数を持つ。`TermExpandResult` も同じ形を持つ。(3) 完了通知は `describeUnusableBatches`（`commands/shared/guidance.ts`）の一文を必ず足す。0件が正常な回は情報、使えなかった回があれば警告。
+**決定** : (1) `term-detector.ts` / `term-expander.ts` の解析は、読めない答え・形の合わない答え・空の答えを `UnusableAIResponseError` として断ち切る。**空の配列（空のオブジェクト）だけが正しい0件**。(2) `detectTerm_CoreProc` は件数ではなく結果（`TermDetectionResult`）を返し、使えなかった回数を持つ。`TermExpandResult` も同じ形を持つ。(3) 完了通知は `describeUnusableBatches`（`commands/shared/guidance.ts`）の一文を必ず足す。0件が正常な回は情報、使えなかった回があれば警告。`用語検出` `用語の訳語を埋める` `用語集の更新` の3つとも同じ形にする。
 
 **理由** : 翻訳では既に `UnusableAIResponseError` で同じ区別を付けている（ADR の系譜）。用語だけが「0件の成功」に丸めていた。全部の回が使えなかったときは以前からエラーになるが、**一部だけ使えなかった回**は成功した件数しか出ず、静かに落ちていた。実測: `lab resilience --only R6` が `INFO=4` → **`FAIL=0 INFO=0 OK=28`**。
 
-**備考** : 実験場の R6 は、登録コマンドが引数にパスを取らないため lab の身代わり（`hosts/headless.mjs`）が中核処理を直に呼んでいる。**身代わりには通知の層が無い**ので「通知が1本も出なかった」の INFO は道具側の限界だった。返り値の `unusableBatches` を見る判定（`reportsInResult`）に替えてある。TM 登録（`tm-entry-generator.ts`）の解析も同じ形で0件に丸めているが、この段では触っていない。
+**備考** : 実験場の R6 は、登録コマンドが引数にパスを取らないため lab の身代わり（`hosts/headless.mjs`）が中核処理を直に呼んでいる。**身代わりには通知の層が無い**ので「通知が1本も出なかった」の INFO は道具側の限界だった。返り値の `unusableBatches` を見る判定（`reportsInResult`）に替えてある。TM 登録（`tm-entry-generator.ts`）の解析も同じ形で0件に丸めているが、この段では触っていない。`用語の訳語を埋める` は用語集の読み込みも `catch` で「用語集がありません。先に用語検出を実行してください」に倒していた（ADR-260908-02 が `用語を追加` `用語検出` で外したのと同じ形）。無いときだけその案内を出すよう改めた。
 
 ### ADR-260908-02: 合流の途中の用語集・翻訳メモリには触らない
 

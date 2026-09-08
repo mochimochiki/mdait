@@ -13,7 +13,9 @@ import { LangTerm, TermEntry } from "../../../../commands/term/term-entry";
 import type { TermExpander, TermExpansionContext } from "../../../../commands/term/term-expander";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
+import { describeUnusableBatches } from "../../../../commands/shared/guidance";
 import type { TransPair } from "../../../../infra/config/configuration";
+import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 const transPair: TransPair = {
 	sourceDir: "docs/en",
@@ -93,6 +95,41 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 			),
 			/Language model is not available/,
 		);
+	});
+
+	test("答えが使えなかったバッチは数えて返し、成功した分は残すこと", async () => {
+		// 実測（意地悪シナリオ R7-N8）: 形の違う JSON しか受けていないのに
+		// 「0 件展開しました」で終わり、答えが使えなかったことがどこにも出なかった
+		const expander = new ScriptedExpander([
+			async () => {
+				throw new UnusableAIResponseError("invalid-format", "Term expansion response could not be read as JSON");
+			},
+			async () => new Map([["beta", "ベータ"]]),
+		]);
+
+		const result = await extractFromBatches(
+			transPair,
+			[createLargeContext("alpha"), createLargeContext("beta")],
+			undefined,
+			undefined,
+			expander,
+		);
+
+		assert.equal(result.totalBatches, 2);
+		assert.equal(result.unusableBatches, 1, "使えなかったバッチを数えていること");
+		assert.equal(result.unusableReason, "invalid-format", "最初の理由を持ち帰っていること");
+		assert.deepEqual([...result.results], [["beta", "ベータ"]], "成功した分は残すこと");
+	});
+
+	test("使えなかったバッチがあれば、通知に足す一文が組めること", () => {
+		// 完了通知はこの一文を足して警告として出す（足さないと「0 件展開」としか読めない）
+		const sentence = describeUnusableBatches({
+			totalBatches: 2,
+			unusableBatches: 1,
+			unusableReason: "invalid-format",
+		});
+		assert.ok(sentence.length > 0, "一文が組めること");
+		assert.equal(describeUnusableBatches({ totalBatches: 2, unusableBatches: 0 }), "", "使えた回だけなら足さないこと");
 	});
 
 	test("AI呼び出し中のキャンセル（CancellationError）はエラーにせず、解決済みの部分結果を返すこと", async () => {

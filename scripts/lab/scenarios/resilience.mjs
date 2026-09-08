@@ -547,9 +547,12 @@ const ROUTES = [
 		// 用語は**見本の本文に実際に出てくる語**にすること（出てこない語は
 		// 「その語を含む原文が無い」として対象から外れ、やはり AI を呼ばない）。
 		prepare: async () => {
+			// **mdait が書くのと同じ形（BOM 付き）で置くこと。** BOM を付けずに置くと、
+			// 用語集を保存した回に BOM が足されるだけで「用語集が変わった」と出て、
+			// 壊れた答えから行が書かれた場合と見分けが付かなくなる
 			fs.writeFileSync(
 				termsFile(),
-				"ja,en,context,variants_ja\n段落,,壊れた応答のあとでも、この段落は残っていなければならない。,\n",
+				"\ufeffja,en,context,variants_ja\n段落,,壊れた応答のあとでも、この段落は残っていなければならない。,\n",
 				"utf8",
 			);
 			await reload();
