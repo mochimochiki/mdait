@@ -27,13 +27,24 @@ ROWS = [
 TITLES = ["# 記事2", "## a2第1章", "## a2第2章"]
 
 
+# 行はパスではなくファイルIDで自分を名乗る（ADR-260908-04）。ID とパスの対応を持つのは
+# ブロックの見出し1行だけなので、改名でこの台が書き換えるのもその1行だけになる。
+FILE_ID = "0123456789ab"
+
+
 def state(path, rows):
-    out = ["", f"# {path}", ""]
+    out = [
+        "# mdait unit-state — 翻訳ユニットの状態管理",
+        "# id\tkind\tseat\tlevel\ttitleHash\thash\tfrom\tneed",
+        "",
+        f"# {FILE_ID} {path}",
+        "",
+    ]
     body = []
     for seat, level, th, h, frm, need in rows:
-        body.append(f"{path}\tunit\t{seat}\t{level}\t{th}\t{h}\t{frm}\t{need}")
+        body.append(f"# u{seat}\n{FILE_ID}\tunit\t{seat}\t{level}\t{th}\t{h}\t{frm}\t{need}")
     out.append("\n\n".join(body))
-    out += ["", f"# {path} [unseated]", ""]
+    out += ["", f"# {FILE_ID} [unseated]", ""]
     return "\n".join(out) + "\n"
 
 
@@ -91,11 +102,35 @@ def run(mode, union=True):
         print("改訂した状態(dddd4444)が .md に残ったか:", survived is not None)
     else:
         st = open(f"{d}/.mdait/unit-state").read()
-        print("改訂した状態(dddd4444)が unit-state に残ったか:", "dddd4444" in st)
-        print("行のパスは新しい方に揃ったか:", "a2-renamed.md\tunit" in st)
+        heads = [l for l in st.splitlines() if l.startswith("# ") and ".md" in l]
+        print("改訂した状態(dddd4444)が unit-state に残ったか:", "revise@dddd4444" in st)
+        print("見出しのパス:", heads)
+        print("生きているパスの行が revise@ を持つか:", check_live_row(d))
         print("--- unit-state ---")
         print(st)
     print()
+
+
+def check_live_row(d):
+    """製品の読み取りを通して、**いま実在するパス**の行が revise@ を持つかを見る。
+
+    合流のあとのファイルは人が読んでも判断しづらいので、ストアに読ませて答えさせる。
+    """
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    script = f"""
+const {{ UnitStateStore }} = require({repo!r} + "/out/core/unit-state/unit-state-store.js");
+const fs = require("node:fs");
+const store = UnitStateStore.getInstance();
+store.load({d!r} + "/.mdait");
+const live = fs.readdirSync({d!r} + "/content/en").map((f) => "content/en/" + f);
+const found = live.flatMap((p) => store.getEntriesByPath(p).map((e) => `${{p}} ${{e.seat}} ${{e.hash}} ${{e.need}}`));
+console.log(JSON.stringify(found.filter((l) => l.includes("revise@"))));
+"""
+    probe = os.path.join(d, "probe.cjs")
+    open(probe, "w").write(script)
+    r = sh(f"node {probe}", d, check=False)
+    os.remove(probe)
+    return (r.stdout or r.stderr).strip()
 
 
 os.makedirs(ROOT, exist_ok=True)

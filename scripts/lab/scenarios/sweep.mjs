@@ -272,13 +272,21 @@ function readUnitState() {
  */
 function unitStateRows(relPath) {
 	const rows = [];
-	for (const line of readUnitState().split("\n")) {
+	const content = readUnitState();
+	// 行が名乗るのはファイルIDだけで、パスとの対応は見出し `# <id> <path>` が持つ
+	const byId = new Map();
+	for (const line of content.split("\n")) {
+		const m = /^# ([0-9a-f]{12}) (.+)$/.exec(line);
+		if (m && m[2] !== "[unseated]") byId.set(m[1], m[2]);
+	}
+	for (const line of content.split("\n")) {
 		if (line.trim() === "" || line.startsWith("#")) continue;
 		const cols = line.split("\t");
 		if (cols.length !== 8) continue;
-		if (relPath !== undefined && cols[0] !== relPath) continue;
+		const filePath = byId.get(cols[0]) ?? cols[0];
+		if (relPath !== undefined && filePath !== relPath) continue;
 		rows.push({
-			path: cols[0],
+			path: filePath,
 			kind: cols[1],
 			seat: cols[2],
 			level: Number(cols[3]),

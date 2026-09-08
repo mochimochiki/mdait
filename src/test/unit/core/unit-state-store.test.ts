@@ -30,6 +30,34 @@ function plainEntry(filePath: string, hash: string, from: string, need: string):
 }
 
 /**
+ * 書き出した `unit-state` を読む。
+ *
+ * 行が名乗るのはファイルIDだけなので、見出し `# <id> <path>` から対応を作り、
+ * 行の先頭列をパスへ戻して返す（テストが書きたいのはパスであってIDではない）。
+ */
+function readState(dir: string): { lines: string[]; rows: string[]; idOf: (p: string) => string } {
+	const raw = fs.readFileSync(path.join(dir, "unit-state"), "utf-8").split("\n");
+	const ids = new Map<string, string>();
+	for (const line of raw) {
+		const m = /^# ([0-9a-f]{12}) (.+)$/.exec(line);
+		if (m && m[2] !== "[unseated]") {
+			ids.set(m[2], m[1]);
+		}
+	}
+	const byId = new Map([...ids].map(([filePath, id]) => [id, filePath]));
+	const lines = raw.map((line) => {
+		const head = line.split("\t")[0];
+		const filePath = byId.get(head);
+		return filePath !== undefined && line.includes("\t") ? `${filePath}${line.slice(head.length)}` : line;
+	});
+	return {
+		lines,
+		rows: lines.filter((l) => l.trim() !== "" && !l.startsWith("#")),
+		idOf: (filePath: string) => ids.get(filePath) as string,
+	};
+}
+
+/**
  * 「その席から後ろの、席に着いている行」を集める。書き出し側（detachMarkers）は
  * 「どのユニットにも席を譲らなかった行」を集めて渡すので、集め方はここに置く。
  */
@@ -318,7 +346,9 @@ suite("UnitStateStore", () => {
 		);
 	});
 
-	test("TSVがpath→席の二段でソートされること", () => {
+	test("TSVがファイル→席の二段でソートされること", () => {
+		// ファイルどうしの並びはファイルIDで決まる（同じフォルダ内の改名でブロックを
+		// 動かさないため）ので、ここで見るのは「同じファイルの行が続けて席の順に並ぶ」こと
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
 
@@ -327,12 +357,12 @@ suite("UnitStateStore", () => {
 		store.setEntry(plainEntry("a.md", "5", "6", "translate"));
 		store.save(tempDir);
 
-		const content = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
-		const dataLines = content.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"));
-		assert.strictEqual(dataLines.length, 3);
-		assert.ok(dataLines[0].startsWith(`a.md\tunit\t${seat(0)}\t`));
-		assert.ok(dataLines[1].startsWith(`z.md\tunit\t${seat(0)}\t`));
-		assert.ok(dataLines[2].startsWith(`z.md\tunit\t${seat(1)}\t`));
+		const { rows } = readState(tempDir);
+		assert.strictEqual(rows.length, 3);
+		const zAt = rows.findIndex((l) => l.startsWith("z.md\t"));
+		assert.ok(rows[zAt].startsWith(`z.md\tunit\t${seat(0)}\t`));
+		assert.ok(rows[zAt + 1].startsWith(`z.md\tunit\t${seat(1)}\t`));
+		assert.strictEqual(rows.filter((l) => l.startsWith(`a.md\tunit\t${seat(0)}\t`)).length, 1);
 	});
 
 	test("cleanupOrphansInScopeで走査範囲内の見つからなかったpathの全行が削除されること", () => {
@@ -860,12 +890,9 @@ suite("UnitStateStore", () => {
 			store.dropEntries("ja/a.md", liveSeatsFrom(store, "ja/a.md", seat(1)));
 			store.save(tempDir);
 
-			const dataLines = fs
-				.readFileSync(path.join(tempDir, "unit-state"), "utf-8")
-				.split("\n")
-				.filter((l) => l.trim() !== "" && !l.startsWith("#"));
-			assert.strictEqual(dataLines.length, 1);
-			assert.ok(dataLines[0].startsWith(`ja/a.md\tunit\t${seat(0)}\t`));
+			const { rows } = readState(tempDir);
+			assert.strictEqual(rows.length, 1);
+			assert.ok(rows[0].startsWith(`ja/a.md\tunit\t${seat(0)}\t`));
 		});
 	});
 
@@ -985,16 +1012,16 @@ suite("UnitStateStore", () => {
 		store.setEntry({ path: "d/b.md", kind: "unit" as const, seat: seat(0), level: 1, titleHash: "h", hash: "b0", from: "f", need: "" });
 		store.save(tempDir);
 
-		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const { lines, idOf } = readState(tempDir);
 		const rowIndex = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix));
 
-		// 各ブロックの直前は「空行 → # <path> → 空行 → # <行の目印>」の4行
+		// 各ブロックの直前は「空行 → # <id> <path> → 空行 → # <行の目印>」の4行
 		for (const filePath of ["d/a.md", "d/b.md"]) {
 			const at = rowIndex(`${filePath}\tunit\t${seat(0)}\t`);
 			assert.ok(at >= 4, `${filePath} のブロックが見つからない`);
 			assert.strictEqual(lines[at - 1], `# u${seat(0)}`);
 			assert.strictEqual(lines[at - 2], "");
-			assert.strictEqual(lines[at - 3], `# ${filePath}`);
+			assert.strictEqual(lines[at - 3], `# ${idOf(filePath)} ${filePath}`);
 			assert.strictEqual(lines[at - 4], "");
 		}
 		// 同じファイルの行のあいだには「空行 → その行の目印」を挟む
@@ -1021,10 +1048,10 @@ suite("UnitStateStore", () => {
 		store.setEntry({ path: "d/a.md", kind: "unit" as const, seat: seat(1), level: 2, titleHash: "h", hash: "a1", from: "f", need: "" });
 		store.save(tempDir);
 
-		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const { lines, idOf } = readState(tempDir);
 		const last = lines.findIndex((l) => l.startsWith(`d/a.md\tunit\t${seat(1)}\t`));
 		assert.strictEqual(lines[last + 1], "");
-		assert.strictEqual(lines[last + 2], "# d/a.md [unseated]");
+		assert.strictEqual(lines[last + 2], `# ${idOf("d/a.md")} [unseated]`);
 		assert.strictEqual(lines[last + 3], "");
 	});
 
@@ -1043,12 +1070,12 @@ suite("UnitStateStore", () => {
 		});
 		store.save(tempDir);
 
-		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const { lines, idOf } = readState(tempDir);
 		const held = lines.findIndex((l) => l.startsWith("d/a.md\theld\t"));
 		assert.ok(held > 0);
 		assert.strictEqual(lines[held - 1], "# ha9 f"); // 席に着いていない行の目印は本文の hash と from / need
 		assert.strictEqual(lines[held - 2], "");
-		assert.strictEqual(lines[held - 3], "# d/a.md [unseated]");
+		assert.strictEqual(lines[held - 3], `# ${idOf("d/a.md")} [unseated]`);
 
 		// 読み直せば行はすべて戻る（見出しはローダーが読み飛ばす）
 		UnitStateStore.dispose();
@@ -1058,13 +1085,32 @@ suite("UnitStateStore", () => {
 	});
 
 	test("同じディレクトリの2ファイルが、別々の区画に置かれること（同じ場所への追記を避ける）", () => {
+		// 区画はファイルIDの先頭2桁で決まる。IDは乱数なので、**区画が離れることを確かめるには
+		// IDを決めておく必要がある**。見出し付きの状態ファイルを先に置いて読ませる
 		const store = UnitStateStore.getInstance();
+		fs.writeFileSync(
+			path.join(tempDir, "unit-state"),
+			[
+				"# mdait unit-state",
+				"",
+				"# 000000000001 d/n1.md",
+				"",
+				`# u${seat(0)}`,
+				`000000000001\tunit\t${seat(0)}\t0\t\tx\tf\t`,
+				"",
+				"# ffffffffff01 d/n2.md",
+				"",
+				`# u${seat(0)}`,
+				`ffffffffff01\tunit\t${seat(0)}\t0\t\ty\tf\t`,
+				"",
+			].join("\n"),
+			"utf-8",
+		);
 		store.load(tempDir);
-		store.setEntry(plainEntry("d/n1.md", "x", "f", ""));
-		store.setEntry(plainEntry("d/n2.md", "y", "f", ""));
+		store.setEntry(plainEntry("d/n1.md", "x", "f", "translate")); // 書き直させる
 		store.save(tempDir);
 
-		const lines = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+		const { lines } = readState(tempDir);
 		const between = lines.slice(
 			lines.findIndex((l) => l.startsWith("d/n1.md\t")),
 			lines.findIndex((l) => l.startsWith("d/n2.md\t")),
@@ -1077,43 +1123,195 @@ suite("UnitStateStore", () => {
 	});
 
 	test("行の並べ方が、実行環境のロケールに依らないこと", () => {
-		// `localeCompare` は en-US では `a.md` < `B.md`、符号位置では `B.md` < `a.md` になる。
+		// `localeCompare` は en-US では `a` < `B`、符号位置では `B` < `a` になる。
 		// 並べ方が人によって違うと、中身が同じなのに全行が差分になり、必ず合流でぶつかる。
 		//
-		// 並びはまず区画（ファイル名のハッシュ）で決まるので、比べ方の違いが表に出るのは
-		// **同じ区画に入った2つ**だけである。そういう組を探して、符号位置の順であることを見る。
+		// 行そのものの並びはファイルID（16進）で決まるので比べ方の違いが出ない。
+		// 表に出るのは**ディレクトリの並び**なので、そこを見る。
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
-		const names: string[] = [];
-		for (let i = 0; i < 60; i++) {
-			names.push(`a${i}.md`, `A${i}.md`);
+		const dirs: string[] = [];
+		for (let i = 0; i < 8; i++) {
+			dirs.push(`a${i}`, `A${i}`);
 		}
-		for (const name of names) {
-			store.setEntry(plainEntry(`d/${name}`, `h-${name}`, "f", ""));
+		for (const dir of dirs) {
+			store.setEntry(plainEntry(`d/${dir}/x.md`, `h-${dir}`, "f", ""));
 		}
 		store.save(tempDir);
 
-		const emitted = fs
-			.readFileSync(path.join(tempDir, "unit-state"), "utf-8")
-			.split("\n")
-			.filter((l) => l.trim() !== "" && !l.startsWith("#"))
-			.map((l) => l.split("\t")[0]);
-		assert.strictEqual(emitted.length, names.length);
+		const emitted: string[] = [];
+		for (const row of readState(tempDir).rows) {
+			const dir = row.split("\t")[0].replace(/[^/]+$/, "");
+			if (emitted[emitted.length - 1] !== dir) {
+				emitted.push(dir);
+			}
+		}
+		assert.strictEqual(emitted.length, dirs.length);
 
-		// 区画は「ファイル名のハッシュの先頭2桁 % 64」で決まる（save の bucketOf と同じ規則）。
-		// 同じ区画に入った隣り合わせだけが、パスの比べ方で順番が決まっている
-		const bucketOf = (p: string) =>
-			Number.parseInt(calculateHash(p.slice(p.lastIndexOf("/") + 1), false).substring(0, 2), 16) % 64;
 		let disagreements = 0;
 		for (let i = 1; i < emitted.length; i++) {
 			const [prev, next] = [emitted[i - 1], emitted[i]];
-			if (bucketOf(prev) !== bucketOf(next)) continue;
 			if (prev.localeCompare(next) > 0) {
 				disagreements++;
-				assert.ok(prev < next, `符号位置の順になっていない: ${prev} → ${next}`);
 			}
+			assert.ok(prev < next, `符号位置の順になっていない: ${prev} → ${next}`);
 		}
 		assert.ok(disagreements > 0, "比べ方の違いが出る組が1つも無く、この検査が働いていない");
+	});
+
+	suite("ファイルID（行はパスではなくIDで自分を名乗る）", () => {
+		const rowsOf = (dir: string) =>
+			fs
+				.readFileSync(path.join(dir, "unit-state"), "utf-8")
+				.split("\n")
+				.filter((l) => l.trim() !== "" && !l.startsWith("#"));
+
+		test("改名で書き換わるのは、ID とパスの対応を持つ見出し1行だけであること", () => {
+			// これがこの形式の目的そのものである。行のパス列を書き換えていた頃は、
+			// 改名がそのファイルの全行と領域を重ね、union の合流で `revise@` が
+			// 死んだパスの行に付いていた（ADR-260908-04）
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry({ path: "d/a.md", kind: "unit" as const, seat: seat(0), level: 1, titleHash: "t", hash: "h0", from: "f0", need: "" });
+			store.setEntry({ path: "d/a.md", kind: "unit" as const, seat: seat(1), level: 2, titleHash: "t", hash: "h1", from: "f1", need: "" });
+			store.save(tempDir);
+			const before = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+
+			store.movePath("d/a.md", "d/b.md");
+			store.save(tempDir);
+			const after = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8").split("\n");
+
+			assert.strictEqual(after.length, before.length);
+			const changed = before.map((l, i) => [l, after[i]]).filter(([b, a]) => b !== a);
+			assert.strictEqual(changed.length, 1, `1行だけ変わるはず: ${JSON.stringify(changed)}`);
+			assert.ok(/^# [0-9a-f]{12} d\/b\.md$/.test(changed[0][1]));
+		});
+
+		test("先頭列がパスの古い8列も読み替え、状態が失われないこと", () => {
+			fs.writeFileSync(
+				path.join(tempDir, "unit-state"),
+				[
+					"# mdait unit-state",
+					"",
+					"# d/a.md",
+					"",
+					`d/a.md\tunit\t${seat(0)}\t1\tth\thash0\tfrom0\trevise@old`,
+					`d/a.md\theld\t\t2\tth\thash9\tfrom9\t`,
+					"",
+				].join("\n"),
+				"utf-8",
+			);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			assert.strictEqual(store.getLastParseReport().migrated, 2);
+			assert.strictEqual(store.getUnitEntry("d/a.md", seat(0))?.need, "revise@old");
+			assert.strictEqual(store.getHeldEntry("d/a.md", "hash9")?.from, "from9");
+
+			store.save(tempDir);
+			assert.ok(rowsOf(tempDir).every((l) => /^[0-9a-f]{12}\t/.test(l)), "新しい形で書き戻していない");
+			assert.strictEqual(fs.existsSync(path.join(tempDir, "unit-state.broken")), false, "傷ではないので避難しない");
+		});
+
+		test("同じIDを2つのパスが名乗ったら、行は位置で読み、片方のIDを決定的に振り直すこと", () => {
+			const shared = "0123456789ab";
+			fs.writeFileSync(
+				path.join(tempDir, "unit-state"),
+				[
+					"# mdait unit-state",
+					"",
+					`# ${shared} d/a.md`,
+					"",
+					`${shared}\tunit\t${seat(0)}\t1\tth\thashA\tfromA\t`,
+					"",
+					`# ${shared} d/b.md`,
+					"",
+					`${shared}\tunit\t${seat(0)}\t1\tth\thashB\tfromB\t`,
+					"",
+				].join("\n"),
+				"utf-8",
+			);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			assert.ok(store.getLastParseReport().idCollisions > 0);
+			assert.strictEqual(store.getUnitEntry("d/a.md", seat(0))?.hash, "hashA");
+			assert.strictEqual(store.getUnitEntry("d/b.md", seat(0))?.hash, "hashB");
+
+			store.save(tempDir);
+			const { idOf } = readState(tempDir);
+			assert.strictEqual(idOf("d/a.md"), shared, "小さいほうのパスにIDを残す");
+			assert.notStrictEqual(idOf("d/b.md"), shared);
+			// 振り直しは決定的なので、同じ状況を別々に片付けても同じ ID になる
+			const reassigned = idOf("d/b.md");
+			UnitStateStore.dispose();
+			const other = createTempDir();
+			try {
+				fs.copyFileSync(path.join(tempDir, "unit-state.broken"), path.join(other, "unit-state"));
+				const store2 = UnitStateStore.getInstance();
+				store2.load(other);
+				store2.save(other);
+				assert.strictEqual(readState(other).idOf("d/b.md"), reassigned);
+			} finally {
+				cleanupTempDir(other);
+			}
+		});
+
+		test("改名の途中で読み直されても、連れてきた ID が消えないこと", () => {
+			// ID はパスから作るので忘れても同じ値が出る。改名したファイルだけは別で、
+			// 連れてきた ID（改名前のパスから作った値）は思い出せない
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("d/a.md", "h", "f", ""));
+			store.save(tempDir);
+			const before = readState(tempDir).idOf("d/a.md");
+
+			store.movePath("d/a.md", "d/b.md");
+			store.load(tempDir); // 翻訳や一括変換の最中に sync が割り込む形
+			store.save(tempDir);
+
+			const { idOf, rows } = readState(tempDir);
+			assert.strictEqual(rows.length, 1);
+			assert.ok(rows[0].startsWith("d/b.md\t"));
+			assert.strictEqual(idOf("d/b.md"), before, "改名で ID が作り直されている");
+		});
+
+		test("見出しの無いIDの行は読み飛ばし、原本を横へ写すこと", () => {
+			fs.writeFileSync(
+				path.join(tempDir, "unit-state"),
+				[
+					"# mdait unit-state",
+					"",
+					"# 0123456789ab d/a.md",
+					"",
+					`0123456789ab\tunit\t${seat(0)}\t1\tth\thashA\tfromA\t`,
+					`cafebabe0000\tunit\t${seat(0)}\t1\tth\thashX\tfromX\t`,
+					"",
+				].join("\n"),
+				"utf-8",
+			);
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			assert.strictEqual(store.getLastParseReport().skipped, 1);
+			assert.strictEqual(store.getAllEntries().length, 1);
+			store.save(tempDir);
+			assert.ok(fs.existsSync(path.join(tempDir, "unit-state.broken")));
+		});
+
+		test("読み直しても ID が変わらないこと（＝中身が同じなら差分が出ないこと）", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("d/a.md", "h", "f", ""));
+			store.save(tempDir);
+			const first = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
+
+			UnitStateStore.dispose();
+			const store2 = UnitStateStore.getInstance();
+			store2.load(tempDir);
+			store2.setEntry(plainEntry("d/a.md", "h2", "f", ""));
+			store2.save(tempDir);
+			const second = fs.readFileSync(path.join(tempDir, "unit-state"), "utf-8");
+			assert.strictEqual(readState(tempDir).idOf("d/a.md"), /# ([0-9a-f]{12}) d\/a\.md/.exec(first)?.[1]);
+			assert.ok(second.includes("h2"));
+		});
 	});
 
 	suite("旧形式（7列）の読み替え", () => {
@@ -1164,13 +1362,10 @@ suite("UnitStateStore", () => {
 			store.load(tempDir);
 			store.save(tempDir);
 
-			const dataLines = fs
-				.readFileSync(path.join(tempDir, "unit-state"), "utf-8")
-				.split("\n")
-				.filter((l) => l.trim() !== "" && !l.startsWith("#"));
-			assert.strictEqual(dataLines.length, 1);
-			assert.strictEqual(dataLines[0].split("\t").length, 8);
-			assert.ok(dataLines[0].startsWith("a.md\tunit\t"));
+			const { rows } = readState(tempDir);
+			assert.strictEqual(rows.length, 1);
+			assert.strictEqual(rows[0].split("\t").length, 8);
+			assert.ok(rows[0].startsWith("a.md\tunit\t"));
 			assert.strictEqual(fs.existsSync(path.join(tempDir, "unit-state.broken")), false, "傷ではないので避難しない");
 		});
 

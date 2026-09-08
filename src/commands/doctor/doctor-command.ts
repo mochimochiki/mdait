@@ -115,7 +115,7 @@ function directoryExists(absPath: string): boolean {
  * 実ファイルシステムを走査する DoctorProbe を生成する。
  * 走査結果は相対パス単位でキャッシュし、Markdown 数とマーカー保有数を返す。
  */
-function createFsProbe(baseDir: string): DoctorProbe {
+export function createFsProbe(baseDir: string): DoctorProbe {
 	const cache = new Map<string, { md: number; withMarkers: number }>();
 	const resolveDir = (rel: string): string => (path.isAbsolute(rel) ? rel : path.join(baseDir, rel));
 
@@ -175,11 +175,23 @@ function createFsProbe(baseDir: string): DoctorProbe {
 		try {
 			const text = fs.readFileSync(path.join(baseDir, ".mdait", "unit-state"), "utf8");
 			for (const line of text.split(/\r?\n/)) {
+				// 行はファイルIDで自分を名乗り、**パスを持つのは見出し `# <id> <path>` だけ**である
+				// （ADR-260908-04）。見出しは行のあるファイルにしか書かれないので、
+				// 見出しを数えることがそのまま「unit-state に行を持つファイル」を数えることになる
+				const heading = /^# ([0-9a-f]{12}) (.+)$/.exec(line);
+				if (heading) {
+					if (heading[2] !== "[unseated]") {
+						found.add(heading[2].replace(/\\/g, "/"));
+					}
+					continue;
+				}
 				if (line === "" || line.startsWith("#")) {
 					continue;
 				}
+				// 旧い形（先頭列がパス）の作業場も数える。新形式へ書き戻す前に
+				// 診断を叩かれると「まず Sync」を誤って出すため
 				const filePath = line.split("\t")[0];
-				if (filePath) {
+				if (filePath && !/^[0-9a-f]{12}$/.test(filePath)) {
 					found.add(filePath.replace(/\\/g, "/"));
 				}
 			}
