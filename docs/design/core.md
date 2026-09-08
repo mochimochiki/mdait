@@ -160,7 +160,7 @@ a2b5c7d8 <encoded_content> <encoded_note>
 
 翻訳ユニットの状態を `.mdait/unit-state` で管理します。非Markdownファイル（.txt, .csv等）はファイル内にHTMLコメントマーカーを埋め込めないため、また MD-external モード（マーカー外部化）でも本文にマーカーを残さないため、外部ストアで状態を永続化します。**非MDファイルは「ファイル＝単一ユニット」= MDユニットの N=1 特殊形**として同じストアで扱います。
 
-**保存形式**: TSV（タブ区切り）。`path・order・level・titleHash・hash・from・need` の7カラム。複合キー `(path, order)` でユニットを識別します。非MDファイルは `order=0, level=0, titleHash=""` の1行、MD-external は同一 path に複数 order 行を持ちます。
+**保存形式**: TSV（タブ区切り）。`id・kind・seat・level・titleHash・hash・from・need` の8カラム。`(path, 席のキー)` でユニットを識別します（`path` は行そのものではなく、ブロックの見出しが持ちます — 次項）。`kind` は行の種別で `unit`（いまの本文に対応する行）・`held`（消えた章の状態を預かる行）・`front`（frontmatter マーカーの行）の3つ。非MDファイルは `kind=unit, level=0, titleHash=""` の1行、MD-external は同一 path に複数の `unit` 行を持ちます。
 
 **行はパスではなくファイルIDで自分を名乗る**（ADR-260908-03）: 行の先頭列は12桁16進のファイルIDで、ID とパスの対応を持つのは**ブロックの見出し `# <id> <path>` の1行だけ**です。だから原文を改名しても、書き換わるのはその1行で済みます（かつては行のパス列を全部書き換えており、同じファイルへのどんな変更とも領域が重なって、`merge=union` の合流で `revise@` が死んだパスの行に付いていました）。ID は「そのパスの行を初めて書くとき」に `sha1(パス)` の先頭48ビットで作り、以後は書かれた値を読んで使い回します（作り直さないので改名で変わりません）。
 
