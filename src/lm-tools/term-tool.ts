@@ -115,7 +115,8 @@ export class MdaitTermTool implements vscode.LanguageModelTool<TermInput> {
 				if (action === "detect") {
 					const collector = new UnitPairCollector();
 					const collection = await collector.collectFromFiles(scope.sourceFiles, scope.pair, token);
-					const entries = await detectTerm_CoreProc(collection.pairs, scope.pair, dummyProgress, token);
+					const detected = await detectTerm_CoreProc(collection.pairs, scope.pair, dummyProgress, token);
+					const entries = detected.entries;
 					detectedTerms.push(...entries);
 					pairResults.push({
 						sourceLang: scope.pair.sourceLang,

@@ -176,7 +176,7 @@ export function createFsProbe(baseDir: string): DoctorProbe {
 			const text = fs.readFileSync(path.join(baseDir, ".mdait", "unit-state"), "utf8");
 			for (const line of text.split(/\r?\n/)) {
 				// 行はファイルIDで自分を名乗り、**パスを持つのは見出し `# <id> <path>` だけ**である
-				// （ADR-260908-03）。見出しは行のあるファイルにしか書かれないので、
+				// （ADR-260908-04）。見出しは行のあるファイルにしか書かれないので、
 				// 見出しを数えることがそのまま「unit-state に行を持つファイル」を数えることになる
 				const heading = /^# ([0-9a-f]{12}) (.+)$/.exec(line);
 				if (heading) {

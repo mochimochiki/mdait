@@ -1,7 +1,7 @@
 // 診断（doctor）が `.mdait/unit-state` から「行を持つファイル」を数えるところの単体テスト。
 //
 // 行はファイルIDで自分を名乗り、パスを持つのは見出し `# <id> <path>` だけである
-// （ADR-260908-03）。先頭列をパスとして数えると、external の作業場で常に0件になり、
+// （ADR-260908-04）。先頭列をパスとして数えると、external の作業場で常に0件になり、
 // 「まず Sync してください」を誤って出す。
 
 import { strict as assert } from "node:assert";

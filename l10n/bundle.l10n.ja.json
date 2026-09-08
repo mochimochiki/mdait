@@ -467,6 +467,7 @@
   "The surrounding lines used to find the spot are no longer in the translation. It may have been edited by hand.": "変更する場所を探す目印にしていた前後の行が、訳文に見つかりませんでした。訳文が手で編集されたのかもしれません。",
   "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.": "AI の返事が最後まで届かず途中で切れました。ai.openai.maxTokens を大きくするか、章をもっと小さく分けてください。",
   "The AI returned an empty answer.": "AI の返事が空でした。",
+  "The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.": "AI の答えが {1} 回のうち {0} 回で使えませんでした。その分は飛ばしています。",
   "No translation pair found for: {0}": "{0} に対応する翻訳ペアが見つかりません",
   "Translation cancelled for {0}. {1} unit(s) were kept, and {2} unit(s) were left as they were (the answer could not be used, or it could not be written back). They still need translation.": "{0} の翻訳を中止しました。{1} 件は残しましたが、{2} 件はそのままです（答えが使えなかったか、ファイルに書き戻せませんでした）。まだ翻訳が必要です。",
   "Translation cancelled for {0}. {1} unit(s) translated before stopping were kept.": "{0} の翻訳を中断しました。中断までに訳し終えた {1} 件はそのまま残しています。",

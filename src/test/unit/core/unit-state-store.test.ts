@@ -1169,7 +1169,7 @@ suite("UnitStateStore", () => {
 		test("改名で書き換わるのは、ID とパスの対応を持つ見出し1行だけであること", () => {
 			// これがこの形式の目的そのものである。行のパス列を書き換えていた頃は、
 			// 改名がそのファイルの全行と領域を重ね、union の合流で `revise@` が
-			// 死んだパスの行に付いていた（ADR-260908-03）
+			// 死んだパスの行に付いていた（ADR-260908-04）
 			const store = UnitStateStore.getInstance();
 			store.load(tempDir);
 			store.setEntry({ path: "d/a.md", kind: "unit" as const, seat: seat(0), level: 1, titleHash: "t", hash: "h0", from: "f0", need: "" });
