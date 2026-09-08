@@ -162,37 +162,45 @@ a2b5c7d8 <encoded_content> <encoded_note>
 
 **保存形式**: TSV（タブ区切り）。`path・order・level・titleHash・hash・from・need` の7カラム。複合キー `(path, order)` でユニットを識別します。非MDファイルは `order=0, level=0, titleHash=""` の1行、MD-external は同一 path に複数 order 行を持ちます。
 
-**並べ方と骨格**（ADR-260906-03）: ディレクトリ昇順 → 区画（そのファイル名の hash を 64 で割った余り）→ パス → order。ファイルごとのブロックは「空行・`# <path>`・空行」で挟み、**区画の見出し（`# <dir>/[NN]`）は中身が空でも必ず出します**。どちらも合流のための骨組みです。見出しと空行が挟まっていないと、記事を1本消した枝を合流させたときに**触ってもいない記事の行が競合します**（3方向マージが手掛かりに使う行が隣のブロックへ食い込むため）。区画が無いと、両方の枝が新しい記事を足したときに**同じ挿入位置**へ2つの追加が来て必ず競合します。ローダーは空行と `#` 行を読み飛ばすので、形式そのものは7列のまま変わりません。
+**行はパスではなくファイルIDで自分を名乗る**（ADR-260908-03）: 行の先頭列は12桁16進のファイルIDで、ID とパスの対応を持つのは**ブロックの見出し `# <id> <path>` の1行だけ**です。だから原文を改名しても、書き換わるのはその1行で済みます（かつては行のパス列を全部書き換えており、同じファイルへのどんな変更とも領域が重なって、`merge=union` の合流で `revise@` が死んだパスの行に付いていました）。ID は「そのパスの行を初めて書くとき」に `sha1(パス)` の先頭48ビットで作り、以後は書かれた値を読んで使い回します（作り直さないので改名で変わりません）。
+
+**並べ方と骨格**（ADR-260906-03 / ADR-260908-03）: ディレクトリ昇順 → 区画（ファイルIDの先頭2桁を 64 で割った余り）→ ファイルID → 席のキー。ファイルごとのブロックは「空行・`# <id> <path>`・空行」で挟み、**区画の見出し（`# <dir>/[NN]`）は中身が空でも必ず出します**。どちらも合流のための骨組みです。見出しと空行が挟まっていないと、記事を1本消した枝を合流させたときに**触ってもいない記事の行が競合します**（3方向マージが手掛かりに使う行が隣のブロックへ食い込むため）。区画が無いと、両方の枝が新しい記事を足したときに**同じ挿入位置**へ2つの追加が来て必ず競合します。並びをパスではなく ID で決めるのは、同じフォルダの中で名前を変えただけでブロックが別の場所へ移らないようにするためです。
 
 ```
 # mdait unit-state — 翻訳ユニットの状態管理
-# path	order	level	titleHash	hash	from	need
+# id	kind	seat	level	titleHash	hash	from	need
 # docs/en/[00]
 # docs/en/[01]
 
-# docs/en/data.csv
+# 3f9a2c1d4e5b docs/en/data.csv
 
-docs/en/data.csv	0	0		11223344	55667788	translate
+# u50000000
+3f9a2c1d4e5b	unit	50000000	0		11223344	55667788	translate
+
+# 3f9a2c1d4e5b [unseated]
 
 # docs/en/[02]
 
-# docs/en/guide.md
+# a17c0b93de42 docs/en/guide.md
 
-docs/en/guide.md	0	1	aa11bb22	a1b2c3d4	ff03a1b2	
-docs/en/guide.md	1	2	cc33dd44	99887766	55443322	translate
+# u50000000
+a17c0b93de42	unit	50000000	1	aa11bb22	a1b2c3d4	ff03a1b2	
+
+# u50001024
+a17c0b93de42	unit	50001024	2	cc33dd44	99887766	55443322	translate
+
+# a17c0b93de42 [unseated]
 ```
 
-**壊れたファイルの扱い**（ADR-260906-03）: 読み取りは、同じ席（`path` と `order`）に2行来ても**どちらも捨てません**。溢れたほうは保留席（`HELD_ORDER_BASE` 以降）へ逃がし、本文 hash の完全一致でだけ拾われるようにします。席に残すほうは**読んだ順ではなく値で決める**ので、同じ競合を2人が別々に片付けても同じバイト列になります。競合マーカーの行は読み飛ばし、CRLF でも同じに読みます。傷があった回は、上書きする前に原本を `.mdait/unit-state.broken` へ1度だけ写します。
+**壊れたファイルの扱い**（ADR-260906-03 / ADR-260908-03）: 読み取りは、同じ席に2行来ても**どちらも捨てません**。溢れたほうは席から降ろし（`kind` が `held`）、本文 hash の完全一致でだけ拾われるようにします。席に残すほうは**読んだ順ではなく値で決める**ので、同じ競合を2人が別々に片付けても同じバイト列になります。競合マーカーの行は読み飛ばし、CRLF でも同じに読みます。同じファイルIDを2つのパスが名乗ったら、行は直前の見出しの位置で読み、小さいほうのパスに ID を残して他方は `sha1(id + パス)` で決定的に振り直します。傷があった回は、上書きする前に原本を `.mdait/unit-state.broken` へ1度だけ写します。旧い形（7列で `order` が数／先頭列がパスの8列）は読み替えて、新しい形で書き戻します。
 
-（path 境界に空行アンカーを入れてファイルごとのブロックを分離する。下記「git 競合回避」を参照）
-
-**UnitRegistryとの関係**: UnitStateStoreはパス＋順序ベースのメタデータ管理（(path,order)→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。revise時に旧コンテンツが必要なため、sync時にUnitRegistryへ保存します。両者は役割が異なるため統合しません。
+**UnitRegistryとの関係**: UnitStateStoreはファイル＋席ベースのメタデータ管理（(path,seat)→hash/from/need）、UnitRegistryはコンテンツアドレスストア（hash→content）。revise時に旧コンテンツが必要なため、sync時にUnitRegistryへ保存します。両者は役割が異なるため統合しません。
 
 **実装**: [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts)
 
 > 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（非MDの rebuild は `need:review` 付与で安全網）。旧ファイルは手動削除して構いません。
 
-**git 競合回避（ADR-260624-01 / ADR-260906-03〜07 / ADR-260907-04）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `ensureMdaitDir()` が `.mdait/.gitattributes` に `unit-state merge=union` を冪等生成し、(2) `save()` がファイルごとのブロックを「空行・見出し・空行」で挟み、行と行のあいだにも空行を1つ置き、**各行の1つ手前にその行だけの目印**（`# u<席の背番号>`）を書く。空行も `#` の行もローダーが読み飛ばすので読み込みは変わらない。合流で同じ席の行が2つ並んだら、後勝ちで潰さず片方を席から降ろして両方残す（読み取りは1行でも多く拾う）。並べ方ごとの競合数の実測は [merge-resilience.md](merge-resilience.md) にある。
+**git 競合回避（ADR-260624-01 / ADR-260906-03〜07 / ADR-260907-04 / ADR-260908-03）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `ensureMdaitDir()` が `.mdait/.gitattributes` に `unit-state merge=union` を冪等生成し、(2) `save()` がファイルごとのブロックを「空行・見出し・空行」で挟み、行と行のあいだにも空行を1つ置き、**各行の1つ手前にその行だけの目印**（`# u<席の背番号>`）を書き、(3) 行は**パスではなくファイルID**で自分を名乗る（改名で書き換わるのは見出し1行だけ）。空行と `#` の行のうち、ID とパスの対応を持つ見出しだけがローダーの読み取りに効き、あとは読み飛ばす。合流で同じ席の行が2つ並んだら、後勝ちで潰さず片方を席から降ろして両方残す（読み取りは1行でも多く拾う）。並べ方ごとの競合数の実測は [merge-resilience.md](merge-resilience.md) にある。
 
 ### MD-external モードの配線
 
@@ -359,7 +367,7 @@ sequenceDiagram
 | HashCalculator | [`src/core/hash/`](../../src/core/hash/) | テキスト正規化＋CRC32ハッシュ生成 |
 | StatusManager | [`src/core/status/`](../../src/core/status/) | ユニット/ファイル/ディレクトリのステータス集約 |
 | StatusCollectorPort | [`src/core/status/status-collector-port.ts`](../../src/core/status/status-collector-port.ts) | ステータス収集のDI境界インターフェース |
-| UnitStateStore | [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts) | 翻訳ユニットの状態管理（(path,order)→level/titleHash/hash/from/need）。非MD＝N=1特殊形 |
+| UnitStateStore | [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts) | 翻訳ユニットの状態管理（(path,席)→level/titleHash/hash/from/need）。非MD＝N=1特殊形 |
 | planRenameFollow / planEntryMoves | [`src/core/unit-state/rename-plan.ts`](../../src/core/unit-state/rename-plan.ts) | ファイルの移動に訳文と `unit-state` の行を追随させる計画（ADR-260807-01） |
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |

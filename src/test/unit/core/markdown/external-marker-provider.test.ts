@@ -203,9 +203,12 @@ suite("ExternalMarkerProvider", () => {
 		const dataLines = content.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"));
 		assert.strictEqual(dataLines.length, 2);
 		// 席のキーは「二度と動かない背番号」なので値は決め打ちできない。8列で、
-		// パスが同じで、種別が本文で、キーが増える向きに並んでいることを見る
+		// 同じファイルIDを名乗り（対応は見出し `# <id> <path>` が持つ）、種別が本文で、
+		// キーが増える向きに並んでいることを見る
+		const fileId = /^# ([0-9a-f]{12}) (.+)$/m.exec(content);
+		assert.ok(fileId && fileId[2] === TARGET_PATH, "ID とパスの対応を持つ見出しが無い");
 		const columns = dataLines.map((l) => l.split("\t"));
-		assert.ok(columns.every((c) => c.length === 8 && c[0] === TARGET_PATH && c[1] === "unit"));
+		assert.ok(columns.every((c) => c.length === 8 && c[0] === fileId[1] && c[1] === "unit"));
 		assert.ok(columns[0][2] < columns[1][2]);
 	});
 

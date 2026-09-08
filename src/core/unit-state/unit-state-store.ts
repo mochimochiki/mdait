@@ -1,8 +1,8 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
-import { calculateHash } from "../hash/hash-calculator";
 import { assignSeats, isSeatKey } from "./seat-keys";
 
 const logger = Logger.getInstance();
@@ -13,7 +13,7 @@ const UNIT_STATE_FILENAME = "unit-state";
 /** ヘッダーコメント行 */
 const HEADER_LINES = [
 	"# mdait unit-state — 翻訳ユニットの状態管理",
-	"# path\tkind\tseat\tlevel\ttitleHash\thash\tfrom\tneed",
+	"# id\tkind\tseat\tlevel\ttitleHash\thash\tfrom\tneed",
 ];
 
 /** TSVのカラム数 */
@@ -21,6 +21,42 @@ const EXPECTED_COLUMN_COUNT = 8;
 
 /** 旧形式（`path order level titleHash hash from need`）のカラム数 */
 const LEGACY_COLUMN_COUNT = 7;
+
+/**
+ * ファイルIDの桁数（16進）。48ビットあれば、1万ファイルでも衝突は約 2e-7 である。
+ */
+const FILE_ID_LENGTH = 12;
+
+/** ファイルIDの形（12桁の小文字16進） */
+const FILE_ID_PATTERN = /^[0-9a-f]{12}$/;
+
+/**
+ * ブロックの見出し行 `# <id> <path>` と、席に着いていない行の区画 `# <id> [unseated]`。
+ *
+ * 旧形式の見出し（`# content/en/a2.md`）・区画の骨格（`# content/en/[3f]`）・行ごとの
+ * 目印（`# u00001024` / `# h1234abcd …`）は、どれもこの形に当たらない。
+ */
+const FILE_ID_HEADER_PATTERN = /^# ([0-9a-f]{12}) (.+)$/;
+
+/** その文字列がファイルIDの形か */
+function isFileId(value: string): boolean {
+	return FILE_ID_PATTERN.test(value);
+}
+
+/**
+ * 種から決まったファイルIDを作る。**同じ種からは誰が計算しても同じ ID が出る。**
+ *
+ * ID を作るのは「そのパスの行を初めて書くとき」の1度きりで、以後は状態ファイルに
+ * 書かれた値を読んで使い回す。だから**改名しても ID は変わらない**（作り直さない）。
+ *
+ * 乱数にしてはいけない。ID の先頭1バイトがブロックの区画を決めるので、乱数にすると
+ * **2人が別々に新しいファイルを足したときに同じ区画へ入るかどうかが、そのつどの運で
+ * 決まる**。パスから作れば、同じ作業場からは誰が動かしても同じ配置になる。
+ * 2人が同じ名前のファイルを同時に足した回に、ブロックが1つにまとまる利点もある。
+ */
+function derivedFileId(seed: string): string {
+	return crypto.createHash("sha1").update(seed).digest("hex").substring(0, FILE_ID_LENGTH);
+}
 
 /** 読み取りに傷があった回に、上書きの直前で原本を写す先 */
 const SALVAGE_FILENAME = "unit-state.broken";
@@ -66,13 +102,20 @@ export interface UnitStateParseReport {
 	conflictMarkers: number;
 	/** 同じ席に2行以上来たので、席を分けた回数 */
 	duplicates: number;
-	/** 旧形式（7列）から読み替えた行数 */
+	/** 旧い形（7列、または先頭列がパスの8列）から読み替えた行数 */
 	migrated: number;
+	/** 同じファイルIDを2つ以上のパスが名乗った回数 */
+	idCollisions: number;
 }
 
 /** 傷なく読み切れたか */
 export function isCleanParse(report: UnitStateParseReport): boolean {
-	return report.skipped === 0 && report.conflictMarkers === 0 && report.duplicates === 0;
+	return (
+		report.skipped === 0 &&
+		report.conflictMarkers === 0 &&
+		report.duplicates === 0 &&
+		report.idCollisions === 0
+	);
 }
 
 /**
@@ -256,11 +299,39 @@ export class UnitStateStore {
 	 * 書き手にロックを足さずに済む**（ADR-260831-01）。
 	 */
 	private pending: Map<string, Map<string, UnitStateEntry | null>> = new Map();
+	/**
+	 * `path` → ファイルID と、その逆引き。**行はこの ID で自分を名乗る。**
+	 *
+	 * 行にパスを持たせていた頃は、改名するとそのファイルの行が全部書き換わった。同じファイルへの
+	 * どんな変更とも領域が重なるので、`merge=union` では両方の行が残り、`revise@` が
+	 * **もう存在しないパスの行**に付く。次の同期の孤立掃除がその行を消すので、訳し直しの要求は
+	 * 誰にも見られないまま消えた（ADR-260908-03）。ID を挟めば、改名で動くのは見出し1行になる。
+	 *
+	 * 逆引き（`idOwners`）を別に持つのは、ID を1つ作るたびに使用済みを全走査しないためである。
+	 * 走査すると、初回保存でファイル数の2乗に比例する。
+	 */
+	private fileIds: Map<string, string> = new Map();
+	private idOwners: Map<string, string> = new Map();
+	/**
+	 * **まだディスクへ書いていない ID の付け替え**（`movePath` が連れて動かしたぶん）。
+	 *
+	 * ID はパスから決まるので、忘れても同じ値が出る — ただし**改名したファイルだけは別**で、
+	 * 連れてきた ID（改名前のパスから作った値）は思い出せない。`load()` は表と一緒に ID も
+	 * 捨ててディスクから読み直すので、割り込まれるとそのファイルだけ新しい ID になり、
+	 * ブロックが丸ごと書き換わる（`pending` と同じ理由・同じ作法で覚え直す）。
+	 */
+	private pendingFileIds: Map<string, string> = new Map();
 	private dirty = false;
 	private loaded = false;
 	private mdaitDir: string | undefined;
 	/** 直近の読み取りの内訳 */
-	private lastParseReport: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0, migrated: 0 };
+	private lastParseReport: UnitStateParseReport = {
+		skipped: 0,
+		conflictMarkers: 0,
+		duplicates: 0,
+		migrated: 0,
+		idCollisions: 0,
+	};
 	/** 読み取りに傷があったので、次の上書きの前に原本を写す */
 	private needsSalvage = false;
 
@@ -275,6 +346,47 @@ export class UnitStateStore {
 
 	static dispose(): void {
 		UnitStateStore.instance = undefined;
+	}
+
+	/** ファイルIDを覚える（表と逆引きを必ず揃えて動かす） */
+	private setFileId(filePath: string, id: string): void {
+		const previous = this.fileIds.get(filePath);
+		if (previous === id) {
+			return;
+		}
+		if (previous !== undefined) {
+			this.idOwners.delete(previous);
+		}
+		const owner = this.idOwners.get(id);
+		if (owner !== undefined && owner !== filePath) {
+			this.fileIds.delete(owner);
+		}
+		this.fileIds.set(filePath, id);
+		this.idOwners.set(id, filePath);
+	}
+
+	/** ファイルIDを忘れる */
+	private clearFileId(filePath: string): void {
+		const previous = this.fileIds.get(filePath);
+		if (previous === undefined) {
+			return;
+		}
+		this.fileIds.delete(filePath);
+		this.idOwners.delete(previous);
+	}
+
+	/** そのパスのファイルID（無ければ作る） */
+	private ensureFileId(filePath: string): string {
+		const existing = this.fileIds.get(filePath);
+		if (existing !== undefined) {
+			return existing;
+		}
+		let id = derivedFileId(filePath);
+		for (let salt = 1; this.idOwners.has(id); salt++) {
+			id = derivedFileId(`${filePath}\u0000${salt}`);
+		}
+		this.setFileId(filePath, id);
+		return id;
 	}
 
 	/** そのファイルの行（無ければ undefined）。読み取り専用の用途に使う */
@@ -387,7 +499,7 @@ export class UnitStateStore {
 	 * 別に用意されていない。ここで採るべきは「いま書いている最中の変更」のほうである。
 	 */
 	private replayPending(): void {
-		if (this.pending.size === 0) {
+		if (this.pending.size === 0 && this.pendingFileIds.size === 0) {
 			this.dirty = false;
 			return;
 		}
@@ -399,6 +511,9 @@ export class UnitStateStore {
 					this.ensureRows(filePath).set(key, entry);
 				}
 			}
+		}
+		for (const [filePath, id] of this.pendingFileIds) {
+			this.setFileId(filePath, id);
 		}
 		// 当て直した変更はまだディスクに無い。`save()` が書き出すまで dirty のまま
 		this.dirty = true;
@@ -417,6 +532,8 @@ export class UnitStateStore {
 	load(mdaitDir: string): void {
 		this.mdaitDir = mdaitDir;
 		this.byPath.clear();
+		this.fileIds.clear();
+		this.idOwners.clear();
 
 		const filePath = path.join(mdaitDir, UNIT_STATE_FILENAME);
 		if (!fs.existsSync(filePath)) {
@@ -430,14 +547,45 @@ export class UnitStateStore {
 		// `svn:eol-style=native` は取り出すときに CRLF へ変えうる。`\n` だけで切ると
 		// 7列目 `need` の末尾に `\r` が残り、`need !== ""` が全行で真になる
 		const lines = content.split(/\r?\n/);
-		const report: UnitStateParseReport = { skipped: 0, conflictMarkers: 0, duplicates: 0, migrated: 0 };
+		const report: UnitStateParseReport = {
+			skipped: 0,
+			conflictMarkers: 0,
+			duplicates: 0,
+			migrated: 0,
+			idCollisions: 0,
+		};
 		// 旧形式（7列・`order` が数）の行は、そのファイルの分をすべて読んでからでないと
 		// 席のキーへ読み替えられない（並びが分からないと隣が決まらない）ので、いったん貯める
 		const legacy = new Map<string, Array<{ order: number; entry: UnitStateEntry }>>();
 
+		// **見出しを先に全部読む。** 行はファイルIDでしか自分を名乗らないので、
+		// ID とパスの対応（`# <id> <path>`）が揃っていないと1行も置き場所が決まらない。
+		// 合流のあとのファイルには同じ ID の見出しが2つ並ぶこともあるので、パスは集合で持つ
+		const idPaths = new Map<string, Set<string>>();
+		for (const line of lines) {
+			const declared = FILE_ID_HEADER_PATTERN.exec(line);
+			if (!declared || declared[2] === UNSEATED_SECTION_SUFFIX) {
+				continue;
+			}
+			const paths = idPaths.get(declared[1]);
+			if (paths) {
+				paths.add(declared[2]);
+			} else {
+				idPaths.set(declared[1], new Set([declared[2]]));
+			}
+		}
+		// 同じ ID の見出しが2つ以上あるときだけ使う、位置による読み方。
+		// 直前の見出しがそのファイルの持ち主である、という弱い手掛かりだが、
+		// ID がぶつかったときに残っているのはこれしかない
+		let currentPath: string | undefined;
+
 		for (const line of lines) {
 			// 空行・コメント行をスキップ
 			if (line.trim() === "" || line.startsWith("#")) {
+				const declared = FILE_ID_HEADER_PATTERN.exec(line);
+				if (declared && declared[2] !== UNSEATED_SECTION_SUFFIX) {
+					currentPath = declared[2];
+				}
 				continue;
 			}
 
@@ -477,7 +625,34 @@ export class UnitStateStore {
 				continue;
 			}
 
-			const [filePathCol, kindStr, seat, levelStr, titleHash, hash, from, need] = columns;
+			const [head, kindStr, seat, levelStr, titleHash, hash, from, need] = columns;
+			// **先頭列は、いまの形ではファイルID、古い形ではパスである。** 列数では見分けが
+			// 付かない（どちらも8列）ので、**この同じファイルの見出しで宣言された ID か**で決める。
+			// 見出しが1つも無いファイル（＝丸ごと古い形）では、12桁16進のパスを持つ作業場の行を
+			// 落とさないよう、先頭列は常にパスとして読む
+			const declaredPaths = idPaths.get(head);
+			let filePathCol: string;
+			if (declaredPaths) {
+				if (declaredPaths.size === 1) {
+					filePathCol = declaredPaths.values().next().value as string;
+				} else {
+					report.idCollisions++;
+					filePathCol =
+						currentPath !== undefined && declaredPaths.has(currentPath)
+							? currentPath
+							: [...declaredPaths].sort(compareCodePoints)[0];
+				}
+			} else if (isFileId(head) && idPaths.size > 0) {
+				// 見出しが失われた行。パスを復元する手掛かりがどこにも無い
+				report.skipped++;
+				logger.warn("unit-state", "Skipping a row whose file id has no heading", {
+					line: line.substring(0, 100),
+				});
+				continue;
+			} else {
+				report.migrated++;
+				filePathCol = head;
+			}
 			const kind = toKind(kindStr);
 			const level = Number.parseInt(levelStr, 10);
 			if (!kind || Number.isNaN(level)) {
@@ -529,11 +704,57 @@ export class UnitStateStore {
 			});
 		}
 
+		this.adoptFileIds(idPaths, report);
+
 		this.loaded = true;
 		// `replayPending` は保存待ちが無ければ dirty を落とす（＝ディスクと同じ、の意）。
 		// 傷を畳んだ回はディスクと同じではないので、後始末はそのあとに置く
 		this.replayPending();
 		this.afterLoad(report);
+	}
+
+	/**
+	 * 読み終わった見出しから、パスごとのファイルIDを決める。
+	 *
+	 * 合流のあとのファイルでは、対応が1対1でないことがある。どちらも**値で決める** —
+	 * 誰がどの順で合流させても同じバイト列に落ち着かせるためである（`seatPriority` と同じ作法）。
+	 *
+	 * - 1つのパスを2つの ID が名乗る（改名の合流で起きる）… 小さいほうの ID を採る
+	 * - 1つの ID を2つのパスが名乗る（採番の衝突）… 小さいほうのパスに残し、他方は
+	 *   `sha1(id + パス)` で振り直す。乱数で振り直すと、片付けた人ごとに違う ID が出て、
+	 *   それ自体が次の合流の火種になる
+	 */
+	private adoptFileIds(idPaths: Map<string, Set<string>>, report: UnitStateParseReport): void {
+		const claimed = new Map<string, string>();
+		for (const [id, paths] of idPaths) {
+			for (const filePath of paths) {
+				if (!this.byPath.has(filePath)) {
+					continue; // 行が1つも無いパスの見出し。書き戻しでは消える
+				}
+				const current = claimed.get(filePath);
+				if (current === undefined || compareCodePoints(id, current) < 0) {
+					claimed.set(filePath, id);
+				}
+			}
+		}
+		for (const filePath of [...claimed.keys()].sort(compareCodePoints)) {
+			const declared = claimed.get(filePath) as string;
+			let id = declared;
+			if (this.idOwners.has(id)) {
+				report.idCollisions++;
+				logger.warn("unit-state", "Two paths claimed the same file id; reassigning one of them", {
+					id,
+					path: filePath,
+				});
+				let salt = 0;
+				id = derivedFileId(`${declared}\u0000${filePath}`);
+				while (this.idOwners.has(id)) {
+					salt++;
+					id = derivedFileId(`${declared}\u0000${filePath}\u0000${salt}`);
+				}
+			}
+			this.setFileId(filePath, id);
+		}
 	}
 
 	/**
@@ -618,14 +839,32 @@ export class UnitStateStore {
 		const filePath = path.join(mdaitDir, UNIT_STATE_FILENAME);
 
 		const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
-		const bucketOf = (p: string) => (Number.parseInt(calculateHash(p.slice(dirOf(p).length), false).substring(0, 2), 16) % BUCKETS_PER_DIR);
+		// 行が1つも無くなったパスの ID は忘れ、行のあるパスには必ず ID を配る。
+		// 配る順をパスの符号位置に揃えるのは、採番がぶつかったときの振り直しを
+		// **走査順に依らせない**ため（`adoptFileIds` と同じ作法）
+		for (const known of [...this.fileIds.keys()]) {
+			if (!this.byPath.has(known)) {
+				this.clearFileId(known);
+			}
+		}
+		const idOf = new Map<string, string>();
+		for (const p of [...this.byPath.keys()].sort(compareCodePoints)) {
+			idOf.set(p, this.ensureFileId(p));
+		}
+		// **区画も、同じディレクトリの中の並びも、パスではなく ID で決める。**
+		// パスで決めると、同じフォルダの中で名前を変えただけでブロックが別の場所へ移り、
+		// 「改名で動くのは見出し1行」という当てが外れる（ADR-260908-03）。
+		// ID はハッシュなので、先頭の1バイトをそのまま区画に使える
+		const bucketOf = (id: string) => Number.parseInt(id.substring(0, 2), 16) % BUCKETS_PER_DIR;
 		const sortedEntries = [...this.allEntries()].sort((a, b) => {
 			const d = compareCodePoints(dirOf(a.path), dirOf(b.path));
 			if (d !== 0) return d;
-			const ba = bucketOf(a.path);
-			const bb = bucketOf(b.path);
+			const ia = idOf.get(a.path) as string;
+			const ib = idOf.get(b.path) as string;
+			const ba = bucketOf(ia);
+			const bb = bucketOf(ib);
 			if (ba !== bb) return ba < bb ? -1 : 1;
-			const c = compareCodePoints(a.path, b.path);
+			const c = compareCodePoints(ia, ib);
 			return c !== 0 ? c : compareCodePoints(rowOrder(a), rowOrder(b));
 		});
 
@@ -638,9 +877,10 @@ export class UnitStateStore {
 		// 記事を1本消した枝と、別の記事を訳した枝を合わせると、訳した側の行が二重になって
 		// 後勝ちで翻訳前に巻き戻り、消したはずの記事の行も復活した。
 		//
-		// 見出し行はローダーが `#` として読み飛ばすので、**形式は1バイトも変わらない**
-		// （古い版の mdait もそのまま読める）。人が diff を見るときの目印にもなる。
+		// 見出し行は `# <id> <path>` で、**ID とパスの対応を持つのはこの1行だけ**である。
+		// 人が diff を見るときの目印にもなる。
 		let prevPath: string | undefined;
+		let prevId: string | undefined;
 		let prevDir: string | undefined;
 		let bucketCursor = 0;
 		let tailOpened = false;
@@ -663,11 +903,13 @@ export class UnitStateStore {
 			if (prevPath === undefined || tailOpened) {
 				return;
 			}
-			lines.push("", `# ${prevPath} ${UNSEATED_SECTION_SUFFIX}`, "");
+			// **区画の見出しにもパスを書かない。** 書くと、改名で動く行が2つになる
+			lines.push("", `# ${prevId} ${UNSEATED_SECTION_SUFFIX}`, "");
 			tailOpened = true;
 			needBlank = false;
 		};
 		for (const entry of sortedEntries) {
+			const rowId = idOf.get(entry.path) as string;
 			if (entry.path !== prevPath) {
 				openTail();
 				const dir = dirOf(entry.path);
@@ -676,9 +918,11 @@ export class UnitStateStore {
 					bucketCursor = 0;
 					prevDir = dir;
 				}
-				fillBuckets(dir, bucketOf(entry.path) + 1);
-				lines.push("", `# ${entry.path}`, "");
+				fillBuckets(dir, bucketOf(rowId) + 1);
+				// **ID とパスの対応を持つのは、この1行だけ。** 改名で書き換わるのもここだけになる
+				lines.push("", `# ${rowId} ${entry.path}`, "");
 				prevPath = entry.path;
+				prevId = rowId;
 				tailOpened = false;
 				needBlank = false;
 			}
@@ -716,7 +960,7 @@ export class UnitStateStore {
 			// 中身が同じなのに差分になる。
 			lines.push(`# ${entryKey(entry).replace(/\t/g, " ").trimEnd()}`);
 			lines.push(
-				`${entry.path}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
+				`${rowId}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
 			);
 			needBlank = true;
 		}
@@ -730,6 +974,7 @@ export class UnitStateStore {
 		this.dirty = false;
 		// ディスクに載ったので、もう当て直す必要は無い
 		this.pending.clear();
+		this.pendingFileIds.clear();
 	}
 
 	/**
@@ -898,20 +1143,33 @@ export class UnitStateStore {
 		// 取りこぼさないよう、動かす分を先に取り出してから行き先を消す
 		const detached = moving.map(({ from, to }) => {
 			const rows = this.byPath.get(from);
+			// **ファイルIDを連れて動かす。** 連れて行かないと行き先で新しい ID が振られ、
+			// ブロックの全行が書き換わる — 改名を見出し1行の差分に収めるという当てが外れる
+			const id = this.fileIds.get(from);
 			this.dropPath(from);
-			return { to, rows };
+			this.clearFileId(from);
+			this.pendingFileIds.delete(from);
+			return { to, rows, id };
 		});
 		for (const { to } of detached) {
 			this.dropPath(to);
+			this.clearFileId(to);
+			this.pendingFileIds.delete(to);
 		}
 		let moved = 0;
-		for (const { to, rows } of detached) {
+		for (const { to, rows, id } of detached) {
+			if (id !== undefined) {
+				this.setFileId(to, id);
+			}
 			if (!rows) {
 				continue;
 			}
 			for (const entry of rows.values()) {
 				this.putRow({ ...entry, path: to });
 				moved++;
+			}
+			if (id !== undefined) {
+				this.pendingFileIds.set(to, id);
 			}
 		}
 		return moved;

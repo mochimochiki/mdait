@@ -153,7 +153,9 @@ suite("need 解決後のステータス更新（どのファイル種別でも�
 		// 非Markdownファイルの need はマーカーモードに関わらず unit-state に載るため、
 		// embedded でもディスクへ保存されていなければ再読み込みで need が復活する
 		const persisted = fs.readFileSync(path.join(tempDir, ".mdait", "unit-state"), "utf-8");
-		const row = persisted.split("\n").find((l) => l.startsWith("en/doc.txt\t"));
+		// 行はパスではなくファイルIDで自分を名乗る。対応は見出し `# <id> <path>` が持つ
+		const fileId = /^# ([0-9a-f]{12}) en\/doc\.txt$/m.exec(persisted)?.[1];
+		const row = persisted.split("\n").find((l) => fileId !== undefined && l.startsWith(`${fileId}\t`));
 		assert.ok(row, "unit-state に行が書き出されていること");
 		assert.ok(!row.endsWith("translate"), `need が残っている: ${row}`);
 	});
