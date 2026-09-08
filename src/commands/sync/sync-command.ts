@@ -648,6 +648,13 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const seenPaths = new Set<string>();
 		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
 		const scannedTargetDirsAbs = new Set<string>();
+		// 台帳の掃除の判断に使う「見に行けたディレクトリ」。**`scannedDirs` とは別に持つ。**
+		// あちらは「見に行って1件以上見つけた」で、0件のペアを入れるとその全行が消える。
+		// こちらの問いは「そのディレクトリまで手が届いたか」なので、0件でも届いている
+		// （新しく足したばかりで訳文がまだ無い言語・`ignoredPatterns` で全部外した場合。
+		// どちらも守るべき控えは `unit-state` の行から拾える）。混ぜると、空のペアが1つ
+		// あるだけで掃除が永久に走らなくなる
+		const reachedDirs = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
@@ -657,6 +664,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			// 掃除側の分岐で守っているわけではない（実測: 後続ペアも1件も処理されない）。
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config, config.trans.extensions);
+			// 列挙が返ってきた＝このペアまで手が届いた（件数は問わない。上の宣言を参照）
+			reachedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.sourceDir)));
+			reachedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.targetDir)));
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
 					vscode.l10n.t("[{0} -> {1}] No files found for synchronization.", pair.sourceDir, pair.targetDir),
@@ -862,7 +872,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// 走査が全部に届いていないので、掃除の判断材料としては欠けている
 		await runUnitRegistryGC(statusManager, {
 			configuredDirs,
-			scannedDirs: [...scannedDirs],
+			reachedDirs: [...reachedDirs],
 			cancelled,
 		});
 
@@ -2227,8 +2237,12 @@ async function refreshUntranslatedCopy(
 export interface RegistrySweepScope {
 	/** config の全 pair のディレクトリ（ワークスペースルート相対） */
 	configuredDirs: readonly string[];
-	/** 今回実際に走査し、1件以上見つけたディレクトリ */
-	scannedDirs: readonly string[];
+	/**
+	 * 今回**見に行けた**ディレクトリ。孤立掃除の `scannedDirs`（1件以上見つけたもの）とは
+	 * 別で、0件でも見に行けていれば入る。混ぜると、まだ訳文の無い言語を1つ足しただけで
+	 * 掃除が永久に走らなくなる。
+	 */
+	reachedDirs: readonly string[];
 	/** 途中で取り消されたか */
 	cancelled: boolean;
 }
@@ -2302,15 +2316,20 @@ async function runUnitRegistryGC(statusManager: StatusManager, sweep: RegistrySw
 
 /**
  * この回の走査が全部に届いていなければ、その理由を返す（届いていれば null）。
+ *
+ * **対象ペアを絞って走らせた回も「届いていない」に入る**（`SelectionState` で言語を
+ * 選ぶと、選ばなかったペアのディレクトリは `reachedDirs` に入らない）。絞った先の
+ * 言語の控えを消さないための、意図した振る舞いである。いつも絞って走らせる人の
+ * 手元では掃除が走らないが、台帳が育つだけで壊れはしない。
  */
 export function describeIncompleteSweep(sweep: RegistrySweepScope): string | null {
 	if (sweep.cancelled) {
 		return "the sync was cancelled, so the sweep did not reach every file";
 	}
-	const scanned = new Set(sweep.scannedDirs);
-	const missed = sweep.configuredDirs.filter((dir) => !scanned.has(dir));
+	const reached = new Set(sweep.reachedDirs);
+	const missed = sweep.configuredDirs.filter((dir) => !reached.has(dir));
 	if (missed.length > 0) {
-		return `configured directories were not scanned: ${missed.join(", ")}`;
+		return `configured directories were not reached: ${missed.join(", ")}`;
 	}
 	const report = UnitStateStore.getInstance().getLastParseReport();
 	if (!isUnitStateCleanParse(report)) {

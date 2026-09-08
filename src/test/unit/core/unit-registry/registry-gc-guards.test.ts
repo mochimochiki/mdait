@@ -62,6 +62,27 @@ suite("unit-registry の掃除: 走らせてよい条件", () => {
 		assert.equal(await reloaded.loadUnitRegistry(hashOf(1)), null, "掃除が走っていない");
 	});
 
+	test("傷のあった台帳が直っていれば、同じ作業場のまま掃除が走る", async () => {
+		// 傷は「そのとき読んだファイル」の話である。覚えたままにすると、人が競合を解いたあとも
+		// その作業場では掃除が二度と走らない（ストアを使い回すので印だけが下りない）
+		const registryPath = await buildLargeRegistry();
+		const healthy = fs.readFileSync(registryPath, "utf-8");
+		fs.writeFileSync(registryPath, `${healthy}<<<<<<< HEAD\n`, "utf-8");
+
+		UnitRegistryManager.resetInstance();
+		const mgr = UnitRegistryManager.getInstance();
+		await mgr.garbageCollect(new Set([hashOf(0)]));
+
+		// 人が競合を解いた（同じインスタンスのまま）
+		fs.writeFileSync(registryPath, healthy, "utf-8");
+		await mgr.garbageCollect(new Set([hashOf(0)]));
+
+		UnitRegistryManager.resetInstance();
+		const reloaded = UnitRegistryManager.getInstance();
+		assert.equal(await reloaded.loadUnitRegistry(hashOf(1)), null, "台帳が直ったのに掃除が走らないままだった");
+		assert.notEqual(await reloaded.loadUnitRegistry(hashOf(0)), null, "渡した控えまで消えている");
+	});
+
 	test("台帳を1行でも取りこぼした回は掃除を走らせない（合流の途中で消さない）", async () => {
 		const registryPath = await buildLargeRegistry();
 		fs.appendFileSync(registryPath, "<<<<<<< HEAD\n", "utf-8");

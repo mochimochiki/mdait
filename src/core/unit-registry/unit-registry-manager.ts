@@ -372,6 +372,16 @@ export class UnitRegistryManager {
 			`Running unit-registry GC (file size: ${Math.round(stats.size / 1024)}KB)`,
 		);
 
+		// **傷は「そのとき読んだファイル」の話なので、ここで読み直す。**
+		// 覚えたままにすると、人が競合を解いたあとも、この作業場では掃除が二度と走らない
+		// （ストアは一度読んだら使い回すので、印だけが下りない）。まだ書き出していない
+		// 控えを抱えているときは読み直さない — 読み直しはストアを捨てるので、
+		// 抱えているぶんが消える。その回は印が下りないまま下で見送りになる
+		if (this.lastReadDamaged && this.writeBuffer.size === 0) {
+			this.store = null;
+			this.storeLoaded = false;
+		}
+
 		// ストアを取得
 		const store = await this.getOrLoadStore();
 		if (this.lastReadDamaged) {

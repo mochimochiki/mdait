@@ -36,31 +36,43 @@ suite("sync: 台帳の掃除を走らせてよい範囲か", () => {
 		UnitStateStore.getInstance().load(mdaitDir);
 	};
 
-	test("設定の全ディレクトリを走査できていれば走らせる", () => {
+	test("設定の全ディレクトリに手が届いていれば走らせる", () => {
 		loadState("");
 		const reason = describeIncompleteSweep({
 			configuredDirs: ["docs/ja", "docs/en"],
-			scannedDirs: ["docs/ja", "docs/en"],
+			reachedDirs: ["docs/ja", "docs/en"],
 			cancelled: false,
 		});
 		assert.equal(reason, null);
 	});
 
-	test("走査できなかった設定ディレクトリがあれば走らせない", () => {
+	test("見に行けなかった設定ディレクトリがあれば走らせない", () => {
 		loadState("");
 		const reason = describeIncompleteSweep({
 			configuredDirs: ["docs/ja", "docs/en", "docs/fr"],
-			scannedDirs: ["docs/ja", "docs/en"],
+			reachedDirs: ["docs/ja", "docs/en"],
 			cancelled: false,
 		});
 		assert.ok(reason?.includes("docs/fr"), `走らせない理由に届かなかった場所が出ていない: ${reason}`);
+	});
+
+	test("原文が0件のペアでも、見に行けていれば走らせる", () => {
+		// 「見に行って1件も無かった」は届いている。まだ訳文の無い言語を1つ足しただけで
+		// 掃除が永久に走らなくなるのを防ぐ（守るべき控えは unit-state の行から拾える）
+		loadState("");
+		const reason = describeIncompleteSweep({
+			configuredDirs: ["docs/ja", "docs/en", "docs/fr"],
+			reachedDirs: ["docs/ja", "docs/en", "docs/fr"],
+			cancelled: false,
+		});
+		assert.equal(reason, null);
 	});
 
 	test("途中で取り消された回は走らせない", () => {
 		loadState("");
 		const reason = describeIncompleteSweep({
 			configuredDirs: ["docs/ja"],
-			scannedDirs: ["docs/ja"],
+			reachedDirs: ["docs/ja"],
 			cancelled: true,
 		});
 		assert.ok(reason?.includes("cancelled"), `取り消しが理由に出ていない: ${reason}`);
@@ -70,7 +82,7 @@ suite("sync: 台帳の掃除を走らせてよい範囲か", () => {
 		loadState("<<<<<<< HEAD\n");
 		const reason = describeIncompleteSweep({
 			configuredDirs: ["docs/ja"],
-			scannedDirs: ["docs/ja"],
+			reachedDirs: ["docs/ja"],
 			cancelled: false,
 		});
 		assert.ok(reason?.includes("unit-state"), `unit-state の傷が理由に出ていない: ${reason}`);
