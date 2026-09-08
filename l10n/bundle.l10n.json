@@ -480,6 +480,7 @@
   "The AI's edits pointed at the same lines twice, so mdait could not apply them safely.": "The AI's edits pointed at the same lines twice, so mdait could not apply them safely.",
   "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.": "The AI's answer was cut off before it finished. Raise ai.openai.maxTokens, or split the section into smaller ones.",
   "The AI returned an empty answer.": "The AI returned an empty answer.",
+  "The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.": "The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.",
   "✨Re-translate in full": "✨Re-translate in full",
   "{0} is on the source side. Translate the matching file under '{1}' instead.": "{0} is on the source side. Translate the matching file under '{1}' instead.",
   "Translation cancelled for {0}. {1} unit(s) were kept, and {2} unit(s) were left as they were (the answer could not be used, or it could not be written back). They still need translation.": "Translation cancelled for {0}. {1} unit(s) were kept, and {2} unit(s) were left as they were (the answer could not be used, or it could not be written back). They still need translation.",

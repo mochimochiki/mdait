@@ -89,7 +89,7 @@ export const defaultAdoptStages: AdoptStages = {
 	collectSourceFiles: (pair, config) => new FileExplorer().getSourceFiles(pair.sourceDir, config),
 	runTermDetect: async (pair, sourceFiles, progress, token) => {
 		const collection = await new UnitPairCollector().collectFromFiles(sourceFiles, pair, token);
-		return detectTerm_CoreProc(collection.pairs, pair, progress, token);
+		return (await detectTerm_CoreProc(collection.pairs, pair, progress, token)).entries;
 	},
 	runTermExpand: (pair, progress, token) => expandTerm_CoreProc(pair, progress, token),
 	runTmCommit: (targetFile, config, progress, token) => executeTmCommitForFile(targetFile, config, progress, token),

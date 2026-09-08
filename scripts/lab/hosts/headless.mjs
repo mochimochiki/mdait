@@ -447,6 +447,7 @@ const adapters = {
 
 		const pairs = [];
 		let newTerms = 0;
+		let unusableBatches = 0;
 		for (const pair of config.transPairs) {
 			let sourceFiles = await explorer.getSourceFiles(pair.sourceDir, config);
 			if (scope) {
@@ -454,16 +455,20 @@ const adapters = {
 			}
 			if (sourceFiles.length === 0) continue;
 			const collection = await new UnitPairCollector().collectFromFiles(sourceFiles, pair, token);
-			const entries = await detectTerm_CoreProc(collection.pairs, pair, progress, token);
-			newTerms += entries.length;
+			const detected = await detectTerm_CoreProc(collection.pairs, pair, progress, token);
+			newTerms += detected.entries.length;
+			unusableBatches += detected.unusableBatches;
 			pairs.push({
 				sourceLang: pair.sourceLang,
 				targetLang: pair.targetLang,
 				sourceFiles: sourceFiles.length,
-				newTerms: entries.length,
+				newTerms: detected.entries.length,
+				// 答えが使えなかったバッチの数。lab はここに通知の層を持たないので、
+				// 「壊れた答えを受けたことが結果に出ているか」はこの数で見る
+				unusableBatches: detected.unusableBatches,
 			});
 		}
-		return { pairs, newTerms };
+		return { pairs, newTerms, unusableBatches };
 	},
 };
 
