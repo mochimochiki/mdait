@@ -6,6 +6,7 @@
  * 不正なレスポンスを検出してリトライ判断の基礎情報を提供する。
  */
 
+import { patchEchoesLineNumbers } from "../../core/diff/diff-generator";
 import type { TermSuggestion } from "./translator";
 
 /**
@@ -319,6 +320,19 @@ export function validateRevisionPatchPlainResponse(rawResponse: string): Validat
 			error: {
 				code: "INVALID_FIELD_TYPE",
 				message: "The answer contained no REPLACE / INSERT AFTER / DELETE block",
+				retryable: true,
+			},
+		};
+	}
+	// **渡した行番号を本文に書き戻していたら、当てる前にもう一度聞く。**
+	// 当てはめ器から見れば正しいパッチなので、ここで気づかないと番号ごと訳文へ入る
+	// （ADR-260908-05。実測で qwen3.6-35B-A3B に 36件中1件出た）
+	if (patchEchoesLineNumbers(body)) {
+		return {
+			valid: false,
+			error: {
+				code: "INVALID_FIELD_TYPE",
+				message: "The answer repeated the line numbers inside an edit block",
 				retryable: true,
 			},
 		};

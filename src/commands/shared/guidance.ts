@@ -184,6 +184,8 @@ export function describePatchFailure(reason: PatchFailureReason): string {
 			return vscode.l10n.t("The AI pointed at line numbers that do not exist in the translation.");
 		case "overlapping-ops":
 			return vscode.l10n.t("The AI's edits pointed at the same lines twice, so mdait could not apply them safely.");
+		case "line-number-residue":
+			return vscode.l10n.t("The AI wrote the line numbers back into the text instead of only using them to point.");
 	}
 }
 

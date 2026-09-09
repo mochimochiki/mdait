@@ -278,9 +278,17 @@ export function judge(testCase, variant, raw) {
 	}
 	if (!applied.ok) {
 		// 書式そのものが違うのか、当てる場所が見つからなかったのかを分ける
-		const stage = ["unrecognized-format", "empty-patch", "no-changes", "unterminated-block", "bad-range"].includes(
-			applied.reason,
-		)
+		// 「書き方が違う」のか「当てる場所が見つからない」のか。**行番号方式には後者が
+		// 存在しない**ので（訳文の文字列を照合しない）、その失敗はすべて format へ寄る
+		const stage = [
+			"unrecognized-format",
+			"empty-patch",
+			"no-changes",
+			"unterminated-block",
+			"bad-range",
+			"overlapping-ops",
+			"line-number-residue",
+		].includes(applied.reason)
 			? "format"
 			: "apply";
 		return { stage, ok: false, reason: applied.reason };
@@ -810,11 +818,20 @@ function selfTestChecks() {
 		String(fenceBreak.reason),
 	);
 
+	// 行番号の書き戻しは、**当てはめ器が当てる前に断る**（ADR-260908-05）。
+	// 当ててしまうと `5\t...` という行がそのまま訳文として保存される
 	const numberEcho = judge(c1, linenum, `REPLACE 5\n5\t${goodLine}\nEND`);
 	add(
-		`行番号を書き戻したら health で落ちる`,
+		`行番号を書き戻したパッチは当てない`,
 		!numberEcho.ok && String(numberEcho.reason).includes("line-number-residue"),
-		String(numberEcho.reason),
+		`${numberEcho.stage} / ${numberEcho.reason}`,
+	);
+	// それでも health 側の網は残す。**当てはめ器を通らない候補**（udiff・searchreplace）で
+	// 同じ形が出たときに気づけなくなるため
+	add(
+		`行番号が残った出来上がりは health でも落ちる`,
+		checkHealth(c1, `${prev}\n5\t${goodLine}`).some((problem) => problem === "line-number-residue"),
+		String(checkHealth(c1, `${prev}\n5\t${goodLine}`)),
 	);
 
 	// --- ケース集合そのものが成り立っているか ---
