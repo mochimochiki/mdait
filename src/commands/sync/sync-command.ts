@@ -36,6 +36,7 @@ import {
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
+import { sweepMarkerHashes } from "./registry-sweep";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -648,13 +649,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		const seenPaths = new Set<string>();
 		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
 		const scannedTargetDirsAbs = new Set<string>();
-		// 台帳の掃除の判断に使う「見に行けたディレクトリ」。**`scannedDirs` とは別に持つ。**
-		// あちらは「見に行って1件以上見つけた」で、0件のペアを入れるとその全行が消える。
-		// こちらの問いは「そのディレクトリまで手が届いたか」なので、0件でも届いている
-		// （新しく足したばかりで訳文がまだ無い言語・`ignoredPatterns` で全部外した場合。
-		// どちらも守るべき控えは `unit-state` の行から拾える）。混ぜると、空のペアが1つ
-		// あるだけで掃除が永久に走らなくなる
-		const reachedDirs = new Set<string>();
 
 		// TransPairごとに処理
 		for (const pair of pairs) {
@@ -664,9 +658,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			// 掃除側の分岐で守っているわけではない（実測: 後続ペアも1件も処理されない）。
 			const fileExplorer = new FileExplorer();
 			const files = await fileExplorer.getSourceFiles(pair.sourceDir, config, config.trans.extensions);
-			// 列挙が返ってきた＝このペアまで手が届いた（件数は問わない。上の宣言を参照）
-			reachedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.sourceDir)));
-			reachedDirs.add(toWorkspaceRelativePath(path.resolve(config.getConfigBaseDir(), pair.targetDir)));
 			if (files.length === 0) {
 				vscode.window.showWarningMessage(
 					vscode.l10n.t("[{0} -> {1}] No files found for synchronization.", pair.sourceDir, pair.targetDir),
@@ -871,8 +862,10 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// 全ファイル処理完了後、GC処理。**取り消しの判定より後**に置く — 途中で止まった回は
 		// 走査が全部に届いていないので、掃除の判断材料としては欠けている
 		await runUnitRegistryGC(statusManager, {
-			configuredDirs,
-			reachedDirs: [...reachedDirs],
+			// **選択で絞った `pairs` ではなく `config.transPairs` 全部**。理由は
+			// RegistrySweepScope.dirsAbs の説明にある
+			dirsAbs: collectAllPairDirsAbs(config),
+			extensions: [".md", ...(config.trans.extensions ?? [])],
 			cancelled,
 		});
 
@@ -1039,6 +1032,22 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
  * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
  * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
  */
+/**
+ * config の**全** pair のディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
+ *
+ * 台帳の掃除の走査だけがこれを使う。掃除は「消してよい」と言い切る操作なので、
+ * その日の作業範囲ではなくワークスペース全体を見る必要がある。
+ */
+function collectAllPairDirsAbs(config: Configuration): string[] {
+	const baseDir = config.getConfigBaseDir();
+	const dirs = new Set<string>();
+	for (const pair of config.transPairs) {
+		dirs.add(path.resolve(baseDir, pair.sourceDir));
+		dirs.add(path.resolve(baseDir, pair.targetDir));
+	}
+	return [...dirs];
+}
+
 function collectConfiguredDirs(config: Configuration): string[] {
 	const baseDir = config.getConfigBaseDir();
 	const dirs = new Set<string>();
@@ -2232,17 +2241,19 @@ async function refreshUntranslatedCopy(
 }
 
 /**
- * 掃除を走らせてよいかを決める、この回の走査の届いた範囲。
+ * 掃除のときに見て回る範囲。**この回の sync が何を処理したかとは別物である。**
  */
 export interface RegistrySweepScope {
-	/** config の全 pair のディレクトリ（ワークスペースルート相対） */
-	configuredDirs: readonly string[];
 	/**
-	 * 今回**見に行けた**ディレクトリ。孤立掃除の `scannedDirs`（1件以上見つけたもの）とは
-	 * 別で、0件でも見に行けていれば入る。混ぜると、まだ訳文の無い言語を1つ足しただけで
-	 * 掃除が永久に走らなくなる。
+	 * config の**全** pair のディレクトリ（絶対パス）。
+	 *
+	 * **`SelectionState` で絞ってはいけない。** 翻訳者はふだん対象言語を絞って作業する
+	 * ので、絞った側だけを見て消すと、絞った先の言語の控えが毎回消える。掃除の走査は
+	 * sync の作業範囲から切り離して、いつでも全言語を見る。
 	 */
-	reachedDirs: readonly string[];
+	dirsAbs: readonly string[];
+	/** 管理下の拡張子（`.md` を含む） */
+	extensions: readonly string[];
 	/** 途中で取り消されたか */
 	cancelled: boolean;
 }
@@ -2250,28 +2261,31 @@ export interface RegistrySweepScope {
 /**
  * ユニットレジストリのGC処理。
  *
- * **消してよいのは、この回の走査が届いた範囲だけである。** 控えはハッシュだけを鍵にした
- * content-addressed の表で、どのファイルの控えかを持っていない。だから「いま手元で
- * 使われているハッシュ」以外を消すと、**見に行かなかった場所から参照されている控えも
- * 一緒に消える**。削除は競合を出さないふつうの差分なので、そのまま全員へ伝播し、
- * `need:revise@X` の戻り先が誰の手元からも消える。
+ * **消してよいと言えるのは、ワークスペース全体を見たときだけである。** 控えはハッシュだけを
+ * 鍵にした content-addressed の表で、どのファイルの控えかを持っていない。だから見に行かな
+ * かった場所から参照されている控えも「使われていない」と読まれて消える。削除は競合を出さ
+ * ないふつうの差分なので、そのまま全員へ伝播し、`need:revise@X` の戻り先が誰の手元からも
+ * 消える。
  *
- * そこで、走査が全部に届いた回にだけ走らせる。届かなかった回は台帳が育つだけで、
- * 次に届いた回に減らせる — **残しすぎは取り返せるが、消しすぎは取り返せない。**
+ * **だから掃除の走査は、この回の sync が処理した範囲から切り離す。** 翻訳者はふだん
+ * `SelectionState` で対象言語を絞って作業するので、sync の作業範囲に合わせると、絞った先の
+ * 言語の控えが毎回消える（そして掃除を「絞った回は見送る」で守ると、ほとんどの回が見送りに
+ * なって台帳が減らない）。守る印は次の3か所から、**選択に関わらず全言語ぶん**集める。
  *
- * 守る印は、ステータスツリーだけでなく `unit-state` の**全行**からも集める。ツリーに
- * 載るのは今回走査したファイルだけだが、行はそれより広く残っている（設定から外れたが
- * ファイルは在る・`ignoredPatterns` で外した・拡張子を外した・孤立訳文）。手元で対象言語を
- * 一時的に絞った翻訳者の掃除が、絞った先の言語の控えを消すのはこの差からである。
+ * | どこから | 何が拾えるか |
+ * |---|---|
+ * | ステータスツリー | この回に見たファイル（安いので保険として） |
+ * | `unit-state` の**全行** | external の Markdown と非 Markdown。設定から外れたがファイルは在る行・`ignoredPatterns` で外した行・孤立訳文も含む |
+ * | 原稿の走査（`sweepMarkerHashes`） | embedded の埋め込みマーカーと frontmatter の `mdait.front` |
  *
  * **まだ合流していない枝の控えだけは、これでも守れない。** その枝の行はこの作業ツリーの
  * どこにも無く、手元から見えるものが1つも無い。台帳が閾値へ育つのは長く使った現場なので、
  * そこでは合流を先に済ませてから sync するしかない（docs/design/merge-resilience.md）。
  *
  * @param statusManager StatusManagerインスタンス
- * @param sweep この回の走査が届いた範囲
+ * @param scope 掃除のときに見て回る範囲（選択で絞らない）
  */
-async function runUnitRegistryGC(statusManager: StatusManager, sweep: RegistrySweepScope): Promise<void> {
+async function runUnitRegistryGC(statusManager: StatusManager, scope: RegistrySweepScope): Promise<void> {
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
@@ -2279,7 +2293,13 @@ async function runUnitRegistryGC(statusManager: StatusManager, sweep: RegistrySw
 		return;
 	}
 
-	const skipReason = describeIncompleteSweep(sweep);
+	// 原稿の走査。閾値を超えた回にしか走らないので、全ファイルを読む費用を払ってよい
+	const swept = sweepMarkerHashes(scope.dirsAbs, scope.extensions);
+
+	const skipReason = describeIncompleteSweep({
+		cancelled: scope.cancelled,
+		unreadableDirs: swept.unreadableDirs,
+	});
 	if (skipReason) {
 		logger.info("sync", "Skipped unit-registry GC", { reason: skipReason });
 		return;
@@ -2304,32 +2324,41 @@ async function runUnitRegistryGC(statusManager: StatusManager, sweep: RegistrySw
 		}
 	}
 
-	// ツリーに載らない行からも集める（上の説明のとおり、行のほうが広い）
+	// ツリーに載らない行からも集める（上の表のとおり、行のほうが広い）
 	for (const entry of UnitStateStore.getInstance().getAllEntries()) {
 		addHash(entry.hash);
 		addHash(entry.from);
 		addHash(MdaitMarker.extractOldHashFromNeed(entry.need) ?? undefined);
 	}
 
+	// 原稿に埋め込まれたマーカー（embedded と frontmatter）
+	for (const hash of swept.hashes) {
+		addHash(hash);
+	}
+
+	logger.info("sync", "Collected hashes to protect from unit-registry GC", {
+		activeHashes: activeHashes.size,
+		filesRead: swept.filesRead,
+	});
 	await unitRegistryManager.garbageCollect(activeHashes);
 }
 
 /**
- * この回の走査が全部に届いていなければ、その理由を返す（届いていれば null）。
+ * 掃除を見送るなら、その理由を返す（走らせてよければ null）。
  *
- * **対象ペアを絞って走らせた回も「届いていない」に入る**（`SelectionState` で言語を
- * 選ぶと、選ばなかったペアのディレクトリは `reachedDirs` に入らない）。絞った先の
- * 言語の控えを消さないための、意図した振る舞いである。いつも絞って走らせる人の
- * 手元では掃除が走らないが、台帳が育つだけで壊れはしない。
+ * 見送るのは「守るべき印を数え落としたかもしれない回」だけである。**対象ペアを絞って
+ * 走らせた回はここに入らない** — 掃除の走査は選択と切り離してあり、絞っていても全言語を
+ * 見に行く。
  */
-export function describeIncompleteSweep(sweep: RegistrySweepScope): string | null {
+export function describeIncompleteSweep(sweep: {
+	cancelled: boolean;
+	unreadableDirs: readonly string[];
+}): string | null {
 	if (sweep.cancelled) {
-		return "the sync was cancelled, so the sweep did not reach every file";
+		return "the sync was cancelled, so the workspace may be half-written";
 	}
-	const reached = new Set(sweep.reachedDirs);
-	const missed = sweep.configuredDirs.filter((dir) => !reached.has(dir));
-	if (missed.length > 0) {
-		return `configured directories were not reached: ${missed.join(", ")}`;
+	if (sweep.unreadableDirs.length > 0) {
+		return `configured directories could not be read: ${sweep.unreadableDirs.join(", ")}`;
 	}
 	const report = UnitStateStore.getInstance().getLastParseReport();
 	if (!isUnitStateCleanParse(report)) {
