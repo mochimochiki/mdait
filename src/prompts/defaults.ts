@@ -237,24 +237,25 @@ Use them as reference for consistency, but prioritize accuracy and context.
  * - {{contextLang}}: context抽出元の言語コード (例: "en")
  * - {{surroundingText}}: 周辺テキスト（オプショナル）
  * - {{terms}}: 用語集（訳語指定用、オプショナル）
- * - {{previousTranslation}}: 前回翻訳（必須）
+ * - {{tmReferences}}: 翻訳メモリ参照（オプショナル）
+ * - {{numberedPreviousTranslation}}: 行番号とタブを付けた前回翻訳（必須）
  * - {{sourceDiff}}: 原文の変更差分（unified diff形式、必須）
  *
  * @output
- * ```json
- * {
- *   "targetPatch": "unified diff for previous translation",
- *   "termSuggestions": [
- *     {
- *       "source": "元の用語",
- *       "target": "訳語",
- *       "context": "用語を含むcontextLang言語からの引用文",
- *       "reason": "(オプショナル) 追加理由"
- *     }
- *   ],
- *   "warnings": ["(optional) patch risk or ambiguity"]
- * }
+ * **JSON ではなく素のテキスト**（ADR-260903-01）。行番号で指す編集ブロックを並べる。
+ * 封筒はフェンス包みとエスケープ負荷を招き、後者は逐語コピーを実際に壊していた。
  * ```
+ * REPLACE 12-14
+ * （その行を置き換える新しい行）
+ * END
+ * INSERT AFTER 20
+ * （その行の後ろへ差し込む行）
+ * END
+ * DELETE 30-31
+ * END
+ * ```
+ * 用語候補は改訂では集めない（測った指示文に含めていない）。
+ * 当てはめは `applyRevisionPatch(prev, patch, "linenum")` を通す。
  */
 export const DEFAULT_TRANS_REVISE_PATCH = `You are a professional translator specializing in Markdown documents.
 
@@ -820,25 +821,23 @@ TRANSLATION MEMORY REFERENCES:
  * trans.revisePatchPlain - 非MDファイル改訂翻訳プロンプト
  *
  * @description
- * 非Markdownファイルの改訂翻訳。ソースが変更された場合、差分を参照して既存翻訳を更新します。
- * 非MDファイルではパッチモードではなく全文翻訳で改訂します。
+ * 非Markdownファイルの改訂翻訳。原文が変わったとき、差分を参照して既存訳文を更新します。
+ * Markdown と同じ行番号方式（ADR-260903-01）。当てはめに失敗したときだけ全文翻訳へ倒れます
+ * （非MD はユニット分割が無く、据え置くと訳文が古いまま残るため）。
  *
  * @input
  * - {{sourceLang}}: 翻訳元言語コード
  * - {{targetLang}}: 翻訳先言語コード
- * - {{fileExtension}}: ファイル拡張子
- * - {{sourceDiff}}: 原文の変更差分（unified diff形式）
- * - {{previousTranslation}}: 前回翻訳
+ * - {{contextLang}}: context抽出元の言語コード
+ * - {{fileExtension}}: ファイル拡張子（オプショナル）
+ * - {{surroundingText}}: 周辺テキスト（オプショナル）
  * - {{terms}}: 用語集（オプショナル）
  * - {{tmReferences}}: 翻訳メモリ参照（オプショナル）
+ * - {{numberedPreviousTranslation}}: 行番号とタブを付けた前回翻訳（必須）
+ * - {{sourceDiff}}: 原文の変更差分（unified diff形式、必須）
  *
  * @output
- * ```json
- * {
- *   "translation": "更新された翻訳テキスト",
- *   "termSuggestions": []
- * }
- * ```
+ * `trans.revisePatch` と同じ編集ブロック（素のテキスト）。
  */
 export const DEFAULT_TRANS_REVISE_PATCH_PLAIN = `You are a professional translator performing a revision. The source file has been modified. Update the existing translation by returning ONLY the edits.
 

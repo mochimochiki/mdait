@@ -30,7 +30,7 @@ const REPO = path.resolve(HERE, "..", "..", "..");
 require(path.join(REPO, "scripts", "lab", "vscode-shim.js"));
 
 const { DEFAULT_TRANS_REVISE_PATCH, USER_SECTION_MARKER } = require(path.join(REPO, "out", "prompts", "defaults.js"));
-const { applySimplePatch } = require(path.join(REPO, "out", "core", "diff", "diff-generator.js"));
+const { applySimplePatch, applyLineNumberPatch } = require(path.join(REPO, "out", "core", "diff", "diff-generator.js"));
 const { extractJsonFromResponse, detectJsonInContent } = require(
 	path.join(REPO, "out", "commands", "trans", "response-validator.js"),
 );
@@ -398,75 +398,15 @@ function applySearchReplace(previous, patch) {
 }
 
 /**
- * 行番号ベースの指示を当てる。
+ * 行番号ベースの指示を当てる。**本番の当てはめ器そのもの**（`applyLineNumberPatch`）。
  *
- * REPLACE a-b / INSERT AFTER n / DELETE a-b の3つ。各ブロックは END で閉じる。
- * **前回訳文を1行も写させない**のがこの候補のねらいなので、当てはめ側も
- * 文字列の一致をいっさい見ない（行番号だけで決める）。
+ * P01 の時点では行番号方式はまだ候補でしかなく、本番に当てはめ器が無かったので、
+ * ここに写しを置いていた。本番へ入った（ADR-260903-01）あともそれを残していたため、
+ * **ベンチだけが古い当てはめ器を測る**状態になっていた（実際に写しの側だけ
+ * `overlapping-ops` を持たず、`INSERT AFTER 0` を範囲外として弾いていた）。
+ * 「偽物を1つも挟まない」というこのベンチの前提が、いちばん大事な候補で破れていたので寄せた。
  */
-function applyLineOps(previous, patch) {
-	const text = patch.trim();
-	if (!text) return { ok: false, reason: "empty-patch" };
-	const lines = previous.split("\n");
-	const ops = [];
-	const tokens = text.split("\n");
-
-	for (let at = 0; at < tokens.length; at += 1) {
-		const head = tokens[at].trim();
-		const replace = /^REPLACE\s+(\d+)\s*(?:-\s*(\d+))?$/i.exec(head);
-		const insert = /^INSERT\s+AFTER\s+(\d+)$/i.exec(head);
-		const remove = /^DELETE\s+(\d+)\s*(?:-\s*(\d+))?$/i.exec(head);
-		if (!replace && !insert && !remove) continue;
-
-		const body = [];
-		let cursor = at + 1;
-		while (cursor < tokens.length && tokens[cursor].trim().toUpperCase() !== "END") {
-			body.push(tokens[cursor]);
-			cursor += 1;
-		}
-		if (cursor >= tokens.length) return { ok: false, reason: "unterminated-block" };
-		at = cursor;
-
-		if (replace) {
-			const from = Number(replace[1]);
-			const to = replace[2] ? Number(replace[2]) : from;
-			ops.push({ kind: "replace", from, to, body });
-		} else if (insert) {
-			ops.push({ kind: "insert", from: Number(insert[1]), to: Number(insert[1]), body });
-		} else {
-			const from = Number(remove[1]);
-			const to = remove[2] ? Number(remove[2]) : from;
-			ops.push({ kind: "delete", from, to, body: [] });
-		}
-	}
-
-	if (ops.length === 0) return { ok: false, reason: "unrecognized-format" };
-
-	for (const op of ops) {
-		if (!Number.isInteger(op.from) || !Number.isInteger(op.to) || op.from < 1 || op.to < op.from) {
-			return { ok: false, reason: "bad-range" };
-		}
-		// insert は末尾の後ろ（= 行数）まで許す。replace / delete は実在する行に限る
-		const limit = op.kind === "insert" ? lines.length : lines.length;
-		if (op.to > limit) return { ok: false, reason: "bad-range" };
-	}
-
-	// 後ろから当てる。前から当てると行番号がずれる
-	const ordered = [...ops].sort((a, b) => b.from - a.from);
-	const result = [...lines];
-	for (const op of ordered) {
-		if (op.kind === "replace") {
-			result.splice(op.from - 1, op.to - op.from + 1, ...op.body);
-		} else if (op.kind === "insert") {
-			result.splice(op.from, 0, ...op.body);
-		} else {
-			result.splice(op.from - 1, op.to - op.from + 1);
-		}
-	}
-	const text2 = result.join("\n");
-	if (text2 === previous) return { ok: false, reason: "no-changes" };
-	return { ok: true, text: text2 };
-}
+const applyLineOps = applyLineNumberPatch;
 
 // ---------------------------------------------------------------------------
 // 形式ごとの指示（ここだけが候補の違い）
