@@ -28,10 +28,15 @@ import {
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
-import { UnitStateStore, isLiveBodyEntry } from "../../core/unit-state/unit-state-store";
+import {
+	UnitStateStore,
+	isCleanParse as isUnitStateCleanParse,
+	isLiveBodyEntry,
+} from "../../core/unit-state/unit-state-store";
 import type { OrphanTargetPolicy, TransPair } from "../../infra/config/configuration";
 import { Configuration } from "../../infra/config/configuration";
 import { type MarkerIO, resolveMarkerIO } from "../../infra/config/marker-io";
+import { sweepMarkerHashes } from "./registry-sweep";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -846,9 +851,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			unitStateStore.save(mdaitDir);
 		}
 
-		// 全ファイル処理完了後、GC処理
-		await runUnitRegistryGC(statusManager);
-
 		const endTime = Date.now();
 		const durationMs = endTime - startTime;
 
@@ -856,6 +858,16 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// （例外は投げられず、ワーカーが次を取らずに抜けるだけ）に 0 のままになり、
 		// 止めたのに「完了しました」と出る。AI を使わない定常 sync ではそちらが普通の経路
 		const cancelled = options?.token?.isCancellationRequested === true || cancelledCount > 0;
+
+		// 全ファイル処理完了後、GC処理。**取り消しの判定より後**に置く — 途中で止まった回は
+		// 走査が全部に届いていないので、掃除の判断材料としては欠けている
+		await runUnitRegistryGC(statusManager, {
+			// **選択で絞った `pairs` ではなく `config.transPairs` 全部**。理由は
+			// RegistrySweepScope.dirsAbs の説明にある
+			dirsAbs: collectAllPairDirsAbs(config),
+			extensions: [".md", ...(config.trans.extensions ?? [])],
+			cancelled,
+		});
 
 		logger.info("sync", "Sync completed", {
 			totalFileCount,
@@ -1020,6 +1032,22 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
  * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
  * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
  */
+/**
+ * config の**全** pair のディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
+ *
+ * 台帳の掃除の走査だけがこれを使う。掃除は「消してよい」と言い切る操作なので、
+ * その日の作業範囲ではなくワークスペース全体を見る必要がある。
+ */
+function collectAllPairDirsAbs(config: Configuration): string[] {
+	const baseDir = config.getConfigBaseDir();
+	const dirs = new Set<string>();
+	for (const pair of config.transPairs) {
+		dirs.add(path.resolve(baseDir, pair.sourceDir));
+		dirs.add(path.resolve(baseDir, pair.targetDir));
+	}
+	return [...dirs];
+}
+
 function collectConfiguredDirs(config: Configuration): string[] {
 	const baseDir = config.getConfigBaseDir();
 	const dirs = new Set<string>();
@@ -2213,11 +2241,51 @@ async function refreshUntranslatedCopy(
 }
 
 /**
- * ユニットレジストリのGC処理
- * StatusItemTreeから全ユニットのハッシュを収集し、不要なユニットレジストリを削除
- * @param statusManager StatusManagerインスタンス
+ * 掃除のときに見て回る範囲。**この回の sync が何を処理したかとは別物である。**
  */
-async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
+export interface RegistrySweepScope {
+	/**
+	 * config の**全** pair のディレクトリ（絶対パス）。
+	 *
+	 * **`SelectionState` で絞ってはいけない。** 翻訳者はふだん対象言語を絞って作業する
+	 * ので、絞った側だけを見て消すと、絞った先の言語の控えが毎回消える。掃除の走査は
+	 * sync の作業範囲から切り離して、いつでも全言語を見る。
+	 */
+	dirsAbs: readonly string[];
+	/** 管理下の拡張子（`.md` を含む） */
+	extensions: readonly string[];
+	/** 途中で取り消されたか */
+	cancelled: boolean;
+}
+
+/**
+ * ユニットレジストリのGC処理。
+ *
+ * **消してよいと言えるのは、ワークスペース全体を見たときだけである。** 控えはハッシュだけを
+ * 鍵にした content-addressed の表で、どのファイルの控えかを持っていない。だから見に行かな
+ * かった場所から参照されている控えも「使われていない」と読まれて消える。削除は競合を出さ
+ * ないふつうの差分なので、そのまま全員へ伝播し、`need:revise@X` の戻り先が誰の手元からも
+ * 消える。
+ *
+ * **だから掃除の走査は、この回の sync が処理した範囲から切り離す。** 翻訳者はふだん
+ * `SelectionState` で対象言語を絞って作業するので、sync の作業範囲に合わせると、絞った先の
+ * 言語の控えが毎回消える（そして掃除を「絞った回は見送る」で守ると、ほとんどの回が見送りに
+ * なって台帳が減らない）。守る印は次の3か所から、**選択に関わらず全言語ぶん**集める。
+ *
+ * | どこから | 何が拾えるか |
+ * |---|---|
+ * | ステータスツリー | この回に見たファイル（安いので保険として） |
+ * | `unit-state` の**全行** | external の Markdown と非 Markdown。設定から外れたがファイルは在る行・`ignoredPatterns` で外した行・孤立訳文も含む |
+ * | 原稿の走査（`sweepMarkerHashes`） | embedded の埋め込みマーカーと frontmatter の `mdait.front` |
+ *
+ * **まだ合流していない枝の控えだけは、これでも守れない。** その枝の行はこの作業ツリーの
+ * どこにも無く、手元から見えるものが1つも無い。台帳が閾値へ育つのは長く使った現場なので、
+ * そこでは合流を先に済ませてから sync するしかない（docs/design/merge-resilience.md）。
+ *
+ * @param statusManager StatusManagerインスタンス
+ * @param scope 掃除のときに見て回る範囲（選択で絞らない）
+ */
+async function runUnitRegistryGC(statusManager: StatusManager, scope: RegistrySweepScope): Promise<void> {
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
@@ -2225,28 +2293,78 @@ async function runUnitRegistryGC(statusManager: StatusManager): Promise<void> {
 		return;
 	}
 
+	// 原稿の走査。閾値を超えた回にしか走らないので、全ファイルを読む費用を払ってよい
+	const swept = sweepMarkerHashes(scope.dirsAbs, scope.extensions);
+
+	const skipReason = describeIncompleteSweep({
+		cancelled: scope.cancelled,
+		unreadableDirs: swept.unreadableDirs,
+	});
+	if (skipReason) {
+		logger.info("sync", "Skipped unit-registry GC", { reason: skipReason });
+		return;
+	}
+
 	// 全StatusItemから使用中のhashを収集
 	const activeHashes = new Set<string>();
+	const addHash = (hash: string | undefined): void => {
+		if (hash) {
+			activeHashes.add(hash.toLowerCase());
+		}
+	};
 	const tree = statusManager.getStatusItemTree();
 	const files = tree.getFilesAll();
 
 	for (const file of files) {
 		for (const unit of file.children ?? []) {
-			if (unit.unitHash) {
-				activeHashes.add(unit.unitHash);
-			}
-			if (unit.fromHash) {
-				activeHashes.add(unit.fromHash);
-			}
+			addHash(unit.unitHash);
+			addHash(unit.fromHash);
 			// need:revise@{oldhash}形式からoldhashを抽出
-			const oldhash = MdaitMarker.extractOldHashFromNeed(unit.needFlag);
-			if (oldhash) {
-				activeHashes.add(oldhash);
-			}
+			addHash(MdaitMarker.extractOldHashFromNeed(unit.needFlag) ?? undefined);
 		}
 	}
 
+	// ツリーに載らない行からも集める（上の表のとおり、行のほうが広い）
+	for (const entry of UnitStateStore.getInstance().getAllEntries()) {
+		addHash(entry.hash);
+		addHash(entry.from);
+		addHash(MdaitMarker.extractOldHashFromNeed(entry.need) ?? undefined);
+	}
+
+	// 原稿に埋め込まれたマーカー（embedded と frontmatter）
+	for (const hash of swept.hashes) {
+		addHash(hash);
+	}
+
+	logger.info("sync", "Collected hashes to protect from unit-registry GC", {
+		activeHashes: activeHashes.size,
+		filesRead: swept.filesRead,
+	});
 	await unitRegistryManager.garbageCollect(activeHashes);
+}
+
+/**
+ * 掃除を見送るなら、その理由を返す（走らせてよければ null）。
+ *
+ * 見送るのは「守るべき印を数え落としたかもしれない回」だけである。**対象ペアを絞って
+ * 走らせた回はここに入らない** — 掃除の走査は選択と切り離してあり、絞っていても全言語を
+ * 見に行く。
+ */
+export function describeIncompleteSweep(sweep: {
+	cancelled: boolean;
+	unreadableDirs: readonly string[];
+}): string | null {
+	if (sweep.cancelled) {
+		return "the sync was cancelled, so the workspace may be half-written";
+	}
+	if (sweep.unreadableDirs.length > 0) {
+		return `configured directories could not be read: ${sweep.unreadableDirs.join(", ")}`;
+	}
+	const report = UnitStateStore.getInstance().getLastParseReport();
+	if (!isUnitStateCleanParse(report)) {
+		return "unit-state could not be read in full (a merge may be in progress)";
+	}
+	return null;
 }
 
 /**

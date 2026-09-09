@@ -44,6 +44,15 @@ export class UnitRegistryManager {
 	/** 次にファイルを書く前に、いまディスクにあるバイト列を避難させるか */
 	private needsSalvage = false;
 
+	/**
+	 * 直近の読み取りで1行でも取りこぼしたか（避難のあとも下がらない）。
+	 *
+	 * `needsSalvage` は1度避難させたら下りるので、「この回の台帳は丸ごと読めたか」の
+	 * 問いには使えない。掃除は**読めた行だけを正**として消す操作なので、読み取りに
+	 * 傷があった回は走らせてはいけない。
+	 */
+	private lastReadDamaged = false;
+
 	private constructor() {}
 
 	/**
@@ -149,6 +158,7 @@ export class UnitRegistryManager {
 		}
 
 		this.store = new UnitRegistryStore();
+		this.lastReadDamaged = false;
 		const filePath = this.getUnitRegistryFilePath();
 
 		if (filePath && fs.existsSync(filePath)) {
@@ -161,6 +171,7 @@ export class UnitRegistryManager {
 				if (!isCleanParse(report)) {
 					// 読める行はすべて残っている。残りは避難させた原本にしか無い
 					this.needsSalvage = true;
+					this.lastReadDamaged = true;
 					Logger.getInstance().warn(
 						"unit-registry",
 						`Could not read every line of the unit registry; kept ${this.store.size()} snapshot(s)`,
@@ -172,6 +183,7 @@ export class UnitRegistryManager {
 				// ここに控えてある旧原文はどこにも複製が無く、黙って上書きすると
 				// `need:revise@X` の戻り先が永久に引けなくなる
 				this.needsSalvage = true;
+				this.lastReadDamaged = true;
 				this.store = new UnitRegistryStore();
 				Logger.getInstance().warn(
 					"unit-registry",
@@ -330,6 +342,10 @@ export class UnitRegistryManager {
 	 * 「どれも使われていない」と読むと控えを全部消してしまい、`need:revise@X` の戻り先が
 	 * 二度と引けなくなる。**残しすぎは次の GC で減らせるが、消しすぎは取り返せない。**
 	 *
+	 * **台帳を1行でも取りこぼした回も走らせない。** 掃除は「読めた行だけが台帳の全部」と
+	 * 決めつけて消す操作なので、合流の途中で競合マーカーが残っている台帳に当てると、
+	 * 読めなかった側の控えが消えたうえで正規形に整えられ、消えた跡すら残らない。
+	 *
 	 * @param activeHashes 現在使用中のハッシュセット
 	 */
 	async garbageCollect(activeHashes: Set<string>): Promise<void> {
@@ -356,8 +372,25 @@ export class UnitRegistryManager {
 			`Running unit-registry GC (file size: ${Math.round(stats.size / 1024)}KB)`,
 		);
 
+		// **傷は「そのとき読んだファイル」の話なので、ここで読み直す。**
+		// 覚えたままにすると、人が競合を解いたあとも、この作業場では掃除が二度と走らない
+		// （ストアは一度読んだら使い回すので、印だけが下りない）。まだ書き出していない
+		// 控えを抱えているときは読み直さない — 読み直しはストアを捨てるので、
+		// 抱えているぶんが消える。その回は印が下りないまま下で見送りになる
+		if (this.lastReadDamaged && this.writeBuffer.size === 0) {
+			this.store = null;
+			this.storeLoaded = false;
+		}
+
 		// ストアを取得
 		const store = await this.getOrLoadStore();
+		if (this.lastReadDamaged) {
+			Logger.getInstance().warn(
+				"unit-registry",
+				"Skipped unit-registry GC: the registry could not be read in full (a merge may be in progress)",
+			);
+			return;
+		}
 		const beforeSize = store.size();
 
 		// 初期エントリ（^[0-9a-f]{3}00000$）を保護対象に追加
@@ -417,5 +450,6 @@ export class UnitRegistryManager {
 		this.store = null;
 		this.storeLoaded = false;
 		this.needsSalvage = false;
+		this.lastReadDamaged = false;
 	}
 }

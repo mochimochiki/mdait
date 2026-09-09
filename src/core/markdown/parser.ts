@@ -167,6 +167,7 @@ export class MarkdownItParser implements IMarkdownParser {
 			mdaitMarkerLevel,
 			htmlCommentRanges,
 			provider.markersFormBoundaries,
+			lines,
 		);
 
 		// 第2パス: 境界からユニットを構築
@@ -244,6 +245,7 @@ export class MarkdownItParser implements IMarkdownParser {
 	 * @param htmlCommentRanges HTMLコメント範囲の配列
 	 * @param markersFormBoundaries マーカー単独で境界を形成するか（embedded=true）。
 	 *   external（false）ではマーカー単独境界を作らない分岐がフェーズ1で必要になる。
+	 * @param lines 正規化後の全行（マーカーと見出しのあいだの空行を見分けるのに使う）
 	 * @returns ソート済みの境界配列
 	 */
 	private collectBoundaries(
@@ -251,6 +253,7 @@ export class MarkdownItParser implements IMarkdownParser {
 		mdaitMarkerLevel: number,
 		htmlCommentRanges: HtmlCommentRange[],
 		markersFormBoundaries = true,
+		lines: readonly string[] = [],
 	): UnitBoundary[] {
 		// external（markersFormBoundaries === false）では、マーカー単独境界（見出しを伴わない
 		// 手動サブ境界）を作らない。境界は「見出しレベル≤閾値」＋「先頭本文ユニット」のみとし、
@@ -336,8 +339,14 @@ export class MarkdownItParser implements IMarkdownParser {
 			// マーカーの直後に見出しがあるか確認（レベルに関係なく全ての見出しをチェック）
 			let foundHeading: { line: number; heading: { level: number; title: string } } | null = null;
 
-			// マーカーの次の行のみチェック（空行を挟まない場合のみ統合）
-			const checkLine = markerNextLine;
+			// **マーカーと見出しのあいだの空行は読み飛ばす。**
+			//
+			// 整形ツール（Prettier・markdownlint・エディタの整形）はマーカーの直後へ空行を入れる。
+			// 空行を挟むと統合しない読み方だと、そのマーカーは「見出しを伴わない単独の境界」に
+			// なり、**全ユニット分の幽霊ユニットが生える**（章の数だけ空のユニットが増え、
+			// 続く見出しは自分のマーカーを失う）。原稿を整形しただけで起きるので、
+			// 読み手のほうで吸収する。読み飛ばすのは空行だけなので、本文が挟まれば統合しない
+			const checkLine = this.skipBlankLines(lines, markerNextLine);
 			const heading = allHeadings.get(checkLine);
 			if (heading) {
 				foundHeading = { line: checkLine, heading };
@@ -377,6 +386,18 @@ export class MarkdownItParser implements IMarkdownParser {
 		boundaries.sort((a, b) => a.line - b.line);
 
 		return boundaries;
+	}
+
+	/**
+	 * `from` 行から続く空行を読み飛ばした先の行番号を返す。
+	 * 行の一覧を渡されていない（既定の空配列）ときは何もしない。
+	 */
+	private skipBlankLines(lines: readonly string[], from: number): number {
+		let line = from;
+		while (line < lines.length && lines[line].trim() === "") {
+			line++;
+		}
+		return line;
 	}
 
 	/**
@@ -520,9 +541,15 @@ export class MarkdownItParser implements IMarkdownParser {
 				const contentLines = rawContent.split("\n");
 				if (contentLines[0].includes("<!-- mdait")) {
 					contentLines.shift();
-					// マーカーの後の空行も除去（もしあれば）
-					if (contentLines.length > 0 && contentLines[0].trim() === "") {
+					// マーカーの後の空行も除去（もしあれば）。**見出しと統合された境界では
+					// 何行あっても全部落とす** — 整形ツールがマーカーと見出しのあいだへ入れた
+					// 空行を読み飛ばして統合しているので、書き出しでは正規形（空行なし）へ戻す
+					const stripsAllBlankLines = boundary.heading !== undefined;
+					while (contentLines.length > 0 && contentLines[0].trim() === "") {
 						contentLines.shift();
+						if (!stripsAllBlankLines) {
+							break;
+						}
 					}
 					rawContent = contentLines.join("\n");
 				}
