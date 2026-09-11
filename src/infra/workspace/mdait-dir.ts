@@ -75,8 +75,9 @@ function unionAttributeTargets(): Set<string> {
  * 同じ行へ別の指定を並べている作業場では、**`eol=lf` は利用者のもの**なので残す。
  * 行ごと消すと、その指定が黙って失われる。
  *
- * 指定が1つも残らなかった行は落とし、ファイルに中身が無くなったらファイルごと消す。
- * 対象外の行（他人が書いた行）は1行も動かさない。
+ * 指定が1つも残らなかった行は落とし、**中身のある行が1つも残らなかったら**ファイルごと
+ * 消す。対象外の行（他人が書いた行）は1行も動かさない — **空行も動かさない。** 空行は
+ * 人が読むための区切りで、こちらが落とした行の跡ではないからである。
  */
 function pruneUnionMergeAttributes(filePath: string): void {
 	if (!fs.existsSync(filePath)) {
@@ -86,10 +87,14 @@ function pruneUnionMergeAttributes(filePath: string): void {
 	const targets = unionAttributeTargets();
 	const eol = existing.includes("\r\n") ? "\r\n" : "\n";
 	const hadTrailingEol = existing.endsWith("\n");
+	// 末尾の改行は「行の区切り」であって空行ではない。split が置いていく最後の "" を
+	// ここで外しておかないと、書き戻すたびに空行が1つ増える
+	const lines = existing.split(/\r?\n/);
+	const body = hadTrailingEol ? lines.slice(0, -1) : lines;
 	const kept: string[] = [];
 	let changed = false;
 
-	for (const line of existing.split(/\r?\n/)) {
+	for (const line of body) {
 		const tokens = line.trim().split(/\s+/).filter((token) => token !== "");
 		if (tokens.length < 2 || !targets.has(tokens[0])) {
 			kept.push(line);
@@ -109,11 +114,8 @@ function pruneUnionMergeAttributes(filePath: string): void {
 	if (!changed) {
 		return; // 出来上がりが同じなら書かない（無用な差分を作らない）
 	}
-	// 末尾の空行は、行を落としたぶんだけ残る。書き戻す前に畳む
-	while (kept.length > 0 && kept[kept.length - 1].trim() === "") {
-		kept.pop();
-	}
-	if (kept.length === 0) {
+	// 残ったのが空行だけなら、ファイルそのものに用が無い
+	if (kept.every((line) => line.trim() === "")) {
 		fs.rmSync(filePath, { force: true });
 		return;
 	}

@@ -1461,6 +1461,29 @@ suite("UnitStateStore", () => {
 				assert.strictEqual(held.filter(isMergeHeldEntry).length, 0);
 			});
 
+			test("席に着いていない行どうしがぶつかっても、読めない身元を作らない", () => {
+				// `entryKey` をそのまま身元に使うと、ここで `h<hash>…` という読み取れない値が
+				// 入る。メモリの上でだけ競合として数えられ、読み直すと消えるので数字が揺れる
+				write(tempDir, [
+					"# mdait unit-state",
+					`a.md\theld\t\t1\tth\tHASH\tsrc\t`,
+					`a.md\theld\t\t2\ttx\tHASH\tsrc\t`,
+				]);
+				const store = UnitStateStore.getInstance();
+				store.load(tempDir);
+				const before = store.getEntriesByPath("a.md").filter(isMergeHeldEntry).length;
+				store.save(tempDir);
+
+				UnitStateStore.dispose();
+				const reread = UnitStateStore.getInstance();
+				reread.load(tempDir);
+				assert.equal(
+					reread.getEntriesByPath("a.md").filter(isMergeHeldEntry).length,
+					before,
+					"読み直すと件数が変わっている",
+				);
+			});
+
 			test("古い版が書いた席の空な held は、合流由来として数えない", () => {
 				write(tempDir, ["# mdait unit-state", "a.md\theld\t\t1\tth\thash1\tfrom1\trevise@X"]);
 				const store = UnitStateStore.getInstance();

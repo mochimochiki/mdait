@@ -187,7 +187,7 @@ Set `markers.mode` in `mdait.json` to choose where this state lives:
 
 Convert existing documents in place with the **`mdait: Externalize Markers`** and **`mdait: Embed Markers`** commands.
 
-`.mdait/unit-state` is a single aggregated file, so concurrent translation of different documents could otherwise collide on it. mdait auto-generates `.mdait/.gitattributes` with `unit-state merge=union` and writes per-file blocks separated by blank-line anchors, so independent edits merge automatically and the next Sync re-normalizes the file.
+`.mdait/unit-state` is a single aggregated file, so concurrent translation of different documents could otherwise collide on it. mdait writes per-file blocks separated by blank-line anchors, puts a per-row anchor in front of every row, and has each row name itself by file ID rather than by path, so independent edits merge automatically and the next Sync re-normalizes the file. This does not rely on git's `merge=union`: that setting does not exist in SVN and silently dropped one side where it did apply, so mdait no longer writes `.mdait/.gitattributes` and removes the setting from workspaces that still have it (ADR-260911-01). Conflicts that do occur are surfaced under **Merge conflicts** in the mdait view.
 
 ---
 

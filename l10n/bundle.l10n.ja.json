@@ -628,7 +628,6 @@
   "Could not read the glossary. Translating without it: {0}": "用語集を読めませんでした。用語集なしで翻訳します: {0}",
   "The translation memory is in the middle of a merge. Resolve the conflict in {0} first.": "翻訳メモリが合流の途中です。先に {0} の衝突を解いてください。",
   "{0} merge conflict(s)": "競合の解決 {0}件",
-  "mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost, but the translation memory and glossary cannot be used until they are resolved. Click to open the mdait view.": "mdait: .mdait の中に未解決の競合が {0}件 あります。失われたものはありませんが、解決するまで翻訳メモリと用語集は使えません。クリックすると mdait のビューが開きます。",
   "Unit state": "ユニットの状態",
   "Source snapshots": "原文の控え",
   "Translation memory": "翻訳メモリ",
@@ -640,5 +639,10 @@
   "Merging left conflicts inside .mdait. Nothing has been lost, but mdait cannot use these files until the conflicts are resolved.": "合流で .mdait の中に競合が残りました。失われたものはありませんが、解決するまで mdait はこれらのファイルを使えません。",
   "held state: {0}": "預かっている状態: {0}",
   "held state: translated": "預かっている状態: 翻訳済み",
-  "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded — but it will only come back on its own if the chapter's text matches it exactly.\n\nHeld state: from={1} need={2}": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。捨ててはいませんが、章の本文がぴたりと一致したときだけ自動で戻ります。\n\n預かっている状態: from={1} need={2}"
+  "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded — but it will only come back on its own if the chapter's text matches it exactly.\n\nHeld state: from={1} need={2}": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。捨ててはいませんが、章の本文がぴたりと一致したときだけ自動で戻ります。\n\n預かっている状態: from={1} need={2}",
+  "mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost.": "mdait: .mdait の中に未解決の競合が {0}件 あります。失われたものはありません。",
+  "The {0} cannot be used until they are resolved.": "解決するまで{0}は使えません。",
+  "Click to open the mdait view.": "クリックすると mdait のビューが開きます。",
+  "translation memory": "翻訳メモリ",
+  "glossary": "用語集"
 }

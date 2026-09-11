@@ -16,6 +16,7 @@ import * as vscode from "vscode";
 import type { StatusManager } from "../../core/status/status-manager";
 import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import type { Configuration } from "../../infra/config/configuration";
+import type { ConflictFileKind } from "../../core/conflict/mdait-conflicts";
 import { collectWorkspaceConflicts } from "./conflict-source";
 
 /** 集計結果（表示の組み立てをテストできるように分離する） */
@@ -28,6 +29,34 @@ export interface StatusBarCounts {
 	orphanTargets: number;
 	/** `.mdait` に残っている未解決の合流の競合の数 */
 	conflicts: number;
+	/** 競合しているファイルの種別（ツールチップの文面をここから作る） */
+	conflictKinds: readonly ConflictFileKind[];
+}
+
+/**
+ * 競合のツールチップ。**何が使えなくなっているかは、競合している対象で決まる。**
+ *
+ * 件数だけを見て「翻訳メモリと用語集が使えません」と書くと、`unit-state` だけが競合して
+ * いるときに嘘になる（TM も用語集もふつうに読める）。読めなくなっている対象が実際に
+ * あるときだけ、その名前を挙げる。
+ */
+export function buildConflictTooltip(counts: StatusBarCounts): string {
+	const blocked: string[] = [];
+	if (counts.conflictKinds.includes("tm")) {
+		blocked.push(vscode.l10n.t("translation memory"));
+	}
+	if (counts.conflictKinds.includes("terms")) {
+		blocked.push(vscode.l10n.t("glossary"));
+	}
+	const head = vscode.l10n.t(
+		"mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost.",
+		counts.conflicts,
+	);
+	const tail = vscode.l10n.t("Click to open the mdait view.");
+	if (blocked.length === 0) {
+		return `${head} ${tail}`;
+	}
+	return `${head} ${vscode.l10n.t("The {0} cannot be used until they are resolved.", blocked.join(" / "))} ${tail}`;
 }
 
 /**
@@ -83,13 +112,15 @@ export class StatusBarSummary implements vscode.Disposable {
 	public collect(): StatusBarCounts {
 		const tree = this.statusManager.getStatusItemTree();
 		const scopeDirs = getSelectedScopeDirs(this.configuration);
+		const conflicts = collectWorkspaceConflicts(this.configuration);
 		return {
 			pendingTranslation: tree.countPendingTranslationUnits(scopeDirs),
 			needsAttention: tree.getNeedsAttentionUnits(scopeDirs).length,
 			orphanTargets: tree.countOrphanTargetFiles(scopeDirs),
 			// 競合だけは選択中の transPair で絞らない。`.mdait` のファイルは
 			// ワークスペースに1つずつで、言語ペアに属さないため
-			conflicts: collectWorkspaceConflicts(this.configuration).total,
+			conflicts: conflicts.total,
+			conflictKinds: conflicts.files.map((file) => file.kind),
 		};
 	}
 
@@ -111,10 +142,7 @@ export class StatusBarSummary implements vscode.Disposable {
 		this.item.backgroundColor =
 			counts.conflicts > 0 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
 		if (counts.conflicts > 0) {
-			this.item.tooltip = vscode.l10n.t(
-				"mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost, but the translation memory and glossary cannot be used until they are resolved. Click to open the mdait view.",
-				counts.conflicts,
-			);
+			this.item.tooltip = buildConflictTooltip(counts);
 			this.item.show();
 			return;
 		}

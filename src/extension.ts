@@ -29,6 +29,7 @@ import { SelectionState } from "./core/status/selection-state";
 import { type StatusItem, isFrontmatterStatusItem } from "./core/status/status-item";
 import { StatusManager } from "./core/status/status-manager";
 import { UnitStateStore } from "./core/unit-state/unit-state-store";
+import { ensureMdaitDir } from "./infra/workspace/mdait-dir";
 import { Configuration } from "./infra/config/configuration";
 import { Logger, parseLogLevel } from "./infra/logging/logger";
 import { AIOnboarding } from "./infra/onboarding/ai-onboarding";
@@ -69,6 +70,10 @@ import {
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
 import { StatusBarSummary } from "./ui/status/status-bar-summary";
+import {
+	collectWorkspaceConflicts,
+	invalidateWorkspaceConflicts,
+} from "./ui/status/conflict-source";
 import { StatusTreeProvider } from "./ui/status/status-tree-provider";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -98,6 +103,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		const mdaitDir = config.getMdaitDir();
 		if (fs.existsSync(mdaitDir)) {
 			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+			// 既にある作業場から `merge=union` を外す（ADR-260911-01）。**起動時に走らせる。**
+			// コマンドの中だけで呼んでいると、作業場を開いただけの人には移行がいつまでも届かない
+			await ensureMdaitDir();
 		}
 	} catch (error) {
 		// 設定ファイルがない場合はエラーを表示せず、Welcome Viewを表示するため続行
@@ -124,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	statusManager.setCollector(new StatusCollector());
 
 	// mdaitHasStatusコンテキスト変数を初期化
-	await updateHasStatusContext(statusManager);
+	await updateHasStatusContext(statusManager, config);
 
 	// ステータスツリービューを作成
 	const statusTreeProvider = new StatusTreeProvider();
@@ -156,7 +164,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	config.onConfigurationChanged(() => {
 		selectionState.reconcileWith(config.transPairs);
 		updateConfiguredContext(config);
-		updateHasStatusContext(statusManager);
+		updateHasStatusContext(statusManager, config);
 		statusTreeProvider.refresh();
 	});
 
@@ -173,13 +181,33 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// ステータスツリー変更時にmdaitHasStatusを更新
 	statusManager.onStatusTreeChanged(() => {
-		updateHasStatusContext(statusManager);
+		updateHasStatusContext(statusManager, config);
 	});
 
 	// needs 件数のステータスバー常駐表示（原文保存で状態が変わったことに気づく唯一の受動サーフェス）
 	const statusBarSummary = new StatusBarSummary(statusManager, config);
 	context.subscriptions.push(statusBarSummary);
 	config.onConfigurationChanged(() => statusBarSummary.refresh());
+
+	// **`.mdait` の中のファイルが VS Code の外で変わったら数え直す。**
+	//
+	// 合流は git や SVN が外から行うもので、mdait のイベント（状態ツリーの変化・設定の
+	// 読み直し）は1つも起きない。見張っていないと、**VS Code を開いたまま合流した人には
+	// 競合が一度も見えない** — 次に何かコマンドを走らせるまでツリーもステータスバーも
+	// 古いままになる。監視するのは競合が出うる4つだけで、`reports/` や `logs/` は見ない
+	const conflictWatcher = vscode.workspace.createFileSystemWatcher(
+		new vscode.RelativePattern(config.getMdaitDir(), "{unit-state,unit-registry,translations.tmx,*.csv,*.yaml,*.yml}"),
+	);
+	const refreshConflicts = () => {
+		invalidateWorkspaceConflicts();
+		statusBarSummary.refresh();
+		statusTreeProvider.refresh();
+		updateHasStatusContext(statusManager, config);
+	};
+	conflictWatcher.onDidChange(refreshConflicts);
+	conflictWatcher.onDidCreate(refreshConflicts);
+	conflictWatcher.onDidDelete(refreshConflicts);
+	context.subscriptions.push(conflictWatcher);
 
 	// setup.createConfig command
 	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>
@@ -906,7 +934,11 @@ async function updateConfiguredContext(config: Configuration): Promise<void> {
 /**
  * mdaitHasStatusコンテキスト変数を更新する
  */
-async function updateHasStatusContext(statusManager: StatusManager): Promise<void> {
-	const hasStatus = !statusManager.getStatusItemTree().isEmpty();
+async function updateHasStatusContext(statusManager: StatusManager, config: Configuration): Promise<void> {
+	// **競合だけがある作業場でも、ツリーを出す。** ここが空だと VS Code は Welcome を
+	// かぶせるので、「競合の解決」の枝がユーザーに一度も見えない（原稿がまだ1つも
+	// 同期されていない作業場を合流させたときに実際に起きる）
+	const hasStatus =
+		!statusManager.getStatusItemTree().isEmpty() || collectWorkspaceConflicts(config).total > 0;
 	await vscode.commands.executeCommand("setContext", "mdaitHasStatus", hasStatus);
 }

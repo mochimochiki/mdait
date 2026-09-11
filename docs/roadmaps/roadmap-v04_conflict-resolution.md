@@ -71,7 +71,7 @@ P03 --> P04
 **状態と操作は StatusTree**（1件1行。語・原文の先頭・ファイルと席が読める）、**解説は Hover**。
 合流のたびにトーストは出さない。
 
-実測台は union を前提に数字を出しているので、この段で測り直す（`merge.mjs` / `merge-extra.mjs`）。
+実測台は git / diff3 / union の3方式を横に並べて出すので、**git と diff3 の列がそのまま union 無しの世界である**（台を直す必要は無かった）。この段で読み直して数字を記録する（`merge.mjs` / `merge-extra.mjs`）。
 
 **Steps**
 - [x] `mdait-dir.ts` の `.gitattributes` 自動生成をやめる。既存の作業場からは `merge=union` の指定を外す。**消すのはトークン1つだけ**で行ごとではない（`unit-state merge=union eol=lf` の `eol=lf` は利用者のもの。行ごと消すと黙って失われる）。指定が1つも残らない行は落とし、ファイルに中身が無くなったらファイルごと消す。用語集は `terms.filename` から解決し、既定の `terms.csv` も残骸として外す

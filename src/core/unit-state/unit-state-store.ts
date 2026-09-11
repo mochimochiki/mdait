@@ -180,7 +180,7 @@ export function isHeldBackEntry(entry: UnitStateEntry): boolean {
  * 記録してもいない — 降ろした瞬間にしか知り得ない事実を、その行自身に持たせているだけである。
  */
 export function isMergeHeldEntry(entry: UnitStateEntry): boolean {
-	return entry.kind === "held" && entry.seat !== "";
+	return entry.kind === "held" && readHeldOrigin(entry.seat) !== "";
 }
 
 /**
@@ -189,6 +189,21 @@ export function isMergeHeldEntry(entry: UnitStateEntry): boolean {
  * 手で書き換えられた値・古い版が書いた値は空として扱う。数え落とすほうが、
  * 身元の分からない値を「競合」として人の前に出すより安全である。
  */
+/**
+ * 降ろす行に残す「押し出された元の行の身元」。
+ *
+ * **読み取り（`readHeldOrigin`）が受け取れる語彙でしか作らない。** `entryKey` をそのまま
+ * 使うと、既に降ろされている行どうしがぶつかったときに `h<hash>…` という読み取れない値が
+ * 入り、**メモリの上でだけ競合として数えられて、読み直すと消える**。
+ * 席を持たない行（既に降ろされた行）から降ろされたものは、名乗れる席が無いので空にする。
+ */
+function heldOriginOf(entry: UnitStateEntry): string {
+	if (entry.kind === "unit") {
+		return isSeatKey(entry.seat) ? `u${entry.seat}` : "";
+	}
+	return entry.kind === "front" ? "f" : "";
+}
+
 function readHeldOrigin(seat: string): string {
 	if (seat === "f") {
 		return seat;
@@ -839,7 +854,7 @@ export class UnitStateStore {
 		// という事実がディスクから消え、**本文から消えた章を預かっている行と見分けが付かなく
 		// なる**。列は前からあるもので、古い版の mdait はここを読み飛ばすので互換も壊れない
 		// （ADR-260911-03）。
-		const held: UnitStateEntry = { ...leaves, kind: "held", seat: entryKey(leaves) };
+		const held: UnitStateEntry = { ...leaves, kind: "held", seat: heldOriginOf(leaves) };
 		const heldKey = entryKey(held);
 		if (!rows.has(heldKey)) {
 			rows.set(heldKey, held);

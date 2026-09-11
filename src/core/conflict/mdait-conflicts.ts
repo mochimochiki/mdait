@@ -78,12 +78,18 @@ export function noConflicts(): MdaitConflicts {
  */
 type FileStamp = string;
 
-function stampOf(filePath: string): FileStamp | undefined {
+/**
+ * 見た目には**パスも入れる**。覚え書きは作業場をまたいで生き残るので（`conflict-source.ts` の
+ * スキャナはモジュールに1つ）、設定でパスが変わったのに新しいパスのファイルの更新時刻と
+ * 寸法がたまたま同じだと、前のパスの答えをそのまま返してしまう。
+ */
+
+function stampOf(filePath: string): FileStamp {
 	try {
 		const stat = fs.statSync(filePath);
-		return `${stat.mtimeMs}:${stat.size}`;
+		return `${filePath}\u0000${stat.mtimeMs}:${stat.size}`;
 	} catch {
-		return undefined; // 無いファイルは競合しようがない
+		return `${filePath}\u0000-`; // 無いファイルは競合しようがない
 	}
 }
 
@@ -131,15 +137,34 @@ export function collectMdaitConflicts(
 		}
 	}
 
-	const heldRows: MergeHeldRow[] = entries.filter(isMergeHeldEntry).map((entry) => ({
+	const heldRows = collectMergeHeldRows(entries, files);
+	return { files, heldRows, total: files.length + heldRows.length };
+}
+
+/**
+ * 合流で降ろされた行を拾う。ただし **`unit-state` にまだ競合マーカーが残っているあいだは
+ * 1行も返さない。**
+ *
+ * この2つは**同じ競合の別の時点**だからである。マーカーの入った `unit-state` を読むと、
+ * 読み込みは両陣営の行を拾って片方を席から降ろす — つまりファイルの競合1つが、そのまま
+ * 行の競合として**同時にメモリに現れる**。両方数えると1つの合流が2件に見え、ツリーにも
+ * 二重に並ぶ。マーカーが残っているうちはファイル1件として数え、畳んで書き戻されたあとに
+ * 行として数える。
+ */
+function collectMergeHeldRows(
+	entries: readonly UnitStateEntry[],
+	files: readonly ConflictedFile[],
+): MergeHeldRow[] {
+	if (files.some((file) => file.kind === "unit-state")) {
+		return [];
+	}
+	return entries.filter(isMergeHeldEntry).map((entry) => ({
 		path: entry.path,
 		seat: entry.seat,
 		hash: entry.hash,
 		from: entry.from,
 		need: entry.need,
 	}));
-
-	return { files, heldRows, total: files.length + heldRows.length };
 }
 
 /**
@@ -149,7 +174,7 @@ export function collectMdaitConflicts(
  * メモリの上にあるので毎回数え直す（走査の費用はファイルの読み直しに比べて無視できる）。
  */
 export class MdaitConflictScanner {
-	private stamps = new Map<ConflictFileKind, FileStamp | undefined>();
+	private stamps = new Map<ConflictFileKind, FileStamp>();
 	private files: ConflictedFile[] = [];
 	private scannedOnce = false;
 
@@ -170,13 +195,7 @@ export class MdaitConflictScanner {
 			this.stamps = new Map(candidates.map(([kind, filePath]) => [kind, stampOf(filePath)]));
 			this.scannedOnce = true;
 		}
-		const heldRows: MergeHeldRow[] = entries.filter(isMergeHeldEntry).map((entry) => ({
-			path: entry.path,
-			seat: entry.seat,
-			hash: entry.hash,
-			from: entry.from,
-			need: entry.need,
-		}));
+		const heldRows = collectMergeHeldRows(entries, this.files);
 		return { files: this.files, heldRows, total: this.files.length + heldRows.length };
 	}
 

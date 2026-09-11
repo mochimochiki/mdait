@@ -171,6 +171,22 @@ suite(".mdait の初期化", () => {
 			assert.equal(read(".gitattributes"), "*.md text");
 		});
 
+		test("他人が書いた空行は動かさない", async () => {
+			write(".gitattributes", "unit-state merge=union\n\n*.md text\n\n");
+
+			await ensureMdaitDir();
+
+			assert.equal(read(".gitattributes"), "\n*.md text\n\n");
+		});
+
+		test("空行しか残らなければ、ファイルごと消える", async () => {
+			write(".gitattributes", "\nunit-state merge=union\n\n");
+
+			await ensureMdaitDir();
+
+			assert.equal(fs.existsSync(mdaitPath(".gitattributes")), false);
+		});
+
 		test("2度呼んでも中身は変わらない", async () => {
 			write(".gitattributes", "unit-state merge=union\n*.md text\n");
 

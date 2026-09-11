@@ -114,6 +114,32 @@ suite(".mdait の未解決の競合を数える", () => {
 		assert.equal(collectMdaitConflicts(paths, [heldRow()]).total, 2);
 	});
 
+	suite("同じ合流を二重に数えない", () => {
+		test("unit-state にマーカーが残っているあいだは、行を数えない", () => {
+			// マーカーの入った unit-state を読むと、読み込みが両陣営の行を拾って片方を
+			// 席から降ろす。ファイルの競合1つが、そのまま行の競合として同時に現れるので、
+			// 両方数えると1つの合流が2件に見える
+			write(paths.unitState, CONFLICTED);
+
+			const found = collectMdaitConflicts(paths, [heldRow(), heldRow({ path: "en/b.md" })]);
+			assert.equal(found.total, 1, "同じ合流が二重に数えられている");
+			assert.equal(found.files[0].kind, "unit-state");
+			assert.equal(found.heldRows.length, 0);
+		});
+
+		test("マーカーが畳まれたあとは、行として数える", () => {
+			const found = collectMdaitConflicts(paths, [heldRow(), heldRow({ path: "en/b.md" })]);
+
+			assert.equal(found.total, 2);
+		});
+
+		test("unit-state 以外のファイルの競合は、行の件数を抑えない", () => {
+			write(paths.tm, CONFLICTED);
+
+			assert.equal(collectMdaitConflicts(paths, [heldRow()]).total, 2);
+		});
+	});
+
 	test("数えるだけで、1バイトも書かない", () => {
 		write(paths.unitState, CONFLICTED);
 		const before = fs.statSync(paths.unitState);
@@ -170,6 +196,22 @@ suite(".mdait の未解決の競合を数える", () => {
 			scanner.invalidate();
 
 			assert.equal(scanner.scan(paths).total, 0);
+		});
+
+		test("パスが変わったら、見た目が同じでも読み直す", () => {
+			// 覚え書きはモジュールに1つで作業場をまたいで生き残る。パスを鍵に入れていないと、
+			// 設定で用語集の名前が変わったのに、新しいファイルの更新時刻と寸法がたまたま
+			// 同じだったときに前のパスの答えを返してしまう
+			write(paths.terms, CONFLICTED);
+			pinMtime(paths.terms);
+			const scanner = new MdaitConflictScanner();
+			assert.equal(scanner.scan(paths).total, 1);
+
+			const renamed = path.join(tempDir, "glossary2.yaml");
+			fs.writeFileSync(renamed, "解決済み\n".padEnd(CONFLICTED.length, " "), "utf-8");
+			fs.utimesSync(renamed, PINNED, PINNED);
+
+			assert.equal(scanner.scan({ ...paths, terms: renamed }).total, 0, "前のパスの答えが返っている");
 		});
 
 		test("ファイルが消えても数え続けない", () => {

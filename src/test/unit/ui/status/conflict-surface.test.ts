@@ -15,7 +15,7 @@ import {
 	buildConflictsItem,
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
-import { buildStatusBarText } from "../../../../ui/status/status-bar-summary";
+import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
@@ -99,11 +99,14 @@ suite("競合の解決（StatusTree の枝）", () => {
 });
 
 suite("競合の解決（ステータスバーの1行）", () => {
-	const counts = (overrides: Partial<Parameters<typeof buildStatusBarText>[0]> = {}) => ({
+	const counts = (
+		overrides: Partial<Parameters<typeof buildStatusBarText>[0]> = {},
+	): Parameters<typeof buildStatusBarText>[0] => ({
 		pendingTranslation: 0,
 		needsAttention: 0,
 		orphanTargets: 0,
 		conflicts: 0,
+		conflictKinds: [],
 		...overrides,
 	});
 
@@ -128,5 +131,40 @@ suite("競合の解決（ステータスバーの1行）", () => {
 		const text = buildStatusBarText(counts({ pendingTranslation: 2 }));
 
 		assert.ok(text.startsWith("$(globe)"), text);
+	});
+
+	suite("ツールチップは、実際に使えなくなっている対象だけを挙げる", () => {
+		test("unit-state だけの競合では、TM も用語集も使えないとは言わない", () => {
+			const tip = buildConflictTooltip(counts({ conflicts: 1, conflictKinds: ["unit-state"] }));
+
+			assert.doesNotMatch(tip, /memory|glossary/i, tip);
+		});
+
+		test("台帳だけの競合でも同じ", () => {
+			const tip = buildConflictTooltip(counts({ conflicts: 1, conflictKinds: ["unit-registry"] }));
+
+			assert.doesNotMatch(tip, /memory|glossary/i, tip);
+		});
+
+		test("TM が競合していれば、翻訳メモリが使えないと言う", () => {
+			const tip = buildConflictTooltip(counts({ conflicts: 1, conflictKinds: ["tm"] }));
+
+			assert.match(tip, /translation memory/i, tip);
+			assert.doesNotMatch(tip, /glossary/i, tip);
+		});
+
+		test("両方が競合していれば両方を挙げる", () => {
+			const tip = buildConflictTooltip(counts({ conflicts: 2, conflictKinds: ["tm", "terms"] }));
+
+			assert.match(tip, /translation memory/i, tip);
+			assert.match(tip, /glossary/i, tip);
+		});
+
+		test("合流で降ろされた行だけのときも、対象を名指ししない", () => {
+			const tip = buildConflictTooltip(counts({ conflicts: 3, conflictKinds: [] }));
+
+			assert.match(tip, /3/, tip);
+			assert.doesNotMatch(tip, /memory|glossary/i, tip);
+		});
 	});
 });
