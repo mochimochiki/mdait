@@ -4,7 +4,7 @@
  * `merge.mjs` / `merge-extra.mjs` はここを一度も測っていない。TMX は
  *   - tuid 順に並んだ XML の `<tu>` ブロックの列
  *   - 骨格（区画の目印）も、ブロックとブロックのあいだの空行も無い
- *   - `.mdait/.gitattributes` に **merge=union の指定が無い**
+ *   - 骨格が無いぶん、両陣営の追加が同じ隙間へ入りやすい
  * なので、2人が同じ日に翻訳メモリへ登録したときにどうなるかは未知だった。
  *
  *   node scripts/lab/scenarios/merge-tmx-probe.mjs
@@ -102,7 +102,7 @@ function trial(seed, baseCount, addCount) {
 	return { out, want: new Set([...mine, ...theirs]).size };
 }
 
-console.log("translations.tmx の合流（`.mdait/.gitattributes` に `merge=union` を書き出す）\n");
+console.log("translations.tmx の合流（union は比較用。製品は `.gitattributes` を置かない — ADR-260911-01）\n");
 console.log("  形                              git                diff3              union");
 console.log(`  ${"-".repeat(76)}`);
 for (const [baseCount, addCount] of [

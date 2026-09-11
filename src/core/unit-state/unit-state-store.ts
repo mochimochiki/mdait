@@ -164,6 +164,38 @@ export function isHeldBackEntry(entry: UnitStateEntry): boolean {
 	return entry.kind === "held";
 }
 
+/**
+ * **合流で押し出された行か。**
+ *
+ * 席に着いていない行（`held`）には出どころが2つあり、**人の判断を待っているのは片方だけ**
+ * である（ADR-260911-03）。
+ *
+ * - **本文から消えた章を預かっている行**（`parkEntries`）… 正規の用途。章を消して貼り戻す
+ *   運用で使う。本文が戻れば hash の完全一致で自動的に席へ戻るので、人は何もしなくてよい
+ * - **合流で同じ席に2行来て、降ろされたほうの行**（`seatOnLoad`）… 2人が同じ章に別々の
+ *   `from` / `need` を書いた結果で、**どちらを採るかは人にしか決められない**
+ *
+ * 見分けるのは `seat` である。降ろすときに「押し出された元の行の身元」をそこへ残し、
+ * 預けるときは空のままにする。**どこにも新しい列を足していない**し、同じ事実を二重に
+ * 記録してもいない — 降ろした瞬間にしか知り得ない事実を、その行自身に持たせているだけである。
+ */
+export function isMergeHeldEntry(entry: UnitStateEntry): boolean {
+	return entry.kind === "held" && entry.seat !== "";
+}
+
+/**
+ * `held` の行の `seat` 列に書ける値か（`u<席のキー>` か `f`）。
+ *
+ * 手で書き換えられた値・古い版が書いた値は空として扱う。数え落とすほうが、
+ * 身元の分からない値を「競合」として人の前に出すより安全である。
+ */
+function readHeldOrigin(seat: string): string {
+	if (seat === "f") {
+		return seat;
+	}
+	return seat.startsWith("u") && isSeatKey(seat.slice(1)) ? seat : "";
+}
+
 /** いまの本文の**位置**を持っている行か */
 export function isLiveBodyEntry(entry: UnitStateEntry): boolean {
 	return entry.kind === "unit";
@@ -246,7 +278,15 @@ export interface UnitStateEntry {
 	path: string;
 	/** 行の種別 */
 	kind: UnitStateKind;
-	/** 席のキー（`unit` のときだけ意味を持つ。`held` / `front` は ""） */
+	/**
+	 * 席のキー。**種別で意味が変わる。**
+	 *
+	 * - `unit` … その行の席。二度と動かない背番号
+	 * - `held` … **合流で押し出された元の行の身元**（`u<席>` か `f`）。空なら、本文から
+	 *   消えた章を預かっているだけの行である（`parkEntries` が預けたもの）。ここが
+	 *   「その行が人の判断を待っているか」を分ける唯一の手掛かりになる（ADR-260911-03）
+	 * - `front` … 常に ""（1ファイルに1つなので席が要らない）
+	 */
 	seat: string;
 	/** 見出しレベル（非MD・先頭本文ユニット=0） */
 	level: number;
@@ -677,8 +717,12 @@ export class UnitStateStore {
 				continue;
 			}
 
+			// `front` は席を持たない。`unit` は自分の席、`held` は押し出された元の行の身元
+			// （合流由来かどうかの唯一の手掛かり）。読めない値は空として扱う — 数え落とす
+			// ほうが、手で書き換えられた値を競合として人の前に出すより安全である
+			const seatCol = kind === "unit" ? seat : kind === "held" ? readHeldOrigin(seat) : "";
 			this.seatOnLoad(
-				{ path: filePathCol, kind, seat: kind === "unit" ? seat : "", level, titleHash, hash, from, need },
+				{ path: filePathCol, kind, seat: seatCol, level, titleHash, hash, from, need },
 				report,
 			);
 		}
@@ -789,7 +833,13 @@ export class UnitStateStore {
 		// 降ろしたほうは席を持たない行（`held`）にする。**捨てない。**
 		// 本文 hash が無い行も預かる — 拾い戻せはしないが、`from` / `need` は
 		// このファイルにしか無く、本文から計算し直せない
-		const held: UnitStateEntry = { ...leaves, kind: "held", seat: "" };
+		//
+		// **押し出された元の行の身元を `seat` に残す。** 残さないと、次の `save()` が
+		// 競合マーカーごと畳んだきれいなファイルを書いた時点で「これは合流で降ろされた行だ」
+		// という事実がディスクから消え、**本文から消えた章を預かっている行と見分けが付かなく
+		// なる**。列は前からあるもので、古い版の mdait はここを読み飛ばすので互換も壊れない
+		// （ADR-260911-03）。
+		const held: UnitStateEntry = { ...leaves, kind: "held", seat: entryKey(leaves) };
 		const heldKey = entryKey(held);
 		if (!rows.has(heldKey)) {
 			rows.set(heldKey, held);

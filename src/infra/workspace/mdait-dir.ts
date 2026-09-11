@@ -15,27 +15,6 @@ import { Logger, formatError } from "../logging/logger";
  */
 const GITIGNORE_LINES = ["logs/", "reports/", "unit-registry.broken", "unit-state.broken"];
 
-/**
- * `.mdait/.gitattributes` に必ず載っている行。
- *
- * どれも「1つのファイルへ全員が書き込む」形なので、ブランチをまたぐと同じ場所が動く。
- * union merge なら両方の陣営の行が残る — 残しすぎは次の sync / GC が正規形へ均すが、
- * **落とした行は取り返せない**（`unit-registry` の各行は、どこにも複製の無い旧原文である）。
- *
- * `translations.tmx` は XML だが **1 TU = 1 行**で書くので、行を足し合わせても壊れない
- * （整形して1つの TU を10行に散らしていた頃に union を掛けると、入れ子が壊れて TU の
- * 2〜3割が読めなくなった）。同じ tuid の行が2つ並んだら、読み込みが訳を拾い集めて畳む。
- *
- * `terms.csv` は用語集の**既定の名前**である。`terms.filename` で名前を変えている作業場では
- * この指定は効かないので、そこは利用者が自分で書く（`.gitattributes` に書けるのは決まった名前だけ）。
- */
-const GITATTRIBUTES_LINES = [
-	"unit-state merge=union",
-	"unit-registry merge=union",
-	"translations.tmx merge=union",
-	"terms.csv merge=union",
-];
-
 /** 行の見出し（.gitignore ならパターン、.gitattributes なら対象パス）を取り出す */
 function leadingToken(line: string): string {
 	return line.trim().split(/\s+/)[0] ?? "";
@@ -44,7 +23,7 @@ function leadingToken(line: string): string {
 /**
  * 見出しがまだ無い行だけを書き足す。
  *
- * 既にある行には触らない — `unit-state merge=ours` のように利用者が書き換えていたら、
+ * 既にある行には触らない — `logs/` のように利用者が書き換えていたら、
  * それは意図された指定なので、こちらの既定で上書きしない。
  */
 function ensureLines(filePath: string, requiredLines: string[]): void {
@@ -67,9 +46,87 @@ function ensureLines(filePath: string, requiredLines: string[]): void {
 }
 
 /**
+ * かつて mdait が `.mdait/.gitattributes` へ書き出していた `merge=union` の対象。
+ *
+ * union は「競合を出さない代わりに黙って片方を捨てる」取引で、**SVN には最初から無い**。
+ * 効いた先（翻訳メモリと用語集）では実際に片方が失われていた。外せば git も SVN も
+ * 「競合マーカーの入ったファイル」だけを吐き、扱う入力が1種類に揃う（ADR-260911-01）。
+ *
+ * 用語集は `terms.filename` で名前を変えられるので、決め打ちにせず設定から解決する。
+ * **既定の `terms.csv` も必ず対象に入れる** — mdait はそこだけを決め打ちで書いていたので、
+ * 名前を変えた作業場にも `terms.csv merge=union` が残骸として残っている。
+ */
+function unionAttributeTargets(): Set<string> {
+	const targets = new Set(["unit-state", "unit-registry", "translations.tmx", "terms.csv"]);
+	try {
+		targets.add(path.basename(Configuration.getInstance().getTermsFilePath()));
+	} catch {
+		// 設定がまだ読めない作業場では、既定の名前ぶんだけを外す
+	}
+	return targets;
+}
+
+/**
+ * 既にある `.gitattributes` から、mdait が書いた `merge=union` の指定を外す。
+ *
+ * **消すのは `merge=union` というトークン1つだけ**で、行ごとではない。行に出所は
+ * 書かれていないので、利用者が同じ指定を自分で書いていた場合も外れる（union を
+ * 外すのが目的なので意図は一致する）。一方で `unit-state merge=union eol=lf` のように
+ * 同じ行へ別の指定を並べている作業場では、**`eol=lf` は利用者のもの**なので残す。
+ * 行ごと消すと、その指定が黙って失われる。
+ *
+ * 指定が1つも残らなかった行は落とし、ファイルに中身が無くなったらファイルごと消す。
+ * 対象外の行（他人が書いた行）は1行も動かさない。
+ */
+function pruneUnionMergeAttributes(filePath: string): void {
+	if (!fs.existsSync(filePath)) {
+		return;
+	}
+	const existing = fs.readFileSync(filePath, "utf-8");
+	const targets = unionAttributeTargets();
+	const eol = existing.includes("\r\n") ? "\r\n" : "\n";
+	const hadTrailingEol = existing.endsWith("\n");
+	const kept: string[] = [];
+	let changed = false;
+
+	for (const line of existing.split(/\r?\n/)) {
+		const tokens = line.trim().split(/\s+/).filter((token) => token !== "");
+		if (tokens.length < 2 || !targets.has(tokens[0])) {
+			kept.push(line);
+			continue;
+		}
+		const specs = tokens.slice(1).filter((spec) => spec !== "merge=union");
+		if (specs.length === tokens.length - 1) {
+			kept.push(line); // この行に union は無かった（`merge=ours` などはそのまま）
+			continue;
+		}
+		changed = true;
+		if (specs.length > 0) {
+			kept.push(`${tokens[0]} ${specs.join(" ")}`);
+		}
+	}
+
+	if (!changed) {
+		return; // 出来上がりが同じなら書かない（無用な差分を作らない）
+	}
+	// 末尾の空行は、行を落としたぶんだけ残る。書き戻す前に畳む
+	while (kept.length > 0 && kept[kept.length - 1].trim() === "") {
+		kept.pop();
+	}
+	if (kept.length === 0) {
+		fs.rmSync(filePath, { force: true });
+		return;
+	}
+	fs.writeFileSync(filePath, `${kept.join(eol)}${hadTrailingEol ? eol : ""}`, "utf-8");
+}
+
+/**
  * .mdaitディレクトリを初期化する
- * ディレクトリが存在しない場合は作成し、.gitignore・.gitattributes も自動生成する
+ * ディレクトリが存在しない場合は作成し、.gitignore も自動生成する
  * 既に存在する場合でも、足りない行があれば書き足す（冪等性を保証）
+ *
+ * `.gitattributes` は**もう作らない**。既にある作業場からは `merge=union` の指定を外す
+ * （ADR-260911-01）。合流の守りは union に依存せず、競合は「競合の解決」で解く。
  *
  * @returns .mdaitディレクトリの絶対パス。ワークスペースが見つからない場合はnull
  */
@@ -88,12 +145,12 @@ export async function ensureMdaitDir(): Promise<string | null> {
 		}
 
 		ensureLines(path.join(mdaitDir, ".gitignore"), GITIGNORE_LINES);
-		ensureLines(path.join(mdaitDir, ".gitattributes"), GITATTRIBUTES_LINES);
+		pruneUnionMergeAttributes(path.join(mdaitDir, ".gitattributes"));
 	} catch (error) {
-		// .gitignore/.gitattributes 作成失敗はベストエフォートなので警告のみ
+		// .gitignore/.gitattributes の手入れはベストエフォートなので警告のみ
 		Logger.getInstance().warn(
 			"mdait-dir",
-			"failed to create .mdait/.gitignore or .gitattributes",
+			"failed to create .mdait/.gitignore or prune .mdait/.gitattributes",
 			formatError(error),
 		);
 	}

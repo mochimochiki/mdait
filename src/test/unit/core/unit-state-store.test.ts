@@ -7,6 +7,7 @@ import {
 	isFrontMatterEntry,
 	isHeldBackEntry,
 	isLiveBodyEntry,
+	isMergeHeldEntry,
 	isPathInDirs,
 	shouldRemoveEntryPath,
 } from "../../../core/unit-state/unit-state-store";
@@ -1388,6 +1389,86 @@ suite("UnitStateStore", () => {
 	suite("合流のあとのファイルを読む", () => {
 		const write = (dir: string, lines: string[]) =>
 			fs.writeFileSync(path.join(dir, "unit-state"), `${lines.join("\n")}\n`, "utf-8");
+
+		suite("合流で降ろされた行と、本文から消えた章を預かる行を見分ける", () => {
+			test("合流で降ろされた行は、押し出された元の席を名乗る", () => {
+				write(tempDir, [
+					"# mdait unit-state",
+					`a.md\tunit\t${seat(0)}\t1\tth\thash1\tfrom1\t`,
+					`a.md\tunit\t${seat(0)}\t1\tth\thash2\tfrom2\trevise@old`,
+				]);
+				const store = UnitStateStore.getInstance();
+				store.load(tempDir);
+
+				const merged = store.getEntriesByPath("a.md").filter(isMergeHeldEntry);
+				assert.strictEqual(merged.length, 1);
+				assert.strictEqual(merged[0].seat, `u${seat(0)}`, "どの席から降ろされたかが読めない");
+			});
+
+			test("本文から消えた章を預かる行は、合流由来として数えない", () => {
+				const store = UnitStateStore.getInstance();
+				store.setEntry({ path: "a.md", kind: "unit", seat: seat(0), level: 1, titleHash: "th", hash: "H", from: "src", need: "" });
+				store.parkEntries("a.md", [seat(0)]);
+
+				const held = store.getEntriesByPath("a.md").filter(isHeldBackEntry);
+				assert.strictEqual(held.length, 1, "預かっていない");
+				assert.strictEqual(held.filter(isMergeHeldEntry).length, 0, "章を消しただけで競合として数えている");
+			});
+
+			test("章を消して貼り戻しても、合流由来は1件も増えない", () => {
+				const store = UnitStateStore.getInstance();
+				const live = { path: "a.md", kind: "unit" as const, seat: seat(0), level: 1, titleHash: "th", hash: "H", from: "src", need: "" };
+				store.setEntry(live);
+				store.parkEntries("a.md", [seat(0)]); // 章を消した
+				store.setEntry(live); // 貼り戻した
+				store.save(tempDir);
+
+				UnitStateStore.dispose();
+				const reread = UnitStateStore.getInstance();
+				reread.load(tempDir);
+				assert.strictEqual(reread.getEntriesByPath("a.md").filter(isMergeHeldEntry).length, 0);
+			});
+
+			test("畳んで書き戻したあとも、合流由来であることが残る", () => {
+				write(tempDir, [
+					"# mdait unit-state",
+					`a.md\tunit\t${seat(0)}\t1\tth\thash1\tfrom1\t`,
+					`a.md\tunit\t${seat(0)}\t1\tth\thash2\tfrom2\trevise@old`,
+				]);
+				const store = UnitStateStore.getInstance();
+				store.load(tempDir);
+				store.save(tempDir); // 競合マーカーごと畳んだきれいなファイルを書く
+
+				UnitStateStore.dispose();
+				const reread = UnitStateStore.getInstance();
+				reread.load(tempDir);
+				const merged = reread.getEntriesByPath("a.md").filter(isMergeHeldEntry);
+				assert.strictEqual(merged.length, 1, "書き戻した時点で合流由来という事実が消えている");
+				assert.strictEqual(merged[0].seat, `u${seat(0)}`);
+				assert.strictEqual(merged[0].from, "from1", "降ろされた行の状態まで残っていない");
+			});
+
+			test("席の列が読めない値なら、合流由来として数えない", () => {
+				write(tempDir, [
+					"# mdait unit-state",
+					"a.md\theld\tでたらめ\t1\tth\thash1\tfrom1\t",
+				]);
+				const store = UnitStateStore.getInstance();
+				store.load(tempDir);
+
+				const held = store.getEntriesByPath("a.md").filter(isHeldBackEntry);
+				assert.strictEqual(held.length, 1, "行そのものは捨てない");
+				assert.strictEqual(held.filter(isMergeHeldEntry).length, 0);
+			});
+
+			test("古い版が書いた席の空な held は、合流由来として数えない", () => {
+				write(tempDir, ["# mdait unit-state", "a.md\theld\t\t1\tth\thash1\tfrom1\trevise@X"]);
+				const store = UnitStateStore.getInstance();
+				store.load(tempDir);
+
+				assert.strictEqual(store.getEntriesByPath("a.md").filter(isMergeHeldEntry).length, 0);
+			});
+		});
 
 		test("同じ席に2行来ても、どちらも捨てないこと", () => {
 			write(tempDir, [
