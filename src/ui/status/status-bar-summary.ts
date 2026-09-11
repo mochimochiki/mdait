@@ -16,6 +16,7 @@ import * as vscode from "vscode";
 import type { StatusManager } from "../../core/status/status-manager";
 import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import type { Configuration } from "../../infra/config/configuration";
+import { collectWorkspaceConflicts } from "./conflict-source";
 
 /** 集計結果（表示の組み立てをテストできるように分離する） */
 export interface StatusBarCounts {
@@ -25,6 +26,8 @@ export interface StatusBarCounts {
 	needsAttention: number;
 	/** 原文と結びついていない訳文の数 */
 	orphanTargets: number;
+	/** `.mdait` に残っている未解決の合流の競合の数 */
+	conflicts: number;
 }
 
 /**
@@ -33,6 +36,11 @@ export interface StatusBarCounts {
  */
 export function buildStatusBarText(counts: StatusBarCounts): string {
 	const parts: string[] = [];
+	// 競合はエラー状態で、**解けるまで他の数字が当てにならない**（TM も用語集も読めていない）。
+	// だから件数の先頭に置き、行そのものにも警告の色を付ける
+	if (counts.conflicts > 0) {
+		parts.push(vscode.l10n.t("{0} merge conflict(s)", counts.conflicts));
+	}
 	if (counts.pendingTranslation > 0) {
 		parts.push(vscode.l10n.t("{0} to translate", counts.pendingTranslation));
 	}
@@ -44,7 +52,10 @@ export function buildStatusBarText(counts: StatusBarCounts): string {
 	if (counts.orphanTargets > 0) {
 		parts.push(vscode.l10n.t("{0} without source", counts.orphanTargets));
 	}
-	return parts.length > 0 ? `$(globe) ${parts.join(" / ")}` : "";
+	if (parts.length === 0) {
+		return "";
+	}
+	return `${counts.conflicts > 0 ? "$(git-merge)" : "$(globe)"} ${parts.join(" / ")}`;
 }
 
 /**
@@ -76,6 +87,9 @@ export class StatusBarSummary implements vscode.Disposable {
 			pendingTranslation: tree.countPendingTranslationUnits(scopeDirs),
 			needsAttention: tree.getNeedsAttentionUnits(scopeDirs).length,
 			orphanTargets: tree.countOrphanTargetFiles(scopeDirs),
+			// 競合だけは選択中の transPair で絞らない。`.mdait` のファイルは
+			// ワークスペースに1つずつで、言語ペアに属さないため
+			conflicts: collectWorkspaceConflicts(this.configuration).total,
 		};
 	}
 
@@ -92,6 +106,18 @@ export class StatusBarSummary implements vscode.Disposable {
 			return;
 		}
 		this.item.text = text;
+		// 競合が残っているあいだは背景を警告色にする。色だけに頼らないよう、
+		// 文字でも「N件の競合」を出している（ux.md §3.3「状態は色だけで表さない」）
+		this.item.backgroundColor =
+			counts.conflicts > 0 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
+		if (counts.conflicts > 0) {
+			this.item.tooltip = vscode.l10n.t(
+				"mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost, but the translation memory and glossary cannot be used until they are resolved. Click to open the mdait view.",
+				counts.conflicts,
+			);
+			this.item.show();
+			return;
+		}
 		this.item.tooltip = vscode.l10n.t(
 			"mdait: {0} unit(s) waiting for translation, {1} unit(s) waiting for your decision, {2} translation(s) with no source file. Click to open the mdait view.",
 			counts.pendingTranslation,
