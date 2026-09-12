@@ -148,7 +148,7 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
 - **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき。Keep は独立ユニット化＝need と from を同時に外す恒久操作。ADR-260805-01）。ツリーのファイル行には一括の「まとめて残す/まとめて削除」（どちらも modal）
 - **$(arrow-right) Next**: 次の要対応ユニットへ（`need:review` / `need:verify-deletion` のとき）
-- **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「独立扱いにする」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
+- **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「凍結する」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
 
 **ソースファイル（原文）のマーカー**:
 - **$(symbol-reference) Target**: 訳文ユニットへジャンプ（`from`属性がなく、対応する訳文が存在する場合）
@@ -201,6 +201,8 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 
 **原文が変わったユニット**（`need:revise`）: 旧原文（`revise@{旧原文ハッシュ}`）と新原文（`from`）を `.mdait/unit-registry` から引き、`core/markdown/source-diff.ts` で行差分を作って ```diff ブロックで出す。AI は使わない（旧原文が保存済みのため。ADR-260802-03）。引けないときは差分を出さない（Hover 自体は壊さない）
 
+**独立ユニット**（訳文側の `from` なし。判定は `core/unit-state/independent-unit.ts`）: `このユニットは原文には存在しません。` の一言だけを出して終える（ADR-260912-05）。統計も差分も無く、CodeLens にも操作が出ないので、ここが唯一の説明になる
+
 #### SummaryDecorator
 
 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供します。
@@ -211,6 +213,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 - 詳細はHoverで確認可能
 - サマリが無くても状態を出す。状態は気づける場所に置き、理由と対処は Hover に置く
   - `need:revise`（`needsRevision()`）→ `原文が変わりました`（ADR-260802-03）
+  - 独立ユニット（訳文側の `from` なし）→ `原文なし`（ADR-260912-05）。サマリより優先する — その章が何であるかは、その章に何が起きたかより先に読めるべきである
   - 人が訳文を手で直したことは出さない（ADR-260905-04）
 
 ---

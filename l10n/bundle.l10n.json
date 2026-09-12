@@ -31,6 +31,7 @@
   "Source changed — revision needed": "Source changed — revision needed",
   "Source deleted — verify whether to delete this unit": "Source deleted — verify whether to delete this unit",
   "Isolated — kept as-is, excluded from translation": "Isolated — kept as-is, excluded from translation",
+  "This unit does not exist in the source.": "This unit does not exist in the source.",
   "Translation completed": "Translation completed",
   "Translation needed": "Translation needed",
   "Source document": "Source document",

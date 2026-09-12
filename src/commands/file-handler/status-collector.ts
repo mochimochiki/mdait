@@ -17,6 +17,7 @@ import {
 	isPendingWorkNeed,
 } from "../../core/status/status-item";
 import { StatusItemTree } from "../../core/status/status-item-tree";
+import { isIndependentUnit } from "../../core/unit-state/independent-unit";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
@@ -159,7 +160,8 @@ export class StatusCollector implements StatusCollectorPort {
 				return this.buildEmptyFileStatusItem(filePath, fileName);
 			}
 
-			const units = this.collectUnitsStatus(markdown.units, filePath, fileName);
+			const isSourceFile = this.fileExplorer.isSourceFile(filePath, this.config);
+			const units = this.collectUnitsStatus(markdown.units, filePath, fileName, isSourceFile);
 			return this.buildFileStatusItem(filePath, fileName, units, frontmatterItem);
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -192,7 +194,12 @@ export class StatusCollector implements StatusCollectorPort {
 	/**
 	 * ユニットの翻訳状態を収集する
 	 */
-	private collectUnitsStatus(units: readonly MdaitUnit[], filePath: string, fileName: string): UnitStatusItem[] {
+	private collectUnitsStatus(
+		units: readonly MdaitUnit[],
+		filePath: string,
+		fileName: string,
+		isSourceFile: boolean,
+	): UnitStatusItem[] {
 		return units.map((unit) => {
 			const unitStatus = this.determineUnitStatus(unit);
 			return {
@@ -207,6 +214,8 @@ export class StatusCollector implements StatusCollectorPort {
 				startLine: unit.startLine,
 				endLine: unit.endLine,
 				contextValue: this.determineUnitContextValue(unit),
+				// 原文ユニットも from を持たないので、マーカーだけでは独立ユニットと区別できない
+				isIndependent: isIndependentUnit(unit.marker, isSourceFile),
 				filePath,
 				fileName,
 			};
@@ -218,7 +227,7 @@ export class StatusCollector implements StatusCollectorPort {
 	 *
 	 * **`Status` を引数に取ってはならない。** 以前は `Status` を先に見ていたため、
 	 * 「凍結ユニットを翻訳率の分母から外す」という集計都合で付けた `Status.Source` に
-	 * 吸い込まれ、`mdaitUnitIsolated` の分岐へ到達できなかった（ツリーの「独立扱いを解除」が
+	 * 吸い込まれ、`mdaitUnitIsolated` の分岐へ到達できなかった（ツリーの「凍結を解除」が
 	 * 一度も表示されないバグ）。出し分けはユニット自身の事実（need と from）だけで決める。
 	 *
 	 * ▶（Translate Unit）は trans が実際に処理するユニット（translate/revise）にのみ表示し、

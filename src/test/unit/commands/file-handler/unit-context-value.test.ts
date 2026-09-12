@@ -3,7 +3,7 @@
 // 背景: 凍結ユニット（need:isolate）を翻訳率の分母から外すために Status.Source を
 // 名乗らせていたところ、contextValue が Status を先に見ていたため巻き添えで
 // "mdaitUnitSource" に吸われ、"mdaitUnitIsolated" の分岐へ到達できなかった。
-// その結果、ツリーの「独立扱いを解除」が一度も表示されなかった。
+// その結果、ツリーの「凍結を解除」が一度も表示されなかった。
 //
 // 以後 contextValue は Status を引数に取らない。ここはその不変条件を守る番人である。
 
@@ -25,6 +25,19 @@ function unit(need: string | null, from: string | null): MdaitUnit {
 			},
 		},
 	} as unknown as MdaitUnit;
+}
+
+/** private メソッドを名前で呼ぶ（収集したユニット項目そのものが検証対象のため） */
+function collectUnits(units: MdaitUnit[], isSourceFile: boolean): UnitStatusItem[] {
+	const collector = new StatusCollector() as unknown as {
+		collectUnitsStatus(
+			units: readonly MdaitUnit[],
+			filePath: string,
+			fileName: string,
+			isSourceFile: boolean,
+		): UnitStatusItem[];
+	};
+	return collector.collectUnitsStatus(units, "/ws/ja/a.md", "a.md", isSourceFile);
 }
 
 /** private メソッドを名前で呼ぶ（出し分けの判定そのものが検証対象のため） */
@@ -91,6 +104,23 @@ suite("ユニットの状態導出（contextValue と分母判定）", () => {
 		const { contextValue, status } = derive(unit(null, null));
 		assert.strictEqual(contextValue, "mdaitUnitSource");
 		assert.strictEqual(status, Status.Source);
+	});
+
+	// 独立ユニットも from が無いので Status.Source を名乗る。原文のユニットと同じ形に
+	// なるため、どちら側のファイルかを併せて見ないと区別できない
+	test("訳文の from なしユニットには独立ユニットの印が付く", () => {
+		const [item] = collectUnits([unit(null, null)], false);
+		assert.strictEqual(item.isIndependent, true);
+	});
+
+	test("原文ファイルのユニットには独立ユニットの印を付けない", () => {
+		const [item] = collectUnits([unit(null, null)], true);
+		assert.strictEqual(item.isIndependent, false);
+	});
+
+	test("凍結ユニットには独立ユニットの印を付けない", () => {
+		const [item] = collectUnits([unit("isolate", "srcA")], false);
+		assert.strictEqual(item.isIndependent, false);
 	});
 
 	test("凍結ユニットは翻訳率の分母に数えない（Status を偽らずに除外できている）", () => {

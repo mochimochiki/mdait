@@ -792,6 +792,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * 孤立訳文は色やアイコンだけで表さず、必ず文字でも読めるようにする
 	 * （ux.md §3.3「状態は色だけで表さない」）。明示的な description より優先するのは、
 	 * 原文が消えている事実のほうが、その中のユニットの状態より先に判断が要るため。
+	 *
+	 * 独立ユニット（原文と結びついていない訳文の章）も同じ文字で表す。こちらは `Status.Source`
+	 * を名乗るため、何も足さないと副題が空になり、原文のユニットと見分けが付かない。
 	 */
 	private resolveDescription(element: StatusItem): string | undefined {
 		if (element.type === StatusItemType.File && element.isOrphanTarget) {
@@ -799,6 +802,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		}
 		if (element.description) {
 			return element.description;
+		}
+		if (element.type === StatusItemType.Unit && element.isIndependent) {
+			return vscode.l10n.t("No source");
 		}
 		if (element.type === StatusItemType.Unit || element.type === StatusItemType.Frontmatter) {
 			return getStateDescription(element.status, element.needFlag);
@@ -860,6 +866,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			if (element.needFlag === "isolate") {
 				return vscode.l10n.t("Isolated — kept as-is, excluded from translation");
 			}
+		}
+
+		// 独立ユニットは Status.Source を名乗る（from が無いため）。「ソース文書」と出すと
+		// 訳文ファイルの中身なのに原文だと読めてしまうので、先に本当のことを言う
+		if (element.type === StatusItemType.Unit && element.isIndependent) {
+			return vscode.l10n.t("This unit does not exist in the source.");
 		}
 
 		switch (element.status) {
@@ -977,6 +989,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 						new vscode.ThemeColor("charts.gray"),
 					);
 				}
+			}
+
+			// 独立ユニットは Status.Source を名乗るが、原文ではない。原文と同じ青の丸を出すと
+			// 「原文なし」という副題と食い違って読めるため、手前で分ける
+			if (element.isIndependent) {
+				return new vscode.ThemeIcon(
+					"circle-small-filled",
+					new vscode.ThemeColor("charts.gray"),
+				);
 			}
 
 			// ステータスに応じてアイコンを決定

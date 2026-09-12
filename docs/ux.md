@@ -103,6 +103,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 - **AI を使う操作には ✨ を付ける**（UX-P4）。付いていない操作は AI を呼ばない。**逆も真** — AI を呼ばない操作に ✨ を付けない（実例: かつての `✨TM最適化` は純粋な重み計算で AI を呼ばないのに ✨ が付き、コストの予測を裏切っていた。いまは廃止）
 - **AI 運用ループに乗らない操作はサーフェスに出さない**（UX-P9）。消せないもの（互換のために残す設定・移行コマンド・エージェント専用ツール）は、パレット非表示・設定エディタの奥・ツール専用、のいずれかに退避する
 - **変化の気づきは1箇所に集約する** — 状態が変わったことは**ステータスバーの常駐サマリ**が受け持ち、その詳細は該当サーフェス（Decoration・Hover・ツリー）で受け取る。変化のたびにトーストを出さない（通知疲れの回避）
+- **似た状態には違う言葉を当てる** — マーカーの3つの状態は画面でも別の語で呼ぶ（ADR-260912-05）。**独立**（`from` なし。対応する原文の章が無い。恒久）／**凍結**（`need:isolate`。原文の章は在るが更新を流さない。解除できる）／**孤立**（原文ファイルが消えた訳文。始末がまだ決まっていない）。かつて `isolate` を「独立扱い」と訳していたため、画面では独立ユニットと見分けが付かなかった
 - **機械が判定できないことを機械が決めない** — 「訳し終えたか」は判定できないので need の解除は人の宣言（確定ボタン）で行う。宣言が必要なことは**確定ボタンが常にそこに在ること**で伝える。推し量って言葉にしない（ADR-260905-04）
 
 #### 例: 手で訳しているユニット（ADR-260905-04）
@@ -162,7 +163,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 |---|---|---|
 | `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
 | `need:verify-deletion` の裁定 | 原文削除（policy=verify）・崩れ疑いの自動削除見送り | CodeLens/ツリーの「Keep」「Delete Unit」2択（Keep は独立ユニット化＝恒久。ADR-260805-01）。ファイル行に一括の「まとめて残す/まとめて削除」（modal） / エージェントは `mdait_resolve { action:"keep" }`（保持）/ `{ action:"delete" }`（削除） |
-| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「凍結する」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
 
@@ -188,7 +189,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
 | レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
 | verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit（＋ファイル行の一括確定） | `mdait_resolve { action:"keep" \| "delete" }` |
-| isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| isolate宣言/解除 | CodeLens「その他」→凍結する（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
 | 検証 | ✨AIレビューの前処理として実行される（単独の人間導線は持たない。UX-R5 / ADR-260802-02） | `mdait_validate`（ゴール判定用に据え置き） |
@@ -209,7 +210,8 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | `need:revise` | ✅ 白抜き＋専用ツールチップ | ✅ ▶ + Mark as Revised | — | ✅ |
 | `need:review` | ✅ 黄＋Mark as Reviewed | ✅ Mark as Reviewed | ✅ Needs Review | ✅ |
 | `need:verify-deletion` | ✅ trash/橙＋Keep / Delete Unit | ✅ Keep / Delete Unit の2択 | ❌ | ✅ |
-| `need:isolate` | ✅ circle-slash/灰＋Un-isolate | ✅ 「その他」メニュー内の Mark as Isolated / 完了マークの Un-isolate | ❌ | ✅ |
+| `need:isolate`（凍結） | ✅ circle-slash/灰＋凍結を解除 | ✅ 「その他」メニュー内の 凍結する / 完了マークの 凍結を解除 | ❌ | ✅ |
+| 独立ユニット（`from` なし） | ✅ 灰＋副題「原文なし」 | ❌（操作が無い。押せるものだけを出す） | ✅ Decoration「原文なし」＋ Hover の一言 | ✅ |
 | エラーユニット | ✅ 赤 | — | ✅ | ✅（件数） |
 | AIレビュー flagged | ❌（ツリーは need:review の有無のみ） | — | ✅ | ✅（escalations） |
 
