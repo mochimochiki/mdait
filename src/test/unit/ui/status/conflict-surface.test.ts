@@ -143,6 +143,29 @@ suite("競合の解決（StatusTree の枝）", () => {
 			assert.equal(rows[0].contextValue, "mdaitConflictChoice");
 		});
 
+		test("解説は、何が起きたのかから始まる（指示語で始めない）", () => {
+			// 読む人はこの文を前触れなく初めて見る。「こちら」「あちら」から始めると、
+			// 何を指しているのかが読み手に無い
+			const tip = buildConflictChoiceRows(plan(1), STAMP)[0].tooltip ?? "";
+			const first = tip.split("\n")[0];
+
+			assert.match(first, /took in someone else's changes/, "何が起きたのかが書かれていない");
+			assert.match(first, /Translation memory/, "どのファイルの話かが書かれていない");
+		});
+
+		test("消した側は、誰が消したのかが読める（分かれる前の値を置かない）", () => {
+			const withDeletion = {
+				...plan(1),
+				pending: [{ key: "k0", label: "語0", oursText: "私の訳0", theirsText: "(removed)", baseText: "もとの訳0", theirsDeleted: true }],
+			};
+
+			const tip = buildConflictChoiceRows(withDeletion, STAMP)[0].tooltip ?? "";
+
+			assert.match(tip, /they deleted it/, "相手が消したことが書かれていない");
+			assert.match(tip, /\(they deleted this entry\)/);
+			assert.match(tip, /the entry goes away/, "選ぶと何が起きるのかが書かれていない");
+		});
+
 		test("Hover に両側と、分かれる前の値を置く", () => {
 			const tip = buildConflictChoiceRows(plan(1), STAMP)[0].tooltip ?? "";
 
