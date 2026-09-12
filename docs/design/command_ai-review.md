@@ -41,7 +41,8 @@ src/commands/ai-review/
   verify-response-validator.ts # AI応答のJSONバリデーション
   pair-verifier.ts             # AIService 呼び出し + リトライ
   review-core.ts               # executeAiReviewForFile: 1ファイル分の検証→マーカー変異→書き戻し
-  review-command.ts            # VS Code コマンド（mdait.aiReview.file / .directory）
+  review-command.ts            # VS Code コマンド（mdait.aiReview.file / .directory / .pending）
+  pending-review-files.ts      # 純関数: 選択中ペアの確認待ち（本文・frontmatter・非MD）を持つファイルの選別（.pending 用）
   review-result-provider.ts    # レポート本文の組み立てと note 編集 CodeLens（generateReviewTableSection を adopt と共有）
   review-targets.ts            # レビュー対象ターゲット解決（mdait_aiReview / adopt で共有）
 src/commands/adopt/
@@ -177,8 +178,9 @@ frontmatter は `collectFrontmatterReviewPair`（`pair-collector.ts`）が本文
 ### UI・レポート
 
 - コマンド: StatusTree のファイル/ディレクトリ行のインラインボタン `$(verified)`「✨AI翻訳レビュー」。QuickPick で範囲を選ぶ: 「未確認の訳のみレビュー」（pending）/「すべての訳を監査（レポートのみ・マーカー変更なし）」（audit）
+- **確認待ちをまとめて消化する入口** `mdait.aiReview.pending`（ADR-260912-02）: 引数なしで、**選択中の言語ペア**に残る `need:review` を持つ訳文ファイルを全部対象にする。対象の範囲はツリー本体・要対応ノード・ステータスバーと同じ `getSelectedScopeDirs`（ここだけ全ペアを見ると「要対応に3件と出ているのに7件走った」が起きる。ADR-260724-01）。数えるのは本文ユニット・frontmatter・非 Markdown（ファイル＝1ユニット。need はファイル側に載る）の `review` で、`verify-deletion` は数えない（人にしか決められない問いで、訳の忠実さを AI に確かめさせても答えにならない）。選別は `collectPendingReviewFiles`（`pending-review-files.ts`。ファイルパス昇順に固定し、同じパスは1回だけ走らせる）。呼び出し元は要対応ノードのインラインボタン `$(verified)` と、sync 完了通知の「✨AI review」（翻訳待ちが 0 で確認待ちが残るとき。[command_sync.md](command_sync.md) の「完了通知」）。**モード選択の QuickPick は出さず pending に固定する** — この入口は「確認待ちを消化する」と決まっていて、確定済みの訳まで監査する audit は別の意図の操作である。選ばせると、通知のボタンを押しただけの人に「何を選べばよいか」を毎回考えさせる。対象が 0 件なら「レビュー待ちのユニットはありません」と言って終わる（UX-P7。ボタンは verify-deletion だけが残っているときにも出得る）。コマンドパレットにも出す（引数なしで動く）
 - 進捗: `withProgress`（cancellable）。AI 初回利用は AIOnboarding ゲート
-- 結果通知: escalated > 0 なら warning、それ以外は info
+- 結果通知: escalated > 0 なら warning、それ以外は info。ボタンは「レポートを開く」だけで、次の一手の導線は足さない（残った確認待ちはツリーの要対応に出る）
 - レポート: 実ファイル `.mdait/reports/ai-review.md`（Markdown 表）。mismatch を先頭にソートし、**自動承認したユニットも必ず列挙**する（TM 登録可能状態への昇格を可視化）。見出しは `buildReviewReport` へのラベル注入で表示言語化する（件数の語彙行・表ヘッダ・verdict/action 語彙は共通語彙として英語固定。ADR-260719-01）。ユニット列は該当箇所への行リンクになる（`linkBaseDir` にレポートの置き場所を渡す。取り込みウィザードと同じ）
 - hover: `SummaryManager.reviewReasons` に `AI translation review: {verdict} ({confidence}) — {reason}` を保存
 - StatusTree: 変更なし（need:review 数の減少が自然に反映される）

@@ -5,6 +5,7 @@ import type { SectionAligner } from "../adopt/section-aligner";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
 import type { DeleteUnitResult, DeleteUnitsResult } from "../markers/delete-unit";
 import type { KeepUnitsResult } from "../markers/keep-unit";
+import type { RequestTranslateResult } from "../markers/request-translate";
 import type { NeedResolutionOptions, NeedTarget, ResolveNeedFileResult } from "../markers/resolve-need";
 import type { Translator } from "../trans/translator";
 import type { FileType } from "./file-type";
@@ -25,7 +26,7 @@ export interface FileSyncResult {
 	deleted: number;
 	unchanged: number;
 	revisionsNeeded: number;
-	/** adoptで採用（need:review付与）したユニット数 */
+	/** 紐の無い既訳を need:review で受けたユニット数（adopt でなくても数える） */
 	adopted?: number;
 	/** 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数 */
 	reviewsSuperseded?: number;
@@ -99,12 +100,19 @@ export interface FileHandler {
 	isInitialized(filePath: string): Promise<boolean>;
 
 	// ===== マーカー／ユニット状態の書き換え =====
-	// CodeLens・ツリー・LM Tool はこの3メソッドだけを呼ぶ。サーフェス側でマーカーを
+	// CodeLens・ツリー・LM Tool は以下のメソッド（resolveNeed / requestTranslate / declareIsolate /
+	// deleteUnit / keepUnits / deleteAllVerifyDeletion）だけを呼ぶ。サーフェス側でマーカーを
 	// 直接書き換えてはならない（排他制御・ステータス更新の取りこぼしが起きるため。
 	// 詳細は commands/markers/unit-mutation.ts）。
 
 	/** need フラグを外す（裁定の確定）。対象未指定なら needs フィルタに一致する全件 */
 	resolveNeed(filePath: string, options?: NeedResolutionOptions): Promise<ResolveNeedFileResult>;
+
+	/**
+	 * 確認待ちの既訳を採用せず、翻訳待ちへ戻す（need:review → need:translate）。
+	 * 印を付け替えるだけで AI は呼ばない。need が review 以外なら reason つきで false を返す
+	 */
+	requestTranslate(filePath: string, target: NeedTarget): Promise<RequestTranslateResult>;
 
 	/** 凍結を宣言する（need:isolate）。対応しないファイル種別では reason つきで false を返す */
 	declareIsolate(filePath: string, target: NeedTarget): Promise<DeclareIsolateResult>;

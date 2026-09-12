@@ -17,6 +17,7 @@ import {
 	deleteUnitFromFile,
 } from "../markers/delete-unit";
 import { type KeepUnitsResult, keepUnitsAsIndependent } from "../markers/keep-unit";
+import { type RequestTranslateResult, requestTranslateForFile } from "../markers/request-translate";
 import {
 	type NeedResolutionOptions,
 	type NeedTarget,
@@ -134,6 +135,16 @@ export class MdFileHandler implements FileHandler {
 
 	async resolveNeed(filePath: string, options: NeedResolutionOptions = {}): Promise<ResolveNeedFileResult> {
 		return resolveNeedForFile(filePath, Configuration.getInstance(), options);
+	}
+
+	async requestTranslate(filePath: string, target: NeedTarget): Promise<RequestTranslateResult> {
+		if (target.kind !== "unit") {
+			// frontmatter はマーカーの形も書き換え経路（setFrontmatterMarker）も本文ユニットと別で、
+			// この操作は本文ユニットだけを扱う。frontmatter の訳は数行の見出し語なので、
+			// 採用しないなら手で直して確認済みにするほうが早く、翻訳待ちへ戻す道は用意しない
+			return { requested: false, changed: false, hash: "", reason: "not-found" };
+		}
+		return requestTranslateForFile(filePath, target.hash, Configuration.getInstance());
 	}
 
 	async declareIsolate(filePath: string, target: NeedTarget): Promise<DeclareIsolateResult> {

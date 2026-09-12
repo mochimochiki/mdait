@@ -2,11 +2,12 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import {
 	type DirectoryStatusItem,
+	type NeedsAttentionItem,
 	Status,
 	type StatusItem,
 	StatusItemType,
-	type UnitStatusItem,
 } from "../../core/status/status-item";
+import { getNeedsAttentionLine } from "../../core/status/status-item-tree";
 import { StatusManager } from "../../core/status/status-manager";
 import { OperationRegistry } from "../../commands/shared/operation-registry";
 import {
@@ -44,6 +45,34 @@ function getNeedLabel(needFlag: string | undefined): string {
 		return vscode.l10n.t("Deletion check");
 	}
 	return vscode.l10n.t("Review");
+}
+
+/**
+ * 要対応ノード配下に置くクローンを作る（純関数）。
+ *
+ * 元の項目は実ファイル配下のツリーからも参照されているため、同じインスタンスを2か所に
+ * 出すと tree item id が衝突する。`isVirtualCopy` を立てたコピーにし、`getTreeItem` が
+ * id に接尾辞を付ける・クリックで対訳を開く・親を要対応ノードにする、の判断材料にする。
+ *
+ * 副題はラベルだけでは項目を識別できない場合に補う（ux.md B-7）:
+ * - 本文ユニット・frontmatter: ラベル（見出し／"Frontmatter"）だけではどのファイルか
+ *   分からないので「ファイル名 · 種類」
+ * - 非Markdown ファイル: ラベルがファイル名そのものなので「種類」だけ（同じ名前を2度出さない）
+ *
+ * @param item 要対応の元項目
+ * @param workspaceFolder ツールチップの相対パスの基準（無ければ絶対パス）
+ */
+export function toNeedsAttentionClone(item: NeedsAttentionItem, workspaceFolder: string | undefined): NeedsAttentionItem {
+	const needLabel = getNeedLabel(item.needFlag);
+	const description =
+		item.type === StatusItemType.File ? needLabel : `${path.basename(item.filePath)} · ${needLabel}`;
+	const displayPath = workspaceFolder ? path.relative(workspaceFolder, item.filePath) : item.filePath;
+	return {
+		...item,
+		isVirtualCopy: true,
+		description,
+		tooltip: `${displayPath}\n${needLabel}`,
+	};
 }
 
 /**
@@ -329,11 +358,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				treeItem.id = element.directoryPath;
 			}
 		} else if (element.type === StatusItemType.File && element.filePath) {
-			if (workspaceFolder) {
-				treeItem.id = path.relative(workspaceFolder, element.filePath);
-			} else {
-				treeItem.id = element.filePath;
-			}
+			const baseId = workspaceFolder ? path.relative(workspaceFolder, element.filePath) : element.filePath;
+			treeItem.id = this.withVirtualCopySuffix(baseId, element);
 		} else if (
 			element.type === StatusItemType.Unit &&
 			element.filePath &&
@@ -342,18 +368,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			const baseId = workspaceFolder
 				? `${path.relative(workspaceFolder, element.filePath)}#${element.unitHash}`
 				: `${element.filePath}#${element.unitHash}`;
-			// Needs Attention 仮想ノード配下のクローンは、実ファイル配下の本体と同じ id にならないよう
-			// サフィックスを付与する（VS Code TreeView は id の一意性を前提とするため）。
-			treeItem.id = element.isVirtualCopy ? `${baseId}::needs-attention` : baseId;
+			treeItem.id = this.withVirtualCopySuffix(baseId, element);
 		} else if (
 			element.type === StatusItemType.Frontmatter &&
 			element.filePath
 		) {
-			if (workspaceFolder) {
-				treeItem.id = `${path.relative(workspaceFolder, element.filePath)}#frontmatter`;
-			} else {
-				treeItem.id = `${element.filePath}#frontmatter`;
-			}
+			const baseId = workspaceFolder
+				? `${path.relative(workspaceFolder, element.filePath)}#frontmatter`
+				: `${element.filePath}#frontmatter`;
+			treeItem.id = this.withVirtualCopySuffix(baseId, element);
 		}
 
 		// 未同期の案内はクリックで初回同期を実行する
@@ -366,24 +389,35 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				title: vscode.l10n.t("Not synced yet — run Initial Sync"),
 			};
 		}
-		// ファイルの場合はコマンドを設定してクリック時にファイルを開く（先頭行）
-		if (element.type === StatusItemType.File) {
+		// 要対応ノード配下のクローン（本文ユニット・frontmatter・非Markdown ファイル）は
+		// 原文と並べて開く — review は「この訳がこの原文の訳として正しいか」を見る作業で、
+		// 訳文だけ開いても判断できない。frontmatter と非Markdown は行を持たないので
+		// ファイル先頭（0 行目）で開く。そこにはマーカー行が無いので `mdait.openPair` は
+		// 原文を見つけられず訳文だけを開く（frontmatter の対訳は将来課題。訳文を開いた
+		// 時点で「レビュー済みにする」は行内にあり、裁定はできる）。
+		// ファイル配下の通常の項目は従来どおり訳文だけを開く（決定事項。編集の入口で
+		// 毎回右に原文が出るのは煩い）
+		if (element.type !== StatusItemType.Directory && element.isVirtualCopy) {
+			treeItem.command = {
+				command: "mdait.openPair",
+				title: "Open Pair",
+				arguments: [element.filePath, getNeedsAttentionLine(element)],
+			};
+		} else if (element.type === StatusItemType.File) {
+			// ファイルの場合はクリック時にファイルを開く（先頭行）
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Open File",
 				arguments: [element.filePath, 0],
 			};
-		}
-		// ユニットの場合はコマンドを設定してクリック時にジャンプ
-		if (element.type === StatusItemType.Unit) {
+		} else if (element.type === StatusItemType.Unit) {
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Jump to Unit",
 				arguments: [element.filePath, element.startLine],
 			};
-		}
-		// frontmatterの場合はコマンドを設定してクリック時にファイル先頭にジャンプ
-		if (element.type === StatusItemType.Frontmatter) {
+		} else if (element.type === StatusItemType.Frontmatter) {
+			// frontmatterの場合はクリック時にファイル先頭にジャンプ
 			treeItem.command = {
 				command: "mdait.jumpToUnit",
 				title: "Jump to Frontmatter",
@@ -395,13 +429,25 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
+	 * Needs Attention 仮想ノード配下のクローンは、実ファイル配下の本体と同じ id にならないよう
+	 * 接尾辞を付ける（VS Code TreeView は id の一意性を前提とする）。
+	 * 本文ユニット・frontmatter・非Markdown ファイルの3種類すべてに同じ規則を当てる —
+	 * どれか1つに付け忘れると、その種類の項目が要対応ノードに現れた瞬間に id が衝突し、
+	 * 展開状態や選択が本体と混ざる
+	 */
+	private withVirtualCopySuffix(baseId: string, element: NeedsAttentionItem): string {
+		return element.isVirtualCopy ? `${baseId}::needs-attention` : baseId;
+	}
+
+	/**
 	 * API: 親要素を取得する
 	 * TreeView.reveal()を使用するために必要
 	 */
 	public getParent(element: StatusItem): StatusItem | undefined {
-		// Needs Attention仮想ノード配下のクローンの場合、親は仮想ノード自身。
-		// reveal を安定させるため、直近にルートを構築したときの実体を返す。
-		if (element.type === StatusItemType.Unit && element.isVirtualCopy) {
+		// Needs Attention仮想ノード配下のクローン（本文ユニット・frontmatter・非Markdown ファイル）
+		// の場合、親は仮想ノード自身。reveal を安定させるため、直近にルートを構築したときの
+		// 実体を返す。
+		if (element.type !== StatusItemType.Directory && element.isVirtualCopy) {
 			return this.needsAttentionItem ?? this.buildNeedsAttentionItem();
 		}
 
@@ -471,6 +517,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			);
 		}
 		if (element.type === StatusItemType.File) {
+			// 要対応ノード配下のファイル行（非Markdown のクローン）は葉。非Markdown は元から
+			// 子を持たないが、クローンから実ファイルの子を辿らせないことをここで明示する
+			if (element.isVirtualCopy) {
+				return Promise.resolve([]);
+			}
 			// ファイルの場合はfrontmatter + 翻訳ユニット一覧を返す
 			return Promise.resolve(this.getFileChildren(element));
 		}
@@ -614,39 +665,22 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	}
 
 	/**
-	 * review / verify-deletion 待ちのユニットをクローン（isVirtualCopy: true）として返す。
-	 * 元のUnitStatusItemは実ファイル配下のツリーからも参照されているため、id衝突を避けるためクローンする。
+	 * review / verify-deletion 待ちの項目（本文ユニット・frontmatter・非Markdown ファイル）を
+	 * クローン（isVirtualCopy: true）として返す（作り方は `toNeedsAttentionClone`）。
 	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
-	 *
-	 * 見出しタイトルだけでは同名の見出しが区別できないため、副題にファイル名と種類を出す。
 	 */
-	private getNeedsAttentionChildren(): UnitStatusItem[] {
-		return this.collectNeedsAttentionUnits().map((unit) => ({
-			...unit,
-			isVirtualCopy: true,
-			description: `${path.basename(unit.filePath)} · ${getNeedLabel(unit.needFlag)}`,
-			tooltip: this.formatNeedsAttentionTooltip(unit),
-		}));
+	private getNeedsAttentionChildren(): NeedsAttentionItem[] {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		return this.collectNeedsAttentionUnits().map((item) => toNeedsAttentionClone(item, workspaceFolder));
 	}
 
 	/**
-	 * 要対応ユニットを選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
+	 * 要対応項目を選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
 	 */
-	private collectNeedsAttentionUnits(): UnitStatusItem[] {
+	private collectNeedsAttentionUnits(): NeedsAttentionItem[] {
 		return this.statusItemTree.getNeedsAttentionUnits(
 			getSelectedScopeDirs(this.configuration),
 		);
-	}
-
-	/**
-	 * 要対応項目のツールチップ（ワークスペース相対パス＋種類）を組み立てる
-	 */
-	private formatNeedsAttentionTooltip(unit: UnitStatusItem): string {
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const displayPath = workspaceFolder
-			? path.relative(workspaceFolder, unit.filePath)
-			: unit.filePath;
-		return `${displayPath}\n${getNeedLabel(unit.needFlag)}`;
 	}
 
 	/**
@@ -740,6 +774,11 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		if (element.type === StatusItemType.Unit || element.type === StatusItemType.Frontmatter) {
 			return getStateDescription(element.status, element.needFlag);
 		}
+		// 非Markdown はファイル行がそのまま1ユニットなので、ユニットと同じく状態を文字でも出す
+		// （need はファイルに載る。Markdown のファイル行は needFlag を持たないので変わらない）
+		if (element.type === StatusItemType.File && element.needFlag) {
+			return getStateDescription(element.status, element.needFlag);
+		}
 		return undefined;
 	}
 
@@ -778,13 +817,22 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			element.type === StatusItemType.Directory &&
 			element.directoryPath === NEEDS_ATTENTION_ID
 		) {
+			// 並ぶのは本文ユニットだけではない（frontmatter・非Markdown も確認待ちになる）ので、
+			// 何が来るかを Hover で言っておく。ツリーの行には出さない（1行に収まらない）
 			return vscode.l10n.t(
-				"Units waiting for a review or deletion decision. Click a unit to jump and resolve it.",
+				"Body units, frontmatter, and non-Markdown files waiting for a review or deletion decision. Click an item to open it side by side with its source and resolve it.",
 			);
 		}
 
-		// ユニットのneedFlagを優先して表示
-		if (element.type === StatusItemType.Unit && element.needFlag) {
+		// need フラグを優先して表示。frontmatter と非Markdown のファイル行（ファイル＝1ユニット、
+		// need はファイルに載る）も同じ need 語彙なので同じ説明を出す — ここを Unit だけにすると、
+		// 確認待ちの frontmatter が「翻訳が必要」と語り、何を求められているか読めない
+		if (
+			(element.type === StatusItemType.Unit ||
+				element.type === StatusItemType.Frontmatter ||
+				element.type === StatusItemType.File) &&
+			element.needFlag
+		) {
 			if (element.needFlag === "review") {
 				return vscode.l10n.t("Review required");
 			}
@@ -859,6 +907,16 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			element.directoryPath === NOT_SYNCED_ID
 		) {
 			return new vscode.ThemeIcon("sync", new vscode.ThemeColor("charts.blue"));
+		}
+
+		// 確認待ち（need:review）は本文ユニットと同じ黄で示す。frontmatter と非Markdown の
+		// ファイル行にも review は載るので、ユニットだけ黄にすると要対応ノードの中で
+		// 同じ状態の項目が別の色に見える（意味は副題の文字でも読める。色だけに頼らない）
+		if (element?.type === StatusItemType.Frontmatter && element.needFlag === "review") {
+			return new vscode.ThemeIcon("book", new vscode.ThemeColor("charts.yellow"));
+		}
+		if (element?.type === StatusItemType.File && element.needFlag === "review") {
+			return new vscode.ThemeIcon("circle", new vscode.ThemeColor("charts.yellow"));
 		}
 
 		// Frontmatter階層の場合はbookアイコンを使用

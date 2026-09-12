@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { adoptCommand } from "./commands/adopt/adopt-command";
-import { aiReviewDirectoryCommand, aiReviewFileCommand } from "./commands/ai-review/review-command";
+import { aiReviewDirectoryCommand, aiReviewFileCommand, aiReviewPendingCommand } from "./commands/ai-review/review-command";
 import { AiReviewResultCodeLensProvider } from "./commands/ai-review/review-result-provider";
 import { diagnoseSetupCommand } from "./commands/doctor/doctor-command";
 import { getFileHandler } from "./commands/file-handler/file-handler-factory";
@@ -58,8 +58,10 @@ import {
 	codeLensTranslateCommand,
 	codeLensTranslateFileCommand,
 	editNoteForUnitCommand,
+	openPairCommand,
 } from "./ui/codelens/codelens-command";
 import { MdaitCodeLensProvider } from "./ui/codelens/codelens-provider";
+import { codeLensRequestTranslateCommand } from "./ui/codelens/request-translate-command";
 import { SummaryDecorator } from "./ui/hover/summary-decorator";
 import { SummaryManager } from "./ui/hover/summary-manager";
 import { TranslationSummaryHoverProvider } from "./ui/hover/translation-summary-hover-provider";
@@ -342,6 +344,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		"mdait.needsAttention.next",
 		needsAttentionNextCommand,
 	);
+	// 訳文と原文を並べて開く（要対応ノードのクリックと「次の要対応へ」の移動先。
+	// review は対訳で見えないと判断できないため、訳文だけ開く jumpToUnit とは分ける）
+	const openPairDisposable = vscode.commands.registerCommand(
+		"mdait.openPair",
+		(filePath: string, line: number) => openPairCommand(filePath, line),
+	);
 
 	// term.detect command
 	const termDetectDisposable = vscode.commands.registerCommand("mdait.term.detect", detectTermCommand);
@@ -382,6 +390,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	const aiReviewDirectoryDisposable = vscode.commands.registerCommand("mdait.aiReview.directory", (item?: StatusItem) =>
 		aiReviewDirectoryCommand(item),
 	);
+	// 選択中の言語ペアのレビュー待ちをまとめて確認する入口（要対応ノードのインラインと
+	// sync 完了通知の「✨AI review」から。引数なしで走る）
+	const aiReviewPendingDisposable = vscode.commands.registerCommand("mdait.aiReview.pending", () =>
+		aiReviewPendingCommand(),
+	);
 
 	// Adopt command（取り込みウィザード。ワークスペース全体）
 	const adoptDisposable = vscode.commands.registerCommand("mdait.adopt.run", () => adoptCommand());
@@ -415,6 +428,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const codeLensClearNeedDisposable = vscode.commands.registerCommand(
 		"mdait.codelens.clearNeed",
 		codeLensClearNeedCommand,
+	);
+
+	// CodeLens「要翻訳にする」（need:review → need:translate。印を付け替えるだけで AI は呼ばない）
+	const codeLensRequestTranslateDisposable = vscode.commands.registerCommand(
+		"mdait.codelens.requestTranslate",
+		codeLensRequestTranslateCommand,
 	);
 
 	// CodeLens verify-deletion 削除コマンド（UX-R1: 判断サーフェスの完成）
@@ -806,6 +825,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		codeLensJumpToSourceDisposable,
 		codeLensJumpToTargetDisposable,
 		codeLensClearNeedDisposable,
+		aiReviewPendingDisposable,
+		openPairDisposable,
+		codeLensRequestTranslateDisposable,
 		codeLensDeleteUnitDisposable,
 		codeLensKeepUnitDisposable,
 		codeLensOtherActionsDisposable,

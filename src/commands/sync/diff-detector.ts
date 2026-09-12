@@ -42,7 +42,7 @@ export interface DiffResult {
 	unchanged: number;
 	/** need:revise付与件数 */
 	revisionsNeeded?: number;
-	/** adoptで採用（need:review付与）したユニット数 */
+	/** 紐の無い既訳を need:review で受けたユニット数（adopt でなくても数える） */
 	adopted?: number;
 	/** 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数 */
 	reviewsSuperseded?: number;

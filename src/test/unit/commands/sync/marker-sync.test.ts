@@ -5,6 +5,7 @@
 
 import { strict as assert } from "node:assert";
 import {
+	needForFirstLink,
 	syncMarkerPair,
 	syncSourceMarker,
 	syncTargetMarker,
@@ -325,64 +326,102 @@ suite("marker-sync", () => {
 			);
 		});
 
-		suite("adoptTarget オプション（既存対訳の採用）", () => {
-			test("from新規確立＋needなし＋adopt → need:review が付き既訳が採用される", () => {
+		suite("existingText オプション（紐の無い既訳を守る。規則は needForFirstLink）", () => {
+			test("from新規確立＋needなし＋本文あり → need:review が付き既訳として守られる", () => {
 				// マーカーなし既訳のsync: ensureMdaitMarkerHashによりhashのみのマーカーが付いた状態
 				const tgtMarker = new MdaitMarker("tgt123");
 				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				assert.strictEqual(result.targetMarker.from, "src123");
 				assert.strictEqual(result.targetMarker.need, "review");
 			});
 
-			test("adoptなしの同条件では need:translate（従来動作の維持）", () => {
+			test("取り込み（adopt）を頼まれていなくても、本文ありの既訳は need:review になること", () => {
+				// かつては adopt のときだけ review に倒し、ふつうの sync では translate を付けていた。
+				// すると次の trans が人の書いた訳を機械翻訳で上書きする（G3）。規則は adopt に依らない
+				const tgtMarker = new MdaitMarker("tgt123");
+				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker, { existingText: true });
+				assert.strictEqual(result.targetMarker.need, "review", "既訳は adopt の有無に関わらず守る");
+			});
+
+			test("丸写し（訳文の hash が原文の hash と同じ）は本文があっても need:translate", () => {
+				// 原文をそのまま写しただけで、まだ訳していない。人に確認を頼む理由が無い
+				const tgtMarker = new MdaitMarker("src123");
+				const result = syncMarkerPair("src123", "src123", null, tgtMarker, { existingText: true });
+				assert.strictEqual(result.targetMarker.from, "src123");
+				assert.strictEqual(result.targetMarker.need, "translate");
+			});
+
+			test("本文なし（existingText=false）なら need:translate", () => {
 				const tgtMarker = new MdaitMarker("tgt123");
 				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker);
 				assert.strictEqual(result.targetMarker.need, "translate");
 			});
 
-			test("adoptでも新規ターゲット（マーカーなし）は need:translate", () => {
+			test("新規ターゲット（マーカーなし）は existingText でも need:translate", () => {
 				const result = syncMarkerPair("src123", "src123", null, null, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				assert.strictEqual(result.targetMarker.need, "translate");
 			});
 
-			test("adoptでも既にfrom確立済みのユニットには影響しない", () => {
+			test("既にfrom確立済みのユニットには影響しない", () => {
 				const tgtMarker = new MdaitMarker("tgt123", "src123", null);
 				const result = syncMarkerPair("src123", "tgt123", new MdaitMarker("src123"), tgtMarker, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				assert.strictEqual(result.targetMarker.need, null);
 			});
 
-			test("adopt済みユニットの2回目のsyncは無変更（冪等性）", () => {
+			test("守ったユニットの2回目のsyncは無変更（冪等性）", () => {
 				const tgtMarker = new MdaitMarker("tgt123");
 				const first = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				// 2回目: from確立済み・need:review
 				const second = syncMarkerPair("src123", "tgt123", first.sourceMarker, first.targetMarker, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				assert.strictEqual(second.targetMarker.from, "src123");
 				assert.strictEqual(second.targetMarker.need, "review");
 				assert.strictEqual(second.targetMarker.hash, "tgt123");
+				assert.strictEqual(second.changed, false);
 			});
 
-			test("adoptで採用されたユニットはtransの対象にならない（needsTranslation=false）", () => {
+			test("守ったユニットはtransの対象にならない（needsTranslation=false）", () => {
 				const tgtMarker = new MdaitMarker("tgt123");
 				const result = syncMarkerPair("src123", "tgt123", null, tgtMarker, {
-					adoptTarget: true,
+					existingText: true,
 				});
 				assert.strictEqual(result.targetMarker.needsTranslation(), false);
 			});
 
-			test("adopt採用後にソースが変更されたら通常のreviseフローに乗る", () => {
+			test("守ったあとにソースが変更されたら通常のreviseフローに乗る", () => {
 				const tgtMarker = new MdaitMarker("tgt123", "src123", null); // レビュー承認済み（need除去済み）
 				const result = syncMarkerPair("src456", "tgt123", new MdaitMarker("src456"), tgtMarker);
 				assert.strictEqual(result.targetMarker.need, "revise@src123");
+			});
+		});
+
+		suite("needForFirstLink（紐を初めて結ぶときの規則）", () => {
+			test("本文あり・丸写しでない → review", () => {
+				assert.strictEqual(needForFirstLink(new MdaitMarker("tgt123", "src123"), true), "review");
+			});
+
+			test("丸写し（hash === from）→ translate", () => {
+				assert.strictEqual(needForFirstLink(new MdaitMarker("src123", "src123"), true), "translate");
+			});
+
+			test("本文なし → translate", () => {
+				assert.strictEqual(needForFirstLink(new MdaitMarker("tgt123", "src123"), false), "translate");
+			});
+
+			test("中身の一致（verbatimCopy）が渡されたらハッシュより優先する", () => {
+				// ハッシュが衝突して同じに見えても、中身が違えば人の訳として守る
+				assert.strictEqual(needForFirstLink(new MdaitMarker("src123", "src123"), true, false), "review");
+				// 中身が同じなら、ハッシュが違って見えても丸写しとして translate に残す
+				assert.strictEqual(needForFirstLink(new MdaitMarker("tgt123", "src123"), true, true), "translate");
 			});
 		});
 

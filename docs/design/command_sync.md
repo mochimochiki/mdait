@@ -45,6 +45,7 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | 状況 | needフラグ | 意味 |
 |---|---|---|
 | 新規ターゲット作成 | `translate` | 未翻訳。全ユニットに付与 |
+| 紐（`from`）の無い訳文ユニットに初めて紐を結ぶ | 本文あり・丸写しでない → `review` / 丸写し（本文が原文と一字一句同じ）・本文なし → `translate` | マーカーの無い既訳を trans の上書きから守る。取り込み（adopt）の有無・保管方式（embedded / external）・ファイル種別に依らず同じ（後述「着地の規則」。ADR-260912-01） |
 | ソース変更 | `revise@{oldhash}` | 原文が変わったので改訂が必要 |
 | revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
 | ターゲットのみ変更 | なし | hash更新のみ |
@@ -124,6 +125,36 @@ sequenceDiagram
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除。守る印の走査は**選択で絞らず config の全 pair**を見る。走るのは**取り消されず、在るディレクトリを全部読めて、`unit-state` と `unit-registry` を丸ごと読めた回だけ**（ADR-260908-06。詳細は [core.md](core.md) の GC処理）
 - **合流の途中の原稿には触らない**（ADR-260906-04）: 原文か訳文のどちらかに競合マーカー（`<<<<<<<` など7文字ちょうどの行。コードブロックの中は数えない）が残っているファイルは同期しない（[`hasConflictMarkers()`](../../src/core/markdown/conflict-markers.ts)）。素通りすると `<<<<<<< HEAD` を本文として hash を取り、全ユニットに `need:revise` を付けたうえでその姿のまま訳文へ写す。明示 sync は見送った件数を完了通知に出し、保存で走る自動 sync は黙って見送る
 - **未訳の丸写しは原文に追随する**（ADR-260905-02）: `need:translate` のユニットの訳文は「原文の丸写し」であり、原文が変わったら sync が写し直す（[`refreshUntranslatedCopy()`](../../src/commands/sync/sync-command.ts)）。写してよいのは**中身が丸写しだと確かめられた**ユニットだけで、判定は `hash === from`、古い壊れ方は `unit-registry` のスナップショットと中身まで突き合わせる。人が書きかけた訳文・訳し終えた訳文には触らない。原文が閉じ忘れたコードフェンスを抱えている回は写さない（続く訳文ユニットが飲まれるため）。これが崩れると、訳文に古い原文が残り続け、未訳の丸写しと人が書きかけた訳文が同じ形になって区別が付かなくなる
+
+### 着地の規則: 紐の無い訳文に初めて紐を結ぶとき
+
+マーカー（紐 `from`）の無い訳文ユニットに sync が初めて紐を結ぶとき、どの `need` を付けるかは [`needForFirstLink()`](../../src/commands/sync/marker-sync.ts) **1か所**で決める（ADR-260912-01）。取り込み（`adopt`）を頼んだかどうか、マーカーの保管方式（embedded / external）、ファイルの種類（Markdown 本文・frontmatter・非 Markdown）のどれにも依らない。
+
+| 訳文側の状態 | need | 意味 |
+|---|---|---|
+| 本文あり・丸写しでない | `review` | 人の書いた訳として守る。trans は `needsTranslation()` で弾くので上書きしない |
+| 丸写し（本文が原文と一字一句同じ。本文ユニットは中身の一致で、frontmatter は `hash === from` で判定） | `translate` | まだ訳していない。人に確認を頼む理由が無いので trans に任せる |
+| 本文なし | `translate` | 同上 |
+
+- 丸写しかどうかはハッシュで確かめる。`from` はいま結んだ原文の hash なので、訳文の `hash` がそれと同じなら一字一句その原文のままである（「未訳の丸写しは原文に追随する」と同じ根拠）。「本文があるか」だけは中身を見ないと分からないので、呼び出し側が `existingText` として答える
+- frontmatter（[`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts)）は「対象キーのどれかに値がある」を本文ありとみなし、値が原文と全部同じなら丸写し。丸写しを review に倒さないのは、frontmatter の確認待ちの出口が「確認済みにする」しか無いため（「要翻訳にする」は本文ユニットにしか無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに残り、訳されないまま受け入れるしかなくなる
+- 非 Markdown（[`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) の rebuild 分岐。`unit-state` に行が無く訳文ファイルが在る）も同じ規則。丸写しの判定はバイト列で、改行コードだけ違う訳文は丸写しとみなさない
+- かつては adopt のときだけ review に倒し、ふつうの sync ではマーカーの無い既訳に `need:translate` を付けていた（次の trans が人の書いた訳を機械翻訳で上書きする）。external で `unit-state` を失ったときは別の安全網（`isExternalRebuild`）が全ユニットを review に倒していた（丸写しまで確認待ちに混ざる）。どちらもこの規則に吸収した
+- `adopt` オプションが変えるのは AI アライン（`align`）を許すかどうかと、完了レポートの文言（取り込みとして報告する）だけ。既訳を review で受けた件数（`adopted`）はふつうの sync でも数える
+- 受けたあと原文が変わったときの挙動は他のユニットと同じ — 丸写し（`translate`）は写し直され、既訳（`review`）は `revise@` へ移る
+
+### 完了通知
+
+明示 sync の完了通知は [`chooseSyncCompletionNotice()`](../../src/commands/sync/sync-command.ts)（純関数）が1つ選ぶ。ボタンは**常に1つ**（ux.md §3.3「同じ重みのボタンを3つ以上並べない」）。件数は「今回の実行で増えた数」ではなく、sync 後のステータスツリーに**いま残っている数**（選択中の transPair の範囲）を使う — 変更なしの2回目以降の sync でも、残っていれば導線は出続ける。
+
+| 分岐 | 条件 | 出すもの |
+|---|---|---|
+| `cancelled` | 取り消された | 「中断しました。もう一度同期すると続きから進みます」だけ。次の AI 実行は勧めない（ADR-260903-05） |
+| `translatable` | 翻訳待ち（`translate` / `revise`）が残っている | 件数と「✨今すぐ翻訳」（`mdait.trans.pendingTargets`） |
+| `reviewable` | 翻訳待ちが 0 で、確認待ち（`review`。本文・frontmatter・非 Markdown を数える `countPendingReviewUnits`）が残っている | 件数と「✨AI review」（`mdait.aiReview.pending`。[command_ai-review.md](command_ai-review.md)） |
+| `plain` | どちらも残っていない | 成功・失敗の件数だけ |
+
+翻訳待ちと確認待ちの両方が残れば翻訳を先に勧める。翻訳は新しい訳を作る仕事で、確認は出来上がった訳を見る仕事なので、順序として翻訳が先（ADR-260912-02）。
 
 ### 孤立ユニットモデル（isolate と独立ユニット）
 
@@ -244,12 +275,13 @@ match 結果の `{source: null, target}` ペア（対応する原文が無い ta
 
 | ファイル | 責務 |
 |---|---|
-| [`sync-command.ts`](../../src/commands/sync/sync-command.ts) | `syncCommand()` → `SyncResult`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()`。FileHandler dispatch化済み: ファイルタイプに応じて`MdFileHandler`/`PlainFileHandler`に委譲。UnitStateStoreのload/save/cleanupOrphansを管理 |
+| [`sync-command.ts`](../../src/commands/sync/sync-command.ts) | `syncCommand()` → `SyncResult`, `syncSingleFile()`, `sync_CoreProc()`, `syncNew_CoreProc()`, `chooseSyncCompletionNotice()`（完了通知の分岐）。FileHandler dispatch化済み: ファイルタイプに応じて`MdFileHandler`/`PlainFileHandler`に委譲。UnitStateStoreのload/save/cleanupOrphansを管理 |
 | [`file-handler-factory.ts`](../../src/commands/file-handler/file-handler-factory.ts) | `getFileHandler()` - 拡張子に基づくFileHandler振り分け（分岐の唯一の集約点） |
 | [`md-file-handler.ts`](../../src/commands/file-handler/md-file-handler.ts) | `MdFileHandler` - MD用。`sync_CoreProc`/`syncNew_CoreProc`への委譲、DiffResult→FileSyncResult変換 |
 | [`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) | `PlainFileHandler` - 非MD用。UnitStateStore + UnitRegistryによるhash比較ベースの同期 |
 | [`section-matcher.ts`](../../src/commands/sync/section-matcher.ts) | `match()` - 3フェーズユニット対応付け、`createSyncedTargets()` - 孤立処理 |
 | [`diff-detector.ts`](../../src/commands/sync/diff-detector.ts) | `detect()` - 同期前後の差分検出 |
-| [`marker-sync.ts`](../../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()` |
+| [`marker-sync.ts`](../../src/commands/sync/marker-sync.ts) | `syncSourceMarker()`, `syncTargetMarker()`, `syncMarkerPair()`, `needForFirstLink()`（紐の無い訳文に初めて紐を結ぶときの need を決める唯一の場所） |
+| [`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts) | `syncFrontmatterMarkers()` - frontmatter マーカーの同期。既訳の受け方は本文ユニットと同じ規則（`needForFirstLink`） |
 | [`level-validator.ts`](../../src/commands/sync/level-validator.ts) | `validateAndSyncLevel()` - level設定の検証と同期 |
 | [`asset-copier.ts`](../../src/commands/sync/asset-copier.ts) | `AssetPathExtractor`（拡張ポイント）・`MarkdownAssetPathExtractor`・`copyDiffAssets()` - 差分に応じたアセットファイルのsourceDir→targetDirコピー |
