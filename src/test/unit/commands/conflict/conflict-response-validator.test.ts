@@ -78,13 +78,33 @@ suite("競合の判定の応答の検証", () => {
 		});
 
 		test("同じ番号に2つ答えが来たら、どちらも採らない", () => {
-			// どちらが正しいか分からないものを黙って採るより、決まらなかったことにする
+			// どちらが正しいか分からないものを黙って採るより、決まらなかったことにする。
+			// 先に来たほうを残すと、答えの順番だけで採否が決まってしまう
 			const found = validateConflictResponse(wrap(ok(1, "ours"), ok(1, "theirs")), 1);
 
-			assert.equal(found.decisions.length, 1, "最初の答えは採る");
-			assert.equal(found.decisions[0].side, "ours");
-			assert.match(found.discarded[0], /answered twice/);
+			assert.equal(found.decisions.length, 0, "先に来たほうが残っている");
+			assert.match(found.discarded[0], /answered more than once/);
 		});
+
+		test("同じ番号が3つ来ても、捨てた理由は1つにまとめる", () => {
+			const found = validateConflictResponse(wrap(ok(1, "ours"), ok(1, "theirs"), ok(1, "ours")), 1);
+
+			assert.equal(found.decisions.length, 0);
+			assert.equal(found.discarded.length, 1);
+		});
+	});
+
+	test("説明文に別の波括弧が混ざっていても読める", () => {
+		// 最初の `{` から最後の `}` まで切り出す形だと、この応答はまるごと読めなくなり、
+		// 問い直しを1回無駄にしていた
+		const found = validateConflictResponse(
+			'考えたこと {補足: 用語集と照らした} 答えは次です {"decisions":[{"index":1,"side":"ours","reason":"用語集どおり"}]}',
+			1,
+		);
+
+		assert.equal(found.unreadable, false);
+		assert.equal(found.decisions.length, 1);
+		assert.equal(found.decisions[0].side, "ours");
 	});
 
 	test("理由が無くても採る（理由は解説であって判定ではない）", () => {

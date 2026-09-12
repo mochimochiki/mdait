@@ -39,13 +39,70 @@ export interface ConflictResponseValidation {
 	unreadable: boolean;
 }
 
-/** 応答から JSON の本体を取り出す（コードフェンスに包まれていても読む） */
+/**
+ * 文字列の中で、`start` の `{` と対になる `}` の位置を返す（無ければ -1）。
+ *
+ * 文字列リテラルの中の括弧とエスケープは数えない。
+ */
+function matchingBrace(body: string, start: number): number {
+	let depth = 0;
+	let inString = false;
+	let escaped = false;
+	for (let i = start; i < body.length; i++) {
+		const ch = body[i];
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+			} else if (ch === "\\") {
+				escaped = true;
+			} else if (ch === '"') {
+				inString = false;
+			}
+			continue;
+		}
+		if (ch === '"') {
+			inString = true;
+		} else if (ch === "{") {
+			depth++;
+		} else if (ch === "}") {
+			depth--;
+			if (depth === 0) {
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+/**
+ * 応答から JSON の本体を取り出す（コードフェンスに包まれていても読む）。
+ *
+ * **前後の説明文に別の `{...}` が混ざっていても読めるようにする。** 最初の `{` から
+ * 最後の `}` までを丸ごと切り出す形だと、`ここが私の考えです {補足} 次が答えです
+ * {"decisions":[...]}` のような応答でまるごと読めなくなり、問い直しを1回無駄にしていた。
+ * 括弧を対応付けて、`decisions` を持つ最初のまとまりを返す。
+ */
 function extractJson(raw: string): string {
 	const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
 	const body = (fenced ? fenced[1] : raw).trim();
-	const start = body.indexOf("{");
-	const end = body.lastIndexOf("}");
-	return start >= 0 && end > start ? body.slice(start, end + 1) : body;
+	let fallback: string | undefined;
+	for (let start = body.indexOf("{"); start >= 0; start = body.indexOf("{", start + 1)) {
+		const end = matchingBrace(body, start);
+		if (end < 0) {
+			break;
+		}
+		const candidate = body.slice(start, end + 1);
+		try {
+			const parsed = JSON.parse(candidate) as { decisions?: unknown };
+			if (Array.isArray(parsed?.decisions)) {
+				return candidate;
+			}
+			fallback ??= candidate;
+		} catch {
+			// このまとまりは JSON として読めない。次の `{` を試す
+		}
+	}
+	return fallback ?? body;
 }
 
 /**
@@ -68,6 +125,16 @@ export function validateConflictResponse(raw: string, expectedCount: number): Co
 		return { decisions: [], discarded: ["The response had no decisions array."], unreadable: true };
 	}
 
+	// **同じ番号に2つの答えが来たら、その番号はまるごと決まらなかったことにする。**
+	// 先に来たほうを残すと、どちらが正しいか分からないものを黙って採ることになる
+	const counts = new Map<number, number>();
+	for (const item of list) {
+		const index = (item as Record<string, unknown>)?.index;
+		if (typeof index === "number") {
+			counts.set(index, (counts.get(index) ?? 0) + 1);
+		}
+	}
+
 	const decisions: ConflictDecision[] = [];
 	const seen = new Set<number>();
 	for (const item of list) {
@@ -77,10 +144,12 @@ export function validateConflictResponse(raw: string, expectedCount: number): Co
 			discarded.push(`index ${String(record?.index)} is outside 1..${expectedCount}`);
 			continue;
 		}
-		if (seen.has(index)) {
-			// 同じ件に2つの答えが来た。**後から来たほうを採らない** — どちらが正しいか
-			// 分からないものを黙って採るより、決まらなかったことにするほうが安全である
-			discarded.push(`index ${index} was answered twice`);
+		if ((counts.get(index) ?? 0) > 1) {
+			// 同じ件に2つの答えが来た。**どちらも採らない**
+			if (!seen.has(index)) {
+				discarded.push(`index ${index} was answered more than once`);
+			}
+			seen.add(index);
 			continue;
 		}
 		seen.add(index);

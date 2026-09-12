@@ -206,9 +206,16 @@ export class UnitRegistryManager {
 	 */
 	async resolveConflict(): Promise<number> {
 		// 覚えている中身を捨てて読み直す。合流はこの外で起きているので、
-		// メモリの上の版は合流の前の姿である
+		// メモリの上の版は合流の前の姿である。**ほどいた中身の覚え書きも一緒に捨てる** —
+		// `loadUnitRegistry` と `loadNote` はストアより先にそちらを見るので、残したままだと
+		// 相手側が書き直した控えや note が、この manager が生きているあいだ古いまま返る
+		//
+		// **書き待ちの控え（`writeBuffer`）は捨てない。** まだファイルに載っていないので、
+		// 捨てるとその原文の控えがどこにも残らない
 		this.store = null;
 		this.storeLoaded = false;
+		this.cache.clear();
+		this.noteCache.clear();
 		const store = await this.getOrLoadStore();
 		await this.persistStore(store);
 		return store.size();

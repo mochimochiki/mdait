@@ -16,7 +16,8 @@ import { splitConflictedFile } from "../../../core/conflict/conflict-sections";
 import { type KeyedEntry, mergeByKey } from "../../../core/conflict/key-merge";
 import { TmxStore } from "../../../core/tm/tmx-store";
 import type { TmEntry } from "../../../core/tm/types";
-import type { ChoiceSide, PendingChoice, ResolutionPlan, Verdict } from "../resolution-plan";
+import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
+import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料を、計画の外へ持ち出さずに抱えておく */
 interface TmSides {
@@ -63,15 +64,27 @@ function mergeVariants(ours: TmEntry, theirs: TmEntry, base: TmEntry | undefined
 	for (const lang of langs) {
 		const mine = ours.variants.get(lang);
 		const yours = theirs.variants.get(lang);
-		if (mine === undefined) {
-			merged.set(lang, yours as NonNullable<typeof yours>);
-			continue;
+		const ancestor = base?.variants.get(lang);
+
+		// **片方にしか無い言語。** 祖先に無ければ「足した」なので採る。祖先に在れば
+		// 「消した」なので、残っている側が祖先のままなら消す。残っている側も直していたら
+		// 「消した」と「直した」がぶつかっているので、TU ごと人に決めてもらう
+		if (mine === undefined || yours === undefined) {
+			const present = (mine ?? yours) as NonNullable<typeof mine>;
+			if (ancestor === undefined) {
+				merged.set(lang, present);
+				continue;
+			}
+			if (JSON.stringify(present) === JSON.stringify(ancestor)) {
+				merged.delete(lang);
+				continue;
+			}
+			return undefined;
 		}
-		if (yours === undefined || JSON.stringify(mine) === JSON.stringify(yours)) {
+		if (JSON.stringify(mine) === JSON.stringify(yours)) {
 			continue;
 		}
 		// 同じ言語に別の訳。祖先を見て片方だけが変えたなら、変えたほうを採る
-		const ancestor = base?.variants.get(lang);
 		if (ancestor !== undefined) {
 			if (JSON.stringify(mine) === JSON.stringify(ancestor)) {
 				merged.set(lang, yours);
@@ -82,6 +95,9 @@ function mergeVariants(ours: TmEntry, theirs: TmEntry, base: TmEntry | undefined
 			}
 		}
 		return undefined; // 2人が同じ言語の訳を別々に直した。人が決める
+	}
+	if (merged.size === 0) {
+		return undefined; // 訳が1つも残らない。畳まずに人へ回す
 	}
 	return { tuid: ours.tuid, primary: ours.primary, variants: merged };
 }
@@ -123,9 +139,13 @@ export function planTmResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: item.ours.primary,
-		oursText: describe(item.ours),
-		theirsText: describe(item.theirs),
+		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す — 値を出すと、
+		// その側を採れば値が戻ると読めてしまう
+		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours),
+		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs),
 		baseText: item.base ? describe(item.base) : undefined,
+		oursDeleted: item.oursDeleted,
+		theirsDeleted: item.theirsDeleted,
 	}));
 
 	return {
@@ -165,6 +185,12 @@ export function applyTmResolution(
 		if (!side) {
 			// **迷った件は書かずに残す。** 両方の版を残せないので、この対象は書き戻さない
 			remainingCount++;
+			continue;
+		}
+		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
+		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
+			final.delete(item.key);
+			decidedCount++;
 			continue;
 		}
 		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);
