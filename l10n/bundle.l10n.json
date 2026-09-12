@@ -64,6 +64,8 @@
   "keeping yours": "keeping yours",
   "keeping theirs": "keeping theirs",
   "undecided": "undecided",
+  "removed on this side": "removed on this side",
+  "One side removed this entry while the other changed it.": "One side removed this entry while the other changed it.",
   "Two people wrote a different value for this entry.": "Two people wrote a different value for this entry.",
   "Yours": "Yours",
   "Theirs": "Theirs",

@@ -63,9 +63,10 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 		preparedStamp = undefined;
 		return undefined;
 	}
-	// 覚え書きの鍵は「いま競合しているファイルとその見た目」。スキャナが読み直した回は
-	// 必ず作り直す
-	const stamp = conflicts.files.map((file) => file.filePath).join("\u0000");
+	// 覚え書きの鍵は「いま競合しているファイルとその見た目」。**パスだけでは足りない** —
+	// 別の合流が来ても人が手で直しても、競合しているファイルの並びは変わらないことがある。
+	// 中身が動いたのに前の計画を返すと、古い値をそのまま書き戻しうる
+	const stamp = conflicts.files.map((file) => file.stamp).join("\u0000");
 	if (preparedCache && preparedStamp === stamp && !preparedDirty) {
 		return preparedCache;
 	}
@@ -75,7 +76,12 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 		preparedDirty = false;
 		return preparedCache;
 	} catch (error) {
+		// 作り直せなかった。**前の計画を残さない** — 残すと、次に同じ見た目で聞かれたときに
+		// 古い計画を返してしまう
 		Logger.getInstance().debug("conflicts", "failed to prepare a resolution", formatError(error));
+		preparedCache = undefined;
+		preparedStamp = undefined;
+		preparedDirty = true;
 		return undefined;
 	}
 }

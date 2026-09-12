@@ -17,24 +17,47 @@
  */
 import type { ChoiceSide } from "./resolution-plan";
 
-/** ファイルの絶対パス → 鍵 → どちらを採るか */
-const decisions = new Map<string, Map<string, ChoiceSide>>();
+/**
+ * ファイルの絶対パス → そのときのファイルの見た目と、決まっているぶん。
+ *
+ * **見た目を一緒に持つ。** 決めかけのあいだにファイルが外から変わったら（別の合流が
+ * 来た・人が手で直した）、前の鍵に対する判断はもう当てにならない。同じ鍵が新しい競合にも
+ * 現れると、人が見ていないのに決まったことにされてしまう。
+ */
+const decisions = new Map<string, { stamp: string; choices: Map<string, ChoiceSide> }>();
 
-/** 1件ぶんの判断を預かる */
-export function rememberDecision(filePath: string, key: string, side: ChoiceSide): void {
-	const perFile = decisions.get(filePath) ?? new Map<string, ChoiceSide>();
-	perFile.set(key, side);
-	decisions.set(filePath, perFile);
+/** その預かりが、いまのファイルの見た目のものか。違えば捨てる */
+function liveChoices(filePath: string, stamp: string): Map<string, ChoiceSide> | undefined {
+	const held = decisions.get(filePath);
+	if (!held) {
+		return undefined;
+	}
+	if (held.stamp !== stamp) {
+		decisions.delete(filePath);
+		return undefined;
+	}
+	return held.choices;
 }
 
-/** そのファイルについて、いままでに決まっているぶん */
-export function decisionsFor(filePath: string): ReadonlyMap<string, ChoiceSide> {
-	return decisions.get(filePath) ?? new Map<string, ChoiceSide>();
+/**
+ * 1件ぶんの判断を預かる。
+ *
+ * @param stamp 計画を作ったときのファイルの見た目（`PreparedResolution.stamps`）
+ */
+export function rememberDecision(filePath: string, stamp: string, key: string, side: ChoiceSide): void {
+	const choices = liveChoices(filePath, stamp) ?? new Map<string, ChoiceSide>();
+	choices.set(key, side);
+	decisions.set(filePath, { stamp, choices });
+}
+
+/** そのファイルについて、いままでに決まっているぶん（見た目が変わっていれば空） */
+export function decisionsFor(filePath: string, stamp: string): ReadonlyMap<string, ChoiceSide> {
+	return liveChoices(filePath, stamp) ?? new Map<string, ChoiceSide>();
 }
 
 /** その1件に下した判断（まだなら `undefined`） */
-export function decisionOf(filePath: string, key: string): ChoiceSide | undefined {
-	return decisions.get(filePath)?.get(key);
+export function decisionOf(filePath: string, stamp: string, key: string): ChoiceSide | undefined {
+	return liveChoices(filePath, stamp)?.get(key);
 }
 
 /**

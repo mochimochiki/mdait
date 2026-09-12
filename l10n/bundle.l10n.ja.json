@@ -690,6 +690,8 @@
   "keeping yours": "こちらを採る",
   "keeping theirs": "あちらを採る",
   "undecided": "未決",
+  "removed on this side": "この側では消されています",
+  "One side removed this entry while the other changed it.": "片方がこの件を消し、もう片方が直しています。",
   "Two people wrote a different value for this entry.": "この項目に、2人が別々の値を書いています。",
   "Before the split": "分かれる前",
   "You picked a side. Nothing is written yet — this file is rewritten once every one of its conflicts is settled.": "どちらを採るか決めました。まだ書いていません — このファイルは、中の競合がすべて決まったときに書き換えます。",
