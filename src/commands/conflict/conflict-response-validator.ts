@@ -30,6 +30,13 @@ export interface ConflictResponseValidation {
 	decisions: ConflictDecision[];
 	/** 捨てた件の理由（ログとレポートに出す。人には件数だけ見せる） */
 	discarded: string[];
+	/**
+	 * 応答が**まるごと読めなかった**か。
+	 *
+	 * 「読めたが1件も決まらなかった」（`{"decisions":[]}`）と区別する。前者は問い直す
+	 * 値打ちがあるが、後者は AI が答えた結果なので問い直しても同じ答えが返るだけである。
+	 */
+	unreadable: boolean;
 }
 
 /** 応答から JSON の本体を取り出す（コードフェンスに包まれていても読む） */
@@ -53,12 +60,12 @@ export function validateConflictResponse(raw: string, expectedCount: number): Co
 	try {
 		parsed = JSON.parse(extractJson(raw));
 	} catch {
-		return { decisions: [], discarded: ["The response was not valid JSON."] };
+		return { decisions: [], discarded: ["The response was not valid JSON."], unreadable: true };
 	}
 
 	const list = (parsed as { decisions?: unknown })?.decisions;
 	if (!Array.isArray(list)) {
-		return { decisions: [], discarded: ["The response had no decisions array."] };
+		return { decisions: [], discarded: ["The response had no decisions array."], unreadable: true };
 	}
 
 	const decisions: ConflictDecision[] = [];
@@ -91,5 +98,5 @@ export function validateConflictResponse(raw: string, expectedCount: number): Co
 		decisions.push({ index, side, reason });
 	}
 
-	return { decisions, discarded };
+	return { decisions, discarded, unreadable: false };
 }

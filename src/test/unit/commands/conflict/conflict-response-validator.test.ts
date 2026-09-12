@@ -22,7 +22,7 @@ suite("競合の判定の応答の検証", () => {
 	});
 
 	test("コードフェンスに包まれていても読む", () => {
-		const found = validateConflictResponse("```json\n" + wrap(ok(1, "ours")) + "\n```", 1);
+		const found = validateConflictResponse(`\`\`\`json\n${wrap(ok(1, "ours"))}\n\`\`\``, 1);
 
 		assert.equal(found.decisions.length, 1);
 	});
