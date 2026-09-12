@@ -227,6 +227,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.conflict.resolve",
+        "title": "%mdait.conflict.resolve.title%",
+        "icon": "$(sparkle)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.aiReview.file",
         "title": "%mdait.aiReview.file.title%",
         "icon": "$(verified)",
@@ -529,6 +535,11 @@
           "group": "inline"
         },
         {
+          "command": "mdait.conflict.resolve",
+          "when": "view == mdait.status && viewItem == mdaitConflictsRoot",
+          "group": "inline"
+        },
+        {
           "command": "mdait.needsAttention.next",
           "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
           "group": "inline"
@@ -577,6 +588,11 @@
           "command": "mdait.translate.frontmatter",
           "when": "view == mdait.status && viewItem == mdaitFrontmatterTarget",
           "group": "1_translate@1"
+        },
+        {
+          "command": "mdait.conflict.resolve",
+          "when": "view == mdait.status && viewItem == mdaitConflictsRoot",
+          "group": "0_conflict@1"
         },
         {
           "command": "mdait.needsAttention.next",

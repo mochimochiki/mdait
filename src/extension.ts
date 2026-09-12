@@ -69,6 +69,7 @@ import {
 	openSettingsAsUiCommand,
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
+import { executeResolveConflicts } from "./commands/conflict/resolve-command";
 import { StatusBarSummary } from "./ui/status/status-bar-summary";
 import {
 	collectWorkspaceConflicts,
@@ -208,6 +209,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	conflictWatcher.onDidCreate(refreshConflicts);
 	conflictWatcher.onDidDelete(refreshConflicts);
 	context.subscriptions.push(conflictWatcher);
+
+	// 合流の競合の解決（roadmap-v04 P02）。ツリーの「競合の解決」の枝から呼ぶ
+	context.subscriptions.push(
+		vscode.commands.registerCommand("mdait.conflict.resolve", async () => {
+			await executeResolveConflicts();
+			refreshConflicts();
+		}),
+	);
 
 	// setup.createConfig command
 	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>

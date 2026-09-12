@@ -20,7 +20,7 @@ import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { PromptIds } from "../../prompts";
-import type { PromptParts, PromptVariables } from "../../prompts";
+import type { PromptId, PromptParts, PromptVariables } from "../../prompts";
 import { type ConflictDecision, validateConflictResponse } from "./conflict-response-validator";
 import type { ChoiceSide, PendingChoice } from "./resolution-plan";
 
@@ -93,7 +93,7 @@ export function buildConflictsBlock(items: readonly PendingChoice[], context: Ju
 export class ConflictJudge {
 	constructor(
 		private readonly aiService: AIService,
-		private readonly getPromptParts: (id: string, variables: PromptVariables) => PromptParts,
+		private readonly getPromptParts: (id: PromptId, variables: PromptVariables) => PromptParts,
 	) {}
 
 	/**

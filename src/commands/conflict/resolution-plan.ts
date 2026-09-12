@@ -72,6 +72,13 @@ export interface ResolutionOutcome {
 	remainingCount: number;
 	/** 書き戻したか（迷った件があれば1バイトも書かない対象もある） */
 	written: boolean;
+	/**
+	 * `unit-state` で、同じ席に2行来たので片方を席から降ろした件数。
+	 *
+	 * **解けていないのではない** — 行はどちらも残っている。原稿と突き合わせて
+	 * どちらを席へ戻すかを決めるのが P03 の仕事で、その件数をここで伝える。
+	 */
+	unseatedCount?: number;
 	/** 失敗した理由（あれば） */
 	error?: string;
 }
