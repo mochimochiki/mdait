@@ -11,6 +11,7 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
+import { advanceAfterReview } from "../../commands/markers/needs-attention-next";
 import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
@@ -20,6 +21,8 @@ import { parseFrontmatterMarker } from "../../core/markdown/frontmatter-translat
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
+import type { UnitStatusItem } from "../../core/status/status-item";
+import type { StatusItemTree } from "../../core/status/status-item-tree";
 import { StatusManager } from "../../core/status/status-manager";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { Configuration } from "../../infra/config/configuration";
@@ -31,7 +34,7 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
  * - embedded: その行のテキストから直接パース
  * - external: ドキュメント全体をパースし、行を含むユニットのマーカーを返す
  */
-function getMarkerAtLine(document: vscode.TextDocument, line: number): MdaitMarker | null {
+export function getMarkerAtLine(document: vscode.TextDocument, line: number): MdaitMarker | null {
 	const config = Configuration.getInstance();
 	if (config.isExternalMarkers()) {
 		const explorer = new FileExplorer();
@@ -86,7 +89,9 @@ export async function codeLensTranslateCommand(range: vscode.Range): Promise<voi
 }
 
 /**
- * CodeLensからneedマーカーをクリアするコマンド
+ * CodeLensからneedマーカーをクリアするコマンド。
+ * 「レビュー完了」（need:review を外した）のときだけ、続けて次の要対応へ進む
+ * （`advanceAfterReview`。ADR-260912-08）。翻訳済み・改訂済み・isolate 解除では動かない。
  * @param range CodeLensが表示されている行の範囲
  */
 export async function codeLensClearNeedCommand(range: vscode.Range): Promise<void> {
@@ -106,6 +111,9 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 
 		const filePath = document.uri.fsPath;
 		const target = { kind: "unit" as const, hash: marker.hash };
+		// 次の要対応を探す起点。embedded ではマーカー行、external ではユニットの開始行で、
+		// どちらもキューの `startLine` と同じ行（同じ項目で足踏みしない）
+		const origin = { filePath, line: range.start.line };
 		const result = await getFileHandler(filePath).resolveNeed(filePath, {
 			targets: [target],
 			needs: ALL_RESOLVABLE_NEEDS,
@@ -129,9 +137,11 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 				allowSameAsSource: true,
 			});
 			reportResolveOutcome(forced.resolved.length);
+			await advanceAfterReview(forced.resolved, origin);
 			return;
 		}
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, origin);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
@@ -584,81 +594,188 @@ export async function codeLensJumpToSourceCommand(range: vscode.Range): Promise<
 			return;
 		}
 
-		// クリック位置および左側の可視範囲から相対オフセットを取得（左側は変更しない）
-		const clickedPos = new vscode.Position(range.start.line, 0);
-		const leftVisible = activeEditor.visibleRanges[0];
-		const document = activeEditor.document;
-		const marker = getMarkerAtLine(document, range.start.line);
-		if (!marker?.from) {
+		// ボタンを押した本人が相手なので、原文を開けなかった理由はそのまま返す
+		const located = await openSourceBesideTarget(activeEditor, range.start.line);
+		if (located.kind === "no-from") {
 			vscode.window.showWarningMessage(vscode.l10n.t("No source hash found in marker."));
-			return;
+		} else if (located.kind === "not-found") {
+			vscode.window.showWarningMessage(vscode.l10n.t("Source unit not found for hash: {0}", located.from));
 		}
-
-		const statusManager = StatusManager.getInstance();
-		// 現在のターゲットファイルから対応するソースファイルパスをFileExplorerで推定
-		const targetFilePath = document.uri.fsPath;
-		const config = Configuration.getInstance();
-		const explorer = new FileExplorer();
-		const pair = explorer.getTransPairFromTarget(targetFilePath, config);
-		const preferredSourcePath = pair ? (explorer.getSourcePath(targetFilePath, pair) ?? undefined) : undefined;
-
-		// 優先パスでユニットを検索し、見つからなければ全体検索
-		const tree = statusManager.getStatusItemTree();
-		const sourceUnit = preferredSourcePath
-			? (tree.getUnit(marker.from, preferredSourcePath) ?? tree.getUnitByHash(marker.from))
-			: tree.getUnitByHash(marker.from);
-		if (!sourceUnit || !sourceUnit.filePath) {
-			vscode.window.showWarningMessage(vscode.l10n.t("Source unit not found for hash: {0}", marker.from));
-			return;
-		}
-
-		const targetDoc = await vscode.workspace.openTextDocument(sourceUnit.filePath);
-		const jumpLine = sourceUnit.startLine ?? 0;
-		const position = new vscode.Position(jumpLine, 0);
-		const selection = new vscode.Selection(position, position);
-
-		// 右側（Beside）に分割して開き、カーソルをジャンプ位置へ
-		const editor = await vscode.window.showTextDocument(targetDoc, {
-			viewColumn: vscode.ViewColumn.Beside,
-			preview: true,
-			preserveFocus: true,
-			selection,
-		});
-
-		// 左側の相対位置に同期するように右側のスクロール位置を調整
-		if (leftVisible) {
-			const offset = Math.max(0, clickedPos.line - leftVisible.start.line);
-			const desiredTop = Math.max(0, Math.min(jumpLine - offset, targetDoc.lineCount - 1));
-			const topPos = new vscode.Position(desiredTop, 0);
-			editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
-		} else {
-			// 可視範囲が取れない場合は中央表示にフォールバック
-			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
-		}
-
-		// ターゲットユニット（左側）と原文ユニット（右側）の両方をハイライト
-		const targetStartLine = range.start.line;
-		const targetEndLine = findUnitEndLine(document, targetStartLine);
-		const sourceStartLine = sourceUnit.startLine ?? 0;
-		const sourceEndLine = sourceUnit.endLine ?? 0;
-
-		highlightUnit(activeEditor, targetStartLine, targetEndLine, "target");
-		highlightUnit(editor, sourceStartLine, sourceEndLine, "source");
-
-		// ハイライト範囲を保存
-		_highlightInfo = {
-			leftEditor: activeEditor,
-			rightEditor: editor,
-			leftRange: new vscode.Range(targetStartLine, 0, targetEndLine, Number.MAX_SAFE_INTEGER),
-			rightRange: new vscode.Range(sourceStartLine, 0, sourceEndLine, Number.MAX_SAFE_INTEGER),
-		};
-
-		// 左→右の継続スクロール同期を開始
-		startOneWayScrollSync(activeEditor, editor, clickedPos.line, jumpLine);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Jump to source failed: {0}", errorMessage));
 	}
+}
+
+/**
+ * 訳文ユニットを原文と並べて開くコマンド（`mdait.openPair`）。
+ * ステータスツリーの「要対応」ノードの項目クリックと「次の要対応へ」から呼ばれる。
+ *
+ * `need:review` は「この訳文がこの原文の訳として正しいか」を人が見る作業で、訳文だけを
+ * 開いても判断できない（`mdait.jumpToUnit` との違い）。CodeLens の「Source」ボタンと
+ * 同じ中身（`openSourceBesideTarget`）を、訳文を開くところから始める。
+ *
+ * @param filePath 訳文ファイルの絶対パス
+ * @param line 訳文ユニットの開始行（0 始まり。embedded ではマーカー行）
+ */
+export async function openPairCommand(filePath: string, line: number): Promise<void> {
+	try {
+		const document = await vscode.workspace.openTextDocument(filePath);
+		// 既に見えている列があればそこへ、無ければ左端（One）へ。アクティブ列に開くと、
+		// 前の項目で右に出した原文プレビューがアクティブなとき訳文がそこへ開き、
+		// さらにその右へ原文が出て3列になる。訳文は左・原文は右、を項目をまたいで保つ
+		const viewColumn = pickViewColumnForTarget(
+			vscode.window.visibleTextEditors,
+			document.uri.fsPath,
+			vscode.ViewColumn.One,
+		);
+		const clampedLine = Math.max(0, Math.min(line, document.lineCount - 1));
+		const position = new vscode.Position(clampedLine, 0);
+		// preview の指定はしない（`mdait.jumpToUnit` と同じ）。要対応を順に回るとき、
+		// 利用者の preview 設定どおりに同じタブを使い回せる
+		const editor = await vscode.window.showTextDocument(document, {
+			viewColumn,
+			selection: new vscode.Selection(position, position),
+		});
+		editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+
+		// 原文が無い項目（verify-deletion・独立ユニット）は要対応にふつうに混ざる。
+		// 原文を開けなくても警告は出さない — 訳文を該当行で開いた時点で、その項目に対して
+		// できること（Keep / Delete / 確定）は揃っている。理由ごとの通知は CodeLens 側に残す
+		await openSourceBesideTarget(editor, clampedLine);
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		vscode.window.showErrorMessage(vscode.l10n.t("Failed to open the translation pair: {0}", errorMessage));
+	}
+}
+
+/**
+ * 訳文を開く列を決める（純関数）。
+ * そのドキュメントが既にどこかの列に見えていればその列、無ければ `fallback`。
+ * 呼び出し側は `fallback` に ViewColumn.One を渡す（理由は `openPairCommand` を参照）。
+ *
+ * @param visibleEditors いま見えているエディタ（`vscode.window.visibleTextEditors`）
+ * @param fsPath 開く訳文の `document.uri.fsPath`（visibleEditors 側と同じ正規化を経た値を渡す）
+ * @param fallback どこにも見えていないときの列
+ */
+export function pickViewColumnForTarget(
+	visibleEditors: ReadonlyArray<{ document: { uri: { fsPath: string } }; viewColumn?: vscode.ViewColumn }>,
+	fsPath: string,
+	fallback: vscode.ViewColumn,
+): vscode.ViewColumn {
+	const shown = visibleEditors.find((editor) => editor.document.uri.fsPath === fsPath);
+	return shown?.viewColumn ?? fallback;
+}
+
+/** 対訳の原文ユニットの所在（`locatePairSource` の答え） */
+export type PairSourceLocation =
+	| { kind: "no-from" }
+	| { kind: "not-found"; from: string }
+	| { kind: "found"; from: string; unit: UnitStatusItem };
+
+/**
+ * 訳文マーカーの from から原文ユニットを探す（純関数）。
+ * from が無ければ探さない（verify-deletion・独立ユニット）。優先パス（訳文と対になる
+ * 原文ファイル）で見つからなければ全体から探す。
+ *
+ * @param tree ステータスツリー
+ * @param from 訳文マーカーの from（無ければ null / undefined）
+ * @param preferredSourcePath 訳文と対になる原文ファイルの絶対パス（推定できなければ null / undefined）
+ */
+export function locatePairSource(
+	tree: Pick<StatusItemTree, "getUnit" | "getUnitByHash">,
+	from: string | null | undefined,
+	preferredSourcePath: string | null | undefined,
+): PairSourceLocation {
+	if (!from) {
+		return { kind: "no-from" };
+	}
+	const unit = preferredSourcePath
+		? (tree.getUnit(from, preferredSourcePath) ?? tree.getUnitByHash(from))
+		: tree.getUnitByHash(from);
+	if (!unit || !unit.filePath) {
+		return { kind: "not-found", from };
+	}
+	return { kind: "found", from, unit };
+}
+
+/**
+ * 訳文エディタの `targetLine` にあるユニットの原文を右（Beside）に preview で開き、
+ * 両側のユニットをハイライトして左→右のスクロール同期を始める。
+ * CodeLens の「Source」ボタンと `openPairCommand` の共通部。
+ *
+ * 原文を開けなかった理由は戻り値で返し、利用者に何を伝えるかは呼び出し側が決める
+ * （ボタンを押した人には理由を返し、要対応の入口では黙る）。
+ *
+ * @param targetEditor 訳文のエディタ（左側。ここは動かさない）
+ * @param targetLine 訳文ユニットの開始行（embedded ではマーカー行）
+ */
+async function openSourceBesideTarget(
+	targetEditor: vscode.TextEditor,
+	targetLine: number,
+): Promise<PairSourceLocation> {
+	// 起点行と左側の可視範囲から相対オフセットを取る（左側は変更しない）
+	const leftVisible = targetEditor.visibleRanges[0];
+	const document = targetEditor.document;
+	const marker = getMarkerAtLine(document, targetLine);
+
+	// 現在のターゲットファイルから対応するソースファイルパスをFileExplorerで推定
+	const targetFilePath = document.uri.fsPath;
+	const config = Configuration.getInstance();
+	const explorer = new FileExplorer();
+	const pair = explorer.getTransPairFromTarget(targetFilePath, config);
+	const preferredSourcePath = pair ? explorer.getSourcePath(targetFilePath, pair) : null;
+
+	const located = locatePairSource(StatusManager.getInstance().getStatusItemTree(), marker?.from, preferredSourcePath);
+	if (located.kind !== "found") {
+		return located;
+	}
+	const sourceUnit = located.unit;
+
+	const sourceDoc = await vscode.workspace.openTextDocument(sourceUnit.filePath);
+	const jumpLine = sourceUnit.startLine ?? 0;
+	const position = new vscode.Position(jumpLine, 0);
+	const selection = new vscode.Selection(position, position);
+
+	// 右側（Beside）に分割して開き、カーソルをジャンプ位置へ
+	const editor = await vscode.window.showTextDocument(sourceDoc, {
+		viewColumn: vscode.ViewColumn.Beside,
+		preview: true,
+		preserveFocus: true,
+		selection,
+	});
+
+	// 左側の相対位置に同期するように右側のスクロール位置を調整
+	if (leftVisible) {
+		const offset = Math.max(0, targetLine - leftVisible.start.line);
+		const desiredTop = Math.max(0, Math.min(jumpLine - offset, sourceDoc.lineCount - 1));
+		const topPos = new vscode.Position(desiredTop, 0);
+		editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+	} else {
+		// 可視範囲が取れない場合は中央表示にフォールバック
+		editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+	}
+
+	// ターゲットユニット（左側）と原文ユニット（右側）の両方をハイライト
+	const targetStartLine = targetLine;
+	const targetEndLine = findUnitEndLine(document, targetStartLine);
+	const sourceStartLine = sourceUnit.startLine ?? 0;
+	const sourceEndLine = sourceUnit.endLine ?? 0;
+
+	highlightUnit(targetEditor, targetStartLine, targetEndLine, "target");
+	highlightUnit(editor, sourceStartLine, sourceEndLine, "source");
+
+	// ハイライト範囲を保存
+	_highlightInfo = {
+		leftEditor: targetEditor,
+		rightEditor: editor,
+		leftRange: new vscode.Range(targetStartLine, 0, targetEndLine, Number.MAX_SAFE_INTEGER),
+		rightRange: new vscode.Range(sourceStartLine, 0, sourceEndLine, Number.MAX_SAFE_INTEGER),
+	};
+
+	// 左→右の継続スクロール同期を開始
+	startOneWayScrollSync(targetEditor, editor, targetLine, jumpLine);
+	return located;
 }
 
 // 左右エディタのスクロール同期（左→右の一方向）に使用するディスポーザブル
@@ -867,7 +984,9 @@ function startOneWayScrollSync(
 }
 
 /**
- * CodeLensからfrontmatterのneedマーカーをクリアするコマンド
+ * CodeLensからfrontmatterのneedマーカーをクリアするコマンド。
+ * 「レビュー完了」のときは本文ユニットと同じく次の要対応へ進む（frontmatter は
+ * キューでは行 0 の項目なので、起点も行 0。同じファイルの本文ユニットが次になる）
  * @param range CodeLensが表示されている行の範囲
  */
 export async function codeLensClearFrontmatterNeedCommand(_range: vscode.Range): Promise<void> {
@@ -884,6 +1003,7 @@ export async function codeLensClearFrontmatterNeedCommand(_range: vscode.Range):
 			needs: ALL_RESOLVABLE_NEEDS,
 		});
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, { filePath, line: 0 });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear frontmatter need marker: {0}", errorMessage));
@@ -1025,6 +1145,8 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
 /**
  * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
  * 実際の書き換え・保存・ステータス更新はハンドラ側が行う。
+ * 「レビュー完了」のときは Markdown と同じく次の要対応へ進む（ファイル＝1ユニットで
+ * キューでは行 0 の項目なので、起点も行 0）
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
@@ -1033,6 +1155,7 @@ export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<voi
 			needs: ALL_RESOLVABLE_NEEDS,
 		});
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, { filePath: uri.fsPath, line: 0 });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));

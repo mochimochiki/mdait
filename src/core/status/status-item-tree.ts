@@ -4,6 +4,7 @@ import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import {
 	type DirectoryStatusItem,
 	type FileStatusItem,
+	type NeedsAttentionItem,
 	Status,
 	type StatusItem,
 	StatusItemType,
@@ -30,24 +31,62 @@ function isSameOrUnder(child: string, parent: string): boolean {
 }
 
 /**
- * 要対応ユニットの表示順を決める比較関数（ファイルパス昇順→開始行昇順→ハッシュ昇順）。
+ * 要対応項目の「訳文ファイル内の開始行」（0 始まり）。
+ *
+ * frontmatter と非Markdown（ファイル＝1ユニット）は行を持たないのでファイル先頭（0）と
+ * みなす。並び順・「次の要対応へ」の起点比較・`mdait.openPair` に渡す行の3か所が
+ * 同じ答えを使うための唯一の算出点（ばらばらに `?? 0` を書くと、どれか1つが
+ * frontmatter を末尾に回すような食い違いを生む）。
+ */
+export function getNeedsAttentionLine(item: NeedsAttentionItem): number {
+	return item.type === StatusItemType.Unit ? (item.startLine ?? 0) : 0;
+}
+
+/**
+ * 同じファイル・同じ行に並んだときの種類の順（ファイル → frontmatter → 本文ユニット）。
+ * 実際には非Markdown は children を持たず、frontmatter があれば本文は 0 行目から
+ * 始まらないので衝突しないが、比較関数は全域で決定的でなければならない。
+ */
+function needsAttentionKindRank(item: NeedsAttentionItem): number {
+	switch (item.type) {
+		case StatusItemType.File:
+			return 0;
+		case StatusItemType.Frontmatter:
+			return 1;
+		case StatusItemType.Unit:
+			return 2;
+	}
+}
+
+/**
+ * 要対応項目の表示順を決める比較関数（ファイルパス昇順→開始行昇順→種類→ハッシュ昇順）。
  *
  * ロケール依存の比較（localeCompare）は環境によって結果が変わりうるため使わない。
  * 「同じ状態なら常に同じ並び」を保証することが目的であり、これは見た目の問題ではなく
  * 表示の信頼に関わる（ADR-260724-01）。「次の要対応へ」コマンドもこの順序に従う。
+ * frontmatter と非Markdown は行 0 なので、そのファイルの先頭に並ぶ。
  */
-export function compareNeedsAttentionUnits(a: UnitStatusItem, b: UnitStatusItem): number {
+export function compareNeedsAttentionUnits(a: NeedsAttentionItem, b: NeedsAttentionItem): number {
 	if (a.filePath !== b.filePath) {
 		return a.filePath < b.filePath ? -1 : 1;
 	}
-	const lineDiff = (a.startLine ?? 0) - (b.startLine ?? 0);
+	const lineDiff = getNeedsAttentionLine(a) - getNeedsAttentionLine(b);
 	if (lineDiff !== 0) {
 		return lineDiff;
 	}
-	if (a.unitHash === b.unitHash) {
+	const rankDiff = needsAttentionKindRank(a) - needsAttentionKindRank(b);
+	if (rankDiff !== 0) {
+		return rankDiff;
+	}
+	if (a.type !== StatusItemType.Unit || b.type !== StatusItemType.Unit || a.unitHash === b.unitHash) {
 		return 0;
 	}
 	return a.unitHash < b.unitHash ? -1 : 1;
+}
+
+/** 人の裁定を待つ need か（要対応キューに並べる条件）。verify-deletion は本文ユニットにしか付かない */
+function isAttentionNeed(need: string | undefined): boolean {
+	return need === "review" || need === "verify-deletion";
 }
 
 /**
@@ -195,26 +234,61 @@ export class StatusItemTree {
 	}
 
 	/**
-	 * review / verify-deletion 待ちのユニットをファイル横断で集める。
-	 * StatusTreeProvider の「Needs Attention」仮想ノード（UX-R1: 判断サーフェスの完成）の
-	 * データソース。escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
+	 * 人の裁定を待つ項目（本文ユニット・frontmatter・非Markdown ファイル）を歩く。
+	 *
+	 * `getNeedsAttentionUnits`（要対応ノード・「次へ」・ステータスバー）と
+	 * `countPendingReviewUnits`（sync 完了通知の件数）の**唯一の共通の走査**である。
+	 * 2つが別々に歩くと、片方だけ直したときに「通知は 3 件と言うのに要対応ノードは
+	 * 0 件で出ない」というずれが再発する。どちらも need の種類でしか絞らない。
+	 *
+	 * 歩かないファイル:
+	 * - 孤立訳文（`isOrphanTarget === true`）: 原文が無いので「この訳が原文に合うか」を
+	 *   裁定できない。先に決めるべきは「この訳文をどうするか」（破棄か原文の復元か）で、
+	 *   その操作はファイル行にある。中のユニットを要対応に並べても目を逸らさせるだけ
+	 * - 原文側（`Status.Source`）: 訳ではないので裁定の対象にならない
+	 * どちらも AI レビュー（`ai-review/pending-review-files.ts`）が同じ理由で外している。
+	 * 印はいずれも収集時にディスクから計算されたもので、ここでは読むだけ（ADR-260806-01）
+	 */
+	private *walkNeedsAttentionItems(scopeDirs?: string[]): Generator<NeedsAttentionItem> {
+		for (const file of this.getFilesInScope(scopeDirs)) {
+			if (file.isOrphanTarget === true || file.status === Status.Source) {
+				continue;
+			}
+			// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
+			// need はファイルレベルに載る（MD では常に undefined なので二重に数えない）
+			if (isAttentionNeed(file.needFlag)) {
+				yield file;
+			}
+			if (file.frontmatter && isAttentionNeed(file.frontmatter.needFlag)) {
+				yield file.frontmatter;
+			}
+			for (const unit of this.getUnitsInFile(file.filePath)) {
+				if (isAttentionNeed(unit.needFlag)) {
+					yield unit;
+				}
+			}
+		}
+	}
+
+	/**
+	 * review / verify-deletion 待ちの項目をファイル横断で集める。
+	 * StatusTreeProvider の「Needs Attention」仮想ノード（UX-R1: 判断サーフェスの完成）、
+	 * 「次の要対応へ」、ステータスバーの件数のデータソース。
+	 * escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
+	 *
+	 * 名前の「ユニット」は裁定の単位のことで、本文ユニットのほかに frontmatter と
+	 * 非Markdown ファイル（ファイル＝1ユニット）を含む（`NeedsAttentionItem`）。
+	 * 何を含め何を外すかは `walkNeedsAttentionItems` を見よ。
 	 *
 	 * @param scopeDirs 集約対象を限定するディレクトリ（絶対パス）の集合。
 	 *   ツリー本体が選択中の transPair だけを表示するため、要対応も同じ範囲に揃える
 	 *   （未指定なら全ファイルが対象。ADR-260724-01）。
-	 * @returns ファイルパス昇順→開始行昇順で安定ソートされたユニット列。
-	 *   同じ状態なら常に同じ並びになることを保証する（並びの揺れは表示上の信頼を損なうため）。
+	 * @returns ファイルパス昇順→開始行昇順で安定ソートされた項目列（frontmatter と
+	 *   非Markdown は行 0 としてそのファイルの先頭）。同じ状態なら常に同じ並びになることを
+	 *   保証する（並びの揺れは表示上の信頼を損なうため）。
 	 */
-	public getNeedsAttentionUnits(scopeDirs?: string[]): UnitStatusItem[] {
-		const matches: UnitStatusItem[] = [];
-		for (const file of this.getFilesInScope(scopeDirs)) {
-			for (const unit of this.getUnitsInFile(file.filePath)) {
-				if (unit.needFlag === "review" || unit.needFlag === "verify-deletion") {
-					matches.push(unit);
-				}
-			}
-		}
-		return matches.sort(compareNeedsAttentionUnits);
+	public getNeedsAttentionUnits(scopeDirs?: string[]): NeedsAttentionItem[] {
+		return Array.from(this.walkNeedsAttentionItems(scopeDirs)).sort(compareNeedsAttentionUnits);
 	}
 
 	/**
@@ -240,6 +314,40 @@ export class StatusItemTree {
 				if (isTranslateNeed(unit.needFlag)) {
 					count++;
 				}
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * 人の確認待ち（need:review）のユニットを数える。
+	 *
+	 * sync 完了通知の「AI レビュー」導線に使う。`countPendingTranslationUnits` と同じく
+	 * 「今回の実行で増えた件数」ではなく「現在ツリーに残っている件数」を返す — 変更なしの
+	 * 2回目以降の sync でも、確認待ちが残っていれば導線は出続けなければならない。
+	 *
+	 * 数える対象は AI レビューが拾うものに揃える:
+	 * - 本文ユニットの `need:review`
+	 * - frontmatter の `need:review`（`ai-review/pair-collector.ts` が本文と同じ1ペアとして列挙する）
+	 * - 非MD（プレーン）ファイルのファイルレベル `need:review`（ファイル＝1ユニットで children を
+	 *   持たず、need はファイル側に載る。`ai-review/review-targets.ts` は `trans.extensions` の
+	 *   ファイルも対象に含めるので、ここで外すと通知の件数がレビューの実行結果と食い違う）
+	 *
+	 * `verify-deletion` は数えない。あれは「原文が消えた訳文を捨ててよいか」という人にしか
+	 * 決められない問いで、AI レビューの対象（訳が原文に合っているか）ではない。
+	 *
+	 * 走査は `getNeedsAttentionUnits` と同じ（`walkNeedsAttentionItems`）。この件数と
+	 * 要対応ノードの中身は「verify-deletion を含むかどうか」しか違わない — 孤立訳文や
+	 * 原文側の扱いを片方だけ変えると、通知の件数とノードの件数がまたずれる。
+	 *
+	 * @param scopeDirs 集計対象を限定するディレクトリ（絶対パス）の集合。
+	 *   sync が処理する選択中の transPair と同じ範囲に揃える（未指定なら全ファイル）。
+	 */
+	public countPendingReviewUnits(scopeDirs?: string[]): number {
+		let count = 0;
+		for (const item of this.walkNeedsAttentionItems(scopeDirs)) {
+			if (item.needFlag === "review") {
+				count++;
 			}
 		}
 		return count;

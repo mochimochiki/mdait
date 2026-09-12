@@ -16,8 +16,10 @@ const logger = Logger.getInstance();
  */
 interface SyncInput {
 	/**
-	 * 採用（adopt）モード: マーカーなし・本文ありの既存訳文を from 確立＋need:review で採用する。
-	 * 既存対訳サイトの取り込み用の一度きりの操作。
+	 * 取り込み（adopt）モード: 既存対訳サイトの取り込み用の一度きりの操作。
+	 * マーカーなし・本文ありの既訳を need:review で受けること自体はふつうの sync でも同じ
+	 * （marker-sync.ts の `needForFirstLink`）。この旗が変えるのは AI アライン（align）を
+	 * 許すかどうかと、完了レポートの文言だけ。
 	 */
 	adopt?: boolean;
 	/**
@@ -45,7 +47,7 @@ interface SyncData {
 		deleted: number;
 		unchanged: number;
 		revisionsNeeded: number;
-		/** adoptで採用（need:review付与）したユニット数 */
+		/** 紐の無い既訳を need:review で受けたユニット数（adopt でなくても数える） */
 		adopted: number;
 		/** 独立ユニット（from なし素 hash / need:isolate）として保持した孤立ターゲット数 */
 		kept: number;
@@ -177,9 +179,12 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 					`AI align re-paired ${syncResult.totalAlignCorrections} unit(s) whose position-based mapping was wrong. All adopted pairs remain need:review; run mdait_aiReview to verify the (re)aligned pairs — any residual mis-pairing surfaces as a mismatch.`,
 				);
 			}
-			if (adopt && syncResult.totalAdopted > 0) {
+			// 既訳を need:review で受けるのは adopt に限らない（marker-sync.ts の needForFirstLink）。
+			// ふつうの sync で受けた回にも次の一手を出さないと、エージェントは review を片づける
+			// 手段（mdait_aiReview）に辿り着けない
+			if (syncResult.totalAdopted > 0) {
 				nextActions.unshift(
-					`${syncResult.totalAdopted} existing translation unit(s) were adopted with need:review. Run mdait_aiReview to triage them with AI (auto-approves high-confidence matches, escalates suspected mis-pairings), or review them and resolve the need:review flags with mdait_resolve, then run mdait_sync again before committing them to the TM.`,
+					`${syncResult.totalAdopted} existing translation unit(s) were linked with need:review. Run mdait_aiReview to triage them with AI (auto-approves high-confidence matches, escalates suspected mis-pairings), or review them and resolve the need:review flags with mdait_resolve, then run mdait_sync again before committing them to the TM.`,
 				);
 			}
 			return toToolResult(createOkEnvelope(summary, data, nextActions));

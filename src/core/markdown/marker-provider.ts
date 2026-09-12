@@ -154,8 +154,9 @@ export const embeddedMarkerProvider: MarkerProvider = new EmbeddedMarkerProvider
  * 外部ストア（`.mdait/unit-state`）とユニットを橋渡しする Provider。
  *
  * - マーカーは本文に埋め込まず、`UnitStateStore` に `(path, order)` キーで保管する。
- * - attach: store のエントリを order 昇順で取得し、ユニット配列 index（=order）を主キーに
- *   マーカーを後付けする。titleHash は補助検証のみ（不一致でも index マッチを採用）。
+ * - attach: store のエントリといまのユニットを**中身で**突き合わせてマーカーを後付けする
+ *   （何番目かは身元に使わない。手がかりは本文の hash → 見出しの hash とレベル → 順序。
+ *   詳細は `unit-state-align.ts`）。titleHash は補助の印ではなく、そこで使う鍵である。
  * - detach: 各ユニットを order=index でストアに書き込む（save は呼ばない。sync 完了時に1回）。
  *
  * `ctx.filePath` はワークスペース相対・/区切りを契約とする（正規化は呼び出し側の責務）。

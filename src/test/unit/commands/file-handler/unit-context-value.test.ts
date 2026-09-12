@@ -3,7 +3,7 @@
 // 背景: 凍結ユニット（need:isolate）を翻訳率の分母から外すために Status.Source を
 // 名乗らせていたところ、contextValue が Status を先に見ていたため巻き添えで
 // "mdaitUnitSource" に吸われ、"mdaitUnitIsolated" の分岐へ到達できなかった。
-// その結果、ツリーの「独立扱いを解除」が一度も表示されなかった。
+// その結果、ツリーの「凍結を解除」が一度も表示されなかった。
 //
 // 以後 contextValue は Status を引数に取らない。ここはその不変条件を守る番人である。
 
@@ -27,15 +27,31 @@ function unit(need: string | null, from: string | null): MdaitUnit {
 	} as unknown as MdaitUnit;
 }
 
-/** private メソッドを名前で呼ぶ（出し分けの判定そのものが検証対象のため） */
-function derive(u: MdaitUnit): { status: Status; contextValue: string } {
+/** private メソッドを名前で呼ぶ（収集したユニット項目そのものが検証対象のため） */
+function collectUnits(units: MdaitUnit[], isTargetFile: boolean): UnitStatusItem[] {
+	const collector = new StatusCollector() as unknown as {
+		collectUnitsStatus(
+			units: readonly MdaitUnit[],
+			filePath: string,
+			fileName: string,
+			isTargetFile: boolean,
+		): UnitStatusItem[];
+	};
+	return collector.collectUnitsStatus(units, "/ws/ja/a.md", "a.md", isTargetFile);
+}
+
+/**
+ * private メソッドを名前で呼ぶ（出し分けの判定そのものが検証対象のため）。
+ * 既定は原文側のファイル — 独立ユニットの分岐は `isTargetFile` を明示して確かめる。
+ */
+function derive(u: MdaitUnit, isTargetFile = false): { status: Status; contextValue: string } {
 	const collector = new StatusCollector() as unknown as {
 		determineUnitStatus(u: MdaitUnit): Status;
-		determineUnitContextValue(u: MdaitUnit): string;
+		determineUnitContextValue(u: MdaitUnit, isTargetFile: boolean): string;
 	};
 	return {
 		status: collector.determineUnitStatus(u),
-		contextValue: collector.determineUnitContextValue(u),
+		contextValue: collector.determineUnitContextValue(u, isTargetFile),
 	};
 }
 
@@ -91,6 +107,30 @@ suite("ユニットの状態導出（contextValue と分母判定）", () => {
 		const { contextValue, status } = derive(unit(null, null));
 		assert.strictEqual(contextValue, "mdaitUnitSource");
 		assert.strictEqual(status, Status.Source);
+	});
+
+	// 独立ユニットも from が無いので Status.Source を名乗る。原文のユニットと同じ形に
+	// なるため、どちら側のファイルかを併せて見ないと区別できない
+	test("訳文の from なしユニットには独立ユニットの印が付く", () => {
+		const [item] = collectUnits([unit(null, null)], true);
+		assert.strictEqual(item.isIndependent, true);
+	});
+
+	test("原文ファイルのユニットには独立ユニットの印を付けない", () => {
+		const [item] = collectUnits([unit(null, null)], false);
+		assert.strictEqual(item.isIndependent, false);
+	});
+
+	test("凍結ユニットには独立ユニットの印を付けない", () => {
+		const [item] = collectUnits([unit("isolate", "srcA")], true);
+		assert.strictEqual(item.isIndependent, false);
+	});
+
+	// 独立ユニットに原文と同じ contextValue を与えると、ツリーに「凍結する」が並ぶ。
+	// 原文の章が無いユニットにその宣言は意味を持たない（CodeLens も「その他」を出さない）
+	test("独立ユニットは mdaitUnitIndependent になる（原文向けのメニューを出さないため）", () => {
+		const { contextValue } = derive(unit(null, null), true);
+		assert.strictEqual(contextValue, "mdaitUnitIndependent");
 	});
 
 	test("凍結ユニットは翻訳率の分母に数えない（Status を偽らずに除外できている）", () => {

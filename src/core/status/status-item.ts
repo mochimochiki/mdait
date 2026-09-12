@@ -113,6 +113,14 @@ export interface UnitStatusItem extends BaseStatusItem {
 	startLine?: number;
 	endLine?: number;
 	errorMessage?: string; // エラー発生時のメッセージ
+	/**
+	 * 独立ユニット（原文と結びついていない訳文の章）か。
+	 *
+	 * 判定は `core/unit-state/independent-unit.ts` の `isIndependentUnit` だけが行う。
+	 * 原文ファイルのユニットも `from` を持たないため、マーカーだけでは区別できず、
+	 * 収集のときに「どちら側のファイルか」と併せて計算した結果をここに載せる。
+	 */
+	isIndependent?: boolean;
 }
 
 /**
@@ -131,6 +139,21 @@ export interface FrontmatterStatusItem extends BaseStatusItem {
  * ディレクトリ・ファイル・ユニット・Frontmatterを一元管理する統合型（Discriminated Union）
  */
 export type StatusItem = DirectoryStatusItem | FileStatusItem | UnitStatusItem | FrontmatterStatusItem;
+
+/**
+ * 要対応キュー（StatusTree の「Needs Attention」ノード・「次の要対応へ」）の1項目。
+ *
+ * 人の裁定を待つ need は本文ユニットのほかに2か所に載る:
+ * - frontmatter（title / description）: `FileStatusItem.frontmatter.needFlag`
+ * - 非Markdown（.txt / .csv / .json）: ファイル＝1ユニットで children を持たず、
+ *   need は `FileStatusItem.needFlag` に載る（Markdown では常に undefined）
+ *
+ * マーカーの無い既訳をふつうの sync でも `need:review` で受けるようになってから、
+ * この2つの確認待ちは日常的に発生する。本文ユニットだけを集めると、通知の件数
+ * （`countPendingReviewUnits`）や AI レビューの対象とは食い違い、AI が本文を片づけた
+ * あとに残った frontmatter へ要対応ノードからも「次へ」からも辿れなくなる。
+ */
+export type NeedsAttentionItem = UnitStatusItem | FrontmatterStatusItem | FileStatusItem;
 
 // ========== need フラグの分類 ==========
 

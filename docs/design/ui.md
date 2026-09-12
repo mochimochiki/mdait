@@ -42,7 +42,7 @@ UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、�
 
 #### Needs Attention（要対応キュー）
 
-ルート直下の仮想ノード。`need:review` / `need:verify-deletion` のユニットを、**選択中の transPair の範囲で**横断集約する（範囲の算出はツリー本体と共通の `getSelectedScopeDirs`。算出点が分かれると、ツリーに出ていないファイルの項目が要対応にだけ並ぶ）。
+ルート直下の仮想ノード。`need:review` / `need:verify-deletion` の**裁定の単位**を、**選択中の transPair の範囲で**横断集約する（範囲の算出はツリー本体と共通の `getSelectedScopeDirs`。算出点が分かれると、ツリーに出ていないファイルの項目が要対応にだけ並ぶ）。裁定の単位は3種類 — 本文ユニット、`need:review` の frontmatter、`need:review` の非 Markdown ファイル（ファイル＝1ユニット）。マーカーの無い既訳はふつうの sync でも review で受ける（ADR-260912-06）ので、frontmatter と非 Markdown の確認待ちは日常的に生じる。本文ユニットだけを並べると、通知の件数（`countPendingReviewUnits`）や AI レビューの対象（`mdait.aiReview.pending`）と食い違い、AI が残した frontmatter の確認待ちに辿れなくなる。走査は `StatusItemTree.walkNeedsAttentionItems` 1本で、ノードの中身と通知の件数は必ず同じ集合から出る（差は verify-deletion を含むかだけ）。原文と結びついていない訳文（`isOrphanTarget`）と原文側のファイルは、review が残っていても並べない — 先に決めるべきは「この訳文をどうするか」で、その操作はファイル行にある。
 
 - 件数ラベルと子リストは同じ集約結果から作られる（以前は件数だけがルート構築時のスナップショットで固まり、中身と食い違っていた）
 - 並びはファイルパス昇順→開始行昇順で固定。同じ状態なら常に同じ並びになる
@@ -50,7 +50,9 @@ UI層は、mdaitの内部状態をVS Code標準UIパターンで可視化し、�
 - 0件のときはノードごと出さない（UX-P7: デッドエンドを置かない）
 - ノードが現れた最初の1回だけ展開状態で返す。全体再描画のたびに展開し直すと、ユーザーが畳んでも保存のたびに勝手に開いてしまうため
 - 集約範囲は LM Tools の集計（`mdait_getStatus` 等）とも共通で、人間とエージェントの件数は一致する（ADR-260724-01）
-- **「次の要対応へ」**（`mdait.needsAttention.next`）で、現在位置の次の項目へ1操作で移動できる。末尾まで来たら先頭へ回る。導線は CodeLens の裁定ボタンの隣・要対応ノードのインラインボタン・キーバインド（`ctrl+alt+n` / `cmd+alt+n`）の3つ。裁定直後に自動で画面が飛ぶことはしない（UX-P5）
+- **項目のクリックは訳文と原文を並べて開く**（`mdait.openPair`。ADR-260912-07）。review は「この訳がこの原文の訳として正しいか」を見る作業で、訳文だけ開いても判断できない。訳文を左（既にどこかの列に見えていればその列、無ければ列1）に開き、右に原文を preview で開いて両側のユニットをハイライトし、左→右のスクロール同期を付ける（中身は CodeLens「Source」と同じ `openSourceBesideTarget`）。`from` が無い項目（verify-deletion・独立ユニット）や原文が見つからない項目は訳文だけを開いて黙る — その項目にできること（Keep / Delete / 確定）は訳文側に揃っている。ファイル配下のふつうのユニット行は従来どおり `mdait.jumpToUnit` で訳文だけを開く（編集の入口で毎回右に原文が出るのは煩い）
+- **インラインボタン**: `$(verified)`「✨AI翻訳レビュー（レビュー待ちをまとめて確認）」（`mdait.aiReview.pending`。選択中ペアの `need:review` 全件を AI にかける。[command_ai-review.md](command_ai-review.md)）と「次の要対応へ」の2つ。コンテキストメニューにも同じ2つ
+- **「次の要対応へ」**（`mdait.needsAttention.next`）で、現在位置の次の項目へ1操作で移動できる。末尾まで来たら先頭へ回る。移動先は項目クリックと同じ対訳表示（`mdait.openPair`）。導線は要対応ノードのインラインボタン・コマンドパレット・キーバインド（`ctrl+alt+n` / `cmd+alt+n`）。CodeLens には出さない — マーカー行に並べるのはそのユニットへの操作だけ（ux.md §3.3。ADR-260912-07）。**CodeLens「レビュー完了」とこのノードの「レビュー済みにする」を押した直後は、残っている次の要対応へ自動で進む**（`advanceAfterReview`。ADR-260912-08）。移動先と進み方はこのコマンドと同じで、残りが 0 件になったらステータスバーに「要対応: すべて片づきました」を一時的に出して終わる（通知は出さない）。翻訳済み・改訂済み・isolate 解除・Keep / Delete・「要翻訳にする」では進まない — 「要翻訳にする」の次の一手はその場の ✨翻訳なので、飛ぶと押せなくなる
 
 #### コンテキストメニューの表示制御
 
@@ -63,6 +65,8 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 - `mdaitFileTargetVerifyDeletion`: 確認待ち（`need:verify-deletion`）を含むターゲットファイル（ファイル単位の一括確定用。ADR-260805-01）
 - `mdaitFileTargetOrphan`: 原文と結びついていないターゲットファイル（破棄コマンド用。ADR-260806-01）
 - `mdaitPlainFileTarget` / `mdaitPlainFileTargetComplete`: 非Markdownのターゲットファイル（ファイル＝1ユニット）
+- `mdaitUnitTargetAttention` / `mdaitFrontmatterTargetAttention` / `mdaitPlainFileTargetAttention`: `need:review` の本文ユニット / frontmatter / 非Markdown ファイル（「レビュー済みにする」用。need で決め、`Status` は見ない。Attention には翻訳系のボタンを出さない — review に ✨翻訳を出すと「翻訳不要」で終わるデッドエンドになる）
+- `mdaitUnitIndependent`: 独立ユニット（訳文側の `from` なし。ADR-260912-05）。メニューは登録しない — 原文の章が無い以上「凍結する」に意味が無く、押しても何も変わらないものを並べないため（CodeLens が「その他」を出さないのと同じ判断）。原文ユニットの `mdaitUnitSource` と分けているのはこのためである
 
 **contextValueの設定**:
 ターゲットファイル/ディレクトリは、翻訳状態に応じて以下のいずれかのcontextValueを持ちます：
@@ -93,7 +97,7 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 - ユニット分割されないため、**リーフノード（子ノードなし、collapsibleState: None）** として表示
 - ステータスは `UnitStateStore` のneedフィールドから直接決定（`need:''` → Translated、`need:translate` → NeedsTranslation等）
 - ファイルサイズが `trans.maxFileSize` を超過する場合、tooltipに超過理由を表示
-- CodeLens・Hover・SummaryDecoratorの非MD対応は将来の拡張スコープ
+- CodeLens は非MD訳文の1行目に Source と、`need` があれば ✨翻訳・完了マーク・要翻訳にする（`need:review` のときだけ）を出す（ファイル＝1ユニット）。Hover・SummaryDecoratorの非MD対応は将来の拡張スコープ
 
 ---
 
@@ -147,8 +151,20 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
 - **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき。Keep は独立ユニット化＝need と from を同時に外す恒久操作。ADR-260805-01）。ツリーのファイル行には一括の「まとめて残す/まとめて削除」（どちらも modal）
-- **$(arrow-right) Next**: 次の要対応ユニットへ（`need:review` / `need:verify-deletion` のとき）
-- **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「独立扱いにする」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
+- **$(sync) 要翻訳にする（Mark as Needs Translation）**: `need:review` の訳文ユニットにだけ出す。「この訳は採用しない」の答えで、`need:review` → `need:translate` に印を付け替える。**印を付け替えるだけで AI は呼ばない**（だから ✨ を付けない）。訳すのはその後の「✨翻訳」に任せる。書き換えは `getFileHandler().requestTranslate`（`commands/markers/request-translate.ts`、`withMarkerOnlyMutation`）だけを通す。ずれた紐づけからの逃げ道でもある — 訳文を捨てて、紐づいた原文から訳し直す。frontmatter の review 行には出さない（書き換え経路が本文ユニットと別で、数行の見出し語なら手で直して確認済みにするほうが早い）。非 Markdown の review 行にも同じボタンを出す（ADR-260912-07）
+- **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「凍結する」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
+
+`need` ごとのボタンの並び（`buildUnitCodeLensSpecs`。純関数で、テストがこの順を固定している）:
+
+| need | 並び |
+|---|---|
+| `translate` / `revise@…` | Source → ✨翻訳 → 翻訳済みにする（改訂済みにする） → その他 |
+| `review` | Source → レビュー済みにする → 要翻訳にする → その他 |
+| `verify-deletion` | Source → Keep → Delete Unit → その他 |
+| `isolate` | Source → Un-isolate → その他 |
+| なし | Source → その他 |
+
+「次の要対応へ」はこの行に出さない — マーカー行に並べるのはそのユニットへの操作だけで、次のユニットへ動くのはツリーとパレットの役目（ADR-260912-07。要対応ノードの節を参照）。ただし **「レビュー完了」を押した直後は、残っている次の要対応へ自動で進む**（本文ユニット・frontmatter・非 Markdown の3種類とも。ADR-260912-08）。要対応を上から順に片づけるとき、1件ごとに「次の要対応へ」を押し直す手間をなくすため。
 
 **ソースファイル（原文）のマーカー**:
 - **$(symbol-reference) Target**: 訳文ユニットへジャンプ（`from`属性がなく、対応する訳文が存在する場合）
@@ -172,10 +188,12 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 
 **設計意図**: 原文と訳文を並べて確認できることで、翻訳品質のレビューが容易になります。
 
+**対訳表示コマンド `mdait.openPair`**（`openPairCommand`。ADR-260912-07）: 「Source」の中身（`openSourceBesideTarget`）を、**訳文を開くところから**始める版。訳文ファイルと開始行を受け取り、訳文を左（既にどこかの列に見えていればその列、無ければ列1。`pickViewColumnForTarget`）に開いてから、右に原文を preview で開いて上と同じハイライト・スクロール同期を付ける。アクティブ列に開かないのは、前の項目で右に出した原文 preview がアクティブなとき訳文がそこへ開き、さらにその右へ原文が出て3列になるため。原文の所在は `locatePairSource`（`from` が無ければ探さない → 対になる原文ファイル → 全体）で決め、見つからなくても警告は出さない（ボタンを押した本人が相手の「Source」だけ理由を返す）。ステータスツリーの要対応ノードの項目クリックと「次の要対応へ」から呼ばれる。package.json には宣言しない（`mdait.jumpToUnit` と同じ内部コマンド）
+
 #### 実装の詳細
 
-- **Provider**: `MdaitCodeLensProvider`がドキュメント内のマーカーを検出し、適切なCodeLensを生成
-- **Command**: `codeLensJumpToSourceCommand`, `codeLensJumpToTargetCommand`, `codeLensTranslateCommand`, `codeLensClearNeedCommand`等がアクションを実行。**マーカーの書き換えは自分で行わず `getFileHandler` 経由で実行する**（排他制御・ステータス更新の取りこぼしを防ぐため。`commands/markers/unit-mutation.ts`）
+- **Provider**: `MdaitCodeLensProvider`がドキュメント内のマーカーを検出し、適切なCodeLensを生成。どのボタンをどの順で出すかは純関数 `buildUnitCodeLensSpecs` が決め、Provider は range を付けて `vscode.CodeLens` に包むだけ
+- **Command**: `codeLensJumpToSourceCommand`, `codeLensJumpToTargetCommand`, `codeLensTranslateCommand`, `codeLensClearNeedCommand`, `codeLensRequestTranslateCommand`（`ui/codelens/request-translate-command.ts`）等がアクションを実行。**マーカーの書き換えは自分で行わず `getFileHandler` 経由で実行する**（排他制御・ステータス更新の取りこぼしを防ぐため。`commands/markers/unit-mutation.ts`）
 - **パフォーマンス**: ソースファイル判定は`FileExplorer.isSourceFile()`でO(transPairs数)、ターゲット検索は`StatusItemTree.getTargetUnitByFromHash()`で優先検索→全体検索のフォールバック
 
 ---
@@ -201,6 +219,8 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 
 **原文が変わったユニット**（`need:revise`）: 旧原文（`revise@{旧原文ハッシュ}`）と新原文（`from`）を `.mdait/unit-registry` から引き、`core/markdown/source-diff.ts` で行差分を作って ```diff ブロックで出す。AI は使わない（旧原文が保存済みのため。ADR-260802-03）。引けないときは差分を出さない（Hover 自体は壊さない）
 
+**独立ユニット**（訳文側の `from` なし。判定は `core/unit-state/independent-unit.ts`）: `このユニットは原文には存在しません。` の一言だけを出して終える（ADR-260912-05）。統計も差分も無く、CodeLens にも操作が出ないので、ここが唯一の説明になる
+
 #### SummaryDecorator
 
 翻訳サマリの概要をマーカー行末尾にGitLens風のインライン表示で提供します。
@@ -211,6 +231,7 @@ mdaitマーカー行およびfrontmatterマーカー行にホバーしたとき�
 - 詳細はHoverで確認可能
 - サマリが無くても状態を出す。状態は気づける場所に置き、理由と対処は Hover に置く
   - `need:revise`（`needsRevision()`）→ `原文が変わりました`（ADR-260802-03）
+  - 独立ユニット（訳文側の `from` なし）→ `原文なし`（ADR-260912-05）。サマリより優先する — その章が何であるかは、その章に何が起きたかより先に読めるべきである
   - 人が訳文を手で直したことは出さない（ADR-260905-04）
 
 ---
@@ -344,7 +365,8 @@ sequenceDiagram
 | `mdait.sync` / `mdait.setup.*` / `mdait.settings.open` / `mdait.translateSelection` / `mdait.adopt.run` | パレット（一部はツリーにも） | スタンドアロンで動作するもののみパレットに露出（ux.md C-2） |
 | `mdait.markers.externalize` / `mdait.markers.embed` / `mdait.tm.optimize` | 内部（パレット非表示） | AI 運用ループに乗らないためユーザー導線から外した（ADR-260802-02）。移行は設定変更時の sync 自己修復、TM の重み再計算は tm.commit の後段で自動実行される |
 | `mdait.translate.{directory,file,unit,frontmatter}` / `mdait.term.update` / `mdait.tm.commit.{file,directory}` / `mdait.aiReview.{file,directory}` | ツリー行内/コンテキストメニュー | アイテム引数必須のためパレット非表示。`term.update` は検出＋展開を1操作にまとめたもの（ADR-260802-02） |
-| `mdait.unit.{markReviewed,keep,delete,markIsolated,unisolate}` / `mdait.needsAttention.next` / `mdait.jumpToUnit` | ツリー/CodeLens/キーバインド | 判断サーフェス（ux.md J4）。書き換えは `getFileHandler` 経由 |
+| `mdait.aiReview.pending` | 要対応ノードの行内/コンテキストメニュー・sync 完了通知の「✨AI review」・パレット | 引数なしで、選択中ペアの `need:review` 全件（本文・frontmatter・非MD）を AI レビューにかける。モード選択は出さず pending 固定（ADR-260912-07） |
+| `mdait.unit.{markReviewed,keep,delete,markIsolated,unisolate}` / `mdait.needsAttention.next` / `mdait.jumpToUnit` / `mdait.openPair` | ツリー/キーバインド/パレット | 判断サーフェス（ux.md J4）。書き換えは `getFileHandler` 経由。`openPair` は要対応ノードの項目クリックと「次の要対応へ」の移動先（訳文と原文を並べて開く。package.json 未宣言の内部コマンド） |
 | `mdait.codelens.*` / `mdait.unit.editNoteForUnit` | CodeLens | エディタ内インラインアクション専用 |
 | `mdait.status.{sync,sync.initial,selectTargets,openTerm,openTm}` | ツリータイトルバー | `mdait.status.sync.processing` はハンドラを持たない表示専用ダミー（`enablement: false` のスピナー表示枠） |
 | `mdait.addToGlossary` | Hover の `command:` URI | package.json 未宣言（Hover 起点が正しい導線のため意図的） |

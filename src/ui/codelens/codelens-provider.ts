@@ -36,6 +36,169 @@ export function shouldShowOtherActions(marker: Pick<MdaitMarker, "hash" | "from"
 }
 
 /**
+ * 「翻訳待ちに戻す」（need:review → need:translate）を出すユニットかどうかを判定する（純関数）。
+ * 確認待ち（need:review）の訳文ユニットだけが対象。review は「取り込んだ既訳を採用するか」の
+ * 判断待ちで、採用しない側の答えがこのボタンになる。原文側には訳し直すものが無いので出さない。
+ *
+ * @param marker 対象ユニットのマーカー
+ * @param isSourceFile 原文ファイルかどうか
+ */
+export function shouldOfferRequestTranslate(marker: Pick<MdaitMarker, "need">, isSourceFile: boolean): boolean {
+	return !isSourceFile && marker.need === "review";
+}
+
+/**
+ * CodeLens に載せるボタン1つ分（`vscode.CodeLens` に包む前の素の形）。
+ * 引数（range / uri）は包むときに付けるので持たない。テストから「どのボタンがどの順で出るか」を
+ * 見られるようにするための形で、vscode の型に触れない。
+ */
+export interface CodeLensSpec {
+	title: string;
+	tooltip: string;
+	command: string;
+}
+
+/**
+ * need の種類に応じた完了ボタンのラベルとツールチップ（本文ユニット・frontmatter・非MDで共通）
+ * @param need need の生値
+ */
+export function completionButtonLabel(need: string): { title: string; tooltip: string; plainTitle: string } {
+	if (need === "translate") {
+		return {
+			title: vscode.l10n.t("$(check) Mark as Translated"),
+			tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually translated"),
+			plainTitle: vscode.l10n.t("Mark as Translated"),
+		};
+	}
+	if (need.startsWith("revise@")) {
+		return {
+			title: vscode.l10n.t("$(check) Mark as Revised"),
+			tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually revised"),
+			plainTitle: vscode.l10n.t("Mark as Revised"),
+		};
+	}
+	if (need === "review") {
+		return {
+			title: vscode.l10n.t("$(check) Mark as Reviewed"),
+			tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
+			plainTitle: vscode.l10n.t("Mark as Reviewed"),
+		};
+	}
+	if (need === "isolate") {
+		return {
+			title: vscode.l10n.t("$(circle-slash) Un-isolate"),
+			tooltip: vscode.l10n.t("Tooltip: Resume following source updates for this unit"),
+			plainTitle: vscode.l10n.t("Un-isolate"),
+		};
+	}
+	// デフォルト
+	return {
+		title: vscode.l10n.t("$(check) Mark as Completed"),
+		tooltip: vscode.l10n.t("Tooltip: Mark this unit as completed"),
+		plainTitle: vscode.l10n.t("Mark as Completed"),
+	};
+}
+
+/** 「翻訳待ちに戻す」ボタンの ID（テストが文言ではなくこれで見つけられるように） */
+export const REQUEST_TRANSLATE_COMMAND = "mdait.codelens.requestTranslate";
+
+/**
+ * 「翻訳待ちに戻す」（need:review → need:translate）のボタン。
+ * MD の本文ユニットと非MDファイルの両方から使う（ラベル・コマンドを1箇所に置く）。
+ * 印を付け替えるだけで AI は呼ばないので ✨ は付けない（ux.md §3.3）
+ */
+export function requestTranslateSpec(): CodeLensSpec {
+	return {
+		title: vscode.l10n.t("$(discard) Mark as Needs Translation"),
+		tooltip: vscode.l10n.t(
+			"Tooltip: Reject this translation and put the unit back in the translation queue (need:review → need:translate). No AI call.",
+		),
+		command: REQUEST_TRANSLATE_COMMAND,
+	};
+}
+
+/**
+ * 本文ユニットのマーカー行に並べるボタンを、出す順に決める（純関数）。
+ * 実際の `vscode.CodeLens` への包み込みは `MdaitCodeLensProvider` が行う。
+ *
+ * @param marker 対象ユニットのマーカー
+ * @param isSourceFile 原文ファイルかどうか
+ */
+export function buildUnitCodeLensSpecs(marker: MdaitMarker, isSourceFile: boolean): CodeLensSpec[] {
+	const specs: CodeLensSpec[] = [];
+
+	// fromハッシュがある場合はソースへ移動ボタン（ターゲットファイルのみ）
+	if (marker.from) {
+		specs.push({
+			title: vscode.l10n.t("$(symbol-reference) Source"),
+			tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
+			command: "mdait.codelens.jumpToSource",
+		});
+	}
+
+	// ソースファイルでfromがない場合はターゲットへ移動ボタン
+	if (isSourceFile && !marker.from) {
+		specs.push({
+			title: vscode.l10n.t("$(symbol-reference) Target"),
+			tooltip: vscode.l10n.t("Tooltip: Jump to target translation unit"),
+			command: "mdait.codelens.jumpToTarget",
+		});
+	}
+
+	// 翻訳が必要な場合は翻訳ボタン
+	if (marker.needsTranslation()) {
+		specs.push({
+			title: vscode.l10n.t("✨Translate"),
+			tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+			command: "mdait.codelens.translate",
+		});
+	}
+
+	// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）。
+	// Keep は need を外すだけでなく独立ユニット化する（恒久化。clearNeed だと次の sync で復活する）
+	if (marker.need === "verify-deletion") {
+		specs.push({
+			title: vscode.l10n.t("$(check) Keep"),
+			tooltip: vscode.l10n.t(
+				"Tooltip: Keep this unit as independent — it will no longer be matched against the source",
+			),
+			command: "mdait.codelens.keepUnit",
+		});
+		specs.push({
+			title: vscode.l10n.t("$(trash) Delete Unit"),
+			tooltip: vscode.l10n.t("Tooltip: Delete this unit from the document"),
+			command: "mdait.codelens.deleteUnit",
+		});
+	} else if (marker.need) {
+		// needマーカーがある場合は完了ボタン（isolate 解除もここで生値に応じたラベルになる）
+		const { title, tooltip } = completionButtonLabel(marker.need);
+		specs.push({ title, tooltip, command: "mdait.codelens.clearNeed" });
+		// review は「採用する（完了）／採用しない（翻訳待ちへ戻す）」の2択なので、
+		// 完了ボタンの隣に採用しない側の答えを置く。frontmatter の review 行には出さない
+		// （書き換え経路が本文ユニットと別で対象外。理由は MdFileHandler.requestTranslate）
+		if (shouldOfferRequestTranslate(marker, isSourceFile)) {
+			specs.push(requestTranslateSpec());
+		}
+	}
+
+	// 裁定待ち（review / verify-deletion）の行に「$(arrow-right) Next」は出さない。
+	// この行に並べるのはそのユニットへの操作だけで、次のユニットへの移動は
+	// ツリーとパレットの `mdait.needsAttention.next` に任せる
+
+	// 低頻度アクション（全文で訳し直す・isolate 宣言・note 編集）は
+	// 「その他」メニューへ集約する（ADR-260719-01・ADR-260906-01）
+	if (shouldShowOtherActions(marker, isSourceFile)) {
+		specs.push({
+			title: vscode.l10n.t("$(kebab-vertical) More"),
+			tooltip: vscode.l10n.t("Tooltip: Other actions for this unit (re-translate, isolate, note)"),
+			command: "mdait.codelens.otherActions",
+		});
+	}
+
+	return specs;
+}
+
+/**
  * mdaitマーカーのCodeLensを提供するプロバイダー
  */
 export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
@@ -111,18 +274,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					continue;
 				}
 				const range = new vscode.Range(unit.startLine, 0, unit.startLine, 0);
-				const unitCodeLenses = this.createCodeLensesForMarker(
-					unit.marker,
-					range,
-					"mdait.codelens.jumpToSource",
-					"mdait.codelens.jumpToTarget",
-					"mdait.codelens.translate",
-					"mdait.codelens.clearNeed",
-					"mdait.codelens.deleteUnit",
-					[range],
-					isSourceFile,
-				);
-				codeLenses.push(...unitCodeLenses);
+				codeLenses.push(...this.createCodeLensesForMarker(unit.marker, range, isSourceFile));
 			}
 			return codeLenses;
 		}
@@ -147,18 +299,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 			if (marker) {
 				const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
-				const unitCodeLenses = this.createCodeLensesForMarker(
-					marker,
-					range,
-					"mdait.codelens.jumpToSource",
-					"mdait.codelens.jumpToTarget",
-					"mdait.codelens.translate",
-					"mdait.codelens.clearNeed",
-					"mdait.codelens.deleteUnit",
-					[range],
-					isSourceFile,
-				);
-				codeLenses.push(...unitCodeLenses);
+				codeLenses.push(...this.createCodeLensesForMarker(marker, range, isSourceFile));
 			}
 		}
 
@@ -196,7 +337,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 
 		// needマーカーがある場合は完了ボタンを表示
 		if (marker.need) {
-			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
+			const { title, tooltip } = completionButtonLabel(marker.need);
 			codeLenses.push(
 				new vscode.CodeLens(range, {
 					title,
@@ -214,133 +355,21 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	}
 
 	/**
-	 * マーカーからCodeLensを作成する共通ロジック
+	 * 本文ユニットのマーカー行に並べる CodeLens を作る。
+	 * どのボタンを出すかは `buildUnitCodeLensSpecs`（純関数）が決め、ここは range を付けて包むだけ。
 	 * @param marker mdaitマーカー
-	 * @param range CodeLensの範囲
-	 * @param jumpToSourceCommand ソースへジャンプするコマンド
-	 * @param jumpToTargetCommand ターゲットへジャンプするコマンド
-	 * @param translateCommand 翻訳コマンド
-	 * @param clearNeedCommand needクリアコマンド
-	 * @param deleteUnitCommand ユニット削除コマンド
-	 * @param translateArgs 翻訳コマンドの引数
+	 * @param range CodeLensの範囲（各コマンドはこの range から対象ユニットを特定する）
 	 * @param isSourceFile ソースファイルかどうか
 	 * @returns CodeLensの配列
 	 */
 	private createCodeLensesForMarker(
 		marker: MdaitMarker,
 		range: vscode.Range,
-		jumpToSourceCommand: string,
-		jumpToTargetCommand: string,
-		translateCommand: string,
-		clearNeedCommand: string,
-		deleteUnitCommand: string,
-		translateArgs: (vscode.Range | vscode.Uri)[],
 		isSourceFile: boolean,
 	): vscode.CodeLens[] {
-		const codeLenses: vscode.CodeLens[] = [];
-
-		// fromハッシュがある場合はソースへ移動ボタン（ターゲットファイルのみ）
-		if (marker.from) {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(symbol-reference) Source"),
-					tooltip: vscode.l10n.t("Tooltip: Jump to original source unit"),
-					command: jumpToSourceCommand,
-					arguments: [range],
-				}),
-			);
-		}
-
-		// ソースファイルでfromがない場合はターゲットへ移動ボタン
-		if (isSourceFile && !marker.from && jumpToTargetCommand) {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(symbol-reference) Target"),
-					tooltip: vscode.l10n.t("Tooltip: Jump to target translation unit"),
-					command: jumpToTargetCommand,
-					arguments: [range],
-				}),
-			);
-		}
-
-		// 翻訳が必要な場合は翻訳ボタン
-		if (marker.needsTranslation()) {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("✨Translate"),
-					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
-					command: translateCommand,
-					arguments: translateArgs,
-				}),
-			);
-		}
-
-		// 裁定待ち（review / verify-deletion）には「次へ」を添え、裁定→次へ をその場で回せるようにする
-		// （UX-R4: ツリーへ戻る往復をなくす）
-		const isAwaitingDecision =
-			marker.need === "review" || marker.need === "verify-deletion";
-
-		// verify-deletion は Keep / Delete Unit の2択（UX-R1: 判断サーフェスの完成）。
-		// Keep は need を外すだけでなく独立ユニット化する（恒久化。clearNeed だと次の sync で復活する）
-		if (marker.need === "verify-deletion") {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(check) Keep"),
-					tooltip: vscode.l10n.t(
-						"Tooltip: Keep this unit as independent — it will no longer be matched against the source",
-					),
-					command: "mdait.codelens.keepUnit",
-					arguments: [range],
-				}),
-			);
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(trash) Delete Unit"),
-					tooltip: vscode.l10n.t("Tooltip: Delete this unit from the document"),
-					command: deleteUnitCommand,
-					arguments: [range],
-				}),
-			);
-		} else if (marker.need) {
-			// needマーカーがある場合は完了ボタン（isolate 解除もここで生値に応じたラベルになる）
-			const { title, tooltip } = this.getCompletionButtonLabel(marker.need);
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title,
-					tooltip,
-					command: clearNeedCommand,
-					arguments: [range],
-				}),
-			);
-		}
-
-		if (isAwaitingDecision) {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(arrow-right) Next"),
-					tooltip: vscode.l10n.t("Tooltip: Jump to the next unit needing attention"),
-					command: "mdait.needsAttention.next",
-					// CodeLens のクリックはカーソルを動かさないため、押した行を明示的に渡す。
-					// 渡さないとカーソル位置（多くは先頭行）が起点になり、前へ戻ってしまう。
-					arguments: [range],
-				}),
-			);
-		}
-
-		// 低頻度アクション（全文で訳し直す・isolate 宣言・note 編集）は
-		// 「その他」メニューへ集約する（ADR-260719-01・ADR-260906-01）
-		if (shouldShowOtherActions(marker, isSourceFile)) {
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("$(kebab-vertical) More"),
-					tooltip: vscode.l10n.t("Tooltip: Other actions for this unit (re-translate, isolate, note)"),
-					command: "mdait.codelens.otherActions",
-					arguments: [range],
-				}),
-			);
-		}
-
-		return codeLenses;
+		return buildUnitCodeLensSpecs(marker, isSourceFile).map(
+			(spec) => new vscode.CodeLens(range, { ...spec, arguments: [range] }),
+		);
 	}
 
 	/**
@@ -392,7 +421,7 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					}),
 				);
 
-				const { title, tooltip } = this.getCompletionButtonLabel(entry.need);
+				const { title, tooltip } = completionButtonLabel(entry.need);
 				codeLenses.push(
 					new vscode.CodeLens(range, {
 						title,
@@ -401,6 +430,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 						arguments: [document.uri],
 					}),
 				);
+				// 非MDでも review の2択は同じ。ストアの行があればこのファイルは訳文側なので
+				// 原文側の判定は要らない。コマンドは MD と同じ（1行目の range を渡す。
+				// 受け側が非MDを見分けてファイル＝1ユニットとして扱う）
+				if (shouldOfferRequestTranslate({ need: entry.need }, false)) {
+					codeLenses.push(new vscode.CodeLens(range, { ...requestTranslateSpec(), arguments: [range] }));
+				}
 			}
 			return codeLenses;
 		}
@@ -438,47 +473,4 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 		// 既にprovideで設定済みなのでそのまま返す
 		return codeLens;
 	}
-
-	/**
-	 * needマーカーの種類に応じた完了ボタンのラベルとツールチップを取得
-	 * @param need needマーカーの値
-	 * @returns ボタンのtitleとtooltip
-	 */
-	private getCompletionButtonLabel(need: string): { title: string; tooltip: string; plainTitle: string } {
-		if (need === "translate") {
-			return {
-				title: vscode.l10n.t("$(check) Mark as Translated"),
-				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually translated"),
-				plainTitle: vscode.l10n.t("Mark as Translated"),
-			};
-		}
-		if (need.startsWith("revise@")) {
-			return {
-				title: vscode.l10n.t("$(check) Mark as Revised"),
-				tooltip: vscode.l10n.t("Tooltip: Mark this unit as manually revised"),
-				plainTitle: vscode.l10n.t("Mark as Revised"),
-			};
-		}
-		if (need === "review") {
-			return {
-				title: vscode.l10n.t("$(check) Mark as Reviewed"),
-				tooltip: vscode.l10n.t("Tooltip: Mark this unit as reviewed"),
-				plainTitle: vscode.l10n.t("Mark as Reviewed"),
-			};
-		}
-		if (need === "isolate") {
-			return {
-				title: vscode.l10n.t("$(circle-slash) Un-isolate"),
-				tooltip: vscode.l10n.t("Tooltip: Resume following source updates for this unit"),
-				plainTitle: vscode.l10n.t("Un-isolate"),
-			};
-		}
-		// デフォルト
-		return {
-			title: vscode.l10n.t("$(check) Mark as Completed"),
-			tooltip: vscode.l10n.t("Tooltip: Mark this unit as completed"),
-			plainTitle: vscode.l10n.t("Mark as Completed"),
-		};
-	}
-
 }

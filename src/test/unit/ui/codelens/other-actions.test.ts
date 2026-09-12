@@ -22,7 +22,7 @@ suite("shouldShowOtherActions（「その他」メニューの表示条件）", 
 });
 
 suite("buildOtherActions（メニュー項目の構成）", () => {
-	test("need が無ければ「独立扱いにする」と「ノート」を出す", () => {
+	test("need が無ければ「凍結する」と「ノート」を出す", () => {
 		assert.deepStrictEqual(buildOtherActions(false), ["isolate", "note"]);
 	});
 
@@ -60,7 +60,7 @@ suite("canRetranslateInFull（全文で訳し直せるユニットか）", () =>
 });
 
 suite("buildOtherActions（訳し直しを含む構成）", () => {
-	test("訳し終えた訳文では 独立扱い → 訳し直す → ノート の順に並ぶ", () => {
+	test("訳し終えた訳文では 凍結 → 訳し直す → ノート の順に並ぶ", () => {
 		assert.deepStrictEqual(buildOtherActions(false, true), ["isolate", "retranslate", "note"]);
 	});
 

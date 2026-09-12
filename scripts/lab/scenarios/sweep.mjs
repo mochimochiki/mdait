@@ -1566,14 +1566,49 @@ async function phase13() {
 	}
 
 	// ---- frontmatter だけの原稿 ----
+	// 見本の en 側は title が既に英語（人が書いた既訳）でマーカーが無い。最初の sync は
+	// これを `need:review` で受ける（本文ユニットと同じ規則。translate にすると次の翻訳が
+	// 人の書いた題名を上書きする）。翻訳の経路は、確認を済ませたあと原文を書き換えて
+	// 改訂待ちにしてから通す
 	const frontRel = "content/en/only-frontmatter.md";
 	const frontAbs = path.join(ws, frontRel);
-	if (fs.existsSync(frontAbs)) {
+	const frontSrcAbs = path.join(ws, "content/ja/only-frontmatter.md");
+	if (fs.existsSync(frontAbs) && fs.existsSync(frontSrcAbs)) {
 		const before = read(frontAbs);
 		if (markerLines(before).length === 0 && before.includes("front:")) {
 			ok(P, "frontmatter だけの原稿は本文にマーカーを持たないOK（front マーカーだけ）");
 		} else {
 			fail(P, frontRel, "frontmatter だけの原稿の姿がおかしい", before.slice(0, 200));
+		}
+		if (/front:\s*'[^']*need:review/.test(before) && before.includes('title: "frontmatter only"')) {
+			ok(P, "マーカーの無い既訳の frontmatter は need:review で受け、題名を書き換えないOK");
+		} else {
+			fail(P, frontRel, "既訳の frontmatter が need:review で受けられていない", before.slice(0, 200));
+		}
+
+		// 確認待ちのままでは翻訳しない（既訳を守る）
+		const guarded = await runCmd("mdait.translate.frontmatter", [frontAbs]);
+		const stillGuarded = read(frontAbs);
+		if (guarded.status !== "error" && stillGuarded.includes('title: "frontmatter only"')) {
+			ok(P, "確認待ちの frontmatter は translate.frontmatter でも既訳が上書きされないOK");
+		} else {
+			fail(P, frontRel, "確認待ちの frontmatter が翻訳で上書きされた", stillGuarded.slice(0, 200));
+		}
+
+		// 人が「レビュー済み」を押す（CodeLens・ツリー・LM Tool と同じ入口を直に叩く）
+		await inprocReload();
+		const { getFileHandler } = out("commands/file-handler/file-handler-factory.js");
+		await getFileHandler(frontAbs).resolveNeed(frontAbs, { needs: ["review"] });
+		await reload();
+		// 原文の題名を変えて改訂待ちにし、そこで初めて翻訳の経路を通す
+		fs.writeFileSync(frontSrcAbs, read(frontSrcAbs).replace("frontmatter のみ", "frontmatter だけ"), "utf8");
+		await reload();
+		await sync();
+		const revised = read(frontAbs);
+		if (/front:\s*'[^']*need:revise@/.test(revised)) {
+			ok(P, "確認済みの frontmatter は原文が変わると改訂待ちになるOK");
+		} else {
+			fail(P, frontRel, "原文の題名を変えても frontmatter が改訂待ちにならない", revised.slice(0, 200));
 		}
 		const result = await runCmd("mdait.translate.frontmatter", [frontAbs]);
 		if (result.status === "error") {

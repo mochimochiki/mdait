@@ -263,6 +263,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.aiReview.pending",
+        "title": "%mdait.aiReview.pending.title%",
+        "icon": "$(verified)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.adopt.run",
         "title": "%mdait.adopt.run.title%",
         "icon": "$(cloud-download)",
@@ -541,7 +547,7 @@
         },
         {
           "command": "mdait.unit.markReviewed",
-          "when": "view == mdait.status && viewItem == mdaitUnitTargetAttention",
+          "when": "view == mdait.status && (viewItem == mdaitUnitTargetAttention || viewItem == mdaitFrontmatterTargetAttention || viewItem == mdaitPlainFileTargetAttention)",
           "group": "inline@1"
         },
         {
@@ -585,9 +591,14 @@
           "group": "inline@2"
         },
         {
+          "command": "mdait.aiReview.pending",
+          "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
+          "group": "inline@1"
+        },
+        {
           "command": "mdait.needsAttention.next",
           "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
-          "group": "inline"
+          "group": "inline@2"
         },
         {
           "command": "mdait.translate.frontmatter",
@@ -640,13 +651,18 @@
           "group": "0_conflict@1"
         },
         {
-          "command": "mdait.needsAttention.next",
+          "command": "mdait.aiReview.pending",
           "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
           "group": "2_judge@1"
         },
         {
+          "command": "mdait.needsAttention.next",
+          "when": "view == mdait.status && viewItem == mdaitNeedsAttentionRoot",
+          "group": "2_judge@2"
+        },
+        {
           "command": "mdait.unit.markReviewed",
-          "when": "view == mdait.status && viewItem == mdaitUnitTargetAttention",
+          "when": "view == mdait.status && (viewItem == mdaitUnitTargetAttention || viewItem == mdaitFrontmatterTargetAttention || viewItem == mdaitPlainFileTargetAttention)",
           "group": "2_judge@1"
         },
         {
@@ -746,7 +762,7 @@
         "name": "mdait_sync",
         "displayName": "mdait: Sync Translation Markers",
         "toolReferenceName": "mdaitSync",
-        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Pass adopt:true ONLY when onboarding an existing bilingual site whose target files already contain translations but no mdait markers: matched existing translations are adopted with need:review instead of need:translate so they are never overwritten by translation. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded/adopted/kept), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
+        "modelDescription": "Synchronize translation markers in mdait-managed Markdown documents. Detects changes in source documents and updates need flags (need:translate or need:revise@{oldhash}) in target documents. This modifies files by updating HTML comment markers. Existing translations without markers are always protected: a target unit that has text and is not a verbatim copy of its source is linked with need:review (never need:translate), so translation cannot overwrite it; verbatim copies stay need:translate. Pass adopt:true only when onboarding an existing bilingual site: it enables the optional AI align step and reports the run as an adoption. Returns a JSON envelope { schemaVersion, ok, summary, data, nextActions } where data contains processed file counts, unit-level change counts (added/modified/deleted/revisionsNeeded/adopted/kept), and the post-sync status breakdown. mdait commands are idempotent: re-running sync on an unchanged workspace reports zero changes.",
         "canBeReferencedInPrompt": true,
         "tags": [
           "mdait",
@@ -758,7 +774,7 @@
           "properties": {
             "adopt": {
               "type": "boolean",
-              "description": "One-time onboarding mode for existing bilingual sites. Adopts marker-less target units that already have content: establishes the from link and flags them need:review instead of need:translate, so existing translations are never overwritten."
+              "description": "One-time onboarding mode for existing bilingual sites. Enables the optional AI align step and reports the run as an adoption. Protecting marker-less existing translations (linking them with need:review, verbatim copies with need:translate) happens in every sync, with or without this flag."
             },
             "align": {
               "type": "boolean",

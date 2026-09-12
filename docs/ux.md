@@ -53,7 +53,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 |---|---|---|
 | **StatusTree**（アクティビティバー🌐） | ディレクトリ/ファイル/ユニットの翻訳状態と行内アクション（▶翻訳・用語・TM・AIレビュー）。運用のホーム画面 | [design/ui.md](design/ui.md) |
 | **Welcome View** | 未設定時: mdait.json 作成/選択/診断。未同期時: 「Initial Sync / Adopt」の2択導線 | [design/ui.md](design/ui.md)、ADR-260711-06 |
-| **CodeLens**（マーカー行） | ユニット単位の翻訳・原文/訳文ジャンプ・need解決（Mark as …）・「その他」メニュー（isolate宣言・note編集。訳文/原文両対応） | [design/ui.md](design/ui.md) |
+| **CodeLens**（マーカー行） | ユニット単位の翻訳・原文/訳文ジャンプ・need解決（Mark as …）・review の不採用（要翻訳にする）・「その他」メニュー（isolate宣言・note編集。訳文/原文両対応） | [design/ui.md](design/ui.md) |
 | **Hover / Decoration** | 翻訳結果サマリ・用語候補・TM参照・レビュー状態のインライン確認 | [design/ui.md](design/ui.md) |
 | **ステータスバー** | 抱えている needs 件数の常駐サマリ。原文保存で状態が変わったことに気づく唯一の受動サーフェス（UX-R5） | [design/ui.md](design/ui.md) |
 | **通知・進捗・確認UI** | withProgress（キャンセル対応）、完了通知＋次アクションボタン、破壊的操作の modal 確認 | 本書 §7・[design/ui.md](design/ui.md) |
@@ -103,6 +103,7 @@ mdait は「継続的な多言語文書管理」のツールである。翻訳�
 - **AI を使う操作には ✨ を付ける**（UX-P4）。付いていない操作は AI を呼ばない。**逆も真** — AI を呼ばない操作に ✨ を付けない（実例: かつての `✨TM最適化` は純粋な重み計算で AI を呼ばないのに ✨ が付き、コストの予測を裏切っていた。いまは廃止）
 - **AI 運用ループに乗らない操作はサーフェスに出さない**（UX-P9）。消せないもの（互換のために残す設定・移行コマンド・エージェント専用ツール）は、パレット非表示・設定エディタの奥・ツール専用、のいずれかに退避する
 - **変化の気づきは1箇所に集約する** — 状態が変わったことは**ステータスバーの常駐サマリ**が受け持ち、その詳細は該当サーフェス（Decoration・Hover・ツリー）で受け取る。変化のたびにトーストを出さない（通知疲れの回避）
+- **似た状態には違う言葉を当てる** — マーカーの3つの状態は画面でも別の語で呼ぶ（ADR-260912-05）。**独立**（`from` なし。対応する原文の章が無い。恒久）／**凍結**（`need:isolate`。原文の章は在るが更新を流さない。解除できる）／**孤立**（原文ファイルが消えた訳文。始末がまだ決まっていない）。かつて `isolate` を「独立扱い」と訳していたため、画面では独立ユニットと見分けが付かなかった
 - **機械が判定できないことを機械が決めない** — 「訳し終えたか」は判定できないので need の解除は人の宣言（確定ボタン）で行う。宣言が必要なことは**確定ボタンが常にそこに在ること**で伝える。推し量って言葉にしない（ADR-260905-04）
 
 #### 例: 手で訳しているユニット（ADR-260905-04）
@@ -141,14 +142,17 @@ graph TD
     A[原文を編集して保存] -->|autoSyncOnSave| B[need:revise 付与]
     B --> C[StatusTree で確認<br/>または sync 完了通知]
     C -->|Translate now / ▶| D[trans 実行<br/>diff-aware revise]
+    C -->|✨AI review<br/>翻訳待ち 0 で確認待ちあり| F
     D --> E{need:review 発生?}
-    E -->|あり| F[レビュー: CodeLens Mark as Reviewed<br/>または AIレビューに委任]
+    E -->|あり| F[レビュー: 要対応ノードで対訳を開き<br/>CodeLens Mark as Reviewed / 要翻訳にする<br/>または ✨AIレビューに委任]
     E -->|なし| G[tm.commit で知識蓄積]
     F --> G
     G --> A
 ```
 
-最短ループは「保存（自動sync）→ trans → （review）→ tm.commit」の4アクション。UX-P6 に従い、各工程の完了通知が次工程のボタンを持つべきである（現状 sync→trans のみ実装。trans→review→tm の連鎖誘導は §8 UX-R2）。
+最短ループは「保存（自動sync）→ trans → （review）→ tm.commit」の4アクション。UX-P6 に従い、各工程の完了通知が次工程のボタンを持つべきである。現状は sync→trans（翻訳待ちが残るとき「✨今すぐ翻訳」）と sync→review（翻訳待ちが 0 で確認待ちが残るとき「✨AI review」。両方残れば翻訳を先に勧め、ボタンは常に1つ。ADR-260912-07）を実装。trans→review→tm の連鎖誘導は §8 UX-R2。
+
+マーカーの無い既訳は、取り込み（adopt）を経なくてもふつうの sync が `need:review` で受ける（原文の丸写しだけは `need:translate`。ADR-260912-06）。だから確認待ちは定常運用でもふつうに発生し、sync→review の導線はその出口である。
 
 ### J3: 既存対訳の取り込み（Adopt）
 
@@ -160,9 +164,9 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 | 判断 | 発生条件 | 操作手段 |
 |---|---|---|
-| `need:review` の承認 | adopt採用・構造不一致・品質チェック | CodeLens「Mark as Reviewed」/ StatusTreeのNeeds Attentionノードから連続処理 / AIレビュー委任 / エージェントは `mdait_resolve { action:"resolve" }` |
+| `need:review` の裁定（採用する／しない） | マーカーの無い既訳の一次受け（adopt でも通常 sync でも。丸写しは除く。ADR-260912-06）・構造不一致・品質チェック | 採用する: CodeLens「Mark as Reviewed」またはツリーの「レビュー済みにする」（押した直後に次の要対応へ自動で進む。ADR-260912-08）。採用しない: CodeLens「要翻訳にする」（`need:translate` へ戻す。印を付け替えるだけで AI は呼ばない。ずれた紐づけからの逃げ道でもある）。StatusTree の要対応ノードは項目クリックで訳文と原文を並べて開き（`mdait.openPair`）、「次の要対応へ」で順に回る / AIレビュー委任（ファイル・ディレクトリ行の ✨AI翻訳レビュー、要対応ノードの ✨AIレビュー、sync 完了通知の「✨AI review」） / エージェントは `mdait_resolve { action:"resolve" }`（採用のみ。ADR-260912-07） |
 | `need:verify-deletion` の裁定 | 原文削除（policy=verify）・崩れ疑いの自動削除見送り | CodeLens/ツリーの「Keep」「Delete Unit」2択（Keep は独立ユニット化＝恒久。ADR-260805-01）。ファイル行に一括の「まとめて残す/まとめて削除」（modal） / エージェントは `mdait_resolve { action:"keep" }`（保持）/ `{ action:"delete" }`（削除） |
-| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「独立扱いにする」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| `need:isolate` の宣言/解除 | ユーザーの意思（独自コンテンツのopt-out） | CodeLens「その他」メニューの「凍結する」（訳文の対訳ユニット/原文ユニット）・ツリーの「Mark as Isolated」/ 解除は「Un-isolate」/ エージェントは `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 
 ---
 
@@ -186,10 +190,11 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 状態観測 | StatusTree / Hover | `mdait_getStatus`（detail・ユニット一覧） |
 | 同期 | Sync ボタン / 保存時自動 | `mdait_sync` |
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
-| レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード | `mdait_resolve { action:"resolve" }` |
+| レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード（クリックで訳文と原文を並べて開く） | `mdait_resolve { action:"resolve" }` |
+| レビューの不採用（`need:review` → `need:translate`） | CodeLens「要翻訳にする」 | —（`mdait_resolve` は採用側だけ。ADR-260912-07 の範囲外） |
 | verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit（＋ファイル行の一括確定） | `mdait_resolve { action:"keep" \| "delete" }` |
-| isolate宣言/解除 | CodeLens「その他」→独立扱いにする（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
-| AIレビュー委任 | ✨AI Translation Review | `mdait_aiReview` |
+| isolate宣言/解除 | CodeLens「その他」→凍結する（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
+| AIレビュー委任 | ✨AI Translation Review（ファイル・ディレクトリ行）/ 要対応ノードの ✨AIレビュー・sync 完了通知の「✨AI review」（選択中ペアの確認待ち全件） | `mdait_aiReview` |
 | 用語・TM | ツリー行ボタン | `mdait_term` / `mdait_tm` |
 | 検証 | ✨AIレビューの前処理として実行される（単独の人間導線は持たない。UX-R5 / ADR-260802-02） | `mdait_validate`（ゴール判定用に据え置き） |
 | 取り込み | Adopt ウィザード | `mdait_adopt` |
@@ -207,9 +212,10 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 翻訳済み | ✅ 緑 | ✅ Source/Note | ✅ サマリ | ✅ |
 | `need:translate` | ✅ 白抜き | ✅ ▶ + Mark as Translated | — | ✅ |
 | `need:revise` | ✅ 白抜き＋専用ツールチップ | ✅ ▶ + Mark as Revised | — | ✅ |
-| `need:review` | ✅ 黄＋Mark as Reviewed | ✅ Mark as Reviewed | ✅ Needs Review | ✅ |
+| `need:review` | ✅ 黄＋Mark as Reviewed。要対応ノードのクリックは対訳表示 | ✅ Mark as Reviewed / 要翻訳にする の2択 | ✅ Needs Review | ✅ |
 | `need:verify-deletion` | ✅ trash/橙＋Keep / Delete Unit | ✅ Keep / Delete Unit の2択 | ❌ | ✅ |
-| `need:isolate` | ✅ circle-slash/灰＋Un-isolate | ✅ 「その他」メニュー内の Mark as Isolated / 完了マークの Un-isolate | ❌ | ✅ |
+| `need:isolate`（凍結） | ✅ circle-slash/灰＋凍結を解除 | ✅ 「その他」メニュー内の 凍結する / 完了マークの 凍結を解除 | ❌ | ✅ |
+| 独立ユニット（`from` なし） | ✅ 灰＋副題「原文なし」 | ❌（操作が無い。押せるものだけを出す） | ✅ Decoration「原文なし」＋ Hover の一言 | ✅ |
 | エラーユニット | ✅ 赤 | — | ✅ | ✅（件数） |
 | AIレビュー flagged | ❌（ツリーは need:review の有無のみ） | — | ✅ | ✅（escalations） |
 
@@ -241,7 +247,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | B-5 | **要対応ノードの件数・中身が、要対応を増やす操作（trans / sync / aiReview）の後に更新されない。** ルート通知が出ないため古いスナップショットが凍結し、ファイルツリー側だけが新しくなる。手動 sync は全再構築されるため直り「押すと直る／放っておくとズレる」不安定さとして現れる | 重大（バグ） | ✅ 変更通知を全体再描画＋デバウンスに一本化（ADR-260724-01） |
 | B-6 | 要対応が選択中の transPair で絞られず（ツリー本体は絞られる）、ツリーに存在しないファイルの項目が並ぶ。クリックすると選択外の言語が開く | 中 | ✅ 選択中の transPair で絞り込み（ADR-260724-01） |
 | B-7 | 要対応の項目ラベルが見出しタイトルのみでどのファイルか分からず、並び順もスキャン順依存で再構築のたび変わる | 中 | ✅ 副題にファイル名と種類を表示＋安定ソート（ADR-260724-01） |
-| B-8 | 裁定後に次の項目へ進む導線がなく、ツリー→ジャンプ→裁定→ツリーの往復が残る（B-3で一覧は得たがキューとして未完成） | 中 | ✅ `mdait.needsAttention.next`（次の要対応へ）を3導線で追加（ADR-260724-01） |
+| B-8 | 裁定後に次の項目へ進む導線がなく、ツリー→ジャンプ→裁定→ツリーの往復が残る（B-3で一覧は得たがキューとして未完成） | 中 | ✅ `mdait.needsAttention.next`（次の要対応へ）を3導線で追加（ADR-260724-01）。※その後 CodeLens の「Next」は外した（ADR-260912-07。マーカー行に並べるのはそのユニットへの操作だけ）。いまの導線は要対応ノードのインライン・パレット・キーバインドで、移動先は訳文と原文を並べた対訳表示（`mdait.openPair`）。さらに CodeLens「レビュー完了」・ツリーの「レビュー済みにする」の直後は次の要対応へ自動で進む（ADR-260912-08） |
 | B-9 | 要対応・翻訳率の件数が人間（StatusTree、選択中の transPair のみ）とエージェント（LM Tools、ワークスペース全体）で一致しない | 低 | ✅ LM Tools の集計も選択中の transPair に統一（ADR-260724-01）。sync/trans は元から選択中のペアだけを処理するため、集計のみ全体だと「誰も処理しない件数」を報告していた |
 
 ### C. デッドエンド・破綻（UX-P7 違反）
@@ -260,7 +266,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 
 | # | 痛点 | 重大度 | 状態 |
 |---|---|---|---|
-| D-1 | trans 完了後の次アクション誘導がない（need:review が新規発生しても知らされない。tm.commit を思い出すのはユーザー任せ） | 中 | 🔜 UX-R2 |
+| D-1 | trans 完了後の次アクション誘導がない（need:review が新規発生しても知らされない。tm.commit を思い出すのはユーザー任せ） | 中 | 🔜 UX-R2。sync 完了通知には AI レビューの導線を追加済み（翻訳待ちが 0 で確認待ちが残るとき「✨AI review」。ADR-260912-07）。trans 完了通知は未 |
 | D-2 | autoSyncOnSave がサイレントで、原文保存により need:revise が付いた事実に気づけない | 中 | 🔜 UX-R2（ステータスバー常駐サマリ） |
 | D-3 | `need:revise` と `need:translate` がツリー上同一表示で区別不能 | 低 | ✅ ツールチップ・verify-deletion/isolate アイコンも追加 |
 
@@ -374,7 +380,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 1. **更新通知の一本化**: 部分通知と `notifyRootChanged()` を廃止し、変更シグナル1本＋デバウンスによる全体再描画に統一する。「どのノードを描き直すか」を誰も判断しない設計にすることで、派生ビューを追加した際の通知漏れを構造的に不可能にする。
 2. **実体の一元化**: ユニットの本体を `children` に一元化し、索引はファイル単位で毎回張り直す。`removeFile` を追加して削除・リネームを反映する。
 3. **要対応の一貫性**: 選択中の transPair で絞り、相対パス→行番号で安定ソートし、`description` にファイル名と種類を出す。
-4. **「次の要対応へ」**: `mdait.needsAttention.next` を CodeLens・コンテキストメニュー・キーバインドの3導線で提供。自動ジャンプはしない（UX-P5）。
+4. **「次の要対応へ」**: `mdait.needsAttention.next` を CodeLens・コンテキストメニュー・キーバインドの3導線で提供。自動ジャンプはしない（UX-P5）。※CodeLens の導線はその後外し、移動先は訳文と原文を並べた対訳表示に変えた（ADR-260912-07）。※さらにその後、「レビュー完了」（CodeLens・ツリー）の直後だけは次の要対応へ自動で進むと決め直した（ADR-260912-08。裁定→移動を1操作にしないと連続裁定にならない）。
 
 **完了ゲート**: 要対応を増やす操作（trans / sync / aiReview）の直後に、件数ラベルと項目リストが常に一致すること（単体の回帰テストで担保 — 済）。20件の要対応を、ツリーへ戻ることなく「裁定→次へ」の反復だけで処理しきれること（手動確認 — 未実施。`npm run test:vscode` および実ワークスペースでの確認が残る）。
 

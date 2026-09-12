@@ -16,6 +16,7 @@ import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
 import type { DeleteUnitResult, DeleteUnitsResult } from "../markers/delete-unit";
 import type { KeepUnitsResult } from "../markers/keep-unit";
+import type { RequestTranslateResult } from "../markers/request-translate";
 import {
 	DEFAULT_RESOLVABLE_NEEDS,
 	type NeedResolutionOptions,
@@ -49,6 +50,29 @@ function matchesPlainTarget(targets: NeedTarget[] | undefined, hash: string): bo
 }
 
 /**
+ * 非Markdown の訳文ファイル行の contextValue を決める（ツリーのボタンの出し分け）。
+ *
+ * ユニット（`determineUnitContextValue`）と同じく **`Status` ではなく need で決める**。
+ * `Status` は「原文側か訳文側か／翻訳の進み具合」を表す値で、そこに出し分けを
+ * 相乗りさせると、集計都合で `Status` の付け方が変わったときにボタンが巻き添えで消える。
+ *
+ * - `need:review`（確認待ち）→ `…Attention`: 「レビュー済みにする」だけを出す。
+ *   通常の `mdaitPlainFileTarget` に付く ✨翻訳を出すと、trans は review を処理しないので
+ *   押しても「翻訳不要」で終わる — 押せないものをボタンにしない（ux.md §3.3）
+ * - need なし → `…Complete`（TM 登録などの完了後の操作）
+ * - それ以外（translate / revise@…）→ `mdaitPlainFileTarget`（✨翻訳）
+ */
+export function determinePlainFileContextValue(need: string | null | undefined): string {
+	if (need === "review") {
+		return "mdaitPlainFileTargetAttention";
+	}
+	if (!need) {
+		return "mdaitPlainFileTargetComplete";
+	}
+	return "mdaitPlainFileTarget";
+}
+
+/**
  * 非Markdownファイル（.txt, .csv, .tsv等）用のFileHandler実装。
  * UnitStateStoreで翻訳状態を管理し、ファイル全体を1ユニットとして扱う。
  */
@@ -67,18 +91,30 @@ export class PlainFileHandler implements FileHandler {
 		const store = UnitStateStore.getInstance();
 		const existing = store.getSoleEntry(targetRelPath);
 
-		// 4. need判定
+		// 4. ターゲットの現在hashを再計算（rebuild の判定にも使う）
+		const targetContent = fs.readFileSync(targetFile, "utf-8");
+		const targetHash = calculateHash(targetContent, false);
+
+		// 5. need判定
 		let need: string;
 		let revisionsNeeded = 0;
 		let modified = 0;
 
 		if (!existing) {
-			// rebuild時: unit-state未登録 + ターゲットファイル存在 → need:review
-			need = "review";
-			revisionsNeeded = 1;
+			// rebuild時: unit-state未登録 + ターゲットファイル存在。
+			// 「紐なし・本文あり・丸写しでない → review、丸写し → translate」（MD 側と同じ規則）。
+			// 訳文の本文が原文と一字一句同じなら、それは syncNew の複製がそのまま残っている
+			// ＝まだ訳していない。review に倒すと「確認待ち」の列に未訳が混ざり、確認する側は
+			// 原文をそのまま読まされる。翻訳待ちに戻すのが実態に合う
+			const isVerbatimCopy = targetHash === sourceHash;
+			need = isVerbatimCopy ? "translate" : "review";
+			// 丸写しは「まだ訳していない」だけで改訂を求める話ではないので revisionsNeeded に数えない。
+			// modified は行が新しく作られた（状態が変わった）ことを表すので、どちらも 1
+			revisionsNeeded = isVerbatimCopy ? 0 : 1;
 			modified = 1;
-			logger.info("sync", "Rebuild detected for plain file, assigning need:review", {
+			logger.info("sync", "Rebuild detected for plain file", {
 				targetFile: targetRelPath,
+				need,
 			});
 		} else if (existing.from !== sourceHash) {
 			// ソース変更あり
@@ -94,10 +130,6 @@ export class PlainFileHandler implements FileHandler {
 			// ソース変更なし → needそのまま
 			need = existing.need;
 		}
-
-		// 5. ターゲットの現在hashを再計算
-		const targetContent = fs.readFileSync(targetFile, "utf-8");
-		const targetHash = calculateHash(targetContent, false);
 
 		// 6. UnitRegistryにソースコンテンツのスナップショット保存
 		const unitRegistryManager = UnitRegistryManager.getInstance();
@@ -459,7 +491,7 @@ export class PlainFileHandler implements FileHandler {
 			// 非MDはファイル＝1ユニットで children を持たないため、need はファイルレベルに載せる
 			// （sync 完了通知の翻訳待ち件数などがユニット横断の集計から拾えるようにする）
 			needFlag: entry.need || undefined,
-			contextValue: status === Status.Translated ? "mdaitPlainFileTargetComplete" : "mdaitPlainFileTarget",
+			contextValue: determinePlainFileContextValue(entry.need),
 		};
 	}
 
@@ -514,6 +546,30 @@ export class PlainFileHandler implements FileHandler {
 				changed: true,
 				remainingNeedFlags: [],
 			};
+		});
+	}
+
+	async requestTranslate(filePath: string, target: NeedTarget): Promise<RequestTranslateResult> {
+		const relPath = toWorkspaceRelativePath(filePath);
+
+		// resolveNeed と同じ経路（withFileMutation）。need はストアにしか無く本文は変えない
+		return withFileMutation<RequestTranslateResult>(filePath, Configuration.getInstance(), async () => {
+			const store = UnitStateStore.getInstance();
+			const entry = store.getSoleEntry(relPath);
+			if (!entry) {
+				return { requested: false, changed: false, hash: "", reason: "not-found" };
+			}
+			// hash 指定は照合する（resolveNeed と同じ理由。ファイル＝1ユニットでも、指定と違う
+			// ユニットを黙って書き換えると NeedTarget の契約が壊れる）
+			if (!matchesPlainTarget([target], entry.hash)) {
+				return { requested: false, changed: false, hash: entry.hash, reason: "not-found" };
+			}
+			if (entry.need !== "review") {
+				return { requested: false, changed: false, hash: entry.hash, reason: "not-review" };
+			}
+
+			store.setEntry({ ...entry, need: "translate" });
+			return { requested: true, changed: true, hash: entry.hash };
 		});
 	}
 

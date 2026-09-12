@@ -17,6 +17,7 @@ import {
 	isPendingWorkNeed,
 } from "../../core/status/status-item";
 import { StatusItemTree } from "../../core/status/status-item-tree";
+import { isIndependentUnit } from "../../core/unit-state/independent-unit";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
@@ -159,7 +160,10 @@ export class StatusCollector implements StatusCollectorPort {
 				return this.buildEmptyFileStatusItem(filePath, fileName);
 			}
 
-			const units = this.collectUnitsStatus(markdown.units, filePath, fileName);
+			// 「原文ではない」ではなく「訳文である」で取る。原文でも訳文でもない管理外の
+			// Markdown まで独立ユニット扱いになるのを避けるため（independent-unit.ts）
+			const isTargetFile = this.fileExplorer.isTargetFile(filePath, this.config);
+			const units = this.collectUnitsStatus(markdown.units, filePath, fileName, isTargetFile);
 			return this.buildFileStatusItem(filePath, fileName, units, frontmatterItem);
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -192,7 +196,12 @@ export class StatusCollector implements StatusCollectorPort {
 	/**
 	 * ユニットの翻訳状態を収集する
 	 */
-	private collectUnitsStatus(units: readonly MdaitUnit[], filePath: string, fileName: string): UnitStatusItem[] {
+	private collectUnitsStatus(
+		units: readonly MdaitUnit[],
+		filePath: string,
+		fileName: string,
+		isTargetFile: boolean,
+	): UnitStatusItem[] {
 		return units.map((unit) => {
 			const unitStatus = this.determineUnitStatus(unit);
 			return {
@@ -206,7 +215,9 @@ export class StatusCollector implements StatusCollectorPort {
 				needFlag: unit.marker?.need || undefined,
 				startLine: unit.startLine,
 				endLine: unit.endLine,
-				contextValue: this.determineUnitContextValue(unit),
+				contextValue: this.determineUnitContextValue(unit, isTargetFile),
+				// 原文ユニットも from を持たないので、マーカーだけでは独立ユニットと区別できない
+				isIndependent: isIndependentUnit(unit.marker, isTargetFile),
 				filePath,
 				fileName,
 			};
@@ -218,7 +229,7 @@ export class StatusCollector implements StatusCollectorPort {
 	 *
 	 * **`Status` を引数に取ってはならない。** 以前は `Status` を先に見ていたため、
 	 * 「凍結ユニットを翻訳率の分母から外す」という集計都合で付けた `Status.Source` に
-	 * 吸い込まれ、`mdaitUnitIsolated` の分岐へ到達できなかった（ツリーの「独立扱いを解除」が
+	 * 吸い込まれ、`mdaitUnitIsolated` の分岐へ到達できなかった（ツリーの「凍結を解除」が
 	 * 一度も表示されないバグ）。出し分けはユニット自身の事実（need と from）だけで決める。
 	 *
 	 * ▶（Translate Unit）は trans が実際に処理するユニット（translate/revise）にのみ表示し、
@@ -226,12 +237,19 @@ export class StatusCollector implements StatusCollectorPort {
 	 * 判定順は determineUnitStatus と揃える（need を from より先に見る。穴あき一次受けの
 	 * need:review は from を持たないため）。
 	 */
-	private determineUnitContextValue(unit: MdaitUnit): string {
+	private determineUnitContextValue(unit: MdaitUnit, isTargetFile: boolean): string {
 		const need = unit.marker?.need;
 
 		// 凍結は原文側にも宣言できる（ADR-260706-02）ため Target を名前に含めない
 		if (isIsolatedNeed(need)) {
 			return "mdaitUnitIsolated";
+		}
+		// 独立ユニットは原文ユニットと同じ形（from なし）をしている。同じ contextValue に
+		// すると原文向けの「凍結する」がツリーに並ぶが、原文の章が無い以上その宣言に意味は
+		// 無い。押しても何も変わらないものをメニューに出さない（ux.md・UX-P7）。
+		// CodeLens が「その他」を出さないのと同じ判断である
+		if (isIndependentUnit(unit.marker, isTargetFile)) {
+			return "mdaitUnitIndependent";
 		}
 		if (need === "review") {
 			return "mdaitUnitTargetAttention";
@@ -423,8 +441,27 @@ export class StatusCollector implements StatusCollectorPort {
 			fileName,
 			fromHash: marker.from ?? undefined,
 			needFlag: marker.need ?? undefined,
-			contextValue: isSource ? "mdaitFrontmatterSource" : "mdaitFrontmatterTarget",
+			contextValue: this.determineFrontmatterContextValue(isSource, marker.need),
 		};
+	}
+
+	/**
+	 * frontmatter の contextValue を決める。ユニットと同じく **`Status` ではなく need で決める**
+	 * （`determineUnitContextValue` の理由を参照）。
+	 *
+	 * 確認待ち（`need:review`）は `…Attention` に分け、「レビュー済みにする」だけを出す。
+	 * 通常の `mdaitFrontmatterTarget` に付く ✨翻訳を review にも出すと、押しても trans は
+	 * review を処理しないので「翻訳不要」で終わる — 押せないものをボタンにしない
+	 * （ux.md §3.3）。採用しない側の答え（翻訳待ちに戻す）は CodeLens 側にある。
+	 */
+	private determineFrontmatterContextValue(isSource: boolean, need: string | null | undefined): string {
+		if (isSource) {
+			return "mdaitFrontmatterSource";
+		}
+		if (need === "review") {
+			return "mdaitFrontmatterTargetAttention";
+		}
+		return "mdaitFrontmatterTarget";
 	}
 
 	/**
