@@ -121,6 +121,17 @@ suite("用語集の競合を解く", () => {
 		assert.equal(fs.readFileSync(termsPath, "utf-8"), content, "競合マーカーごと残っていない");
 	});
 
+	test("BOM 付きの用語集でも、主言語の語が読める", async () => {
+		// BOM を外し忘れると先頭の列名が `\ufeffen` になり、主言語の列が言語として
+		// 認識されない（実測: 語の見出しが空になり、主言語の列が素通りしていた）
+		write(`\ufeff${conflicted([row("Hello", "こんにちは")], [row("Hello", "やあ")])}`);
+
+		const planned = await planTermsResolution(termsPath, await repo(), "en");
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 1);
+		assert.equal(planned.plan.pending[0].label, "Hello", "主言語の語が読めていない");
+	});
+
 	test("解き終えた用語集には、どちらの語も残っている", async () => {
 		write(conflicted([row("Hello", "こんにちは")], [row("Goodbye", "さようなら")]));
 		const planned = await planTermsResolution(termsPath, await repo(), "en");

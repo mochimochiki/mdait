@@ -404,11 +404,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 			return;
 		}
 
-		// ファイル読み込み（BOM対応）
-		let content = fs.readFileSync(this.path, "utf8");
-		if (content.charCodeAt(0) === 0xfeff) {
-			content = content.slice(1); // BOM除去
-		}
+		const content = fs.readFileSync(this.path, "utf8");
 
 		// **合流の途中の用語集は読まない。** 競合マーカーの行は CSV としては列数の合わない行で、
 		// パーサーが投げるか、投げずに壊れた語を1つ増やす。どちらにせよそのまま書き戻すと
@@ -438,8 +434,16 @@ export class TermsRepositoryCSV implements TermsRepository {
 		await this.save();
 	}
 
-	/** 読み込んだ全文を、この表の中身として取り込む */
-	private applyContent(content: string, options: { keepPreserved: boolean }): void {
+	/**
+	 * 読み込んだ全文を、この表の中身として取り込む。
+	 *
+	 * **BOM はここで外す。** 外し忘れると先頭の列名が `\ufeffja` になり、主言語の列が
+	 * 言語として認識されなくなる（実測: 競合の解決で、語の見出しが空になり、主言語の列が
+	 * 「知らない列」として素通りしていた）。ファイルから読むときも、競合の解決で片方の
+	 * 陣営を読むときも、必ずこの1箇所を通る。
+	 */
+	private applyContent(rawContent: string, options: { keepPreserved: boolean }): void {
+		const content = rawContent.charCodeAt(0) === 0xfeff ? rawContent.slice(1) : rawContent;
 		// CSVパース
 		const records = parse(content, {
 			columns: true,
