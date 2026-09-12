@@ -11,6 +11,7 @@ import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
+import { isIndependentUnit } from "../../core/unit-state/independent-unit";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { SummaryManager } from "./summary-manager";
 
@@ -58,6 +59,19 @@ export class SummaryDecorator {
 		const document = editor.document;
 		const decorations: vscode.DecorationOptions[] = [];
 		const config = Configuration.getInstance();
+		// 役割は「原文か」「訳文か」を別々に取る。`FileExplorer` はワークスペースが無いと
+		// **コンストラクターが**投げるので、生成ごと try の中に入れる（ここが投げると
+		// エディタを切り替えるたびに装飾の更新が落ちる）。判定できなければどちらも false —
+		// 印を出さないだけで、嘘は書かない
+		let isSourceFile = false;
+		let isTargetFile = false;
+		try {
+			const explorer = new FileExplorer();
+			isSourceFile = explorer.isSourceFile(document.uri.fsPath, config);
+			isTargetFile = explorer.isTargetFile(document.uri.fsPath, config);
+		} catch {
+			// ワークスペース未設定など
+		}
 
 		const addDecoration = (lineIndex: number, marker: MdaitMarker): void => {
 			const summary = this.summaryManager.getSummary(marker.hash);
@@ -67,11 +81,17 @@ export class SummaryDecorator {
 			// **人が訳文を手で直したことは出さない**（ADR-260905-04）。触った本人はいちばんよく
 			// 知っているので知らせる意味が薄く、少し直して保存するたびに「編集済み」と出るのは
 			// かえって不安にさせる。締めくくり方は CodeLens の「✓翻訳済みにする」が常に隣にある
-			const summaryText = summary
-				? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
-				: marker.needsRevision()
-					? vscode.l10n.t("The source has changed")
-					: undefined;
+			//
+			// 独立ユニット（原文と結びついていない訳文の章）は、CodeLens にも何も出ない。
+			// 何の印も無いと「ただの本文」と見分けが付かないので、ここで一言だけ添える
+			// （操作は無い。解説は Hover にある。ux.md §3.3 の役割分担）
+			const summaryText = isIndependentUnit(marker, isTargetFile)
+				? vscode.l10n.t("No source")
+				: summary
+					? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)
+					: marker.needsRevision()
+						? vscode.l10n.t("The source has changed")
+						: undefined;
 			if (!summaryText) {
 				return;
 			}
@@ -84,9 +104,7 @@ export class SummaryDecorator {
 
 		if (config.isExternalMarkers()) {
 			// external: 本文にマーカーが無いため、パースしてユニット開始行に装飾を置く
-			const explorer = new FileExplorer();
-			const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
-			const io = resolveMarkerIO(config, document.uri.fsPath, role);
+			const io = resolveMarkerIO(config, document.uri.fsPath, isSourceFile ? "source" : "target");
 			const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
 			for (const unit of parsed.units) {
 				if (unit.marker?.hash) {

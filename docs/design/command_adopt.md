@@ -13,7 +13,7 @@
 
 - **AI は明示起動時のみ**（ADR-260705-01): 確認 UI を冒頭に1回出し、実行する段（AI を使う処理）を動的に列挙する。
 - **既訳の不可侵**: どの段も既存訳文の本文を変更しない。マーカー変異は sync の `need:review` 付与とレビュー承認時の `need:review` 解除のみ。
-- **既訳を review で受ける規則は adopt 固有ではなく sync 共通**（ADR-260912-01）: マーカーの無い既訳に初めて紐（`from`）を結ぶとき、本文があり丸写しでなければ `need:review`、原文の丸写しなら `need:translate` — この着地は `needForFirstLink`（[command_sync.md](command_sync.md) の「着地の規則」）が決め、取り込みを頼まなくても同じ。`adopt` が sync に与えるのは AI アライン（`align`）の許可と完了レポートの文言だけである。取り込みウィザードの値打ちは、アライン・AI レビュー・用語集・TM を1操作に束ねる点にある。
+- **既訳を review で受ける規則は adopt 固有ではなく sync 共通**（ADR-260912-06）: マーカーの無い既訳に初めて紐（`from`）を結ぶとき、本文があり丸写しでなければ `need:review`、原文の丸写しなら `need:translate` — この着地は `needForFirstLink`（[command_sync.md](command_sync.md) の「着地の規則」）が決め、取り込みを頼まなくても同じ。`adopt` が sync に与えるのは AI アライン（`align`）の許可と完了レポートの文言だけである。取り込みウィザードの値打ちは、アライン・AI レビュー・用語集・TM を1操作に束ねる点にある。
 - **薄いオーケストレーター**（ADR-260706-01): 各段のロジックは一切再実装せず、既存プリミティブへ配線するだけ。段は注入可能（`AdoptStages`）でテスト容易性を確保する。
 - **review → tm の順序による TM 汚染なしの構造保証**: `isTmCommitTarget` は「from あり ∧ need なし」のみ対象（包括方式・ADR-260711-05）。レビューを通過（`need:review` 解除）したペアだけが TM に登録され、エスカレーション残りは構造的にスキップされる。
 
@@ -158,12 +158,12 @@ data: 旧 mdait_aiSync の `{sync, review, autoApprove, escalations, status}` �
 | 3 | ja に無い章が en に存在（訳文側の独自セクション） | マーカーなしの独自章は **`need:review` 一次受け**で保護される（削除も翻訳も決めつけず人間が「素hash化 / `need:isolate` / 削除」を選ぶ・[guide-admin.md](../guide-admin.md)）。誤ペア化は AIアラインの unmatchedTarget 識別で防止 | **実装済み**（一次受け＋AIアライン）。判断サーフェスは将来増分 |
 | 4 | 章の順序入れ替え | 位置ベースのため誤ペア化 → mismatch 検出（修正は手動） | AIアライン（**実装済み**） |
 | 5 | ペアは正しいが訳抜け・原文改訂に未追随 | レビューが **partial でエスカレーション**（issues に欠落箇所を列挙、hover/レポートに表示）。修正は手動 | AIレビュー拡張（修正提案化）＋判断サーフェスで孤立/漏れ 確定（将来増分） |
-| 6 | en が原文コピーのまま（未翻訳） | ユニット単位で原文と一字一句同じ（本文の一致）なら sync が `need:translate` で受け、レビューには乗せない（まだ訳していないので trans に任せる。ADR-260912-01）。部分的に原文が残る訳は `need:review` で受け、検証プロンプトの verdict 定義で match を禁止 — partial に倒す | **実装済み** |
+| 6 | en が原文コピーのまま（未翻訳） | ユニット単位で原文と一字一句同じ（本文の一致）なら sync が `need:translate` で受け、レビューには乗せない（まだ訳していないので trans に任せる。ADR-260912-06）。部分的に原文が残る訳は `need:review` で受け、検証プロンプトの verdict 定義で match を禁止 — partial に倒す | **実装済み** |
 | 7 | en ファイル自体が無い | `syncNew` が全ユニット `need:translate` を生成 → 通常の trans フロー（adopt 不要） | **実装済みで完結** |
 | 8 | ja に無いファイルが en にある | sync はソースファイル起点なので**取り込まない**（`unit-state` に行は作られない）。ただし**気づかないわけではない** — 孤立訳文として数え、「原文の無い訳文が N 件。消さずに残した」と通知しツリーに出す（`isOrphanTarget`）。AI翻訳レビューはワークスペース全体を見るときこれを対象から外す（原文が無いので「原文が見つからない」と失敗するしかなく、取り込みの結果が理由の分からない `errors: 1` になっていた・ADR-260903-03） | 管理下に載せる機能は将来課題（未計画） |
 | 9 | 見出しレベル設定の不一致 | `validateAndSyncLevel` が target の `mdait.sync.level` をソースに自動同期 | **実装済みで完結** |
-| 9.5 | frontmatter に既訳がある（`title` / `description`） | 本文と同じ規則で採用し `need:review` を付ける（対象キーの値が原文と全部同じ＝丸写しなら `need:translate`。ADR-260912-01）。trans は `needsTranslation()` で弾くので人の書いたタイトルを上書きしない。原文が変われば `revise@` へ倒れる（ADR-260902-02） | **実装済みで完結**（AI翻訳レビューが本文と同じ1ペアとして判定し、承認されれば確認も外れる・ADR-260902-03） |
-| 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 分岐が本文と同じ規則で受ける — 既訳（原文と違う本文）は `need:review`、原文の丸写しは `need:translate`（ADR-260912-01）。AI翻訳レビューは非 Markdown も対象で（`review-targets.ts` / `plain-review-pair.ts`。ADR-260903-08）、承認は原稿を書かず `unit-state` の `need` だけを外す。残った確認待ちは `mdait.aiReview.pending` からもまとめて消化できる | **実装済みで完結** |
+| 9.5 | frontmatter に既訳がある（`title` / `description`） | 本文と同じ規則で採用し `need:review` を付ける（対象キーの値が原文と全部同じ＝丸写しなら `need:translate`。ADR-260912-06）。trans は `needsTranslation()` で弾くので人の書いたタイトルを上書きしない。原文が変われば `revise@` へ倒れる（ADR-260902-02） | **実装済みで完結**（AI翻訳レビューが本文と同じ1ペアとして判定し、承認されれば確認も外れる・ADR-260902-03） |
+| 10 | 非 Markdown ファイル | PlainFileHandler の rebuild 分岐が本文と同じ規則で受ける — 既訳（原文と違う本文）は `need:review`、原文の丸写しは `need:translate`（ADR-260912-06）。AI翻訳レビューは非 Markdown も対象で（`review-targets.ts` / `plain-review-pair.ts`。ADR-260903-08）、承認は原稿を書かず `unit-state` の `need` だけを外す。残った確認待ちは `mdait.aiReview.pending` からもまとめて消化できる | **実装済みで完結** |
 | 11 | ja に原文のみの補足章がある（原文側の独自セクション・意図的） | `need:isolate` を付与すれば伝播停止（target 生成・translate/revise 付与なし。凍結）。sync/trans/TM の全経路が対象外として扱う | **実装済み**（`need:isolate`・[command_sync.md](command_sync.md) 孤立ユニットモデル）。宣言 CodeLens UI は将来増分 |
 
 パターン2〜4 で書かれた誤った `from` リンクは、次回 sync の Phase 1（from ベースマッチング）が維持し続けるため自然には直らない。復旧手順（誤ペアのマーカー除去 → 構造修正 → 再 adopt）は [guide-admin.md](../guide-admin.md) を参照。mismatch には**誤リンク型**（カスケードズレ・復旧手順が必要）と**内容差し替え型**（位置は正しいが中身が別物・再翻訳でよい）があり、判断サーフェスでの区別は将来増分。孤立（原文/訳文/両方）の統合モデルは [command_sync.md](command_sync.md) の「孤立ユニットモデル」を参照。

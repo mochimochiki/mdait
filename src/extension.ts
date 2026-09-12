@@ -71,6 +71,8 @@ import {
 	openSettingsAsUiCommand,
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
+import { executeResolveConflicts } from "./commands/conflict/resolve-command";
+import { takeSideForItem } from "./commands/conflict/take-side-command";
 import { StatusBarSummary } from "./ui/status/status-bar-summary";
 import {
 	collectWorkspaceConflicts,
@@ -210,6 +212,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	conflictWatcher.onDidCreate(refreshConflicts);
 	conflictWatcher.onDidDelete(refreshConflicts);
 	context.subscriptions.push(conflictWatcher);
+
+	// 合流の競合の解決（roadmap-v04 P02）。ツリーの「競合の解決」の枝から呼ぶ
+	context.subscriptions.push(
+		vscode.commands.registerCommand("mdait.conflict.resolve", async () => {
+			await executeResolveConflicts();
+			refreshConflicts();
+		}),
+		// 人が1件ずつ決める逃げ道（P03）。**AI を1回も呼ばないので ✨ は付けない**
+		vscode.commands.registerCommand("mdait.conflict.takeOurs", async (item: unknown) => {
+			await takeSideForItem(item, "ours");
+			refreshConflicts();
+		}),
+		vscode.commands.registerCommand("mdait.conflict.takeTheirs", async (item: unknown) => {
+			await takeSideForItem(item, "theirs");
+			refreshConflicts();
+		}),
+	);
 
 	// setup.createConfig command
 	const createConfigDisposable = vscode.commands.registerCommand("mdait.setup.createConfig", () =>

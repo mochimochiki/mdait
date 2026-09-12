@@ -357,6 +357,33 @@ export class TmxStore {
 	}
 
 	/**
+	 * **競合の解決の経路だけが通る読み取り。** 片方の陣営の全文を TU の表に解く。
+	 *
+	 * 通常の `load` は競合マーカーを見つけたら読むのを拒む（ADR-260908-02）。その線は
+	 * 動かさない — ここは「解決の材料を作るため」の別の入口で、ファイルには触らない。
+	 */
+	static parseSide(xml: string): Map<string, TmEntry> {
+		return parseTmx(xml);
+	}
+
+	/**
+	 * **競合の解決の経路だけが通る書き出し。** 解いた結果で TM を置き換えて保存する。
+	 *
+	 * `save()` は競合を検知した状態では投げる（解いていない競合ごと消えるため）ので、
+	 * 解決の経路はそのまま呼べない。**クラスの外に別の書き出しを作らないこと** —
+	 * 原子的な書き込みと、保存後の mtime の記録はここにしか無い（ADR-260911-02）。
+	 *
+	 * @param filePath 書き出し先
+	 * @param resolved 解いた結果（tuid → TU）
+	 */
+	writeResolved(filePath: string, resolved: Map<string, TmEntry>): void {
+		this.index = resolved;
+		this.conflicted = false;
+		this.rebuildTrigramIndex();
+		this.save(filePath);
+	}
+
+	/**
 	 * インメモリインデックスをTMX XMLとしてファイルに書き出す。
 	 * ディレクトリが存在しない場合は再帰的に作成する。
 	 * @param filePath TMXファイルのパス

@@ -44,7 +44,7 @@
 |---|---|---|---|
 | G1 | LM Toolsが3つのみ（`mdait_getStatus`/`mdait_sync`/`mdait_translate`）。term.detect/expand、tm.commit/optimize、検証はチャットから駆動不可 | `package.json` の `languageModelTools`、`src/lm-tools/`、[tools.md](tools.md)「今後の拡張可能性」 | M3, M4 |
 | G2 | ツール出力が非構造化テキスト。エージェントが計画に使う情報（ファイル別need一覧、翻訳失敗の原因、次アクション）が取れない | `src/lm-tools/get-status-tool.ts` / `translate-tool.ts`（`LanguageModelTextPart` に文章を返すのみ） | M1 |
-| G3 | 既存対訳の取り込みが安全でない。embedded（デフォルト）では初回syncでマーカーなし既訳に一律 `need:translate` が付き、(a) transで既訳が上書きされる、(b) tm.commitの対象（`from`あり＋`need`なし）外になる。「既訳をreviewに倒す」安全網は当時 externalモード再構築（旧 `isExternalRebuild`）と非MDにのみあった | `src/commands/sync/marker-sync.ts`（`needForFirstLink`）、`src/commands/tm/commit-filter.ts` | M2 → **解消**（ADR-260912-01。adopt に依らず sync 共通の規則 `needForFirstLink` で既訳を `need:review`、丸写しだけを `need:translate` で受ける） |
+| G3 | 既存対訳の取り込みが安全でない。embedded（デフォルト）では初回syncでマーカーなし既訳に一律 `need:translate` が付き、(a) transで既訳が上書きされる、(b) tm.commitの対象（`from`あり＋`need`なし）外になる。「既訳をreviewに倒す」安全網は当時 externalモード再構築（旧 `isExternalRebuild`）と非MDにのみあった | `src/commands/sync/marker-sync.ts`（`needForFirstLink`）、`src/commands/tm/commit-filter.ts` | M2 → **解消**（ADR-260912-06。adopt に依らず sync 共通の規則 `needForFirstLink` で既訳を `need:review`、丸写しだけを `need:translate` で受ける） |
 | G4 | 訳文側にしかないセクションは `sync.autoDelete: true`（デフォルト）で初回syncにより削除される。`false` でも `need:verify-deletion` 止まりで「意図的に保持する」状態を表現できない | `src/commands/sync/section-matcher.ts`（孤立ターゲット処理） | M2, M5 |
 | G5 | 用語一貫性の事後検証がない。`TranslationChecker` はMarkdown構造カウント比較のみ。用語集はプロンプトへの「Follow the provided terminology list strictly」というソフトな指示止まりで、逸脱の検出・レポート手段がない | `src/commands/trans/translation-checker.ts`、`src/prompts/defaults.ts` | M4 |
 | G6 | 翻訳方向がtransPair単位で固定（常にsource→target）。「訳文側にしかないセクションを原文側へ埋め戻す」ユニット単位の方向反転は未モデル化 | `src/commands/trans-selection/direction-picker.ts`、`assets/schemas/mdait-config.schema.json`（transPairs） | M5 |
@@ -130,7 +130,7 @@ sequenceDiagram
 
 ### adopt（採用）モード — G3
 
-> **更新（2026-09-12）**: 「マーカーの無い既訳を `need:review` で受ける」規則は adopt 固有ではなくなった（ADR-260912-01）。ふつうの sync でも、紐（`from`）の無い訳文に初めて紐を結ぶときは `marker-sync.ts` の `needForFirstLink` が同じ規則で決める — 本文があり丸写しでなければ `need:review`、原文の丸写し（`hash === from`）なら `need:translate`。frontmatter・非MD も同じ。旧 `isExternalRebuild` の安全網は廃止。`adopt` が変えるのは AI アライン（`align`）の許可と完了レポートの文言だけで、`adopted` の件数はふつうの sync でも数える。下記は当初の設計の記録として残す。
+> **更新（2026-09-12）**: 「マーカーの無い既訳を `need:review` で受ける」規則は adopt 固有ではなくなった（ADR-260912-06）。ふつうの sync でも、紐（`from`）の無い訳文に初めて紐を結ぶときは `marker-sync.ts` の `needForFirstLink` が同じ規則で決める — 本文があり丸写しでなければ `need:review`、原文の丸写し（`hash === from`）なら `need:translate`。frontmatter・非MD も同じ。旧 `isExternalRebuild` の安全網は廃止。`adopt` が変えるのは AI アライン（`align`）の許可と完了レポートの文言だけで、`adopted` の件数はふつうの sync でも数える。下記は当初の設計の記録として残す。
 
 `mdait_sync` / syncコマンドのオプション。初回syncで「マーカーなしだが本文のある既存訳文」を翻訳済みとして採用する。
 
@@ -249,7 +249,7 @@ sequenceDiagram
 
 **実装タスク**:
 
-1. syncに `adopt` オプション追加。マーカーなし・本文ありのターゲットユニットを `need:review` で採用（`marker-sync.ts` の新規ターゲット分岐を拡張、当時の `isExternalRebuild` の安全網ロジックと共通化。※現在はこの受け方が adopt に依らない sync 共通の規則 `needForFirstLink` になっている。ADR-260912-01）
+1. syncに `adopt` オプション追加。マーカーなし・本文ありのターゲットユニットを `need:review` で採用（`marker-sync.ts` の新規ターゲット分岐を拡張、当時の `isExternalRebuild` の安全網ロジックと共通化。※現在はこの受け方が adopt に依らない sync 共通の規則 `needForFirstLink` になっている。ADR-260912-06）
 2. `sync.orphanTargetPolicy` 設定を追加（`delete`/`verify`/`keep`。スキーマ・`Configuration`・`section-matcher.ts`）。`autoDelete` からの後方互換マッピング
 3. `need:keep` の全経路対応: syncが触らない・transが対象外にする・statusが「独自ユニット」として分母から除外する
 4. `mdait_sync` ツールに `adopt` パラメータを公開し、採用件数・孤立ターゲット処理結果を `data` で返す

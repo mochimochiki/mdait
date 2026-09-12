@@ -113,6 +113,14 @@ export interface UnitStatusItem extends BaseStatusItem {
 	startLine?: number;
 	endLine?: number;
 	errorMessage?: string; // エラー発生時のメッセージ
+	/**
+	 * 独立ユニット（原文と結びついていない訳文の章）か。
+	 *
+	 * 判定は `core/unit-state/independent-unit.ts` の `isIndependentUnit` だけが行う。
+	 * 原文ファイルのユニットも `from` を持たないため、マーカーだけでは区別できず、
+	 * 収集のときに「どちら側のファイルか」と併せて計算した結果をここに載せる。
+	 */
+	isIndependent?: boolean;
 }
 
 /**

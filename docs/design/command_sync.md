@@ -45,7 +45,7 @@ syncは原文と訳文を比較して、翻訳が必要な箇所を見つけま�
 | 状況 | needフラグ | 意味 |
 |---|---|---|
 | 新規ターゲット作成 | `translate` | 未翻訳。全ユニットに付与 |
-| 紐（`from`）の無い訳文ユニットに初めて紐を結ぶ | 本文あり・丸写しでない → `review` / 丸写し（本文が原文と一字一句同じ）・本文なし → `translate` | マーカーの無い既訳を trans の上書きから守る。取り込み（adopt）の有無・保管方式（embedded / external）・ファイル種別に依らず同じ（後述「着地の規則」。ADR-260912-01） |
+| 紐（`from`）の無い訳文ユニットに初めて紐を結ぶ | 本文あり・丸写しでない → `review` / 丸写し（本文が原文と一字一句同じ）・本文なし → `translate` | マーカーの無い既訳を trans の上書きから守る。取り込み（adopt）の有無・保管方式（embedded / external）・ファイル種別に依らず同じ（後述「着地の規則」。ADR-260912-06） |
 | ソース変更 | `revise@{oldhash}` | 原文が変わったので改訂が必要 |
 | revise中にソース再変更 | `revise@{最初のoldhash}`維持 | 改訂基準点（変更前hash）を保持 |
 | ターゲットのみ変更 | なし | hash更新のみ |
@@ -128,7 +128,7 @@ sequenceDiagram
 
 ### 着地の規則: 紐の無い訳文に初めて紐を結ぶとき
 
-マーカー（紐 `from`）の無い訳文ユニットに sync が初めて紐を結ぶとき、どの `need` を付けるかは [`needForFirstLink()`](../../src/commands/sync/marker-sync.ts) **1か所**で決める（ADR-260912-01）。取り込み（`adopt`）を頼んだかどうか、マーカーの保管方式（embedded / external）、ファイルの種類（Markdown 本文・frontmatter・非 Markdown）のどれにも依らない。
+マーカー（紐 `from`）の無い訳文ユニットに sync が初めて紐を結ぶとき、どの `need` を付けるかは [`needForFirstLink()`](../../src/commands/sync/marker-sync.ts) **1か所**で決める（ADR-260912-06）。取り込み（`adopt`）を頼んだかどうか、マーカーの保管方式（embedded / external）、ファイルの種類（Markdown 本文・frontmatter・非 Markdown）のどれにも依らない。
 
 | 訳文側の状態 | need | 意味 |
 |---|---|---|
@@ -154,7 +154,7 @@ sequenceDiagram
 | `reviewable` | 翻訳待ちが 0 で、確認待ち（`review`。本文・frontmatter・非 Markdown を数える `countPendingReviewUnits`）が残っている | 件数と「✨AI review」（`mdait.aiReview.pending`。[command_ai-review.md](command_ai-review.md)） |
 | `plain` | どちらも残っていない | 成功・失敗の件数だけ |
 
-翻訳待ちと確認待ちの両方が残れば翻訳を先に勧める。翻訳は新しい訳を作る仕事で、確認は出来上がった訳を見る仕事なので、順序として翻訳が先（ADR-260912-02）。
+翻訳待ちと確認待ちの両方が残れば翻訳を先に勧める。翻訳は新しい訳を作る仕事で、確認は出来上がった訳を見る仕事なので、順序として翻訳が先（ADR-260912-07）。
 
 ### 孤立ユニットモデル（isolate と独立ユニット）
 

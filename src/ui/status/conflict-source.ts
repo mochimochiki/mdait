@@ -10,6 +10,10 @@
  *
  * @module ui/status/conflict-source
  */
+import { decisionsFor } from "../../commands/conflict/conflict-decisions";
+import type { ResolutionPlan } from "../../commands/conflict/resolution-plan";
+import type { PreparedResolution } from "../../commands/conflict/resolve-core";
+import { prepareResolution } from "../../commands/conflict/resolve-core";
 import { MdaitConflictScanner, type MdaitConflicts, noConflicts } from "../../core/conflict/mdait-conflicts";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
@@ -45,7 +49,84 @@ export function collectWorkspaceConflicts(configuration: Configuration): MdaitCo
 	}
 }
 
+/**
+ * いま人の判断を待っている件の一覧（ツリーが1件1行で並べるために使う）。
+ *
+ * 計画を作るのはファイルを読む仕事なので、**競合の見た目が動いていないあいだは作り直さない**。
+ * 動いていたら作り直す — 別の合流が来たか、人が手で直したかのどちらかで、前の計画の鍵は
+ * もう当てにならない。
+ *
+ * **1バイトも書かない。** `prepareResolution` は読むだけである。
+ */
+export async function collectPendingChoices(configuration: Configuration): Promise<PreparedResolution | undefined> {
+	const conflicts = collectWorkspaceConflicts(configuration);
+	if (conflicts.files.length === 0) {
+		preparedCache = undefined;
+		preparedStamp = undefined;
+		return undefined;
+	}
+	// 覚え書きの鍵は「いま競合しているファイルとその見た目」。**パスだけでは足りない** —
+	// 別の合流が来ても人が手で直しても、競合しているファイルの並びは変わらないことがある。
+	// 中身が動いたのに前の計画を返すと、古い値をそのまま書き戻しうる
+	const stamp = conflicts.files.map((file) => file.stamp).join("\u0000");
+	if (preparedCache && preparedStamp === stamp && !preparedDirty) {
+		return preparedCache;
+	}
+	try {
+		preparedCache = await prepareResolution(conflicts, configuration);
+		preparedStamp = stamp;
+		preparedDirty = false;
+		return preparedCache;
+	} catch (error) {
+		// 作り直せなかった。**前の計画を残さない** — 残すと、次に同じ見た目で聞かれたときに
+		// 古い計画を返してしまう
+		Logger.getInstance().debug("conflicts", "failed to prepare a resolution", formatError(error));
+		preparedCache = undefined;
+		preparedStamp = undefined;
+		preparedDirty = true;
+		return undefined;
+	}
+}
+
+/**
+ * その対象で、**まだ人が決めていない**件数。
+ *
+ * 決めかけの判断（`conflict-decisions.ts`）を差し引く。差し引かないと、ツリーで2件
+ * 決めても根の数字が動かず、「判断を待っている件数」という説明が嘘になる。
+ */
+export function undecidedCount(plan: ResolutionPlan, stamp: string | undefined): number {
+	if (stamp === undefined) {
+		return plan.pending.length;
+	}
+	const decided = decisionsFor(plan.filePath, stamp);
+	return plan.pending.filter((item) => !decided.has(item.key)).length;
+}
+
+/**
+ * いま人が決める件数（覚え書きから同期で読む）。
+ *
+ * ステータスバーは同期で描くので、計画を作り直すのを待てない。まだ作っていなければ
+ * `undefined` を返し、呼び出し側は数を伏せる（0 と言い切らない）。
+ */
+export function pendingChoiceCount(): number | undefined {
+	const prepared = preparedCache;
+	if (!prepared) {
+		return undefined;
+	}
+	return prepared.summary.plans.reduce(
+		(sum, plan) => sum + undecidedCount(plan, prepared.stamps.get(plan.filePath)),
+		0,
+	);
+}
+
+let preparedCache: PreparedResolution | undefined;
+let preparedStamp: string | undefined;
+let preparedDirty = true;
+
 /** 覚え書きを捨てて、次に数えるときは必ずファイルを読み直させる */
 export function invalidateWorkspaceConflicts(): void {
 	scanner.invalidate();
+	preparedCache = undefined;
+	preparedStamp = undefined;
+	preparedDirty = true;
 }

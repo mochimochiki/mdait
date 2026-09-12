@@ -219,7 +219,7 @@ a17c0b93de42	unit	50001024	2	cc33dd44	99887766	55443322	translate
 
 **実装**: [`src/core/unit-state/unit-state-store.ts`](../../src/core/unit-state/unit-state-store.ts)
 
-> 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（rebuild は訳してある本文に `need:review`、原文の丸写しに `need:translate` を付ける。非MD も Markdown も同じ規則 `needForFirstLink`。ADR-260912-01）。旧ファイルは手動削除して構いません。
+> 互換性に関する注意: 旧 `.mdait/file-state`（4カラム）は読み込みません。初回 sync で `.mdait/unit-state` を再構築します（rebuild は訳してある本文に `need:review`、原文の丸写しに `need:translate` を付ける。非MD も Markdown も同じ規則 `needForFirstLink`。ADR-260912-06）。旧ファイルは手動削除して構いません。
 
 **git 競合回避（ADR-260624-01 / ADR-260906-03〜07 / ADR-260907-04 / ADR-260908-04）**: `.mdait/unit-state` は全ファイルの状態を集約する単一TSVのため、external での並行翻訳で競合しやすい。これを最小化するため、(1) `save()` がファイルごとのブロックを「空行・見出し・空行」で挟み、行と行のあいだにも空行を1つ置き、**各行の1つ手前にその行だけの目印**（`# u<席の背番号>`）を書き、(2) 行は**パスではなくファイルID**で自分を名乗る（改名で書き換わるのは見出し1行だけ）。**git の `merge=union` には頼らない** — SVN に無く、効いた先で黙って片方を捨てていたので、`.mdait/.gitattributes` ごと撤去した（ADR-260911-01）。空行と `#` の行のうち、ID とパスの対応を持つ見出しだけがローダーの読み取りに効き、あとは読み飛ばす。合流で同じ席の行が2つ並んだら、後勝ちで潰さず片方を席から降ろして両方残す（読み取りは1行でも多く拾う）。並べ方ごとの競合数の実測は [merge-resilience.md](merge-resilience.md) にある。
 

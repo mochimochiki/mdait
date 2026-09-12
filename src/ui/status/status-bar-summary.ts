@@ -17,7 +17,7 @@ import type { StatusManager } from "../../core/status/status-manager";
 import { getSelectedScopeDirs } from "../../commands/shared/status-scope";
 import type { Configuration } from "../../infra/config/configuration";
 import type { ConflictFileKind } from "../../core/conflict/mdait-conflicts";
-import { collectWorkspaceConflicts } from "./conflict-source";
+import { collectPendingChoices, collectWorkspaceConflicts, pendingChoiceCount } from "./conflict-source";
 
 /** 集計結果（表示の組み立てをテストできるように分離する） */
 export interface StatusBarCounts {
@@ -31,6 +31,13 @@ export interface StatusBarCounts {
 	conflicts: number;
 	/** 競合しているファイルの種別（ツールチップの文面をここから作る） */
 	conflictKinds: readonly ConflictFileKind[];
+	/**
+	 * そのうち**あなたが決める件数**。まだ数えていなければ `undefined`。
+	 *
+	 * 出す数字はこれに統一する。ファイルの数を出すと、ツリーの一覧やダイアログと
+	 * 食い違う数字が画面に並ぶ。
+	 */
+	conflictDecisions?: number;
 }
 
 /**
@@ -48,15 +55,11 @@ export function buildConflictTooltip(counts: StatusBarCounts): string {
 	if (counts.conflictKinds.includes("terms")) {
 		blocked.push(vscode.l10n.t("glossary"));
 	}
-	const head = vscode.l10n.t(
-		"mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost.",
-		counts.conflicts,
-	);
-	const tail = vscode.l10n.t("Click to open the mdait view.");
+	const head = vscode.l10n.t("mdait: merge conflicts in .mdait.");
 	if (blocked.length === 0) {
-		return `${head} ${tail}`;
+		return head;
 	}
-	return `${head} ${vscode.l10n.t("The {0} cannot be used until they are resolved.", blocked.join(" / "))} ${tail}`;
+	return `${head} ${vscode.l10n.t("{0} cannot be used until they are resolved.", blocked.join(" / "))}`;
 }
 
 /**
@@ -68,7 +71,11 @@ export function buildStatusBarText(counts: StatusBarCounts): string {
 	// 競合はエラー状態で、**解けるまで他の数字が当てにならない**（TM も用語集も読めていない）。
 	// だから件数の先頭に置き、行そのものにも警告の色を付ける
 	if (counts.conflicts > 0) {
-		parts.push(vscode.l10n.t("{0} merge conflict(s)", counts.conflicts));
+		parts.push(
+			counts.conflictDecisions
+				? vscode.l10n.t("{0} conflict(s)", counts.conflictDecisions)
+				: vscode.l10n.t("conflicts"),
+		);
 	}
 	if (counts.pendingTranslation > 0) {
 		parts.push(vscode.l10n.t("{0} to translate", counts.pendingTranslation));
@@ -121,6 +128,7 @@ export class StatusBarSummary implements vscode.Disposable {
 			// ワークスペースに1つずつで、言語ペアに属さないため
 			conflicts: conflicts.total,
 			conflictKinds: conflicts.files.map((file) => file.kind),
+			conflictDecisions: pendingChoiceCount(),
 		};
 	}
 
@@ -131,6 +139,10 @@ export class StatusBarSummary implements vscode.Disposable {
 			return;
 		}
 		const counts = this.collect();
+		if (counts.conflicts > 0 && counts.conflictDecisions === undefined) {
+			// 初回は計画がまだ無い。数えてから描き直す（数字を伏せたままにしない）
+			void collectPendingChoices(this.configuration).then(() => this.refresh());
+		}
 		const text = buildStatusBarText(counts);
 		if (!text) {
 			this.item.hide();

@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { hasConflictMarkersInDataFile } from "../../core/markdown/conflict-markers";
 
 import type { TransPair } from "../../infra/config/configuration";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
@@ -186,10 +187,17 @@ export class YamlTermsRepository implements TermsRepository {
 			return;
 		}
 
-		try {
-			// ファイルを読み込み
-			const content = fs.readFileSync(this.path, { encoding: "utf8" });
+		// ファイルを読み込み
+		const content = fs.readFileSync(this.path, { encoding: "utf8" });
 
+		// **合流の途中の用語集は読まない。** CSV には前からあった番人が、こちらには無かった。
+		// 競合マーカーの行は YAML としては構文エラーか、運悪く読めてしまえば壊れた語になる。
+		// どちらにせよそのまま書き戻すと用語が消える（ADR-260908-02 と同じ線）。
+		if (hasConflictMarkersInDataFile(content)) {
+			throw new Error(`The glossary is in the middle of a merge. Resolve the conflict in ${this.path} first.`);
+		}
+
+		try {
 			// YAMLをパース
 			const yamlData = parseYaml(content) as YamlTermsFile;
 
@@ -197,15 +205,42 @@ export class YamlTermsRepository implements TermsRepository {
 				throw new Error("Invalid YAML structure");
 			}
 
-			// メタデータを保存
-			this.metadata = yamlData.metadata || {};
-			this.allLanguages = this.metadata.languages || [];
-
-			// 用語エントリを変換
-			this.entries = (yamlData.terms || []).map(this.convertFromYamlEntry);
+			this.applyParsed(yamlData);
 		} catch (error) {
 			throw new Error(`Failed to load YAML file: ${error instanceof Error ? error.message : String(error)}`);
 		}
+	}
+
+	/** パース済みの中身を、この用語集の中身として取り込む */
+	private applyParsed(yamlData: YamlTermsFile): void {
+		// メタデータを保存
+		this.metadata = yamlData.metadata || {};
+		this.allLanguages = this.metadata.languages || [];
+
+		// 用語エントリを変換
+		this.entries = (yamlData.terms || []).map(this.convertFromYamlEntry);
+	}
+
+	/**
+	 * **競合の解決の経路だけが通る読み取り。** 片方の陣営の全文を読み、その版の用語を返す。
+	 *
+	 * 通常の読み込みは競合マーカーを見つけたら投げる。その線は動かさない — ここは
+	 * 「解決の材料を作るため」の別の入口で、ファイルには触らない。メタデータは
+	 * あとから読んだ側のものが残るので、**自分の側を後に読むこと**。
+	 */
+	async loadSide(content: string): Promise<readonly TermEntry[]> {
+		const yamlData = parseYaml(content) as YamlTermsFile;
+		if (!yamlData || typeof yamlData !== "object") {
+			throw new Error("Invalid YAML structure");
+		}
+		this.applyParsed(yamlData);
+		return [...this.entries];
+	}
+
+	/** **競合の解決の経路だけが通る書き出し。** 解いた結果で置き換えて保存する */
+	async writeResolved(entries: readonly TermEntry[]): Promise<void> {
+		this.entries = [...entries];
+		await this.save();
 	}
 
 	/**

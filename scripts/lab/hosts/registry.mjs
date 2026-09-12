@@ -328,6 +328,14 @@ export const COMMANDS = {
 		asksUser: true,
 		note: "原文と結びついていない訳文をごみ箱へ送る。確認を出す",
 	},
+	"mdait.conflict.resolve": {
+		module: "out/commands/conflict/resolve-command.js",
+		export: "executeResolveConflicts",
+		args: "none",
+		hosts: ALL,
+		asksUser: true,
+		note: "`.mdait` の合流の競合のうち、鍵の突き合わせで決まる分を解く。確認を出す",
+	},
 	"mdait.needsAttention.next": {
 		module: "out/commands/markers/needs-attention-next.js",
 		export: "needsAttentionNextCommand",
