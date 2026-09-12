@@ -672,7 +672,7 @@
   "{0} entry/entries have a different value for the same key. No AI is configured, so these are left for you to decide.": "{0}件は、同じ項目に別の値が来ています。AI の設定が無いので、これはあなたの判断のために残します。",
   "{0} entry/entries were removed on one side and changed on the other. These never go to the AI, because removing is not something it is allowed to choose — they are left for you.": "{0}件は、片方が消し、片方が直しています。「消す」は AI に任せていない判断なので、AI へは送らずにあなたの判断のために残します。",
   "Files to be rewritten: {0}": "書き換えるファイル: {0}",
-  "This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. Setting git's merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you.": "この合流には、両側が何から分かれたかが記録されていません。片方だけが直した形を自動では決められないのはそのためです。git の merge.conflictStyle を diff3（または zdiff3）にしておくと、あなたが決める件が減ります。",
+  "This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. If you merge with git, setting merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you. SVN has no equivalent setting, so with SVN these stay for you to decide.": "この合流には、両側が何から分かれたかが記録されていません。片方だけが直した形を自動では決められないのはそのためです。git で合流しているなら、merge.conflictStyle を diff3（または zdiff3）にしておくと、あなたが決める件が減ります。SVN には相当する設定が無いので、SVN ではこの形はあなたの判断のために残ります。",
   "A file is only rewritten once every one of its conflicts is settled, so nothing is half-written. Your working tree is not committed, so you can undo this with git or SVN.": "ファイルは、その中の競合がすべて決まったときだけ書き換えます（半端な状態にはなりません）。作業ツリーはコミットしないので、git や SVN で元に戻せます。",
   "Resolve with AI": "AI で解決する",
   "Resolve without AI": "AI を使わずに解決する",
