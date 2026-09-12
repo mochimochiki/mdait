@@ -423,8 +423,27 @@ export class StatusCollector implements StatusCollectorPort {
 			fileName,
 			fromHash: marker.from ?? undefined,
 			needFlag: marker.need ?? undefined,
-			contextValue: isSource ? "mdaitFrontmatterSource" : "mdaitFrontmatterTarget",
+			contextValue: this.determineFrontmatterContextValue(isSource, marker.need),
 		};
+	}
+
+	/**
+	 * frontmatter の contextValue を決める。ユニットと同じく **`Status` ではなく need で決める**
+	 * （`determineUnitContextValue` の理由を参照）。
+	 *
+	 * 確認待ち（`need:review`）は `…Attention` に分け、「レビュー済みにする」だけを出す。
+	 * 通常の `mdaitFrontmatterTarget` に付く ✨翻訳を review にも出すと、押しても trans は
+	 * review を処理しないので「翻訳不要」で終わる — 押せないものをボタンにしない
+	 * （ux.md §3.3）。採用しない側の答え（翻訳待ちに戻す）は CodeLens 側にある。
+	 */
+	private determineFrontmatterContextValue(isSource: boolean, need: string | null | undefined): string {
+		if (isSource) {
+			return "mdaitFrontmatterSource";
+		}
+		if (need === "review") {
+			return "mdaitFrontmatterTargetAttention";
+		}
+		return "mdaitFrontmatterTarget";
 	}
 
 	/**

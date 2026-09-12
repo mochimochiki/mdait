@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { COMMANDS } from "./hosts/registry.mjs";
 import { UsageError, asNumber, oneOf, parseArgs } from "./lib/args.mjs";
 import { summarizeResult } from "./lib/digest.mjs";
@@ -180,7 +180,8 @@ async function loadHost(name) {
 	if (!fs.existsSync(file)) {
 		throw new UsageError(`ホスト ${name} はまだ用意されていません（${file} がありません）`);
 	}
-	return await import(file);
+	// Windows の絶対パス（c:\…）は import() に直接渡せない（protocol 'c:' で落ちる）ので file:// にする
+	return await import(pathToFileURL(file).href);
 }
 
 /** いま動いているセッションを取り出す。無ければ null */
@@ -375,7 +376,7 @@ async function runOne(opts) {
 	// その控えを結果に合流させて、headless と同じ形（result.dialogs）で読めるようにする。
 	if (session.host === "code-server") {
 		try {
-			const { drainDialogs } = await import(path.join(HERE, "ui", "driver.mjs"));
+			const { drainDialogs } = await import(pathToFileURL(path.join(HERE, "ui", "driver.mjs")).href);
 			const dialogs = await drainDialogs();
 			if (dialogs.length > 0) result.dialogs = [...(result.dialogs ?? []), ...dialogs];
 		} catch {
@@ -465,7 +466,7 @@ async function verbShot(opts) {
 		warn(`画面を操る道具（${driver}）がまだありません。用意され次第この動詞が使えるようになります。`);
 		return 2;
 	}
-	const { shot } = await import(driver);
+	const { shot } = await import(pathToFileURL(driver).href);
 	const file = await shot(session, name);
 	say(`撮りました: ${file}`);
 	return 0;

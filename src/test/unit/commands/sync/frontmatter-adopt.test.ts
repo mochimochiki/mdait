@@ -5,6 +5,12 @@
  * frontmatter だけはその規則が書かれておらず、`need:translate` のままだった。その結果、
  * **最初の翻訳で人の書いた英語タイトルが機械翻訳に置き換わっていた**（実測）。
  * adopt が掲げる「既訳の不可侵」が本文にしか効いていなかった。
+ *
+ * その後、規則は取り込みかどうかに依らなくなった（`marker-sync.ts` の `needForFirstLink`）。
+ * ふつうの sync でも、マーカーの無い訳文側に値があれば review で受ける。丸写し（対象キーの
+ * 値が原文と全部同じ）は本文ユニットと同じく translate に残す — review に倒すと出口が
+ * 「確認済みにする」しか無く、原文の複製そのままのファイルは訳されないまま受け入れるしか
+ * なくなるため。
  */
 
 import * as assert from "node:assert";
@@ -118,13 +124,43 @@ for (const mode of ["embedded", "external"] as const) {
 			assert.match(written, /description: "Requirements and setup steps"/);
 		});
 
-		test("取り込みでない通常の sync では確認待ちにしないこと", async () => {
+		test("取り込みでない通常の sync でも、人の書いた frontmatter は確認待ちになること", async () => {
+			// かつては adopt を頼まれたときだけ review にしていた。ふつうの sync で translate を付けると
+			// 次の trans が人の付けたタイトルを機械翻訳で上書きする — 事故は取り込みかどうかと関係なく起きる
 			const config = await bootstrap();
 			fs.writeFileSync(targetFile, TARGET, "utf-8");
 
+			const result = await sync_CoreProc(sourceFile, targetFile, config);
+
+			const marker = targetFrontmatterMarker();
+			assert.strictEqual(marker?.need, "review", "取り込みの有無に関わらず既訳は守る");
+			assert.strictEqual(marker?.needsTranslation(), false, "trans の対象に入らないこと");
+			assert.ok((result.adopted ?? 0) >= 1, "既訳として受けた件数に数えること");
+			assert.match(fs.readFileSync(targetFile, "utf-8"), /title: "Installation"/, "値は1文字も変えない");
+		});
+
+		test("訳文の frontmatter が原文の丸写し（対象キーの値が全部同じ）なら翻訳待ちのままであること", async () => {
+			// 本文ユニットと同じ規則。review に倒すと出口が「確認済みにする」しか無く、
+			// 原文の複製そのままのファイルは訳されないまま受け入れるしかなくなる
+			const config = await bootstrap();
+			fs.writeFileSync(
+				targetFile,
+				[
+					"---",
+					'title: "インストール"',
+					'description: "動作環境と導入手順"',
+					"---",
+					"# Installation",
+					"",
+					"Body.",
+					"",
+				].join("\n"),
+				"utf-8",
+			);
+
 			await sync_CoreProc(sourceFile, targetFile, config);
 
-			assert.strictEqual(targetFrontmatterMarker()?.need, "translate", "取り込みを頼まれていないので従来どおり");
+			assert.strictEqual(targetFrontmatterMarker()?.need, "translate");
 		});
 
 		test("訳文ファイルが無い新規作成では翻訳待ちのままであること（原文の複製は既訳ではない）", async () => {

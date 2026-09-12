@@ -313,7 +313,7 @@ export interface MarkdownMutationContext {
  * **どちらの入口を選ぶか。**
  * - 本文そのものを変える操作（章を消す、段落を書き換える）は **こちら**。
  *   モードに関わらず書き戻さないと、変更が消える。
- * - マーカーしか変えない操作（need 解除・Keep・isolate 宣言）は
+ * - マーカーしか変えない操作（need 解除・要翻訳にする（review → translate）・Keep・isolate 宣言）は
  *   `withMarkerOnlyMutation` を通す。こちらを通すと、external でパーサーの整形が
  *   原稿に焼き付く（改行コードが CRLF から LF に変わる等）。
  *
@@ -338,12 +338,13 @@ export async function withMarkdownMutation<T extends UnitMutationResult>(
 }
 
 /**
- * マーカーしか変えない書き換えを実行する（need 解除・Keep（独立化）・isolate 宣言）。
+ * マーカーしか変えない書き換えを実行する（need 解除・要翻訳にする（review → translate。
+ * `request-translate.ts`）・Keep（独立化）・isolate 宣言）。
  *
  * **external では絶対にファイルを書かない。** external を選ぶ理由は「原文を1バイトも
  * 書き換えない」ことであり（ADR-260802-04 / ADR-260814-01）、マーカーがストアにある以上、
  * これらの操作で本文へ書き戻す理由がそもそも無い。sync の `persistSourceDocument` が
- * モードで書き込みを止めているのと同じ強さを、この3経路にも与える。
+ * モードで書き込みを止めているのと同じ強さを、この4経路にも与える。
  *
  * 「出来上がりが読み込んだ内容と同じなら書かない」という比較では足りない。パーサーを
  * 通した書き出しは改行コードを LF に揃え、ユニット間の余分な空行を詰め、末尾に改行を足す。

@@ -87,6 +87,67 @@ suite("取り消したときの完了通知", () => {
 			"plain",
 		);
 	});
+
+	test("取り消したら、確認待ちが残っていても中断だけを伝えること", () => {
+		const notice = chooseSyncCompletionNotice({
+			cancelled: true,
+			successCount: 2,
+			errorCount: 0,
+			translatableCount: 0,
+			reviewableCount: 5,
+		});
+		assert.equal(notice.kind, "cancelled", "止めた直後に AI レビューを勧めている");
+	});
+});
+
+/**
+ * 確認待ち（need:review）の導線。
+ *
+ * マーカーの無い既訳はふつうの sync でも review で受けるので（marker-sync.ts の
+ * `needForFirstLink`）、翻訳待ちが 0 で確認待ちだけが残る回が普通に起きる。そのとき次の一手は
+ * AI レビューで、導線が無いと「完了しました」で終わって確認待ちが積み上がる。
+ * ボタンは1つだけ — 両方あるときは翻訳を先に勧める。
+ */
+suite("確認待ちが残っているときの完了通知", () => {
+	test("翻訳待ちが 0 で確認待ちがあれば、AI レビューの導線（reviewable）を出すこと", () => {
+		const notice = chooseSyncCompletionNotice({
+			cancelled: false,
+			successCount: 3,
+			errorCount: 0,
+			translatableCount: 0,
+			reviewableCount: 4,
+		});
+		assert.deepEqual(notice, { kind: "reviewable", successCount: 3, errorCount: 0, reviewableCount: 4 });
+	});
+
+	test("翻訳待ちと確認待ちの両方があれば、翻訳の導線を優先すること（ボタンは1つだけ）", () => {
+		const notice = chooseSyncCompletionNotice({
+			cancelled: false,
+			successCount: 3,
+			errorCount: 0,
+			translatableCount: 2,
+			reviewableCount: 4,
+		});
+		assert.equal(notice.kind, "translatable");
+	});
+
+	test("どちらも 0 ならふつうの完了サマリであること", () => {
+		const notice = chooseSyncCompletionNotice({
+			cancelled: false,
+			successCount: 3,
+			errorCount: 1,
+			translatableCount: 0,
+			reviewableCount: 0,
+		});
+		assert.deepEqual(notice, { kind: "plain", successCount: 3, errorCount: 1 });
+	});
+
+	test("確認待ちの件数を渡さない呼び出しは 0 と同じに扱うこと（既存の呼び出しを壊さない）", () => {
+		assert.equal(
+			chooseSyncCompletionNotice({ cancelled: false, successCount: 1, errorCount: 0, translatableCount: 0 }).kind,
+			"plain",
+		);
+	});
 });
 
 suite("取り消しの数え先（ソース走査）", () => {

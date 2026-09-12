@@ -13,9 +13,11 @@ import type { FileStatusItem, StatusItem, UnitStatusItem } from "../../core/stat
 import { Configuration } from "../../infra/config/configuration";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { getFileHandler } from "../file-handler/file-handler-factory";
+import { resolveFileType } from "../file-handler/file-type";
 import type { DeclareIsolateResult } from "./declare-isolate";
 import type { DeleteUnitResult } from "./delete-unit";
 import type { KeepUnitsResult } from "./keep-unit";
+import type { NeedTarget } from "./resolve-need";
 
 /** deleteUnit の失敗理由を人間可読なメッセージに変換する */
 function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
@@ -75,6 +77,48 @@ function requireFile(item?: StatusItem): FileStatusItem | undefined {
 	return item;
 }
 
+/** review 裁定の宛先（どのファイルの、どの単位の need を外すか） */
+export interface ReviewTarget {
+	filePath: string;
+	target: NeedTarget;
+}
+
+/**
+ * ツリー項目を review 裁定の宛先に読み替える（純関数。VS Code 非依存）。
+ *
+ * `need:review` は本文ユニットのほかに frontmatter と非Markdown ファイル（ファイル＝1ユニット）
+ * にも載る。要対応ノードはその3種類を並べるので、「レビュー済みにする」も3種類を受ける。
+ * どれも書き換えは `getFileHandler().resolveNeed` に渡す `NeedTarget` の違いでしかなく、
+ * サーフェス側で分岐して書き換えを実装しない（AGENTS.md の不変条件）。
+ *
+ * - 本文ユニット → `{ kind: "unit", hash }`
+ * - frontmatter → `{ kind: "frontmatter" }`
+ * - 非Markdown のファイル行 → `{ kind: "file" }`。Markdown のファイル行は受けない —
+ *   Markdown に「ファイル全体を1つの need として外す」単位は無く、`MdFileHandler` は
+ *   `kind:"file"` を黙って読み飛ばす（0 件解決）ので、ここで宛先にならないと答える
+ *
+ * @returns 宛先。裁定の単位にならない項目（ディレクトリ・Markdown のファイル行・壊れた項目）なら undefined
+ */
+export function toReviewTarget(item?: StatusItem): ReviewTarget | undefined {
+	if (!item) {
+		return undefined;
+	}
+	switch (item.type) {
+		case StatusItemType.Unit:
+			return item.filePath && item.unitHash
+				? { filePath: item.filePath, target: { kind: "unit", hash: item.unitHash } }
+				: undefined;
+		case StatusItemType.Frontmatter:
+			return item.filePath ? { filePath: item.filePath, target: { kind: "frontmatter" } } : undefined;
+		case StatusItemType.File:
+			return item.filePath && resolveFileType(item.filePath) === "plain"
+				? { filePath: item.filePath, target: { kind: "file" } }
+				: undefined;
+		default:
+			return undefined;
+	}
+}
+
 /** modal の detail に載せる確認待ちユニットの一覧（多すぎる場合は件数で畳む） */
 function formatPendingTitles(units: UnitStatusItem[]): string {
 	const MAX_LISTED = 15;
@@ -105,13 +149,23 @@ export class StatusTreeNeedHandler {
 		}
 	}
 
-	/** review: レビュー済みとして need を外す */
+	/**
+	 * review: レビュー済みとして need を外す。
+	 * 本文ユニットのほかに frontmatter と非Markdown のファイル行も受ける（`toReviewTarget`）。
+	 */
 	public async markReviewed(item?: StatusItem): Promise<void> {
-		const unit = requireUnit(item);
-		if (!unit) {
+		const review = toReviewTarget(item);
+		if (!review) {
+			vscode.window.showErrorMessage(vscode.l10n.t("Invalid unit item"));
 			return;
 		}
-		await this.resolveOne(unit, "review", vscode.l10n.t("Nothing to mark as reviewed for this unit."));
+		const result = await getFileHandler(review.filePath).resolveNeed(review.filePath, {
+			targets: [review.target],
+			needs: ["review"],
+		});
+		if (result.resolved.length === 0) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Nothing to mark as reviewed for this unit."));
+		}
 	}
 
 	/**

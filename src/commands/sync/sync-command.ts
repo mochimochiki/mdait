@@ -482,7 +482,10 @@ export interface SyncResult {
 	totalUnchanged: number;
 	/** need:revise付与件数 */
 	revisionsNeeded: number;
-	/** adoptで採用（need:review付与）したユニット数 */
+	/**
+	 * 紐（from）の無い既訳を need:review で受けたユニット数。
+	 * 取り込み（adopt）でなくても数える — 受け方の規則は adopt に依らない（marker-sync.ts の `needForFirstLink`）
+	 */
 	totalAdopted: number;
 	/** 確認待ちのまま原文が変わり、改訂待ちへ移ったユニット数 */
 	totalReviewsSuperseded: number;
@@ -508,8 +511,11 @@ export interface SyncResult {
  */
 export interface SyncCommandOptions {
 	/**
-	 * 採用（adopt）モード: マーカーなし・本文ありの既存訳文を from 確立＋need:review で採用する。
-	 * 既存対訳サイトの取り込み用の一度きりの操作であり、永続設定にはしない。
+	 * 取り込み（adopt）モード: 既存対訳サイトを取り込む一度きりの操作であり、永続設定にはしない。
+	 *
+	 * マーカーなし・本文ありの既存訳文を from 確立＋need:review で受けること**自体は、
+	 * ふつうの sync でも同じ**（marker-sync.ts の `needForFirstLink`）。この旗が変えるのは
+	 * AI アライン（`align`）を許すかどうかと、完了レポートの文言（取り込みとして報告する）だけ。
 	 */
 	adopt?: boolean;
 	/**
@@ -547,6 +553,8 @@ export type SyncCompletionNotice =
 	| { kind: "cancelled"; syncedCount: number }
 	/** 翻訳待ちが残っている。件数と「今すぐ翻訳」の導線を出す */
 	| { kind: "translatable"; successCount: number; errorCount: number; translatableCount: number }
+	/** 翻訳待ちは無いが確認待ち（need:review）が残っている。件数と「AI レビュー」の導線を出す */
+	| { kind: "reviewable"; successCount: number; errorCount: number; reviewableCount: number }
 	/** ふつうの完了サマリ */
 	| { kind: "plain"; successCount: number; errorCount: number };
 
@@ -555,19 +563,28 @@ export type SyncCompletionNotice =
  *
  * **取り消しが最優先。** 実行の結果そのものなので、完了サマリの代わりにこれだけを出す。
  * 「今すぐ翻訳」も出さない — 止めた直後に次の AI 実行を勧めるのは、取り消しの意思と食い違う。
+ *
+ * **導線のボタンは1つだけ。** 翻訳待ちと確認待ちの両方が残っていれば翻訳を先に勧める。
+ * 翻訳は新しい訳を作る仕事で、確認は出来上がった訳を見る仕事なので、順序として翻訳が先。
+ * 確認待ちの導線が出るのは翻訳待ちが 0 のときだけである。
  */
 export function chooseSyncCompletionNotice(args: {
 	cancelled: boolean;
 	successCount: number;
 	errorCount: number;
 	translatableCount: number;
+	/** 確認待ち（need:review）の件数。省略は 0 と同じ */
+	reviewableCount?: number;
 }): SyncCompletionNotice {
-	const { cancelled, successCount, errorCount, translatableCount } = args;
+	const { cancelled, successCount, errorCount, translatableCount, reviewableCount = 0 } = args;
 	if (cancelled) {
 		return { kind: "cancelled", syncedCount: successCount };
 	}
 	if (translatableCount > 0) {
 		return { kind: "translatable", successCount, errorCount, translatableCount };
+	}
+	if (reviewableCount > 0) {
+		return { kind: "reviewable", successCount, errorCount, reviewableCount };
 	}
 	return { kind: "plain", successCount, errorCount };
 }
@@ -901,10 +918,20 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// sync 後のステータスツリーに残っている翻訳待ち（translate / revise）全体を使う。
 		// 前者だけを見ると、変更なしの2回目以降の sync で翻訳待ちが残っているのに
 		// 件数と「今すぐ翻訳」ボタンが消えてしまう。
-		const translatableCount = statusManager
-			.getStatusItemTree()
-			.countPendingTranslationUnits(getSelectedScopeDirs(config));
-		const notice = chooseSyncCompletionNotice({ cancelled, successCount, errorCount, translatableCount });
+		const scopeDirs = getSelectedScopeDirs(config);
+		const statusTree = statusManager.getStatusItemTree();
+		const translatableCount = statusTree.countPendingTranslationUnits(scopeDirs);
+		// 確認待ち（need:review）も同じく「いま残っている全体」を数える。マーカーの無い既訳は
+		// ふつうの sync でも review で受ける（marker-sync.ts の needForFirstLink）ので、
+		// 翻訳待ちが無いのに確認待ちだけが残る回が普通に起きる。そのとき次の一手は AI レビュー
+		const reviewableCount = statusTree.countPendingReviewUnits(scopeDirs);
+		const notice = chooseSyncCompletionNotice({
+			cancelled,
+			successCount,
+			errorCount,
+			translatableCount,
+			reviewableCount,
+		});
 		if (notice.kind === "cancelled") {
 			// 途中まで済んだ分は残るので、次の一手は「もう一度 sync」だと言い切る
 			void vscode.window.showInformationMessage(
@@ -939,6 +966,33 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				// fire-and-forget のため outer try/catch では拾えないので明示的にログ化する。
 				.then(undefined, (error) => {
 					logger.error("sync", "Post-sync translate guidance failed", {
+						...formatError(error),
+					});
+				});
+		} else if (notice.kind === "reviewable") {
+			// 翻訳待ちの導線と同じ作法（fire-and-forget・拒否は .then の第2引数で拾ってログ化）
+			const reviewNow = vscode.l10n.t("✨AI review");
+			void vscode.window
+				.showInformationMessage(
+					vscode.l10n.t(
+						"Synchronization completed: {0} succeeded, {1} failed. {2} unit(s) need review.",
+						successCount,
+						errorCount,
+						notice.reviewableCount,
+					),
+					reviewNow,
+				)
+				.then((choice) => {
+					if (choice === reviewNow) {
+						// 確認待ちが残っている訳文を対象に AI レビューを回すコマンドへ委譲する
+						// （mdait.aiReview は URI 必須の単一ファイル用。sync 直後はアクティブな
+						// エディタが無いのが普通なので、翻訳の導線と同じく「残っている全部」を渡す）
+						return vscode.commands.executeCommand("mdait.aiReview.pending");
+					}
+					return undefined;
+				})
+				.then(undefined, (error) => {
+					logger.error("sync", "Post-sync review guidance failed", {
 						...formatError(error),
 					});
 				});
@@ -1543,15 +1597,7 @@ export async function sync_CoreProc(
 	// マーカー保管方式（embedded/external）に応じた provider/ctx を解決
 	const sourceIO = resolveMarkerIO(config, sourceFile, "source");
 	const targetIO = resolveMarkerIO(config, targetFile, "target");
-
-	// external で target に unit-state エントリが無い＝store喪失/手動作成の「rebuild」検知。
-	// 既存訳文を need:translate で上書きしないよう、後段で need:review に倒す安全網。
 	const targetRel = targetIO.ctx?.filePath;
-	const isExternalRebuild =
-		config.isExternalMarkers() &&
-		targetContent.trim() !== "" &&
-		targetRel !== undefined &&
-		UnitStateStore.getInstance().getEntriesByPath(targetRel).length === 0;
 
 	// Markdownのユニット分割
 	const source = markdownParser.parse(sourceContent, config, sourceIO.provider, sourceIO.ctx);
@@ -1646,10 +1692,8 @@ export async function sync_CoreProc(
 	// 確認待ちのまま原文が変わったかを数えるため、同期の前の印を控える（本文ユニットと同じ扱い）
 	const frontmatterMarkerBefore = parseFrontmatterMarker(target.frontMatter);
 	const frontmatterWasAwaitingReview = frontmatterMarkerBefore?.need === "review";
-	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys, {
-		adopt: options?.adopt === true,
-	});
-	// 取り込みで採用した frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）
+	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
+	// 既訳として受けた frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）
 	const frontmatterAdopted =
 		!frontmatterMarkerBefore && parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review" ? 1 : 0;
 	const frontmatterReviewSuperseded =
@@ -1720,24 +1764,15 @@ export async function sync_CoreProc(
 		}
 	}
 
-	// ユニットのハッシュを更新
+	// ユニットのハッシュを更新。マーカーの無い既訳をどう受けるか（review か translate か）は
+	// 取り込み（adopt）かどうかに依らず `needForFirstLink` の規則で決まる。external で
+	// unit-state を失ったときの救済もそこに吸収した（かつては別の安全網で全ユニットを review に倒していた）
 	const { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations } = await updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
 		targetFile,
-		options?.adopt === true,
 	);
-
-	// external rebuild 安全網: 既存targetユニットが（fromロストにより）need:translateに
-	// なった場合、自動上書きを避けるため need:review に倒す（非MDのrebuild挙動と整合）。
-	if (isExternalRebuild) {
-		for (const unit of target.units) {
-			if (unit.marker?.need === "translate") {
-				unit.marker.setNeed("review");
-			}
-		}
-	}
 
 	// sourceのスナップショット保存
 	const unitRegistryManager = UnitRegistryManager.getInstance();
@@ -2078,17 +2113,16 @@ export { syncFrontmatterMarkers } from "./sync-frontmatter";
 /**
  * ユニットのハッシュを更新する
  * @param matchResult ユニットのマッチ結果
- * @param adopt adoptモード（マーカーなし既訳を need:review で採用）
- * @returns need:revise付与件数とadopt採用件数
+ * @returns need:revise付与件数と、既訳として受けた（need:review を付けた）件数
  */
 async function updateSectionHashes(
 	matchResult: { source: MdaitUnit | null; target: MdaitUnit | null }[],
 	config: Configuration,
 	sourceFilePath: string,
 	targetFilePath: string,
-	adopt = false,
 ): Promise<{
 	revisionsNeeded: number;
+	/** 紐の無い既訳を need:review で受けた件数（取り込みのレポートと LM ツールが使う） */
 	adopted: number;
 	reviewsSuperseded: number;
 	/** まだ訳していない丸写しを、変わった原文へ写し直した件数 */
@@ -2124,10 +2158,13 @@ async function updateSectionHashes(
 			let targetHash = calculateHash(target.content);
 			recordMigration(source.marker?.hash, sourceHash);
 
-			// adopt判定: from未確立かつ本文のある既存targetのみが採用候補
+			// 紐（from）の無い既存 target に本文があるか。review と translate のどちらで受けるかは
+			// marker-sync.ts の `needForFirstLink` が決める（丸写しは translate）。取り込みかどうかは見ない
 			const hadFrom = !!target.marker?.from;
 			const wasAwaitingReview = target.marker?.need === "review";
-			const adoptTarget = adopt && !hadFrom && target.content.trim() !== "";
+			const existingText = !hadFrom && target.content.trim() !== "";
+			// 丸写しかどうかは中身で答える（ハッシュの衝突で人の訳を translate に倒さない）
+			const verbatimCopy = existingText ? target.content === source.content : undefined;
 
 			// ペアのどちらか一方が isolate の場合は need を凍結する（hash/from のみ最新化し、
 			// 新しい翻訳需要を流さない。target 側 isolate は revise による isolate 上書きも防ぐ）
@@ -2149,7 +2186,8 @@ async function updateSectionHashes(
 
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker, {
-				adoptTarget,
+				existingText,
+				verbatimCopy,
 				suppressNeed,
 			});
 			source.marker = result.sourceMarker;
@@ -2157,7 +2195,7 @@ async function updateSectionHashes(
 			if (result.targetMarker.needsRevision()) {
 				revisionsNeeded++;
 			}
-			if (adoptTarget && result.targetMarker.need === "review") {
+			if (existingText && result.targetMarker.need === "review") {
 				adopted++;
 			}
 			if (wasAwaitingReview && result.targetMarker.needsRevision()) {

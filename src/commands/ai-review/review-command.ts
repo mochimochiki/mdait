@@ -2,14 +2,16 @@
  * @file review-command.ts
  * @description
  *   AI翻訳レビューコマンドのエントリーポイント。
- *   StatusTree のファイル/ディレクトリから呼び出され、adopt 済みペア
- *   （from + need:review）を AI で検証して自動承認/エスカレーションする。
+ *   StatusTree のファイル/ディレクトリ、または引数なし（選択中ペアのレビュー待ち全件）
+ *   から呼び出され、adopt 済みペア（from + need:review）を AI で検証して
+ *   自動承認/エスカレーションする。
  *   withProgress パターンで進捗表示・キャンセル対応（tm/command-commit.ts と同構成）。
  * @module commands/ai-review/review-command
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { StatusItem } from "../../core/status/status-item";
+import { StatusManager } from "../../core/status/status-manager";
 import { Configuration } from "../../infra/config/configuration";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -17,9 +19,11 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { PromptProvider } from "../../prompts";
 import { notifyWithReport } from "../shared/report-file";
+import { getSelectedScopeDirs } from "../shared/status-scope";
 import { type ValidationReport, runDeterministicChecks } from "../validate/validate-command";
 import type { ReviewCollectMode } from "./pair-collector";
 import { PairVerifier } from "./pair-verifier";
+import { collectPendingReviewFiles } from "./pending-review-files";
 import { type AiReviewOptions, executeAiReviewForFile } from "./review-core";
 import type { AiReviewFileResult } from "./review-result";
 import { writeAiReviewReport } from "./review-result-provider";
@@ -139,6 +143,60 @@ export async function aiReviewDirectoryCommand(item?: StatusItem): Promise<AiRev
 		return;
 	}
 	return runAiReviewWithProgress(files, path.basename(dirPath));
+}
+
+/**
+ * 選択中の言語ペアに残るレビュー待ち（need:review）を、引数なしで一括消化する。
+ *
+ * sync 完了通知の「✨AI review」ボタンと、ステータスツリーの「要対応」ノードの
+ * インラインボタンから呼ばれる。どちらもツリー項目を持たない場所なので、
+ * ファイル/ディレクトリ版のようにアイテムを受け取らず、ツリーの現在の状態から
+ * 対象を決める（`translatePendingTargets` と同じ考え方）。
+ *
+ * 範囲はツリー本体・要対応ノード・ステータスバーと同じ `getSelectedScopeDirs` に揃える。
+ * ここだけ全ペアを見ると「要対応に 3 件と出ているのに 7 件走った」が起きる（ADR-260724-01）。
+ */
+export async function aiReviewPendingCommand(): Promise<AiReviewFileResult[] | undefined> {
+	const config = Configuration.getInstance();
+	const validationError = config.validate();
+	if (validationError) {
+		vscode.window.showErrorMessage(validationError);
+		return;
+	}
+
+	const tree = StatusManager.getInstance().getStatusItemTree();
+	const pending = collectPendingReviewFiles(tree.getFilesInScope(getSelectedScopeDirs(config)));
+	if (pending.files.length === 0) {
+		// 押せるのに何も起きない、を避ける（UX-P7）。ボタンは要対応が 0 でも出得る
+		// （verify-deletion だけが残っているときなど）ので、ここで必ず言葉にする
+		vscode.window.showInformationMessage(vscode.l10n.t("No units are awaiting review."));
+		return;
+	}
+
+	// モード選択（pending / audit）の QuickPick は出さない。この入口は「レビュー待ちを
+	// 消化する」と決まっていて、確定済みの訳まで監査する audit は別の意図の操作である。
+	// 選ばせると、通知のボタンを押しただけの人に「何を選べばよいか」を毎回考えさせる。
+	//
+	// 代わりに件数を見せて1回だけ確認する（ADR-260705-01: AI を使う処理は明示の起動と
+	// 確認 UI を通す）。ファイル版・ディレクトリ版は QuickPick がその役を兼ねていたので、
+	// QuickPick を外したここでは modal が要る。要対応ノードのアイコンを誤って押しただけで
+	// 選択中ペアの全ファイルに AI が走り、autoApprove ならマーカーまで変わってしまう
+	const confirmation = await vscode.window.showInformationMessage(
+		vscode.l10n.t(
+			"Review {0} unit(s) awaiting review in {1} file(s) with AI?",
+			pending.units,
+			pending.files.length,
+		),
+		{ modal: true },
+		vscode.l10n.t("Yes"),
+		vscode.l10n.t("No"),
+	);
+	if (confirmation !== vscode.l10n.t("Yes")) {
+		return;
+	}
+
+	const scopeLabel = vscode.l10n.t("{0} unit(s) awaiting review", pending.units);
+	return runAiReviewWithMode(pending.files, scopeLabel, "pending");
 }
 
 /**

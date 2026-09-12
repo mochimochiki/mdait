@@ -42,6 +42,7 @@
   "mdait.tm.commit.directory.title": "✨TM登録（ディレクトリ）",
   "mdait.aiReview.file.title": "✨AI翻訳レビュー（ファイル）",
   "mdait.aiReview.directory.title": "✨AI翻訳レビュー（ディレクトリ）",
+  "mdait.aiReview.pending.title": "✨AI翻訳レビュー（レビュー待ちをまとめて確認）",
   "mdait.adopt.run.title": "✨既存翻訳の取り込み",
   "mdait.term.update.title": "✨用語集を更新"
 }

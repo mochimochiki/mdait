@@ -2,6 +2,8 @@ import * as assert from "node:assert";
 import * as path from "node:path";
 import {
 	type FileStatusItem,
+	type FrontmatterStatusItem,
+	type NeedsAttentionItem,
 	Status,
 	StatusItemType,
 	type UnitStatusItem,
@@ -47,6 +49,38 @@ function makeUnitItem(
 		status,
 		...extra,
 	};
+}
+
+/** テスト用 FrontmatterStatusItem を生成（訳文側。from を持つ） */
+function makeFrontmatterItem(
+	filePath: string,
+	needFlag: string | undefined,
+	status: Status = Status.NeedsTranslation,
+): FrontmatterStatusItem {
+	return {
+		type: StatusItemType.Frontmatter,
+		label: "Frontmatter",
+		status,
+		filePath,
+		fileName: path.basename(filePath),
+		fromHash: "src1",
+		needFlag,
+	};
+}
+
+/**
+ * 要対応項目を見分ける鍵。ユニットは hash、frontmatter と非MD（ファイル＝1ユニット）は
+ * 種類とファイル名（要対応は3種類が混ざるので、hash だけでは並びを検査できない）
+ */
+function attentionKey(item: NeedsAttentionItem): string {
+	switch (item.type) {
+		case StatusItemType.Unit:
+			return item.unitHash;
+		case StatusItemType.Frontmatter:
+			return `frontmatter:${item.fileName}`;
+		case StatusItemType.File:
+			return `file:${item.fileName}`;
+	}
 }
 
 suite("StatusItemTree", () => {
@@ -175,7 +209,7 @@ suite("StatusItemTree", () => {
 
 			const matches = tree.getNeedsAttentionUnits();
 			assert.deepStrictEqual(
-				matches.map((u) => u.unitHash).sort(),
+				matches.map(attentionKey).sort(),
 				["deletionUnit", "reviewUnit"],
 			);
 		});
@@ -205,7 +239,7 @@ suite("StatusItemTree", () => {
 			tree.buildTree([jaFile, frFile], ["ja", "fr"]);
 
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits([jaDir]).map((u) => u.unitHash),
+				tree.getNeedsAttentionUnits([jaDir]).map(attentionKey),
 				["jaUnit"],
 				"選択外のディレクトリのユニットは集約されないこと",
 			);
@@ -231,7 +265,7 @@ suite("StatusItemTree", () => {
 			tree.buildTree([enFile, enUsFile], ["en", "en-US"]);
 
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits([enDir]).map((u) => u.unitHash),
+				tree.getNeedsAttentionUnits([enDir]).map(attentionKey),
 				["enUnit"],
 				"en-US 配下のユニットが en の集約に混入しないこと",
 			);
@@ -258,17 +292,169 @@ suite("StatusItemTree", () => {
 
 			// 投入順を変えた2本のツリーで同じ並びになることを確認する
 			tree.buildTree([fileB, fileA], ["ja"]);
-			const order1 = tree.getNeedsAttentionUnits().map((u) => u.unitHash);
+			const order1 = tree.getNeedsAttentionUnits().map(attentionKey);
 
 			const other = new StatusItemTree();
 			try {
 				other.buildTree([fileA, fileB], ["ja"]);
-				const order2 = other.getNeedsAttentionUnits().map((u) => u.unitHash);
+				const order2 = other.getNeedsAttentionUnits().map(attentionKey);
 				assert.deepStrictEqual(order1, ["a10", "b5", "b20"]);
 				assert.deepStrictEqual(order2, order1, "投入順が変わっても並びが同じこと");
 			} finally {
 				other.dispose();
 			}
+		});
+
+		test("frontmatter の確認待ちも集められ、そのファイルの先頭（行 0）に並ぶこと", () => {
+			// マーカーの無い既訳はふつうの sync でも need:review で受けるため、frontmatter の
+			// 確認待ちは日常的に生じる。本文しか拾わないと、通知は「3件」と言うのにノードは出ない
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const aPath = path.join(jaDir, "a.md");
+			const file = makeFileItem(
+				aPath,
+				Status.NeedsTranslation,
+				[makeUnitItem(aPath, "a10", "review", Status.NeedsTranslation, { startLine: 10 })],
+				{ frontmatter: makeFrontmatterItem(aPath, "review") },
+			);
+
+			tree.buildTree([file], ["ja"]);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["frontmatter:a.md", "a10"]);
+		});
+
+		test("frontmatter が翻訳待ち・確認済み・原文側なら集めないこと", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const translatePath = path.join(jaDir, "translate.md");
+			const donePath = path.join(jaDir, "done.md");
+			const sourcePath = path.join(jaDir, "source.md");
+			tree.buildTree(
+				[
+					makeFileItem(translatePath, Status.NeedsTranslation, [], {
+						frontmatter: makeFrontmatterItem(translatePath, "translate"),
+					}),
+					makeFileItem(donePath, Status.Translated, [], {
+						frontmatter: makeFrontmatterItem(donePath, undefined, Status.Translated),
+					}),
+					makeFileItem(sourcePath, Status.Source, [], {
+						frontmatter: makeFrontmatterItem(sourcePath, undefined, Status.Source),
+					}),
+				],
+				["ja"],
+			);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
+		});
+
+		test("非MD（プレーン）ファイルの確認待ちも集められ、ファイル＝1項目として並ぶこと", () => {
+			// 非MD はファイル＝1ユニットで children を持たず、need はファイルに載る
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const txtPath = path.join(jaDir, "notes.txt");
+			const csvPath = path.join(jaDir, "data.csv");
+			const mdPath = path.join(jaDir, "z.md");
+			tree.buildTree(
+				[
+					makeFileItem(txtPath, Status.NeedsTranslation, [], { needFlag: "review" }),
+					makeFileItem(csvPath, Status.NeedsTranslation, [], { needFlag: "translate" }),
+					makeFileItem(mdPath, Status.NeedsTranslation, [
+						makeUnitItem(mdPath, "z5", "review", Status.NeedsTranslation, { startLine: 5 }),
+					]),
+				],
+				["ja"],
+			);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["file:notes.txt", "z5"]);
+		});
+
+		test("孤立訳文（原文の無い訳文）は review が残っていても集めないこと", () => {
+			// 原文が無いので「この訳が原文に合うか」を裁定できない。先に決めるべきは
+			// 「この訳文をどうするか」で、その操作はファイル行にある（ADR-260806-01）
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const orphanMd = path.join(jaDir, "orphan.md");
+			const orphanTxt = path.join(jaDir, "orphan.txt");
+			const livePath = path.join(jaDir, "live.md");
+			tree.buildTree(
+				[
+					makeFileItem(
+						orphanMd,
+						Status.NeedsTranslation,
+						[
+							makeUnitItem(orphanMd, "o1", "review", Status.NeedsTranslation),
+							makeUnitItem(orphanMd, "o2", "verify-deletion", Status.NeedsTranslation),
+						],
+						{ isOrphanTarget: true, frontmatter: makeFrontmatterItem(orphanMd, "review") },
+					),
+					makeFileItem(orphanTxt, Status.NeedsTranslation, [], { needFlag: "review", isOrphanTarget: true }),
+					makeFileItem(livePath, Status.NeedsTranslation, [
+						makeUnitItem(livePath, "l1", "review", Status.NeedsTranslation),
+					]),
+				],
+				["ja"],
+			);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["l1"]);
+			assert.strictEqual(tree.countPendingReviewUnits(), 1, "通知の件数も孤立を数えないこと");
+		});
+
+		test("原文側（Status.Source）のファイルは集めないこと", () => {
+			const enDir = path.resolve("/mock-workspace/en");
+			const sourcePath = path.join(enDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(sourcePath, Status.Source, [makeUnitItem(sourcePath, "s1", "review", Status.Source)], {
+						frontmatter: makeFrontmatterItem(sourcePath, "review", Status.Source),
+					}),
+				],
+				["en"],
+			);
+
+			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
+			assert.strictEqual(tree.countPendingReviewUnits(), 0, "通知の件数も原文側を数えないこと");
+		});
+
+		test("要対応の review 件数と sync 完了通知の確認待ち件数が常に一致すること", () => {
+			// 片方だけ直すと「通知は 3 件と言うのに要対応ノードは 0 件で出ない」が再発する。
+			// 本文・frontmatter・非MD・孤立・原文側・選択外ディレクトリを混ぜて、
+			// 2つの関数が同じ集合を数えることを固定する
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const frDir = path.resolve("/mock-workspace/fr");
+			const enDir = path.resolve("/mock-workspace/en");
+			const aPath = path.join(jaDir, "a.md");
+			const orphanPath = path.join(jaDir, "orphan.md");
+			const txtPath = path.join(jaDir, "notes.txt");
+			const frPath = path.join(frDir, "a.md");
+			const enPath = path.join(enDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(
+						aPath,
+						Status.NeedsTranslation,
+						[
+							makeUnitItem(aPath, "a1", "review", Status.NeedsTranslation, { startLine: 3 }),
+							makeUnitItem(aPath, "a2", "verify-deletion", Status.NeedsTranslation, { startLine: 8 }),
+							makeUnitItem(aPath, "a3", "translate", Status.NeedsTranslation, { startLine: 12 }),
+						],
+						{ frontmatter: makeFrontmatterItem(aPath, "review") },
+					),
+					makeFileItem(orphanPath, Status.NeedsTranslation, [makeUnitItem(orphanPath, "o1", "review")], {
+						isOrphanTarget: true,
+					}),
+					makeFileItem(txtPath, Status.NeedsTranslation, [], { needFlag: "review" }),
+					makeFileItem(frPath, Status.NeedsTranslation, [makeUnitItem(frPath, "f1", "review")]),
+					makeFileItem(enPath, Status.Source, [makeUnitItem(enPath, "e1", undefined, Status.Source)]),
+				],
+				["en", "ja", "fr"],
+			);
+
+			for (const scope of [undefined, [jaDir], [jaDir, frDir], [enDir]]) {
+				const reviews = tree.getNeedsAttentionUnits(scope).filter((item) => item.needFlag === "review");
+				assert.strictEqual(
+					tree.countPendingReviewUnits(scope),
+					reviews.length,
+					`scope=${scope?.join(",") ?? "(all)"}: 通知の件数と要対応ノードの review 件数が一致すること`,
+				);
+			}
+			assert.strictEqual(tree.countPendingReviewUnits([jaDir]), 3, "本文1 + frontmatter1 + 非MD1（孤立は除く）");
+			assert.strictEqual(tree.getNeedsAttentionUnits([jaDir]).length, 4, "上の3件 + verify-deletion 1件");
 		});
 	});
 
@@ -369,7 +555,7 @@ suite("StatusItemTree", () => {
 				"ユニット索引からも消えること",
 			);
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits().map((u) => u.unitHash),
+				tree.getNeedsAttentionUnits().map(attentionKey),
 				["bUnit"],
 				"要対応からも消えること",
 			);
@@ -576,6 +762,124 @@ suite("StatusItemTree", () => {
 				2,
 				"scopeDirs未指定なら全ファイルが対象であること",
 			);
+		});
+	});
+
+	suite("countPendingReviewUnits（sync完了通知の確認待ち件数）", () => {
+		test("reviewのユニットだけを数え、translate/revise@/verify-deletion/isolateは数えないこと", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(filePath, Status.NeedsTranslation, [
+				makeUnitItem(filePath, "u1", "translate", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u2", "revise@abc123", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u3", "review", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u4", "verify-deletion", Status.NeedsTranslation),
+				makeUnitItem(filePath, "u5", "isolate", Status.Translated),
+				makeUnitItem(filePath, "u6", undefined, Status.Translated),
+				makeUnitItem(filePath, "u7", "review", Status.NeedsTranslation),
+			]);
+
+			tree.buildTree([file], ["ja"]);
+
+			assert.strictEqual(tree.countPendingReviewUnits(), 2, "人の確認待ち（review）だけが数えられること");
+		});
+
+		test("frontmatter の確認待ちも数えること（AI レビューは frontmatter も1ペアとして見る）", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(
+				filePath,
+				Status.NeedsTranslation,
+				[makeUnitItem(filePath, "u1", "review", Status.NeedsTranslation)],
+				{
+					frontmatter: {
+						type: StatusItemType.Frontmatter,
+						label: "Frontmatter",
+						status: Status.NeedsTranslation,
+						filePath,
+						fileName: "a.md",
+						fromHash: "src1",
+						needFlag: "review",
+					},
+				},
+			);
+
+			tree.buildTree([file], ["ja"]);
+
+			assert.strictEqual(tree.countPendingReviewUnits(), 2);
+		});
+
+		test("frontmatter が翻訳待ちや確認済みなら数えないこと", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(filePath, Status.NeedsTranslation, [], {
+				frontmatter: {
+					type: StatusItemType.Frontmatter,
+					label: "Frontmatter",
+					status: Status.NeedsTranslation,
+					filePath,
+					fileName: "a.md",
+					fromHash: "src1",
+					needFlag: "translate",
+				},
+			});
+
+			tree.buildTree([file], ["ja"]);
+
+			assert.strictEqual(tree.countPendingReviewUnits(), 0);
+		});
+
+		test("非MD（プレーン）ファイルのファイルレベル確認待ちも数えること（AI レビューの対象に入る）", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			tree.buildTree(
+				[
+					makeFileItem(path.join(jaDir, "notes.txt"), Status.NeedsTranslation, [], { needFlag: "review" }),
+					makeFileItem(path.join(jaDir, "data.csv"), Status.NeedsTranslation, [], { needFlag: "translate" }),
+					makeFileItem(path.join(jaDir, "done.txt"), Status.Translated, []),
+				],
+				["ja"],
+			);
+
+			assert.strictEqual(tree.countPendingReviewUnits(), 1);
+		});
+
+		test("2回目のsync相当の更新後（変更なし）でも残っている確認待ちが数えられること", () => {
+			// 完了通知が「今回の実行で増えた分」を見ていると、変更なしの再 sync で導線が消える
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const filePath = path.join(jaDir, "a.md");
+			const file = makeFileItem(filePath, Status.NeedsTranslation, [
+				makeUnitItem(filePath, "u1", "review", Status.NeedsTranslation),
+			]);
+			tree.buildTree([file], ["ja"]);
+
+			tree.addOrUpdateFile(
+				makeFileItem(filePath, Status.NeedsTranslation, [
+					makeUnitItem(filePath, "u1", "review", Status.NeedsTranslation),
+				]),
+			);
+
+			assert.strictEqual(tree.countPendingReviewUnits(), 1);
+		});
+
+		test("scopeDirsを渡すと選択中ペアの範囲だけが数えられること", () => {
+			const jaDir = path.resolve("/mock-workspace/ja");
+			const frDir = path.resolve("/mock-workspace/fr");
+			const jaPath = path.join(jaDir, "a.md");
+			const frPath = path.join(frDir, "a.md");
+			tree.buildTree(
+				[
+					makeFileItem(jaPath, Status.NeedsTranslation, [
+						makeUnitItem(jaPath, "jaUnit", "review", Status.NeedsTranslation),
+					]),
+					makeFileItem(frPath, Status.NeedsTranslation, [
+						makeUnitItem(frPath, "frUnit", "review", Status.NeedsTranslation),
+					]),
+				],
+				["ja", "fr"],
+			);
+
+			assert.strictEqual(tree.countPendingReviewUnits([jaDir]), 1);
+			assert.strictEqual(tree.countPendingReviewUnits(), 2, "scopeDirs未指定なら全ファイルが対象であること");
 		});
 	});
 

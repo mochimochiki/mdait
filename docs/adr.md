@@ -12,6 +12,26 @@
 
 ## ADR
 
+### ADR-260912-02: 確認待ちを 0 へ運ぶ導線を足し、CodeLens の「次へ」を外す
+
+**背景** : ADR-260912-01 で確認待ち（`need:review`）はふつうの sync でも出るようになったのに、それを片づける道が細かった。AI レビューの入口はツリーのファイル／ディレクトリ行だけで、sync の完了通知は翻訳待ちしか案内しない。要対応の項目をクリックしても訳文しか開かず、「この訳がこの原文の訳として正しいか」を見るには CodeLens の「Source」を押し直すしかなかった。review のユニットに人が取れる手は「レビュー済みにする」（採用）だけで、**「この訳は駄目」と言う道が無く**、駄目な訳を手で消してから翻訳待ちにする回り道しか無かった。
+
+**決定** : (1) `mdait.aiReview.pending` — 選択中の言語ペアに残る確認待ち**全件**（本文ユニット・frontmatter・非 Markdown）を引数なしで AI レビューにかける。要対応ノードのインラインボタンと、sync 完了通知の新しい分岐 `reviewable`（翻訳待ちが 0 で確認待ちが残るときの「✨AI review」）から呼ぶ。モード選択の QuickPick は出さず pending に固定する。(2) `mdait.openPair` — 訳文を左（既に見えていればその列、無ければ列1）に開き、右に原文を preview で並べて両側のハイライトとスクロール同期を付ける。中身は CodeLens「Source」と同じ `openSourceBesideTarget`。要対応ノードの項目クリックと「次の要対応へ」の移動先にする。ファイル配下のふつうのユニットは従来どおり訳文だけを開く。(3) CodeLens の review 行に「$(sync) 要翻訳にする」（`need:review` → `need:translate`）を足す。印を付け替えるだけで AI は呼ばない。書き換えは `getFileHandler().requestTranslate`（`withMarkerOnlyMutation`）だけを通し、frontmatter は対象外。(4) CodeLens の「$(arrow-right) Next」は外す。`mdait.needsAttention.next` 自体は要対応ノードのインライン・パレット・キーバインドに残す。(5) 要対応ノードは本文ユニットに加えて `need:review` の frontmatter と非 Markdown ファイルも並べ、通知の件数と AI レビューの対象と同じ集合にする（走査は `walkNeedsAttentionItems` 1本）。原文の無い訳文（孤立）と原文側は並べない。「レビュー済みにする」は3種類とも `getFileHandler().resolveNeed` で解く。
+
+**理由** : 通知のボタンは1つに絞る — 翻訳待ちと確認待ちの両方が残れば翻訳を先に勧める（翻訳は訳を作る仕事、確認は出来上がった訳を見る仕事なので、順序として翻訳が先）。QuickPick を出さないのは、通知のボタンを押しただけの人に「何を選べばよいか」を毎回考えさせないため — この入口は「確認待ちを消化する」と決まっており、確定済みの訳まで監査する audit は別の意図の操作である。代わりに件数（ユニット数とファイル数）を見せる modal で1回確認する（ADR-260705-01。ファイル版・ディレクトリ版では QuickPick がその役を兼ねていた）。要対応ノードを本文ユニットだけにしないのは、ADR-260912-01 で frontmatter と非 Markdown の確認待ちが日常的に生じるようになり、「通知は 3 件と言うのに要対応ノードは出ない」「AI が残した frontmatter に辿れない」が起きるため。「要翻訳にする」を `resolveNeed`（採用の確定）にも `retranslate`（AI で上書き）にも相乗りさせないのは、review が「取り込んだ既訳を AI の上書きから守る」状態だから — 守りを外さず翻訳待ちの列へ戻すだけにし、AI を呼ぶかは人が改めて決める。ずれた紐づけからの逃げ道にもなる（訳文を捨てて、紐づいた原文から訳し直す）。CodeLens から Next を外すのは、マーカー行に並べるのはそのユニットへの操作だけであり（ux.md §3.3）、次のユニットへ動くのはツリーとパレットの役目だからである。
+
+**備考** : AI レビューの完了通知にはボタンを足していない（「レポートを開く」は元からあり、残った確認待ちはツリーの要対応に出る）。紐づけのずれを直す UI（対訳ビューが土台になる）と、LM ツール `mdait_resolve` から「要翻訳にする」を呼べるようにすることは、この決定の範囲外。番人は `request-translate.test.ts`・`plain-request-translate.test.ts`・`request-translate-codelens.test.ts`・`open-pair.test.ts`・`pending-review-files.test.ts`・`status-item-tree.test.ts`（`countPendingReviewUnits`）。
+
+### ADR-260912-01: 紐の無い訳文に最初の紐を結ぶときの need は1か所で決め、丸写しだけを翻訳待ちに残す
+
+**背景** : external で `.mdait/unit-state` を消して sync すると、旧 `isExternalRebuild` の安全網が訳文の**全ユニット**を `need:review` に倒した。原文の丸写し（まだ訳していない）まで確認待ちに混ざり、確認する側は原文をそのまま読まされる。逆に既定の embedded では、ふつうの sync がマーカーの無い既訳に `need:translate` を付け、**次の trans が人の書いた訳を機械翻訳で上書き**していた（agent-orchestration.md の G3。取り込み（adopt）を頼んだときだけ review に倒していた）。「紐の無い訳文に初めて紐を結ぶ」という同じ場面なのに、着地が adopt の有無・保管方式・ファイル種別で割れていた。
+
+**決定** : 規則を `marker-sync.ts` の `needForFirstLink` 1か所に書く。本文があり丸写しでない → `need:review`、丸写し（本文が原文と一字一句同じ）か本文なし → `need:translate`。adopt の有無にも embedded / external にも依らない。frontmatter（`sync-frontmatter.ts`）も非 Markdown（`plain-file-handler.ts` の rebuild 分岐）も同じ規則に揃える。旧 `isExternalRebuild` は廃止。`adopt` が変えるのは AI アラインを許すかどうかと完了レポートの文言だけで、`adopted` の件数はふつうの sync でも数える。
+
+**理由** : 丸写しかどうかは、本文を持つ呼び出し側では**中身の一致**で決める（translate に倒すと次の trans が本文を上書きするので、ハッシュの衝突で人の訳を捨てる余地を残さない。`refreshUntranslatedCopy` と同じ立場）。本文を持たない frontmatter はハッシュで代える — `from` はいま結んだ原文の hash なので、訳文の `hash` がそれと同じなら丸写しである。丸写しは「まだ訳していない」のだから人に確認を頼む理由が無く、trans に任せるのが正しい。既訳を translate に倒すと trans が上書きする — 失うものの重さが逆なので、迷ったら review 側へ倒す。frontmatter の丸写しを review に倒さないのは、frontmatter の確認待ちの出口が「確認済みにする」しか無い（「要翻訳にする」が無い）ため。原文の複製そのままのファイルは frontmatter だけが確認待ちに残り、訳されないまま受け入れるしかなくなる。translate に倒せば trans が同じ値を返すか訳すかを決め、どちらでも人の手は要らない。
+
+**備考** : 番人は `existing-translation-review.test.ts`（embedded / external・台帳を失った再 sync・adopt を頼んでも着地が同じこと）・`plain-rebuild-verbatim.test.ts`・`frontmatter-adopt.test.ts`。非 Markdown の丸写し判定はバイト列で行う（改行コードだけ違えば丸写しとみなさない）。
+
 ### ADR-260911-03: 合流で降ろした行は、押し出された元の席を自分に持つ
 
 **背景** : 席に着いていない行（`held`）には出どころが2つある。**本文から消えた章を預かる行**（`parkEntries`。章を消して貼り戻す正規の用途）と、**合流で同じ席に2行来て降ろされた行**（`seatOnLoad`）である。人の判断を待っているのは後者だけなのに、両者は行として1バイトも違わなかった。しかも読み込みは競合マーカーを畳んできれいなファイルを書き戻すので（既存の振る舞い）、**最初の保存で「合流由来」という事実がディスクから消える**。ディスクから計算し直す手立ても無い — 降ろした瞬間にしか知り得ない事実だからである。

@@ -42,6 +42,7 @@
   "mdait.tm.commit.directory.title": "✨TM Commit Directory",
   "mdait.aiReview.file.title": "✨AI Translation Review (File)",
   "mdait.aiReview.directory.title": "✨AI Translation Review (Directory)",
+  "mdait.aiReview.pending.title": "✨AI Translation Review (Pending Reviews)",
   "mdait.adopt.run.title": "✨Adopt Existing Translations",
   "mdait.term.update.title": "✨Update Glossary"
 }
