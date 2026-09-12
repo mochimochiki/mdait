@@ -417,6 +417,29 @@ export class TermsRepositoryCSV implements TermsRepository {
 			throw new Error(`The glossary is in the middle of a merge. Resolve the conflict in ${this.path} first.`);
 		}
 
+		this.applyContent(content, { keepPreserved: false });
+	}
+
+	/**
+	 * **競合の解決の経路だけが通る読み取り。** 片方の陣営の全文を読み、その版の用語を返す。
+	 *
+	 * 付帯情報（未知列・列の順・言語）は**消さずに足す**（`keepPreserved`）。両側を順に
+	 * 読むので、片方にしか無い語の未知列を消してしまうと、書き戻したときに他所の道具の
+	 * データが落ちる。あとから読んだ側が勝つので、**自分の側を後に読むこと**。
+	 */
+	async loadSide(content: string): Promise<readonly TermEntry[]> {
+		this.applyContent(content, { keepPreserved: true });
+		return [...this.entries];
+	}
+
+	/** **競合の解決の経路だけが通る書き出し。** 解いた結果で置き換えて保存する */
+	async writeResolved(entries: readonly TermEntry[]): Promise<void> {
+		this.entries = [...entries];
+		await this.save();
+	}
+
+	/** 読み込んだ全文を、この表の中身として取り込む */
+	private applyContent(content: string, options: { keepPreserved: boolean }): void {
 		// CSVパース
 		const records = parse(content, {
 			columns: true,
@@ -425,10 +448,12 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 		if (records.length === 0) {
 			this.entries = [];
-			this.allLanguages = [];
-			this.preservedHeaders = [];
-			this.preservedPerKey.clear();
-			this.originalColumnOrder = null;
+			if (!options.keepPreserved) {
+				this.allLanguages = [];
+				this.preservedHeaders = [];
+				this.preservedPerKey.clear();
+				this.originalColumnOrder = null;
+			}
 			return;
 		}
 
@@ -446,8 +471,13 @@ export class TermsRepositoryCSV implements TermsRepository {
 			...this.allLanguages,
 			...Array.from(this.sourceLanguages).map((l) => `variants_${l}`),
 		]);
-		this.preservedHeaders = headers.filter((h) => !managed.has(h));
-		this.preservedPerKey.clear();
+		const unknown = headers.filter((h) => !managed.has(h));
+		this.preservedHeaders = options.keepPreserved
+			? [...new Set([...this.preservedHeaders, ...unknown])]
+			: unknown;
+		if (!options.keepPreserved) {
+			this.preservedPerKey.clear();
+		}
 
 		// 各行をTermEntryに変換しつつ未知列を保持。
 		//
@@ -463,8 +493,8 @@ export class TermsRepositoryCSV implements TermsRepository {
 			if (seenKeys.has(key)) continue;
 			seenKeys.add(key);
 			tmpEntries.push(entry);
-			const preserved: Record<string, string> = {};
-			for (const h of this.preservedHeaders) {
+			const preserved: Record<string, string> = { ...(this.preservedPerKey.get(key) ?? {}) };
+			for (const h of unknown) {
 				preserved[h] = row[h] ?? "";
 			}
 			this.preservedPerKey.set(key, preserved);

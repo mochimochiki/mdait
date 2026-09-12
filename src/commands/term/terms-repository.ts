@@ -36,6 +36,23 @@ export interface TermsRepository {
 	save(): Promise<void>;
 
 	/**
+	 * **競合の解決の経路だけが通る読み取り。** 片方の陣営の全文を読み、その版の用語を返す。
+	 *
+	 * 通常の読み込みは、競合マーカーを見つけたら投げる（ADR-260908-02）。その線は動かさない —
+	 * ここは「解決の材料を作るため」の別の入口で、ファイルには触らない。書き出しに要る
+	 * 付帯情報（CSV の未知列・列の順、YAML のメタデータ）は読んだぶんだけ引き取る。
+	 */
+	loadSide(content: string): Promise<readonly TermEntry[]>;
+
+	/**
+	 * **競合の解決の経路だけが通る書き出し。** 解いた結果で置き換えて保存する。
+	 *
+	 * クラスの外に別の書き出しを作らないこと（ADR-260911-02）— 原子的な書き込みと、
+	 * 未知列・メタデータの温存はここにしか無い。
+	 */
+	writeResolved(entries: readonly TermEntry[]): Promise<void>;
+
+	/**
 	 * 統計情報の取得
 	 */
 	getStats(): Promise<RepositoryStats>;
