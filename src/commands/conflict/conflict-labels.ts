@@ -9,22 +9,21 @@
  *
  * @module commands/conflict/conflict-labels
  */
+import * as path from "node:path";
 import * as vscode from "vscode";
-import type { ConflictFileKind } from "../../core/conflict/mdait-conflicts";
 import type { ChoiceSide, PendingChoice } from "./resolution-plan";
 
-/** 競合した対象の名前（ツリー・進捗・レポートで共通） */
-export function conflictKindLabel(kind: ConflictFileKind): string {
-	switch (kind) {
-		case "unit-state":
-			return vscode.l10n.t("Unit state");
-		case "unit-registry":
-			return vscode.l10n.t("Source snapshots");
-		case "tm":
-			return vscode.l10n.t("Translation memory");
-		case "terms":
-			return vscode.l10n.t("Glossary");
-	}
+/**
+ * 競合した対象の名前（ツリー・進捗・レポートで共通）＝ **ファイル名そのもの**。
+ *
+ * 種別ごとの呼び名（「ユニットの状態」「原文の控え」）を作らない。**その言葉は
+ * mdait の中にしか無く、人が開くファイルの名前と対応しない** — ツリーで名前を見て
+ * `.mdait` を開くと、そこにあるのは `unit-state` と `unit-registry` である。
+ * 用語集はファイル名を設定で変えられる（`terms.filename`）ので、その意味でも
+ * 固定の呼び名より実物の名前のほうが正しい（何が起きているかの説明は Hover が持つ）。
+ */
+export function conflictTargetLabel(filePath: string): string {
+	return path.basename(filePath);
 }
 
 /**

@@ -25,7 +25,7 @@ import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
-import { conflictKindLabel } from "./conflict-labels";
+import { conflictTargetLabel } from "./conflict-labels";
 import {
 	type ChoiceSide,
 	type ConflictResolutionPlan,
@@ -156,7 +156,7 @@ export async function executeResolution(
 			outcomes.push(skippedOutcome(plan));
 			continue;
 		}
-		progress?.report({ message: conflictKindLabel(plan.kind) });
+		progress?.report({ message: conflictTargetLabel(plan.filePath) });
 		outcomes.push(await applyDecidedResolution(plan, prepared, config));
 	}
 

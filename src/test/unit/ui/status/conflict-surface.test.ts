@@ -27,8 +27,20 @@ const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 /** 計画を作ったときのファイルの見た目（決めかけの寿命はこれで決まる） */
 const STAMP = "/ws/.mdait/translations.tmx\u00001:2";
 
+/** 種別ごとの実ファイル名（ツリーに出るのはこの名前そのもの） */
+const FILE_NAME = {
+	"unit-state": "unit-state",
+	"unit-registry": "unit-registry",
+	tm: "translations.tmx",
+	terms: "terms.csv",
+} as const;
+
 const withFiles = (...kinds: Array<"unit-state" | "unit-registry" | "tm" | "terms">): MdaitConflicts => ({
-	files: kinds.map((kind) => ({ kind, filePath: `/ws/.mdait/${kind}`, stamp: `/ws/.mdait/${kind}\u00001:2` })),
+	files: kinds.map((kind) => ({
+		kind,
+		filePath: `/ws/.mdait/${FILE_NAME[kind]}`,
+		stamp: `/ws/.mdait/${FILE_NAME[kind]}\u00001:2`,
+	})),
 	heldRows: [],
 	total: kinds.length,
 });
@@ -85,13 +97,14 @@ suite("競合の解決（StatusTree の枝）", () => {
 		}
 	});
 
-	test("ファイルは1つ1行で、種別が読める", () => {
+	test("ファイルは1つ1行で、そのファイル名が読める", () => {
+		// 種別ごとの呼び名を作らない。人が `.mdait` を開いたときに見る名前と同じにする
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
 		assert.equal(rows.length, 2);
 		assert.deepEqual(
 			rows.map((r) => r.label),
-			["Translation memory", "Glossary"],
+			["translations.tmx", "terms.csv"],
 		);
 		assert.ok(rows.every((r) => r.type === StatusItemType.Directory));
 	});
@@ -161,7 +174,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {
-			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
+			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/translations.tmx", 2]]));
 
 			assert.match(rows[0].label, /2/, "開く価値のある行だと分からない");
 		});
@@ -169,7 +182,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 		test("決める件がゼロなら、件数を添えない", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws");
 
-			assert.equal(rows[0].label, "Translation memory");
+			assert.equal(rows[0].label, "translations.tmx");
 		});
 
 		test("1件1行で並び、まだ決めていない件は未決と出る", () => {

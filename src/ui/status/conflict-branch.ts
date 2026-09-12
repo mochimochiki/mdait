@@ -14,7 +14,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
-import { conflictKindLabel, conflictSideText } from "../../commands/conflict/conflict-labels";
+import { conflictSideText, conflictTargetLabel } from "../../commands/conflict/conflict-labels";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
@@ -114,8 +114,11 @@ export function buildConflictRows(
 		const pending = pendingCounts.get(file.filePath) ?? 0;
 		return {
 			type: StatusItemType.Directory,
-			// 対象の名前と、その中で決める件数だけ。パスは Hover に降ろす
-			label: pending > 0 ? `${conflictKindLabel(file.kind)}（${pending}）` : conflictKindLabel(file.kind),
+			// 対象の名前（＝ファイル名）と、その中で決める件数だけ。パスは Hover に降ろす
+			label:
+				pending > 0
+					? vscode.l10n.t("{0} ({1})", conflictTargetLabel(file.filePath), pending)
+					: conflictTargetLabel(file.filePath),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
 			contextValue: "mdaitConflictFile",
