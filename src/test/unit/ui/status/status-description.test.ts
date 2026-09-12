@@ -85,4 +85,18 @@ suite("StatusTreeProvider 状態の副題", () => {
 		const treeItem = provider.getTreeItem(makeUnitItem({ status: Status.Translated }));
 		assert.strictEqual(treeItem.description, undefined);
 	});
+
+	// 独立ユニットは from が無いため Status.Source を名乗る。何も足さないと副題が空になり、
+	// 訳文ファイルの中なのに原文のユニットと見分けが付かない
+	test("独立ユニットの副題に「原文なし」が出る", () => {
+		const treeItem = provider.getTreeItem(
+			makeUnitItem({ status: Status.Source, isIndependent: true }),
+		);
+		assert.strictEqual(treeItem.description, "No source");
+	});
+
+	test("原文ファイルのユニットには「原文なし」を出さない", () => {
+		const treeItem = provider.getTreeItem(makeUnitItem({ status: Status.Source }));
+		assert.notStrictEqual(treeItem.description, "No source");
+	});
 });

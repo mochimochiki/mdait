@@ -12,6 +12,7 @@ import { markdownParser } from "../../core/markdown/parser";
 import { diffSourceLines, formatSourceDiff } from "../../core/markdown/source-diff";
 import { findUnitAtLine } from "../../core/markdown/unit-locator";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { isIndependentUnit } from "../../core/unit-state/independent-unit";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -49,13 +50,23 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		}
 
 		const config = Configuration.getInstance();
+		// 役割は「原文か」「訳文か」を別々に取る。`FileExplorer` はワークスペースが無いと
+		// **コンストラクターが**投げるので、生成ごと try の中に入れる（ここが投げると
+		// hover 自体が reject する）。判定できなければどちらも false
+		let isSourceFile = false;
+		let isTargetFile = false;
+		try {
+			const explorer = new FileExplorer();
+			isSourceFile = explorer.isSourceFile(document.uri.fsPath, config);
+			isTargetFile = explorer.isTargetFile(document.uri.fsPath, config);
+		} catch {
+			// ワークスペース未設定など
+		}
 
 		// マーカーを取得（external では行範囲からユニットを特定）
 		let marker: MdaitMarker | null;
 		if (config.isExternalMarkers()) {
-			const explorer = new FileExplorer();
-			const role = explorer.isSourceFile(document.uri.fsPath, config) ? "source" : "target";
-			const io = resolveMarkerIO(config, document.uri.fsPath, role);
+			const io = resolveMarkerIO(config, document.uri.fsPath, isSourceFile ? "source" : "target");
 			const parsed = markdownParser.parse(document.getText(), config, io.provider, io.ctx);
 			marker = findUnitAtLine(parsed.units, position.line)?.marker ?? null;
 		} else {
@@ -69,6 +80,14 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		}
 		if (!marker || !marker.hash) {
 			return null;
+		}
+
+		// 独立ユニット（原文と結びついていない訳文の章）は、そのことだけを伝える。
+		// 統計も差分も無く、CodeLens にも操作が出ないので、ここが唯一の説明になる
+		if (isIndependentUnit(marker, isTargetFile)) {
+			const md = new vscode.MarkdownString();
+			md.appendMarkdown(vscode.l10n.t("This unit does not exist in the source."));
+			return new vscode.Hover(md);
 		}
 
 		// ユニットに紐づく note（registry に永続化・audit で AI へ渡す）を取得
