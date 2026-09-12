@@ -66,7 +66,7 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 	switch (kind) {
 		case "unit-state":
 			return vscode.l10n.t(
-				"Two branches wrote different values for the same translation unit. mdait keeps every row it can read, so nothing is lost, but the conflict markers are still in the file.",
+				"Two branches wrote different values for the same translation unit. Every row that can be read is kept, so there is nothing to choose between — resolving removes the conflict markers.",
 			);
 		case "unit-registry":
 			return vscode.l10n.t(
@@ -74,11 +74,11 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 			);
 		case "tm":
 			return vscode.l10n.t(
-				"Two branches registered different translations. While the conflict markers are there, mdait refuses to read or save the translation memory, so nothing is overwritten.",
+				"Two branches registered different translations. While the conflict markers are there, mdait cannot read the translation memory, so past translations are neither shown nor committed until this is resolved.",
 			);
 		case "terms":
 			return vscode.l10n.t(
-				"Two branches edited the glossary. While the conflict markers are there, mdait refuses to read it, so AI translation runs without glossary terms until this is resolved.",
+				"Two branches edited the glossary. While the conflict markers are there, mdait cannot read it, so AI translation runs without glossary terms until this is resolved.",
 			);
 	}
 }
@@ -97,7 +97,11 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		tooltip: vscode.l10n.t("Merging left conflicts inside .mdait. Nothing has been lost."),
+		// **数字が何を数えているかは、ラベルからは読めない。** 件数を出しているときだけ、
+		// それが「あなたが決める件数」であることを言う（自動で片付く分は数に入っていない）
+		tooltip: decisions
+			? vscode.l10n.t("Merging left conflicts inside .mdait. The number is how many of them you decide.")
+			: vscode.l10n.t("Merging left conflicts inside .mdait."),
 	};
 }
 
@@ -139,7 +143,7 @@ export function buildConflictRows(
 		directoryPath: `${CONFLICT_ROW_PREFIX}held:${index}`,
 		contextValue: "mdaitConflictHeldRow",
 		tooltip: vscode.l10n.t(
-			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",
+			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",
 			row.path,
 		),
 	}));

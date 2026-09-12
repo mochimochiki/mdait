@@ -55,7 +55,7 @@ export function buildConflictTooltip(counts: StatusBarCounts): string {
 	if (counts.conflictKinds.includes("terms")) {
 		blocked.push(vscode.l10n.t("glossary"));
 	}
-	const head = vscode.l10n.t("mdait: merge conflicts in .mdait. Nothing has been lost.");
+	const head = vscode.l10n.t("mdait: merge conflicts in .mdait.");
 	if (blocked.length === 0) {
 		return head;
 	}
