@@ -124,7 +124,6 @@ suite("翻訳メモリの競合を解く", () => {
 		const planned = planTmResolution(tmPath);
 		assert.ok(planned);
 		assert.equal(planned.plan.pending.length, 0);
-		assert.equal(planned.plan.hasBase, true);
 
 		applyTmResolution(tmPath, planned.plan, planned.resolution, new Map());
 		assert.equal(readBack().get(tuidOf("Hello"))?.variants.get("ja")?.text, "相手が直した");
@@ -147,7 +146,6 @@ suite("翻訳メモリの競合を解く", () => {
 			new Map([[tuidOf("Hello"), "theirs" as const]]),
 		);
 
-		assert.equal(outcome.decidedCount, 1);
 		assert.equal(outcome.remainingCount, 0);
 		assert.equal(readBack().get(tuidOf("Hello"))?.variants.get("ja")?.text, "やあ");
 	});
@@ -165,7 +163,6 @@ suite("翻訳メモリの競合を解く", () => {
 		const outcome = applyTmResolution(tmPath, planned.plan, planned.resolution, new Map());
 
 		assert.equal(outcome.remainingCount, 1);
-		assert.equal(outcome.decidedCount, 0);
 		assert.equal(fs.readFileSync(tmPath, "utf-8"), content, "競合マーカーごと残っていない");
 	});
 
@@ -240,7 +237,7 @@ suite("翻訳メモリの競合を解く", () => {
 			new Map([[tuidOf("Hello"), "theirs" as const]]),
 		);
 
-		assert.equal(outcome.decidedCount, 1);
+		assert.equal(outcome.remainingCount, 0);
 		assert.equal(readBack().get(tuidOf("Hello")), undefined, "祖先の値が書き戻っている");
 		assert.equal(readBack().get(tuidOf("Goodbye"))?.variants.get("ja")?.text, "さようなら");
 	});

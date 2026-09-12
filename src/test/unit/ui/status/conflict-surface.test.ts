@@ -20,6 +20,7 @@ import {
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
+import { undecidedCount } from "../../../../ui/status/conflict-source";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
@@ -129,8 +130,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 			kind: "tm" as const,
 			filePath: "/ws/.mdait/translations.tmx",
 			autoResolvedCount: 3,
-			deletedKeys: [],
-			hasBase: true,
+			deletedCount: 0,
 			pending: Array.from({ length: pending }, (_, i) => ({
 				key: `k${i}`,
 				label: `語${i}`,
@@ -138,6 +138,26 @@ suite("競合の解決（StatusTree の枝）", () => {
 				theirsText: `相手の訳${i}`,
 				baseText: `もとの訳${i}`,
 			})),
+		});
+
+		test("決めた分だけ、残りの件数が減る", () => {
+			// 根の数字は「判断を待っている件数」と名乗っている。決めても減らないと嘘になる
+			const target = plan(3);
+			const stamp = "s";
+
+			assert.equal(undecidedCount(target, stamp), 3);
+			rememberDecision(target.filePath, stamp, "k0", "ours");
+			rememberDecision(target.filePath, stamp, "k1", "theirs");
+
+			assert.equal(undecidedCount(target, stamp), 1);
+		});
+
+		test("計画の見た目が分からなければ、決めた分を差し引かない", () => {
+			// 見た目が引けないのは、ファイルが外から変わったとき。前の判断はもう当てにならない
+			const target = plan(3);
+			rememberDecision(target.filePath, "s", "k0", "ours");
+
+			assert.equal(undecidedCount(target, undefined), 3);
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {

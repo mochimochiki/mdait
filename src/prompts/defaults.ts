@@ -1204,13 +1204,6 @@ Return exactly one JSON object: {"ok": true} | {"corrections": [...]} | {"needBo
 /**
  * デフォルトプロンプトのマッピング
  */
-/**
- * 合流の競合の解決（roadmap-v04 P02）。
- *
- * **選ばせるだけで、書かせない。** 採否は人の宣言に留めるという線（ADR-260911-02）を
- * AI にも引く。両方を合わせる形は、鍵の突き合わせで決定的に決まるときだけ機械が行うので、
- * ここへ来るのは「同じ鍵の同じ項目に、人が書いた2つの値」だけである。
- */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
 	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,

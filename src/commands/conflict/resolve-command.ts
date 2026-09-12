@@ -30,17 +30,21 @@ import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../u
  * @returns 承認されたか
  */
 async function confirm(prepared: PreparedResolution): Promise<boolean> {
-	const { autoResolvedTotal, pendingTotal, wholeFileCount, plans } = prepared.summary;
-	const files = plans.map((plan) => path.basename(plan.filePath)).join(", ");
+	const { pendingTotal, wholeFileCount, plans } = prepared.summary;
+	// **この実行で書ける対象だけを約束する。** 決まらない件が1つでもある対象は1バイトも
+	// 書かないので、その名前を「書き換える」に並べると、起きないことを言うことになる
+	const writable = plans.filter((plan) => plan.wholeFile === true || plan.pending.length === 0);
+	const files = writable.map((plan) => path.basename(plan.filePath)).join(", ");
+	const automatic = writable.reduce((sum, plan) => sum + plan.autoResolvedCount, 0);
 
 	// 0 の項目は出さない（見えている数字は必ず中身のあるものにする）
 	const counts = [
 		...(pendingTotal > 0 ? [vscode.l10n.t("you decide {0}", pendingTotal)] : []),
-		...(autoResolvedTotal > 0 ? [vscode.l10n.t("automatic {0}", autoResolvedTotal)] : []),
+		...(automatic > 0 ? [vscode.l10n.t("automatic {0}", automatic)] : []),
 		...(wholeFileCount > 0 ? [vscode.l10n.t("rewritten whole: {0} file(s)", wholeFileCount)] : []),
 	].join(" ／ ");
 
-	const detail = [counts, vscode.l10n.t("Rewrites: {0}", files)].filter(Boolean).join("\n\n");
+	const detail = [counts, files ? vscode.l10n.t("Rewrites: {0}", files) : ""].filter(Boolean).join("\n\n");
 	const proceed = vscode.l10n.t("Resolve");
 	const answer = await vscode.window.showWarningMessage(
 		vscode.l10n.t("Resolve the merge conflicts in .mdait?"),
@@ -94,7 +98,7 @@ export async function executeResolveConflicts(): Promise<void> {
 		return;
 	}
 
-	// **計画だけ先に作る。** ここで1バイトも書かず、AI も呼ばない
+	// **計画だけ先に作る。** ここで1バイトも書かない
 	const prepared = await prepareResolution(conflicts, config);
 	if (prepared.summary.plans.length === 0) {
 		reportNothingPlanned(prepared);
@@ -120,7 +124,6 @@ export async function executeResolveConflicts(): Promise<void> {
 	const report = buildConflictReport(prepared.summary, outcomes);
 	const uri = await writeReport(config, "conflict", report);
 	const remaining = outcomes.reduce((sum, outcome) => sum + outcome.remainingCount, 0);
-	const written = outcomes.filter((outcome) => outcome.written).length;
 	// **書けなかった対象と、読めなかった対象を数に入れる。** 入れないと、書き込みが
 	// 失敗しても「全部解決しました」と出る
 	const unfinished =

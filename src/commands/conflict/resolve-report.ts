@@ -13,13 +13,8 @@
  * @module commands/conflict/resolve-report
  */
 import * as vscode from "vscode";
-import { conflictKindLabel } from "./conflict-kind";
-import type { ConflictResolutionPlan, PendingChoice, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
-
-/** 消した側には見せる値が無いので、その場の言葉で「削除」と書く */
-function valueCell(text: string, deleted: boolean | undefined): string {
-	return deleted ? vscode.l10n.t("deleted") : escapeCell(text);
-}
+import { conflictKindLabel, conflictSideText } from "./conflict-labels";
+import type { ConflictResolutionPlan, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
 
 /** 決まらずに残った件を一覧にする */
 function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): string[] {
@@ -37,19 +32,16 @@ function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): str
 		"|---|---|---|",
 	];
 	for (const item of plan.pending) {
-		lines.push(`| ${escapeCell(item.label)} | ${cells(item).join(" | ")} |`);
+		const ours = escapeCell(conflictSideText(item, "ours"));
+		const theirs = escapeCell(conflictSideText(item, "theirs"));
+		lines.push(`| ${escapeCell(item.label)} | ${ours} | ${theirs} |`);
 	}
 	return lines;
 }
 
-/** 両側の値の欄 */
-function cells(item: PendingChoice): [string, string] {
-	return [valueCell(item.oursText, item.oursDeleted), valueCell(item.theirsText, item.theirsDeleted)];
-}
-
 /** 表のセルに入れても壊れないようにする */
 function escapeCell(text: string): string {
-	return text.replace(/\|/g, "\\|").replace(/\n/g, " ");
+	return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
 /**
@@ -65,9 +57,12 @@ export function buildConflictReport(
 	const lines: string[] = [`# ${vscode.l10n.t("Merge conflict resolution")}`, ""];
 
 	const remainingTotal = outcomes.reduce((sum, outcome) => sum + outcome.remainingCount, 0);
+	// **書けなかった対象の分を数えない。** 決まらない件が1つでもあれば、その対象は
+	// 1バイトも書かれていない（自動で決まった分もディスクには届いていない）
+	const mergedTotal = outcomes.reduce((sum, outcome) => sum + (outcome.written ? outcome.autoResolvedCount : 0), 0);
 
 	lines.push(
-		vscode.l10n.t("- Merged automatically (nothing to decide): {0}", summary.autoResolvedTotal),
+		vscode.l10n.t("- Merged automatically (nothing to decide): {0}", mergedTotal),
 		vscode.l10n.t("- Still waiting for your decision: {0}", remainingTotal),
 		"",
 	);
@@ -101,8 +96,8 @@ export function buildConflictReport(
 			vscode.l10n.t("- Entries kept without a decision: {0}", outcome.autoResolvedCount),
 			vscode.l10n.t("- File rewritten: {0}", outcome.written ? vscode.l10n.t("yes") : vscode.l10n.t("no")),
 		);
-		if (plan && plan.deletedKeys.length > 0) {
-			lines.push(vscode.l10n.t("- Entries the other side deleted: {0}", plan.deletedKeys.length));
+		if (plan && plan.deletedCount > 0) {
+			lines.push(vscode.l10n.t("- Entries the other side deleted: {0}", plan.deletedCount));
 		}
 		if (outcome.unseatedCount && outcome.unseatedCount > 0) {
 			lines.push(

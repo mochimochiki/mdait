@@ -42,14 +42,12 @@ export interface ResolutionPlan {
 	kind: ConflictFileKind;
 	/** 対象のファイル（絶対パス） */
 	filePath: string;
-	/** 鍵の突き合わせで決まった件数（AI も人も通らない） */
+	/** 鍵の突き合わせで決まった件数（誰も通らない） */
 	autoResolvedCount: number;
-	/** 祖先を見て「片方が消した」と判断して落とした鍵 */
-	deletedKeys: string[];
+	/** 祖先を見て「片方が消した」と判断して落とした件数 */
+	deletedCount: number;
 	/** 人の判断を待っている件 */
 	pending: PendingChoice[];
-	/** 共通の祖先が取れたか（取れないと判定の材料が1つ減る） */
-	hasBase: boolean;
 	/**
 	 * **1件ずつ選ぶのではなく、ファイルを丸ごと書き直す対象か**（`unit-state` と `unit-registry`）。
 	 *
@@ -73,9 +71,7 @@ export interface ResolutionOutcome {
 	filePath: string;
 	/** 決定的に決まって書き戻した件数 */
 	autoResolvedCount: number;
-	/** 判定で決まって書き戻した件数 */
-	decidedCount: number;
-	/** 決まらずに残した件数（AI が迷った・API キーが無い） */
+	/** まだ人が決めていない件数 */
 	remainingCount: number;
 	/** 書き戻したか（迷った件があれば1バイトも書かない対象もある） */
 	written: boolean;

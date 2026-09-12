@@ -25,7 +25,7 @@ import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
-import { conflictKindLabel } from "./conflict-kind";
+import { conflictKindLabel } from "./conflict-labels";
 import {
 	type ChoiceSide,
 	type ConflictResolutionPlan,
@@ -135,9 +135,6 @@ export async function prepareResolution(
 	return { summary: summarizePlans(plans, failures, conflicts.heldRows.length), carried, stamps };
 }
 
-/** 決まった件が1つも無いこと（鍵の突き合わせだけで解くときの `decided`） */
-const NO_DECISIONS: ReadonlyMap<string, ChoiceSide> = new Map();
-
 /**
  * 計画を実行する。**鍵の突き合わせで決まる分だけを書き戻す。**
  *
@@ -160,21 +157,30 @@ export async function executeResolution(
 			continue;
 		}
 		progress?.report({ message: conflictKindLabel(plan.kind) });
-		outcomes.push(await applyOne(plan, prepared, config, NO_DECISIONS));
+		outcomes.push(await applyDecidedResolution(plan, prepared, config));
 	}
 
 	return outcomes;
 }
 
-/** 取り消されて手が付かなかった対象の結果（残っている件はそのまま残っている） */
-function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
+/** 手を付ける前の結果（書けなかったとき・取り消されたときは、これがそのまま答えになる） */
+function baseOutcome(plan: ResolutionPlan): ResolutionOutcome {
 	return {
 		kind: plan.kind,
 		filePath: plan.filePath,
-		autoResolvedCount: 0,
-		decidedCount: 0,
-		remainingCount: Math.max(plan.pending.length, 1),
+		autoResolvedCount: plan.autoResolvedCount,
+		remainingCount: plan.pending.length,
 		written: false,
+	};
+}
+
+/** 取り消されて手が付かなかった対象の結果（残っている件はそのまま残っている） */
+function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
+	return {
+		...baseOutcome(plan),
+		autoResolvedCount: 0,
+		// 丸ごと書き直す対象には決める件が無い。0 と答えると「片付いた」と読めてしまう
+		remainingCount: Math.max(plan.pending.length, 1),
 		skipped: true,
 	};
 }
@@ -197,36 +203,20 @@ function staleError(plan: ResolutionPlan, prepared: PreparedResolution): string 
 }
 
 /**
- * **人が決めた結果を書き戻す**（roadmap-v04 P03）。
+ * **1つの対象を書き戻す**（roadmap-v04）。
  *
- * `executeResolution` は全対象を回すが、こちらは1つの対象だけを書き戻す — 人はツリーの
- * 行を1件ずつ決めていくので、その対象の最後の1件が決まった時点で呼ばれる。
+ * `executeResolution` は全対象を回し、人が決めた分を1件も渡さない（鍵の突き合わせで
+ * 決まる分だけが書かれる）。ツリーの行から呼ぶときは、その対象の最後の1件が決まった
+ * 時点で、決まった全件を渡す。
  */
 export async function applyDecidedResolution(
 	plan: ResolutionPlan,
 	prepared: PreparedResolution,
 	config: Configuration,
-	decided: ReadonlyMap<string, ChoiceSide>,
-): Promise<ResolutionOutcome> {
-	return applyOne(plan, prepared, config, decided);
-}
-
-/** 1つの対象を書き戻す */
-async function applyOne(
-	plan: ResolutionPlan,
-	prepared: PreparedResolution,
-	config: Configuration,
-	decided: ReadonlyMap<string, ChoiceSide>,
+	decided: ReadonlyMap<string, ChoiceSide> = new Map(),
 ): Promise<ResolutionOutcome> {
 	const carried = prepared.carried.get(plan.filePath);
-	const base: ResolutionOutcome = {
-		kind: plan.kind,
-		filePath: plan.filePath,
-		autoResolvedCount: plan.autoResolvedCount,
-		decidedCount: 0,
-		remainingCount: plan.pending.length,
-		written: false,
-	};
+	const base = baseOutcome(plan);
 
 	try {
 		switch (plan.kind) {

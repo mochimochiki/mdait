@@ -7,15 +7,14 @@
  *   **状態と操作**はこの枝（1件1行）、**解説**は Hover（＝ツリー行のツールチップ）である。
  *   合流のたびにトーストは出さない（変化の気づきは1箇所に集約する）。
  *
- *   この段（P01）では**見せるだけ**で、行内の操作はまだ無い。解くのは P02（✨AI の一発）と
- *   P03（`こちらを採る` / `あちらを採る`）である。
+ *   出すのは1件1行で、行内の操作は `あなたを残す` / `相手を残す` の2つである。
  *
  * @module ui/status/conflict-branch
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
-import { conflictKindLabel } from "../../commands/conflict/conflict-kind";
+import { conflictKindLabel, conflictSideText } from "../../commands/conflict/conflict-labels";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
@@ -77,18 +76,22 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 	if (conflicts.total === 0) {
 		return undefined;
 	}
+	// 数えるのは**あなたが決める件数**。ファイルの数でも自動で片付く件数でもない。
+	// **数字が何を数えているかはラベルからは読めない**ので、数字を出すときだけ解説も
+	// 数字の話にする — 条件を2度書くと、片方だけ直して食い違う
+	const [label, tooltip] = decisions
+		? [
+				vscode.l10n.t("Conflicts ({0})", decisions),
+				vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision."),
+			]
+		: [vscode.l10n.t("Conflicts"), vscode.l10n.t("Merging left conflicts inside .mdait.")];
 	return {
 		type: StatusItemType.Directory,
-		// 数えるのは**あなたが決める件数**。ファイルの数でも自動で片付く件数でもない
-		label: decisions ? vscode.l10n.t("Conflicts ({0})", decisions) : vscode.l10n.t("Conflicts"),
+		label,
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		// **数字が何を数えているかは、ラベルからは読めない。** 件数を出しているときだけ、
-		// それが「あなたが決める件数」であることを言う（自動で片付く分は数に入っていない）
-		tooltip: decisions
-			? vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision.")
-			: vscode.l10n.t("Merging left conflicts inside .mdait."),
+		tooltip,
 	};
 }
 
@@ -141,11 +144,8 @@ export function buildConflictRows(
 /**
  * 競合したファイルを開いたときに出る、**1件1行**（roadmap-v04 P03）。
  *
- * 行には「こちらを採る」「あちらを採る」が付く（`package.json` の `viewItem` で引く）。
- * **✨は付けない** — AI を1回も呼ばないからである（UX-P4 の逆向き）。
- *
- * 既に決めた件は、どちらを採ったかを副題に出す。決めただけではまだ書かれていない
- * （そのファイルの最後の1件が決まったときにまとめて書く）ことも Hover に書く。
+ * 行には「あなたを残す」「相手を残す」が付く（`package.json` の `viewItem` で引く）。
+ * 既に決めた件は、どちらを採ったかを副題に出す。
  */
 export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): DirectoryStatusItem[] {
 	return plan.pending.map((item, index) => {
@@ -187,16 +187,15 @@ function shorten(text: string, max = 40): string {
 /**
  * 1件の解説（Hover）。
  *
- * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか、AI を
- * 使うか）は書かない — 操作の結果を見れば分かることで、読ませる意味がない
- * （`docs/ux.md` §3.3）。
+ * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか）は
+ * 書かない — 操作の結果を見れば分かることで、読ませる意味がない（`docs/ux.md` §3.3）。
  */
 function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
 	const parts = [
 		item.label,
 		"",
-		`${vscode.l10n.t("You")}\t${item.oursDeleted ? vscode.l10n.t("deleted") : item.oursText}`,
-		`${vscode.l10n.t("They")}\t${item.theirsDeleted ? vscode.l10n.t("deleted") : item.theirsText}`,
+		`${vscode.l10n.t("You")}\t${conflictSideText(item, "ours")}`,
+		`${vscode.l10n.t("They")}\t${conflictSideText(item, "theirs")}`,
 	];
 	if (item.baseText !== undefined) {
 		parts.push(`${vscode.l10n.t("Before")}\t${item.baseText}`);
