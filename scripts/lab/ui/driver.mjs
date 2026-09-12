@@ -301,6 +301,66 @@ export async function connect(opts = {}) {
 	};
 
 	/**
+	 * ツリーの1行にマウスを載せて、**行内のボタン（インラインアクション）を出す**。
+	 *
+	 * VS Code はマウスが載っている行か選択中の行にしかボタンを描かないので、載せないと
+	 * 写しにも DOM にも現れない（実測: `あなたを残す` / `相手を残す` が撮れなかった）。
+	 *
+	 * @param {string} label 行の名前（`setRowExpanded` と同じ当て方）
+	 * @returns {Promise<string[]|null>} その行に出たボタンの名前。行が無ければ null
+	 */
+	const hoverRow = async (label) => {
+		const row = await findRow(label);
+		if (!row) return null;
+		await row.scrollIntoViewIfNeeded().catch(() => {});
+		await row.hover({ timeout: 5000 });
+		await page.waitForTimeout(300);
+		return await row
+			.locator(".actions .action-item a")
+			.evaluateAll((els) => els.map((el) => (el.getAttribute("aria-label") || el.title || "").trim()));
+	};
+
+	/**
+	 * ツリーの1行の、行内のボタンを押す。
+	 *
+	 * 押す前に必ずマウスを載せる（載せないとボタンが描かれていない）。**押せたかを返す** —
+	 * 黙って何もしないと、押したつもりの操作が起きていないことに気づけない。
+	 *
+	 * @param {string} label 行の名前
+	 * @param {string} action ボタンの名前（部分一致・大文字小文字を無視）
+	 * @returns {Promise<boolean>} 押せたか
+	 */
+	const clickRowAction = async (label, action) => {
+		const buttons = await hoverRow(label);
+		if (!buttons) return false;
+		const row = await findRow(label);
+		if (!row) return false;
+		const button = row.locator(`.actions .action-item a[aria-label*="${action}" i]`).first();
+		if ((await button.count()) === 0) return false;
+		await button.click({ timeout: 5000 });
+		await page.waitForTimeout(800);
+		return true;
+	};
+
+	/** 名前でツリーの行を1つ引く（`matchesRowName` の当て方に従う） */
+	const findRow = async (label) => {
+		const rows = page.locator(".part.sidebar .monaco-list-row");
+		const count = await rows.count();
+		for (let i = 0; i < count; i++) {
+			const row = rows.nth(i);
+			const name = (
+				await row
+					.locator(".monaco-icon-name-container .label-name")
+					.first()
+					.textContent()
+					.catch(() => "")
+			)?.trim();
+			if (name && matchesRowName(name, label)) return row;
+		}
+		return null;
+	};
+
+	/**
 	 * いま開いているエディタの CodeLens を機械可読で読む。
 	 *
 	 * CodeLens は**実 Extension Host でしか出ない**（headless では provider ごと動かない）。
@@ -490,6 +550,8 @@ export async function connect(opts = {}) {
 		treeItems,
 		expandTree,
 		setRowExpanded,
+		hoverRow,
+		clickRowAction,
 		codeLenses,
 		openFile,
 		closeEditors,
@@ -519,7 +581,7 @@ export function uiPaths() {
  * 同じ command.json を2つの拡張が奪い合う。さらに画面を閉じたときに ready ファイルが
  * 消えてしまう（拡張は終了時に自分で消す）。画面は1つに保つのが安全（実測）。
  *
- * @param {"shot"|"notifications"|"click-notification"|"dismiss-notifications"|"dialog"|"click-dialog"|"open-mdait"|"run-command"|"tree-rows"|"url"|"reload"} action
+ * @param {"shot"|"notifications"|"click-notification"|"dismiss-notifications"|"dialog"|"click-dialog"|"open-mdait"|"run-command"|"tree-rows"|"hover-row"|"click-row-action"|"url"|"reload"} action
  */
 export async function ask(action, args = {}, { timeoutSec = 60 } = {}) {
 	const { requestFile, resultFile } = uiPaths();
@@ -713,6 +775,11 @@ async function handleRequest(keeper, request, screenLog, policy) {
 			return await keeper.expandTree(a.rounds);
 		case "set-row-expanded":
 			return await keeper.setRowExpanded(a.label, a.expanded !== false);
+		case "hover-row":
+			// 行内のボタンはマウスを載せないと描かれない（撮るときは必ずこれを先に頼む）
+			return await keeper.hoverRow(a.label);
+		case "click-row-action":
+			return await keeper.clickRowAction(a.label, a.action);
 		case "codelens":
 			return await keeper.codeLenses();
 		case "open-file":

@@ -25,7 +25,8 @@ import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
-import { conflictKindLabel } from "./conflict-labels";
+import { conflictTargetLabel } from "./conflict-labels";
+import { decisionsFor } from "./conflict-decisions";
 import {
 	type ChoiceSide,
 	type ConflictResolutionPlan,
@@ -156,11 +157,19 @@ export async function executeResolution(
 			outcomes.push(skippedOutcome(plan));
 			continue;
 		}
-		progress?.report({ message: conflictKindLabel(plan.kind) });
-		outcomes.push(await applyDecidedResolution(plan, prepared, config));
+		progress?.report({ message: conflictTargetLabel(plan.filePath) });
+		// **人がツリーで決めたぶんも一緒に書く。** 渡さないと、決めたのに書かれない対象が
+		// 残り、「全部やる」つもりで押した人の期待を裏切る
+		outcomes.push(await applyDecidedResolution(plan, prepared, config, decidedFor(plan, prepared)));
 	}
 
 	return outcomes;
+}
+
+/** その対象について、人がツリーで決めているぶん（計画を作ったときの見た目に結び付く） */
+export function decidedFor(plan: ResolutionPlan, prepared: PreparedResolution): ReadonlyMap<string, ChoiceSide> {
+	const stamp = prepared.stamps.get(plan.filePath);
+	return stamp === undefined ? new Map() : decisionsFor(plan.filePath, stamp);
 }
 
 /** 手を付ける前の結果（書けなかったとき・取り消されたときは、これがそのまま答えになる） */

@@ -119,6 +119,22 @@ export function pendingChoiceCount(): number | undefined {
 	);
 }
 
+/**
+ * 全件を決め終えて、あとは人が `解決` を押すだけのファイルの数（覚え書きから同期で読む）。
+ *
+ * この数はラベルの数字には出ない — 決める件が 0 になるからである。押し忘れたまま数字が
+ * 消えると気づけないので、根の解説（Hover）がここを拾う。
+ */
+export function readyToWriteCount(): number {
+	const prepared = preparedCache;
+	if (!prepared) {
+		return 0;
+	}
+	return prepared.summary.plans.filter(
+		(plan) => plan.pending.length > 0 && undecidedCount(plan, prepared.stamps.get(plan.filePath)) === 0,
+	).length;
+}
+
 let preparedCache: PreparedResolution | undefined;
 let preparedStamp: string | undefined;
 let preparedDirty = true;

@@ -13,7 +13,7 @@
  * @module commands/conflict/resolve-report
  */
 import * as vscode from "vscode";
-import { conflictKindLabel, conflictSideText } from "./conflict-labels";
+import { conflictSideText, conflictTargetLabel } from "./conflict-labels";
 import type { ConflictResolutionPlan, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
 
 /** 決まらずに残った件を一覧にする */
@@ -77,7 +77,7 @@ export function buildConflictReport(
 
 	for (const outcome of outcomes) {
 		const plan = summary.plans.find((candidate) => candidate.filePath === outcome.filePath);
-		lines.push(`## ${conflictKindLabel(outcome.kind)}`, "");
+		lines.push(`## ${conflictTargetLabel(outcome.filePath)}`, "");
 		lines.push(`\`${outcome.filePath}\``, "");
 
 		if (outcome.error) {

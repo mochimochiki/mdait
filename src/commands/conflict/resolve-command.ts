@@ -17,7 +17,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { notifyWithReport, writeReport } from "../shared/report-file";
 import { buildConflictReport } from "./resolve-report";
-import { type PreparedResolution, executeResolution, prepareResolution } from "./resolve-core";
+import { type PreparedResolution, decidedFor, executeResolution, prepareResolution } from "./resolve-core";
 import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 
 /**
@@ -30,10 +30,15 @@ import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../u
  * @returns 承認されたか
  */
 async function confirm(prepared: PreparedResolution): Promise<boolean> {
-	const { pendingTotal, wholeFileCount, plans } = prepared.summary;
+	const { wholeFileCount, plans } = prepared.summary;
+	// 数えるのは**まだ決まっていない件**。ツリーで決めたぶんはこの実行で書かれるので、
+	// 「あなたが決める」に数えると、もう済んだ仕事をもう一度求めることになる
+	const undecided = (plan: (typeof plans)[number]) =>
+		plan.pending.filter((item) => !decidedFor(plan, prepared).has(item.key)).length;
+	const pendingTotal = plans.reduce((sum, plan) => sum + undecided(plan), 0);
 	// **この実行で書ける対象だけを約束する。** 決まらない件が1つでもある対象は1バイトも
 	// 書かないので、その名前を「書き換える」に並べると、起きないことを言うことになる
-	const writable = plans.filter((plan) => plan.wholeFile === true || plan.pending.length === 0);
+	const writable = plans.filter((plan) => plan.wholeFile === true || undecided(plan) === 0);
 	const files = writable.map((plan) => path.basename(plan.filePath)).join(", ");
 	const automatic = writable.reduce((sum, plan) => sum + plan.autoResolvedCount, 0);
 

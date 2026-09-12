@@ -27,8 +27,20 @@ const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 /** 計画を作ったときのファイルの見た目（決めかけの寿命はこれで決まる） */
 const STAMP = "/ws/.mdait/translations.tmx\u00001:2";
 
+/** 種別ごとの実ファイル名（ツリーに出るのはこの名前そのもの） */
+const FILE_NAME = {
+	"unit-state": "unit-state",
+	"unit-registry": "unit-registry",
+	tm: "translations.tmx",
+	terms: "terms.csv",
+} as const;
+
 const withFiles = (...kinds: Array<"unit-state" | "unit-registry" | "tm" | "terms">): MdaitConflicts => ({
-	files: kinds.map((kind) => ({ kind, filePath: `/ws/.mdait/${kind}`, stamp: `/ws/.mdait/${kind}\u00001:2` })),
+	files: kinds.map((kind) => ({
+		kind,
+		filePath: `/ws/.mdait/${FILE_NAME[kind]}`,
+		stamp: `/ws/.mdait/${FILE_NAME[kind]}\u00001:2`,
+	})),
 	heldRows: [],
 	total: kinds.length,
 });
@@ -74,6 +86,19 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.match(item?.tooltip ?? "", /waiting for your decision/);
 	});
 
+	test("書き込み待ちのファイルがあれば、解説がそれを言う", () => {
+		// 決め終えた分は数字に出ない（決める件が 0 になる）。押し忘れに気づけるのは解説だけ
+		const item = buildConflictsItem(withFiles("terms"), 0, 1);
+
+		assert.match(item?.tooltip ?? "", /waiting to be written/);
+	});
+
+	test("書き込み待ちが無ければ、その話はしない", () => {
+		const item = buildConflictsItem(withFiles("terms"), 2, 0);
+
+		assert.doesNotMatch(item?.tooltip ?? "", /waiting to be written/);
+	});
+
 	test("件数を出していないときは、数字の説明もしない", () => {
 		// 決める件が 0（丸ごと書き直す対象しかない）と、まだ数えていない（undefined）。
 		// **どちらもラベルに数字が出ない**ので、数字の話をすると出ていないものの説明になる
@@ -85,13 +110,14 @@ suite("競合の解決（StatusTree の枝）", () => {
 		}
 	});
 
-	test("ファイルは1つ1行で、種別が読める", () => {
+	test("ファイルは1つ1行で、そのファイル名が読める", () => {
+		// 種別ごとの呼び名を作らない。人が `.mdait` を開いたときに見る名前と同じにする
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
 		assert.equal(rows.length, 2);
 		assert.deepEqual(
 			rows.map((r) => r.label),
-			["Translation memory", "Glossary"],
+			["translations.tmx", "terms.csv"],
 		);
 		assert.ok(rows.every((r) => r.type === StatusItemType.Directory));
 	});
@@ -161,15 +187,45 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {
-			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 2 }]]),
+			);
 
 			assert.match(rows[0].label, /2/, "開く価値のある行だと分からない");
+			assert.equal(rows[0].contextValue, "mdaitConflictFile", "まだ書けないのに書ける形になっている");
+		});
+
+		test("全件を決め終えた行は、書ける形になる（押すまで書かない）", () => {
+			// 最後の1件を決めた瞬間に書きに行かない。**人が `解決` を押して初めて書く**
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFileDecided");
+			assert.ok(rows[0].description, "決め終えたことが副題から読めない");
+			assert.doesNotMatch(rows[0].label, /\d/, "決め終えたのに未決の件数が残っている");
+		});
+
+		test("はじめから決める件が無い行は、書ける形にしない", () => {
+			// 丸ごと書き直す対象（unit-state・台帳）は、根の `競合を解決` で片付く
+			const rows = buildConflictRows(
+				withFiles("unit-state"),
+				"/ws",
+				new Map([["/ws/.mdait/unit-state", { pending: 0, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFile");
+			assert.equal(rows[0].description, undefined);
 		});
 
 		test("決める件がゼロなら、件数を添えない", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws");
 
-			assert.equal(rows[0].label, "Translation memory");
+			assert.equal(rows[0].label, "translations.tmx");
 		});
 
 		test("1件1行で並び、まだ決めていない件は未決と出る", () => {
