@@ -41,20 +41,55 @@ const { planTermsResolution, applyTermsResolution } = require(
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "mdait-resolve-"));
 const PAIRS = [{ sourceLang: "en", targetLang: "ja", sourceDir: "content/en", targetDir: "content/ja" }];
 
-/** 合流のしかた。union はもう製品では使わないが、比べるために残す */
+/**
+ * 合流のしかた。union はもう製品では使わないが、比べるために残す。
+ *
+ * `conflictStatus` は「競合があった」を表す終了コードの判定である。**それ以外の終了は
+ * 失敗として投げる** — 道具が入っていない・引数が悪いといった失敗を競合と取り違えると、
+ * 空の合流結果を製品のパーサーに通して「消失 0」と報告してしまう。
+ *
+ * - `git merge-file` … 競合の数をそのまま返す（128 以上は本当の失敗）
+ * - `diff3 -m` … 1 が競合、2 が失敗
+ */
 const WAYS = {
-	git: (files) => run(["git", "merge-file", "-p"], files),
-	diff3: (files) => run(["diff3", "-m"], files),
-	"git-diff3": (files) => run(["git", "merge-file", "-p", "--diff3"], files),
+	git: (files) => run(["git", "merge-file", "-p"], files, (status) => status > 0 && status < 128),
+	diff3: (files) => run(["diff3", "-m"], files, (status) => status === 1),
+	"git-diff3": (files) => run(["git", "merge-file", "-p", "--diff3"], files, (status) => status > 0 && status < 128),
 };
 
-function run(cmd, [mine, base, theirs]) {
+function run(cmd, [mine, base, theirs], conflictStatus) {
 	try {
 		return execFileSync(cmd[0], [...cmd.slice(1), mine, base, theirs], { encoding: "utf-8" });
 	} catch (error) {
 		// 競合があると終了コードが 0 以外になる。出力そのものは欲しい
-		return error.stdout ?? "";
+		if (typeof error.status === "number" && conflictStatus(error.status) && error.stdout) {
+			return error.stdout;
+		}
+		throw new Error(
+			`${cmd.join(" ")} が合流できませんでした（終了コード ${String(error.status)}）: ${String(error.stderr ?? error.message).trim()}`,
+		);
 	}
+}
+
+/**
+ * 重ならない隙間を `count` 個引く。
+ *
+ * 引き直しても重なるときは（狭い範囲に多く足す形）、空いている番号を順に拾って埋める。
+ * 引ける番号が尽きたら、その回の形が成り立っていないので止める。
+ */
+function uniqueSlots(count, draw) {
+	const chosen = new Set();
+	for (let i = 0; i < count; i++) {
+		let slot = draw();
+		for (let attempt = 0; attempt < 50 && chosen.has(slot); attempt++) {
+			slot = draw();
+		}
+		while (chosen.has(slot)) {
+			slot += 1;
+		}
+		chosen.add(slot);
+	}
+	return [...chosen];
 }
 
 function write(name, content) {
@@ -97,8 +132,11 @@ function tmCase(baseCount, add, next, disagree) {
 	for (let i = 0; i < baseCount; i++) common.push([`sentence ${i * 10}`, `文 ${i * 10}`]);
 	const mine = [...common];
 	const theirs = [...common];
-	for (let i = 0; i < add; i++) {
-		const slot = next(baseCount * 10 - 2) + 1;
+	// **同じ隙間を2度引かない。** 引くと同じ原文の TU が2つ並び、製品のパーサーは
+	// 同じ tuid を1つに畳む。「両側 N 件ずつ足した」と名乗る回が、実際にはそれより
+	// 少ない件数になり、別の形の数字を測ってしまう
+	for (const slot of uniqueSlots(add, () => next(baseCount * 10 - 2) + 1)) {
+		const i = mine.length - common.length;
 		mine.push([`sentence ${slot}`, `私の文 ${i}`]);
 		theirs.push([`sentence ${slot + 0.5}`, `相手の文 ${i}`]);
 	}
@@ -124,16 +162,35 @@ async function measureTm(way, baseCount, add, next, disagree = false) {
 		return { conflicted: false, pending: 0, lost: countLost(wanted, got), grown: countGrown(wanted, got) };
 	}
 	// **判断待ちは残したまま**書き戻しを試す（人も AI も居ない前提で、決定的な分だけを見る）
+	const before = fs.readFileSync(target, "utf-8");
 	applyTmResolution(target, planned.plan, planned.resolution, new Map());
 	const after = fs.readFileSync(target, "utf-8");
+	if (planned.plan.pending.length > 0) {
+		// 判断待ちが残った回は**1バイトも書かないこと**が約束である。数えずに 0 と
+		// 言い切る前に、本当に書かれていないかを確かめる
+		assertUntouched(before, after, "translations.tmx");
+		return { conflicted: true, pending: planned.plan.pending.length, lost: 0, grown: 0, unwritten: true };
+	}
 	const got = /^<{7}|^={7}|^>{7}/m.test(after) ? new Map() : TmxStore.parseSide(after);
 	return {
 		conflicted: true,
-		pending: planned.plan.pending.length,
-		lost: planned.plan.pending.length > 0 ? 0 : countLost(wanted, got),
-		grown: planned.plan.pending.length > 0 ? 0 : countGrown(wanted, got),
-		unwritten: planned.plan.pending.length > 0,
+		pending: 0,
+		lost: countLost(wanted, got),
+		grown: countGrown(wanted, got),
+		unwritten: false,
 	};
+}
+
+/**
+ * 判断待ちが残った回に、ファイルが1バイトも変わっていないことを確かめる。
+ *
+ * ここを確かめずに消失・増殖を 0 と報告すると、**半端に書き戻す不具合を台が隠す**。
+ * 「決まらない件が残った対象は1バイトも書かない」は測っている当のものである。
+ */
+function assertUntouched(before, after, what) {
+	if (before !== after) {
+		throw new Error(`判断待ちが残っているのに ${what} が書き換わりました。半端な書き戻しです`);
+	}
 }
 
 const countLost = (wanted, got) => [...wanted].filter((key) => !got.has(key)).length;
@@ -160,13 +217,15 @@ async function measureTerms(way, baseCount, add, next) {
 	for (let i = 0; i < baseCount; i++) common.push(term(i * 10));
 	const mine = [...common];
 	const theirs = [...common];
-	for (let i = 0; i < add; i++) {
-		// 既存語（0,10,20,...）の隙間へ入れる。末尾へ足し合う形は原稿の競合と同じで測る意味がない。
-		//
-		// **隙間の番号が既存語に当たることがある。** そのとき「片方だけが既存の語を直した」形に
-		// なり、これが git と diff3 の差を生む — 祖先があれば「直したほうを採る」と決定的に
-		// 決まるが、祖先が無いと「同じ語に別の訳語」としか見えず、人に回る（実測で確かめた）。
-		const slot = next(baseCount * 10 - 3) + 1;
+	// 既存語（0,10,20,...）の隙間へ入れる。末尾へ足し合う形は原稿の競合と同じで測る意味がない。
+	//
+	// **隙間の番号が既存語に当たることがある。** そのとき「片方だけが既存の語を直した」形に
+	// なり、これが git と diff3 の差を生む — 祖先があれば「直したほうを採る」と決定的に
+	// 決まるが、祖先が無いと「同じ語に別の訳語」としか見えず、人に回る（実測で確かめた）。
+	// **同じ隙間を2度引くのは別の話で、そちらは避ける** — 引くと「両側 N 語ずつ足した」と
+	// 名乗る回が、実際にはそれより少ない語数になる
+	for (const slot of uniqueSlots(add, () => next(baseCount * 10 - 3) + 1)) {
+		const i = mine.length - common.length;
 		mine.push(term(slot, `私の用語 ${i}`));
 		theirs.push(term(slot + 1, `相手の用語 ${i}`));
 	}
@@ -187,9 +246,13 @@ async function measureTerms(way, baseCount, add, next) {
 		const got = new Set([...(await back.getAllEntries())].map(key));
 		return { conflicted: false, pending: 0, lost: [...wanted].filter((k) => !got.has(k)).length, grown: [...got].filter((k) => !wanted.has(k)).length };
 	}
+	const before = fs.readFileSync(target, "utf-8");
 	await applyTermsResolution(planned.plan, planned.resolution, repo, new Map());
 	const after = fs.readFileSync(target, "utf-8");
 	if (planned.plan.pending.length > 0 || /^<{7}|^={7}|^>{7}/m.test(after)) {
+		if (planned.plan.pending.length > 0) {
+			assertUntouched(before, after, "terms.csv");
+		}
 		return { conflicted: true, pending: planned.plan.pending.length, lost: 0, grown: 0, unwritten: true };
 	}
 	const back = await TermsRepositoryCSV.load(target);
