@@ -88,14 +88,23 @@ suite("既にある作業場からの移行", () => {
 
 		assert.equal(outcome.rows, 2, "行が失われている");
 		assert.equal(outcome.unseated, 1);
-		const merged = UnitStateStore.getInstance().getEntriesByPath("en/a.md").filter(isMergeHeldEntry);
-		assert.equal(merged.length, 1, "合流由来として見分けられていない");
+
+		// **メモリの上ではなく、ディスクから読み直して確かめる。** 保存の側で降ろされた行が
+		// 落ちる回帰は、メモリの表を見ているだけでは捕まらない
+		UnitStateStore.dispose();
+		const reloaded = UnitStateStore.getInstance();
+		reloaded.load(mdaitDir);
+		const rows = reloaded.getEntriesByPath("en/a.md");
+		assert.equal(rows.length, 2, "保存で行が落ちている");
+		assert.equal(rows.filter(isMergeHeldEntry).length, 1, "合流由来として見分けられていない");
 	});
 
-	test("まだ mdait 化していない作業場では、何も作らない", async () => {
-		// `.gitattributes` を作らないのはもちろん、勝手に作り直しもしない
+	test("`.gitattributes` が無い作業場では、移行はそれを作らない", async () => {
+		// 移行は**外す**だけの仕事で、無いものを作りはしない。`.gitignore` は移行とは別に
+		// mdait が持つファイルなので、そちらは作られる（作業場ごとの完成形をここで固定する）
 		await ensureMdaitDir();
 
-		assert.equal(fs.existsSync(attributes()), false);
+		assert.equal(fs.existsSync(attributes()), false, "移行が .gitattributes を作っている");
+		assert.equal(fs.existsSync(path.join(mdaitDir, ".gitignore")), true);
 	});
 });
