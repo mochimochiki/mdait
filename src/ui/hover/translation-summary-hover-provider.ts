@@ -50,12 +50,17 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 		}
 
 		const config = Configuration.getInstance();
-		const explorer = new FileExplorer();
+		// 役割は「原文か」「訳文か」を別々に取る。`FileExplorer` はワークスペースが無いと
+		// **コンストラクターが**投げるので、生成ごと try の中に入れる（ここが投げると
+		// hover 自体が reject する）。判定できなければどちらも false
 		let isSourceFile = false;
+		let isTargetFile = false;
 		try {
+			const explorer = new FileExplorer();
 			isSourceFile = explorer.isSourceFile(document.uri.fsPath, config);
+			isTargetFile = explorer.isTargetFile(document.uri.fsPath, config);
 		} catch {
-			// ワークスペース未設定など。既定のまま進む（hover を壊さない）
+			// ワークスペース未設定など
 		}
 
 		// マーカーを取得（external では行範囲からユニットを特定）
@@ -79,7 +84,7 @@ export class TranslationSummaryHoverProvider implements vscode.HoverProvider {
 
 		// 独立ユニット（原文と結びついていない訳文の章）は、そのことだけを伝える。
 		// 統計も差分も無く、CodeLens にも操作が出ないので、ここが唯一の説明になる
-		if (isIndependentUnit(marker, isSourceFile)) {
+		if (isIndependentUnit(marker, isTargetFile)) {
 			const md = new vscode.MarkdownString();
 			md.appendMarkdown(vscode.l10n.t("This unit does not exist in the source."));
 			return new vscode.Hover(md);

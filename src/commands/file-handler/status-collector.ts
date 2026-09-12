@@ -160,8 +160,10 @@ export class StatusCollector implements StatusCollectorPort {
 				return this.buildEmptyFileStatusItem(filePath, fileName);
 			}
 
-			const isSourceFile = this.fileExplorer.isSourceFile(filePath, this.config);
-			const units = this.collectUnitsStatus(markdown.units, filePath, fileName, isSourceFile);
+			// 「原文ではない」ではなく「訳文である」で取る。原文でも訳文でもない管理外の
+			// Markdown まで独立ユニット扱いになるのを避けるため（independent-unit.ts）
+			const isTargetFile = this.fileExplorer.isTargetFile(filePath, this.config);
+			const units = this.collectUnitsStatus(markdown.units, filePath, fileName, isTargetFile);
 			return this.buildFileStatusItem(filePath, fileName, units, frontmatterItem);
 		} catch (error) {
 			console.error(`Error processing file ${filePath}:`, error);
@@ -198,7 +200,7 @@ export class StatusCollector implements StatusCollectorPort {
 		units: readonly MdaitUnit[],
 		filePath: string,
 		fileName: string,
-		isSourceFile: boolean,
+		isTargetFile: boolean,
 	): UnitStatusItem[] {
 		return units.map((unit) => {
 			const unitStatus = this.determineUnitStatus(unit);
@@ -213,9 +215,9 @@ export class StatusCollector implements StatusCollectorPort {
 				needFlag: unit.marker?.need || undefined,
 				startLine: unit.startLine,
 				endLine: unit.endLine,
-				contextValue: this.determineUnitContextValue(unit),
+				contextValue: this.determineUnitContextValue(unit, isTargetFile),
 				// 原文ユニットも from を持たないので、マーカーだけでは独立ユニットと区別できない
-				isIndependent: isIndependentUnit(unit.marker, isSourceFile),
+				isIndependent: isIndependentUnit(unit.marker, isTargetFile),
 				filePath,
 				fileName,
 			};
@@ -235,12 +237,19 @@ export class StatusCollector implements StatusCollectorPort {
 	 * 判定順は determineUnitStatus と揃える（need を from より先に見る。穴あき一次受けの
 	 * need:review は from を持たないため）。
 	 */
-	private determineUnitContextValue(unit: MdaitUnit): string {
+	private determineUnitContextValue(unit: MdaitUnit, isTargetFile: boolean): string {
 		const need = unit.marker?.need;
 
 		// 凍結は原文側にも宣言できる（ADR-260706-02）ため Target を名前に含めない
 		if (isIsolatedNeed(need)) {
 			return "mdaitUnitIsolated";
+		}
+		// 独立ユニットは原文ユニットと同じ形（from なし）をしている。同じ contextValue に
+		// すると原文向けの「凍結する」がツリーに並ぶが、原文の章が無い以上その宣言に意味は
+		// 無い。押しても何も変わらないものをメニューに出さない（ux.md・UX-P7）。
+		// CodeLens が「その他」を出さないのと同じ判断である
+		if (isIndependentUnit(unit.marker, isTargetFile)) {
+			return "mdaitUnitIndependent";
 		}
 		if (need === "review") {
 			return "mdaitUnitTargetAttention";

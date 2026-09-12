@@ -63,6 +63,7 @@ StatusTreeは`contextValue`プロパティを使用して、VS Codeのwhen条件
 - `mdaitFileTargetVerifyDeletion`: 確認待ち（`need:verify-deletion`）を含むターゲットファイル（ファイル単位の一括確定用。ADR-260805-01）
 - `mdaitFileTargetOrphan`: 原文と結びついていないターゲットファイル（破棄コマンド用。ADR-260806-01）
 - `mdaitPlainFileTarget` / `mdaitPlainFileTargetComplete`: 非Markdownのターゲットファイル（ファイル＝1ユニット）
+- `mdaitUnitIndependent`: 独立ユニット（訳文側の `from` なし。ADR-260912-05）。メニューは登録しない — 原文の章が無い以上「凍結する」に意味が無く、押しても何も変わらないものを並べないため（CodeLens が「その他」を出さないのと同じ判断）。原文ユニットの `mdaitUnitSource` と分けているのはこのためである
 
 **contextValueの設定**:
 ターゲットファイル/ディレクトリは、翻訳状態に応じて以下のいずれかのcontextValueを持ちます：

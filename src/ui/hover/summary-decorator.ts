@@ -59,13 +59,18 @@ export class SummaryDecorator {
 		const document = editor.document;
 		const decorations: vscode.DecorationOptions[] = [];
 		const config = Configuration.getInstance();
-		const explorer = new FileExplorer();
+		// 役割は「原文か」「訳文か」を別々に取る。`FileExplorer` はワークスペースが無いと
+		// **コンストラクターが**投げるので、生成ごと try の中に入れる（ここが投げると
+		// エディタを切り替えるたびに装飾の更新が落ちる）。判定できなければどちらも false —
+		// 印を出さないだけで、嘘は書かない
 		let isSourceFile = false;
+		let isTargetFile = false;
 		try {
+			const explorer = new FileExplorer();
 			isSourceFile = explorer.isSourceFile(document.uri.fsPath, config);
+			isTargetFile = explorer.isTargetFile(document.uri.fsPath, config);
 		} catch {
-			// ワークスペース未設定など。原文側と決めつけない（訳文の装飾を落とすより、
-			// 原文に余計な装飾が出ないほうを優先する材料が無いため既定のまま進む）
+			// ワークスペース未設定など
 		}
 
 		const addDecoration = (lineIndex: number, marker: MdaitMarker): void => {
@@ -80,7 +85,7 @@ export class SummaryDecorator {
 			// 独立ユニット（原文と結びついていない訳文の章）は、CodeLens にも何も出ない。
 			// 何の印も無いと「ただの本文」と見分けが付かないので、ここで一言だけ添える
 			// （操作は無い。解説は Hover にある。ux.md §3.3 の役割分担）
-			const summaryText = isIndependentUnit(marker, isSourceFile)
+			const summaryText = isIndependentUnit(marker, isTargetFile)
 				? vscode.l10n.t("No source")
 				: summary
 					? this.buildSummaryText(summary.stats.duration, summary.stats.tokens, marker.need)

@@ -7,16 +7,17 @@
 import * as assert from "node:assert";
 import { isIndependentUnit } from "../../../../core/unit-state/independent-unit";
 
-const TARGET = false;
-const SOURCE = true;
+const TARGET = true;
+/** 原文側、または原文でも訳文でもない管理外の Markdown（どちらも「訳文だと確かめられない」） */
+const NOT_TARGET = false;
 
 suite("isIndependentUnit（独立ユニットの判定）", () => {
 	test("訳文の from なし・need なしのユニットは独立ユニット", () => {
 		assert.strictEqual(isIndependentUnit({ hash: "aaaa", from: null, need: null }, TARGET), true);
 	});
 
-	test("原文ファイルのユニットは from が無くても独立ユニットではない", () => {
-		assert.strictEqual(isIndependentUnit({ hash: "aaaa", from: null, need: null }, SOURCE), false);
+	test("訳文だと確かめられないファイル（原文側・管理外）のユニットは独立ユニットではない", () => {
+		assert.strictEqual(isIndependentUnit({ hash: "aaaa", from: null, need: null }, NOT_TARGET), false);
 	});
 
 	test("from があれば独立ユニットではない（原文と結びついている）", () => {
