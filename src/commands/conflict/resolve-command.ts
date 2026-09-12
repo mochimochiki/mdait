@@ -74,7 +74,7 @@ async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promis
 		...(missingBase
 			? [
 					vscode.l10n.t(
-						"This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. Setting git's merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you.",
+						"This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. If you merge with git, setting merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you. SVN has no equivalent setting, so with SVN these stay for you to decide.",
 					),
 				]
 			: []),
