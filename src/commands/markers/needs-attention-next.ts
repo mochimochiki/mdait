@@ -18,8 +18,8 @@ export interface NeedsAttentionOrigin {
  * 残る（ux.md B-8）。本コマンドは現在位置の次の項目へ1操作で移動し、末尾まで来たら先頭へ
  * 回ることでキューを一巡できるようにする。
  *
- * 裁定直後に自動で画面が飛ぶことはしない（驚きが大きく VS Code 標準の作法から外れるため。
- * UX-P5）。押したときだけ動く。
+ * 押したときだけ動く。裁定の直後に自動で進むのは CodeLens「レビュー完了」だけで、
+ * それは `advanceAfterReview` が受け持つ（ADR-260912-03）。
  *
  * 移動先は訳文だけでなく原文と並べて開く（`mdait.openPair`）。要対応の中心は review で、
  * 「この訳がこの原文の訳として正しいか」は対訳で見えないと判断できない。
@@ -44,7 +44,57 @@ export async function needsAttentionNextCommand(arg?: unknown): Promise<void> {
 		return;
 	}
 
-	const index = findNextIndex(items, resolveOrigin(readOriginLine(arg)));
+	await openNeedsAttentionItem(items, findNextIndex(items, resolveOrigin(readOriginLine(arg))));
+}
+
+/**
+ * need 解除の結果が「レビュー完了」（`need:review` を外した）だったかを判定する（純関数）。
+ *
+ * 同じ確定ボタンでも、翻訳済み・改訂済み・isolate 解除は要対応キューの外の操作なので、
+ * 押したあとに別のファイルへ飛ばれると驚く。次へ進むのは review を片づけたときだけ。
+ *
+ * @param resolved `resolveNeed` が返した解決済みユニット（`need` は外したフラグの生値）
+ */
+export function isReviewResolution(resolved: ReadonlyArray<{ need: string }>): boolean {
+	return resolved.some((unit) => unit.need === "review");
+}
+
+/**
+ * CodeLens「レビュー完了」の直後に、残っている次の要対応へ進む（ADR-260912-03）。
+ *
+ * 要対応をキューとして回るとき、1件ごとに「次の要対応へ」を押し直すのは往復と同じ手間で、
+ * 裁定→移動を1操作にまとめてはじめて連続裁定になる。review 以外の確定
+ * （`isReviewResolution` が false）では何もしない。
+ *
+ * `needsAttentionNextCommand` との違いは残りが 0 件のときだけ — 通知で遮らず、
+ * ステータスバーに一言置いて終わる。いま1件片づけた人にとって「残りなし」は結果であって
+ * 警告ではない（ux.md §3.3）。
+ *
+ * @param resolved `resolveNeed` が返した解決済みユニット
+ * @param origin いま裁定した項目の位置（ファイルと行）。ここより後ろの項目を探す。
+ *   裁定した項目はキューから消えているので（`resolveNeed` がステータスを更新済み）、
+ *   同じ項目で足踏みすることはない。末尾なら先頭へ回る
+ */
+export async function advanceAfterReview(
+	resolved: ReadonlyArray<{ need: string }>,
+	origin: NeedsAttentionOrigin,
+): Promise<void> {
+	if (!isReviewResolution(resolved)) {
+		return;
+	}
+	const items = collectSortedNeedsAttentionItems();
+	if (items.length === 0) {
+		vscode.window.setStatusBarMessage(vscode.l10n.t("Needs Attention: all done"), 4000);
+		return;
+	}
+	await openNeedsAttentionItem(items, findNextIndex(items, origin));
+}
+
+/**
+ * キューの `index` 番目の項目を対訳表示で開き、キューの何件目かをステータスバーに一時的に示す
+ * （通知を増やさず視界の隅で進捗が分かるようにする）。
+ */
+async function openNeedsAttentionItem(items: NeedsAttentionItem[], index: number): Promise<void> {
 	const target = items[index];
 
 	await vscode.commands.executeCommand(
@@ -53,7 +103,6 @@ export async function needsAttentionNextCommand(arg?: unknown): Promise<void> {
 		getNeedsAttentionLine(target),
 	);
 
-	// キューの何件目かを一時的に示す（通知を増やさず視界の隅で進捗が分かるようにする）
 	vscode.window.setStatusBarMessage(
 		vscode.l10n.t("Needs Attention: {0} of {1}", index + 1, items.length),
 		4000,

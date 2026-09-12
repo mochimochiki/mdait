@@ -186,6 +186,9 @@ const vscodeMock = {
 			return global.__vscodeMockActiveTextEditor;
 		},
 		showTextDocument: async (document) => ({ document }),
+		// ステータスバーの一時メッセージ（「要対応: N 件中 M 件目」など）。トーストではないので
+		// __vscodeMockShownMessages には控えない（「通知を出さないこと」の検査を汚さない）
+		setStatusBarMessage: () => ({ dispose: () => {} }),
 		createOutputChannel: () => ({
 			appendLine: () => {},
 			append: () => {},

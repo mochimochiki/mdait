@@ -3,10 +3,16 @@
 // 前進・末尾からの折り返し・起点が無い場合の3つを固定する。
 // 併せて、第1引数にツリー項目が来ても落ちないこと（実測された TypeError）と、
 // frontmatter・非MD が行 0 の項目としてキューに混ざることを固定する。
+// CodeLens「レビュー完了」の直後に自動で次へ進む条件（review を外したときだけ。
+// ADR-260912-03）と、片づけた項目が消えたキューで次の項目が選ばれることもここで固定する。
 
 import * as assert from "node:assert";
 import * as path from "node:path";
-import { findNextIndex, readOriginLine } from "../../../../commands/markers/needs-attention-next";
+import {
+	findNextIndex,
+	isReviewResolution,
+	readOriginLine,
+} from "../../../../commands/markers/needs-attention-next";
 import {
 	type FileStatusItem,
 	type FrontmatterStatusItem,
@@ -172,6 +178,54 @@ suite("findNextIndex（frontmatter・非MD を含むキュー）", () => {
 
 	test("直前のファイルの末尾から進むと、次のファイルの frontmatter（行 0）が選ばれること", () => {
 		assert.strictEqual(findNextIndex(queue, { filePath: txtPath, line: 99 }), 1);
+	});
+});
+
+suite("isReviewResolution（「レビュー完了」の直後だけ次の要対応へ進む）", () => {
+	test("need:review を外した結果なら進むこと", () => {
+		assert.strictEqual(isReviewResolution([{ need: "review" }]), true);
+	});
+
+	test("翻訳済み・改訂済み・isolate 解除・verify-deletion は要対応キューの外の操作なので進まないこと", () => {
+		for (const need of ["translate", "revise@old", "isolate", "verify-deletion"]) {
+			assert.strictEqual(isReviewResolution([{ need }]), false, `need=${need}`);
+		}
+	});
+
+	test("何も外せなかった（解決 0 件）なら進まないこと", () => {
+		assert.strictEqual(isReviewResolution([]), false);
+	});
+});
+
+suite("findNextIndex（「レビュー完了」で片づけた項目が消えたキュー）", () => {
+	setup(() => {
+		__vscodeMockWorkspaceRoot = "/mock-workspace";
+	});
+
+	test("片づけた行を起点にすると、同じファイルの次の項目へ進むこと", () => {
+		// a5 を片づけた直後のキュー（a5 は resolveNeed のステータス更新で既に消えている）
+		const queue = buildQueue([
+			makeFile(aPath, [makeUnit(aPath, "a80", 80)]),
+			makeFile(bPath, [makeUnit(bPath, "b10", 10)]),
+		]);
+		assert.strictEqual(keyOf(queue[findNextIndex(queue, { filePath: aPath, line: 5 })]), "a80");
+	});
+
+	test("最後の項目を片づけたら、残っている先頭の項目へ回ること", () => {
+		// b10 を片づけた直後。手前に残した a5 がまだあるので、そこへ回る
+		const queue = buildQueue([makeFile(aPath, [makeUnit(aPath, "a5", 5)])]);
+		assert.strictEqual(keyOf(queue[findNextIndex(queue, { filePath: bPath, line: 10 })]), "a5");
+	});
+
+	test("frontmatter（行 0）を片づけたら、同じファイルの本文ユニットへ進むこと", () => {
+		const queue = buildQueue([makeFile(aPath, [makeUnit(aPath, "a5", 5)])]);
+		assert.strictEqual(keyOf(queue[findNextIndex(queue, { filePath: aPath, line: 0 })]), "a5");
+	});
+
+	test("非MD ファイル（行 0）を片づけたら、パス順で次のファイルの項目へ進むこと", () => {
+		const txtPath = path.join(jaDir, "0-notes.txt"); // a.md より前
+		const queue = buildQueue([makeFile(aPath, [makeUnit(aPath, "a5", 5)])]);
+		assert.strictEqual(keyOf(queue[findNextIndex(queue, { filePath: txtPath, line: 0 })]), "a5");
 	});
 });
 

@@ -544,6 +544,7 @@
   "Delete unit '{0}' from the document? This removes its content — recover via git history if needed.": "Delete unit '{0}' from the document? This removes its content — recover via git history if needed.",
   "Nothing to un-isolate for this unit.": "Nothing to un-isolate for this unit.",
   "No units are awaiting review or deletion verification.": "No units are awaiting review or deletion verification.",
+  "Needs Attention: all done": "Needs Attention: all done",
   "Needs Attention: {0} of {1}": "Needs Attention: {0} of {1}",
   "mdait is not configured in this workspace.": "mdait is not configured in this workspace.",
   "Cannot externalize markers: sync.level is 0 (fully manual marker placement). External marker mode stores markers by heading-based unit order and cannot represent manual unit boundaries, so externalizing would lose them. Set sync.level to 1 or higher first.": "Cannot externalize markers: sync.level is 0 (fully manual marker placement). External marker mode stores markers by heading-based unit order and cannot represent manual unit boundaries, so externalizing would lose them. Set sync.level to 1 or higher first.",

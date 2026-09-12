@@ -10,6 +10,7 @@
 import * as vscode from "vscode";
 import { StatusItemType, getUnitsFromFile } from "../../core/status/status-item";
 import type { FileStatusItem, StatusItem, UnitStatusItem } from "../../core/status/status-item";
+import { getNeedsAttentionLine } from "../../core/status/status-item-tree";
 import { Configuration } from "../../infra/config/configuration";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import { getFileHandler } from "../file-handler/file-handler-factory";
@@ -17,6 +18,7 @@ import { resolveFileType } from "../file-handler/file-type";
 import type { DeclareIsolateResult } from "./declare-isolate";
 import type { DeleteUnitResult } from "./delete-unit";
 import type { KeepUnitsResult } from "./keep-unit";
+import { advanceAfterReview } from "./needs-attention-next";
 import type { NeedTarget } from "./resolve-need";
 
 /** deleteUnit の失敗理由を人間可読なメッセージに変換する */
@@ -81,6 +83,11 @@ function requireFile(item?: StatusItem): FileStatusItem | undefined {
 export interface ReviewTarget {
 	filePath: string;
 	target: NeedTarget;
+	/**
+	 * 要対応キューでのこの項目の行（`getNeedsAttentionLine` と同じ。本文ユニットは開始行、
+	 * frontmatter と非Markdown は 0）。裁定のあと次の要対応を探す起点になる
+	 */
+	line: number;
 }
 
 /**
@@ -106,13 +113,19 @@ export function toReviewTarget(item?: StatusItem): ReviewTarget | undefined {
 	switch (item.type) {
 		case StatusItemType.Unit:
 			return item.filePath && item.unitHash
-				? { filePath: item.filePath, target: { kind: "unit", hash: item.unitHash } }
+				? {
+						filePath: item.filePath,
+						target: { kind: "unit", hash: item.unitHash },
+						line: getNeedsAttentionLine(item),
+					}
 				: undefined;
 		case StatusItemType.Frontmatter:
-			return item.filePath ? { filePath: item.filePath, target: { kind: "frontmatter" } } : undefined;
+			return item.filePath
+				? { filePath: item.filePath, target: { kind: "frontmatter" }, line: getNeedsAttentionLine(item) }
+				: undefined;
 		case StatusItemType.File:
 			return item.filePath && resolveFileType(item.filePath) === "plain"
-				? { filePath: item.filePath, target: { kind: "file" } }
+				? { filePath: item.filePath, target: { kind: "file" }, line: getNeedsAttentionLine(item) }
 				: undefined;
 		default:
 			return undefined;
@@ -152,6 +165,9 @@ export class StatusTreeNeedHandler {
 	/**
 	 * review: レビュー済みとして need を外す。
 	 * 本文ユニットのほかに frontmatter と非Markdown のファイル行も受ける（`toReviewTarget`）。
+	 * 外せたら CodeLens「レビュー完了」と同じく、残っている次の要対応を対訳表示で開く
+	 * （`advanceAfterReview`。ADR-260912-03）。要対応ノードの項目で押したときも、ファイル配下の
+	 * ユニット行で押したときも同じ — どちらもキューの次へ進む
 	 */
 	public async markReviewed(item?: StatusItem): Promise<void> {
 		const review = toReviewTarget(item);
@@ -165,7 +181,9 @@ export class StatusTreeNeedHandler {
 		});
 		if (result.resolved.length === 0) {
 			vscode.window.showWarningMessage(vscode.l10n.t("Nothing to mark as reviewed for this unit."));
+			return;
 		}
+		await advanceAfterReview(result.resolved, { filePath: review.filePath, line: review.line });
 	}
 
 	/**
