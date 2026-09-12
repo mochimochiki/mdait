@@ -9,9 +9,12 @@ import * as path from "node:path";
  * FileMutex のロックキーやダーティドキュメント検出のパス比較に使用する。
  *
  * @param filePath 正規化するファイルパス
- * @param platform 対象プラットフォーム（テスト用に注入可能。既定は実行環境）
+ * @param platform 対象プラットフォーム（テスト用に注入可能。既定は実行環境）。
+ *   パスの解決（区切り・ドライブレター）も小文字化もこの値に従う。解決だけを実行環境の
+ *   `path` に任せると、Windows で走らせた linux 向けのテストが `C:\ws\...` に解決されて落ちる
  */
 export function normalizeFileKey(filePath: string, platform: NodeJS.Platform = process.platform): string {
-	const resolved = path.resolve(filePath);
+	const impl = platform === "win32" ? path.win32 : path.posix;
+	const resolved = impl.resolve(filePath);
 	return platform === "win32" ? resolved.toLowerCase() : resolved;
 }
