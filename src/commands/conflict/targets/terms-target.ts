@@ -20,6 +20,7 @@ import type { LangTerm, TermEntry } from "../../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../../term/term-entry";
 import type { TermsRepository } from "../../term/terms-repository";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
+import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料 */
 interface TermSides {
@@ -39,12 +40,17 @@ function entryKey(entry: TermEntry, primaryLang: string): string {
 	return `${primaryLang}:${TermEntryUtils.getTerm(entry, primaryLang) ?? ""}::${entry.context}`;
 }
 
+/** 表記揺れの一覧が同じか。**繋げて比べない** — `['a', 'b']` と `['a b']` は別物である */
+function sameVariants(a: readonly string[], b: readonly string[]): boolean {
+	return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
 /** 言語1つぶんが同じか */
 function sameLang(a: LangTerm | undefined, b: LangTerm | undefined): boolean {
 	if (!a || !b) {
 		return a === b;
 	}
-	return a.term === b.term && a.variants.join(" ") === b.variants.join(" ");
+	return a.term === b.term && sameVariants(a.variants, b.variants);
 }
 
 /** 2つの語が同じか */
@@ -83,14 +89,29 @@ function mergeLanguages(ours: TermEntry, theirs: TermEntry, base: TermEntry | un
 	for (const lang of langs) {
 		const mine = ours.languages[lang];
 		const yours = theirs.languages[lang];
-		if (!mine) {
-			merged[lang] = yours;
-			continue;
-		}
-		if (!yours || sameLang(mine, yours)) {
-			continue;
-		}
 		const ancestor = base?.languages[lang];
+
+		// **片方にしか無い言語。** 祖先に無ければ「足した」なので採る。祖先に在れば
+		// 「消した」なので、残っている側が祖先のままなら消す。残っている側も直していたら
+		// 「消した」と「直した」がぶつかっているので、語ごと人に決めてもらう
+		if (!mine || !yours) {
+			const present = mine ?? yours;
+			if (!present) {
+				continue;
+			}
+			if (!ancestor) {
+				merged[lang] = present;
+				continue;
+			}
+			if (sameLang(present, ancestor)) {
+				delete merged[lang];
+				continue;
+			}
+			return undefined;
+		}
+		if (sameLang(mine, yours)) {
+			continue;
+		}
 		if (ancestor) {
 			if (sameLang(mine, ancestor)) {
 				merged[lang] = yours;
@@ -101,6 +122,9 @@ function mergeLanguages(ours: TermEntry, theirs: TermEntry, base: TermEntry | un
 			}
 		}
 		return undefined; // 2人が同じ言語の訳語を別々に直した。人が決める
+	}
+	if (Object.keys(merged).length === 0) {
+		return undefined; // 訳語が1つも残らない。畳まずに人へ回す
 	}
 	return TermEntryUtils.create(ours.context, merged);
 }
@@ -144,9 +168,12 @@ export async function planTermsResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
-		oursText: describe(item.ours),
-		theirsText: describe(item.theirs),
+		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す
+		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours),
+		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs),
 		baseText: item.base ? describe(item.base) : undefined,
+		oursDeleted: item.oursDeleted,
+		theirsDeleted: item.theirsDeleted,
 	}));
 
 	return {
@@ -189,6 +216,12 @@ export async function applyTermsResolution(
 		const side = decided.get(item.key);
 		if (!side) {
 			remainingCount++;
+			continue;
+		}
+		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
+		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
+			final.delete(item.key);
+			decidedCount++;
 			continue;
 		}
 		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);

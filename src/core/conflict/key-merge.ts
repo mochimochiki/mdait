@@ -17,6 +17,7 @@
  *   | 同じ鍵・片方だけが祖先から変えた | **変えたほうを採る**（3方向マージの基本） |
  *   | 同じ鍵・触った項目が別 | 項目単位で両方採る（`mergeFields` を渡したときだけ） |
  *   | 同じ鍵・同じ項目に別の値 | **決まらない**。AI か人が決める |
+ *   | 片方が消し・片方が直した | **決まらない**。消した側は「消した」という印で見せる |
  *
  *   祖先が無いとき（diff3 形式でない合流）は「片方が消した」と「片方が足した」を見分け
  *   られない。**そのときは必ず両方を採る** — 消えて困るほうが、余って困るより重いからである。
@@ -40,6 +41,14 @@ export interface UndecidedEntry<T> {
 	theirs: T;
 	/** 共通の祖先（diff3 形式で取れたときだけ） */
 	base?: T;
+	/**
+	 * **自分の側がこの鍵を消していた。** `ours` には祖先の値が入る（消した側に見せる値が
+	 * 無いので、何を消したのかが読めるようにする）。この印が付いた件で `ours` を採るとは
+	 * 「消したままにする」ことで、祖先の値を書き戻すことではない。
+	 */
+	oursDeleted?: boolean;
+	/** **相手の側がこの鍵を消していた。** 意味は `oursDeleted` と同じ */
+	theirsDeleted?: boolean;
 }
 
 /** 突き合わせた結果 */
@@ -123,10 +132,13 @@ export function mergeByKey<T>(
 					deleted.push(key);
 					continue;
 				}
+				// **消した側と直した側がぶつかっている。** 消した側には見せる値が無いので
+				// 祖先の値を置き、「消した」ことは印で伝える。印を落とすと、消した側を
+				// 採ったときに祖先の値が書き戻り、削除が黙って取り消される
 				undecided.push(
 					mine === undefined
-						? { key, ours: ancestor, theirs: yours as T, base: ancestor }
-						: { key, ours: mine, theirs: ancestor, base: ancestor },
+						? { key, ours: ancestor, theirs: yours as T, base: ancestor, oursDeleted: true }
+						: { key, ours: mine, theirs: ancestor, base: ancestor, theirsDeleted: true },
 				);
 				continue;
 			}

@@ -16,14 +16,18 @@ import {
 	buildConflictRows,
 	buildConflictsItem,
 	choiceOfConflictRow,
+	fingerprintOfKey,
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
+/** 計画を作ったときのファイルの見た目（決めかけの寿命はこれで決まる） */
+const STAMP = "/ws/.mdait/translations.tmx\u00001:2";
+
 const withFiles = (...kinds: Array<"unit-state" | "unit-registry" | "tm" | "terms">): MdaitConflicts => ({
-	files: kinds.map((kind) => ({ kind, filePath: `/ws/.mdait/${kind}` })),
+	files: kinds.map((kind) => ({ kind, filePath: `/ws/.mdait/${kind}`, stamp: `/ws/.mdait/${kind}\u00001:2` })),
 	heldRows: [],
 	total: kinds.length,
 });
@@ -120,10 +124,18 @@ suite("競合の解決（StatusTree の枝）", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
 
 			assert.match(rows[0].description ?? "", /\.mdait\/tm/);
+			// 件数が出ていなければ、開く価値のある行だと分からない
+			assert.match(rows[0].description ?? "", /2/);
+		});
+
+		test("判断待ちが無いファイルの行には、件数を添えない", () => {
+			const rows = buildConflictRows(withFiles("tm"), "/ws");
+
+			assert.equal(rows[0].description, ".mdait/tm");
 		});
 
 		test("1件1行で並び、まだ決めていない件は未決と出る", () => {
-			const rows = buildConflictChoiceRows(plan(2));
+			const rows = buildConflictChoiceRows(plan(2), STAMP);
 
 			assert.equal(rows.length, 2);
 			assert.equal(rows[0].label, "語0");
@@ -132,7 +144,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("Hover に両側と、分かれる前の値を置く", () => {
-			const tip = buildConflictChoiceRows(plan(1))[0].tooltip ?? "";
+			const tip = buildConflictChoiceRows(plan(1), STAMP)[0].tooltip ?? "";
 
 			assert.match(tip, /私の訳0/);
 			assert.match(tip, /相手の訳0/);
@@ -140,9 +152,9 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("決めた件は、どちらを採ったかが読める", () => {
-			rememberDecision("/ws/.mdait/translations.tmx", "k0", "theirs");
+			rememberDecision("/ws/.mdait/translations.tmx", STAMP, "k0", "theirs");
 
-			const rows = buildConflictChoiceRows(plan(1));
+			const rows = buildConflictChoiceRows(plan(1), STAMP);
 
 			assert.equal(rows[0].contextValue, "mdaitConflictChoiceDecided");
 			assert.notEqual(rows[0].description, undefined);
@@ -150,11 +162,30 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("行の識別子から、どのファイルの何番目かを引ける", () => {
-			const rows = buildConflictChoiceRows(plan(3));
+			const rows = buildConflictChoiceRows(plan(3), STAMP);
 
 			const found = choiceOfConflictRow(rows[2].directoryPath);
 			assert.equal(found?.filePath, "/ws/.mdait/translations.tmx");
 			assert.equal(found?.index, 2);
+		});
+
+		test("行の識別子は、その件の鍵の目印も持つ", () => {
+			// 番号だけだと、ファイルが外から変わったときに別の件を指してしまう
+			const rows = buildConflictChoiceRows(plan(3), STAMP);
+
+			const found = choiceOfConflictRow(rows[2].directoryPath);
+			assert.equal(found?.fingerprint, fingerprintOfKey("k2"));
+			assert.notEqual(found?.fingerprint, fingerprintOfKey("k0"));
+		});
+
+		test("ファイルが外から変わったら、決めかけは残らない", () => {
+			rememberDecision("/ws/.mdait/translations.tmx", STAMP, "k0", "theirs");
+
+			// 別の合流が来た（見た目が変わった）
+			const rows = buildConflictChoiceRows(plan(1), `${STAMP}-changed`);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictChoice", "前の判断が残っている");
+			forgetAllDecisions();
 		});
 
 		test("競合の解決の行でない識別子からは引けない", () => {

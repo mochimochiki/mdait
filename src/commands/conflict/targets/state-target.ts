@@ -40,6 +40,7 @@ export function planUnitStateResolution(filePath: string): ResolutionPlan {
 		deletedKeys: [],
 		pending: [],
 		hasBase: false,
+		wholeFile: true,
 	};
 }
 
@@ -81,10 +82,17 @@ export function planUnitRegistryResolution(filePath: string): ResolutionPlan {
 		deletedKeys: [],
 		pending: [],
 		hasBase: false,
+		wholeFile: true,
 	};
 }
 
-/** 台帳を正規形で書き戻す。読めた控えはすべて残る */
+/**
+ * 台帳を正規形で書き戻す。読めた控えはすべて残る。
+ *
+ * **`unit-state` と同じ排他の内側で行う。** 台帳の読み書き（`flushBuffer`）は sync の
+ * ストア全体の排他の中で起きるので、ここだけ外で読み直すと、sync が抱えている控えと
+ * 読み直した結果が互いを上書きしうる。
+ */
 export async function applyUnitRegistryResolution(): Promise<number> {
-	return UnitRegistryManager.getInstance().resolveConflict();
+	return withUnitStateLock(async () => UnitRegistryManager.getInstance().resolveConflict());
 }

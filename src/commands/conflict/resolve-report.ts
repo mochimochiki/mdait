@@ -13,7 +13,7 @@
  * @module commands/conflict/resolve-report
  */
 import * as vscode from "vscode";
-import type { ConflictResolutionPlan, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
+import type { ChoiceSide, ConflictResolutionPlan, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
 
 /** 対象の人が読む名前 */
 function kindLabel(kind: ResolutionOutcome["kind"]): string {
@@ -29,8 +29,17 @@ function kindLabel(kind: ResolutionOutcome["kind"]): string {
 	}
 }
 
-/** 決まらずに残った件を一覧にする */
-function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): string[] {
+/**
+ * 決まらずに残った件を一覧にする。
+ *
+ * **決まった件は出さない。** 出すと、AI が決めた件まで「あなたの判断を待っています」の
+ * 表に並び、どれが本当に残っているのか読めなくなる。
+ */
+function remainingSection(
+	plan: ResolutionPlan,
+	outcome: ResolutionOutcome,
+	sides: ReadonlyMap<string, ChoiceSide>,
+): string[] {
 	if (outcome.remainingCount === 0) {
 		return [];
 	}
@@ -45,6 +54,9 @@ function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): str
 		"|---|---|---|",
 	];
 	for (const item of plan.pending) {
+		if (sides.has(item.key)) {
+			continue;
+		}
 		lines.push(`| ${escapeCell(item.label)} | ${escapeCell(item.oursText)} | ${escapeCell(item.theirsText)} |`);
 	}
 	return lines;
@@ -61,11 +73,14 @@ function escapeCell(text: string): string {
  * @param summary 実行前の計画（何件を判定にかけたか）
  * @param outcomes 対象ごとの結果
  * @param reasons 鍵 → AI が付けた理由
+ * @param sides 鍵 → AI がどちらを採ったか。**理由だけでは採否を確かめられない**ので、
+ *   採った側も表に出す
  */
 export function buildConflictReport(
 	summary: ConflictResolutionPlan,
 	outcomes: readonly ResolutionOutcome[],
 	reasons: ReadonlyMap<string, string>,
+	sides: ReadonlyMap<string, ChoiceSide> = new Map(),
 ): string {
 	const lines: string[] = [`# ${vscode.l10n.t("Merge conflict resolution")}`, ""];
 
@@ -79,6 +94,14 @@ export function buildConflictReport(
 		"",
 	);
 
+	if (summary.failures.length > 0) {
+		lines.push(vscode.l10n.t("## Files that could not be read"), "");
+		for (const failure of summary.failures) {
+			lines.push(`- \`${failure.filePath}\` — ${escapeCell(failure.error)}`);
+		}
+		lines.push("");
+	}
+
 	for (const outcome of outcomes) {
 		const plan = summary.plans.find((candidate) => candidate.filePath === outcome.filePath);
 		lines.push(`## ${kindLabel(outcome.kind)}`, "");
@@ -86,6 +109,13 @@ export function buildConflictReport(
 
 		if (outcome.error) {
 			lines.push(vscode.l10n.t("Could not be resolved: {0}", outcome.error), "");
+			continue;
+		}
+		if (outcome.skipped) {
+			lines.push(
+				vscode.l10n.t("You cancelled before this one was reached. It has not been changed at all."),
+				"",
+			);
 			continue;
 		}
 
@@ -107,16 +137,27 @@ export function buildConflictReport(
 		}
 
 		// AI が決めた件と、その理由
-		const decidedHere = (plan?.pending ?? []).filter((item) => reasons.has(item.key));
+		const decidedHere = (plan?.pending ?? []).filter((item) => sides.has(item.key) || reasons.has(item.key));
 		if (decidedHere.length > 0) {
-			lines.push("", `| ${vscode.l10n.t("Entry")} | ${vscode.l10n.t("Why")} |`, "|---|---|");
+			lines.push(
+				"",
+				`| ${vscode.l10n.t("Entry")} | ${vscode.l10n.t("Kept")} | ${vscode.l10n.t("Why")} |`,
+				"|---|---|---|",
+			);
 			for (const item of decidedHere) {
-				lines.push(`| ${escapeCell(item.label)} | ${escapeCell(reasons.get(item.key) ?? "")} |`);
+				const side = sides.get(item.key);
+				const kept =
+					side === "ours"
+						? vscode.l10n.t("yours")
+						: side === "theirs"
+							? vscode.l10n.t("theirs")
+							: "—";
+				lines.push(`| ${escapeCell(item.label)} | ${kept} | ${escapeCell(reasons.get(item.key) ?? "")} |`);
 			}
 		}
 
 		if (plan) {
-			lines.push(...remainingSection(plan, outcome));
+			lines.push(...remainingSection(plan, outcome, sides));
 		}
 		lines.push("");
 	}

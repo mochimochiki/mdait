@@ -129,6 +129,21 @@ suite("鍵で突き合わせる決定的マージ", () => {
 			assert.equal(found.undecided[0].ours.word, "私が直した");
 			assert.equal(found.undecided[0].theirs.word, "もと");
 		});
+
+		test("消した側には「消した」という印が付く", () => {
+			// 印が無いと、その側を採ったときに祖先の値が書き戻り、削除が黙って取り消される
+			const found = mergeByKey([e("a", "私が直した")], [], [e("a", "もと")], opts);
+
+			assert.equal(found.undecided[0].theirsDeleted, true);
+			assert.equal(found.undecided[0].oursDeleted, undefined);
+		});
+
+		test("印は消した側にだけ付く（こちらが消した場合）", () => {
+			const found = mergeByKey([], [e("a", "相手が直した")], [e("a", "もと")], opts);
+
+			assert.equal(found.undecided[0].oursDeleted, true);
+			assert.equal(found.undecided[0].theirsDeleted, undefined);
+		});
 	});
 
 	suite("順に依らないこと", () => {

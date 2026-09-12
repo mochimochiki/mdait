@@ -18,17 +18,21 @@
  *
  * @module commands/conflict/resolve-core
  */
+import * as fs from "node:fs";
 import type * as vscode from "vscode";
 import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
+import { ConflictEvidenceProvider } from "./conflict-evidence";
 import type { ConflictJudge } from "./conflict-judge";
 import {
 	type ChoiceSide,
 	type ConflictResolutionPlan,
+	type ResolutionFailure,
 	type ResolutionOutcome,
 	type ResolutionPlan,
+	isDeletionChoice,
 	summarizePlans,
 } from "./resolution-plan";
 import {
@@ -47,6 +51,23 @@ export interface PreparedResolution {
 	summary: ConflictResolutionPlan;
 	/** 対象ごとの持ち物（書き戻すときに要る） */
 	carried: Map<string, { tm?: TmResolution; terms?: TermsResolution; repository?: TermsRepository }>;
+	/**
+	 * 計画を作った時点のファイルの見た目（更新時刻と寸法）。
+	 *
+	 * 計画から書き戻しまでのあいだに確認ダイアログと AI への問い合わせが挟まる。その間に
+	 * 人が手で直したり同期が走ったりしたら、**古い計画で上書きしてはいけない**。
+	 */
+	stamps: Map<string, string>;
+}
+
+/** ファイルの見た目。読めなければ空文字（無いファイルは書き戻す先でもない） */
+function stampOf(filePath: string): string {
+	try {
+		const stat = fs.statSync(filePath);
+		return `${stat.mtimeMs}:${stat.size}`;
+	} catch {
+		return "";
+	}
 }
 
 /** 対象の人が読む名前（AI にも「何が競合しているか」として渡す） */
@@ -74,8 +95,11 @@ export async function prepareResolution(
 ): Promise<PreparedResolution> {
 	const plans: ResolutionPlan[] = [];
 	const carried: PreparedResolution["carried"] = new Map();
+	const stamps = new Map<string, string>();
+	const failures: ResolutionFailure[] = [];
 
 	for (const file of conflicts.files) {
+		stamps.set(file.filePath, stampOf(file.filePath));
 		try {
 			switch (file.kind) {
 				case "tm": {
@@ -89,7 +113,12 @@ export async function prepareResolution(
 				case "terms": {
 					// 競合中のファイルは通常の読み込みでは読めないので、空のリポジトリを作って
 					// 解決専用の入口（`loadSide`）から両側を読ませる
-					const repository = await TermsRepository.create(file.filePath, config.transPairs);
+					const repository = await TermsRepository.create(
+						file.filePath,
+						config.transPairs,
+						undefined,
+						config.primaryLang,
+					);
 					const planned = await planTermsResolution(file.filePath, repository, config.primaryLang);
 					if (planned) {
 						plans.push(planned.plan);
@@ -105,12 +134,19 @@ export async function prepareResolution(
 					break;
 			}
 		} catch (error) {
-			// 1つの対象が読めなくても、残りは解ける。読めなかったことはレポートに出す
+			// 1つの対象が読めなくても、残りは解ける。**読めなかったことは必ず持ち帰る** —
+			// ここで黙って落とすと、壊れた1ファイルだけが競合していたときに
+			// 「未解決の競合はありません」と出る
 			logger.warn("conflict", "Failed to plan a resolution", { kind: file.kind, ...formatError(error) });
+			failures.push({
+				kind: file.kind,
+				filePath: file.filePath,
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
-	return { summary: summarizePlans(plans), carried };
+	return { summary: summarizePlans(plans, failures, conflicts.heldRows.length), carried, stamps };
 }
 
 /**
@@ -126,29 +162,86 @@ export async function executeResolution(
 	responseLang: string | undefined,
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	token?: vscode.CancellationToken,
-): Promise<{ outcomes: ResolutionOutcome[]; reasons: Map<string, string> }> {
+): Promise<{
+	outcomes: ResolutionOutcome[];
+	reasons: Map<string, string>;
+	/** AI がどちらを採ったか（レポートに出す。理由だけでは採否を確かめられない） */
+	sides: Map<string, ChoiceSide>;
+}> {
 	const outcomes: ResolutionOutcome[] = [];
 	const reasons = new Map<string, string>();
+	const sides = new Map<string, ChoiceSide>();
+
+	// 判定の材料は、競合していないファイルからだけ集める
+	const conflictedKinds = new Set(prepared.summary.plans.map((plan) => plan.kind));
+	const evidence = judge ? await ConflictEvidenceProvider.create(config, conflictedKinds) : undefined;
 
 	for (const plan of prepared.summary.plans) {
 		if (token?.isCancellationRequested) {
-			break;
+			// **手を付けなかった対象も結果に載せる。** 載せないと、残った件が数に出ず
+			// 「全部解決しました」と言ってしまう
+			outcomes.push(skippedOutcome(plan));
+			continue;
 		}
 		progress?.report({ message: targetName(plan) });
 
 		let decided: ReadonlyMap<string, ChoiceSide> = new Map();
-		if (judge && plan.pending.length > 0) {
-			const result = await judge.judge(plan.pending, { targetName: targetName(plan), responseLang }, token);
+		// **片方が消した件は AI へ送らない。** AI に許した語彙は二択だけで、「消す」は
+		// その外にある（ADR-260912-01）。人が決める
+		const askable = plan.pending.filter((item) => !isDeletionChoice(item));
+		if (judge && askable.length > 0) {
+			const result = await judge.judge(
+				askable,
+				{
+					targetName: targetName(plan),
+					responseLang,
+					evidenceFor: evidence ? (item) => evidence.forItem(item) : undefined,
+				},
+				token,
+			);
 			decided = result.decided;
 			for (const [key, reason] of result.reasons) {
 				reasons.set(key, reason);
+			}
+			for (const [key, side] of result.decided) {
+				sides.set(key, side);
 			}
 		}
 
 		outcomes.push(await applyOne(plan, prepared, config, decided));
 	}
 
-	return { outcomes, reasons };
+	return { outcomes, reasons, sides };
+}
+
+/** 取り消されて手が付かなかった対象の結果（残っている件はそのまま残っている） */
+function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
+	return {
+		kind: plan.kind,
+		filePath: plan.filePath,
+		autoResolvedCount: 0,
+		decidedCount: 0,
+		remainingCount: Math.max(plan.pending.length, 1),
+		written: false,
+		skipped: true,
+	};
+}
+
+/**
+ * 計画を作ってから、そのファイルが外で変わっていないか。
+ *
+ * 確認ダイアログと AI への問い合わせのあいだに人が手で直したり同期が走ったりしうる。
+ * 変わっていたら**書かない** — 手元の計画はもう1つ前の姿を指しているので、書けば相手の
+ * 変更をそのまま消す。数え直せば新しい計画が作られる。
+ *
+ * @returns 変わっていれば理由、変わっていなければ `undefined`
+ */
+function staleError(plan: ResolutionPlan, prepared: PreparedResolution): string | undefined {
+	const planned = prepared.stamps.get(plan.filePath);
+	if (planned === undefined || planned === stampOf(plan.filePath)) {
+		return undefined;
+	}
+	return `${plan.filePath} changed while the resolution was being prepared. Nothing was written; run the resolution again.`;
 }
 
 /**
@@ -189,12 +282,20 @@ async function applyOne(
 				if (!carried?.tm) {
 					return base;
 				}
+				const stale = staleError(plan, prepared);
+				if (stale) {
+					return { ...base, error: stale };
+				}
 				const result = applyTmResolution(plan.filePath, plan, carried.tm, decided);
 				return { ...base, ...result, written: result.remainingCount === 0 };
 			}
 			case "terms": {
 				if (!carried?.terms || !carried.repository) {
 					return base;
+				}
+				const stale = staleError(plan, prepared);
+				if (stale) {
+					return { ...base, error: stale };
 				}
 				const result = await applyTermsResolution(plan, carried.terms, carried.repository, decided);
 				return { ...base, ...result, written: result.remainingCount === 0 };

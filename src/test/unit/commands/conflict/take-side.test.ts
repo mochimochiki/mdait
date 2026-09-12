@@ -27,6 +27,14 @@ declare let __vscodeMockWorkspaceRoot: string;
 
 const tuidOf = (primary: string) => calculateHash(primary, true);
 
+/** 決めかけの寿命は、計画を作ったときのファイルの見た目に結び付いている */
+const S = "stamp";
+const stampOf = (prepared: { stamps: Map<string, string> }, filePath: string): string => {
+	const stamp = prepared.stamps.get(filePath);
+	assert.ok(stamp, "計画がファイルの見た目を覚えていない");
+	return stamp;
+};
+
 function tu(primary: string, ja: string): string {
 	return `<tu tuid="${tuidOf(primary)}"><tuv xml:lang="en"><seg>${primary}</seg></tuv><tuv xml:lang="ja"><seg>${ja}</seg></tuv></tu>`;
 }
@@ -93,32 +101,32 @@ suite("人が1件ずつ決める", () => {
 
 	suite("判断の預かり", () => {
 		test("決めたぶんを覚えている", () => {
-			rememberDecision("/a", "k1", "ours");
+			rememberDecision("/a", S, "k1", "ours");
 
-			assert.equal(decisionOf("/a", "k1"), "ours");
-			assert.equal(decisionsFor("/a").size, 1);
+			assert.equal(decisionOf("/a", S, "k1"), "ours");
+			assert.equal(decisionsFor("/a", S).size, 1);
 		});
 
 		test("決め直せる", () => {
-			rememberDecision("/a", "k1", "ours");
-			rememberDecision("/a", "k1", "theirs");
+			rememberDecision("/a", S, "k1", "ours");
+			rememberDecision("/a", S, "k1", "theirs");
 
-			assert.equal(decisionOf("/a", "k1"), "theirs");
+			assert.equal(decisionOf("/a", S, "k1"), "theirs");
 		});
 
 		test("ファイルごとに分かれている", () => {
-			rememberDecision("/a", "k1", "ours");
-			rememberDecision("/b", "k1", "theirs");
+			rememberDecision("/a", S, "k1", "ours");
+			rememberDecision("/b", S, "k1", "theirs");
 
-			assert.equal(decisionOf("/a", "k1"), "ours");
-			assert.equal(decisionOf("/b", "k1"), "theirs");
+			assert.equal(decisionOf("/a", S, "k1"), "ours");
+			assert.equal(decisionOf("/b", S, "k1"), "theirs");
 		});
 
 		test("捨てれば残らない（書き戻したあと・ファイルが外から変わったあと）", () => {
-			rememberDecision("/a", "k1", "ours");
+			rememberDecision("/a", S, "k1", "ours");
 			forgetDecisions("/a");
 
-			assert.equal(decisionOf("/a", "k1"), undefined);
+			assert.equal(decisionOf("/a", S, "k1"), undefined);
 		});
 	});
 
@@ -130,8 +138,8 @@ suite("人が1件ずつ決める", () => {
 			const plan = prepared.summary.plans[0];
 			assert.equal(plan.pending.length, 2);
 
-			rememberDecision(tmPath, plan.pending[0].key, "ours");
-			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath));
+			rememberDecision(tmPath, stampOf(prepared, tmPath), plan.pending[0].key, "ours");
+			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath, stampOf(prepared, tmPath)));
 
 			assert.equal(outcome.written, false);
 			assert.equal(outcome.remainingCount, 1);
@@ -145,9 +153,9 @@ suite("人が1件ずつ決める", () => {
 
 			for (const item of plan.pending) {
 				// 原文が Hello の件は「こちら」、Bye の件は「あちら」を採る
-				rememberDecision(tmPath, item.key, item.label === "Hello" ? "ours" : "theirs");
+				rememberDecision(tmPath, stampOf(prepared, tmPath), item.key, item.label === "Hello" ? "ours" : "theirs");
 			}
-			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath));
+			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath, stampOf(prepared, tmPath)));
 
 			assert.equal(outcome.written, true);
 			assert.equal(outcome.decidedCount, 2);
@@ -163,10 +171,10 @@ suite("人が1件ずつ決める", () => {
 			const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 			const plan = prepared.summary.plans[0];
 			for (const item of plan.pending) {
-				rememberDecision(tmPath, item.key, "theirs");
+				rememberDecision(tmPath, stampOf(prepared, tmPath), item.key, "theirs");
 			}
 
-			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath));
+			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath, stampOf(prepared, tmPath)));
 
 			assert.equal(outcome.written, true);
 			assert.equal(outcome.remainingCount, 0);

@@ -16,6 +16,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
+import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import { type DirectoryStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 
@@ -159,9 +160,9 @@ export function buildConflictRows(
  * 既に決めた件は、どちらを採ったかを副題に出す。決めただけではまだ書かれていない
  * （そのファイルの最後の1件が決まったときにまとめて書く）ことも Hover に書く。
  */
-export function buildConflictChoiceRows(plan: ResolutionPlan): DirectoryStatusItem[] {
+export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): DirectoryStatusItem[] {
 	return plan.pending.map((item, index) => {
-		const chosen = decisionOf(plan.filePath, item.key);
+		const chosen = decisionOf(plan.filePath, stamp, item.key);
 		return {
 			type: StatusItemType.Directory,
 			label: item.label,
@@ -171,20 +172,36 @@ export function buildConflictChoiceRows(plan: ResolutionPlan): DirectoryStatusIt
 					: vscode.l10n.t("keeping theirs")
 				: vscode.l10n.t("undecided"),
 			status: Status.Error,
-			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${plan.filePath}`,
+			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${fingerprintOfKey(item.key)}:${plan.filePath}`,
 			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
 			tooltip: buildChoiceTooltip(item, chosen),
 		};
 	});
 }
 
+/**
+ * 行の識別子に載せる、その件の鍵の短い目印。
+ *
+ * 鍵そのものを載せないのは、長い（席のキーやハッシュ）からである。**番号だけでは足りない** —
+ * ツリーに出したままファイルが外から変わると、同じ番号が別の件を指しうる。押した行が
+ * いまも同じ件を指しているかは、この目印で確かめる。
+ */
+export function fingerprintOfKey(key: string): string {
+	return calculateHash(key);
+}
+
 /** 1件の解説（Hover）。両側の全文と、AI が付けた理由を置く */
 function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
+	// 消した側には見せる値が無い。その場の言葉で「消した」と書く（`(removed)` の
+	// 目印は AI へ送る文面のためのもので、人に見せる言葉ではない）
+	const removed = vscode.l10n.t("removed on this side");
 	const parts = [
-		vscode.l10n.t("Two people wrote a different value for this entry."),
+		item.oursDeleted || item.theirsDeleted
+			? vscode.l10n.t("One side removed this entry while the other changed it.")
+			: vscode.l10n.t("Two people wrote a different value for this entry."),
 		"",
-		`${vscode.l10n.t("Yours")}: ${item.oursText}`,
-		`${vscode.l10n.t("Theirs")}: ${item.theirsText}`,
+		`${vscode.l10n.t("Yours")}: ${item.oursDeleted ? removed : item.oursText}`,
+		`${vscode.l10n.t("Theirs")}: ${item.theirsDeleted ? removed : item.theirsText}`,
 	];
 	if (item.baseText !== undefined) {
 		parts.push(`${vscode.l10n.t("Before the split")}: ${item.baseText}`);
@@ -200,16 +217,24 @@ function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | und
 	return parts.join("\n");
 }
 
-/** 行の識別子から、そのファイルの絶対パスと何番目かを取り出す */
-export function choiceOfConflictRow(directoryPath: string): { filePath: string; index: number } | undefined {
+/** 行の識別子から、そのファイルの絶対パス・何番目か・鍵の目印を取り出す */
+export function choiceOfConflictRow(
+	directoryPath: string,
+): { filePath: string; index: number; fingerprint: string } | undefined {
 	if (!directoryPath.startsWith(CONFLICT_CHOICE_PREFIX)) {
 		return undefined;
 	}
 	const rest = directoryPath.slice(CONFLICT_CHOICE_PREFIX.length);
-	const colon = rest.indexOf(":");
-	if (colon < 0) {
+	const first = rest.indexOf(":");
+	if (first < 0) {
 		return undefined;
 	}
-	const index = Number.parseInt(rest.slice(0, colon), 10);
-	return Number.isInteger(index) ? { filePath: rest.slice(colon + 1), index } : undefined;
+	const second = rest.indexOf(":", first + 1);
+	if (second < 0) {
+		return undefined;
+	}
+	const index = Number.parseInt(rest.slice(0, first), 10);
+	return Number.isInteger(index)
+		? { filePath: rest.slice(second + 1), index, fingerprint: rest.slice(first + 1, second) }
+		: undefined;
 }

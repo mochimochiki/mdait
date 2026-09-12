@@ -29,11 +29,27 @@ import { type UnitStateEntry, isMergeHeldEntry } from "../unit-state/unit-state-
 /** 競合マーカーが残りうる `.mdait` のファイルの種別 */
 export type ConflictFileKind = "unit-state" | "unit-registry" | "tm" | "terms";
 
+/**
+ * ファイルの見た目（更新時刻と寸法）。中身を読み直すかどうかの判断に使う。
+ *
+ * `unit-registry` は数 MB になるので、ツリーが描き変わるたびに全文を走査させない。
+ * 見た目が動いていなければ前の答えをそのまま返す。**動いていたら必ず読み直す** —
+ * 内容が同じでも読み直すだけで、取りこぼすことは無い。
+ */
+type FileStamp = string;
+
 /** 競合マーカーの入ったファイル1つ */
 export interface ConflictedFile {
 	kind: ConflictFileKind;
 	/** 絶対パス */
 	filePath: string;
+	/**
+	 * 数えたときのファイルの見た目（更新時刻と寸法）。
+	 *
+	 * **パスだけでは「同じ競合か」を言えない。** 別の合流が来ても人が手で直しても、
+	 * 競合しているファイルの並びは変わらないことがある。中身が動いたかを見るのはここ。
+	 */
+	stamp: FileStamp;
 }
 
 /** 合流で席から降ろされた `unit-state` の行1つ */
@@ -68,15 +84,6 @@ export interface ConflictFilePaths {
 export function noConflicts(): MdaitConflicts {
 	return { files: [], heldRows: [], total: 0 };
 }
-
-/**
- * ファイルの見た目（更新時刻と寸法）。中身を読み直すかどうかの判断に使う。
- *
- * `unit-registry` は数 MB になるので、ツリーが描き変わるたびに全文を走査させない。
- * 見た目が動いていなければ前の答えをそのまま返す。**動いていたら必ず読み直す** —
- * 内容が同じでも読み直すだけで、取りこぼすことは無い。
- */
-type FileStamp = string;
 
 /**
  * 見た目には**パスも入れる**。覚え書きは作業場をまたいで生き残るので（`conflict-source.ts` の
@@ -133,7 +140,7 @@ export function collectMdaitConflicts(
 	];
 	for (const [kind, filePath] of candidates) {
 		if (filePath && isConflicted(filePath)) {
-			files.push({ kind, filePath });
+			files.push({ kind, filePath, stamp: stampOf(filePath) });
 		}
 	}
 

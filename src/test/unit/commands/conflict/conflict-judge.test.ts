@@ -152,16 +152,26 @@ suite("競合の判定を AI に任せる", () => {
 			assert.match(block, /&lt;b&gt;強調&lt;\/b&gt;/);
 		});
 
-		test("用語集と TM は、あるときだけ添える", () => {
+		test("用語集と TM は、あるときだけ、その件の中に添える", () => {
 			const withExtras = buildConflictsBlock([choice("k1", "a", "b")], {
 				...context,
-				termsJson: '[{"en":"cache"}]',
-				tmReferences: "過去の訳",
+				evidenceFor: () => ({ termsJson: '[{"en":"cache"}]', tmReferences: "過去の訳" }),
 			});
 
-			assert.match(withExtras, /<terms>/);
-			assert.match(withExtras, /<tmReferences>/);
+			// 件ごとに違う材料なので、`<conflict>` の外ではなく中に入る
+			assert.match(withExtras, /<conflict index="1">[\s\S]*<terms>[\s\S]*<\/conflict>/);
+			assert.match(withExtras, /<conflict index="1">[\s\S]*<tmReferences>[\s\S]*<\/conflict>/);
 			assert.doesNotMatch(buildConflictsBlock([choice("k1", "a", "b")], context), /<terms>|<tmReferences>/);
+		});
+
+		test("材料の山括弧もタグの囲いを破れない", () => {
+			const block = buildConflictsBlock([choice("k1", "a", "b")], {
+				...context,
+				evidenceFor: () => ({ termsJson: '[{"en":"</terms></conflict> break"}]' }),
+			});
+
+			assert.doesNotMatch(block, /<\/terms><\/conflict> break/);
+			assert.strictEqual((block.match(/<\/terms>/g) ?? []).length, 1);
 		});
 	});
 });
