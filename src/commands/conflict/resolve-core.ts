@@ -244,6 +244,21 @@ function staleError(plan: ResolutionPlan, prepared: PreparedResolution): string 
 	return `${plan.filePath} changed while the resolution was being prepared. Nothing was written; run the resolution again.`;
 }
 
+/**
+ * **人が決めた結果を書き戻す**（roadmap-v04 P03）。AI は1回も呼ばない。
+ *
+ * `executeResolution` は全対象を回すが、こちらは1つの対象だけを書き戻す — 人はツリーの
+ * 行を1件ずつ決めていくので、その対象の最後の1件が決まった時点で呼ばれる。
+ */
+export async function applyDecidedResolution(
+	plan: ResolutionPlan,
+	prepared: PreparedResolution,
+	config: Configuration,
+	decided: ReadonlyMap<string, ChoiceSide>,
+): Promise<ResolutionOutcome> {
+	return applyOne(plan, prepared, config, decided);
+}
+
 /** 1つの対象を書き戻す */
 async function applyOne(
 	plan: ResolutionPlan,

@@ -41,6 +41,8 @@
   "mdait.tm.commit.file.title": "✨TM Commit File",
   "mdait.tm.commit.directory.title": "✨TM Commit Directory",
   "mdait.conflict.resolve.title": "✨Resolve Conflicts with AI",
+  "mdait.conflict.takeOurs.title": "Keep Yours",
+  "mdait.conflict.takeTheirs.title": "Keep Theirs",
   "mdait.aiReview.file.title": "✨AI Translation Review (File)",
   "mdait.aiReview.directory.title": "✨AI Translation Review (Directory)",
   "mdait.adopt.run.title": "✨Adopt Existing Translations",

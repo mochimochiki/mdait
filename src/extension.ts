@@ -70,6 +70,7 @@ import {
 } from "./ui/settings/settings-editor-provider";
 import { SettingsPanel } from "./ui/settings/settings-panel";
 import { executeResolveConflicts } from "./commands/conflict/resolve-command";
+import { takeSideForItem } from "./commands/conflict/take-side-command";
 import { StatusBarSummary } from "./ui/status/status-bar-summary";
 import {
 	collectWorkspaceConflicts,
@@ -214,6 +215,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand("mdait.conflict.resolve", async () => {
 			await executeResolveConflicts();
+			refreshConflicts();
+		}),
+		// 人が1件ずつ決める逃げ道（P03）。**AI を1回も呼ばないので ✨ は付けない**
+		vscode.commands.registerCommand("mdait.conflict.takeOurs", async (item: unknown) => {
+			await takeSideForItem(item, "ours");
+			refreshConflicts();
+		}),
+		vscode.commands.registerCommand("mdait.conflict.takeTheirs", async (item: unknown) => {
+			await takeSideForItem(item, "theirs");
 			refreshConflicts();
 		}),
 	);
