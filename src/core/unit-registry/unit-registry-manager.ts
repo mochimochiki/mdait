@@ -195,6 +195,26 @@ export class UnitRegistryManager {
 	}
 
 	/**
+	 * **競合の解決の経路だけが通る書き戻し。** 合流の途中の台帳を読み直し、読めた控えを
+	 * すべて残した正規形で書き出す。
+	 *
+	 * **台帳には選択が要らない。** 控えの中身は原文の過去の本文で、鍵はその本文のハッシュ
+	 * なので、同じ鍵に別の値が来ることがない。競合ブロックの中の行も、読み取りがマーカーを
+	 * 読み飛ばして両陣営ぶんを拾うので、**両方残すだけで解ける**（ADR-260911-02）。
+	 *
+	 * @returns 書き戻した控えの数
+	 */
+	async resolveConflict(): Promise<number> {
+		// 覚えている中身を捨てて読み直す。合流はこの外で起きているので、
+		// メモリの上の版は合流の前の姿である
+		this.store = null;
+		this.storeLoaded = false;
+		const store = await this.getOrLoadStore();
+		await this.persistStore(store);
+		return store.size();
+	}
+
+	/**
 	 * ユニットレジストリを読み込み
 	 * @param hash ユニットのハッシュ
 	 * @returns ユニットのコンテンツ、存在しない場合はnull

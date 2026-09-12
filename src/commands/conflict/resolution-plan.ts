@@ -51,6 +51,13 @@ export interface ResolutionPlan {
 	pending: PendingChoice[];
 	/** 共通の祖先が取れたか（取れないと判定の材料が1つ減る） */
 	hasBase: boolean;
+	/**
+	 * `unit-state` で、同じ席に2行来たので片方を席から降ろした回数。
+	 *
+	 * 降ろされた行はどちらも残るので**ここでは決まらなくてよい**が、原稿との照合で
+	 * 決めるべき件がこれだけ増えたことは人に伝わったほうがよい（P03 が片付ける）。
+	 */
+	unseatedCount?: number;
 }
 
 /** 計画を実行した結果 */
