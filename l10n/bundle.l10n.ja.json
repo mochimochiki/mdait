@@ -684,5 +684,6 @@
   "Pick a side with the buttons on this row. No AI is involved.": "この行のボタンでどちらかを選んでください。AI は使いません。",
   "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded. Running Sync matches it against your documents: the side whose text matches goes back to its seat.": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。捨ててはいません。同期を走らせると原稿と突き合わせ、本文が一致する側が席へ戻ります。",
   "Resolved every conflict in {0}.": "{0} の競合をすべて解決しました。",
-  "Could not write the resolution: {0}": "解決の結果を書けませんでした: {0}"
+  "Could not write the resolution: {0}": "解決の結果を書けませんでした: {0}",
+  "This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. Setting git's merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you.": "この合流は「両者が何から分かれたか」を記録していないので、片方だけが直した形も自動では片付きません。git の merge.conflictStyle を diff3（または zdiff3）にしておくと、判断を求められる件が減ります。"
 }

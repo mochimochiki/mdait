@@ -36,6 +36,11 @@ async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promis
 	const { autoResolvedTotal, pendingTotal, plans } = prepared.summary;
 	const files = plans.map((plan) => path.basename(plan.filePath)).join(", ");
 
+	// 祖先が取れていない対象があれば、そのことを言う。**祖先があるかどうかで、人が決める
+	// 件数が実際に変わる**（実測: 片方だけが既存の語を直した形は、祖先があれば決定的に
+	// 決まるが、無いと人に回る）。次からのために設定を勧める
+	const missingBase = plans.some((plan) => plan.pending.length > 0 && !plan.hasBase);
+
 	const detail = [
 		vscode.l10n.t("{0} entry/entries can be merged automatically, with nothing to decide.", autoResolvedTotal),
 		willUseAi
@@ -48,6 +53,13 @@ async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promis
 					pendingTotal,
 				),
 		vscode.l10n.t("Files to be rewritten: {0}", files),
+		...(missingBase
+			? [
+					vscode.l10n.t(
+						"This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. Setting git's merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you.",
+					),
+				]
+			: []),
 		vscode.l10n.t(
 			"A file is only rewritten once every one of its conflicts is settled, so nothing is half-written. Your working tree is not committed, so you can undo this with git or SVN.",
 		),
