@@ -2,6 +2,8 @@
 // どれも `getFileHandler().resolveNeed` に正しい宛先（NeedTarget）で渡すことの検証。
 // 書き換えそのものはハンドラ側の責務なので、ここでは呼び出しの引数だけを見る
 // （サーフェス側で書き換えを実装しない — AGENTS.md の不変条件）。
+// 外せたあとは CodeLens「レビュー完了」と同じく次の要対応へ進む（ADR-260912-08）ので、
+// 起点の行（宛先の `line`）と、次の項目が対訳表示（mdait.openPair）で開かれることも固定する。
 
 import * as assert from "node:assert";
 import * as fs from "node:fs";
@@ -10,6 +12,7 @@ import { MdFileHandler } from "../../../../commands/file-handler/md-file-handler
 import { PlainFileHandler, determinePlainFileContextValue } from "../../../../commands/file-handler/plain-file-handler";
 import type { NeedResolutionOptions, ResolveNeedFileResult } from "../../../../commands/markers/resolve-need";
 import { StatusTreeNeedHandler, toReviewTarget } from "../../../../commands/markers/status-tree-need-handler";
+import { SelectionState } from "../../../../core/status/selection-state";
 import {
 	type DirectoryStatusItem,
 	type FileStatusItem,
@@ -18,9 +21,12 @@ import {
 	StatusItemType,
 	type UnitStatusItem,
 } from "../../../../core/status/status-item";
+import { StatusManager } from "../../../../core/status/status-manager";
+import { Configuration, type TransPair } from "../../../../infra/config/configuration";
 
 declare let __vscodeMockWorkspaceRoot: string;
 declare let __vscodeMockShownMessages: { level: string; message: string }[] | undefined;
+declare let __vscodeMockExecutedCommands: { command: string; args: unknown[] }[] | undefined;
 
 const jaDir = path.resolve("/mock-workspace/ja");
 const mdPath = path.join(jaDir, "a.md");
@@ -70,24 +76,31 @@ function directoryItem(): DirectoryStatusItem {
 }
 
 suite("toReviewTarget（ツリー項目 → review 裁定の宛先）", () => {
-	test("本文ユニットは hash 付きの unit 宛先になること", () => {
-		assert.deepStrictEqual(toReviewTarget(unitItem()), {
+	test("本文ユニットは hash 付きの unit 宛先になり、起点の行は開始行になること", () => {
+		assert.deepStrictEqual(toReviewTarget(unitItem({ startLine: 12 })), {
 			filePath: mdPath,
 			target: { kind: "unit", hash: "u1" },
+			line: 12,
 		});
 	});
 
-	test("frontmatter は frontmatter 宛先になること", () => {
+	test("開始行の無い本文ユニットは行 0 を起点にすること（キューの並びと同じ読み方）", () => {
+		assert.strictEqual(toReviewTarget(unitItem())?.line, 0);
+	});
+
+	test("frontmatter は frontmatter 宛先になり、起点の行は 0 になること", () => {
 		assert.deepStrictEqual(toReviewTarget(frontmatterItem()), {
 			filePath: mdPath,
 			target: { kind: "frontmatter" },
+			line: 0,
 		});
 	});
 
-	test("非MD のファイル行は file 宛先（ファイル＝1ユニット）になること", () => {
+	test("非MD のファイル行は file 宛先（ファイル＝1ユニット）になり、起点の行は 0 になること", () => {
 		assert.deepStrictEqual(toReviewTarget(fileItem(txtPath, { needFlag: "review" })), {
 			filePath: txtPath,
 			target: { kind: "file" },
+			line: 0,
 		});
 	});
 
@@ -206,6 +219,99 @@ suite("StatusTreeNeedHandler.markReviewed（3種類の項目を resolveNeed へ�
 			__vscodeMockShownMessages?.map((m) => m.level),
 			["error", "error", "error"],
 		);
+	});
+});
+
+suite("StatusTreeNeedHandler.markReviewed（外せたら次の要対応へ進む。ADR-260912-08）", () => {
+	const originalMd = MdFileHandler.prototype.resolveNeed;
+	let savedPairs: TransPair[];
+	let targetDir: string;
+	let guidePath: string;
+	let resolvedNeed: string;
+
+	/** 要対応キューに残っている本文ユニットを1件、ステータスツリーへ載せる */
+	function seedRemaining(filePath: string, unitHash: string, startLine: number): void {
+		StatusManager.getInstance()
+			.getStatusItemTree()
+			.addOrUpdateFile(
+				fileItem(filePath, {
+					totalUnits: 1,
+					children: [unitItem({ filePath, unitHash, startLine })],
+				}),
+			);
+	}
+
+	setup(() => {
+		__vscodeMockWorkspaceRoot = "/mock-workspace";
+		__vscodeMockShownMessages = [];
+		__vscodeMockExecutedCommands = [];
+		resolvedNeed = "review";
+		// 要対応は選択中の transPair の範囲で集めるので、設定と選択を用意する
+		// （基準ディレクトリは他のテストが差し替えている可能性があるため、実際の値から組む）
+		const config = Configuration.getInstance();
+		savedPairs = config.transPairs;
+		const pair: TransPair = { sourceDir: "docs/en", targetDir: "docs/ja", sourceLang: "en", targetLang: "ja" };
+		config.transPairs = [pair];
+		SelectionState.getInstance().reconcileWith([pair]);
+		targetDir = path.resolve(config.getConfigBaseDir(), pair.targetDir);
+		guidePath = path.join(targetDir, "guide.md");
+		// 書き換えは本物を呼ばず、「review を外せた」結果だけ返す。片づけた項目は本物なら
+		// ステータス更新でキューから消えるので、ここでは最初から残りの項目だけを載せる
+		MdFileHandler.prototype.resolveNeed = async () => ({
+			resolved: [{ hash: "u1", need: resolvedNeed }],
+			skipped: [],
+			changed: true,
+			remainingNeedFlags: [],
+		});
+	});
+
+	teardown(() => {
+		MdFileHandler.prototype.resolveNeed = originalMd;
+		Configuration.getInstance().transPairs = savedPairs;
+		StatusManager.getInstance().dispose();
+		__vscodeMockShownMessages = undefined;
+		__vscodeMockExecutedCommands = undefined;
+	});
+
+	test("同じファイルに次の確認待ちが残っていれば、その行を対訳表示で開くこと", async () => {
+		seedRemaining(guidePath, "u2", 40);
+
+		await new StatusTreeNeedHandler().markReviewed(unitItem({ filePath: guidePath, startLine: 5 }));
+
+		assert.deepStrictEqual(__vscodeMockExecutedCommands, [{ command: "mdait.openPair", args: [guidePath, 40] }]);
+		assert.deepStrictEqual(__vscodeMockShownMessages, [], "移動はトーストで知らせないこと");
+	});
+
+	test("片づけた項目より前にしか残っていなければ、先頭へ回ること（行き止まりにしない）", async () => {
+		seedRemaining(guidePath, "u0", 2);
+
+		await new StatusTreeNeedHandler().markReviewed(unitItem({ filePath: guidePath, startLine: 5 }));
+
+		assert.deepStrictEqual(__vscodeMockExecutedCommands, [{ command: "mdait.openPair", args: [guidePath, 2] }]);
+	});
+
+	test("frontmatter を片づけたら、同じファイルの本文ユニットへ進むこと（起点は行 0）", async () => {
+		seedRemaining(guidePath, "u2", 40);
+
+		await new StatusTreeNeedHandler().markReviewed(frontmatterItem({ filePath: guidePath }));
+
+		assert.deepStrictEqual(__vscodeMockExecutedCommands, [{ command: "mdait.openPair", args: [guidePath, 40] }]);
+	});
+
+	test("残りが無ければ画面を動かさず、トーストも出さないこと", async () => {
+		await new StatusTreeNeedHandler().markReviewed(unitItem({ filePath: guidePath, startLine: 5 }));
+
+		assert.deepStrictEqual(__vscodeMockExecutedCommands, []);
+		assert.deepStrictEqual(__vscodeMockShownMessages, []);
+	});
+
+	test("外せたのが review 以外なら進まないこと", async () => {
+		resolvedNeed = "translate";
+		seedRemaining(guidePath, "u2", 40);
+
+		await new StatusTreeNeedHandler().markReviewed(unitItem({ filePath: guidePath, startLine: 5 }));
+
+		assert.deepStrictEqual(__vscodeMockExecutedCommands, []);
 	});
 });
 

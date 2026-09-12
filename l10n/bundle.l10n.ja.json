@@ -552,6 +552,7 @@
   "Nothing to un-isolate for this unit.": "このユニットには解除する凍結がありません。",
   "No units are awaiting review or deletion verification.": "レビュー待ち・削除確認待ちのユニットはありません。",
   "Needs Attention: {0} of {1}": "要対応: {1} 件中 {0} 件目",
+  "Needs Attention: all done": "要対応: すべて片づきました",
   "mdait is not configured in this workspace.": "このワークスペースで mdait が設定されていません。",
   "Cannot externalize markers: sync.level is 0 (fully manual marker placement). External marker mode stores markers by heading-based unit order and cannot represent manual unit boundaries, so externalizing would lose them. Set sync.level to 1 or higher first.": "マーカーを外部化できません: sync.level が 0（マーカーを完全に手動で配置する設定）になっています。外部マーカー方式は見出しに基づくユニットの並び順でマーカーを保管するため、手動で置いたユニット境界を表現できず、外部化するとマーカーが失われます。先に sync.level を 1 以上に設定してください。",
   "No managed Markdown files found. Nothing to convert.": "管理下の Markdown ファイルが見つかりません。変換対象がありません。",

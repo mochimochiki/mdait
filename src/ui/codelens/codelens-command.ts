@@ -11,6 +11,7 @@ import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
+import { advanceAfterReview } from "../../commands/markers/needs-attention-next";
 import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
@@ -88,7 +89,9 @@ export async function codeLensTranslateCommand(range: vscode.Range): Promise<voi
 }
 
 /**
- * CodeLensからneedマーカーをクリアするコマンド
+ * CodeLensからneedマーカーをクリアするコマンド。
+ * 「レビュー完了」（need:review を外した）のときだけ、続けて次の要対応へ進む
+ * （`advanceAfterReview`。ADR-260912-08）。翻訳済み・改訂済み・isolate 解除では動かない。
  * @param range CodeLensが表示されている行の範囲
  */
 export async function codeLensClearNeedCommand(range: vscode.Range): Promise<void> {
@@ -108,6 +111,9 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 
 		const filePath = document.uri.fsPath;
 		const target = { kind: "unit" as const, hash: marker.hash };
+		// 次の要対応を探す起点。embedded ではマーカー行、external ではユニットの開始行で、
+		// どちらもキューの `startLine` と同じ行（同じ項目で足踏みしない）
+		const origin = { filePath, line: range.start.line };
 		const result = await getFileHandler(filePath).resolveNeed(filePath, {
 			targets: [target],
 			needs: ALL_RESOLVABLE_NEEDS,
@@ -131,9 +137,11 @@ export async function codeLensClearNeedCommand(range: vscode.Range): Promise<voi
 				allowSameAsSource: true,
 			});
 			reportResolveOutcome(forced.resolved.length);
+			await advanceAfterReview(forced.resolved, origin);
 			return;
 		}
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, origin);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
@@ -976,7 +984,9 @@ function startOneWayScrollSync(
 }
 
 /**
- * CodeLensからfrontmatterのneedマーカーをクリアするコマンド
+ * CodeLensからfrontmatterのneedマーカーをクリアするコマンド。
+ * 「レビュー完了」のときは本文ユニットと同じく次の要対応へ進む（frontmatter は
+ * キューでは行 0 の項目なので、起点も行 0。同じファイルの本文ユニットが次になる）
  * @param range CodeLensが表示されている行の範囲
  */
 export async function codeLensClearFrontmatterNeedCommand(_range: vscode.Range): Promise<void> {
@@ -993,6 +1003,7 @@ export async function codeLensClearFrontmatterNeedCommand(_range: vscode.Range):
 			needs: ALL_RESOLVABLE_NEEDS,
 		});
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, { filePath, line: 0 });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear frontmatter need marker: {0}", errorMessage));
@@ -1134,6 +1145,8 @@ export async function codeLensTranslateFileCommand(uri: vscode.Uri): Promise<voi
 /**
  * 非Markdownファイルの need マーカーをクリアするCodeLensコマンド。
  * 実際の書き換え・保存・ステータス更新はハンドラ側が行う。
+ * 「レビュー完了」のときは Markdown と同じく次の要対応へ進む（ファイル＝1ユニットで
+ * キューでは行 0 の項目なので、起点も行 0）
  */
 export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<void> {
 	try {
@@ -1142,6 +1155,7 @@ export async function codeLensClearFileNeedCommand(uri: vscode.Uri): Promise<voi
 			needs: ALL_RESOLVABLE_NEEDS,
 		});
 		reportResolveOutcome(result.resolved.length);
+		await advanceAfterReview(result.resolved, { filePath: uri.fsPath, line: 0 });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to clear need marker: {0}", errorMessage));
