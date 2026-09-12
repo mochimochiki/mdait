@@ -3,16 +3,19 @@
  * @description
  *   `あなたを残す` / `相手を残す` — **人が1件ずつ決める**（roadmap-v04 P03）。
  *
- *   決めたぶんはその場では書かない。**そのファイルの最後の1件が決まったときに、まとめて
- *   書き戻す。** 決まらない件が残っているうちに書くと、残った件の両側がディスクから
- *   消えるからである。途中の判断は `conflict-decisions.ts` が預かる。
+ *   **決めても書かない。** 決まらない件が残っているうちに書くと、残った件の両側が
+ *   ディスクから消えるので、書けるのは全件が決まったあとだけである。そのうえで、
+ *   **最後の1件を決めた瞬間に書きに行くこともしない** — 1件を選ぶという小さな操作が
+ *   ファイル全体の書き換えを起こすと、結果の大きさが操作と釣り合わず、決め直す機会も
+ *   無くなる。全件が決まると、そのファイルの行に `解決` が出る（`resolveDecidedFile`）。
+ *   途中の判断は `conflict-decisions.ts` が預かる。
  *
  * @module commands/conflict/take-side-command
  */
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
-import { choiceOfConflictRow, fingerprintOfKey } from "../../ui/status/conflict-branch";
+import { choiceOfConflictRow, fingerprintOfKey, filePathOfConflictRow } from "../../ui/status/conflict-branch";
 import { collectPendingChoices, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 import { decisionsFor, forgetDecisions, rememberDecision } from "./conflict-decisions";
 import type { ChoiceSide } from "./resolution-plan";
@@ -29,10 +32,7 @@ export interface TakeSideTarget {
 }
 
 /**
- * 1件について「こちら」か「あちら」を採る。
- *
- * そのファイルの件が全部決まったら、その場で書き戻す。まだ残っていれば預かるだけで、
- * ファイルは競合マーカーの入ったまま動かない。
+ * 1件について「こちら」か「あちら」を採る。**預かるだけで、ファイルは動かない。**
  */
 export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceSide): Promise<void> {
 	if (!target?.filePath || !target.key) {
@@ -50,12 +50,38 @@ export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceS
 		return;
 	}
 
+	// **ここでは1バイトも書かない。** 書くのは人が `解決` を押したときだけである。
+	// 覚え書きも捨てない — 計画は動いていないので、読み直させると用語集と TM を
+	// 解き直すだけで何も変わらない（行の数え上げは預かりを引いて出す）
 	rememberDecision(target.filePath, stamp, target.key, side);
+}
 
-	const decided = decisionsFor(target.filePath, stamp);
+/**
+ * そのファイルの決まったぶんを書き戻す（ツリーのファイルの行の `解決`）。
+ *
+ * 出るのは**全件が決まったあと**だけなので、ここへ来る時点で書けるはずである。それでも
+ * 決まっていなければ何も書かない（ファイルが外から変わって計画が作り直されたときに
+ * 起こりうる）。
+ */
+export async function resolveDecidedFile(filePath: string | undefined): Promise<void> {
+	if (!filePath) {
+		return;
+	}
+	const config = Configuration.getInstance();
+	const prepared = await collectPendingChoices(config);
+	const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === filePath);
+	const stamp = prepared?.stamps.get(filePath);
+	if (!prepared || !plan || stamp === undefined) {
+		forgetDecisions(filePath);
+		invalidateWorkspaceConflicts();
+		return;
+	}
+
+	const decided = decisionsFor(filePath, stamp);
 	const remaining = plan.pending.filter((item) => !decided.has(item.key)).length;
 	if (remaining > 0) {
-		// まだ決まらない件がある。**ここでは1バイトも書かない**
+		// 決まっていない件がある。**押せるはずの無いときに押された** — 数え直させて黙る
+		invalidateWorkspaceConflicts();
 		return;
 	}
 
@@ -66,11 +92,11 @@ export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceS
 			// 選択だけが消え、何も言われないまま最初からやり直しになる
 			throw new Error(outcome.error);
 		}
-		forgetDecisions(target.filePath);
+		forgetDecisions(filePath);
 		invalidateWorkspaceConflicts();
 		if (outcome.written) {
 			void vscode.window.showInformationMessage(
-				vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(target.filePath)),
+				vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(filePath)),
 			);
 		}
 	} catch (error) {
@@ -80,6 +106,12 @@ export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceS
 			vscode.l10n.t("Could not write the resolution: {0}", error instanceof Error ? error.message : String(error)),
 		);
 	}
+}
+
+/** ツリーのファイルの行から `解決` を受ける */
+export async function resolveDecidedFileForItem(item: unknown): Promise<void> {
+	const directoryPath = (item as { directoryPath?: string } | undefined)?.directoryPath;
+	await resolveDecidedFile(directoryPath ? filePathOfConflictRow(directoryPath) : undefined);
 }
 
 /**

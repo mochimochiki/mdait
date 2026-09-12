@@ -1,9 +1,9 @@
 /**
  * 人が1件ずつ決める逃げ道のテスト（roadmap-v04 P03）。
  *
- * ここが持つ約束は3つ。**AI を1回も呼ばないこと**（API キーが無い人の道）、
- * **決まらない件が残っているうちは1バイトも書かないこと**、そして
- * **最後の1件が決まったらまとめて書き戻すこと**である。
+ * ここが持つ約束は4つ。**AI を1回も呼ばないこと**（API キーが無い人の道）、
+ * **決まらない件が残っているうちは1バイトも書かないこと**、**全件が決まっても、
+ * 人が `解決` を押すまで書かないこと**、そして**押したらまとめて書き戻すこと**である。
  */
 
 import { strict as assert } from "node:assert";
@@ -18,6 +18,8 @@ import {
 	rememberDecision,
 } from "../../../../commands/conflict/conflict-decisions";
 import { applyDecidedResolution, prepareResolution } from "../../../../commands/conflict/resolve-core";
+import { resolveDecidedFile, takeSide } from "../../../../commands/conflict/take-side-command";
+import { invalidateWorkspaceConflicts } from "../../../../ui/status/conflict-source";
 import { collectMdaitConflicts } from "../../../../core/conflict/mdait-conflicts";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../../core/tm/tmx-store";
@@ -163,6 +165,48 @@ suite("人が1件ずつ決める", () => {
 			assert.equal(back.get(tuidOf("Hello"))?.variants.get("ja")?.text, "こんにちは");
 			assert.equal(back.get(tuidOf("Bye"))?.variants.get("ja")?.text, "またね");
 			assert.doesNotMatch(fs.readFileSync(tmPath, "utf-8"), /^<{7}|^={7}|^>{7}/m);
+		});
+
+		test("全件を決めても、解決を押すまで1バイトも書かない", async () => {
+			// 1件を選ぶという小さな操作が、ファイル全体の書き換えを起こしてはいけない
+			const content = twoConflicts();
+			fs.writeFileSync(tmPath, content, "utf-8");
+			invalidateWorkspaceConflicts();
+			const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+			const plan = prepared.summary.plans[0];
+
+			for (const item of plan.pending) {
+				await takeSide({ filePath: tmPath, key: item.key }, "theirs");
+			}
+
+			assert.equal(fs.readFileSync(tmPath, "utf-8"), content, "押していないのに書き戻している");
+		});
+
+		test("解決を押すと、決めたとおりに書き戻る", async () => {
+			fs.writeFileSync(tmPath, twoConflicts(), "utf-8");
+			invalidateWorkspaceConflicts();
+			const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+			for (const item of prepared.summary.plans[0].pending) {
+				await takeSide({ filePath: tmPath, key: item.key }, "theirs");
+			}
+
+			await resolveDecidedFile(tmPath);
+
+			const back = TmxStore.parseSide(fs.readFileSync(tmPath, "utf-8"));
+			assert.equal(back.get(tuidOf("Hello"))?.variants.get("ja")?.text, "やあ");
+			assert.doesNotMatch(fs.readFileSync(tmPath, "utf-8"), /^<{7}|^={7}|^>{7}/m);
+		});
+
+		test("決まっていない件が残っているうちは、解決を押しても書かない", async () => {
+			const content = twoConflicts();
+			fs.writeFileSync(tmPath, content, "utf-8");
+			invalidateWorkspaceConflicts();
+			const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+			await takeSide({ filePath: tmPath, key: prepared.summary.plans[0].pending[0].key }, "ours");
+
+			await resolveDecidedFile(tmPath);
+
+			assert.equal(fs.readFileSync(tmPath, "utf-8"), content, "半端に書き戻している");
 		});
 
 		test("AI を1回も通さずに、全件を解決できる", async () => {

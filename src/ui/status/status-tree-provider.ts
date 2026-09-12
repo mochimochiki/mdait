@@ -581,13 +581,17 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private async getConflictRows(): Promise<StatusItem[]> {
 		const conflicts = this.collectConflicts();
 		const prepared = await collectPendingChoices(this.configuration);
-		const counts = new Map<string, number>();
+		const counts = new Map<string, { pending: number; undecided: number }>();
 		// **前の数を先に捨てる。** 残すと、計画が作れなくなったファイルの行が
 		// 「開ける」ままになり、開いても中身が1件も無い行き止まりになる
 		this.conflictChoiceCounts.clear();
 		for (const plan of prepared?.summary.plans ?? []) {
-			// 行に出すのは**まだ決めていない件数**。開けるかどうかは件そのものの有無で決まる
-			counts.set(plan.filePath, undecidedCount(plan, prepared?.stamps.get(plan.filePath)));
+			// 行に出すのは**まだ決めていない件数**。開けるかどうかは件そのものの有無で決まる。
+			// 総数も渡す — 全件決め終えた行に `解決` を出すのは、この2つの差で決まる
+			counts.set(plan.filePath, {
+				pending: plan.pending.length,
+				undecided: undecidedCount(plan, prepared?.stamps.get(plan.filePath)),
+			});
 			this.conflictChoiceCounts.set(`mdait:conflict:file:${plan.filePath}`, plan.pending.length);
 		}
 		return buildConflictRows(conflicts, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, counts);

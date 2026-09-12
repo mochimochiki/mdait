@@ -174,9 +174,39 @@ suite("競合の解決（StatusTree の枝）", () => {
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {
-			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/translations.tmx", 2]]));
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 2 }]]),
+			);
 
 			assert.match(rows[0].label, /2/, "開く価値のある行だと分からない");
+			assert.equal(rows[0].contextValue, "mdaitConflictFile", "まだ書けないのに書ける形になっている");
+		});
+
+		test("全件を決め終えた行は、書ける形になる（押すまで書かない）", () => {
+			// 最後の1件を決めた瞬間に書きに行かない。**人が `解決` を押して初めて書く**
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFileDecided");
+			assert.ok(rows[0].description, "決め終えたことが副題から読めない");
+			assert.doesNotMatch(rows[0].label, /\d/, "決め終えたのに未決の件数が残っている");
+		});
+
+		test("はじめから決める件が無い行は、書ける形にしない", () => {
+			// 丸ごと書き直す対象（unit-state・台帳）は、根の `競合を解決` で片付く
+			const rows = buildConflictRows(
+				withFiles("unit-state"),
+				"/ws",
+				new Map([["/ws/.mdait/unit-state", { pending: 0, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFile");
+			assert.equal(rows[0].description, undefined);
 		});
 
 		test("決める件がゼロなら、件数を添えない", () => {

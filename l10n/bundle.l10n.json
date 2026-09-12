@@ -56,6 +56,8 @@
   "Conflicts": "Conflicts",
   "Merging left conflicts inside .mdait.": "Merging left conflicts inside .mdait.",
   "{0} ({1})": "{0} ({1})",
+  "all decided": "all decided",
+  "Every conflict in this file has been decided. Press Resolve to write them back.": "Every conflict in this file has been decided. Press Resolve to write them back.",
   "held state: {0}": "held state: {0}",
   "held state: translated": "held state: translated",
   "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. Running Sync matches it against your documents: the side whose text matches goes back to its seat.": "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",

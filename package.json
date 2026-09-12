@@ -233,6 +233,12 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.conflict.resolveFile",
+        "title": "%mdait.conflict.resolveFile.title%",
+        "icon": "$(check)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.conflict.takeOurs",
         "title": "%mdait.conflict.takeOurs.title%",
         "icon": "$(arrow-left)",
@@ -377,6 +383,10 @@
         },
         {
           "command": "mdait.tm.commit.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.conflict.resolveFile",
           "when": "false"
         },
         {
@@ -557,6 +567,11 @@
         {
           "command": "mdait.conflict.resolve",
           "when": "view == mdait.status && viewItem == mdaitConflictsRoot",
+          "group": "inline"
+        },
+        {
+          "command": "mdait.conflict.resolveFile",
+          "when": "view == mdait.status && viewItem == mdaitConflictFileDecided",
           "group": "inline"
         },
         {

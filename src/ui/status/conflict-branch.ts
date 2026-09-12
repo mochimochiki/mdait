@@ -20,6 +20,14 @@ import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import { type DirectoryStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 
+/** そのファイルの決め具合（行の見た目と、`解決` を出すかどうかを決める） */
+export interface ConflictRowCounts {
+	/** 人が決める件の総数 */
+	pending: number;
+	/** そのうち、まだ決めていない件数 */
+	undecided: number;
+}
+
 /** ルート直下の「競合の解決」仮想ノードの識別子（実在するパスと衝突しない形にする） */
 export const CONFLICTS_ID = "mdait:conflicts";
 
@@ -104,25 +112,38 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 export function buildConflictRows(
 	conflicts: MdaitConflicts,
 	workspaceRoot: string | undefined,
-	/** 人が決める件の数（ファイルの絶対パス → 件数）。開けるかどうかの判断に使う */
-	pendingCounts: ReadonlyMap<string, number> = new Map(),
+	/**
+	 * 人が決める件の数（ファイルの絶対パス → 決め具合）。
+	 *
+	 * `undecided` は行に出す件数で、`pending` は「そもそも人が決める件があるか」である。
+	 * **両方要る** — 全件決まった行（`pending > 0` かつ `undecided === 0`）と、
+	 * はじめから決める件が無い行（`pending === 0`）は、見た目も操作も違う
+	 */
+	pendingCounts: ReadonlyMap<string, ConflictRowCounts> = new Map(),
 ): DirectoryStatusItem[] {
 	const shortPath = (absolute: string) =>
 		workspaceRoot ? path.relative(workspaceRoot, absolute).split(path.sep).join("/") : absolute;
 
 	const fileRows = conflicts.files.map((file): DirectoryStatusItem => {
-		const pending = pendingCounts.get(file.filePath) ?? 0;
+		const counts = pendingCounts.get(file.filePath) ?? { pending: 0, undecided: 0 };
+		// **全件を決め終えたら、書ける。** そのときだけ行に `解決` を出す（`package.json`）。
+		// 決め終えたことは副題でも読めるようにする — ボタンは載せた行にしか描かれないので、
+		// 印がアイコンだけだと「決めたのに何も起きない」と見える
+		const ready = counts.pending > 0 && counts.undecided === 0;
 		return {
 			type: StatusItemType.Directory,
 			// 対象の名前（＝ファイル名）と、その中で決める件数だけ。パスは Hover に降ろす
 			label:
-				pending > 0
-					? vscode.l10n.t("{0} ({1})", conflictTargetLabel(file.filePath), pending)
+				counts.undecided > 0
+					? vscode.l10n.t("{0} ({1})", conflictTargetLabel(file.filePath), counts.undecided)
 					: conflictTargetLabel(file.filePath),
+			description: ready ? vscode.l10n.t("all decided") : undefined,
 			status: Status.Error,
 			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
-			contextValue: "mdaitConflictFile",
-			tooltip: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
+			contextValue: ready ? "mdaitConflictFileDecided" : "mdaitConflictFile",
+			tooltip: ready
+				? `${shortPath(file.filePath)}\n\n${vscode.l10n.t("Every conflict in this file has been decided. Press Resolve to write them back.")}`
+				: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
 		};
 	});
 
