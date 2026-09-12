@@ -229,7 +229,7 @@
       {
         "command": "mdait.conflict.resolve",
         "title": "%mdait.conflict.resolve.title%",
-        "icon": "$(sparkle)",
+        "icon": "$(merge)",
         "category": "mdait"
       },
       {

@@ -203,7 +203,7 @@ suite("翻訳メモリの競合を解く", () => {
 		assert.equal(planned.plan.pending.length, 1);
 	});
 
-	test("片方が TU ごと消し、片方が直したなら、消した側は「消した」と見せる", () => {
+	test("片方が TU ごと消し、片方が直したなら、消した側には値を持たせない", () => {
 		write(
 			conflicted(
 				[tu("Hello", { ja: "こちらが直した" }), tu("Goodbye", { ja: "さようなら" })],
@@ -217,7 +217,9 @@ suite("翻訳メモリの競合を解く", () => {
 		const item = planned.plan.pending.find((candidate) => candidate.key === tuidOf("Hello"));
 		assert.ok(item, "消された TU が人へ回っていない");
 		assert.equal(item.theirsDeleted, true);
-		assert.equal(item.theirsText, "(removed)", "祖先の訳を相手の値として見せている");
+		// 祖先の値を置くと、その側を採れば訳が戻ると読めてしまう。**空のまま**渡し、
+		// 「削除」と書くかどうかは表示する側が決める
+		assert.equal(item.theirsText, "", "祖先の訳を相手の値として見せている");
 	});
 
 	test("消した側を採れば、その TU は消えたままになる", () => {

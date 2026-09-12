@@ -17,7 +17,6 @@ import { type KeyedEntry, mergeByKey } from "../../../core/conflict/key-merge";
 import { TmxStore } from "../../../core/tm/tmx-store";
 import type { TmEntry } from "../../../core/tm/types";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
-import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料を、計画の外へ持ち出さずに抱えておく */
 interface TmSides {
@@ -151,10 +150,10 @@ export function planTmResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: item.ours.primary,
-		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す — 値を出すと、
-		// その側を採れば値が戻ると読めてしまう
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		// 消した側には見せる値が無い。祖先の値を置かず**空にする** — 値を出すと、
+		// その側を採れば値が戻ると読めてしまう。出す言葉は表示する側が決める
+		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
 		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,

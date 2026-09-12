@@ -172,7 +172,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 		test("消した側は、誰が消したのかが読める（分かれる前の値を置かない）", () => {
 			const withDeletion = {
 				...plan(1),
-				pending: [{ key: "k0", label: "語0", oursText: "私の訳0", theirsText: "(removed)", baseText: "もとの訳0", theirsDeleted: true }],
+				pending: [{ key: "k0", label: "語0", oursText: "私の訳0", theirsText: "", baseText: "もとの訳0", theirsDeleted: true }],
 			};
 
 			const tip = buildConflictChoiceRows(withDeletion, STAMP)[0].tooltip ?? "";

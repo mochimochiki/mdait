@@ -15,6 +15,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
+import { conflictKindLabel } from "../../commands/conflict/conflict-kind";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
@@ -45,20 +46,6 @@ export function isConflictFileRowId(directoryPath: string): boolean {
 /** ファイルの行の識別子から、そのファイルの絶対パスを取り出す */
 export function filePathOfConflictRow(directoryPath: string): string | undefined {
 	return directoryPath.startsWith(CONFLICT_FILE_PREFIX) ? directoryPath.slice(CONFLICT_FILE_PREFIX.length) : undefined;
-}
-
-/** 競合したファイルの、人が読む名前 */
-function fileKindLabel(kind: ConflictFileKind): string {
-	switch (kind) {
-		case "unit-state":
-			return vscode.l10n.t("Unit state");
-		case "unit-registry":
-			return vscode.l10n.t("Source snapshots");
-		case "tm":
-			return vscode.l10n.t("Translation memory");
-		case "terms":
-			return vscode.l10n.t("Glossary");
-	}
 }
 
 /** 競合したファイルごとの、いま何が起きているかの解説（Hover） */
@@ -125,7 +112,7 @@ export function buildConflictRows(
 		return {
 			type: StatusItemType.Directory,
 			// 対象の名前と、その中で決める件数だけ。パスは Hover に降ろす
-			label: pending > 0 ? `${fileKindLabel(file.kind)}（${pending}）` : fileKindLabel(file.kind),
+			label: pending > 0 ? `${conflictKindLabel(file.kind)}（${pending}）` : conflictKindLabel(file.kind),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
 			contextValue: "mdaitConflictFile",

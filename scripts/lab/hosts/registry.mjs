@@ -334,7 +334,7 @@ export const COMMANDS = {
 		args: "none",
 		hosts: ALL,
 		asksUser: true,
-		note: "`.mdait` の合流の競合を解く。AI へ問い合わせる前に確認を出す",
+		note: "`.mdait` の合流の競合のうち、鍵の突き合わせで決まる分を解く。確認を出す",
 	},
 	"mdait.needsAttention.next": {
 		module: "out/commands/markers/needs-attention-next.js",

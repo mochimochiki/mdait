@@ -20,7 +20,6 @@ import type { LangTerm, TermEntry } from "../../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../../term/term-entry";
 import type { TermsRepository } from "../../term/terms-repository";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
-import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料 */
 interface TermSides {
@@ -178,9 +177,9 @@ export async function planTermsResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
-		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		// 消した側には見せる値が無い。祖先の値を置かず**空にする**（出す言葉は表示する側が決める）
+		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
 		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,

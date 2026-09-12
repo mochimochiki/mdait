@@ -1,35 +1,27 @@
 /**
  * @file resolve-command.ts
  * @description
- *   ✨`競合を AI で解決` の入口（roadmap-v04 P02）。
+ *   `競合を解決` の入口（roadmap-v04）。
  *
- *   **確認ダイアログは AI へ問い合わせる前に出す**（UX-P4）。判定が終わってから「これで
- *   よいですか」と聞く形にすると、断ったときには既に費用が出ている。計画を作る段では
- *   1バイトも書かず、AI も呼ばないので、件数も概算も承認の前に言える。
+ *   **AI を1回も呼ばない**（ADR-260912-04）。片付くのは鍵の突き合わせで決まる分だけで、
+ *   同じ鍵に別の値が来た件はツリーの行で人が決める。だから ✨ も付かないし、API キーの
+ *   有無で挙動が変わることもない。
  *
- *   **API キーが無くても止まらない。** AI を呼ばずに、鍵の突き合わせで決まる分だけを
- *   片付けて残りを人へ回す（ADR-260911-02。器だけで全件を解決できる）。
+ *   計画を作る段では1バイトも書かないので、**承認の前に**何件が決まり、何件が残り、
+ *   どのファイルを書き換えるかを言える。
  *
  * @module commands/conflict/resolve-command
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
-import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
-import { getResponseLanguage } from "../../infra/llm/response-language";
-import { Logger, formatError } from "../../infra/logging/logger";
-import { PromptProvider } from "../../prompts";
 import { notifyWithReport, writeReport } from "../shared/report-file";
-import { ConflictJudge } from "./conflict-judge";
 import { buildConflictReport } from "./resolve-report";
 import { type PreparedResolution, executeResolution, prepareResolution } from "./resolve-core";
 import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 
-const logger = Logger.getInstance();
-
 /**
- * 承認をもらう。**AI へ問い合わせる前に**、何件を決めることになるかと、どのファイルを
- * 書き換えるかだけを見せる（UX-P4）。
+ * 承認をもらう。何件を決めることになるかと、どのファイルを書き換えるかだけを見せる。
  *
  * **解説を書かない。** 「まだ書き換わらない」「取り消せる」といった説明は、操作の結果を
  * 見れば分かることで、ここで読ませる意味がない（`docs/ux.md` §3.3: 確認ダイアログに
@@ -37,7 +29,7 @@ const logger = Logger.getInstance();
  *
  * @returns 承認されたか
  */
-async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promise<boolean> {
+async function confirm(prepared: PreparedResolution): Promise<boolean> {
 	const { autoResolvedTotal, pendingTotal, wholeFileCount, plans } = prepared.summary;
 	const files = plans.map((plan) => path.basename(plan.filePath)).join(", ");
 
@@ -49,7 +41,7 @@ async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promis
 	].join(" ／ ");
 
 	const detail = [counts, vscode.l10n.t("Rewrites: {0}", files)].filter(Boolean).join("\n\n");
-	const proceed = willUseAi ? vscode.l10n.t("Resolve with AI") : vscode.l10n.t("Resolve");
+	const proceed = vscode.l10n.t("Resolve");
 	const answer = await vscode.window.showWarningMessage(
 		vscode.l10n.t("Resolve the merge conflicts in .mdait?"),
 		{ modal: true, detail },
@@ -109,33 +101,23 @@ export async function executeResolveConflicts(): Promise<void> {
 		return;
 	}
 
-	// AI が使えるか。使えなくても止まらない（鍵の突き合わせで決まる分は片付く）
-	let judge: ConflictJudge | undefined;
-	try {
-		const aiService = await new AIServiceBuilder().build(config.ai);
-		const promptProvider = PromptProvider.getInstance();
-		judge = new ConflictJudge(aiService, (id, variables) => promptProvider.getPromptParts(id, variables));
-	} catch (error) {
-		logger.info("conflict", "No AI available; resolving what is deterministic", formatError(error));
+	if (!(await confirm(prepared))) {
+		return; // 断られた。1バイトも書いていない
 	}
 
-	if (!(await confirm(prepared, judge !== undefined && prepared.summary.aiTotal > 0))) {
-		return; // 断られた。1バイトも書いていないし、問い合わせもしていない
-	}
-
-	const { outcomes, reasons, sides } = await vscode.window.withProgress(
+	const outcomes = await vscode.window.withProgress(
 		{
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("Resolving merge conflicts"),
 			cancellable: true,
 		},
-		(progress, token) => executeResolution(prepared, config, judge, getResponseLanguage(), progress, token),
+		(progress, token) => executeResolution(prepared, config, progress, token),
 	);
 
 	// 解いたぶんファイルが変わったので、数え直させる
 	invalidateWorkspaceConflicts();
 
-	const report = buildConflictReport(prepared.summary, outcomes, reasons, sides);
+	const report = buildConflictReport(prepared.summary, outcomes);
 	const uri = await writeReport(config, "conflict", report);
 	const remaining = outcomes.reduce((sum, outcome) => sum + outcome.remainingCount, 0);
 	const written = outcomes.filter((outcome) => outcome.written).length;

@@ -1,44 +1,29 @@
 /**
- * 競合の解決の本体のテスト（roadmap-v04 P02）。
+ * 競合の解決の本体のテスト（roadmap-v04）。
  *
- * ここが持つ約束は、P02 のゲートそのものである。
+ * ここが持つ約束は3つ。
  *
- * - **計画を作る段では1バイトも書かず、AI も呼ばない**（UX-P4: コストは承認の前に見える）
- * - **API キーが無くても止まらない**（鍵の突き合わせで決まる分は片付く）
- * - **決まらない件が残った対象は1バイトも書かない**
+ * - **計画を作る段では1バイトも書かない**（承認の前に件数だけを見せる）
+ * - **鍵の突き合わせで決まる分は、誰にも聞かずに片付く**
+ * - **決まらない件が残った対象は1バイトも書かない**（半端に書くと残った件の片側が消える）
  */
 
 import { strict as assert } from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ConflictJudge } from "../../../../commands/conflict/conflict-judge";
-import { executeResolution, prepareResolution } from "../../../../commands/conflict/resolve-core";
+import {
+	applyDecidedResolution,
+	executeResolution,
+	prepareResolution,
+} from "../../../../commands/conflict/resolve-core";
 import { collectMdaitConflicts } from "../../../../core/conflict/mdait-conflicts";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../../core/tm/tmx-store";
 import { Configuration } from "../../../../infra/config/configuration";
 import type * as vscode from "vscode";
-import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
-import type { PromptParts } from "../../../../prompts";
 
 declare let __vscodeMockWorkspaceRoot: string;
-
-/** 呼ばれたことを数える偽の AI */
-class CountingAi implements AIService {
-	calls = 0;
-	constructor(private readonly reply: string) {}
-	async sendMessage(_system: string, _messages: AIMessage[]): Promise<string> {
-		this.calls++;
-		return this.reply;
-	}
-}
-
-const parts = (variables: Record<string, string | undefined>): PromptParts => ({
-	system: "SYSTEM",
-	userContext: `USER ${variables.conflicts ?? ""}`,
-	isLegacy: false,
-});
 
 const tuidOf = (primary: string) => calculateHash(primary, true);
 
@@ -114,17 +99,7 @@ suite("競合の解決の本体", () => {
 		assert.equal(fs.statSync(tmPath).mtimeMs, before);
 	});
 
-	test("計画を作る段では、AI を1回も呼ばない", async () => {
-		// UX-P4: 承認をもらう前に費用が出てはいけない
-		fs.writeFileSync(tmPath, conflictedTmx("こんにちは", "やあ"), "utf-8");
-		const ai = new CountingAi('{"decisions":[]}');
-
-		await prepareResolution(collectMdaitConflicts(paths()), config);
-
-		assert.equal(ai.calls, 0);
-	});
-
-	test("AI が無くても止まらず、決まる分だけ片付ける", async () => {
+	test("鍵の突き合わせで決まる分は、誰にも聞かずに片付ける", async () => {
 		// 別々の文を登録しただけの形。鍵の突き合わせで決定的に両方採れる
 		const content = [
 			'<?xml version="1.0" encoding="UTF-8"?>',
@@ -142,7 +117,7 @@ suite("競合の解決の本体", () => {
 		fs.writeFileSync(tmPath, content, "utf-8");
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 
-		const { outcomes } = await executeResolution(prepared, config, undefined, undefined);
+		const outcomes = await executeResolution(prepared, config);
 
 		assert.equal(outcomes.length, 1);
 		assert.equal(outcomes[0].written, true);
@@ -150,43 +125,12 @@ suite("競合の解決の本体", () => {
 		assert.equal(TmxStore.parseSide(fs.readFileSync(tmPath, "utf-8")).size, 2);
 	});
 
-	test("AI が無ければ、決まらない件は残して1バイトも書かない", async () => {
+	test("同じ鍵に別の値が来たら、残して1バイトも書かない", async () => {
 		const content = conflictedTmx("こんにちは", "やあ");
 		fs.writeFileSync(tmPath, content, "utf-8");
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 
-		const { outcomes } = await executeResolution(prepared, config, undefined, undefined);
-
-		assert.equal(outcomes[0].remainingCount, 1);
-		assert.equal(outcomes[0].written, false);
-		assert.equal(fs.readFileSync(tmPath, "utf-8"), content);
-	});
-
-	test("AI が決めれば、書き戻して競合マーカーが消える", async () => {
-		fs.writeFileSync(tmPath, conflictedTmx("こんにちは", "やあ"), "utf-8");
-		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
-		const ai = new CountingAi('{"decisions":[{"index":1,"side":"theirs","reason":"新しいほう"}]}');
-		const judge = new ConflictJudge(ai, (_id, v) => parts(v));
-
-		const { outcomes, reasons } = await executeResolution(prepared, config, judge, undefined);
-
-		assert.equal(ai.calls, 1);
-		assert.equal(outcomes[0].decidedCount, 1);
-		assert.equal(outcomes[0].written, true);
-		const after = fs.readFileSync(tmPath, "utf-8");
-		assert.doesNotMatch(after, /^<{7}|^={7}|^>{7}/m);
-		assert.equal(TmxStore.parseSide(after).get(tuidOf("Hello"))?.variants.get("ja")?.text, "やあ");
-		assert.equal([...reasons.values()][0], "新しいほう");
-	});
-
-	test("AI が迷えば、書かずに残す", async () => {
-		const content = conflictedTmx("こんにちは", "やあ");
-		fs.writeFileSync(tmPath, content, "utf-8");
-		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
-		const ai = new CountingAi('{"decisions":[{"index":1,"side":"unsure"}]}');
-		const judge = new ConflictJudge(ai, (_id, v) => parts(v));
-
-		const { outcomes } = await executeResolution(prepared, config, judge, undefined);
+		const outcomes = await executeResolution(prepared, config);
 
 		assert.equal(outcomes[0].remainingCount, 1);
 		assert.equal(outcomes[0].written, false);
@@ -215,7 +159,7 @@ suite("競合の解決の本体", () => {
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 		const cancelled = { isCancellationRequested: true } as unknown as vscode.CancellationToken;
 
-		const { outcomes } = await executeResolution(prepared, config, undefined, undefined, undefined, cancelled);
+		const outcomes = await executeResolution(prepared, config, undefined, cancelled);
 
 		assert.equal(outcomes.length, 1, "手を付けなかった対象が結果から消えている");
 		assert.equal(outcomes[0].skipped, true);
@@ -226,17 +170,17 @@ suite("競合の解決の本体", () => {
 	test("計画を作ったあとにファイルが変わっていたら、上書きしない", async () => {
 		fs.writeFileSync(tmPath, conflictedTmx("こんにちは", "やあ"), "utf-8");
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+		const plan = prepared.summary.plans[0];
 
-		// 確認ダイアログや AI への問い合わせのあいだに、人が手で直した
+		// 確認ダイアログのあいだや、人が1件ずつ決めているあいだに、手で直した
 		const edited = conflictedTmx("こんにちは（手で直した）", "やあ");
 		fs.writeFileSync(tmPath, edited, "utf-8");
 
-		const ai = new CountingAi('{"decisions":[{"index":1,"side":"theirs","reason":"新しいほう"}]}');
-		const judge = new ConflictJudge(ai, (_id, v) => parts(v));
-		const { outcomes } = await executeResolution(prepared, config, judge, undefined);
+		const decided = new Map(plan.pending.map((item) => [item.key, "theirs" as const]));
+		const outcome = await applyDecidedResolution(plan, prepared, config, decided);
 
-		assert.equal(outcomes[0].written, false);
-		assert.ok(outcomes[0].error, "変わったことが伝わっていない");
+		assert.equal(outcome.written, false);
+		assert.ok(outcome.error, "変わったことが伝わっていない");
 		assert.equal(fs.readFileSync(tmPath, "utf-8"), edited, "手で直した内容を消している");
 	});
 });
