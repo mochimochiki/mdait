@@ -86,19 +86,18 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 /**
  * 「競合の解決」の枝を作る。0件なら `undefined`（空のノードをツリーに出さない — UX-P7）。
  */
-export function buildConflictsItem(conflicts: MdaitConflicts): DirectoryStatusItem | undefined {
+export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number | undefined): DirectoryStatusItem | undefined {
 	if (conflicts.total === 0) {
 		return undefined;
 	}
 	return {
 		type: StatusItemType.Directory,
-		label: vscode.l10n.t("Merge conflicts ({0})", conflicts.total),
+		// 数えるのは**あなたが決める件数**。ファイルの数でも自動で片付く件数でもない
+		label: decisions ? vscode.l10n.t("Conflicts ({0})", decisions) : vscode.l10n.t("Conflicts"),
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		tooltip: vscode.l10n.t(
-			"Merging left conflicts inside .mdait. Nothing has been lost, but mdait cannot use these files until the conflicts are resolved.",
-		),
+		tooltip: vscode.l10n.t("Merging left conflicts inside .mdait. Nothing has been lost."),
 	};
 }
 
@@ -121,11 +120,8 @@ export function buildConflictRows(
 		const pending = pendingCounts.get(file.filePath) ?? 0;
 		return {
 			type: StatusItemType.Directory,
-			label: fileKindLabel(file.kind),
-			description:
-				pending > 0
-					? `${shortPath(file.filePath)} · ${vscode.l10n.t("{0} to decide", pending)}`
-					: shortPath(file.filePath),
+			// 対象の名前と、その中で決める件数だけ。パスは Hover に降ろす
+			label: pending > 0 ? `${fileKindLabel(file.kind)}（${pending}）` : fileKindLabel(file.kind),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
 			contextValue: "mdaitConflictFile",
@@ -165,16 +161,17 @@ export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): Di
 		const chosen = decisionOf(plan.filePath, stamp, item.key);
 		return {
 			type: StatusItemType.Directory,
-			label: item.label,
+			label: shorten(item.label),
+			// **状態を一言だけ。** 削除がからむかどうかは Hover が言う
 			description: chosen
 				? chosen === "ours"
-					? vscode.l10n.t("your edit chosen")
-					: vscode.l10n.t("their edit chosen")
-				: vscode.l10n.t("not chosen yet"),
+					? vscode.l10n.t("yours")
+					: vscode.l10n.t("theirs")
+				: vscode.l10n.t("not chosen"),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${fingerprintOfKey(item.key)}:${plan.filePath}`,
 			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
-			tooltip: buildChoiceTooltip(item, plan.kind, chosen),
+			tooltip: buildChoiceTooltip(item, chosen),
 		};
 	});
 }
@@ -190,69 +187,41 @@ export function fingerprintOfKey(key: string): string {
 	return calculateHash(key);
 }
 
+/** ツリーの1行に収まる長さへ。記法の印（`**` など）は読めないので落とす */
+function shorten(text: string, max = 40): string {
+	const plain = text.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+	return plain.length > max ? `${plain.slice(0, max)}…` : plain;
+}
+
 /**
  * 1件の解説（Hover）。
  *
- * **読む人はこの文を前触れなく初めて見る。** だから順に、何が起きたのか・両者が何を書いたのか・
- * 選ぶと何が起きるのか・いつ書き換わるのかを、この順で書く。「こちら」「あちら」のような
- * 指示語で始めない — 何を指しているのかが読み手に無いためである（`docs/ux.md` §3.3:
- * 解説はすべて Hover に置き、なぜこの状態なのかと次に何をすればよいかを書く）。
+ * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか、AI を
+ * 使うか）は書かない — 操作の結果を見れば分かることで、読ませる意味がない
+ * （`docs/ux.md` §3.3）。
  */
-function buildChoiceTooltip(
-	item: PendingChoice,
-	kind: ConflictFileKind,
-	chosen: "ours" | "theirs" | undefined,
-): string {
-	const target = fileKindLabel(kind);
-
-	// 1. 何が起きたのか。誰が何をしたかまで書く（「片方が」で済ませない）
-	const happened = item.theirsDeleted
-		? vscode.l10n.t(
-				"You took in someone else's changes, and their edit collided with yours on this entry in the {0}. You rewrote it; they deleted it.",
-				target,
-			)
-		: item.oursDeleted
-			? vscode.l10n.t(
-					"You took in someone else's changes, and their edit collided with yours on this entry in the {0}. You deleted it; they rewrote it.",
-					target,
-				)
-			: vscode.l10n.t(
-					"You took in someone else's changes, and two values arrived for the same entry in the {0}: the one you wrote and the one they wrote.",
-					target,
-				);
-
-	// 2. 両者が書いたもの。消した側には値が無いので、値の代わりにそう書く
+function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
 	const parts = [
-		happened,
+		item.label,
 		"",
-		`${vscode.l10n.t("You")}: ${item.oursDeleted ? vscode.l10n.t("(you deleted this entry)") : item.oursText}`,
-		`${vscode.l10n.t("They")}: ${item.theirsDeleted ? vscode.l10n.t("(they deleted this entry)") : item.theirsText}`,
+		`${vscode.l10n.t("You")}\t${item.oursDeleted ? vscode.l10n.t("deleted") : item.oursText}`,
+		`${vscode.l10n.t("They")}\t${item.theirsDeleted ? vscode.l10n.t("deleted") : item.theirsText}`,
 	];
 	if (item.baseText !== undefined) {
-		parts.push(`${vscode.l10n.t("Before either of you edited it")}: ${item.baseText}`);
+		parts.push(`${vscode.l10n.t("Before")}\t${item.baseText}`);
 	}
-
-	// 3. 選ぶと何が起きるのか
-	parts.push(
-		"",
-		item.theirsDeleted
-			? vscode.l10n.t("Take your edit and the entry stays. Take theirs and the entry goes away.")
-			: item.oursDeleted
-				? vscode.l10n.t("Take your edit and the entry goes away. Take theirs and the entry stays.")
-				: vscode.l10n.t("Choose which value to keep. The one you do not choose will not be there afterwards."),
-	);
-
-	// 4. いつ書き換わるのか
-	parts.push(
-		"",
-		chosen
-			? vscode.l10n.t(
-					"You have chosen. Nothing has been written yet: this file is rewritten in one go, once every entry in it has been decided.",
-				)
-			: vscode.l10n.t(
-					"Choosing writes nothing yet. This file is rewritten in one go, once every entry in it has been decided. No AI is involved.",
-				),
-	);
+	parts.push("", vscode.l10n.t("Choose which one to keep."));
+	// 消した側を採ると項目ごと消える。結果が値の表から読めないので、そこだけ足す
+	if (item.theirsDeleted) {
+		parts.push(vscode.l10n.t("Taking theirs removes this entry."));
+	} else if (item.oursDeleted) {
+		parts.push(vscode.l10n.t("Taking yours removes this entry."));
+	}
+	if (chosen) {
+		parts.push(
+			chosen === "ours" ? vscode.l10n.t("Chosen: yours.") : vscode.l10n.t("Chosen: theirs."),
+		);
+	}
 	return parts.join("\n");
 }
 

@@ -23,7 +23,7 @@ import {
 	isConflictFileRowId,
 	isConflictRowId,
 } from "./conflict-branch";
-import { collectPendingChoices, collectWorkspaceConflicts } from "./conflict-source";
+import { collectPendingChoices, collectWorkspaceConflicts, pendingChoiceCount } from "./conflict-source";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -549,7 +549,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// 「競合の解決」は最上段に置く。競合はエラー状態で、**解くまで他の数字が当てにならない**
 		// （TM も用語集も読めていない）。要対応より手前に出す理由はそこにある
-		const conflictsItem = buildConflictsItem(this.collectConflicts());
+		const conflictsItem = buildConflictsItem(this.collectConflicts(), pendingChoiceCount());
 		if (!conflictsItem) {
 			this.conflictsExpandedOnce = false;
 		}

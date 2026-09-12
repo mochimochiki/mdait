@@ -28,69 +28,30 @@ import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../u
 const logger = Logger.getInstance();
 
 /**
- * 承認をもらう。**AI へ問い合わせる前に**、対象件数・何を書くか・取り消せるかを見せる。
+ * 承認をもらう。**AI へ問い合わせる前に**、何件を決めることになるかと、どのファイルを
+ * 書き換えるかだけを見せる（UX-P4）。
+ *
+ * **解説を書かない。** 「まだ書き換わらない」「取り消せる」といった説明は、操作の結果を
+ * 見れば分かることで、ここで読ませる意味がない（`docs/ux.md` §3.3: 確認ダイアログに
+ * 載せてよいのは、これから起きること・対象件数・取り消せるかどうか）。
  *
  * @returns 承認されたか
  */
 async function confirm(prepared: PreparedResolution, willUseAi: boolean): Promise<boolean> {
-	const { autoResolvedTotal, pendingTotal, aiTotal, wholeFileCount, plans } = prepared.summary;
+	const { autoResolvedTotal, pendingTotal, wholeFileCount, plans } = prepared.summary;
 	const files = plans.map((plan) => path.basename(plan.filePath)).join(", ");
 
-	// 祖先が取れていない対象があれば、そのことを言う。**祖先があるかどうかで、人が決める
-	// 件数が実際に変わる**（実測: 片方だけが既存の語を直した形は、祖先があれば決定的に
-	// 決まるが、無いと人に回る）。次からのために設定を勧める
-	const missingBase = plans.some((plan) => plan.pending.length > 0 && !plan.hasBase);
-	/** 片方が消し、片方が直した件。AI へは送らない */
-	const deletionCount = pendingTotal - aiTotal;
+	// 0 の項目は出さない（見えている数字は必ず中身のあるものにする）
+	const counts = [
+		...(pendingTotal > 0 ? [vscode.l10n.t("you decide {0}", pendingTotal)] : []),
+		...(autoResolvedTotal > 0 ? [vscode.l10n.t("automatic {0}", autoResolvedTotal)] : []),
+		...(wholeFileCount > 0 ? [vscode.l10n.t("rewritten whole: {0} file(s)", wholeFileCount)] : []),
+	].join(" ／ ");
 
-	const detail = [
-		vscode.l10n.t("{0} entry/entries can be merged automatically, with nothing to decide.", autoResolvedTotal),
-		...(wholeFileCount > 0
-			? [
-					vscode.l10n.t(
-						"{0} file(s) are rewritten as a whole. Every row both sides could read is kept, so there is nothing to decide in them.",
-						wholeFileCount,
-					),
-				]
-			: []),
-		willUseAi
-			? vscode.l10n.t(
-					"{0} entry/entries have a different value for the same key. These will be sent to the AI, which can only pick one of the two existing values — it never writes new text.",
-					aiTotal,
-				)
-			: vscode.l10n.t(
-					"{0} entry/entries have a different value for the same key. No AI is configured, so these are left for you to decide.",
-					aiTotal,
-				),
-		...(deletionCount > 0
-			? [
-					vscode.l10n.t(
-						"{0} entry/entries were removed on one side and changed on the other. These never go to the AI, because removing is not something it is allowed to choose — they are left for you.",
-						deletionCount,
-					),
-				]
-			: []),
-		vscode.l10n.t("Files to be rewritten: {0}", files),
-		...(missingBase
-			? [
-					vscode.l10n.t(
-						"This merge did not record what both sides started from, so cases where only one side changed something cannot be settled automatically. If you merge with git, setting merge.conflictStyle to diff3 (or zdiff3) leaves fewer of these for you. SVN has no equivalent setting, so with SVN these stay for you to decide.",
-					),
-				]
-			: []),
-		vscode.l10n.t(
-			"A file is only rewritten once every one of its conflicts is settled, so nothing is half-written. Your working tree is not committed, so you can undo this with git or SVN.",
-		),
-	].join("\n\n");
-
-	const proceed = willUseAi ? vscode.l10n.t("Resolve with AI") : vscode.l10n.t("Resolve without AI");
-	const entryTotal = autoResolvedTotal + pendingTotal;
+	const detail = [counts, vscode.l10n.t("Rewrites: {0}", files)].filter(Boolean).join("\n\n");
+	const proceed = willUseAi ? vscode.l10n.t("Resolve with AI") : vscode.l10n.t("Resolve");
 	const answer = await vscode.window.showWarningMessage(
-		// 1件ずつ選ぶ件が1つも無くても、ファイルは書き直す。「0件を解決しますか」と
-		// 聞かないように、そのときはファイルの数で聞く
-		entryTotal > 0
-			? vscode.l10n.t("Resolve {0} merge conflict(s) in .mdait?", entryTotal)
-			: vscode.l10n.t("Resolve the merge conflicts in {0} file(s) in .mdait?", plans.length),
+		vscode.l10n.t("Resolve the merge conflicts in .mdait?"),
 		{ modal: true, detail },
 		proceed,
 	);
@@ -186,15 +147,18 @@ export async function executeResolveConflicts(): Promise<void> {
 
 	notifyWithReport(
 		unfinished > 0
-			? vscode.l10n.t(
-					"Resolved {0} file(s); {1} file(s) were left untouched. The report says what happened to each.",
-					written,
-					unfinished,
-				)
+			? vscode.l10n.t("Could not write {0} file(s).", unfinished)
 			: remaining > 0
-				? vscode.l10n.t("Resolved {0} file(s); {1} conflict(s) still need your decision.", written, remaining)
-				: vscode.l10n.t("Resolved every merge conflict in .mdait ({0} file(s)).", written),
+				? vscode.l10n.t("Decide {0} more to write.", remaining)
+				: vscode.l10n.t("Resolved the merge conflicts."),
 		uri,
 		unfinished > 0 || remaining > 0 ? "warning" : "info",
+		// 残っているときだけ、次の一手（一覧を開く）をレポートより前に置く
+		remaining > 0 && unfinished === 0
+			? {
+					label: vscode.l10n.t("Open the list"),
+					run: () => void vscode.commands.executeCommand("mdait.status.focus"),
+				}
+			: undefined,
 	);
 }
