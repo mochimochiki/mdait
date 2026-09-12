@@ -86,6 +86,19 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.match(item?.tooltip ?? "", /waiting for your decision/);
 	});
 
+	test("書き込み待ちのファイルがあれば、解説がそれを言う", () => {
+		// 決め終えた分は数字に出ない（決める件が 0 になる）。押し忘れに気づけるのは解説だけ
+		const item = buildConflictsItem(withFiles("terms"), 0, 1);
+
+		assert.match(item?.tooltip ?? "", /waiting to be written/);
+	});
+
+	test("書き込み待ちが無ければ、その話はしない", () => {
+		const item = buildConflictsItem(withFiles("terms"), 2, 0);
+
+		assert.doesNotMatch(item?.tooltip ?? "", /waiting to be written/);
+	});
+
 	test("件数を出していないときは、数字の説明もしない", () => {
 		// 決める件が 0（丸ごと書き直す対象しかない）と、まだ数えていない（undefined）。
 		// **どちらもラベルに数字が出ない**ので、数字の話をすると出ていないものの説明になる

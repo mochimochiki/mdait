@@ -59,6 +59,7 @@
   "Conflicts": "競合",
   "Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision.": "合流で .mdait の中に競合が出ました。数字は、あなたの判断を待っている件数です。",
   "Merging left conflicts inside .mdait.": "合流で .mdait の中に競合が出ました。",
+  "{0} file(s) have been decided and are waiting to be written — press Resolve on the row.": "{0}ファイルが決まっていて、書き込みを待っています。行の「解決」を押してください。",
   "held state: {0}": "預かっている状態: {0}",
   "held state: translated": "預かっている状態: 翻訳済み",
   "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. Running Sync matches it against your documents: the side whose text matches goes back to its seat.": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。同期を走らせると原稿と突き合わせ、本文が一致する側が席へ戻ります。",

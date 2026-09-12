@@ -80,7 +80,12 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 /**
  * 「競合の解決」の枝を作る。0件なら `undefined`（空のノードをツリーに出さない — UX-P7）。
  */
-export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number | undefined): DirectoryStatusItem | undefined {
+export function buildConflictsItem(
+	conflicts: MdaitConflicts,
+	decisions: number | undefined,
+	/** 全件を決め終えて、あとは書くだけのファイルの数 */
+	readyFiles = 0,
+): DirectoryStatusItem | undefined {
 	if (conflicts.total === 0) {
 		return undefined;
 	}
@@ -93,13 +98,22 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 				vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision."),
 			]
 		: [vscode.l10n.t("Conflicts"), vscode.l10n.t("Merging left conflicts inside .mdait.")];
+	// **決め終えた分は数字に出ない**（決める件が 0 になるので）。押し忘れたまま数字が
+	// 消えるのを防ぐため、ここだけは解説で拾う
+	const waiting =
+		readyFiles > 0
+			? vscode.l10n.t(
+					"{0} file(s) have been decided and are waiting to be written — press Resolve on the row.",
+					readyFiles,
+				)
+			: "";
 	return {
 		type: StatusItemType.Directory,
 		label,
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		tooltip,
+		tooltip: waiting ? `${tooltip}\n\n${waiting}` : tooltip,
 	};
 }
 

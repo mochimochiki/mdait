@@ -27,6 +27,7 @@ import {
 	collectPendingChoices,
 	collectWorkspaceConflicts,
 	pendingChoiceCount,
+	readyToWriteCount,
 	undecidedCount,
 } from "./conflict-source";
 import { Configuration } from "../../infra/config/configuration";
@@ -554,7 +555,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// 「競合の解決」は最上段に置く。競合はエラー状態で、**解くまで他の数字が当てにならない**
 		// （TM も用語集も読めていない）。要対応より手前に出す理由はそこにある
-		const conflictsItem = buildConflictsItem(this.collectConflicts(), pendingChoiceCount());
+		const conflictsItem = buildConflictsItem(this.collectConflicts(), pendingChoiceCount(), readyToWriteCount());
 		if (!conflictsItem) {
 			this.conflictsExpandedOnce = false;
 		}

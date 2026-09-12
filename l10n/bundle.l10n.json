@@ -55,6 +55,7 @@
   "Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision.": "Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision.",
   "Conflicts": "Conflicts",
   "Merging left conflicts inside .mdait.": "Merging left conflicts inside .mdait.",
+  "{0} file(s) have been decided and are waiting to be written — press Resolve on the row.": "{0} file(s) have been decided and are waiting to be written — press Resolve on the row.",
   "{0} ({1})": "{0} ({1})",
   "all decided": "all decided",
   "Every conflict in this file has been decided. Press Resolve to write them back.": "Every conflict in this file has been decided. Press Resolve to write them back.",
