@@ -1,0 +1,104 @@
+/**
+ * @file take-side-command.ts
+ * @description
+ *   `こちらを採る` / `あちらを採る` — **人が1件ずつ決める逃げ道**（roadmap-v04 P03）。
+ *
+ *   **AI を1回も呼ばない。** だから ✨ も付けない（UX-P4 の逆向き: 付いていない操作は
+ *   AI を呼ばない）。API キーが無い人はここだけで全件を片付けられる。
+ *
+ *   決めたぶんはその場では書かない。**そのファイルの最後の1件が決まったときに、まとめて
+ *   書き戻す。** 決まらない件が残っているうちに書くと、残った件の両側がディスクから
+ *   消えるからである。途中の判断は `conflict-decisions.ts` が預かる。
+ *
+ * @module commands/conflict/take-side-command
+ */
+import * as vscode from "vscode";
+import { Configuration } from "../../infra/config/configuration";
+import { Logger, formatError } from "../../infra/logging/logger";
+import { choiceOfConflictRow } from "../../ui/status/conflict-branch";
+import { collectPendingChoices, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
+import { decisionsFor, forgetDecisions, rememberDecision } from "./conflict-decisions";
+import type { ChoiceSide } from "./resolution-plan";
+import { applyDecidedResolution } from "./resolve-core";
+
+const logger = Logger.getInstance();
+
+/** ツリーの行がコマンドへ渡す、1件を指すもの */
+export interface TakeSideTarget {
+	/** 対象のファイル（絶対パス） */
+	filePath: string;
+	/** その中の1件を指す鍵 */
+	key: string;
+}
+
+/**
+ * 1件について「こちら」か「あちら」を採る。
+ *
+ * そのファイルの件が全部決まったら、その場で書き戻す。まだ残っていれば預かるだけで、
+ * ファイルは競合マーカーの入ったまま動かない。
+ */
+export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceSide): Promise<void> {
+	if (!target?.filePath || !target.key) {
+		return;
+	}
+	const config = Configuration.getInstance();
+	rememberDecision(target.filePath, target.key, side);
+
+	const prepared = await collectPendingChoices(config);
+	const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === target.filePath);
+	if (!prepared || !plan) {
+		// 計画が引けない（ファイルが外から変わった）。預かりは捨てて数え直させる
+		forgetDecisions(target.filePath);
+		invalidateWorkspaceConflicts();
+		return;
+	}
+
+	const decided = decisionsFor(target.filePath);
+	const remaining = plan.pending.filter((item) => !decided.has(item.key)).length;
+	if (remaining > 0) {
+		// まだ決まらない件がある。**ここでは1バイトも書かない**
+		return;
+	}
+
+	try {
+		const outcome = await applyDecidedResolution(plan, prepared, config, decided);
+		forgetDecisions(target.filePath);
+		invalidateWorkspaceConflicts();
+		if (outcome.written) {
+			void vscode.window.showInformationMessage(
+				vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(target.filePath)),
+			);
+		}
+	} catch (error) {
+		logger.warn("conflict", "Failed to write a hand-made resolution", formatError(error));
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t("Could not write the resolution: {0}", error instanceof Error ? error.message : String(error)),
+		);
+	}
+}
+
+/**
+ * ツリーの行から `こちらを採る` / `あちらを採る` を受ける。
+ *
+ * 行が持っているのは「どのファイルの何番目か」だけなので、計画を引き直して鍵へ戻す。
+ * 番号で持つのは、鍵が長く（席のキーやハッシュ）ツリーの識別子に載せると読めなくなるためである。
+ */
+export async function takeSideForItem(item: unknown, side: ChoiceSide): Promise<void> {
+	const directoryPath = (item as { directoryPath?: string } | undefined)?.directoryPath;
+	if (!directoryPath) {
+		return;
+	}
+	const row = choiceOfConflictRow(directoryPath);
+	if (!row) {
+		return;
+	}
+	const prepared = await collectPendingChoices(Configuration.getInstance());
+	const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === row.filePath);
+	const choice = plan?.pending[row.index];
+	if (!choice) {
+		// ファイルが外から変わって、番号が別の件を指すようになった。何もしない
+		invalidateWorkspaceConflicts();
+		return;
+	}
+	await takeSide({ filePath: row.filePath, key: choice.key }, side);
+}

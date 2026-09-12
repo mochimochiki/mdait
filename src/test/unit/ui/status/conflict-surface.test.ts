@@ -9,10 +9,13 @@
 import { strict as assert } from "node:assert";
 import type { MdaitConflicts } from "../../../../core/conflict/mdait-conflicts";
 import { Status, StatusItemType } from "../../../../core/status/status-item";
+import { forgetAllDecisions, rememberDecision } from "../../../../commands/conflict/conflict-decisions";
 import {
 	CONFLICTS_ID,
+	buildConflictChoiceRows,
 	buildConflictRows,
 	buildConflictsItem,
+	choiceOfConflictRow,
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
@@ -95,6 +98,68 @@ suite("競合の解決（StatusTree の枝）", () => {
 		const rows = buildConflictRows(withFiles("unit-state"), undefined);
 
 		assert.equal(rows[0].description, "/ws/.mdait/unit-state");
+	});
+
+	suite("人が決める件（P03）", () => {
+		const plan = (pending: number) => ({
+			kind: "tm" as const,
+			filePath: "/ws/.mdait/translations.tmx",
+			autoResolvedCount: 3,
+			deletedKeys: [],
+			hasBase: true,
+			pending: Array.from({ length: pending }, (_, i) => ({
+				key: `k${i}`,
+				label: `語${i}`,
+				oursText: `私の訳${i}`,
+				theirsText: `相手の訳${i}`,
+				baseText: `もとの訳${i}`,
+			})),
+		});
+
+		test("判断待ちの件数をファイルの行に添える", () => {
+			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
+
+			assert.match(rows[0].description ?? "", /\.mdait\/tm/);
+		});
+
+		test("1件1行で並び、まだ決めていない件は未決と出る", () => {
+			const rows = buildConflictChoiceRows(plan(2));
+
+			assert.equal(rows.length, 2);
+			assert.equal(rows[0].label, "語0");
+			assert.ok(rows[0].description);
+			assert.equal(rows[0].contextValue, "mdaitConflictChoice");
+		});
+
+		test("Hover に両側と、分かれる前の値を置く", () => {
+			const tip = buildConflictChoiceRows(plan(1))[0].tooltip ?? "";
+
+			assert.match(tip, /私の訳0/);
+			assert.match(tip, /相手の訳0/);
+			assert.match(tip, /もとの訳0/);
+		});
+
+		test("決めた件は、どちらを採ったかが読める", () => {
+			rememberDecision("/ws/.mdait/translations.tmx", "k0", "theirs");
+
+			const rows = buildConflictChoiceRows(plan(1));
+
+			assert.equal(rows[0].contextValue, "mdaitConflictChoiceDecided");
+			assert.notEqual(rows[0].description, undefined);
+			forgetAllDecisions();
+		});
+
+		test("行の識別子から、どのファイルの何番目かを引ける", () => {
+			const rows = buildConflictChoiceRows(plan(3));
+
+			const found = choiceOfConflictRow(rows[2].directoryPath);
+			assert.equal(found?.filePath, "/ws/.mdait/translations.tmx");
+			assert.equal(found?.index, 2);
+		});
+
+		test("競合の解決の行でない識別子からは引けない", () => {
+			assert.equal(choiceOfConflictRow("content/en/a.md"), undefined);
+		});
 	});
 });
 

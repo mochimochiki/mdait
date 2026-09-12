@@ -41,6 +41,8 @@
   "mdait.tm.commit.file.title": "✨TM登録（ファイル）",
   "mdait.tm.commit.directory.title": "✨TM登録（ディレクトリ）",
   "mdait.conflict.resolve.title": "✨競合を AI で解決",
+  "mdait.conflict.takeOurs.title": "こちらを採る",
+  "mdait.conflict.takeTheirs.title": "あちらを採る",
   "mdait.aiReview.file.title": "✨AI翻訳レビュー（ファイル）",
   "mdait.aiReview.directory.title": "✨AI翻訳レビュー（ディレクトリ）",
   "mdait.adopt.run.title": "✨既存翻訳の取り込み",

@@ -639,7 +639,6 @@
   "Merging left conflicts inside .mdait. Nothing has been lost, but mdait cannot use these files until the conflicts are resolved.": "合流で .mdait の中に競合が残りました。失われたものはありませんが、解決するまで mdait はこれらのファイルを使えません。",
   "held state: {0}": "預かっている状態: {0}",
   "held state: translated": "預かっている状態: 翻訳済み",
-  "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded — but it will only come back on its own if the chapter's text matches it exactly.\n\nHeld state: from={1} need={2}": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。捨ててはいませんが、章の本文がぴたりと一致したときだけ自動で戻ります。\n\n預かっている状態: from={1} need={2}",
   "mdait: {0} unresolved merge conflict(s) inside .mdait. Nothing has been lost.": "mdait: .mdait の中に未解決の競合が {0}件 あります。失われたものはありません。",
   "The {0} cannot be used until they are resolved.": "解決するまで{0}は使えません。",
   "Click to open the mdait view.": "クリックすると mdait のビューが開きます。",
@@ -674,5 +673,16 @@
   "There are no unresolved merge conflicts in .mdait.": ".mdait に未解決の競合はありません。",
   "Resolving merge conflicts": "競合を解決しています",
   "Resolved {0} file(s); {1} conflict(s) still need your decision.": "{0}個のファイルを解決しました。{1}件はまだあなたの判断を待っています。",
-  "Resolved every merge conflict in .mdait ({0} file(s)).": ".mdait の競合をすべて解決しました（{0}個のファイル）。"
+  "Resolved every merge conflict in .mdait ({0} file(s)).": ".mdait の競合をすべて解決しました（{0}個のファイル）。",
+  "{0} to decide": "{0}件は判断待ち",
+  "keeping yours": "こちらを採る",
+  "keeping theirs": "あちらを採る",
+  "undecided": "未決",
+  "Two people wrote a different value for this entry.": "この項目に、2人が別々の値を書いています。",
+  "Before the split": "分かれる前",
+  "You picked a side. Nothing is written yet — this file is rewritten once every one of its conflicts is settled.": "どちらを採るか決めました。まだ書いていません — このファイルは、中の競合がすべて決まったときに書き換えます。",
+  "Pick a side with the buttons on this row. No AI is involved.": "この行のボタンでどちらかを選んでください。AI は使いません。",
+  "{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded. Running Sync matches it against your documents: the side whose text matches goes back to its seat.": "{0}\n\n同じ章に2つの枝が別々の状態を書いたため、片方を席から降ろしました。捨ててはいません。同期を走らせると原稿と突き合わせ、本文が一致する側が席へ戻ります。",
+  "Resolved every conflict in {0}.": "{0} の競合をすべて解決しました。",
+  "Could not write the resolution: {0}": "解決の結果を書けませんでした: {0}"
 }

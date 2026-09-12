@@ -10,6 +10,8 @@
  *
  * @module ui/status/conflict-source
  */
+import type { PreparedResolution } from "../../commands/conflict/resolve-core";
+import { prepareResolution } from "../../commands/conflict/resolve-core";
 import { MdaitConflictScanner, type MdaitConflicts, noConflicts } from "../../core/conflict/mdait-conflicts";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
@@ -45,7 +47,47 @@ export function collectWorkspaceConflicts(configuration: Configuration): MdaitCo
 	}
 }
 
+/**
+ * いま人の判断を待っている件の一覧（ツリーが1件1行で並べるために使う）。
+ *
+ * 計画を作るのはファイルを読む仕事なので、**競合の見た目が動いていないあいだは作り直さない**。
+ * 動いていたら作り直す — 別の合流が来たか、人が手で直したかのどちらかで、前の計画の鍵は
+ * もう当てにならない。
+ *
+ * **1バイトも書かない。** `prepareResolution` は読むだけである。
+ */
+export async function collectPendingChoices(configuration: Configuration): Promise<PreparedResolution | undefined> {
+	const conflicts = collectWorkspaceConflicts(configuration);
+	if (conflicts.files.length === 0) {
+		preparedCache = undefined;
+		preparedStamp = undefined;
+		return undefined;
+	}
+	// 覚え書きの鍵は「いま競合しているファイルとその見た目」。スキャナが読み直した回は
+	// 必ず作り直す
+	const stamp = conflicts.files.map((file) => file.filePath).join("\u0000");
+	if (preparedCache && preparedStamp === stamp && !preparedDirty) {
+		return preparedCache;
+	}
+	try {
+		preparedCache = await prepareResolution(conflicts, configuration);
+		preparedStamp = stamp;
+		preparedDirty = false;
+		return preparedCache;
+	} catch (error) {
+		Logger.getInstance().debug("conflicts", "failed to prepare a resolution", formatError(error));
+		return undefined;
+	}
+}
+
+let preparedCache: PreparedResolution | undefined;
+let preparedStamp: string | undefined;
+let preparedDirty = true;
+
 /** 覚え書きを捨てて、次に数えるときは必ずファイルを読み直させる */
 export function invalidateWorkspaceConflicts(): void {
 	scanner.invalidate();
+	preparedCache = undefined;
+	preparedStamp = undefined;
+	preparedDirty = true;
 }

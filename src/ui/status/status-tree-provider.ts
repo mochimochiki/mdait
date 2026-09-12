@@ -14,8 +14,16 @@ import {
 	getSelectedScopeDirs,
 } from "../../commands/shared/status-scope";
 import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
-import { CONFLICTS_ID, buildConflictRows, buildConflictsItem, isConflictRowId } from "./conflict-branch";
-import { collectWorkspaceConflicts } from "./conflict-source";
+import {
+	CONFLICTS_ID,
+	buildConflictChoiceRows,
+	buildConflictRows,
+	buildConflictsItem,
+	filePathOfConflictRow,
+	isConflictFileRowId,
+	isConflictRowId,
+} from "./conflict-branch";
+import { collectPendingChoices, collectWorkspaceConflicts } from "./conflict-source";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -148,6 +156,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/** 「競合の解決」の枝も、現れた最初の1回だけ展開して見せる */
 	private conflictsExpandedOnce = false;
 
+	/** 競合したファイルの行 → その中の「人が決める件」の数（折りたたみの判断に使う） */
+	private readonly conflictChoiceCounts = new Map<string, number>();
+
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
 		this.configuration = Configuration.getInstance();
@@ -204,6 +215,12 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 					}
 					this.conflictsExpandedOnce = true;
 					return vscode.TreeItemCollapsibleState.Expanded;
+				}
+				if (isConflictFileRowId(element.directoryPath)) {
+					// 人が決める件を持つファイルだけ開ける（持たないものは行き止まりにしない）
+					return this.conflictChoiceCounts.get(element.directoryPath)
+						? vscode.TreeItemCollapsibleState.Collapsed
+						: vscode.TreeItemCollapsibleState.None;
 				}
 				if (isConflictRowId(element.directoryPath)) {
 					return vscode.TreeItemCollapsibleState.None;
@@ -456,11 +473,14 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			if (element.directoryPath === NEEDS_ATTENTION_ID) {
 				return Promise.resolve(this.getNeedsAttentionChildren());
 			}
-			// 「競合の解決」の枝は1件1行を返す。行そのものは子を持たない
+			// 「競合の解決」の枝は1件1行を返す
 			if (element.directoryPath === CONFLICTS_ID) {
-				return Promise.resolve(
-					buildConflictRows(this.collectConflicts(), vscode.workspace.workspaceFolders?.[0]?.uri.fsPath),
-				);
+				return this.getConflictRows();
+			}
+			// 競合したファイルを開くと、その中の1件1行（人が決める逃げ道 — P03）
+			const conflictFile = filePathOfConflictRow(element.directoryPath);
+			if (conflictFile) {
+				return this.getConflictChoices(conflictFile);
 			}
 			if (isConflictRowId(element.directoryPath)) {
 				return Promise.resolve([]);
@@ -544,6 +564,39 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/** `.mdait` の未解決の競合を数える（算出点は `conflict-source.ts` 1つに寄せる） */
 	public collectConflicts(): MdaitConflicts {
 		return collectWorkspaceConflicts(this.configuration);
+	}
+
+	/**
+	 * 「競合の解決」の枝の中身を返す。
+	 *
+	 * **ここで人が決める件の数も数えておく。** 「そのファイルの行を開けるか」は
+	 * `getTreeItem` が同期で聞いてくるので、行を作るこの時点で答えを用意しておかないと、
+	 * 初回の描画で必ず「開けない」と答えることになる。
+	 */
+	private async getConflictRows(): Promise<StatusItem[]> {
+		const conflicts = this.collectConflicts();
+		const prepared = await collectPendingChoices(this.configuration);
+		const counts = new Map<string, number>();
+		for (const plan of prepared?.summary.plans ?? []) {
+			counts.set(plan.filePath, plan.pending.length);
+			this.conflictChoiceCounts.set(`mdait:conflict:file:${plan.filePath}`, plan.pending.length);
+		}
+		return buildConflictRows(conflicts, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, counts);
+	}
+
+	/**
+	 * 競合したファイルの中の、人が決める件を1件1行で返す。
+	 *
+	 * 「開けるかどうか」は `getTreeItem` が先に聞いてくるが、件数を知るにはファイルを
+	 * 読むしかない。読んだ結果をここで覚えておき、折りたたみの判断はそれを見る
+	 * （毎回読み直すと、ツリーが描き変わるたびに用語集と TM を解き直すことになる）。
+	 */
+	private async getConflictChoices(filePath: string): Promise<StatusItem[]> {
+		const prepared = await collectPendingChoices(this.configuration);
+		const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === filePath);
+		const rows = plan ? buildConflictChoiceRows(plan) : [];
+		this.conflictChoiceCounts.set(`mdait:conflict:file:${filePath}`, rows.length);
+		return rows;
 	}
 
 	/**

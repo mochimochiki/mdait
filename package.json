@@ -233,6 +233,18 @@
         "category": "mdait"
       },
       {
+        "command": "mdait.conflict.takeOurs",
+        "title": "%mdait.conflict.takeOurs.title%",
+        "icon": "$(arrow-left)",
+        "category": "mdait"
+      },
+      {
+        "command": "mdait.conflict.takeTheirs",
+        "title": "%mdait.conflict.takeTheirs.title%",
+        "icon": "$(arrow-right)",
+        "category": "mdait"
+      },
+      {
         "command": "mdait.aiReview.file",
         "title": "%mdait.aiReview.file.title%",
         "icon": "$(verified)",
@@ -365,6 +377,14 @@
         },
         {
           "command": "mdait.tm.commit.directory",
+          "when": "false"
+        },
+        {
+          "command": "mdait.conflict.takeOurs",
+          "when": "false"
+        },
+        {
+          "command": "mdait.conflict.takeTheirs",
           "when": "false"
         },
         {
@@ -538,6 +558,16 @@
           "command": "mdait.conflict.resolve",
           "when": "view == mdait.status && viewItem == mdaitConflictsRoot",
           "group": "inline"
+        },
+        {
+          "command": "mdait.conflict.takeOurs",
+          "when": "view == mdait.status && viewItem =~ /^mdaitConflictChoice/",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdait.conflict.takeTheirs",
+          "when": "view == mdait.status && viewItem =~ /^mdaitConflictChoice/",
+          "group": "inline@2"
         },
         {
           "command": "mdait.needsAttention.next",

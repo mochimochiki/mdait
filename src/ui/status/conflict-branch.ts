@@ -14,6 +14,8 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { decisionOf } from "../../commands/conflict/conflict-decisions";
+import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import { type DirectoryStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 
@@ -23,9 +25,25 @@ export const CONFLICTS_ID = "mdait:conflicts";
 /** 枝の中の1行の識別子の接頭辞 */
 const CONFLICT_ROW_PREFIX = "mdait:conflict:";
 
+/** 競合したファイルの行の識別子（開くと、その中の1件1行が出る） */
+const CONFLICT_FILE_PREFIX = `${CONFLICT_ROW_PREFIX}file:`;
+
+/** そのファイルの中の1件を指す行の識別子 */
+const CONFLICT_CHOICE_PREFIX = `${CONFLICT_ROW_PREFIX}choice:`;
+
 /** その `directoryPath` が「競合の解決」の枝の中の行か */
 export function isConflictRowId(directoryPath: string): boolean {
 	return directoryPath.startsWith(CONFLICT_ROW_PREFIX);
+}
+
+/** その行が「競合したファイル」の行か（開くと中の1件が出る） */
+export function isConflictFileRowId(directoryPath: string): boolean {
+	return directoryPath.startsWith(CONFLICT_FILE_PREFIX);
+}
+
+/** ファイルの行の識別子から、そのファイルの絶対パスを取り出す */
+export function filePathOfConflictRow(directoryPath: string): string | undefined {
+	return directoryPath.startsWith(CONFLICT_FILE_PREFIX) ? directoryPath.slice(CONFLICT_FILE_PREFIX.length) : undefined;
 }
 
 /** 競合したファイルの、人が読む名前 */
@@ -92,19 +110,27 @@ export function buildConflictsItem(conflicts: MdaitConflicts): DirectoryStatusIt
 export function buildConflictRows(
 	conflicts: MdaitConflicts,
 	workspaceRoot: string | undefined,
+	/** 人が決める件の数（ファイルの絶対パス → 件数）。開けるかどうかの判断に使う */
+	pendingCounts: ReadonlyMap<string, number> = new Map(),
 ): DirectoryStatusItem[] {
 	const shortPath = (absolute: string) =>
 		workspaceRoot ? path.relative(workspaceRoot, absolute).split(path.sep).join("/") : absolute;
 
-	const fileRows = conflicts.files.map((file): DirectoryStatusItem => ({
-		type: StatusItemType.Directory,
-		label: fileKindLabel(file.kind),
-		description: shortPath(file.filePath),
-		status: Status.Error,
-		directoryPath: `${CONFLICT_ROW_PREFIX}file:${file.kind}`,
-		contextValue: "mdaitConflictFile",
-		tooltip: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
-	}));
+	const fileRows = conflicts.files.map((file): DirectoryStatusItem => {
+		const pending = pendingCounts.get(file.filePath) ?? 0;
+		return {
+			type: StatusItemType.Directory,
+			label: fileKindLabel(file.kind),
+			description:
+				pending > 0
+					? `${shortPath(file.filePath)} · ${vscode.l10n.t("{0} to decide", pending)}`
+					: shortPath(file.filePath),
+			status: Status.Error,
+			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
+			contextValue: "mdaitConflictFile",
+			tooltip: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
+		};
+	});
 
 	const heldRows = conflicts.heldRows.map((row, index): DirectoryStatusItem => ({
 		type: StatusItemType.Directory,
@@ -116,12 +142,74 @@ export function buildConflictRows(
 		directoryPath: `${CONFLICT_ROW_PREFIX}held:${index}`,
 		contextValue: "mdaitConflictHeldRow",
 		tooltip: vscode.l10n.t(
-			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded — but it will only come back on its own if the chapter's text matches it exactly.\n\nHeld state: from={1} need={2}",
+			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",
 			row.path,
-			row.from || "—",
-			row.need || "—",
 		),
 	}));
 
 	return [...fileRows, ...heldRows];
+}
+
+/**
+ * 競合したファイルを開いたときに出る、**1件1行**（roadmap-v04 P03）。
+ *
+ * 行には「こちらを採る」「あちらを採る」が付く（`package.json` の `viewItem` で引く）。
+ * **✨は付けない** — AI を1回も呼ばないからである（UX-P4 の逆向き）。
+ *
+ * 既に決めた件は、どちらを採ったかを副題に出す。決めただけではまだ書かれていない
+ * （そのファイルの最後の1件が決まったときにまとめて書く）ことも Hover に書く。
+ */
+export function buildConflictChoiceRows(plan: ResolutionPlan): DirectoryStatusItem[] {
+	return plan.pending.map((item, index) => {
+		const chosen = decisionOf(plan.filePath, item.key);
+		return {
+			type: StatusItemType.Directory,
+			label: item.label,
+			description: chosen
+				? chosen === "ours"
+					? vscode.l10n.t("keeping yours")
+					: vscode.l10n.t("keeping theirs")
+				: vscode.l10n.t("undecided"),
+			status: Status.Error,
+			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${plan.filePath}`,
+			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
+			tooltip: buildChoiceTooltip(item, chosen),
+		};
+	});
+}
+
+/** 1件の解説（Hover）。両側の全文と、AI が付けた理由を置く */
+function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
+	const parts = [
+		vscode.l10n.t("Two people wrote a different value for this entry."),
+		"",
+		`${vscode.l10n.t("Yours")}: ${item.oursText}`,
+		`${vscode.l10n.t("Theirs")}: ${item.theirsText}`,
+	];
+	if (item.baseText !== undefined) {
+		parts.push(`${vscode.l10n.t("Before the split")}: ${item.baseText}`);
+	}
+	parts.push(
+		"",
+		chosen
+			? vscode.l10n.t(
+					"You picked a side. Nothing is written yet — this file is rewritten once every one of its conflicts is settled.",
+				)
+			: vscode.l10n.t("Pick a side with the buttons on this row. No AI is involved."),
+	);
+	return parts.join("\n");
+}
+
+/** 行の識別子から、そのファイルの絶対パスと何番目かを取り出す */
+export function choiceOfConflictRow(directoryPath: string): { filePath: string; index: number } | undefined {
+	if (!directoryPath.startsWith(CONFLICT_CHOICE_PREFIX)) {
+		return undefined;
+	}
+	const rest = directoryPath.slice(CONFLICT_CHOICE_PREFIX.length);
+	const colon = rest.indexOf(":");
+	if (colon < 0) {
+		return undefined;
+	}
+	const index = Number.parseInt(rest.slice(0, colon), 10);
+	return Number.isInteger(index) ? { filePath: rest.slice(colon + 1), index } : undefined;
 }
