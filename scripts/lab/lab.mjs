@@ -904,6 +904,101 @@ const REVISE_EDIT = {
 	to: "これは日本語のテスト用 Markdown ファイルです。改訂の録音のために一文を足した。",
 };
 
+/**
+ * 競合の解決を録るための、決まりきった用語集の競合。
+ *
+ * **AI が作ったものを使わない。** `term.detect` の結果は相手しだいで変わるので、録音と
+ * 再生で中身が1文字でも違えば shim が 409 を返す。ここは手で書いた固定の中身にしておく。
+ *
+ * 形は2つ入れてある。両側が別々の語を足した形（決定的に両方採る）と、両方が同じ語の
+ * 訳語を別々に直した形（**ここだけが AI に渡る**）。
+ *
+ * **AI に渡る1件は、判断の付く中身にしてある。** 片方は綴りを誤っている（`gatway`）ので、
+ * 判定は正しいほうへ倒れる。どちらでもよい2つを渡すと AI は `unsure` と答え（実測）、
+ * 書き戻しの道が1度も通らない録音になってしまう。
+ */
+const CONFLICT_TERMS = [
+	// 見本の作業場は ja → en（主言語は ja）。**鍵になるのは主言語の語**なので、
+	// 衝突させるのは訳語（en）の側でなければならない。ここを取り違えると、
+	// 2つの行が別々の語として両方採られてしまい、AI に渡る件が1つも出ない
+	"ja,en,context,variants_ja",
+	"キャッシュ,cache,,",
+	"<<<<<<< HEAD",
+	"ゲートウェイ,gatway,,",
+	"私だけの語,mine,,",
+	"||||||| base",
+	"ゲートウェイ,gate way,,",
+	"=======",
+	"ゲートウェイ,gateway,,",
+	"相手だけの語,yours,,",
+	">>>>>>> theirs",
+	"トークン,token,,",
+	"",
+].join("\n");
+
+/** 録音／再生のための競合を、作業場の用語集に置く */
+function writeConflictedTerms(ws) {
+	const termsPath = path.join(ws, ".mdait", "terms.csv");
+	fs.mkdirSync(path.dirname(termsPath), { recursive: true });
+	fs.writeFileSync(termsPath, CONFLICT_TERMS, "utf8");
+	return termsPath;
+}
+
+/**
+ * 競合の解決の往復を、録音のとおりに再生する（roadmap-v04 P02）。
+ *
+ * 見るのは2つ。**両者の別々の追加がどちらも残ること**（union をやめた代償で出る形で、
+ * ここが崩れると「消失 0」が成り立たない）と、**競合マーカーが消えること**である。
+ *
+ * 録り直すとき:
+ *   node scripts/lab/lab.mjs up --host headless --ai agent --ws tmp --reset \
+ *     --record scripts/lab/ai/recordings/conflict-resolve-terms.jsonl
+ *   （作業場へ競合を置いてから）node scripts/lab/lab.mjs run mdait.conflict.resolve
+ */
+async function regressConflict() {
+	const recording = path.join(HERE, "ai/recordings/conflict-resolve-terms.jsonl");
+	if (!fs.existsSync(recording)) {
+		warn(`競合の解決の録音がありません: ${recording}`);
+		return 1;
+	}
+	await verbUp({
+		host: "headless",
+		ai: "replay",
+		replay: recording,
+		ws: "tmp",
+		reset: true,
+		name: "regress-conflict",
+	});
+	try {
+		await runOne({ _: ["mdait.sync"] });
+		const termsPath = writeConflictedTerms(readSession().ws);
+		await runOne({ _: ["mdait.conflict.resolve"] });
+
+		const after = fs.readFileSync(termsPath, "utf8");
+		const problems = [];
+		if (/^<{7}|^={7}|^>{7}/m.test(after)) {
+			problems.push("競合マーカーが残っている");
+		}
+		// **両者の別々の追加は、どちらも残らなければならない**
+		if (!after.includes("私だけの語")) problems.push("こちらの側の追加が消えた");
+		if (!after.includes("相手だけの語")) problems.push("相手の側の追加が消えた");
+		// 祖先を見て決定的に決まる形（片方だけが直した）も残る
+		if (!after.includes("キャッシュ") || !after.includes("トークン")) problems.push("触っていない語が消えた");
+		// 判定が通ったこと（綴りの誤った側が残っていたら、AI の答えが効いていない）
+		if (after.includes("gatway")) problems.push("判定が効いていない（綴りの誤った側が残った）");
+
+		if (problems.length > 0) {
+			warn(`競合の解決の再生が食い違いました: ${problems.join(" / ")}`);
+			warn("意図した変更なら録り直す。意図しないなら変更を戻す。どちらかを決めてから進むこと。");
+			return 1;
+		}
+		say("競合の解決: 録音のとおりに再生できました（LLM 呼び出し 0 回）。");
+		return 0;
+	} finally {
+		await verbDown();
+	}
+}
+
 async function presetRegress(opts) {
 	let code = 0;
 
@@ -924,6 +1019,11 @@ async function presetRegress(opts) {
 		}
 	} finally {
 		await verbDown();
+	}
+
+	// --- 競合の解決の往復（roadmap-v04 P02） ---
+	if (!opts.replay) {
+		code = (await regressConflict()) || code;
 	}
 
 	// --- 改訂の往復（`--replay` で別の録音を指したときは、そちらだけを見る） ---
