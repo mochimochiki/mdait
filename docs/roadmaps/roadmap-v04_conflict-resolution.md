@@ -202,26 +202,33 @@ union を外したのだから、外した世界で通しで測らないと「�
 合流由来の `held` 行の解消）を確認する。`docs/design/merge-resilience.md` の数字を、union 無しの実測で置き換える。
 
 **Steps**
-- [ ] 通しの台（競合を作る → 解決コマンド → 消失と増殖を数える）
-- [ ] git と diff3 の両方で走らせる
-- [ ] 既存作業場からの移行を通す
-- [ ] `merge-resilience.md` の数字と結論を更新する
+- [x] 通しの台（競合を作る → 解決 → 消失と増殖を数える）→ `scripts/lab/scenarios/merge-resolve-probe.mjs`。1形につき20回
+- [x] git と diff3 の両方で走らせる（`git merge-file` の既定・GNU diff3・`git --diff3` の3通り）
+- [x] 既存作業場からの移行を通す（`migration.test.ts`）
+- [x] `merge-resilience.md` の数字と結論を更新する
 
 **Gates**
-- [ ] 全台で消失 0・増殖 0（別々の鍵が1つの競合ブロックに入った形を必ず含める）
-- [ ] SVN 相当（diff3）で git と同じ結果になる
+- [x] 全台で消失 0・増殖 0（別々の鍵が1つの競合ブロックに入った形を必ず含める）— **競合が 18/20 出る規模でも判断待ち 0**
+- [x] SVN 相当（diff3）で git と同じ結果になる — **消失・増殖は同じ。判断待ちだけは diff3 のほうが少ない**（下記）
+
+**この段で分かったこと**
+
+- **union を外して増えたのは「競合マーカーが出る回数」だけで、人がやることは増えていない。** 翻訳メモリに 2000件あって両側が 50件ずつ足すと 18/20 の回で競合するが、鍵で突き合わせれば**判断待ち 0**で片付く
+- **共通の祖先があるかどうかで、人がやることが変わる。** 「片方だけが既存の語を直した」形は、祖先があれば決定的に決まるが、無いと「同じ語に別の訳語」としか見えず人に回る。実測（用語集 500語へ両側10語ずつ）で **45件 → 0件**。運用として `merge.conflictStyle = zdiff3` を勧め、祖先が取れなかったときは確認ダイアログでも伝えるようにした
+- 判断待ちが残った対象は1バイトも書かないので、**どの回も消失 0・増殖 0** だった
 
 ## Gates
 
-- [ ] git と SVN 相当の両方で、`.mdait` の競合をファイルを手で開かずに解決できる
-- [ ] 黙って片方が消える経路が1つも残っていない（用語集 CSV の先勝ち畳み、`translations.tmx` のログだけ、の両方が無くなった）
-- [ ] `npm test` / `npm run bundle` / `npm run test:explore` / `npm run test:byok:e2e` が通る
-- [ ] `docs/design/merge-resilience.md` の結論が union 無しの実測で書き換わっている
+- [x] git と SVN 相当の両方で、`.mdait` の競合をファイルを手で開かずに解決できる
+- [x] 黙って片方が消える経路が1つも残っていない（用語集 CSV の先勝ち畳み・`translations.tmx` のログだけ、の両方が無くなった。どちらも「読むのを拒む」に変わり、そこから解ける）
+- [x] `npm test` / `npm run bundle` / `npm run test:explore` / `npm run test:byok:e2e` が通る
+- [x] `docs/design/merge-resilience.md` の結論が union 無しの実測で書き換わっている
 
 ## Notes
 
-- **frontmatter のキーごと分割**（`docs/design/merge-resilience.md`「残っている対策案」1）とは、`unit-state` の
-  形式と StatusTree で触る場所が重なる。どちらを先にやるかは P01 が終わった時点で決め直す。
+- **frontmatter のキーごと分割**（`docs/design/merge-resilience.md`「残っている対策案」1）は、このロードマップの
+  あとに回した（2026-09-11 の判断）。`unit-state` の形式と StatusTree で触る場所が重なるが、
+  roadmap-v04 が入った今、次に着手できる状態にある。
 - **台帳の掃除の、未合流の枝への効き目**はこのロードマップでは解けない（控えはハッシュしか鍵に持たず、
   同じファイルの過去の版を区別できない）。同名の課題として `merge-resilience.md` に残す。
 - `1 TU = 1 行`（ADR-260908-01）は union のための工夫だったが残す。行単位のほうが競合の範囲が小さく、
