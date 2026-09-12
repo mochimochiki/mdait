@@ -67,10 +67,20 @@ function sameEntry(a: TermEntry, b: TermEntry): boolean {
 	return true;
 }
 
-/** 語を人が読める1行にする */
-function describe(entry: TermEntry): string {
-	const langs = Object.keys(entry.languages).sort();
-	const body = langs.map((lang) => `${lang}: ${entry.languages[lang].term}`).join(" / ");
+/**
+ * 語を人が読める1行にする。
+ *
+ * **主言語の語は出さない。** 見出しに出ているものを繰り返すと、訳語の違いが埋もれる。
+ * 訳語が1つならそれだけを、2つ以上あるなら言語名を添えて並べる。
+ */
+function describe(entry: TermEntry, primaryLang: string): string {
+	const langs = Object.keys(entry.languages)
+		.filter((lang) => lang !== primaryLang)
+		.sort();
+	const body =
+		langs.length === 1
+			? entry.languages[langs[0]].term
+			: langs.map((lang) => `${lang}: ${entry.languages[lang].term}`).join(" / ");
 	return entry.context ? `${body} — ${entry.context}` : body;
 }
 
@@ -169,9 +179,9 @@ export async function planTermsResolution(
 		key: item.key,
 		label: TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
 		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs),
-		baseText: item.base ? describe(item.base) : undefined,
+		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,
 	}));
