@@ -22,42 +22,51 @@
  */
 import { UnitRegistryManager } from "../../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../../core/unit-state/unit-state-store";
+import { withUnitStateLock } from "../../../infra/workspace/unit-state-lock";
 import type { ResolutionPlan } from "../resolution-plan";
 
 /**
  * `unit-state` の競合の計画を作る。**判断を求める件は1つも無い。**
  *
- * @param mdaitDir `.mdait` の絶対パス
- * @param filePath `unit-state` の絶対パス
+ * 件数はここでは数えない。数えるには読み直すしかなく、読み直しはストア全体を捨てて
+ * 入れ替える操作なので、**ロックの外でやってはいけない**（読み込み途中の表を別の処理が
+ * 永続化しうる）。実際に解いた件数は書き戻したあとに返る。
  */
-export function planUnitStateResolution(mdaitDir: string, filePath: string): ResolutionPlan {
-	const store = UnitStateStore.getInstance();
-	// 合流はこの外で起きているので、メモリの上の版は合流の前の姿である。読み直す
-	store.load(mdaitDir);
-	const report = store.getLastParseReport();
+export function planUnitStateResolution(filePath: string): ResolutionPlan {
 	return {
 		kind: "unit-state",
 		filePath,
-		// 競合マーカーを読み飛ばして拾った行が、そのまま「決定的に決まった分」である
-		autoResolvedCount: store.getAllEntries().length,
+		autoResolvedCount: 0,
 		deletedKeys: [],
 		pending: [],
 		hasBase: false,
-		// 席を分けた回数は、P03 が片付ける「降ろされた行」の数でもある
-		unseatedCount: report.duplicates,
 	};
 }
 
+/** 解いた結果 */
+export interface StateResolutionOutcome {
+	/** 書き戻した行の数 */
+	rows: number;
+	/** 同じ席に2行来たので片方を席から降ろした回数（P03 が片付ける） */
+	unseated: number;
+}
+
 /**
- * `unit-state` を正規形で書き戻す。読めた行はすべて残る。
+ * `unit-state` を読み直して正規形で書き戻す。読めた行はすべて残る。
  *
- * 書き出しは `UnitStateStore.save` を通る — 原子的な書き込みと、傷のあった回の原本の
- * 避難はそこにしか無い。
+ * **ストア全体の排他を取る。** `load()` は表を丸ごと捨ててディスクから読み直すので、
+ * ロックの外でやると sync や一括変換の書き換えが無言で消える。ファイル単位の排他は
+ * 使わないので、順序（ストア → ファイル）の制約にも触れない。
  */
-export function applyUnitStateResolution(mdaitDir: string): number {
-	const store = UnitStateStore.getInstance();
-	store.save(mdaitDir);
-	return store.getAllEntries().length;
+export async function applyUnitStateResolution(mdaitDir: string): Promise<StateResolutionOutcome> {
+	return withUnitStateLock(async () => {
+		const store = UnitStateStore.getInstance();
+		// 合流はこの外で起きているので、メモリの上の版は合流の前の姿である。読み直す
+		store.load(mdaitDir);
+		const report = store.getLastParseReport();
+		store.save(mdaitDir);
+		return { rows: store.getAllEntries().length, unseated: report.duplicates };
+	});
 }
 
 /**

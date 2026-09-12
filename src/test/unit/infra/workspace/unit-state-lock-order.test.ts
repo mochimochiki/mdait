@@ -36,6 +36,9 @@ const GUARDED_MODULES = [
 	"commands/markers/unit-mutation.ts",
 	"commands/markers/markers-migration.ts",
 	"commands/ai-review/review-core.ts",
+	// 合流の競合の解決。`load()` で表を丸ごと入れ替えるので、ここも排他の内側でなければ
+	// ならない（ロックの外で読み直すと、sync や一括変換の書き換えが無言で消える）
+	"commands/conflict/targets/state-target.ts",
 ];
 
 function read(relPath: string): string {
@@ -86,6 +89,9 @@ suite("unit-state ロックの順序", () => {
 			"commands/trans/trans-command.ts",
 			// 非MDファイル。1ファイル1行で、書き換えるのは自分の行だけ
 			"commands/file-handler/plain-file-handler.ts",
+			// 合流の競合の解決。`withUnitStateLock` でストア全体の排他を取る。
+			// ファイル単位の排他は使わないので、順序の制約には触れない
+			"commands/conflict/targets/state-target.ts",
 		]);
 
 		const offenders: string[] = [];
