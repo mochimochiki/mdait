@@ -463,10 +463,22 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 		// ヘッダーから言語リストを抽出
 		const headers = Object.keys(records[0]);
-		// 元の列順序を保存
-		this.originalColumnOrder = [...headers];
+		const languages = TermEntryConverter.extractLanguagesFromHeaders(headers);
 
-		this.allLanguages = TermEntryConverter.extractLanguagesFromHeaders(headers);
+		// **両側を読むときは、言語も列の順も足す（消さない）。**
+		//
+		// 競合の解決は片方ずつ読む。上書きにすると、あとから読んだ側（自分の側）の
+		// ヘッダーだけが残り、相手側にしか無い言語の列と未知列がヘッダーごと消える。
+		// 保存は `allLanguages` の言語しか書かないので、相手の訳語はそこで失われる。
+		// いま読んだ側を先に置くのは、書き出しの列の並びを自分の作業場の形に寄せるため。
+		if (options.keepPreserved) {
+			const previousOrder = this.originalColumnOrder ?? [];
+			this.originalColumnOrder = [...headers, ...previousOrder.filter((h) => !headers.includes(h))];
+			this.allLanguages = [...languages, ...this.allLanguages.filter((l) => !languages.includes(l))];
+		} else {
+			this.originalColumnOrder = [...headers];
+			this.allLanguages = languages;
+		}
 		// 最新設定からsource言語セットを更新
 		this.updateSourceLanguages(this.currentTransPairs);
 		// 管理対象の列集合を作り、未知列ヘッダーを記録

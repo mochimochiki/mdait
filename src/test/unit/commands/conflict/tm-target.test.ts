@@ -169,6 +169,80 @@ suite("翻訳メモリの競合を解く", () => {
 		assert.equal(fs.readFileSync(tmPath, "utf-8"), content, "競合マーカーごと残っていない");
 	});
 
+	test("祖先があり、片方だけが訳を消したなら、消えたままにする", () => {
+		// 消したのに祖先の訳が戻ってくると、消す操作がいつまでも効かない
+		write(
+			conflicted(
+				[tu("Hello", { ja: "もとの訳", fr: "bonjour" })],
+				[tu("Hello", { fr: "bonjour" })],
+				[tu("Hello", { ja: "もとの訳", fr: "bonjour" })],
+			),
+		);
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 0);
+
+		applyTmResolution(tmPath, planned.plan, planned.resolution, new Map());
+		const back = readBack().get(tuidOf("Hello"));
+		assert.equal(back?.variants.get("ja"), undefined, "消した訳が戻っている");
+		assert.equal(back?.variants.get("fr")?.text, "bonjour");
+	});
+
+	test("片方が消し、片方が直した訳は、人の判断を待つ", () => {
+		write(
+			conflicted(
+				[tu("Hello", { ja: "こちらが直した", fr: "bonjour" })],
+				[tu("Hello", { fr: "bonjour" })],
+				[tu("Hello", { ja: "もとの訳", fr: "bonjour" })],
+			),
+		);
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 1);
+	});
+
+	test("片方が TU ごと消し、片方が直したなら、消した側は「消した」と見せる", () => {
+		write(
+			conflicted(
+				[tu("Hello", { ja: "こちらが直した" }), tu("Goodbye", { ja: "さようなら" })],
+				[tu("Goodbye", { ja: "さようなら" })],
+				[tu("Hello", { ja: "もとの訳" }), tu("Goodbye", { ja: "さようなら" })],
+			),
+		);
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		const item = planned.plan.pending.find((candidate) => candidate.key === tuidOf("Hello"));
+		assert.ok(item, "消された TU が人へ回っていない");
+		assert.equal(item.theirsDeleted, true);
+		assert.equal(item.theirsText, "(removed)", "祖先の訳を相手の値として見せている");
+	});
+
+	test("消した側を採れば、その TU は消えたままになる", () => {
+		write(
+			conflicted(
+				[tu("Hello", { ja: "こちらが直した" }), tu("Goodbye", { ja: "さようなら" })],
+				[tu("Goodbye", { ja: "さようなら" })],
+				[tu("Hello", { ja: "もとの訳" }), tu("Goodbye", { ja: "さようなら" })],
+			),
+		);
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+
+		const outcome = applyTmResolution(
+			tmPath,
+			planned.plan,
+			planned.resolution,
+			new Map([[tuidOf("Hello"), "theirs" as const]]),
+		);
+
+		assert.equal(outcome.decidedCount, 1);
+		assert.equal(readBack().get(tuidOf("Hello")), undefined, "祖先の値が書き戻っている");
+		assert.equal(readBack().get(tuidOf("Goodbye"))?.variants.get("ja")?.text, "さようなら");
+	});
+
 	test("解き終えたファイルには競合マーカーが残らない", () => {
 		write(
 			conflicted(

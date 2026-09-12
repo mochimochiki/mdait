@@ -145,6 +145,81 @@ suite("用語集の競合を解く", () => {
 		assert.equal(back.length, 2, "どちらかの語が消えている");
 	});
 
+	test("表記揺れの一覧が違えば、同じ語とは見なさない", async () => {
+		// `['a', 'b']` と `['a b']` は繋げると同じ文字列になる。繋げて比べると、
+		// 別々の編集の片方が黙って消える
+		write(
+			conflicted(
+				[`Hello,こんにちは,,"a,b"`],
+				["Hello,こんにちは,,a b"],
+			),
+		);
+
+		const planned = await planTermsResolution(termsPath, await repo(), "en");
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 1, "別物なのに畳んでいる");
+	});
+
+	test("祖先があり、片方だけが訳語を消したなら、消えたままにする", async () => {
+		const HEAD3 = "en,ja,fr,context,variants_en";
+		const line = (ja: string, fr: string) => `Hello,${ja},${fr},,`;
+		fs.writeFileSync(
+			termsPath,
+			`${[
+				HEAD3,
+				"<<<<<<< HEAD",
+				line("こんにちは", "bonjour"),
+				"||||||| base",
+				line("こんにちは", "bonjour"),
+				"=======",
+				line("", "bonjour"),
+				">>>>>>> theirs",
+			].join("\n")}\n`,
+			"utf-8",
+		);
+
+		// 計画と書き戻しは**同じリポジトリ**を通す（読んだ列と言語をそれが抱えている）
+		const repository = await repo();
+		const planned = await planTermsResolution(termsPath, repository, "en");
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 0);
+
+		await applyTermsResolution(planned.plan, planned.resolution, repository, new Map());
+		const back = await readBack();
+		assert.equal(TermEntry.getTerm(back[0], "ja"), undefined, "消した訳語が戻っている");
+		assert.equal(TermEntry.getTerm(back[0], "fr"), "bonjour");
+	});
+
+	test("相手側にしか無い言語の列も、書き戻しで残る", async () => {
+		// 2人が別々の言語の列を足すと、ヘッダーの行ごと競合する。片方ずつ読むので、
+		// あとから読んだ側の列だけを覚えると、相手の訳語が列ごと消える
+		fs.writeFileSync(
+			termsPath,
+			`${[
+				"<<<<<<< HEAD",
+				"en,ja,context,variants_en",
+				"Hello,こんにちは,,",
+				"=======",
+				"en,fr,context,variants_en",
+				"Hello,bonjour,,",
+				">>>>>>> theirs",
+			].join("\n")}\n`,
+			"utf-8",
+		);
+
+		const repository = await repo();
+		const planned = await planTermsResolution(termsPath, repository, "en");
+		assert.ok(planned);
+		assert.equal(planned.plan.pending.length, 0, "触った言語が別なので決まるはず");
+
+		await applyTermsResolution(planned.plan, planned.resolution, repository, new Map());
+
+		const after = fs.readFileSync(termsPath, "utf-8");
+		assert.match(after, /fr/, "相手側の言語の列が消えている");
+		assert.match(after, /bonjour/);
+		assert.match(after, /こんにちは/);
+	});
+
 	suite("YAML の用語集でも同じように解ける", () => {
 		test("2人が別々の語を足しただけなら、両方残る", async () => {
 			const yamlPath = path.join(tempDir, "glossary.yaml");
@@ -176,7 +251,9 @@ suite("用語集の競合を解く", () => {
 			const yamlPath = path.join(tempDir, "glossary.yaml");
 			fs.writeFileSync(yamlPath, "terms:\n<<<<<<< HEAD\n  - context: a\n=======\n  - context: b\n>>>>>>> x\n", "utf-8");
 
+			const before = fs.readFileSync(yamlPath, "utf-8");
 			await assert.rejects(() => TermsRepository.load(yamlPath), /middle of a merge/);
+			assert.equal(fs.readFileSync(yamlPath, "utf-8"), before, "読み込みに失敗したのにファイルが変わっている");
 		});
 	});
 });

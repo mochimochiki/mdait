@@ -7,9 +7,11 @@
  *   鍵も、触った項目が別の形も、祖先を見て片方だけが変えた形も、すべて手前の鍵の
  *   突き合わせで決定的に片付いている（`core/conflict/key-merge.ts`）。
  *
- *   AI が持ち出せる材料（原文の旧版と新版・TM・用語集）は人が手で集められないもので、
- *   そこがこの機能の値打ちである。一方で **AI にできるのは「どちらかを選ぶ」ことだけ**で、
- *   新しい値は書けない（ADR-260911-02）。
+ *   AI が持ち出せる材料（TM・用語集）は人が手で集められないもので、そこがこの機能の
+ *   値打ちである（集めるのは `conflict-evidence.ts`。件ごとに `<conflict>` の中へ入れる）。
+ *   一方で **AI にできるのは「どちらかを選ぶ」ことだけ**で、新しい値は書けない
+ *   （ADR-260911-02）。**片方が消した件は、そもそもここへ来ない** — 「消す」は AI に
+ *   許した語彙の外なので、人が決める。
  *
  *   system prompt を不変に保ち、リトライは user message 側に足す（`pair-verifier.ts` と
  *   同じキャッシュ維持のやり方）。
@@ -21,6 +23,7 @@ import type { AIMessage, AIService } from "../../infra/llm/ai-service";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { PromptIds } from "../../prompts";
 import type { PromptId, PromptParts, PromptVariables } from "../../prompts";
+import type { ConflictEvidence } from "./conflict-evidence";
 import { type ConflictDecision, validateConflictResponse } from "./conflict-response-validator";
 import type { ChoiceSide, PendingChoice } from "./resolution-plan";
 
@@ -38,10 +41,13 @@ export interface JudgeContext {
 	targetName: string;
 	/** AI が理由を書く言語 */
 	responseLang?: string;
-	/** 用語集の抜粋（JSON） */
-	termsJson?: string;
-	/** TM の近い訳 */
-	tmReferences?: string;
+	/**
+	 * 1件ごとの材料（用語集の抜粋・過去の近い訳）を返す係。
+	 *
+	 * 件ごとに違うので、まとめて1つ置くのではなく `<conflict>` の中に入れる。
+	 * 材料が無ければ空を返すこと（タグそのものを出さない）。
+	 */
+	evidenceFor?(item: PendingChoice): ConflictEvidence;
 }
 
 /** 判定の結果 */
@@ -76,17 +82,19 @@ export function buildConflictsBlock(items: readonly PendingChoice[], context: Ju
 		if (item.baseText !== undefined) {
 			parts.push(`<base>${escapeForTag(item.baseText)}</base>`);
 		}
+		// 材料は件ごとに違うので、その件の中に置く。用語集も TM も外から来た文字列なので
+		// 山括弧を潰してから入れる（タグの囲いを破らせない）
+		const evidence = context.evidenceFor?.(item);
+		if (evidence?.termsJson) {
+			parts.push(`<terms>${escapeForTag(evidence.termsJson)}</terms>`);
+		}
+		if (evidence?.tmReferences) {
+			parts.push(`<tmReferences>${escapeForTag(evidence.tmReferences)}</tmReferences>`);
+		}
 		parts.push("</conflict>");
 		return parts.join("\n");
 	});
-	const extras: string[] = [];
-	if (context.termsJson) {
-		extras.push(`<terms>${escapeForTag(context.termsJson)}</terms>`);
-	}
-	if (context.tmReferences) {
-		extras.push(`<tmReferences>${escapeForTag(context.tmReferences)}</tmReferences>`);
-	}
-	return [...extras, "<conflicts>", ...blocks, "</conflicts>"].join("\n");
+	return ["<conflicts>", ...blocks, "</conflicts>"].join("\n");
 }
 
 /** 判定を AI に任せる係 */

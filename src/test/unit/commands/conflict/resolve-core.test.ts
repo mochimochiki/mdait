@@ -18,6 +18,7 @@ import { collectMdaitConflicts } from "../../../../core/conflict/mdait-conflicts
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { TmxStore } from "../../../../core/tm/tmx-store";
 import { Configuration } from "../../../../infra/config/configuration";
+import type * as vscode from "vscode";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import type { PromptParts } from "../../../../prompts";
 
@@ -196,5 +197,46 @@ suite("競合の解決の本体", () => {
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 
 		assert.equal(prepared.summary.plans.length, 0);
+	});
+
+	test("読めなかった対象は、計画から落とさずに持ち帰る", async () => {
+		// 壊れた1ファイルだけが競合していると、黙って落とせば「競合はありません」になる
+		fs.writeFileSync(tmPath, "<<<<<<< HEAD\nこれは XML ではない <<< \n=======\nこれも違う\n>>>>>>> theirs\n", "utf-8");
+
+		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+
+		assert.equal(prepared.summary.plans.length, 0);
+		assert.equal(prepared.summary.failures.length, 1, "読めなかったことが伝わっていない");
+		assert.equal(prepared.summary.failures[0].kind, "tm");
+	});
+
+	test("取り消したら、手を付けなかった対象も未解決として返す", async () => {
+		fs.writeFileSync(tmPath, conflictedTmx("こんにちは", "やあ"), "utf-8");
+		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+		const cancelled = { isCancellationRequested: true } as unknown as vscode.CancellationToken;
+
+		const { outcomes } = await executeResolution(prepared, config, undefined, undefined, undefined, cancelled);
+
+		assert.equal(outcomes.length, 1, "手を付けなかった対象が結果から消えている");
+		assert.equal(outcomes[0].skipped, true);
+		assert.ok(outcomes[0].remainingCount > 0, "残っていないことにされている");
+		assert.equal(outcomes[0].written, false);
+	});
+
+	test("計画を作ったあとにファイルが変わっていたら、上書きしない", async () => {
+		fs.writeFileSync(tmPath, conflictedTmx("こんにちは", "やあ"), "utf-8");
+		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
+
+		// 確認ダイアログや AI への問い合わせのあいだに、人が手で直した
+		const edited = conflictedTmx("こんにちは（手で直した）", "やあ");
+		fs.writeFileSync(tmPath, edited, "utf-8");
+
+		const ai = new CountingAi('{"decisions":[{"index":1,"side":"theirs","reason":"新しいほう"}]}');
+		const judge = new ConflictJudge(ai, (_id, v) => parts(v));
+		const { outcomes } = await executeResolution(prepared, config, judge, undefined);
+
+		assert.equal(outcomes[0].written, false);
+		assert.ok(outcomes[0].error, "変わったことが伝わっていない");
+		assert.equal(fs.readFileSync(tmPath, "utf-8"), edited, "手で直した内容を消している");
 	});
 });

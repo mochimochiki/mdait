@@ -80,18 +80,21 @@ export namespace TermsRepository {
 	 * @param path ファイルパス
 	 * @param transPairs 初期化に使用する言語ペア
 	 * @param format ファイル形式（拡張子から自動判定）
+	 * @param primaryLang 主言語。**渡さないと最初の source 言語で代用される** — 設定の
+	 *   `primaryLang` がそれと違う作業場では、語を指す鍵が設定と食い違う
 	 */
 	export async function create(
 		path: string,
 		transPairs: readonly TransPair[],
 		format?: "csv" | "yaml",
+		primaryLang?: string,
 	): Promise<TermsRepository> {
 		const actualFormat = format ?? detectFormat(path);
 
 		switch (actualFormat) {
 			case "csv": {
 				const { TermsRepositoryCSV } = await import("./terms-repository-csv.js");
-				return TermsRepositoryCSV.create(path, transPairs);
+				return TermsRepositoryCSV.create(path, transPairs, primaryLang);
 			}
 			case "yaml": {
 				const { YamlTermsRepository } = await import("./terms-repository-yaml.js");
