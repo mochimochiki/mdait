@@ -168,13 +168,13 @@ export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): Di
 			label: item.label,
 			description: chosen
 				? chosen === "ours"
-					? vscode.l10n.t("keeping yours")
-					: vscode.l10n.t("keeping theirs")
-				: vscode.l10n.t("undecided"),
+					? vscode.l10n.t("your edit chosen")
+					: vscode.l10n.t("their edit chosen")
+				: vscode.l10n.t("not chosen yet"),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${fingerprintOfKey(item.key)}:${plan.filePath}`,
 			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
-			tooltip: buildChoiceTooltip(item, chosen),
+			tooltip: buildChoiceTooltip(item, plan.kind, chosen),
 		};
 	});
 }
@@ -190,29 +190,68 @@ export function fingerprintOfKey(key: string): string {
 	return calculateHash(key);
 }
 
-/** 1件の解説（Hover）。両側の全文と、AI が付けた理由を置く */
-function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
-	// 消した側には見せる値が無い。その場の言葉で「消した」と書く（`(removed)` の
-	// 目印は AI へ送る文面のためのもので、人に見せる言葉ではない）
-	const removed = vscode.l10n.t("removed on this side");
+/**
+ * 1件の解説（Hover）。
+ *
+ * **読む人はこの文を前触れなく初めて見る。** だから順に、何が起きたのか・両者が何を書いたのか・
+ * 選ぶと何が起きるのか・いつ書き換わるのかを、この順で書く。「こちら」「あちら」のような
+ * 指示語で始めない — 何を指しているのかが読み手に無いためである（`docs/ux.md` §3.3:
+ * 解説はすべて Hover に置き、なぜこの状態なのかと次に何をすればよいかを書く）。
+ */
+function buildChoiceTooltip(
+	item: PendingChoice,
+	kind: ConflictFileKind,
+	chosen: "ours" | "theirs" | undefined,
+): string {
+	const target = fileKindLabel(kind);
+
+	// 1. 何が起きたのか。誰が何をしたかまで書く（「片方が」で済ませない）
+	const happened = item.theirsDeleted
+		? vscode.l10n.t(
+				"You took in someone else's changes, and their edit collided with yours on this entry in the {0}. You rewrote it; they deleted it.",
+				target,
+			)
+		: item.oursDeleted
+			? vscode.l10n.t(
+					"You took in someone else's changes, and their edit collided with yours on this entry in the {0}. You deleted it; they rewrote it.",
+					target,
+				)
+			: vscode.l10n.t(
+					"You took in someone else's changes, and two values arrived for the same entry in the {0}: the one you wrote and the one they wrote.",
+					target,
+				);
+
+	// 2. 両者が書いたもの。消した側には値が無いので、値の代わりにそう書く
 	const parts = [
-		item.oursDeleted || item.theirsDeleted
-			? vscode.l10n.t("One side removed this entry while the other changed it.")
-			: vscode.l10n.t("Two people wrote a different value for this entry."),
+		happened,
 		"",
-		`${vscode.l10n.t("Yours")}: ${item.oursDeleted ? removed : item.oursText}`,
-		`${vscode.l10n.t("Theirs")}: ${item.theirsDeleted ? removed : item.theirsText}`,
+		`${vscode.l10n.t("You")}: ${item.oursDeleted ? vscode.l10n.t("(you deleted this entry)") : item.oursText}`,
+		`${vscode.l10n.t("They")}: ${item.theirsDeleted ? vscode.l10n.t("(they deleted this entry)") : item.theirsText}`,
 	];
 	if (item.baseText !== undefined) {
-		parts.push(`${vscode.l10n.t("Before the split")}: ${item.baseText}`);
+		parts.push(`${vscode.l10n.t("Before either of you edited it")}: ${item.baseText}`);
 	}
+
+	// 3. 選ぶと何が起きるのか
+	parts.push(
+		"",
+		item.theirsDeleted
+			? vscode.l10n.t("Take your edit and the entry stays. Take theirs and the entry goes away.")
+			: item.oursDeleted
+				? vscode.l10n.t("Take your edit and the entry goes away. Take theirs and the entry stays.")
+				: vscode.l10n.t("Choose which value to keep. The one you do not choose will not be there afterwards."),
+	);
+
+	// 4. いつ書き換わるのか
 	parts.push(
 		"",
 		chosen
 			? vscode.l10n.t(
-					"You picked a side. Nothing is written yet — this file is rewritten once every one of its conflicts is settled.",
+					"You have chosen. Nothing has been written yet: this file is rewritten in one go, once every entry in it has been decided.",
 				)
-			: vscode.l10n.t("Pick a side with the buttons on this row. No AI is involved."),
+			: vscode.l10n.t(
+					"Choosing writes nothing yet. This file is rewritten in one go, once every entry in it has been decided. No AI is involved.",
+				),
 	);
 	return parts.join("\n");
 }
