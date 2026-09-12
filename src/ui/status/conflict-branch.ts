@@ -74,7 +74,7 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 			);
 		case "tm":
 			return vscode.l10n.t(
-				"Two branches registered different translations. While the conflict markers are there, mdait cannot read the translation memory, so past translations are neither shown nor committed until this is resolved.",
+				"Two branches registered different translations. While the conflict markers are there, mdait cannot read the translation memory: past translations are not offered while translating, and nothing new can be committed to it.",
 			);
 		case "terms":
 			return vscode.l10n.t(
@@ -100,7 +100,7 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 		// **数字が何を数えているかは、ラベルからは読めない。** 件数を出しているときだけ、
 		// それが「あなたが決める件数」であることを言う（自動で片付く分は数に入っていない）
 		tooltip: decisions
-			? vscode.l10n.t("Merging left conflicts inside .mdait. The number is how many of them you decide.")
+			? vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision.")
 			: vscode.l10n.t("Merging left conflicts inside .mdait."),
 	};
 }

@@ -67,6 +67,23 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.ok(item.tooltip.length > 0);
 	});
 
+	test("件数を出しているときは、その数字が何を数えているかを Hover で言う", () => {
+		const item = buildConflictsItem(withFiles("tm", "terms"), 3);
+
+		assert.match(item?.tooltip ?? "", /waiting for your decision/);
+	});
+
+	test("件数を出していないときは、数字の説明もしない", () => {
+		// 決める件が 0（丸ごと書き直す対象しかない）と、まだ数えていない（undefined）。
+		// **どちらもラベルに数字が出ない**ので、数字の話をすると出ていないものの説明になる
+		for (const decisions of [0, undefined]) {
+			const item = buildConflictsItem(withFiles("unit-state"), decisions);
+
+			assert.ok(item?.tooltip);
+			assert.doesNotMatch(item.tooltip, /waiting for your decision/);
+		}
+	});
+
 	test("ファイルは1つ1行で、種別が読める", () => {
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
