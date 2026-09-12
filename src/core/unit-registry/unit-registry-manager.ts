@@ -80,10 +80,7 @@ export class UnitRegistryManager {
 		if (!workspaceRoot) {
 			return null;
 		}
-		return path.join(
-			Configuration.getInstance().getMdaitDir(),
-			"unit-registry",
-		);
+		return Configuration.getInstance().getUnitRegistryFilePath();
 	}
 
 	/**

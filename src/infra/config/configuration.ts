@@ -407,6 +407,13 @@ export class Configuration {
 	}
 
 	/**
+	 * ユニットレジストリ（`.mdait/unit-registry`。原文の過去の本文の控え）の絶対パスを取得する。
+	 */
+	public getUnitRegistryFilePath(): string {
+		return path.join(this.getMdaitDir(), "unit-registry");
+	}
+
+	/**
 	 * レポート出力ディレクトリ（`.mdait/reports/`）の絶対パスを取得する。
 	 * mdait.json と混ざらないようサブディレクトリに寄せている。
 	 */

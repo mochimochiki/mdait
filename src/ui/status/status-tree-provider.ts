@@ -13,6 +13,9 @@ import {
 	getSelectedPairAbsDirs,
 	getSelectedScopeDirs,
 } from "../../commands/shared/status-scope";
+import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
+import { CONFLICTS_ID, buildConflictRows, buildConflictsItem, isConflictRowId } from "./conflict-branch";
+import { collectWorkspaceConflicts } from "./conflict-source";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -142,6 +145,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 */
 	private needsAttentionExpandedOnce = false;
 
+	/** 「競合の解決」の枝も、現れた最初の1回だけ展開して見せる */
+	private conflictsExpandedOnce = false;
+
 	constructor() {
 		this.statusManager = StatusManager.getInstance();
 		this.configuration = Configuration.getInstance();
@@ -188,6 +194,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				}
 				// 未同期の案内は押すだけの行なので子を持たない
 				if (element.directoryPath === NOT_SYNCED_ID) {
+					return vscode.TreeItemCollapsibleState.None;
+				}
+				// 競合はエラー状態なので、現れたら1度は開いて見せる。2回目以降は
+				// 畳んだままにする（展開状態の管理は VS Code に委ねる）
+				if (element.directoryPath === CONFLICTS_ID) {
+					if (this.conflictsExpandedOnce) {
+						return vscode.TreeItemCollapsibleState.Collapsed;
+					}
+					this.conflictsExpandedOnce = true;
+					return vscode.TreeItemCollapsibleState.Expanded;
+				}
+				if (isConflictRowId(element.directoryPath)) {
 					return vscode.TreeItemCollapsibleState.None;
 				}
 				// ディレクトリは子要素（ファイル・サブディレクトリ）があればCollapsed
@@ -303,6 +321,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				treeItem.id = NEEDS_ATTENTION_ID;
 			} else if (element.directoryPath === NOT_SYNCED_ID) {
 				treeItem.id = NOT_SYNCED_ID;
+			} else if (element.directoryPath === CONFLICTS_ID || isConflictRowId(element.directoryPath)) {
+				treeItem.id = element.directoryPath;
 			} else if (workspaceFolder) {
 				treeItem.id = path.relative(workspaceFolder, element.directoryPath);
 			} else {
@@ -436,6 +456,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			if (element.directoryPath === NEEDS_ATTENTION_ID) {
 				return Promise.resolve(this.getNeedsAttentionChildren());
 			}
+			// 「競合の解決」の枝は1件1行を返す。行そのものは子を持たない
+			if (element.directoryPath === CONFLICTS_ID) {
+				return Promise.resolve(
+					buildConflictRows(this.collectConflicts(), vscode.workspace.workspaceFolders?.[0]?.uri.fsPath),
+				);
+			}
+			if (isConflictRowId(element.directoryPath)) {
+				return Promise.resolve([]);
+			}
 			// ディレクトリの場合はファイル一覧を返す
 			return Promise.resolve(
 				this.getStatusItemsRecursive(element.directoryPath),
@@ -497,11 +526,24 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// Needs Attention仮想ノードを先頭に追加する（0件時は追加しない＝デッドエンドを作らない）
 		const needsAttentionItem = this.buildNeedsAttentionItem();
+
+		// 「競合の解決」は最上段に置く。競合はエラー状態で、**解くまで他の数字が当てにならない**
+		// （TM も用語集も読めていない）。要対応より手前に出す理由はそこにある
+		const conflictsItem = buildConflictsItem(this.collectConflicts());
+		if (!conflictsItem) {
+			this.conflictsExpandedOnce = false;
+		}
 		return [
+			...(conflictsItem ? [conflictsItem] : []),
 			...(notSyncedItem ? [notSyncedItem] : []),
 			...(needsAttentionItem ? [needsAttentionItem] : []),
 			...visibleItems,
 		];
+	}
+
+	/** `.mdait` の未解決の競合を数える（算出点は `conflict-source.ts` 1つに寄せる） */
+	public collectConflicts(): MdaitConflicts {
+		return collectWorkspaceConflicts(this.configuration);
 	}
 
 	/**
@@ -792,6 +834,15 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 				"debug-disconnect",
 				new vscode.ThemeColor("charts.orange"),
 			);
+		}
+
+		// 「競合の解決」はエラー状態。要対応（黄）より強い赤で、段の違いを色でも示す
+		// （色だけに頼らないよう、ラベルにも件数と種別を文字で出している）
+		if (
+			element?.type === StatusItemType.Directory &&
+			(element.directoryPath === CONFLICTS_ID || isConflictRowId(element.directoryPath))
+		) {
+			return new vscode.ThemeIcon("git-merge", new vscode.ThemeColor("charts.red"));
 		}
 
 		// Needs Attention仮想ノードは専用アイコン
