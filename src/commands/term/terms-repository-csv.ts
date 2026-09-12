@@ -404,11 +404,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 			return;
 		}
 
-		// ファイル読み込み（BOM対応）
-		let content = fs.readFileSync(this.path, "utf8");
-		if (content.charCodeAt(0) === 0xfeff) {
-			content = content.slice(1); // BOM除去
-		}
+		const content = fs.readFileSync(this.path, "utf8");
 
 		// **合流の途中の用語集は読まない。** 競合マーカーの行は CSV としては列数の合わない行で、
 		// パーサーが投げるか、投げずに壊れた語を1つ増やす。どちらにせよそのまま書き戻すと
@@ -417,6 +413,37 @@ export class TermsRepositoryCSV implements TermsRepository {
 			throw new Error(`The glossary is in the middle of a merge. Resolve the conflict in ${this.path} first.`);
 		}
 
+		this.applyContent(content, { keepPreserved: false });
+	}
+
+	/**
+	 * **競合の解決の経路だけが通る読み取り。** 片方の陣営の全文を読み、その版の用語を返す。
+	 *
+	 * 付帯情報（未知列・列の順・言語）は**消さずに足す**（`keepPreserved`）。両側を順に
+	 * 読むので、片方にしか無い語の未知列を消してしまうと、書き戻したときに他所の道具の
+	 * データが落ちる。あとから読んだ側が勝つので、**自分の側を後に読むこと**。
+	 */
+	async loadSide(content: string): Promise<readonly TermEntry[]> {
+		this.applyContent(content, { keepPreserved: true });
+		return [...this.entries];
+	}
+
+	/** **競合の解決の経路だけが通る書き出し。** 解いた結果で置き換えて保存する */
+	async writeResolved(entries: readonly TermEntry[]): Promise<void> {
+		this.entries = [...entries];
+		await this.save();
+	}
+
+	/**
+	 * 読み込んだ全文を、この表の中身として取り込む。
+	 *
+	 * **BOM はここで外す。** 外し忘れると先頭の列名が `\ufeffja` になり、主言語の列が
+	 * 言語として認識されなくなる（実測: 競合の解決で、語の見出しが空になり、主言語の列が
+	 * 「知らない列」として素通りしていた）。ファイルから読むときも、競合の解決で片方の
+	 * 陣営を読むときも、必ずこの1箇所を通る。
+	 */
+	private applyContent(rawContent: string, options: { keepPreserved: boolean }): void {
+		const content = rawContent.charCodeAt(0) === 0xfeff ? rawContent.slice(1) : rawContent;
 		// CSVパース
 		const records = parse(content, {
 			columns: true,
@@ -425,19 +452,33 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 		if (records.length === 0) {
 			this.entries = [];
-			this.allLanguages = [];
-			this.preservedHeaders = [];
-			this.preservedPerKey.clear();
-			this.originalColumnOrder = null;
+			if (!options.keepPreserved) {
+				this.allLanguages = [];
+				this.preservedHeaders = [];
+				this.preservedPerKey.clear();
+				this.originalColumnOrder = null;
+			}
 			return;
 		}
 
 		// ヘッダーから言語リストを抽出
 		const headers = Object.keys(records[0]);
-		// 元の列順序を保存
-		this.originalColumnOrder = [...headers];
+		const languages = TermEntryConverter.extractLanguagesFromHeaders(headers);
 
-		this.allLanguages = TermEntryConverter.extractLanguagesFromHeaders(headers);
+		// **両側を読むときは、言語も列の順も足す（消さない）。**
+		//
+		// 競合の解決は片方ずつ読む。上書きにすると、あとから読んだ側（自分の側）の
+		// ヘッダーだけが残り、相手側にしか無い言語の列と未知列がヘッダーごと消える。
+		// 保存は `allLanguages` の言語しか書かないので、相手の訳語はそこで失われる。
+		// いま読んだ側を先に置くのは、書き出しの列の並びを自分の作業場の形に寄せるため。
+		if (options.keepPreserved) {
+			const previousOrder = this.originalColumnOrder ?? [];
+			this.originalColumnOrder = [...headers, ...previousOrder.filter((h) => !headers.includes(h))];
+			this.allLanguages = [...languages, ...this.allLanguages.filter((l) => !languages.includes(l))];
+		} else {
+			this.originalColumnOrder = [...headers];
+			this.allLanguages = languages;
+		}
 		// 最新設定からsource言語セットを更新
 		this.updateSourceLanguages(this.currentTransPairs);
 		// 管理対象の列集合を作り、未知列ヘッダーを記録
@@ -446,8 +487,13 @@ export class TermsRepositoryCSV implements TermsRepository {
 			...this.allLanguages,
 			...Array.from(this.sourceLanguages).map((l) => `variants_${l}`),
 		]);
-		this.preservedHeaders = headers.filter((h) => !managed.has(h));
-		this.preservedPerKey.clear();
+		const unknown = headers.filter((h) => !managed.has(h));
+		this.preservedHeaders = options.keepPreserved
+			? [...new Set([...this.preservedHeaders, ...unknown])]
+			: unknown;
+		if (!options.keepPreserved) {
+			this.preservedPerKey.clear();
+		}
 
 		// 各行をTermEntryに変換しつつ未知列を保持。
 		//
@@ -463,8 +509,8 @@ export class TermsRepositoryCSV implements TermsRepository {
 			if (seenKeys.has(key)) continue;
 			seenKeys.add(key);
 			tmpEntries.push(entry);
-			const preserved: Record<string, string> = {};
-			for (const h of this.preservedHeaders) {
+			const preserved: Record<string, string> = { ...(this.preservedPerKey.get(key) ?? {}) };
+			for (const h of unknown) {
 				preserved[h] = row[h] ?? "";
 			}
 			this.preservedPerKey.set(key, preserved);
