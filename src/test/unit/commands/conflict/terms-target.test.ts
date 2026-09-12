@@ -84,7 +84,6 @@ suite("用語集の競合を解く", () => {
 		const planned = await planTermsResolution(termsPath, await repo(), "en");
 		assert.ok(planned);
 		assert.equal(planned.plan.pending.length, 0);
-		assert.equal(planned.plan.hasBase, true);
 
 		await applyTermsResolution(planned.plan, planned.resolution, await repo(), new Map());
 		const back = await readBack();
@@ -104,7 +103,7 @@ suite("用語集の競合を解く", () => {
 			new Map([[key, "theirs" as const]]),
 		);
 
-		assert.equal(outcome.decidedCount, 1);
+		assert.equal(outcome.remainingCount, 0);
 		const back = await readBack();
 		assert.equal(TermEntry.getTerm(back[0], "ja"), "やあ");
 	});

@@ -12,8 +12,8 @@
  *   - `unit-registry` … 控えの鍵は本文そのもののハッシュなので、**同じ鍵に別の値が来ない**。
  *     両方残せば解ける（ADR-260911-02）
  *
- *   だからここは AI を1回も呼ばない。やることは「読み直して、正規形で書き戻す」だけで、
- *   その結果ファイルから競合マーカーが消える。
+ *   だからやることは「読み直して、正規形で書き戻す」だけで、その結果ファイルから
+ *   競合マーカーが消える。
  *
  *   残るのは、降ろされた行をどちらに決めるかである。それは訳の良し悪しではなく**原稿との
  *   照合**なので、P03 が決定的に片付ける。
@@ -37,9 +37,8 @@ export function planUnitStateResolution(filePath: string): ResolutionPlan {
 		kind: "unit-state",
 		filePath,
 		autoResolvedCount: 0,
-		deletedKeys: [],
+		deletedCount: 0,
 		pending: [],
-		hasBase: false,
 		wholeFile: true,
 	};
 }
@@ -79,9 +78,8 @@ export function planUnitRegistryResolution(filePath: string): ResolutionPlan {
 		filePath,
 		// 件数は読み直してみないと分からない。書き戻したあとに数える
 		autoResolvedCount: 0,
-		deletedKeys: [],
+		deletedCount: 0,
 		pending: [],
-		hasBase: false,
 		wholeFile: true,
 	};
 }

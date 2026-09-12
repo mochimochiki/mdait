@@ -20,6 +20,7 @@ import {
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
+import { undecidedCount } from "../../../../ui/status/conflict-source";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
@@ -67,6 +68,23 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.ok(item.tooltip.length > 0);
 	});
 
+	test("件数を出しているときは、その数字が何を数えているかを Hover で言う", () => {
+		const item = buildConflictsItem(withFiles("tm", "terms"), 3);
+
+		assert.match(item?.tooltip ?? "", /waiting for your decision/);
+	});
+
+	test("件数を出していないときは、数字の説明もしない", () => {
+		// 決める件が 0（丸ごと書き直す対象しかない）と、まだ数えていない（undefined）。
+		// **どちらもラベルに数字が出ない**ので、数字の話をすると出ていないものの説明になる
+		for (const decisions of [0, undefined]) {
+			const item = buildConflictsItem(withFiles("unit-state"), decisions);
+
+			assert.ok(item?.tooltip);
+			assert.doesNotMatch(item.tooltip, /waiting for your decision/);
+		}
+	});
+
 	test("ファイルは1つ1行で、種別が読める", () => {
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
@@ -112,8 +130,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 			kind: "tm" as const,
 			filePath: "/ws/.mdait/translations.tmx",
 			autoResolvedCount: 3,
-			deletedKeys: [],
-			hasBase: true,
+			deletedCount: 0,
 			pending: Array.from({ length: pending }, (_, i) => ({
 				key: `k${i}`,
 				label: `語${i}`,
@@ -121,6 +138,26 @@ suite("競合の解決（StatusTree の枝）", () => {
 				theirsText: `相手の訳${i}`,
 				baseText: `もとの訳${i}`,
 			})),
+		});
+
+		test("決めた分だけ、残りの件数が減る", () => {
+			// 根の数字は「判断を待っている件数」と名乗っている。決めても減らないと嘘になる
+			const target = plan(3);
+			const stamp = "s";
+
+			assert.equal(undecidedCount(target, stamp), 3);
+			rememberDecision(target.filePath, stamp, "k0", "ours");
+			rememberDecision(target.filePath, stamp, "k1", "theirs");
+
+			assert.equal(undecidedCount(target, stamp), 1);
+		});
+
+		test("計画の見た目が分からなければ、決めた分を差し引かない", () => {
+			// 見た目が引けないのは、ファイルが外から変わったとき。前の判断はもう当てにならない
+			const target = plan(3);
+			rememberDecision(target.filePath, "s", "k0", "ours");
+
+			assert.equal(undecidedCount(target, undefined), 3);
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {
@@ -155,7 +192,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 		test("消した側は、誰が消したのかが読める（分かれる前の値を置かない）", () => {
 			const withDeletion = {
 				...plan(1),
-				pending: [{ key: "k0", label: "語0", oursText: "私の訳0", theirsText: "(removed)", baseText: "もとの訳0", theirsDeleted: true }],
+				pending: [{ key: "k0", label: "語0", oursText: "私の訳0", theirsText: "", baseText: "もとの訳0", theirsDeleted: true }],
 			};
 
 			const tip = buildConflictChoiceRows(withDeletion, STAMP)[0].tooltip ?? "";

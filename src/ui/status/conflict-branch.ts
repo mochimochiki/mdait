@@ -7,14 +7,14 @@
  *   **状態と操作**はこの枝（1件1行）、**解説**は Hover（＝ツリー行のツールチップ）である。
  *   合流のたびにトーストは出さない（変化の気づきは1箇所に集約する）。
  *
- *   この段（P01）では**見せるだけ**で、行内の操作はまだ無い。解くのは P02（✨AI の一発）と
- *   P03（`こちらを採る` / `あちらを採る`）である。
+ *   出すのは1件1行で、行内の操作は `あなたを残す` / `相手を残す` の2つである。
  *
  * @module ui/status/conflict-branch
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
+import { conflictKindLabel, conflictSideText } from "../../commands/conflict/conflict-labels";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
@@ -47,26 +47,12 @@ export function filePathOfConflictRow(directoryPath: string): string | undefined
 	return directoryPath.startsWith(CONFLICT_FILE_PREFIX) ? directoryPath.slice(CONFLICT_FILE_PREFIX.length) : undefined;
 }
 
-/** 競合したファイルの、人が読む名前 */
-function fileKindLabel(kind: ConflictFileKind): string {
-	switch (kind) {
-		case "unit-state":
-			return vscode.l10n.t("Unit state");
-		case "unit-registry":
-			return vscode.l10n.t("Source snapshots");
-		case "tm":
-			return vscode.l10n.t("Translation memory");
-		case "terms":
-			return vscode.l10n.t("Glossary");
-	}
-}
-
 /** 競合したファイルごとの、いま何が起きているかの解説（Hover） */
 function fileKindExplanation(kind: ConflictFileKind): string {
 	switch (kind) {
 		case "unit-state":
 			return vscode.l10n.t(
-				"Two branches wrote different values for the same translation unit. mdait keeps every row it can read, so nothing is lost, but the conflict markers are still in the file.",
+				"Two branches wrote different values for the same translation unit. Every row that can be read is kept, so there is nothing to choose between — resolving removes the conflict markers.",
 			);
 		case "unit-registry":
 			return vscode.l10n.t(
@@ -74,11 +60,11 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 			);
 		case "tm":
 			return vscode.l10n.t(
-				"Two branches registered different translations. While the conflict markers are there, mdait refuses to read or save the translation memory, so nothing is overwritten.",
+				"Two branches registered different translations. While the conflict markers are there, mdait cannot read the translation memory: past translations are not offered while translating, and nothing new can be committed to it.",
 			);
 		case "terms":
 			return vscode.l10n.t(
-				"Two branches edited the glossary. While the conflict markers are there, mdait refuses to read it, so AI translation runs without glossary terms until this is resolved.",
+				"Two branches edited the glossary. While the conflict markers are there, mdait cannot read it, so AI translation runs without glossary terms until this is resolved.",
 			);
 	}
 }
@@ -90,14 +76,22 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 	if (conflicts.total === 0) {
 		return undefined;
 	}
+	// 数えるのは**あなたが決める件数**。ファイルの数でも自動で片付く件数でもない。
+	// **数字が何を数えているかはラベルからは読めない**ので、数字を出すときだけ解説も
+	// 数字の話にする — 条件を2度書くと、片方だけ直して食い違う
+	const [label, tooltip] = decisions
+		? [
+				vscode.l10n.t("Conflicts ({0})", decisions),
+				vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision."),
+			]
+		: [vscode.l10n.t("Conflicts"), vscode.l10n.t("Merging left conflicts inside .mdait.")];
 	return {
 		type: StatusItemType.Directory,
-		// 数えるのは**あなたが決める件数**。ファイルの数でも自動で片付く件数でもない
-		label: decisions ? vscode.l10n.t("Conflicts ({0})", decisions) : vscode.l10n.t("Conflicts"),
+		label,
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		tooltip: vscode.l10n.t("Merging left conflicts inside .mdait. Nothing has been lost."),
+		tooltip,
 	};
 }
 
@@ -121,7 +115,7 @@ export function buildConflictRows(
 		return {
 			type: StatusItemType.Directory,
 			// 対象の名前と、その中で決める件数だけ。パスは Hover に降ろす
-			label: pending > 0 ? `${fileKindLabel(file.kind)}（${pending}）` : fileKindLabel(file.kind),
+			label: pending > 0 ? `${conflictKindLabel(file.kind)}（${pending}）` : conflictKindLabel(file.kind),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
 			contextValue: "mdaitConflictFile",
@@ -139,7 +133,7 @@ export function buildConflictRows(
 		directoryPath: `${CONFLICT_ROW_PREFIX}held:${index}`,
 		contextValue: "mdaitConflictHeldRow",
 		tooltip: vscode.l10n.t(
-			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. It is kept, not discarded. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",
+			"{0}\n\nTwo branches wrote different states for the same chapter, so one of them was taken off its seat. Running Sync matches it against your documents: the side whose text matches goes back to its seat.",
 			row.path,
 		),
 	}));
@@ -150,11 +144,8 @@ export function buildConflictRows(
 /**
  * 競合したファイルを開いたときに出る、**1件1行**（roadmap-v04 P03）。
  *
- * 行には「こちらを採る」「あちらを採る」が付く（`package.json` の `viewItem` で引く）。
- * **✨は付けない** — AI を1回も呼ばないからである（UX-P4 の逆向き）。
- *
- * 既に決めた件は、どちらを採ったかを副題に出す。決めただけではまだ書かれていない
- * （そのファイルの最後の1件が決まったときにまとめて書く）ことも Hover に書く。
+ * 行には「あなたを残す」「相手を残す」が付く（`package.json` の `viewItem` で引く）。
+ * 既に決めた件は、どちらを採ったかを副題に出す。
  */
 export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): DirectoryStatusItem[] {
 	return plan.pending.map((item, index) => {
@@ -196,16 +187,15 @@ function shorten(text: string, max = 40): string {
 /**
  * 1件の解説（Hover）。
  *
- * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか、AI を
- * 使うか）は書かない — 操作の結果を見れば分かることで、読ませる意味がない
- * （`docs/ux.md` §3.3）。
+ * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか）は
+ * 書かない — 操作の結果を見れば分かることで、読ませる意味がない（`docs/ux.md` §3.3）。
  */
 function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
 	const parts = [
 		item.label,
 		"",
-		`${vscode.l10n.t("You")}\t${item.oursDeleted ? vscode.l10n.t("deleted") : item.oursText}`,
-		`${vscode.l10n.t("They")}\t${item.theirsDeleted ? vscode.l10n.t("deleted") : item.theirsText}`,
+		`${vscode.l10n.t("You")}\t${conflictSideText(item, "ours")}`,
+		`${vscode.l10n.t("They")}\t${conflictSideText(item, "theirs")}`,
 	];
 	if (item.baseText !== undefined) {
 		parts.push(`${vscode.l10n.t("Before")}\t${item.baseText}`);

@@ -23,7 +23,12 @@ import {
 	isConflictFileRowId,
 	isConflictRowId,
 } from "./conflict-branch";
-import { collectPendingChoices, collectWorkspaceConflicts, pendingChoiceCount } from "./conflict-source";
+import {
+	collectPendingChoices,
+	collectWorkspaceConflicts,
+	pendingChoiceCount,
+	undecidedCount,
+} from "./conflict-source";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -581,7 +586,8 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		// 「開ける」ままになり、開いても中身が1件も無い行き止まりになる
 		this.conflictChoiceCounts.clear();
 		for (const plan of prepared?.summary.plans ?? []) {
-			counts.set(plan.filePath, plan.pending.length);
+			// 行に出すのは**まだ決めていない件数**。開けるかどうかは件そのものの有無で決まる
+			counts.set(plan.filePath, undecidedCount(plan, prepared?.stamps.get(plan.filePath)));
 			this.conflictChoiceCounts.set(`mdait:conflict:file:${plan.filePath}`, plan.pending.length);
 		}
 		return buildConflictRows(conflicts, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, counts);

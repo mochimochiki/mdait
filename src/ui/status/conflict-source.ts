@@ -10,6 +10,8 @@
  *
  * @module ui/status/conflict-source
  */
+import { decisionsFor } from "../../commands/conflict/conflict-decisions";
+import type { ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import type { PreparedResolution } from "../../commands/conflict/resolve-core";
 import { prepareResolution } from "../../commands/conflict/resolve-core";
 import { MdaitConflictScanner, type MdaitConflicts, noConflicts } from "../../core/conflict/mdait-conflicts";
@@ -87,13 +89,34 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 }
 
 /**
+ * その対象で、**まだ人が決めていない**件数。
+ *
+ * 決めかけの判断（`conflict-decisions.ts`）を差し引く。差し引かないと、ツリーで2件
+ * 決めても根の数字が動かず、「判断を待っている件数」という説明が嘘になる。
+ */
+export function undecidedCount(plan: ResolutionPlan, stamp: string | undefined): number {
+	if (stamp === undefined) {
+		return plan.pending.length;
+	}
+	const decided = decisionsFor(plan.filePath, stamp);
+	return plan.pending.filter((item) => !decided.has(item.key)).length;
+}
+
+/**
  * いま人が決める件数（覚え書きから同期で読む）。
  *
  * ステータスバーは同期で描くので、計画を作り直すのを待てない。まだ作っていなければ
  * `undefined` を返し、呼び出し側は数を伏せる（0 と言い切らない）。
  */
 export function pendingChoiceCount(): number | undefined {
-	return preparedCache?.summary.pendingTotal;
+	const prepared = preparedCache;
+	if (!prepared) {
+		return undefined;
+	}
+	return prepared.summary.plans.reduce(
+		(sum, plan) => sum + undecidedCount(plan, prepared.stamps.get(plan.filePath)),
+		0,
+	);
 }
 
 let preparedCache: PreparedResolution | undefined;

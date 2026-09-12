@@ -17,7 +17,6 @@ import { type KeyedEntry, mergeByKey } from "../../../core/conflict/key-merge";
 import { TmxStore } from "../../../core/tm/tmx-store";
 import type { TmEntry } from "../../../core/tm/types";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
-import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料を、計画の外へ持ち出さずに抱えておく */
 interface TmSides {
@@ -151,10 +150,10 @@ export function planTmResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: item.ours.primary,
-		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す — 値を出すと、
-		// その側を採れば値が戻ると読めてしまう
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		// 消した側には見せる値が無い。祖先の値を置かず**空にする** — 値を出すと、
+		// その側を採れば値が戻ると読めてしまう。出す言葉は表示する側が決める
+		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
 		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,
@@ -165,59 +164,49 @@ export function planTmResolution(
 			kind: "tm",
 			filePath,
 			autoResolvedCount: merged.resolved.length,
-			deletedKeys: merged.deleted,
+			deletedCount: merged.deleted.length,
 			pending,
-			hasBase: split.base !== undefined,
 		},
 		resolution: { sides, resolved: new Map(merged.resolved.map((r) => [r.key, r.value])) },
 	};
 }
 
 /**
- * 判定の結果を足して書き戻す。
+ * 人が決めた分を足して書き戻す。
  *
  * **書き出しは `TmxStore` の中の入口を通る**（ADR-260911-02）。原子的な書き込みと
  * 保存後の mtime の記録はそこにしか無い。
  *
- * @param decided 判定が決まった件（決まらなかった件は含めない）
- * @returns 書き戻した件数と、決まらずに残った件数
+ * @param decided 決まった件（決まらなかった件は含めない）
+ * @returns 決まらずに残した件数。1件でも残れば1バイトも書かない
  */
 export function applyTmResolution(
 	filePath: string,
 	plan: ResolutionPlan,
 	resolution: TmResolution,
 	decided: ReadonlyMap<string, ChoiceSide>,
-): { decidedCount: number; remainingCount: number } {
-	const final = new Map(resolution.resolved);
-	let decidedCount = 0;
-	let remainingCount = 0;
+): { remainingCount: number } {
+	const undecided = plan.pending.filter((item) => !decided.has(item.key));
+	if (undecided.length > 0) {
+		// 決まらない件が1つでもあれば、ファイルは競合マーカーの入ったまま残す。
+		// 半端に書き戻すと、残った件の両側がディスクから消える。**入れ物も作らない**
+		return { remainingCount: undecided.length };
+	}
 
+	const final = new Map(resolution.resolved);
 	for (const item of plan.pending) {
-		const side = decided.get(item.key);
-		if (!side) {
-			// **迷った件は書かずに残す。** 両方の版を残せないので、この対象は書き戻さない
-			remainingCount++;
-			continue;
-		}
+		const side = decided.get(item.key) as ChoiceSide;
 		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
 		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
 			final.delete(item.key);
-			decidedCount++;
 			continue;
 		}
 		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);
 		if (chosen) {
 			final.set(item.key, chosen);
-			decidedCount++;
 		}
 	}
 
-	if (remainingCount > 0) {
-		// 決まらない件が1つでもあれば、ファイルは競合マーカーの入ったまま残す。
-		// 半端に書き戻すと、残った件の両側がディスクから消える
-		return { decidedCount: 0, remainingCount };
-	}
-
 	TmxStore.getInstance(filePath).writeResolved(filePath, final);
-	return { decidedCount, remainingCount: 0 };
+	return { remainingCount: 0 };
 }

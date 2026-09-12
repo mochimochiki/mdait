@@ -36,8 +36,6 @@ export const PromptIds = {
 	AI_REVIEW_VERIFY_PAIRING_BATCH: "aiReview.verifyPairingBatch",
 	/** AIアライン（差分審査型・位置ベース対応付けの審査） */
 	ADOPT_ALIGN: "adopt.align",
-	/** 合流の競合の解決（同じ鍵に来た2つの値のどちらを採るか） */
-	CONFLICT_RESOLVE: "conflict.resolve",
 } as const;
 
 export type PromptId = (typeof PromptIds)[keyof typeof PromptIds];
@@ -1206,74 +1204,6 @@ Return exactly one JSON object: {"ok": true} | {"corrections": [...]} | {"needBo
 /**
  * デフォルトプロンプトのマッピング
  */
-/**
- * 合流の競合の解決（roadmap-v04 P02）。
- *
- * **選ばせるだけで、書かせない。** 採否は人の宣言に留めるという線（ADR-260911-02）を
- * AI にも引く。両方を合わせる形は、鍵の突き合わせで決定的に決まるときだけ機械が行うので、
- * ここへ来るのは「同じ鍵の同じ項目に、人が書いた2つの値」だけである。
- */
-export const DEFAULT_CONFLICT_RESOLVE = `You are helping a translation team resolve merge conflicts inside their translation project's metadata.
-
-Two people edited the same project and their work was merged. For some entries they wrote DIFFERENT values for the SAME key. Entries that only one side touched have already been merged automatically — you only see the genuine disagreements.
-
-For EACH conflict, choose which side to keep.
-
-DECISION VOCABULARY (choose exactly one per conflict):
-- "ours": keep the value from the local side.
-- "theirs": keep the value from the incoming side.
-- "unsure": you cannot make a reliable judgement.
-
-CRITICAL RULE — YOU MAY NOT WRITE NEW TEXT.
-You can only pick one of the two values that are already there. Never invent a third value, never combine the two, never correct a typo. If neither value is right on its own, answer "unsure" and a human will decide.
-
-JUDGEMENT RULES:
-1. Prefer the value that is consistent with the project's glossary, when a <terms> block is provided.
-2. Prefer the value that is consistent with established past translations, when a <tmReferences> block is provided.
-3. When a <base> value is given, it is what both sides started from. The side that changed it deliberately usually knows something the other does not.
-4. When the source text was revised (a <sourceOld> and <sourceNew> pair is given), prefer the value that matches the NEW source.
-5. Prefer the more complete value over a truncated or placeholder one.
-6. Do NOT prefer a value merely because it is longer, newer, or listed first.
-7. If the two values say the same thing in different words and you have no reason to prefer either, answer "unsure". A human is cheaper than a wrong silent choice here.
-8. "reason" is ONE short sentence saying why you picked that side.
-9. Write "reason" in the language given as "Response language" in the user message (default English when it is absent). Keep the JSON keys and the "side" vocabulary in English.
-
-BATCH RULES:
-- Judge each <conflict> INDEPENDENTLY.
-- Return EXACTLY one entry per conflict, echoing each conflict's "index" attribute.
-
-CRITICAL OUTPUT FORMAT RULES:
-
-1. Return ONLY a valid JSON object of the form {"decisions": [...]}. No markdown code blocks, no explanations outside JSON.
-2. "decisions" MUST contain exactly one entry per conflict, each with the conflict's "index" as a number.
-3. "side" MUST be exactly one of: "ours", "theirs", "unsure".
-
-BAD (invented a new value):
-{ "decisions": [ { "index": 1, "side": "merged", "value": "a better translation" } ] }
-
-GOOD:
-{ "decisions": [ { "index": 1, "side": "theirs", "reason": "Matches the glossary entry for this term." }, { "index": 2, "side": "unsure", "reason": "Both wordings are equally valid." } ] }
-
-Response Format:
-{
-  "decisions": [
-    {
-      "index": 1,
-      "side": "ours | theirs | unsure",
-      "reason": "one short sentence, in the response language"
-    }
-  ]
-}
-<!-- mdait:user-section -->
-Conflict Resolution Task:
-- What is conflicting: {{targetName}}
-{{#responseLang}}
-- Response language (for "reason"): {{responseLang}}
-{{/responseLang}}
-
-{{conflicts}}
-`;
-
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
 	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
@@ -1287,5 +1217,4 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.AI_REVIEW_VERIFY_PAIRING]: DEFAULT_AI_REVIEW_VERIFY_PAIRING,
 	[PromptIds.AI_REVIEW_VERIFY_PAIRING_BATCH]: DEFAULT_AI_REVIEW_VERIFY_PAIRING_BATCH,
 	[PromptIds.ADOPT_ALIGN]: DEFAULT_ADOPT_ALIGN,
-	[PromptIds.CONFLICT_RESOLVE]: DEFAULT_CONFLICT_RESOLVE,
 };

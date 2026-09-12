@@ -20,7 +20,6 @@ import type { LangTerm, TermEntry } from "../../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../../term/term-entry";
 import type { TermsRepository } from "../../term/terms-repository";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
-import { REMOVED_TEXT } from "../resolution-plan";
 
 /** 判定に必要な材料 */
 interface TermSides {
@@ -178,9 +177,9 @@ export async function planTermsResolution(
 	const pending: PendingChoice[] = merged.undecided.map((item) => ({
 		key: item.key,
 		label: TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
-		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		// 消した側には見せる値が無い。祖先の値を置かず**空にする**（出す言葉は表示する側が決める）
+		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
 		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,
@@ -191,9 +190,8 @@ export async function planTermsResolution(
 			kind: "terms",
 			filePath,
 			autoResolvedCount: merged.resolved.length,
-			deletedKeys: merged.deleted,
+			deletedCount: merged.deleted.length,
 			pending,
-			hasBase: split.base !== undefined,
 		},
 		resolution: {
 			sides: {
@@ -207,7 +205,7 @@ export async function planTermsResolution(
 }
 
 /**
- * 判定の結果を足して書き戻す。**書き出しはリポジトリの中の入口を通る。**
+ * 人が決めた分を足して書き戻す。**書き出しはリポジトリの中の入口を通る。**
  *
  * 決まらない件が1つでも残っていれば1バイトも書かない（半端に書き戻すと、残った件の
  * 両側がディスクから消える）。
@@ -217,34 +215,26 @@ export async function applyTermsResolution(
 	resolution: TermsResolution,
 	repository: TermsRepository,
 	decided: ReadonlyMap<string, ChoiceSide>,
-): Promise<{ decidedCount: number; remainingCount: number }> {
-	const final = new Map(resolution.resolved);
-	let decidedCount = 0;
-	let remainingCount = 0;
+): Promise<{ remainingCount: number }> {
+	const undecided = plan.pending.filter((item) => !decided.has(item.key));
+	if (undecided.length > 0) {
+		return { remainingCount: undecided.length };
+	}
 
+	const final = new Map(resolution.resolved);
 	for (const item of plan.pending) {
-		const side = decided.get(item.key);
-		if (!side) {
-			remainingCount++;
-			continue;
-		}
+		const side = decided.get(item.key) as ChoiceSide;
 		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
 		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
 			final.delete(item.key);
-			decidedCount++;
 			continue;
 		}
 		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);
 		if (chosen) {
 			final.set(item.key, chosen);
-			decidedCount++;
 		}
 	}
 
-	if (remainingCount > 0) {
-		return { decidedCount: 0, remainingCount };
-	}
-
 	await repository.writeResolved([...final.values()]);
-	return { decidedCount, remainingCount: 0 };
+	return { remainingCount: 0 };
 }

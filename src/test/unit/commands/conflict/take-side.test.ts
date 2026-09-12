@@ -158,7 +158,7 @@ suite("人が1件ずつ決める", () => {
 			const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(tmPath, stampOf(prepared, tmPath)));
 
 			assert.equal(outcome.written, true);
-			assert.equal(outcome.decidedCount, 2);
+			assert.equal(outcome.remainingCount, 0);
 			const back = TmxStore.parseSide(fs.readFileSync(tmPath, "utf-8"));
 			assert.equal(back.get(tuidOf("Hello"))?.variants.get("ja")?.text, "こんにちは");
 			assert.equal(back.get(tuidOf("Bye"))?.variants.get("ja")?.text, "またね");

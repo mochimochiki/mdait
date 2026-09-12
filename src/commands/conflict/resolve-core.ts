@@ -1,20 +1,21 @@
 /**
  * @file resolve-core.ts
  * @description
- *   競合の解決の本体（roadmap-v04 P02）。VS Code の UI を持たないので、コマンドからも
+ *   競合の解決の本体（roadmap-v04）。VS Code の UI を持たないので、コマンドからも
  *   LM Tool からも同じ道を通れる。
  *
- *   段取りは4つで、**順番に意味がある**。
+ *   段取りは3つで、**順番に意味がある**。
  *
  *   1. **計画を作る** … 両側を切り出し、鍵で突き合わせる。ここで**1バイトも書かない**
- *   2. **確認をもらう** … 件数と概算を見せてから承認を待つ。AI へ問い合わせるのはこの後
- *      （UX-P4。判定が終わってから確認を出す形にはしない）
- *   3. **判定する** … 決まらない件だけを AI へ。迷った件はそのまま残る
- *   4. **書き戻す** … 対象ごとの解決専用の入口を通る。新しい書き込み経路は作らない
+ *   2. **確認をもらう** … 何件が決まり、何件が残り、どのファイルを書くかを見せる
+ *   3. **書き戻す** … 対象ごとの解決専用の入口を通る。新しい書き込み経路は作らない
+ *
+ *   決まるのは**鍵の突き合わせだけ**である（ADR-260912-04: AI を使わない）。同じ鍵に
+ *   別の値が来た件は人が決める（`applyDecidedResolution`）。
  *
  *   **決まらない件が1つでも残った対象は、1バイトも書かない。** 半端に書き戻すと、
  *   残った件の両側がディスクから消える。その対象は競合マーカーの入ったまま残り、
- *   人が決める（P03）。
+ *   ツリーの行で1件ずつ決める。
  *
  * @module commands/conflict/resolve-core
  */
@@ -24,15 +25,13 @@ import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
-import { ConflictEvidenceProvider } from "./conflict-evidence";
-import type { ConflictJudge } from "./conflict-judge";
+import { conflictKindLabel } from "./conflict-labels";
 import {
 	type ChoiceSide,
 	type ConflictResolutionPlan,
 	type ResolutionFailure,
 	type ResolutionOutcome,
 	type ResolutionPlan,
-	isDeletionChoice,
 	summarizePlans,
 } from "./resolution-plan";
 import {
@@ -54,8 +53,9 @@ export interface PreparedResolution {
 	/**
 	 * 計画を作った時点のファイルの見た目（更新時刻と寸法）。
 	 *
-	 * 計画から書き戻しまでのあいだに確認ダイアログと AI への問い合わせが挟まる。その間に
-	 * 人が手で直したり同期が走ったりしたら、**古い計画で上書きしてはいけない**。
+	 * 計画から書き戻しまでのあいだに確認ダイアログが挟まり、人が1件ずつ決めるときは
+	 * さらに間が空く。その間に人が手で直したり同期が走ったりしたら、**古い計画で
+	 * 上書きしてはいけない**。
 	 */
 	stamps: Map<string, string>;
 }
@@ -70,24 +70,10 @@ function stampOf(filePath: string): string {
 	}
 }
 
-/** 対象の人が読む名前（AI にも「何が競合しているか」として渡す） */
-function targetName(plan: ResolutionPlan): string {
-	switch (plan.kind) {
-		case "unit-state":
-			return "unit state";
-		case "unit-registry":
-			return "source snapshots";
-		case "tm":
-			return "translation memory";
-		case "terms":
-			return "glossary";
-	}
-}
-
 /**
  * 競合を読んで計画を作る。**1バイトも書かない。**
  *
- * 確認ダイアログはこの結果から件数を出すので、承認の前に「何件を AI にかけるか」が言える。
+ * 確認ダイアログはこの結果から件数を出すので、承認の前に「何が決まり、何が残るか」が言える。
  */
 export async function prepareResolution(
 	conflicts: MdaitConflicts,
@@ -150,31 +136,18 @@ export async function prepareResolution(
 }
 
 /**
- * 計画を実行する。
+ * 計画を実行する。**鍵の突き合わせで決まる分だけを書き戻す。**
  *
- * @param judge 判定にかける係。`undefined` なら AI を1回も呼ばず、決まらない件は全部残す
- *   （API キーが無い場合。器だけで全件を人が解決できる — ADR-260911-02）
+ * 同じ鍵に別の値が来た件は1つも決まらないので、その件を持つ対象は1バイトも書かれずに
+ * 残る。残りはツリーの行から `applyDecidedResolution` が片付ける。
  */
 export async function executeResolution(
 	prepared: PreparedResolution,
 	config: Configuration,
-	judge: ConflictJudge | undefined,
-	responseLang: string | undefined,
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	token?: vscode.CancellationToken,
-): Promise<{
-	outcomes: ResolutionOutcome[];
-	reasons: Map<string, string>;
-	/** AI がどちらを採ったか（レポートに出す。理由だけでは採否を確かめられない） */
-	sides: Map<string, ChoiceSide>;
-}> {
+): Promise<ResolutionOutcome[]> {
 	const outcomes: ResolutionOutcome[] = [];
-	const reasons = new Map<string, string>();
-	const sides = new Map<string, ChoiceSide>();
-
-	// 判定の材料は、競合していないファイルからだけ集める
-	const conflictedKinds = new Set(prepared.summary.plans.map((plan) => plan.kind));
-	const evidence = judge ? await ConflictEvidenceProvider.create(config, conflictedKinds) : undefined;
 
 	for (const plan of prepared.summary.plans) {
 		if (token?.isCancellationRequested) {
@@ -183,46 +156,31 @@ export async function executeResolution(
 			outcomes.push(skippedOutcome(plan));
 			continue;
 		}
-		progress?.report({ message: targetName(plan) });
-
-		let decided: ReadonlyMap<string, ChoiceSide> = new Map();
-		// **片方が消した件は AI へ送らない。** AI に許した語彙は二択だけで、「消す」は
-		// その外にある（ADR-260912-01）。人が決める
-		const askable = plan.pending.filter((item) => !isDeletionChoice(item));
-		if (judge && askable.length > 0) {
-			const result = await judge.judge(
-				askable,
-				{
-					targetName: targetName(plan),
-					responseLang,
-					evidenceFor: evidence ? (item) => evidence.forItem(item) : undefined,
-				},
-				token,
-			);
-			decided = result.decided;
-			for (const [key, reason] of result.reasons) {
-				reasons.set(key, reason);
-			}
-			for (const [key, side] of result.decided) {
-				sides.set(key, side);
-			}
-		}
-
-		outcomes.push(await applyOne(plan, prepared, config, decided));
+		progress?.report({ message: conflictKindLabel(plan.kind) });
+		outcomes.push(await applyDecidedResolution(plan, prepared, config));
 	}
 
-	return { outcomes, reasons, sides };
+	return outcomes;
+}
+
+/** 手を付ける前の結果（書けなかったとき・取り消されたときは、これがそのまま答えになる） */
+function baseOutcome(plan: ResolutionPlan): ResolutionOutcome {
+	return {
+		kind: plan.kind,
+		filePath: plan.filePath,
+		autoResolvedCount: plan.autoResolvedCount,
+		remainingCount: plan.pending.length,
+		written: false,
+	};
 }
 
 /** 取り消されて手が付かなかった対象の結果（残っている件はそのまま残っている） */
 function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
 	return {
-		kind: plan.kind,
-		filePath: plan.filePath,
+		...baseOutcome(plan),
 		autoResolvedCount: 0,
-		decidedCount: 0,
+		// 丸ごと書き直す対象には決める件が無い。0 と答えると「片付いた」と読めてしまう
 		remainingCount: Math.max(plan.pending.length, 1),
-		written: false,
 		skipped: true,
 	};
 }
@@ -230,8 +188,8 @@ function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
 /**
  * 計画を作ってから、そのファイルが外で変わっていないか。
  *
- * 確認ダイアログと AI への問い合わせのあいだに人が手で直したり同期が走ったりしうる。
- * 変わっていたら**書かない** — 手元の計画はもう1つ前の姿を指しているので、書けば相手の
+ * 確認ダイアログのあいだや、人が1件ずつ決めているあいだに、手で直したり同期が走ったり
+ * しうる。変わっていたら**書かない** — 手元の計画はもう1つ前の姿を指しているので、書けば相手の
  * 変更をそのまま消す。数え直せば新しい計画が作られる。
  *
  * @returns 変わっていれば理由、変わっていなければ `undefined`
@@ -245,36 +203,20 @@ function staleError(plan: ResolutionPlan, prepared: PreparedResolution): string 
 }
 
 /**
- * **人が決めた結果を書き戻す**（roadmap-v04 P03）。AI は1回も呼ばない。
+ * **1つの対象を書き戻す**（roadmap-v04）。
  *
- * `executeResolution` は全対象を回すが、こちらは1つの対象だけを書き戻す — 人はツリーの
- * 行を1件ずつ決めていくので、その対象の最後の1件が決まった時点で呼ばれる。
+ * `executeResolution` は全対象を回し、人が決めた分を1件も渡さない（鍵の突き合わせで
+ * 決まる分だけが書かれる）。ツリーの行から呼ぶときは、その対象の最後の1件が決まった
+ * 時点で、決まった全件を渡す。
  */
 export async function applyDecidedResolution(
 	plan: ResolutionPlan,
 	prepared: PreparedResolution,
 	config: Configuration,
-	decided: ReadonlyMap<string, ChoiceSide>,
-): Promise<ResolutionOutcome> {
-	return applyOne(plan, prepared, config, decided);
-}
-
-/** 1つの対象を書き戻す */
-async function applyOne(
-	plan: ResolutionPlan,
-	prepared: PreparedResolution,
-	config: Configuration,
-	decided: ReadonlyMap<string, ChoiceSide>,
+	decided: ReadonlyMap<string, ChoiceSide> = new Map(),
 ): Promise<ResolutionOutcome> {
 	const carried = prepared.carried.get(plan.filePath);
-	const base: ResolutionOutcome = {
-		kind: plan.kind,
-		filePath: plan.filePath,
-		autoResolvedCount: plan.autoResolvedCount,
-		decidedCount: 0,
-		remainingCount: plan.pending.length,
-		written: false,
-	};
+	const base = baseOutcome(plan);
 
 	try {
 		switch (plan.kind) {
