@@ -87,15 +87,26 @@ export function notifyWithReport(
 	message: string,
 	uri: vscode.Uri | undefined,
 	severity: "info" | "warning" = "info",
+	/** レポートより先に押させたい一手（次にやることが決まっているとき） */
+	primary?: { label: string; run: () => void },
 ): void {
 	const show = severity === "warning" ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
-	if (!uri) {
+	const openLabel = vscode.l10n.t("Open report");
+	const buttons = [...(primary ? [primary.label] : []), ...(uri ? [openLabel] : [])];
+	if (buttons.length === 0) {
 		void show(message);
 		return;
 	}
-	const openLabel = vscode.l10n.t("Open report");
-	void show(message, openLabel).then(
-		(choice) => (choice === openLabel ? openReport(uri) : undefined),
+	void show(message, ...buttons).then(
+		(choice) => {
+			if (primary && choice === primary.label) {
+				primary.run();
+				return;
+			}
+			if (uri && choice === openLabel) {
+				openReport(uri);
+			}
+		},
 		(error) => logger.warn("report", "Report notification failed", formatError(error)),
 	);
 }

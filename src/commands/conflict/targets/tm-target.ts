@@ -26,13 +26,24 @@ interface TmSides {
 	base?: Map<string, TmEntry>;
 }
 
-/** TU を人が読める1行にする（訳を言語ごとに並べる） */
-function describe(entry: TmEntry): string {
-	const variants = [...entry.variants.entries()]
-		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-		.map(([lang, variant]) => `${lang}: ${variant.text ?? ""}`)
-		.join(" / ");
-	return variants || entry.primary;
+/**
+ * TU を人が読める1行にする。
+ *
+ * **原文は出さない。** 見出しに出ているものを値の欄でも繰り返すと、両者の違いが
+ * 埋もれる（実測: 3行のうち3行が同じ原文で始まっていた）。言語が1つなら訳だけを、
+ * 2つ以上あるなら言語名を添えて並べる。
+ */
+function describe(entry: TmEntry, primaryLang: string): string {
+	const translations = [...entry.variants.entries()]
+		.filter(([lang]) => lang !== primaryLang)
+		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+	if (translations.length === 0) {
+		return entry.primary;
+	}
+	if (translations.length === 1) {
+		return translations[0][1].text ?? "";
+	}
+	return translations.map(([lang, variant]) => `${lang}: ${variant.text ?? ""}`).join(" / ");
 }
 
 /** 2つの TU が同じか（＝どちらを採っても結果が変わらないか） */
@@ -119,6 +130,7 @@ export interface TmResolution {
  */
 export function planTmResolution(
 	filePath: string,
+	primaryLang = "",
 ): { plan: ResolutionPlan; resolution: TmResolution } | undefined {
 	const xml = fs.readFileSync(filePath, "utf-8");
 	const split = splitConflictedFile(xml);
@@ -141,9 +153,9 @@ export function planTmResolution(
 		label: item.ours.primary,
 		// 消した側には見せる値が無い。祖先の値ではなく「消した」と出す — 値を出すと、
 		// その側を採れば値が戻ると読めてしまう
-		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours),
-		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs),
-		baseText: item.base ? describe(item.base) : undefined,
+		oursText: item.oursDeleted ? REMOVED_TEXT : describe(item.ours, primaryLang),
+		theirsText: item.theirsDeleted ? REMOVED_TEXT : describe(item.theirs, primaryLang),
+		baseText: item.base ? describe(item.base, primaryLang) : undefined,
 		oursDeleted: item.oursDeleted,
 		theirsDeleted: item.theirsDeleted,
 	}));

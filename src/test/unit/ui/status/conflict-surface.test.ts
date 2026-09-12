@@ -46,32 +46,34 @@ const withHeld = (count: number): MdaitConflicts => ({
 
 suite("競合の解決（StatusTree の枝）", () => {
 	test("0件なら枝を出さない（空のノードを置かない）", () => {
-		assert.equal(buildConflictsItem(empty), undefined);
+		assert.equal(buildConflictsItem(empty, 0), undefined);
 	});
 
-	test("件数をラベルに出す", () => {
-		const item = buildConflictsItem(withFiles("tm", "terms"));
+	test("ラベルに出すのは、あなたが決める件数", () => {
+		// ファイルの数（2）ではなく、決める件数（3）を出す。数字を3画面で揃える
+		const item = buildConflictsItem(withFiles("tm", "terms"), 3);
 
 		assert.ok(item);
-		assert.match(item.label, /2/);
+		assert.match(item.label, /3/);
+		assert.doesNotMatch(item.label, /2/);
 		assert.equal(item.directoryPath, CONFLICTS_ID);
 		assert.equal(item.status, Status.Error);
 	});
 
 	test("枝そのものにも解説を置く（Hover）", () => {
-		const item = buildConflictsItem(withFiles("tm"));
+		const item = buildConflictsItem(withFiles("tm"), 1);
 
 		assert.ok(item?.tooltip);
 		assert.ok(item.tooltip.length > 0);
 	});
 
-	test("ファイルは1つ1行で、種別とパスが読める", () => {
+	test("ファイルは1つ1行で、種別が読める", () => {
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
 		assert.equal(rows.length, 2);
 		assert.deepEqual(
-			rows.map((r) => r.description),
-			[".mdait/tm", ".mdait/terms"],
+			rows.map((r) => r.label),
+			["Translation memory", "Glossary"],
 		);
 		assert.ok(rows.every((r) => r.type === StatusItemType.Directory));
 	});
@@ -98,10 +100,11 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.ok(ids.every(isConflictRowId));
 	});
 
-	test("ワークスペースが分からなくても絶対パスで出す", () => {
-		const rows = buildConflictRows(withFiles("unit-state"), undefined);
+	test("パスは行に出さず、Hover に置く", () => {
+		const rows = buildConflictRows(withFiles("unit-state"), "/ws");
 
-		assert.equal(rows[0].description, "/ws/.mdait/unit-state");
+		assert.equal(rows[0].description, undefined);
+		assert.match(rows[0].tooltip ?? "", /\.mdait\/unit-state/);
 	});
 
 	suite("人が決める件（P03）", () => {
@@ -120,18 +123,16 @@ suite("競合の解決（StatusTree の枝）", () => {
 			})),
 		});
 
-		test("判断待ちの件数をファイルの行に添える", () => {
+		test("決める件数をファイルの行のラベルに添える", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
 
-			assert.match(rows[0].description ?? "", /\.mdait\/tm/);
-			// 件数が出ていなければ、開く価値のある行だと分からない
-			assert.match(rows[0].description ?? "", /2/);
+			assert.match(rows[0].label, /2/, "開く価値のある行だと分からない");
 		});
 
-		test("判断待ちが無いファイルの行には、件数を添えない", () => {
+		test("決める件がゼロなら、件数を添えない", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws");
 
-			assert.equal(rows[0].description, ".mdait/tm");
+			assert.equal(rows[0].label, "Translation memory");
 		});
 
 		test("1件1行で並び、まだ決めていない件は未決と出る", () => {
@@ -143,14 +144,12 @@ suite("競合の解決（StatusTree の枝）", () => {
 			assert.equal(rows[0].contextValue, "mdaitConflictChoice");
 		});
 
-		test("解説は、何が起きたのかから始まる（指示語で始めない）", () => {
-			// 読む人はこの文を前触れなく初めて見る。「こちら」「あちら」から始めると、
-			// 何を指しているのかが読み手に無い
+		test("解説は見出しから始まり、仕組みの説明を書かない", () => {
 			const tip = buildConflictChoiceRows(plan(1), STAMP)[0].tooltip ?? "";
-			const first = tip.split("\n")[0];
 
-			assert.match(first, /took in someone else's changes/, "何が起きたのかが書かれていない");
-			assert.match(first, /Translation memory/, "どのファイルの話かが書かれていない");
+			assert.equal(tip.split("\n")[0], "語0", "何の件かが最初に出ていない");
+			assert.doesNotMatch(tip, /AI|written|rewritten/i, "仕組みの説明が残っている");
+			assert.match(tip, /Choose which one to keep\./);
 		});
 
 		test("消した側は、誰が消したのかが読める（分かれる前の値を置かない）", () => {
@@ -161,9 +160,8 @@ suite("競合の解決（StatusTree の枝）", () => {
 
 			const tip = buildConflictChoiceRows(withDeletion, STAMP)[0].tooltip ?? "";
 
-			assert.match(tip, /they deleted it/, "相手が消したことが書かれていない");
-			assert.match(tip, /\(they deleted this entry\)/);
-			assert.match(tip, /the entry goes away/, "選ぶと何が起きるのかが書かれていない");
+			assert.match(tip, /deleted/, "相手が消したことが書かれていない");
+			assert.match(tip, /Taking theirs removes this entry\./, "選ぶと何が起きるのかが書かれていない");
 		});
 
 		test("Hover に両側と、分かれる前の値を置く", () => {
@@ -234,14 +232,23 @@ suite("競合の解決（ステータスバーの1行）", () => {
 	});
 
 	test("競合だけでも出る（他の件数が 0 でも隠れない）", () => {
-		const text = buildStatusBarText(counts({ conflicts: 3 }));
+		const text = buildStatusBarText(counts({ conflicts: 2, conflictDecisions: 3 }));
 
+		// 出すのは決める件数。ファイルの数は出さない
 		assert.match(text, /3/);
+		assert.doesNotMatch(text, /2/);
 		assert.ok(text.startsWith("$(git-merge)"), text);
 	});
 
+	test("まだ数えていなければ、数字を出さない（0 と言い切らない）", () => {
+		const text = buildStatusBarText(counts({ conflicts: 2 }));
+
+		assert.ok(text.startsWith("$(git-merge)"), text);
+		assert.doesNotMatch(text, /[0-9]/, text);
+	});
+
 	test("競合は他の件数より前に出る", () => {
-		const text = buildStatusBarText(counts({ conflicts: 1, pendingTranslation: 5 }));
+		const text = buildStatusBarText(counts({ conflicts: 1, conflictDecisions: 1, pendingTranslation: 5 }));
 
 		assert.ok(text.indexOf("1") < text.indexOf("5"), text);
 	});
@@ -282,7 +289,6 @@ suite("競合の解決（ステータスバーの1行）", () => {
 		test("合流で降ろされた行だけのときも、対象を名指ししない", () => {
 			const tip = buildConflictTooltip(counts({ conflicts: 3, conflictKinds: [] }));
 
-			assert.match(tip, /3/, tip);
 			assert.doesNotMatch(tip, /memory|glossary/i, tip);
 		});
 	});

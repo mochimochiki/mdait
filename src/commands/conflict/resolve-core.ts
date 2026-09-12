@@ -103,7 +103,7 @@ export async function prepareResolution(
 		try {
 			switch (file.kind) {
 				case "tm": {
-					const planned = planTmResolution(file.filePath);
+					const planned = planTmResolution(file.filePath, config.primaryLang);
 					if (planned) {
 						plans.push(planned.plan);
 						carried.set(file.filePath, { tm: planned.resolution });

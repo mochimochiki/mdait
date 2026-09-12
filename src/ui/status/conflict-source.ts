@@ -86,6 +86,16 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 	}
 }
 
+/**
+ * いま人が決める件数（覚え書きから同期で読む）。
+ *
+ * ステータスバーは同期で描くので、計画を作り直すのを待てない。まだ作っていなければ
+ * `undefined` を返し、呼び出し側は数を伏せる（0 と言い切らない）。
+ */
+export function pendingChoiceCount(): number | undefined {
+	return preparedCache?.summary.pendingTotal;
+}
+
 let preparedCache: PreparedResolution | undefined;
 let preparedStamp: string | undefined;
 let preparedDirty = true;
