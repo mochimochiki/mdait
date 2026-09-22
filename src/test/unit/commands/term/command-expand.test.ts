@@ -13,8 +13,10 @@ import { LangTerm, TermEntry } from "../../../../commands/term/term-entry";
 import type { TermExpander, TermExpansionContext } from "../../../../commands/term/term-expander";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
-import { describeUnusableBatches } from "../../../../commands/shared/guidance";
+import { NO_BATCHES } from "../../../../commands/shared/batch-failures";
+import { describeBatchFailures } from "../../../../commands/shared/guidance";
 import type { TransPair } from "../../../../infra/config/configuration";
+import { AiCallsStoppedError } from "../../../../infra/llm/ai-call-guard";
 import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 const transPair: TransPair = {
@@ -116,6 +118,7 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 		);
 
 		assert.equal(result.totalBatches, 2);
+		assert.equal(result.failedBatches, 1, "失敗したバッチを数えていること");
 		assert.equal(result.unusableBatches, 1, "使えなかったバッチを数えていること");
 		assert.equal(result.unusableReason, "invalid-format", "最初の理由を持ち帰っていること");
 		assert.deepEqual([...result.results], [["beta", "ベータ"]], "成功した分は残すこと");
@@ -123,13 +126,63 @@ suite("extractFromBatches（用語展開のバッチ抽出）", () => {
 
 	test("使えなかったバッチがあれば、通知に足す一文が組めること", () => {
 		// 完了通知はこの一文を足して警告として出す（足さないと「0 件展開」としか読めない）
-		const sentence = describeUnusableBatches({
+		const sentence = describeBatchFailures({
 			totalBatches: 2,
+			failedBatches: 1,
 			unusableBatches: 1,
 			unusableReason: "invalid-format",
 		});
 		assert.ok(sentence.length > 0, "一文が組めること");
-		assert.equal(describeUnusableBatches({ totalBatches: 2, unusableBatches: 0 }), "", "使えた回だけなら足さないこと");
+		assert.equal(describeBatchFailures({ ...NO_BATCHES, totalBatches: 2 }), "", "使えた回だけなら足さないこと");
+	});
+
+	test("答えが使えなかった以外の失敗も、成功したバッチがあるときに数えて通知の文に出すこと", async () => {
+		// 以前は「答えが使えなかった」ものしか数えておらず、1つでも成功したバッチがあると
+		// 通信の失敗や 429 は完了通知に一言も出なかった
+		const expander = new ScriptedExpander([
+			async () => {
+				throw new Error("429 Too Many Requests");
+			},
+			async () => new Map([["beta", "ベータ"]]),
+		]);
+
+		const result = await extractFromBatches(
+			transPair,
+			[createLargeContext("alpha"), createLargeContext("beta")],
+			undefined,
+			undefined,
+			expander,
+		);
+
+		assert.equal(result.totalBatches, 2);
+		assert.equal(result.failedBatches, 1, "失敗を理由を問わず数えること");
+		assert.equal(result.unusableBatches, 0);
+		assert.ok(describeBatchFailures(result).length > 0, "通知に足す一文が組めること");
+	});
+
+	test("歯止めが AI 呼び出しを止めたら、残りのバッチは投げずに打ち切ること", async () => {
+		const expander = new ScriptedExpander([
+			async () => new Map([["alpha", "アルファ"]]),
+			async () => {
+				throw new AiCallsStoppedError("stopped");
+			},
+			async () => new Map([["gamma", "ガンマ"]]),
+		]);
+
+		const result = await extractFromBatches(
+			transPair,
+			[createLargeContext("alpha"), createLargeContext("beta"), createLargeContext("gamma")],
+			undefined,
+			undefined,
+			expander,
+		);
+
+		assert.equal(expander.calls, 2, "止まったあとのバッチを投げないこと");
+		assert.equal(result.totalBatches, 2, "試したバッチだけを数えること");
+		assert.equal(result.failedBatches, 1);
+		assert.equal(result.stoppedMessage, "stopped", "止まったことを通知の文へ運ぶこと");
+		assert.deepEqual([...result.results], [["alpha", "アルファ"]], "止まる前の結果は残すこと");
+		assert.ok(describeBatchFailures(result).includes("stopped"), "通知の文に止まった理由が入ること");
 	});
 
 	test("AI呼び出し中のキャンセル（CancellationError）はエラーにせず、解決済みの部分結果を返すこと", async () => {
