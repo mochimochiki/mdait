@@ -300,7 +300,7 @@ src/lm-tools/
 ├── sync-tool.ts          # 同期ツール
 ├── translate-tool.ts     # 翻訳ツール
 ├── term-tool.ts          # 用語集ツール（detect/expand）
-├── tm-tool.ts            # 翻訳メモリツール（commit/optimize）
+├── tm-tool.ts            # 翻訳メモリツール（commit）
 ├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ├── ai-review-tool.ts     # AI翻訳レビューツール（need:reviewのトリアージ）
 ├── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）

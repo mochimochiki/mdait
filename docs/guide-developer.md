@@ -13,7 +13,7 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 | `mdait_sync { adopt?, align? }` | `#mdaitSync` | マーカー同期 | マーカー書換 |
 | `mdait_translate { path }` | `#mdaitTranslate` | 翻訳（ファイル／ディレクトリ） | 訳文書換・AI 使用 |
 | `mdait_term { action, path? }` | `#mdaitTerm` | 用語集の `detect` / `expand` | 用語集書換・AI 使用 |
-| `mdait_tm { action, path? }` | `#mdaitTm` | 翻訳メモリの `commit` / `optimize` | tmx 書換・AI 使用 |
+| `mdait_tm { action, path? }` | `#mdaitTm` | 翻訳メモリの `commit` | tmx 書換・AI 使用 |
 | `mdait_aiReview { path?, mode?, dryRun? }` | `#mdaitAiReview` | 対訳ペアの AI 判定（`pending` / `audit`） | マーカー書換・AI 使用 |
 | `mdait_adopt { dryRun?, buildGlossary?, buildTm? }` | `#mdaitAdopt` | 既存翻訳の取り込みウィザード | マーカー・用語集・tmx 書換・AI 使用 |
 | `mdait_resolve { path, action?, unitHashes?, needs? }` | `#mdaitResolve` | `need` フラグの裁定 | マーカー・本文書換。AI 不使用 |
