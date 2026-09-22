@@ -9,10 +9,13 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { getFileHandler } from "../../commands/file-handler/file-handler-factory";
-import type { DeclareIsolateResult } from "../../commands/markers/declare-isolate";
-import type { DeleteUnitResult } from "../../commands/markers/delete-unit";
 import { advanceAfterReview } from "../../commands/markers/needs-attention-next";
-import { describeKeepFailure } from "../../commands/markers/status-tree-need-handler";
+import {
+	declareIsolateAndReport,
+	deleteUnitAfterConfirm,
+	isSourcePath,
+	keepUnitAndReport,
+} from "../../commands/markers/unit-decision-actions";
 import { ALL_RESOLVABLE_NEEDS } from "../../commands/markers/resolve-need";
 import { showTranslationError } from "../../commands/shared/guidance";
 import { isRetranslatableUnit, transCommand, transUnitCommand } from "../../commands/trans/trans-command";
@@ -168,37 +171,11 @@ export async function codeLensKeepUnitCommand(range: vscode.Range): Promise<void
 			return;
 		}
 
-		const filePath = document.uri.fsPath;
-		const result = await getFileHandler(filePath).keepUnits(filePath, [marker.hash]);
-		if (result.kept.length === 0) {
-			vscode.window.showWarningMessage(describeKeepFailure(result.skipped[0]?.reason));
-			return;
-		}
-		vscode.window.showInformationMessage(
-			vscode.l10n.t("Unit kept as independent. It will no longer be matched against the source."),
-		);
+		await keepUnitAndReport(document.uri.fsPath, marker.hash);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to keep unit: {0}", errorMessage));
 	}
-}
-
-/** ユニット削除の失敗理由を人間可読なメッセージに変換する */
-function describeDeleteFailure(reason: DeleteUnitResult["reason"]): string {
-	if (reason === "not-verify-deletion") {
-		return vscode.l10n.t(
-			"This unit does not have need:verify-deletion. Only units flagged for deletion review can be deleted this way.",
-		);
-	}
-	return vscode.l10n.t("Unit not found.");
-}
-
-/** 凍結宣言の失敗理由を人間可読なメッセージに変換する */
-function describeIsolateFailure(reason: DeclareIsolateResult["reason"]): string {
-	if (reason === "need-already-set") {
-		return vscode.l10n.t("This unit already has a pending need. Resolve it first, then retry.");
-	}
-	return vscode.l10n.t("Unit not found.");
 }
 
 /**
@@ -220,27 +197,7 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 			return;
 		}
 
-		const confirmLabel = vscode.l10n.t("Delete");
-		const choice = await vscode.window.showWarningMessage(
-			vscode.l10n.t(
-				"Delete this unit from the document? This removes its content — recover via git history if needed.",
-			),
-			{ modal: true },
-			confirmLabel,
-		);
-		if (choice !== confirmLabel) {
-			return;
-		}
-
-		const result = await getFileHandler(document.uri.fsPath).deleteUnit(document.uri.fsPath, {
-			kind: "unit",
-			hash: marker.hash,
-		});
-		if (!result.deleted) {
-			vscode.window.showWarningMessage(describeDeleteFailure(result.reason));
-			return;
-		}
-		vscode.window.showInformationMessage(vscode.l10n.t("Unit deleted."));
+		await deleteUnitAfterConfirm(document.uri.fsPath, marker.hash);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to delete unit: {0}", errorMessage));
@@ -285,7 +242,7 @@ export function buildOtherActions(hasNeed: boolean, canRetranslate = false): Oth
 
 /**
  * CodeLens の「その他」メニュー（QuickPick）を開き、選択されたアクションを実行する。
- * 低頻度アクション（isolate 宣言・note 編集）を1つの CodeLens に集約し、
+ * 低頻度アクション（isolate 宣言・全文で訳し直す・note 編集）を1つの CodeLens に集約し、
  * マーカー行のボタン列が長くなるのを防ぐ（ADR-260719-01）。
  * 原文・訳文の双方で同じメニューを提供する（原文側 isolate は sync の伝播停止・ADR-260706-02）。
  *
@@ -306,7 +263,7 @@ export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<
 		}
 
 		// isolate の意味は方向で異なる（訳文は原文更新に追従しない・原文は訳文へ伝播しない）ため文言を分ける
-		const isSourceFile = isSourceDocument(document);
+		const isSourceFile = isSourcePath(document.uri.fsPath);
 
 		const items: OtherActionItem[] = buildOtherActions(
 			Boolean(marker.need),
@@ -345,7 +302,7 @@ export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<
 		}
 
 		if (picked.action === "isolate") {
-			await declareIsolateAtMarker(document.uri.fsPath, marker.hash, isSourceFile);
+			await declareIsolateAndReport(document.uri.fsPath, marker.hash);
 			return;
 		}
 		if (picked.action === "retranslate") {
@@ -363,40 +320,6 @@ export async function codeLensOtherActionsCommand(range: vscode.Range): Promise<
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		vscode.window.showErrorMessage(vscode.l10n.t("Failed to run the selected action: {0}", errorMessage));
 	}
-}
-
-/**
- * ドキュメントが原文（ソース）側かどうかを判定する。ワークスペース未設定等では訳文扱い。
- */
-function isSourceDocument(document: vscode.TextDocument): boolean {
-	try {
-		return new FileExplorer().isSourceFile(document.uri.fsPath, Configuration.getInstance());
-	} catch {
-		return false;
-	}
-}
-
-/**
- * 指定ユニットに need:isolate を宣言し、結果を通知する（「その他」メニューから利用）。
- *
- * @param absPath 対象ファイルの絶対パス
- * @param unitHash 宣言対象ユニットの hash
- * @param isSourceFile 原文側かどうか（通知文言の出し分けに使う）
- */
-async function declareIsolateAtMarker(absPath: string, unitHash: string, isSourceFile: boolean): Promise<void> {
-	const result = await getFileHandler(absPath).declareIsolate(absPath, {
-		kind: "unit",
-		hash: unitHash,
-	});
-	if (!result.declared) {
-		vscode.window.showWarningMessage(describeIsolateFailure(result.reason));
-		return;
-	}
-	vscode.window.showInformationMessage(
-		isSourceFile
-			? vscode.l10n.t("Unit marked as isolated. It will no longer propagate to the translations.")
-			: vscode.l10n.t("Unit marked as isolated. It will no longer follow source updates."),
-	);
 }
 
 /**
