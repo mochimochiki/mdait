@@ -35,6 +35,8 @@
  * @module core/unit-state/seat-keys
  */
 
+import { type AlignAnchor, selectMonotonicAnchors } from "../matching/interval-align";
+
 /** 整数部の桁数。固定でなければ文字列の順序と数の順序が一致しない */
 const INT_DIGITS = 8;
 
@@ -167,17 +169,24 @@ export function assignSeats(preferred: readonly (string | undefined)[]): string[
 	}
 
 	// 1. 据え置ける席だけを残す。並びが逆転しているもの（＝章が移動した）は手放す。
-	//    単調な最大部分列を取り直すこともできるが、移動した章はどのみちブロックが
-	//    書き換わるので、素直に前から見て通らないものを落とす
+	//    **残す席は最長増加部分列で選ぶ。** 前から見て通らないものを落とすやり方だと、
+	//    最後の章を先頭へ移しただけで先頭の席が基準になり、残りの章が全部席を手放す
+	//    （＝記事のブロックが丸ごと書き換わる）。最長の並びを残せば、動くのは移した章だけになる
 	const kept: Array<string | undefined> = new Array(count).fill(undefined);
-	let last: string | undefined;
+	const ranks = new Map<string, number>();
+	for (const seat of [...new Set(preferred.filter((s): s is string => s !== undefined && isSeatKey(s)))].sort()) {
+		ranks.set(seat, ranks.size);
+	}
+	const candidates: AlignAnchor[] = [];
 	for (let i = 0; i < count; i++) {
 		const seat = preferred[i];
-		if (seat === undefined || !isSeatKey(seat) || (last !== undefined && seat <= last)) {
-			continue;
+		const rank = seat === undefined ? undefined : ranks.get(seat);
+		if (rank !== undefined) {
+			candidates.push({ a: i, b: rank });
 		}
-		kept[i] = seat;
-		last = seat;
+	}
+	for (const { a } of selectMonotonicAnchors(candidates)) {
+		kept[a] = preferred[a];
 	}
 
 	// 2. 空いているところへ、前後のあいだのキーを配る
