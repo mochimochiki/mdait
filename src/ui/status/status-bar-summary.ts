@@ -122,7 +122,7 @@ export class StatusBarSummary implements vscode.Disposable {
 		const conflicts = collectWorkspaceConflicts(this.configuration);
 		return {
 			pendingTranslation: tree.countPendingTranslationUnits(scopeDirs),
-			needsAttention: tree.getNeedsAttentionUnits(scopeDirs).length,
+			needsAttention: tree.getNeedsAttentionItems(scopeDirs).length,
 			orphanTargets: tree.countOrphanTargetFiles(scopeDirs),
 			// 競合だけは選択中の transPair で絞らない。`.mdait` のファイルは
 			// ワークスペースに1つずつで、言語ペアに属さないため

@@ -87,12 +87,12 @@ function keyOf(item: NeedsAttentionItem): string {
 	}
 }
 
-/** ツリーが返すのと同じ順序（compareNeedsAttentionUnits 適用済み）のキューを作る */
+/** ツリーが返すのと同じ順序（compareNeedsAttentionItems 適用済み）のキューを作る */
 function buildQueue(files: FileStatusItem[]): NeedsAttentionItem[] {
 	const tree = new StatusItemTree();
 	try {
 		tree.buildTree(files, ["ja"]);
-		return tree.getNeedsAttentionUnits();
+		return tree.getNeedsAttentionItems();
 	} finally {
 		tree.dispose();
 	}

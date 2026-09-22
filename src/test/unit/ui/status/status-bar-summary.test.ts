@@ -49,7 +49,7 @@ suite("ステータスバーの常駐表示", () => {
 		} as unknown as Configuration;
 		const tree = {
 			countPendingTranslationUnits: () => 0,
-			getNeedsAttentionUnits: () => [],
+			getNeedsAttentionItems: () => [],
 			countOrphanTargetFiles: () => 0,
 		};
 		const statusManager = {

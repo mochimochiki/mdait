@@ -129,7 +129,7 @@ function collectSortedNeedsAttentionItems(): NeedsAttentionItem[] {
 	const config = Configuration.getInstance();
 	return StatusManager.getInstance()
 		.getStatusItemTree()
-		.getNeedsAttentionUnits(getSelectedScopeDirs(config));
+		.getNeedsAttentionItems(getSelectedScopeDirs(config));
 }
 
 /**
@@ -150,7 +150,7 @@ function resolveOrigin(line: number | undefined): NeedsAttentionOrigin | undefin
 /**
  * 起点より後ろにある最初の項目を探す。見つからなければ先頭へ回る（末尾で行き止まりにしない）。
  *
- * items は `compareNeedsAttentionUnits`（ファイルパス昇順→開始行昇順）でソート済みである
+ * items は `compareNeedsAttentionItems`（ファイルパス昇順→開始行昇順）でソート済みである
  * ことを前提とし、比較規則もそれに一致させる（行は `getNeedsAttentionLine` で読む。
  * frontmatter と非Markdown は 0 行目扱いなので、そのファイルの先頭に居るときは
  * カーソルが 0 行目なら「もう通り過ぎた」として次へ進む）。

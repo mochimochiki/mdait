@@ -736,18 +736,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * review / verify-deletion 待ちの項目（本文ユニット・frontmatter・非Markdown ファイル）を
 	 * クローン（isVirtualCopy: true）として返す（作り方は `toNeedsAttentionClone`）。
-	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
+	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionItems（VS Code非依存・単体テスト対象）に委譲する。
 	 */
 	private getNeedsAttentionChildren(): NeedsAttentionItem[] {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		return this.collectNeedsAttentionUnits().map((item) => toNeedsAttentionClone(item, workspaceFolder));
+		return this.collectNeedsAttentionItems().map((item) => toNeedsAttentionClone(item, workspaceFolder));
 	}
 
 	/**
 	 * 要対応項目を選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
 	 */
-	private collectNeedsAttentionUnits(): NeedsAttentionItem[] {
-		return this.statusItemTree.getNeedsAttentionUnits(
+	private collectNeedsAttentionItems(): NeedsAttentionItem[] {
+		return this.statusItemTree.getNeedsAttentionItems(
 			getSelectedScopeDirs(this.configuration),
 		);
 	}
@@ -761,7 +761,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * （ADR-260724-01）。
 	 */
 	private buildNeedsAttentionItem(): DirectoryStatusItem | undefined {
-		const count = this.collectNeedsAttentionUnits().length;
+		const count = this.collectNeedsAttentionItems().length;
 		if (count === 0) {
 			this.needsAttentionItem = undefined;
 			// 次に要対応が現れたときは、また展開した状態で見せる

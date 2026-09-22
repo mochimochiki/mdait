@@ -66,7 +66,7 @@ function needsAttentionKindRank(item: NeedsAttentionItem): number {
  * 表示の信頼に関わる（ADR-260724-01）。「次の要対応へ」コマンドもこの順序に従う。
  * frontmatter と非Markdown は行 0 なので、そのファイルの先頭に並ぶ。
  */
-export function compareNeedsAttentionUnits(a: NeedsAttentionItem, b: NeedsAttentionItem): number {
+export function compareNeedsAttentionItems(a: NeedsAttentionItem, b: NeedsAttentionItem): number {
 	if (a.filePath !== b.filePath) {
 		return a.filePath < b.filePath ? -1 : 1;
 	}
@@ -286,7 +286,7 @@ export class StatusItemTree {
 	/**
 	 * 人の裁定を待つ項目（本文ユニット・frontmatter・非Markdown ファイル）を歩く。
 	 *
-	 * `getNeedsAttentionUnits`（要対応ノード・「次へ」・ステータスバー）と
+	 * `getNeedsAttentionItems`（要対応ノード・「次へ」・ステータスバー）と
 	 * `countPendingReviewUnits`（sync 完了通知の件数）の**唯一の共通の走査**である。
 	 * 2つが別々に歩くと、片方だけ直したときに「通知は 3 件と言うのに要対応ノードは
 	 * 0 件で出ない」というずれが再発する。どちらも need の種類でしか絞らない。
@@ -304,9 +304,8 @@ export class StatusItemTree {
 	 * 「次の要対応へ」、ステータスバーの件数のデータソース。
 	 * escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
 	 *
-	 * 名前の「ユニット」は裁定の単位のことで、本文ユニットのほかに frontmatter と
-	 * 非Markdown ファイル（ファイル＝1ユニット）を含む（`NeedsAttentionItem`）。
-	 * 何を含め何を外すかは `walkNeedsAttentionItems` を見よ。
+	 * 本文ユニットのほかに frontmatter と非Markdown ファイル（ファイル＝1ユニット）を含む
+	 * （`NeedsAttentionItem`）。何を含め何を外すかは `walkNeedsAttentionItems` を見よ。
 	 *
 	 * @param scopeDirs 集約対象を限定するディレクトリ（絶対パス）の集合。
 	 *   ツリー本体が選択中の transPair だけを表示するため、要対応も同じ範囲に揃える
@@ -315,8 +314,8 @@ export class StatusItemTree {
 	 *   非Markdown は行 0 としてそのファイルの先頭）。同じ状態なら常に同じ並びになることを
 	 *   保証する（並びの揺れは表示上の信頼を損なうため）。
 	 */
-	public getNeedsAttentionUnits(scopeDirs?: string[]): NeedsAttentionItem[] {
-		return Array.from(this.walkNeedsAttentionItems(scopeDirs)).sort(compareNeedsAttentionUnits);
+	public getNeedsAttentionItems(scopeDirs?: string[]): NeedsAttentionItem[] {
+		return Array.from(this.walkNeedsAttentionItems(scopeDirs)).sort(compareNeedsAttentionItems);
 	}
 
 	/**
@@ -364,7 +363,7 @@ export class StatusItemTree {
 	 * `verify-deletion` は数えない。あれは「原文が消えた訳文を捨ててよいか」という人にしか
 	 * 決められない問いで、AI レビューの対象（訳が原文に合っているか）ではない。
 	 *
-	 * 走査は `getNeedsAttentionUnits` と同じ（`walkNeedsAttentionItems`）。この件数と
+	 * 走査は `getNeedsAttentionItems` と同じ（`walkNeedsAttentionItems`）。この件数と
 	 * 要対応ノードの中身は「verify-deletion を含むかどうか」しか違わない — 孤立訳文や
 	 * 原文側の扱いを片方だけ変えると、通知の件数とノードの件数がまたずれる。
 	 *

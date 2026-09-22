@@ -45,7 +45,7 @@ export interface PendingReviewCollection {
  *
  * 並びはファイルパス昇順に固定する。ツリーの走査順（スキャン順）に任せると、
  * 同じ状態でも起動ごとに進捗の順が変わって見え、レポートの並びも揺れる。
- * ロケール依存の比較は使わない（`compareNeedsAttentionUnits` と同じ理由）。
+ * ロケール依存の比較は使わない（`compareNeedsAttentionItems` と同じ理由）。
  */
 export function collectPendingReviewFiles(files: readonly PendingReviewFileLike[]): PendingReviewCollection {
 	const paths = new Set<string>();
