@@ -19,7 +19,7 @@ import { choiceOfConflictRow, fingerprintOfKey, filePathOfConflictRow } from "..
 import { collectPendingChoices, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 import { decisionsFor, forgetDecisions, rememberDecision } from "./conflict-decisions";
 import type { ChoiceSide } from "./resolution-plan";
-import { applyDecidedResolution } from "./resolve-core";
+import { applyDecidedResolution, undecidedCount } from "./resolve-core";
 
 const logger = Logger.getInstance();
 
@@ -52,7 +52,8 @@ export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceS
 
 	// **ここでは1バイトも書かない。** 書くのは人が `解決` を押したときだけである。
 	// 覚え書きも捨てない — 計画は動いていないので、読み直させると用語集と TM を
-	// 解き直すだけで何も変わらない（行の数え上げは預かりを引いて出す）
+	// 解き直すだけで何も変わらない（行の数え上げは預かりを引いて出す）。呼び出し側も
+	// 描き直すだけにする（`extension.ts`）
 	rememberDecision(target.filePath, stamp, target.key, side);
 }
 
@@ -77,16 +78,14 @@ export async function resolveDecidedFile(filePath: string | undefined): Promise<
 		return;
 	}
 
-	const decided = decisionsFor(filePath, stamp);
-	const remaining = plan.pending.filter((item) => !decided.has(item.key)).length;
-	if (remaining > 0) {
+	if (undecidedCount(plan, prepared) > 0) {
 		// 決まっていない件がある。**押せるはずの無いときに押された** — 数え直させて黙る
 		invalidateWorkspaceConflicts();
 		return;
 	}
 
 	try {
-		const outcome = await applyDecidedResolution(plan, prepared, config, decided);
+		const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(filePath, stamp));
 		if (outcome.error) {
 			// **書けなかったのに預かりを捨てない。** 捨てると、競合は残ったまま人の
 			// 選択だけが消え、何も言われないまま最初からやり直しになる

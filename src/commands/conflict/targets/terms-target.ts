@@ -14,25 +14,21 @@
  * @module commands/conflict/targets/terms-target
  */
 import * as fs from "node:fs";
-import { splitConflictedFile } from "../../../core/conflict/conflict-sections";
-import { type KeyedEntry, mergeByKey } from "../../../core/conflict/key-merge";
+import { mergeFieldMaps } from "../../../core/conflict/key-merge";
 import type { LangTerm, TermEntry } from "../../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../../term/term-entry";
 import type { TermsRepository } from "../../term/terms-repository";
-import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
-
-/** 判定に必要な材料 */
-interface TermSides {
-	ours: Map<string, TermEntry>;
-	theirs: Map<string, TermEntry>;
-	base?: Map<string, TermEntry>;
-}
+import type { ChoiceSide, ResolutionPlan } from "../resolution-plan";
+import {
+	type KeyedResolution,
+	countUndecided,
+	finalEntries,
+	planKeyedResolution,
+	splitForResolution,
+} from "./keyed-target";
 
 /** 解いた結果を組み立てるための持ち物 */
-export interface TermsResolution {
-	sides: TermSides;
-	resolved: Map<string, TermEntry>;
-}
+export type TermsResolution = KeyedResolution<TermEntry>;
 
 /** リポジトリの中の鍵と同じ作り（主言語の用語 + 文脈） */
 function entryKey(entry: TermEntry, primaryLang: string): string {
@@ -45,10 +41,7 @@ function sameVariants(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /** 言語1つぶんが同じか */
-function sameLang(a: LangTerm | undefined, b: LangTerm | undefined): boolean {
-	if (!a || !b) {
-		return a === b;
-	}
+function sameLang(a: LangTerm, b: LangTerm): boolean {
 	return a.term === b.term && sameVariants(a.variants, b.variants);
 }
 
@@ -59,7 +52,9 @@ function sameEntry(a: TermEntry, b: TermEntry): boolean {
 	}
 	const langs = new Set([...Object.keys(a.languages), ...Object.keys(b.languages)]);
 	for (const lang of langs) {
-		if (!sameLang(a.languages[lang], b.languages[lang])) {
+		const mine = a.languages[lang];
+		const yours = b.languages[lang];
+		if (!mine || !yours ? mine !== yours : !sameLang(mine, yours)) {
 			return false;
 		}
 	}
@@ -83,66 +78,46 @@ function describe(entry: TermEntry, primaryLang: string): string {
 	return entry.context ? `${body} — ${entry.context}` : body;
 }
 
+const languageMap = (entry: TermEntry) => new Map(Object.entries(entry.languages));
+
 /**
  * **言語ごとに触った先が別なら、両方採る。**
  *
  * 片方が ja の訳語を、片方が fr の訳語を足しただけの形がこれにあたる。二択で解かせると
- * 片方の言語がまるごと消える。同じ言語を2人が別々に直していたら `undefined` を返す。
+ * 片方の言語がまるごと消える。言語を鍵にして語と同じ規則で突き合わせ、同じ言語を2人が
+ * 別々に直していたら `undefined` を返す。
  */
 function mergeLanguages(ours: TermEntry, theirs: TermEntry, base: TermEntry | undefined): TermEntry | undefined {
 	if (ours.context !== theirs.context) {
 		return undefined; // 文脈そのものが違う。機械では決められない
 	}
-	const langs = new Set([...Object.keys(ours.languages), ...Object.keys(theirs.languages)]);
-	const merged: Record<string, LangTerm> = { ...ours.languages };
-	for (const lang of langs) {
-		const mine = ours.languages[lang];
-		const yours = theirs.languages[lang];
-		const ancestor = base?.languages[lang];
-
-		// **片方にしか無い言語。** 祖先に無ければ「足した」なので採る。祖先に在れば
-		// 「消した」なので、残っている側が祖先のままなら消す。残っている側も直していたら
-		// 「消した」と「直した」がぶつかっているので、語ごと人に決めてもらう
-		if (!mine || !yours) {
-			const present = mine ?? yours;
-			if (!present) {
-				continue;
-			}
-			if (!ancestor) {
-				merged[lang] = present;
-				continue;
-			}
-			if (sameLang(present, ancestor)) {
-				delete merged[lang];
-				continue;
-			}
-			return undefined;
-		}
-		if (sameLang(mine, yours)) {
-			continue;
-		}
-		if (ancestor) {
-			if (sameLang(mine, ancestor)) {
-				merged[lang] = yours;
-				continue;
-			}
-			if (sameLang(yours, ancestor)) {
-				continue;
-			}
-		}
-		return undefined; // 2人が同じ言語の訳語を別々に直した。人が決める
+	const merged = mergeFieldMaps(languageMap(ours), languageMap(theirs), base && languageMap(base), sameLang);
+	if (!merged) {
+		return undefined;
 	}
-	if (Object.keys(merged).length === 0) {
-		return undefined; // 訳語が1つも残らない。畳まずに人へ回す
+	// 言語の並びは自分の側の順を保つ（YAML の書き出しはこの順に並ぶ）
+	const order = [...new Set([...Object.keys(ours.languages), ...Object.keys(theirs.languages)])];
+	const languages: Record<string, LangTerm> = {};
+	for (const lang of order) {
+		const term = merged.get(lang);
+		if (term) {
+			languages[lang] = term;
+		}
 	}
-	return TermEntryUtils.create(ours.context, merged);
+	return TermEntryUtils.create(ours.context, languages);
 }
 
-const toKeyed = (entries: readonly TermEntry[], primaryLang: string): KeyedEntry<TermEntry>[] =>
-	entries.map((value) => ({ key: entryKey(value, primaryLang), value }));
-
-const toMap = (entries: readonly TermEntry[], primaryLang: string): Map<string, TermEntry> =>
-	new Map(entries.map((entry) => [entryKey(entry, primaryLang), entry]));
+const toMap = (entries: readonly TermEntry[], primaryLang: string): Map<string, TermEntry> => {
+	// 同じ鍵が2度来たら先に来たほうを残す（鍵の突き合わせと同じ規則）
+	const map = new Map<string, TermEntry>();
+	for (const entry of entries) {
+		const key = entryKey(entry, primaryLang);
+		if (!map.has(key)) {
+			map.set(key, entry);
+		}
+	}
+	return map;
+};
 
 /**
  * 用語集の競合を読み、決定的に決まるものと決まらないものに分ける。**1バイトも書かない。**
@@ -157,9 +132,8 @@ export async function planTermsResolution(
 	repository: TermsRepository,
 	primaryLang: string,
 ): Promise<{ plan: ResolutionPlan; resolution: TermsResolution } | undefined> {
-	const content = fs.readFileSync(filePath, "utf-8");
-	const split = splitConflictedFile(content);
-	if (!split.conflicted) {
+	const split = splitForResolution(fs.readFileSync(filePath, "utf-8"));
+	if (!split) {
 		return undefined;
 	}
 
@@ -167,41 +141,17 @@ export async function planTermsResolution(
 	const theirs = await repository.loadSide(split.theirs);
 	const ours = await repository.loadSide(split.ours);
 
-	const merged = mergeByKey(
-		toKeyed(ours, primaryLang),
-		toKeyed(theirs, primaryLang),
-		base ? toKeyed(base, primaryLang) : undefined,
-		{ sameValue: sameEntry, mergeFields: mergeLanguages },
-	);
-
-	const pending: PendingChoice[] = merged.undecided.map((item) => ({
-		key: item.key,
-		label: TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
-		// 消した側には見せる値が無い。祖先の値を置かず**空にする**（出す言葉は表示する側が決める）
-		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
-		baseText: item.base ? describe(item.base, primaryLang) : undefined,
-		oursDeleted: item.oursDeleted,
-		theirsDeleted: item.theirsDeleted,
-	}));
-
-	return {
-		plan: {
-			kind: "terms",
-			filePath,
-			autoResolvedCount: merged.resolved.length,
-			deletedCount: merged.deleted.length,
-			pending,
-		},
-		resolution: {
-			sides: {
-				ours: toMap(ours, primaryLang),
-				theirs: toMap(theirs, primaryLang),
-				base: base ? toMap(base, primaryLang) : undefined,
-			},
-			resolved: new Map(merged.resolved.map((r) => [r.key, r.value])),
-		},
+	const sides = {
+		ours: toMap(ours, primaryLang),
+		theirs: toMap(theirs, primaryLang),
+		base: base ? toMap(base, primaryLang) : undefined,
 	};
+	return planKeyedResolution("terms", filePath, sides, {
+		sameValue: sameEntry,
+		mergeFields: mergeLanguages,
+		describe: (entry) => describe(entry, primaryLang),
+		labelOf: (item) => TermEntryUtils.getTerm(item.ours, primaryLang) ?? item.key,
+	});
 }
 
 /**
@@ -216,25 +166,10 @@ export async function applyTermsResolution(
 	repository: TermsRepository,
 	decided: ReadonlyMap<string, ChoiceSide>,
 ): Promise<{ remainingCount: number }> {
-	const undecided = plan.pending.filter((item) => !decided.has(item.key));
-	if (undecided.length > 0) {
-		return { remainingCount: undecided.length };
+	const final = finalEntries(plan, resolution, decided);
+	if (!final) {
+		return { remainingCount: countUndecided(plan, decided) };
 	}
-
-	const final = new Map(resolution.resolved);
-	for (const item of plan.pending) {
-		const side = decided.get(item.key) as ChoiceSide;
-		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
-		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
-			final.delete(item.key);
-			continue;
-		}
-		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);
-		if (chosen) {
-			final.set(item.key, chosen);
-		}
-	}
-
 	await repository.writeResolved([...final.values()]);
 	return { remainingCount: 0 };
 }

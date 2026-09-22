@@ -20,7 +20,7 @@ import {
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
-import { undecidedCount } from "../../../../ui/status/conflict-source";
+import { type PreparedResolution, undecidedCount } from "../../../../commands/conflict/resolve-core";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
@@ -166,16 +166,22 @@ suite("競合の解決（StatusTree の枝）", () => {
 			})),
 		});
 
+		/** 計画を作ったときの見た目だけを持つ、最小の「準備済みの解決」 */
+		const preparedWith = (filePath: string, stamp?: string) =>
+			({
+				stamps: new Map(stamp === undefined ? [] : [[filePath, stamp]]),
+			}) as unknown as PreparedResolution;
+
 		test("決めた分だけ、残りの件数が減る", () => {
 			// 根の数字は「判断を待っている件数」と名乗っている。決めても減らないと嘘になる
 			const target = plan(3);
-			const stamp = "s";
+			const prepared = preparedWith(target.filePath, "s");
 
-			assert.equal(undecidedCount(target, stamp), 3);
-			rememberDecision(target.filePath, stamp, "k0", "ours");
-			rememberDecision(target.filePath, stamp, "k1", "theirs");
+			assert.equal(undecidedCount(target, prepared), 3);
+			rememberDecision(target.filePath, "s", "k0", "ours");
+			rememberDecision(target.filePath, "s", "k1", "theirs");
 
-			assert.equal(undecidedCount(target, stamp), 1);
+			assert.equal(undecidedCount(target, prepared), 1);
 		});
 
 		test("計画の見た目が分からなければ、決めた分を差し引かない", () => {
@@ -183,7 +189,7 @@ suite("競合の解決（StatusTree の枝）", () => {
 			const target = plan(3);
 			rememberDecision(target.filePath, "s", "k0", "ours");
 
-			assert.equal(undecidedCount(target, undefined), 3);
+			assert.equal(undecidedCount(target, preparedWith(target.filePath)), 3);
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {

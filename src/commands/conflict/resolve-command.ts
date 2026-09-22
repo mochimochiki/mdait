@@ -17,7 +17,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { notifyWithReport, writeReport } from "../shared/report-file";
 import { buildConflictReport } from "./resolve-report";
-import { type PreparedResolution, decidedFor, executeResolution, prepareResolution } from "./resolve-core";
+import { type PreparedResolution, executeResolution, prepareResolution, undecidedCount } from "./resolve-core";
 import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 
 /**
@@ -33,12 +33,22 @@ async function confirm(prepared: PreparedResolution): Promise<boolean> {
 	const { wholeFileCount, plans } = prepared.summary;
 	// 数えるのは**まだ決まっていない件**。ツリーで決めたぶんはこの実行で書かれるので、
 	// 「あなたが決める」に数えると、もう済んだ仕事をもう一度求めることになる
-	const undecided = (plan: (typeof plans)[number]) =>
-		plan.pending.filter((item) => !decidedFor(plan, prepared).has(item.key)).length;
-	const pendingTotal = plans.reduce((sum, plan) => sum + undecided(plan), 0);
+	const pendingTotal = plans.reduce((sum, plan) => sum + undecidedCount(plan, prepared), 0);
 	// **この実行で書ける対象だけを約束する。** 決まらない件が1つでもある対象は1バイトも
 	// 書かないので、その名前を「書き換える」に並べると、起きないことを言うことになる
-	const writable = plans.filter((plan) => plan.wholeFile === true || undecided(plan) === 0);
+	const writable = plans.filter((plan) => plan.wholeFile === true || undecidedCount(plan, prepared) === 0);
+	if (writable.length === 0) {
+		// 書けるものが1つも無い。「解決」を押させても何も起きないので、決める場所へ案内する
+		const open = vscode.l10n.t("Open the list");
+		const answer = await vscode.window.showInformationMessage(
+			vscode.l10n.t("Decide {0} more to write.", pendingTotal),
+			open,
+		);
+		if (answer === open) {
+			void vscode.commands.executeCommand("mdait.status.focus");
+		}
+		return false;
+	}
 	const files = writable.map((plan) => path.basename(plan.filePath)).join(", ");
 	const automatic = writable.reduce((sum, plan) => sum + plan.autoResolvedCount, 0);
 
@@ -126,21 +136,25 @@ export async function executeResolveConflicts(): Promise<void> {
 	// 解いたぶんファイルが変わったので、数え直させる
 	invalidateWorkspaceConflicts();
 
-	const report = buildConflictReport(prepared.summary, outcomes);
+	const report = buildConflictReport(prepared, outcomes);
 	const uri = await writeReport(config, "conflict", report);
 	const remaining = outcomes.reduce((sum, outcome) => sum + outcome.remainingCount, 0);
 	// **書けなかった対象と、読めなかった対象を数に入れる。** 入れないと、書き込みが
-	// 失敗しても「全部解決しました」と出る
-	const unfinished =
-		outcomes.filter((outcome) => outcome.error !== undefined || outcome.skipped === true).length +
-		prepared.summary.failures.length;
+	// 失敗しても「全部解決しました」と出る。取り消して手を付けなかった対象は別に数える —
+	// 書こうとして失敗したのではない
+	const failed =
+		outcomes.filter((outcome) => outcome.error !== undefined).length + prepared.summary.failures.length;
+	const skipped = outcomes.filter((outcome) => outcome.skipped === true).length;
+	const unfinished = failed + skipped;
 
 	notifyWithReport(
-		unfinished > 0
-			? vscode.l10n.t("Could not write {0} file(s).", unfinished)
-			: remaining > 0
-				? vscode.l10n.t("Decide {0} more to write.", remaining)
-				: vscode.l10n.t("Resolved the merge conflicts."),
+		failed > 0
+			? vscode.l10n.t("Could not write {0} file(s).", failed)
+			: skipped > 0
+				? vscode.l10n.t("Cancelled. {0} file(s) were left unchanged.", skipped)
+				: remaining > 0
+					? vscode.l10n.t("Decide {0} more to write.", remaining)
+					: vscode.l10n.t("Resolved the merge conflicts."),
 		uri,
 		unfinished > 0 || remaining > 0 ? "warning" : "info",
 		// 残っているときだけ、次の一手（一覧を開く）をレポートより前に置く

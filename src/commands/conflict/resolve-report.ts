@@ -14,10 +14,11 @@
  */
 import * as vscode from "vscode";
 import { conflictSideText, conflictTargetLabel } from "./conflict-labels";
-import type { ConflictResolutionPlan, ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
+import type { ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
+import { type PreparedResolution, decidedFor } from "./resolve-core";
 
-/** 決まらずに残った件を一覧にする */
-function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): string[] {
+/** 決まらずに残った件を一覧にする。**ツリーで決めた件は並べない**（もう済んだ仕事である） */
+function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome, prepared: PreparedResolution): string[] {
 	if (outcome.remainingCount === 0) {
 		return [];
 	}
@@ -31,7 +32,8 @@ function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome): str
 		`| ${vscode.l10n.t("Entry")} | ${vscode.l10n.t("Yours")} | ${vscode.l10n.t("Theirs")} |`,
 		"|---|---|---|",
 	];
-	for (const item of plan.pending) {
+	const decided = decidedFor(plan, prepared);
+	for (const item of plan.pending.filter((candidate) => !decided.has(candidate.key))) {
 		const ours = escapeCell(conflictSideText(item, "ours"));
 		const theirs = escapeCell(conflictSideText(item, "theirs"));
 		lines.push(`| ${escapeCell(item.label)} | ${ours} | ${theirs} |`);
@@ -47,13 +49,11 @@ function escapeCell(text: string): string {
 /**
  * レポートの本文を組み立てる。
  *
- * @param summary 実行前の計画
+ * @param prepared 実行前の計画
  * @param outcomes 対象ごとの結果
  */
-export function buildConflictReport(
-	summary: ConflictResolutionPlan,
-	outcomes: readonly ResolutionOutcome[],
-): string {
+export function buildConflictReport(prepared: PreparedResolution, outcomes: readonly ResolutionOutcome[]): string {
+	const { summary } = prepared;
 	const lines: string[] = [`# ${vscode.l10n.t("Merge conflict resolution")}`, ""];
 
 	const remainingTotal = outcomes.reduce((sum, outcome) => sum + outcome.remainingCount, 0);
@@ -96,8 +96,9 @@ export function buildConflictReport(
 			vscode.l10n.t("- Entries kept without a decision: {0}", outcome.autoResolvedCount),
 			vscode.l10n.t("- File rewritten: {0}", outcome.written ? vscode.l10n.t("yes") : vscode.l10n.t("no")),
 		);
-		if (plan && plan.deletedCount > 0) {
-			lines.push(vscode.l10n.t("- Entries the other side deleted: {0}", plan.deletedCount));
+		// 消したのがどちらの側でも数える。書かなかった対象では、まだ何も消えていない
+		if (outcome.written && plan && plan.deletedCount > 0) {
+			lines.push(vscode.l10n.t("- Entries deleted on one side: {0}", plan.deletedCount));
 		}
 		if (outcome.unseatedCount && outcome.unseatedCount > 0) {
 			lines.push(
@@ -109,7 +110,7 @@ export function buildConflictReport(
 		}
 
 		if (plan) {
-			lines.push(...remainingSection(plan, outcome));
+			lines.push(...remainingSection(plan, outcome, prepared));
 		}
 		lines.push("");
 	}

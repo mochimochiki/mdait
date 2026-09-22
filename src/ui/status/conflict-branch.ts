@@ -50,6 +50,11 @@ export function isConflictFileRowId(directoryPath: string): boolean {
 	return directoryPath.startsWith(CONFLICT_FILE_PREFIX);
 }
 
+/** 競合したファイルの行の識別子 */
+export function conflictFileRowId(filePath: string): string {
+	return `${CONFLICT_FILE_PREFIX}${filePath}`;
+}
+
 /** ファイルの行の識別子から、そのファイルの絶対パスを取り出す */
 export function filePathOfConflictRow(directoryPath: string): string | undefined {
 	return directoryPath.startsWith(CONFLICT_FILE_PREFIX) ? directoryPath.slice(CONFLICT_FILE_PREFIX.length) : undefined;
@@ -153,7 +158,7 @@ export function buildConflictRows(
 					: conflictTargetLabel(file.filePath),
 			description: ready ? vscode.l10n.t("all decided") : undefined,
 			status: Status.Error,
-			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
+			directoryPath: conflictFileRowId(file.filePath),
 			contextValue: ready ? "mdaitConflictFileDecided" : "mdaitConflictFile",
 			tooltip: ready
 				? `${shortPath(file.filePath)}\n\n${vscode.l10n.t("Every conflict in this file has been decided. Press Resolve to write them back.")}`

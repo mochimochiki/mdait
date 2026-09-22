@@ -12,18 +12,20 @@
  * @module commands/conflict/targets/tm-target
  */
 import * as fs from "node:fs";
-import { splitConflictedFile } from "../../../core/conflict/conflict-sections";
-import { type KeyedEntry, mergeByKey } from "../../../core/conflict/key-merge";
+import { mergeFieldMaps } from "../../../core/conflict/key-merge";
 import { TmxStore } from "../../../core/tm/tmx-store";
-import type { TmEntry } from "../../../core/tm/types";
-import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
+import type { TmEntry, TmVariant } from "../../../core/tm/types";
+import type { ChoiceSide, ResolutionPlan } from "../resolution-plan";
+import {
+	type KeyedResolution,
+	countUndecided,
+	finalEntries,
+	planKeyedResolution,
+	splitForResolution,
+} from "./keyed-target";
 
-/** 判定に必要な材料を、計画の外へ持ち出さずに抱えておく */
-interface TmSides {
-	ours: Map<string, TmEntry>;
-	theirs: Map<string, TmEntry>;
-	base?: Map<string, TmEntry>;
-}
+/** 解いた結果を組み立てるための持ち物（計画と一緒に持ち回る） */
+export type TmResolution = KeyedResolution<TmEntry>;
 
 /**
  * TU を人が読める1行にする。
@@ -45,13 +47,16 @@ function describe(entry: TmEntry, primaryLang: string): string {
 	return translations.map(([lang, variant]) => `${lang}: ${variant.text ?? ""}`).join(" / ");
 }
 
+const sameVariant = (a: TmVariant, b: TmVariant) => JSON.stringify(a) === JSON.stringify(b);
+
 /** 2つの TU が同じか（＝どちらを採っても結果が変わらないか） */
 function sameEntry(a: TmEntry, b: TmEntry): boolean {
 	if (a.primary !== b.primary || a.variants.size !== b.variants.size) {
 		return false;
 	}
 	for (const [lang, variant] of a.variants) {
-		if (JSON.stringify(variant) !== JSON.stringify(b.variants.get(lang))) {
+		const other = b.variants.get(lang);
+		if (!other || !sameVariant(variant, other)) {
 			return false;
 		}
 	}
@@ -63,63 +68,15 @@ function sameEntry(a: TmEntry, b: TmEntry): boolean {
  *
  * 同じ原文に、片方が ja の訳を、片方が fr の訳を登録した形がこれにあたる。TU としては
  * 「同じ tuid に別の値」だが、**訳が重なっていない**ので二択で解かせるとどちらかの言語が
- * まるごと消える。重なっていたら `undefined` を返して人に決めてもらう。
+ * まるごと消える。言語を鍵にして TU と同じ規則で突き合わせ、重なっていたら `undefined` を
+ * 返して人に決めてもらう。
  */
 function mergeVariants(ours: TmEntry, theirs: TmEntry, base: TmEntry | undefined): TmEntry | undefined {
 	if (ours.primary !== theirs.primary) {
 		return undefined; // 同じ tuid で原文が違う（衝突か正規化の揺れ）。機械では決められない
 	}
-	const langs = new Set([...ours.variants.keys(), ...theirs.variants.keys()]);
-	const merged = new Map(ours.variants);
-	for (const lang of langs) {
-		const mine = ours.variants.get(lang);
-		const yours = theirs.variants.get(lang);
-		const ancestor = base?.variants.get(lang);
-
-		// **片方にしか無い言語。** 祖先に無ければ「足した」なので採る。祖先に在れば
-		// 「消した」なので、残っている側が祖先のままなら消す。残っている側も直していたら
-		// 「消した」と「直した」がぶつかっているので、TU ごと人に決めてもらう
-		if (mine === undefined || yours === undefined) {
-			const present = (mine ?? yours) as NonNullable<typeof mine>;
-			if (ancestor === undefined) {
-				merged.set(lang, present);
-				continue;
-			}
-			if (JSON.stringify(present) === JSON.stringify(ancestor)) {
-				merged.delete(lang);
-				continue;
-			}
-			return undefined;
-		}
-		if (JSON.stringify(mine) === JSON.stringify(yours)) {
-			continue;
-		}
-		// 同じ言語に別の訳。祖先を見て片方だけが変えたなら、変えたほうを採る
-		if (ancestor !== undefined) {
-			if (JSON.stringify(mine) === JSON.stringify(ancestor)) {
-				merged.set(lang, yours);
-				continue;
-			}
-			if (JSON.stringify(yours) === JSON.stringify(ancestor)) {
-				continue;
-			}
-		}
-		return undefined; // 2人が同じ言語の訳を別々に直した。人が決める
-	}
-	if (merged.size === 0) {
-		return undefined; // 訳が1つも残らない。畳まずに人へ回す
-	}
-	return { tuid: ours.tuid, primary: ours.primary, variants: merged };
-}
-
-const toEntries = (index: Map<string, TmEntry>): KeyedEntry<TmEntry>[] =>
-	[...index.entries()].map(([key, value]) => ({ key, value }));
-
-/** 解いた結果を組み立てるための持ち物（計画と一緒に持ち回る） */
-export interface TmResolution {
-	sides: TmSides;
-	/** 決定的に決まった分 */
-	resolved: Map<string, TmEntry>;
+	const variants = mergeFieldMaps(ours.variants, theirs.variants, base?.variants, sameVariant);
+	return variants ? { tuid: ours.tuid, primary: ours.primary, variants } : undefined;
 }
 
 /**
@@ -131,44 +88,21 @@ export function planTmResolution(
 	filePath: string,
 	primaryLang = "",
 ): { plan: ResolutionPlan; resolution: TmResolution } | undefined {
-	const xml = fs.readFileSync(filePath, "utf-8");
-	const split = splitConflictedFile(xml);
-	if (!split.conflicted) {
+	const split = splitForResolution(fs.readFileSync(filePath, "utf-8"));
+	if (!split) {
 		return undefined;
 	}
-
-	const sides: TmSides = {
+	const sides = {
 		ours: TmxStore.parseSide(split.ours),
 		theirs: TmxStore.parseSide(split.theirs),
 		base: split.base ? TmxStore.parseSide(split.base) : undefined,
 	};
-	const merged = mergeByKey(toEntries(sides.ours), toEntries(sides.theirs), sides.base ? toEntries(sides.base) : undefined, {
+	return planKeyedResolution("tm", filePath, sides, {
 		sameValue: sameEntry,
 		mergeFields: mergeVariants,
+		describe: (entry) => describe(entry, primaryLang),
+		labelOf: (item) => item.ours.primary,
 	});
-
-	const pending: PendingChoice[] = merged.undecided.map((item) => ({
-		key: item.key,
-		label: item.ours.primary,
-		// 消した側には見せる値が無い。祖先の値を置かず**空にする** — 値を出すと、
-		// その側を採れば値が戻ると読めてしまう。出す言葉は表示する側が決める
-		oursText: item.oursDeleted ? "" : describe(item.ours, primaryLang),
-		theirsText: item.theirsDeleted ? "" : describe(item.theirs, primaryLang),
-		baseText: item.base ? describe(item.base, primaryLang) : undefined,
-		oursDeleted: item.oursDeleted,
-		theirsDeleted: item.theirsDeleted,
-	}));
-
-	return {
-		plan: {
-			kind: "tm",
-			filePath,
-			autoResolvedCount: merged.resolved.length,
-			deletedCount: merged.deleted.length,
-			pending,
-		},
-		resolution: { sides, resolved: new Map(merged.resolved.map((r) => [r.key, r.value])) },
-	};
 }
 
 /**
@@ -186,27 +120,10 @@ export function applyTmResolution(
 	resolution: TmResolution,
 	decided: ReadonlyMap<string, ChoiceSide>,
 ): { remainingCount: number } {
-	const undecided = plan.pending.filter((item) => !decided.has(item.key));
-	if (undecided.length > 0) {
-		// 決まらない件が1つでもあれば、ファイルは競合マーカーの入ったまま残す。
-		// 半端に書き戻すと、残った件の両側がディスクから消える。**入れ物も作らない**
-		return { remainingCount: undecided.length };
+	const final = finalEntries(plan, resolution, decided);
+	if (!final) {
+		return { remainingCount: countUndecided(plan, decided) };
 	}
-
-	const final = new Map(resolution.resolved);
-	for (const item of plan.pending) {
-		const side = decided.get(item.key) as ChoiceSide;
-		// 消した側を採ったなら、**消えたままにする**（祖先の値を書き戻さない）
-		if (side === "ours" ? item.oursDeleted : item.theirsDeleted) {
-			final.delete(item.key);
-			continue;
-		}
-		const chosen = (side === "ours" ? resolution.sides.ours : resolution.sides.theirs).get(item.key);
-		if (chosen) {
-			final.set(item.key, chosen);
-		}
-	}
-
 	TmxStore.getInstance(filePath).writeResolved(filePath, final);
 	return { remainingCount: 0 };
 }

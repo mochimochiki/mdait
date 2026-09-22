@@ -79,6 +79,29 @@ suite("翻訳メモリの競合を解く", () => {
 		assert.equal(planned.plan.autoResolvedCount, 2);
 	});
 
+	test("競合ブロックの外にある登録は、自動で片付けた件数に数えない", () => {
+		// 両側はファイル全体から切り出すので、ブロックの外の TU は両側に同じ姿で現れる。
+		// 数えると、1万件の TM で「1万件を自動で片付けた」と言うことになる
+		const shared = Array.from({ length: 5 }, (_, i) => tu(`Shared ${i}`, { ja: `共有${i}` }));
+		const content = conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Goodbye", { ja: "さようなら" })]).replace(
+			"<body>",
+			`<body>\n${shared.join("\n")}`,
+		);
+		write(content);
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.autoResolvedCount, 2);
+		assert.equal(planned.resolution.resolved.size, 7, "書き戻す中身からは落とさない");
+	});
+
+	test("<<<<<<< の行だけ消えた壊れたマーカーは、競合なしではなく読めないとして投げる", () => {
+		// 「競合なし」と答えると、ツリーには競合として出続けるのに解く手立ても理由も見えない
+		write(`${tmx(tu("Hello", { ja: "こんにちは" }))}=======\n>>>>>>> theirs\n`);
+
+		assert.throws(() => planTmResolution(tmPath), /incomplete/);
+	});
+
 	test("同じ原文に別々の言語の訳を足しただけなら、両方採る", () => {
 		write(
 			conflicted(

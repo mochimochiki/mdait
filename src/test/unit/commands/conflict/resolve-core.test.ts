@@ -94,7 +94,7 @@ suite("競合の解決の本体", () => {
 
 		const prepared = await prepareResolution(collectMdaitConflicts(paths()), config);
 
-		assert.equal(prepared.summary.pendingTotal, 1);
+		assert.equal(prepared.summary.plans[0].pending.length, 1);
 		assert.equal(fs.readFileSync(tmPath, "utf-8"), content);
 		assert.equal(fs.statSync(tmPath).mtimeMs, before);
 	});

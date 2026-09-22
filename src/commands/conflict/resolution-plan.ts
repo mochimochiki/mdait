@@ -56,13 +56,6 @@ export interface ResolutionPlan {
 	 * 「丸ごと書き直すファイルが何個あるか」をここから数える。
 	 */
 	wholeFile?: boolean;
-	/**
-	 * `unit-state` で、同じ席に2行来たので片方を席から降ろした回数。
-	 *
-	 * 降ろされた行はどちらも残るので**ここでは決まらなくてよい**が、原稿との照合で
-	 * 決めるべき件がこれだけ増えたことは人に伝わったほうがよい（P03 が片付ける）。
-	 */
-	unseatedCount?: number;
 }
 
 /** 計画を実行した結果 */
@@ -78,13 +71,13 @@ export interface ResolutionOutcome {
 	/**
 	 * `unit-state` で、同じ席に2行来たので片方を席から降ろした件数。
 	 *
-	 * **解けていないのではない** — 行はどちらも残っている。原稿と突き合わせて
-	 * どちらを席へ戻すかを決めるのが P03 の仕事で、その件数をここで伝える。
+	 * **解けていないのではない** — 行はどちらも残っている。どちらを席へ戻すかは
+	 * 次の同期が原稿と突き合わせて決める。その件数をここで伝える。
 	 */
 	unseatedCount?: number;
 	/** 失敗した理由（あれば） */
 	error?: string;
-	/** 取り消されて、手が付かなかったか（`remainingCount` は計画のままの件数になる） */
+	/** 取り消されて、手が付かなかったか（`remainingCount` は計画のままの件数） */
 	skipped?: boolean;
 }
 
@@ -101,10 +94,6 @@ export interface ResolutionFailure {
  */
 export interface ConflictResolutionPlan {
 	plans: ResolutionPlan[];
-	/** 鍵の突き合わせで決まる総数 */
-	autoResolvedTotal: number;
-	/** 人の判断を待つ総数 */
-	pendingTotal: number;
 	/** ファイルを丸ごと書き直す対象の数（1件ずつの選択が無いので件数に出ない） */
 	wholeFileCount: number;
 	/** 競合しているのに読めなかった対象。**「競合が無い」と混ぜない** */
@@ -121,8 +110,6 @@ export function summarizePlans(
 ): ConflictResolutionPlan {
 	return {
 		plans: [...plans],
-		autoResolvedTotal: plans.reduce((sum, plan) => sum + plan.autoResolvedCount, 0),
-		pendingTotal: plans.reduce((sum, plan) => sum + plan.pending.length, 0),
 		wholeFileCount: plans.filter((plan) => plan.wholeFile === true).length,
 		failures: [...failures],
 		heldRowCount,
