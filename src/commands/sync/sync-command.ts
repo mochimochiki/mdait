@@ -183,13 +183,13 @@ export function resetOrphanMemory(): void {
 }
 
 /**
- * 合流の途中の原稿を飛ばしたことを伝える。
+ * 合流の途中の原稿（原文か訳文に競合マーカーが残っているもの。`isMidMerge`）を飛ばしたことを伝える。
  *
  * 飛ばさずに進むと、`<<<<<<< HEAD` の行を本文として hash を取り、全ユニットに
  * `need:revise` を付けたうえで、**その姿のまま訳文へ写す**。訳文にも競合マーカーが
  * 生えるので、原稿の競合を解く前に訳文の競合まで増える。
  */
-function conflictInSourceNotice(count: number): SyncNotice | undefined {
+function conflictedFilesNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
 	}
@@ -1034,7 +1034,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				reviewSupersededNotice(totalReviewsSuperseded),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
-				conflictInSourceNotice(totalConflicted),
+				conflictedFilesNotice(totalConflicted),
 				newOrphansNotice(freshOrphans),
 				config.getOrphanTargetPolicy() === "delete"
 					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
@@ -1599,7 +1599,7 @@ export async function sync_CoreProc(
 	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
 	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
 	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
-	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneTail）と同じ考え方。
+	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneLeftovers）と同じ考え方。
 	//
 	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
 	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
