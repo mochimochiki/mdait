@@ -415,7 +415,7 @@ frontmatter まで外に出すと、external の Markdown は**mdait の痕跡�
 |---|---|---|
 | **sync の孤立掃除**（`sync-command.ts` → `UnitStateStore`） | 選択中の pair だけを走査して作った「生きているパスの一覧」に無い行を全削除。ja→en だけ選んで sync すると **fr の行が丸ごと消えた**（実測 S62 / S63） | 範囲を3分割して判断する（下記 §13）。**config のどのペアの配下にも無い行は消す／config にあるが今回走査していない行は残す／走査して見つからなかった行は消す**（`cleanupOrphansInScope`） |
 | **embed（external → embedded 戻し）**（`markers-migration.ts`） | hash の無いユニットのマーカーを捨てたうえで、**そのパスの全行を削除**。対応の付かなかった行の `from`/`need` が本文にも store にも残らなかった。しかも `reconcileMarkerModeForFile` 経由で **sync のたびに走る** | `alignEntriesToUnits` で「どの行がどのユニットへ書き戻されたか」を出し、**書き戻せた行だけ**を消す。残した行は警告に出す（セッション内で1ファイル1回） |
-| **末尾行の刈り取り**（`marker-provider.ts` の `detachMarkers`） | ガードが `units.length > 0` だけ。守りたいのは「0件」ではなく「**一時的に減った**」ケース（コードブロックの閉じ忘れ・`sync.level` 変更）。刈った後は設定を戻しても状態は戻らない | `shouldPruneTail`: **半分未満へ3件以上減った**ときは刈らず、**保留席へ移す**（§13）。比率だけだと2件→1件で止まるので絶対件数の下限を併せる |
+| **末尾行の刈り取り**（`marker-provider.ts` の `detachMarkers`） | ガードが `units.length > 0` だけ。守りたいのは「0件」ではなく「**一時的に減った**」ケース（コードブロックの閉じ忘れ・`sync.level` 変更）。刈った後は設定を戻しても状態は戻らない | `shouldPruneLeftovers`: **半分未満へ3件以上減った**ときは刈らず、**保留席へ移す**（§13）。比率だけだと2件→1件で止まるので絶対件数の下限を併せる |
 
 ### なぜ「残す側」に倒すか
 
@@ -673,7 +673,7 @@ git から書き戻すと本文のマーカーが落ち、`ensureMdaitMarkerHash
 ### (3) 保留席の寿命（当時は変えなかった。**2026-08-09 に §19 で変更**）
 
 保留席の order は必ず `units.length` より大きいので、`pruneEntriesFrom` が一度でも走ると全部消える。
-`shouldPruneTail` はユニット数が保留席の数に追いつくと真になるため、**「章が戻ってくれば復帰する」には
+`shouldPruneLeftovers` はユニット数が保留席の数に追いつくと真になるため、**「章が戻ってくれば復帰する」には
 ユニット数で測る締め切りがある**。
 
 ```
@@ -1147,7 +1147,7 @@ ADR-260912-06。「全ユニット review」という着地ではなくなった
 3. `detachMarkers` が order 0〜N-1 を書き直し、**消された章の行があった位置が上書きされる**
 
 保留席（`parkEntriesFrom`）は**末尾の行にしか効かない**。この筋書きではユニット数が戻っているので
-`shouldPruneTail(N, N)` は何もせず、保留も刈り取りも起きないまま行だけが消える。ログにも残らない。
+`shouldPruneLeftovers(N, N)` は何もせず、保留も刈り取りも起きないまま行だけが消える。ログにも残らない。
 
 貼り戻すと本文は正しい訳に戻るのに行は `need:translate` のまま。`need:translate` は
 「✨翻訳が上書きしてよい」の意味なので、**次に翻訳を回すと人の訳が AI 訳で潰される**。
@@ -1352,7 +1352,7 @@ probe は `fs.renameSync` を直接呼んでいたが、S7 / S8 / S10 / S28 と�
   ↓ sync が原文から消えた章を作り直す
 書き出しに渡るのは 3ユニット ← 減ったという事実に一度も触れない
   ↓ detachMarkers が order 0,1,2 をそのまま上書き
-消した章の from が消滅。shouldPruneTail も parkEntriesFrom も働かない（数が合っているため）
+消した章の from が消滅。shouldPruneLeftovers も parkEntriesFrom も働かない（数が合っているため）
 ```
 
 **(b) 対応が付かなかったと分かるのは読み込み時、保留を決めているのは書き出し時で、あいだに

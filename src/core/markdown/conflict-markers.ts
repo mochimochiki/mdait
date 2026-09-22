@@ -22,8 +22,12 @@ export function isConflictMarkerLine(line: string): boolean {
  * 説明する文書はコードブロックに実例を載せる。そこを拾うと、正常な原稿が永久に
  * 同期されなくなる（同じ考え方でマーカー境界の探索も `getCodeBlockLineSet` を通す）。
  *
- * 「片側だけある」ことも競合とみなす。マーカーを手で消し始めて途中でやめた原稿は、
- * 本文としては壊れており、そのまま hash を取ると訳文へその姿が写る。
+ * マーカーを手で消し始めて途中でやめた原稿も競合とみなす（本文としては壊れており、
+ * そのまま hash を取ると訳文へその姿が写る）。ただし **`=======` だけ・`>>>>>>>` だけでは
+ * 決めない。** `=======` は7文字の見出しの下線（`Install` の下に引いたもの）と、
+ * `>>>>>>>` は7段の引用と同じ形で、1行だけで競合とみなすと、ふつうの原稿が永久に
+ * 同期されなくなる。`<<<<<<<` か `|||||||` があるとき、または `=======` と `>>>>>>>` が
+ * 両方あるとき（`<<<<<<<` の行だけ消した形）に競合とみなす。
  */
 export function hasConflictMarkers(content: string): boolean {
 	if (!CONFLICT_MARKER_ANY_LINE.test(content)) {
@@ -32,12 +36,13 @@ export function hasConflictMarkers(content: string): boolean {
 	}
 	const codeBlockLines = getCodeBlockLineSet(content);
 	const lines = content.split(/\r?\n/);
+	const seen = new Set<string>();
 	for (let i = 0; i < lines.length; i++) {
 		if (!codeBlockLines.has(i) && isConflictMarkerLine(lines[i])) {
-			return true;
+			seen.add(lines[i][0]);
 		}
 	}
-	return false;
+	return seen.has("<") || seen.has("|") || (seen.has("=") && seen.has(">"));
 }
 
 /**
