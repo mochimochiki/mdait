@@ -1280,11 +1280,20 @@ export class UnitStateStore {
 			//
 			// 絞るのは**ここ（預けるとき）だけ**である。読み取り（`seatOnLoad`）で絞ると、
 			// 合流のあとのファイルで「同じ本文・違う状態」の行が黙って消える
-			const older = this.heldEntriesWithHash(filePath, entry.hash);
+			//
+			// **合流で降ろされた行（`isMergeHeldEntry`）は絞る対象にしない。** 人がどちらを採るか
+			// 決めるのを待っている行で、ここで消すと競合が黙って消える
+			const older = this.heldEntriesWithHash(filePath, entry.hash).filter((row) => !isMergeHeldEntry(row));
 			for (const row of older) {
 				this.dropRow(filePath, entryKey(row));
 			}
-			this.putRow({ ...entry, kind: "held", seat: "" });
+			const parkedRow: UnitStateEntry = { ...entry, kind: "held", seat: "" };
+			const sameKey = this.rowsOf(filePath)?.get(entryKey(parkedRow));
+			if (sameKey && isMergeHeldEntry(sameKey)) {
+				// 同じ状態を合流で降ろされた行がすでに持っている。上書きすると競合の印が消える
+				continue;
+			}
+			this.putRow(parkedRow);
 			if (older.length === 0) {
 				parked++;
 			}
@@ -1307,7 +1316,8 @@ export class UnitStateStore {
 	 * 席に着いていない行を、本文 hash を指定して消す。
 	 *
 	 * 本文が戻ってきて拾い戻された行を外すために使う（`detachMarkers` が席のキーで
-	 * 書き直すので、残すと同じ状態の行が二重になる）。
+	 * 書き直すので、残すと同じ状態の行が二重になる）。合流で降ろされた行
+	 * （`isMergeHeldEntry`）は人の判断待ちなので消さない。
 	 *
 	 * @returns 削除されたエントリ数
 	 */
@@ -1316,6 +1326,9 @@ export class UnitStateStore {
 		let removed = 0;
 		for (const hash of new Set(hashes)) {
 			for (const entry of this.heldEntriesWithHash(filePath, hash)) {
+				if (isMergeHeldEntry(entry)) {
+					continue;
+				}
 				if (this.dropRow(filePath, entryKey(entry))) {
 					removed++;
 				}
