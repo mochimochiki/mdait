@@ -7,9 +7,8 @@
 import type * as vscode from "vscode";
 import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
-import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
-import { parseJsonAnswer } from "../shared/ai-json";
+import { parseJsonAnswer, unusableJsonAnswer } from "../shared/ai-json";
 import { MockTermDetector } from "./mock-term-detector";
 import type { TermEntry } from "./term-entry";
 import { LangTerm, TermEntry as TermEntryUtils } from "./term-entry";
@@ -308,7 +307,7 @@ ${pair.target?.content || "(no translation)"}`;
 	private parseTermArray(response: string): any[] {
 		const parsed = parseJsonAnswer(response, "Term detection");
 		if (!Array.isArray(parsed)) {
-			throw this.unusableResponse(response, "the JSON was not an array");
+			throw unusableJsonAnswer("Term detection", response, "the JSON was not an array");
 		}
 		return parsed;
 	}
@@ -316,17 +315,12 @@ ${pair.target?.content || "(no translation)"}`;
 	/** 項目は入っているのに1つも形が合わなかったなら、それは0件ではなく使えない答え */
 	private rejectIfNothingUsable(parsed: readonly unknown[], usable: readonly unknown[], response: string): void {
 		if (parsed.length > 0 && usable.length === 0) {
-			throw this.unusableResponse(response, `none of the ${parsed.length} item(s) had the expected fields`);
+			throw unusableJsonAnswer(
+				"Term detection",
+				response,
+				`none of the ${parsed.length} item(s) had the expected fields`,
+			);
 		}
-	}
-
-	/** 使えない答えを表す例外を作る（message は記録用の英語。利用者向けの文は呼び出し側が組む） */
-	private unusableResponse(response: string, why: string): UnusableAIResponseError {
-		return new UnusableAIResponseError(
-			"invalid-format",
-			`Term detection response was not usable: ${why}`,
-			`responseChars=${response.length}`,
-		);
 	}
 
 	/**

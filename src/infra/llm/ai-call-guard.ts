@@ -1,7 +1,9 @@
 /**
- * @file call-budget.ts
+ * @file ai-call-guard.ts
  * @description
  *   **AI を呼び続けてしまったときの歯止め。1か所しかない。**
+ *
+ *   使った金額やトークン数は数えていない。数えるのは「送った内容」と「失敗」の回数だけである。
  *
  *   経路ごとの送り直しには、それぞれ上限が付いている（`trans.retryLimit`、
  *   `DEFAULT_RETRY_POLICY.maxRetries` など）。それでも足りなかった。上限は
@@ -19,14 +21,19 @@
  *
  *   ふつうの仕事では、どちらも増えない。ユニットごとに送る内容は違うし、成功すれば
  *   2 は 0 に戻る。大きなフォルダをまとめて翻訳しても引っ掛からない。逆に、鍵が違う・
- *   モデル名が違う・相手が壊れた答えしか返さない、といった**何をしても進まない状態**では、
- *   数十回で打ち切る。
+ *   モデル名が違う、といった**呼ぶたびに例外になる状態**では、2 で数十回のうちに打ち切る。
+ *
+ *   2 が数えるのは、プロバイダが**例外を投げた**回だけである。出力上限で切れた答え
+ *   （プロバイダが例外にする）は数に入るが、答えが返ってきたあとで呼び出し側が
+ *   「形が違う」と捨てたものは、ここから見れば成功で、2 を 0 に戻す。だから
+ *   「形の壊れた答えしか返さない相手」を 2 は止めない。そういう相手を同じ内容で
+ *   送り直し続ける輪は、1 が止める（200回）。
  *
  *   打ち切ったあとは、しばらく呼ばずにいれば（{@link QUIET_RESET_MS}）数え直す。設定を
  *   直してすぐ叩き直せる余地を残すためで、輪の側は間を置かずに回り続けるので戻らない。
  *   打ち切っても済んだ分は書かれているので、直して叩き直せば続きから進む。
  *
- * @module infra/llm/call-budget
+ * @module infra/llm/ai-call-guard
  */
 import * as vscode from "vscode";
 import { isOperationCancelled } from "../errors/operation-cancelled";
@@ -62,7 +69,7 @@ let lastActivityAt = 0;
 /** いまの時刻を返す。テストで時計を進めるために差し替えられるようにしてある */
 let clock: () => number = () => Date.now();
 
-/** 数えていたものを捨てる（テスト用。ふつうは間が空いたときに自動で捨てる） */
+/** 数えていたものを捨てる。export はテスト用（ふつうは間が空いたときに中で自動で捨てる） */
 export function resetAiCallGuard(): void {
 	sentCounts = new Map();
 	consecutiveFailures = 0;
@@ -70,7 +77,7 @@ export function resetAiCallGuard(): void {
 }
 
 /**
- * 時計を差し替える（テスト専用）。
+ * テスト用。時計を差し替える。
  *
  * 「10 秒待ったら数え直す」を確かめるのに本当に 10 秒待つわけにはいかないため。
  * 引数なしで呼ぶと本物の時計へ戻る。
@@ -79,7 +86,7 @@ export function setAiCallGuardClock(next?: () => number): void {
 	clock = next ?? (() => Date.now());
 }
 
-/** いまの数え（テスト・診断用） */
+/** テスト用。いまの数えを返す */
 export function aiCallGuardState(): {
 	consecutiveFailures: number;
 	trackedRequests: number;
@@ -118,14 +125,14 @@ export function withAiCallGuard(service: AIService): AIService {
 /**
  * 包む前の相手（プロバイダ）を取り出す。
  *
- * 「どのプロバイダが選ばれたか」を確かめたい場所のためのもの（設定のテスト・診断）。
+ * テスト用。「どのプロバイダが選ばれたか」を確かめるためのもの（いまは設定のテストだけが使う）。
  * 呼び出しには使わない — 包みを外して呼ぶと歯止めが効かなくなる。
  */
 export function unwrapAiCallGuard(service: AIService): AIService {
 	return service instanceof GuardedAIService ? service.provider : service;
 }
 
-/** 歯止めが付いているか */
+/** テスト用。歯止めが付いているか */
 export function hasAiCallGuard(service: AIService): boolean {
 	return service instanceof GuardedAIService;
 }

@@ -17,7 +17,8 @@ import { Configuration, type TransPair } from "../../infra/config/configuration"
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
-import { describeUnusableBatches } from "../shared/guidance";
+import { NO_BATCHES } from "../shared/batch-failures";
+import { describeBatchFailures } from "../shared/guidance";
 import { OperationRegistry } from "../shared/operation-registry";
 import { notifyWithReport } from "../shared/report-file";
 import { detectTerm_CoreProc } from "./command-detect";
@@ -157,7 +158,7 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 				const collection = await new UnitPairCollector().collectFromFiles(scope.sourceFiles, scope.transPair, token);
 				const detected =
 					collection.pairs.length === 0
-						? { entries: [], totalBatches: 0, unusableBatches: 0 }
+						? { entries: [], ...NO_BATCHES }
 						: await detectTerm_CoreProc(collection.pairs, scope.transPair, progress, token);
 				if (token.isCancellationRequested) {
 					return;
@@ -177,18 +178,20 @@ export async function updateGlossaryCommand(item?: StatusItem): Promise<void> {
 								targetLang: scope.transPair.targetLang,
 							})
 						: undefined;
-				// 使えなかった答えがあったなら、件数と一緒に必ず言う。件数だけを出すと
-				// 「用語が無かった」ことと区別が付かず、設定を見に行く手掛かりが消える
+				// 失敗したバッチがあったなら、件数と一緒に必ず言い、警告として出す。件数だけを
+				// 出すと「用語が無かった」ことと区別が付かず、設定を見に行く手掛かりが消える
 				const body = vscode.l10n.t(
 					"Glossary updated: {0} new term(s), {1} translation(s) filled in, {2} still missing.",
 					detected.entries.length,
 					expanded.expanded,
 					expanded.remaining,
 				);
-				const unusable = [describeUnusableBatches(detected), describeUnusableBatches(expanded)]
-					.filter(Boolean)
-					.join(" ");
-				notifyWithReport(unusable ? `${body} ${unusable}` : body, uri);
+				const failures = [describeBatchFailures(detected), describeBatchFailures(expanded)].filter(Boolean).join(" ");
+				if (failures) {
+					notifyWithReport(`${body} ${failures}`, uri, "warning");
+				} else {
+					notifyWithReport(body, uri);
+				}
 
 			} catch (error) {
 				logger.error("term.update", "Glossary update failed", { ...formatError(error) });

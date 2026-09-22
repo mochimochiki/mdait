@@ -99,7 +99,7 @@ class StubStages implements AdoptStages {
 		if (this.termExpandError) {
 			throw this.termExpandError;
 		}
-		return { expanded: 3, remaining: 1, totalBatches: 1, unusableBatches: 0 };
+		return { expanded: 3, remaining: 1, totalBatches: 1, failedBatches: 0, unusableBatches: 0 };
 	}
 	async runTmCommit(targetFile: string): Promise<TmCommitResult> {
 		this.calls.push(`tmCommit:${targetFile}`);

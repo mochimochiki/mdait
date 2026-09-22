@@ -195,9 +195,10 @@ function parseTmx(xml: string): Map<string, TmEntry> {
 				entries.set(entry.tuid, entry);
 				continue;
 			}
-			// **同じ tuid の TU が2つ並ぶのは、合流（`merge=union`）のあとの姿である。**
-			// 後勝ちで潰すと、片方の枝で登録した訳が警告も無く消える（`unit-state` で
-			// 同じことが起きていた。ADR-260906-03）。言語ごとに拾い集める。
+			// 同じ tuid の TU が2つ並ぶことがある — 競合を「両方残す」形で解いたときや、
+			// かつての `merge=union` の合流が残したファイルである。後勝ちで潰すと、片方の枝で
+			// 登録した訳が警告も無く消える（`unit-state` で同じことが起きていた。ADR-260906-03）。
+			// 言語ごとに拾い集める。
 			for (const [lang, variant] of entry.variants) {
 				const kept = existing.variants.get(lang);
 				if (!kept) {
@@ -247,7 +248,8 @@ function serializeTmx(entries: Map<string, TmEntry>): string {
 	const sortedEntries = [...entries.values()].sort((a, b) => compareCodePoints(a.tuid, b.tuid));
 	// 行と行のあいだに空行や目印を挟むのは**効かない**。ここで出る競合は「両方が同じ隙間へ
 	// 足した」形で、`unit-state` の実測でもこの形だけは並べ方をどう変えても消えなかった。
-	// TU は tuid の順に並ぶので、20件ずつ足せばどこかは必ず隣り合う。union で解く。
+	// TU は tuid の順に並ぶので、20件ずつ足せばどこかは必ず隣り合う。この競合は
+	// 1 TU = 1 行の形を頼りに両側を切り出し、tuid を鍵に突き合わせて解く（`core/conflict/key-merge.ts`）。
 	const tuLines = sortedEntries.map((entry) => tuBuilder.build({ tu: buildTuObject(entry) }).trim());
 
 	return [XML_DECLARATION, `<tmx version="${TMX_VERSION}">`, "<body>", ...tuLines, "</body>", "</tmx>", ""].join("\n");

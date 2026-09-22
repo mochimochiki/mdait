@@ -4,7 +4,7 @@ import {
 	Configuration,
 } from "../../../../infra/config/configuration";
 import { AIServiceBuilder } from "../../../../infra/llm/ai-service-builder";
-import { hasAiCallGuard, unwrapAiCallGuard } from "../../../../infra/llm/call-budget";
+import { hasAiCallGuard, unwrapAiCallGuard } from "../../../../infra/llm/ai-call-guard";
 import { DefaultAIProvider } from "../../../../infra/llm/providers/default-ai-provider";
 import { VSCodeLanguageModelProvider } from "../../../../infra/llm/providers/vscode-lm-provider";
 
