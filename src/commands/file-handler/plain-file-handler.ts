@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { applyRevisionPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { type FileStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -10,7 +11,7 @@ import { Configuration, type TransPair } from "../../infra/config/configuration"
 import { OperationCancelledError, isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
-import { writeManagedDocument } from "../../infra/workspace/managed-write";
+import { writeManagedDocument, writeManagedDocumentSync } from "../../infra/workspace/managed-write";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import { toWorkspaceRelativePath } from "../../infra/workspace/workspace-path";
 import type { DeclareIsolateResult } from "../markers/declare-isolate";
@@ -25,6 +26,8 @@ import {
 	needMatchesSelection,
 } from "../markers/resolve-need";
 import { withFileMutation } from "../markers/unit-mutation";
+import { syncMarkerPair } from "../sync/marker-sync";
+import { isStaleUntranslatedCopy } from "../sync/untranslated-copy";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
 import { lookupTmReferences } from "../trans/trans-command";
@@ -87,64 +90,69 @@ export class PlainFileHandler implements FileHandler {
 		// 2. ターゲットのワークスペース相対パスを算出
 		const targetRelPath = toWorkspaceRelativePath(targetFile);
 
-		// 3. UnitStateStoreからターゲットのエントリを取得（非MD=order:0）
+		// 3. UnitStateStoreからターゲットのエントリを取得（非MD はファイル1ユニット＝`getSoleEntry`）
 		const store = UnitStateStore.getInstance();
 		const existing = store.getSoleEntry(targetRelPath);
 
 		// 4. ターゲットの現在hashを再計算（rebuild の判定にも使う）
-		const targetContent = fs.readFileSync(targetFile, "utf-8");
-		const targetHash = calculateHash(targetContent, false);
+		let targetContent = fs.readFileSync(targetFile, "utf-8");
+		let targetHash = calculateHash(targetContent, false);
 
-		// 5. need判定
-		let need: string;
-		let revisionsNeeded = 0;
-		let modified = 0;
+		// 5. まだ訳していない丸写しが古い原文のままなら、いまの原文へ写し直す（Markdown と同じ規則）。
+		// 写し直さないと、訳文ファイルに古い原文が残り続けて訳文に見える
+		const staleCopy =
+			existing && (await isStaleUntranslatedCopy(existing.need, existing.from, targetHash, sourceHash, targetContent));
+		if (staleCopy) {
+			writeManagedDocumentSync(targetFile, sourceContent);
+			targetContent = fs.readFileSync(targetFile, "utf-8");
+			targetHash = calculateHash(targetContent, false);
+		}
 
+		// 6. need判定。規則は Markdown と同じ `syncMarkerPair`（marker-sync.ts）に任せる。
+		// 行が無い（rebuild）ときは紐の無い訳文として渡し、`needForFirstLink` が
+		// 「本文あり・丸写しでない → review、丸写し・空 → translate」を決める
+		const targetMarker = existing
+			? new MdaitMarker(existing.hash, existing.from || null, existing.need || null)
+			: new MdaitMarker(targetHash);
+		const existingText = !existing && targetContent.trim() !== "";
+		const wasAwaitingReview = existing?.need === "review";
+		const result = syncMarkerPair(sourceHash, targetHash, null, targetMarker, {
+			existingText,
+			// 丸写しかどうかは中身で答える（改行コードだけ違うものは丸写しとみなさない）
+			verbatimCopy: existingText ? targetContent === sourceContent : undefined,
+		});
+		const need = result.targetMarker.need ?? "";
+
+		// 数え方も Markdown と同じ。紐の無い既訳を review で受けたら adopted、改訂待ちは revisionsNeeded
+		// 訳文だけが変わった回（hash だけ進む）は従来どおり unchanged に数える
+		const modified = !existing || existing.from !== sourceHash || existing.need !== need ? 1 : 0;
+		const becameRevision = modified === 1 && result.targetMarker.needsRevision();
+		const revisionsNeeded = becameRevision ? 1 : 0;
+		const adopted = existingText && need === "review" ? 1 : 0;
+		const reviewsSuperseded = wasAwaitingReview && becameRevision ? 1 : 0;
 		if (!existing) {
-			// rebuild時: unit-state未登録 + ターゲットファイル存在。
-			// 「紐なし・本文あり・丸写しでない → review、丸写し → translate」（MD 側と同じ規則）。
-			// 訳文の本文が原文と一字一句同じなら、それは syncNew の複製がそのまま残っている
-			// ＝まだ訳していない。review に倒すと「確認待ち」の列に未訳が混ざり、確認する側は
-			// 原文をそのまま読まされる。翻訳待ちに戻すのが実態に合う
-			const isVerbatimCopy = targetHash === sourceHash;
-			need = isVerbatimCopy ? "translate" : "review";
-			// 丸写しは「まだ訳していない」だけで改訂を求める話ではないので revisionsNeeded に数えない。
-			// modified は行が新しく作られた（状態が変わった）ことを表すので、どちらも 1
-			revisionsNeeded = isVerbatimCopy ? 0 : 1;
-			modified = 1;
 			logger.info("sync", "Rebuild detected for plain file", {
 				targetFile: targetRelPath,
 				need,
 			});
-		} else if (existing.from !== sourceHash) {
-			// ソース変更あり
-			if (existing.need.startsWith(NEED_REVISE_PREFIX)) {
-				// 既にrevise中 → 旧基準ハッシュを保持（上書きしない）
-				need = existing.need;
-			} else {
-				need = `${NEED_REVISE_PREFIX}${existing.from}`;
-			}
-			revisionsNeeded = 1;
-			modified = 1;
-		} else {
-			// ソース変更なし → needそのまま
-			need = existing.need;
 		}
 
-		// 6. UnitRegistryにソースコンテンツのスナップショット保存
+		// 7. UnitRegistryにソースコンテンツのスナップショット保存
 		const unitRegistryManager = UnitRegistryManager.getInstance();
 		unitRegistryManager.saveUnitRegistry(sourceHash, sourceContent);
 
-		// 7. UnitStateStoreのエントリ更新（非MD＝ファイル1ユニット）
+		// 8. UnitStateStoreのエントリ更新（非MD＝ファイル1ユニット）
 		store.setSoleEntry(targetRelPath, { hash: targetHash, from: sourceHash, need });
 
-		// 8. FileSyncResultを返す
+		// 9. FileSyncResultを返す
 		return {
 			added: 0,
 			modified,
 			deleted: 0,
 			unchanged: modified === 0 ? 1 : 0,
 			revisionsNeeded,
+			adopted,
+			reviewsSuperseded,
 		};
 	}
 
@@ -214,7 +222,7 @@ export class PlainFileHandler implements FileHandler {
 			};
 		}
 
-		// 2. UnitStateStoreからエントリ取得（非MD=order:0）
+		// 2. UnitStateStoreからエントリ取得（非MD はファイル1ユニット＝`getSoleEntry`）
 		const entry = store.getSoleEntry(targetRelPath);
 		if (!entry || !entry.need) {
 			// 翻訳不要
@@ -502,7 +510,7 @@ export class PlainFileHandler implements FileHandler {
 	}
 
 	// ===== マーカー／ユニット状態の書き換え =====
-	// 非MDファイルは「ファイル＝単一ユニット」（order=0）。need は unit-state のみに存在し本文は変えない。
+	// 非MDファイルは「ファイル＝単一ユニット」（行は `getSoleEntry` / `setSoleEntry` で読み書きする）。need は unit-state のみに存在し本文は変えない。
 
 	async resolveNeed(filePath: string, options: NeedResolutionOptions = {}): Promise<ResolveNeedFileResult> {
 		const selected = options.needs && options.needs.length > 0 ? options.needs : [...DEFAULT_RESOLVABLE_NEEDS];

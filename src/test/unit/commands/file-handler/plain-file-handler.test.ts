@@ -142,7 +142,8 @@ suite("PlainFileHandler", () => {
 			const result = await handler.sync(sourceFile, targetFile);
 
 			assert.strictEqual(result.modified, 1);
-			assert.strictEqual(result.revisionsNeeded, 1);
+			assert.strictEqual(result.revisionsNeeded, 0, "確認待ちは改訂待ちに数えないこと（Markdown と同じ）");
+			assert.strictEqual(result.adopted, 1, "紐の無い既訳を確認待ちで受けたら adopted に数えること");
 
 			const store = UnitStateStore.getInstance();
 			const entry = store.getSoleEntry("target/test.txt");
@@ -233,6 +234,91 @@ suite("PlainFileHandler", () => {
 			const entry = store.getSoleEntry("target/data.csv");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, "translate");
+		});
+
+		test("未訳（need:translate）の丸写しは原文が変わっても translate のまま、訳文ファイルを新しい原文へ写し直すこと", async () => {
+			const sourceFile = path.join(tempDir, "source", "data.csv");
+			const targetFile = path.join(tempDir, "target", "data.csv");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const oldContent = "col1,col2\nval1,val2\n";
+			const newContent = "col1,col2\nval1,val3\n";
+			const oldHash = calculateHash(oldContent, false);
+			fs.writeFileSync(sourceFile, newContent, "utf-8");
+			fs.writeFileSync(targetFile, oldContent, "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setSoleEntry("target/data.csv", { hash: oldHash, from: oldHash, need: "translate" });
+
+			const result = await handler.sync(sourceFile, targetFile);
+
+			const entry = store.getSoleEntry("target/data.csv");
+			assert.ok(entry);
+			assert.strictEqual(entry.need, "translate", "revise に倒さないこと（まだ訳していない）");
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), newContent, "古い原文の丸写しを残さないこと");
+			assert.strictEqual(entry.hash, calculateHash(newContent, false));
+			assert.strictEqual(entry.from, calculateHash(newContent, false));
+			assert.strictEqual(result.revisionsNeeded, 0);
+		});
+
+		test("未訳でも手が入った訳文ファイルは写し直さず、translate のままにすること", async () => {
+			const sourceFile = path.join(tempDir, "source", "data.csv");
+			const targetFile = path.join(tempDir, "target", "data.csv");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const oldHash = calculateHash("old", false);
+			fs.writeFileSync(sourceFile, "new", "utf-8");
+			fs.writeFileSync(targetFile, "書きかけの訳", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setSoleEntry("target/data.csv", { hash: oldHash, from: oldHash, need: "translate" });
+
+			await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(store.getSoleEntry("target/data.csv")?.need, "translate");
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), "書きかけの訳");
+		});
+
+		test("revise 待ちのまま原文が改訂前へ戻ったら need を外すこと（Markdown と同じ）", async () => {
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const originalHash = calculateHash("original", false);
+			fs.writeFileSync(sourceFile, "original", "utf-8");
+			fs.writeFileSync(targetFile, "訳文", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setSoleEntry("target/test.txt", {
+				hash: calculateHash("訳文", false),
+				from: calculateHash("edited", false),
+				need: `revise@${originalHash}`,
+			});
+
+			await handler.sync(sourceFile, targetFile);
+
+			const entry = store.getSoleEntry("target/test.txt");
+			assert.strictEqual(entry?.need, "");
+			assert.strictEqual(entry?.from, originalHash);
+		});
+
+		test("確認待ちのまま原文が変わったら revise に移り、reviewsSuperseded に数えること", async () => {
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const oldHash = calculateHash("old", false);
+			fs.writeFileSync(sourceFile, "new", "utf-8");
+			fs.writeFileSync(targetFile, "訳文", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setSoleEntry("target/test.txt", { hash: calculateHash("訳文", false), from: oldHash, need: "review" });
+
+			const result = await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(store.getSoleEntry("target/test.txt")?.need, `revise@${oldHash}`);
+			assert.strictEqual(result.revisionsNeeded, 1);
+			assert.strictEqual(result.reviewsSuperseded, 1);
 		});
 	});
 

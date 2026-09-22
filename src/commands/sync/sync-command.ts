@@ -61,6 +61,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { isStaleUntranslatedCopy } from "./untranslated-copy";
 import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
@@ -2227,14 +2228,7 @@ async function updateSectionHashes(
 
 /**
  * まだ訳していない訳文が原文の丸写しのままなら、変わった原文へ写し直す。
- *
- * 写し直してよい根拠は**その訳文に人の仕事が入っていないこと**だけであり、それは
- * ハッシュで確かめられる。`from` は「この訳文が写した原文の中身」のハッシュなので、
- * いまの訳文の中身のハッシュが `from` と一致するなら、訳文は一字一句その原文のままである。
- * 一致しなければ誰かが書いている（手訳の途中・既訳の取り込み）ので触らない。
- *
- * `need:translate` に限る。`revise` は訳し終えた本文を守る話で、`review` は人の確認待ち、
- * `isolate` は追随しないという宣言であり、どれも写し直してよい状態ではない。
+ * 写し直してよいかの規則は `untranslated-copy.ts` の `isStaleUntranslatedCopy`（非 Markdown と共通）。
  *
  * @returns 写し直したら true
  */
@@ -2245,34 +2239,14 @@ async function refreshUntranslatedCopy(
 	targetHash: string,
 ): Promise<boolean> {
 	const marker = target.marker;
-	if (marker?.need !== "translate") {
+	if (!(await isStaleUntranslatedCopy(marker?.need, marker?.from, targetHash, sourceHash, target.content))) {
 		return false;
-	}
-	if (!marker.from || targetHash === sourceHash) {
-		return false; // 訳文はもう今の原文の丸写しである。することは無い
 	}
 	if (spillsIntoFollowingUnits(source.content)) {
 		// **原文が閉じ忘れたフェンスを抱えている。** そのまま写すと、続く訳文ユニットが
 		// フェンスに飲まれて章の切れ目ごと消える（実測: 訳文が3ユニットから1ユニットになった）。
 		// 原文の構造が潰れている回は写し直さない。直せば次の sync で追いつく
 		return false;
-	}
-	if (targetHash === marker.from) {
-		// 直前の原文の丸写しである（いちばん多い形。ディスクを読まずに決まる）
-		target.content = source.content;
-		return true;
-	}
-	// `from` が既に先へ進んでしまった訳文の救済。この修正が入る前の sync は、
-	// 原文が変わっても丸写しを写し直さないまま `from` だけ進めていたため、
-	// 「一度も触っていないのに hash≠from」というユニットが既に手元にある
-	// （`from` は今の原文を指しているので、上の安い判定では拾えない）。
-	// その形は手編集と見分けが付かないので、**過去の原文そのものだったか**を
-	// スナップショットに問い合わせて確かめる（`unit-registry` は sync のたびに
-	// 原文ユニットの中身を hash キーで控えている）。中身まで突き合わせるので、
-	// ハッシュがたまたま衝突しても人の書いた訳文を捨てることはない
-	const snapshot = await UnitRegistryManager.getInstance().loadUnitRegistry(targetHash);
-	if (snapshot === null || snapshot !== target.content) {
-		return false; // 過去の原文ではない。誰かが書いている
 	}
 	target.content = source.content;
 	return true;

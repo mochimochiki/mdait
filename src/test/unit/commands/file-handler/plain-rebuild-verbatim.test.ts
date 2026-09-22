@@ -78,7 +78,8 @@ suite("非Markdown: 再構築で丸写しは翻訳待ち、訳済みは確認待
 		assert.ok(entry);
 		assert.strictEqual(entry.need, "review");
 		assert.strictEqual(result.modified, 1);
-		assert.strictEqual(result.revisionsNeeded, 1, "確認待ちは従来どおり数えること");
+		assert.strictEqual(result.revisionsNeeded, 0, "確認待ちは改訂待ちに数えないこと（Markdown と同じ）");
+		assert.strictEqual(result.adopted, 1, "紐の無い既訳を確認待ちで受けたら adopted に数えること");
 	});
 
 	test("改行コードだけが違う訳文は丸写しとみなさない（バイト列で判定する）", async () => {
