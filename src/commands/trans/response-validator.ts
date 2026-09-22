@@ -42,7 +42,8 @@ export type ValidationErrorCode =
 	| "INVALID_FIELD_TYPE" // フィールド型不正
 	| "JSON_IN_CONTENT" // コンテンツ内にJSON混入
 	| "NESTED_JSON" // ネストされたJSON構造
-	| "EMPTY_RESPONSE"; // answer が空（素のテキストで受けるときに使う）
+	| "EMPTY_RESPONSE" // answer が空（素のテキストで受けるときに使う）
+	| "LINE_NUMBER_ECHO"; // 行番号方式で、渡した行番号を本文へ書き戻した（専用の案内へつなぐため分ける）
 
 /**
  * 翻訳レスポンスの内部表現
@@ -331,7 +332,7 @@ export function validateRevisionPatchPlainResponse(rawResponse: string): Validat
 		return {
 			valid: false,
 			error: {
-				code: "INVALID_FIELD_TYPE",
+				code: "LINE_NUMBER_ECHO",
 				message: "The answer repeated the line numbers inside an edit block",
 				retryable: true,
 			},
