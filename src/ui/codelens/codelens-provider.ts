@@ -15,7 +15,7 @@ import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { FrontMatter } from "../../core/markdown/front-matter";
 import { FRONTMATTER_MARKER_KEY, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
-import { MdaitMarker } from "../../core/markdown/mdait-marker";
+import { MdaitMarker, isTranslationNeed } from "../../core/markdown/mdait-marker";
 import { markdownParser } from "../../core/markdown/parser";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -412,14 +412,17 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			);
 
 			if (entry.need) {
-				codeLenses.push(
-					new vscode.CodeLens(range, {
-						title: vscode.l10n.t("✨Translate"),
-						tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
-						command: "mdait.codelens.translateFile",
-						arguments: [document.uri],
-					}),
-				);
+				// 確認待ち（review）には ✨翻訳を出さない（Markdown のユニットと同じ規則）
+				if (isTranslationNeed(entry.need)) {
+					codeLenses.push(
+						new vscode.CodeLens(range, {
+							title: vscode.l10n.t("✨Translate"),
+							tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+							command: "mdait.codelens.translateFile",
+							arguments: [document.uri],
+						}),
+					);
+				}
 
 				const { title, tooltip } = completionButtonLabel(entry.need);
 				codeLenses.push(

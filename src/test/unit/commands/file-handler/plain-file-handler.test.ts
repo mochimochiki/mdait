@@ -540,6 +540,43 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result, undefined);
 		});
 
+		test("確認待ち（need:review）の既訳は訳し直さず、そのまま残すこと", async () => {
+			// 取り込んだ既訳を AI の上書きから守る状態（ADR-260912-07）。訳し直すかは人が決める
+			const sourceFile = path.join(tempDir, "source", "adopted.txt");
+			const targetFile = path.join(tempDir, "target", "adopted.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+			fs.writeFileSync(sourceFile, "原文", "utf-8");
+			fs.writeFileSync(targetFile, "adopted translation", "utf-8");
+
+			UnitStateStore.getInstance().setEntry({
+				path: "target/adopted.txt",
+				kind: "unit" as const, seat: seat(0),
+				level: 0,
+				titleHash: "",
+				hash: calculateHash("adopted translation", false),
+				from: calculateHash("原文", false),
+				need: "review",
+			});
+			// 呼ばれたら落ちる翻訳器（呼ばれないことを確かめる）
+			const failingTranslator = {
+				translate: () => {
+					throw new Error("review の既訳を訳し直そうとした");
+				},
+			} as unknown as Translator;
+
+			const result = await handler.translate(
+				targetFile,
+				failingTranslator,
+				{ sourceDir: "source", targetDir: "target", sourceLang: "ja", targetLang: "en" },
+				dummyProgress,
+				dummyToken,
+			);
+
+			assert.strictEqual(result, undefined);
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), "adopted translation");
+		});
+
 		test("翻訳前にキャンセルされた場合、中断として投げること", async () => {
 			const sourceFile = path.join(tempDir, "source", "cancel.txt");
 			const targetFile = path.join(tempDir, "target", "cancel.txt");

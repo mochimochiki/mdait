@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { applyRevisionPatch, createUnifiedDiff, hasDiff } from "../../core/diff/diff-generator";
 import { calculateHash } from "../../core/hash/hash-calculator";
+import { isTranslationNeed } from "../../core/markdown/mdait-marker";
 import { type FileStatusItem, Status, StatusItemType } from "../../core/status/status-item";
 import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
@@ -57,8 +58,8 @@ function matchesPlainTarget(targets: NeedTarget[] | undefined, hash: string): bo
  * 相乗りさせると、集計都合で `Status` の付け方が変わったときにボタンが巻き添えで消える。
  *
  * - `need:review`（確認待ち）→ `…Attention`: 「レビュー済みにする」だけを出す。
- *   通常の `mdaitPlainFileTarget` に付く ✨翻訳を出すと、trans は review を処理しないので
- *   押しても「翻訳不要」で終わる — 押せないものをボタンにしない（ux.md §3.3）
+ *   trans は review を訳さない（`isTranslationNeed`）ので、✨翻訳を出しても押して
+ *   何も起きない — 押せないものをボタンにしない（ux.md §3.3）
  * - need なし → `…Complete`（TM 登録などの完了後の操作）
  * - それ以外（translate / revise@…）→ `mdaitPlainFileTarget`（✨翻訳）
  */
@@ -216,8 +217,8 @@ export class PlainFileHandler implements FileHandler {
 
 		// 2. UnitStateStoreからエントリ取得（非MD=order:0）
 		const entry = store.getSoleEntry(targetRelPath);
-		if (!entry || !entry.need) {
-			// 翻訳不要
+		if (!entry || !isTranslationNeed(entry.need)) {
+			// 翻訳不要。確認待ち（review）も訳さない — 取り込んだ既訳を AI で上書きしてしまう
 			return undefined;
 		}
 
