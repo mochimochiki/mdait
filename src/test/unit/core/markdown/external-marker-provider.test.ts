@@ -442,7 +442,7 @@ suite("ExternalMarkerProvider", () => {
 			];
 			const memo = buildAlignmentMemo(entries, [], new Set());
 			assert.deepStrictEqual(memo.unmatchedSeats, [], "1件も預けない");
-			assert.deepStrictEqual(memo.recoveredHeldHashes, []);
+			assert.deepStrictEqual(memo.recoveredHeldEntries, []);
 		});
 
 		test("本文を空にして貼り戻しても、行が二重にならず状態が戻ること", () => {

@@ -125,7 +125,8 @@ export class PlainFileHandler implements FileHandler {
 
 		// 数え方も Markdown と同じ。紐の無い既訳を review で受けたら adopted、改訂待ちは revisionsNeeded
 		// 訳文だけが変わった回（hash だけ進む）は従来どおり unchanged に数える
-		const modified = !existing || existing.from !== sourceHash || existing.need !== need ? 1 : 0;
+		// 丸写しを写し直した回は訳文ファイルを書いているので、from と need が変わらなくても変更に数える
+		const modified = staleCopy || !existing || existing.from !== sourceHash || existing.need !== need ? 1 : 0;
 		const becameRevision = modified === 1 && result.targetMarker.needsRevision();
 		const revisionsNeeded = becameRevision ? 1 : 0;
 		const adopted = existingText && need === "review" ? 1 : 0;

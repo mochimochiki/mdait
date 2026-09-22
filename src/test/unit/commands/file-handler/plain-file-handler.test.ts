@@ -261,6 +261,31 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.revisionsNeeded, 0);
 		});
 
+		test("from だけ先へ進んでいた古い丸写しを写し直した回は、変更として数えること", async () => {
+			// 以前の sync は丸写しを写し直さずに from だけ進めていた。その形では from も need も
+			// 変わらないが、訳文ファイルは書き換わるので「変更なし」と数えてはいけない
+			const sourceFile = path.join(tempDir, "source", "data.csv");
+			const targetFile = path.join(tempDir, "target", "data.csv");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			const oldContent = "col1,col2\nval1,val2\n";
+			const newContent = "col1,col2\nval1,val3\n";
+			const oldHash = calculateHash(oldContent, false);
+			const newHash = calculateHash(newContent, false);
+			fs.writeFileSync(sourceFile, newContent, "utf-8");
+			fs.writeFileSync(targetFile, oldContent, "utf-8");
+			UnitRegistryManager.getInstance().saveUnitRegistry(oldHash, oldContent);
+			const store = UnitStateStore.getInstance();
+			store.setSoleEntry("target/data.csv", { hash: oldHash, from: newHash, need: "translate" });
+
+			const result = await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), newContent, "前提: 写し直している");
+			assert.strictEqual(result.modified, 1);
+			assert.strictEqual(result.unchanged, 0);
+		});
+
 		test("未訳でも手が入った訳文ファイルは写し直さず、translate のままにすること", async () => {
 			const sourceFile = path.join(tempDir, "source", "data.csv");
 			const targetFile = path.join(tempDir, "target", "data.csv");

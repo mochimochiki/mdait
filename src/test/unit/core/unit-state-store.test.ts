@@ -628,7 +628,7 @@ suite("UnitStateStore", () => {
 			const store = UnitStateStore.getInstance();
 			store.load(tempDir);
 			seed(store, 1);
-			store.setEntry({
+			const held = {
 				path: "ja/a.md",
 				kind: "held" as const, seat: "",
 				level: 2,
@@ -636,9 +636,10 @@ suite("UnitStateStore", () => {
 				hash: "held",
 				from: "s",
 				need: "",
-			});
+			};
+			store.setEntry(held);
 
-			assert.strictEqual(store.dropHeldEntries("ja/a.md", ["held"]), 1);
+			assert.strictEqual(store.dropHeldEntries("ja/a.md", [held]), 1);
 			assert.deepStrictEqual(
 				store.getEntriesByPath("ja/a.md").map((e) => e.seat),
 				[seat(0)],
@@ -1449,17 +1450,27 @@ suite("UnitStateStore", () => {
 				assert.strictEqual(merged.length, 1, "章を預けたついでに競合の行が消えている");
 			});
 
-			test("拾い戻した本文の hash で消すときも、合流で降ろされた行は消さないこと", () => {
+			test("拾い戻した行だけを消し、同じ本文 hash の選ばれなかった行は残すこと", () => {
+				// 合流で降ろされた行は、本文が一致した側が席へ戻ることで片付く。拾い戻された行まで
+				// 残すと競合が一覧から消えず、同じ hash の別の行まで消すと相手側の状態が失われる
 				write(tempDir, [
 					"# mdait unit-state",
-					`a.md\tunit\t${seat(0)}\t1\tth\tH\tfrom1\t`,
-					`a.md\tunit\t${seat(0)}\t1\tth\tH\tfrom2\trevise@old`,
+					`a.md\theld\tu${seat(0)}\t1\tth\tH\tfrom1\t`,
+					`a.md\theld\tu${seat(0)}\t1\tth\tH\tfrom2\trevise@old`,
 				]);
 				const store = UnitStateStore.getInstance();
 				store.load(tempDir);
+				const merged = store.getEntriesByPath("a.md").filter(isMergeHeldEntry);
+				assert.strictEqual(merged.length, 2, "前提");
+				const recovered = merged.find((entry) => entry.from === "from1");
+				assert.ok(recovered);
 
-				assert.strictEqual(store.dropHeldEntries("a.md", ["H"]), 0);
-				assert.strictEqual(store.getEntriesByPath("a.md").filter(isMergeHeldEntry).length, 1);
+				assert.strictEqual(store.dropHeldEntries("a.md", [recovered]), 1);
+				const left = store.getEntriesByPath("a.md").filter(isMergeHeldEntry);
+				assert.deepStrictEqual(
+					left.map((entry) => entry.from),
+					["from2"],
+				);
 			});
 
 			test("席の列が読めない値なら、合流由来として数えない", () => {

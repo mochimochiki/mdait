@@ -1292,25 +1292,22 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 席に着いていない行を、本文 hash を指定して消す。
+	 * 本文が戻ってきて拾い戻された「席に着いていない行」を消す。
 	 *
-	 * 本文が戻ってきて拾い戻された行を外すために使う（`detachMarkers` が席のキーで
-	 * 書き直すので、残すと同じ状態の行が二重になる）。合流で降ろされた行
-	 * （`isMergeHeldEntry`）は人の判断待ちなので消さない。
+	 * `detachMarkers` が席のキーで書き直すので、残すと同じ状態の行が二重になる。
+	 * 合流で降ろされた行（`isMergeHeldEntry`）も、拾い戻されたならここで消える —
+	 * 本文が一致した側を席へ戻すのが、その行の片付け方である。**消すのは拾い戻された
+	 * 行そのものだけ**で、同じ本文 hash の別の行（合流で選ばれなかった側）は残す。
 	 *
+	 * @param entries 拾い戻された行（読み込み時の照合結果。いまのストアに無ければ何もしない）
 	 * @returns 削除されたエントリ数
 	 */
-	dropHeldEntries(filePath: string, hashes: readonly string[]): number {
+	dropHeldEntries(filePath: string, entries: readonly UnitStateEntry[]): number {
 		this.autoLoad();
 		let removed = 0;
-		for (const hash of new Set(hashes)) {
-			for (const entry of this.heldEntriesWithHash(filePath, hash)) {
-				if (isMergeHeldEntry(entry)) {
-					continue;
-				}
-				if (this.dropRow(filePath, entryKey(entry))) {
-					removed++;
-				}
+		for (const entry of entries) {
+			if (entry.kind === "held" && this.dropRow(filePath, entryKey(entry))) {
+				removed++;
 			}
 		}
 		return removed;

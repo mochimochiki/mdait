@@ -69,11 +69,12 @@ export interface MarkerAlignmentMemo {
 	 */
 	readonly unmatchedSeats: readonly string[];
 	/**
-	 * 席に着いていない行から拾い戻された行の本文 hash。その行を消す。
+	 * 席に着いていない行から拾い戻された行。その行を消す。
 	 *
-	 * 書き出しが席のキーで書き直すため、残すと同じ状態の行が二重になる。
+	 * 書き出しが席のキーで書き直すため、残すと同じ状態の行が二重になる。hash ではなく
+	 * 行そのものを持つのは、同じ本文 hash の別の行（合流で選ばれなかった側）を巻き込まないため。
 	 */
-	readonly recoveredHeldHashes: readonly string[];
+	readonly recoveredHeldEntries: readonly UnitStateEntry[];
 	/**
 	 * ユニットごとの「いま座っている席」。**添字ではなくユニットそのものを鍵にする。**
 	 *
@@ -390,7 +391,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	private applyAlignmentMemo(filePath: string, memo: MarkerAlignmentMemo): void {
 		// 先に席から外す。外す前に席へ移すと、同じ本文 hash の突き合わせ（席は1本文1席）で
 		// 拾い戻したばかりの行が「既にある席」と見なされ、退避したい行が置けなくなる
-		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldHashes);
+		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldEntries);
 		const parked = this.store.parkEntries(filePath, memo.unmatchedSeats);
 		if (recovered > 0 || parked > 0) {
 			logger.info("marker", "Applied held seats from the parse-time alignment", {
@@ -460,7 +461,7 @@ export function buildAlignmentMemo(
 	aligned: ReadonlyArray<UnitStateEntry | undefined> = [],
 ): MarkerAlignmentMemo {
 	const unmatchedSeats: string[] = [];
-	const recoveredHeldHashes: string[] = [];
+	const recoveredHeldEntries: UnitStateEntry[] = [];
 	const seatByUnit = new Map<MdaitUnit, string>();
 	for (let i = 0; i < units.length; i++) {
 		const entry = aligned[i];
@@ -469,14 +470,14 @@ export function buildAlignmentMemo(
 		}
 	}
 	if (units.length === 0) {
-		return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
+		return { unmatchedSeats, recoveredHeldEntries, seatByUnit };
 	}
 	for (const entry of entries) {
 		const matched = matchedEntries.has(entry);
 		if (isHeldBackEntry(entry)) {
 			if (matched) {
 				// 本文が戻ってきて拾われた。書き出しが席のキーで書き直すので、こちらは消す
-				recoveredHeldHashes.push(entry.hash);
+				recoveredHeldEntries.push(entry);
 			}
 			continue;
 		}
@@ -491,7 +492,7 @@ export function buildAlignmentMemo(
 		}
 		unmatchedSeats.push(entry.seat);
 	}
-	return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
+	return { unmatchedSeats, recoveredHeldEntries, seatByUnit };
 }
 
 /**
