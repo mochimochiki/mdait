@@ -10,6 +10,9 @@ import {
 } from "./unit-registry-encoder";
 import { isCleanParse, UnitRegistryStore } from "./unit-registry-store";
 
+/** 台帳の掃除（GC）を走らせるファイルサイズの閾値（バイト）。これ未満なら掃除しない */
+export const UNIT_REGISTRY_GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 /**
  * ユニットレジストリマネージャー
  * ユニットコンテンツのレジストリを`.mdait/unit-registry`ファイルで管理
@@ -33,9 +36,6 @@ export class UnitRegistryManager {
 
 	/** ストアが読み込み済みかどうか */
 	private storeLoaded = false;
-
-	/** GC閾値（バイト） */
-	private static readonly GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
 
 	/** 読み取りに傷があったとき、上書きする前に元のバイト列を避難させる先 */
 	private static readonly SALVAGE_FILE_NAME = "unit-registry.broken";
@@ -315,7 +315,7 @@ export class UnitRegistryManager {
 			return;
 		}
 		this.mergeWriteBufferInto(store);
-		const filePath = path.join(mdaitDir, "unit-registry");
+		const filePath = Configuration.getInstance().getUnitRegistryFilePath();
 		this.salvageBeforeOverwrite(filePath, mdaitDir);
 		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(store.serialize()));
 	}
@@ -387,7 +387,7 @@ export class UnitRegistryManager {
 
 		// ファイルサイズチェック（閾値未満ならスキップ）
 		const stats = fs.statSync(filePath);
-		if (stats.size < UnitRegistryManager.GC_THRESHOLD) {
+		if (stats.size < UNIT_REGISTRY_GC_THRESHOLD) {
 			return;
 		}
 
@@ -431,13 +431,8 @@ export class UnitRegistryManager {
 			}
 		}
 
-		// 正規形でファイルに書き込み
-		const content = store.serialize();
-		this.salvageBeforeOverwrite(filePath, path.dirname(filePath));
-		await vscode.workspace.fs.writeFile(
-			vscode.Uri.file(filePath),
-			new TextEncoder().encode(content),
-		);
+		// 正規形でファイルに書き込み（原本の避難も含めて persistStore に任せる）
+		await this.persistStore(store);
 
 		console.log(
 			`GC completed: ${beforeSize} -> ${store.size()} unit-registry entries`,

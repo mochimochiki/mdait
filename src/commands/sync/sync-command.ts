@@ -27,7 +27,7 @@ import {
 	planContentRelink,
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
-import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UNIT_REGISTRY_GC_THRESHOLD, UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import {
 	UnitStateStore,
 	isCleanParse as isUnitStateCleanParse,
@@ -662,7 +662,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// - configuredDirs: config の全 pair のディレクトリ。ここから外れた行は消してよい
 		// - scannedDirs:    今回実際に走査できたディレクトリ。ここに無い行は「確かめていない」
 		// - seenPaths:      走査して実在を確認したファイル
-		const configuredDirs = collectConfiguredDirs(config);
+		// `UnitStateEntry.path` と同じ基準（ワークスペースルート相対・`/` 区切り）にそろえる
+		const configuredDirs = collectAllPairDirsAbs(config).map(toWorkspaceRelativePath);
 		const scannedDirs = new Set<string>();
 		const seenPaths = new Set<string>();
 		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
@@ -1081,17 +1082,12 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 }
 
 /**
- * config の全 pair の原文・訳文ディレクトリを、`UnitStateEntry.path` と同じ基準
- * （ワークスペースルート相対・`/` 区切り）で返す。
+ * config の**全** pair の原文・訳文ディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
  *
  * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
  * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
- */
-/**
- * config の**全** pair のディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
- *
- * 台帳の掃除の走査だけがこれを使う。掃除は「消してよい」と言い切る操作なので、
- * その日の作業範囲ではなくワークスペース全体を見る必要がある。
+ * 台帳の掃除も同じで、「消してよい」と言い切るにはその日の作業範囲ではなく
+ * ワークスペース全体を見る必要がある。
  */
 function collectAllPairDirsAbs(config: Configuration): string[] {
 	const baseDir = config.getConfigBaseDir();
@@ -1099,16 +1095,6 @@ function collectAllPairDirsAbs(config: Configuration): string[] {
 	for (const pair of config.transPairs) {
 		dirs.add(path.resolve(baseDir, pair.sourceDir));
 		dirs.add(path.resolve(baseDir, pair.targetDir));
-	}
-	return [...dirs];
-}
-
-function collectConfiguredDirs(config: Configuration): string[] {
-	const baseDir = config.getConfigBaseDir();
-	const dirs = new Set<string>();
-	for (const pair of config.transPairs) {
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.sourceDir)));
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
 	}
 	return [...dirs];
 }
@@ -2301,7 +2287,7 @@ async function runUnitRegistryGC(statusManager: StatusManager, scope: RegistrySw
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
-	if (unitRegistryManager.getUnitRegistryFileSize() < 5 * 1024 * 1024) {
+	if (unitRegistryManager.getUnitRegistryFileSize() < UNIT_REGISTRY_GC_THRESHOLD) {
 		return;
 	}
 
