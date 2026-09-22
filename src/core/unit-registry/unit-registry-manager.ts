@@ -14,8 +14,7 @@ import { isCleanParse, UnitRegistryStore } from "./unit-registry-store";
  * ユニットレジストリマネージャー
  * ユニットコンテンツのレジストリを`.mdait/unit-registry`ファイルで管理
  *
- * CRC32ハッシュの先頭3桁（000〜fff）で区画化し、
- * 決定的な順序（バケット昇順＋エントリ昇順）で出力
+ * 形式（区画はハッシュの先頭4桁）は `unit-registry-store.ts` の説明を見よ
  */
 export class UnitRegistryManager {
 	private static instance: UnitRegistryManager;
@@ -417,15 +416,8 @@ export class UnitRegistryManager {
 		}
 		const beforeSize = store.size();
 
-		// 初期エントリ（^[0-9a-f]{3}00000$）を保護対象に追加
-		const protectedHashes = new Set(activeHashes);
-		for (let i = 0; i < 4096; i++) {
-			const bucketId = i.toString(16).padStart(3, "0");
-			protectedHashes.add(`${bucketId}00000`);
-		}
-
 		// アクティブなもののみ残す
-		store.retainOnly(protectedHashes);
+		store.retainOnly(activeHashes);
 
 		// キャッシュも更新
 		for (const hash of this.cache.keys()) {

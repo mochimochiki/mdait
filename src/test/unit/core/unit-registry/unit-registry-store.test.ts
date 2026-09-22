@@ -253,6 +253,25 @@ abc00002 theirs
 			assert.ok(isCleanParse(report), "CRLF というだけで原本の避難が走ってしまう");
 		});
 
+		test("旧形式の区画の目印（<3桁>00000 の空の行）は読み捨て、書き出しにも残さないこと", () => {
+			const content = ["abc00000 ", "abc00001 contentA1", "0ff00000 ", "0ff00001  noteOnly"].join("\n");
+
+			const store = new UnitRegistryStore();
+			const report = store.parse(content);
+
+			assert.ok(isCleanParse(report), "空の行を傷として数えている");
+			assert.equal(store.size(), 2);
+			assert.equal(store.get("abc00000"), null);
+			assert.equal(store.getNote("0ff00001"), "noteOnly", "note だけの行まで捨てている");
+			assert.ok(!store.serialize().includes("abc00000"), "空の行が書き出しに持ち越されている");
+		});
+
+		test("00000 で終わる本物の控えは残すこと", () => {
+			const store = new UnitRegistryStore();
+			store.parse("abc00000 realContent");
+			assert.equal(store.get("abc00000"), "realContent");
+		});
+
 		test("CRLF でも読めない行に数えない", () => {
 			const content = ["abc0", "abc00001 contentA1"].join("\r\n");
 
