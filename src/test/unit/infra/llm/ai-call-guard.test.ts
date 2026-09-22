@@ -1,5 +1,5 @@
 /**
- * @file call-budget.test.ts
+ * @file ai-call-guard.test.ts
  * @description AI を呼び過ぎたときの歯止めのテスト。
  *
  * 実測で見つかった暴走の回帰固定: 途中で切れた JSON を返す相手に 1 ファイルの翻訳を
@@ -20,7 +20,7 @@ import {
 	resetAiCallGuard,
 	setAiCallGuardClock,
 	withAiCallGuard,
-} from "../../../../infra/llm/call-budget";
+} from "../../../../infra/llm/ai-call-guard";
 
 /** 常に同じ答えを返す相手 */
 function alwaysAnswers(answer = "ok"): AIService & { calls: number } {
