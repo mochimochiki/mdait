@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
 import { assignSeats, isSeatKey } from "./seat-keys";
+import { isConflictMarkerLine } from "../markdown/conflict-markers";
 
 const logger = Logger.getInstance();
 
@@ -67,10 +68,6 @@ const BUCKETS_PER_DIR = 64;
 /** ファイルごとの「席に着いていない行を置く区画」の見出しに付ける印 */
 const UNSEATED_SECTION_SUFFIX = "[unseated]";
 
-/** 合流で残る競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
-function isConflictMarkerLine(line: string): boolean {
-	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
-}
 
 /**
  * 行の種別。**桁のトリックではなく、独立した列で表す。**

@@ -1,4 +1,5 @@
 import { encodeUnitRegistry } from "./unit-registry-encoder";
+import { isConflictMarkerLine } from "../markdown/conflict-markers";
 
 /**
  * Unit Registry Store
@@ -67,10 +68,6 @@ function isEntryLine(line: string): boolean {
 	return /^[0-9a-f]{8} /i.test(line);
 }
 
-/** git がマージで残す競合マーカーの行か（`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`） */
-function isConflictMarkerLine(line: string): boolean {
-	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
-}
 
 /**
  * 読み取れなかったものの内訳。すべて 0 なら、ファイルは丸ごと読めている。

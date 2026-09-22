@@ -1,5 +1,8 @@
 import { getCodeBlockLineSet } from "./code-block-lines";
 
+const CONFLICT_MARKER_LINE = /^(<{7}|\|{7}|={7}|>{7})(\s|$)/;
+const CONFLICT_MARKER_ANY_LINE = /^(<{7}|\|{7}|={7}|>{7})(\s|$)/m;
+
 /**
  * バージョン管理の合流が残す競合マーカーの行か。
  *
@@ -8,8 +11,8 @@ import { getCodeBlockLineSet } from "./code-block-lines";
  * 取り違えないためである。`>>>>>>>` は引用の入れ子と形が同じなので、後ろに名札
  * （`<<<<<<< .mine` の `.mine`）が無い場合でも7文字ちょうどであることに頼る。
  */
-function isMarkerLine(line: string): boolean {
-	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line);
+export function isConflictMarkerLine(line: string): boolean {
+	return CONFLICT_MARKER_LINE.test(line);
 }
 
 /**
@@ -23,14 +26,14 @@ function isMarkerLine(line: string): boolean {
  * 本文としては壊れており、そのまま hash を取ると訳文へその姿が写る。
  */
 export function hasConflictMarkers(content: string): boolean {
-	if (!/^(<{7}|\|{7}|={7}|>{7})(\s|$)/m.test(content)) {
+	if (!CONFLICT_MARKER_ANY_LINE.test(content)) {
 		// ほとんどの原稿はここで抜ける（行に切る前に1回で判定する）
 		return false;
 	}
 	const codeBlockLines = getCodeBlockLineSet(content);
 	const lines = content.split(/\r?\n/);
 	for (let i = 0; i < lines.length; i++) {
-		if (!codeBlockLines.has(i) && isMarkerLine(lines[i])) {
+		if (!codeBlockLines.has(i) && isConflictMarkerLine(lines[i])) {
 			return true;
 		}
 	}
@@ -46,5 +49,5 @@ export function hasConflictMarkers(content: string): boolean {
  * （TMX は本文をエスケープして書き、CSV の値は引用符に包まれる）。
  */
 export function hasConflictMarkersInDataFile(content: string): boolean {
-	return /^(<{7}|\|{7}|={7}|>{7})(\s|$)/m.test(content);
+	return CONFLICT_MARKER_ANY_LINE.test(content);
 }
