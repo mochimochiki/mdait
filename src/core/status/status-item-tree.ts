@@ -89,6 +89,56 @@ function isAttentionNeed(need: string | undefined): boolean {
 	return need === "review" || need === "verify-deletion";
 }
 
+/** 裁定を待つ項目を探すのに要る、ファイル項目の形だけ（`FileStatusItem` の部分型） */
+export interface AttentionFileLike {
+	/** 原文側か訳文側か（`Status.Source` の文字列値は "source"） */
+	status?: string;
+	/** 原文と結びついていない訳文か（収集のたびにディスクから計算した結果。ADR-260806-01） */
+	isOrphanTarget?: boolean;
+	/** 非Markdown のファイルレベル need（Markdown では常に undefined） */
+	needFlag?: string;
+	/** frontmatter 項目 */
+	frontmatter?: { needFlag?: string };
+}
+
+/**
+ * 1つのファイルの中で、人の裁定を待つ項目（ファイル自身・frontmatter・本文ユニット）を歩く。
+ *
+ * 何を歩き何を外すかの規則はここにしか置かない。ツリーの要対応（`walkNeedsAttentionItems`）と
+ * AI レビューの一括消化（`ai-review/pending-review-files.ts`）がどちらもここを通る。
+ *
+ * 歩かないファイル:
+ * - 孤立訳文（`isOrphanTarget === true`）: 原文が無いので「この訳が原文に合うか」を
+ *   裁定できない。先に決めるべきは「この訳文をどうするか」（破棄か原文の復元か）で、
+ *   その操作はファイル行にある。中のユニットを要対応に並べても目を逸らさせるだけ
+ * - 原文側（`Status.Source`）: 訳ではないので裁定の対象にならない
+ * 印はいずれも収集時にディスクから計算されたもので、ここでは読むだけ（ADR-260806-01）
+ *
+ * @param file ファイル項目
+ * @param units そのファイルの本文ユニット
+ */
+export function* attentionItemsInFile<F extends AttentionFileLike, U extends { needFlag?: string }>(
+	file: F,
+	units: Iterable<U>,
+): Generator<F | NonNullable<F["frontmatter"]> | U> {
+	if (file.isOrphanTarget === true || file.status === Status.Source) {
+		return;
+	}
+	// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
+	// need はファイルレベルに載る（MD では常に undefined なので二重に数えない）
+	if (isAttentionNeed(file.needFlag)) {
+		yield file;
+	}
+	if (file.frontmatter && isAttentionNeed(file.frontmatter.needFlag)) {
+		yield file.frontmatter as NonNullable<F["frontmatter"]>;
+	}
+	for (const unit of units) {
+		if (isAttentionNeed(unit.needFlag)) {
+			yield unit;
+		}
+	}
+}
+
 /**
  * StatusItemのファーストクラスコレクション
  * ディレクトリ・ファイル・ユニットの階層構造を効率的に管理する
@@ -240,33 +290,11 @@ export class StatusItemTree {
 	 * `countPendingReviewUnits`（sync 完了通知の件数）の**唯一の共通の走査**である。
 	 * 2つが別々に歩くと、片方だけ直したときに「通知は 3 件と言うのに要対応ノードは
 	 * 0 件で出ない」というずれが再発する。どちらも need の種類でしか絞らない。
-	 *
-	 * 歩かないファイル:
-	 * - 孤立訳文（`isOrphanTarget === true`）: 原文が無いので「この訳が原文に合うか」を
-	 *   裁定できない。先に決めるべきは「この訳文をどうするか」（破棄か原文の復元か）で、
-	 *   その操作はファイル行にある。中のユニットを要対応に並べても目を逸らさせるだけ
-	 * - 原文側（`Status.Source`）: 訳ではないので裁定の対象にならない
-	 * どちらも AI レビュー（`ai-review/pending-review-files.ts`）が同じ理由で外している。
-	 * 印はいずれも収集時にディスクから計算されたもので、ここでは読むだけ（ADR-260806-01）
+	 * 1ファイルの中で何を歩き何を外すか（孤立訳文・原文側）は `attentionItemsInFile` を見よ。
 	 */
 	private *walkNeedsAttentionItems(scopeDirs?: string[]): Generator<NeedsAttentionItem> {
 		for (const file of this.getFilesInScope(scopeDirs)) {
-			if (file.isOrphanTarget === true || file.status === Status.Source) {
-				continue;
-			}
-			// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
-			// need はファイルレベルに載る（MD では常に undefined なので二重に数えない）
-			if (isAttentionNeed(file.needFlag)) {
-				yield file;
-			}
-			if (file.frontmatter && isAttentionNeed(file.frontmatter.needFlag)) {
-				yield file.frontmatter;
-			}
-			for (const unit of this.getUnitsInFile(file.filePath)) {
-				if (isAttentionNeed(unit.needFlag)) {
-					yield unit;
-				}
-			}
+			yield* attentionItemsInFile(file, this.getUnitsInFile(file.filePath));
 		}
 	}
 
