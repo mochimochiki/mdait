@@ -91,7 +91,7 @@ export function isCleanParse(report: UnitRegistryParseReport): boolean {
  * インメモリでバケット構造を管理し、パース・シリアライズを担当
  */
 export class UnitRegistryStore {
-	/** bucketId(3桁hex) -> Map<hash(8桁), UnitRegistryEntry> */
+	/** bucketId(4桁hex) -> Map<hash(8桁), UnitRegistryEntry> */
 	private buckets = new Map<string, Map<string, UnitRegistryEntry>>();
 
 	/**
@@ -149,6 +149,12 @@ export class UnitRegistryStore {
 			const hash = normalizeHash(parts[0]);
 			const encodedContent = parts[1] ?? "";
 			const encodedNote = parts[2];
+			if (!encodedContent && !encodedNote) {
+				// content も note も無い行は何も運んでいない。旧形式（区画が3桁だった頃）は
+				// 区画の目印を `<3桁>00000 ` という空の行で置いていたので、それがここに来る。
+				// 残すと書き出しのたびに持ち越され、消す手段が無い
+				continue;
+			}
 
 			const bucketId = getBucketId(hash);
 			if (!this.buckets.has(bucketId)) {
@@ -205,16 +211,6 @@ export class UnitRegistryStore {
 	 */
 	upsert(hash: string, encoded: string): void {
 		this.ensureEntry(hash).content = encoded;
-	}
-
-	/**
-	 * 複数エントリの content を一括で挿入または更新
-	 * @param entries [hash, encoded] のペア配列
-	 */
-	upsertMany(entries: [string, string][]): void {
-		for (const [hash, encoded] of entries) {
-			this.upsert(hash, encoded);
-		}
 	}
 
 	/**
@@ -326,18 +322,5 @@ export class UnitRegistryStore {
 	 */
 	clear(): void {
 		this.buckets.clear();
-	}
-
-	/**
-	 * すべてのハッシュを取得
-	 */
-	keys(): string[] {
-		const result: string[] = [];
-		for (const entries of this.buckets.values()) {
-			for (const hash of entries.keys()) {
-				result.push(hash);
-			}
-		}
-		return result;
 	}
 }

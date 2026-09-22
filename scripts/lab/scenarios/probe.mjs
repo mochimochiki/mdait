@@ -1709,7 +1709,7 @@ async function allScenarios() {
 	});
 
 	// S79: S75 の「途中の章」版。末尾ではなく文書のまん中の章を消して sync → 貼り戻す。
-	//      末尾を見る刈り取り／保留（shouldPruneTail / parkEntriesFrom）はここでは
+	//      末尾を見る刈り取り／保留（shouldPruneLeftovers / parkEntriesFrom）はここでは
 	//      何も拾えない。読み込み時に「対応が付かなかった行」を控えて書き出しで
 	//      保留席へ移す経路が働いて初めて、貼り戻しで訳が戻る（ADR-260809-01）。
 	await scenario("S79 訳文を訳したあと途中の章を消して sync → 貼り戻す", async () => {

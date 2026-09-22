@@ -57,8 +57,8 @@ export interface MarkerFileContext {
 /**
  * 読み込み時の照合結果のうち、書き出し時の判断に要る分だけの控え。
  *
- * 行そのものではなく `order` で覚える。控えを取ってから使うまでのあいだにストアが
- * 書き換わりうるので（`movePath` など）、そのときのストアを正として引き直す。
+ * 行そのものではなく席のキー（と本文の hash）で覚える。控えを取ってから使うまでのあいだに
+ * ストアが書き換わりうるので（`movePath` など）、そのときのストアを正として引き直す。
  */
 export interface MarkerAlignmentMemo {
 	/**
@@ -153,11 +153,12 @@ export const embeddedMarkerProvider: MarkerProvider = new EmbeddedMarkerProvider
 /**
  * 外部ストア（`.mdait/unit-state`）とユニットを橋渡しする Provider。
  *
- * - マーカーは本文に埋め込まず、`UnitStateStore` に `(path, order)` キーで保管する。
+ * - マーカーは本文に埋め込まず、`UnitStateStore` に `(path, 席のキー)` で保管する（`seat-keys.ts`）。
  * - attach: store のエントリといまのユニットを**中身で**突き合わせてマーカーを後付けする
  *   （何番目かは身元に使わない。手がかりは本文の hash → 見出しの hash とレベル → 順序。
  *   詳細は `unit-state-align.ts`）。titleHash は補助の印ではなく、そこで使う鍵である。
- * - detach: 各ユニットを order=index でストアに書き込む（save は呼ばない。sync 完了時に1回）。
+ * - detach: 各ユニットを席のキーでストアに書き込む。座っていた席は据え置き、新しい章には
+ *   前後のあいだの席を配る（save は呼ばない。sync 完了時に1回）。
  *
  * `ctx.filePath` はワークスペース相対・/区切りを契約とする（正規化は呼び出し側の責務）。
  */
@@ -253,7 +254,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !kept.has(e.seat)).map((e) => e.seat);
 		const entryCount = this.store.countLiveEntriesByPath(filePath);
 		if (leftovers.length > 0) {
-			if (ctx.deliberateDeletion || shouldPruneTail(entryCount, units.length)) {
+			if (ctx.deliberateDeletion || shouldPruneLeftovers(entryCount, units.length)) {
 				// 消す側は今まで無言だった。掃除も刈り取り見送りもログを出すのに、
 				// 実際に状態を失う操作だけが記録に残らないのは追跡のしようがない
 				const removed = this.store.dropEntries(filePath, leftovers);
@@ -382,7 +383,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	/**
 	 * 読み込み時の控えを適用する（書き出しで行が上書きされる前に呼ぶ）。
 	 *
-	 * 控えは `order` しか持たないので、いまのストアを正として引き直す。控えを取ってから
+	 * 控えは席のキーと本文の hash しか持たないので、いまのストアを正として引き直す。控えを取ってから
 	 * ここへ来るまでのあいだにストアが書き換わっている可能性があるため（リネーム追随の
 	 * `movePath`、別のコマンドの書き込み）、控えの中身を鵜呑みにはしない。
 	 */
@@ -403,7 +404,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 }
 
 /**
- * 末尾の余った行を刈ってよいか。
+ * どのユニットにも席を譲らなかった行（余った行）を刈ってよいか。
  *
  * 守りたいのは「ユニットが 0 件になった」ときだけではなく「**一時的に減った**」ときである。
  * コードブロックの閉じ忘れでパースが崩れる、`sync.level` の設定を変えて見出しの粒度が
@@ -411,8 +412,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * ユニット数が戻っても、消えた `from`/`need` は戻らない。
  *
  * 刈らないと決めた行は捨て置かれるのではなく、**席から降ろして位置の意味を剥がす**
- * （`UnitStateStore.parkEntries`）。席に着いていない行は順序では拾われず、内容（本文の hash・
- * 見出しの hash とレベル）が一致したときだけ拾われる。だから章が戻ってくれば正しく復帰し、
+ * （`UnitStateStore.parkEntries`）。席に着いていない行は順序でも見出しでも拾われず、本文の hash が
+ * 完全に一致したときだけ拾われる（`alignEntriesToUnits` の `contentOnly`）。だから章が戻ってくれば正しく復帰し、
  * 戻ってこなければ無害に居座るだけになる。この保証があって初めて
  * 「消す側の失敗は取り返せず、残す側の失敗は取り返せる」という非対称が成り立つ。
  *
@@ -428,7 +429,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * ので、ユニット数がいくら増えても消えない）。人が明示的に頼んだ削除は判定を通さず必ず
  * 刈る（`MarkerFileContext.deliberateDeletion`）。詳しくは docs/design/unit-state.md §14。
  */
-export function shouldPruneTail(entryCount: number, unitCount: number): boolean {
+export function shouldPruneLeftovers(entryCount: number, unitCount: number): boolean {
 	if (unitCount === 0) {
 		// 本文を一時的に空にした・パース途中の崩れた状態。そのファイルの行を丸ごと失わない
 		return false;
@@ -444,7 +445,7 @@ export function shouldPruneTail(entryCount: number, unitCount: number): boolean 
  *
  * ユニットが0件のときは控えを作らない。本文を全選択して消した・コードブロックの閉じ忘れで
  * 以降が全部飲まれた、といった「一時的に潰れた」状態では**すべての行が対応なし**になるが、
- * それは章が消えた証拠ではない。`shouldPruneTail` が「ユニット0件なら刈らない」を先に返すのと
+ * それは章が消えた証拠ではない。`shouldPruneLeftovers` が「ユニット0件なら刈らない」を先に返すのと
  * 同じ理由で、ここでも証拠として扱わない。
  *
  * @param entries そのファイルの行（並び順）

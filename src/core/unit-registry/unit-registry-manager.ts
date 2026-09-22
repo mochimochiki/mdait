@@ -10,12 +10,14 @@ import {
 } from "./unit-registry-encoder";
 import { isCleanParse, UnitRegistryStore } from "./unit-registry-store";
 
+/** 台帳の掃除（GC）を走らせるファイルサイズの閾値（バイト）。これ未満なら掃除しない */
+export const UNIT_REGISTRY_GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 /**
  * ユニットレジストリマネージャー
  * ユニットコンテンツのレジストリを`.mdait/unit-registry`ファイルで管理
  *
- * CRC32ハッシュの先頭3桁（000〜fff）で区画化し、
- * 決定的な順序（バケット昇順＋エントリ昇順）で出力
+ * 形式（区画はハッシュの先頭4桁）は `unit-registry-store.ts` の説明を見よ
  */
 export class UnitRegistryManager {
 	private static instance: UnitRegistryManager;
@@ -34,9 +36,6 @@ export class UnitRegistryManager {
 
 	/** ストアが読み込み済みかどうか */
 	private storeLoaded = false;
-
-	/** GC閾値（バイト） */
-	private static readonly GC_THRESHOLD = 5 * 1024 * 1024; // 5MB
 
 	/** 読み取りに傷があったとき、上書きする前に元のバイト列を避難させる先 */
 	private static readonly SALVAGE_FILE_NAME = "unit-registry.broken";
@@ -316,7 +315,7 @@ export class UnitRegistryManager {
 			return;
 		}
 		this.mergeWriteBufferInto(store);
-		const filePath = path.join(mdaitDir, "unit-registry");
+		const filePath = Configuration.getInstance().getUnitRegistryFilePath();
 		this.salvageBeforeOverwrite(filePath, mdaitDir);
 		await vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), new TextEncoder().encode(store.serialize()));
 	}
@@ -388,7 +387,7 @@ export class UnitRegistryManager {
 
 		// ファイルサイズチェック（閾値未満ならスキップ）
 		const stats = fs.statSync(filePath);
-		if (stats.size < UnitRegistryManager.GC_THRESHOLD) {
+		if (stats.size < UNIT_REGISTRY_GC_THRESHOLD) {
 			return;
 		}
 
@@ -417,15 +416,8 @@ export class UnitRegistryManager {
 		}
 		const beforeSize = store.size();
 
-		// 初期エントリ（^[0-9a-f]{3}00000$）を保護対象に追加
-		const protectedHashes = new Set(activeHashes);
-		for (let i = 0; i < 4096; i++) {
-			const bucketId = i.toString(16).padStart(3, "0");
-			protectedHashes.add(`${bucketId}00000`);
-		}
-
 		// アクティブなもののみ残す
-		store.retainOnly(protectedHashes);
+		store.retainOnly(activeHashes);
 
 		// キャッシュも更新
 		for (const hash of this.cache.keys()) {
@@ -439,13 +431,8 @@ export class UnitRegistryManager {
 			}
 		}
 
-		// 正規形でファイルに書き込み
-		const content = store.serialize();
-		this.salvageBeforeOverwrite(filePath, path.dirname(filePath));
-		await vscode.workspace.fs.writeFile(
-			vscode.Uri.file(filePath),
-			new TextEncoder().encode(content),
-		);
+		// 正規形でファイルに書き込み（原本の避難も含めて persistStore に任せる）
+		await this.persistStore(store);
 
 		console.log(
 			`GC completed: ${beforeSize} -> ${store.size()} unit-registry entries`,

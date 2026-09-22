@@ -181,12 +181,6 @@ export function isMergeHeldEntry(entry: UnitStateEntry): boolean {
 }
 
 /**
- * `held` の行の `seat` 列に書ける値か（`u<席のキー>` か `f`）。
- *
- * 手で書き換えられた値・古い版が書いた値は空として扱う。数え落とすほうが、
- * 身元の分からない値を「競合」として人の前に出すより安全である。
- */
-/**
  * 降ろす行に残す「押し出された元の行の身元」。
  *
  * **読み取り（`readHeldOrigin`）が受け取れる語彙でしか作らない。** `entryKey` をそのまま
@@ -201,6 +195,12 @@ function heldOriginOf(entry: UnitStateEntry): string {
 	return entry.kind === "front" ? "f" : "";
 }
 
+/**
+ * `held` の行の `seat` 列に書ける値か（`u<席のキー>` か `f`）。書ける値ならそのまま、でなければ空を返す。
+ *
+ * 手で書き換えられた値・古い版が書いた値は空として扱う。数え落とすほうが、
+ * 身元の分からない値を「競合」として人の前に出すより安全である。
+ */
 function readHeldOrigin(seat: string): string {
 	if (seat === "f") {
 		return seat;
@@ -355,7 +355,7 @@ export class UnitStateStore {
 	 * `path` → ファイルID と、その逆引き。**行はこの ID で自分を名乗る。**
 	 *
 	 * 行にパスを持たせていた頃は、改名するとそのファイルの行が全部書き換わった。同じファイルへの
-	 * どんな変更とも領域が重なるので、`merge=union` では両方の行が残り、`revise@` が
+	 * どんな変更とも領域が重なるので、当時の `merge=union` では両方の行が残り、`revise@` が
 	 * **もう存在しないパスの行**に付く。次の同期の孤立掃除がその行を消すので、訳し直しの要求は
 	 * 誰にも見られないまま消えた（ADR-260908-04）。ID を挟めば、改名で動くのは見出し1行になる。
 	 *
@@ -816,8 +816,8 @@ export class UnitStateStore {
 	/**
 	 * 読み込みで1行を席に着ける。**同じ席に2行来ても、どちらも捨てない。**
 	 *
-	 * 合流のあとのファイルには、同じ `(path, order)` の行が2つ並ぶ（`merge=union` は
-	 * 両陣営の行を残し、競合マーカー入りのファイルでも両陣営の行はどちらも読めるため）。
+	 * 合流のあとのファイルには、同じ `(path, 席)` の行が2つ並ぶことがある（競合マーカー入りの
+	 * ファイルでも、読み取りは両陣営の行をどちらも拾うため）。
 	 * かつてはここで後勝ちに潰しており、**負けた側の `from` / `need` / `revise@` が
 	 * 警告も残さず消えていた** — 控えが他所に無いので、消えたことに気づく手掛かりも無い。
 	 *
@@ -1109,24 +1109,6 @@ export class UnitStateStore {
 		return found;
 	}
 
-	/** 席のキーで本文の行を引く（無ければ undefined） */
-	getUnitEntry(filePath: string, seat: string): UnitStateEntry | undefined {
-		this.autoLoad();
-		return this.rowsOf(filePath)?.get(`u${seat}`);
-	}
-
-	/** 本文の hash で、席に着いていない行を引く（無ければ undefined） */
-	getHeldEntry(filePath: string, hash: string): UnitStateEntry | undefined {
-		this.autoLoad();
-		return this.heldEntriesWithHash(filePath, hash)[0];
-	}
-
-	/** 席のキーで本文の行を消す */
-	removeUnitEntry(filePath: string, seat: string): void {
-		this.autoLoad();
-		this.dropRow(filePath, `u${seat}`);
-	}
-
 	/** 「ファイル＝単一ユニット」の行を書く（`getSoleEntry` を見よ） */
 	setSoleEntry(filePath: string, marker: { hash: string; from: string; need: string }): void {
 		this.autoLoad();
@@ -1277,11 +1259,20 @@ export class UnitStateStore {
 			//
 			// 絞るのは**ここ（預けるとき）だけ**である。読み取り（`seatOnLoad`）で絞ると、
 			// 合流のあとのファイルで「同じ本文・違う状態」の行が黙って消える
-			const older = this.heldEntriesWithHash(filePath, entry.hash);
+			//
+			// **合流で降ろされた行（`isMergeHeldEntry`）は絞る対象にしない。** 人がどちらを採るか
+			// 決めるのを待っている行で、ここで消すと競合が黙って消える
+			const older = this.heldEntriesWithHash(filePath, entry.hash).filter((row) => !isMergeHeldEntry(row));
 			for (const row of older) {
 				this.dropRow(filePath, entryKey(row));
 			}
-			this.putRow({ ...entry, kind: "held", seat: "" });
+			const parkedRow: UnitStateEntry = { ...entry, kind: "held", seat: "" };
+			const sameKey = this.rowsOf(filePath)?.get(entryKey(parkedRow));
+			if (sameKey && isMergeHeldEntry(sameKey)) {
+				// 同じ状態を合流で降ろされた行がすでに持っている。上書きすると競合の印が消える
+				continue;
+			}
+			this.putRow(parkedRow);
 			if (older.length === 0) {
 				parked++;
 			}
@@ -1304,7 +1295,8 @@ export class UnitStateStore {
 	 * 席に着いていない行を、本文 hash を指定して消す。
 	 *
 	 * 本文が戻ってきて拾い戻された行を外すために使う（`detachMarkers` が席のキーで
-	 * 書き直すので、残すと同じ状態の行が二重になる）。
+	 * 書き直すので、残すと同じ状態の行が二重になる）。合流で降ろされた行
+	 * （`isMergeHeldEntry`）は人の判断待ちなので消さない。
 	 *
 	 * @returns 削除されたエントリ数
 	 */
@@ -1313,6 +1305,9 @@ export class UnitStateStore {
 		let removed = 0;
 		for (const hash of new Set(hashes)) {
 			for (const entry of this.heldEntriesWithHash(filePath, hash)) {
+				if (isMergeHeldEntry(entry)) {
+					continue;
+				}
 				if (this.dropRow(filePath, entryKey(entry))) {
 					removed++;
 				}
@@ -1335,19 +1330,6 @@ export class UnitStateStore {
 			}
 		}
 		return removed;
-	}
-
-	/**
-	 * 指定パスの**すべての**行の数（frontmatter の行も、席に着いていない行も含む）。
-	 *
-	 * 「そのパスに行が1つでも在るか」を問うときだけ使う。**「訳文に守るべき状態が
-	 * 残っているか」を問うのに使ってはならない** — frontmatter の行は本文が1つも
-	 * 無くても在りうるので、本文の話をしているつもりで数えると常に1以上になる
-	 * （`countBodyEntriesByPath` を使うこと）。
-	 */
-	countEntriesByPath(filePath: string): number {
-		this.autoLoad();
-		return this.rowsOf(filePath)?.size ?? 0;
 	}
 
 	/**
@@ -1375,7 +1357,7 @@ export class UnitStateStore {
 	/**
 	 * 指定パスの、席に着いている行の数を返す。
 	 *
-	 * 刈るかどうかの判定（`shouldPruneTail`）はこちらを使う。席に着いていない行を数に
+	 * 刈るかどうかの判定（`shouldPruneLeftovers`）はこちらを使う。席に着いていない行を数に
 	 * 入れると、預かっている間ずっと「行がユニットより多い」ことになり、その数だけ
 	 * 「減った」と誤って見える。預かりの行はもう位置を持っていないので、位置の話には数えない。
 	 */
@@ -1463,12 +1445,6 @@ export class UnitStateStore {
 		this.dropRow(filePath, "f");
 	}
 
-	/** need != '' のエントリ一覧 */
-	getEntriesNeedingAction(): UnitStateEntry[] {
-		this.autoLoad();
-		return [...this.allEntries()].filter((e) => e.need !== "");
-	}
-
 	/** 全エントリを返す */
 	getAllEntries(): UnitStateEntry[] {
 		this.autoLoad();
@@ -1477,7 +1453,7 @@ export class UnitStateStore {
 
 	/**
 	 * 不要になったエントリを削除する。extensions設定変更後の残留エントリクリーンアップ用。
-	 * 同一pathの全order行がまとめて削除される。
+	 * 同一pathの行はまとめて削除される。
 	 *
 	 * 行を3つに切り分ける（docs/design/unit-state.md §8）。
 	 *
