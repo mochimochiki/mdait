@@ -1112,24 +1112,6 @@ export class UnitStateStore {
 		return found;
 	}
 
-	/** 席のキーで本文の行を引く（無ければ undefined） */
-	getUnitEntry(filePath: string, seat: string): UnitStateEntry | undefined {
-		this.autoLoad();
-		return this.rowsOf(filePath)?.get(`u${seat}`);
-	}
-
-	/** 本文の hash で、席に着いていない行を引く（無ければ undefined） */
-	getHeldEntry(filePath: string, hash: string): UnitStateEntry | undefined {
-		this.autoLoad();
-		return this.heldEntriesWithHash(filePath, hash)[0];
-	}
-
-	/** 席のキーで本文の行を消す */
-	removeUnitEntry(filePath: string, seat: string): void {
-		this.autoLoad();
-		this.dropRow(filePath, `u${seat}`);
-	}
-
 	/** 「ファイル＝単一ユニット」の行を書く（`getSoleEntry` を見よ） */
 	setSoleEntry(filePath: string, marker: { hash: string; from: string; need: string }): void {
 		this.autoLoad();
@@ -1354,19 +1336,6 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 指定パスの**すべての**行の数（frontmatter の行も、席に着いていない行も含む）。
-	 *
-	 * 「そのパスに行が1つでも在るか」を問うときだけ使う。**「訳文に守るべき状態が
-	 * 残っているか」を問うのに使ってはならない** — frontmatter の行は本文が1つも
-	 * 無くても在りうるので、本文の話をしているつもりで数えると常に1以上になる
-	 * （`countBodyEntriesByPath` を使うこと）。
-	 */
-	countEntriesByPath(filePath: string): number {
-		this.autoLoad();
-		return this.rowsOf(filePath)?.size ?? 0;
-	}
-
-	/**
 	 * 指定パスの**本文の行**の数（frontmatter の行を除く。席に着いていない行は含む）。
 	 *
 	 * 数え方は `getEntriesByPath` と同じで、配列を作らないだけの版である。
@@ -1477,12 +1446,6 @@ export class UnitStateStore {
 	removeFrontMatterEntry(filePath: string): void {
 		this.autoLoad();
 		this.dropRow(filePath, "f");
-	}
-
-	/** need != '' のエントリ一覧 */
-	getEntriesNeedingAction(): UnitStateEntry[] {
-		this.autoLoad();
-		return [...this.allEntries()].filter((e) => e.need !== "");
 	}
 
 	/** 全エントリを返す */

@@ -217,16 +217,6 @@ export class UnitRegistryStore {
 	}
 
 	/**
-	 * 複数エントリの content を一括で挿入または更新
-	 * @param entries [hash, encoded] のペア配列
-	 */
-	upsertMany(entries: [string, string][]): void {
-		for (const [hash, encoded] of entries) {
-			this.upsert(hash, encoded);
-		}
-	}
-
-	/**
 	 * content を取得
 	 * @param hash 8桁ハッシュ
 	 * @returns エンコード済みコンテンツ、存在しない場合はnull（note のみのエントリは "" を返す＝呼び出し側は falsy 判定で content 無しとして扱う）
@@ -335,18 +325,5 @@ export class UnitRegistryStore {
 	 */
 	clear(): void {
 		this.buckets.clear();
-	}
-
-	/**
-	 * すべてのハッシュを取得
-	 */
-	keys(): string[] {
-		const result: string[] = [];
-		for (const entries of this.buckets.values()) {
-			for (const hash of entries.keys()) {
-				result.push(hash);
-			}
-		}
-		return result;
 	}
 }

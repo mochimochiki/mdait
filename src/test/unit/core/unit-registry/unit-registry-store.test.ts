@@ -6,6 +6,13 @@ import {
 	isCleanParse,
 } from "../../../../core/unit-registry/unit-registry-store";
 
+/** 複数の控えをまとめて入れる */
+function upsertAll(store: UnitRegistryStore, entries: [string, string][]): void {
+	for (const [hash, encoded] of entries) {
+		store.upsert(hash, encoded);
+	}
+}
+
 suite("UnitRegistryStore", () => {
 	suite("getBucketId", () => {
 		test("ハッシュの先頭4桁を小文字で返す", () => {
@@ -47,10 +54,10 @@ suite("UnitRegistryStore", () => {
 		});
 	});
 
-	suite("upsertMany", () => {
+	suite("upsert をまとめて", () => {
 		test("複数エントリを一括追加できる", () => {
 			const store = new UnitRegistryStore();
-			store.upsertMany([
+			upsertAll(store, [
 				["abc12345", "content1"],
 				["def67890", "content2"],
 				["abc54321", "content3"],
@@ -109,8 +116,8 @@ suite("UnitRegistryStore", () => {
 			const store2 = new UnitRegistryStore();
 
 			// 異なる順序で追加
-			store1.upsertMany(entries);
-			store2.upsertMany([...entries].reverse());
+			upsertAll(store1, entries);
+			upsertAll(store2, [...entries].reverse());
 
 			assert.equal(store1.serialize(), store2.serialize());
 		});
@@ -320,7 +327,7 @@ fff12345 contentF`;
 	suite("retainOnly (GC)", () => {
 		test("指定したハッシュのみを残す", () => {
 			const store = new UnitRegistryStore();
-			store.upsertMany([
+			upsertAll(store, [
 				["abc12345", "content1"],
 				["abc54321", "content2"],
 				["def67890", "content3"],
@@ -345,7 +352,7 @@ fff12345 contentF`;
 
 		test("GC後も全区画の目印は出力される", () => {
 			const store = new UnitRegistryStore();
-			store.upsertMany([
+			upsertAll(store, [
 				["abc12345", "content1"],
 				["def67890", "content2"],
 			]);
@@ -359,7 +366,7 @@ fff12345 contentF`;
 
 		test("初期エントリが保護対象に含まれる場合、削除されない", () => {
 			const store = new UnitRegistryStore();
-			store.upsertMany([
+			upsertAll(store, [
 				["abc12345", "content1"],
 				["abc00000", "initial"], // 初期エントリと同じハッシュ
 				["def67890", "content2"],
@@ -388,19 +395,6 @@ fff12345 contentF`;
 			assert.equal(store.size(), 2);
 		});
 
-		test("keysはすべてのハッシュを返す", () => {
-			const store = new UnitRegistryStore();
-			store.upsertMany([
-				["abc12345", "content1"],
-				["def67890", "content2"],
-			]);
-
-			const keys = store.keys();
-			assert.equal(keys.length, 2);
-			assert.ok(keys.includes("abc12345"));
-			assert.ok(keys.includes("def67890"));
-		});
-
 		test("clearはストアを空にする", () => {
 			const store = new UnitRegistryStore();
 			store.upsert("abc12345", "content1");
@@ -423,7 +417,7 @@ fff12345 contentF`;
 			}
 
 			const start = Date.now();
-			store.upsertMany(entries);
+			upsertAll(store, entries);
 			const serialized = store.serialize();
 			store.parse(serialized);
 			const elapsed = Date.now() - start;
