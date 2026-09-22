@@ -122,7 +122,6 @@ Set `ai.provider` and `ai.model` in `mdait.json`. Provider-specific settings are
 
 - **Commit** — `tm.commit` registers translated unit pairs into a TMX file with LLM-guard validation.
 - **Reference** — During translation, relevant TM entries are auto-retrieved and supplied as context.
-- **Optimize** — `tm.optimize` uses AI to deduplicate and improve TM quality.
 
 ---
 

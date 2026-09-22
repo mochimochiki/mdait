@@ -291,11 +291,11 @@ store.save(tmxPath);
 
 **実装**: [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts)
 
-### SentenceSplitter
+### buildSentenceQueries
 
-`Intl.Segmenter`ベースの文分割。コードブロック/インラインコード保護、段落・リスト項目の独立分割に対応し、言語ごとにSegmenterをキャッシュして日英中の文境界を検出します。
+TM 検索のクエリを文単位に分ける。TM 用に正規化したテキスト（`normalizeForTm`）を行ごとに `Intl.Segmenter` で文に分け、`minQueryLength` に満たない文を捨てる。
 
-**実装**: [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts)
+**実装**: [`src/core/tm/tm-query.ts`](../../src/core/tm/tm-query.ts)
 
 ### TmTextNormalizer
 
@@ -393,7 +393,7 @@ sequenceDiagram
 | UnitRegistry | [`src/core/unit-registry/`](../../src/core/unit-registry/) | ユニット内容の永続化・GC |
 | DiffGenerator | [`src/core/diff/`](../../src/core/diff/) | `=`/`-`/`+`パッチ適用・unified diff生成 |
 | TmxStore | [`src/core/tm/tmx-store.ts`](../../src/core/tm/tmx-store.ts) | TMX I/O・インメモリTMインデックス・trigram転置インデックス |
-| SentenceSplitter | [`src/core/tm/sentence-splitter.ts`](../../src/core/tm/sentence-splitter.ts) | Intl.SegmenterによるTM文分割 |
+| buildSentenceQueries | [`src/core/tm/tm-query.ts`](../../src/core/tm/tm-query.ts) | Intl.Segmenter による TM 検索クエリの文分割 |
 | TmTextNormalizer | [`src/core/tm/tm-text-normalizer.ts`](../../src/core/tm/tm-text-normalizer.ts) | Markdown除去・TM価値フィルタリング |
 | formatTmReferences | [`src/core/tm/tm-reference-formatter.ts`](../../src/core/tm/tm-reference-formatter.ts) | TM検索結果のプロンプト文字列変換 |
 | rankTmEntries | [`src/core/tm/tm-ranker.ts`](../../src/core/tm/tm-ranker.ts) | trigram Jaccard + MMR による TM スコアリング |
