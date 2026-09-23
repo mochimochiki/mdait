@@ -358,7 +358,9 @@ async function ensureUp() {
 async function runOne(opts) {
 	const command = opts._[0];
 	if (!command) throw new UsageError("実行するコマンド名が要ります（例: lab run mdait.sync）");
-	if (!command.startsWith("mdait.")) throw new UsageError(`コマンド名は mdait. で始まります（渡された値: ${command}）`);
+	if (!command.startsWith("mdait.") && !command.startsWith("mdait_")) {
+		throw new UsageError(`コマンド名は mdait.（コマンド）か mdait_（LM Tool）で始まります（渡された値: ${command}）`);
+	}
 
 	const session = await ensureUp();
 	const entry = COMMANDS[command];

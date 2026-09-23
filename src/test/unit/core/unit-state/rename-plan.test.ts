@@ -13,8 +13,17 @@ import {
  * 実装（前方一致でディレクトリ配下を判定し、相対パスを付け替える）を最小限になぞる。
  * パスは `/` 区切りの相対表記で書く。
  */
-function probeOf(pairs: Array<[string, string]>, existing: string[], known: string[] = []): RenameFollowProbe {
+function probeOf(
+	pairs: Array<[string, string]>,
+	existing: string[],
+	known: string[] = [],
+	options: { caseInsensitive?: boolean } = {},
+): RenameFollowProbe {
 	const present = new Set(existing);
+	// 大文字小文字を区別しないファイルシステム（Windows・macOS の既定）では、
+	// 綴りの違うパスも同じファイルとして「在る」と答える
+	const fold = (p: string) => (options.caseInsensitive ? p.toLowerCase() : p);
+	const presentFolded = new Set(existing.map(fold));
 	const knownPaths = new Set(known);
 	const under = (p: string, dir: string) => p === dir || p.startsWith(`${dir}/`);
 	const swapDir = (p: string, from: string, to: string) => (p === from ? to : `${to}/${p.substring(from.length + 1)}`);
@@ -35,9 +44,10 @@ function probeOf(pairs: Array<[string, string]>, existing: string[], known: stri
 			}
 			return derived;
 		},
-		exists: (p) => present.has(p),
+		exists: (p) => presentFolded.has(fold(p)),
+		existsExactly: (p) => present.has(p),
 		hasEntriesAt: (p) => [...knownPaths].some((k) => k === p || k.startsWith(`${p}/`)),
-		sameKey: (p) => p,
+		sameKey: (p) => fold(p),
 	};
 }
 
@@ -52,9 +62,7 @@ suite("移動の前に立てる計画（連れて動かす訳文）", () => {
 		const probe = probeOf(JA_EN, ["content/ja/guide.md", "content/en/guide.md"]);
 		const plan = planRenameFollow([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
-		assert.deepStrictEqual(plan.companions, [
-			{ oldPath: "content/en/guide.md", newPath: "content/en/handbook.md" },
-		]);
+		assert.deepStrictEqual(plan.companions, [{ oldPath: "content/en/guide.md", newPath: "content/en/handbook.md" }]);
 		assert.deepStrictEqual(plan.blocked, []);
 	});
 
@@ -165,11 +173,7 @@ suite("移動のあとに立てる計画（unit-state の行の付け替え）",
 
 	test("訳文が旧パスに残っているなら行も残すこと（連れて行けなかった場合）", () => {
 		// 行き先が塞がっていて訳文を動かせなかった世界
-		const probe = probeOf(JA_EN, [
-			"content/ja/handbook.md",
-			"content/en/guide.md",
-			"content/en/handbook.md",
-		]);
+		const probe = probeOf(JA_EN, ["content/ja/handbook.md", "content/en/guide.md", "content/en/handbook.md"]);
 		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
 		assert.deepStrictEqual(moves, [{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }]);
@@ -239,16 +243,59 @@ suite("移動のあとに立てる計画（unit-state の行の付け替え）",
 	});
 
 	test("ピボット構成では、連鎖して動いた訳文の行まで付け替えること", () => {
-		const probe = probeOf(PIVOT, [
-			"content/ja/handbook.md",
-			"content/en/handbook.md",
-			"content/fr/handbook.md",
-		]);
+		const probe = probeOf(PIVOT, ["content/ja/handbook.md", "content/en/handbook.md", "content/fr/handbook.md"]);
 		const moves = planEntryMoves([{ oldPath: "content/ja/guide.md", newPath: "content/ja/handbook.md" }], probe);
 
 		assert.deepStrictEqual(
 			moves.map((m) => m.newPath),
 			["content/ja/handbook.md", "content/en/handbook.md", "content/fr/handbook.md"],
 		);
+	});
+});
+
+suite("大文字小文字だけの改名（README.md → Readme.md）", () => {
+	const rename = { oldPath: "content/ja/README.md", newPath: "content/ja/Readme.md" };
+	const companion = { oldPath: "content/en/README.md", newPath: "content/en/Readme.md" };
+
+	test("大文字小文字を区別しない環境でも、訳文の綴りを連れて変えること", () => {
+		// 新しい綴りを問うても「在る」と返るが、それは訳文そのものであって塞いでいる別のファイルではない
+		const probe = probeOf(JA_EN, ["content/ja/README.md", "content/en/README.md"], [], { caseInsensitive: true });
+		const plan = planRenameFollow([rename], probe);
+
+		assert.deepStrictEqual(plan.companions, [companion]);
+		assert.deepStrictEqual(plan.blocked, []);
+	});
+
+	test("大文字小文字を区別する環境でも、同じように連れて変えること", () => {
+		const probe = probeOf(JA_EN, ["content/ja/README.md", "content/en/README.md"]);
+		const plan = planRenameFollow([rename], probe);
+
+		assert.deepStrictEqual(plan.companions, [companion]);
+	});
+
+	test("区別する環境で新しい綴りのファイルが別にあれば、連れて行かないこと", () => {
+		const probe = probeOf(JA_EN, ["content/ja/README.md", "content/en/README.md", "content/en/Readme.md"]);
+		const plan = planRenameFollow([rename], probe);
+
+		assert.deepStrictEqual(plan.companions, []);
+		assert.deepStrictEqual(plan.blocked, [{ rename: companion, reason: "destination-exists" }]);
+	});
+
+	test("綴りが変わったあとは、訳文の行も新しい綴りへ付け替えること", () => {
+		// 移動後: 原文も訳文も新しい綴りで並んでいる。旧い綴りでも「在る」と答えるが、動いている
+		const probe = probeOf(JA_EN, ["content/ja/Readme.md", "content/en/Readme.md"], ["content/en/README.md"], {
+			caseInsensitive: true,
+		});
+
+		assert.deepStrictEqual(planEntryMoves([rename], probe), [rename, companion]);
+	});
+
+	test("訳文の綴りが変わらなかったときは、訳文の行を動かさないこと", () => {
+		// 取り消しや見送りで、訳文は旧い綴りのまま並んでいる
+		const probe = probeOf(JA_EN, ["content/ja/Readme.md", "content/en/README.md"], ["content/en/README.md"], {
+			caseInsensitive: true,
+		});
+
+		assert.deepStrictEqual(planEntryMoves([rename], probe), [rename]);
 	});
 });

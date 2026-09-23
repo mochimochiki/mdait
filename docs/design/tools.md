@@ -97,6 +97,7 @@ interface GetStatusInput {
 - `data` に全体集計（総/翻訳済/エラーユニット数、needフラグ内訳）を格納
 - パス未指定時の集計対象は選択中の transPair のみ。summary のスコープラベルに対象言語を明示する（例: `workspace (targets: ja)`）
 - `detail:true` のとき、needのあるファイルのみの内訳一覧を `data.files` に格納（出力爆発防止）。各ファイルには need のあるユニットの一覧 `units: [{hash, title?, need}]` を含める（need なしユニットは含めない・isolate は含める・1ファイル上限50件、超過時 `unitsTruncated: true`）。エージェントはこの hash を `mdait_resolve` の `unitHashes` にそのまま渡せる
+- `data.conflicts` に `.mdait` に残っている合流の競合を載せる（`{ total, files: [{kind, path}], mergeHeldRows }`。パスはワークスペース相対）。範囲（`path`・選択中の transPair）では絞らない — `.mdait` のファイルはワークスペースに1つずつで、どの範囲を聞かれても同じ答えになる。数え方はステータスバー・ツリーと同じ `collectWorkspaceConflicts`。競合があれば summary に件数を添え、`nextActions` の先頭で人に「競合を解決」を頼むよう案内する（解決の手段はエージェントに渡さない。ADR-260923-05）
 - StatusManagerが初期化されていない場合は `buildStatusItemTree()` を実行
 
 **確認UI**: なし（読み取り専用）

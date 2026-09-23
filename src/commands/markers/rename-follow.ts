@@ -27,7 +27,7 @@
  * @module commands/markers/rename-follow
  */
 import * as vscode from "vscode";
-import { type PathRename, planEntryMoves, planRenameFollow } from "../../core/unit-state/rename-plan";
+import { type PathRename, isCaseOnlyRename, planEntryMoves, planRenameFollow } from "../../core/unit-state/rename-plan";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger } from "../../infra/logging/logger";
 import { createRenameFollowProbe } from "../../infra/workspace/rename-probe";
@@ -71,20 +71,11 @@ export function buildRenameFollowEdit(files: readonly RenamedFileUris[]): vscode
 	}
 
 	for (const companion of plan.companions) {
-		// `ignoreIfExists` は、計画を立ててから編集が適用されるまでの隙に行き先が
-		// 作られた場合（他の拡張・並行操作）の受け皿である。付けないとその1件の失敗が
-		// **ユーザーのリネームごと巻き添えにする** — 追随は付随的な仕事なので、
-		// 失敗しても訳文を連れて行かないだけに留めなければならない。
-		// 連れて行けなかった訳文は原文を失い、段階1の孤立として画面に出る。
-		// 行の付け替えは移動後にディスクを実測して決めるので、ここが黙って no-op に
-		// なっても行は旧パスの訳文に付いたまま正しく残る。
-		//
-		// `overwrite` は明示的に false のままにする（`overwrite` は `ignoreIfExists` に
-		// 優先するため、取り違えると上書きで別の訳文が消える。しかもごみ箱を経由しない）。
-		edit.renameFile(vscode.Uri.file(companion.oldPath), vscode.Uri.file(companion.newPath), {
-			overwrite: false,
-			ignoreIfExists: true,
-		});
+		edit.renameFile(
+			vscode.Uri.file(companion.oldPath),
+			vscode.Uri.file(companion.newPath),
+			renameOptionsFor(companion),
+		);
 	}
 	if (plan.companions.length > 0) {
 		logger.info("rename", "Moving translations along with their source", {
@@ -102,6 +93,29 @@ export function buildRenameFollowEdit(files: readonly RenamedFileUris[]): vscode
 		});
 	}
 	return edit;
+}
+
+/**
+ * 訳文を連れて動かす編集の選択肢。
+ *
+ * VS Code は `overwrite` が**未指定のときだけ** `ignoreIfExists` を見る（`bulkFileEdits.ts` の
+ * `RenameOperation`: `overwrite === undefined && ignoreIfExists && exists(newUri)` なら見送る）。
+ * `overwrite: false` と並べて書くと `ignoreIfExists` は黙って効かなくなる — かつてはそう書いていた。
+ *
+ * - **ふつうの移動**は `ignoreIfExists` だけを渡す。計画を立ててから編集が適用されるまでの隙に
+ *   行き先が作られた場合（他の拡張・並行操作）に、その1件を見送らせるためである。見送らないと
+ *   移動は競合で失敗し、**ユーザーのリネームごと巻き添えにしうる** — 追随は付随的な仕事なので、
+ *   失敗しても訳文を連れて行かないだけに留めなければならない。連れて行けなかった訳文は原文を失い、
+ *   段階1の孤立として画面に出る。行の付け替えは移動後にディスクを実測して決めるので、
+ *   見送っても行は旧パスの訳文に付いたまま正しく残る。`overwrite` が未指定でも上書きはしない
+ *   （ファイルサービスは `overwrite` が真のときだけ行き先を消す）。
+ * - **大文字小文字だけの改名**は `overwrite: false` を渡し、`ignoreIfExists` を効かせない。
+ *   大文字小文字を区別しない環境では新しい綴りも「在る」と答えるので、`ignoreIfExists` が
+ *   効くと必ず見送られる。ファイルサービスは同じファイルの綴り違いを競合と見なさないので、
+ *   `overwrite: false` のままで綴りだけが変わる。
+ */
+function renameOptionsFor(companion: PathRename): { overwrite?: boolean; ignoreIfExists?: boolean } {
+	return isCaseOnlyRename(companion) ? { overwrite: false } : { ignoreIfExists: true };
 }
 
 /**

@@ -64,4 +64,19 @@ suite("buildNextActions（状態→推奨アクション対応表）", () => {
 		const actions = buildNextActions(needs(), 0, 0, 12);
 		assert.ok(actions[0].includes("All units are translated"));
 	});
+
+	test("競合が残っていれば最初に知らせ、人に解決を頼むよう案内する", () => {
+		const actions = buildNextActions(needs({ translate: 1 }), 0, 0, 5, 2);
+		assert.ok(actions[0].includes("2 merge conflict(s)"));
+		assert.ok(actions[0].includes("mdait.conflict.resolve"));
+		assert.ok(
+			actions.some((a) => a.includes("mdait_translate")),
+			"ほかの案内は消さない",
+		);
+	});
+
+	test("競合だけが残っているときは『すべて翻訳済み』と言い切らない", () => {
+		const actions = buildNextActions(needs(), 0, 0, 5, 1);
+		assert.ok(!actions.some((a) => a.includes("All units are translated")));
+	});
 });

@@ -12,7 +12,9 @@ Extension Host は起動しない。
 - 常駐する。`lab up` が detached で起こし、`ready` ファイルができたら戻る。
 - **UI が要るコマンドは動かない**（QuickPick を出すもの、CodeLens から呼ばれるもの）。
   `lab run` が実行前に知らせる。
-- `fireTimeline` / `stateDiff` / `syncAnalysis` は入らない（ツリーの provider が構築されないため）。
+- `fireTimeline` / `stateDiff` / `syncAnalysis` も入る。`fireTimeline` に並ぶのはツリー自身の通知
+  （`source: "tree"`）だけで、画面側の再描画（`source: "provider"`）は無い（provider を組まないため）。
+  状態が変わったのにツリーの通知が1つも無い＝画面が追随しない、は headless でも `syncAnalysis.syncGaps` に出る。
 - モックに無い vscode API に当たったら `scripts/lab/vscode-shim.js` を足す（`withProgress` /
   `commands` / `findFiles` の要領）。
 

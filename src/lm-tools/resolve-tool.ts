@@ -55,6 +55,9 @@ interface ResolveInput {
 	action?: "resolve" | "keep" | "declare-isolate" | "delete" | "request-translate";
 }
 
+/** 受け付ける action。ここに無い値は入力の誤りとして弾く */
+const ALLOWED_ACTIONS: readonly string[] = ["resolve", "keep", "declare-isolate", "delete", "request-translate"];
+
 /** mdait_resolve の data 形式（action:"resolve"） */
 interface ResolveData {
 	file: string;
@@ -146,6 +149,16 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 			}
 
 			const action = options.input.action ?? "resolve";
+			// **知らない action を「解決」として扱わない。** 既定値は省略したときだけで、綴りを誤った
+			// action まで既定の resolve に落ちると、確かめる前の訳を承認してしまう（受け入れテストで実測）
+			if (!ALLOWED_ACTIONS.includes(action)) {
+				const message = vscode.l10n.t(
+					'Unknown action: "{0}". Use one of: {1}.',
+					String(action),
+					ALLOWED_ACTIONS.join(", "),
+				);
+				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
+			}
 			const unitHashes = options.input.unitHashes ?? [];
 			if (action !== "resolve" && unitHashes.length === 0) {
 				// 省略してファイル内全件へ暗黙に効かせる経路は作らない（意図せぬ一括操作の安全弁。
@@ -422,6 +435,11 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		_token: vscode.CancellationToken,
 	): Promise<vscode.PreparedToolInvocation> {
 		const inputPath = options.input.path ?? "";
+
+		if (options.input.action !== undefined && !ALLOWED_ACTIONS.includes(options.input.action)) {
+			// invoke が入力の誤りとして弾くので、何かを書き換えるかのような確認は出さない
+			return { invocationMessage: vscode.l10n.t("Resolving need flags...") };
+		}
 
 		if (options.input.action === "declare-isolate") {
 			const hashes = options.input.unitHashes ?? [];

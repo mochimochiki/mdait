@@ -119,7 +119,7 @@ sequenceDiagram
 
 - **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[design.md](../design.md) P4参照）
 - **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
-- **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可（②の対象外）
+- **SectionMatcher**（external の attach と同じ共通部品 `core/matching/interval-align` に載っている。ADR-260923-03）: ①targetの`from`とsourceの`hash`が一意に一致する組を錨にする（順序が入れ替わっていても採る）、②順序の保たれる錨だけで区間を切り、同じ本文の原文が複数あるものは区間の中の順序で決める、③残りを区間内の順序で埋める（使える訳文は `from` を持たないものだけ。原文を失った訳文を別の原文へ付け替えない）、④残りを新規／孤立とする。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可。結果は原文の順に並べ、**相手のいない訳文は元あった位置へ差し込む**（末尾へ寄せない。`orderPairs`。AI アラインの再配線も同じ規約で並べる）
 - **レガシーneedの正規化**: パース直後に `normalizeLegacyNeeds` が `keep`→need除去・`backfill`→`review` へ決定的に変換する（後述の「孤立ユニットモデル」節参照）
 - **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除。守る印の走査は**選択で絞らず config の全 pair**を見る。走るのは**取り消されず、在るディレクトリを全部読めて、`unit-state` と `unit-registry` を丸ごと読めた回だけ**（ADR-260908-06。詳細は [core.md](core.md) の GC処理）

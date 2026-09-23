@@ -8,9 +8,11 @@
  *
  * 命令の受け渡しは他のホストと同じファイル経由（<ws>/.mdait/debug/command.json →
  * result.json）。返す形は src/infra/debug/debug-command-handler.ts と揃えてある。
- * ただし fireTimeline / stateDiff / syncAnalysis は載せない。あれは「画面へ変更が
- * 伝わったか」を見るためのもので、画面の無い headless では常に空になり、
- * 「伝わっていない」と読み違える元になるからである。
+ * fireTimeline / stateDiff / syncAnalysis も同じ部品（debug-fire-recorder・debug-sync-analyzer）で
+ * 取る。状態の差分はステータスツリー（StatusManager）から、変更の通知はツリー自身
+ * （StatusItemTree の notifyChanged）から記録されるので、画面が無くても取れる。取れないのは
+ * 画面側の再描画（source: "provider"）だけで、これはツリーの通知を受けて必ず走る
+ * （status-tree-provider.ts）ので、同期のずれの判定には要らない。
  *
  * 使い方（ふつうは lab.mjs 経由で起こす）:
  *   node scripts/lab/hosts/headless.mjs --serve --ws /tmp/mdait-lab/ws
@@ -356,6 +358,7 @@ async function handleOnce(ws, vscode, logger, say) {
 
 	say(`実行します: ${command} ${JSON.stringify(args)}`);
 	vscode.__labResetDialogs?.();
+	const trace = startTrace();
 	try {
 		const result = await invoke(command, args, vscode);
 		const completedAt = new Date().toISOString();
@@ -373,6 +376,7 @@ async function handleOnce(ws, vscode, logger, say) {
 				dialogs: vscode.__labDialogs?.() ?? [],
 				startedAt,
 				completedAt,
+				...trace.finish(),
 			}),
 		);
 		say(`終わりました: ${command} → ${status}`);
@@ -389,6 +393,8 @@ async function handleOnce(ws, vscode, logger, say) {
 				dialogs: vscode.__labDialogs?.() ?? [],
 				startedAt,
 				completedAt: new Date().toISOString(),
+				// 実ホストと同じく、つまずいたときは通知の履歴だけ返す
+				fireTimeline: trace.finish().fireTimeline,
 			}),
 		);
 		say(`つまずきました: ${command} → ${error?.message ?? error}`);
@@ -397,6 +403,39 @@ async function handleOnce(ws, vscode, logger, say) {
 	}
 	// 次の命令が古い一覧を見ないように組み直す（extension の sync 後と同じ手当て）
 	await rebuildTree(say);
+}
+
+/**
+ * 1つの命令のあいだの「ツリーの状態の差分」と「ツリーの変更通知」を記録する。
+ * 実ホストの debug-command-handler.ts と同じ部品を、同じ順（前の状態 → 記録開始 → 実行 →
+ * 記録停止 → 後の状態 → 突き合わせ）で使う。
+ *
+ * 後の状態は、命令のあとに組み直す（rebuildTree）**前**に取る。組み直しは lab の都合で、
+ * 実ホストでは起きないからである。取れなかったときは空を返して先へ進む。
+ */
+function startTrace() {
+	let recorder;
+	let analyzer;
+	let before = {};
+	try {
+		recorder = out("infra/debug/debug-fire-recorder.js").DebugFireRecorder.getInstance();
+		analyzer = out("infra/debug/debug-sync-analyzer.js");
+		recorder.enable();
+		before = analyzer.snapshotState();
+		recorder.start();
+	} catch {
+		recorder = undefined;
+	}
+	return {
+		finish() {
+			if (!recorder || !analyzer) {
+				return { fireTimeline: [], stateDiff: [], syncAnalysis: null };
+			}
+			const fireTimeline = recorder.stop();
+			const stateDiff = analyzer.diffSnapshots(before, analyzer.snapshotState());
+			return { fireTimeline, stateDiff, syncAnalysis: analyzer.analyzeSync(stateDiff, fireTimeline) };
+		},
+	};
 }
 
 /** result.json の形。抜けている項目は必ず null か空で埋める（読む側が場合分けしなくて済む） */
@@ -504,6 +543,9 @@ async function invoke(command, rawArgs, vscode) {
 	if (entry.adapter) {
 		return await adapters[entry.adapter](...args);
 	}
+	if (entry.tool) {
+		return await invokeTool(entry, args[0], vscode);
+	}
 	const mod = out(entry.module.replace(/^out\//, ""));
 	if (entry.method) {
 		const key = `${entry.module}#${entry.export}`;
@@ -519,6 +561,34 @@ async function invoke(command, rawArgs, vscode) {
 		return await fn(fakeExtensionContext(vscode), ...args);
 	}
 	return await fn(...args);
+}
+
+/**
+ * LM Tool を、Copilot Chat がするのと同じ順に呼ぶ（prepareInvocation → 確認 → invoke）。
+ *
+ * 返すのはツールが返したエンベロープ（JSON）そのもの。エージェントが読むのと同じ形を
+ * そのまま見せるためで、ここで要約や整形はしない。
+ */
+async function invokeTool(entry, input, vscode) {
+	const Tool = out(entry.module.replace(/^out\//, ""))[entry.export];
+	if (typeof Tool !== "function") {
+		throw new Error(`${entry.module} に ${entry.export} が見当たりません（compile し直してください）`);
+	}
+	const tool = new Tool();
+	const options = { input: input && typeof input === "object" ? input : {}, toolInvocationToken: undefined };
+	const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
+	const prepared = await tool.prepareInvocation?.(options, token);
+	const confirmation = prepared?.confirmationMessages;
+	if (confirmation && !vscode.__labAnswerToolConfirmation(confirmation.title, confirmation.message)) {
+		return { toolCancelledByUser: true };
+	}
+	const result = await tool.invoke(options, token);
+	const text = (result?.content ?? []).map((part) => part?.value ?? "").join("");
+	try {
+		return JSON.parse(text);
+	} catch {
+		return text;
+	}
 }
 
 // このファイルを直接動かしたとき（= 子として起こされたとき）だけ常駐する

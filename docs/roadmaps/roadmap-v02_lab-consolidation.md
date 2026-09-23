@@ -210,8 +210,12 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
   渡すと、実 Extension Host では対象0件のまま `done` で返っていた（`vscode.RelativePattern` も
   `Uri.file` も相対パスを解決できない）。headless はモックが解決するので通り、**headless だけでは
   永久に見つからない**種類のものだった。IPC の入口で絶対パスへ直し、単体テストで固定した。
-- [TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。
-  ツリーの provider が構築されないなら省略で構わないが、取れるなら sync のギャップ検出が headless でも効く。
+- ~~[TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。~~
+  → **3つとも取れる**（2026-09-23）。状態の差分はステータスツリー（`StatusManager`）から、変更の通知は
+  ツリー自身（`StatusItemTree.notifyChanged`、`source: "tree"`）から記録されるので、画面が無くてよい。
+  取れないのは画面側の再描画（`source: "provider"`）だけで、これはツリーの通知を受けて必ず走るので
+  ずれの判定には要らない。headless も実ホストと同じ部品で返すようにした（実測: 1ファイルに章を足した
+  sync で 通知37件・差分2件・ずれ0件）
 
 ---
 

@@ -1314,6 +1314,45 @@ export class UnitStateStore {
 	}
 
 	/**
+	 * 合流で降ろされた行から合流由来の印を外し、ふつうの預かりにする。
+	 *
+	 * 同期が原稿と突き合わせて、どちらの版とも一致しなかった行に使う（`MarkerAlignmentMemo`
+	 * の `settledMergeHeldEntries`）。拾い戻しは本文 hash の完全一致なので、預かりのまま残せば
+	 * 本文が戻ってきたときにはこれまでどおり拾われる。
+	 *
+	 * 同じ本文 hash の預かりがすでにあれば、こちらは消す。拾い戻しは同じ hash の行を1つしか
+	 * 使わないので、2つ残しても片方は永遠に使われない（`parkEntries` と同じ理由）。
+	 *
+	 * **frontmatter の席から降ろされた行（`seat` が `f`）は消す。** 預かりから拾い戻すのは本文の
+	 * 章だけで、frontmatter の行には戻る道が無い。預かりにしても永遠に使われない行が残るだけである。
+	 * frontmatter の状態は席に残った行と同期が決め直す（原稿がどちらの版とも違えば改訂待ちになる）。
+	 *
+	 * @param entries 読み込み時の照合結果（いまのストアに無い・もう合流由来でない行は何もしない）
+	 * @returns 印を外した（または重複として消した）行の数
+	 */
+	settleMergeHeldEntries(filePath: string, entries: readonly UnitStateEntry[]): number {
+		this.autoLoad();
+		let settled = 0;
+		for (const entry of entries) {
+			const key = entryKey(entry);
+			const row = this.rowsOf(filePath)?.get(key);
+			if (!row || !isMergeHeldEntry(row)) {
+				continue;
+			}
+			const duplicate = this.heldEntriesWithHash(filePath, row.hash).some(
+				(other) => entryKey(other) !== key && !isMergeHeldEntry(other),
+			);
+			if (duplicate || row.seat === "f") {
+				this.dropRow(filePath, key);
+			} else {
+				this.putRow({ ...row, seat: "" });
+			}
+			settled++;
+		}
+		return settled;
+	}
+
+	/**
 	 * 指定した席の行を消す。
 	 *
 	 * @returns 削除されたエントリ数

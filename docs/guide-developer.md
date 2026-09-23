@@ -44,7 +44,7 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 
 次がすべて成立したときに完了と判定する。いずれもツール出力から機械的に確認できる。
 
-1. `mdait_getStatus` の `data.needs` で `translate` / `revise` / `review` / `verifyDeletion` / `other` がすべて 0（`isolate` は定常状態なので除外してよい）
+1. `mdait_getStatus` の `data.needs` で `translate` / `revise` / `review` / `verifyDeletion` / `other` がすべて 0（`isolate` は定常状態なので除外してよい）。あわせて `data.conflicts.total` が 0
 2. `mdait_validate` の `data.violations` が空
 3. `mdait_term { action: "detect" }` の `data.pairs[].newTerms` 合計が 0、かつ `unexpanded` 合計が 0
 4. `mdait_tm { action: "commit" }` の `data.newEntries` が 0、かつ `data.skipped` の needTranslate / needRevise / needReview が 0
@@ -70,20 +70,20 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 
 ### 取り込み
 
-1. Git にコミット済みであることを確認する（マーカーの書き込みを伴う）
+1. Git にコミット済みであることを確認する（マーカーの書き込みを伴う）。Git の管理下でなければ、元に戻す手段が無いことを人に伝えて、続けてよいか確かめる（自分で `git init` しない）
 2. `mdait_adopt` を 1 回呼ぶ。`sync(adopt+align)` が位置ずれを AI で補正して既訳を採用し、続く AI レビューが高確信の一致を自動承認して誤ペア・訳抜けをエスカレーションする。`data.sync.adopted` / `alignCorrections` と `data.review.*` / `data.escalations` を観測する
    - AI を使わず決定的に進めたい場合は `mdait_sync { adopt: true }`（`align: true` を足すと位置ずれの AI 補正だけを併用できる。`adopt` なしでは無効）。`data.units.adopted` が採用数、`kept` が独立ユニットの保持数、`orphanReviewed` がマーカーなし孤立の一次受け数。後から `mdait_aiReview` をかけてもよい
    - `buildGlossary` / `buildTm` を渡せば次段も同時に走るが、エスカレーションが多いと翻訳メモリがほぼ空になる。レビューを片付けてから個別に実行する方が確実
-3. 残った `need:review` を裁定する。`mdait_getStatus { detail: true }` で対象ファイルと `data.files[].units` のハッシュを特定し、原文と訳文の対応が正しいかを確認する。`data.escalations` は mismatch（誤ペア）・partial（訳抜けの疑い）なので先に見る。問題なければ `mdait_resolve { path, unitHashes }` で解決する（`hash` / `from` は変わらない）。レビューを委任されていなければ、人に承認を求める
+3. 残った `need:review` を裁定する。`mdait_getStatus { detail: true }` で対象ファイルと `data.files[].units` のハッシュを特定し、原文と訳文の対応が正しいかを確認する。`data.escalations` は mismatch（誤ペア）・partial（訳抜けの疑い）なので先に見る。**AI レビューが失敗していると `escalations` は空になる**（`data.stageErrors` や `ok:false` を確かめる）。空を「誤ペアが無い」と読まず、ファイルごとに原文と訳文の見出しと中身を並べて確かめる — AI を使わない取り込みの対応付けは位置で並べるだけなので、片方にしか無い章があると、そこから後ろがずれる。誤ペアを見つけたら解決せず、人に知らせる。問題なければ `mdait_resolve { path, unitHashes }` で解決する（`hash` / `from` は変わらない）。レビューを委任されていなければ、人に承認を求める
 4. `mdait_sync` を再実行し、`data.status.needs.review` が 0 になったことを確認する
 
-訳文側にしかないセクションは、同期が削除せず `need:review`（`from` なし）で保護する。残すか消すかの判断は人に委ねる。委任されている場合、そのファイル限定で残す宣言は `mdait_resolve { action: "declare-isolate", unitHashes }` で行える。
+訳文側にしかないセクションは、同期が削除せず `need:review`（`from` なし）で保護する。残すか消すかの判断は人に委ねる。委任されている場合、そのファイル限定で残す宣言は `mdait_resolve { action: "declare-isolate", unitHashes }` で行える。`need:review` が付いたままでは宣言できない（`need-already-set` で見送られる）ので、先に `mdait_resolve { action: "resolve", unitHashes }` で確認待ちを外してから宣言する。`action` に知らない値を渡すと `invalid_input` で落ちる
 
 ### 知識構築と翻訳
 
 5. `mdait_term { action: "detect" }` — 既訳ペアの両言語から用語を抽出する
 6. `mdait_term { action: "expand" }` — 未展開の訳語を既訳から解決する
-7. `mdait_tm { action: "commit" }` — 承認済みの既訳を翻訳メモリに登録する
+7. `mdait_tm { action: "commit" }` — 承認済みの既訳を翻訳メモリに登録する。`need:review` が残っているユニットは登録されない（`data.skipped.needReview` に数えられる）ので、レビューを片付ける前は 0 件でも異常ではない
 8. `mdait_translate { path: "<targetDir>" }` — 原文側にしかなかったセクションを翻訳する
 9. `mdait_validate` — 違反が 0 になるまで 8〜9 を繰り返す
 10. 新規翻訳分を `mdait_tm { action: "commit" }` で登録し、完成の判定基準を確認する
@@ -103,6 +103,7 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 
 - **翻訳が途中で失敗・キャンセルされた** — 同じ `mdait_translate` を再実行する。翻訳済みユニットはスキップされ、残りだけが処理される
 - **`ok:false` が返った** — `error.code` と `nextActions` に従う。`no_workspace` / `invalid_path` は入力の誤り。`internal_error` は `mdait_sync` → `mdait_getStatus` で状態を観測し直す
+- **合流の競合が残っている**（`data.conflicts.total > 0`）— `.mdait` の用語集・翻訳メモリ・状態ファイルに合流の競合マーカーが残っている。ファイルを手で直さず、人に mdait のステータスビューの「競合を解決」を頼む。残っているあいだ、競合した用語集・翻訳メモリは読めない
 - **エラーユニットがある**（`data.errorUnits > 0`）— `mdait_getStatus { detail: true }` で対象を特定し、原因（AI への到達性は `mdait.setup.diagnose`）を解消してから翻訳し直す
 
 ## やってはいけないこと

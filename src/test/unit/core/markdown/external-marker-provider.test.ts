@@ -8,7 +8,7 @@ import * as path from "node:path";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
 import { ExternalMarkerProvider, buildAlignmentMemo, shouldPruneLeftovers } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
-import { UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
+import { UnitStateStore, isHeldBackEntry, isMergeHeldEntry } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
 import { seat } from "../../helpers/unit-state";
 
@@ -615,5 +615,41 @@ suite("shouldPruneLeftovers（余った行の刈り取り判定）", () => {
 	test("半分以上残っていれば3件以上減っても刈ること", () => {
 		assert.strictEqual(shouldPruneLeftovers(10, 6), true);
 		assert.strictEqual(shouldPruneLeftovers(8, 4), true, "ちょうど半分は刈る");
+	});
+
+	test("合流で降ろされた行は、そのファイルを1度同期すると競合の数から外れ、行は失われないこと", () => {
+		const tempDir = createTempDir();
+		// 合流で同じ席に2行来た状態（競合マーカーは畳まれたあと）。降ろされた側が「合流由来」を名乗る
+		const title = calculateHash("章");
+		fs.writeFileSync(
+			path.join(tempDir, "unit-state"),
+			[
+				"# mdait unit-state",
+				"",
+				"# aaaaaaaaaaaa en/a.md",
+				"",
+				`aaaaaaaaaaaa\tunit\t${seat(0)}\t2\t${title}\tours0001\tsrc-old\t`,
+				`aaaaaaaaaaaa\tunit\t${seat(0)}\t2\t${title}\ttheirs01\tsrc-new\trevise@src-new`,
+				"",
+			].join("\n"),
+			"utf-8",
+		);
+		UnitStateStore.dispose();
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		assert.strictEqual(store.getEntriesByPath("en/a.md").filter(isMergeHeldEntry).length, 1, "前提");
+
+		// 原稿はどちらの版とも違う本文（両方より先へ進んでいる）。同期は席に残った行を使い、
+		// 降ろされた行は「本文が戻ってきたら拾う」預かりへ移す — 人の判断を待つ件ではなくなる
+		const provider = new ExternalMarkerProvider(store);
+		const ctx = { filePath: "en/a.md", role: "target" as const };
+		const parsed = markdownParser.parse("## 章\n\n両方より新しい本文\n", makeConfig(2), provider, ctx);
+		markdownParser.stringify(parsed, provider, ctx);
+
+		const rows = store.getEntriesByPath("en/a.md");
+		assert.strictEqual(rows.filter(isMergeHeldEntry).length, 0, "同期のあとも競合として数えられ続ける");
+		assert.strictEqual(rows.length, 2, "降ろされた行が失われた");
+		UnitStateStore.dispose();
+		cleanupTempDir(tempDir);
 	});
 });
