@@ -286,6 +286,33 @@ function writeIfChanged(filePath: string, content: string): void {
 }
 
 /**
+ * 共有ファイルを書く**前に**、手元の控えを書く。
+ *
+ * 控えから出ていく行（貼り戻されて共有ファイルへ移る行）があるときは、旧い控えを
+ * 後ろに重ねて残す。共有ファイルを書く前に止まっても、その行の状態が失われない。
+ * 重ねた行は、共有ファイルを書き終えたあとで取り除く（`save`）。
+ *
+ * @param content いまの控えの中身（`undefined` は「控えの行が無い」）
+ */
+function writeHeldBeforeShared(heldPath: string, content: string | undefined): void {
+	let previous: string | undefined;
+	try {
+		previous = fs.readFileSync(heldPath, "utf-8");
+	} catch {
+		previous = undefined;
+	}
+	const dataLines = (text: string | undefined) =>
+		(text ?? "").split(/\r?\n/).filter((line) => line.trim() !== "" && !line.startsWith("#"));
+	const current = new Set(dataLines(content));
+	const leaving = dataLines(previous).some((line) => !current.has(line));
+	if (leaving) {
+		writeIfChanged(heldPath, `${content ?? ""}${previous}`);
+	} else if (content !== undefined) {
+		writeIfChanged(heldPath, content);
+	}
+}
+
+/**
  * ファイルの中で行を並べる順。**席のある行が先、席に着いていない行が後ろ。**
  *
  * 席に着いていない行は「増えたり減ったりする行」なので、まとめて後ろへ置き、
@@ -1172,12 +1199,21 @@ export class UnitStateStore {
 		if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
-		// **手元の控えを先に書く。** 旧い版が共有ファイルに書いた `held` は、この回の共有ファイルから
-		// 消える。共有ファイルを先に書いて控えを書く前に止まると、その行がどこにも残らない。
-		// 逆の順なら、止まっても両方に同じ行があるだけで、読み込みが1つに畳む
-		this.saveHeld(mdaitDir, idOf);
+		// **どちらのファイルで止まっても、行がどこにも残らない瞬間を作らない。**
+		// 行は両方向へ動く — 章が消えれば共有ファイルから控えへ、貼り戻されれば控えから共有ファイルへ。
+		// そこで控えは、共有ファイルの前に「いまの行＋出ていく旧い行」を書き、共有ファイルを
+		// 書き終えてから、いまの行だけに絞る。途中で止まっても両方に同じ行があるだけで、
+		// 読み込みが1つに畳む（共有ファイルに同じ本文の行があれば控えは読まない）
+		const heldPath = localPath(mdaitDir, HELD_FILENAME);
+		const heldContent = this.renderHeld(idOf);
+		writeHeldBeforeShared(heldPath, heldContent);
 		this.salvageBeforeOverwrite(filePath, mdaitDir);
 		writeIfChanged(filePath, content);
+		if (heldContent === undefined) {
+			fs.rmSync(heldPath, { force: true });
+		} else {
+			writeIfChanged(heldPath, heldContent);
+		}
 		this.dirty = false;
 		// ディスクに載ったので、もう当て直す必要は無い
 		this.pending.clear();
@@ -1185,7 +1221,7 @@ export class UnitStateStore {
 	}
 
 	/**
-	 * 席に着いていない行（`held`）を手元の控えへ書く。1行も無ければ控えを消す。
+	 * 手元の控えの中身を作る。席に着いていない行（`held`）が1行も無ければ `undefined`。
 	 *
 	 * 共有ファイルと違って合流しないので、区画・目印・空行の工夫は要らない。見出し
 	 * `# <id> <path>` だけは書く — 共有ファイルにそのファイルの行が1つも無いとき、
@@ -1193,14 +1229,12 @@ export class UnitStateStore {
 	 *
 	 * @param idOf パス → ファイルID（共有ファイルと同じ ID を使う）
 	 */
-	private saveHeld(mdaitDir: string, idOf: ReadonlyMap<string, string>): void {
-		const heldPath = localPath(mdaitDir, HELD_FILENAME);
+	private renderHeld(idOf: ReadonlyMap<string, string>): string | undefined {
 		const held = [...this.allEntries()]
 			.filter((entry) => entry.kind === "held")
 			.sort((a, b) => compareCodePoints(a.path, b.path) || compareCodePoints(entryKey(a), entryKey(b)));
 		if (held.length === 0) {
-			fs.rmSync(heldPath, { force: true });
-			return;
+			return undefined;
 		}
 		const lines: string[] = [...HELD_HEADER_LINES];
 		let prevPath: string | undefined;
@@ -1214,7 +1248,7 @@ export class UnitStateStore {
 				`${id}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
 			);
 		}
-		writeIfChanged(heldPath, `${lines.join("\n")}\n`);
+		return `${lines.join("\n")}\n`;
 	}
 
 	/**

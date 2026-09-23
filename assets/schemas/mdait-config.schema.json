@@ -309,12 +309,12 @@
           "properties": {
             "enableStatsLogging": {
               "type": "boolean",
-              "description": "Enable AI communication statistics logging to .mdait/logs/ai-stats.log for debugging purposes",
+              "description": "Enable AI communication statistics logging to .mdait/local/logs/ai-stats.log for debugging purposes",
               "default": true
             },
             "logPromptAndResponse": {
               "type": "boolean",
-              "description": "Enable detailed AI logging including prompts and responses to .mdait/logs/ai-detailed.log (warning: may contain sensitive data)",
+              "description": "Enable detailed AI logging including prompts and responses to .mdait/local/logs/ai-detailed.log (warning: may contain sensitive data)",
               "default": false
             }
           },

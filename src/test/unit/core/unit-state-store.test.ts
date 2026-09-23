@@ -1090,6 +1090,44 @@ suite("UnitStateStore", () => {
 		assert.strictEqual(fs.existsSync(path.join(tempDir, "local", "unit-state.held")), false);
 	});
 
+	test("控えから共有ファイルへ行が戻る回に共有ファイルの書き込みが失敗しても、控えに行が残ること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		const held = { path: "d/a.md", kind: "held" as const, seat: "", level: 2, titleHash: "h", hash: "a9", from: "f", need: "review" };
+		store.setEntry(held);
+		store.save(tempDir);
+		// 貼り戻されて席へ戻る（控えの最後の1行が共有ファイルへ移る）
+		store.dropHeldEntries("d/a.md", [held]);
+		store.setEntry({ ...held, kind: "unit" as const, seat: seat(0) });
+		// 共有ファイルの置き場をディレクトリで塞ぎ、書き込みを失敗させる
+		const sharedPath = path.join(tempDir, "unit-state");
+		fs.rmSync(sharedPath, { force: true });
+		fs.mkdirSync(path.join(sharedPath, "blocker"), { recursive: true });
+
+		assert.throws(() => store.save(tempDir));
+
+		const heldFile = fs.readFileSync(path.join(tempDir, "local", "unit-state.held"), "utf-8");
+		assert.ok(heldFile.includes("\ta9\tf\treview"), "行の状態がどこにも残らない瞬間を作らない");
+	});
+
+	test("控えから共有ファイルへ行が戻ったあとは、控えから重ねた行が取り除かれること", () => {
+		const store = UnitStateStore.getInstance();
+		store.load(tempDir);
+		const held = { path: "d/a.md", kind: "held" as const, seat: "", level: 2, titleHash: "h", hash: "a9", from: "f", need: "review" };
+		const other = { ...held, hash: "b7" };
+		store.setEntry(held);
+		store.setEntry(other);
+		store.save(tempDir);
+
+		store.dropHeldEntries("d/a.md", [held]);
+		store.setEntry({ ...held, kind: "unit" as const, seat: seat(0) });
+		store.save(tempDir);
+
+		const heldFile = fs.readFileSync(path.join(tempDir, "local", "unit-state.held"), "utf-8");
+		assert.ok(!heldFile.includes("\ta9\t"), "戻った行は控えに残らない");
+		assert.ok(heldFile.includes("\tb7\t"));
+	});
+
 	test("控えだけが変わった回は、共有の unit-state を書き直さないこと", () => {
 		const store = UnitStateStore.getInstance();
 		store.load(tempDir);
