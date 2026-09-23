@@ -195,11 +195,11 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		),
 	"ai.debug.enableStatsLogging": () =>
 		vscode.l10n.t(
-			"Write AI call statistics (duration, token counts) to .mdait/logs/ai-stats.log. Useful for tracking cost and performance; contains no document content.",
+			"Write AI call statistics (duration, token counts) to .mdait/local/logs/ai-stats.log. Useful for tracking cost and performance; contains no document content.",
 		),
 	"ai.debug.logPromptAndResponse": () =>
 		vscode.l10n.t(
-			"Write full prompts and responses to .mdait/logs/ai-detailed.log. Helpful when investigating translation quality, but the log contains your document text — keep it off otherwise.",
+			"Write full prompts and responses to .mdait/local/logs/ai-detailed.log. Helpful when investigating translation quality, but the log contains your document text — keep it off otherwise.",
 		),
 	// --- trans ---
 	"trans.frontmatter.keys": () =>

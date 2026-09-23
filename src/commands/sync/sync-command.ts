@@ -61,7 +61,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
-import { isStaleUntranslatedCopy } from "./untranslated-copy";
+import { isStaleUntranslatedCopy, isWrittenOverTranslateMark } from "./untranslated-copy";
 import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
@@ -2165,11 +2165,29 @@ async function updateSectionHashes(
 			// 崩れたままだと、未訳の丸写しと人が書きかけた訳文が同じ形になり、
 			// 訳文を見ただけではどちらか分からなくなる（かつては表示がそれを手編集と読み違え、
 			// 触っていないユニットに「編集済み」と出していた）。
-			if (!suppressNeed && (await refreshUntranslatedCopy(source, target, sourceHash, targetHash))) {
+			const copy = suppressNeed ? NOT_A_STALE_COPY : await refreshUntranslatedCopy(source, target, sourceHash, targetHash);
+			if (copy.refreshed) {
 				refreshedCopies++;
 				targetHash = calculateHash(target.content);
 			}
 			recordMigration(target.marker?.hash, targetHash);
+
+			// 翻訳待ちの章に、印を付けたあとで人の文章が書き込まれていたら確認待ちへ切り替える
+			// （規則は `isWrittenOverTranslateMark`）。翻訳待ちのままだと次の✨翻訳が人の文章を上書きする
+			const writtenOver =
+				!suppressNeed &&
+				!!target.marker &&
+				isWrittenOverTranslateMark(
+					target.marker.need,
+					target.marker.hash,
+					targetHash,
+					target.content,
+					source.content,
+					copy.stale,
+				);
+			if (writtenOver && target.marker) {
+				target.marker.setNeed("review");
+			}
 
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker, {
@@ -2182,7 +2200,7 @@ async function updateSectionHashes(
 			if (result.targetMarker.needsRevision()) {
 				revisionsNeeded++;
 			}
-			if (existingText && result.targetMarker.need === "review") {
+			if ((existingText || writtenOver) && result.targetMarker.need === "review") {
 				adopted++;
 			}
 			if (wasAwaitingReview && result.targetMarker.needsRevision()) {
@@ -2212,30 +2230,38 @@ async function updateSectionHashes(
 	return { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations };
 }
 
+/** 未訳の丸写しを写し直そうとした結果 */
+interface UntranslatedCopyOutcome {
+	/** 古い原文の丸写しだったか（写し直しを見送った回も真） */
+	stale: boolean;
+	/** 写し直したか */
+	refreshed: boolean;
+}
+
+const NOT_A_STALE_COPY: UntranslatedCopyOutcome = { stale: false, refreshed: false };
+
 /**
  * まだ訳していない訳文が原文の丸写しのままなら、変わった原文へ写し直す。
  * 写し直してよいかの規則は `untranslated-copy.ts` の `isStaleUntranslatedCopy`（非 Markdown と共通）。
- *
- * @returns 写し直したら true
  */
 async function refreshUntranslatedCopy(
 	source: MdaitUnit,
 	target: MdaitUnit,
 	sourceHash: string,
 	targetHash: string,
-): Promise<boolean> {
+): Promise<UntranslatedCopyOutcome> {
 	const marker = target.marker;
 	if (!(await isStaleUntranslatedCopy(marker?.need, marker?.from, targetHash, sourceHash, target.content))) {
-		return false;
+		return NOT_A_STALE_COPY;
 	}
 	if (spillsIntoFollowingUnits(source.content)) {
 		// **原文が閉じ忘れたフェンスを抱えている。** そのまま写すと、続く訳文ユニットが
 		// フェンスに飲まれて章の切れ目ごと消える（実測: 訳文が3ユニットから1ユニットになった）。
 		// 原文の構造が潰れている回は写し直さない。直せば次の sync で追いつく
-		return false;
+		return { stale: true, refreshed: false };
 	}
 	target.content = source.content;
-	return true;
+	return { stale: true, refreshed: true };
 }
 
 /**

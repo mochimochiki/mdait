@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../config/configuration";
+import { localPath } from "../workspace/local-dir";
 import { ensureMdaitDir } from "../workspace/mdait-dir";
 import type { AIMessage } from "./ai-service";
 
@@ -109,7 +110,7 @@ export class AIStatsLogger {
 	/**
 	 * 1行を追記する。置き場ごと消えていたら（ENOENT）、一度だけ用意し直して書き直す。
 	 *
-	 * `.mdait/logs` は `.mdait/.gitignore` に載っていて git の管理外なので、
+	 * `.mdait/local/logs` は `.mdait/.gitignore` に載っていて git の管理外なので、
 	 * `git clean -xdf` や掃除で消えることがある。ところがパスは最初の1回しか
 	 * 決めていないため、消えたあとは追記が毎回 ENOENT で落ち、拡張を立ち上げ直すまで
 	 * AI とのやり取りが一切残らなくなる（呼び出し元が握り潰すので誰も気づけない）。
@@ -151,7 +152,7 @@ export class AIStatsLogger {
 			}
 
 			// ログディレクトリのパス
-			const logDir = path.join(mdaitDir, "logs");
+			const logDir = localPath(mdaitDir, "logs");
 			this.logFilePath = path.join(logDir, "ai-stats.log");
 
 			// ログディレクトリが存在しない場合は作成
@@ -248,7 +249,7 @@ export class AIStatsLogger {
 			}
 
 			// ログディレクトリのパス
-			const logDir = path.join(mdaitDir, "logs");
+			const logDir = localPath(mdaitDir, "logs");
 			this.detailedLogFilePath = path.join(logDir, "ai-detailed.log");
 
 			// ログディレクトリが存在しない場合は作成

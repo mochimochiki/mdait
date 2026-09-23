@@ -26,7 +26,7 @@ let latestAnchors: ReportAnchor[] = [];
 const onDidWriteReport = new vscode.EventEmitter<void>();
 
 /**
- * AIレビューレポートを `.mdait/reports/ai-review.md` へ書き出す。
+ * AIレビューレポートを `.mdait/local/reports/ai-review.md` へ書き出す。
  *
  * @returns 書き出したファイルの URI（失敗時は undefined）
  */
@@ -37,7 +37,7 @@ export async function writeAiReviewReport(
 	const config = Configuration.getInstance();
 	const { content, anchors } = buildReviewReport(results, {
 		labels: { title: vscode.l10n.t("mdait AI Translation Review") },
-		// リンクはレポートの置き場所（.mdait/reports/）からの相対パスで解決される
+		// リンクはレポートの置き場所（.mdait/local/reports/）からの相対パスで解決される
 		linkBaseDir: path.dirname(config.getReportFilePath("ai-review")),
 	});
 	latestAnchors = anchors;

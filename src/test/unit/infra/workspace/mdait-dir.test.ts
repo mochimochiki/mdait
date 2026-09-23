@@ -34,16 +34,14 @@ suite(".mdait の初期化", () => {
 	const mdaitPath = (name: string): string => path.join(tempDir, ".mdait", name);
 	const read = (name: string): string => fs.readFileSync(mdaitPath(name), "utf-8");
 	const write = (name: string, content: string): void => {
-		fs.mkdirSync(path.join(tempDir, ".mdait"), { recursive: true });
+		fs.mkdirSync(path.dirname(mdaitPath(name)), { recursive: true });
 		fs.writeFileSync(mdaitPath(name), content, "utf-8");
 	};
 
-	test("何も無いところに .gitignore を作る", async () => {
+	test("何も無いところに .gitignore を作る（コミットしないものは local/ の1行で足りる）", async () => {
 		await ensureMdaitDir();
 
-		assert.match(read(".gitignore"), /^logs\/$/m);
-		assert.match(read(".gitignore"), /^reports\/$/m);
-		assert.match(read(".gitignore"), /^unit-registry\.broken$/m);
+		assert.equal(read(".gitignore"), "local/\n");
 	});
 
 	test(".gitattributes は作らない", async () => {
@@ -52,14 +50,14 @@ suite(".mdait の初期化", () => {
 		assert.equal(fs.existsSync(mdaitPath(".gitattributes")), false);
 	});
 
-	test("既にある .gitignore にも、足りない行だけを書き足す", async () => {
-		write(".gitignore", "logs/\n");
+	test("既にある .gitignore にも、足りない行だけを書き足す（旧い行は消さない）", async () => {
+		write(".gitignore", "logs/\nlocal/\n");
 
 		await ensureMdaitDir();
 
 		const ignore = read(".gitignore");
-		assert.match(ignore, /^reports\/$/m);
-		assert.equal(ignore.match(/^logs\/$/gm)?.length, 1, "既にある行が二重になっている");
+		assert.equal(ignore.match(/^local\/$/gm)?.length, 1, "既にある行が二重になっている");
+		assert.match(ignore, /^logs\/$/m, "利用者のファイルの旧い行は残す");
 	});
 
 	test("末尾に改行が無いファイルでも、行が繋がってしまわない", async () => {
@@ -68,7 +66,7 @@ suite(".mdait の初期化", () => {
 		await ensureMdaitDir();
 
 		assert.match(read(".gitignore"), /^logs\/$/m);
-		assert.match(read(".gitignore"), /^unit-registry\.broken$/m);
+		assert.match(read(".gitignore"), /^local\/$/m);
 	});
 
 	test("CRLF のファイルには CRLF で書き足す（改行を混ぜない）", async () => {
@@ -76,8 +74,32 @@ suite(".mdait の初期化", () => {
 
 		await ensureMdaitDir();
 
-		assert.ok(read(".gitignore").includes("reports/"));
+		assert.ok(read(".gitignore").includes("local/"));
 		assert.doesNotMatch(read(".gitignore"), /[^\r]\n/, "CRLF のファイルに LF が混ざっている");
+	});
+
+	test("旧い場所（.mdait 直下）のログ・レポート・避難先を local/ へ移す", async () => {
+		write("logs/ai-stats.log", "stats");
+		write("reports/sync.md", "report");
+		write("unit-state.broken", "broken");
+
+		await ensureMdaitDir();
+
+		assert.equal(read("local/logs/ai-stats.log"), "stats");
+		assert.equal(read("local/reports/sync.md"), "report");
+		assert.equal(read("local/unit-state.broken"), "broken");
+		assert.equal(fs.existsSync(mdaitPath("logs")), false);
+		assert.equal(fs.existsSync(mdaitPath("unit-state.broken")), false);
+	});
+
+	test("移し先に既にあるものは上書きしない（避難先は最初の事故の姿を残す）", async () => {
+		write("unit-state.broken", "second");
+		write("local/unit-state.broken", "first");
+
+		await ensureMdaitDir();
+
+		assert.equal(read("local/unit-state.broken"), "first");
+		assert.equal(read("unit-state.broken"), "second", "移せなかったものは元の場所に残す");
 	});
 
 	test("2度呼んでも中身は変わらない", async () => {

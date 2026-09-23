@@ -162,7 +162,7 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
   のままだった（`guidance.ts` がやり直しの返り値を捨て、`trans-command.ts` が古い結果を返していた）。
   返り値を読む側（LM ツール・ツリー・lab の IPC）が実態と食い違う。`reportTransOutcomeWithRetry` に
   括り出して直し、単体テストで固定した。
-- **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/logs` は `.gitignore`
+- **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/local/logs` は `.gitignore`
   済みで掃除に巻き込まれるが、`AIStatsLogger` はパスを覚えたまま `appendFile` を呼ぶため、消えると毎回
   ENOENT になり**記録だけが静かに途切れていた**（翻訳は続く）。ENOENT のときだけ作り直して1回書き直す。
 - **耐性検査で、翻訳系だけが壊れることが分かった（ADR-260824-01 として直した）。** 同じ意地悪（途中で切れた応答・空の応答・

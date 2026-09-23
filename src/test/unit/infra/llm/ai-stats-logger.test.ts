@@ -2,7 +2,7 @@
  * @file ai-stats-logger.test.ts
  * @description ログの追記が、置き場ごと消えたあとでも続けられるかを確かめる。
  *
- * `.mdait/logs` は `.mdait/.gitignore` に載っていて git の管理外なので、
+ * `.mdait/local/logs` は `.mdait/.gitignore` に載っていて git の管理外なので、
  * `git clean -xdf` や掃除スクリプトで消えることがある。消えたあとも
  * 拡張は動いたままで、ログの置き場は最初の1回しか用意していなかったため、
  * 以降の追記が ENOENT で静かに落ちて、AI とのやり取りが一切残らなくなっていた。
@@ -64,13 +64,13 @@ suite("AIStatsLogger", () => {
 
 	test("詳細ログの置き場が消されても、次の追記でディレクトリごと作り直して書ける", async () => {
 		const logger = AIStatsLogger.getInstance();
-		const logFile = path.join(tempDir, ".mdait", "logs", "ai-detailed.log");
+		const logFile = path.join(tempDir, ".mdait", "local", "logs", "ai-detailed.log");
 
 		await logger.logDetailed(detailedRecord("1回目"));
 		assert.ok(fs.existsSync(logFile), "1回目の追記でログファイルができること");
 
 		// git clean などで置き場ごと消える状況を再現する（拡張は動いたまま）
-		fs.rmSync(path.join(tempDir, ".mdait", "logs"), { recursive: true, force: true });
+		fs.rmSync(path.join(tempDir, ".mdait", "local", "logs"), { recursive: true, force: true });
 
 		await logger.logDetailed(detailedRecord("2回目"));
 		assert.ok(fs.existsSync(logFile), "消えたあとの追記でもログファイルが作り直されること");
@@ -81,12 +81,12 @@ suite("AIStatsLogger", () => {
 
 	test("統計ログの置き場が消されても、次の追記でディレクトリごと作り直して書ける", async () => {
 		const logger = AIStatsLogger.getInstance();
-		const logFile = path.join(tempDir, ".mdait", "logs", "ai-stats.log");
+		const logFile = path.join(tempDir, ".mdait", "local", "logs", "ai-stats.log");
 
 		await logger.log(statsRecord());
 		assert.ok(fs.existsSync(logFile), "1回目の追記でログファイルができること");
 
-		fs.rmSync(path.join(tempDir, ".mdait", "logs"), { recursive: true, force: true });
+		fs.rmSync(path.join(tempDir, ".mdait", "local", "logs"), { recursive: true, force: true });
 
 		await logger.log(statsRecord());
 		assert.ok(fs.existsSync(logFile), "消えたあとの追記でもログファイルが作り直されること");
@@ -97,7 +97,7 @@ suite("AIStatsLogger", () => {
 
 	test("置き場が残っているあいだは、追記が積み上がる", async () => {
 		const logger = AIStatsLogger.getInstance();
-		const logFile = path.join(tempDir, ".mdait", "logs", "ai-detailed.log");
+		const logFile = path.join(tempDir, ".mdait", "local", "logs", "ai-detailed.log");
 
 		await logger.logDetailed(detailedRecord("1件目"));
 		await logger.logDetailed(detailedRecord("2件目"));

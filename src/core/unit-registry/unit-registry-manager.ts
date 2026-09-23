@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
+import { localPath } from "../../infra/workspace/local-dir";
 import { ensureMdaitDir } from "../../infra/workspace/mdait-dir";
 import {
 	decodeUnitRegistry,
@@ -335,11 +336,12 @@ export class UnitRegistryManager {
 		}
 		this.needsSalvage = false;
 		const logger = Logger.getInstance();
-		const salvagePath = path.join(mdaitDir, UnitRegistryManager.SALVAGE_FILE_NAME);
+		const salvagePath = localPath(mdaitDir, UnitRegistryManager.SALVAGE_FILE_NAME);
 		try {
 			if (!fs.existsSync(filePath)) {
 				return;
 			}
+			fs.mkdirSync(path.dirname(salvagePath), { recursive: true });
 			if (fs.existsSync(salvagePath)) {
 				logger.warn(
 					"unit-registry",

@@ -198,7 +198,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 合流は git や SVN が外から行うもので、mdait のイベント（状態ツリーの変化・設定の
 	// 読み直し）は1つも起きない。見張っていないと、**VS Code を開いたまま合流した人には
 	// 競合が一度も見えない** — 次に何かコマンドを走らせるまでツリーもステータスバーも
-	// 古いままになる。監視するのは競合が出うる4つだけで、`reports/` や `logs/` は見ない。
+	// 古いままになる。監視するのは競合が出うる4つだけで、`local/` の中は見ない。
 	// **設定が変わったら張り直す** — `.mdait` の場所は mdait.json の場所で決まるので、起動時に
 	// 張ったままだと、あとから設定を作った・選び直した作業場では別の場所を見張り続ける
 	let conflictWatcher: vscode.FileSystemWatcher | undefined;
@@ -446,7 +446,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Adopt command（取り込みウィザード。ワークスペース全体）
 	const adoptDisposable = vscode.commands.registerCommand("mdait.adopt.run", () => adoptCommand());
 
-	// AIレビューレポート（.mdait/reports/ai-review.md）の flagged 行に
+	// AIレビューレポート（.mdait/local/reports/ai-review.md）の flagged 行に
 	// 「note を編集」CodeLens を出す。対象ファイルの絞り込みはプロバイダー側で行う
 	const aiReviewResultCodeLensDisposable = vscode.languages.registerCodeLensProvider(
 		{ scheme: "file", language: "markdown" },

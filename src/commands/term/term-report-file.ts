@@ -13,7 +13,7 @@ import { writeReport } from "../shared/report-file";
 import { type TermDetectResult, generateContent } from "./term-result-content";
 
 /**
- * 用語検出レポートを `.mdait/reports/term.md` へ書き出す。
+ * 用語検出レポートを `.mdait/local/reports/term.md` へ書き出す。
  * 見出し・定型文は表示言語で出す（ADR-260719-01）。
  *
  * @returns 書き出したファイルの URI（失敗時は undefined）

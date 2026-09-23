@@ -9,6 +9,7 @@ import {
 } from "../../core/markdown/marker-provider";
 import { TROUBLESHOOTING_URL } from "../links";
 import { Logger, formatError } from "../logging/logger";
+import { localPath } from "../workspace/local-dir";
 
 /**
  * AI設定の型定義
@@ -414,11 +415,19 @@ export class Configuration {
 	}
 
 	/**
-	 * レポート出力ディレクトリ（`.mdait/reports/`）の絶対パスを取得する。
-	 * mdait.json と混ざらないようサブディレクトリに寄せている。
+	 * コミットしないものをまとめて置くディレクトリ（`.mdait/local/`）の絶対パスを取得する。
+	 * 中身は `infra/workspace/local-dir.ts` を参照。
+	 */
+	public getLocalDir(): string {
+		return localPath(this.getMdaitDir());
+	}
+
+	/**
+	 * レポート出力ディレクトリ（`.mdait/local/reports/`）の絶対パスを取得する。
+	 * 個人の実行結果なので共有しない（ADR-260907-07・ADR-260923-08）。
 	 */
 	public getReportsDir(): string {
-		return path.join(this.getMdaitDir(), "reports");
+		return localPath(this.getMdaitDir(), "reports");
 	}
 
 	/**

@@ -88,7 +88,7 @@ sequenceDiagram
 
 ### 完了後プレビュー
 
-新規/更新件数が 1 件以上あれば `.mdait/reports/tm.md` へレポートを書き出す（`tm-report-file.ts` → 共通経路 `commands/shared/report-file.ts`）。
+新規/更新件数が 1 件以上あれば `.mdait/local/reports/tm.md` へレポートを書き出す（`tm-report-file.ts` → 共通経路 `commands/shared/report-file.ts`）。
 自動では開かず、完了通知の「レポートを開く」ボタンから開く。実行ごとに上書きする。
 本文生成（`tm-result-content.ts`）は VS Code 非依存の純関数のまま、見出し・定型文はプロバイダーからのラベル注入で表示言語化する（既定は英語。ADR-260719-01）。
 

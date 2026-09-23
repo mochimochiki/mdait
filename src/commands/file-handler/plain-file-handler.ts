@@ -27,7 +27,7 @@ import {
 } from "../markers/resolve-need";
 import { withFileMutation } from "../markers/unit-mutation";
 import { syncMarkerPair } from "../sync/marker-sync";
-import { isStaleUntranslatedCopy } from "../sync/untranslated-copy";
+import { isStaleUntranslatedCopy, isWrittenOverTranslateMark } from "../sync/untranslated-copy";
 import { extractRelevantTerms, termsToJson } from "../trans/term-extractor";
 import { TermsCacheManager } from "../trans/terms-cache-manager";
 import { lookupTmReferences } from "../trans/trans-command";
@@ -114,6 +114,20 @@ export class PlainFileHandler implements FileHandler {
 		const targetMarker = existing
 			? new MdaitMarker(existing.hash, existing.from || null, existing.need || null)
 			: new MdaitMarker(targetHash);
+		// 翻訳待ちの印を付けたあとで人の文章が書き込まれていたら確認待ちへ切り替える（Markdown と同じ規則）
+		const writtenOver =
+			!!existing &&
+			isWrittenOverTranslateMark(
+				existing.need,
+				existing.hash,
+				targetHash,
+				targetContent,
+				sourceContent,
+				!!staleCopy,
+			);
+		if (writtenOver) {
+			targetMarker.setNeed("review");
+		}
 		const existingText = !existing && targetContent.trim() !== "";
 		const wasAwaitingReview = existing?.need === "review";
 		const result = syncMarkerPair(sourceHash, targetHash, null, targetMarker, {
@@ -129,7 +143,7 @@ export class PlainFileHandler implements FileHandler {
 		const modified = staleCopy || !existing || existing.from !== sourceHash || existing.need !== need ? 1 : 0;
 		const becameRevision = modified === 1 && result.targetMarker.needsRevision();
 		const revisionsNeeded = becameRevision ? 1 : 0;
-		const adopted = existingText && need === "review" ? 1 : 0;
+		const adopted = (existingText || writtenOver) && need === "review" ? 1 : 0;
 		const reviewsSuperseded = wasAwaitingReview && becameRevision ? 1 : 0;
 		if (!existing) {
 			logger.info("sync", "Rebuild detected for plain file", {

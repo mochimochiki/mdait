@@ -1,7 +1,7 @@
 /**
  * @file report-file.ts
  * @description
- *   各コマンドの実行レポートを `.mdait/reports/` 配下の Markdown 実ファイルとして書き出し、
+ *   各コマンドの実行レポートを `.mdait/local/reports/` 配下の Markdown 実ファイルとして書き出し、
  *   完了通知のボタンから開くための共通経路。
  *
  *   **レポートの出し方を各コマンドで実装しないこと。** 以前は adopt だけが実ファイル、
@@ -23,7 +23,7 @@ const logger = Logger.getInstance();
 export type ReportKind = "adopt" | "ai-review" | "term" | "tm" | "doctor" | "validate" | "conflict";
 
 /**
- * レポートを `.mdait/reports/<kind>.md` へ書き出す。
+ * レポートを `.mdait/local/reports/<kind>.md` へ書き出す。
  *
  * **レポートの書き出しが `.mdait/` を新規作成することはない。** まだ mdait 化されていない
  * ワークスペースでは書かずに undefined を返す（セットアップ診断は未設定のワークスペースでも

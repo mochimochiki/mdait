@@ -40,7 +40,7 @@ sequenceDiagram
     Core->>Prim: (4/5) expandTerm_CoreProc（transPair ごと）
     Core->>Prim: (5/5) executeTmCommitForFile（ターゲットファイルごと）
     end
-    Core-->>U: 結果通知（レポートを開くボタン付き） + 統合レポート（.mdait/reports/adopt.md） + nextActions
+    Core-->>U: 結果通知（レポートを開くボタン付き） + 統合レポート（.mdait/local/reports/adopt.md） + nextActions
 ```
 
 - **オプトインは冒頭1回の QuickPick（canSelectMany）**: 「用語集も構築する（term.detect → term.expand）」「翻訳メモリも構築する（tm.commit）」。既定は両方 ON（推奨フロー = [guide-admin.md](../guide-admin.md) と一致）。TM 無効設定（`tm.enabled: false`）のときは TM 項目自体を出さない。
@@ -132,7 +132,7 @@ interface AdoptOutcome {
 ```
 
 - 結果通知: escalated / errors / stageErrors があれば warning、なければ info。adopted / align 修正 / 承認 / 用語 / TM 件数を1行で要約。
-- レポート（実ファイル `.mdait/reports/adopt.md`、実行ごとに上書き）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有。ユニット列は該当箇所への行リンク `[title](<relpath#Lnn>)`）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。見出し・定型文は `report-l10n.ts` のラベル注入で表示言語化（純関数の既定は英語）。パスは `Configuration.getReportFilePath("adopt")`。書き出しは `writeAdoptReport` →共通経路 `commands/shared/report-file.ts` の `writeReport`（人間の実行・`mdait_adopt` の双方で書く）。自動では開かず、完了通知の「レポートを開く」ボタンから Markdown プレビューで開く（`markdown.showPreview`。失敗時はテキストで開くフォールバック）。
+- レポート（実ファイル `.mdait/local/reports/adopt.md`、実行ごとに上書き）: sync サマリ → レビューサマリ＋ファイル別表（`generateReviewTableSection` を AI翻訳レビューと共有。ユニット列は該当箇所への行リンク `[title](<relpath#Lnn>)`）→ 用語集セクション → TM セクション（各オプション段は選択時のみ）→ stageErrors。見出し・定型文は `report-l10n.ts` のラベル注入で表示言語化（純関数の既定は英語）。パスは `Configuration.getReportFilePath("adopt")`。書き出しは `writeAdoptReport` →共通経路 `commands/shared/report-file.ts` の `writeReport`（人間の実行・`mdait_adopt` の双方で書く）。自動では開かず、完了通知の「レポートを開く」ボタンから Markdown プレビューで開く（`markdown.showPreview`。失敗時はテキストで開くフォールバック）。
 - nextActions: escalated 残りあり → 「該当ユニットを確認し、解消後に AI翻訳レビュー / tm.commit を再実行」（**escalated 多数時に TM がほぼ空になるケースの受け皿**）。buildTm 未選択で承認あり → tm.commit を案内。全消化 → status 確認。
 
 ## LM tool 契約（mdait_adopt）
