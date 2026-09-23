@@ -109,6 +109,15 @@ suite("mdait_resolve の invoke（入力検証）", () => {
 		assert.ok(envelope.error?.message.includes("reviewed"), "どの値が悪いか示すこと");
 	});
 
+	test("知らない action を渡したら、既定の resolve に落とさず invalid_input で落ちること", async () => {
+		// 綴りを誤った action まで resolve として扱うと、確かめる前の訳を承認してしまう
+		const envelope = await invoke(tool, { path: "en/doc.md", action: "bogus", unitHashes: ["abcd1234"] });
+
+		assert.strictEqual(envelope.ok, false);
+		assert.strictEqual(envelope.error?.code, "invalid_input");
+		assert.ok(envelope.error?.message.includes("bogus"), "どの値が悪いか示すこと");
+	});
+
 	for (const action of ["keep", "delete", "declare-isolate", "request-translate"] as const) {
 		test(`action:"${action}" で unitHashes が無ければ invalid_input で落ちること`, async () => {
 			// 省略してファイル内全件へ暗黙に効かせる経路は作らない（意図せぬ一括操作の安全弁）

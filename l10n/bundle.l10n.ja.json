@@ -261,6 +261,7 @@
   "Translate directory: {0}?\n\nThis will translate {1} units across {2} files using AI.": "ディレクトリ {0} を翻訳しますか？\n\n{2} ファイルの {1} ユニットをAIで翻訳します。",
   "Translate file: {0}?\n\nThis will translate {1} units using AI.": "ファイル {0} を翻訳しますか？\n\n{1} ユニットをAIで翻訳します。",
   "Unknown action: {0}": "不明なアクション: {0}",
+  "Unknown action: \"{0}\". Use one of: {1}.": "不明な action です: \"{0}\"。次のどれかを指定してください: {1}。",
   "TM feature is disabled. Enable it in mdait.json.": "TM機能が無効です。mdait.jsonで有効にしてください。",
   "No target files found for the given scope: {0}": "指定スコープにターゲットファイルが見つかりません: {0}",
   "TM commit completed: {0} new, {1} updated, {2} warnings, {3} errors across {4} file(s).": "TMコミット完了: 新規 {0}、更新 {1}、警告 {2}、エラー {3}（{4} ファイル）。",
