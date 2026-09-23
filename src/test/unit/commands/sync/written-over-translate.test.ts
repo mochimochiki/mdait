@@ -30,24 +30,28 @@ suite("isWrittenOverTranslateMark", () => {
 	const SOURCE = "## 見出し\n\n原文。";
 
 	test("翻訳待ちの丸写しに人の文章が書き込まれたら真", () => {
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "copy", "human", "## Title\n\nText.", SOURCE, false), true);
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "human", "## Title\n\nText.", SOURCE, false), true);
 	});
 
 	test("記録した hash といまの hash が同じなら偽（印を付けた時点の本文のまま）", () => {
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "human", "src", "human", "## Title\n\nText.", SOURCE, false), false);
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "human", "human", "## Title\n\nText.", SOURCE, false), false);
 	});
 
 	test("translate 以外の need は対象にしない", () => {
 		for (const need of ["", "review", "revise@abc", "isolate", "verify-deletion"]) {
-			assert.strictEqual(isWrittenOverTranslateMark(need, "copy", "copy", "human", "## Title", SOURCE, false), false, need);
+			assert.strictEqual(isWrittenOverTranslateMark(need, "copy", "human", "## Title", SOURCE, false), false, need);
 		}
 	});
 
-	test("空の本文・いまの原文の丸写し・記録した原文の丸写し・古い原文の丸写しは人の文章ではない", () => {
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "copy", "empty", "  \n", SOURCE, false), false);
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "copy", "now", SOURCE, SOURCE, false), false);
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "old", "from", "from", "## 旧\n\n旧。", SOURCE, false), false);
-		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "copy", "older", "## 旧旧", SOURCE, true), false);
+	test("空の本文・いまの原文の丸写し・古い原文の丸写しは人の文章ではない", () => {
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "empty", "  \n", SOURCE, false), false);
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "now", SOURCE, SOURCE, false), false);
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "older", "## 旧旧", SOURCE, true), false);
+	});
+
+	test("丸写しかどうかをハッシュの一致では決めない（中身が原文と違えば人の文章として守る）", () => {
+		// 記録した原文とハッシュがたまたま同じでも、古い原文の丸写しと判定されていなければ人の文章である
+		assert.strictEqual(isWrittenOverTranslateMark("translate", "copy", "from", "## Title\n\nText.", SOURCE, false), true);
 	});
 });
 

@@ -2180,7 +2180,6 @@ async function updateSectionHashes(
 				isWrittenOverTranslateMark(
 					target.marker.need,
 					target.marker.hash,
-					target.marker.from,
 					targetHash,
 					target.content,
 					source.content,

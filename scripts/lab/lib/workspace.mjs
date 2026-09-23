@@ -31,6 +31,9 @@ const RESIDUE = [
 	"unit-registry",
 	"index.json",
 	"local",
+	// 旧い版が .mdait 直下に置いていたもの。残すと ensureMdaitDir が local/ へ移し戻す
+	"unit-state.broken",
+	"unit-registry.broken",
 	"logs",
 	"reports",
 	"ai-stats.log",

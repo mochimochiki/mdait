@@ -66,12 +66,15 @@ export async function isStaleUntranslatedCopy(
  *
  * 次のものは人の文章ではないので外す。
  * - 本文が空
- * - いまの原文の丸写し、または記録した原文（`from`）の丸写し
- * - 古い原文の丸写し（`isStaleUntranslatedCopy` が真。写し直しを見送った回も含む）
+ * - いまの原文の丸写し（中身で比べる）
+ * - 古い原文の丸写し（`isStaleUntranslatedCopy` が真。写し直しを見送った回も含む。記録した原文
+ *   `from` の丸写しもここに入る）
+ *
+ * 丸写しかどうかを `from` とのハッシュの一致では決めない。ハッシュがたまたま一致した人の文章を
+ * 翻訳待ちのまま残すと、次の✨翻訳が上書きする（`needForFirstLink` が中身で比べるのと同じ立場）。
  *
  * @param need 訳文のいまの need
  * @param recordedHash 記録してある訳文の hash（sync で進める前の値）
- * @param from 訳文のいまの `from`（sync で進める前の値）
  * @param targetHash 訳文の中身のハッシュ
  * @param targetContent 訳文の中身
  * @param sourceContent いまの原文の中身
@@ -80,7 +83,6 @@ export async function isStaleUntranslatedCopy(
 export function isWrittenOverTranslateMark(
 	need: string | null | undefined,
 	recordedHash: string | null | undefined,
-	from: string | null | undefined,
 	targetHash: string,
 	targetContent: string,
 	sourceContent: string,
@@ -92,5 +94,5 @@ export function isWrittenOverTranslateMark(
 	if (targetContent.trim() === "" || targetContent === sourceContent) {
 		return false;
 	}
-	return recordedHash !== targetHash && from !== targetHash;
+	return recordedHash !== targetHash;
 }

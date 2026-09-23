@@ -120,7 +120,6 @@ export class PlainFileHandler implements FileHandler {
 			isWrittenOverTranslateMark(
 				existing.need,
 				existing.hash,
-				existing.from,
 				targetHash,
 				targetContent,
 				sourceContent,
