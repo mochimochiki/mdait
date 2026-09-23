@@ -12,6 +12,26 @@ const logger = Logger.getInstance();
 /** unit-stateファイル名 */
 const UNIT_STATE_FILENAME = "unit-state";
 
+/**
+ * 席に着いていない行（`held`）を置く、**手元だけの**ファイルの名前（`.mdait/local/` の中）。
+ *
+ * `held` は「本文から消えた章の状態の控え」と「合流で降ろされ、人の判断を待つ行」で、
+ * どちらも**その手元の作業の途中経過**である。共有の `unit-state` に載せると、誰にも見えない
+ * 行が全員のファイルで増え続け、差分と合流に本文と関係の無い行が混ざる。章を git で戻す
+ * （revert・checkout）ときは、本文と一緒にコミットされた `unit` の行が戻るので控えは要らない
+ * （ADR-260923-06）。
+ *
+ * **消してもよい。** 控えが無ければ、貼り戻した訳は元の状態へ戻る代わりに確認待ち（review）で
+ * 受ける（`isWrittenOverTranslateMark`）。人の訳が機械翻訳で上書きされることは無い。
+ */
+const HELD_FILENAME = "unit-state.held";
+
+/** 手元の控えのヘッダーコメント行 */
+const HELD_HEADER_LINES = [
+	"# mdait unit-state.held — 本文から消えた章の状態の控えと、合流で降ろされた行（この手元だけ。コミットしない）",
+	"# id\tkind\tseat\tlevel\ttitleHash\thash\tfrom\tneed",
+];
+
 /** ヘッダーコメント行 */
 const HEADER_LINES = [
 	"# mdait unit-state — 翻訳ユニットの状態管理",
@@ -245,6 +265,24 @@ export function entryKey(entry: UnitStateEntry): string {
  */
 function compareCodePoints(a: string, b: string): number {
 	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * 中身が1バイトでも違うときだけ書く。
+ *
+ * 控えだけが変わった回に共有ファイルを書き直すと、中身は同じでも更新時刻が動き、
+ * SVN や一部の道具から「変わった」ファイルに見える（`putRow` が同じ値の入れ直しで
+ * `dirty` を立てないのと同じ理由）。
+ */
+function writeIfChanged(filePath: string, content: string): void {
+	try {
+		if (fs.readFileSync(filePath, "utf-8") === content) {
+			return;
+		}
+	} catch {
+		// 無い・読めないときは書く
+	}
+	atomicWriteFileSync(filePath, content, "utf-8");
 }
 
 /**
@@ -590,8 +628,10 @@ export class UnitStateStore {
 
 		const filePath = path.join(mdaitDir, UNIT_STATE_FILENAME);
 		if (!fs.existsSync(filePath)) {
+			const heldDropped = this.loadHeld(mdaitDir);
 			this.loaded = true;
 			this.replayPending();
+			this.dirty ||= heldDropped > 0;
 			return;
 		}
 
@@ -679,6 +719,8 @@ export class UnitStateStore {
 			}
 
 			const [head, kindStr, seat, levelStr, titleHash, hash, from, need] = columns;
+			/** この行を「旧い形からの読み替え」としてもう数えたか（1行を2度数えない） */
+			let migratedRow = false;
 			// **先頭列は、いまの形ではファイルID、古い形ではパスである。** 列数では見分けが
 			// 付かない（どちらも8列）ので、**この同じファイルの見出しで宣言された ID か**で決める。
 			// 見出しが1つも無いファイル（＝丸ごと古い形）では、12桁16進のパスを持つ作業場の行を
@@ -704,6 +746,7 @@ export class UnitStateStore {
 				continue;
 			} else {
 				report.migrated++;
+				migratedRow = true;
 				filePathCol = head;
 			}
 			const kind = toKind(kindStr);
@@ -734,6 +777,10 @@ export class UnitStateStore {
 			// （合流由来かどうかの唯一の手掛かり）。読めない値は空として扱う — 数え落とす
 			// ほうが、手で書き換えられた値を競合として人の前に出すより安全である
 			const seatCol = kind === "unit" ? seat : kind === "held" ? readHeldOrigin(seat) : "";
+			if (kind === "held" && !migratedRow) {
+				// 旧い版は `held` を共有ファイルに書いていた。読んで手元の控えへ移す（書き戻しで消える）
+				report.migrated++;
+			}
 			this.seatOnLoad(
 				{ path: filePathCol, kind, seat: seatCol, level, titleHash, hash, from, need },
 				report,
@@ -762,11 +809,13 @@ export class UnitStateStore {
 		}
 
 		this.adoptFileIds(idPaths, report);
+		const heldDropped = this.loadHeld(mdaitDir);
 
 		this.loaded = true;
 		// `replayPending` は保存待ちが無ければ dirty を落とす（＝ディスクと同じ、の意）。
-		// 傷を畳んだ回はディスクと同じではないので、後始末はそのあとに置く
+		// 傷を畳んだ回・控えから要らない行を落とした回はディスクと同じではないので、後始末はそのあとに置く
 		this.replayPending();
+		this.dirty ||= heldDropped > 0;
 		this.afterLoad(report);
 	}
 
@@ -812,6 +861,97 @@ export class UnitStateStore {
 			}
 			this.setFileId(filePath, id);
 		}
+	}
+
+	/**
+	 * 手元の控え（`.mdait/local/unit-state.held`）を読み、`held` の行を表へ加える。
+	 *
+	 * 行はファイルIDで自分を名乗る。パスは**共有ファイルの見出しを先に引く** — 別の人が
+	 * ファイルを改名して合流した回でも、控えが新しいパスへ付いていく。共有ファイルに
+	 * そのファイルの行が1つも無いときだけ、控え自身の見出しを使う。
+	 *
+	 * **共有ファイルに同じ本文 hash の `unit` 行がある控えは読まない**（合流で降ろされた行を除く）。
+	 * 章を git で戻す（revert・checkout）と、本文と一緒にコミットされた行が戻ってくる。そこへ
+	 * 古い控えが並ぶと、本文 hash で身元を確定する突き合わせ（`unit-state-align.ts` の段階1）が
+	 * 「同じ hash の行が2つある」として働かなくなる。控えより、本文と一緒に戻った行のほうが正しい。
+	 *
+	 * 控えは手元だけのものなので、読めない行は読み飛ばす（原本の避難はしない）。
+	 *
+	 * @returns 読まなかった行の数（1以上なら、書き戻して控えから消す必要がある）
+	 */
+	private loadHeld(mdaitDir: string): number {
+		const heldPath = localPath(mdaitDir, HELD_FILENAME);
+		if (!fs.existsSync(heldPath)) {
+			return 0;
+		}
+		const lines = fs.readFileSync(heldPath, "utf-8").split(/\r?\n/);
+		const localPaths = new Map<string, string>();
+		for (const line of lines) {
+			const declared = FILE_ID_HEADER_PATTERN.exec(line);
+			if (declared) {
+				localPaths.set(declared[1], declared[2]);
+			}
+		}
+		let dropped = 0;
+		for (const line of lines) {
+			if (line.trim() === "" || line.startsWith("#")) {
+				continue;
+			}
+			const columns = line.split("\t");
+			if (columns.length !== EXPECTED_COLUMN_COUNT || columns[1] !== "held") {
+				dropped++;
+				continue;
+			}
+			const [id, , seat, levelStr, titleHash, hash, from, need] = columns;
+			const filePath = this.idOwners.get(id) ?? localPaths.get(id);
+			const level = Number.parseInt(levelStr, 10);
+			if (filePath === undefined || Number.isNaN(level)) {
+				dropped++;
+				continue;
+			}
+			if (!this.fileIds.has(filePath) && !this.idOwners.has(id)) {
+				this.setFileId(filePath, id);
+			}
+			const entry: UnitStateEntry = {
+				path: filePath,
+				kind: "held",
+				seat: readHeldOrigin(seat),
+				level,
+				titleHash,
+				hash,
+				from,
+				need,
+			};
+			const rows = this.ensureRows(filePath);
+			if (!isMergeHeldEntry(entry) && this.hasUnitRowWithHash(rows, hash)) {
+				// 本文と一緒に戻った行がある。古い控えは書き戻しで消す
+				dropped++;
+				continue;
+			}
+			const key = entryKey(entry);
+			if (!rows.has(key)) {
+				rows.set(key, entry);
+			}
+		}
+		if (dropped > 0) {
+			logger.info("unit-state", `Dropped rows from ${HELD_FILENAME} that are no longer needed or unreadable`, {
+				dropped,
+			});
+		}
+		return dropped;
+	}
+
+	/** そのファイルの行に、本文 hash が一致する `unit` の行があるか */
+	private hasUnitRowWithHash(rows: Map<string, UnitStateEntry>, hash: string): boolean {
+		if (!hash) {
+			return false;
+		}
+		for (const row of rows.values()) {
+			if (row.kind === "unit" && row.hash === hash) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -919,7 +1059,7 @@ export class UnitStateStore {
 		// 「改名で動くのは見出し1行」という当てが外れる（ADR-260908-04）。
 		// ID はハッシュなので、先頭の1バイトをそのまま区画に使える
 		const bucketOf = (id: string) => Number.parseInt(id.substring(0, 2), 16) % BUCKETS_PER_DIR;
-		const sortedEntries = [...this.allEntries()].sort((a, b) => {
+		const sortedEntries = [...this.allEntries()].filter((entry) => entry.kind !== "held").sort((a, b) => {
 			const d = compareCodePoints(dirOf(a.path), dirOf(b.path));
 			if (d !== 0) return d;
 			const ia = idOf.get(a.path) as string;
@@ -1032,12 +1172,49 @@ export class UnitStateStore {
 		if (prevDir !== undefined) fillBuckets(prevDir, BUCKETS_PER_DIR);
 		// 末尾改行を付与
 		const content = `${lines.join("\n")}\n`;
+		// **手元の控えを先に書く。** 旧い版が共有ファイルに書いた `held` は、この回の共有ファイルから
+		// 消える。共有ファイルを先に書いて控えを書く前に止まると、その行がどこにも残らない。
+		// 逆の順なら、止まっても両方に同じ行があるだけで、読み込みが1つに畳む
+		this.saveHeld(mdaitDir, idOf);
 		this.salvageBeforeOverwrite(filePath, mdaitDir);
-		atomicWriteFileSync(filePath, content, "utf-8");
+		writeIfChanged(filePath, content);
 		this.dirty = false;
 		// ディスクに載ったので、もう当て直す必要は無い
 		this.pending.clear();
 		this.pendingFileIds.clear();
+	}
+
+	/**
+	 * 席に着いていない行（`held`）を手元の控えへ書く。1行も無ければ控えを消す。
+	 *
+	 * 共有ファイルと違って合流しないので、区画・目印・空行の工夫は要らない。見出し
+	 * `# <id> <path>` だけは書く — 共有ファイルにそのファイルの行が1つも無いとき、
+	 * ID からパスを引く手掛かりがここにしか無い。
+	 *
+	 * @param idOf パス → ファイルID（共有ファイルと同じ ID を使う）
+	 */
+	private saveHeld(mdaitDir: string, idOf: ReadonlyMap<string, string>): void {
+		const heldPath = localPath(mdaitDir, HELD_FILENAME);
+		const held = [...this.allEntries()]
+			.filter((entry) => entry.kind === "held")
+			.sort((a, b) => compareCodePoints(a.path, b.path) || compareCodePoints(entryKey(a), entryKey(b)));
+		if (held.length === 0) {
+			fs.rmSync(heldPath, { force: true });
+			return;
+		}
+		const lines: string[] = [...HELD_HEADER_LINES];
+		let prevPath: string | undefined;
+		for (const entry of held) {
+			const id = idOf.get(entry.path) as string;
+			if (entry.path !== prevPath) {
+				lines.push("", `# ${id} ${entry.path}`);
+				prevPath = entry.path;
+			}
+			lines.push(
+				`${id}\t${entry.kind}\t${entry.seat}\t${entry.level}\t${entry.titleHash}\t${entry.hash}\t${entry.from}\t${entry.need}`,
+			);
+		}
+		writeIfChanged(heldPath, `${lines.join("\n")}\n`);
 	}
 
 	/**

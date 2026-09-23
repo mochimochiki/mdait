@@ -1073,6 +1073,7 @@ const EXPECTED_DIFF = {
 	S12: "本文からマーカーが消えても external は状態を保つ（external が強い。意図した差）",
 	S50: "章を消したうえで残りを見出しごと全面改稿。どの章が消えたかを示す情報がファイルに残らない（外部ストア方式の構造的な限界）",
 	S56: "同上（訳文側を全面改稿してから原文の章を削除）",
+	S91: "external は手元の控えを消したので、貼り戻した訳を元の状態（need なし）へ戻せず確認待ち（review）で受ける。embedded は本文にマーカーがあるので戻る。控えは共有しないので、別の環境ではいつもこの形になる（ADR-260923-06）",
 	S81: "中身が1文字も違わない訳文を2本まとめて VS Code の外で動かした場合。どの行がどのファイルのものか内容から決められないので結び直さない（ADR-260810-01）。誤って結ぶと別文書の翻訳状態が付いて取り返しがつかないが、落としてもいまと同じ＝状態が失われるだけなので、落とす側を選んでいる。embedded は本文にマーカーがあるので動いても失わない",
 	// S69 はここにあったが、2026-09-02 の実測で**両モードとも4章すべて訳文ごと完全復帰**した。
 	// かつては embedded だけがフェンスに飲まれたユニットの訳を失っていた（マーカーごと飲まれ、
@@ -1720,6 +1721,29 @@ async function allScenarios() {
 		await hostSync();
 		write("en/guide.md", saved);
 	});
+
+	// S91: S79 の途中で、手元の控え（.mdait/local/unit-state.held）を消す。控えは共有しない
+	//      手元だけのもので、別の環境で作業すれば最初から無い（ADR-260923-06）。控えが無いと
+	//      貼り戻した訳は元の状態へ戻らないが、翻訳待ち（need:translate）に落ちて次の翻訳で
+	//      上書きされてはならない — 確認待ち（review）で受ける（isWrittenOverTranslateMark）。
+	await scenario(
+		"S91 訳文の途中の章を消して sync → 手元の控えを消す → 貼り戻す",
+		async () => {
+			await hostTrans(path.join(CONTENT, "en/guide.md"));
+			await hostSync();
+			const saved = read("en/guide.md");
+			removeChapterAt("en/guide.md", 0);
+			await hostSync();
+			rmrf(path.join(MDAIT, "local", "unit-state.held"));
+			write("en/guide.md", saved);
+		},
+		{
+			expect: () =>
+				(unitsOf("en/guide.md") ?? [])
+					.filter((unit) => unit.need === "translate" && unit.body.includes("[MT]"))
+					.map((unit) => `訳し終えた章が翻訳待ちに落ちた（次の翻訳で上書きされる）: ${unit.title}`),
+		},
+	);
 
 	// S80: 原文も訳文も VS Code の外で動かす（git mv・CLI・外部エクスプローラ）。
 	//      イベントが来ないので段階2 の追随は働かない。訳し終えた訳文の全ユニットが
