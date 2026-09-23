@@ -229,13 +229,6 @@ export const COMMANDS = {
 		hosts: ALL,
 		note: "フォルダ配下の対訳を翻訳メモリへ登録する",
 	},
-	"mdait.tm.optimize": {
-		module: "out/commands/tm/command-optimize.js",
-		export: "tmOptimizeCommand",
-		args: "none",
-		hosts: ALL,
-		note: "翻訳メモリを整理する",
-	},
 
 	// --- AI レビュー・取り込み ---
 	"mdait.aiReview.file": {
@@ -251,6 +244,14 @@ export const COMMANDS = {
 		args: "dir-item",
 		hosts: ALL,
 		note: "フォルダ配下の訳を AI に見てもらう",
+	},
+	"mdait.aiReview.pending": {
+		module: "out/commands/ai-review/review-command.js",
+		export: "aiReviewPendingCommand",
+		args: "none",
+		hosts: ALL,
+		asksUser: true,
+		note: "選択中のペアで確認待ち（need:review）のユニットを AI に見てもらう。件数を見せて確認を出すので、答えられない headless では何もせず戻る",
 	},
 	"mdait.adopt.run": {
 		module: "out/commands/adopt/adopt-command.js",

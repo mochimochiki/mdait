@@ -10,6 +10,7 @@
 
 import { strict as assert } from "node:assert";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
+import { buildAlignmentMemo } from "../../../../core/markdown/marker-provider";
 import type { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { alignEntriesToUnits } from "../../../../core/unit-state/unit-state-align";
 import type { UnitStateEntry } from "../../../../core/unit-state/unit-state-store";
@@ -76,5 +77,16 @@ suite("合流で降ろされた行の、原稿との照合", () => {
 		const aligned = alignEntriesToUnits(entries, units, new Set([0]));
 
 		assert.equal(aligned[0], undefined);
+	});
+
+	test("席へ戻った降ろされた行は、消す行として控えに載る（競合の一覧から外れる）", () => {
+		// 載せないと、同期のあとも同じ行が「降ろされた行」として競合に残り続け、片付ける手立てが無い
+		const back = unseated("いまの本文", "src-new", "revise@src-new");
+		const entries = [seated("古い本文", "src-old"), back];
+		const units = [unit("章", "いまの本文")];
+
+		const memo = buildAlignmentMemo(entries, units, new Set([back]), [back]);
+
+		assert.deepEqual(memo.recoveredHeldEntries, [back]);
 	});
 });

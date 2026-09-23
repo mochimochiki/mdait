@@ -18,8 +18,8 @@ export interface NeedsAttentionOrigin {
  * 残る（ux.md B-8）。本コマンドは現在位置の次の項目へ1操作で移動し、末尾まで来たら先頭へ
  * 回ることでキューを一巡できるようにする。
  *
- * 押したときだけ動く。裁定の直後に自動で進むのは CodeLens「レビュー完了」だけで、
- * それは `advanceAfterReview` が受け持つ（ADR-260912-08）。
+ * 押したときだけ動く。裁定の直後に自動で進むのは「レビュー完了」（CodeLens とツリーの
+ * 「レビュー済みにする」）だけで、それは `advanceAfterReview` が受け持つ（ADR-260912-08）。
  *
  * 移動先は訳文だけでなく原文と並べて開く（`mdait.openPair`）。要対応の中心は review で、
  * 「この訳がこの原文の訳として正しいか」は対訳で見えないと判断できない。
@@ -60,7 +60,8 @@ export function isReviewResolution(resolved: ReadonlyArray<{ need: string }>): b
 }
 
 /**
- * CodeLens「レビュー完了」の直後に、残っている次の要対応へ進む（ADR-260912-08）。
+ * 「レビュー完了」（CodeLens とツリーの「レビュー済みにする」）の直後に、残っている次の
+ * 要対応へ進む（ADR-260912-08）。
  *
  * 要対応をキューとして回るとき、1件ごとに「次の要対応へ」を押し直すのは往復と同じ手間で、
  * 裁定→移動を1操作にまとめてはじめて連続裁定になる。review 以外の確定
@@ -128,7 +129,7 @@ function collectSortedNeedsAttentionItems(): NeedsAttentionItem[] {
 	const config = Configuration.getInstance();
 	return StatusManager.getInstance()
 		.getStatusItemTree()
-		.getNeedsAttentionUnits(getSelectedScopeDirs(config));
+		.getNeedsAttentionItems(getSelectedScopeDirs(config));
 }
 
 /**
@@ -149,7 +150,7 @@ function resolveOrigin(line: number | undefined): NeedsAttentionOrigin | undefin
 /**
  * 起点より後ろにある最初の項目を探す。見つからなければ先頭へ回る（末尾で行き止まりにしない）。
  *
- * items は `compareNeedsAttentionUnits`（ファイルパス昇順→開始行昇順）でソート済みである
+ * items は `compareNeedsAttentionItems`（ファイルパス昇順→開始行昇順）でソート済みである
  * ことを前提とし、比較規則もそれに一致させる（行は `getNeedsAttentionLine` で読む。
  * frontmatter と非Markdown は 0 行目扱いなので、そのファイルの先頭に居るときは
  * カーソルが 0 行目なら「もう通り過ぎた」として次へ進む）。

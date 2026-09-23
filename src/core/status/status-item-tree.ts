@@ -66,7 +66,7 @@ function needsAttentionKindRank(item: NeedsAttentionItem): number {
  * 表示の信頼に関わる（ADR-260724-01）。「次の要対応へ」コマンドもこの順序に従う。
  * frontmatter と非Markdown は行 0 なので、そのファイルの先頭に並ぶ。
  */
-export function compareNeedsAttentionUnits(a: NeedsAttentionItem, b: NeedsAttentionItem): number {
+export function compareNeedsAttentionItems(a: NeedsAttentionItem, b: NeedsAttentionItem): number {
 	if (a.filePath !== b.filePath) {
 		return a.filePath < b.filePath ? -1 : 1;
 	}
@@ -87,6 +87,56 @@ export function compareNeedsAttentionUnits(a: NeedsAttentionItem, b: NeedsAttent
 /** 人の裁定を待つ need か（要対応キューに並べる条件）。verify-deletion は本文ユニットにしか付かない */
 function isAttentionNeed(need: string | undefined): boolean {
 	return need === "review" || need === "verify-deletion";
+}
+
+/** 裁定を待つ項目を探すのに要る、ファイル項目の形だけ（`FileStatusItem` の部分型） */
+export interface AttentionFileLike {
+	/** 原文側か訳文側か（`Status.Source` の文字列値は "source"） */
+	status?: string;
+	/** 原文と結びついていない訳文か（収集のたびにディスクから計算した結果。ADR-260806-01） */
+	isOrphanTarget?: boolean;
+	/** 非Markdown のファイルレベル need（Markdown では常に undefined） */
+	needFlag?: string;
+	/** frontmatter 項目 */
+	frontmatter?: { needFlag?: string };
+}
+
+/**
+ * 1つのファイルの中で、人の裁定を待つ項目（ファイル自身・frontmatter・本文ユニット）を歩く。
+ *
+ * 何を歩き何を外すかの規則はここにしか置かない。ツリーの要対応（`walkNeedsAttentionItems`）と
+ * AI レビューの一括消化（`ai-review/pending-review-files.ts`）がどちらもここを通る。
+ *
+ * 歩かないファイル:
+ * - 孤立訳文（`isOrphanTarget === true`）: 原文が無いので「この訳が原文に合うか」を
+ *   裁定できない。先に決めるべきは「この訳文をどうするか」（破棄か原文の復元か）で、
+ *   その操作はファイル行にある。中のユニットを要対応に並べても目を逸らさせるだけ
+ * - 原文側（`Status.Source`）: 訳ではないので裁定の対象にならない
+ * 印はいずれも収集時にディスクから計算されたもので、ここでは読むだけ（ADR-260806-01）
+ *
+ * @param file ファイル項目
+ * @param units そのファイルの本文ユニット
+ */
+export function* attentionItemsInFile<F extends AttentionFileLike, U extends { needFlag?: string }>(
+	file: F,
+	units: Iterable<U>,
+): Generator<F | NonNullable<F["frontmatter"]> | U> {
+	if (file.isOrphanTarget === true || file.status === Status.Source) {
+		return;
+	}
+	// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
+	// need はファイルレベルに載る（MD では常に undefined なので二重に数えない）
+	if (isAttentionNeed(file.needFlag)) {
+		yield file;
+	}
+	if (file.frontmatter && isAttentionNeed(file.frontmatter.needFlag)) {
+		yield file.frontmatter as NonNullable<F["frontmatter"]>;
+	}
+	for (const unit of units) {
+		if (isAttentionNeed(unit.needFlag)) {
+			yield unit;
+		}
+	}
 }
 
 /**
@@ -236,37 +286,15 @@ export class StatusItemTree {
 	/**
 	 * 人の裁定を待つ項目（本文ユニット・frontmatter・非Markdown ファイル）を歩く。
 	 *
-	 * `getNeedsAttentionUnits`（要対応ノード・「次へ」・ステータスバー）と
+	 * `getNeedsAttentionItems`（要対応ノード・「次へ」・ステータスバー）と
 	 * `countPendingReviewUnits`（sync 完了通知の件数）の**唯一の共通の走査**である。
 	 * 2つが別々に歩くと、片方だけ直したときに「通知は 3 件と言うのに要対応ノードは
 	 * 0 件で出ない」というずれが再発する。どちらも need の種類でしか絞らない。
-	 *
-	 * 歩かないファイル:
-	 * - 孤立訳文（`isOrphanTarget === true`）: 原文が無いので「この訳が原文に合うか」を
-	 *   裁定できない。先に決めるべきは「この訳文をどうするか」（破棄か原文の復元か）で、
-	 *   その操作はファイル行にある。中のユニットを要対応に並べても目を逸らさせるだけ
-	 * - 原文側（`Status.Source`）: 訳ではないので裁定の対象にならない
-	 * どちらも AI レビュー（`ai-review/pending-review-files.ts`）が同じ理由で外している。
-	 * 印はいずれも収集時にディスクから計算されたもので、ここでは読むだけ（ADR-260806-01）
+	 * 1ファイルの中で何を歩き何を外すか（孤立訳文・原文側）は `attentionItemsInFile` を見よ。
 	 */
 	private *walkNeedsAttentionItems(scopeDirs?: string[]): Generator<NeedsAttentionItem> {
 		for (const file of this.getFilesInScope(scopeDirs)) {
-			if (file.isOrphanTarget === true || file.status === Status.Source) {
-				continue;
-			}
-			// 非MD（プレーン）ファイルは「ファイル＝1ユニット」で children を持たず、
-			// need はファイルレベルに載る（MD では常に undefined なので二重に数えない）
-			if (isAttentionNeed(file.needFlag)) {
-				yield file;
-			}
-			if (file.frontmatter && isAttentionNeed(file.frontmatter.needFlag)) {
-				yield file.frontmatter;
-			}
-			for (const unit of this.getUnitsInFile(file.filePath)) {
-				if (isAttentionNeed(unit.needFlag)) {
-					yield unit;
-				}
-			}
+			yield* attentionItemsInFile(file, this.getUnitsInFile(file.filePath));
 		}
 	}
 
@@ -276,9 +304,8 @@ export class StatusItemTree {
 	 * 「次の要対応へ」、ステータスバーの件数のデータソース。
 	 * escalated（AIレビューflagged）の集約は将来課題（ux.md B-4）。
 	 *
-	 * 名前の「ユニット」は裁定の単位のことで、本文ユニットのほかに frontmatter と
-	 * 非Markdown ファイル（ファイル＝1ユニット）を含む（`NeedsAttentionItem`）。
-	 * 何を含め何を外すかは `walkNeedsAttentionItems` を見よ。
+	 * 本文ユニットのほかに frontmatter と非Markdown ファイル（ファイル＝1ユニット）を含む
+	 * （`NeedsAttentionItem`）。何を含め何を外すかは `walkNeedsAttentionItems` を見よ。
 	 *
 	 * @param scopeDirs 集約対象を限定するディレクトリ（絶対パス）の集合。
 	 *   ツリー本体が選択中の transPair だけを表示するため、要対応も同じ範囲に揃える
@@ -287,8 +314,8 @@ export class StatusItemTree {
 	 *   非Markdown は行 0 としてそのファイルの先頭）。同じ状態なら常に同じ並びになることを
 	 *   保証する（並びの揺れは表示上の信頼を損なうため）。
 	 */
-	public getNeedsAttentionUnits(scopeDirs?: string[]): NeedsAttentionItem[] {
-		return Array.from(this.walkNeedsAttentionItems(scopeDirs)).sort(compareNeedsAttentionUnits);
+	public getNeedsAttentionItems(scopeDirs?: string[]): NeedsAttentionItem[] {
+		return Array.from(this.walkNeedsAttentionItems(scopeDirs)).sort(compareNeedsAttentionItems);
 	}
 
 	/**
@@ -336,7 +363,7 @@ export class StatusItemTree {
 	 * `verify-deletion` は数えない。あれは「原文が消えた訳文を捨ててよいか」という人にしか
 	 * 決められない問いで、AI レビューの対象（訳が原文に合っているか）ではない。
 	 *
-	 * 走査は `getNeedsAttentionUnits` と同じ（`walkNeedsAttentionItems`）。この件数と
+	 * 走査は `getNeedsAttentionItems` と同じ（`walkNeedsAttentionItems`）。この件数と
 	 * 要対応ノードの中身は「verify-deletion を含むかどうか」しか違わない — 孤立訳文や
 	 * 原文側の扱いを片方だけ変えると、通知の件数とノードの件数がまたずれる。
 	 *

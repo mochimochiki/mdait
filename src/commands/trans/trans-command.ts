@@ -948,8 +948,11 @@ async function translateUnit(
 					},
 				);
 
-				// 形式は AI に投げた指示文が決めている。**中身から推測しない**（ADR-260903-01）
-				const patched = applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
+				// 形式は AI に投げた指示文が決めている。**中身から推測しない**（ADR-260903-01）。
+				// 当てる前にパッチの失敗と分かっていたら（行番号の書き戻し）、当てずにその理由を使う
+				const patched: ReturnType<typeof applyRevisionPatch> = patchResult.patchFailure
+					? { ok: false, reason: patchResult.patchFailure }
+					: applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
 				if (patched.ok) {
 					translationResult = {
 						translatedText: patched.text,

@@ -196,7 +196,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 		await manager.buildStatusItemTree();
 
 		assert.strictEqual(
-			manager.getStatusItemTree().getNeedsAttentionUnits().length,
+			manager.getStatusItemTree().getNeedsAttentionItems().length,
 			0,
 			"翻訳前は要対応が0件であること",
 		);
@@ -215,7 +215,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 
 		assert.strictEqual(fired, 1, "要対応を増やす更新でも通知が届くこと");
 		assert.strictEqual(
-			manager.getStatusItemTree().getNeedsAttentionUnits().length,
+			manager.getStatusItemTree().getNeedsAttentionItems().length,
 			1,
 			"集約結果が新しい要対応を含むこと",
 		);
@@ -241,7 +241,7 @@ suite("StatusManager（ツリー変更通知の一本化とデバウンス）", 
 			"削除されたファイルがツリーから消えること",
 		);
 		assert.deepStrictEqual(
-			manager.getStatusItemTree().getNeedsAttentionUnits(),
+			manager.getStatusItemTree().getNeedsAttentionItems(),
 			[],
 			"削除されたファイルの要対応も消えること",
 		);

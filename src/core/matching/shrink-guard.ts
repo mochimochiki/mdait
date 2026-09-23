@@ -7,7 +7,7 @@
  *   その状態で「無くなったもの」を消してしまうと、原因を直しても戻らない。
  *
  *   同じ疑いを2箇所で使う。
- *   - `unit-state` の末尾行を刈るか（`marker-provider.ts` の `shouldPruneTail`）
+ *   - `unit-state` の余った行を刈るか（`marker-provider.ts` の `shouldPruneLeftovers`）
  *   - 原文を失った訳文ユニットを自動削除するか（`sync-command.ts` の `resolveOrphanPolicy`）
  *
  *   **述語は1つ。ただし慎重さの度合いは用途で変える。** 同じ現象を見ていても、判断を
@@ -45,7 +45,7 @@ export interface ShrinkSuspicionPolicy {
  * 行が2件から1件に減るのは普通の編集で、いちいち疑って席から降ろすと邪魔になる。
  * 疑いそこねても行が1本余るだけで取り返しがつくので、比率と減少幅だけで判断する。
  *
- * `collapsedRemainder: 0` にこの経路が到達することは無い。呼び出し元の `shouldPruneTail` が
+ * `collapsedRemainder: 0` にこの経路が到達することは無い。呼び出し元の `shouldPruneLeftovers` が
  * 「ユニット0件なら刈らない」を先に返すためで、意味としての既定値としてここに書いてある。
  */
 export const PRUNE_SUSPICION: ShrinkSuspicionPolicy = { minDrop: 3, collapsedRemainder: 0 };

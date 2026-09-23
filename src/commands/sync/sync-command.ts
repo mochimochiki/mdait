@@ -27,7 +27,7 @@ import {
 	planContentRelink,
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
-import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UNIT_REGISTRY_GC_THRESHOLD, UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import {
 	UnitStateStore,
 	isCleanParse as isUnitStateCleanParse,
@@ -61,6 +61,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { isStaleUntranslatedCopy } from "./untranslated-copy";
 import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
@@ -182,13 +183,13 @@ export function resetOrphanMemory(): void {
 }
 
 /**
- * 合流の途中の原稿を飛ばしたことを伝える。
+ * 合流の途中の原稿（原文か訳文に競合マーカーが残っているもの。`isMidMerge`）を飛ばしたことを伝える。
  *
  * 飛ばさずに進むと、`<<<<<<< HEAD` の行を本文として hash を取り、全ユニットに
  * `need:revise` を付けたうえで、**その姿のまま訳文へ写す**。訳文にも競合マーカーが
  * 生えるので、原稿の競合を解く前に訳文の競合まで増える。
  */
-function conflictInSourceNotice(count: number): SyncNotice | undefined {
+function conflictedFilesNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
 	}
@@ -661,7 +662,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// - configuredDirs: config の全 pair のディレクトリ。ここから外れた行は消してよい
 		// - scannedDirs:    今回実際に走査できたディレクトリ。ここに無い行は「確かめていない」
 		// - seenPaths:      走査して実在を確認したファイル
-		const configuredDirs = collectConfiguredDirs(config);
+		// `UnitStateEntry.path` と同じ基準（ワークスペースルート相対・`/` 区切り）にそろえる
+		const configuredDirs = collectAllPairDirsAbs(config).map(toWorkspaceRelativePath);
 		const scannedDirs = new Set<string>();
 		const seenPaths = new Set<string>();
 		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
@@ -1032,7 +1034,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				reviewSupersededNotice(totalReviewsSuperseded),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
-				conflictInSourceNotice(totalConflicted),
+				conflictedFilesNotice(totalConflicted),
 				newOrphansNotice(freshOrphans),
 				config.getOrphanTargetPolicy() === "delete"
 					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
@@ -1080,17 +1082,12 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 }
 
 /**
- * config の全 pair の原文・訳文ディレクトリを、`UnitStateEntry.path` と同じ基準
- * （ワークスペースルート相対・`/` 区切り）で返す。
+ * config の**全** pair の原文・訳文ディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
  *
  * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
  * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
- */
-/**
- * config の**全** pair のディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
- *
- * 台帳の掃除の走査だけがこれを使う。掃除は「消してよい」と言い切る操作なので、
- * その日の作業範囲ではなくワークスペース全体を見る必要がある。
+ * 台帳の掃除も同じで、「消してよい」と言い切るにはその日の作業範囲ではなく
+ * ワークスペース全体を見る必要がある。
  */
 function collectAllPairDirsAbs(config: Configuration): string[] {
 	const baseDir = config.getConfigBaseDir();
@@ -1098,16 +1095,6 @@ function collectAllPairDirsAbs(config: Configuration): string[] {
 	for (const pair of config.transPairs) {
 		dirs.add(path.resolve(baseDir, pair.sourceDir));
 		dirs.add(path.resolve(baseDir, pair.targetDir));
-	}
-	return [...dirs];
-}
-
-function collectConfiguredDirs(config: Configuration): string[] {
-	const baseDir = config.getConfigBaseDir();
-	const dirs = new Set<string>();
-	for (const pair of config.transPairs) {
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.sourceDir)));
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
 	}
 	return [...dirs];
 }
@@ -1612,7 +1599,7 @@ export async function sync_CoreProc(
 	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
 	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
 	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
-	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneTail）と同じ考え方。
+	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneLeftovers）と同じ考え方。
 	//
 	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
 	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
@@ -2227,14 +2214,7 @@ async function updateSectionHashes(
 
 /**
  * まだ訳していない訳文が原文の丸写しのままなら、変わった原文へ写し直す。
- *
- * 写し直してよい根拠は**その訳文に人の仕事が入っていないこと**だけであり、それは
- * ハッシュで確かめられる。`from` は「この訳文が写した原文の中身」のハッシュなので、
- * いまの訳文の中身のハッシュが `from` と一致するなら、訳文は一字一句その原文のままである。
- * 一致しなければ誰かが書いている（手訳の途中・既訳の取り込み）ので触らない。
- *
- * `need:translate` に限る。`revise` は訳し終えた本文を守る話で、`review` は人の確認待ち、
- * `isolate` は追随しないという宣言であり、どれも写し直してよい状態ではない。
+ * 写し直してよいかの規則は `untranslated-copy.ts` の `isStaleUntranslatedCopy`（非 Markdown と共通）。
  *
  * @returns 写し直したら true
  */
@@ -2245,34 +2225,14 @@ async function refreshUntranslatedCopy(
 	targetHash: string,
 ): Promise<boolean> {
 	const marker = target.marker;
-	if (marker?.need !== "translate") {
+	if (!(await isStaleUntranslatedCopy(marker?.need, marker?.from, targetHash, sourceHash, target.content))) {
 		return false;
-	}
-	if (!marker.from || targetHash === sourceHash) {
-		return false; // 訳文はもう今の原文の丸写しである。することは無い
 	}
 	if (spillsIntoFollowingUnits(source.content)) {
 		// **原文が閉じ忘れたフェンスを抱えている。** そのまま写すと、続く訳文ユニットが
 		// フェンスに飲まれて章の切れ目ごと消える（実測: 訳文が3ユニットから1ユニットになった）。
 		// 原文の構造が潰れている回は写し直さない。直せば次の sync で追いつく
 		return false;
-	}
-	if (targetHash === marker.from) {
-		// 直前の原文の丸写しである（いちばん多い形。ディスクを読まずに決まる）
-		target.content = source.content;
-		return true;
-	}
-	// `from` が既に先へ進んでしまった訳文の救済。この修正が入る前の sync は、
-	// 原文が変わっても丸写しを写し直さないまま `from` だけ進めていたため、
-	// 「一度も触っていないのに hash≠from」というユニットが既に手元にある
-	// （`from` は今の原文を指しているので、上の安い判定では拾えない）。
-	// その形は手編集と見分けが付かないので、**過去の原文そのものだったか**を
-	// スナップショットに問い合わせて確かめる（`unit-registry` は sync のたびに
-	// 原文ユニットの中身を hash キーで控えている）。中身まで突き合わせるので、
-	// ハッシュがたまたま衝突しても人の書いた訳文を捨てることはない
-	const snapshot = await UnitRegistryManager.getInstance().loadUnitRegistry(targetHash);
-	if (snapshot === null || snapshot !== target.content) {
-		return false; // 過去の原文ではない。誰かが書いている
 	}
 	target.content = source.content;
 	return true;
@@ -2327,7 +2287,7 @@ async function runUnitRegistryGC(statusManager: StatusManager, scope: RegistrySw
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
-	if (unitRegistryManager.getUnitRegistryFileSize() < 5 * 1024 * 1024) {
+	if (unitRegistryManager.getUnitRegistryFileSize() < UNIT_REGISTRY_GC_THRESHOLD) {
 		return;
 	}
 

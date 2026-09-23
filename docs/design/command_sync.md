@@ -137,7 +137,7 @@ sequenceDiagram
 | 本文なし | `translate` | 同上 |
 
 - 丸写しかどうかはハッシュで確かめる。`from` はいま結んだ原文の hash なので、訳文の `hash` がそれと同じなら一字一句その原文のままである（「未訳の丸写しは原文に追随する」と同じ根拠）。「本文があるか」だけは中身を見ないと分からないので、呼び出し側が `existingText` として答える
-- frontmatter（[`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts)）は「対象キーのどれかに値がある」を本文ありとみなし、値が原文と全部同じなら丸写し。丸写しを review に倒さないのは、frontmatter の確認待ちの出口が「確認済みにする」しか無いため（「要翻訳にする」は本文ユニットにしか無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに残り、訳されないまま受け入れるしかなくなる
+- frontmatter（[`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts)）は「対象キーのどれかに値がある」を本文ありとみなし、値が原文と全部同じなら丸写し。丸写しを review に倒さないのは、frontmatter の確認待ちの出口が「レビュー完了」しか無いため（「要翻訳にする」は本文ユニットにしか無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに残り、訳されないまま受け入れるしかなくなる
 - 非 Markdown（[`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) の rebuild 分岐。`unit-state` に行が無く訳文ファイルが在る）も同じ規則。丸写しの判定はバイト列で、改行コードだけ違う訳文は丸写しとみなさない
 - かつては adopt のときだけ review に倒し、ふつうの sync ではマーカーの無い既訳に `need:translate` を付けていた（次の trans が人の書いた訳を機械翻訳で上書きする）。external で `unit-state` を失ったときは別の安全網（`isExternalRebuild`）が全ユニットを review に倒していた（丸写しまで確認待ちに混ざる）。どちらもこの規則に吸収した
 - `adopt` オプションが変えるのは AI アライン（`align`）を許すかどうかと、完了レポートの文言（取り込みとして報告する）だけ。既訳を review で受けた件数（`adopted`）はふつうの sync でも数える

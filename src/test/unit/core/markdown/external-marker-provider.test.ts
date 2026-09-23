@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
-import { ExternalMarkerProvider, buildAlignmentMemo, shouldPruneTail } from "../../../../core/markdown/marker-provider";
+import { ExternalMarkerProvider, buildAlignmentMemo, shouldPruneLeftovers } from "../../../../core/markdown/marker-provider";
 import { markdownParser } from "../../../../core/markdown/parser";
 import { UnitStateStore, isHeldBackEntry } from "../../../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../../../infra/config/configuration";
@@ -442,7 +442,7 @@ suite("ExternalMarkerProvider", () => {
 			];
 			const memo = buildAlignmentMemo(entries, [], new Set());
 			assert.deepStrictEqual(memo.unmatchedSeats, [], "1件も預けない");
-			assert.deepStrictEqual(memo.recoveredHeldHashes, []);
+			assert.deepStrictEqual(memo.recoveredHeldEntries, []);
 		});
 
 		test("本文を空にして貼り戻しても、行が二重にならず状態が戻ること", () => {
@@ -590,30 +590,30 @@ suite("ExternalMarkerProvider", () => {
 	});
 });
 
-suite("shouldPruneTail（末尾行の刈り取り判定）", () => {
+suite("shouldPruneLeftovers（余った行の刈り取り判定）", () => {
 	test("ユニットが0件なら刈らないこと", () => {
-		assert.strictEqual(shouldPruneTail(5, 0), false);
+		assert.strictEqual(shouldPruneLeftovers(5, 0), false);
 	});
 
 	test("ユニットが減っていなければ刈ること", () => {
-		assert.strictEqual(shouldPruneTail(3, 3), true);
-		assert.strictEqual(shouldPruneTail(3, 5), true);
+		assert.strictEqual(shouldPruneLeftovers(3, 3), true);
+		assert.strictEqual(shouldPruneLeftovers(3, 5), true);
 	});
 
 	test("減少幅が小さければ刈ること（普通の章削除）", () => {
-		assert.strictEqual(shouldPruneTail(10, 8), true);
-		assert.strictEqual(shouldPruneTail(2, 1), true, "2件が1件は比率では半減だが件数が小さいので刈る");
-		assert.strictEqual(shouldPruneTail(4, 2), true, "減少2件は疑わしさの下限に届かない");
+		assert.strictEqual(shouldPruneLeftovers(10, 8), true);
+		assert.strictEqual(shouldPruneLeftovers(2, 1), true, "2件が1件は比率では半減だが件数が小さいので刈る");
+		assert.strictEqual(shouldPruneLeftovers(4, 2), true, "減少2件は疑わしさの下限に届かない");
 	});
 
 	test("半分未満へ3件以上減ったときは刈らないこと（一時的な崩れを疑う）", () => {
-		assert.strictEqual(shouldPruneTail(6, 1), false);
-		assert.strictEqual(shouldPruneTail(20, 1), false);
-		assert.strictEqual(shouldPruneTail(7, 3), false);
+		assert.strictEqual(shouldPruneLeftovers(6, 1), false);
+		assert.strictEqual(shouldPruneLeftovers(20, 1), false);
+		assert.strictEqual(shouldPruneLeftovers(7, 3), false);
 	});
 
 	test("半分以上残っていれば3件以上減っても刈ること", () => {
-		assert.strictEqual(shouldPruneTail(10, 6), true);
-		assert.strictEqual(shouldPruneTail(8, 4), true, "ちょうど半分は刈る");
+		assert.strictEqual(shouldPruneLeftovers(10, 6), true);
+		assert.strictEqual(shouldPruneLeftovers(8, 4), true, "ちょうど半分は刈る");
 	});
 });

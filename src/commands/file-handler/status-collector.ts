@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { getFrontmatterTranslationKeys, parseFrontmatterMarker } from "../../core/markdown/frontmatter-translation";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
+import { isTranslationNeed } from "../../core/markdown/mdait-marker";
 import { MarkdownItParser } from "../../core/markdown/parser";
 import type { StatusCollectorPort } from "../../core/status/status-collector-port";
 import {
@@ -449,10 +450,10 @@ export class StatusCollector implements StatusCollectorPort {
 	 * frontmatter の contextValue を決める。ユニットと同じく **`Status` ではなく need で決める**
 	 * （`determineUnitContextValue` の理由を参照）。
 	 *
-	 * 確認待ち（`need:review`）は `…Attention` に分け、「レビュー済みにする」だけを出す。
-	 * 通常の `mdaitFrontmatterTarget` に付く ✨翻訳を review にも出すと、押しても trans は
-	 * review を処理しないので「翻訳不要」で終わる — 押せないものをボタンにしない
-	 * （ux.md §3.3）。採用しない側の答え（翻訳待ちに戻す）は CodeLens 側にある。
+	 * ✨翻訳（`mdaitFrontmatterTarget`）は trans が実際に訳すとき（`isTranslationNeed`）だけ出す。
+	 * 翻訳済み・凍結に出すと押しても「翻訳不要」で終わる — 押せないものをボタンにしない
+	 * （ux.md §3.3）。確認待ち（`need:review`）は `…Attention` に分け、「レビュー済みにする」
+	 * だけを出す。採用しない側の答え（翻訳待ちに戻す）は CodeLens 側にある。
 	 */
 	private determineFrontmatterContextValue(isSource: boolean, need: string | null | undefined): string {
 		if (isSource) {
@@ -461,7 +462,7 @@ export class StatusCollector implements StatusCollectorPort {
 		if (need === "review") {
 			return "mdaitFrontmatterTargetAttention";
 		}
-		return "mdaitFrontmatterTarget";
+		return isTranslationNeed(need) ? "mdaitFrontmatterTarget" : "mdaitFrontmatterTargetComplete";
 	}
 
 	/**

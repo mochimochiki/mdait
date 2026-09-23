@@ -122,7 +122,7 @@ sequenceDiagram
 | `mdait_sync` | `{ path?, adopt? }` | 変更ファイル数、付与needの内訳、孤立ターゲットと適用ポリシー、adopt採用件数 | マーカー書換 | あり |
 | `mdait_translate` | `{ path }`（ファイル/ディレクトリ） | ファイルごとの成功/失敗、needの遷移、チェッカー違反、失敗原因 | 訳文書換・AI使用 | あり（スコープ単位で1回、対象ユニット総数を表示） |
 | `mdait_term` | `{ action: "detect"\|"expand", path? }` | 追加/更新された用語一覧、未展開残数 | terms.csv書換・AI使用 | あり |
-| `mdait_tm` | `{ action: "commit"\|"optimize", path? }` | 追加/更新TU数、スキップ理由内訳（needあり等） | translations.tmx書換・AI使用 | あり |
+| `mdait_tm` | `{ action: "commit", path? }` | 追加/更新TU数、スキップ理由内訳（needあり等） | translations.tmx書換・AI使用 | あり |
 | `mdait_validate` | `{ path?, checks?: ["structure","terms"] }` | 違反一覧（ファイル/ユニット/種別/期待値/実際値） | なし | なし（AI不使用・読取専用） |
 | `mdait_aiReview` | `{ path?, dryRun? }` | need:review ペアの verdict 集計（approved/mismatch/partial等）とエスカレーション一覧 | マーカー書換（need:review 解除）・AI使用 | あり |
 
@@ -188,7 +188,7 @@ sequenceDiagram
 
 各マイルストーンは独立してリリース可能で、途中で止まっても既存機能を壊さない順序にしている。**M2完了時点でS2（既存対訳取り込み）が、M4完了時点で目標シナリオの品質保証が、M6完了時点で全体が成立する。**
 
-> **実装状況（2026-07-04）**: M1〜M6 の実装タスクは完了（チケット: `.tasks/do/260704-01`〜`260704-06`、ADR-260704-01〜06）。
+> **実装状況（2026-07-04）**: M1〜M6 の実装タスクは完了（ADR-260704-01〜06）。
 > 残る完了ゲートは VS Code 実環境が必要な手動検証のみ:
 > Copilot Chat での各ツールの実機確認（M1/M3/M4）、取り込み手順の通し確認（M2）、
 > 100ファイル規模の並列翻訳計測と E2E（mdait-lab の P11/P12）の実走、
@@ -206,7 +206,6 @@ sequenceDiagram
 - [ ] 新規/変更コマンドが**冪等**であることをテストで確認（同入力で2回実行して2回目が無変更）
 - [ ] 設計判断をADRに記録した（`docs/adr.md`、新しいものを上）
 - [ ] 影響のある `docs/design/*.md`・`docs/guide/` を更新した
-- [ ] 作業チケットを `.tasks/do/` で管理し、完了時に `done.ps1` で移動した
 
 ### M1: エージェントが読める化（構造化出力とスコープ拡張）
 
@@ -285,7 +284,7 @@ sequenceDiagram
 **実装タスク**:
 
 1. `mdait_term` ツール新設（`action: detect|expand`、`path` スコープ）。`src/commands/term/` の既存コマンドを薄くラップ
-2. `mdait_tm` ツール新設（`action: commit|optimize`、`path` スコープ）。`src/commands/tm/` を薄くラップ
+2. `mdait_tm` ツール新設（`action: commit`、`path` スコープ）。`src/commands/tm/` を薄くラップ
 3. 出力 `data`: term→追加/更新用語と未展開残数、tm→追加/更新TU数と**スキップ理由内訳**（`need` あり・対象外ファイル等。エージェントが「なぜコミットされないか」を診断できるように）
 4. `package.json` のツール定義・`extension.ts` 登録・l10n・[tools.md](tools.md) 更新
 
@@ -402,7 +401,7 @@ sequenceDiagram
 
 **完了ゲート**:
 
-- [ ] 100ファイル規模のサンプルでディレクトリ翻訳が並列実行され、逐次比で有意に短縮（計測値をチケットに記録）
+- [ ] 100ファイル規模のサンプルでディレクトリ翻訳が並列実行され、逐次比で有意に短縮（計測値を記録）
 - [ ] 翻訳中の中断→同一呼び出し再実行で残りだけが処理される（テスト）
 - [ ] mdait-lab のE2E（P11 / P12）でS1・S2とも「ひとこと相当の操作列→完成状態の全条件成立」が通る
 - [ ] プレイブックだけを渡した状態で、実装コンテキストを持たないエージェントがS2取り込みを完走できる（手動検証。**本ロードマップ全体の受け入れテスト**）

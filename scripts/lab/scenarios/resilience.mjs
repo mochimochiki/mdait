@@ -66,6 +66,7 @@ import { parseArgs } from "../lib/args.mjs";
 import { sendCommand } from "../lib/ipc.mjs";
 import { saveStep } from "../lib/runs.mjs";
 import { LAB_DIR, readSession } from "../lib/session.mjs";
+import { parseUnitState } from "../lib/unit-state.mjs";
 import { configureAi } from "../lib/workspace.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -974,16 +975,11 @@ function frontmatterPairs(was, now) {
 	return Object.keys(before).map((key) => [key, before[key] ?? "", after[key] ?? ""]);
 }
 
-/** 台帳の中で、もう存在しないファイルを指す行 */
+/** 台帳の中で、もう存在しないファイルを指す行（見出しからパスを引けない行も含む） */
 function ghostRows(unitState) {
-	const rows = [];
-	for (const line of unitState.split("\n")) {
-		if (line.trim() === "" || line.startsWith("#")) continue;
-		const cols = line.split("\t");
-		if (cols.length !== 8) continue;
-		if (!fs.existsSync(path.join(ws, cols[0]))) rows.push(line);
-	}
-	return rows;
+	return parseUnitState(unitState)
+		.filter((row) => !row.pathKnown || !fs.existsSync(path.join(ws, row.path)))
+		.map((row) => row.line);
 }
 
 /** 変わった場所を短く示す */

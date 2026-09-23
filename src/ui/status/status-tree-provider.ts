@@ -20,6 +20,7 @@ import {
 	buildConflictChoiceRows,
 	buildConflictRows,
 	buildConflictsItem,
+	conflictFileRowId,
 	filePathOfConflictRow,
 	isConflictFileRowId,
 	isConflictRowId,
@@ -29,8 +30,8 @@ import {
 	collectWorkspaceConflicts,
 	pendingChoiceCount,
 	readyToWriteCount,
-	undecidedCount,
 } from "./conflict-source";
+import { undecidedCount } from "../../commands/conflict/resolve-core";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -642,9 +643,9 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 			// 総数も渡す — 全件決め終えた行に `解決` を出すのは、この2つの差で決まる
 			counts.set(plan.filePath, {
 				pending: plan.pending.length,
-				undecided: undecidedCount(plan, prepared?.stamps.get(plan.filePath)),
+				undecided: prepared ? undecidedCount(plan, prepared) : plan.pending.length,
 			});
-			this.conflictChoiceCounts.set(`mdait:conflict:file:${plan.filePath}`, plan.pending.length);
+			this.conflictChoiceCounts.set(conflictFileRowId(plan.filePath), plan.pending.length);
 		}
 		return buildConflictRows(conflicts, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, counts);
 	}
@@ -661,7 +662,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === filePath);
 		const stamp = prepared?.stamps.get(filePath);
 		const rows = plan && stamp !== undefined ? buildConflictChoiceRows(plan, stamp) : [];
-		this.conflictChoiceCounts.set(`mdait:conflict:file:${filePath}`, rows.length);
+		this.conflictChoiceCounts.set(conflictFileRowId(filePath), rows.length);
 		return rows;
 	}
 
@@ -735,18 +736,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * review / verify-deletion 待ちの項目（本文ユニット・frontmatter・非Markdown ファイル）を
 	 * クローン（isVirtualCopy: true）として返す（作り方は `toNeedsAttentionClone`）。
-	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
+	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionItems（VS Code非依存・単体テスト対象）に委譲する。
 	 */
 	private getNeedsAttentionChildren(): NeedsAttentionItem[] {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		return this.collectNeedsAttentionUnits().map((item) => toNeedsAttentionClone(item, workspaceFolder));
+		return this.collectNeedsAttentionItems().map((item) => toNeedsAttentionClone(item, workspaceFolder));
 	}
 
 	/**
 	 * 要対応項目を選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
 	 */
-	private collectNeedsAttentionUnits(): NeedsAttentionItem[] {
-		return this.statusItemTree.getNeedsAttentionUnits(
+	private collectNeedsAttentionItems(): NeedsAttentionItem[] {
+		return this.statusItemTree.getNeedsAttentionItems(
 			getSelectedScopeDirs(this.configuration),
 		);
 	}
@@ -760,7 +761,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * （ADR-260724-01）。
 	 */
 	private buildNeedsAttentionItem(): DirectoryStatusItem | undefined {
-		const count = this.collectNeedsAttentionUnits().length;
+		const count = this.collectNeedsAttentionItems().length;
 		if (count === 0) {
 			this.needsAttentionItem = undefined;
 			// 次に要対応が現れたときは、また展開した状態で見せる

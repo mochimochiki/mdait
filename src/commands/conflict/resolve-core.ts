@@ -19,9 +19,8 @@
  *
  * @module commands/conflict/resolve-core
  */
-import * as fs from "node:fs";
 import type * as vscode from "vscode";
-import type { MdaitConflicts } from "../../core/conflict/mdait-conflicts";
+import { type MdaitConflicts, stampOf } from "../../core/conflict/mdait-conflicts";
 import type { Configuration } from "../../infra/config/configuration";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { TermsRepository } from "../term/terms-repository";
@@ -41,6 +40,7 @@ import {
 	planUnitRegistryResolution,
 	planUnitStateResolution,
 } from "./targets/state-target";
+import { countUndecided } from "./targets/keyed-target";
 import { type TermsResolution, applyTermsResolution, planTermsResolution } from "./targets/terms-target";
 import { type TmResolution, applyTmResolution, planTmResolution } from "./targets/tm-target";
 
@@ -52,23 +52,13 @@ export interface PreparedResolution {
 	/** 対象ごとの持ち物（書き戻すときに要る） */
 	carried: Map<string, { tm?: TmResolution; terms?: TermsResolution; repository?: TermsRepository }>;
 	/**
-	 * 計画を作った時点のファイルの見た目（更新時刻と寸法）。
+	 * 競合を数えた時点のファイルの見た目（`ConflictedFile.stamp`）。
 	 *
 	 * 計画から書き戻しまでのあいだに確認ダイアログが挟まり、人が1件ずつ決めるときは
 	 * さらに間が空く。その間に人が手で直したり同期が走ったりしたら、**古い計画で
 	 * 上書きしてはいけない**。
 	 */
 	stamps: Map<string, string>;
-}
-
-/** ファイルの見た目。読めなければ空文字（無いファイルは書き戻す先でもない） */
-function stampOf(filePath: string): string {
-	try {
-		const stat = fs.statSync(filePath);
-		return `${stat.mtimeMs}:${stat.size}`;
-	} catch {
-		return "";
-	}
 }
 
 /**
@@ -86,7 +76,7 @@ export async function prepareResolution(
 	const failures: ResolutionFailure[] = [];
 
 	for (const file of conflicts.files) {
-		stamps.set(file.filePath, stampOf(file.filePath));
+		stamps.set(file.filePath, file.stamp);
 		try {
 			switch (file.kind) {
 				case "tm": {
@@ -137,10 +127,9 @@ export async function prepareResolution(
 }
 
 /**
- * 計画を実行する。**鍵の突き合わせで決まる分だけを書き戻す。**
+ * 計画を実行する。鍵の突き合わせで決まった分に、**人がツリーで決めた分を足して**書き戻す。
  *
- * 同じ鍵に別の値が来た件は1つも決まらないので、その件を持つ対象は1バイトも書かれずに
- * 残る。残りはツリーの行から `applyDecidedResolution` が片付ける。
+ * まだ決まっていない件が残る対象は1バイトも書かれずに残る。
  */
 export async function executeResolution(
 	prepared: PreparedResolution,
@@ -172,6 +161,16 @@ export function decidedFor(plan: ResolutionPlan, prepared: PreparedResolution): 
 	return stamp === undefined ? new Map() : decisionsFor(plan.filePath, stamp);
 }
 
+/** その対象で、**まだ人が決めていない**件数（ツリーで決めた分を差し引く） */
+export function undecidedCount(plan: ResolutionPlan, prepared: PreparedResolution): number {
+	return countUndecided(plan, decidedFor(plan, prepared));
+}
+
+/** 全件を決め終えて、あとは書くだけの対象か（はじめから決める件が無い対象は含まない） */
+export function isFullyDecided(plan: ResolutionPlan, prepared: PreparedResolution): boolean {
+	return plan.pending.length > 0 && undecidedCount(plan, prepared) === 0;
+}
+
 /** 手を付ける前の結果（書けなかったとき・取り消されたときは、これがそのまま答えになる） */
 function baseOutcome(plan: ResolutionPlan): ResolutionOutcome {
 	return {
@@ -185,13 +184,7 @@ function baseOutcome(plan: ResolutionPlan): ResolutionOutcome {
 
 /** 取り消されて手が付かなかった対象の結果（残っている件はそのまま残っている） */
 function skippedOutcome(plan: ResolutionPlan): ResolutionOutcome {
-	return {
-		...baseOutcome(plan),
-		autoResolvedCount: 0,
-		// 丸ごと書き直す対象には決める件が無い。0 と答えると「片付いた」と読めてしまう
-		remainingCount: Math.max(plan.pending.length, 1),
-		skipped: true,
-	};
+	return { ...baseOutcome(plan), autoResolvedCount: 0, skipped: true };
 }
 
 /**
@@ -212,11 +205,10 @@ function staleError(plan: ResolutionPlan, prepared: PreparedResolution): string 
 }
 
 /**
- * **1つの対象を書き戻す**（roadmap-v04）。
+ * **1つの対象を書き戻す。**
  *
- * `executeResolution` は全対象を回し、人が決めた分を1件も渡さない（鍵の突き合わせで
- * 決まる分だけが書かれる）。ツリーの行から呼ぶときは、その対象の最後の1件が決まった
- * 時点で、決まった全件を渡す。
+ * `executeResolution` は全対象についてこれを呼ぶ。ツリーのファイルの行の `解決` は、
+ * その対象1つについて呼ぶ。どちらも、人が決めた分を `decided` に渡す。
  */
 export async function applyDecidedResolution(
 	plan: ResolutionPlan,
@@ -259,7 +251,7 @@ export async function applyDecidedResolution(
 					remainingCount: 0,
 					written: true,
 					// 降ろされた行は残るが、**解けていないのではない**（行はどちらも残っている）。
-					// どちらを席へ戻すかを原稿と突き合わせて決めるのは P03 の仕事である
+					// どちらを席へ戻すかは、次の同期が原稿と突き合わせて決める
 					unseatedCount: result.unseated,
 				};
 			}

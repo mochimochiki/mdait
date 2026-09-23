@@ -16,7 +16,7 @@
  *   | 同じ鍵・同じ値 | 1つに畳む |
  *   | 同じ鍵・片方だけが祖先から変えた | **変えたほうを採る**（3方向マージの基本） |
  *   | 同じ鍵・触った項目が別 | 項目単位で両方採る（`mergeFields` を渡したときだけ） |
- *   | 同じ鍵・同じ項目に別の値 | **決まらない**。AI か人が決める |
+ *   | 同じ鍵・同じ項目に別の値 | **決まらない**。人が決める |
  *   | 片方が消し・片方が直した | **決まらない**。消した側は「消した」という印で見せる |
  *
  *   祖先が無いとき（diff3 形式でない合流）は「片方が消した」と「片方が足した」を見分け
@@ -34,7 +34,7 @@ export interface KeyedEntry<T> {
 	value: T;
 }
 
-/** 決まらなかった1件（AI か人が決める） */
+/** 決まらなかった1件（人が決める） */
 export interface UndecidedEntry<T> {
 	key: string;
 	ours: T;
@@ -53,8 +53,15 @@ export interface UndecidedEntry<T> {
 
 /** 突き合わせた結果 */
 export interface KeyMergeResult<T> {
-	/** 決定的に決まったもの。鍵の順に並ぶ */
+	/** 決定的に決まったもの。鍵の順に並ぶ（両側で同じだったものも含む） */
 	resolved: KeyedEntry<T>[];
+	/**
+	 * `resolved` のうち、**両側で同じだった**件数。
+	 *
+	 * 両側はファイル全体から切り出すので（`conflict-sections.ts`）、競合ブロックの外の件は
+	 * すべてここに入る。「突き合わせで片付いた件数」として人に見せるのは、これを引いた数である。
+	 */
+	sameCount: number;
 	/** 同じ鍵に別の値が来て、決まらなかったもの */
 	undecided: UndecidedEntry<T>[];
 	/** 祖先を見て「片方が消した」と判断して落としたもの */
@@ -114,6 +121,7 @@ export function mergeByKey<T>(
 	const resolved: KeyedEntry<T>[] = [];
 	const undecided: UndecidedEntry<T>[] = [];
 	const deleted: string[] = [];
+	let sameCount = 0;
 
 	const keys = [...new Set([...oursMap.keys(), ...theirsMap.keys()])].sort(compareCodePoints);
 	for (const key of keys) {
@@ -150,6 +158,7 @@ export function mergeByKey<T>(
 		// 同じ鍵・同じ値
 		if (options.sameValue(mine, yours)) {
 			resolved.push({ key, value: mine });
+			sameCount++;
 			continue;
 		}
 
@@ -175,5 +184,25 @@ export function mergeByKey<T>(
 		undecided.push({ key, ours: mine, theirs: yours, base: ancestor });
 	}
 
-	return { resolved, undecided, deleted };
+	return { resolved, undecided, deleted, sameCount };
+}
+
+/**
+ * 1件の中の**項目の表**（言語 → 訳など）を、`mergeByKey` と同じ規則で合わせる。
+ *
+ * `mergeFields` の実装に使う。1項目でも決まらなければ `undefined` を返し、その件ごと
+ * 人に決めてもらう。項目が1つも残らないときも `undefined` を返す（畳まずに人へ回す）。
+ */
+export function mergeFieldMaps<T>(
+	ours: ReadonlyMap<string, T>,
+	theirs: ReadonlyMap<string, T>,
+	base: ReadonlyMap<string, T> | undefined,
+	sameValue: (a: T, b: T) => boolean,
+): Map<string, T> | undefined {
+	const toEntries = (map: ReadonlyMap<string, T>) => [...map].map(([key, value]) => ({ key, value }));
+	const merged = mergeByKey(toEntries(ours), toEntries(theirs), base ? toEntries(base) : undefined, { sameValue });
+	if (merged.undecided.length > 0 || merged.resolved.length === 0) {
+		return undefined;
+	}
+	return new Map(merged.resolved.map((entry) => [entry.key, entry.value]));
 }

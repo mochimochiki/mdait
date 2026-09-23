@@ -24,6 +24,7 @@
  *
  * @module core/conflict/conflict-sections
  */
+import { isConflictMarkerLine } from "../markdown/conflict-markers";
 
 /** 競合ブロック1つ（レポートと Hover で「どこが」を言うために位置も持つ） */
 export interface ConflictSection {
@@ -53,9 +54,9 @@ export interface ConflictedFileSides {
 	sections: ConflictSection[];
 }
 
-/** 7文字ちょうどで始まる競合マーカーの行か（見出しの下線や引用と取り違えないため） */
+/** 競合マーカーの行なら、その種類 */
 function markerKind(line: string): "ours" | "base" | "sep" | "theirs" | undefined {
-	if (!/^(<{7}|\|{7}|={7}|>{7})(\s|$)/.test(line)) {
+	if (!isConflictMarkerLine(line)) {
 		return undefined;
 	}
 	switch (line[0]) {

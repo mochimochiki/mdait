@@ -70,7 +70,7 @@ export function forgetDecisions(filePath: string): void {
 	decisions.delete(filePath);
 }
 
-/** すべての預かりを捨てる（作業場が変わったとき・テスト用） */
+/** すべての預かりを捨てる（テスト用） */
 export function forgetAllDecisions(): void {
 	decisions.clear();
 }

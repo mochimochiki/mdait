@@ -1,19 +1,20 @@
 /**
  * @file ai-json.ts
  * @description
- *   **AI の答えから JSON を読む、1つの入口。**
+ *   **用語を拾う・訳語を埋める経路が、AI の答えから JSON を読むときの入口。**
  *
- *   AI へ JSON を頼む経路（用語を拾う・訳語を埋める）は、答えを読めなかったときに
- *   `UnusableAIResponseError` を投げる。0件として飲み込むと「見つからなかった」と
- *   区別が付かなくなるためである（ADR-260908-03）。
+ *   この2つの経路は、答えを読めなかったときに `UnusableAIResponseError` を投げる。
+ *   0件として飲み込むと「見つからなかった」と区別が付かなくなるためである（ADR-260908-03）。
+ *   翻訳・TM 登録・AI レビュー・取り込みの経路は、いまも `extractJsonFromResponse` を
+ *   直に使っており、ここは通らない。
  *
  *   ただし**読み方が厳しすぎても同じ害になる。** 読めるはずの答えを「使えない」と
- *   突き返すと、今度は動くはずの仕事が止まる。だからここでは順に3つ試す。
- *     1. コードフェンスの中（`extractJsonFromResponse`。前置き・後書きはここで落ちる）
- *     2. 全文そのまま
- *     3. 最初の `[` / `{` から、同じ種類の最後の閉じ括弧まで（前後に説明文が付いた形）
+ *   突き返すと、今度は動くはずの仕事が止まる。だからここでは順に2つ試す。
+ *     1. `extractJsonFromResponse` の結果。コードフェンスがあればその中身（前置き・後書きは
+ *        ここで落ちる）、無ければ全文
+ *     2. 1 の中の、最初の `[` / `{` から同じ種類の最後の閉じ括弧まで（前後に説明文が付いた形）
  *
- *   3 で**最後の**閉じ括弧まで取るのは意図してのこと。用語の答えは
+ *   2 で**最後の**閉じ括弧まで取るのは意図してのこと。用語の答えは
  *   `[{"variants":["…"]}]` のように配列が入れ子になるので、最初の `]` で切ると必ず壊れる。
  *
  * @module commands/shared/ai-json
@@ -63,4 +64,20 @@ function sliceOutermost(text: string): string {
 	if (start < 0) return "";
 	const end = text.lastIndexOf(opensWithArray ? "]" : "}");
 	return end > start ? text.slice(start, end + 1) : "";
+}
+
+/**
+ * JSON としては読めたが、形が合わない答えを表す例外を作る。
+ * message は記録用の英語。利用者向けの文は呼び出し側が理由（`invalid-format`）から組む。
+ *
+ * @param what 記録用の呼び名（`parseJsonAnswer` に渡したものと同じ。例: "Term detection"）
+ * @param response AI からの生の答え
+ * @param why 何が合わなかったか（記録用の英語）
+ */
+export function unusableJsonAnswer(what: string, response: string, why: string): UnusableAIResponseError {
+	return new UnusableAIResponseError(
+		"invalid-format",
+		`${what} response was not usable: ${why}`,
+		`responseChars=${response.length}`,
+	);
 }

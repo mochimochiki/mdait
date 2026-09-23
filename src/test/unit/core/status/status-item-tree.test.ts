@@ -192,7 +192,7 @@ suite("StatusItemTree", () => {
 		});
 	});
 
-	suite("getNeedsAttentionUnits（Needs Attention仮想ノードの集約ロジック）", () => {
+	suite("getNeedsAttentionItems（Needs Attention仮想ノードの集約ロジック）", () => {
 		test("review/verify-deletionのユニットのみを全ファイル横断で集める", () => {
 			const jaDir = path.resolve("/mock-workspace/ja");
 			const fileA = makeFileItem(path.join(jaDir, "a.md"), Status.Translated, [
@@ -207,7 +207,7 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree([fileA, fileB], ["ja"]);
 
-			const matches = tree.getNeedsAttentionUnits();
+			const matches = tree.getNeedsAttentionItems();
 			assert.deepStrictEqual(
 				matches.map(attentionKey).sort(),
 				["deletionUnit", "reviewUnit"],
@@ -222,7 +222,7 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree([fileA], ["ja"]);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems(), []);
 		});
 
 		test("scopeDirsを渡すと対象ディレクトリ配下のユニットだけが集約されること", () => {
@@ -239,12 +239,12 @@ suite("StatusItemTree", () => {
 			tree.buildTree([jaFile, frFile], ["ja", "fr"]);
 
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits([jaDir]).map(attentionKey),
+				tree.getNeedsAttentionItems([jaDir]).map(attentionKey),
 				["jaUnit"],
 				"選択外のディレクトリのユニットは集約されないこと",
 			);
 			assert.strictEqual(
-				tree.getNeedsAttentionUnits().length,
+				tree.getNeedsAttentionItems().length,
 				2,
 				"scopeDirs未指定なら全ファイルが対象であること",
 			);
@@ -265,7 +265,7 @@ suite("StatusItemTree", () => {
 			tree.buildTree([enFile, enUsFile], ["en", "en-US"]);
 
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits([enDir]).map(attentionKey),
+				tree.getNeedsAttentionItems([enDir]).map(attentionKey),
 				["enUnit"],
 				"en-US 配下のユニットが en の集約に混入しないこと",
 			);
@@ -292,12 +292,12 @@ suite("StatusItemTree", () => {
 
 			// 投入順を変えた2本のツリーで同じ並びになることを確認する
 			tree.buildTree([fileB, fileA], ["ja"]);
-			const order1 = tree.getNeedsAttentionUnits().map(attentionKey);
+			const order1 = tree.getNeedsAttentionItems().map(attentionKey);
 
 			const other = new StatusItemTree();
 			try {
 				other.buildTree([fileA, fileB], ["ja"]);
-				const order2 = other.getNeedsAttentionUnits().map(attentionKey);
+				const order2 = other.getNeedsAttentionItems().map(attentionKey);
 				assert.deepStrictEqual(order1, ["a10", "b5", "b20"]);
 				assert.deepStrictEqual(order2, order1, "投入順が変わっても並びが同じこと");
 			} finally {
@@ -319,7 +319,7 @@ suite("StatusItemTree", () => {
 
 			tree.buildTree([file], ["ja"]);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["frontmatter:a.md", "a10"]);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems().map(attentionKey), ["frontmatter:a.md", "a10"]);
 		});
 
 		test("frontmatter が翻訳待ち・確認済み・原文側なら集めないこと", () => {
@@ -342,7 +342,7 @@ suite("StatusItemTree", () => {
 				["ja"],
 			);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems(), []);
 		});
 
 		test("非MD（プレーン）ファイルの確認待ちも集められ、ファイル＝1項目として並ぶこと", () => {
@@ -362,7 +362,7 @@ suite("StatusItemTree", () => {
 				["ja"],
 			);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["file:notes.txt", "z5"]);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems().map(attentionKey), ["file:notes.txt", "z5"]);
 		});
 
 		test("孤立訳文（原文の無い訳文）は review が残っていても集めないこと", () => {
@@ -391,7 +391,7 @@ suite("StatusItemTree", () => {
 				["ja"],
 			);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits().map(attentionKey), ["l1"]);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems().map(attentionKey), ["l1"]);
 			assert.strictEqual(tree.countPendingReviewUnits(), 1, "通知の件数も孤立を数えないこと");
 		});
 
@@ -407,7 +407,7 @@ suite("StatusItemTree", () => {
 				["en"],
 			);
 
-			assert.deepStrictEqual(tree.getNeedsAttentionUnits(), []);
+			assert.deepStrictEqual(tree.getNeedsAttentionItems(), []);
 			assert.strictEqual(tree.countPendingReviewUnits(), 0, "通知の件数も原文側を数えないこと");
 		});
 
@@ -446,7 +446,7 @@ suite("StatusItemTree", () => {
 			);
 
 			for (const scope of [undefined, [jaDir], [jaDir, frDir], [enDir]]) {
-				const reviews = tree.getNeedsAttentionUnits(scope).filter((item) => item.needFlag === "review");
+				const reviews = tree.getNeedsAttentionItems(scope).filter((item) => item.needFlag === "review");
 				assert.strictEqual(
 					tree.countPendingReviewUnits(scope),
 					reviews.length,
@@ -454,7 +454,7 @@ suite("StatusItemTree", () => {
 				);
 			}
 			assert.strictEqual(tree.countPendingReviewUnits([jaDir]), 3, "本文1 + frontmatter1 + 非MD1（孤立は除く）");
-			assert.strictEqual(tree.getNeedsAttentionUnits([jaDir]).length, 4, "上の3件 + verify-deletion 1件");
+			assert.strictEqual(tree.getNeedsAttentionItems([jaDir]).length, 4, "上の3件 + verify-deletion 1件");
 		});
 	});
 
@@ -520,7 +520,7 @@ suite("StatusItemTree", () => {
 				"children側にも同じ更新が反映されること",
 			);
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits(),
+				tree.getNeedsAttentionItems(),
 				[],
 				"need解決後は要対応から外れること",
 			);
@@ -543,7 +543,7 @@ suite("StatusItemTree", () => {
 				],
 				["ja"],
 			);
-			assert.strictEqual(tree.getNeedsAttentionUnits().length, 2);
+			assert.strictEqual(tree.getNeedsAttentionItems().length, 2);
 
 			const removed = tree.removeFile(aPath);
 
@@ -555,7 +555,7 @@ suite("StatusItemTree", () => {
 				"ユニット索引からも消えること",
 			);
 			assert.deepStrictEqual(
-				tree.getNeedsAttentionUnits().map(attentionKey),
+				tree.getNeedsAttentionItems().map(attentionKey),
 				["bUnit"],
 				"要対応からも消えること",
 			);
@@ -1022,7 +1022,7 @@ suite("StatusItemTree", () => {
 				],
 				["ja"],
 			);
-			assert.strictEqual(tree.getNeedsAttentionUnits().length, 0);
+			assert.strictEqual(tree.getNeedsAttentionItems().length, 0);
 
 			let fired = 0;
 			tree.onTreeChanged(() => {
@@ -1038,7 +1038,7 @@ suite("StatusItemTree", () => {
 
 			assert.strictEqual(fired, 1, "変更が1回通知されること");
 			assert.strictEqual(
-				tree.getNeedsAttentionUnits().length,
+				tree.getNeedsAttentionItems().length,
 				1,
 				"通知後の集約結果に新しい要対応が含まれること",
 			);

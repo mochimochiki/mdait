@@ -18,8 +18,9 @@ import { Logger, formatError } from "../../infra/logging/logger";
 import { choiceOfConflictRow, fingerprintOfKey, filePathOfConflictRow } from "../../ui/status/conflict-branch";
 import { collectPendingChoices, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 import { decisionsFor, forgetDecisions, rememberDecision } from "./conflict-decisions";
+import { type ConflictParty, sideOf } from "./conflict-labels";
 import type { ChoiceSide } from "./resolution-plan";
-import { applyDecidedResolution } from "./resolve-core";
+import { applyDecidedResolution, undecidedCount } from "./resolve-core";
 
 const logger = Logger.getInstance();
 
@@ -52,7 +53,8 @@ export async function takeSide(target: TakeSideTarget | undefined, side: ChoiceS
 
 	// **ここでは1バイトも書かない。** 書くのは人が `解決` を押したときだけである。
 	// 覚え書きも捨てない — 計画は動いていないので、読み直させると用語集と TM を
-	// 解き直すだけで何も変わらない（行の数え上げは預かりを引いて出す）
+	// 解き直すだけで何も変わらない（行の数え上げは預かりを引いて出す）。呼び出し側も
+	// 描き直すだけにする（`extension.ts`）
 	rememberDecision(target.filePath, stamp, target.key, side);
 }
 
@@ -77,16 +79,14 @@ export async function resolveDecidedFile(filePath: string | undefined): Promise<
 		return;
 	}
 
-	const decided = decisionsFor(filePath, stamp);
-	const remaining = plan.pending.filter((item) => !decided.has(item.key)).length;
-	if (remaining > 0) {
+	if (undecidedCount(plan, prepared) > 0) {
 		// 決まっていない件がある。**押せるはずの無いときに押された** — 数え直させて黙る
 		invalidateWorkspaceConflicts();
 		return;
 	}
 
 	try {
-		const outcome = await applyDecidedResolution(plan, prepared, config, decided);
+		const outcome = await applyDecidedResolution(plan, prepared, config, decisionsFor(filePath, stamp));
 		if (outcome.error) {
 			// **書けなかったのに預かりを捨てない。** 捨てると、競合は残ったまま人の
 			// 選択だけが消え、何も言われないまま最初からやり直しになる
@@ -117,12 +117,15 @@ export async function resolveDecidedFileForItem(item: unknown): Promise<void> {
 /**
  * ツリーの行から `あなたを残す` / `相手を残す` を受ける。
  *
+ * 受けるのは**どちらの人の変更か**で、git のどちらの側かではない。rebase の途中と
+ * stash pop では ours が相手の変更なので、計画の `mineSide` を通して git の側へ読み替える。
+ *
  * 行が持っているのは「どのファイルの何番目か」と鍵の短い目印だけなので、計画を引き直して
  * 鍵へ戻す。番号で持つのは、鍵が長く（席のキーやハッシュ）ツリーの識別子に載せると
  * 読めなくなるためである。**目印は必ず突き合わせる** — ツリーに出したままファイルが外から
  * 変わると、同じ番号が別の件を指しうる。
  */
-export async function takeSideForItem(item: unknown, side: ChoiceSide): Promise<void> {
+export async function takeSideForItem(item: unknown, party: ConflictParty): Promise<void> {
 	const directoryPath = (item as { directoryPath?: string } | undefined)?.directoryPath;
 	if (!directoryPath) {
 		return;
@@ -134,11 +137,11 @@ export async function takeSideForItem(item: unknown, side: ChoiceSide): Promise<
 	const prepared = await collectPendingChoices(Configuration.getInstance());
 	const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === row.filePath);
 	const choice = plan?.pending[row.index];
-	if (!choice || fingerprintOfKey(choice.key) !== row.fingerprint) {
+	if (!plan || !choice || fingerprintOfKey(choice.key) !== row.fingerprint) {
 		// ファイルが外から変わって、番号が別の件を指すようになった。**番号だけで当てない** —
 		// 押した行が指していた件と違うものを決めてしまう
 		invalidateWorkspaceConflicts();
 		return;
 	}
-	await takeSide({ filePath: row.filePath, key: choice.key }, side);
+	await takeSide({ filePath: row.filePath, key: choice.key }, sideOf(plan, party));
 }

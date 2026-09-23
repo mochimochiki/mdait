@@ -198,39 +198,63 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 合流は git や SVN が外から行うもので、mdait のイベント（状態ツリーの変化・設定の
 	// 読み直し）は1つも起きない。見張っていないと、**VS Code を開いたまま合流した人には
 	// 競合が一度も見えない** — 次に何かコマンドを走らせるまでツリーもステータスバーも
-	// 古いままになる。監視するのは競合が出うる4つだけで、`reports/` や `logs/` は見ない
-	const conflictWatcher = vscode.workspace.createFileSystemWatcher(
-		new vscode.RelativePattern(config.getMdaitDir(), "{unit-state,unit-registry,translations.tmx,*.csv,*.yaml,*.yml}"),
-	);
-	const refreshConflicts = () => {
-		invalidateWorkspaceConflicts();
+	// 古いままになる。監視するのは競合が出うる4つだけで、`reports/` や `logs/` は見ない。
+	// **設定が変わったら張り直す** — `.mdait` の場所は mdait.json の場所で決まるので、起動時に
+	// 張ったままだと、あとから設定を作った・選び直した作業場では別の場所を見張り続ける
+	let conflictWatcher: vscode.FileSystemWatcher | undefined;
+	let watchedMdaitDir: string | undefined;
+	const watchMdaitDir = () => {
+		const mdaitDir = config.getMdaitDir();
+		if (conflictWatcher && mdaitDir === watchedMdaitDir) {
+			return;
+		}
+		conflictWatcher?.dispose();
+		watchedMdaitDir = mdaitDir;
+		conflictWatcher = vscode.workspace.createFileSystemWatcher(
+			new vscode.RelativePattern(mdaitDir, "{unit-state,unit-registry,translations.tmx,*.csv,*.yaml,*.yml}"),
+		);
+		conflictWatcher.onDidChange(refreshConflicts);
+		conflictWatcher.onDidCreate(refreshConflicts);
+		conflictWatcher.onDidDelete(refreshConflicts);
+	};
+	const redrawConflicts = () => {
 		statusBarSummary.refresh();
 		statusTreeProvider.refresh();
 		updateHasStatusContext(statusManager, config);
 	};
-	conflictWatcher.onDidChange(refreshConflicts);
-	conflictWatcher.onDidCreate(refreshConflicts);
-	conflictWatcher.onDidDelete(refreshConflicts);
-	context.subscriptions.push(conflictWatcher);
+	const refreshConflicts = () => {
+		invalidateWorkspaceConflicts();
+		redrawConflicts();
+	};
+	watchMdaitDir();
+	config.onConfigurationChanged(() => {
+		watchMdaitDir();
+		refreshConflicts();
+	});
+	context.subscriptions.push({ dispose: () => conflictWatcher?.dispose() });
 
-	// 合流の競合の解決（roadmap-v04 P02）。ツリーの「競合の解決」の枝から呼ぶ
+	// マージの競合の解決。ツリーの「競合の解決」の枝から呼ぶ
 	context.subscriptions.push(
 		vscode.commands.registerCommand("mdait.conflict.resolve", async () => {
 			await executeResolveConflicts();
 			refreshConflicts();
 		}),
-		// 人が1件ずつ決める逃げ道（P03）。**AI を1回も呼ばないので ✨ は付けない**
+		// 人が1件ずつ決めた分を書く。**AI を1回も呼ばないので ✨ は付けない**
 		vscode.commands.registerCommand("mdait.conflict.resolveFile", async (item: unknown) => {
 			await resolveDecidedFileForItem(item);
 			refreshConflicts();
 		}),
-		vscode.commands.registerCommand("mdait.conflict.takeOurs", async (item: unknown) => {
-			await takeSideForItem(item, "ours");
-			refreshConflicts();
+		// 1件を決めてもファイルは動かないので、読み直させずに描き直すだけにする。読み直させると
+		// 1件押すたびに unit-registry を含む4ファイルを読み、用語集と TM を解き直すことになる
+		// 受けるのは「どちらの人の変更か」。git の ours / theirs への読み替えは計画が持つ
+		// （rebase と stash pop では ours が相手の変更になる）
+		vscode.commands.registerCommand("mdait.conflict.keepYours", async (item: unknown) => {
+			await takeSideForItem(item, "you");
+			redrawConflicts();
 		}),
-		vscode.commands.registerCommand("mdait.conflict.takeTheirs", async (item: unknown) => {
-			await takeSideForItem(item, "theirs");
-			refreshConflicts();
+		vscode.commands.registerCommand("mdait.conflict.keepTheirs", async (item: unknown) => {
+			await takeSideForItem(item, "they");
+			redrawConflicts();
 		}),
 	);
 

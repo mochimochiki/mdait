@@ -10,7 +10,6 @@
 import { computeTrigrams, normalizeForTm } from "./tm-text-normalizer";
 import type { TmEntry } from "./types";
 
-/** スコア付き TmEntry */
 /**
  * スコア付きの TM エントリ。
  *
@@ -38,7 +37,6 @@ type CandidateWithTrigrams = {
 	entry: TmEntry;
 	trigrams: ReadonlySet<string>;
 	querySim: number;
-	finalScore: number;
 };
 
 /**
@@ -87,13 +85,12 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 			const trigrams = options.trigramCache?.get(`${entry.tuid}:${lang}`)
 				?? computeTrigrams(normalizeForTm(text));
 			const querySim = jaccard(queryTrigrams, trigrams);
-			const finalScore = querySim;
-			return { entry, trigrams, querySim, finalScore };
+			return { entry, trigrams, querySim };
 		})
 		.filter((c): c is CandidateWithTrigrams => c !== null);
 
-	// finalScore 降順にソート（重み補正後の候補順）
-	pool.sort((a, b) => b.finalScore - a.finalScore);
+	// クエリとの類似度の高い順に並べる
+	pool.sort((a, b) => b.querySim - a.querySim);
 
 	const selected: Array<CandidateWithTrigrams & { score: number }> = [];
 	const remaining = [...pool];
@@ -103,14 +100,14 @@ export function rankTmEntries(query: string, candidates: TmEntry[], options: Ran
 		let bestScore = Number.NEGATIVE_INFINITY;
 
 		if (selected.length === 0) {
-			// 初回: finalScore が最高の候補を選択
+			// 初回: クエリとの類似度が最も高い候補を選択
 			bestIdx = 0;
-			bestScore = remaining[0].finalScore;
+			bestScore = remaining[0].querySim;
 		} else {
 			for (let i = 0; i < remaining.length; i++) {
 				const c = remaining[i];
 				const maxSimToSelected = Math.max(...selected.map((s) => jaccard(s.trigrams, c.trigrams)));
-				const score = lambda * c.finalScore - (1 - lambda) * maxSimToSelected;
+				const score = lambda * c.querySim - (1 - lambda) * maxSimToSelected;
 				if (score > bestScore) {
 					bestScore = score;
 					bestIdx = i;

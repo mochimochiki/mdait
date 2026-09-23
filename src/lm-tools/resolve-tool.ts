@@ -5,6 +5,7 @@ import { getFileHandler } from "../commands/file-handler/file-handler-factory";
 import type { DeclareIsolateResult } from "../commands/markers/declare-isolate";
 import type { DeleteUnitResult } from "../commands/markers/delete-unit";
 import type { KeepUnitsResult } from "../commands/markers/keep-unit";
+import type { RequestTranslateSkipReason } from "../commands/markers/request-translate";
 import {
 	ALL_RESOLVABLE_NEEDS,
 	DEFAULT_RESOLVABLE_NEEDS,
@@ -14,7 +15,6 @@ import {
 	unitTargets,
 } from "../commands/markers/resolve-need";
 import { StatusManager } from "../core/status/status-manager";
-import { Configuration } from "../infra/config/configuration";
 import { Logger, formatError } from "../infra/logging/logger";
 import { FileExplorer } from "../infra/workspace/file-explorer";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
@@ -26,7 +26,6 @@ const logger = Logger.getInstance();
 /** 確認UIに列挙する対象ユニットの上限 */
 const MAX_CONFIRMATION_UNITS = 10;
 
-/** needs フィルタとして受理する値（マーカーの既定 need 語彙） */
 /** 解決対象に指定できる need 種別（語彙の持ち主は resolve-need.ts） */
 const ALLOWED_NEED_FILTERS = ALL_RESOLVABLE_NEEDS;
 
@@ -49,8 +48,11 @@ interface ResolveInput {
 	 * 既に need が付いているユニットは宣言をスキップする（他の判断待ちを踏み潰さない安全弁）。
 	 * "delete": unitHashes で指定した need:verify-deletion ユニットをドキュメントから削除する。
 	 * 安全弁として need:verify-deletion 以外のユニットは削除・独立化できない。
+	 * "request-translate": unitHashes で指定した need:review ユニットを採用せず、翻訳待ち
+	 * （need:translate）へ戻す。印を付け替えるだけで AI は呼ばない（CodeLens「要翻訳にする」と同じ。
+	 * ADR-260912-07）。review 以外のユニットは変えない。
 	 */
-	action?: "resolve" | "keep" | "declare-isolate" | "delete";
+	action?: "resolve" | "keep" | "declare-isolate" | "delete" | "request-translate";
 }
 
 /** mdait_resolve の data 形式（action:"resolve"） */
@@ -89,6 +91,13 @@ interface DeleteUnitData {
 	}>;
 }
 
+/** mdait_resolve の data 形式（action:"request-translate"） */
+interface RequestTranslateData {
+	file: string;
+	requested: Array<{ hash: string; title?: string }>;
+	skipped: Array<{ hash: string; reason: RequestTranslateSkipReason }>;
+}
+
 /**
  * mdaitのneedフラグ解決ツール
  * need:review / need:verify-deletion 等の解決（フラグ除去）を GitHub Copilot Chat から
@@ -115,7 +124,6 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidPath, message));
 			}
 
-			const config = Configuration.getInstance();
 			try {
 				new FileExplorer();
 			} catch {
@@ -137,14 +145,28 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 				);
 			}
 
-			if (options.input.action === "declare-isolate") {
-				return await this.invokeDeclareIsolate(inputPath, absPath, config, options.input.unitHashes);
+			const action = options.input.action ?? "resolve";
+			const unitHashes = options.input.unitHashes ?? [];
+			if (action !== "resolve" && unitHashes.length === 0) {
+				// 省略してファイル内全件へ暗黙に効かせる経路は作らない（意図せぬ一括操作の安全弁。
+				// 複数の hash を明示した一括操作はできる）
+				const message = vscode.l10n.t(
+					'unitHashes is required for action:"{0}". Run mdait_getStatus (detail:true) to find target unit hashes.',
+					action,
+				);
+				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
-			if (options.input.action === "keep") {
-				return await this.invokeKeep(inputPath, absPath, options.input.unitHashes);
+			if (action === "declare-isolate") {
+				return await this.invokeDeclareIsolate(inputPath, absPath, unitHashes);
 			}
-			if (options.input.action === "delete") {
-				return await this.invokeDelete(inputPath, absPath, config, options.input.unitHashes);
+			if (action === "keep") {
+				return await this.invokeKeep(inputPath, absPath, unitHashes);
+			}
+			if (action === "delete") {
+				return await this.invokeDelete(inputPath, absPath, unitHashes);
+			}
+			if (action === "request-translate") {
+				return await this.invokeRequestTranslate(inputPath, absPath, unitHashes);
 			}
 
 			// needs フィルタの語彙チェック（未知の値はエージェントの入力ミスとして弾く）
@@ -190,23 +212,12 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		}
 	}
 
-	/**
-	 * action:"declare-isolate" の実処理。unitHashes 必須（省略してファイル内全件へ暗黙的に宣言する
-	 * 経路は提供しない。意図せぬ大量凍結を防ぐ安全弁。複数 hash を明示指定した一括宣言自体は対応する）。
-	 */
+	/** action:"declare-isolate" の実処理 */
 	private async invokeDeclareIsolate(
 		inputPath: string,
 		absPath: string,
-		config: Configuration,
-		unitHashes: string[] | undefined,
+		unitHashes: string[],
 	): Promise<vscode.LanguageModelToolResult> {
-		if (!unitHashes || unitHashes.length === 0) {
-			const message = vscode.l10n.t(
-				'unitHashes is required for action:"declare-isolate". Run mdait_getStatus (detail:true) to find target unit hashes.',
-			);
-			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
-		}
-
 		const declared: Array<{ hash: string; title?: string }> = [];
 		const skipped: Array<{
 			hash: string;
@@ -259,22 +270,14 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	}
 
 	/**
-	 * action:"keep" の実処理。unitHashes 必須（省略してファイル内全件を暗黙的に独立化する経路は
-	 * 提供しない。意図せぬ大量独立化を防ぐ安全弁。複数 hash を明示指定した一括 Keep 自体は対応する）。
+	 * action:"keep" の実処理。
 	 * need:verify-deletion 以外のユニットは独立化しない（keepUnits の安全弁）。
 	 */
 	private async invokeKeep(
 		inputPath: string,
 		absPath: string,
-		unitHashes: string[] | undefined,
+		unitHashes: string[],
 	): Promise<vscode.LanguageModelToolResult> {
-		if (!unitHashes || unitHashes.length === 0) {
-			const message = vscode.l10n.t(
-				'unitHashes is required for action:"keep". Run mdait_getStatus (detail:true) to find target unit hashes.',
-			);
-			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
-		}
-
 		const result = await getFileHandler(absPath).keepUnits(absPath, unitHashes);
 		const data: KeepUnitData = { file: inputPath, kept: result.kept, skipped: result.skipped };
 		const summary = vscode.l10n.t(
@@ -308,23 +311,14 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 	}
 
 	/**
-	 * action:"delete" の実処理。unitHashes 必須（省略してファイル内全件を暗黙的に削除する経路は
-	 * 提供しない。誤った大量削除を防ぐ安全弁。複数 hash を明示指定した一括削除自体は対応する）。
+	 * action:"delete" の実処理。
 	 * need:verify-deletion 以外のユニットは削除しない（deleteUnitFromFile の安全弁）。
 	 */
 	private async invokeDelete(
 		inputPath: string,
 		absPath: string,
-		config: Configuration,
-		unitHashes: string[] | undefined,
+		unitHashes: string[],
 	): Promise<vscode.LanguageModelToolResult> {
-		if (!unitHashes || unitHashes.length === 0) {
-			const message = vscode.l10n.t(
-				'unitHashes is required for action:"delete". Run mdait_getStatus (detail:true) to find target unit hashes.',
-			);
-			return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
-		}
-
 		const deleted: Array<{ hash: string; title?: string }> = [];
 		const skipped: Array<{
 			hash: string;
@@ -371,6 +365,58 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 		return toToolResult(createOkEnvelope(summary, data, nextActions));
 	}
 
+	/**
+	 * action:"request-translate" の実処理。確認待ちの既訳を採用せず、翻訳待ちへ戻す。
+	 * 印を付け替えるだけで AI は呼ばない。need:review 以外のユニットは変えない
+	 * （訳し終えた本文や他の判断待ちを黙って翻訳待ちに戻さない）。
+	 */
+	private async invokeRequestTranslate(
+		inputPath: string,
+		absPath: string,
+		unitHashes: string[],
+	): Promise<vscode.LanguageModelToolResult> {
+		const requested: RequestTranslateData["requested"] = [];
+		const skipped: RequestTranslateData["skipped"] = [];
+		for (const hash of unitHashes) {
+			const result = await getFileHandler(absPath).requestTranslate(absPath, { kind: "unit", hash });
+			if (result.requested) {
+				requested.push(result.title ? { hash: result.hash, title: result.title } : { hash: result.hash });
+			} else {
+				skipped.push({ hash, reason: result.reason ?? "not-found" });
+			}
+		}
+
+		const data: RequestTranslateData = { file: inputPath, requested, skipped };
+		const summary = vscode.l10n.t(
+			"Sent {0} unit(s) in {1} back to translation ({2} skipped).",
+			requested.length,
+			inputPath,
+			skipped.length,
+		);
+
+		const nextActions: string[] = [];
+		if (skipped.some((s) => s.reason === "not-review")) {
+			nextActions.push(
+				"Some units were skipped because they don't have need:review. Only units awaiting review can be sent back to translation this way.",
+			);
+		}
+		if (skipped.some((s) => s.reason === "not-found")) {
+			nextActions.push(
+				"Some unit hashes were not found. Run mdait_getStatus (detail:true) to get current unit hashes, then retry.",
+			);
+		}
+		if (requested.length > 0) {
+			nextActions.push(
+				"The units now have need:translate and keep their current text until translated. Run mdait_translate on this file to translate them (uses AI).",
+			);
+		}
+		if (nextActions.length === 0) {
+			nextActions.push("Nothing was sent back. Run mdait_getStatus (detail:true) to inspect unit state.");
+		}
+
+		return toToolResult(createOkEnvelope(summary, data, nextActions));
+	}
+
 	async prepareInvocation(
 		options: vscode.LanguageModelToolInvocationPrepareOptions<ResolveInput>,
 		_token: vscode.CancellationToken,
@@ -402,6 +448,22 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 						"This will keep {0} unit(s) flagged need:verify-deletion in {1} as independent units. They will no longer be matched against the source; re-linking them later is a manual edit. No AI is used.",
 						hashes.length,
 						inputPath,
+					),
+				},
+			};
+		}
+
+		if (options.input.action === "request-translate") {
+			const targets = collectConfirmationTargets(resolveInputPath(inputPath), options.input.unitHashes, ["review"]);
+			return {
+				invocationMessage: vscode.l10n.t("Sending unit(s) back to translation..."),
+				confirmationMessages: {
+					title: vscode.l10n.t("Confirm Sending Back to Translation"),
+					message: vscode.l10n.t(
+						"This will reject the current translation of {0} unit(s) flagged need:review in {1} and mark them need:translate. Their text stays until they are translated. No AI is used.{2}",
+						targets.length,
+						inputPath,
+						formatUnitList(targets),
 					),
 				},
 			};

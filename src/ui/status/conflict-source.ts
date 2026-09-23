@@ -10,10 +10,12 @@
  *
  * @module ui/status/conflict-source
  */
-import { decisionsFor } from "../../commands/conflict/conflict-decisions";
-import type { ResolutionPlan } from "../../commands/conflict/resolution-plan";
-import type { PreparedResolution } from "../../commands/conflict/resolve-core";
-import { prepareResolution } from "../../commands/conflict/resolve-core";
+import {
+	type PreparedResolution,
+	isFullyDecided,
+	prepareResolution,
+	undecidedCount,
+} from "../../commands/conflict/resolve-core";
 import { MdaitConflictScanner, type MdaitConflicts, noConflicts } from "../../core/conflict/mdait-conflicts";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../../infra/config/configuration";
@@ -69,13 +71,12 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 	// 別の合流が来ても人が手で直しても、競合しているファイルの並びは変わらないことがある。
 	// 中身が動いたのに前の計画を返すと、古い値をそのまま書き戻しうる
 	const stamp = conflicts.files.map((file) => file.stamp).join("\u0000");
-	if (preparedCache && preparedStamp === stamp && !preparedDirty) {
+	if (preparedCache && preparedStamp === stamp) {
 		return preparedCache;
 	}
 	try {
 		preparedCache = await prepareResolution(conflicts, configuration);
 		preparedStamp = stamp;
-		preparedDirty = false;
 		return preparedCache;
 	} catch (error) {
 		// 作り直せなかった。**前の計画を残さない** — 残すと、次に同じ見た目で聞かれたときに
@@ -83,27 +84,15 @@ export async function collectPendingChoices(configuration: Configuration): Promi
 		Logger.getInstance().debug("conflicts", "failed to prepare a resolution", formatError(error));
 		preparedCache = undefined;
 		preparedStamp = undefined;
-		preparedDirty = true;
 		return undefined;
 	}
 }
 
 /**
- * その対象で、**まだ人が決めていない**件数。
+ * いま人が決める件数（覚え書きから同期で読む）。
  *
  * 決めかけの判断（`conflict-decisions.ts`）を差し引く。差し引かないと、ツリーで2件
  * 決めても根の数字が動かず、「判断を待っている件数」という説明が嘘になる。
- */
-export function undecidedCount(plan: ResolutionPlan, stamp: string | undefined): number {
-	if (stamp === undefined) {
-		return plan.pending.length;
-	}
-	const decided = decisionsFor(plan.filePath, stamp);
-	return plan.pending.filter((item) => !decided.has(item.key)).length;
-}
-
-/**
- * いま人が決める件数（覚え書きから同期で読む）。
  *
  * ステータスバーは同期で描くので、計画を作り直すのを待てない。まだ作っていなければ
  * `undefined` を返し、呼び出し側は数を伏せる（0 と言い切らない）。
@@ -113,10 +102,7 @@ export function pendingChoiceCount(): number | undefined {
 	if (!prepared) {
 		return undefined;
 	}
-	return prepared.summary.plans.reduce(
-		(sum, plan) => sum + undecidedCount(plan, prepared.stamps.get(plan.filePath)),
-		0,
-	);
+	return prepared.summary.plans.reduce((sum, plan) => sum + undecidedCount(plan, prepared), 0);
 }
 
 /**
@@ -130,19 +116,15 @@ export function readyToWriteCount(): number {
 	if (!prepared) {
 		return 0;
 	}
-	return prepared.summary.plans.filter(
-		(plan) => plan.pending.length > 0 && undecidedCount(plan, prepared.stamps.get(plan.filePath)) === 0,
-	).length;
+	return prepared.summary.plans.filter((plan) => isFullyDecided(plan, prepared)).length;
 }
 
 let preparedCache: PreparedResolution | undefined;
 let preparedStamp: string | undefined;
-let preparedDirty = true;
 
 /** 覚え書きを捨てて、次に数えるときは必ずファイルを読み直させる */
 export function invalidateWorkspaceConflicts(): void {
 	scanner.invalidate();
 	preparedCache = undefined;
 	preparedStamp = undefined;
-	preparedDirty = true;
 }

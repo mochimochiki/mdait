@@ -238,7 +238,7 @@ suite("TermsRepositoryCSV", () => {
 	});
 
 	test("合流で同じ語の行が2つ並んでも、読み込みで1つに畳むこと", async () => {
-		// `merge=union` は両方の陣営の行を残すので、2人が同じ語を足すと行が並ぶ
+		// 競合を「両方残す」形で解くと、2人が同じ語を足したときに行が並ぶ
 		const merged = [
 			"en,ja,context,variants_en",
 			"apple,りんご,fruit,",
@@ -251,5 +251,27 @@ suite("TermsRepositoryCSV", () => {
 		const repository = await TermsRepositoryCSV.load(testFilePath, testTransPairs);
 		const entries = await repository.getAllEntries();
 		assert.equal(entries.length, 2, "同じ語が2つ残っている");
+	});
+
+	test("基準言語の欄が空の行どうしは、別の語として読み書きで残ること", async () => {
+		// 基準言語（ja）の語だけで行を見分けていた頃は、空欄の行がみな同じ行とみなされ、
+		// 2行目以降が読み込みで消えていた
+		const csv = ["ja,en,context", ",Apple,", ",Banana,", ""].join("\n");
+		fs.writeFileSync(testFilePath, csv, "utf-8");
+
+		const repository = await TermsRepositoryCSV.load(testFilePath, testTransPairs);
+		const entries = await repository.getAllEntries();
+		assert.deepEqual(
+			entries.map((e) => e.languages.en?.term),
+			["Apple", "Banana"],
+		);
+
+		await repository.save();
+		const reloaded = await TermsRepositoryCSV.load(testFilePath, testTransPairs);
+		const reloadedEntries = await reloaded.getAllEntries();
+		assert.deepEqual(
+			reloadedEntries.map((e) => e.languages.en?.term),
+			["Apple", "Banana"],
+		);
 	});
 });
