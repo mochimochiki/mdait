@@ -10,6 +10,7 @@
  */
 import { splitConflictedFile } from "../../../core/conflict/conflict-sections";
 import { type KeyMergeOptions, type UndecidedEntry, mergeByKey } from "../../../core/conflict/key-merge";
+import { mineSideOf } from "../../../core/conflict/conflict-orientation";
 import { hasConflictMarkersInDataFile } from "../../../core/markdown/conflict-markers";
 import type { ChoiceSide, PendingChoice, ResolutionPlan } from "../resolution-plan";
 
@@ -27,11 +28,12 @@ export interface KeyedResolution<T> {
 	resolved: Map<string, T>;
 }
 
-/** 切り出した3つの全文（祖先は diff3 形式のときだけ） */
+/** 切り出した3つの全文（祖先は diff3 形式のときだけ）と、自分の側 */
 export interface SplitTexts {
 	ours: string;
 	theirs: string;
 	base?: string;
+	mineSide: ChoiceSide;
 }
 
 /**
@@ -42,10 +44,10 @@ export interface SplitTexts {
  *   ここで `undefined` を返すと「競合は無い」と扱われ、ツリーには競合として出続けるのに
  *   解く手立ても理由も見えなくなる。投げれば「読めなかったファイル」として報告される
  */
-export function splitForResolution(content: string): SplitTexts | undefined {
+export function splitForResolution(filePath: string, content: string): SplitTexts | undefined {
 	const split = splitConflictedFile(content);
 	if (split.conflicted) {
-		return { ours: split.ours, theirs: split.theirs, base: split.base };
+		return { ours: split.ours, theirs: split.theirs, base: split.base, mineSide: mineSideOf(filePath, content) };
 	}
 	if (hasConflictMarkersInDataFile(content)) {
 		throw new Error("The conflict markers are incomplete (no line starting with <<<<<<<). Fix them by hand.");
@@ -67,6 +69,7 @@ export interface KeyedPlanOptions<T> extends KeyMergeOptions<T> {
 export function planKeyedResolution<T>(
 	kind: ResolutionPlan["kind"],
 	filePath: string,
+	mineSide: ChoiceSide,
 	sides: KeyedSides<T>,
 	options: KeyedPlanOptions<T>,
 ): { plan: ResolutionPlan; resolution: KeyedResolution<T> } {
@@ -99,6 +102,7 @@ export function planKeyedResolution<T>(
 			autoResolvedCount: merged.resolved.length - merged.sameCount,
 			deletedCount: merged.deleted.length,
 			pending,
+			mineSide,
 		},
 		resolution: { sides, resolved: new Map(merged.resolved.map((r) => [r.key, r.value])) },
 	};

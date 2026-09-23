@@ -14,7 +14,13 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
-import { conflictSideText, conflictTargetLabel } from "../../commands/conflict/conflict-labels";
+import {
+	conflictSideText,
+	conflictTargetLabel,
+	deletedBy,
+	partyOf,
+	sideOf,
+} from "../../commands/conflict/conflict-labels";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
@@ -198,14 +204,14 @@ export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): Di
 			label: shorten(item.label),
 			// **状態を一言だけ。** 削除がからむかどうかは Hover が言う
 			description: chosen
-				? chosen === "ours"
+				? partyOf(plan, chosen) === "you"
 					? vscode.l10n.t("yours")
 					: vscode.l10n.t("theirs")
 				: vscode.l10n.t("not chosen"),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${fingerprintOfKey(item.key)}:${plan.filePath}`,
 			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
-			tooltip: buildChoiceTooltip(item, chosen),
+			tooltip: buildChoiceTooltip(plan, item, chosen),
 		};
 	});
 }
@@ -233,26 +239,32 @@ function shorten(text: string, max = 40): string {
  * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか）は
  * 書かない — 操作の結果を見れば分かることで、読ませる意味がない（`docs/ux.md` §3.3）。
  */
-function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
+function buildChoiceTooltip(
+	plan: ResolutionPlan,
+	item: PendingChoice,
+	chosen: "ours" | "theirs" | undefined,
+): string {
+	const mine = sideOf(plan, "you");
+	const theirs = sideOf(plan, "they");
 	const parts = [
 		item.label,
 		"",
-		`${vscode.l10n.t("You")}\t${conflictSideText(item, "ours")}`,
-		`${vscode.l10n.t("They")}\t${conflictSideText(item, "theirs")}`,
+		`${vscode.l10n.t("You")}\t${conflictSideText(item, mine)}`,
+		`${vscode.l10n.t("They")}\t${conflictSideText(item, theirs)}`,
 	];
 	if (item.baseText !== undefined) {
 		parts.push(`${vscode.l10n.t("Before")}\t${item.baseText}`);
 	}
 	parts.push("", vscode.l10n.t("Choose which one to keep."));
 	// 消した側を採ると項目ごと消える。結果が値の表から読めないので、そこだけ足す
-	if (item.theirsDeleted) {
+	if (deletedBy(item, theirs)) {
 		parts.push(vscode.l10n.t("Taking theirs removes this entry."));
-	} else if (item.oursDeleted) {
+	} else if (deletedBy(item, mine)) {
 		parts.push(vscode.l10n.t("Taking yours removes this entry."));
 	}
 	if (chosen) {
 		parts.push(
-			chosen === "ours" ? vscode.l10n.t("Chosen: yours.") : vscode.l10n.t("Chosen: theirs."),
+			partyOf(plan, chosen) === "you" ? vscode.l10n.t("Chosen: yours.") : vscode.l10n.t("Chosen: theirs."),
 		);
 	}
 	return parts.join("\n");

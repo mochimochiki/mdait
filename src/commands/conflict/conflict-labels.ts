@@ -11,7 +11,31 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { ChoiceSide, PendingChoice } from "./resolution-plan";
+import type { ChoiceSide, PendingChoice, ResolutionPlan } from "./resolution-plan";
+
+/**
+ * 画面が話す「どちらの人の変更か」。git の ours / theirs とは**同じではない** —
+ * rebase の途中と stash pop では ours が相手の変更になる（`ResolutionPlan.mineSide`）。
+ */
+export type ConflictParty = "you" | "they";
+
+/** その人の変更が、git のどちらの側にあるか */
+export function sideOf(plan: Pick<ResolutionPlan, "mineSide">, party: ConflictParty): ChoiceSide {
+	if (party === "you") {
+		return plan.mineSide;
+	}
+	return plan.mineSide === "ours" ? "theirs" : "ours";
+}
+
+/** git のその側が、どちらの人の変更か */
+export function partyOf(plan: Pick<ResolutionPlan, "mineSide">, side: ChoiceSide): ConflictParty {
+	return side === plan.mineSide ? "you" : "they";
+}
+
+/** その人の側を消した件か（その側を採ると項目ごと消える） */
+export function deletedBy(item: PendingChoice, side: ChoiceSide): boolean {
+	return (side === "ours" ? item.oursDeleted : item.theirsDeleted) === true;
+}
 
 /**
  * 競合した対象の名前（ツリー・進捗・レポートで共通）＝ **ファイル名そのもの**。
@@ -33,8 +57,8 @@ export function conflictTargetLabel(filePath: string): string {
  * 言葉で「削除」と書く。祖先の値を出すと、その側を採れば値が戻ると読めてしまう。
  */
 export function conflictSideText(item: PendingChoice, side: ChoiceSide): string {
-	if (side === "ours") {
-		return item.oursDeleted ? vscode.l10n.t("deleted") : item.oursText;
+	if (deletedBy(item, side)) {
+		return vscode.l10n.t("deleted");
 	}
-	return item.theirsDeleted ? vscode.l10n.t("deleted") : item.theirsText;
+	return side === "ours" ? item.oursText : item.theirsText;
 }

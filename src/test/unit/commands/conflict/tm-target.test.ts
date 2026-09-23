@@ -95,6 +95,24 @@ suite("翻訳メモリの競合を解く", () => {
 		assert.equal(planned.resolution.resolved.size, 7, "書き戻す中身からは落とさない");
 	});
 
+	test("rebase の途中なら、自分の側は theirs と計画に書く", () => {
+		// ours は取り込み先（相手の変更）になる。画面の「あなた／相手」はこれで読み替える
+		fs.mkdirSync(path.join(tempDir, ".git", "rebase-merge"), { recursive: true });
+		write(conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Hello", { ja: "やあ" })]));
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.mineSide, "theirs");
+	});
+
+	test("ふつうのマージなら、自分の側は ours と計画に書く", () => {
+		write(conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Hello", { ja: "やあ" })]));
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.mineSide, "ours");
+	});
+
 	test("<<<<<<< の行だけ消えた壊れたマーカーは、競合なしではなく読めないとして投げる", () => {
 		// 「競合なし」と答えると、ツリーには競合として出続けるのに解く手立ても理由も見えない
 		write(`${tmx(tu("Hello", { ja: "こんにちは" }))}=======\n>>>>>>> theirs\n`);

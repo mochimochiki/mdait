@@ -12,6 +12,16 @@
 
 ## ADR
 
+### ADR-260923-02: 競合の「あなた／相手」を、git の ours / theirs と切り離す
+
+**背景** : 競合の解決は `<<<<<<<` 側（ours）を常に「あなた」と見せていた。rebase の途中と stash pop では ours が相手の変更なので、表示も操作も逆になっていた。
+
+**決定** : 計画にファイルごとの「自分の側」（`mineSide`）を持たせ、画面と操作は「あなた／相手」で話す。git の側への読み替えは `conflict-labels.ts` の1か所で行う。
+
+**理由** : rebase 中は `.git/rebase-merge` か `rebase-apply/rebasing` があり、stash pop は名札で分かる。取り違えると、自分の編集を残すつもりで相手の側を選ばせてしまう。
+
+**備考** : `git am`（`rebase-apply/applying`）と SVN は ours が自分なので読み替えない。コマンド ID は画面の意味どおり `keepYours` / `keepTheirs` に改めた。
+
 ### ADR-260923-01: エージェントにも「要翻訳にする」を開く
 
 **背景** : 確認待ちを採用しない答え（`need:review` → `need:translate`）は、人には CodeLens にあるのに、エージェントの `mdait_resolve` には無かった。

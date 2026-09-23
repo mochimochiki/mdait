@@ -132,7 +132,7 @@ export async function planTermsResolution(
 	repository: TermsRepository,
 	primaryLang: string,
 ): Promise<{ plan: ResolutionPlan; resolution: TermsResolution } | undefined> {
-	const split = splitForResolution(fs.readFileSync(filePath, "utf-8"));
+	const split = splitForResolution(filePath, fs.readFileSync(filePath, "utf-8"));
 	if (!split) {
 		return undefined;
 	}
@@ -146,7 +146,7 @@ export async function planTermsResolution(
 		theirs: toMap(theirs, primaryLang),
 		base: base ? toMap(base, primaryLang) : undefined,
 	};
-	return planKeyedResolution("terms", filePath, sides, {
+	return planKeyedResolution("terms", filePath, split.mineSide, sides, {
 		sameValue: sameEntry,
 		mergeFields: mergeLanguages,
 		describe: (entry) => describe(entry, primaryLang),

@@ -13,7 +13,7 @@
  * @module commands/conflict/resolve-report
  */
 import * as vscode from "vscode";
-import { conflictSideText, conflictTargetLabel } from "./conflict-labels";
+import { conflictSideText, conflictTargetLabel, sideOf } from "./conflict-labels";
 import type { ResolutionOutcome, ResolutionPlan } from "./resolution-plan";
 import { type PreparedResolution, decidedFor } from "./resolve-core";
 
@@ -34,9 +34,9 @@ function remainingSection(plan: ResolutionPlan, outcome: ResolutionOutcome, prep
 	];
 	const decided = decidedFor(plan, prepared);
 	for (const item of plan.pending.filter((candidate) => !decided.has(candidate.key))) {
-		const ours = escapeCell(conflictSideText(item, "ours"));
-		const theirs = escapeCell(conflictSideText(item, "theirs"));
-		lines.push(`| ${escapeCell(item.label)} | ${ours} | ${theirs} |`);
+		const yours = escapeCell(conflictSideText(item, sideOf(plan, "you")));
+		const theirs = escapeCell(conflictSideText(item, sideOf(plan, "they")));
+		lines.push(`| ${escapeCell(item.label)} | ${yours} | ${theirs} |`);
 	}
 	return lines;
 }

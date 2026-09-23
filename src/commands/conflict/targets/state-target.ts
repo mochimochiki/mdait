@@ -39,6 +39,8 @@ export function planUnitStateResolution(filePath: string): ResolutionPlan {
 		autoResolvedCount: 0,
 		deletedCount: 0,
 		pending: [],
+		// 1件ずつ選ぶ件が無いので、どちらが自分かは使われない
+		mineSide: "ours",
 		wholeFile: true,
 	};
 }
@@ -80,6 +82,8 @@ export function planUnitRegistryResolution(filePath: string): ResolutionPlan {
 		autoResolvedCount: 0,
 		deletedCount: 0,
 		pending: [],
+		// 1件ずつ選ぶ件が無いので、どちらが自分かは使われない
+		mineSide: "ours",
 		wholeFile: true,
 	};
 }

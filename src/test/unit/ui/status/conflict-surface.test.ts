@@ -152,11 +152,15 @@ suite("競合の解決（StatusTree の枝）", () => {
 	});
 
 	suite("人が決める件（P03）", () => {
-		const plan = (pending: number) => ({
+		// 預かった判断はモジュールに1つの表に残るので、テストごとに捨てる
+		teardown(() => forgetAllDecisions());
+
+		const plan = (pending: number, mineSide: "ours" | "theirs" = "ours") => ({
 			kind: "tm" as const,
 			filePath: "/ws/.mdait/translations.tmx",
 			autoResolvedCount: 3,
 			deletedCount: 0,
+			mineSide,
 			pending: Array.from({ length: pending }, (_, i) => ({
 				key: `k${i}`,
 				label: `語${i}`,
@@ -269,6 +273,37 @@ suite("競合の解決（StatusTree の枝）", () => {
 			assert.match(tip, /私の訳0/);
 			assert.match(tip, /相手の訳0/);
 			assert.match(tip, /もとの訳0/);
+		});
+
+		test("rebase の途中では、theirs 側を「あなた」として見せる", () => {
+			// rebase では ours が取り込み先（相手の変更）で、theirs が自分のコミット。ours を
+			// 「あなた」と出すと、自分の編集を残すつもりで相手の側を選ばせてしまう
+			const rebasing = plan(1, "theirs");
+			const tip = buildConflictChoiceRows(rebasing, STAMP)[0].tooltip ?? "";
+
+			assert.match(tip, /You\t相手の訳0/, "自分のコミット（theirs）が「あなた」に出ていない");
+			assert.match(tip, /They\t私の訳0/);
+		});
+
+		test("rebase の途中で theirs を採った件は「あなた」を採ったと読める", () => {
+			const rebasing = plan(1, "theirs");
+			rememberDecision(rebasing.filePath, STAMP, "k0", "theirs");
+
+			const row = buildConflictChoiceRows(rebasing, STAMP)[0];
+
+			assert.equal(row.description, "yours");
+			assert.match(row.tooltip ?? "", /Chosen: yours\./);
+		});
+
+		test("rebase の途中で自分の側が消していたら「あなたを採ると消える」と書く", () => {
+			const rebasing = {
+				...plan(1, "theirs"),
+				pending: [{ key: "k0", label: "語0", oursText: "相手の訳0", theirsText: "", theirsDeleted: true }],
+			};
+
+			const tip = buildConflictChoiceRows(rebasing, STAMP)[0].tooltip ?? "";
+
+			assert.match(tip, /Taking yours removes this entry\./);
 		});
 
 		test("決めた件は、どちらを採ったかが読める", () => {

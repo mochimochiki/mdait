@@ -88,7 +88,7 @@ export function planTmResolution(
 	filePath: string,
 	primaryLang = "",
 ): { plan: ResolutionPlan; resolution: TmResolution } | undefined {
-	const split = splitForResolution(fs.readFileSync(filePath, "utf-8"));
+	const split = splitForResolution(filePath, fs.readFileSync(filePath, "utf-8"));
 	if (!split) {
 		return undefined;
 	}
@@ -97,7 +97,7 @@ export function planTmResolution(
 		theirs: TmxStore.parseSide(split.theirs),
 		base: split.base ? TmxStore.parseSide(split.base) : undefined,
 	};
-	return planKeyedResolution("tm", filePath, sides, {
+	return planKeyedResolution("tm", filePath, split.mineSide, sides, {
 		sameValue: sameEntry,
 		mergeFields: mergeVariants,
 		describe: (entry) => describe(entry, primaryLang),

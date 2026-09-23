@@ -49,6 +49,14 @@ export interface ResolutionPlan {
 	/** 人の判断を待っている件 */
 	pending: PendingChoice[];
 	/**
+	 * **自分の変更はどちらの側か。** ふつうのマージでは ours だが、rebase の途中と
+	 * stash pop では theirs になる（`core/conflict/conflict-orientation.ts`）。
+	 *
+	 * 画面は「あなた／相手」で話し、git の側への読み替えはこれを通して1か所で行う
+	 * （`conflict-labels.ts` の `sideOf` / `partyOf`）。
+	 */
+	mineSide: ChoiceSide;
+	/**
 	 * **1件ずつ選ぶのではなく、ファイルを丸ごと書き直す対象か**（`unit-state` と `unit-registry`）。
 	 *
 	 * この2つは選択が要らないので `pending` も `autoResolvedCount` も 0 のまま計画に載る。

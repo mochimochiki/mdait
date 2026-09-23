@@ -246,12 +246,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		// 1件を決めてもファイルは動かないので、読み直させずに描き直すだけにする。読み直させると
 		// 1件押すたびに unit-registry を含む4ファイルを読み、用語集と TM を解き直すことになる
-		vscode.commands.registerCommand("mdait.conflict.takeOurs", async (item: unknown) => {
-			await takeSideForItem(item, "ours");
+		// 受けるのは「どちらの人の変更か」。git の ours / theirs への読み替えは計画が持つ
+		// （rebase と stash pop では ours が相手の変更になる）
+		vscode.commands.registerCommand("mdait.conflict.keepYours", async (item: unknown) => {
+			await takeSideForItem(item, "you");
 			redrawConflicts();
 		}),
-		vscode.commands.registerCommand("mdait.conflict.takeTheirs", async (item: unknown) => {
-			await takeSideForItem(item, "theirs");
+		vscode.commands.registerCommand("mdait.conflict.keepTheirs", async (item: unknown) => {
+			await takeSideForItem(item, "they");
 			redrawConflicts();
 		}),
 	);

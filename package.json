@@ -239,14 +239,14 @@
         "category": "mdait"
       },
       {
-        "command": "mdait.conflict.takeOurs",
-        "title": "%mdait.conflict.takeOurs.title%",
+        "command": "mdait.conflict.keepYours",
+        "title": "%mdait.conflict.keepYours.title%",
         "icon": "$(arrow-left)",
         "category": "mdait"
       },
       {
-        "command": "mdait.conflict.takeTheirs",
-        "title": "%mdait.conflict.takeTheirs.title%",
+        "command": "mdait.conflict.keepTheirs",
+        "title": "%mdait.conflict.keepTheirs.title%",
         "icon": "$(arrow-right)",
         "category": "mdait"
       },
@@ -396,11 +396,11 @@
           "when": "false"
         },
         {
-          "command": "mdait.conflict.takeOurs",
+          "command": "mdait.conflict.keepYours",
           "when": "false"
         },
         {
-          "command": "mdait.conflict.takeTheirs",
+          "command": "mdait.conflict.keepTheirs",
           "when": "false"
         },
         {
@@ -581,12 +581,12 @@
           "group": "inline"
         },
         {
-          "command": "mdait.conflict.takeOurs",
+          "command": "mdait.conflict.keepYours",
           "when": "view == mdait.status && viewItem =~ /^mdaitConflictChoice/",
           "group": "inline@1"
         },
         {
-          "command": "mdait.conflict.takeTheirs",
+          "command": "mdait.conflict.keepTheirs",
           "when": "view == mdait.status && viewItem =~ /^mdaitConflictChoice/",
           "group": "inline@2"
         },
