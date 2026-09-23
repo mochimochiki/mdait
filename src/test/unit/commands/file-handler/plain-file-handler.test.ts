@@ -286,7 +286,9 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(result.unchanged, 0);
 		});
 
-		test("未訳でも手が入った訳文ファイルは写し直さず、translate のままにすること", async () => {
+		// 翻訳待ちのままだと次の✨翻訳が人の文章を上書きする。手が入った時点で確認待ちへ切り替わり
+		// （`isWrittenOverTranslateMark`）、同じ回に原文も変わっているので改訂待ちへ進む
+		test("未訳でも手が入った訳文ファイルは写し直さず、翻訳待ちから外すこと", async () => {
 			const sourceFile = path.join(tempDir, "source", "data.csv");
 			const targetFile = path.join(tempDir, "target", "data.csv");
 			mkdirp(path.dirname(sourceFile));
@@ -300,7 +302,7 @@ suite("PlainFileHandler", () => {
 
 			await handler.sync(sourceFile, targetFile);
 
-			assert.strictEqual(store.getSoleEntry("target/data.csv")?.need, "translate");
+			assert.strictEqual(store.getSoleEntry("target/data.csv")?.need, `revise@${oldHash}`);
 			assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), "書きかけの訳");
 		});
 
