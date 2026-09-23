@@ -1196,7 +1196,7 @@ suite("UnitStateStore", () => {
 
 			store.save(tempDir);
 			assert.ok(rowsOf(tempDir).every((l) => /^[0-9a-f]{12}\t/.test(l)), "新しい形で書き戻していない");
-			assert.strictEqual(fs.existsSync(path.join(tempDir, "unit-state.broken")), false, "傷ではないので避難しない");
+			assert.strictEqual(fs.existsSync(path.join(tempDir, "local", "unit-state.broken")), false, "傷ではないので避難しない");
 		});
 
 		test("同じIDを2つのパスが名乗ったら、行は位置で読み、片方のIDを決定的に振り直すこと", () => {
@@ -1232,7 +1232,7 @@ suite("UnitStateStore", () => {
 			UnitStateStore.dispose();
 			const other = createTempDir();
 			try {
-				fs.copyFileSync(path.join(tempDir, "unit-state.broken"), path.join(other, "unit-state"));
+				fs.copyFileSync(path.join(tempDir, "local", "unit-state.broken"), path.join(other, "unit-state"));
 				const store2 = UnitStateStore.getInstance();
 				store2.load(other);
 				store2.save(other);
@@ -1280,7 +1280,7 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(store.getLastParseReport().skipped, 1);
 			assert.strictEqual(store.getAllEntries().length, 1);
 			store.save(tempDir);
-			assert.ok(fs.existsSync(path.join(tempDir, "unit-state.broken")));
+			assert.ok(fs.existsSync(path.join(tempDir, "local", "unit-state.broken")));
 		});
 
 		test("読み直しても ID が変わらないこと（＝中身が同じなら差分が出ないこと）", () => {
@@ -1353,7 +1353,7 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(rows.length, 1);
 			assert.strictEqual(rows[0].split("\t").length, 8);
 			assert.ok(rows[0].startsWith("a.md\tunit\t"));
-			assert.strictEqual(fs.existsSync(path.join(tempDir, "unit-state.broken")), false, "傷ではないので避難しない");
+			assert.strictEqual(fs.existsSync(path.join(tempDir, "local", "unit-state.broken")), false, "傷ではないので避難しない");
 		});
 
 		test("同じ order の行が2つあれば、片方を席から降ろして両方残すこと", () => {
@@ -1632,7 +1632,7 @@ suite("UnitStateStore", () => {
 			store.load(tempDir);
 			store.save(tempDir); // 傷があった回は dirty が立つので書き戻る
 
-			const salvaged = path.join(tempDir, "unit-state.broken");
+			const salvaged = path.join(tempDir, "local", "unit-state.broken");
 			assert.ok(fs.existsSync(salvaged), "原本が写されていない");
 			assert.strictEqual(fs.readFileSync(salvaged, "utf-8"), original);
 		});
@@ -1646,11 +1646,12 @@ suite("UnitStateStore", () => {
 			store.setEntry(entry);
 			store.save(tempDir);
 
-			assert.ok(!fs.existsSync(path.join(tempDir, "unit-state.broken")));
+			assert.ok(!fs.existsSync(path.join(tempDir, "local", "unit-state.broken")));
 		});
 
 		test("既にある避難先は上書きしないこと（最初の事故の姿を残す）", () => {
-			fs.writeFileSync(path.join(tempDir, "unit-state.broken"), "最初の事故", "utf-8");
+			fs.mkdirSync(path.join(tempDir, "local"), { recursive: true });
+			fs.writeFileSync(path.join(tempDir, "local", "unit-state.broken"), "最初の事故", "utf-8");
 			write(tempDir, [
 				"# mdait unit-state",
 				`a.md\tunit\t${seat(0)}\t1\tth\thash1\tfrom1\t`,
@@ -1660,7 +1661,7 @@ suite("UnitStateStore", () => {
 			store.load(tempDir);
 			store.save(tempDir);
 
-			assert.strictEqual(fs.readFileSync(path.join(tempDir, "unit-state.broken"), "utf-8"), "最初の事故");
+			assert.strictEqual(fs.readFileSync(path.join(tempDir, "local", "unit-state.broken"), "utf-8"), "最初の事故");
 		});
 	});
 

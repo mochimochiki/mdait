@@ -3,17 +3,40 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { Configuration } from "../config/configuration";
 import { Logger, formatError } from "../logging/logger";
+import { LOCAL_DIRNAME, localPath } from "./local-dir";
 
 /**
  * `.mdait/.gitignore` に必ず載っている行。
- * `unit-registry.broken` と `unit-state.broken` は、読み取りに傷があったときだけ横へ写す
- * 原本の避難先で、中身は壊れた回のスナップショットそのもの。共有するものではない。
  *
- * `reports/` は各コマンドの実行レポート。**個人の実行結果であって共有する資産ではない**
- * ので追跡しない（ADR-260907-07）。ファイル名が種類ごとに固定で、実行のたびに全文を
- * 上書きするため、共有すると2人が同じコマンドを走らせるだけで必ず競合する。
+ * コミットしないものは `local/` にまとめてあるので1行で済む（中身は `local-dir.ts`）。
+ * 置くものが増えても、ここを書き足して回らない（ADR-260923-06）。
  */
-const GITIGNORE_LINES = ["logs/", "reports/", "unit-registry.broken", "unit-state.broken"];
+const GITIGNORE_LINES = [`${LOCAL_DIRNAME}/`];
+
+/**
+ * かつて `.mdait/` の直下に置いていた、コミットしないもの。`local/` の中の同じ名前へ移す。
+ *
+ * 既存の作業場の `.gitignore` に残っている旧い行（`logs/` など）には触らない — 利用者の
+ * ファイルなので消さない（`ensureLines` と同じ立場）。移したあとは何にも当たらない行になるだけである。
+ */
+const LEGACY_LOCAL_ENTRIES = ["logs", "reports", "unit-state.broken", "unit-registry.broken"];
+
+/**
+ * 旧い場所にあるものを `local/` へ移す。**移し先に既にあるものは動かさない**（上書きすると
+ * どちらかが消える。とくに避難先 `*.broken` は、最初の事故の姿を残すのが役目である）。
+ */
+function moveLegacyLocalEntries(mdaitDir: string): void {
+	for (const name of LEGACY_LOCAL_ENTRIES) {
+		const from = path.join(mdaitDir, name);
+		const to = localPath(mdaitDir, name);
+		if (!fs.existsSync(from) || fs.existsSync(to)) {
+			continue;
+		}
+		fs.mkdirSync(path.dirname(to), { recursive: true });
+		fs.renameSync(from, to);
+		Logger.getInstance().info("mdait-dir", `Moved .mdait/${name} to .mdait/${LOCAL_DIRNAME}/${name}`);
+	}
+}
 
 /** 行の見出し（.gitignore ならパターン、.gitattributes なら対象パス）を取り出す */
 function leadingToken(line: string): string {
@@ -23,7 +46,7 @@ function leadingToken(line: string): string {
 /**
  * 見出しがまだ無い行だけを書き足す。
  *
- * 既にある行には触らない — `logs/` のように利用者が書き換えていたら、
+ * 既にある行には触らない — `local/` のように利用者が書き換えていたら、
  * それは意図された指定なので、こちらの既定で上書きしない。
  */
 function ensureLines(filePath: string, requiredLines: string[]): void {
@@ -148,11 +171,12 @@ export async function ensureMdaitDir(): Promise<string | null> {
 
 		ensureLines(path.join(mdaitDir, ".gitignore"), GITIGNORE_LINES);
 		pruneUnionMergeAttributes(path.join(mdaitDir, ".gitattributes"));
+		moveLegacyLocalEntries(mdaitDir);
 	} catch (error) {
-		// .gitignore/.gitattributes の手入れはベストエフォートなので警告のみ
+		// .gitignore/.gitattributes の手入れと旧い場所からの移動はベストエフォートなので警告のみ
 		Logger.getInstance().warn(
 			"mdait-dir",
-			"failed to create .mdait/.gitignore or prune .mdait/.gitattributes",
+			"failed to create .mdait/.gitignore, prune .mdait/.gitattributes, or move legacy files into .mdait/local",
 			formatError(error),
 		);
 	}

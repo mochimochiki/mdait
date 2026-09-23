@@ -951,7 +951,7 @@ function expectLinesPresent(rel, lines) {
 function resetAll() {
 	rmrf(CONTENT);
 	fs.mkdirSync(CONTENT, { recursive: true });
-	for (const name of ["unit-state", "unit-registry", "reports"]) rmrf(path.join(MDAIT, name));
+	for (const name of ["unit-state", "unit-registry", "local"]) rmrf(path.join(MDAIT, name));
 }
 
 /**

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Logger } from "../../infra/logging/logger";
 import { atomicWriteFileSync } from "../../infra/workspace/atomic-write";
+import { localPath } from "../../infra/workspace/local-dir";
 import { assignSeats, isSeatKey } from "./seat-keys";
 import { isConflictMarkerLine } from "../markdown/conflict-markers";
 
@@ -59,7 +60,7 @@ function derivedFileId(seed: string): string {
 	return crypto.createHash("sha1").update(seed).digest("hex").substring(0, FILE_ID_LENGTH);
 }
 
-/** 読み取りに傷があった回に、上書きの直前で原本を写す先 */
+/** 読み取りに傷があった回に、上書きの直前で原本を写す先（`.mdait/local/` の中。共有しない） */
 const SALVAGE_FILENAME = "unit-state.broken";
 
 /** ディレクトリごとに置く区画の数 */
@@ -1053,11 +1054,12 @@ export class UnitStateStore {
 			return;
 		}
 		this.needsSalvage = false;
-		const salvagePath = path.join(mdaitDir, SALVAGE_FILENAME);
+		const salvagePath = localPath(mdaitDir, SALVAGE_FILENAME);
 		try {
 			if (!fs.existsSync(filePath)) {
 				return;
 			}
+			fs.mkdirSync(path.dirname(salvagePath), { recursive: true });
 			if (fs.existsSync(salvagePath)) {
 				logger.warn("unit-state", `Kept the existing ${SALVAGE_FILENAME}; this run's file was not saved aside`);
 				return;

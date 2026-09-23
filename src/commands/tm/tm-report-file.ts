@@ -14,7 +14,7 @@ import type { TmCommitResult } from "./commit-processor";
 import { generateContent } from "./tm-result-content";
 
 /**
- * TM登録レポートを `.mdait/reports/tm.md` へ書き出す。
+ * TM登録レポートを `.mdait/local/reports/tm.md` へ書き出す。
  * 見出し・定型文は表示言語で出す（ADR-260719-01）。
  *
  * @returns 書き出したファイルの URI（失敗時は undefined）

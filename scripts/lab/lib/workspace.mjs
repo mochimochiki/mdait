@@ -30,6 +30,7 @@ const RESIDUE = [
 	"unit-state",
 	"unit-registry",
 	"index.json",
+	"local",
 	"logs",
 	"reports",
 	"ai-stats.log",

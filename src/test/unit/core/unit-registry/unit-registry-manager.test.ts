@@ -165,7 +165,7 @@ suite("UnitRegistryManager（note の永続化・移送）", () => {
 		assert.equal(await reloaded.loadUnitRegistry("bbbb2222"), "old source B", "無関係な控えまで消えている");
 		assert.equal(await reloaded.loadUnitRegistry("cccc3333"), "new source C");
 		assert.ok(
-			fs.existsSync(path.join(tempDir, ".mdait", "unit-registry.broken")),
+			fs.existsSync(path.join(tempDir, ".mdait", "local", "unit-registry.broken")),
 			"上書きする前に原本が避難していない",
 		);
 	});
