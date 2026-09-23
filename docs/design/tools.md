@@ -259,30 +259,32 @@ interface AdoptInput {
 
 ### 9. Resolve Tool (`mdait_resolve`)
 
-**機能**: need フラグの裁定。StatusTree/CodeLens の判断アクション（Mark as Reviewed・Keep/Delete Unit・Mark as Isolated/Un-isolate、UX-R1: [ux.md](../ux.md) §8）のLM Tool版で、エージェントがレビュー承認・削除確認・isolate宣言/解除をマーカー手編集なしで完了するための手段。`action` パラメータで3つの操作系統を切り替える（ADR-260712-03）
+**機能**: need フラグの裁定。StatusTree/CodeLens の判断アクション（Mark as Reviewed・要翻訳にする・Keep/Delete Unit・Mark as Isolated/Un-isolate、UX-R1: [ux.md](../ux.md) §8）のLM Tool版で、エージェントがレビューの採否・削除確認・isolate宣言/解除をマーカー手編集なしで完了するための手段。`action` パラメータで操作を切り替える（ADR-260712-03・ADR-260923-01）
 
 **入力パラメータ**:
 ```typescript
 interface ResolveInput {
   path: string;          // 対象ファイル（相対/絶対）。ディレクトリは不可
-  action?: "resolve" | "declare-isolate" | "delete"; // 省略時 "resolve"
+  action?: "resolve" | "request-translate" | "keep" | "declare-isolate" | "delete"; // 省略時 "resolve"
   unitHashes?: string[]; // 対象ユニットのhash。
                          // resolve: 省略時はファイル内のneedsフィルタ一致全ユニット
-                         // declare-isolate / delete: 必須（bulk操作による誤爆を防ぐ安全弁）
-  needs?: string[];      // action:"resolve" のみ。解決対象のneed種別。省略時は ["review", "verify-deletion"]。
+                         // それ以外: 必須（一括操作による誤爆を防ぐ安全弁）
+  needs?: string[];      // action:"resolve" のみ。解決対象のneed種別。省略時は ["review"]。
                          // translate/revise の解決は明示指定時のみ（"revise" は revise@{oldhash} にも一致）。
                          // "isolate" を指定すると isolate 宣言の解除（undeclare）になる
 }
 ```
 
-**実装（action別）**:
-- **`resolve`（既定）**: `getFileHandler(path).resolveNeed()` に委譲（人間の CodeLens・ツリーと同一経路）。マーカー変異は `removeNeedTag()` のみで **hash / from / 本文には一切触れない**。`data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳
-- **`declare-isolate`**: `getFileHandler(path).declareIsolate()` に委譲（非Markdownファイルは対象外で常に `not-found`）。指定ユニットに `need:isolate` を設定する（凍結。以後 sync は revise を伝播しない）。既に何らかの need が付いているユニットはスキップする（安全弁）。`data`: `declared: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `need-already-set`）
-- **`delete`**: `getFileHandler(path).deleteUnit()` に委譲（非Markdownファイルは対象外で常に `not-found`）。指定ユニットをドキュメントから完全に除去する（hash/fromの書き換えではなくユニット自体の削除）。`need:verify-deletion` 以外は削除不可（安全弁）。external モードでは unit-state ストアの order を詰め直す。`data`: `deleted: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `not-verify-deletion`）
-- 3系統とも ai-review の `review-core.ts` と同じ書換経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる。マーカー境界はパーサーに委譲するのでコードブロック内のサンプルマーカーには誤マッチしない
-- 冪等: 同入力の2回目は対象0件（`resolve`/`declare-isolate` の unitHashes 指定時は該当 reason でスキップ、`delete` は `not-found`）
+**実装（action別）**: どれも `getFileHandler(path)` の同名の入口に委譲する（人間の CodeLens・ツリーと同じ経路。AGENTS.md の不変条件）。
+- **`resolve`（既定）**: `resolveNeed()`。need を外すだけで **hash / from / 本文には触れない**。`data`: `resolved: [{hash, title?, need}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `already-resolved` / `need-not-selected`）・解決後の `remainingNeeds` 内訳
+- **`request-translate`**: `requestTranslate()`。確認待ちの既訳を採用せず、`need:review` を `need:translate` に付け替える（AI は呼ばない。訳すのは次の `mdait_translate`）。review 以外は変えない。`data`: `requested: [{hash, title?}]`・`skipped: [{hash, reason}]`（reason: `not-found` / `not-review`）
+- **`keep`**: `keepUnits()`。`need:verify-deletion` のユニットを独立ユニットとして残す（need と from を同時に外す）。`data`: `kept`・`skipped`（reason: `not-found` / `not-verify-deletion`）
+- **`declare-isolate`**: `declareIsolate()`（非Markdownファイルは対象外で常に `not-found`）。指定ユニットに `need:isolate` を設定する（凍結。以後 sync は revise を伝播しない）。既に何らかの need が付いているユニットはスキップする（安全弁）。`data`: `declared`・`skipped`（reason: `not-found` / `need-already-set`）
+- **`delete`**: `deleteUnit()`（非Markdownファイルは対象外で常に `not-found`）。指定ユニットをドキュメントから除去する。`need:verify-deletion` 以外は削除不可（安全弁）。`data`: `deleted`・`skipped`（reason: `not-found` / `not-verify-deletion`）
+- どれも `unit-mutation.ts` の書き換え経路（`resolveMarkerIO` 経由の parse/stringify ＋ `FileMutex` 排他）に乗るため、embedded / external 両モードで同じ意味論になる
+- 冪等: 同入力の2回目は対象0件（該当 reason でスキップ）
 
-**確認UI**: あり（AI不使用だがマーカー・本文書換のため。action別に対象件数を提示。`delete` は「mdaitではやり直せない・git復旧可能」の注記付き）
+**確認UI**: あり（AI不使用だがマーカー・本文書換のため。action別に対象を提示。`delete` は「mdaitではやり直せない・git復旧可能」の注記付き）
 
 **実装**: [`src/lm-tools/resolve-tool.ts`](../../src/lm-tools/resolve-tool.ts)
 
@@ -304,7 +306,7 @@ src/lm-tools/
 ├── validate-tool.ts      # 検証ツール（structure/terms、読取専用）
 ├── ai-review-tool.ts     # AI翻訳レビューツール（need:reviewのトリアージ）
 ├── adopt-tool.ts         # 既存翻訳の取り込みウィザードツール（mdait_adopt・command_adopt.md）
-└── resolve-tool.ts       # need裁定ツール（resolve除去・declare-isolate宣言・delete削除）
+└── resolve-tool.ts       # need裁定ツール（resolve・request-translate・keep・declare-isolate・delete）
 ```
 
 ---

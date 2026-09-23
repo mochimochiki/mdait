@@ -191,7 +191,7 @@ mdait が「決めつけずに人間へ倒した」ものを人間が裁くフ�
 | 同期 | Sync ボタン / 保存時自動 | `mdait_sync` |
 | 翻訳 | ▶（unit/file/dir） | `mdait_translate`（file/dir） |
 | レビュー承認・need解決 | CodeLens「Mark as …」/ StatusTree Needs Attentionノード（クリックで訳文と原文を並べて開く） | `mdait_resolve { action:"resolve" }` |
-| レビューの不採用（`need:review` → `need:translate`） | CodeLens「要翻訳にする」 | —（`mdait_resolve` は採用側だけ。ADR-260912-07 の範囲外） |
+| レビューの不採用（`need:review` → `need:translate`） | CodeLens「要翻訳にする」 | `mdait_resolve { action:"request-translate" }`（ADR-260923-01） |
 | verify-deletion裁定 | CodeLens/ツリーの Keep / Delete Unit（＋ファイル行の一括確定） | `mdait_resolve { action:"keep" \| "delete" }` |
 | isolate宣言/解除 | CodeLens「その他」→凍結する（訳文の対訳ユニット/原文ユニット）・ツリーの Mark as Isolated / Un-isolate | `mdait_resolve { action:"declare-isolate" }` / `{ needs:["isolate"] }` |
 | AIレビュー委任 | ✨AI Translation Review（ファイル・ディレクトリ行）/ 要対応ノードの ✨AIレビュー・sync 完了通知の「✨AI review」（選択中ペアの確認待ち全件） | `mdait_aiReview` |

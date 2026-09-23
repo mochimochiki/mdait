@@ -12,6 +12,14 @@
 
 ## ADR
 
+### ADR-260923-01: エージェントにも「要翻訳にする」を開く
+
+**背景** : 確認待ちを採用しない答え（`need:review` → `need:translate`）は、人には CodeLens にあるのに、エージェントの `mdait_resolve` には無かった。
+
+**決定** : `mdait_resolve` に `action:"request-translate"` を足す。`unitHashes` は必須で、書き換えは `getFileHandler().requestTranslate` を通す。
+
+**理由** : 人とエージェントが同じ判断を下せるようにする（ADR-260712-03 と同じく、ツールは増やさず action で切り替える）。AI は呼ばないので守りは外れない。
+
 ### ADR-260912-11: 画面の日本語は、道具の通用語に合わせる
 
 **背景** : 画面の日本語に mdait だけの言い換えが混ざっていた。`merge` を「合流」、`branch` を「枝」、`snapshot` を「控え」、`marker` を「目印」、`version` を「版」と訳していた。読み手は git の言葉で作業しているので、同じものを別の名前で呼ばれると対応表を覚えることになる。
@@ -58,7 +66,7 @@
 
 **理由** : 通知のボタンは1つに絞る — 翻訳待ちと確認待ちの両方が残れば翻訳を先に勧める（翻訳は訳を作る仕事、確認は出来上がった訳を見る仕事なので、順序として翻訳が先）。QuickPick を出さないのは、通知のボタンを押しただけの人に「何を選べばよいか」を毎回考えさせないため — この入口は「確認待ちを消化する」と決まっており、確定済みの訳まで監査する audit は別の意図の操作である。代わりに件数（ユニット数とファイル数）を見せる modal で1回確認する（ADR-260705-01。ファイル版・ディレクトリ版では QuickPick がその役を兼ねていた）。要対応ノードを本文ユニットだけにしないのは、ADR-260912-06 で frontmatter と非 Markdown の確認待ちが日常的に生じるようになり、「通知は 3 件と言うのに要対応ノードは出ない」「AI が残した frontmatter に辿れない」が起きるため。「要翻訳にする」を `resolveNeed`（採用の確定）にも `retranslate`（AI で上書き）にも相乗りさせないのは、review が「取り込んだ既訳を AI の上書きから守る」状態だから — 守りを外さず翻訳待ちの列へ戻すだけにし、AI を呼ぶかは人が改めて決める。ずれた紐づけからの逃げ道にもなる（訳文を捨てて、紐づいた原文から訳し直す）。CodeLens から Next を外すのは、マーカー行に並べるのはそのユニットへの操作だけであり（ux.md §3.3）、次のユニットへ動くのはツリーとパレットの役目だからである。
 
-**備考** : AI レビューの完了通知にはボタンを足していない（「レポートを開く」は元からあり、残った確認待ちはツリーの要対応に出る）。紐づけのずれを直す UI（対訳ビューが土台になる）と、LM ツール `mdait_resolve` から「要翻訳にする」を呼べるようにすることは、この決定の範囲外。番人は `request-translate.test.ts`・`plain-request-translate.test.ts`・`request-translate-codelens.test.ts`・`open-pair.test.ts`・`pending-review-files.test.ts`・`status-item-tree.test.ts`（`countPendingReviewUnits`）。
+**備考** : AI レビューの完了通知にはボタンを足していない（「レポートを開く」は元からあり、残った確認待ちはツリーの要対応に出る）。紐づけのずれを直す UI（対訳ビューが土台になる）と、LM ツール `mdait_resolve` から「要翻訳にする」を呼べるようにすることは、この決定の範囲外（後者は ADR-260923-01 で足した）。番人は `request-translate.test.ts`・`plain-request-translate.test.ts`・`request-translate-codelens.test.ts`・`open-pair.test.ts`・`pending-review-files.test.ts`・`status-item-tree.test.ts`（`countPendingReviewUnits`）。
 
 ### ADR-260912-06: 紐の無い訳文に最初の紐を結ぶときの need は1か所で決め、丸写しだけを翻訳待ちに残す
 
