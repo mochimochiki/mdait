@@ -10,6 +10,7 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { NeedTarget } from "../../commands/markers/resolve-need";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
@@ -174,8 +175,7 @@ export function buildUnitCodeLensSpecs(marker: MdaitMarker, isSourceFile: boolea
 		const { title, tooltip } = completionButtonLabel(marker.need);
 		specs.push({ title, tooltip, command: "mdait.codelens.clearNeed" });
 		// review は「採用する（完了）／採用しない（翻訳待ちへ戻す）」の2択なので、
-		// 完了ボタンの隣に採用しない側の答えを置く。frontmatter の review 行には出さない
-		// （書き換え経路が本文ユニットと別で対象外。理由は MdFileHandler.requestTranslate）
+		// 完了ボタンの隣に採用しない側の答えを置く（frontmatter の review 行も同じ）
 		if (shouldOfferRequestTranslate(marker, isSourceFile)) {
 			specs.push(requestTranslateSpec());
 		}
@@ -258,7 +258,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			const marker = parseFrontmatterMarker(frontMatter);
 			if (marker) {
 				// frontmatterの開始行（最初の---の行）にCodeLensを表示
-				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, frontMatter.startLine, document);
+				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(
+					marker,
+					frontMatter.startLine,
+					document,
+					isSourceFile,
+				);
 				codeLenses.push(...frontmatterCodeLenses);
 			}
 		}
@@ -311,12 +316,14 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * @param marker パース済みのfrontmatterマーカー
 	 * @param lineIndex 行番号
 	 * @param document ドキュメント
+	 * @param isSourceFile ソースファイルかどうか
 	 * @returns CodeLensの配列
 	 */
 	private createFrontmatterCodeLenses(
 		marker: MdaitMarker,
 		lineIndex: number,
 		document: vscode.TextDocument,
+		isSourceFile: boolean,
 	): vscode.CodeLens[] {
 		const line = document.lineAt(lineIndex);
 		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
@@ -346,6 +353,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 					arguments: [range],
 				}),
 			);
+			// review の2択は本文ユニットと同じ（ボタンも表示条件も共通）。押した行ではなく
+			// frontmatter を宛先として渡す — 開始行（`---`）はどのユニットのマーカーでもない
+			if (shouldOfferRequestTranslate(marker, isSourceFile)) {
+				const target: NeedTarget = { kind: "frontmatter" };
+				codeLenses.push(new vscode.CodeLens(range, { ...requestTranslateSpec(), arguments: [range, target] }));
+			}
 		}
 
 		// 翻訳済み（from && !need）の場合は何も表示しない

@@ -1680,9 +1680,13 @@ export async function sync_CoreProc(
 	const frontmatterMarkerBefore = parseFrontmatterMarker(target.frontMatter);
 	const frontmatterWasAwaitingReview = frontmatterMarkerBefore?.need === "review";
 	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
-	// 既訳として受けた frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）
+	// 既訳として受けた frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）。
+	// 紐の無い既訳と、翻訳待ちの印のあとで人が値を書き込んだもの（本文ユニットと同じ2つ）
 	const frontmatterAdopted =
-		!frontmatterMarkerBefore && parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review" ? 1 : 0;
+		frontmatterMarkerBefore?.need !== "review" &&
+		parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review"
+			? 1
+			: 0;
 	const frontmatterReviewSuperseded =
 		frontmatterWasAwaitingReview && (parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.needsRevision() ?? false)
 			? 1

@@ -30,6 +30,25 @@ export function getFrontmatterTranslationValues(
 	return values;
 }
 
+/**
+ * frontmatter の翻訳対象キーの値を、キーの順に改行でつないだもの。**frontmatter の「本文」にあたる。**
+ *
+ * ハッシュ（`calculateFrontmatterHash`）はこの文字列から作る。丸写しかどうか・人の文章が
+ * 書き込まれたか（`isWrittenOverTranslateMark`）を中身で比べるときも同じものを使う —
+ * 別々に組み立てると、ハッシュと中身の比較が食い違う。文字列でない値は空として扱う。
+ */
+export function frontmatterTranslatableText(frontMatter: FrontMatter | undefined, keys: string[]): string {
+	return translatableValues(frontMatter, keys).join("\n");
+}
+
+/** 翻訳対象キーの値（キーの順。文字列でない値は空） */
+function translatableValues(frontMatter: FrontMatter | undefined, keys: string[]): string[] {
+	return keys.map((key) => {
+		const value = frontMatter?.get(key);
+		return typeof value === "string" ? value : "";
+	});
+}
+
 export function calculateFrontmatterHash(
 	frontMatter: FrontMatter | undefined,
 	keys: string[],
@@ -39,11 +58,7 @@ export function calculateFrontmatterHash(
 		return null;
 	}
 
-	const values = keys.map((key) => {
-		const value = frontMatter.get(key);
-		return typeof value === "string" ? value : "";
-	});
-
+	const values = translatableValues(frontMatter, keys);
 	if (!options.allowEmpty && values.every((value) => value === "")) {
 		return null;
 	}

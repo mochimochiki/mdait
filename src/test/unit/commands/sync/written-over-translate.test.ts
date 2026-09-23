@@ -18,7 +18,11 @@ import * as path from "node:path";
 import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
 import { requestTranslateForFile } from "../../../../commands/markers/request-translate";
 import { syncNew_CoreProc, sync_CoreProc } from "../../../../commands/sync/sync-command";
+import { syncFrontmatterMarkers } from "../../../../commands/sync/sync-frontmatter";
 import { isWrittenOverTranslateMark } from "../../../../commands/sync/untranslated-copy";
+import { FrontMatter } from "../../../../core/markdown/front-matter";
+import { parseFrontmatterMarker, setFrontmatterMarker } from "../../../../core/markdown/frontmatter-translation";
+import type { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
@@ -85,7 +89,7 @@ for (const mode of ["embedded", "external"] as const) {
 		});
 
 		/** 設定を書いて原文を置き、訳文を作るところまで進める（訳文は全ユニット need:translate） */
-		async function bootstrap(): Promise<Configuration> {
+		async function bootstrap(options: { frontmatter?: boolean } = {}): Promise<Configuration> {
 			const mdaitDir = path.join(tempDir, ".mdait");
 			fs.mkdirSync(mdaitDir, { recursive: true });
 			const configPath = path.join(mdaitDir, "mdait.json");
@@ -96,13 +100,14 @@ for (const mode of ["embedded", "external"] as const) {
 					primaryLang: "ja",
 					markers: { mode },
 					sync: { level: 3, autoDelete: true },
+					...(options.frontmatter ? { trans: { frontmatter: { keys: ["title"] } } } : {}),
 				}),
 				"utf-8",
 			);
 			const config = Configuration.getInstance();
 			await config.initialize(configPath);
 			UnitStateStore.getInstance().load(mdaitDir);
-			fs.writeFileSync(sourceFile, SOURCE_MD, "utf-8");
+			fs.writeFileSync(sourceFile, options.frontmatter ? `---\ntitle: 製品ガイド\n---\n\n${SOURCE_MD}` : SOURCE_MD, "utf-8");
 			await syncNew_CoreProc(sourceFile, targetFile, config);
 			return config;
 		}
@@ -119,6 +124,15 @@ for (const mode of ["embedded", "external"] as const) {
 				.getEntriesByPath("en/doc.md")
 				.filter((entry) => entry.kind === "unit")
 				.map((entry) => ({ hash: entry.hash, need: entry.need }));
+		}
+
+		/** 訳文の frontmatter の need。embedded は本文の frontmatter から、external は外の台帳から読む */
+		function frontNeed(): string {
+			if (mode === "embedded") {
+				const matched = /front: '?[0-9a-f]+(?: from:[0-9a-f]+)?(?: need:([\w@-]+))?'?/.exec(fs.readFileSync(targetFile, "utf-8"));
+				return matched?.[1] ?? "";
+			}
+			return UnitStateStore.getInstance().getFrontMatterEntry("en/doc.md")?.need ?? "";
 		}
 
 		/** 2番目の章（インストール）を人の訳に書き換える */
@@ -149,11 +163,23 @@ for (const mode of ["embedded", "external"] as const) {
 			const reviewed = targetMarkers()[1];
 			assert.strictEqual(reviewed.need, "review", "確認待ちになった（前提）");
 
-			const requested = await requestTranslateForFile(targetFile, reviewed.hash, config);
+			const requested = await requestTranslateForFile(targetFile, { kind: "unit", hash: reviewed.hash }, config);
 			assert.strictEqual(requested.requested, true, "翻訳待ちへ戻した（前提）");
 			await sync_CoreProc(sourceFile, targetFile, config);
 
 			assert.strictEqual(targetMarkers()[1].need, "translate", "人の判断（採用しない）を sync が覆さない");
+		});
+
+		test("frontmatter の翻訳待ちに人が値を書き込んで sync すると、確認待ちになり既訳として数える", async () => {
+			const config = await bootstrap({ frontmatter: true });
+			const text = fs.readFileSync(targetFile, "utf-8").replace("title: 製品ガイド", "title: Product guide");
+			fs.writeFileSync(targetFile, text, "utf-8");
+
+			const result = await sync_CoreProc(sourceFile, targetFile, config);
+
+			assert.strictEqual(frontNeed(), "review");
+			assert.strictEqual(result.adopted, 1);
+			assert.ok(fs.readFileSync(targetFile, "utf-8").includes("title: Product guide"));
 		});
 
 		test("丸写しのまま何度 sync しても翻訳待ちのまま", async () => {
@@ -221,5 +247,72 @@ suite("PlainFileHandler.sync: 翻訳待ちのファイルに書き込まれた�
 		assert.strictEqual(UnitStateStore.getInstance().getSoleEntry("en/doc.txt")?.need, "review");
 		assert.strictEqual(result.adopted, 1);
 		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), "Translated by hand.\n");
+	});
+});
+
+suite("syncFrontmatterMarkers: 翻訳待ちの frontmatter に書き込まれた人の値を守る", () => {
+	const KEYS = ["title", "description"];
+
+	/** 原文と、原文を丸写しした翻訳待ちの訳文（sync が作った直後の姿）を用意する */
+	function copiedPair(): { source: FrontMatter; target: FrontMatter } {
+		const source = FrontMatter.fromData({ title: "製品ガイド", description: "概要です。" });
+		const first = syncFrontmatterMarkers(source, undefined, KEYS);
+		const target = first.targetFrontMatter as FrontMatter;
+		assert.strictEqual(parseFrontmatterMarker(target)?.need, "translate", "前提: 丸写しは翻訳待ち");
+		return { source, target };
+	}
+
+	test("翻訳待ちの frontmatter に人が値を書き込むと、確認待ちになり値は残る", () => {
+		const { source, target } = copiedPair();
+		target.set("title", "Product guide");
+
+		const result = syncFrontmatterMarkers(source, target, KEYS);
+
+		assert.strictEqual(parseFrontmatterMarker(result.targetFrontMatter)?.need, "review");
+		assert.strictEqual(result.targetFrontMatter?.get("title"), "Product guide");
+	});
+
+	test("丸写しのまま何度 sync しても翻訳待ちのまま", () => {
+		const { source, target } = copiedPair();
+
+		const second = syncFrontmatterMarkers(source, target, KEYS);
+		const third = syncFrontmatterMarkers(source, second.targetFrontMatter, KEYS);
+
+		assert.strictEqual(parseFrontmatterMarker(third.targetFrontMatter)?.need, "translate");
+	});
+
+	test("「採用しない」で翻訳待ちへ戻した frontmatter は、次の sync で確認待ちに戻らない", () => {
+		const { source, target } = copiedPair();
+		target.set("title", "Product guide");
+		const reviewed = syncFrontmatterMarkers(source, target, KEYS).targetFrontMatter as FrontMatter;
+		// 「採用しない」は印だけを translate に付け替える（値はそのまま）
+		const marker = parseFrontmatterMarker(reviewed) as MdaitMarker;
+		marker.setNeed("translate");
+		setFrontmatterMarker(reviewed, marker);
+
+		const result = syncFrontmatterMarkers(source, reviewed, KEYS);
+
+		assert.strictEqual(parseFrontmatterMarker(result.targetFrontMatter)?.need, "translate");
+	});
+
+	test("人が書き込んだ回に原文も変わっていたら、本文ユニットと同じく改訂待ちになる", () => {
+		const { source, target } = copiedPair();
+		const copiedFrom = parseFrontmatterMarker(target)?.from;
+		target.set("title", "Product guide");
+		source.set("title", "製品ガイド（改訂）");
+
+		const result = syncFrontmatterMarkers(source, target, KEYS);
+
+		assert.strictEqual(parseFrontmatterMarker(result.targetFrontMatter)?.need, `revise@${copiedFrom}`);
+	});
+
+	test("値を全部消しただけなら人の文章ではないので翻訳待ちのまま", () => {
+		const { source, target } = copiedPair();
+		target.set("title", "");
+		target.set("description", "");
+
+		const result = syncFrontmatterMarkers(source, target, KEYS);
+
+		assert.strictEqual(parseFrontmatterMarker(result.targetFrontMatter)?.need, "translate");
 	});
 });

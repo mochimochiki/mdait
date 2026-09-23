@@ -12,6 +12,16 @@
 
 ## ADR
 
+### ADR-260923-09: frontmatter にも「要翻訳にする」と翻訳待ちの守りを当てる
+
+**背景** : frontmatter の確認待ちには「レビュー完了」しか出口が無く、ADR-260923-07 の守りを当てると、手で書いた値を訳されないまま受け入れるしかなくなっていた。
+
+**決定** : `requestTranslateForFile` が `{ kind: "frontmatter" }` も受け、CodeLens の frontmatter 行に「要翻訳にする」を出す。sync の frontmatter にも `isWrittenOverTranslateMark` を当てる。
+
+**理由** : 本文ユニットと同じ判定・同じボタンを通せば、規則が1か所に保たれる。比べる中身はハッシュと同じ `frontmatterTranslatableText` にし、食い違いを作らない。
+
+**備考** : ADR-260912-07 の「frontmatter は対象外」と、ADR-260912-06 の「frontmatter には要翻訳にするが無い」という理由づけを差し替える。LM Tool は frontmatter をどの操作の宛先にもしていないので、この変更でも扱わない。
+
 ### ADR-260923-08: コミットしないものを `.mdait/local/` に集め、held をそこへ移す
 
 **背景** : held（消えた章の控え・合流で降ろされた行）は手元の作業の途中経過なのに共有の `unit-state` に載り、見えない行が全員のファイルで増えていた。除外ファイルも直下に散っていた。

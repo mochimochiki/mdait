@@ -151,7 +151,7 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
 - **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき。Keep は独立ユニット化＝need と from を同時に外す恒久操作。ADR-260805-01）。ツリーのファイル行には一括の「まとめて残す/まとめて削除」（どちらも modal）
-- **$(discard) 要翻訳にする（Mark as Needs Translation）**: `need:review` の訳文ユニットにだけ出す。「この訳は採用しない」の答えで、`need:review` → `need:translate` に印を付け替える。**印を付け替えるだけで AI は呼ばない**（だから ✨ を付けない）。訳すのはその後の「✨翻訳」に任せる。書き換えは `getFileHandler().requestTranslate`（`commands/markers/request-translate.ts`、`withMarkerOnlyMutation`）だけを通す。ずれた紐づけからの逃げ道でもある — 訳文を捨てて、紐づいた原文から訳し直す。frontmatter の review 行には出さない（書き換え経路が本文ユニットと別で、数行の見出し語なら手で直して確認済みにするほうが早い）。非 Markdown の review 行にも同じボタンを出す（ADR-260912-07）
+- **$(discard) 要翻訳にする（Mark as Needs Translation）**: `need:review` の訳文ユニットと訳文の frontmatter 行に出す。「この訳は採用しない」の答えで、`need:review` → `need:translate` に印を付け替える。**印を付け替えるだけで AI は呼ばない**（だから ✨ を付けない）。訳すのはその後の「✨翻訳」に任せる。書き換えは `getFileHandler().requestTranslate`（`commands/markers/request-translate.ts`、`withMarkerOnlyMutation`）だけを通す。ずれた紐づけからの逃げ道でもある — 訳文を捨てて、紐づいた原文から訳し直す。frontmatter の review 行にも出す（宛先は `{ kind: "frontmatter" }`。開始行の `---` はどのユニットのマーカーでもないので、CodeLens が宛先を渡す。ADR-260923-09）。非 Markdown の review 行にも同じボタンを出す（ADR-260912-07）
 - **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「凍結する」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
 
 `need` ごとのボタンの並び（`buildUnitCodeLensSpecs`。純関数で、テストがこの順を固定している）:
