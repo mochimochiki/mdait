@@ -269,21 +269,32 @@ export function orderPairs(
 	}
 	orphans.sort((x, y) => x.index - y.index);
 
+	// 手がかりにするのは、順序の保たれる組の最大の部分（`selectMonotonicAnchors`）だけ。
+	// 「直前より後ろなら採る」と貪欲に進めると、先頭の並べ替えられた章が位置を決めてしまう
+	// （原文 [a,b,c]・訳文 [b,own,c,a] で own が a より前へ飛ぶ）
+	const linked: AlignAnchor[] = [];
+	sourceUnits.forEach((source, s) => {
+		const target = bySource.get(source)?.target;
+		const t = target ? targetIndex.get(target) : undefined;
+		if (t !== undefined) {
+			linked.push({ a: s, b: t });
+		}
+	});
+	const insertionAnchors = new Map(selectMonotonicAnchors(linked).map((anchor) => [anchor.a, anchor.b]));
+
 	const ordered: SectionPair[] = [];
 	let nextOrphan = 0;
-	let cursor = -1;
-	for (const source of sourceUnits) {
+	sourceUnits.forEach((source, s) => {
 		const pair = bySource.get(source);
-		if (!pair) continue;
-		const t = pair.target ? targetIndex.get(pair.target) : undefined;
-		if (t !== undefined && t > cursor) {
+		if (!pair) return;
+		const t = insertionAnchors.get(s);
+		if (t !== undefined) {
 			while (nextOrphan < orphans.length && orphans[nextOrphan].index < t) {
 				ordered.push(orphans[nextOrphan++].pair);
 			}
-			cursor = t;
 		}
 		ordered.push(pair);
-	}
+	});
 	while (nextOrphan < orphans.length) {
 		ordered.push(orphans[nextOrphan++].pair);
 	}

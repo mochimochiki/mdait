@@ -134,4 +134,15 @@ suite("SectionMatcher の網羅性", () => {
 		const order = matcher.match(sources, targets, new Set([own])).map((p) => p.target?.title);
 		assert.deepStrictEqual(order, ["T-ta", "T-own", "T-tb", "T-tc"]);
 	});
+
+	test("先頭の組が並べ替えられた章でも、相手のいない訳文の位置はそれで決まらないこと", () => {
+		// 訳文 [b, own, c, a]。a は末尾へ動いた章。順序の保たれる組は b→0, c→2 なので、
+		// own は b と c のあいだに残る（a を手がかりにすると own が a より前へ飛ぶ）
+		const sources = [sourceUnit("a"), sourceUnit("b"), sourceUnit("c")];
+		const own = targetUnit("own");
+		const targets = [targetUnit("tb", "b"), own, targetUnit("tc", "c"), targetUnit("ta", "a")];
+
+		const order = matcher.match(sources, targets, new Set([own])).map((p) => p.target?.title);
+		assert.deepStrictEqual(order, ["T-ta", "T-tb", "T-own", "T-tc"]);
+	});
 });
