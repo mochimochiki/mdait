@@ -13,6 +13,7 @@
  * @module infra/workspace/rename-probe
  */
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { PathRename, RenameFollowProbe } from "../../core/unit-state/rename-plan";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import type { Configuration } from "../config/configuration";
@@ -49,6 +50,15 @@ export function createRenameFollowProbe(config: Configuration, explorer?: FileEx
 		},
 		exists(filePath: string): boolean {
 			return fs.existsSync(filePath);
+		},
+		existsExactly(filePath: string): boolean {
+			// 大文字小文字を区別しない環境では `existsSync` が綴りを問わないので、
+			// 親ディレクトリの一覧に同じ綴りの名前があるかを見る
+			try {
+				return fs.readdirSync(path.dirname(filePath)).includes(path.basename(filePath));
+			} catch {
+				return false;
+			}
 		},
 		hasEntriesAt(filePath: string): boolean {
 			// ワークスペース外・未設定なら「知らない」と答える。ここで例外を投げると

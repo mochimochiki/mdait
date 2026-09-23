@@ -314,6 +314,7 @@
   "File not found in status tree: {0}": "File not found in status tree: {0}",
   "Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.": "Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.",
   "{0} translation file(s) have no source file.": "{0} translation file(s) have no source file.",
+  "{0} merge conflict(s) remain in the .mdait folder.": "{0} merge conflict(s) remain in the .mdait folder.",
   "Failed to get translation status: {0}": "Failed to get translation status: {0}",
   "Getting translation status...": "Getting translation status...",
   "AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).": "AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).",

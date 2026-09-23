@@ -106,6 +106,8 @@ const HEADLESS_ONLY = ["headless"];
  * @property {string} note 何をするか・注意
  * @property {string} [adapter] headless 側の身代わり実装の名前（module の代わり）
  * @property {boolean} [asksUser] 途中でユーザーの答えを求める（headless では「答えなし」になる）
+ * @property {boolean} [tool] LM Tool（Copilot Chat などのエージェントが呼ぶ道具）。`export` はその class 名で、
+ *   引数は入力の JSON を1つ取る。返り値はツールが返すエンベロープ（JSON）そのもの
  */
 
 /** @type {Record<string, CommandEntry>} */
@@ -359,6 +361,83 @@ export const COMMANDS = {
 		args: "none",
 		hosts: ALL,
 		note: "設定の具合を調べてレポートに書く",
+	},
+
+	// --- LM Tool（エージェントが呼ぶ道具）---
+	// 入力は JSON 1つ（例: lab run mdait_getStatus '{"detail":true}'）。確認（confirmationMessages）には
+	// ほかのダイアログと同じく「続ける」で答え、結果の dialogs に控える。実 VS Code のホストで
+	// ツールを呼ぶ口はまだ無い（vscode.lm.invokeTool を通す必要がある）ので headless 専用
+	mdait_getStatus: {
+		module: "out/lm-tools/get-status-tool.js",
+		export: "MdaitGetStatusTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 状態を観測する（読み取りだけ）",
+	},
+	mdait_sync: {
+		module: "out/lm-tools/sync-tool.js",
+		export: "MdaitSyncTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: sync をかける（AI は使わない）",
+	},
+	mdait_translate: {
+		module: "out/lm-tools/translate-tool.js",
+		export: "MdaitTranslateTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 翻訳する（確認あり）",
+	},
+	mdait_term: {
+		module: "out/lm-tools/term-tool.js",
+		export: "MdaitTermTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 用語の検出・展開（確認あり）",
+	},
+	mdait_tm: {
+		module: "out/lm-tools/tm-tool.js",
+		export: "MdaitTmTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 翻訳メモリへ登録する（確認あり）",
+	},
+	mdait_validate: {
+		module: "out/lm-tools/validate-tool.js",
+		export: "MdaitValidateTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 用語の一貫性を検証する（読み取りだけ）",
+	},
+	mdait_aiReview: {
+		module: "out/lm-tools/ai-review-tool.js",
+		export: "MdaitAiReviewTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 訳文を AI でレビューする（確認あり）",
+	},
+	mdait_adopt: {
+		module: "out/lm-tools/adopt-tool.js",
+		export: "MdaitAdoptTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: 既存の対訳を取り込む（確認あり）",
+	},
+	mdait_resolve: {
+		module: "out/lm-tools/resolve-tool.js",
+		export: "MdaitResolveTool",
+		args: "raw",
+		tool: true,
+		hosts: HEADLESS_ONLY,
+		note: "LM Tool: need を解く（確認あり）",
 	},
 };
 

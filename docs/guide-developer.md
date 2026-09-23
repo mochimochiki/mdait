@@ -44,7 +44,7 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 
 次がすべて成立したときに完了と判定する。いずれもツール出力から機械的に確認できる。
 
-1. `mdait_getStatus` の `data.needs` で `translate` / `revise` / `review` / `verifyDeletion` / `other` がすべて 0（`isolate` は定常状態なので除外してよい）
+1. `mdait_getStatus` の `data.needs` で `translate` / `revise` / `review` / `verifyDeletion` / `other` がすべて 0（`isolate` は定常状態なので除外してよい）。あわせて `data.conflicts.total` が 0
 2. `mdait_validate` の `data.violations` が空
 3. `mdait_term { action: "detect" }` の `data.pairs[].newTerms` 合計が 0、かつ `unexpanded` 合計が 0
 4. `mdait_tm { action: "commit" }` の `data.newEntries` が 0、かつ `data.skipped` の needTranslate / needRevise / needReview が 0
@@ -103,6 +103,7 @@ mdait は VS Code の LanguageModelTool API で 9 つのツールを公開する
 
 - **翻訳が途中で失敗・キャンセルされた** — 同じ `mdait_translate` を再実行する。翻訳済みユニットはスキップされ、残りだけが処理される
 - **`ok:false` が返った** — `error.code` と `nextActions` に従う。`no_workspace` / `invalid_path` は入力の誤り。`internal_error` は `mdait_sync` → `mdait_getStatus` で状態を観測し直す
+- **合流の競合が残っている**（`data.conflicts.total > 0`）— `.mdait` の用語集・翻訳メモリ・状態ファイルに合流の競合マーカーが残っている。ファイルを手で直さず、人に mdait のステータスビューの「競合を解決」を頼む。残っているあいだ、競合した用語集・翻訳メモリは読めない
 - **エラーユニットがある**（`data.errorUnits > 0`）— `mdait_getStatus { detail: true }` で対象を特定し、原因（AI への到達性は `mdait.setup.diagnose`）を解消してから翻訳し直す
 
 ## やってはいけないこと

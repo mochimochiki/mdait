@@ -8,6 +8,7 @@ import {
 	UnitStateStore,
 	isHeldBackEntry,
 	isLiveBodyEntry,
+	isMergeHeldEntry,
 } from "../unit-state/unit-state-store";
 import type { FrontMatter } from "./front-matter";
 import {
@@ -75,6 +76,17 @@ export interface MarkerAlignmentMemo {
 	 * 行そのものを持つのは、同じ本文 hash の別の行（合流で選ばれなかった側）を巻き込まないため。
 	 */
 	readonly recoveredHeldEntries: readonly UnitStateEntry[];
+	/**
+	 * 合流で降ろされ（`isMergeHeldEntry`）、この同期でも本文と一致しなかった行。
+	 * 合流由来の印を外し、ふつうの預かり（本文が戻ってきたら拾う行）にする。frontmatter の席から
+	 * 降ろされた行は拾い戻す道が無いので消す（`UnitStateStore.settleMergeHeldEntries`）。
+	 *
+	 * 同期が原稿と突き合わせた時点で、この行は人の判断を待つ件ではなくなる。原稿がどちらの版とも
+	 * 一致しないなら、原稿は両方より先へ進んでいて、席に残った行には同期が改訂の印を付け直す —
+	 * どちらの古い状態を選んでも結果は同じだからである（roadmap-v04 P03）。印を残すと、
+	 * 解きようのない競合がステータスバーとツリーに居座り続ける（ツリーの行に操作は無い）。
+	 */
+	readonly settledMergeHeldEntries: readonly UnitStateEntry[];
 	/**
 	 * ユニットごとの「いま座っている席」。**添字ではなくユニットそのものを鍵にする。**
 	 *
@@ -392,16 +404,17 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		// 先に席から外す。外す前に席へ移すと、同じ本文 hash の突き合わせ（席は1本文1席）で
 		// 拾い戻したばかりの行が「既にある席」と見なされ、退避したい行が置けなくなる
 		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldEntries);
+		const settled = this.store.settleMergeHeldEntries(filePath, memo.settledMergeHeldEntries);
 		const parked = this.store.parkEntries(filePath, memo.unmatchedSeats);
-		if (recovered > 0 || parked > 0) {
+		if (recovered > 0 || parked > 0 || settled > 0) {
 			logger.info("marker", "Applied held seats from the parse-time alignment", {
 				path: filePath,
 				parked,
 				recovered,
+				settled,
 			});
 		}
 	}
-
 }
 
 /**
@@ -462,6 +475,7 @@ export function buildAlignmentMemo(
 ): MarkerAlignmentMemo {
 	const unmatchedSeats: string[] = [];
 	const recoveredHeldEntries: UnitStateEntry[] = [];
+	const settledMergeHeldEntries: UnitStateEntry[] = [];
 	const seatByUnit = new Map<MdaitUnit, string>();
 	for (let i = 0; i < units.length; i++) {
 		const entry = aligned[i];
@@ -470,7 +484,7 @@ export function buildAlignmentMemo(
 		}
 	}
 	if (units.length === 0) {
-		return { unmatchedSeats, recoveredHeldEntries, seatByUnit };
+		return { unmatchedSeats, recoveredHeldEntries, settledMergeHeldEntries, seatByUnit };
 	}
 	for (const entry of entries) {
 		const matched = matchedEntries.has(entry);
@@ -478,6 +492,9 @@ export function buildAlignmentMemo(
 			if (matched) {
 				// 本文が戻ってきて拾われた。書き出しが席のキーで書き直すので、こちらは消す
 				recoveredHeldEntries.push(entry);
+			} else if (isMergeHeldEntry(entry)) {
+				// 原稿と突き合わせても一致しなかった。人の判断を待つ件ではなくなる
+				settledMergeHeldEntries.push(entry);
 			}
 			continue;
 		}
@@ -492,7 +509,7 @@ export function buildAlignmentMemo(
 		}
 		unmatchedSeats.push(entry.seat);
 	}
-	return { unmatchedSeats, recoveredHeldEntries, seatByUnit };
+	return { unmatchedSeats, recoveredHeldEntries, settledMergeHeldEntries, seatByUnit };
 }
 
 /**

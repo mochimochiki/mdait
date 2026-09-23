@@ -36,8 +36,10 @@
 ```
 
 - `done-with-errors` は「完走したが `errorCount > 0`」。成功と失敗の間を潰さないための状態。
-- `fireTimeline` / `stateDiff` / `syncAnalysis` は**実 Extension Host のときだけ**入る。
+- `fireTimeline` / `stateDiff` / `syncAnalysis` は3ホストとも入る。
   ツリーの更新イベントと状態の差分を突き合わせ、「コマンドは成功したのに画面が追随しない」を機械検出するためのもの。
+  headless の `fireTimeline` にはツリー自身の通知（`source: "tree"`）だけが並び、画面側の再描画（`source: "provider"`）は無い。
+  画面側はツリーの通知を受けて必ず再描画するので、ずれの判定（`syncAnalysis`）はツリーの通知だけで足りる。
 - **`id` が一致する結果だけを読むこと**。前回の `result.json` を読んでしまう事故が起きる（`lab run` は対処済み）。
 - 実装の正は `src/infra/debug/debug-command-handler.ts`。
 
@@ -54,6 +56,21 @@
 
 `{...}` や `[...]` の形で書いた引数は JSON として読まれる（例: `lab run mdait.sync '{"adopt":true}'` で
 取り込みが走り、`totalAdopted` が増える）。読めない形はそのまま文字列として渡るので、パスや普通の語は壊れない。
+
+## LM Tool（エージェントが呼ぶ道具）を呼ぶ
+
+`mdait_` で始まる名前は LM Tool として呼ぶ（headless だけ）。入力は JSON 1つで、返り値はツールが返す
+エンベロープそのもの。Copilot Chat と同じ順（`prepareInvocation` → 確認 → `invoke`）で呼び、確認には
+「続ける」で答えて `dialogs` に控える（`MDAIT_LAB_DIALOG=no` なら取り消す）。
+
+```bash
+lab run mdait_getStatus '{"detail":true}'
+lab run mdait_sync '{"adopt":true}'
+lab run mdait_translate '{"path":"content/en"}'
+```
+
+エージェントの手順書（`docs/guide-developer.md`）どおりに動かせるかを、エージェント役を立てて確かめるときに使う。
+実 VS Code のホストでツールを呼ぶ口はまだ無い（`vscode.lm.invokeTool` を通す必要がある）。
 
 ## よく使うコマンド
 

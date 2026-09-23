@@ -313,6 +313,7 @@
   "File not found in status tree: {0}": "ステータスツリーにファイルが見つかりません: {0}",
   "Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.": "{0} の翻訳ステータス: 総ユニット {1} 件、翻訳済み {2} 件、未翻訳 {3} 件、エラー {4} 件。作業が必要なファイル: {5} 件。",
   "{0} translation file(s) have no source file.": "原文が無い訳文が {0}件あります。",
+  "{0} merge conflict(s) remain in the .mdait folder.": ".mdait に合流の競合が {0}件残っています。",
   "Failed to get translation status: {0}": "翻訳ステータスの取得に失敗しました: {0}",
   "Getting translation status...": "翻訳ステータスを取得中...",
   "AI translation review completed ({8}): {0} verified, {1} approved, {2} flagged, {3} escalated ({4} mismatch / {5} partial), {6} kept, {7} errors across {9} file(s).": "AI翻訳レビュー完了（{8}）: 検証 {0}・承認 {1}・フラグ付与 {2}・エスカレーション {3}（mismatch {4} / partial {5}）・保留 {6}・エラー {7}（{9} ファイル）。",

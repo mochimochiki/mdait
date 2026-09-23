@@ -69,7 +69,8 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 	function seedEntry(relPath: string, need = "review"): void {
 		UnitStateStore.getInstance().setEntry({
 			path: relPath,
-			kind: "unit" as const, seat: seat(0),
+			kind: "unit" as const,
+			seat: seat(0),
 			level: 0,
 			titleHash: "",
 			hash: "h0",
@@ -111,15 +112,30 @@ suite("移動への追随（onWillRenameFiles / onDidRenameFiles）", () => {
 
 	test("追随の失敗がユーザーのリネームを巻き添えにしない条件で載せること", () => {
 		// 計画を立ててから編集が適用されるまでの隙に行き先が作られると、
-		// `ignoreIfExists` が無い限りその1件の失敗がリネーム全体を道連れにする。
-		// `overwrite` は `ignoreIfExists` に優先するので、false のままでなければ
-		// 行き先の訳文が上書きで消える（しかもごみ箱を経由しない）
+		// `ignoreIfExists` が効かない限りその1件の失敗がリネーム全体を道連れにする。
+		// VS Code は `overwrite` が未指定のときだけ `ignoreIfExists` を見るので、
+		// `overwrite: false` を並べてはいけない（並べると黙って効かなくなる）。
+		// 未指定の `overwrite` は上書きしない側に倒れる
 		place("ja/guide.md");
 		place("en/guide.md");
 
 		const edit = buildRenameFollowEdit(uris(["ja/guide.md", "ja/handbook.md"])) as unknown as RecordedEdit;
 
-		assert.deepStrictEqual(edit.renamedFiles[0].options, { overwrite: false, ignoreIfExists: true });
+		assert.deepStrictEqual(edit.renamedFiles[0].options, { ignoreIfExists: true });
+	});
+
+	test("大文字小文字だけの改名では、訳文の綴りも変える編集を載せること", () => {
+		// 大文字小文字を区別しない環境では新しい綴りも「在る」と答えるので、
+		// `ignoreIfExists` を効かせると必ず見送られる。`overwrite: false` なら
+		// ファイルサービスは同じファイルの綴り違いとして通す
+		place("ja/README.md");
+		place("en/README.md");
+
+		const edit = buildRenameFollowEdit(uris(["ja/README.md", "ja/Readme.md"])) as unknown as RecordedEdit;
+
+		assert.strictEqual(edit.renamedFiles.length, 1);
+		assert.strictEqual(edit.renamedFiles[0].newUri.fsPath, abs("en/Readme.md"));
+		assert.deepStrictEqual(edit.renamedFiles[0].options, { overwrite: false });
 	});
 
 	test("行き先の訳文が既にあるときは編集に載せないこと（上書きで訳文を失わない）", () => {

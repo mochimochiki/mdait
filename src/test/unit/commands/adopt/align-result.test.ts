@@ -200,7 +200,7 @@ suite("applyCorrections（matchResult 再配線）", () => {
 		);
 	});
 
-	test("独自セクション（#3）は孤立ターゲットとして残す", () => {
+	test("独自セクション（#3）は孤立ターゲットとして、訳文の元の位置に残す", () => {
 		// source s0,s1 / target t0,t1,t2（t1 が訳側独自）。位置ベース s0-t0, s1-t1(誤), t2 孤立
 		const s0 = unit("s0", "A", "a");
 		const s1 = unit("s1", "B", "b");
@@ -214,15 +214,16 @@ suite("applyCorrections（matchResult 再配線）", () => {
 			{ source: s1, target: t1 },
 			{ source: null, target: t2 },
 		];
-		// AI: s1 を t2 に再ペア化（t1 は独自セクション＝孤立へ）
+		// AI: s1 を t2 に再ペア化（t1 は独自セクション＝孤立へ）。
+		// t1 は訳文で t0 と t2 のあいだにあったので、そこに残る（末尾へ動かさない）
 		const accepted: AlignCorrection[] = [{ sourceIndex: 1, targetIndex: 2, confidence: 0.9 }];
 		const result = applyCorrections(matchResult, accepted, sourceUnits, targetUnits);
 		assert.deepStrictEqual(
 			result.map((p) => [p.source?.marker.hash ?? null, p.target?.marker.hash ?? null]),
 			[
 				["s0", "t0"],
-				["s1", "t2"],
 				[null, "t1"],
+				["s1", "t2"],
 			],
 		);
 	});

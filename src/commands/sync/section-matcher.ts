@@ -1,6 +1,12 @@
 import { calculateHash } from "../../core/hash/hash-calculator";
 import { MdaitMarker } from "../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../core/markdown/mdait-unit";
+import {
+	type AlignAnchor,
+	fillGaps,
+	gapsBetweenAnchors,
+	selectMonotonicAnchors,
+} from "../../core/matching/interval-align";
 import type { OrphanTargetPolicy } from "../../infra/config/configuration";
 
 /**
@@ -34,152 +40,136 @@ export interface SyncedTargetsResult {
  */
 export class SectionMatcher {
 	/**
-	 * ソースと対象のユニット対応付けを行う
+	 * ソースと対象のユニット対応付けを行う。
+	 *
+	 * 形は external の attach（`core/unit-state/unit-state-align.ts`）と同じで、共通部分は
+	 * `core/matching/interval-align` にある — 確実な鍵で錨を打ち、順序の保たれる錨だけを枠にして
+	 * 区間に割り、区間の中を順序で埋める。原文と訳文の突き合わせに固有なのは次の3点である。
+	 *
+	 * - 確実な鍵は「訳文の from == 原文の hash」。**錨は区間に関係なく採る**ので、章を
+	 *   並べ替えても対応は入れ替わらない（枠から外れた錨は区間の境界に使わないだけ）
+	 * - 区間を順序で埋めるときに使える訳文は **from を持たないものだけ**。from を持つのに
+	 *   錨にならなかった訳文は、原文を失った訳文（dangling）であり、別の原文に付け替えない
+	 * - 独立ユニットと、from で結ばれなかった `need:isolate` の原文は順序で埋める対象にしない
+	 *
+	 * 結果は `orderPairs` の規約で並ぶ（原文の順。相手のいない訳文は元の位置に差し込む）。
+	 *
 	 * @param sourceUnits ソースのユニット配列
 	 * @param targetUnits 対象のユニット配列
 	 * @param independentTargets 独立ユニット（ファイルに永続化されたマーカーを持つパススルー対象）の集合
 	 */
-	match(
-		sourceUnits: MdaitUnit[],
-		targetUnits: MdaitUnit[],
-		independentTargets?: ReadonlySet<MdaitUnit>,
-	): MatchResult {
-		const result: SectionPair[] = [];
-		const matchedTargetIndexes = new Set<number>();
-		const matchedSourceIndexes = new Set<number>();
+	match(sourceUnits: MdaitUnit[], targetUnits: MdaitUnit[], independentTargets?: ReadonlySet<MdaitUnit>): MatchResult {
+		const targetOf = new Map<number, number>();
+		const usedSources = new Set<number>();
+		const usedTargets = new Set<number>();
+		const link = (s: number, t: number): void => {
+			targetOf.set(s, t);
+			usedSources.add(s);
+			usedTargets.add(t);
+		};
 
 		// 0. 独立ユニット（need:isolate / fromなしの永続マーカー）は対応付け対象から除外し、
 		//    孤立ターゲットとしてパススルーする（sourceと誤対応させない）
-		const independentTargetIndexes = new Set<number>();
-		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
-			if (independentTargets?.has(targetUnits[tIdx])) {
-				independentTargetIndexes.add(tIdx);
-				matchedTargetIndexes.add(tIdx);
+		const independentIndexes = new Set<number>();
+		for (let t = 0; t < targetUnits.length; t++) {
+			if (independentTargets?.has(targetUnits[t])) {
+				independentIndexes.add(t);
 			}
 		}
 
-		// 1. targetのfromとsourceのhashが一致する組をマッチ済みペアとして対応付け
-		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
-			const source = sourceUnits[sIdx];
-			const sourceHash = source.marker?.hash;
-			if (!sourceHash) continue;
-			let found = false;
-			for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
-				const target = targetUnits[tIdx];
-				if (matchedTargetIndexes.has(tIdx)) continue;
-				const targetSrc = target.getSourceHash();
-				if (targetSrc && targetSrc === sourceHash) {
-					result.push({ source, target });
-					matchedTargetIndexes.add(tIdx);
-					matchedSourceIndexes.add(sIdx);
-					found = true;
-					break;
+		// 1. 訳文の from と原文の hash が「原文にも1つ、訳文にも1つ」しかない組は身元が確定している。
+		//    順序が入れ替わっていても採用する
+		const sourcesByHash = groupIndexes(sourceUnits.length, (s) => sourceUnits[s].marker?.hash ?? "");
+		const targetsByFrom = groupIndexes(targetUnits.length, (t) =>
+			independentIndexes.has(t) ? "" : (targetUnits[t].getSourceHash() ?? ""),
+		);
+		const anchors: AlignAnchor[] = [];
+		// 同じ本文の原文が複数ある分。どれとどれを結ぶかは前後の確定した錨との順序で決める
+		const ambiguousGroups: Array<{ sources: number[]; targets: number[] }> = [];
+		for (const [hash, sources] of sourcesByHash) {
+			if (!hash) continue;
+			const targets = targetsByFrom.get(hash);
+			if (!targets) continue;
+			if (sources.length === 1 && targets.length === 1) {
+				link(sources[0], targets[0]);
+				anchors.push({ a: sources[0], b: targets[0] });
+			} else {
+				ambiguousGroups.push({ sources, targets });
+			}
+		}
+
+		// 2. 確定した組のうち、順序が保たれる最大の部分を枠にする。
+		//    枠から外れた組（＝並べ替えられた章）も対応は保つが、区間の境界には使わない
+		const frame = selectMonotonicAnchors(anchors);
+
+		// 3. 同じ本文の原文が複数ある分は、区間に収まる組み合わせだけを単調性で決める
+		const additions: AlignAnchor[] = [];
+		for (const gap of gapsBetweenAnchors(sourceUnits.length, targetUnits.length, frame)) {
+			const candidates: AlignAnchor[] = [];
+			for (const group of ambiguousGroups) {
+				for (const s of group.sources) {
+					if (s < gap.aStart || s >= gap.aEnd || usedSources.has(s)) continue;
+					for (const t of group.targets) {
+						if (t < gap.bStart || t >= gap.bEnd || usedTargets.has(t)) continue;
+						candidates.push({ a: s, b: t });
+					}
 				}
 			}
-			if (!found) {
-				// src一致しなかったsourceは後で順序ベース推定
-				// ここでは何もしない
-			}
-		}
-
-		// 1.5. need:isolate の source は from 一致（Phase 1）でのみマッチ可。
-		//      順序ベース推定（Phase 2）の対象から外し、未マッチのまま {source, target:null}
-		//      としてペアに含める（hash 更新のため）
-		const unmatchedIsolateSourceIndexes: number[] = [];
-		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
-			if (matchedSourceIndexes.has(sIdx)) continue;
-			if (sourceUnits[sIdx].marker?.need === "isolate") {
-				unmatchedIsolateSourceIndexes.push(sIdx);
-				matchedSourceIndexes.add(sIdx);
-			}
-		}
-
-		// 2. マッチ済みユニット間ごとに区間分割し、順序ベースで対応付け
-		let lastMatchedSource = -1;
-		let lastMatchedTarget = -1;
-		const matchedPairs: Array<{ s: number; t: number }> = [];
-		for (let i = 0; i < result.length; i++) {
-			const source = result[i].source;
-			const target = result[i].target;
-			const sIdx = source ? sourceUnits.indexOf(source) : -1;
-			const tIdx = target ? targetUnits.indexOf(target) : -1;
-			matchedPairs.push({ s: sIdx, t: tIdx });
-		}
-		matchedPairs.push({ s: sourceUnits.length, t: targetUnits.length }); // 末尾区間用
-
-		for (let k = 0; k < matchedPairs.length; k++) {
-			const s_Start = lastMatchedSource + 1;
-			const s_End = matchedPairs[k].s;
-			const t_Start = lastMatchedTarget + 1;
-			const t_End = matchedPairs[k].t;
-
-			// 区間内の未マッチsource/targetを順序ベースで対応付け
-			let s_index = s_Start;
-			let t_index = t_Start;
-			while (s_index < s_End || t_index < t_End) {
-				while (s_index < s_End && matchedSourceIndexes.has(s_index)) s_index++;
-				while (t_index < t_End && matchedTargetIndexes.has(t_index)) t_index++;
-				if (s_index >= s_End && t_index >= t_End) break;
-				const s_IsUnMatched = s_index < s_End && !matchedSourceIndexes.has(s_index);
-				const t_IsUnMatched =
-					t_index < t_End && !matchedTargetIndexes.has(t_index) && !targetUnits[t_index].getSourceHash();
-				if (s_IsUnMatched && t_IsUnMatched) {
-					// 両方未マッチの場合はペアとして対応付け（あまり起きないはず）
-					result.push({ source: sourceUnits[s_index], target: targetUnits[t_index] });
-					matchedSourceIndexes.add(s_index);
-					matchedTargetIndexes.add(t_index);
-					s_index++;
-					t_index++;
-				} else if (s_IsUnMatched) {
-					// sourceに対応するtargetがない→新規追加
-					result.push({ source: sourceUnits[s_index], target: null });
-					matchedSourceIndexes.add(s_index);
-					s_index++;
-				} else if (t_IsUnMatched) {
-					// targetに対応するsourceがない→削除（候補）
-					result.push({ source: null, target: targetUnits[t_index] });
-					matchedTargetIndexes.add(t_index);
-					t_index++;
-				} else {
-					s_index++;
-					t_index++;
+			for (const pick of selectMonotonicAnchors(candidates)) {
+				if (!usedSources.has(pick.a) && !usedTargets.has(pick.b)) {
+					link(pick.a, pick.b);
+					additions.push(pick);
 				}
 			}
-			lastMatchedSource = s_End;
-			lastMatchedTarget = t_End;
 		}
-
-		// 3. srcがあるのにマッチしなかったtarget（孤立）
-		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
-			if (matchedTargetIndexes.has(tIdx)) continue;
-			const target = targetUnits[tIdx];
-			if (target.getSourceHash()) {
-				result.push({ source: null, target });
-				matchedTargetIndexes.add(tIdx);
+		// 区間をまたいで余った同じ本文の組は、順に当てる。本文がまったく同じ原文どうしは
+		// 入れ替えても意味が変わらないので、どれに当てても等価である。from の一致は順序より
+		// 強い手がかりなので、順序で埋める段より先に済ませる
+		for (const group of ambiguousGroups) {
+			const freeSources = group.sources.filter((s) => !usedSources.has(s));
+			const freeTargets = group.targets.filter((t) => !usedTargets.has(t));
+			for (let i = 0; i < Math.min(freeSources.length, freeTargets.length); i++) {
+				link(freeSources[i], freeTargets[i]);
 			}
 		}
 
-		// 3b. 独立ユニットを孤立ターゲットとしてパススルー
-		for (const tIdx of independentTargetIndexes) {
-			result.push({ source: null, target: targetUnits[tIdx] });
+		// 4. 残りを区間内の順序で埋める。使えない側は使用済みと同じ扱いで渡す —
+		//    from で結ばれなかった need:isolate の原文（from 一致でしか結ばない）と、
+		//    独立ユニット・from を持つ訳文（原文を失った訳文を別の原文へ付け替えない）
+		const unavailableSources = new Set(usedSources);
+		for (let s = 0; s < sourceUnits.length; s++) {
+			if (!usedSources.has(s) && sourceUnits[s].marker?.need === "isolate") {
+				unavailableSources.add(s);
+			}
+		}
+		const unavailableTargets = new Set(usedTargets);
+		for (let t = 0; t < targetUnits.length; t++) {
+			if (independentIndexes.has(t) || targetUnits[t].getSourceHash()) {
+				unavailableTargets.add(t);
+			}
+		}
+		const finalFrame = [...frame, ...additions].sort((x, y) => x.a - y.a);
+		for (const pair of fillGaps(
+			sourceUnits.length,
+			targetUnits.length,
+			finalFrame,
+			unavailableSources,
+			unavailableTargets,
+		)) {
+			link(pair.a, pair.b);
 		}
 
-		// 3c. Phase 1 でマッチしなかった isolate source（hash 更新のためペアに含める）
-		for (const sIdx of unmatchedIsolateSourceIndexes) {
-			result.push({ source: sourceUnits[sIdx], target: null });
+		// 5. 相手のいない原文は新規（isolate は hash 更新のためだけに載る）、相手のいない訳文は孤立
+		const pairs: SectionPair[] = sourceUnits.map((source, s) => {
+			const t = targetOf.get(s);
+			return { source, target: t === undefined ? null : targetUnits[t] };
+		});
+		for (let t = 0; t < targetUnits.length; t++) {
+			if (!usedTargets.has(t)) {
+				pairs.push({ source: null, target: targetUnits[t] });
+			}
 		}
-
-		// source基準でソート
-		const ordered: SectionPair[] = [];
-		for (let sIdx = 0; sIdx < sourceUnits.length; sIdx++) {
-			const pair = result.find((p) => p.source === sourceUnits[sIdx]);
-			if (pair) ordered.push(pair);
-		}
-		for (let tIdx = 0; tIdx < targetUnits.length; tIdx++) {
-			const pair = result.find((p) => !p.source && p.target === targetUnits[tIdx]);
-			if (pair) ordered.push(pair);
-		}
-		return ordered;
+		return orderPairs(pairs, sourceUnits, targetUnits);
 	}
 
 	/**
@@ -248,4 +238,69 @@ export class SectionMatcher {
 		}
 		return { units: result, orphanDeleted, orphanDeletedTitles, orphanVerified, orphanKept, orphanReviewed };
 	}
+}
+
+/**
+ * ペアを訳文ファイルに書き出す順に並べる。`match()` と AI アライン（`align-result.ts`）が
+ * 共有する順序の規約である。
+ *
+ * 原文を持つペアは原文の順に並べる。相手のいない訳文（独立ユニット・孤立した訳文）は、
+ * **訳文の中で元あった位置**に差し込む — 自分より後ろにあった訳文を持つペアの直前である。
+ * 末尾へ寄せると、訳文の途中に人が書き足した章が sync のたびにファイルの末尾へ動く。
+ *
+ * 位置の手がかりにするのは、原文の順に見て訳文の位置も増えていくペアだけである。
+ * 並べ替えられた章（訳文の位置が戻るペア）を手がかりにすると、差し込む位置が前へ飛ぶ。
+ */
+export function orderPairs(
+	pairs: readonly SectionPair[],
+	sourceUnits: readonly MdaitUnit[],
+	targetUnits: readonly MdaitUnit[],
+): MatchResult {
+	const targetIndex = new Map<MdaitUnit, number>();
+	targetUnits.forEach((unit, index) => targetIndex.set(unit, index));
+	const bySource = new Map<MdaitUnit, SectionPair>();
+	const orphans: Array<{ index: number; pair: SectionPair }> = [];
+	for (const pair of pairs) {
+		if (pair.source) {
+			bySource.set(pair.source, pair);
+		} else if (pair.target) {
+			orphans.push({ index: targetIndex.get(pair.target) ?? Number.MAX_SAFE_INTEGER, pair });
+		}
+	}
+	orphans.sort((x, y) => x.index - y.index);
+
+	const ordered: SectionPair[] = [];
+	let nextOrphan = 0;
+	let cursor = -1;
+	for (const source of sourceUnits) {
+		const pair = bySource.get(source);
+		if (!pair) continue;
+		const t = pair.target ? targetIndex.get(pair.target) : undefined;
+		if (t !== undefined && t > cursor) {
+			while (nextOrphan < orphans.length && orphans[nextOrphan].index < t) {
+				ordered.push(orphans[nextOrphan++].pair);
+			}
+			cursor = t;
+		}
+		ordered.push(pair);
+	}
+	while (nextOrphan < orphans.length) {
+		ordered.push(orphans[nextOrphan++].pair);
+	}
+	return ordered;
+}
+
+/** 添字 0..length-1 を鍵でまとめる */
+function groupIndexes(length: number, keyOf: (index: number) => string): Map<string, number[]> {
+	const groups = new Map<string, number[]>();
+	for (let i = 0; i < length; i++) {
+		const key = keyOf(i);
+		const list = groups.get(key);
+		if (list) {
+			list.push(i);
+		} else {
+			groups.set(key, [i]);
+		}
+	}
+	return groups;
 }

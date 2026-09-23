@@ -9,7 +9,7 @@
  */
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
-import type { MatchResult, SectionPair } from "../sync/section-matcher";
+import { type MatchResult, type SectionPair, orderPairs } from "../sync/section-matcher";
 
 /** AI に渡す1ユニットのスケルトン */
 export interface UnitSkeleton {
@@ -240,31 +240,6 @@ export function validateCorrections(
 	}
 
 	return { accepted, rejected };
-}
-
-/**
- * match() と同じ順序規約でペアを並べ替える。
- * source を持つペアを source 位置順、その後に孤立ターゲットを target 位置順で並べる。
- */
-function orderPairs(
-	pairs: SectionPair[],
-	sourceUnits: readonly MdaitUnit[],
-	targetUnits: readonly MdaitUnit[],
-): MatchResult {
-	const ordered: SectionPair[] = [];
-	for (const source of sourceUnits) {
-		const pair = pairs.find((p) => p.source === source);
-		if (pair) {
-			ordered.push(pair);
-		}
-	}
-	for (const target of targetUnits) {
-		const pair = pairs.find((p) => !p.source && p.target === target);
-		if (pair) {
-			ordered.push(pair);
-		}
-	}
-	return ordered;
 }
 
 /**
