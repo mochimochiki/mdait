@@ -53,7 +53,7 @@ export async function isStaleUntranslatedCopy(
 /**
  * 翻訳待ち（`need:translate`）の訳文に、**印を付けたあとで**人の文章が書き込まれたかを答える。
  *
- * 真なら呼び出し側は `need:review` に切り替える。`need:translate` は「次の✨翻訳が本文を
+ * 真なら呼び出し側は `need:review` に切り替える（ADR-260923-07）。`need:translate` は「次の✨翻訳が本文を
  * 上書きしてよい」の意味なので、放っておくと人の書いた文章が機械翻訳で消える。起きる経路は2つある。
  *
  * - 未訳の章（原文の丸写し）を人が手で訳し始めて保存した

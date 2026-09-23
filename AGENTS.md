@@ -46,7 +46,8 @@ CI（`.github/workflows/ci.yml`）の実行内容: `npm ci` → `compile` → `l
 - 管理下の原稿の書き出しは `infra/workspace/managed-write.ts` の `writeManagedDocument` / `writeManagedDocumentSync` だけを通す。**Markdown も、Markdown 以外の管理下ファイル（.txt / .csv / .json）も同じ**（ADR-260902-04）。原稿の改行コードと末尾改行を測って揃え直し、出来上がりが1バイトも違わなければ書かない処理はそこにしか無い。素の `writeFile` で書くと、Windows で書かれた原稿が全行 LF に書き換わる（実測。内容は同じなのにファイル全体が差分になる）。例外は2つ — `.mdait/` の中の管理ファイルは原稿ではない。**まだ無いファイルへ原文をそのまま複製する経路（`plain-file-handler.syncNew`）は通してはいけない** — ディスクに何も無いと書式が既定（LF）と測られ、CRLF の原文がその場で倒れる。増殖は `managed-write-only.test.ts` がソース走査で見張る（ADR-260902-01）
 - `stringify` は frontmatter の閉じ `---` と本文のあいだの空行を、原稿にあった数だけ再現する（`Markdown.frontMatterGap`。parse で測り stringify で書き戻す）。決め打ちで詰めると、静的サイトの原稿は取り込んだだけで**訳文のほぼ全ファイルが差分になる**（実測 19/23）。ユニット間の連結（空行1つ）とは別の話なので混ぜない（ADR-260903-02）
 - `Status` は「原文側か訳文側か／翻訳の進み具合」だけを表す。「翻訳率の分母に数えるか」を `Status` の値で表現しない（`isCountedInProgress()` が単独で答える）。`contextValue` の決定に `Status` を渡さない（ADR-260726-01）
-- 実行レポートを出すコマンドは、必ず `commands/shared/report-file.ts` 経由で `.mdait/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに独自の表示方法を実装しない（ADR-260726-01）
+- コミットしない（共有しない）ファイルは `.mdait/local/` に置き、パスは `infra/workspace/local-dir.ts` の `localPath`（または `Configuration`）で組み立てる。`.mdait/.gitignore` は `local/` の1行だけにする — 直下に置くとコミットされる。`unit-state` の `held` 行も手元の `local/unit-state.held` に置き、共有の `unit-state` には書かない（ADR-260923-08）
+- 実行レポートを出すコマンドは、必ず `commands/shared/report-file.ts` 経由で `.mdait/local/reports/<kind>.md` へ書き出し、完了通知のボタンから開く。コマンドごとに独自の表示方法を実装しない（ADR-260726-01）
 - 管理下 Markdown のマーカー読取（`markdownParser.parse` / `stringify`）は必ず `infra/config/marker-io.ts` の `resolveMarkerIO` / `resolveMarkerIOForFile` で解決した provider/ctx を渡す。素の `parse(content, config)` は external マーカーモードでマーカーを見失い静かに誤動作する。例外は markers-migration（両表現を意図的に parse する）と、パーサー・FrontMatter 内部のみ（ADR-260801-01）
 
 ## テスト

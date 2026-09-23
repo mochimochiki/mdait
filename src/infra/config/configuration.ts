@@ -424,7 +424,7 @@ export class Configuration {
 
 	/**
 	 * レポート出力ディレクトリ（`.mdait/local/reports/`）の絶対パスを取得する。
-	 * 個人の実行結果なので共有しない（ADR-260907-07・ADR-260923-06）。
+	 * 個人の実行結果なので共有しない（ADR-260907-07・ADR-260923-08）。
 	 */
 	public getReportsDir(): string {
 		return localPath(this.getMdaitDir(), "reports");

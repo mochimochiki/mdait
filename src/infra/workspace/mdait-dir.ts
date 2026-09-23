@@ -9,7 +9,7 @@ import { LOCAL_DIRNAME, localPath } from "./local-dir";
  * `.mdait/.gitignore` に必ず載っている行。
  *
  * コミットしないものは `local/` にまとめてあるので1行で済む（中身は `local-dir.ts`）。
- * 置くものが増えても、ここを書き足して回らない（ADR-260923-06）。
+ * 置くものが増えても、ここを書き足して回らない（ADR-260923-08）。
  */
 const GITIGNORE_LINES = [`${LOCAL_DIRNAME}/`];
 
