@@ -8,10 +8,12 @@
 import { FrontMatter } from "../../core/markdown/front-matter";
 import {
 	calculateFrontmatterHash,
+	frontmatterTranslatableText,
 	parseFrontmatterMarker,
 	setFrontmatterMarker,
 } from "../../core/markdown/frontmatter-translation";
 import { syncSourceMarker, syncTargetMarker } from "./marker-sync";
+import { isWrittenOverTranslateMark } from "./untranslated-copy";
 
 /**
  * frontmatterマーカーを同期する
@@ -24,7 +26,11 @@ import { syncSourceMarker, syncTargetMarker } from "./marker-sync";
  * （`targetFrontMatter` が undefined）は原文から複製するだけなので、値があっても既訳ではない。
  *
  * 丸写し（対象キーの値が原文と全部同じ）の扱いも本文ユニットと同じで translate に残す。
- * 理由は `needForFirstLink` の説明にある（確認待ちの出口が「確認済みにする」しか無い）。
+ * 理由は `needForFirstLink` の説明にある（まだ訳していないのだから、人に確認を頼む理由が無い）。
+ *
+ * **翻訳待ちの印を付けたあとで人が値を書き込んだら確認待ちへ切り替える**のも本文ユニットと同じ
+ * （`isWrittenOverTranslateMark`。ADR-260923-07 / -09）。frontmatter の「中身」は翻訳対象キーの値で、
+ * ハッシュと同じもの（`frontmatterTranslatableText`）を比べる。
  *
  * @param sourceFrontMatter ソース側のfrontmatter
  * @param targetFrontMatter ターゲット側のfrontmatter
@@ -65,6 +71,23 @@ export function syncFrontmatterMarkers(
 
 	const targetHash = calculateFrontmatterHash(workingTarget, keys, { allowEmpty: true });
 	const existingMarker = parseFrontmatterMarker(workingTarget);
+
+	// 翻訳待ちの印を付けたあとで人が値を書き込んでいたら確認待ちへ（本文ユニットと同じ規則）。
+	// 古い原文の丸写しを写し直す処理は frontmatter には無いので、丸写しの判定はいまの原文との比較だけで足りる
+	if (
+		existingMarker &&
+		targetFrontMatter !== undefined &&
+		isWrittenOverTranslateMark(
+			existingMarker.need,
+			existingMarker.hash,
+			targetHash ?? "",
+			frontmatterTranslatableText(targetFrontMatter, keys),
+			frontmatterTranslatableText(sourceFrontMatter, keys),
+			false,
+		)
+	) {
+		existingMarker.setNeed("review");
+	}
 
 	// 既訳を守る: マーカーが無く、訳文側に自前の値が入っているときだけ
 	const existingText =

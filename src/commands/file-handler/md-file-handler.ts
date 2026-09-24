@@ -138,13 +138,11 @@ export class MdFileHandler implements FileHandler {
 	}
 
 	async requestTranslate(filePath: string, target: NeedTarget): Promise<RequestTranslateResult> {
-		if (target.kind !== "unit") {
-			// frontmatter はマーカーの形も書き換え経路（setFrontmatterMarker）も本文ユニットと別で、
-			// この操作は本文ユニットだけを扱う。frontmatter の訳は数行の見出し語なので、
-			// 採用しないなら手で直して確認済みにするほうが早く、翻訳待ちへ戻す道は用意しない
+		if (target.kind === "file") {
+			// ファイル＝1ユニットは非Markdown の単位で、Markdown には無い
 			return { requested: false, changed: false, hash: "", reason: "not-found" };
 		}
-		return requestTranslateForFile(filePath, target.hash, Configuration.getInstance());
+		return requestTranslateForFile(filePath, target, Configuration.getInstance());
 	}
 
 	async declareIsolate(filePath: string, target: NeedTarget): Promise<DeclareIsolateResult> {

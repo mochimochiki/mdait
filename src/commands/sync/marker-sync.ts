@@ -101,10 +101,9 @@ export function syncSourceMarker(
  * 「本文あり」も中身を見ないと分からないので呼び出し側（`existingText`）が答える。
  *
  * frontmatter も同じ規則で決める。title が両言語で同じ値（製品名など）は正しい訳のことも
- * あるが、review に倒すと**確認待ちの出口が「確認済みにする」しか無い**（frontmatter には
- * 「要翻訳にする」が無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに
- * 残り、訳されないまま受け入れるしかなくなる。translate に倒せば trans が同じ値を
- * 返すか訳すかを決め、どちらでも人の手は要らない。
+ * あるが、review に倒すと原文の複製そのままのファイルで frontmatter だけが確認待ちに残り、
+ * 人の手を1回余計に取る。translate に倒せば trans が同じ値を返すか訳すかを決め、
+ * どちらでも人の手は要らない。
  *
  * @param marker 訳文側マーカー（`hash` と `from` は更新済みであること）
  * @param existingText 訳文側に本文があるか（呼び出し側が中身を見て答える）

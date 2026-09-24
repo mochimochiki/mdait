@@ -44,8 +44,9 @@ function resolveTargetAtLine(document: vscode.TextDocument, line: number): NeedT
  * 常駐サマリが受け持つ。ux.md §3.3）。スキップだけ警告を1行出す。
  *
  * @param range CodeLens が表示されている行の範囲
+ * @param target 宛先。frontmatter の行のように、行からユニットを引けない宛先だけ CodeLens が渡す
  */
-export async function codeLensRequestTranslateCommand(range: vscode.Range): Promise<void> {
+export async function codeLensRequestTranslateCommand(range: vscode.Range, target?: NeedTarget): Promise<void> {
 	try {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor) {
@@ -54,14 +55,14 @@ export async function codeLensRequestTranslateCommand(range: vscode.Range): Prom
 		}
 
 		const document = activeEditor.document;
-		const target = resolveTargetAtLine(document, range.start.line);
-		if (!target) {
+		const resolved = target ?? resolveTargetAtLine(document, range.start.line);
+		if (!resolved) {
 			vscode.window.showWarningMessage(vscode.l10n.t("Could not find a unit at this position."));
 			return;
 		}
 
 		const filePath = document.uri.fsPath;
-		const result = await getFileHandler(filePath).requestTranslate(filePath, target);
+		const result = await getFileHandler(filePath).requestTranslate(filePath, resolved);
 		if (!result.requested) {
 			vscode.window.showWarningMessage(describeRequestTranslateFailure(result.reason));
 		}

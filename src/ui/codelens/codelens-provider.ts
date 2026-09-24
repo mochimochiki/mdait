@@ -10,6 +10,7 @@
  */
 import * as path from "node:path";
 import * as vscode from "vscode";
+import type { NeedTarget } from "../../commands/markers/resolve-need";
 import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
@@ -117,6 +118,47 @@ export function requestTranslateSpec(): CodeLensSpec {
 	};
 }
 
+/** frontmatter の CodeLens に載せるボタン1つ分。コマンドに渡す引数も決める（range と uri は包むときに差し込む） */
+export interface FrontmatterCodeLensSpec extends CodeLensSpec {
+	args(at: { range: unknown; uri: unknown }): unknown[];
+}
+
+/**
+ * frontmatter の開始行に並べる CodeLens を決める（純関数）。
+ *
+ * **引数まで決めるのが要点である。** 開始行（`---`）はどのユニットのマーカーでもないので、
+ * 「要翻訳にする」は押した行から宛先を引けない。宛先 `{ kind: "frontmatter" }` を渡し忘れると
+ * コマンドは本文ユニットを探して not-found を返す — ボタンは出るのに何も起きない。
+ *
+ * - `need:translate` / `revise@…` … ✨翻訳（frontmatter だけを訳す）
+ * - need あり … 完了ボタン（ラベルは need の種類で変わる）
+ * - `need:review`（訳文側）… 完了ボタンの直後に「要翻訳にする」（本文ユニットと同じボタン・同じ表示条件）
+ * - 翻訳済み（from あり・need なし）… 何も出さない（TM 登録・原文ジャンプは frontmatter では使わない）
+ *
+ * @param marker frontmatter のマーカー
+ * @param isSourceFile 原文ファイルかどうか
+ */
+export function buildFrontmatterCodeLensSpecs(marker: MdaitMarker, isSourceFile: boolean): FrontmatterCodeLensSpec[] {
+	const specs: FrontmatterCodeLensSpec[] = [];
+	if (marker.needsTranslation()) {
+		specs.push({
+			title: vscode.l10n.t("✨Translate"),
+			tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
+			command: "mdait.translate.frontmatter",
+			args: ({ uri }) => [uri],
+		});
+	}
+	if (marker.need) {
+		const { title, tooltip } = completionButtonLabel(marker.need);
+		specs.push({ title, tooltip, command: "mdait.codelens.clearFrontmatterNeed", args: ({ range }) => [range] });
+		if (shouldOfferRequestTranslate(marker, isSourceFile)) {
+			const target: NeedTarget = { kind: "frontmatter" };
+			specs.push({ ...requestTranslateSpec(), args: ({ range }) => [range, target] });
+		}
+	}
+	return specs;
+}
+
 /**
  * 本文ユニットのマーカー行に並べるボタンを、出す順に決める（純関数）。
  * 実際の `vscode.CodeLens` への包み込みは `MdaitCodeLensProvider` が行う。
@@ -174,8 +216,7 @@ export function buildUnitCodeLensSpecs(marker: MdaitMarker, isSourceFile: boolea
 		const { title, tooltip } = completionButtonLabel(marker.need);
 		specs.push({ title, tooltip, command: "mdait.codelens.clearNeed" });
 		// review は「採用する（完了）／採用しない（翻訳待ちへ戻す）」の2択なので、
-		// 完了ボタンの隣に採用しない側の答えを置く。frontmatter の review 行には出さない
-		// （書き換え経路が本文ユニットと別で対象外。理由は MdFileHandler.requestTranslate）
+		// 完了ボタンの隣に採用しない側の答えを置く（frontmatter の review 行も同じ）
 		if (shouldOfferRequestTranslate(marker, isSourceFile)) {
 			specs.push(requestTranslateSpec());
 		}
@@ -258,7 +299,12 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 			const marker = parseFrontmatterMarker(frontMatter);
 			if (marker) {
 				// frontmatterの開始行（最初の---の行）にCodeLensを表示
-				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(marker, frontMatter.startLine, document);
+				const frontmatterCodeLenses = this.createFrontmatterCodeLenses(
+					marker,
+					frontMatter.startLine,
+					document,
+					isSourceFile,
+				);
 				codeLenses.push(...frontmatterCodeLenses);
 			}
 		}
@@ -311,47 +357,26 @@ export class MdaitCodeLensProvider implements vscode.CodeLensProvider {
 	 * @param marker パース済みのfrontmatterマーカー
 	 * @param lineIndex 行番号
 	 * @param document ドキュメント
+	 * @param isSourceFile ソースファイルかどうか
 	 * @returns CodeLensの配列
 	 */
 	private createFrontmatterCodeLenses(
 		marker: MdaitMarker,
 		lineIndex: number,
 		document: vscode.TextDocument,
+		isSourceFile: boolean,
 	): vscode.CodeLens[] {
 		const line = document.lineAt(lineIndex);
 		const range = new vscode.Range(lineIndex, 0, lineIndex, line.text.length);
-		const codeLenses: vscode.CodeLens[] = [];
-
-		// frontmatter専用のCodeLens表示ロジック
-		// 翻訳が必要な場合のみAI翻訳ボタンを表示
-		if (marker.needsTranslation()) {
-			codeLenses.push(
+		return buildFrontmatterCodeLensSpecs(marker, isSourceFile).map(
+			(spec) =>
 				new vscode.CodeLens(range, {
-					title: vscode.l10n.t("✨Translate"),
-					tooltip: vscode.l10n.t("Tooltip: Translate this unit using AI"),
-					command: "mdait.translate.frontmatter",
-					arguments: [document.uri],
+					title: spec.title,
+					tooltip: spec.tooltip,
+					command: spec.command,
+					arguments: spec.args({ range, uri: document.uri }),
 				}),
-			);
-		}
-
-		// needマーカーがある場合は完了ボタンを表示
-		if (marker.need) {
-			const { title, tooltip } = completionButtonLabel(marker.need);
-			codeLenses.push(
-				new vscode.CodeLens(range, {
-					title,
-					tooltip,
-					command: "mdait.codelens.clearFrontmatterNeed",
-					arguments: [range],
-				}),
-			);
-		}
-
-		// 翻訳済み（from && !need）の場合は何も表示しない
-		// TM登録、確定、ソースジャンプは不要（理由：TM/Fix非対応、原文は同ファイル内）
-
-		return codeLenses;
+		);
 	}
 
 	/**
