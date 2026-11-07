@@ -16,12 +16,12 @@ import {
 	type TransPair,
 } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
-import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
+import { type BatchFailures, BatchFailureTally, NO_BATCHES } from "../shared/batch-failures";
 import { isCancellationError } from "../shared/cancellation";
-import { describeUnusableBatches } from "../shared/guidance";
+import { describeBatchFailures } from "../shared/guidance";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 import { type TermExpander, type TermExpansionContext, createTermExpander } from "./term-expander";
@@ -90,17 +90,18 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 					!token.isCancellationRequested &&
 					(result.expanded > 0 || result.remaining > 0)
 				) {
-					// 「訳語が付かなかった」と「AI の答えが使えなかった」を同じ文で終わらせない。
+					// 「訳語が付かなかった」と「失敗したバッチがあった」を同じ文で終わらせない。
 					// 件数だけを出していたころは、壊れた答えしか受けていない回も
-					// 「0 件展開しました」と読めていた（実測: 意地悪シナリオ R7-N8）
-					const unusable = describeUnusableBatches(result);
+					// 「0 件展開しました」と読めていた（実測: 意地悪シナリオ R7-N8）。
+					// 1つでも失敗したら警告にする
+					const failures = describeBatchFailures(result);
 					const body = vscode.l10n.t(
 						"Term expansion completed: {0} term(s) expanded, {1} term(s) remaining.",
 						result.expanded,
 						result.remaining,
 					);
-					if (unusable) {
-						vscode.window.showWarningMessage(`${body} ${unusable}`);
+					if (failures) {
+						vscode.window.showWarningMessage(`${body} ${failures}`);
 					} else {
 						vscode.window.showInformationMessage(body);
 					}
@@ -127,21 +128,12 @@ export async function expandTermCommand(item?: StatusItem): Promise<void> {
 }
 
 /** 用語展開処理の結果 */
-export interface TermExpandResult {
+export interface TermExpandResult extends BatchFailures {
 	/** 今回展開できた用語数 */
 	expanded: number;
 	/** 展開対象だが今回解決できなかった残数 */
 	remaining: number;
-	/** 試したバッチの数 */
-	totalBatches: number;
-	/** 答えが使えなくて捨てたバッチの数 */
-	unusableBatches: number;
-	/** 最初に使えなかった理由。利用者向けの文はここから組む */
-	unusableReason?: UnusableResponseReason;
 }
-
-/** 使えなかったバッチが無かったことを表す（読み飛ばせる形で書けるようにする） */
-const NO_UNUSABLE_BATCHES = { totalBatches: 0, unusableBatches: 0 } as const;
 
 /**
  * 用語展開処理（中核プロセス）
@@ -193,7 +185,7 @@ export async function expandTerm_CoreProc(
 				targetLang,
 			),
 		);
-		return { expanded: 0, remaining: 0, ...NO_UNUSABLE_BATCHES };
+		return { expanded: 0, remaining: 0, ...NO_BATCHES };
 	}
 
 	// 用語を含むファイルの事前フィルタリング
@@ -220,7 +212,7 @@ export async function expandTerm_CoreProc(
 		);
 	}
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length, ...NO_UNUSABLE_BATCHES };
+		return { expanded: 0, remaining: termsToExpand.length, ...NO_BATCHES };
 	}
 
 	// 用語展開コンテキストの収集
@@ -232,7 +224,7 @@ export async function expandTerm_CoreProc(
 		cancellationToken,
 	);
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length, ...NO_UNUSABLE_BATCHES };
+		return { expanded: 0, remaining: termsToExpand.length, ...NO_BATCHES };
 	}
 
 	// グローバルバッチ分割と一括抽出。
@@ -244,15 +236,9 @@ export async function expandTerm_CoreProc(
 		progress,
 		cancellationToken,
 	);
-	const batches = {
-		totalBatches: extraction.totalBatches,
-		unusableBatches: extraction.unusableBatches,
-		unusableReason: extraction.unusableReason,
-	};
+	const { results: allResults, ...batches } = extraction;
 
 	// 用語集を更新
-	const allResults = extraction.results;
-
 	if (allResults.size === 0) {
 		// 通知は呼び出し側の件数付き完了通知（0 expanded / N remaining）に一本化する
 		return { expanded: 0, remaining: termsToExpand.length, ...batches };
@@ -418,12 +404,7 @@ export async function extractFromBatches(
 	progress?: vscode.Progress<{ message?: string; increment?: number }>,
 	cancellationToken?: vscode.CancellationToken,
 	injectedExpander?: TermExpander,
-): Promise<{
-	results: Map<string, string>;
-	totalBatches: number;
-	unusableBatches: number;
-	unusableReason?: UnusableResponseReason;
-}> {
+): Promise<BatchFailures & { results: Map<string, string> }> {
 	progress?.report({
 		message: vscode.l10n.t("Phase 2: Extracting terms from translations..."),
 		increment: 0,
@@ -437,17 +418,13 @@ export async function extractFromBatches(
 			message: vscode.l10n.t("Phase 2 completed: {0} terms resolved", 0),
 			increment: 50,
 		});
-		return { results, ...NO_UNUSABLE_BATCHES };
+		return { results, ...NO_BATCHES };
 	}
 
 	const batches = splitIntoBatches(contexts);
 	const termExpander = injectedExpander ?? (await createTermExpander());
 
-	let attemptedBatches = 0;
-	let failedBatches = 0;
-	let unusableBatches = 0;
-	let unusableReason: UnusableResponseReason | undefined;
-	let firstBatchError: unknown;
+	const tally = new BatchFailureTally();
 
 	for (const batch of batches) {
 		if (cancellationToken?.isCancellationRequested) {
@@ -468,7 +445,7 @@ export async function extractFromBatches(
 			continue;
 		}
 
-		attemptedBatches++;
+		tally.attempt();
 		try {
 			const extracted = await termExpander.extractFromTranslationsBatch(
 				optimizedBatch,
@@ -486,21 +463,16 @@ export async function extractFromBatches(
 			if (cancellationToken?.isCancellationRequested || isCancellationError(error)) {
 				break;
 			}
-			// 失敗したバッチは飛ばして続行する。最初の失敗で全体を中断すると、
-			// 既に解決済みのバッチの結果まで破棄されてしまう
-			failedBatches++;
-			// 「AI は答えたが使えなかった」は、届かなかった失敗と分けて数える。
-			// 一部だけ使えなかったときに、埋まった件数だけを出して黙る形を無くす
-			if (isUnusableAIResponse(error)) {
-				unusableBatches++;
-				unusableReason ??= error.reason;
-			}
-			if (firstBatchError === undefined) {
-				firstBatchError = error;
-			}
 			Logger.getInstance().warn("term.expand", "Batch term extraction failed", {
 				...formatError(error),
 			});
+			// 失敗したバッチは飛ばして続行する。最初の失敗で全体を中断すると、
+			// 既に解決済みのバッチの結果まで破棄されてしまう。失敗は理由を問わず数え、
+			// 一部だけ失敗したときに、埋まった件数だけを出して黙る形を無くす。
+			// 歯止めが AI 呼び出しを止めたら、残りのバッチは投げない
+			if (!tally.recordFailure(error)) {
+				break;
+			}
 			continue;
 		}
 
@@ -511,9 +483,7 @@ export async function extractFromBatches(
 
 	// 全バッチが失敗した場合は「0件展開の成功」と誤認させず、エラーとして伝播させる
 	// （AI未接続・未認可などの構成問題を呼び出し側のエラー通知で表面化する）
-	if (attemptedBatches > 0 && failedBatches === attemptedBatches) {
-		throw firstBatchError instanceof Error ? firstBatchError : new Error(String(firstBatchError));
-	}
+	tally.throwIfAllFailed();
 
 	progress?.report({
 		message: vscode.l10n.t(
@@ -523,7 +493,7 @@ export async function extractFromBatches(
 		increment: 50,
 	});
 
-	return { results, totalBatches: attemptedBatches, unusableBatches, unusableReason };
+	return { results, ...tally.summary() };
 }
 
 /**

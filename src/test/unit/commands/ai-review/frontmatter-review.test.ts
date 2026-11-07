@@ -5,7 +5,7 @@
  * 背景: adopt は本文にも frontmatter にも `need:review` を付ける（ADR-260902-02）。
  * ところが AI 翻訳レビューは本文ユニットだけを列挙していたため、AI が本文を全部承認しても
  * **frontmatter の確認待ちだけがツリーに残った**（実測。実 LLM で取り込みを一気通しした
- * ときの `.mdait/reports/adopt.md` は本文8件を判定し、frontmatter は1件も見ていない）。
+ * ときの `.mdait/local/reports/adopt.md` は本文8件を判定し、frontmatter は1件も見ていない）。
  * 「AI が整える」が最後の1件で途切れる。
  *
  * ここは実経路（sync の取り込み → executeAiReviewForFile）を通し、embedded と external の

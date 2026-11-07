@@ -125,7 +125,23 @@ suite("席のキー", () => {
 			// 3番目の章が先頭へ移った
 			const seats = assignSeats(["50002048", "50000000", "50001024"]);
 			assertWellFormed(seats);
-			assert.strictEqual(seats[0], "50002048", "先頭に来た章は席を持ったまま");
+			assert.deepStrictEqual(seats.slice(1), ["50000000", "50001024"], "動かしていない章の席が動いた");
+			assert.notStrictEqual(seats[0], "50002048", "移した章だけが席を配り直される");
+		});
+
+		test("最後の章を先頭へ移しても、動くのはその章の行だけ", () => {
+			const before = ["50000000", "50001024", "50002048", "50003072", "50004096", "50005120"];
+			const moved = [before[5], ...before.slice(0, 5)];
+			const seats = assignSeats(moved);
+			assertWellFormed(seats);
+			const changed = seats.filter((seat, i) => seat !== moved[i]).length;
+			assert.strictEqual(changed, 1, `書き換わった行が ${changed} 行ある`);
+			assert.deepStrictEqual(seats.slice(1), before.slice(0, 5));
+		});
+
+		test("同じ入力には必ず同じ席を返す（決定的）", () => {
+			const input = ["50004096", "50000000", undefined, "50002048", "50001024", "50003072"];
+			assert.deepStrictEqual(assignSeats(input), assignSeats([...input]));
 		});
 
 		test("席のキーとして読めない値は身元に使わない", () => {

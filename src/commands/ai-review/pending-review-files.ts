@@ -3,10 +3,9 @@
  * @description
  *   「レビュー待ち（need:review）を AI で一括消化する」入口が対象にするファイルの選別。
  *   ステータスツリーのファイル項目から、AI レビューにかける訳文ファイルの集合と
- *   これから見に行くユニットの数を決める純関数。VS Code API 非依存。
+ *   これから見に行くユニットの数を決める（渡された項目を読むだけで、何も書き換えない）。
  *
- *   ツリーの `getNeedsAttentionUnits` を使わないのは、あれが**本文ユニットしか歩かない**
- *   ためである。need:review は本文ユニットのほかに次の2か所にも載る:
+ *   need:review は本文ユニットのほかに次の2か所にも載る:
  *   - frontmatter（タイトルなど）: `FileStatusItem.frontmatter.needFlag`。
  *     取り込み（adopt）は frontmatter にも need:review を付け、AI レビューも
  *     `collectFrontmatterReviewPair` で対にする（ADR-260902-02）
@@ -14,20 +13,18 @@
  *     need は `FileStatusItem.needFlag` に載る（`plain-file-handler.ts`）
  *   本文だけを拾うと、AI が本文を片づけたあとに frontmatter と .txt/.csv/.json の
  *   確認待ちだけが残り、「一括で片づける」が最後の数件で途切れる。
+ *
+ *   1ファイルの中をどう歩くか（どこに載る need を見るか・孤立訳文と原文側を外すこと）は、
+ *   ツリーの要対応と同じ `attentionItemsInFile` を通す。ここで決めるのは「review だけを
+ *   拾う」ことと、ファイル単位にまとめて並べることだけである。
  * @module commands/ai-review/pending-review-files
  */
 
+import { type AttentionFileLike, attentionItemsInFile } from "../../core/status/status-item-tree";
+
 /** 選別に要るファイル項目の形だけ（`FileStatusItem` の部分型。テストで組み立てやすくする） */
-export interface PendingReviewFileLike {
+export interface PendingReviewFileLike extends AttentionFileLike {
 	filePath: string;
-	/** 原文側か訳文側か（`Status.Source` の文字列値は "source"） */
-	status?: string;
-	/** 原文と結びついていない訳文か（収集のたびにディスクから計算した結果。ADR-260806-01） */
-	isOrphanTarget?: boolean;
-	/** 非Markdown のファイルレベル need（Markdown では常に undefined） */
-	needFlag?: string;
-	/** frontmatter 項目の need */
-	frontmatter?: { needFlag?: string };
 	/** 本文ユニットの need */
 	children?: { needFlag?: string }[];
 }
@@ -40,10 +37,6 @@ export interface PendingReviewCollection {
 	units: number;
 }
 
-function isReview(need: string | undefined): boolean {
-	return need === "review";
-}
-
 /**
  * need:review を1つでも含むファイルを重複なく集め、レビュー待ちユニットを数える。
  *
@@ -52,28 +45,18 @@ function isReview(need: string | undefined): boolean {
  *
  * 並びはファイルパス昇順に固定する。ツリーの走査順（スキャン順）に任せると、
  * 同じ状態でも起動ごとに進捗の順が変わって見え、レポートの並びも揺れる。
- * ロケール依存の比較は使わない（`compareNeedsAttentionUnits` と同じ理由）。
+ * ロケール依存の比較は使わない（`compareNeedsAttentionItems` と同じ理由）。
  */
 export function collectPendingReviewFiles(files: readonly PendingReviewFileLike[]): PendingReviewCollection {
 	const paths = new Set<string>();
 	let units = 0;
 	for (const file of files) {
-		// 原文の無い訳文（孤立）と原文側のファイルは、review が残っていても対にできない。
-		// 走らせると「原文が見つからない」のエラーとして報告され、理由の分からない
-		// `errors: 1` になる（`review-targets.ts` が同じ理由で外している）。
-		// 通知の件数（`countPendingReviewUnits`）も同じ条件で数える
-		if (file.isOrphanTarget === true || file.status === "source") {
-			continue;
-		}
+		// 原文の無い訳文（孤立）と原文側のファイルは、review が残っていても対にできないので
+		// `attentionItemsInFile` が歩かない（走らせると「原文が見つからない」のエラーになる。
+		// `review-targets.ts` が同じ理由で外している）
 		let count = 0;
-		if (isReview(file.needFlag)) {
-			count++;
-		}
-		if (isReview(file.frontmatter?.needFlag)) {
-			count++;
-		}
-		for (const unit of file.children ?? []) {
-			if (isReview(unit.needFlag)) {
+		for (const item of attentionItemsInFile(file, file.children ?? [])) {
+			if (item.needFlag === "review") {
 				count++;
 			}
 		}

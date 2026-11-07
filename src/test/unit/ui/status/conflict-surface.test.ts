@@ -20,15 +20,27 @@ import {
 	isConflictRowId,
 } from "../../../../ui/status/conflict-branch";
 import { buildConflictTooltip, buildStatusBarText } from "../../../../ui/status/status-bar-summary";
-import { undecidedCount } from "../../../../ui/status/conflict-source";
+import { type PreparedResolution, undecidedCount } from "../../../../commands/conflict/resolve-core";
 
 const empty: MdaitConflicts = { files: [], heldRows: [], total: 0 };
 
 /** 計画を作ったときのファイルの見た目（決めかけの寿命はこれで決まる） */
 const STAMP = "/ws/.mdait/translations.tmx\u00001:2";
 
+/** 種別ごとの実ファイル名（ツリーに出るのはこの名前そのもの） */
+const FILE_NAME = {
+	"unit-state": "unit-state",
+	"unit-registry": "unit-registry",
+	tm: "translations.tmx",
+	terms: "terms.csv",
+} as const;
+
 const withFiles = (...kinds: Array<"unit-state" | "unit-registry" | "tm" | "terms">): MdaitConflicts => ({
-	files: kinds.map((kind) => ({ kind, filePath: `/ws/.mdait/${kind}`, stamp: `/ws/.mdait/${kind}\u00001:2` })),
+	files: kinds.map((kind) => ({
+		kind,
+		filePath: `/ws/.mdait/${FILE_NAME[kind]}`,
+		stamp: `/ws/.mdait/${FILE_NAME[kind]}\u00001:2`,
+	})),
 	heldRows: [],
 	total: kinds.length,
 });
@@ -74,6 +86,19 @@ suite("競合の解決（StatusTree の枝）", () => {
 		assert.match(item?.tooltip ?? "", /waiting for your decision/);
 	});
 
+	test("書き込み待ちのファイルがあれば、解説がそれを言う", () => {
+		// 決め終えた分は数字に出ない（決める件が 0 になる）。押し忘れに気づけるのは解説だけ
+		const item = buildConflictsItem(withFiles("terms"), 0, 1);
+
+		assert.match(item?.tooltip ?? "", /waiting to be written/);
+	});
+
+	test("書き込み待ちが無ければ、その話はしない", () => {
+		const item = buildConflictsItem(withFiles("terms"), 2, 0);
+
+		assert.doesNotMatch(item?.tooltip ?? "", /waiting to be written/);
+	});
+
 	test("件数を出していないときは、数字の説明もしない", () => {
 		// 決める件が 0（丸ごと書き直す対象しかない）と、まだ数えていない（undefined）。
 		// **どちらもラベルに数字が出ない**ので、数字の話をすると出ていないものの説明になる
@@ -85,13 +110,14 @@ suite("競合の解決（StatusTree の枝）", () => {
 		}
 	});
 
-	test("ファイルは1つ1行で、種別が読める", () => {
+	test("ファイルは1つ1行で、そのファイル名が読める", () => {
+		// 種別ごとの呼び名を作らない。人が `.mdait` を開いたときに見る名前と同じにする
 		const rows = buildConflictRows(withFiles("tm", "terms"), "/ws");
 
 		assert.equal(rows.length, 2);
 		assert.deepEqual(
 			rows.map((r) => r.label),
-			["Translation memory", "Glossary"],
+			["translations.tmx", "terms.csv"],
 		);
 		assert.ok(rows.every((r) => r.type === StatusItemType.Directory));
 	});
@@ -126,11 +152,15 @@ suite("競合の解決（StatusTree の枝）", () => {
 	});
 
 	suite("人が決める件（P03）", () => {
-		const plan = (pending: number) => ({
+		// 預かった判断はモジュールに1つの表に残るので、テストごとに捨てる
+		teardown(() => forgetAllDecisions());
+
+		const plan = (pending: number, mineSide: "ours" | "theirs" = "ours") => ({
 			kind: "tm" as const,
 			filePath: "/ws/.mdait/translations.tmx",
 			autoResolvedCount: 3,
 			deletedCount: 0,
+			mineSide,
 			pending: Array.from({ length: pending }, (_, i) => ({
 				key: `k${i}`,
 				label: `語${i}`,
@@ -140,16 +170,22 @@ suite("競合の解決（StatusTree の枝）", () => {
 			})),
 		});
 
+		/** 計画を作ったときの見た目だけを持つ、最小の「準備済みの解決」 */
+		const preparedWith = (filePath: string, stamp?: string) =>
+			({
+				stamps: new Map(stamp === undefined ? [] : [[filePath, stamp]]),
+			}) as unknown as PreparedResolution;
+
 		test("決めた分だけ、残りの件数が減る", () => {
 			// 根の数字は「判断を待っている件数」と名乗っている。決めても減らないと嘘になる
 			const target = plan(3);
-			const stamp = "s";
+			const prepared = preparedWith(target.filePath, "s");
 
-			assert.equal(undecidedCount(target, stamp), 3);
-			rememberDecision(target.filePath, stamp, "k0", "ours");
-			rememberDecision(target.filePath, stamp, "k1", "theirs");
+			assert.equal(undecidedCount(target, prepared), 3);
+			rememberDecision(target.filePath, "s", "k0", "ours");
+			rememberDecision(target.filePath, "s", "k1", "theirs");
 
-			assert.equal(undecidedCount(target, stamp), 1);
+			assert.equal(undecidedCount(target, prepared), 1);
 		});
 
 		test("計画の見た目が分からなければ、決めた分を差し引かない", () => {
@@ -157,19 +193,49 @@ suite("競合の解決（StatusTree の枝）", () => {
 			const target = plan(3);
 			rememberDecision(target.filePath, "s", "k0", "ours");
 
-			assert.equal(undecidedCount(target, undefined), 3);
+			assert.equal(undecidedCount(target, preparedWith(target.filePath)), 3);
 		});
 
 		test("決める件数をファイルの行のラベルに添える", () => {
-			const rows = buildConflictRows(withFiles("tm"), "/ws", new Map([["/ws/.mdait/tm", 2]]));
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 2 }]]),
+			);
 
 			assert.match(rows[0].label, /2/, "開く価値のある行だと分からない");
+			assert.equal(rows[0].contextValue, "mdaitConflictFile", "まだ書けないのに書ける形になっている");
+		});
+
+		test("全件を決め終えた行は、書ける形になる（押すまで書かない）", () => {
+			// 最後の1件を決めた瞬間に書きに行かない。**人が `解決` を押して初めて書く**
+			const rows = buildConflictRows(
+				withFiles("tm"),
+				"/ws",
+				new Map([["/ws/.mdait/translations.tmx", { pending: 2, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFileDecided");
+			assert.ok(rows[0].description, "決め終えたことが副題から読めない");
+			assert.doesNotMatch(rows[0].label, /\d/, "決め終えたのに未決の件数が残っている");
+		});
+
+		test("はじめから決める件が無い行は、書ける形にしない", () => {
+			// 丸ごと書き直す対象（unit-state・台帳）は、根の `競合を解決` で片付く
+			const rows = buildConflictRows(
+				withFiles("unit-state"),
+				"/ws",
+				new Map([["/ws/.mdait/unit-state", { pending: 0, undecided: 0 }]]),
+			);
+
+			assert.equal(rows[0].contextValue, "mdaitConflictFile");
+			assert.equal(rows[0].description, undefined);
 		});
 
 		test("決める件がゼロなら、件数を添えない", () => {
 			const rows = buildConflictRows(withFiles("tm"), "/ws");
 
-			assert.equal(rows[0].label, "Translation memory");
+			assert.equal(rows[0].label, "translations.tmx");
 		});
 
 		test("1件1行で並び、まだ決めていない件は未決と出る", () => {
@@ -207,6 +273,37 @@ suite("競合の解決（StatusTree の枝）", () => {
 			assert.match(tip, /私の訳0/);
 			assert.match(tip, /相手の訳0/);
 			assert.match(tip, /もとの訳0/);
+		});
+
+		test("rebase の途中では、theirs 側を「あなた」として見せる", () => {
+			// rebase では ours が取り込み先（相手の変更）で、theirs が自分のコミット。ours を
+			// 「あなた」と出すと、自分の編集を残すつもりで相手の側を選ばせてしまう
+			const rebasing = plan(1, "theirs");
+			const tip = buildConflictChoiceRows(rebasing, STAMP)[0].tooltip ?? "";
+
+			assert.match(tip, /You\t相手の訳0/, "自分のコミット（theirs）が「あなた」に出ていない");
+			assert.match(tip, /They\t私の訳0/);
+		});
+
+		test("rebase の途中で theirs を採った件は「あなた」を採ったと読める", () => {
+			const rebasing = plan(1, "theirs");
+			rememberDecision(rebasing.filePath, STAMP, "k0", "theirs");
+
+			const row = buildConflictChoiceRows(rebasing, STAMP)[0];
+
+			assert.equal(row.description, "yours");
+			assert.match(row.tooltip ?? "", /Chosen: yours\./);
+		});
+
+		test("rebase の途中で自分の側が消していたら「あなたを採ると消える」と書く", () => {
+			const rebasing = {
+				...plan(1, "theirs"),
+				pending: [{ key: "k0", label: "語0", oursText: "相手の訳0", theirsText: "", theirsDeleted: true }],
+			};
+
+			const tip = buildConflictChoiceRows(rebasing, STAMP)[0].tooltip ?? "";
+
+			assert.match(tip, /Taking yours removes this entry\./);
 		});
 
 		test("決めた件は、どちらを採ったかが読める", () => {

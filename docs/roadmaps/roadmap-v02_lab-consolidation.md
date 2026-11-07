@@ -162,7 +162,7 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
   のままだった（`guidance.ts` がやり直しの返り値を捨て、`trans-command.ts` が古い結果を返していた）。
   返り値を読む側（LM ツール・ツリー・lab の IPC）が実態と食い違う。`reportTransOutcomeWithRetry` に
   括り出して直し、単体テストで固定した。
-- **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/logs` は `.gitignore`
+- **ログの追記でディレクトリを作っていなかった（P03 で確かめて修正済み）。** `.mdait/local/logs` は `.gitignore`
   済みで掃除に巻き込まれるが、`AIStatsLogger` はパスを覚えたまま `appendFile` を呼ぶため、消えると毎回
   ENOENT になり**記録だけが静かに途切れていた**（翻訳は続く）。ENOENT のときだけ作り直して1回書き直す。
 - **耐性検査で、翻訳系だけが壊れることが分かった（ADR-260824-01 として直した）。** 同じ意地悪（途中で切れた応答・空の応答・
@@ -210,8 +210,12 @@ probe を `scenarios/probe.mjs` として移植し、run 間の差分比較を�
   渡すと、実 Extension Host では対象0件のまま `done` で返っていた（`vscode.RelativePattern` も
   `Uri.file` も相対パスを解決できない）。headless はモックが解決するので通り、**headless だけでは
   永久に見つからない**種類のものだった。IPC の入口で絶対パスへ直し、単体テストで固定した。
-- [TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。
-  ツリーの provider が構築されないなら省略で構わないが、取れるなら sync のギャップ検出が headless でも効く。
+- ~~[TODO] 実行時見直し：headless ホストで `fireTimeline` / `stateDiff` / `syncAnalysis` をどこまで取れるか。~~
+  → **3つとも取れる**（2026-09-23）。状態の差分はステータスツリー（`StatusManager`）から、変更の通知は
+  ツリー自身（`StatusItemTree.notifyChanged`、`source: "tree"`）から記録されるので、画面が無くてよい。
+  取れないのは画面側の再描画（`source: "provider"`）だけで、これはツリーの通知を受けて必ず走るので
+  ずれの判定には要らない。headless も実ホストと同じ部品で返すようにした（実測: 1ファイルに章を足した
+  sync で 通知37件・差分2件・ずれ0件）
 
 ---
 

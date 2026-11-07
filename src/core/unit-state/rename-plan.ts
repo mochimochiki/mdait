@@ -58,12 +58,21 @@ export interface RenameFollowProbe {
 	/** そのパスに実体があるか（ファイル・ディレクトリを問わない） */
 	exists(path: string): boolean;
 	/**
+	 * そのパスに、**大文字小文字まで同じ綴りで**実体があるか。
+	 *
+	 * 大文字小文字だけの改名（`README.md` → `Readme.md`）を見分けるために要る。
+	 * 大文字小文字を区別しないファイルシステム（Windows・macOS の既定）では `exists` が
+	 * 新旧どちらの綴りにも「在る」と答えるので、動いたかどうかも、行き先が塞がっているかも
+	 * 言えない。親ディレクトリの一覧に、その綴りの名前が並んでいるかで答えること。
+	 */
+	existsExactly(path: string): boolean;
+	/**
 	 * そのパス（またはその配下）に `unit-state` の行が既にあるか。
 	 *
 	 * 「mdait が以前から知っている場所か」を問うために要る。移動が済んだあとの世界では
 	 * 「旧パスに無い・新パスに在る」だけでは**動いてきたのか、前から在ったのか**を
 	 * 区別できない（{@link planEntryMoves} を見よ）。ディレクトリの移動も扱うので
-     * 配下まで含めて答えること。
+	 * 配下まで含めて答えること。
 	 */
 	hasEntriesAt(path: string): boolean;
 	/** 同じ場所を指すパスを同じ文字列にする（重複の排除に使う） */
@@ -87,6 +96,17 @@ export interface RenameFollowPlan {
  * いかない**ので、上限で必ず抜ける。
  */
 const MAX_FOLLOW_STEPS = 10_000;
+
+/**
+ * 大文字小文字だけが違う改名か（`README.md` → `Readme.md`）。
+ *
+ * 大文字小文字を区別しないファイルシステムでは、新旧の綴りが**同じ1つのファイル**を指す。
+ * 「行き先が塞がっている」「旧パスに残っている」という判定が、そのファイル自身を
+ * 見てしまうので、この形だけは綴りで判定する（`existsExactly`）。
+ */
+export function isCaseOnlyRename(rename: PathRename): boolean {
+	return rename.oldPath !== rename.newPath && rename.oldPath.toLowerCase() === rename.newPath.toLowerCase();
+}
 
 /** 導かれた移動を採るかどうかの判定 */
 type Verdict = "take" | "skip" | "blocked";
@@ -122,7 +142,9 @@ function walkFollow(
 		for (const candidate of probe.deriveTargetRenames(rename)) {
 			const from = probe.sameKey(candidate.oldPath);
 			const to = probe.sameKey(candidate.newPath);
-			if (from === to || claimedSources.has(from)) {
+			// 同じ場所を指すなら動かす必要が無い。ただし大文字小文字だけの改名は、
+			// 大文字小文字を区別しない環境では同じ鍵になるが、綴りは動かさなければならない
+			if ((from === to && !isCaseOnlyRename(candidate)) || claimedSources.has(from)) {
 				continue; // 動かす必要が無い、または既に扱っている
 			}
 			const verdict = decide(candidate, claimedDestinations);
@@ -149,13 +171,16 @@ function walkFollow(
  * @param renames ユーザーが行おうとしている移動
  * @param probe ペアの導出と実在確認
  */
-export function planRenameFollow(
-	renames: readonly PathRename[],
-	probe: RenameFollowProbe,
-): RenameFollowPlan {
+export function planRenameFollow(renames: readonly PathRename[], probe: RenameFollowProbe): RenameFollowPlan {
 	const { taken, blocked } = walkFollow(renames, probe, (candidate, claimedDestinations) => {
 		if (!probe.exists(candidate.oldPath)) {
 			return "skip"; // 訳文がまだ無い。sync が原文から作る
+		}
+		if (isCaseOnlyRename(candidate)) {
+			// 大文字小文字を区別しない環境では、新しい綴りを問うても「在る」と返る —
+			// それは塞いでいる別のファイルではなく、動かそうとしている訳文そのものである。
+			// 新しい綴りの名前が別に並んでいるときだけ塞がっている（区別する環境で2つある）
+			return probe.existsExactly(candidate.newPath) ? "blocked" : "take";
 		}
 		// 行き先が塞がっているときは動かさない。上書きすると別の訳文が消え、
 		// ごみ箱も経由しない（＝取り返しがつかない）。連れて行かなかった訳文は
@@ -184,6 +209,14 @@ export function planRenameFollow(
  */
 export function planEntryMoves(renames: readonly PathRename[], probe: RenameFollowProbe): PathRename[] {
 	const { taken } = walkFollow(renames, probe, (candidate) => {
+		if (isCaseOnlyRename(candidate)) {
+			// 大文字小文字を区別しない環境では新旧どちらの綴りも「在る」と答えるので、
+			// 動いたかどうかは綴りで見る。新しい綴りだけが並んでいれば動いている
+			if (!probe.existsExactly(candidate.newPath) || probe.existsExactly(candidate.oldPath)) {
+				return "skip";
+			}
+			return probe.hasEntriesAt(candidate.newPath) ? "skip" : "take";
+		}
 		// 旧パスに残っているなら、その訳文は動いていない（行き先が塞がっていた等）
 		if (probe.exists(candidate.oldPath)) {
 			return "skip";

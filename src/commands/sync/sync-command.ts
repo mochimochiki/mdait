@@ -27,7 +27,7 @@ import {
 	planContentRelink,
 } from "../../core/unit-state/content-relink";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
-import { UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
+import { UNIT_REGISTRY_GC_THRESHOLD, UnitRegistryManager } from "../../core/unit-registry/unit-registry-manager";
 import {
 	UnitStateStore,
 	isCleanParse as isUnitStateCleanParse,
@@ -61,6 +61,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
+import { isStaleUntranslatedCopy, isWrittenOverTranslateMark } from "./untranslated-copy";
 import { hasConflictMarkers, isSvnConflictArtifact } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
@@ -182,13 +183,13 @@ export function resetOrphanMemory(): void {
 }
 
 /**
- * 合流の途中の原稿を飛ばしたことを伝える。
+ * 合流の途中の原稿（原文か訳文に競合マーカーが残っているもの。`isMidMerge`）を飛ばしたことを伝える。
  *
  * 飛ばさずに進むと、`<<<<<<< HEAD` の行を本文として hash を取り、全ユニットに
  * `need:revise` を付けたうえで、**その姿のまま訳文へ写す**。訳文にも競合マーカーが
  * 生えるので、原稿の競合を解く前に訳文の競合まで増える。
  */
-function conflictInSourceNotice(count: number): SyncNotice | undefined {
+function conflictedFilesNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
 	}
@@ -379,31 +380,6 @@ function rollbackWithheldNotice(count: number): SyncNotice | undefined {
  * 旧原文の訳として妥当かを聞いても仕方がない）が、黙って減ると「確認したつもり」の
  * ユニットが生まれる。件数だけは必ず言う。
  */
-/**
- * 翻訳待ちの章が mdait の外で訳されていたので、確認待ち（または改訂待ち）へ付け替えたことを
- * 伝える（ADR-261107-01）。
- *
- * 付け替えは人の訳を AI の上書きから守るためだが、**AI に続きを訳させるつもりで少し手を
- * 入れた人**には、翻訳の列から黙って消えたように見える。件数と戻し方（「要翻訳にする」）を言う。
- */
-function handTranslatedNotice(count: number): SyncNotice | undefined {
-	if (count <= 0) {
-		return undefined;
-	}
-	return {
-		kind: "hand-translated",
-		detail: vscode.l10n.t(
-			"{0} unit(s) waiting for translation had already been edited by hand, so they now wait for your check instead and AI translation will not overwrite them. To let AI translate one anyway, use \"Mark as Needs Translation\" on it.",
-			count,
-		),
-		summary: vscode.l10n.t("{0} hand-translated unit(s) moved to your check", count),
-		action: {
-			label: vscode.l10n.t("Show units"),
-			run: () => vscode.commands.executeCommand("mdait.status.focus"),
-		},
-	};
-}
-
 function reviewSupersededNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
@@ -542,8 +518,6 @@ export interface SyncResult {
 	totalAdopted: number;
 	/** 確認待ちのまま原文が変わり、改訂待ちへ移ったユニット数 */
 	totalReviewsSuperseded: number;
-	/** 翻訳待ちのまま外で訳されていて、確認待ち・改訂待ちへ付け替えたユニット数 */
-	totalHandTranslated?: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	totalKept: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
@@ -696,7 +670,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
 		let totalReviewsSuperseded = 0;
-		let totalHandTranslated = 0;
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
 		let totalOrphanDeletionWithheld = 0;
@@ -719,7 +692,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		// - configuredDirs: config の全 pair のディレクトリ。ここから外れた行は消してよい
 		// - scannedDirs:    今回実際に走査できたディレクトリ。ここに無い行は「確かめていない」
 		// - seenPaths:      走査して実在を確認したファイル
-		const configuredDirs = collectConfiguredDirs(config);
+		// `UnitStateEntry.path` と同じ基準（ワークスペースルート相対・`/` 区切り）にそろえる
+		const configuredDirs = collectAllPairDirsAbs(config).map(toWorkspaceRelativePath);
 		const scannedDirs = new Set<string>();
 		const seenPaths = new Set<string>();
 		// 孤立の測り直しはステータスツリーを引くので、こちらは絶対パスで持つ
@@ -858,7 +832,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
 						totalReviewsSuperseded += syncResult.reviewsSuperseded ?? 0;
-						totalHandTranslated += syncResult.handTranslated ?? 0;
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
@@ -958,7 +931,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalReviewsSuperseded,
-			totalHandTranslated,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -1090,10 +1062,9 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
 				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
 				reviewSupersededNotice(totalReviewsSuperseded),
-				handTranslatedNotice(totalHandTranslated),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
-				conflictInSourceNotice(totalConflicted),
+				conflictedFilesNotice(totalConflicted),
 				newOrphansNotice(freshOrphans),
 				config.getOrphanTargetPolicy() === "delete"
 					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)
@@ -1114,7 +1085,6 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalReviewsSuperseded,
-			totalHandTranslated,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -1142,17 +1112,12 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 }
 
 /**
- * config の全 pair の原文・訳文ディレクトリを、`UnitStateEntry.path` と同じ基準
- * （ワークスペースルート相対・`/` 区切り）で返す。
+ * config の**全** pair の原文・訳文ディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
  *
  * **選択中の pair ではなく config 全体を見る。** 選択は一時的なもので、選択だけを軸にすると
  * 「未選択の言語」と「設定から外された言語」を区別できず、掃除が永久に効かなくなる。
- */
-/**
- * config の**全** pair のディレクトリを絶対パスで返す（`SelectionState` で絞らない）。
- *
- * 台帳の掃除の走査だけがこれを使う。掃除は「消してよい」と言い切る操作なので、
- * その日の作業範囲ではなくワークスペース全体を見る必要がある。
+ * 台帳の掃除も同じで、「消してよい」と言い切るにはその日の作業範囲ではなく
+ * ワークスペース全体を見る必要がある。
  */
 function collectAllPairDirsAbs(config: Configuration): string[] {
 	const baseDir = config.getConfigBaseDir();
@@ -1160,16 +1125,6 @@ function collectAllPairDirsAbs(config: Configuration): string[] {
 	for (const pair of config.transPairs) {
 		dirs.add(path.resolve(baseDir, pair.sourceDir));
 		dirs.add(path.resolve(baseDir, pair.targetDir));
-	}
-	return [...dirs];
-}
-
-function collectConfiguredDirs(config: Configuration): string[] {
-	const baseDir = config.getConfigBaseDir();
-	const dirs = new Set<string>();
-	for (const pair of config.transPairs) {
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.sourceDir)));
-		dirs.add(toWorkspaceRelativePath(path.resolve(baseDir, pair.targetDir)));
 	}
 	return [...dirs];
 }
@@ -1674,7 +1629,7 @@ export async function sync_CoreProc(
 	// 原文が「一時的に空」になることは普通に起きる。そのまま進めると訳文の全ユニットが
 	// 孤立扱いになり、人が手を入れた訳文が本文ごと消える（＝取り返しがつかない）。
 	// 状態は変えずに件数だけ返し、呼び出し側が気づける通知を出す。
-	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneTail）と同じ考え方。
+	// unit-state の余った行を刈らない条件（marker-provider の shouldPruneLeftovers）と同じ考え方。
 	//
 	// 判定は parse 直後に置く。syncFrontmatterMarkers は frontmatter オブジェクトを
 	// その場で書き換えるため、後ろに置くと「中止したのに状態が変わっている」ことになる。
@@ -1755,9 +1710,13 @@ export async function sync_CoreProc(
 	const frontmatterMarkerBefore = parseFrontmatterMarker(target.frontMatter);
 	const frontmatterWasAwaitingReview = frontmatterMarkerBefore?.need === "review";
 	const frontmatterSync = syncFrontmatterMarkers(source.frontMatter, target.frontMatter, frontmatterKeys);
-	// 既訳として受けた frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）
+	// 既訳として受けた frontmatter も「取り込んだ」に数える（レポートの件数を実態に合わせる）。
+	// 紐の無い既訳と、翻訳待ちの印のあとで人が値を書き込んだもの（本文ユニットと同じ2つ）
 	const frontmatterAdopted =
-		!frontmatterMarkerBefore && parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review" ? 1 : 0;
+		frontmatterMarkerBefore?.need !== "review" &&
+		parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.need === "review"
+			? 1
+			: 0;
 	const frontmatterReviewSuperseded =
 		frontmatterWasAwaitingReview && (parseFrontmatterMarker(frontmatterSync.targetFrontMatter)?.needsRevision() ?? false)
 			? 1
@@ -1829,8 +1788,7 @@ export async function sync_CoreProc(
 	// ユニットのハッシュを更新。マーカーの無い既訳をどう受けるか（review か translate か）は
 	// 取り込み（adopt）かどうかに依らず `needForFirstLink` の規則で決まる。external で
 	// unit-state を失ったときの救済もそこに吸収した（かつては別の安全網で全ユニットを review に倒していた）
-	const { revisionsNeeded, adopted, reviewsSuperseded, handTranslated, refreshedCopies, noteMigrations } =
-		await updateSectionHashes(
+	const { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations } = await updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
@@ -1876,7 +1834,6 @@ export async function sync_CoreProc(
 	diffResult.revisionsNeeded = revisionsNeeded;
 	diffResult.adopted = adopted + frontmatterAdopted;
 	diffResult.reviewsSuperseded = reviewsSuperseded + frontmatterReviewSuperseded;
-	diffResult.handTranslated = handTranslated;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
@@ -2189,8 +2146,6 @@ async function updateSectionHashes(
 	/** 紐の無い既訳を need:review で受けた件数（取り込みのレポートと LM ツールが使う） */
 	adopted: number;
 	reviewsSuperseded: number;
-	/** 翻訳待ちのまま mdait の外で訳されていたので付け替えた件数（ADR-261107-01） */
-	handTranslated: number;
 	/** まだ訳していない丸写しを、変わった原文へ写し直した件数 */
 	refreshedCopies: number;
 	noteMigrations: Array<{ from: string; to: string }>;
@@ -2201,7 +2156,6 @@ async function updateSectionHashes(
 	// 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数。
 	// 黙って確認の列から消えるので、件数だけは必ず伝える（ADR-260901-01）
 	let reviewsSuperseded = 0;
-	let handTranslated = 0;
 	// 本文編集で hash が変わったユニットは、紐づく note を旧→新 hash へ移送する（unit-registry）。
 	// content は content-addressed で不変。note だけがユニットに追従する（決定的・AI 不使用）。
 	const noteMigrations: Array<{ from: string; to: string }> = [];
@@ -2229,7 +2183,6 @@ async function updateSectionHashes(
 			// marker-sync.ts の `needForFirstLink` が決める（丸写しは translate）。取り込みかどうかは見ない
 			const hadFrom = !!target.marker?.from;
 			const wasAwaitingReview = target.marker?.need === "review";
-			const wasUntranslated = hadFrom && target.marker?.need === "translate";
 			const existingText = !hadFrom && target.content.trim() !== "";
 			// 丸写しかどうかは中身で答える（ハッシュの衝突で人の訳を translate に倒さない）
 			const verbatimCopy = existingText ? target.content === source.content : undefined;
@@ -2246,34 +2199,46 @@ async function updateSectionHashes(
 			// 崩れたままだと、未訳の丸写しと人が書きかけた訳文が同じ形になり、
 			// 訳文を見ただけではどちらか分からなくなる（かつては表示がそれを手編集と読み違え、
 			// 触っていないユニットに「編集済み」と出していた）。
-			if (!suppressNeed && (await refreshUntranslatedCopy(source, target, sourceHash, targetHash))) {
+			const copy = suppressNeed ? NOT_A_STALE_COPY : await refreshUntranslatedCopy(source, target, sourceHash, targetHash);
+			if (copy.refreshed) {
 				refreshedCopies++;
 				targetHash = calculateHash(target.content);
 			}
 			recordMigration(target.marker?.hash, targetHash);
+
+			// 翻訳待ちの章に、印を付けたあとで人の文章が書き込まれていたら確認待ちへ切り替える
+			// （規則は `isWrittenOverTranslateMark`）。翻訳待ちのままだと次の✨翻訳が人の文章を上書きする
+			const writtenOver =
+				!suppressNeed &&
+				!!target.marker &&
+				isWrittenOverTranslateMark(
+					target.marker.need,
+					target.marker.hash,
+					targetHash,
+					target.content,
+					source.content,
+					copy.stale,
+				);
+			if (writtenOver && target.marker) {
+				target.marker.setNeed("review");
+			}
 
 			// 共通ロジックを使用してペア同期
 			const result = syncMarkerPair(sourceHash, targetHash, source.marker, target.marker, {
 				existingText,
 				verbatimCopy,
 				suppressNeed,
-				// 写し直しの後の本文で答える（写し直した丸写しを人の訳と読まない）
-				targetHasOwnText: target.content.trim() !== "" && target.content !== source.content,
 			});
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
 			if (result.targetMarker.needsRevision()) {
 				revisionsNeeded++;
 			}
-			if (existingText && result.targetMarker.need === "review") {
+			if ((existingText || writtenOver) && result.targetMarker.need === "review") {
 				adopted++;
 			}
 			if (wasAwaitingReview && result.targetMarker.needsRevision()) {
 				reviewsSuperseded++;
-			}
-			// 確認待ちになったぶんだけ数える（同じ回に原文も進んで改訂待ちになったぶんは revisionsNeeded が数える）
-			if (wasUntranslated && result.targetMarker.need === "review") {
-				handTranslated++;
 			}
 			continue;
 		}
@@ -2296,60 +2261,41 @@ async function updateSectionHashes(
 			target.marker = result.marker;
 		}
 	}
-	return { revisionsNeeded, adopted, reviewsSuperseded, handTranslated, refreshedCopies, noteMigrations };
+	return { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations };
 }
+
+/** 未訳の丸写しを写し直そうとした結果 */
+interface UntranslatedCopyOutcome {
+	/** 古い原文の丸写しだったか（写し直しを見送った回も真） */
+	stale: boolean;
+	/** 写し直したか */
+	refreshed: boolean;
+}
+
+const NOT_A_STALE_COPY: UntranslatedCopyOutcome = { stale: false, refreshed: false };
 
 /**
  * まだ訳していない訳文が原文の丸写しのままなら、変わった原文へ写し直す。
- *
- * 写し直してよい根拠は**その訳文に人の仕事が入っていないこと**だけであり、それは
- * ハッシュで確かめられる。`from` は「この訳文が写した原文の中身」のハッシュなので、
- * いまの訳文の中身のハッシュが `from` と一致するなら、訳文は一字一句その原文のままである。
- * 一致しなければ誰かが書いている（手訳の途中・既訳の取り込み）ので触らない。
- *
- * `need:translate` に限る。`revise` は訳し終えた本文を守る話で、`review` は人の確認待ち、
- * `isolate` は追随しないという宣言であり、どれも写し直してよい状態ではない。
- *
- * @returns 写し直したら true
+ * 写し直してよいかの規則は `untranslated-copy.ts` の `isStaleUntranslatedCopy`（非 Markdown と共通）。
  */
 async function refreshUntranslatedCopy(
 	source: MdaitUnit,
 	target: MdaitUnit,
 	sourceHash: string,
 	targetHash: string,
-): Promise<boolean> {
+): Promise<UntranslatedCopyOutcome> {
 	const marker = target.marker;
-	if (marker?.need !== "translate") {
-		return false;
-	}
-	if (!marker.from || targetHash === sourceHash) {
-		return false; // 訳文はもう今の原文の丸写しである。することは無い
+	if (!(await isStaleUntranslatedCopy(marker?.need, marker?.from, targetHash, sourceHash, target.content))) {
+		return NOT_A_STALE_COPY;
 	}
 	if (spillsIntoFollowingUnits(source.content)) {
 		// **原文が閉じ忘れたフェンスを抱えている。** そのまま写すと、続く訳文ユニットが
 		// フェンスに飲まれて章の切れ目ごと消える（実測: 訳文が3ユニットから1ユニットになった）。
 		// 原文の構造が潰れている回は写し直さない。直せば次の sync で追いつく
-		return false;
-	}
-	if (targetHash === marker.from) {
-		// 直前の原文の丸写しである（いちばん多い形。ディスクを読まずに決まる）
-		target.content = source.content;
-		return true;
-	}
-	// `from` が既に先へ進んでしまった訳文の救済。この修正が入る前の sync は、
-	// 原文が変わっても丸写しを写し直さないまま `from` だけ進めていたため、
-	// 「一度も触っていないのに hash≠from」というユニットが既に手元にある
-	// （`from` は今の原文を指しているので、上の安い判定では拾えない）。
-	// その形は手編集と見分けが付かないので、**過去の原文そのものだったか**を
-	// スナップショットに問い合わせて確かめる（`unit-registry` は sync のたびに
-	// 原文ユニットの中身を hash キーで控えている）。中身まで突き合わせるので、
-	// ハッシュがたまたま衝突しても人の書いた訳文を捨てることはない
-	const snapshot = await UnitRegistryManager.getInstance().loadUnitRegistry(targetHash);
-	if (snapshot === null || snapshot !== target.content) {
-		return false; // 過去の原文ではない。誰かが書いている
+		return { stale: true, refreshed: false };
 	}
 	target.content = source.content;
-	return true;
+	return { stale: true, refreshed: true };
 }
 
 /**
@@ -2401,7 +2347,7 @@ async function runUnitRegistryGC(statusManager: StatusManager, scope: RegistrySw
 	const unitRegistryManager = UnitRegistryManager.getInstance();
 
 	// ファイルサイズが閾値未満ならスキップ（GC内部でもチェックされるが、hash収集コストを削減）
-	if (unitRegistryManager.getUnitRegistryFileSize() < 5 * 1024 * 1024) {
+	if (unitRegistryManager.getUnitRegistryFileSize() < UNIT_REGISTRY_GC_THRESHOLD) {
 		return;
 	}
 

@@ -6,6 +6,7 @@ import * as assert from "node:assert";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import {
 	REQUEST_TRANSLATE_COMMAND,
+	buildFrontmatterCodeLensSpecs,
 	buildUnitCodeLensSpecs,
 	shouldOfferRequestTranslate,
 } from "../../../../ui/codelens/codelens-provider";
@@ -100,5 +101,50 @@ suite("buildUnitCodeLensSpecs（「Next」は CodeLens に出さない）", () =
 				"mdait.codelens.otherActions",
 			],
 		);
+	});
+});
+
+suite("buildFrontmatterCodeLensSpecs（frontmatter の review 行のボタン構成と引数）", () => {
+	const AT = { range: "RANGE", uri: "URI" };
+
+	test("訳文の frontmatter の review 行は レビュー完了 → 要翻訳にする の順", () => {
+		const specs = buildFrontmatterCodeLensSpecs(new MdaitMarker("fmA", "fmS", "review"), false);
+
+		assert.deepStrictEqual(
+			specs.map((s) => s.command),
+			["mdait.codelens.clearFrontmatterNeed", REQUEST_TRANSLATE_COMMAND],
+		);
+	});
+
+	test("「要翻訳にする」は宛先 frontmatter を渡す（開始行からはユニットを引けないため）", () => {
+		const specs = buildFrontmatterCodeLensSpecs(new MdaitMarker("fmA", "fmS", "review"), false);
+		const request = specs.find((s) => s.command === REQUEST_TRANSLATE_COMMAND);
+
+		assert.ok(request, "「要翻訳にする」が出ること");
+		assert.deepStrictEqual(request.args(AT), ["RANGE", { kind: "frontmatter" }]);
+	});
+
+	test("完了ボタンには range、✨翻訳には文書の uri を渡す", () => {
+		const specs = buildFrontmatterCodeLensSpecs(new MdaitMarker("fmA", "fmS", "translate"), false);
+
+		assert.deepStrictEqual(
+			specs.map((s) => [s.command, s.args(AT)]),
+			[
+				["mdait.translate.frontmatter", ["URI"]],
+				["mdait.codelens.clearFrontmatterNeed", ["RANGE"]],
+			],
+		);
+	});
+
+	test("原文側・review 以外・翻訳済みの frontmatter には「要翻訳にする」を出さない", () => {
+		for (const [need, isSource] of [
+			["review", true],
+			["translate", false],
+			["revise@old", false],
+			[null, false],
+		] as const) {
+			const specs = buildFrontmatterCodeLensSpecs(new MdaitMarker("fmA", "fmS", need), isSource);
+			assert.ok(!specs.some((s) => s.command === REQUEST_TRANSLATE_COMMAND), `need=${need} source=${isSource}`);
+		}
 	});
 });

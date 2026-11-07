@@ -21,14 +21,16 @@ interface CacheEntry {
 	mtime: number;
 }
 
+const logger = Logger.getInstance();
+
 /**
  * 用語集ファイルのキャッシュを管理するシングルトンクラス
  */
-const logger = Logger.getInstance();
-
 export class TermsCacheManager {
 	private static instance: TermsCacheManager | undefined;
 	private cache: Map<string, CacheEntry> = new Map();
+	/** 読めないと知らせ済みの用語集（同じファイルで繰り返し出さないため） */
+	private readonly warnedPaths = new Set<string>();
 
 	private constructor() {}
 
@@ -58,9 +60,6 @@ export class TermsCacheManager {
 	 * @param transPairs 翻訳ペア設定
 	 * @returns 用語エントリ配列（ファイルが存在しない場合は空配列）
 	 */
-	/** 読めないと知らせ済みの用語集（同じファイルで繰り返し出さないため） */
-	private readonly warnedPaths = new Set<string>();
-
 	public async getTerms(termsFilePath: string, transPairs: readonly TransPair[]): Promise<readonly TermEntry[]> {
 		// ファイルが存在しない場合は空配列を返す
 		if (!fs.existsSync(termsFilePath)) {

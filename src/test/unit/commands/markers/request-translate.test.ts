@@ -126,7 +126,7 @@ Content E.
 			const config = await initConfig("embedded");
 			writeTarget(EMBEDDED_CONTENT);
 
-			const result = await requestTranslateForFile(targetFile, "tgtA", config);
+			const result = await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 
 			assert.strictEqual(result.requested, true);
 			assert.strictEqual(result.changed, true);
@@ -142,7 +142,7 @@ Content E.
 			const config = await initConfig("embedded");
 			writeTarget(EMBEDDED_CONTENT);
 
-			const result = await requestTranslateForFile(targetFile, "zzz", config);
+			const result = await requestTranslateForFile(targetFile, { kind: "unit", hash: "zzz" }, config);
 
 			assert.strictEqual(result.requested, false);
 			assert.strictEqual(result.changed, false);
@@ -160,7 +160,7 @@ Content E.
 				const config = await initConfig("embedded");
 				writeTarget(EMBEDDED_CONTENT);
 
-				const result = await requestTranslateForFile(targetFile, hash, config);
+				const result = await requestTranslateForFile(targetFile, { kind: "unit", hash }, config);
 
 				assert.strictEqual(result.requested, false);
 				assert.strictEqual(result.changed, false);
@@ -174,10 +174,10 @@ Content E.
 		test("2回目は not-review になる（1回目で translate に変わっているため）", async () => {
 			const config = await initConfig("embedded");
 			writeTarget(EMBEDDED_CONTENT);
-			const first = await requestTranslateForFile(targetFile, "tgtA", config);
+			const first = await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 			assert.strictEqual(first.requested, true);
 
-			const second = await requestTranslateForFile(targetFile, "tgtA", config);
+			const second = await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 
 			assert.strictEqual(second.requested, false);
 			assert.strictEqual(second.reason, "not-review");
@@ -207,15 +207,50 @@ Adopted translation A.
 			assert.ok(fs.readFileSync(targetFile, "utf-8").includes("<!-- mdait tgtA from:srcA need:translate -->"));
 		});
 
-		test("frontmatter は対象外（not-found）で、frontmatter の review はそのまま残る", async () => {
+		test("frontmatter 指定は frontmatter の review を translate に付け替え、本文ユニットは触らない", async () => {
 			await initConfig("embedded");
 			writeTarget(FRONTMATTER_CONTENT);
 
 			const result = await getFileHandler(targetFile).requestTranslate(targetFile, { kind: "frontmatter" });
 
+			assert.strictEqual(result.requested, true);
+			assert.strictEqual(result.hash, "fmA");
+			const written = fs.readFileSync(targetFile, "utf-8");
+			// YAML は値を引用符で囲むことがある（書式は FrontMatter が決める）
+			assert.match(written, /front: '?fmA from:fmS need:translate'?\n/, "frontmatter の need が translate に変わること");
+			assert.ok(written.includes("title: Adopted title"), "採用しなかった値はまだ消さないこと");
+			assert.ok(written.includes("<!-- mdait tgtA from:srcA need:review -->"), "本文ユニットの review は残ること");
+		});
+
+		test("frontmatter の review 以外は not-review でスキップし、書き込まない", async () => {
+			await initConfig("embedded");
+			writeTarget(FRONTMATTER_CONTENT.replace("need:review\n---", "need:translate\n---"));
+
+			const result = await getFileHandler(targetFile).requestTranslate(targetFile, { kind: "frontmatter" });
+
+			assert.strictEqual(result.requested, false);
+			assert.strictEqual(result.reason, "not-review");
+			assert.strictEqual(writeCountFor(targetFile), 0);
+		});
+
+		test("frontmatter のマーカーが無ければ not-found", async () => {
+			await initConfig("embedded");
+			writeTarget("## Section A\n\nText.\n");
+
+			const result = await getFileHandler(targetFile).requestTranslate(targetFile, { kind: "frontmatter" });
+
 			assert.strictEqual(result.requested, false);
 			assert.strictEqual(result.reason, "not-found");
-			assert.ok(fs.readFileSync(targetFile, "utf-8").includes("front: fmA from:fmS need:review"));
+		});
+
+		test("file 指定（非Markdown の単位）は Markdown では not-found", async () => {
+			await initConfig("embedded");
+			writeTarget(FRONTMATTER_CONTENT);
+
+			const result = await getFileHandler(targetFile).requestTranslate(targetFile, { kind: "file" });
+
+			assert.strictEqual(result.requested, false);
+			assert.strictEqual(result.reason, "not-found");
 			assert.strictEqual(writeCountFor(targetFile), 0);
 		});
 	});
@@ -230,7 +265,7 @@ Adopted translation A.
 			]);
 			const before = fs.readFileSync(targetFile);
 
-			const result = await requestTranslateForFile(targetFile, "tgtA", config);
+			const result = await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 
 			assert.strictEqual(result.requested, true);
 			const entries = UnitStateStore.getInstance().getEntriesByPath("en/doc.md");
@@ -247,13 +282,31 @@ Adopted translation A.
 			writeTarget(EXTERNAL_CONTENT);
 			setEntries("en/doc.md", [{ hash: "tgtA", from: "srcA", need: "review" }]);
 
-			await requestTranslateForFile(targetFile, "tgtA", config);
+			await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 
 			// ディスクから読み直す。stringify を呼ばなければ、書き込みは止まっても状態が残らない
 			UnitStateStore.dispose();
 			const reloaded = UnitStateStore.getInstance();
 			reloaded.load(mdaitDir);
 			assert.strictEqual(reloaded.getEntriesByPath("en/doc.md")[0]?.need, "translate");
+		});
+
+		test("frontmatter の review もストアの行だけを translate に付け替え、訳文ファイルへは書かない", async () => {
+			const config = await initConfig("external");
+			writeTarget("---\r\ntitle: Adopted title\r\n---\r\n\r\n## Section A\r\n\r\nText.");
+			UnitStateStore.getInstance().load(mdaitDir);
+			UnitStateStore.getInstance().setFrontMatterEntry("en/doc.md", { hash: "fmA", from: "fmS", need: "review" });
+			const before = fs.readFileSync(targetFile);
+
+			const result = await requestTranslateForFile(targetFile, { kind: "frontmatter" }, config);
+
+			assert.strictEqual(result.requested, true);
+			const front = UnitStateStore.getInstance().getFrontMatterEntry("en/doc.md");
+			assert.strictEqual(front?.need, "translate");
+			assert.strictEqual(front?.hash, "fmA", "hash は変わらないこと");
+			assert.strictEqual(front?.from, "fmS", "from は変わらないこと");
+			assert.strictEqual(writeCountFor(targetFile), 0, "訳文ファイルへ書き込みが走った");
+			assert.ok(fs.readFileSync(targetFile).equals(before));
 		});
 
 		test("review 以外の行は not-review でスキップし、ストアも本文も変えない", async () => {
@@ -265,7 +318,7 @@ Adopted translation A.
 			]);
 			const before = fs.readFileSync(targetFile);
 
-			const result = await requestTranslateForFile(targetFile, "tgtA", config);
+			const result = await requestTranslateForFile(targetFile, { kind: "unit", hash: "tgtA" }, config);
 
 			assert.strictEqual(result.requested, false);
 			assert.strictEqual(result.reason, "not-review");

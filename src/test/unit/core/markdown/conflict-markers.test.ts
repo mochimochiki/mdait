@@ -26,8 +26,17 @@ suite("hasConflictMarkers（合流の途中の原稿の見分け）", () => {
 		assert.strictEqual(hasConflictMarkers(content), true);
 	});
 
-	test("片側だけ消しかけた原稿も合流の途中と見なすこと", () => {
-		assert.strictEqual(hasConflictMarkers("本文\n=======\nもう片方\n"), true);
+	test("<<<<<<< の行だけ消しかけた原稿も合流の途中と見なすこと", () => {
+		assert.strictEqual(hasConflictMarkers("本文\n=======\nもう片方\n>>>>>>> other\n"), true);
+	});
+
+	test("7文字の見出しの下線（=======）だけでは合流の途中と見なさないこと", () => {
+		// 見出しと同じ長さの下線を引くのはふつうの書き方。競合とみなすとそのファイルが永久に同期されない
+		assert.strictEqual(hasConflictMarkers("Install\n=======\n\n本文\n"), false);
+	});
+
+	test("7段の引用（>>>>>>>）だけでは合流の途中と見なさないこと", () => {
+		assert.strictEqual(hasConflictMarkers("> 引用\n>>>>>>> 深い引用\n"), false);
 	});
 
 	test("コードブロックの中の実例は数えないこと（マーカーの書き方を解説する原稿）", () => {

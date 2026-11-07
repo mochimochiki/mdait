@@ -37,7 +37,7 @@ const ALLOWED = new Map<string, string>([
 	["infra/workspace/mdait-dir.ts", ".mdait/ の .gitignore と .gitattributes"],
 	["infra/debug/debug-command-handler.ts", "lab の合図ファイル（.mdait/debug/）。製品の経路ではない"],
 	["core/unit-registry/unit-registry-manager.ts", ".mdait/ の管理ファイル（unit-registry）"],
-	["commands/shared/report-file.ts", ".mdait/reports/ の実行レポート。原稿ではない"],
+	["commands/shared/report-file.ts", ".mdait/local/reports/ の実行レポート。原稿ではない"],
 	["commands/markers/markers-migration.ts", "mdait.json（設定ファイル）の markers.mode を書き換えるだけ"],
 	["commands/setup/setup-command.ts", "mdait.json をひな形から作る"],
 	["ui/settings/settings-panel.ts", "mdait.json を設定画面から書き換える"],

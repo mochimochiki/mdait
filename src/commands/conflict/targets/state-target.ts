@@ -16,7 +16,7 @@
  *   競合マーカーが消える。
  *
  *   残るのは、降ろされた行をどちらに決めるかである。それは訳の良し悪しではなく**原稿との
- *   照合**なので、P03 が決定的に片付ける。
+ *   照合**なので、次の同期が決定的に片付ける。
  *
  * @module commands/conflict/targets/state-target
  */
@@ -39,6 +39,8 @@ export function planUnitStateResolution(filePath: string): ResolutionPlan {
 		autoResolvedCount: 0,
 		deletedCount: 0,
 		pending: [],
+		// 1件ずつ選ぶ件が無いので、どちらが自分かは使われない
+		mineSide: "ours",
 		wholeFile: true,
 	};
 }
@@ -47,7 +49,7 @@ export function planUnitStateResolution(filePath: string): ResolutionPlan {
 export interface StateResolutionOutcome {
 	/** 書き戻した行の数 */
 	rows: number;
-	/** 同じ席に2行来たので片方を席から降ろした回数（P03 が片付ける） */
+	/** 同じ席に2行来たので片方を席から降ろした回数（次の同期が片付ける） */
 	unseated: number;
 }
 
@@ -80,6 +82,8 @@ export function planUnitRegistryResolution(filePath: string): ResolutionPlan {
 		autoResolvedCount: 0,
 		deletedCount: 0,
 		pending: [],
+		// 1件ずつ選ぶ件が無いので、どちらが自分かは使われない
+		mineSide: "ours",
 		wholeFile: true,
 	};
 }

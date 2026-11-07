@@ -79,6 +79,47 @@ suite("翻訳メモリの競合を解く", () => {
 		assert.equal(planned.plan.autoResolvedCount, 2);
 	});
 
+	test("競合ブロックの外にある登録は、自動で片付けた件数に数えない", () => {
+		// 両側はファイル全体から切り出すので、ブロックの外の TU は両側に同じ姿で現れる。
+		// 数えると、1万件の TM で「1万件を自動で片付けた」と言うことになる
+		const shared = Array.from({ length: 5 }, (_, i) => tu(`Shared ${i}`, { ja: `共有${i}` }));
+		const content = conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Goodbye", { ja: "さようなら" })]).replace(
+			"<body>",
+			`<body>\n${shared.join("\n")}`,
+		);
+		write(content);
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.autoResolvedCount, 2);
+		assert.equal(planned.resolution.resolved.size, 7, "書き戻す中身からは落とさない");
+	});
+
+	test("rebase の途中なら、自分の側は theirs と計画に書く", () => {
+		// ours は取り込み先（相手の変更）になる。画面の「あなた／相手」はこれで読み替える
+		fs.mkdirSync(path.join(tempDir, ".git", "rebase-merge"), { recursive: true });
+		write(conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Hello", { ja: "やあ" })]));
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.mineSide, "theirs");
+	});
+
+	test("ふつうのマージなら、自分の側は ours と計画に書く", () => {
+		write(conflicted([tu("Hello", { ja: "こんにちは" })], [tu("Hello", { ja: "やあ" })]));
+
+		const planned = planTmResolution(tmPath);
+		assert.ok(planned);
+		assert.equal(planned.plan.mineSide, "ours");
+	});
+
+	test("<<<<<<< の行だけ消えた壊れたマーカーは、競合なしではなく読めないとして投げる", () => {
+		// 「競合なし」と答えると、ツリーには競合として出続けるのに解く手立ても理由も見えない
+		write(`${tmx(tu("Hello", { ja: "こんにちは" }))}=======\n>>>>>>> theirs\n`);
+
+		assert.throws(() => planTmResolution(tmPath), /incomplete/);
+	});
+
 	test("同じ原文に別々の言語の訳を足しただけなら、両方採る", () => {
 		write(
 			conflicted(

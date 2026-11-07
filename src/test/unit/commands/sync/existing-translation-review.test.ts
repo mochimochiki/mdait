@@ -241,60 +241,6 @@ for (const mode of ["embedded", "external"] as const) {
 			assert.ok(targetBody().includes("This section describes basic usage."), "既訳の本文には触らない");
 			assert.strictEqual(result.reviewsSuperseded, 1);
 		});
-
-		test("翻訳待ちの章を mdait の外で手訳したら、次の sync で確認待ちになり本文は守られる", async () => {
-			const config = await bootstrap(SOURCE);
-			await sync_CoreProc(sourceFile, targetFile, config);
-			assert.deepStrictEqual(targetNeeds(), ["translate", "translate", "translate"]);
-
-			// mdait を使わない人が真ん中の章だけを訳した（マーカーの行には触れない）
-			fs.writeFileSync(
-				targetFile,
-				fs
-					.readFileSync(targetFile, "utf-8")
-					.replace("インストール手順を説明します。", "This section describes the installation steps."),
-				"utf-8",
-			);
-			const flipped = await sync_CoreProc(sourceFile, targetFile, config);
-			assert.strictEqual(flipped.handTranslated, 1, "付け替えた件数を通知に渡す");
-
-			assert.deepStrictEqual(
-				targetNeeds(),
-				["translate", "review", "translate"],
-				"translate のままだと次の trans が人の訳を上書きする",
-			);
-			assert.ok(targetBody().includes("This section describes the installation steps."), "人の訳はそのまま");
-
-			// 付け替えたあとは冪等
-			const firstMarkers = targetMarkers();
-			await sync_CoreProc(sourceFile, targetFile, config);
-			assert.deepStrictEqual(targetMarkers(), firstMarkers);
-		});
-
-		test("手訳と同じ回に原文も変わっていたら、その章は改訂待ちになり手訳は守られる", async () => {
-			const config = await bootstrap(SOURCE);
-			await sync_CoreProc(sourceFile, targetFile, config);
-
-			fs.writeFileSync(
-				targetFile,
-				fs
-					.readFileSync(targetFile, "utf-8")
-					.replace("インストール手順を説明します。", "This section describes the installation steps."),
-				"utf-8",
-			);
-			fs.writeFileSync(
-				sourceFile,
-				fs
-					.readFileSync(sourceFile, "utf-8")
-					.replace("インストール手順を説明します。", "インストール手順を説明します。前提条件も確認してください。"),
-				"utf-8",
-			);
-			await sync_CoreProc(sourceFile, targetFile, config);
-
-			const needs = targetNeeds();
-			assert.ok(needs[1].startsWith("revise@"), `旧原文の訳として改訂待ちになる（実際: ${needs[1]}）`);
-			assert.ok(targetBody().includes("This section describes the installation steps."), "手訳を丸写しで上書きしない");
-		});
 	});
 }
 

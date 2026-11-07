@@ -101,10 +101,9 @@ export function syncSourceMarker(
  * 「本文あり」も中身を見ないと分からないので呼び出し側（`existingText`）が答える。
  *
  * frontmatter も同じ規則で決める。title が両言語で同じ値（製品名など）は正しい訳のことも
- * あるが、review に倒すと**確認待ちの出口が「確認済みにする」しか無い**（frontmatter には
- * 「要翻訳にする」が無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに
- * 残り、訳されないまま受け入れるしかなくなる。translate に倒せば trans が同じ値を
- * 返すか訳すかを決め、どちらでも人の手は要らない。
+ * あるが、review に倒すと原文の複製そのままのファイルで frontmatter だけが確認待ちに残り、
+ * 人の手を1回余計に取る。translate に倒せば trans が同じ値を返すか訳すかを決め、
+ * どちらでも人の手は要らない。
  *
  * @param marker 訳文側マーカー（`hash` と `from` は更新済みであること）
  * @param existingText 訳文側に本文があるか（呼び出し側が中身を見て答える）
@@ -277,12 +276,6 @@ export interface PairSyncOptions {
 	 * （ペアのリンクは維持しつつ、新しい翻訳需要を下流に流さない）。
 	 */
 	suppressNeed?: boolean;
-	/**
-	 * 訳文の本文が、いまの原文の丸写しではない人の文になっているか（空でなく、原文と一字一句
-	 * 同じでもない）。呼び出し側が中身で答える。丸写しの写し直し（`refreshUntranslatedCopy`）を
-	 * 済ませた後の本文で判定すること。規則は `syncMarkerPair` の「訳されて翻訳待ち」を見よ。
-	 */
-	targetHasOwnText?: boolean;
 }
 
 /**
@@ -324,7 +317,6 @@ export function syncMarkerPair(
 
 	const isSourceChanged = sourceMarker.hash !== sourceHash;
 	const isTargetChanged = targetMarker.hash !== targetHash;
-	const wasUntranslated = !isNewTarget && targetMarker.need === "translate";
 
 	// ソースハッシュを常に最新に更新
 	sourceMarker.hash = sourceHash;
@@ -362,31 +354,6 @@ export function syncMarkerPair(
 
 		if (!options?.suppressNeed && !revertedToTranslatedSource) {
 			applyNeedForChangedSource(targetMarker, oldSourceHash, options?.existingText === true, options?.verbatimCopy);
-		}
-	}
-
-	// **訳されて翻訳待ち。** `need:translate` は「訳文は原文の丸写しで、まだ誰も訳していない」
-	// という印である。前回の sync から訳文が書き換わり、しかも原文の丸写しでない文になったなら、
-	// mdait の外で誰かが訳した（external では印が原稿に見えないので、mdait を使わない人は
-	// 印を外せない）。translate のまま残すと次の trans がその訳を機械翻訳で上書きする（実測）。
-	// 紐を初めて結ぶときの規則（`needForFirstLink`: 丸写しでない既訳は review）と同じ着地にする。
-	// 同じ回に原文も進んでいたら、その訳は旧原文の訳なので改訂待ちにする（原文が変わった
-	// 既訳と同じ扱い。trans は訳を残したまま差分だけ直す）。
-	//
-	// 「前回から書き換わった」を条件に入れるのは、mdait が過去に写し直しを忘れて
-	// `hash !== from` のまま残った未訳（`refreshUntranslatedCopy` の救済の話）を、
-	// 人の訳と読み違えないため。そうした訳文は前回の sync で hash が記録済みで、変わっていない
-	if (
-		wasUntranslated &&
-		isTargetChanged &&
-		options?.targetHasOwnText === true &&
-		!options.suppressNeed &&
-		targetMarker.need === "translate"
-	) {
-		if (oldSourceHash && oldSourceHash !== sourceMarker.hash) {
-			targetMarker.setReviseNeed(oldSourceHash);
-		} else {
-			targetMarker.setNeed("review");
 		}
 	}
 

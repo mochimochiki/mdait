@@ -119,7 +119,7 @@ sequenceDiagram
 
 - **冪等性**: マーカーは常に現在のコンテンツから再計算される。何度実行しても同じ結果（[design.md](../design.md) P4参照）
 - **ハッシュベース追跡**: VCSに依存せず任意の環境で動作。CRC32ハッシュを使用
-- **SectionMatcher 3フェーズ**: ①targetの`from`とsourceの`hash`のハッシュ一致、②マッチ済みペア間の区間で順序ベース推定、③未マッチを孤立ユニットとして検出。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可（②の対象外）
+- **SectionMatcher**（external の attach と同じ共通部品 `core/matching/interval-align` に載っている。ADR-260923-03）: ①targetの`from`とsourceの`hash`が一意に一致する組を錨にする（順序が入れ替わっていても採る）、②順序の保たれる錨だけで区間を切り、同じ本文の原文が複数あるものは区間の中の順序で決める、③残りを区間内の順序で埋める（使える訳文は `from` を持たないものだけ。原文を失った訳文を別の原文へ付け替えない）、④残りを新規／孤立とする。独立ユニット（`independentTargets`）は対応付け対象外としてパススルー、`need:isolate` のsourceは①でのみマッチ可。結果は原文の順に並べ、**相手のいない訳文は元あった位置へ差し込む**（末尾へ寄せない。`orderPairs`。AI アラインの再配線も同じ規約で並べる）
 - **レガシーneedの正規化**: パース直後に `normalizeLegacyNeeds` が `keep`→need除去・`backfill`→`review` へ決定的に変換する（後述の「孤立ユニットモデル」節参照）
 - **level同期**: 原文FrontMatterの`level`設定が訳文に自動同期される（[`validateAndSyncLevel()`](../../src/commands/sync/level-validator.ts)）
 - **GC**: UnitRegistry合計5MB超過時のみ実行。未参照スナップショットを削除。守る印の走査は**選択で絞らず config の全 pair**を見る。走るのは**取り消されず、在るディレクトリを全部読めて、`unit-state` と `unit-registry` を丸ごと読めた回だけ**（ADR-260908-06。詳細は [core.md](core.md) の GC処理）
@@ -137,7 +137,7 @@ sequenceDiagram
 | 本文なし | `translate` | 同上 |
 
 - 丸写しかどうかはハッシュで確かめる。`from` はいま結んだ原文の hash なので、訳文の `hash` がそれと同じなら一字一句その原文のままである（「未訳の丸写しは原文に追随する」と同じ根拠）。「本文があるか」だけは中身を見ないと分からないので、呼び出し側が `existingText` として答える
-- frontmatter（[`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts)）は「対象キーのどれかに値がある」を本文ありとみなし、値が原文と全部同じなら丸写し。丸写しを review に倒さないのは、frontmatter の確認待ちの出口が「確認済みにする」しか無いため（「要翻訳にする」は本文ユニットにしか無い）。原文の複製そのままのファイルは frontmatter だけが確認待ちに残り、訳されないまま受け入れるしかなくなる
+- frontmatter（[`sync-frontmatter.ts`](../../src/commands/sync/sync-frontmatter.ts)）は「対象キーのどれかに値がある」を本文ありとみなし、値が原文と全部同じなら丸写し。丸写しを review に倒さないのは本文ユニットと同じ理由（まだ訳していないので、人に確認を頼む理由が無い）。翻訳待ちの印のあとで人が値を書き込んだら確認待ちへ切り替える規則（`isWrittenOverTranslateMark`）も本文ユニットと共通で、比べる中身はハッシュと同じ `frontmatterTranslatableText`（ADR-260923-09）
 - 非 Markdown（[`plain-file-handler.ts`](../../src/commands/file-handler/plain-file-handler.ts) の rebuild 分岐。`unit-state` に行が無く訳文ファイルが在る）も同じ規則。丸写しの判定はバイト列で、改行コードだけ違う訳文は丸写しとみなさない
 - かつては adopt のときだけ review に倒し、ふつうの sync ではマーカーの無い既訳に `need:translate` を付けていた（次の trans が人の書いた訳を機械翻訳で上書きする）。external で `unit-state` を失ったときは別の安全網（`isExternalRebuild`）が全ユニットを review に倒していた（丸写しまで確認待ちに混ざる）。どちらもこの規則に吸収した
 - `adopt` オプションが変えるのは AI アライン（`align`）を許すかどうかと、完了レポートの文言（取り込みとして報告する）だけ。既訳を review で受けた件数（`adopted`）はふつうの sync でも数える

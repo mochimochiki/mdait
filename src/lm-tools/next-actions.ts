@@ -16,14 +16,24 @@ import type { NeedBreakdown } from "./status-data";
  * @param errorUnits エラーユニット数
  * @param orphanTargets 原文の無い訳文ファイル数
  * @param totalUnits スコープ内の管理ユニット数（0 なら「何も入っていない」）
+ * @param conflicts `.mdait` に残っている競合の件数
  */
 export function buildNextActions(
 	needs: NeedBreakdown,
 	errorUnits = 0,
 	orphanTargets = 0,
 	totalUnits?: number,
+	conflicts = 0,
 ): string[] {
 	const actions: string[] = [];
+
+	// 競合を先に言う。残っているあいだは用語集と翻訳メモリが読めず、翻訳を進めても
+	// 材料の欠けた訳になる。解決の手段は渡さない — 同じ鍵に別の値が来た件を選ぶのは人である
+	if (conflicts > 0) {
+		actions.push(
+			`${conflicts} merge conflict(s) remain in the .mdait folder (see data.conflicts). While they remain, the glossary and translation memory in conflict cannot be read. Ask the user to run "Resolve Conflicts" (mdait.conflict.resolve) from the mdait status view — do not edit the conflicted files yourself.`,
+		);
+	}
 
 	// 孤立訳文には破棄の手段を渡さない（ADR-260806-01）。エージェントにできるのは
 	// 原文を戻すか、人に判断を求めることだけである

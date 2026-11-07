@@ -95,7 +95,7 @@ suite("ensureMdaitDir", () => {
 		assert.strictEqual(fs.existsSync(gitignorePath), true, ".gitignoreが作成される");
 
 		const content = fs.readFileSync(gitignorePath, "utf-8");
-		assert.strictEqual(content, "logs/\n", ".gitignoreの内容が正しい");
+		assert.strictEqual(content, "local/\n", ".gitignoreの内容が正しい（コミットしないものは local/ の1行）");
 	});
 
 	test(".mdaitディレクトリが既に存在する場合、冪等性が保証される", async () => {
@@ -130,13 +130,13 @@ suite("ensureMdaitDir", () => {
 
 		assert.strictEqual(fs.existsSync(gitignorePath), true, ".gitignoreが追加される");
 		const content = fs.readFileSync(gitignorePath, "utf-8");
-		assert.strictEqual(content, "logs/\n", ".gitignoreの内容が正しい");
+		assert.strictEqual(content, "local/\n", ".gitignoreの内容が正しい（コミットしないものは local/ の1行）");
 	});
 
 	test(".mdaitディレクトリと.gitignoreが既に存在する場合、上書きされない", async () => {
 		// .mdaitディレクトリと.gitignoreを事前に作成
 		fs.mkdirSync(mdaitDir, { recursive: true });
-		const customContent = "logs/\ncustom-ignore/\n";
+		const customContent = "local/\ncustom-ignore/\n";
 		fs.writeFileSync(gitignorePath, customContent, "utf-8");
 
 		await ensureMdaitDir();

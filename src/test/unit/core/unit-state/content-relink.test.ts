@@ -84,6 +84,19 @@ suite("planContentRelink（内容によるファイル再リンク）", () => {
 		assert.strictEqual(plan.decisions[0].to, "en/handbook.md");
 	});
 
+	test("パースが潰れて章がまとめて減った訳文とは結び直さないこと（被覆率が縮みの守りを兼ねる）", () => {
+		// 外で動かしたのと同時にコードブロックの閉じ忘れが入り、10章が3ユニットに潰れた形。
+		// 旧行の hash のうち、いまの本文に残っているのは2つだけ（2/10）。
+		// 被覆率の下限があるので、ユニット数が3割より多く減った相手とは結び直さない。
+		// 3割以内の減り方で結び直したあとは、動いていないファイルと同じ刈り取りの判定
+		// （`shouldPruneLeftovers`）を通るので、再リンク専用の守りは要らない
+		const before = Array.from({ length: 10 }, (_, i) => `h${i + 1}`);
+		const plan = planContentRelink([lost("en/guide.md", ...before)], [fresh("en/handbook.md", "h1", "h2", "hMerged")]);
+
+		assert.deepStrictEqual(plan.decisions, []);
+		assert.deepStrictEqual(plan.rejections, []);
+	});
+
 	test("空のファイルは候補にしないこと", () => {
 		assert.strictEqual(planContentRelink([lost("en/guide.md")], [fresh("en/handbook.md", "h1")]).decisions.length, 0);
 		assert.strictEqual(planContentRelink([lost("en/guide.md", "h1")], [fresh("en/handbook.md")]).decisions.length, 0);

@@ -159,3 +159,25 @@ suite("改訂パッチの形式は指示文の出どころで決まる", () => {
 		assert.ok(error, "旧形式の答えを受け入れてしまった");
 	});
 });
+
+suite("行番号を書き戻す答えが続いたとき", () => {
+	test("使えない答えにせず、パッチの失敗「行番号の書き戻し」として返す", async () => {
+		// 以前は形の誤り（INVALID_FIELD_TYPE）として「期待した形で答えなかった」とだけ出ており、
+		// 行番号の書き戻しに向けた案内（line-number-residue）が利用者に届いていなかった
+		const service = new StubAIService("REPLACE 2\n2\t- Real-time sync\nEND");
+		const translator = new AITranslator(
+			service,
+			"ja",
+			() => ({ ...stubParts }),
+			undefined,
+			1,
+			() => false,
+		);
+
+		const result = await translator.translateRevisionPatch("本文", "ja", "en", makeContext());
+
+		assert.strictEqual(result.patchFailure, "line-number-residue");
+		assert.strictEqual(result.targetPatch, "", "書き戻された行番号を含むパッチは渡さない");
+		assert.strictEqual(service.systemPrompts.length, 2, "送り直しは上限まで行う");
+	});
+});

@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import { type PatchFormat, numberLinesForPatch } from "../../core/diff/diff-generator";
+import { type PatchFailureReason, type PatchFormat, numberLinesForPatch } from "../../core/diff/diff-generator";
 import { getCodeBlockLineSet } from "../../core/markdown/code-block-lines";
 import { OperationCancelledError } from "../../infra/errors/operation-cancelled";
 import type { AIMessage, AIService } from "../../infra/llm/ai-service";
@@ -340,6 +340,11 @@ export interface RevisionPatchResult {
 	warnings?: string[];
 	/** AI の応答から消えていて戻せなかったコードブロックの数（TranslationResult と同義） */
 	droppedCodeBlocks?: number;
+	/**
+	 * 当てはめる前にパッチの失敗と分かったときの理由。あれば `targetPatch` は空で、当ててはいけない。
+	 * いまは「送り直しても渡した行番号を本文へ書き戻し続けた」（`line-number-residue`）だけ。
+	 */
+	patchFailure?: PatchFailureReason;
 	/** 統計情報（将来の拡張用） */
 	stats?: {
 		/** 推定使用トークン数 */
@@ -735,6 +740,13 @@ export class AITranslator implements Translator {
 			unitHash: unitContext?.unitHash,
 			title: unitContext?.title,
 		});
+
+		// 行番号の書き戻しは、形は合っているパッチの失敗である。「使えない答え」にすると
+		// 「期待した形で答えなかった」という別の説明になるので、パッチの失敗として返し、
+		// 当てはめの失敗と同じ扱い（訳文を据え置き、書き戻しに向けた案内を出す）に乗せる
+		if (lastError?.code === "LINE_NUMBER_ECHO") {
+			return { targetPatch: "", format, patchFailure: "line-number-residue" };
+		}
 
 		// 検証に落ちた答えは**使わない**。ここで断ち切る
 		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);

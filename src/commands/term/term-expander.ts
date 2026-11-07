@@ -8,9 +8,8 @@ import type * as vscode from "vscode";
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import type { AIService } from "../../infra/llm/ai-service";
 import { AIServiceBuilder } from "../../infra/llm/ai-service-builder";
-import { UnusableAIResponseError } from "../../infra/llm/unusable-response";
 import { PromptIds, PromptProvider } from "../../prompts";
-import { parseJsonAnswer } from "../shared/ai-json";
+import { parseJsonAnswer, unusableJsonAnswer } from "../shared/ai-json";
 import type { TermEntry } from "./term-entry";
 import { TermEntry as TermEntryUtils } from "./term-entry";
 
@@ -122,7 +121,7 @@ export class AITermExpander implements TermExpander {
 				[{ role: "user", content: userPrompt }],
 				cancellationToken,
 			);
-			return this.parseExtractionResponse(response);
+			return this.parseTermMap(response);
 		} catch (error) {
 			// AI呼び出しの失敗を「0件展開の成功」と誤認させないため握りつぶさず伝播させる
 			console.error("Phase 2 batch extraction failed:", error);
@@ -165,7 +164,7 @@ export class AITermExpander implements TermExpander {
 				[{ role: "user", content: userPrompt }],
 				cancellationToken,
 			);
-			return this.parseTranslationResponse(response);
+			return this.parseTermMap(response);
 		} catch (error) {
 			// AI呼び出しの失敗を「0件翻訳の成功」と誤認させないため握りつぶさず伝播させる
 			console.error("Phase 2 translation failed:", error);
@@ -225,20 +224,6 @@ Return the result as a JSON object mapping source terms to target terms.`;
 	}
 
 	/**
-	 * Phase 1のAIレスポンスをパース
-	 */
-	private parseExtractionResponse(response: string): Map<string, string> {
-		return this.parseTermMap(response);
-	}
-
-	/**
-	 * Phase 2のAIレスポンスをパース
-	 */
-	private parseTranslationResponse(response: string): Map<string, string> {
-		return this.parseTermMap(response);
-	}
-
-	/**
 	 * 応答から「原語 → 訳語」の対応表を取り出す。取り出せなければ**使えない答え**として断ち切る。
 	 *
 	 * **0件として飲み込まない。** 飲み込むと「訳語を埋められる用語が無かった」と区別が付かず、
@@ -249,25 +234,16 @@ Return the result as a JSON object mapping source terms to target terms.`;
 		// JSON の読み方は `commands/shared/ai-json.ts` に寄せてある（フェンス優先・空は empty）
 		const parsed = parseJsonAnswer(response, "Term expansion");
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-			throw this.unusableResponse(response, "the JSON was not an object");
+			throw unusableJsonAnswer("Term expansion", response, "the JSON was not an object");
 		}
 
 		const pairs = Object.entries(parsed).filter(
 			(entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0,
 		);
 		if (Object.keys(parsed).length > 0 && pairs.length === 0) {
-			throw this.unusableResponse(response, "no entry mapped a term to a non-empty string");
+			throw unusableJsonAnswer("Term expansion", response, "no entry mapped a term to a non-empty string");
 		}
 		return new Map(pairs);
-	}
-
-	/** 使えない答えを表す例外を作る（message は記録用の英語。利用者向けの文は呼び出し側が組む） */
-	private unusableResponse(response: string, why: string): UnusableAIResponseError {
-		return new UnusableAIResponseError(
-			"invalid-format",
-			`Term expansion response was not usable: ${why}`,
-			`responseChars=${response.length}`,
-		);
 	}
 }
 

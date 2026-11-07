@@ -251,6 +251,7 @@ suite("行番号方式の答えの検証", () => {
 		const result = validateRevisionPatchPlainResponse("REPLACE 4\n4\t- Real-time sync\nEND");
 		assert.strictEqual(result.valid, false);
 		assert.strictEqual(result.error?.retryable, true);
+		assert.strictEqual(result.error?.code, "LINE_NUMBER_ECHO", "専用の案内へつなぐため、形の誤りとは別の印で返す");
 		assert.match(String(result.error?.message), /line numbers/);
 	});
 

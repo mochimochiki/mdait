@@ -42,12 +42,13 @@ export interface DiffResult {
 	unchanged: number;
 	/** need:revise付与件数 */
 	revisionsNeeded?: number;
-	/** 紐の無い既訳を need:review で受けたユニット数（adopt でなくても数える） */
+	/**
+	 * 既訳を need:review で受けたユニット数（adopt でなくても数える）。紐の無い既訳と、
+	 * 翻訳待ちの印を付けたあとで人の文章が書き込まれた章（`isWrittenOverTranslateMark`）の2つ
+	 */
 	adopted?: number;
 	/** 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数 */
 	reviewsSuperseded?: number;
-	/** 翻訳待ち（need:translate）のまま mdait の外で訳されていたので、確認待ち・改訂待ちへ付け替えたユニット数（ADR-261107-01） */
-	handTranslated?: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	kept?: number;
 	/** need:verify-deletion を付与した孤立ターゲット数 */

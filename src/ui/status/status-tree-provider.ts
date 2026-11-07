@@ -20,6 +20,7 @@ import {
 	buildConflictChoiceRows,
 	buildConflictRows,
 	buildConflictsItem,
+	conflictFileRowId,
 	filePathOfConflictRow,
 	isConflictFileRowId,
 	isConflictRowId,
@@ -28,8 +29,9 @@ import {
 	collectPendingChoices,
 	collectWorkspaceConflicts,
 	pendingChoiceCount,
-	undecidedCount,
+	readyToWriteCount,
 } from "./conflict-source";
+import { undecidedCount } from "../../commands/conflict/resolve-core";
 import { Configuration } from "../../infra/config/configuration";
 import { DebugFireRecorder } from "../../infra/debug/debug-fire-recorder";
 import { Logger, formatError } from "../../infra/logging/logger";
@@ -605,7 +607,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 
 		// 「競合の解決」は最上段に置く。競合はエラー状態で、**解くまで他の数字が当てにならない**
 		// （TM も用語集も読めていない）。要対応より手前に出す理由はそこにある
-		const conflictsItem = buildConflictsItem(this.collectConflicts(), pendingChoiceCount());
+		const conflictsItem = buildConflictsItem(this.collectConflicts(), pendingChoiceCount(), readyToWriteCount());
 		if (!conflictsItem) {
 			this.conflictsExpandedOnce = false;
 		}
@@ -632,14 +634,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	private async getConflictRows(): Promise<StatusItem[]> {
 		const conflicts = this.collectConflicts();
 		const prepared = await collectPendingChoices(this.configuration);
-		const counts = new Map<string, number>();
+		const counts = new Map<string, { pending: number; undecided: number }>();
 		// **前の数を先に捨てる。** 残すと、計画が作れなくなったファイルの行が
 		// 「開ける」ままになり、開いても中身が1件も無い行き止まりになる
 		this.conflictChoiceCounts.clear();
 		for (const plan of prepared?.summary.plans ?? []) {
-			// 行に出すのは**まだ決めていない件数**。開けるかどうかは件そのものの有無で決まる
-			counts.set(plan.filePath, undecidedCount(plan, prepared?.stamps.get(plan.filePath)));
-			this.conflictChoiceCounts.set(`mdait:conflict:file:${plan.filePath}`, plan.pending.length);
+			// 行に出すのは**まだ決めていない件数**。開けるかどうかは件そのものの有無で決まる。
+			// 総数も渡す — 全件決め終えた行に `解決` を出すのは、この2つの差で決まる
+			counts.set(plan.filePath, {
+				pending: plan.pending.length,
+				undecided: prepared ? undecidedCount(plan, prepared) : plan.pending.length,
+			});
+			this.conflictChoiceCounts.set(conflictFileRowId(plan.filePath), plan.pending.length);
 		}
 		return buildConflictRows(conflicts, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, counts);
 	}
@@ -656,7 +662,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 		const plan = prepared?.summary.plans.find((candidate) => candidate.filePath === filePath);
 		const stamp = prepared?.stamps.get(filePath);
 		const rows = plan && stamp !== undefined ? buildConflictChoiceRows(plan, stamp) : [];
-		this.conflictChoiceCounts.set(`mdait:conflict:file:${filePath}`, rows.length);
+		this.conflictChoiceCounts.set(conflictFileRowId(filePath), rows.length);
 		return rows;
 	}
 
@@ -730,18 +736,18 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	/**
 	 * review / verify-deletion 待ちの項目（本文ユニット・frontmatter・非Markdown ファイル）を
 	 * クローン（isVirtualCopy: true）として返す（作り方は `toNeedsAttentionClone`）。
-	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionUnits（VS Code非依存・単体テスト対象）に委譲する。
+	 * 集約ロジック自体は StatusItemTree.getNeedsAttentionItems（VS Code非依存・単体テスト対象）に委譲する。
 	 */
 	private getNeedsAttentionChildren(): NeedsAttentionItem[] {
 		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		return this.collectNeedsAttentionUnits().map((item) => toNeedsAttentionClone(item, workspaceFolder));
+		return this.collectNeedsAttentionItems().map((item) => toNeedsAttentionClone(item, workspaceFolder));
 	}
 
 	/**
 	 * 要対応項目を選択中の transPair に限定して取得する（ツリー本体と同じ範囲に揃える）
 	 */
-	private collectNeedsAttentionUnits(): NeedsAttentionItem[] {
-		return this.statusItemTree.getNeedsAttentionUnits(
+	private collectNeedsAttentionItems(): NeedsAttentionItem[] {
+		return this.statusItemTree.getNeedsAttentionItems(
 			getSelectedScopeDirs(this.configuration),
 		);
 	}
@@ -755,7 +761,7 @@ export class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem> {
 	 * （ADR-260724-01）。
 	 */
 	private buildNeedsAttentionItem(): DirectoryStatusItem | undefined {
-		const count = this.collectNeedsAttentionUnits().length;
+		const count = this.collectNeedsAttentionItems().length;
 		if (count === 0) {
 			this.needsAttentionItem = undefined;
 			// 次に要対応が現れたときは、また展開した状態で見せる

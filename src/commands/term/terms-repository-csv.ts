@@ -223,11 +223,17 @@ export class TermsRepositoryCSV implements TermsRepository {
 		return { sourceOrder, targetOrder, primary };
 	}
 
-	// 内部: エントリを特定するキー（primaryLangの用語 + context）
+	// 内部: エントリを特定するキー（primaryLangの用語 + context）。
+	// 基準言語の欄が空の行は、埋まっている全言語の語で見分ける。基準言語の語だけにすると
+	// 空欄の行がみな同じキーになり、読み込みで2行目以降が消える
 	private computeEntryKey(entry: TermEntry): string {
 		const primary = this.getEffectivePrimaryLang();
 		const term = TermEntryUtils.getTerm(entry, primary) || "";
-		return `${primary}:${term}::${entry.context}`;
+		if (term) {
+			return `${primary}:${term}::${entry.context}`;
+		}
+		const terms = TermEntryUtils.getLanguages(entry).map((lang) => [lang, TermEntryUtils.getTerm(entry, lang) ?? ""]);
+		return `*:${JSON.stringify(terms)}::${entry.context}`;
 	}
 
 	// 内部: エントリに対応する未知列の値を取得（なければ空で初期化）
@@ -497,9 +503,9 @@ export class TermsRepositoryCSV implements TermsRepository {
 
 		// 各行をTermEntryに変換しつつ未知列を保持。
 		//
-		// **同じ語の行が2つ並ぶのは、合流（`merge=union`）のあとの姿である。** union は両方の
-		// 陣営の行を残すので、2人が同じ語を足すと同じ鍵の行が並ぶ。先に出てきたほうを残して畳む
-		// （残さないと、書き戻すたびに同じ語が増えていく）。
+		// 同じ語の行が2つ並ぶことがある — 競合を「両方残す」形で解いたときや、手で書き足した
+		// ときである（かつての `merge=union` の合流もこの形を残した）。先に出てきたほうを残して
+		// 畳む（残さないと、書き戻すたびに同じ語が増えていく）。
 		const tmpEntries: TermEntry[] = [];
 		const seenKeys = new Set<string>();
 		for (const row of records) {

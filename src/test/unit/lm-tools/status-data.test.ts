@@ -3,6 +3,7 @@ import { Status, StatusItemType } from "../../../core/status/status-item";
 import type { FileStatusItem, UnitStatusItem } from "../../../core/status/status-item";
 import {
 	MAX_UNIT_DETAILS_PER_FILE,
+	buildConflictData,
 	buildStatusData,
 	countNeedFlags,
 	countNeeds,
@@ -223,6 +224,29 @@ suite("status-data（need内訳集計）", () => {
 			assert.strictEqual(needs.verifyDeletion, 1);
 			assert.strictEqual(needs.isolate, 1);
 			assert.strictEqual(needs.other, 1);
+		});
+	});
+
+	suite("buildConflictData", () => {
+		test("競合したファイルをワークスペース相対で並べ、降ろされた行は件数だけ返す", () => {
+			const data = buildConflictData(
+				{
+					files: [{ kind: "tm", filePath: "/ws/.mdait/translations.tmx", stamp: "x" }],
+					heldRows: [{ path: "en/a.md", seat: "u1", hash: "h", from: "", need: "" }],
+					total: 2,
+				},
+				(filePath) => filePath.replace("/ws/", ""),
+			);
+			assert.deepStrictEqual(data, {
+				total: 2,
+				files: [{ kind: "tm", path: ".mdait/translations.tmx" }],
+				mergeHeldRows: 1,
+			});
+		});
+
+		test("競合を渡さなければ 0 件として返す", () => {
+			const data = buildStatusData([], false);
+			assert.deepStrictEqual(data.conflicts, { total: 0, files: [], mergeHeldRows: 0 });
 		});
 	});
 });

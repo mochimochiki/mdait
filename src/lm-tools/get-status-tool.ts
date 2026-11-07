@@ -1,15 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-	getSelectedScopeFiles,
-	getSelectedTargetLabels,
-} from "../commands/shared/status-scope";
-import { StatusManager } from "../core/status/status-manager";
+import { getSelectedScopeFiles, getSelectedTargetLabels } from "../commands/shared/status-scope";
 import type { FileStatusItem } from "../core/status/status-item";
+import { StatusManager } from "../core/status/status-manager";
+import { Configuration } from "../infra/config/configuration";
 import { Logger } from "../infra/logging/logger";
+import { collectWorkspaceConflicts } from "../ui/status/conflict-source";
 import { ToolErrorCode, createErrorEnvelope, createOkEnvelope } from "./envelope";
 import { buildNextActions } from "./next-actions";
-import { buildStatusData } from "./status-data";
+import { buildConflictData, buildStatusData } from "./status-data";
 import { toToolResult } from "./tool-result";
 
 const logger = Logger.getInstance();
@@ -77,11 +76,12 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 				// （明示的にパスを指定された場合はその指定を尊重し、絞り込まない）。
 				files = getSelectedScopeFiles(tree);
 				const targets = getSelectedTargetLabels();
-				scopeLabel =
-					targets.length > 0 ? `workspace (targets: ${targets.join(", ")})` : "workspace";
+				scopeLabel = targets.length > 0 ? `workspace (targets: ${targets.join(", ")})` : "workspace";
 			}
 
-			const data = buildStatusData(files, detail);
+			// 競合は範囲で絞らない（ステータスバー・ツリーと同じ算出点を通す）
+			const conflicts = buildConflictData(collectWorkspaceConflicts(Configuration.getInstance()), toWorkspaceRelative);
+			const data = buildStatusData(files, detail, conflicts);
 			const untranslated = data.totalUnits - data.translatedUnits;
 			const summary = vscode.l10n.t(
 				"Translation status for {0}: {1} total units, {2} translated, {3} untranslated, {4} error(s). Files needing work: {5}.",
@@ -96,15 +96,23 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 				data.orphanTargets.length > 0
 					? `${summary} ${vscode.l10n.t("{0} translation file(s) have no source file.", data.orphanTargets.length)}`
 					: summary;
+			const summaryWithConflicts =
+				data.conflicts.total > 0
+					? `${summaryWithOrphans} ${vscode.l10n.t("{0} merge conflict(s) remain in the .mdait folder.", data.conflicts.total)}`
+					: summaryWithOrphans;
 
-			const nextActions = buildNextActions(data.needs, data.errorUnits, data.orphanTargets.length, data.totalUnits);
-			return toToolResult(createOkEnvelope(summaryWithOrphans, data, nextActions));
+			const nextActions = buildNextActions(
+				data.needs,
+				data.errorUnits,
+				data.orphanTargets.length,
+				data.totalUnits,
+				data.conflicts.total,
+			);
+			return toToolResult(createOkEnvelope(summaryWithConflicts, data, nextActions));
 		} catch (error) {
 			logger.error("LanguageModelTool", "Error in getStatus tool", { error });
 			const errorMessage = vscode.l10n.t("Failed to get translation status: {0}", (error as Error).message);
-			return toToolResult(
-				createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message),
-			);
+			return toToolResult(createErrorEnvelope(errorMessage, ToolErrorCode.InternalError, (error as Error).message));
 		}
 	}
 
@@ -117,6 +125,12 @@ export class MdaitGetStatusTool implements vscode.LanguageModelTool<GetStatusInp
 			invocationMessage: vscode.l10n.t("Getting translation status..."),
 		};
 	}
+}
+
+/** 絶対パスをワークスペース相対へ直す（ワークスペースが無ければそのまま） */
+function toWorkspaceRelative(filePath: string): string {
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	return workspaceRoot ? path.relative(workspaceRoot, filePath).split(path.sep).join("/") : filePath;
 }
 
 /**

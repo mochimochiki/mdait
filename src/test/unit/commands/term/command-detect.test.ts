@@ -10,13 +10,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { detectTerm_CoreProc } from "../../../../commands/term/command-detect";
-import { describeUnusableBatches } from "../../../../commands/shared/guidance";
+import { describeBatchFailures } from "../../../../commands/shared/guidance";
 import { LangTerm, TermEntry } from "../../../../commands/term/term-entry";
 import type { TermDetector } from "../../../../commands/term/term-detector";
 import { UnitPair } from "../../../../commands/term/unit-pair";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import { Configuration, type TransPair } from "../../../../infra/config/configuration";
+import { AiCallsStoppedError } from "../../../../infra/llm/ai-call-guard";
 import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 
 declare let __vscodeMockWorkspaceRoot: string;
@@ -50,6 +51,22 @@ class FixedTermDetector implements TermDetector {
 function createPair(): UnitPair {
 	const sourceUnit = new MdaitUnit(new MdaitMarker("abc123"), "Section", 1, "# Section\n\nAPI endpoint content", 0, 2);
 	return UnitPair.create(sourceUnit, undefined);
+}
+
+/** バッチ分割の閾値（8000文字）を1つで超える大きなペア。並べた数だけバッチになる */
+function createLargePair(): UnitPair {
+	const sourceUnit = new MdaitUnit(new MdaitMarker("abc123"), "Section", 1, "x".repeat(5000), 0, 2);
+	return UnitPair.create(sourceUnit, undefined);
+}
+
+/** 呼び出しごとに指定のスクリプトを順に実行する用語検出サービス */
+class ScriptedTermDetector implements TermDetector {
+	public calls = 0;
+	constructor(private readonly script: Array<() => Promise<readonly TermEntry[]>>) {}
+
+	async detectTerms(): Promise<readonly TermEntry[]> {
+		return this.script[this.calls++]();
+	}
 }
 
 const transPair: TransPair = {
@@ -156,8 +173,8 @@ suite("detectTerm_CoreProc", () => {
 		);
 
 		assert.equal(result.entries.length, 0);
-		assert.equal(result.unusableBatches, 0, "答えは使えたので、使えなかった数は 0 であること");
-		assert.equal(describeUnusableBatches(result), "", "何も言い足さないこと");
+		assert.equal(result.failedBatches, 0, "答えは使えたので、失敗した数は 0 であること");
+		assert.equal(describeBatchFailures(result), "", "何も言い足さないこと");
 	});
 
 	test("答えが使えなかったバッチは「0件検出」に混ぜず、数えて返す", async () => {
@@ -172,13 +189,59 @@ suite("detectTerm_CoreProc", () => {
 	});
 
 	test("使えなかったバッチがあれば、通知に足す一文が組める", () => {
-		const sentence = describeUnusableBatches({
+		const sentence = describeBatchFailures({
 			totalBatches: 3,
+			failedBatches: 1,
 			unusableBatches: 1,
 			unusableReason: "invalid-format",
 		});
 		assert.ok(sentence.includes("1"), "使えなかった数が入っていること");
 		assert.ok(sentence.includes("3"), "試した数が入っていること");
 		assert.ok(sentence.length > 0);
+	});
+
+	test("答えが使えなかった以外の失敗も、成功したバッチがあるときに数えて返す", async () => {
+		const detector = new ScriptedTermDetector([
+			async () => new FixedTermDetector().detectTerms(),
+			async () => {
+				throw new Error("429 Too Many Requests");
+			},
+		]);
+
+		const result = await detectTerm_CoreProc(
+			[createLargePair(), createLargePair()],
+			transPair,
+			progressStub,
+			undefined,
+			detector,
+		);
+
+		assert.equal(result.entries.length, 1, "成功した分は残すこと");
+		assert.equal(result.totalBatches, 2);
+		assert.equal(result.failedBatches, 1, "失敗を理由を問わず数えること");
+		assert.ok(describeBatchFailures(result).length > 0, "通知に足す一文が組めること");
+	});
+
+	test("歯止めが AI 呼び出しを止めたら、残りのバッチは投げずに打ち切る", async () => {
+		const detector = new ScriptedTermDetector([
+			async () => new FixedTermDetector().detectTerms(),
+			async () => {
+				throw new AiCallsStoppedError("stopped");
+			},
+			async () => [],
+		]);
+
+		const result = await detectTerm_CoreProc(
+			[createLargePair(), createLargePair(), createLargePair()],
+			transPair,
+			progressStub,
+			undefined,
+			detector,
+		);
+
+		assert.equal(detector.calls, 2, "止まったあとのバッチを投げないこと");
+		assert.equal(result.totalBatches, 2, "試したバッチだけを数えること");
+		assert.equal(result.stoppedMessage, "stopped");
+		assert.equal(result.entries.length, 1, "止まる前の結果は残すこと");
 	});
 });

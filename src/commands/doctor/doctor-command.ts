@@ -510,7 +510,7 @@ async function presentDiagnostics(diagnostics: Diagnostic[], config: Configurati
 }
 
 /**
- * 診断レポートを `.mdait/reports/doctor.md` へ書き出す。
+ * 診断レポートを `.mdait/local/reports/doctor.md` へ書き出す。
  *
  * まだ mdait 化されていないワークスペースでは何も書かない（undefined を返す）。
  * 診断は未設定のワークスペースでも走らせる想定であり、診断しただけで `.mdait/` を

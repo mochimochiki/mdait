@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { parseUnitState, readUnitStateText } from "./unit-state.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -85,22 +86,12 @@ function walk(dir, out = []) {
 	return out;
 }
 
-/** unit-state（外部マーカーの置き場）の need を数える。7列のうち最後が need */
+/** unit-state（外部マーカーの置き場）の need を数える */
 function countUnitState(ws) {
-	const file = path.join(ws, ".mdait", "unit-state");
 	const result = { lines: 0, need: {} };
-	let raw;
-	try {
-		raw = fs.readFileSync(file, "utf8");
-	} catch {
-		return result;
-	}
-	for (const line of raw.split("\n")) {
-		if (!line.trim() || line.startsWith("#")) continue;
-		const columns = line.split("\t");
-		if (columns.length !== 7) continue;
+	for (const row of parseUnitState(readUnitStateText(ws))) {
 		result.lines += 1;
-		const need = columns[6] ? columns[6].split("@")[0] : "(なし)";
+		const need = row.need ? row.need.split("@")[0] : "(なし)";
 		result.need[need] = (result.need[need] ?? 0) + 1;
 	}
 	return result;

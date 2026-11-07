@@ -11,8 +11,9 @@ import type { PatchFailureReason } from "../../core/diff/diff-generator";
 import { Configuration } from "../../infra/config/configuration";
 import { isOperationCancelled } from "../../infra/errors/operation-cancelled";
 import { TROUBLESHOOTING_URL } from "../../infra/links";
-import { isAiCallsStopped } from "../../infra/llm/call-budget";
+import { isAiCallsStopped } from "../../infra/llm/ai-call-guard";
 import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
+import type { BatchFailures } from "./batch-failures";
 import { openConfigInSettingsEditor } from "./open-config-editor";
 
 /** 設定ファイルを設定UIで開く（無ければ作成コマンドへ） */
@@ -135,7 +136,7 @@ export async function showTranslationError(error: unknown): Promise<void> {
 	}
 	const message = error instanceof Error ? error.message : String(error);
 	// 呼び過ぎで打ち切ったときも、行き先は同じ（診断と設定）。何をしても進まない状態で
-	// 止めているので、次の一手は必ず「設定を見る」になる（`infra/llm/call-budget.ts`）
+	// 止めているので、次の一手は必ず「設定を見る」になる（`infra/llm/ai-call-guard.ts`）
 	if (isAiUnavailableMessage(message) || isAiCallsStopped(error)) {
 		// ボタンは2つまで（ux.md §3.3）。ドキュメントは診断レポートの末尾から辿れるので、
 		// ここでは主導線（診断）と、その場で直せる場所（設定）だけを出す
@@ -209,27 +210,47 @@ export function describeResponseFailure(reason: UnusableResponseReason): string 
 }
 
 /**
- * 「AI の答えが使えなかった回がある」ことを伝える一文を組む。無ければ空文字。
+ * 「失敗したバッチがある」ことを伝える文を組む。失敗が無ければ空文字。
  *
  * 用語を拾う・訳語を埋めるのように、仕事をいくつかに分けて AI へ投げる処理のためのもの。
  * **件数だけを出すと「見つからなかった」と区別が付かない。** 次の一手が
  * 「原稿を見る」なのか「設定を見る」なのかが変わるので、必ず言い添える。
+ *
+ * 答えが使えなかった回と、それ以外で失敗した回（届かなかった・429 など）は分けて言う。
+ * 前者は答えの形の話で、後者は接続や設定の話なので、見に行く場所が違う。
  */
-export function describeUnusableBatches(result: {
-	totalBatches: number;
-	unusableBatches: number;
-	unusableReason?: UnusableResponseReason;
-}): string {
-	if (result.unusableBatches === 0) {
+export function describeBatchFailures(result: BatchFailures): string {
+	if (result.failedBatches === 0) {
 		return "";
 	}
-	const reason = result.unusableReason ? describeResponseFailure(result.unusableReason) : "";
-	const body = vscode.l10n.t(
-		"The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.",
-		result.unusableBatches,
-		result.totalBatches,
-	);
-	return reason ? `${body} ${reason}` : body;
+	const parts: string[] = [];
+	if (result.unusableBatches > 0) {
+		parts.push(
+			vscode.l10n.t(
+				"The AI's answer could not be used {0} time(s) out of {1}, so those parts were skipped.",
+				result.unusableBatches,
+				result.totalBatches,
+			),
+		);
+		if (result.unusableReason) {
+			parts.push(describeResponseFailure(result.unusableReason));
+		}
+	}
+	const otherFailures = result.failedBatches - result.unusableBatches;
+	if (otherFailures > 0) {
+		parts.push(
+			vscode.l10n.t(
+				"The AI call failed {0} time(s) out of {1}, so those parts were skipped. See the mdait output panel for details.",
+				otherFailures,
+				result.totalBatches,
+			),
+		);
+	}
+	// 歯止めの文は「残りを投げなかった」ことと「設定を見る」ことまで言っているので、そのまま添える
+	if (result.stoppedMessage) {
+		parts.push(result.stoppedMessage);
+	}
+	return parts.join(" ");
 }
 
 /** 翻訳結果のうち、通知に必要な部分だけの形 */

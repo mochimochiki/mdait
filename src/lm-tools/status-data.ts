@@ -6,6 +6,7 @@
  *   内訳集計と、ファイル別内訳の生成を行う。VS Code API 非依存。
  * @module lm-tools/status-data
  */
+import type { ConflictFileKind, MdaitConflicts } from "../core/conflict/mdait-conflicts";
 import type { FileStatusItem, UnitStatusItem } from "../core/status/status-item";
 import { Status, isCountedInProgress, isIsolatedNeed } from "../core/status/status-item";
 
@@ -69,6 +70,43 @@ export interface StatusData {
 	 * エージェントにできるのは原文を戻すか、人に判断を求めることだけである。
 	 */
 	orphanTargets: string[];
+	/**
+	 * `.mdait` に残っている合流の競合（roadmap-v04）。**選択中の言語ペアやパスで絞らない** —
+	 * `.mdait` のファイルはワークスペースに1つずつで、どの範囲を聞かれても同じ答えになる。
+	 *
+	 * 人のステータスバーとツリーに出ている件数をエージェントにも同じだけ見せる。競合が残って
+	 * いるあいだは用語集と翻訳メモリが読めず、翻訳の材料が欠ける。**解決の手段は渡さない** —
+	 * 同じ鍵に別の値が来た件を選ぶのは人の仕事で（ux.md §3.3）、エージェントにできるのは
+	 * 人に解決を頼むことだけである。
+	 */
+	conflicts: ConflictData;
+}
+
+/** エージェントに見せる競合の内訳 */
+export interface ConflictData {
+	/** 人が片付ける件数（ファイル1つで1件、合流で席から降ろされた行1つで1件） */
+	total: number;
+	/** 競合マーカーの残っているファイル（パスはワークスペース相対） */
+	files: Array<{ kind: ConflictFileKind; path: string }>;
+	/** 合流で席から降ろされた `unit-state` の行の数 */
+	mergeHeldRows: number;
+}
+
+/**
+ * 競合の数え上げを、エージェント向けの形へ写す。
+ * @param toRelative 絶対パスをワークスペース相対へ直す関数
+ */
+export function buildConflictData(conflicts: MdaitConflicts, toRelative: (filePath: string) => string): ConflictData {
+	return {
+		total: conflicts.total,
+		files: conflicts.files.map((file) => ({ kind: file.kind, path: toRelative(file.filePath) })),
+		mergeHeldRows: conflicts.heldRows.length,
+	};
+}
+
+/** 競合が1件も無いときの内訳 */
+export function emptyConflictData(): ConflictData {
+	return { total: 0, files: [], mergeHeldRows: 0 };
 }
 
 function emptyBreakdown(): NeedBreakdown {
@@ -170,8 +208,13 @@ function buildUnitNeedDetails(units: UnitStatusItem[]): {
  * ターゲットファイル一覧から全体ステータスデータを構築する。
  * @param files 対象ファイル（ソースファイルは内部で除外する）
  * @param detail true のとき need のあるファイルの内訳一覧を含める
+ * @param conflicts `.mdait` に残っている競合（省略すると 0 件）
  */
-export function buildStatusData(files: FileStatusItem[], detail: boolean): StatusData {
+export function buildStatusData(
+	files: FileStatusItem[],
+	detail: boolean,
+	conflicts: ConflictData = emptyConflictData(),
+): StatusData {
 	const totals = emptyBreakdown();
 	let totalUnits = 0;
 	let translatedUnits = 0;
@@ -240,6 +283,7 @@ export function buildStatusData(files: FileStatusItem[], detail: boolean): Statu
 		filesWithNeeds,
 		filesTranslated,
 		orphanTargets,
+		conflicts,
 	};
 	if (detail) {
 		data.files = fileDetails;

@@ -88,7 +88,7 @@ suite("sync: 掃除の走査は選択で絞らない", () => {
 		});
 
 		test(".mdait や .git の中は読まない", () => {
-			write(".mdait/reports/sync.md", "<!-- mdait aaaa1111 -->\n");
+			write(".mdait/local/reports/sync.md", "<!-- mdait aaaa1111 -->\n");
 			write("docs/ja/.git/x.md", "<!-- mdait bbbb2222 -->\n");
 			write("docs/ja/a.md", "<!-- mdait cccc3333 -->\n");
 			const swept = sweepMarkerHashes([tempDir], [".md"]);

@@ -8,6 +8,7 @@ import {
 	UnitStateStore,
 	isHeldBackEntry,
 	isLiveBodyEntry,
+	isMergeHeldEntry,
 } from "../unit-state/unit-state-store";
 import type { FrontMatter } from "./front-matter";
 import {
@@ -57,8 +58,8 @@ export interface MarkerFileContext {
 /**
  * 読み込み時の照合結果のうち、書き出し時の判断に要る分だけの控え。
  *
- * 行そのものではなく `order` で覚える。控えを取ってから使うまでのあいだにストアが
- * 書き換わりうるので（`movePath` など）、そのときのストアを正として引き直す。
+ * 行そのものではなく席のキー（と本文の hash）で覚える。控えを取ってから使うまでのあいだに
+ * ストアが書き換わりうるので（`movePath` など）、そのときのストアを正として引き直す。
  */
 export interface MarkerAlignmentMemo {
 	/**
@@ -69,11 +70,23 @@ export interface MarkerAlignmentMemo {
 	 */
 	readonly unmatchedSeats: readonly string[];
 	/**
-	 * 席に着いていない行から拾い戻された行の本文 hash。その行を消す。
+	 * 席に着いていない行から拾い戻された行。その行を消す。
 	 *
-	 * 書き出しが席のキーで書き直すため、残すと同じ状態の行が二重になる。
+	 * 書き出しが席のキーで書き直すため、残すと同じ状態の行が二重になる。hash ではなく
+	 * 行そのものを持つのは、同じ本文 hash の別の行（合流で選ばれなかった側）を巻き込まないため。
 	 */
-	readonly recoveredHeldHashes: readonly string[];
+	readonly recoveredHeldEntries: readonly UnitStateEntry[];
+	/**
+	 * 合流で降ろされ（`isMergeHeldEntry`）、この同期でも本文と一致しなかった行。
+	 * 合流由来の印を外し、ふつうの預かり（本文が戻ってきたら拾う行）にする。frontmatter の席から
+	 * 降ろされた行は拾い戻す道が無いので消す（`UnitStateStore.settleMergeHeldEntries`）。
+	 *
+	 * 同期が原稿と突き合わせた時点で、この行は人の判断を待つ件ではなくなる。原稿がどちらの版とも
+	 * 一致しないなら、原稿は両方より先へ進んでいて、席に残った行には同期が改訂の印を付け直す —
+	 * どちらの古い状態を選んでも結果は同じだからである（roadmap-v04 P03）。印を残すと、
+	 * 解きようのない競合がステータスバーとツリーに居座り続ける（ツリーの行に操作は無い）。
+	 */
+	readonly settledMergeHeldEntries: readonly UnitStateEntry[];
 	/**
 	 * ユニットごとの「いま座っている席」。**添字ではなくユニットそのものを鍵にする。**
 	 *
@@ -153,11 +166,12 @@ export const embeddedMarkerProvider: MarkerProvider = new EmbeddedMarkerProvider
 /**
  * 外部ストア（`.mdait/unit-state`）とユニットを橋渡しする Provider。
  *
- * - マーカーは本文に埋め込まず、`UnitStateStore` に `(path, order)` キーで保管する。
+ * - マーカーは本文に埋め込まず、`UnitStateStore` に `(path, 席のキー)` で保管する（`seat-keys.ts`）。
  * - attach: store のエントリといまのユニットを**中身で**突き合わせてマーカーを後付けする
  *   （何番目かは身元に使わない。手がかりは本文の hash → 見出しの hash とレベル → 順序。
  *   詳細は `unit-state-align.ts`）。titleHash は補助の印ではなく、そこで使う鍵である。
- * - detach: 各ユニットを order=index でストアに書き込む（save は呼ばない。sync 完了時に1回）。
+ * - detach: 各ユニットを席のキーでストアに書き込む。座っていた席は据え置き、新しい章には
+ *   前後のあいだの席を配る（save は呼ばない。sync 完了時に1回）。
  *
  * `ctx.filePath` はワークスペース相対・/区切りを契約とする（正規化は呼び出し側の責務）。
  */
@@ -253,7 +267,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
 		const leftovers = before.filter((e) => isLiveBodyEntry(e) && !kept.has(e.seat)).map((e) => e.seat);
 		const entryCount = this.store.countLiveEntriesByPath(filePath);
 		if (leftovers.length > 0) {
-			if (ctx.deliberateDeletion || shouldPruneTail(entryCount, units.length)) {
+			if (ctx.deliberateDeletion || shouldPruneLeftovers(entryCount, units.length)) {
 				// 消す側は今まで無言だった。掃除も刈り取り見送りもログを出すのに、
 				// 実際に状態を失う操作だけが記録に残らないのは追跡のしようがない
 				const removed = this.store.dropEntries(filePath, leftovers);
@@ -382,28 +396,29 @@ export class ExternalMarkerProvider implements MarkerProvider {
 	/**
 	 * 読み込み時の控えを適用する（書き出しで行が上書きされる前に呼ぶ）。
 	 *
-	 * 控えは `order` しか持たないので、いまのストアを正として引き直す。控えを取ってから
+	 * 控えは席のキーと本文の hash しか持たないので、いまのストアを正として引き直す。控えを取ってから
 	 * ここへ来るまでのあいだにストアが書き換わっている可能性があるため（リネーム追随の
 	 * `movePath`、別のコマンドの書き込み）、控えの中身を鵜呑みにはしない。
 	 */
 	private applyAlignmentMemo(filePath: string, memo: MarkerAlignmentMemo): void {
 		// 先に席から外す。外す前に席へ移すと、同じ本文 hash の突き合わせ（席は1本文1席）で
 		// 拾い戻したばかりの行が「既にある席」と見なされ、退避したい行が置けなくなる
-		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldHashes);
+		const recovered = this.store.dropHeldEntries(filePath, memo.recoveredHeldEntries);
+		const settled = this.store.settleMergeHeldEntries(filePath, memo.settledMergeHeldEntries);
 		const parked = this.store.parkEntries(filePath, memo.unmatchedSeats);
-		if (recovered > 0 || parked > 0) {
+		if (recovered > 0 || parked > 0 || settled > 0) {
 			logger.info("marker", "Applied held seats from the parse-time alignment", {
 				path: filePath,
 				parked,
 				recovered,
+				settled,
 			});
 		}
 	}
-
 }
 
 /**
- * 末尾の余った行を刈ってよいか。
+ * どのユニットにも席を譲らなかった行（余った行）を刈ってよいか。
  *
  * 守りたいのは「ユニットが 0 件になった」ときだけではなく「**一時的に減った**」ときである。
  * コードブロックの閉じ忘れでパースが崩れる、`sync.level` の設定を変えて見出しの粒度が
@@ -411,8 +426,8 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * ユニット数が戻っても、消えた `from`/`need` は戻らない。
  *
  * 刈らないと決めた行は捨て置かれるのではなく、**席から降ろして位置の意味を剥がす**
- * （`UnitStateStore.parkEntries`）。席に着いていない行は順序では拾われず、内容（本文の hash・
- * 見出しの hash とレベル）が一致したときだけ拾われる。だから章が戻ってくれば正しく復帰し、
+ * （`UnitStateStore.parkEntries`）。席に着いていない行は順序でも見出しでも拾われず、本文の hash が
+ * 完全に一致したときだけ拾われる（`alignEntriesToUnits` の `contentOnly`）。だから章が戻ってくれば正しく復帰し、
  * 戻ってこなければ無害に居座るだけになる。この保証があって初めて
  * 「消す側の失敗は取り返せず、残す側の失敗は取り返せる」という非対称が成り立つ。
  *
@@ -428,7 +443,7 @@ export class ExternalMarkerProvider implements MarkerProvider {
  * ので、ユニット数がいくら増えても消えない）。人が明示的に頼んだ削除は判定を通さず必ず
  * 刈る（`MarkerFileContext.deliberateDeletion`）。詳しくは docs/design/unit-state.md §14。
  */
-export function shouldPruneTail(entryCount: number, unitCount: number): boolean {
+export function shouldPruneLeftovers(entryCount: number, unitCount: number): boolean {
 	if (unitCount === 0) {
 		// 本文を一時的に空にした・パース途中の崩れた状態。そのファイルの行を丸ごと失わない
 		return false;
@@ -444,7 +459,7 @@ export function shouldPruneTail(entryCount: number, unitCount: number): boolean 
  *
  * ユニットが0件のときは控えを作らない。本文を全選択して消した・コードブロックの閉じ忘れで
  * 以降が全部飲まれた、といった「一時的に潰れた」状態では**すべての行が対応なし**になるが、
- * それは章が消えた証拠ではない。`shouldPruneTail` が「ユニット0件なら刈らない」を先に返すのと
+ * それは章が消えた証拠ではない。`shouldPruneLeftovers` が「ユニット0件なら刈らない」を先に返すのと
  * 同じ理由で、ここでも証拠として扱わない。
  *
  * @param entries そのファイルの行（並び順）
@@ -459,7 +474,8 @@ export function buildAlignmentMemo(
 	aligned: ReadonlyArray<UnitStateEntry | undefined> = [],
 ): MarkerAlignmentMemo {
 	const unmatchedSeats: string[] = [];
-	const recoveredHeldHashes: string[] = [];
+	const recoveredHeldEntries: UnitStateEntry[] = [];
+	const settledMergeHeldEntries: UnitStateEntry[] = [];
 	const seatByUnit = new Map<MdaitUnit, string>();
 	for (let i = 0; i < units.length; i++) {
 		const entry = aligned[i];
@@ -468,14 +484,17 @@ export function buildAlignmentMemo(
 		}
 	}
 	if (units.length === 0) {
-		return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
+		return { unmatchedSeats, recoveredHeldEntries, settledMergeHeldEntries, seatByUnit };
 	}
 	for (const entry of entries) {
 		const matched = matchedEntries.has(entry);
 		if (isHeldBackEntry(entry)) {
 			if (matched) {
 				// 本文が戻ってきて拾われた。書き出しが席のキーで書き直すので、こちらは消す
-				recoveredHeldHashes.push(entry.hash);
+				recoveredHeldEntries.push(entry);
+			} else if (isMergeHeldEntry(entry)) {
+				// 原稿と突き合わせても一致しなかった。人の判断を待つ件ではなくなる
+				settledMergeHeldEntries.push(entry);
 			}
 			continue;
 		}
@@ -490,7 +509,7 @@ export function buildAlignmentMemo(
 		}
 		unmatchedSeats.push(entry.seat);
 	}
-	return { unmatchedSeats, recoveredHeldHashes, seatByUnit };
+	return { unmatchedSeats, recoveredHeldEntries, settledMergeHeldEntries, seatByUnit };
 }
 
 /**

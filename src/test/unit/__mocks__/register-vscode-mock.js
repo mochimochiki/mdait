@@ -189,6 +189,7 @@ const vscodeMock = {
 		// ステータスバーの一時メッセージ（「要対応: N 件中 M 件目」など）。トーストではないので
 		// __vscodeMockShownMessages には控えない（「通知を出さないこと」の検査を汚さない）
 		setStatusBarMessage: () => ({ dispose: () => {} }),
+		createStatusBarItem: () => ({ show: () => {}, hide: () => {}, dispose: () => {} }),
 		createOutputChannel: () => ({
 			appendLine: () => {},
 			append: () => {},
@@ -241,6 +242,7 @@ const vscodeMock = {
 			this.id = id;
 		}
 	},
+	StatusBarAlignment: { Left: 1, Right: 2 },
 	EventEmitter: class {
 		constructor() {
 			this._listeners = [];

@@ -12,7 +12,9 @@ Extension Host は起動しない。
 - 常駐する。`lab up` が detached で起こし、`ready` ファイルができたら戻る。
 - **UI が要るコマンドは動かない**（QuickPick を出すもの、CodeLens から呼ばれるもの）。
   `lab run` が実行前に知らせる。
-- `fireTimeline` / `stateDiff` / `syncAnalysis` は入らない（ツリーの provider が構築されないため）。
+- `fireTimeline` / `stateDiff` / `syncAnalysis` も入る。`fireTimeline` に並ぶのはツリー自身の通知
+  （`source: "tree"`）だけで、画面側の再描画（`source: "provider"`）は無い（provider を組まないため）。
+  状態が変わったのにツリーの通知が1つも無い＝画面が追随しない、は headless でも `syncAnalysis.syncGaps` に出る。
 - モックに無い vscode API に当たったら `scripts/lab/vscode-shim.js` を足す（`withProgress` /
   `commands` / `findFiles` の要領）。
 
@@ -69,6 +71,8 @@ lab ux                   # 実 UI にしか無いものを一通り撮って、�
 | `tree-items` | ツリーの行（ラベル・副題・アイコンの codicon 名・回転しているか・読み上げラベル・深さ） |
 | `expand-tree` | 畳まれた行を**下から順に**開く（上から開くと深さ方向へ潜り続け、隣の枝に永久に届かない） |
 | `set-row-expanded` | 名前で指した1行だけを開く／畳む |
+| `hover-row` | 名前で指した1行にマウスを載せ、**行内のボタンを描かせる**（載せないと写しにも DOM にも出ない）。出たボタンの名前が返る |
+| `click-row-action` | 行内のボタンを名前で押す（押す前に自動でマウスを載せる）。押せたかが返る |
 | `codelens` | いま開いているエディタの CodeLens のボタン文字（行の上から順） |
 | `open-file` / `close-editors` | ファイルを開く／タブを全部閉じる |
 | `dialog` / `click-dialog` | 前面のダイアログの文言・ボタン・**主たるボタン**／文字で押す |

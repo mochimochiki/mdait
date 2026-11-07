@@ -9,11 +9,11 @@ import * as vscode from "vscode";
 
 import type { MdaitUnit } from "../../core/markdown/mdait-unit";
 import { Configuration, type TransPair } from "../../infra/config/configuration";
-import { type UnusableResponseReason, isUnusableAIResponse } from "../../infra/llm/unusable-response";
 import { Logger, formatError } from "../../infra/logging/logger";
 import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
+import { type BatchFailures, BatchFailureTally } from "../shared/batch-failures";
 import { isCancellationError } from "../shared/cancellation";
-import { describeUnusableBatches } from "../shared/guidance";
+import { describeBatchFailures } from "../shared/guidance";
 import { notifyWithReport } from "../shared/report-file";
 import { type TermDetector, createTermDetector } from "./term-detector";
 import type { TermEntry } from "./term-entry";
@@ -31,15 +31,9 @@ const MAX_BATCH_CHARS = 8000;
  * 利用者にとってまったく違う話で、次の一手も違う（原稿を見る／設定を見る）。
  * 件数だけを返していたころは、どちらも「新しい用語 0 件」として同じ顔で終わっていた。
  */
-export interface TermDetectionResult {
+export interface TermDetectionResult extends BatchFailures {
 	/** 見つかった用語 */
 	entries: TermEntry[];
-	/** 試したバッチの数 */
-	totalBatches: number;
-	/** 答えが使えなくて捨てたバッチの数 */
-	unusableBatches: number;
-	/** 最初に使えなかった理由。利用者向けの文はここから組む（`describeResponseFailure`） */
-	unusableReason?: UnusableResponseReason;
 }
 
 /**
@@ -109,12 +103,12 @@ export async function detectTermCommand(
 
 	// 完了通知は1本にまとめ、レポートは同じ通知のボタンから開く
 	// （自動で開かないのは実ファイルでいつでも開き直せるため。ux.md E-6）
-	const unusable = describeUnusableBatches(detected);
+	// 「用語が無かった」と「失敗したバッチがあった」を同じ文で終わらせない。
+	// 前者はふつうの結末（情報）、後者は手を打つべきこと（警告）。1つでも失敗したら警告にする
+	const failures = describeBatchFailures(detected);
 	if (detected.entries.length === 0) {
-		// 「用語が無かった」と「答えが使えなかった」を同じ文で終わらせない。
-		// 前者はふつうの結末（情報）、後者は手を打つべきこと（警告）
-		if (unusable) {
-			vscode.window.showWarningMessage(unusable);
+		if (failures) {
+			vscode.window.showWarningMessage(failures);
 		} else {
 			vscode.window.showInformationMessage(vscode.l10n.t("Term detection completed: no terms detected."));
 		}
@@ -126,7 +120,11 @@ export async function detectTermCommand(
 		targetLang: transPair.targetLang,
 	});
 	const body = vscode.l10n.t("Term detection completed: {0} term(s) detected.", detected.entries.length);
-	notifyWithReport(unusable ? `${body} ${unusable}` : body, uri);
+	if (failures) {
+		notifyWithReport(`${body} ${failures}`, uri, "warning");
+	} else {
+		notifyWithReport(body, uri);
+	}
 	return detected;
 }
 
@@ -188,20 +186,14 @@ export async function detectTerm_CoreProc(
 
 	// Phase 1: バッチ分割
 	const batches = createBatches(pairs);
-	const totalBatches = batches.length;
 	let processedBatches = 0;
-	let failedBatches = 0;
-	let unusableBatches = 0;
-	let unusableReason: UnusableResponseReason | undefined;
-	let firstBatchError: unknown;
+	const tally = new BatchFailureTally();
 	const allDetectedTerms: TermEntry[] = [];
 
-	/** ここまでの結果を、使えなかったバッチの数と一緒に返す */
+	/** ここまでの結果を、失敗したバッチの数と一緒に返す */
 	const summarize = (): TermDetectionResult => ({
 		entries: allDetectedTerms,
-		totalBatches,
-		unusableBatches,
-		unusableReason,
+		...tally.summary(),
 	});
 
 	// Phase 2: バッチごとに用語検出
@@ -212,10 +204,11 @@ export async function detectTerm_CoreProc(
 		}
 
 		progress.report({
-			message: vscode.l10n.t("Processing batch {0} of {1}", processedBatches + 1, totalBatches),
-			increment: 100 / totalBatches,
+			message: vscode.l10n.t("Processing batch {0} of {1}", processedBatches + 1, batches.length),
+			increment: 100 / batches.length,
 		});
 
+		tally.attempt();
 		try {
 			// バッチ全体を1回のAI呼び出しで処理（UnitPairベース）
 			const detectedTerms = await termDetector.detectTerms(
@@ -255,19 +248,14 @@ export async function detectTerm_CoreProc(
 				console.log("Term detection was cancelled by user");
 				return summarize();
 			}
-			failedBatches++;
-			// 「AI は答えたが使えなかった」は、届かなかった失敗と分けて数える。
-			// 一部のバッチだけ使えなかったときに、成功した分の件数だけを出して黙る形を無くす
-			if (isUnusableAIResponse(error)) {
-				unusableBatches++;
-				unusableReason ??= error.reason;
-			}
-			if (firstBatchError === undefined) {
-				firstBatchError = error;
-			}
 			Logger.getInstance().warn("term.detect", "Batch term detection failed", {
 				...formatError(error),
 			});
+			// 失敗は理由を問わず数える。一部のバッチだけ失敗したときに、成功した分の件数だけを
+			// 出して黙る形を無くす。歯止めが AI 呼び出しを止めたら、残りのバッチは投げない
+			if (!tally.recordFailure(error)) {
+				break;
+			}
 		}
 
 		processedBatches++;
@@ -275,9 +263,7 @@ export async function detectTerm_CoreProc(
 
 	// 全バッチが失敗した場合は「0件検出の成功」と誤認させず、エラーとして伝播させる
 	// （AI未接続・未認可などの構成問題を呼び出し側のエラー通知で表面化する）
-	if (totalBatches > 0 && failedBatches === totalBatches) {
-		throw firstBatchError instanceof Error ? firstBatchError : new Error(String(firstBatchError));
-	}
+	tally.throwIfAllFailed();
 
 	// Phase 3: 検出された用語を用語集に追加
 	if (allDetectedTerms.length > 0) {

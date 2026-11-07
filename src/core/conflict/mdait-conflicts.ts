@@ -8,7 +8,7 @@
  *   TM も用語集も読むのを拒んで手が止まる。**気づく手立てが1つも無かった**のがいちばんの
  *   損で、ここはその手立てを作る係である（ADR-260911-02）。
  *
- *   数えるだけで、**1バイトも書かない**。解くのは P02（AI の一発）と P03（人が決める）である。
+ *   数えるだけで、**1バイトも書かない**。解くのは `commands/conflict/` である。
  *
  * ## 数えるもの
  *
@@ -86,18 +86,29 @@ export function noConflicts(): MdaitConflicts {
 }
 
 /**
+ * ファイルの見た目を測る。
+ *
  * 見た目には**パスも入れる**。覚え書きは作業場をまたいで生き残るので（`conflict-source.ts` の
  * スキャナはモジュールに1つ）、設定でパスが変わったのに新しいパスのファイルの更新時刻と
  * 寸法がたまたま同じだと、前のパスの答えをそのまま返してしまう。
  */
-
-function stampOf(filePath: string): FileStamp {
+export function stampOf(filePath: string): FileStamp {
 	try {
 		const stat = fs.statSync(filePath);
 		return `${filePath}\u0000${stat.mtimeMs}:${stat.size}`;
 	} catch {
 		return `${filePath}\u0000-`; // 無いファイルは競合しようがない
 	}
+}
+
+/** 数える対象を、種別と組にして並べる */
+function candidatesOf(paths: ConflictFilePaths): ReadonlyArray<[ConflictFileKind, string]> {
+	return [
+		["unit-state", paths.unitState],
+		["unit-registry", paths.unitRegistry],
+		["tm", paths.tm],
+		["terms", paths.terms],
+	];
 }
 
 /**
@@ -111,7 +122,7 @@ function isConflicted(filePath: string): boolean {
 	try {
 		return hasConflictMarkersInDataFile(fs.readFileSync(filePath, "utf-8"));
 	} catch {
-		// 読めないファイルは competing しているとは言えない。読めない事実は
+		// 読めないファイルは競合しているとは言えない。読めない事実は
 		// それぞれのストアが自分の経路で報告する（ここで二重に鳴らさない）
 		return false;
 	}
@@ -132,13 +143,7 @@ export function collectMdaitConflicts(
 	entries: readonly UnitStateEntry[] = [],
 ): MdaitConflicts {
 	const files: ConflictedFile[] = [];
-	const candidates: ReadonlyArray<[ConflictFileKind, string]> = [
-		["unit-state", paths.unitState],
-		["unit-registry", paths.unitRegistry],
-		["tm", paths.tm],
-		["terms", paths.terms],
-	];
-	for (const [kind, filePath] of candidates) {
+	for (const [kind, filePath] of candidatesOf(paths)) {
 		if (filePath && isConflicted(filePath)) {
 			files.push({ kind, filePath, stamp: stampOf(filePath) });
 		}
@@ -190,12 +195,7 @@ export class MdaitConflictScanner {
 	 * @param entries `unit-state` の全行
 	 */
 	scan(paths: ConflictFilePaths, entries: readonly UnitStateEntry[] = []): MdaitConflicts {
-		const candidates: ReadonlyArray<[ConflictFileKind, string]> = [
-			["unit-state", paths.unitState],
-			["unit-registry", paths.unitRegistry],
-			["tm", paths.tm],
-			["terms", paths.terms],
-		];
+		const candidates = candidatesOf(paths);
 		const moved = !this.scannedOnce || candidates.some(([kind, filePath]) => this.stamps.get(kind) !== stampOf(filePath));
 		if (moved) {
 			this.files = collectMdaitConflicts(paths).files;

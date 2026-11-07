@@ -1,14 +1,12 @@
-// SectionMatcher の網羅性（どの並びでもユニットを取りこぼさない）の検証。
+// SectionMatcher の網羅性（どの並びでもユニットを取りこぼさない）と、順序の規約の検証。
 //
 // match() は「from 一致で確定した組」を錨にして区間を切り、区間の中を順序で埋める。
-// **錨が単調である（source 順に並べたとき target の位置も増えていく）ことを確かめていない。**
-// 章を並べ替えると錨は交差しうるので、区間の始点と終点が逆転する。逆転した区間に落ちた
-// ユニットが結果に載らないと、createSyncedTargets が結果から訳文を組み立てる以上、
-// **その訳文ユニットはファイルから消える**。
+// 章を並べ替えると錨は交差しうる。交差した錨で区間を切ると区間の始点と終点が逆転し、
+// 逆転した区間に落ちたユニットが結果に載らないと、createSyncedTargets が結果から訳文を
+// 組み立てる以上、**その訳文ユニットはファイルから消える**。
 //
-// unit-state 側の突き合わせ（interval-align）は selectMonotonicAnchors で単調な部分だけを
-// 枠に使うことでこれを避けている。SectionMatcher の載せ替えは未了なので（unit-state.md §10）、
-// 少なくとも「取りこぼさない」ことはここで見張る。
+// いまは external 側の突き合わせと同じ共通部品（core/matching/interval-align）に載っており、
+// 区間は順序の保たれる錨（selectMonotonicAnchors）だけで切る。ここはその安全網である。
 
 import * as assert from "node:assert";
 import { SectionMatcher } from "../../../../commands/sync/section-matcher";
@@ -99,5 +97,52 @@ suite("SectionMatcher の網羅性", () => {
 			const targets = order.map((h) => targetUnit(`t${h}`, h));
 			assertCovers(matcher.match(sources, targets), sources, targets);
 		}
+	});
+
+	test("原文を失った訳文が区間にあっても、残りの原文と from の無い訳文を順に結ぶこと", () => {
+		// 区間の中身: 原文 x / 訳文 [原文を失った訳文, from の無い訳文]。
+		// 原文を失った訳文は別の原文へ付け替えない。それが間に挟まっていても、
+		// from の無い訳文は x の訳として結ばれる（位置で結果が変わらない）
+		const sources = [sourceUnit("a"), sourceUnit("x"), sourceUnit("b")];
+		const dangling = targetUnit("td", "gone");
+		const unmarked = targetUnit("tu");
+		const targets = [targetUnit("ta", "a"), dangling, unmarked, targetUnit("tb", "b")];
+
+		const result = matcher.match(sources, targets);
+		assertCovers(result, sources, targets);
+		assert.strictEqual(result.find((p) => p.source === sources[1])?.target, unmarked);
+		assert.strictEqual(result.find((p) => p.target === dangling)?.source, null);
+	});
+
+	test("相手のいない訳文は、原文の順に並べた結果の中で元の位置に置かれること", () => {
+		const sources = [sourceUnit("a"), sourceUnit("b"), sourceUnit("c")];
+		const own = targetUnit("own");
+		const dangling = targetUnit("td", "gone");
+		const targets = [targetUnit("ta", "a"), own, targetUnit("tb", "b"), dangling, targetUnit("tc", "c")];
+
+		const independent = new Set([own]);
+		const order = matcher.match(sources, targets, independent).map((p) => p.target?.title ?? p.source?.title);
+		assert.deepStrictEqual(order, ["T-ta", "T-own", "T-tb", "T-td", "T-tc"]);
+	});
+
+	test("並べ替えられた章は、相手のいない訳文を差し込む位置の手がかりにしないこと", () => {
+		// 訳文では c の章が先頭へ動いている。c を手がかりにすると own が先頭へ飛ぶ
+		const sources = [sourceUnit("a"), sourceUnit("b"), sourceUnit("c")];
+		const own = targetUnit("own");
+		const targets = [targetUnit("tc", "c"), targetUnit("ta", "a"), own, targetUnit("tb", "b")];
+
+		const order = matcher.match(sources, targets, new Set([own])).map((p) => p.target?.title);
+		assert.deepStrictEqual(order, ["T-ta", "T-own", "T-tb", "T-tc"]);
+	});
+
+	test("先頭の組が並べ替えられた章でも、相手のいない訳文の位置はそれで決まらないこと", () => {
+		// 訳文 [b, own, c, a]。a は末尾へ動いた章。順序の保たれる組は b→0, c→2 なので、
+		// own は b と c のあいだに残る（a を手がかりにすると own が a より前へ飛ぶ）
+		const sources = [sourceUnit("a"), sourceUnit("b"), sourceUnit("c")];
+		const own = targetUnit("own");
+		const targets = [targetUnit("tb", "b"), own, targetUnit("tc", "c"), targetUnit("ta", "a")];
+
+		const order = matcher.match(sources, targets, new Set([own])).map((p) => p.target?.title);
+		assert.deepStrictEqual(order, ["T-ta", "T-tb", "T-own", "T-tc"]);
 	});
 });

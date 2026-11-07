@@ -83,17 +83,17 @@ suite("writeAdoptReport（統合レポートの実ファイル書き出し）", 
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	test("レポートは .mdait/reports/adopt.md に書き出される", async () => {
+	test("レポートは .mdait/local/reports/adopt.md に書き出される", async () => {
 		const config = await initConfig();
 		const uri = await writeAdoptReport(config, outcome());
 
 		assert.ok(uri, "URI が返る");
-		assert.strictEqual(uri?.fsPath, path.join(tempDir, ".mdait", "reports", "adopt.md"));
+		assert.strictEqual(uri?.fsPath, path.join(tempDir, ".mdait", "local", "reports", "adopt.md"));
 		assert.strictEqual(uri?.fsPath, config.getReportFilePath("adopt"));
 		assert.ok(fs.existsSync(config.getReportFilePath("adopt")), "ファイルが存在する");
 	});
 
-	test("ユニット行はレポート位置（.mdait/reports/）からの相対リンクになる", async () => {
+	test("ユニット行はレポート位置（.mdait/local/reports/）からの相対リンクになる", async () => {
 		const config = await initConfig();
 		const unit: UnitReviewResult = {
 			filePath: path.join(tempDir, "en", "doc.md"),
@@ -109,7 +109,7 @@ suite("writeAdoptReport（統合レポートの実ファイル書き出し）", 
 		await writeAdoptReport(config, outcome([reviewFile(tempDir, unit)]));
 
 		const content = fs.readFileSync(config.getReportFilePath("adopt"), "utf-8");
-		assert.ok(content.includes("[Section A](<../../en/doc.md#L12>)"), content);
+		assert.ok(content.includes("[Section A](<../../../en/doc.md#L12>)"), content);
 	});
 
 	test("再実行すると上書きされる（履歴は git に委ねる）", async () => {

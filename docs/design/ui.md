@@ -151,15 +151,15 @@ mdaitマーカー上に表示されるインラインアクションボタンで
 - **✨[AI]翻訳**: AI翻訳を実行（`need:translate`がある場合）
 - **$(check) 完了マーク**: needフラグを手動でクリア（`need`属性がある場合、種類に応じたラベル）
 - **$(check) Keep / $(trash) Delete Unit**: `need:verify-deletion` の2択（Delete は modal 確認つき。Keep は独立ユニット化＝need と from を同時に外す恒久操作。ADR-260805-01）。ツリーのファイル行には一括の「まとめて残す/まとめて削除」（どちらも modal）
-- **$(sync) 要翻訳にする（Mark as Needs Translation）**: `need:review` の訳文ユニットにだけ出す。「この訳は採用しない」の答えで、`need:review` → `need:translate` に印を付け替える。**印を付け替えるだけで AI は呼ばない**（だから ✨ を付けない）。訳すのはその後の「✨翻訳」に任せる。書き換えは `getFileHandler().requestTranslate`（`commands/markers/request-translate.ts`、`withMarkerOnlyMutation`）だけを通す。ずれた紐づけからの逃げ道でもある — 訳文を捨てて、紐づいた原文から訳し直す。frontmatter の review 行には出さない（書き換え経路が本文ユニットと別で、数行の見出し語なら手で直して確認済みにするほうが早い）。非 Markdown の review 行にも同じボタンを出す（ADR-260912-07）
+- **$(discard) 要翻訳にする（Mark as Needs Translation）**: `need:review` の訳文ユニットと訳文の frontmatter 行に出す。「この訳は採用しない」の答えで、`need:review` → `need:translate` に印を付け替える。**印を付け替えるだけで AI は呼ばない**（だから ✨ を付けない）。訳すのはその後の「✨翻訳」に任せる。書き換えは `getFileHandler().requestTranslate`（`commands/markers/request-translate.ts`、`withMarkerOnlyMutation`）だけを通す。ずれた紐づけからの逃げ道でもある — 訳文を捨てて、紐づいた原文から訳し直す。frontmatter の review 行にも出す（宛先は `{ kind: "frontmatter" }`。開始行の `---` はどのユニットのマーカーでもないので、CodeLens が宛先を渡す。ADR-260923-09）。非 Markdown の review 行にも同じボタンを出す（ADR-260912-07）
 - **$(kebab-vertical) その他**: QuickPick メニュー（`from`と`hash`がある場合）。「凍結する」（`need`なし時のみ）・「✨全文で訳し直す」（`need` が空か `revise@…` のときのみ。判断は `isRetranslatableUnit`。ADR-260906-01）・「ノート」を集約（`mdait.codelens.otherActions`）
 
 `need` ごとのボタンの並び（`buildUnitCodeLensSpecs`。純関数で、テストがこの順を固定している）:
 
 | need | 並び |
 |---|---|
-| `translate` / `revise@…` | Source → ✨翻訳 → 翻訳済みにする（改訂済みにする） → その他 |
-| `review` | Source → レビュー済みにする → 要翻訳にする → その他 |
+| `translate` / `revise@…` | Source → ✨翻訳 → 翻訳済みにする（`revise@…` では改訂完了） → その他 |
+| `review` | Source → レビュー完了 → 要翻訳にする → その他 |
 | `verify-deletion` | Source → Keep → Delete Unit → その他 |
 | `isolate` | Source → Un-isolate → その他 |
 | なし | Source → その他 |
@@ -350,7 +350,7 @@ sequenceDiagram
 
 **検証**（単独の人間導線は持たない。ADR-260802-02）:
 - **配置**: ✨AI翻訳レビューの**前処理**として自動実行される。ツールバー・パレットには出さない
-- **機能**: 構造チェック＋用語一貫性検証（読取専用・AI不使用）。結果は AI レビューのレポート（`.mdait/reports/ai-review.md`）に「機械チェック（構造・用語）」セクションとして載り、件数は同じ完了通知に足される
+- **機能**: 構造チェック＋用語一貫性検証（読取専用・AI不使用）。結果は AI レビューのレポート（`.mdait/local/reports/ai-review.md`）に「機械チェック（構造・用語）」セクションとして載り、件数は同じ完了通知に足される
 - **理由**: 機械で判定できる違反を LLM に有料で聞かない。ユーザーから見た操作は「✨AI翻訳レビュー」1つに減る
 - **対称性**: エージェント側の `mdait_validate` は据え置き（ゴール判定に使うため）。コア（`validate_CoreProc`）は共通
 
@@ -363,7 +363,7 @@ sequenceDiagram
 | コマンドID | 導線 | 備考 |
 |---|---|---|
 | `mdait.sync` / `mdait.setup.*` / `mdait.settings.open` / `mdait.translateSelection` / `mdait.adopt.run` | パレット（一部はツリーにも） | スタンドアロンで動作するもののみパレットに露出（ux.md C-2） |
-| `mdait.markers.externalize` / `mdait.markers.embed` / `mdait.tm.optimize` | 内部（パレット非表示） | AI 運用ループに乗らないためユーザー導線から外した（ADR-260802-02）。移行は設定変更時の sync 自己修復、TM の重み再計算は tm.commit の後段で自動実行される |
+| `mdait.markers.externalize` / `mdait.markers.embed` | 内部（パレット非表示） | AI 運用ループに乗らないためユーザー導線から外した（ADR-260802-02）。移行は設定変更時の sync 自己修復 |
 | `mdait.translate.{directory,file,unit,frontmatter}` / `mdait.term.update` / `mdait.tm.commit.{file,directory}` / `mdait.aiReview.{file,directory}` | ツリー行内/コンテキストメニュー | アイテム引数必須のためパレット非表示。`term.update` は検出＋展開を1操作にまとめたもの（ADR-260802-02） |
 | `mdait.aiReview.pending` | 要対応ノードの行内/コンテキストメニュー・sync 完了通知の「✨AI review」・パレット | 引数なしで、選択中ペアの `need:review` 全件（本文・frontmatter・非MD）を AI レビューにかける。モード選択は出さず pending 固定（ADR-260912-07） |
 | `mdait.unit.{markReviewed,keep,delete,markIsolated,unisolate}` / `mdait.needsAttention.next` / `mdait.jumpToUnit` / `mdait.openPair` | ツリー/キーバインド/パレット | 判断サーフェス（ux.md J4）。書き換えは `getFileHandler` 経由。`openPair` は要対応ノードの項目クリックと「次の要対応へ」の移動先（訳文と原文を並べて開く。package.json 未宣言の内部コマンド） |

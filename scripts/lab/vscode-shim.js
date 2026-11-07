@@ -139,6 +139,26 @@ function answerDialog(level, message, items) {
 vscode.window.showInformationMessage = async (message, ...items) => answerDialog("info", message, items);
 vscode.window.showWarningMessage = async (message, ...items) => answerDialog("warning", message, items);
 vscode.window.showErrorMessage = async (message, ...items) => answerDialog("error", message, items);
+/**
+ * LM Tool の確認（`prepareInvocation` の `confirmationMessages`）に答える。
+ *
+ * 実 VS Code ではチャット欄に「続ける / 取り消す」が出て、人が押すまでツールは走らない。
+ * ここでは他のダイアログと同じく**続けるを押したもの**として答え、押したことを控える。
+ * MDAIT_LAB_DIALOG=no のときは取り消す（ツールは呼ばれない）。
+ *
+ * @returns 続けるなら true
+ */
+vscode.__labAnswerToolConfirmation = (title, message) => {
+	const declines = process.env.MDAIT_LAB_DIALOG === "no";
+	answeredDialogs.push({
+		level: "tool-confirmation",
+		modal: true,
+		message: `${String(title ?? "")}: ${String(message?.value ?? message ?? "")}`,
+		buttons: ["Continue", "Cancel"],
+		answered: declines ? "Cancel" : "Continue",
+	});
+	return !declines;
+};
 /** 直前の命令で出たダイアログを読む（headless ホストが結果に載せる） */
 vscode.__labDialogs = () => answeredDialogs.slice();
 vscode.__labResetDialogs = () => {

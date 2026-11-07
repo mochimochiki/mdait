@@ -14,11 +14,25 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { decisionOf } from "../../commands/conflict/conflict-decisions";
-import { conflictKindLabel, conflictSideText } from "../../commands/conflict/conflict-labels";
+import {
+	conflictSideText,
+	conflictTargetLabel,
+	deletedBy,
+	partyOf,
+	sideOf,
+} from "../../commands/conflict/conflict-labels";
 import type { PendingChoice, ResolutionPlan } from "../../commands/conflict/resolution-plan";
 import { calculateHash } from "../../core/hash/hash-calculator";
 import type { ConflictFileKind, MdaitConflicts } from "../../core/conflict/mdait-conflicts";
 import { type DirectoryStatusItem, Status, StatusItemType } from "../../core/status/status-item";
+
+/** そのファイルの決め具合（行の見た目と、`解決` を出すかどうかを決める） */
+export interface ConflictRowCounts {
+	/** 人が決める件の総数 */
+	pending: number;
+	/** そのうち、まだ決めていない件数 */
+	undecided: number;
+}
 
 /** ルート直下の「競合の解決」仮想ノードの識別子（実在するパスと衝突しない形にする） */
 export const CONFLICTS_ID = "mdait:conflicts";
@@ -40,6 +54,11 @@ export function isConflictRowId(directoryPath: string): boolean {
 /** その行が「競合したファイル」の行か（開くと中の1件が出る） */
 export function isConflictFileRowId(directoryPath: string): boolean {
 	return directoryPath.startsWith(CONFLICT_FILE_PREFIX);
+}
+
+/** 競合したファイルの行の識別子 */
+export function conflictFileRowId(filePath: string): string {
+	return `${CONFLICT_FILE_PREFIX}${filePath}`;
 }
 
 /** ファイルの行の識別子から、そのファイルの絶対パスを取り出す */
@@ -72,7 +91,12 @@ function fileKindExplanation(kind: ConflictFileKind): string {
 /**
  * 「競合の解決」の枝を作る。0件なら `undefined`（空のノードをツリーに出さない — UX-P7）。
  */
-export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number | undefined): DirectoryStatusItem | undefined {
+export function buildConflictsItem(
+	conflicts: MdaitConflicts,
+	decisions: number | undefined,
+	/** 全件を決め終えて、あとは書くだけのファイルの数 */
+	readyFiles = 0,
+): DirectoryStatusItem | undefined {
 	if (conflicts.total === 0) {
 		return undefined;
 	}
@@ -85,13 +109,22 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 				vscode.l10n.t("Merging left conflicts inside .mdait. The number counts the ones still waiting for your decision."),
 			]
 		: [vscode.l10n.t("Conflicts"), vscode.l10n.t("Merging left conflicts inside .mdait.")];
+	// **決め終えた分は数字に出ない**（決める件が 0 になるので）。押し忘れたまま数字が
+	// 消えるのを防ぐため、ここだけは解説で拾う
+	const waiting =
+		readyFiles > 0
+			? vscode.l10n.t(
+					"{0} file(s) have been decided and are waiting to be written — press Resolve on the row.",
+					readyFiles,
+				)
+			: "";
 	return {
 		type: StatusItemType.Directory,
 		label,
 		status: Status.Error,
 		directoryPath: CONFLICTS_ID,
 		contextValue: "mdaitConflictsRoot",
-		tooltip,
+		tooltip: waiting ? `${tooltip}\n\n${waiting}` : tooltip,
 	};
 }
 
@@ -104,22 +137,38 @@ export function buildConflictsItem(conflicts: MdaitConflicts, decisions: number 
 export function buildConflictRows(
 	conflicts: MdaitConflicts,
 	workspaceRoot: string | undefined,
-	/** 人が決める件の数（ファイルの絶対パス → 件数）。開けるかどうかの判断に使う */
-	pendingCounts: ReadonlyMap<string, number> = new Map(),
+	/**
+	 * 人が決める件の数（ファイルの絶対パス → 決め具合）。
+	 *
+	 * `undecided` は行に出す件数で、`pending` は「そもそも人が決める件があるか」である。
+	 * **両方要る** — 全件決まった行（`pending > 0` かつ `undecided === 0`）と、
+	 * はじめから決める件が無い行（`pending === 0`）は、見た目も操作も違う
+	 */
+	pendingCounts: ReadonlyMap<string, ConflictRowCounts> = new Map(),
 ): DirectoryStatusItem[] {
 	const shortPath = (absolute: string) =>
 		workspaceRoot ? path.relative(workspaceRoot, absolute).split(path.sep).join("/") : absolute;
 
 	const fileRows = conflicts.files.map((file): DirectoryStatusItem => {
-		const pending = pendingCounts.get(file.filePath) ?? 0;
+		const counts = pendingCounts.get(file.filePath) ?? { pending: 0, undecided: 0 };
+		// **全件を決め終えたら、書ける。** そのときだけ行に `解決` を出す（`package.json`）。
+		// 決め終えたことは副題でも読めるようにする — ボタンは載せた行にしか描かれないので、
+		// 印がアイコンだけだと「決めたのに何も起きない」と見える
+		const ready = counts.pending > 0 && counts.undecided === 0;
 		return {
 			type: StatusItemType.Directory,
-			// 対象の名前と、その中で決める件数だけ。パスは Hover に降ろす
-			label: pending > 0 ? `${conflictKindLabel(file.kind)}（${pending}）` : conflictKindLabel(file.kind),
+			// 対象の名前（＝ファイル名）と、その中で決める件数だけ。パスは Hover に降ろす
+			label:
+				counts.undecided > 0
+					? vscode.l10n.t("{0} ({1})", conflictTargetLabel(file.filePath), counts.undecided)
+					: conflictTargetLabel(file.filePath),
+			description: ready ? vscode.l10n.t("all decided") : undefined,
 			status: Status.Error,
-			directoryPath: `${CONFLICT_FILE_PREFIX}${file.filePath}`,
-			contextValue: "mdaitConflictFile",
-			tooltip: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
+			directoryPath: conflictFileRowId(file.filePath),
+			contextValue: ready ? "mdaitConflictFileDecided" : "mdaitConflictFile",
+			tooltip: ready
+				? `${shortPath(file.filePath)}\n\n${vscode.l10n.t("Every conflict in this file has been decided. Press Resolve to write them back.")}`
+				: `${shortPath(file.filePath)}\n\n${fileKindExplanation(file.kind)}`,
 		};
 	});
 
@@ -155,14 +204,14 @@ export function buildConflictChoiceRows(plan: ResolutionPlan, stamp: string): Di
 			label: shorten(item.label),
 			// **状態を一言だけ。** 削除がからむかどうかは Hover が言う
 			description: chosen
-				? chosen === "ours"
+				? partyOf(plan, chosen) === "you"
 					? vscode.l10n.t("yours")
 					: vscode.l10n.t("theirs")
 				: vscode.l10n.t("not chosen"),
 			status: Status.Error,
 			directoryPath: `${CONFLICT_CHOICE_PREFIX}${index}:${fingerprintOfKey(item.key)}:${plan.filePath}`,
 			contextValue: chosen ? "mdaitConflictChoiceDecided" : "mdaitConflictChoice",
-			tooltip: buildChoiceTooltip(item, chosen),
+			tooltip: buildChoiceTooltip(plan, item, chosen),
 		};
 	});
 }
@@ -190,26 +239,32 @@ function shorten(text: string, max = 40): string {
  * **見出し・3つの値・やること**の3つだけを置く。仕組みの説明（いつ書き込むか）は
  * 書かない — 操作の結果を見れば分かることで、読ませる意味がない（`docs/ux.md` §3.3）。
  */
-function buildChoiceTooltip(item: PendingChoice, chosen: "ours" | "theirs" | undefined): string {
+function buildChoiceTooltip(
+	plan: ResolutionPlan,
+	item: PendingChoice,
+	chosen: "ours" | "theirs" | undefined,
+): string {
+	const mine = sideOf(plan, "you");
+	const theirs = sideOf(plan, "they");
 	const parts = [
 		item.label,
 		"",
-		`${vscode.l10n.t("You")}\t${conflictSideText(item, "ours")}`,
-		`${vscode.l10n.t("They")}\t${conflictSideText(item, "theirs")}`,
+		`${vscode.l10n.t("You")}\t${conflictSideText(item, mine)}`,
+		`${vscode.l10n.t("They")}\t${conflictSideText(item, theirs)}`,
 	];
 	if (item.baseText !== undefined) {
 		parts.push(`${vscode.l10n.t("Before")}\t${item.baseText}`);
 	}
 	parts.push("", vscode.l10n.t("Choose which one to keep."));
 	// 消した側を採ると項目ごと消える。結果が値の表から読めないので、そこだけ足す
-	if (item.theirsDeleted) {
+	if (deletedBy(item, theirs)) {
 		parts.push(vscode.l10n.t("Taking theirs removes this entry."));
-	} else if (item.oursDeleted) {
+	} else if (deletedBy(item, mine)) {
 		parts.push(vscode.l10n.t("Taking yours removes this entry."));
 	}
 	if (chosen) {
 		parts.push(
-			chosen === "ours" ? vscode.l10n.t("Chosen: yours.") : vscode.l10n.t("Chosen: theirs."),
+			partyOf(plan, chosen) === "you" ? vscode.l10n.t("Chosen: yours.") : vscode.l10n.t("Chosen: theirs."),
 		);
 	}
 	return parts.join("\n");

@@ -93,7 +93,7 @@ export class MdaitMarker {
 	 * 翻訳が必要かどうか
 	 */
 	needsTranslation(): boolean {
-		return this.need === "translate" || this.needsRevision();
+		return isTranslationNeed(this.need);
 	}
 
 	/**
@@ -133,4 +133,15 @@ export class MdaitMarker {
 		}
 		return need.substring(7); // "revise@".length = 7
 	}
+}
+
+/**
+ * AI 翻訳が引き受ける need か（`translate` と `revise@…`）。
+ *
+ * `review` は含めない。確認待ちは取り込んだ既訳を AI の上書きから守る状態で
+ * （ADR-260912-07）、訳し直すかどうかは人が `requestTranslate` で決める。
+ * マーカーを持たない非Markdown のファイルも、この1つで判定する。
+ */
+export function isTranslationNeed(need: string | null | undefined): boolean {
+	return need === "translate" || (need?.startsWith("revise@") ?? false);
 }

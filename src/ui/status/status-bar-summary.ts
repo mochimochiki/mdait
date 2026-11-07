@@ -122,7 +122,7 @@ export class StatusBarSummary implements vscode.Disposable {
 		const conflicts = collectWorkspaceConflicts(this.configuration);
 		return {
 			pendingTranslation: tree.countPendingTranslationUnits(scopeDirs),
-			needsAttention: tree.getNeedsAttentionUnits(scopeDirs).length,
+			needsAttention: tree.getNeedsAttentionItems(scopeDirs).length,
 			orphanTargets: tree.countOrphanTargetFiles(scopeDirs),
 			// 競合だけは選択中の transPair で絞らない。`.mdait` のファイルは
 			// ワークスペースに1つずつで、言語ペアに属さないため
@@ -139,9 +139,16 @@ export class StatusBarSummary implements vscode.Disposable {
 			return;
 		}
 		const counts = this.collect();
-		if (counts.conflicts > 0 && counts.conflictDecisions === undefined) {
-			// 初回は計画がまだ無い。数えてから描き直す（数字を伏せたままにしない）
-			void collectPendingChoices(this.configuration).then(() => this.refresh());
+		if (counts.conflictKinds.length > 0 && counts.conflictDecisions === undefined) {
+			// 初回は計画がまだ無い。数えてから描き直す（数字を伏せたままにしない）。
+			// **計画が作れたときだけ描き直す** — 作れなかったのに描き直すと、次の描画もまた
+			// 計画を取りに行き、終わらない（競合したファイルが無く降ろされた行だけのときや、
+			// 計画を作る途中で失敗したとき）
+			void collectPendingChoices(this.configuration).then((prepared) => {
+				if (prepared) {
+					this.refresh();
+				}
+			});
 		}
 		const text = buildStatusBarText(counts);
 		if (!text) {

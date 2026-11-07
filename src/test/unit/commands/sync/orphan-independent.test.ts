@@ -356,6 +356,35 @@ suite("sync CoreProc 統合（独立ユニット・isolate・一次受け）", (
 		assert.strictEqual(secondDiff.orphanReviewed ?? 0, 0);
 	});
 
+	test("sync: 訳文の途中に書き足した章は、sync しても末尾へ動かず元の位置に残ること", async () => {
+		const config = await initConfig({ orphanTargetPolicy: "delete" });
+		fs.writeFileSync(
+			sourceFile,
+			["## 概要", "", "概要の本文。", "", "## 手順", "", "手順の本文。", ""].join("\n"),
+			"utf-8",
+		);
+		await syncNew_CoreProc(sourceFile, targetFile, config);
+
+		// 「概要」と「手順」のあいだに、訳文にしか無い章をマーカーなしで書き足す
+		const lines = fs.readFileSync(targetFile, "utf-8").split("\n");
+		const stepsMarker = lines.findIndex((line, i) => line.startsWith("<!-- mdait") && lines[i + 1] === "## 手順");
+		assert.ok(stepsMarker > 0, "前提: 手順の章のマーカー行がある");
+		lines.splice(stepsMarker, 0, "## Local note", "", "Written only in the translation.", "");
+		fs.writeFileSync(targetFile, lines.join("\n"), "utf-8");
+
+		await sync_CoreProc(sourceFile, targetFile, config);
+		assert.deepStrictEqual(
+			parseUnits(targetFile).map((u) => u.title),
+			["概要", "Local note", "手順"],
+			"書き足した章が元の位置に残ること",
+		);
+
+		// 2回目は独立ユニットとして扱われ、位置もファイルも変わらない
+		const firstContent = fs.readFileSync(targetFile, "utf-8");
+		await sync_CoreProc(sourceFile, targetFile, config);
+		assert.strictEqual(fs.readFileSync(targetFile, "utf-8"), firstContent, "2回目syncでファイルが変化しないこと");
+	});
+
 	test("sync: レガシーneed:keepのユニットが素hash独立ユニットへマイグレーションされ保持されること", async () => {
 		const config = await initConfig({ orphanTargetPolicy: "delete" });
 		fs.writeFileSync(sourceFile, ["## 概要", "", "公開する本文。", ""].join("\n"), "utf-8");

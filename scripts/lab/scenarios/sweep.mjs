@@ -46,6 +46,7 @@ import { parseArgs } from "../lib/args.mjs";
 import { sendCommand } from "../lib/ipc.mjs";
 import { saveStep } from "../lib/runs.mjs";
 import { LAB_DIR, readSession } from "../lib/session.mjs";
+import { parseUnitState } from "../lib/unit-state.mjs";
 import { configureAi, prepareWorkspace } from "../lib/workspace.mjs";
 
 const require = createRequire(import.meta.url);
@@ -268,35 +269,11 @@ function readUnitState() {
  * 頭がぶつかる名前があり、「含む」で探すと別のファイルの行まで拾ってしまう。
  *
  * @param {string} relPath 作業場から見た相対パス
- * @returns {Array<{path:string, kind:string, seat:string, level:number, titleHash:string, hash:string, from:string, need:string}>}
+ * @returns {ReturnType<typeof parseUnitState>}
  */
 function unitStateRows(relPath) {
-	const rows = [];
-	const content = readUnitState();
-	// 行が名乗るのはファイルIDだけで、パスとの対応は見出し `# <id> <path>` が持つ
-	const byId = new Map();
-	for (const line of content.split("\n")) {
-		const m = /^# ([0-9a-f]{12}) (.+)$/.exec(line);
-		if (m && m[2] !== "[unseated]") byId.set(m[1], m[2]);
-	}
-	for (const line of content.split("\n")) {
-		if (line.trim() === "" || line.startsWith("#")) continue;
-		const cols = line.split("\t");
-		if (cols.length !== 8) continue;
-		const filePath = byId.get(cols[0]) ?? cols[0];
-		if (relPath !== undefined && filePath !== relPath) continue;
-		rows.push({
-			path: filePath,
-			kind: cols[1],
-			seat: cols[2],
-			level: Number(cols[3]),
-			titleHash: cols[4],
-			hash: cols[5],
-			from: cols[6],
-			need: cols[7],
-		});
-	}
-	return rows;
+	const rows = parseUnitState(readUnitState());
+	return relPath === undefined ? rows : rows.filter((row) => row.path === relPath);
 }
 
 /** 台帳の全行（絞り込みなし） */
