@@ -11,6 +11,7 @@ import { AIOnboarding } from "../../infra/onboarding/ai-onboarding";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { StatusTreeProvider } from "../../ui/status/status-tree-provider";
 import { clampConcurrency, runWithConcurrency } from "../shared/concurrency";
+import { fileWriteError } from "../shared/guidance";
 import {
 	describePatchFailure,
 	offerFullRetry,
@@ -288,6 +289,19 @@ export class StatusTreeTranslationHandler {
 														: vscode.l10n.t("Translation failed for {0}.", path.basename(file.fsPath)),
 												);
 											}
+										} else if (fileWriteError(fileResult.writeFailures)) {
+											// 訳したがファイルに書けなかった（読み取り専用・ロックなど）。訳した成果は
+											// 失われているので成功に数えない（数えると「翻訳が完了しました」と嘘になる。実測）
+											failed++;
+											if (!firstError) {
+												firstError = new Error(
+													vscode.l10n.t(
+														"{0} could not be saved ({1}).",
+														path.basename(file.fsPath),
+														fileWriteError(fileResult.writeFailures) ?? "",
+													),
+												);
+											}
 										} else {
 											successful++;
 											if (fileResult.patchFailures.length > 0) {
@@ -475,7 +489,7 @@ export class StatusTreeTranslationHandler {
 		const proceed = vscode.l10n.t("Re-translate");
 		const confirmed = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
-				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+				"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with your version control.",
 			),
 			{ modal: true },
 			proceed,

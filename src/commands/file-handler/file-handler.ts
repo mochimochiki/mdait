@@ -30,6 +30,8 @@ export interface FileSyncResult {
 	adopted?: number;
 	/** 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数 */
 	reviewsSuperseded?: number;
+	/** 翻訳待ち（need:translate）のまま mdait の外で訳されていたので、確認待ち・改訂待ちへ付け替えたユニット数（ADR-261107-01） */
+	handTranslated?: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	kept?: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */

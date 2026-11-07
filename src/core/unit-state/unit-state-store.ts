@@ -288,6 +288,14 @@ function readLegacyLine(columns: readonly string[]): { order: number; entry: Uni
  * 非MDファイルは「ファイル＝単一ユニット」（`unit` 1行・level=0・titleHash=""）の特殊形、
  * MD-external は同一 path に複数の `unit` 行を持つ。
  */
+/** `UnitStateStore.snapshotPath` が返す、1ファイルぶんの写し（中身は呼び出し側から触らない） */
+export interface UnitStatePathSnapshot {
+	readonly filePath: string;
+	readonly rows: ReadonlyMap<string, UnitStateEntry> | undefined;
+	readonly pending: ReadonlyMap<string, UnitStateEntry | null> | undefined;
+	readonly dirty: boolean;
+}
+
 export interface UnitStateEntry {
 	/** ワークスペース相対パス（/区切り） */
 	path: string;
@@ -544,6 +552,43 @@ export class UnitStateStore {
 		this.byPath.delete(filePath);
 		this.dirty = true;
 		return removed;
+	}
+
+	/**
+	 * 1ファイルぶんの行と保存待ちの記録を写し取る（`restorePath` で戻す）。
+	 *
+	 * 原稿の書き込みに失敗したとき、その前にストアへ引き取ったマーカーを取り消すために使う
+	 * （trans の external 保存）。`setEntry` で戻すと「同じ値へ戻した」ことが保存待ちとして
+	 * 残り、次の `load()` でディスクの新しい行（`svn update` で届いた他人の更新）を古い値で
+	 * 上書きしてしまう。
+	 */
+	snapshotPath(filePath: string): UnitStatePathSnapshot {
+		this.autoLoad();
+		const rows = this.byPath.get(filePath);
+		const pending = this.pending.get(filePath);
+		return {
+			filePath,
+			rows: rows ? new Map([...rows].map(([key, entry]) => [key, { ...entry }])) : undefined,
+			pending: pending ? new Map(pending) : undefined,
+			dirty: this.dirty,
+		};
+	}
+
+	/** `snapshotPath` で写した姿へ、そのファイルの行と保存待ちの記録を戻す */
+	restorePath(snapshot: UnitStatePathSnapshot): void {
+		const { filePath, rows, pending } = snapshot;
+		if (rows) {
+			this.byPath.set(filePath, new Map(rows));
+		} else {
+			this.byPath.delete(filePath);
+		}
+		if (pending) {
+			this.pending.set(filePath, new Map(pending));
+		} else {
+			this.pending.delete(filePath);
+		}
+		// 待っているあいだに別のファイルが変わっていれば、その分の dirty は残す
+		this.dirty = snapshot.dirty || this.pending.size > 0 || this.pendingFileIds.size > 0;
 	}
 
 	/**

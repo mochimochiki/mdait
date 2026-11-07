@@ -223,7 +223,7 @@ export async function codeLensDeleteUnitCommand(range: vscode.Range): Promise<vo
 		const confirmLabel = vscode.l10n.t("Delete");
 		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
-				"Delete this unit from the document? This removes its content — recover via git history if needed.",
+				"Delete this unit from the document? This removes its content — recover it from version control history if needed.",
 			),
 			{ modal: true },
 			confirmLabel,

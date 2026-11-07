@@ -2,6 +2,7 @@ import * as fs from "node:fs"; // @important Node.jsのbuilt-inモジュール�
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { clampConcurrency, runWithConcurrency } from "../commands/shared/concurrency";
+import { fileWriteError } from "../commands/shared/guidance";
 import { OperationRegistry } from "../commands/shared/operation-registry";
 import { transFile_CoreProc } from "../commands/trans/trans-command";
 import { StatusManager } from "../core/status/status-manager";
@@ -183,6 +184,16 @@ export class MdaitTranslateTool implements vscode.LanguageModelTool<TranslateInp
 									result.responseFailures.length > 0
 										? "The AI's answer could not be used; nothing was written and the units still need translation"
 										: "Translation failed",
+							};
+						}
+						// 訳したがファイルに書けなかった（読み取り専用・ロック）。訳した成果は残っていないので
+						// 成功と返さない。返すとエージェントは訳し終えたと読んで次の工程へ進む
+						const writeError = fileWriteError(result.writeFailures);
+						if (writeError) {
+							return {
+								path: file,
+								ok: false,
+								error: `${result.writeFailures.length} translated part(s) could not be written to the file (${writeError}) and were not saved. Make the file writable and translate again`,
 							};
 						}
 						return {

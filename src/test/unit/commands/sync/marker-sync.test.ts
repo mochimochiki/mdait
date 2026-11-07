@@ -528,6 +528,65 @@ suite("marker-sync", () => {
 			});
 		});
 
+		suite("翻訳待ち（need:translate）の章が mdait の外で訳されたら、上書きから守る", () => {
+			test("前回から訳文が書き換わり丸写しでなくなったら、確認待ち（review）になること", () => {
+				// 丸写しで翻訳待ち（hash === from）。mdait を使わない人が訳文を手で訳した
+				const target = new MdaitMarker("src123", "src123", "translate");
+				const result = syncMarkerPair("src123", "hand01", new MdaitMarker("src123"), target, {
+					targetHasOwnText: true,
+				});
+				assert.strictEqual(result.targetMarker.need, "review", "translate のままだと次の trans が人の訳を上書きする");
+				assert.strictEqual(result.targetMarker.hash, "hand01");
+				assert.strictEqual(result.changed, true);
+			});
+
+			test("同じ回に原文も進んでいたら、旧原文を戻り先にした改訂待ちになること", () => {
+				const target = new MdaitMarker("src123", "src123", "translate");
+				const result = syncMarkerPair("src999", "hand01", new MdaitMarker("src999"), target, {
+					targetHasOwnText: true,
+				});
+				assert.strictEqual(result.targetMarker.from, "src999");
+				assert.strictEqual(result.targetMarker.need, "revise@src123", "人の訳は旧原文の訳。差分だけ直させる");
+			});
+
+			test("前回から訳文が変わっていなければ translate のままであること（写し直し漏れの未訳を人の訳と読まない）", () => {
+				// hash !== from だが、前回の sync で記録した hash から変わっていない
+				const target = new MdaitMarker("old111", "src123", "translate");
+				const result = syncMarkerPair("src123", "old111", new MdaitMarker("src123"), target, {
+					targetHasOwnText: true,
+				});
+				assert.strictEqual(result.targetMarker.need, "translate");
+				assert.strictEqual(result.changed, false);
+			});
+
+			test("書き換わった先が原文の丸写しなら translate のままであること", () => {
+				const target = new MdaitMarker("src123", "src123", "translate");
+				const result = syncMarkerPair("src999", "src999", new MdaitMarker("src999"), target, {
+					targetHasOwnText: false,
+				});
+				assert.strictEqual(result.targetMarker.need, "translate");
+			});
+
+			test("isolate のペアでは印を変えないこと", () => {
+				const target = new MdaitMarker("src123", "src123", "translate");
+				const result = syncMarkerPair("src123", "hand01", new MdaitMarker("src123", null, "isolate"), target, {
+					targetHasOwnText: true,
+					suppressNeed: true,
+				});
+				assert.strictEqual(result.targetMarker.need, "translate");
+			});
+
+			test("付け替えたあとの sync は冪等であること", () => {
+				const target = new MdaitMarker("src123", "src123", "translate");
+				const first = syncMarkerPair("src123", "hand01", new MdaitMarker("src123"), target, { targetHasOwnText: true });
+				const second = syncMarkerPair("src123", "hand01", first.sourceMarker, first.targetMarker, {
+					targetHasOwnText: true,
+				});
+				assert.strictEqual(second.changed, false);
+				assert.strictEqual(second.targetMarker.need, "review");
+			});
+		});
+
 		suite("frontmatter 経路（syncTargetMarker）も同じ決め方に従う", () => {
 			test("need:review のまま原文が変わったら、from が進み revise@ が立つこと", () => {
 				const result = syncTargetMarker({

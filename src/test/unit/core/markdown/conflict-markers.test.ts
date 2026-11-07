@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { hasConflictMarkers } from "../../../../core/markdown/conflict-markers";
+import { hasConflictMarkers, isSvnConflictArtifact } from "../../../../core/markdown/conflict-markers";
 
 suite("hasConflictMarkers（合流の途中の原稿の見分け）", () => {
 	test("ふつうの原稿は合流の途中ではないこと", () => {
@@ -50,5 +50,19 @@ suite("hasConflictMarkers（合流の途中の原稿の見分け）", () => {
 
 	test("CRLF の原稿でも判定すること", () => {
 		assert.strictEqual(hasConflictMarkers("# 見出し\r\n<<<<<<< HEAD\r\n本文\r\n"), true);
+	});
+});
+
+suite("isSvnConflictArtifact（Subversion が競合で横に置くファイルの見分け）", () => {
+	test("svn が競合のときに置く名前を見分けること", () => {
+		for (const name of ["doc.md.mine", "doc.md.r12", "doc.md.r3", "doc.md.merge-left.r5", "doc.md.merge-right.r9", "doc.md.working"]) {
+			assert.strictEqual(isSvnConflictArtifact("doc.md", name), true, name);
+		}
+	});
+
+	test("原稿そのもの・別の原稿・似た名前のファイルを取り違えないこと", () => {
+		for (const name of ["doc.md", "doc.md.bak", "doc.md.orig", "doc.md.r", "doc.md.rev1", "other.md.mine", "doc.mdx.r1", "mydoc.md.r1"]) {
+			assert.strictEqual(isSvnConflictArtifact("doc.md", name), false, name);
+		}
 	});
 });

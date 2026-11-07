@@ -207,11 +207,11 @@ export class MdaitSyncTool implements vscode.LanguageModelTool<SyncInput> {
 		let message: string;
 		if (align) {
 			message = vscode.l10n.t(
-				"This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
+				"This will adopt existing translations (marking them need:review) and use AI to review the position-based unit mapping and correct mis-pairings. It updates translation markers in your Markdown files. Committing your workspace to version control beforehand is recommended. Do you want to proceed?",
 			);
 		} else if (adopt) {
 			message = vscode.l10n.t(
-				"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to git beforehand is recommended. Do you want to proceed?",
+				"This will adopt existing translations (marking them need:review) and update translation markers in your Markdown files. Committing your workspace to version control beforehand is recommended. Do you want to proceed?",
 			);
 		} else {
 			message = vscode.l10n.t(

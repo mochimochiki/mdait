@@ -61,7 +61,7 @@ import { DiffDetector, type DiffResult, DiffType, type UnitDiff } from "./diff-d
 import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
-import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
+import { hasConflictMarkers, isSvnConflictArtifact } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
@@ -195,7 +195,7 @@ function conflictInSourceNotice(count: number): SyncNotice | undefined {
 	return {
 		kind: "conflict-markers",
 		detail: vscode.l10n.t(
-			"Sync skipped {0} file(s) that still contain merge conflict markers. Resolve the conflict in your version control tool, then run sync again.",
+			"Sync skipped {0} file(s) whose merge is unfinished (conflict markers remain, or Subversion left conflict files such as .mine or .r<N> next to them). Resolve the conflict in your version control tool, then run sync again.",
 			count,
 		),
 		summary: vscode.l10n.t("{0} file(s) skipped because a merge is unfinished", count),
@@ -208,7 +208,11 @@ function conflictInSourceNotice(count: number): SyncNotice | undefined {
  * 訳文も見るのは、訳文だけが競合している状態で sync すると、マーカー入りの本文が
  * ユニットとして読まれ、`from` の食い違いから全ユニットが改訂待ちに倒れるためである。
  */
-async function isMidMerge(sourceFile: string, targetFile: string): Promise<boolean> {
+async function isMidMerge(
+	sourceFile: string,
+	targetFile: string,
+	dirListing?: Map<string, readonly string[]>,
+): Promise<boolean> {
 	const read = async (filePath: string): Promise<string | undefined> => {
 		try {
 			if (!fs.existsSync(filePath)) {
@@ -225,8 +229,32 @@ async function isMidMerge(sourceFile: string, targetFile: string): Promise<boole
 		if (content !== undefined && hasConflictMarkers(content)) {
 			return true;
 		}
+		if (content !== undefined && hasSvnConflictArtifacts(filePath, dirListing)) {
+			return true;
+		}
 	}
 	return false;
+}
+
+/**
+ * 原稿の横に Subversion の競合ファイル（`.mine` / `.r<N>` など）が残っているか。
+ * 理由は `isSvnConflictArtifact` の説明にある（バイナリ扱いの原稿にはマーカーが入らない）。
+ */
+function hasSvnConflictArtifacts(filePath: string, dirListing?: Map<string, readonly string[]>): boolean {
+	// 一括 sync ではディレクトリの一覧を1回だけ読む（ファイルごとに読むと、平たいフォルダで
+	// ファイル数の2乗になる）。1ファイルの sync は一覧を持たずにその場で読む
+	const dir = path.dirname(filePath);
+	let siblings = dirListing?.get(dir);
+	if (!siblings) {
+		try {
+			siblings = fs.readdirSync(dir);
+		} catch {
+			return false;
+		}
+		dirListing?.set(dir, siblings);
+	}
+	const baseName = path.basename(filePath);
+	return siblings.some((sibling) => isSvnConflictArtifact(baseName, sibling));
 }
 
 /**
@@ -332,7 +360,7 @@ function rollbackWithheldNotice(count: number): SyncNotice | undefined {
 	return {
 		kind: "rollback-withheld",
 		detail: vscode.l10n.t(
-			"Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source with git). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.",
+			"Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source from version control). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.",
 			count,
 		),
 		summary: vscode.l10n.t("{0} unit(s) kept: the source looks rolled back on its own", count),
@@ -351,6 +379,31 @@ function rollbackWithheldNotice(count: number): SyncNotice | undefined {
  * 旧原文の訳として妥当かを聞いても仕方がない）が、黙って減ると「確認したつもり」の
  * ユニットが生まれる。件数だけは必ず言う。
  */
+/**
+ * 翻訳待ちの章が mdait の外で訳されていたので、確認待ち（または改訂待ち）へ付け替えたことを
+ * 伝える（ADR-261107-01）。
+ *
+ * 付け替えは人の訳を AI の上書きから守るためだが、**AI に続きを訳させるつもりで少し手を
+ * 入れた人**には、翻訳の列から黙って消えたように見える。件数と戻し方（「要翻訳にする」）を言う。
+ */
+function handTranslatedNotice(count: number): SyncNotice | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return {
+		kind: "hand-translated",
+		detail: vscode.l10n.t(
+			"{0} unit(s) waiting for translation had already been edited by hand, so they now wait for your check instead and AI translation will not overwrite them. To let AI translate one anyway, use \"Mark as Needs Translation\" on it.",
+			count,
+		),
+		summary: vscode.l10n.t("{0} hand-translated unit(s) moved to your check", count),
+		action: {
+			label: vscode.l10n.t("Show units"),
+			run: () => vscode.commands.executeCommand("mdait.status.focus"),
+		},
+	};
+}
+
 function reviewSupersededNotice(count: number): SyncNotice | undefined {
 	if (count <= 0) {
 		return undefined;
@@ -395,7 +448,7 @@ function orphanDeletedNotice(count: number, labels: readonly string[] = []): Syn
 	return {
 		kind: "orphan-deleted",
 		detail: `${vscode.l10n.t(
-			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from version control, or set sync.autoDelete to false.",
 			count,
 		)}${named}`,
 		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
@@ -489,6 +542,8 @@ export interface SyncResult {
 	totalAdopted: number;
 	/** 確認待ちのまま原文が変わり、改訂待ちへ移ったユニット数 */
 	totalReviewsSuperseded: number;
+	/** 翻訳待ちのまま外で訳されていて、確認待ち・改訂待ちへ付け替えたユニット数 */
+	totalHandTranslated?: number;
 	/** 独立ユニットとして保持している孤立ターゲット数 */
 	totalKept: number;
 	/** need:review を一次受け付与したマーカーなし孤立ターゲット数 */
@@ -641,6 +696,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalRevisionsNeeded = 0;
 		let totalAdopted = 0;
 		let totalReviewsSuperseded = 0;
+		let totalHandTranslated = 0;
 		let totalKept = 0;
 		let totalOrphanReviewed = 0;
 		let totalOrphanDeletionWithheld = 0;
@@ -650,6 +706,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalTargetEmptied = 0;
 		/** 合流の途中（競合マーカーが残っている）で飛ばしたファイル数 */
 		let totalConflicted = 0;
+		// 合流の途中かを見るときのディレクトリ一覧（この回の sync のあいだだけ使い回す）
+		const dirListing = new Map<string, readonly string[]>();
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -739,7 +797,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						// **合流の途中の原稿には触らない。** `<<<<<<< HEAD` を本文として hash を
 						// 取ると、全ユニットに need:revise が付き、その姿のまま訳文へ写る。
 						// 原稿の競合はここでは解けない（どちらが正しいかは人にしか分からない）
-						if (await isMidMerge(sourceFile, targetFile)) {
+						if (await isMidMerge(sourceFile, targetFile, dirListing)) {
 							logger.info("sync", "Skipped a file that is still mid-merge", { sourceFile });
 							totalConflicted++;
 							totalFileCount++;
@@ -800,6 +858,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						totalRevisionsNeeded += syncResult.revisionsNeeded;
 						totalAdopted += syncResult.adopted ?? 0;
 						totalReviewsSuperseded += syncResult.reviewsSuperseded ?? 0;
+						totalHandTranslated += syncResult.handTranslated ?? 0;
 						totalKept += syncResult.kept ?? 0;
 						totalOrphanReviewed += syncResult.orphanReviewed ?? 0;
 						totalOrphanDeletionWithheld += syncResult.orphanDeletionWithheld ?? 0;
@@ -899,6 +958,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalReviewsSuperseded,
+			totalHandTranslated,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -1030,6 +1090,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				// 「空になった側には触らない」を守って中止したもの。原文が空（ADR-260803-06。
 				// 訳文消失の予防: P6）と訳文が空（ADR-260806-02。翻訳の状態の保護）は別の事故
 				reviewSupersededNotice(totalReviewsSuperseded),
+				handTranslatedNotice(totalHandTranslated),
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				conflictInSourceNotice(totalConflicted),
@@ -1053,6 +1114,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 			revisionsNeeded: totalRevisionsNeeded,
 			totalAdopted,
 			totalReviewsSuperseded,
+			totalHandTranslated,
 			totalKept,
 			totalOrphanReviewed,
 			totalOrphanDeletionWithheld,
@@ -1767,7 +1829,8 @@ export async function sync_CoreProc(
 	// ユニットのハッシュを更新。マーカーの無い既訳をどう受けるか（review か translate か）は
 	// 取り込み（adopt）かどうかに依らず `needForFirstLink` の規則で決まる。external で
 	// unit-state を失ったときの救済もそこに吸収した（かつては別の安全網で全ユニットを review に倒していた）
-	const { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations } = await updateSectionHashes(
+	const { revisionsNeeded, adopted, reviewsSuperseded, handTranslated, refreshedCopies, noteMigrations } =
+		await updateSectionHashes(
 		matchResult,
 		config,
 		sourceFile,
@@ -1813,6 +1876,7 @@ export async function sync_CoreProc(
 	diffResult.revisionsNeeded = revisionsNeeded;
 	diffResult.adopted = adopted + frontmatterAdopted;
 	diffResult.reviewsSuperseded = reviewsSuperseded + frontmatterReviewSuperseded;
+	diffResult.handTranslated = handTranslated;
 	diffResult.kept = syncedResult.orphanKept;
 	diffResult.orphanVerified = syncedResult.orphanVerified;
 	diffResult.orphanReviewed = syncedResult.orphanReviewed;
@@ -2125,6 +2189,8 @@ async function updateSectionHashes(
 	/** 紐の無い既訳を need:review で受けた件数（取り込みのレポートと LM ツールが使う） */
 	adopted: number;
 	reviewsSuperseded: number;
+	/** 翻訳待ちのまま mdait の外で訳されていたので付け替えた件数（ADR-261107-01） */
+	handTranslated: number;
 	/** まだ訳していない丸写しを、変わった原文へ写し直した件数 */
 	refreshedCopies: number;
 	noteMigrations: Array<{ from: string; to: string }>;
@@ -2135,6 +2201,7 @@ async function updateSectionHashes(
 	// 確認待ち（need:review）のまま原文が変わり、改訂待ちへ移ったユニット数。
 	// 黙って確認の列から消えるので、件数だけは必ず伝える（ADR-260901-01）
 	let reviewsSuperseded = 0;
+	let handTranslated = 0;
 	// 本文編集で hash が変わったユニットは、紐づく note を旧→新 hash へ移送する（unit-registry）。
 	// content は content-addressed で不変。note だけがユニットに追従する（決定的・AI 不使用）。
 	const noteMigrations: Array<{ from: string; to: string }> = [];
@@ -2162,6 +2229,7 @@ async function updateSectionHashes(
 			// marker-sync.ts の `needForFirstLink` が決める（丸写しは translate）。取り込みかどうかは見ない
 			const hadFrom = !!target.marker?.from;
 			const wasAwaitingReview = target.marker?.need === "review";
+			const wasUntranslated = hadFrom && target.marker?.need === "translate";
 			const existingText = !hadFrom && target.content.trim() !== "";
 			// 丸写しかどうかは中身で答える（ハッシュの衝突で人の訳を translate に倒さない）
 			const verbatimCopy = existingText ? target.content === source.content : undefined;
@@ -2189,6 +2257,8 @@ async function updateSectionHashes(
 				existingText,
 				verbatimCopy,
 				suppressNeed,
+				// 写し直しの後の本文で答える（写し直した丸写しを人の訳と読まない）
+				targetHasOwnText: target.content.trim() !== "" && target.content !== source.content,
 			});
 			source.marker = result.sourceMarker;
 			target.marker = result.targetMarker;
@@ -2200,6 +2270,10 @@ async function updateSectionHashes(
 			}
 			if (wasAwaitingReview && result.targetMarker.needsRevision()) {
 				reviewsSuperseded++;
+			}
+			// 確認待ちになったぶんだけ数える（同じ回に原文も進んで改訂待ちになったぶんは revisionsNeeded が数える）
+			if (wasUntranslated && result.targetMarker.need === "review") {
+				handTranslated++;
 			}
 			continue;
 		}
@@ -2222,7 +2296,7 @@ async function updateSectionHashes(
 			target.marker = result.marker;
 		}
 	}
-	return { revisionsNeeded, adopted, reviewsSuperseded, refreshedCopies, noteMigrations };
+	return { revisionsNeeded, adopted, reviewsSuperseded, handTranslated, refreshedCopies, noteMigrations };
 }
 
 /**

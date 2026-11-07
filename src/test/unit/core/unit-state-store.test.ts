@@ -117,6 +117,31 @@ suite("UnitStateStore", () => {
 			assert.strictEqual(store.getSoleEntry("docs/b.md")?.hash, "h2");
 		});
 
+		test("snapshotPath / restorePath で戻した行は保存待ちに残らず、読み直しでディスクの新しい行が勝つこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", "translate"));
+			store.save(tempDir);
+
+			// 翻訳が行を書き換えたが、原稿の書き込みに失敗したので取り消す
+			const snapshot = store.snapshotPath("docs/a.md");
+			store.setEntry(plainEntry("docs/a.md", "h2", "s1", ""));
+			store.restorePath(snapshot);
+			assert.strictEqual(store.getSoleEntry("docs/a.md")?.hash, "h1");
+			assert.strictEqual(store.getSoleEntry("docs/a.md")?.need, "translate");
+
+			// その後 svn update で他人の更新がディスクへ届いた
+			const file = path.join(tempDir, "unit-state");
+			fs.writeFileSync(file, fs.readFileSync(file, "utf-8").replace("\th1\t", "\th3\t"), "utf-8");
+			store.load(tempDir);
+
+			assert.strictEqual(
+				store.getSoleEntry("docs/a.md")?.hash,
+				"h3",
+				"戻した行が保存待ちに残っていると、他人の新しい行を古い値で上書きする",
+			);
+		});
+
 		test("割り込みのあいだにディスク側で増えた行も、ちゃんと読めること", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));

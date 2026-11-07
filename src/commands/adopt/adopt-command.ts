@@ -145,7 +145,7 @@ export function buildAdoptConfirmDetail(steps: string[], writesKnowledge: boolea
 			"This updates translation markers{0}.",
 			writesKnowledge ? vscode.l10n.t(" and writes to the glossary/TM") : "",
 		),
-		vscode.l10n.t("Committing your workspace to git beforehand is recommended."),
+		vscode.l10n.t("Committing your workspace to version control beforehand is recommended."),
 	].join("\n");
 }
 

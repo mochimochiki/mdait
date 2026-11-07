@@ -277,6 +277,12 @@ export interface PairSyncOptions {
 	 * （ペアのリンクは維持しつつ、新しい翻訳需要を下流に流さない）。
 	 */
 	suppressNeed?: boolean;
+	/**
+	 * 訳文の本文が、いまの原文の丸写しではない人の文になっているか（空でなく、原文と一字一句
+	 * 同じでもない）。呼び出し側が中身で答える。丸写しの写し直し（`refreshUntranslatedCopy`）を
+	 * 済ませた後の本文で判定すること。規則は `syncMarkerPair` の「訳されて翻訳待ち」を見よ。
+	 */
+	targetHasOwnText?: boolean;
 }
 
 /**
@@ -318,6 +324,7 @@ export function syncMarkerPair(
 
 	const isSourceChanged = sourceMarker.hash !== sourceHash;
 	const isTargetChanged = targetMarker.hash !== targetHash;
+	const wasUntranslated = !isNewTarget && targetMarker.need === "translate";
 
 	// ソースハッシュを常に最新に更新
 	sourceMarker.hash = sourceHash;
@@ -355,6 +362,31 @@ export function syncMarkerPair(
 
 		if (!options?.suppressNeed && !revertedToTranslatedSource) {
 			applyNeedForChangedSource(targetMarker, oldSourceHash, options?.existingText === true, options?.verbatimCopy);
+		}
+	}
+
+	// **訳されて翻訳待ち。** `need:translate` は「訳文は原文の丸写しで、まだ誰も訳していない」
+	// という印である。前回の sync から訳文が書き換わり、しかも原文の丸写しでない文になったなら、
+	// mdait の外で誰かが訳した（external では印が原稿に見えないので、mdait を使わない人は
+	// 印を外せない）。translate のまま残すと次の trans がその訳を機械翻訳で上書きする（実測）。
+	// 紐を初めて結ぶときの規則（`needForFirstLink`: 丸写しでない既訳は review）と同じ着地にする。
+	// 同じ回に原文も進んでいたら、その訳は旧原文の訳なので改訂待ちにする（原文が変わった
+	// 既訳と同じ扱い。trans は訳を残したまま差分だけ直す）。
+	//
+	// 「前回から書き換わった」を条件に入れるのは、mdait が過去に写し直しを忘れて
+	// `hash !== from` のまま残った未訳（`refreshUntranslatedCopy` の救済の話）を、
+	// 人の訳と読み違えないため。そうした訳文は前回の sync で hash が記録済みで、変わっていない
+	if (
+		wasUntranslated &&
+		isTargetChanged &&
+		options?.targetHasOwnText === true &&
+		!options.suppressNeed &&
+		targetMarker.need === "translate"
+	) {
+		if (oldSourceHash && oldSourceHash !== sourceMarker.hash) {
+			targetMarker.setReviseNeed(oldSourceHash);
+		} else {
+			targetMarker.setNeed("review");
 		}
 	}
 

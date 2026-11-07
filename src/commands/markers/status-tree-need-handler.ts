@@ -268,7 +268,7 @@ export class StatusTreeNeedHandler {
 			{
 				modal: true,
 				detail: `${vscode.l10n.t(
-					"This removes their content from the document — recover via git history if needed.",
+					"This removes their content from the document — recover it from version control history if needed.",
 				)}\n\n${formatPendingTitles(pending)}`,
 			},
 			confirmLabel,
@@ -300,7 +300,7 @@ export class StatusTreeNeedHandler {
 		const confirmLabel = vscode.l10n.t("Delete");
 		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(
-				"Delete unit '{0}' from the document? This removes its content — recover via git history if needed.",
+				"Delete unit '{0}' from the document? This removes its content — recover it from version control history if needed.",
 				unit.title ?? unit.label,
 			),
 			{ modal: true },

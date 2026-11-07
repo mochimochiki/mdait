@@ -38,6 +38,27 @@ export function hasConflictMarkers(content: string): boolean {
 }
 
 /**
+ * Subversion が競合のときに原稿の横へ置くファイルの名前か（`<名前>.mine` / `<名前>.r<N>` /
+ * `<名前>.merge-left.r<N>` / `<名前>.merge-right.r<N>` / `<名前>.working`）。
+ *
+ * **マーカーだけでは SVN の合流の途中を見分けられない。** svn がバイナリと判定した原稿
+ * （日本語の多い .md は既定の設定でそうなる）は3方向マージをせず、作業ファイルを自分の版の
+ * まま残して横に `.r<N>` を置くだけで、マーカーを1つも書かない。そこで sync すると、
+ * 相手の版を「原文が古い版へ戻った」と読み、誤った改訂待ちを付ける（実測）。
+ * 横のファイルは `svn resolve` で消えるので、これが在る間は合流の途中とみなしてよい。
+ *
+ * @param baseName 原稿のファイル名（ディレクトリを含まない）
+ * @param siblingName 同じディレクトリにあるファイルの名前
+ */
+export function isSvnConflictArtifact(baseName: string, siblingName: string): boolean {
+	if (!siblingName.startsWith(`${baseName}.`)) {
+		return false;
+	}
+	const suffix = siblingName.slice(baseName.length + 1);
+	return /^(mine|working|r\d+|merge-(left|right)\.r\d+)$/.test(suffix);
+}
+
+/**
  * 原稿ではない管理ファイル（`translations.tmx` / `terms.csv`）が合流の途中かどうか。
  *
  * 原稿と違って**コードブロックを見ない**。TMX の `<seg>` にも CSV の値にも、コードブロックの
