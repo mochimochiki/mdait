@@ -450,6 +450,27 @@ async function transFile_Exclusive(
 	// frontmatter の翻訳で使えない答えを受けたとき、それも「訳せなかったもの」として
 	// 数える（本文のユニットと同じ扱い。数えないと通知が実態と食い違う）
 	const frontmatterFailures: ResponseFailureInfo[] = [];
+	// external で一括保存を待っているユニット（保存に失敗したら、これらが書き戻せなかったぶん）
+	const pendingExternal: Array<{ index: number; unit: MdaitUnit }> = [];
+	// external の一括保存を試みたか（成功経路で試みたら、後始末の経路では繰り返さない）
+	let externalSaveAttempted = false;
+	/**
+	 * external の一括保存。**失敗を飲み込まずに理由を返す。** かつてはログに残すだけで、
+	 * 読み取り専用の訳文（`svn:needs-lock` など）でも「翻訳が完了しました」と通知していた（実測）
+	 */
+	const saveExternal = async (): Promise<string | undefined> => {
+		externalSaveAttempted = true;
+		try {
+			await saveExternalDocument(uri, markdown, io.provider, io.ctx);
+			return undefined;
+		} catch (error) {
+			logger.error("trans", "Failed to persist translations", {
+				file: targetFilePath,
+				...formatError(error),
+			});
+			return error instanceof Error ? error.message : String(error);
+		}
+	};
 
 	try {
 		// frontmatterの翻訳（必要な場合のみ）。frontmatter もツリー上の1行なので、
@@ -483,8 +504,12 @@ async function transFile_Exclusive(
 			}
 			if (frontmatterOutcome.updated) {
 				frontmatterTranslated = true;
-				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
-				await writeManagedDocument(uri.fsPath, updatedContent);
+				// external は本文の訳と一緒に一括保存する（saveExternal）。ここで先に書くと、
+				// 書き込みに失敗したときに frontmatter の行だけが「訳し終えた」姿でストアに残る
+				if (!external) {
+					const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
+					await writeManagedDocument(uri.fsPath, updatedContent);
+				}
 			}
 		}
 
@@ -525,6 +550,7 @@ async function transFile_Exclusive(
 			persistUnit: async (unit, index) => {
 				// external は本文にマーカーを書けないため、ループ後の一括保存に委ねる
 				if (external) {
+					pendingExternal.push({ index, unit });
 					return { written: true };
 				}
 				return updateAndSaveUnit(uri, oldMarkerTexts[index], unit);
@@ -542,7 +568,23 @@ async function transFile_Exclusive(
 			cancelled: loop.cancelled,
 		});
 
-		return buildFileResult(unitsToTranslate, loop, frontmatterTranslated, frontmatterFailures);
+		let saveFailure: string | undefined;
+		if (external && (loop.translated > 0 || frontmatterTranslated)) {
+			saveFailure = await saveExternal();
+			if (saveFailure) {
+				for (const pending of pendingExternal) {
+					loop.writeFailures.push({ ...pending, reason: saveFailure });
+				}
+			}
+		}
+
+		const result = buildFileResult(unitsToTranslate, loop, frontmatterTranslated, frontmatterFailures);
+		if (saveFailure && frontmatterTranslated) {
+			// frontmatter の訳もストアの行と一緒に保存できていない（frontmatter だけのファイルでは
+			// これが唯一の成果なので、数えないと「完了」と言ってしまう）
+			result.writeFailures.push({ title: "frontmatter", reason: saveFailure });
+		}
+		return result;
 	} finally {
 		// **後始末の単一経路。** 中断でも失敗でも必ずここを通る。
 		// (1) ここまでの成果を保存する（external は一括保存なので、これが無いと
@@ -554,15 +596,9 @@ async function transFile_Exclusive(
 		// **ストアに書くべき成果がある**。ユニット数だけで判断すると、frontmatter しか
 		// 持たないファイルは訳文がディスクに書かれるのに行は `need:translate` のまま残り、
 		// ツリーは未翻訳のまま、次の翻訳で AI がもう一度訳す（probe S90）
-		if (external && ((loop?.translated ?? 0) > 0 || frontmatterTranslated)) {
-			try {
-				await saveExternalDocument(uri, markdown, io.provider, io.ctx);
-			} catch (error) {
-				logger.error("trans", "Failed to persist translations", {
-					file: targetFilePath,
-					...formatError(error),
-				});
-			}
+		// 成功経路ではすでに保存を試みている（ここは例外で抜けた経路の保存）
+		if (external && !externalSaveAttempted && ((loop?.translated ?? 0) > 0 || frontmatterTranslated)) {
+			await saveExternal();
 		}
 		await statusManager.refreshFileStatus(targetFilePath);
 		// 失敗したユニットの印は refresh のあとに付け直す。refresh はディスクから
@@ -1445,6 +1481,8 @@ async function transUnit_Exclusive(
 	}
 
 	let loop: UnitLoopResult<MdaitUnit> | undefined;
+	// external の一括保存の失敗理由（成功・未実施なら undefined）。通知で「完了」と言わないために持つ
+	let externalSaveFailure: string | undefined;
 	try {
 		const oldMarkerText = targetUnit.marker.toString();
 		loop = await runUnitLoop([targetUnit], {
@@ -1486,6 +1524,7 @@ async function transUnit_Exclusive(
 					file: targetPath,
 					...formatError(error),
 				});
+				externalSaveFailure = error instanceof Error ? error.message : String(error);
 			}
 		}
 		await statusManager.refreshFileStatus(targetPath);
@@ -1494,6 +1533,9 @@ async function transUnit_Exclusive(
 
 	if (loop.error) {
 		throw loop.error;
+	}
+	if (externalSaveFailure && loop.translated > 0) {
+		loop.writeFailures.push({ index: 0, unit: targetUnit, reason: externalSaveFailure });
 	}
 	return buildFileResult([targetUnit], loop);
 }
@@ -1553,8 +1595,20 @@ async function saveExternalDocument(
 	provider: MarkerProvider,
 	ctx: MarkerFileContext | undefined,
 ): Promise<void> {
-	const updatedContent = markdownParser.stringify(markdown, provider, ctx);
-	await writeManagedDocument(uri.fsPath, updatedContent);
+	// **`stringify` はメモリ上の unit-state を書き換える**（external ではマーカーをストアへ
+	// 引き取るため、訳したユニットの need がここで空になる）。原稿の書き込みに失敗したのに
+	// その行がディスクへ出ると、**原稿は丸写しのまま「訳し終えた」と記録され**、もう一度
+	// 訳そうとしても対象に挙がらない。書き込みを待つあいだに並列翻訳の別ファイルがストアを
+	// 保存することもあるので、書き換えた行は原稿を書けたときだけ表へ当てる（`stagePathChange`）
+	const store = UnitStateStore.getInstance();
+	const filePath = ctx?.filePath;
+	if (!filePath) {
+		await writeManagedDocument(uri.fsPath, markdownParser.stringify(markdown, provider, ctx));
+	} else {
+		const staged = store.stagePathChange(filePath, () => markdownParser.stringify(markdown, provider, ctx));
+		await writeManagedDocument(uri.fsPath, staged.value);
+		staged.commit();
+	}
 	const mdaitDir = await ensureMdaitDir();
 	if (mdaitDir) {
 		UnitStateStore.getInstance().save(mdaitDir);

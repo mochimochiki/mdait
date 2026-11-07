@@ -84,11 +84,11 @@ export async function deleteUnitAfterConfirm(filePath: string, unitHash: string,
 	const choice = await vscode.window.showWarningMessage(
 		title
 			? vscode.l10n.t(
-					"Delete unit '{0}' from the document? This removes its content — recover via git history if needed.",
+					"Delete unit '{0}' from the document? This removes its content — recover it from version control history if needed.",
 					title,
 				)
 			: vscode.l10n.t(
-					"Delete this unit from the document? This removes its content — recover via git history if needed.",
+					"Delete this unit from the document? This removes its content — recover it from version control history if needed.",
 				),
 		{ modal: true },
 		confirmLabel,

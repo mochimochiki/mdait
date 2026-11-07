@@ -834,7 +834,7 @@ export class Configuration {
 		vscode.window
 			.showWarningMessage(
 				vscode.l10n.t(
-					"OpenAI apiKey is written directly in mdait.json. Since this file is tracked by git, the key may leak. Use the ${env:OPENAI_API_KEY} syntax instead.",
+					"OpenAI apiKey is written directly in mdait.json. Since this file is tracked by version control, the key may leak. Use the ${env:OPENAI_API_KEY} syntax instead.",
 				),
 				useEnv,
 			)

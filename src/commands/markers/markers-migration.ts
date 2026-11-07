@@ -512,7 +512,7 @@ async function migrateMarkers(toMode: "embedded" | "external"): Promise<void> {
 			),
 		);
 	}
-	detailLines.push("", vscode.l10n.t("Committing your workspace to git beforehand is recommended."));
+	detailLines.push("", vscode.l10n.t("Committing your workspace to version control beforehand is recommended."));
 
 	const choice = await vscode.window.showWarningMessage(
 		question,

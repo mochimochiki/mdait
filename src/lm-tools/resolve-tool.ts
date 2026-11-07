@@ -499,7 +499,7 @@ export class MdaitResolveTool implements vscode.LanguageModelTool<ResolveInput> 
 				confirmationMessages: {
 					title: vscode.l10n.t("Confirm Unit Deletion"),
 					message: vscode.l10n.t(
-						"This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover via git history if needed. No AI is used.{2}",
+						"This will permanently remove {0} unit(s) flagged need:verify-deletion from {1}. This cannot be undone by mdait — recover it from version control history if needed. No AI is used.{2}",
 						targets.length,
 						inputPath,
 						formatUnitList(targets),

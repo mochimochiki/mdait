@@ -217,7 +217,7 @@ export class StatusTreeNeedHandler {
 			{
 				modal: true,
 				detail: `${vscode.l10n.t(
-					"This removes their content from the document — recover via git history if needed.",
+					"This removes their content from the document — recover it from version control history if needed.",
 				)}\n\n${formatPendingTitles(pending)}`,
 			},
 			confirmLabel,

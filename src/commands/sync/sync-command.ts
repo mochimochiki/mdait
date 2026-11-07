@@ -62,7 +62,7 @@ import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 import { isStaleUntranslatedCopy, isWrittenOverTranslateMark } from "./untranslated-copy";
-import { hasConflictMarkers } from "../../core/markdown/conflict-markers";
+import { collectSvnConflictOwners, hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
@@ -196,7 +196,7 @@ function conflictedFilesNotice(count: number): SyncNotice | undefined {
 	return {
 		kind: "conflict-markers",
 		detail: vscode.l10n.t(
-			"Sync skipped {0} file(s) that still contain merge conflict markers. Resolve the conflict in your version control tool, then run sync again.",
+			"Sync skipped {0} file(s) whose merge is unfinished (conflict markers remain, or Subversion left conflict files such as .mine or .r<N> next to them). Resolve the conflict in your version control tool, then run sync again.",
 			count,
 		),
 		summary: vscode.l10n.t("{0} file(s) skipped because a merge is unfinished", count),
@@ -209,7 +209,11 @@ function conflictedFilesNotice(count: number): SyncNotice | undefined {
  * 訳文も見るのは、訳文だけが競合している状態で sync すると、マーカー入りの本文が
  * ユニットとして読まれ、`from` の食い違いから全ユニットが改訂待ちに倒れるためである。
  */
-async function isMidMerge(sourceFile: string, targetFile: string): Promise<boolean> {
+async function isMidMerge(
+	sourceFile: string,
+	targetFile: string,
+	conflictOwners?: Map<string, ReadonlySet<string>>,
+): Promise<boolean> {
 	const read = async (filePath: string): Promise<string | undefined> => {
 		try {
 			if (!fs.existsSync(filePath)) {
@@ -226,8 +230,32 @@ async function isMidMerge(sourceFile: string, targetFile: string): Promise<boole
 		if (content !== undefined && hasConflictMarkers(content)) {
 			return true;
 		}
+		if (content !== undefined && hasSvnConflictArtifacts(filePath, conflictOwners)) {
+			return true;
+		}
 	}
 	return false;
+}
+
+/**
+ * 原稿の横に Subversion の競合ファイル（`.mine` / `.r<N>` など）が残っているか。
+ * 理由は `isSvnConflictArtifact` の説明にある（バイナリ扱いの原稿にはマーカーが入らない）。
+ */
+function hasSvnConflictArtifacts(filePath: string, conflictOwners?: Map<string, ReadonlySet<string>>): boolean {
+	// 一括 sync ではディレクトリを1回だけ読み、競合ファイルを持つ原稿の名前に絞って覚える
+	// （原稿ごとに一覧全体を見比べると、平たいフォルダでファイル数の2乗になる）。
+	// 1ファイルの sync は覚え場所を持たずにその場で読む
+	const dir = path.dirname(filePath);
+	let owners = conflictOwners?.get(dir);
+	if (!owners) {
+		try {
+			owners = collectSvnConflictOwners(fs.readdirSync(dir));
+		} catch {
+			return false;
+		}
+		conflictOwners?.set(dir, owners);
+	}
+	return owners.has(path.basename(filePath));
 }
 
 /**
@@ -333,7 +361,7 @@ function rollbackWithheldNotice(count: number): SyncNotice | undefined {
 	return {
 		kind: "rollback-withheld",
 		detail: vscode.l10n.t(
-			"Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source with git). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.",
+			"Sync did not delete {0} translated unit(s): the source carries markers from an earlier sync that no translation points at, which is what a one-sided rollback looks like (for example restoring only the source from version control). They are kept and marked for your confirmation. Restore the source and its translation together, then sync again to recover them.",
 			count,
 		),
 		summary: vscode.l10n.t("{0} unit(s) kept: the source looks rolled back on its own", count),
@@ -396,7 +424,7 @@ function orphanDeletedNotice(count: number, labels: readonly string[] = []): Syn
 	return {
 		kind: "orphan-deleted",
 		detail: `${vscode.l10n.t(
-			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from git, or set sync.autoDelete to false.",
+			"Sync removed {0} orphaned unit(s) whose source was deleted. If this was unexpected, you can restore them from version control, or set sync.autoDelete to false.",
 			count,
 		)}${named}`,
 		summary: vscode.l10n.t("{0} orphaned unit(s) were removed", count),
@@ -651,6 +679,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalTargetEmptied = 0;
 		/** 合流の途中（競合マーカーが残っている）で飛ばしたファイル数 */
 		let totalConflicted = 0;
+		// ディレクトリごとの「SVN の競合ファイルを横に持つ原稿の名前」（この回の sync のあいだだけ使い回す）
+		const conflictOwners = new Map<string, ReadonlySet<string>>();
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -741,7 +771,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						// **合流の途中の原稿には触らない。** `<<<<<<< HEAD` を本文として hash を
 						// 取ると、全ユニットに need:revise が付き、その姿のまま訳文へ写る。
 						// 原稿の競合はここでは解けない（どちらが正しいかは人にしか分からない）
-						if (await isMidMerge(sourceFile, targetFile)) {
+						if (await isMidMerge(sourceFile, targetFile, conflictOwners)) {
 							logger.info("sync", "Skipped a file that is still mid-merge", { sourceFile });
 							totalConflicted++;
 							totalFileCount++;

@@ -386,7 +386,7 @@ function describe(d: Diagnostic): string {
 			);
 		case "ai.apiKeyLiteral":
 			return vscode.l10n.t(
-				"OpenAI apiKey is written directly in mdait.json. Use the ${env:OPENAI_API_KEY} syntax to avoid leaking it through git.",
+				"OpenAI apiKey is written directly in mdait.json. Use the ${env:OPENAI_API_KEY} syntax to avoid leaking it through version control.",
 			);
 		case "ai.vscodeLmUnavailable": {
 			// 案内は設定された vendor に合わせる（既定の copilot 以外で GitHub Copilot を案内しない）

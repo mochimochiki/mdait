@@ -60,6 +60,41 @@ suite("失敗が重なったときにどちらを伝えるか", () => {
 		);
 	});
 
+	test("ファイルに書けなかった（読み取り専用・ロック）ときは、同期を勧めずに書けない理由を伝える", async () => {
+		await reportTransOutcome(
+			summary({
+				translatedCount: 1,
+				writeFailures: [{ title: "第1章", reason: "EPERM: operation not permitted, open 'en/doc.md'" }],
+			}),
+			{ label: "doc.md" },
+		);
+
+		const messages = shown();
+		assert.equal(messages.length, 1);
+		assert.equal(messages[0].level, "warning");
+		assert.ok(messages[0].message.includes("EPERM"), `理由を添えること。出た文言: ${messages[0].message}`);
+		assert.ok(
+			!messages[0].message.includes("markers were not found"),
+			"マーカーの問題ではないので、sync で直るとは言わない",
+		);
+		assert.deepEqual(
+			(messages[0] as { items?: string[] }).items ?? [],
+			[],
+			"sync では直らないので「同期を実行」を出さない",
+		);
+	});
+
+	test("frontmatter だけを訳して書けなかったときは、件数を言わずに保存できなかったことを伝える", async () => {
+		await reportTransOutcome(
+			summary({ translatedCount: 0, writeFailures: [{ title: "frontmatter", reason: "EPERM: operation not permitted" }] }),
+			{ label: "doc.md" },
+		);
+		const messages = shown();
+		assert.equal(messages.length, 1);
+		assert.ok(!messages[0].message.includes("Translated 0"), `「0件訳した」と言わない。出た文言: ${messages[0].message}`);
+		assert.ok(messages[0].message.includes("EPERM"));
+	});
+
 	test("書き戻し失敗が無ければ、使えない答えを伝える", async () => {
 		await reportTransOutcome(
 			summary({

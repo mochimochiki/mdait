@@ -17,7 +17,7 @@ suite("buildAdoptConfirmDetail", () => {
 		const lines = detail.split("\n");
 		assert.strictEqual(lines[steps.length], "");
 		assert.strictEqual(lines[steps.length + 1], "This updates translation markers.");
-		assert.strictEqual(lines[steps.length + 2], "Committing your workspace to git beforehand is recommended.");
+		assert.strictEqual(lines[steps.length + 2], "Committing your workspace to version control beforehand is recommended.");
 	});
 
 	test("用語集/TM構築ありのときはマーカー更新の行に書き込み先を追記すること", () => {

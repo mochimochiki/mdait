@@ -983,7 +983,7 @@ async function confirmInitialSync(config: Configuration): Promise<boolean> {
 				"Translation files will be created under the target directory, and mdait will record their state in .mdait/. Your source documents are not modified.",
 			)
 		: vscode.l10n.t(
-				"Translation files will be created under the target directory, and mdait will add comment markers to your source documents so it can track what changed. Use git to undo.",
+				"Translation files will be created under the target directory, and mdait will add comment markers to your source documents so it can track what changed. Use your version control to undo.",
 			);
 	const choice = await vscode.window.showInformationMessage(
 		vscode.l10n.t("Set up translation files for the first time?"),

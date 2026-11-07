@@ -204,10 +204,10 @@ export class MdaitAdoptTool implements vscode.LanguageModelTool<AdoptInput> {
 		const steps = buildAdoptStepList(adoptOptions, Configuration.getInstance().aiReview.autoApprove);
 		const message = dryRun
 			? vscode.l10n.t(
-					"Adopt existing translations (dry run)? Steps: adopt existing translations, AI-align mis-paired units, AI translation review. The review step changes no markers in dry run and the glossary/TM steps are skipped, but adopt still updates markers. Committing your workspace to git beforehand is recommended.",
+					"Adopt existing translations (dry run)? Steps: adopt existing translations, AI-align mis-paired units, AI translation review. The review step changes no markers in dry run and the glossary/TM steps are skipped, but adopt still updates markers. Committing your workspace to version control beforehand is recommended.",
 				)
 			: vscode.l10n.t(
-					"Adopt existing translations? Steps: {0}. This updates translation markers{1}. Committing your workspace to git beforehand is recommended.",
+					"Adopt existing translations? Steps: {0}. This updates translation markers{1}. Committing your workspace to version control beforehand is recommended.",
 					steps.join(", "),
 					adoptOptions.buildGlossary || adoptOptions.buildTm ? vscode.l10n.t(" and writes to the glossary/TM") : "",
 				);

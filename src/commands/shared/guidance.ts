@@ -263,6 +263,17 @@ export interface TransOutcomeSummary {
 	writeFailures: Array<{ title?: string; reason?: string }>;
 }
 
+/**
+ * 書き戻しの失敗のうち、**ファイルそのものに書けなかった**ものの理由を返す（無ければ undefined）。
+ *
+ * 書き戻しの失敗は2種類ある。マーカーが見つからない（`marker-not-found`。原稿が途中で
+ * 変わった。sync で直る）と、ファイルに書けない（読み取り専用・ロック・権限。sync では
+ * 直らない）。後者を前者の文言で伝えると、利用者は効かない sync を回し続ける。
+ */
+export function fileWriteError(failures: ReadonlyArray<{ reason?: string }>): string | undefined {
+	return failures.find((failure) => failure.reason && failure.reason !== "marker-not-found")?.reason;
+}
+
 /** 通知から呼び出せる次の一手 */
 export interface TransOutcomeActions {
 	/** 対象の呼び名（ファイル名・ユニット名） */
@@ -317,7 +328,7 @@ export async function offerFullRetry(body: string, actions: TransOutcomeActions)
 	const proceed = vscode.l10n.t("Re-translate");
 	const confirmed = await vscode.window.showWarningMessage(
 		vscode.l10n.t(
-			"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with git.",
+			"Translate these units again from scratch? Any edits you made by hand in them will be replaced. You can undo this with your version control.",
 		),
 		{ modal: true },
 		proceed,
@@ -398,6 +409,32 @@ export async function reportTransOutcome(result: TransOutcomeSummary, actions: T
 	// こちらは訳した成果が消えているうえ、「同期を実行」という次の一手も添えている。
 	// 順序を逆にすると、同じ実行で両方起きたときにその導線ごと隠れる。
 	if (result.writeFailures.length > 0) {
+		// ファイルそのものに書けなかった（読み取り専用・ロック・権限）。sync では直らないので
+		// 「同期を実行」を勧めない。原因の文言（EPERM など）をそのまま添える
+		const fileError = fileWriteError(result.writeFailures);
+		if (fileError && result.translatedCount === 0) {
+			// frontmatter だけを訳したファイル。ユニットの件数で言うと「0件訳して1件保存できない」になる
+			vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"The translation of {0} could not be saved because the file could not be written ({1}). Make sure the file is writable (not read-only or locked), then translate again.",
+					actions.label,
+					fileError,
+				),
+			);
+			return;
+		}
+		if (fileError) {
+			vscode.window.showWarningMessage(
+				vscode.l10n.t(
+					"Translated {0} unit(s) in {1}, but {2} of them could not be saved because the file could not be written ({3}). Make sure the file is writable (not read-only or locked), then translate again.",
+					result.translatedCount,
+					actions.label,
+					result.writeFailures.length,
+					fileError,
+				),
+			);
+			return;
+		}
 		const runSync = vscode.l10n.t("Run Sync");
 		const choice = await vscode.window.showWarningMessage(
 			vscode.l10n.t(

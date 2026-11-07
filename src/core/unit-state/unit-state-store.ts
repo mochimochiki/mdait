@@ -351,6 +351,14 @@ function readLegacyLine(columns: readonly string[]): { order: number; entry: Uni
  * 非MDファイルは「ファイル＝単一ユニット」（`unit` 1行・level=0・titleHash=""）の特殊形、
  * MD-external は同一 path に複数の `unit` 行を持つ。
  */
+/** `UnitStateStore.snapshotPath` が返す、1ファイルぶんの写し（中身は呼び出し側から触らない） */
+export interface UnitStatePathSnapshot {
+	readonly filePath: string;
+	readonly rows: ReadonlyMap<string, UnitStateEntry> | undefined;
+	readonly pending: ReadonlyMap<string, UnitStateEntry | null> | undefined;
+	readonly dirty: boolean;
+}
+
 export interface UnitStateEntry {
 	/** ワークスペース相対パス（/区切り） */
 	path: string;
@@ -607,6 +615,68 @@ export class UnitStateStore {
 		this.byPath.delete(filePath);
 		this.dirty = true;
 		return removed;
+	}
+
+	/**
+	 * 1ファイルぶんの行と保存待ちの記録を写し取る（`restorePath` で戻す）。
+	 *
+	 * 原稿の書き込みに失敗したとき、その前にストアへ引き取ったマーカーを取り消すために使う
+	 * （trans の external 保存）。`setEntry` で戻すと「同じ値へ戻した」ことが保存待ちとして
+	 * 残り、次の `load()` でディスクの新しい行（`svn update` で届いた他人の更新）を古い値で
+	 * 上書きしてしまう。
+	 */
+	snapshotPath(filePath: string): UnitStatePathSnapshot {
+		this.autoLoad();
+		const rows = this.byPath.get(filePath);
+		const pending = this.pending.get(filePath);
+		return {
+			filePath,
+			rows: rows ? new Map([...rows].map(([key, entry]) => [key, { ...entry }])) : undefined,
+			pending: pending ? new Map(pending) : undefined,
+			dirty: this.dirty,
+		};
+	}
+
+	/**
+	 * 1ファイルぶんの行の書き換えを、**確定するまで共有の表から外しておく**。
+	 *
+	 * `mutate` の中で行を書き換えたあと、表はいったん書き換える前の姿へ戻る。返した `commit` を
+	 * 呼ぶと、書き換えた姿を当て直す。呼ばなければ何も起きなかったことになる。
+	 *
+	 * 原稿の書き込みを待つあいだに別の処理（並列翻訳の別ファイルなど）が表を保存すると、
+	 * 書き換えた行がそこでディスクへ出てしまう。そのあと原稿の書き込みが失敗すると、
+	 * メモリを戻してもディスクには「訳し終えた」行が残り、次の読み直しで復活する。
+	 * 確定前の行を表に置かなければ、その経路が無くなる（trans の external 保存）。
+	 */
+	stagePathChange<T>(filePath: string, mutate: () => T): { value: T; commit: () => void } {
+		const before = this.snapshotPath(filePath);
+		let value: T;
+		try {
+			value = mutate();
+		} catch (error) {
+			this.restorePath(before);
+			throw error;
+		}
+		const after = this.snapshotPath(filePath);
+		this.restorePath(before);
+		return { value, commit: () => this.restorePath(after) };
+	}
+
+	/** `snapshotPath` で写した姿へ、そのファイルの行と保存待ちの記録を戻す */
+	restorePath(snapshot: UnitStatePathSnapshot): void {
+		const { filePath, rows, pending } = snapshot;
+		if (rows) {
+			this.byPath.set(filePath, new Map(rows));
+		} else {
+			this.byPath.delete(filePath);
+		}
+		if (pending) {
+			this.pending.set(filePath, new Map(pending));
+		} else {
+			this.pending.delete(filePath);
+		}
+		// 待っているあいだに別のファイルが変わっていれば、その分の dirty は残す
+		this.dirty = snapshot.dirty || this.pending.size > 0 || this.pendingFileIds.size > 0;
 	}
 
 	/**
