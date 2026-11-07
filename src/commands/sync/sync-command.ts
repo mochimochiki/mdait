@@ -62,7 +62,7 @@ import { validateAndSyncLevel } from "./level-validator";
 import { syncMarkerPair, syncSourceMarker } from "./marker-sync";
 import { SectionMatcher } from "./section-matcher";
 import { isStaleUntranslatedCopy, isWrittenOverTranslateMark } from "./untranslated-copy";
-import { hasConflictMarkers, isSvnConflictArtifact } from "../../core/markdown/conflict-markers";
+import { collectSvnConflictOwners, hasConflictMarkers } from "../../core/markdown/conflict-markers";
 import { type SyncNotice, showSyncNotices } from "./sync-notices";
 import { syncFrontmatterMarkers } from "./sync-frontmatter";
 
@@ -212,7 +212,7 @@ function conflictedFilesNotice(count: number): SyncNotice | undefined {
 async function isMidMerge(
 	sourceFile: string,
 	targetFile: string,
-	dirListing?: Map<string, readonly string[]>,
+	conflictOwners?: Map<string, ReadonlySet<string>>,
 ): Promise<boolean> {
 	const read = async (filePath: string): Promise<string | undefined> => {
 		try {
@@ -230,7 +230,7 @@ async function isMidMerge(
 		if (content !== undefined && hasConflictMarkers(content)) {
 			return true;
 		}
-		if (content !== undefined && hasSvnConflictArtifacts(filePath, dirListing)) {
+		if (content !== undefined && hasSvnConflictArtifacts(filePath, conflictOwners)) {
 			return true;
 		}
 	}
@@ -241,21 +241,21 @@ async function isMidMerge(
  * 原稿の横に Subversion の競合ファイル（`.mine` / `.r<N>` など）が残っているか。
  * 理由は `isSvnConflictArtifact` の説明にある（バイナリ扱いの原稿にはマーカーが入らない）。
  */
-function hasSvnConflictArtifacts(filePath: string, dirListing?: Map<string, readonly string[]>): boolean {
-	// 一括 sync ではディレクトリの一覧を1回だけ読む（ファイルごとに読むと、平たいフォルダで
-	// ファイル数の2乗になる）。1ファイルの sync は一覧を持たずにその場で読む
+function hasSvnConflictArtifacts(filePath: string, conflictOwners?: Map<string, ReadonlySet<string>>): boolean {
+	// 一括 sync ではディレクトリを1回だけ読み、競合ファイルを持つ原稿の名前に絞って覚える
+	// （原稿ごとに一覧全体を見比べると、平たいフォルダでファイル数の2乗になる）。
+	// 1ファイルの sync は覚え場所を持たずにその場で読む
 	const dir = path.dirname(filePath);
-	let siblings = dirListing?.get(dir);
-	if (!siblings) {
+	let owners = conflictOwners?.get(dir);
+	if (!owners) {
 		try {
-			siblings = fs.readdirSync(dir);
+			owners = collectSvnConflictOwners(fs.readdirSync(dir));
 		} catch {
 			return false;
 		}
-		dirListing?.set(dir, siblings);
+		conflictOwners?.set(dir, owners);
 	}
-	const baseName = path.basename(filePath);
-	return siblings.some((sibling) => isSvnConflictArtifact(baseName, sibling));
+	return owners.has(path.basename(filePath));
 }
 
 /**
@@ -679,8 +679,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalTargetEmptied = 0;
 		/** 合流の途中（競合マーカーが残っている）で飛ばしたファイル数 */
 		let totalConflicted = 0;
-		// 合流の途中かを見るときのディレクトリ一覧（この回の sync のあいだだけ使い回す）
-		const dirListing = new Map<string, readonly string[]>();
+		// ディレクトリごとの「SVN の競合ファイルを横に持つ原稿の名前」（この回の sync のあいだだけ使い回す）
+		const conflictOwners = new Map<string, ReadonlySet<string>>();
 
 		// UnitStateStoreをロード
 		const mdaitDir = await ensureMdaitDir();
@@ -771,7 +771,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						// **合流の途中の原稿には触らない。** `<<<<<<< HEAD` を本文として hash を
 						// 取ると、全ユニットに need:revise が付き、その姿のまま訳文へ写る。
 						// 原稿の競合はここでは解けない（どちらが正しいかは人にしか分からない）
-						if (await isMidMerge(sourceFile, targetFile, dirListing)) {
+						if (await isMidMerge(sourceFile, targetFile, conflictOwners)) {
 							logger.info("sync", "Skipped a file that is still mid-merge", { sourceFile });
 							totalConflicted++;
 							totalFileCount++;

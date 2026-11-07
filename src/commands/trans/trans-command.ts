@@ -504,8 +504,12 @@ async function transFile_Exclusive(
 			}
 			if (frontmatterOutcome.updated) {
 				frontmatterTranslated = true;
-				const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
-				await writeManagedDocument(uri.fsPath, updatedContent);
+				// external は本文の訳と一緒に一括保存する（saveExternal）。ここで先に書くと、
+				// 書き込みに失敗したときに frontmatter の行だけが「訳し終えた」姿でストアに残る
+				if (!external) {
+					const updatedContent = markdownParser.stringify(markdown, io.provider, io.ctx);
+					await writeManagedDocument(uri.fsPath, updatedContent);
+				}
 			}
 		}
 
@@ -1591,24 +1595,19 @@ async function saveExternalDocument(
 	provider: MarkerProvider,
 	ctx: MarkerFileContext | undefined,
 ): Promise<void> {
-	// **`stringify` はメモリ上の unit-state を先に書き換える**（external ではマーカーをストアへ
-	// 引き取るため、訳したユニットの need がここで空になる）。原稿の書き込みに失敗したまま
-	// 放っておくと、その行は次のストア保存（sync など）でディスクへ出て、**原稿は丸写しの
-	// まま「訳し終えた」と記録される**。もう一度訳そうとしても対象に挙がらない。だから
-	// 書き込みに失敗したら、このファイルの行を書き換える前の姿へ戻してから投げ直す
+	// **`stringify` はメモリ上の unit-state を書き換える**（external ではマーカーをストアへ
+	// 引き取るため、訳したユニットの need がここで空になる）。原稿の書き込みに失敗したのに
+	// その行がディスクへ出ると、**原稿は丸写しのまま「訳し終えた」と記録され**、もう一度
+	// 訳そうとしても対象に挙がらない。書き込みを待つあいだに並列翻訳の別ファイルがストアを
+	// 保存することもあるので、書き換えた行は原稿を書けたときだけ表へ当てる（`stagePathChange`）
 	const store = UnitStateStore.getInstance();
 	const filePath = ctx?.filePath;
-	// 保存待ちの記録ごと写す（行だけ戻すと「戻した」ことが保存待ちに残り、次の読み直しで
-	// 他人の新しい行を古い値で上書きする。`snapshotPath` の説明を見よ）
-	const before = filePath ? store.snapshotPath(filePath) : undefined;
-	const updatedContent = markdownParser.stringify(markdown, provider, ctx);
-	try {
-		await writeManagedDocument(uri.fsPath, updatedContent);
-	} catch (error) {
-		if (before) {
-			store.restorePath(before);
-		}
-		throw error;
+	if (!filePath) {
+		await writeManagedDocument(uri.fsPath, markdownParser.stringify(markdown, provider, ctx));
+	} else {
+		const staged = store.stagePathChange(filePath, () => markdownParser.stringify(markdown, provider, ctx));
+		await writeManagedDocument(uri.fsPath, staged.value);
+		staged.commit();
 	}
 	const mdaitDir = await ensureMdaitDir();
 	if (mdaitDir) {

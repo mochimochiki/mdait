@@ -637,6 +637,31 @@ export class UnitStateStore {
 		};
 	}
 
+	/**
+	 * 1ファイルぶんの行の書き換えを、**確定するまで共有の表から外しておく**。
+	 *
+	 * `mutate` の中で行を書き換えたあと、表はいったん書き換える前の姿へ戻る。返した `commit` を
+	 * 呼ぶと、書き換えた姿を当て直す。呼ばなければ何も起きなかったことになる。
+	 *
+	 * 原稿の書き込みを待つあいだに別の処理（並列翻訳の別ファイルなど）が表を保存すると、
+	 * 書き換えた行がそこでディスクへ出てしまう。そのあと原稿の書き込みが失敗すると、
+	 * メモリを戻してもディスクには「訳し終えた」行が残り、次の読み直しで復活する。
+	 * 確定前の行を表に置かなければ、その経路が無くなる（trans の external 保存）。
+	 */
+	stagePathChange<T>(filePath: string, mutate: () => T): { value: T; commit: () => void } {
+		const before = this.snapshotPath(filePath);
+		let value: T;
+		try {
+			value = mutate();
+		} catch (error) {
+			this.restorePath(before);
+			throw error;
+		}
+		const after = this.snapshotPath(filePath);
+		this.restorePath(before);
+		return { value, commit: () => this.restorePath(after) };
+	}
+
 	/** `snapshotPath` で写した姿へ、そのファイルの行と保存待ちの記録を戻す */
 	restorePath(snapshot: UnitStatePathSnapshot): void {
 		const { filePath, rows, pending } = snapshot;

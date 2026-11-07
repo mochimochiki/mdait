@@ -142,6 +142,50 @@ suite("UnitStateStore", () => {
 			);
 		});
 
+		test("stagePathChange で書き換えた行は、確定するまで別の保存でディスクへ出ないこと", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", "translate"));
+			store.save(tempDir);
+
+			// 翻訳が行を書き換え、原稿の書き込みを待っている
+			const staged = store.stagePathChange("docs/a.md", () =>
+				store.setEntry(plainEntry("docs/a.md", "h2", "s1", "")),
+			);
+			// そのあいだに並列翻訳の別ファイルがストアを保存した
+			store.setEntry(plainEntry("docs/b.md", "hb", "sb", ""));
+			store.save(tempDir);
+			// 原稿の書き込みは失敗したので commit しない。読み直す
+			store.load(tempDir);
+
+			assert.strictEqual(
+				store.getSoleEntry("docs/a.md")?.need,
+				"translate",
+				"書けなかった訳が「訳し終えた」としてディスクに残ると、もう一度訳す対象に挙がらない",
+			);
+			assert.strictEqual(store.getSoleEntry("docs/b.md")?.hash, "hb", "別ファイルの保存はそのまま");
+			assert.ok(staged);
+		});
+
+		test("stagePathChange の commit で、書き換えた行が表へ当たり保存されること", () => {
+			const store = UnitStateStore.getInstance();
+			store.load(tempDir);
+			store.setEntry(plainEntry("docs/a.md", "h1", "s1", "translate"));
+			store.save(tempDir);
+
+			const staged = store.stagePathChange("docs/a.md", () => {
+				store.setEntry(plainEntry("docs/a.md", "h2", "s1", ""));
+				return "written";
+			});
+			assert.strictEqual(staged.value, "written");
+			assert.strictEqual(store.getSoleEntry("docs/a.md")?.hash, "h1", "確定前は書き換える前の姿");
+			staged.commit();
+			store.save(tempDir);
+			store.load(tempDir);
+			assert.strictEqual(store.getSoleEntry("docs/a.md")?.hash, "h2");
+			assert.strictEqual(store.getSoleEntry("docs/a.md")?.need, "");
+		});
+
 		test("割り込みのあいだにディスク側で増えた行も、ちゃんと読めること", () => {
 			const store = UnitStateStore.getInstance();
 			store.setEntry(plainEntry("docs/a.md", "h1", "s1", ""));

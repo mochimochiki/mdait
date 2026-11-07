@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { hasConflictMarkers, isSvnConflictArtifact } from "../../../../core/markdown/conflict-markers";
+import { collectSvnConflictOwners, hasConflictMarkers, isSvnConflictArtifact } from "../../../../core/markdown/conflict-markers";
 
 suite("hasConflictMarkers（合流の途中の原稿の見分け）", () => {
 	test("ふつうの原稿は合流の途中ではないこと", () => {
@@ -72,6 +72,39 @@ suite("isSvnConflictArtifact（Subversion が競合で横に置くファイル�
 	test("原稿そのもの・別の原稿・似た名前のファイルを取り違えないこと", () => {
 		for (const name of ["doc.md", "doc.md.bak", "doc.md.orig", "doc.md.r", "doc.md.rev1", "other.md.mine", "doc.mdx.r1", "mydoc.md.r1"]) {
 			assert.strictEqual(isSvnConflictArtifact("doc.md", name), false, name);
+		}
+	});
+});
+
+suite("collectSvnConflictOwners（競合ファイルを横に持つ原稿の名前を集める）", () => {
+	test("一覧から、競合ファイルを持つ原稿の名前だけを集めること", () => {
+		const owners = collectSvnConflictOwners([
+			"doc.md",
+			"doc.md.mine",
+			"doc.md.r12",
+			"guide.md",
+			"guide.md.merge-left.r5",
+			"plain.md",
+			"plain.md.bak",
+			"other.md.rev1",
+		]);
+		for (const name of ["doc.md", "guide.md"]) {
+			assert.strictEqual(owners.has(name), true, name);
+		}
+		for (const name of ["plain.md", "other.md"]) {
+			assert.strictEqual(owners.has(name), false, name);
+		}
+	});
+
+	test("isSvnConflictArtifact と同じ答えになること", () => {
+		const names = ["doc.md", "doc.md.mine", "doc.md.working", "doc.md.merge-right.r9", "doc.mdx.r1", "mydoc.md.r1", "doc.md.r"];
+		const owners = collectSvnConflictOwners(names);
+		for (const base of ["doc.md", "doc.mdx", "mydoc.md"]) {
+			assert.strictEqual(
+				owners.has(base),
+				names.some((n) => isSvnConflictArtifact(base, n)),
+				base,
+			);
 		}
 	});
 });

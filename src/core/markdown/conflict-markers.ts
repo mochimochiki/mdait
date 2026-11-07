@@ -62,8 +62,31 @@ export function isSvnConflictArtifact(baseName: string, siblingName: string): bo
 	if (!siblingName.startsWith(`${baseName}.`)) {
 		return false;
 	}
-	const suffix = siblingName.slice(baseName.length + 1);
-	return /^(mine|working|r\d+|merge-(left|right)\.r\d+)$/.test(suffix);
+	return SVN_CONFLICT_SUFFIX.test(siblingName.slice(baseName.length + 1));
+}
+
+const SVN_CONFLICT_SUFFIX = /^(mine|working|r\d+|merge-(left|right)\.r\d+)$/;
+
+/**
+ * ディレクトリの一覧から、Subversion の競合ファイルを横に持つ原稿の名前を集める
+ * （判定は `isSvnConflictArtifact` と同じ）。
+ *
+ * 原稿ごとに一覧全体を見比べると、平たいフォルダではファイル数の2乗の比較になる。
+ * 一覧を1回なめて集めておけば、原稿ごとの判定は `has` で済む。
+ *
+ * @param names 同じディレクトリにあるファイルの名前
+ */
+export function collectSvnConflictOwners(names: readonly string[]): Set<string> {
+	const owners = new Set<string>();
+	for (const name of names) {
+		// `a.md.merge-left.r12` のように接尾辞にも `.` を含むので、区切りの候補をすべて試す
+		for (let dot = name.indexOf("."); dot > 0; dot = name.indexOf(".", dot + 1)) {
+			if (SVN_CONFLICT_SUFFIX.test(name.slice(dot + 1))) {
+				owners.add(name.slice(0, dot));
+			}
+		}
+	}
+	return owners;
 }
 
 /**
