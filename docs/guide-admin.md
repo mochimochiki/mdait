@@ -189,21 +189,27 @@ git config merge.conflictStyle zdiff3
 
 TortoiseSVN を入れるときに「command line client tools」に印を付けておく（既定では入らない）。入っていないと、下の `svn` が「認識されません」で止まる。
 
-作業コピーの根（trunk）で、PowerShell から次の7行を実行する。
+作業コピーの根（trunk）で、PowerShell から次のまとまりをそのまま貼り付けて実行する。何度実行しても結果は同じになる。
 
 ```powershell
 $files = svn list -R | Select-String '\.(md|txt|csv|json|tmx)$|^\.mdait/unit-state$' | ForEach-Object Line
 [IO.File]::WriteAllLines("$PWD\mdait-targets.txt", [string[]]$files)
 svn propset svn:mime-type text/plain --targets mdait-targets.txt
 Remove-Item mdait-targets.txt
-svn propset svn:auto-props "*.md = svn:mime-type=text/plain`n*.txt = svn:mime-type=text/plain`n*.csv = svn:mime-type=text/plain`n*.json = svn:mime-type=text/plain`n*.tmx = svn:mime-type=text/plain`nunit-state = svn:mime-type=text/plain" .
-svn propset svn:ignore local .mdait
+$props = @(svn propget svn:auto-props . 2>$null | Where-Object { $_ -ne '' })
+foreach ($p in '*.md', '*.txt', '*.csv', '*.json', '*.tmx', 'unit-state') {
+  $i = @($props | ForEach-Object { ($_ -split '=', 2)[0].Trim() }).IndexOf($p)
+  if ($i -lt 0) { $props += "$p = svn:mime-type=text/plain" } elseif ($props[$i] -notmatch 'svn:mime-type') { $props[$i] += ';svn:mime-type=text/plain' }
+}
+svn propset svn:auto-props ($props -join "`n") .
+$ignore = @(svn propget svn:ignore .mdait 2>$null | Where-Object { $_ -ne '' -and $_ -ne 'local' }) + 'local'
+svn propset svn:ignore ($ignore -join "`n") .mdait
 svn commit -m "mdait: SVN の設定"
 ```
 
 1. 1〜4行目は、いまある原稿と `.mdait` の中のファイルをテキストとして登録し直す。SVN は日本語の多いファイルをバイナリと判定する（実測: 原文25本のうち12本）。バイナリのままだと、2人が別々の章を直しただけで必ず競合し、差分も見られない。ファイルの一覧をいったん書き出すのは、数百本でもコマンドの長さの上限に当たらないようにするため。
-2. 5行目は、これから足すファイルにも同じ設定を効かせる。
-3. 6行目は、`.mdait/local/` をコミットの対象から外す。
+2. 5〜10行目は、これから足すファイルにも同じ設定を効かせる（`svn:auto-props`）。すでにある設定は残し、mdait の分だけを書き足す。
+3. 11〜12行目は、`.mdait/local/` をコミットの対象から外す（`svn:ignore`）。ここも、すでにある設定は残す。
 
 `.mdait/` と訳文には `svn:needs-lock` を掛けない。読み取り専用のファイルには、同期も翻訳も書き込めない。
 
@@ -213,7 +219,7 @@ svn commit -m "mdait: SVN の設定"
 2. 競合が出たら、同期の前に次の順で解く。
    1. `.mdait` の外のファイル（原稿）は「競合の編集」で直し、「解決済み」にする。
    2. VS Code の mdait ビューで「競合を解決」を押す。
-   3. `.mdait` の中の競合したファイルを「解決済み」にする。コマンドなら、作業コピーの根で `svn resolve --accept working -R .mdait` を実行する（`-R .mdait` を省くと何も解決されない）。
+   3. `.mdait` の中の競合したファイルを「解決済み」にする。コマンドは、mdait の完了通知に出たものをそのまま実行する（対象のパスが入っている）。`--accept` を付けるときは、対象のパスと `-R` を省かない。省くと何も解決されない。
 3. 同期する。そのあと、翻訳などいつもの作業をする。
 4. コミットの直前にもう一度「SVN 更新」をする。競合が出たら 2 に戻る。
 5. 「SVN コミット」をする。コミット画面で「バージョン管理外のファイルを表示」に印を付け、訳文のフォルダに増えたファイルも選ぶ。

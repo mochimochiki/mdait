@@ -156,6 +156,31 @@ suite("PlainFileHandler", () => {
 			assert.strictEqual(store.getSoleEntry("target/test.csv")?.need, "");
 		});
 
+		test("翻訳待ちの丸写しは、改行コードだけ違っても手訳とみなさない", async () => {
+			// 原文が CRLF、丸写しの訳文が LF（エディタや VCS が書き換えた）。中身はいまの原文そのもの
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+			fs.writeFileSync(sourceFile, "一行目\r\n二行目\r\n", "utf-8");
+			fs.writeFileSync(targetFile, "一行目\n二行目\n", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setEntry({
+				path: "target/test.txt",
+				kind: "unit" as const, seat: seat(0),
+				level: 0,
+				titleHash: "",
+				// 記録した本文の hash はいまの本文と違う（印を付けたあとで何か書き換わった形）
+				hash: calculateHash("別の本文", false),
+				from: plainContentHash("一行目\n二行目\n"),
+				need: "translate",
+			});
+
+			await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(store.getSoleEntry("target/test.txt")?.need, "translate", "確認待ちへ切り替えない");
+		});
+
 		test("改行コードは中身ではないが、空白の違いは中身として扱う", () => {
 			assert.strictEqual(plainContentHash("a\r\nb\r\n"), plainContentHash("a\nb\n"));
 			assert.strictEqual(plainContentHash("a\rb"), plainContentHash("a\nb"));

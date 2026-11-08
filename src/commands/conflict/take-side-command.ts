@@ -100,6 +100,8 @@ export async function resolveDecidedFile(filePath: string | undefined): Promise<
 				withSvnResolveHint(
 					vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(filePath)),
 					filePath,
+					// 手動は1ファイルだけを書く。ほかのファイルに競合が残っていることがあるので、このファイルだけを案内する
+					"file",
 				),
 			);
 		}

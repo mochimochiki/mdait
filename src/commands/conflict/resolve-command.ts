@@ -155,7 +155,7 @@ export async function executeResolveConflicts(): Promise<void> {
 				? vscode.l10n.t("Cancelled. {0} file(s) were left unchanged.", skipped)
 				: remaining > 0
 					? vscode.l10n.t("Decide {0} more to write.", remaining)
-					: withSvnResolveHint(vscode.l10n.t("Resolved the merge conflicts."), outcomes[0]?.filePath),
+					: withSvnResolveHint(vscode.l10n.t("Resolved the merge conflicts."), outcomes[0]?.filePath, "mdait-dir"),
 		uri,
 		unfinished > 0 || remaining > 0 ? "warning" : "info",
 		// 残っているときだけ、次の一手（一覧を開く）をレポートより前に置く

@@ -141,8 +141,9 @@ export class PlainFileHandler implements FileHandler {
 				existing.need,
 				existing.hash,
 				targetHash,
-				targetContent,
-				sourceContent,
+				// 「いまの原文の丸写しか」は中身で比べる。改行コードだけ違う丸写しを手訳と取り違えない（ADR-261108-02）
+				toLf(targetContent),
+				toLf(sourceContent),
 				!!staleCopy,
 			);
 		if (writtenOver) {

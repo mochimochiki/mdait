@@ -47,16 +47,28 @@ suite("withSvnResolveHint（競合を解き終えた文言に SVN の一手を�
 		fs.rmSync(root, { recursive: true, force: true });
 	});
 
-	test("SVN の作業コピーでは、.mdait を再帰で解決済みにするコマンドを添えること", () => {
+	test("一括の解決では、その .mdait を絶対パスで再帰に解決済みにするコマンドを添えること", () => {
+		// `.mdait` は作業コピーの根にあるとは限らない（ここでは docs の下）
 		fs.mkdirSync(path.join(root, ".svn"));
-		const message = withSvnResolveHint("解決しました。", path.join(root, ".mdait", "unit-state"));
+		const mdaitDir = path.join(root, "docs", ".mdait");
+		fs.mkdirSync(mdaitDir, { recursive: true });
+		const message = withSvnResolveHint("解決しました。", path.join(mdaitDir, "unit-state"), "mdait-dir");
 		assert.ok(message.startsWith("解決しました。"), message);
-		// `-R .mdait` が無いと、--accept の既定の深さ empty で何も解決されない（svn 1.14 で実測）
-		assert.ok(message.includes("svn resolve --accept working -R .mdait"), message);
+		// `-R` が無いと、--accept の既定の深さ empty で何も解決されない（svn 1.14 で実測）
+		assert.ok(message.includes(`svn resolve --accept working -R "${mdaitDir}"`), message);
+	});
+
+	test("手動の解決では、解いたファイルだけを解決済みにするコマンドを添えること", () => {
+		// ほかのファイルに競合が残っていることがあるので、.mdait 丸ごとは案内しない
+		fs.mkdirSync(path.join(root, ".svn"));
+		const file = path.join(root, ".mdait", "translations.tmx");
+		const message = withSvnResolveHint("解決しました。", file, "file");
+		assert.ok(message.includes(`svn resolve --accept working "${file}"`), message);
+		assert.ok(!message.includes("-R"), message);
 	});
 
 	test("SVN の作業コピーでなければ、文言をそのまま返すこと", () => {
-		const message = withSvnResolveHint("解決しました。", path.join(root, ".mdait", "unit-state"));
+		const message = withSvnResolveHint("解決しました。", path.join(root, ".mdait", "unit-state"), "mdait-dir");
 		assert.strictEqual(message, "解決しました。");
 	});
 });
