@@ -118,6 +118,28 @@ suite("ResponseValidator: 文字列の中の書き損じを直して読む", () 
 			assert.strictEqual(result.parsed?.targetPatch, '+Choose "OK", "Cancel".');
 		});
 
+		test('オブジェクトの中の値は "]" で閉じとみなさず、訳文の中の ["Low"] を最後まで読む', () => {
+			const raw = '{"translation": "Set ["Low"] first.", "termSuggestions": []}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.strictEqual(result.parsed?.translation, 'Set ["Low"] first.');
+			assert.deepStrictEqual(result.parsed?.termSuggestions, []);
+		});
+
+		test('配列の中の "OK", "Cancel" は次の要素が完結しないので閉じとみなさず、警告を1件のまま読む', () => {
+			const raw = '{"translation":"Ready","warnings":["Choose "OK", "Cancel" buttons."]}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.deepStrictEqual(result.parsed?.warnings, ['Choose "OK", "Cancel" buttons.']);
+		});
+
+		test('配列の中で "OK", "Cancel" の閉じが一意に決まらないときは、修復を採用せず読めないとして落とす', () => {
+			const raw = '{"translation":"Ready","warnings":["Choose "OK", "Cancel"]}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, false);
+			assert.strictEqual(result.error?.code, "JSON_PARSE_ERROR");
+		});
+
 		test("カンマの抜けた答えは、次のキーを値に取り込んで読まず、読めないとして落とす", () => {
 			const raw = '{"translation": "x" "termSuggestions": "y"}';
 			const result = validateTranslationResponse(raw);

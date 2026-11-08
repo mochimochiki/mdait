@@ -143,6 +143,7 @@ const REVISION_PATCH_SHAPE: LenientShape = {
  * 直して読めても、次のどちらかなら閉じの取り違えとみなし、やはり最初の失敗を投げる。
  * - `shape` を渡したとき、知らないキーが混ざっている
  * - キーと値の区切りのような並び（`": "`）の `"` を、文字列の中身としてエスケープした
+ * - 配列の中で、どこで閉じるかが一意に決まらない `"` があった
  *
  * @param jsonString `extractJsonFromResponse` で取り出した文字列
  * @param shape 修復した結果に許すキー。省略時はキーを確かめない
@@ -154,7 +155,7 @@ export function parseJsonLenient(jsonString: string, shape?: LenientShape): unkn
 		return JSON.parse(jsonString);
 	} catch (strictError) {
 		const repair = repairJsonStringLiteralsDetailed(jsonString);
-		if (repair.text === jsonString || repair.escapedKeyLike) {
+		if (repair.text === jsonString || repair.escapedKeyLike || repair.ambiguous) {
 			throw strictError;
 		}
 		let parsed: unknown;
@@ -196,11 +197,11 @@ function matchesShape(value: unknown, shape: LenientShape): boolean {
  * やり直しても同じ書き方を繰り返すので、送り直しでは直らない。
  *
  * 文字列の中の `"` は、直後（空白を飛ばす）がその位置で閉じたときに来るべき並びの
- * ときだけ閉じとみなす。キーなら `:`、値なら `}` / `]`、または `,` のあとに次の要素が
- * 続くとき。オブジェクトの中では `,` のあとの文字列を閉じの `"` まで先読みし、その直後が
- * `:` であること（次のキーであること）まで確かめる。値の中の `"OK", "Cancel"` を
- * 閉じと取り違えないためである。配列の中の文字列は、次の要素も文字列のときだけ閉じる。
- * それ以外は文字列の中身として `\"` に書き換える。
+ * ときだけ閉じとみなす。キーなら `:`、値なら入れ物の閉じ（オブジェクトの中は `}`、配列の中は `]`）、
+ * または `,` のあとに次の要素が続くとき。`,` のあとの文字列は閉じの `"` まで先読みし、
+ * オブジェクトの中ならその直後が `:` であること（次のキーであること）、配列の中なら `,` か `]`
+ * であること（次の要素として完結すること）まで確かめる。値の中の `"OK", "Cancel"` や
+ * `["Low"]` を閉じと取り違えないためである。それ以外は文字列の中身として `\"` に書き換える。
  *
  * @param text 読めなかった JSON 文字列
  * @returns 書き換えた文字列。直す箇所が無ければ入力そのもの
@@ -213,11 +214,20 @@ interface RepairResult {
 	text: string;
 	/** キーと値の区切りのような並び（`": "`）の `"` を、中身としてエスケープしたか */
 	escapedKeyLike: boolean;
+	/**
+	 * 配列の中で、閉じが一意に決まらない `"` があったか。
+	 *
+	 * `["Choose "OK", "Cancel"]` は、1件（`Choose "OK", "Cancel"`）とも2件（`Choose "OK` と
+	 * `Cancel`）とも読める。2件として閉じると、その要素の中にエスケープした `"` が奇数個残る。
+	 * どちらが正しいかを決める手がかりが無いので、この形を見たら修復を採用しない。
+	 */
+	ambiguous: boolean;
 }
 
 function repairJsonStringLiteralsDetailed(text: string): RepairResult {
 	let out = "";
 	let escapedKeyLike = false;
+	let ambiguous = false;
 	// 開いている入れ子（"{" か "["）。キーの位置かどうかの判定に使う
 	const stack: string[] = [];
 	// オブジェクトの中で、次に来る文字列がキーかどうか
@@ -247,6 +257,9 @@ function repairJsonStringLiteralsDetailed(text: string): RepairResult {
 
 		// 文字列リテラルを読む
 		const isKey = expectingKey;
+		const container = stack[stack.length - 1];
+		// この文字列の中で、中身としてエスケープした `"` の数
+		let escapedQuotes = 0;
 		out += '"';
 		i++;
 		while (i < text.length) {
@@ -272,12 +285,20 @@ function repairJsonStringLiteralsDetailed(text: string): RepairResult {
 				continue;
 			}
 			if (c === '"') {
-				if (closesString(text, i + 1, isKey, stack[stack.length - 1])) {
+				if (closesString(text, i + 1, isKey, container)) {
+					if (
+						container === "[" &&
+						escapedQuotes % 2 === 1 &&
+						text[skipWhitespace(text, i + 1)] === ","
+					) {
+						ambiguous = true;
+					}
 					break;
 				}
 				if (/^\s*:\s*"/.test(text.slice(i + 1, i + 64))) {
 					escapedKeyLike = true;
 				}
+				escapedQuotes++;
 				out += '\\"';
 				i++;
 				continue;
@@ -291,7 +312,7 @@ function repairJsonStringLiteralsDetailed(text: string): RepairResult {
 		}
 		expectingKey = false;
 	}
-	return { text: out, escapedKeyLike };
+	return { text: out, escapedKeyLike, ambiguous };
 }
 
 /** `"` の直後（`from` 以降）が、文字列がそこで閉じたときに来るべき並びかを答える */
@@ -307,8 +328,9 @@ function closesString(text: string, from: number, isKey: boolean, container: str
 	if (container === undefined) {
 		return false;
 	}
+	// 入れ物の閉じは、その入れ物の中の文字列のときだけ。オブジェクトの値の中の `["Low"]` の `]` で閉じない
 	if (c === "}" || c === "]") {
-		return true;
+		return (c === "}" && container === "{") || (c === "]" && container === "[");
 	}
 	if (c !== ",") {
 		return false;
@@ -322,12 +344,17 @@ function closesString(text: string, from: number, isKey: boolean, container: str
 		}
 		return n === '"' && isFollowedByColon(text, after + 1);
 	}
-	// 配列の中の文字列なら、次の要素も文字列
-	return n === '"';
+	// 配列の中の文字列なら、次の要素も文字列で、閉じの `"` の直後が `,` か `]`（要素として完結する）
+	return n === '"' && isFollowedBy(text, after + 1, [",", "]"]);
 }
 
 /** `from` から次の閉じの `"` まで読み、その直後（空白を飛ばす）が `:` かを答える */
 function isFollowedByColon(text: string, from: number): boolean {
+	return isFollowedBy(text, from, [":"]);
+}
+
+/** `from` から次の閉じの `"` まで読み、その直後（空白を飛ばす）が `expected` のどれかかを答える */
+function isFollowedBy(text: string, from: number, expected: readonly string[]): boolean {
 	let i = from;
 	while (i < text.length) {
 		const c = text[i];
@@ -339,7 +366,7 @@ function isFollowedByColon(text: string, from: number): boolean {
 			return false;
 		}
 		if (c === '"') {
-			return text[skipWhitespace(text, i + 1)] === ":";
+			return expected.includes(text[skipWhitespace(text, i + 1)]);
 		}
 		i++;
 	}
