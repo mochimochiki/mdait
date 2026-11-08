@@ -103,26 +103,69 @@ function isTermRelevant(content: string, entry: TermEntry, lang: string): boolea
 }
 
 /**
- * 用語リストをJSON文字列に変換（プロンプト埋め込み用）
+ * 訳し分けのある語に添える指示。`senses` を持つ語が1つでもあるときだけ、JSON の後ろに付ける。
+ *
+ * 指示文（system）の規則には書かない。訳し分けの無い用語集では、指示文が1文字も
+ * 変わらないようにするため（録音による回帰がそのまま通り、既存の利用者の指示文も動かない）。
+ */
+export const TERM_SENSES_NOTE =
+	'Terms with "senses" take a different translation depending on their meaning. For each occurrence, use the translation whose "when" matches that occurrence, and never use a sense whose "when" does not match.';
+
+/**
+ * 用語リストをプロンプトに埋め込む文字列に変換する。
+ *
+ * 同じ原語の行が複数あるとき（訳し分け。ADR-261108-06）は、1つの語にまとめて
+ * `senses` の配列にする。各行の context は「どの意味のときにこの訳語を使うか」として
+ * `when` に載せる。並べたまま渡すと、同じ語に「strictly に従え」という訳語が2つ並び、
+ * どちらを使うかの手がかりが無くなる。
+ *
+ * 訳し分けの無い語は、これまでと同じ `{term, translation, context}` の形のまま。
+ *
  * @param terms 用語リスト
- * @returns JSON文字列（整形済み）
+ * @returns JSON文字列（整形済み）。訳し分けのある語があれば、後ろに `TERM_SENSES_NOTE` が続く
  */
 export function termsToJson(terms: TranslationTerm[]): string {
 	if (terms.length === 0) {
 		return "";
 	}
 
-	// contextが空の場合は省略してコンパクトに
-	const compactTerms = terms.map((t) => {
-		const result: Record<string, string> = {
-			term: t.term,
-			translation: t.translation,
-		};
-		if (t.context) {
-			result.context = t.context;
+	const groups = groupBySourceTerm(terms);
+	const compactTerms = groups.map((group) => {
+		if (group.length === 1) {
+			// contextが空の場合は省略してコンパクトに
+			const [t] = group;
+			const result: Record<string, string> = {
+				term: t.term,
+				translation: t.translation,
+			};
+			if (t.context) {
+				result.context = t.context;
+			}
+			return result;
 		}
-		return result;
+		return {
+			term: group[0].term,
+			senses: group.map((t) => (t.context ? { translation: t.translation, when: t.context } : { translation: t.translation })),
+		};
 	});
 
-	return JSON.stringify(compactTerms, null, 2);
+	const json = JSON.stringify(compactTerms, null, 2);
+	return groups.some((group) => group.length > 1) ? `${json}\n${TERM_SENSES_NOTE}` : json;
+}
+
+/**
+ * 原語ごとにまとめる。並びは最初に出てきた順で、同じ訳語の行は1つに畳む
+ * （同じ訳語を2度並べても選ぶ手がかりは増えない）。
+ */
+export function groupBySourceTerm(terms: readonly TranslationTerm[]): TranslationTerm[][] {
+	const groups = new Map<string, TranslationTerm[]>();
+	for (const term of terms) {
+		const group = groups.get(term.term);
+		if (!group) {
+			groups.set(term.term, [term]);
+		} else if (!group.some((existing) => existing.translation === term.translation)) {
+			group.push(term);
+		}
+	}
+	return [...groups.values()];
 }

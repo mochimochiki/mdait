@@ -106,9 +106,7 @@ export class YamlTermsRepository implements TermsRepository {
 			if (TermEntryUtils.isEmpty(candidate)) continue;
 
 			// 既存エントリとの同一性チェック（contextと言語で判定）
-			const duplicateIndex = mergedEntries.findIndex((existing) =>
-				TermEntryUtils.isSameEntry(existing, candidate, effectivePrimaryLang),
-			);
+			const duplicateIndex = TermEntryUtils.findSameEntryIndex(mergedEntries, candidate, effectivePrimaryLang);
 
 			if (duplicateIndex >= 0) {
 				// 同一エントリが見つかった場合はマージで更新

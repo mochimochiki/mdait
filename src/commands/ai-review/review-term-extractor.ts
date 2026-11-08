@@ -40,7 +40,10 @@ export function extractBidirectionalTerms(
 	const strippedSource = stripCodeSegments(sourceContent);
 	const strippedTarget = stripCodeSegments(targetContent);
 
-	const relevantTerms: TranslationTerm[] = [];
+	// 訳し分けのある語（同じ原語の行が複数。ADR-261108-06）は、どれか1つの意味が当たれば
+	// **全部の意味を渡す**。訳文側で当たった意味だけを渡すと、別の意味の訳語を選ぶべき
+	// 箇所だったのかを判定する材料が無くなる
+	const hitSourceTerms = new Set<string>();
 	for (const entry of allTerms) {
 		const sourceTerm = TermEntryUtils.getTerm(entry, sourceLang);
 		const targetTerm = TermEntryUtils.getTerm(entry, targetLang);
@@ -52,6 +55,15 @@ export function extractBidirectionalTerms(
 			anyTermVariantAppears(strippedSource, sourceTerm, TermEntryUtils.getvariants(entry, sourceLang)) ||
 			anyTermVariantAppears(strippedTarget, targetTerm, TermEntryUtils.getvariants(entry, targetLang));
 		if (hit) {
+			hitSourceTerms.add(sourceTerm);
+		}
+	}
+
+	const relevantTerms: TranslationTerm[] = [];
+	for (const entry of allTerms) {
+		const sourceTerm = TermEntryUtils.getTerm(entry, sourceLang);
+		const targetTerm = TermEntryUtils.getTerm(entry, targetLang);
+		if (sourceTerm && targetTerm && hitSourceTerms.has(sourceTerm)) {
 			relevantTerms.push({
 				term: sourceTerm,
 				translation: targetTerm,

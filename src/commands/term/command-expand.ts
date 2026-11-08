@@ -174,18 +174,20 @@ export async function expandTerm_CoreProc(
 
 	// 全用語を取得し未展開用語を抽出
 	const allTerms = await termsRepository.getAllEntries();
-	const termsToExpand = allTerms.filter((entry) => {
-		return entry.languages[sourceLang] && !entry.languages[targetLang];
-	});
+	const { termsToExpand, leftForHuman } = selectExpandableTerms(allTerms, sourceLang, targetLang);
 	if (termsToExpand.length === 0) {
-		vscode.window.showInformationMessage(
-			vscode.l10n.t(
-				"All terms are already expanded for {0} → {1}",
-				sourceLang,
-				targetLang,
-			),
-		);
-		return { expanded: 0, remaining: 0, ...NO_BATCHES };
+		// 人が埋める語だけが残っているときは「すべて展開済み」と言わない。件数は
+		// 呼び出し側の完了通知（0 expanded / N remaining）に出る
+		if (leftForHuman === 0) {
+			vscode.window.showInformationMessage(
+				vscode.l10n.t(
+					"All terms are already expanded for {0} → {1}",
+					sourceLang,
+					targetLang,
+				),
+			);
+		}
+		return { expanded: 0, remaining: leftForHuman, ...NO_BATCHES };
 	}
 
 	// 用語を含むファイルの事前フィルタリング
@@ -212,7 +214,7 @@ export async function expandTerm_CoreProc(
 		);
 	}
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length, ...NO_BATCHES };
+		return { expanded: 0, remaining: termsToExpand.length + leftForHuman, ...NO_BATCHES };
 	}
 
 	// 用語展開コンテキストの収集
@@ -224,7 +226,7 @@ export async function expandTerm_CoreProc(
 		cancellationToken,
 	);
 	if (cancellationToken.isCancellationRequested) {
-		return { expanded: 0, remaining: termsToExpand.length, ...NO_BATCHES };
+		return { expanded: 0, remaining: termsToExpand.length + leftForHuman, ...NO_BATCHES };
 	}
 
 	// グローバルバッチ分割と一括抽出。
@@ -241,7 +243,7 @@ export async function expandTerm_CoreProc(
 	// 用語集を更新
 	if (allResults.size === 0) {
 		// 通知は呼び出し側の件数付き完了通知（0 expanded / N remaining）に一本化する
-		return { expanded: 0, remaining: termsToExpand.length, ...batches };
+		return { expanded: 0, remaining: termsToExpand.length + leftForHuman, ...batches };
 	}
 
 	// 用語エントリを更新
@@ -270,9 +272,31 @@ export async function expandTerm_CoreProc(
 
 	return {
 		expanded: updatedTerms.length,
-		remaining: termsToExpand.length - updatedTerms.length,
+		remaining: termsToExpand.length - updatedTerms.length + leftForHuman,
 		...batches,
 	};
+}
+
+/**
+ * 展開する語を選ぶ。targetLang の訳語がまだ無い語のうち、AI に任せられるものだけを返す。
+ *
+ * **訳し分けのある語（同じ原語の行が複数。ADR-261108-06）は選ばない。** AI の答えは
+ * 原語 → 訳語の対応表で、同じ原語の意味を見分けられない。展開すると全部の意味に
+ * 同じ訳語が入り、訳し分けが消える。人が埋めるまで `leftForHuman` に数え、「残り」に出す。
+ */
+export function selectExpandableTerms(
+	allTerms: readonly TermEntry[],
+	sourceLang: string,
+	targetLang: string,
+): { termsToExpand: TermEntry[]; leftForHuman: number } {
+	const senseCount = new Map<string, number>();
+	for (const entry of allTerms) {
+		const term = entry.languages[sourceLang]?.term;
+		if (term) senseCount.set(term, (senseCount.get(term) ?? 0) + 1);
+	}
+	const unexpanded = allTerms.filter((entry) => entry.languages[sourceLang] && !entry.languages[targetLang]);
+	const termsToExpand = unexpanded.filter((entry) => (senseCount.get(entry.languages[sourceLang].term) ?? 0) < 2);
+	return { termsToExpand, leftForHuman: unexpanded.length - termsToExpand.length };
 }
 
 /**

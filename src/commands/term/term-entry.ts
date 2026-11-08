@@ -102,6 +102,7 @@ export namespace TermEntry {
 	 *
 	 * **重複判定ロジック:**
 	 * 1. primaryLangが両方に存在し、かつ異なる場合は別エントリ（明示的に異なる用語と判断）
+	 *    同じ場合も、context が違い、他の言語で訳語が食い違うなら別エントリ（訳し分け）
 	 * 2. それ以外で共通言語に同じ用語がある場合は同一エントリ（重複）
 	 * 3. 共通言語がない場合はcontextのみで同一判定
 	 */
@@ -115,8 +116,12 @@ export namespace TermEntry {
 				if (term1.trim() !== term2.trim()) {
 					return false;
 				}
-				// primaryLangで一致する場合は同一エントリ
-				return true;
+				// 同じ語でも、context が違い、どこかの言語で訳語が食い違うなら**別の意味**
+				// （同じ語の訳し分け。ADR-261108-06）。訳語を上書きして1行に畳むと、
+				// 使い分けの片方が消える
+				return (
+					entry1.context.trim() === entry2.context.trim() || !hasConflictingTranslation(entry1, entry2, primaryLang)
+				);
 			}
 		}
 
@@ -143,6 +148,48 @@ export namespace TermEntry {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * 基準言語以外のどこかの言語で、両方が訳語を持ち、それが違うか。
+	 * 片方が空の言語は食い違いに数えない（空欄を埋める合流は同じ意味の更新）。
+	 */
+	function hasConflictingTranslation(entry1: TermEntry, entry2: TermEntry, primaryLang: string): boolean {
+		for (const lang of getLanguages(entry1)) {
+			if (lang === primaryLang) continue;
+			const term1 = getTerm(entry1, lang)?.trim();
+			const term2 = getTerm(entry2, lang)?.trim();
+			if (term1 && term2 && term1 !== term2) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 候補と同じエントリ（同じ意味の行）を既存の中から探す。見つからなければ -1。
+	 *
+	 * 同じ語に意味の違う行が複数あるときは、**context が一致する行を先に選ぶ**。
+	 * 先頭から `isSameEntry` で探すだけだと、訳語の空欄を埋める候補（展開の結果など）が
+	 * 1つ目の意味に吸い込まれ、2つ目の意味の行が埋まらない。
+	 */
+	export function findSameEntryIndex(
+		entries: readonly TermEntry[],
+		candidate: TermEntry,
+		primaryLang?: string,
+	): number {
+		const candidatePrimary = primaryLang ? getTerm(candidate, primaryLang)?.trim() : undefined;
+		if (primaryLang && candidatePrimary) {
+			const exact = entries.findIndex(
+				(existing) =>
+					getTerm(existing, primaryLang)?.trim() === candidatePrimary &&
+					existing.context.trim() === candidate.context.trim(),
+			);
+			if (exact >= 0) {
+				return exact;
+			}
+		}
+		return entries.findIndex((existing) => isSameEntry(existing, candidate, primaryLang));
 	}
 
 	/**
