@@ -61,6 +61,17 @@ export function extractRelevantTerms(
 	const haystack = options.markdown === false ? unitContent : stripCodeSegments(unitContent);
 	const relevantTerms: TranslationTerm[] = [];
 
+	// 当たった原語を先に集め、その原語の**全部の意味**を渡す（訳し分け。ADR-261108-06）。
+	// 行ごとに照合すると、片方の意味の行にしか無い表記揺れで当たったとき、
+	// 他の意味が指示文に届かない
+	const hitSourceTerms = new Set<string>();
+	for (const entry of allTerms) {
+		const sourceTerm = TermEntryUtils.getTerm(entry, sourceLang);
+		if (sourceTerm && TermEntryUtils.getTerm(entry, targetLang) && isTermRelevant(haystack, entry, sourceLang)) {
+			hitSourceTerms.add(sourceTerm);
+		}
+	}
+
 	for (const entry of allTerms) {
 		// 原語と訳語の両方が存在するかチェック
 		const sourceTerm = TermEntryUtils.getTerm(entry, sourceLang);
@@ -70,8 +81,7 @@ export function extractRelevantTerms(
 			continue;
 		}
 
-		// ユニット内容に原語またはその表記揺れが含まれるかチェック
-		if (isTermRelevant(haystack, entry, sourceLang)) {
+		if (hitSourceTerms.has(sourceTerm)) {
 			const translationVariants = [...TermEntryUtils.getvariants(entry, targetLang)];
 			relevantTerms.push({
 				term: sourceTerm,
@@ -154,8 +164,9 @@ export function termsToJson(terms: TranslationTerm[]): string {
 }
 
 /**
- * 原語ごとにまとめる。並びは最初に出てきた順で、同じ訳語の行は1つに畳む
- * （同じ訳語を2度並べても選ぶ手がかりは増えない）。
+ * 原語ごとにまとめる。並びは最初に出てきた順で、訳語と context の両方が同じ行だけを
+ * 1つに畳む。同じ訳語でも context が違えば、それぞれの使う場面として残す
+ * （畳むと、その場面に合う意味が指示文から消える）。
  */
 export function groupBySourceTerm(terms: readonly TranslationTerm[]): TranslationTerm[][] {
 	const groups = new Map<string, TranslationTerm[]>();
@@ -163,7 +174,9 @@ export function groupBySourceTerm(terms: readonly TranslationTerm[]): Translatio
 		const group = groups.get(term.term);
 		if (!group) {
 			groups.set(term.term, [term]);
-		} else if (!group.some((existing) => existing.translation === term.translation)) {
+		} else if (
+			!group.some((existing) => existing.translation === term.translation && existing.context === term.context)
+		) {
 			group.push(term);
 		}
 	}

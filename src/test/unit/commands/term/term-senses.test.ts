@@ -44,6 +44,12 @@ suite("用語集の訳し分け", () => {
 			assert.equal(TermEntry.isSameEntry(settingsNoun, fill, "ja"), true);
 		});
 
+		test("基準言語の欄が空の行でも、context が違い訳語が食い違えば別の意味として扱う", () => {
+			const finance = TermEntry.create("金融機関", { en: LangTerm.create("bank"), de: LangTerm.create("Bank") });
+			const river = TermEntry.create("川岸", { en: LangTerm.create("bank"), de: LangTerm.create("Ufer") });
+			assert.equal(TermEntry.isSameEntry(finance, river, "ja"), false);
+		});
+
 		test("意味が複数ある語では、context が一致する行を選ぶ", () => {
 			const fillVerb = TermEntry.create("動詞「設定する」", {
 				ja: LangTerm.create("設定"),
@@ -106,6 +112,29 @@ suite("用語集の訳し分け", () => {
 					],
 				},
 				{ term: "中継", translation: "relay" },
+			]);
+		});
+
+		test("片方の意味の行にしか無い表記揺れで当たっても、全部の意味を渡す", () => {
+			const noun = TermEntry.create("名詞", { ja: LangTerm.create("設定", ["セッティング"]), en: LangTerm.create("settings") });
+			const verb = TermEntry.create("動詞", { ja: LangTerm.create("設定"), en: LangTerm.create("configure") });
+			const terms = extractRelevantTerms("セッティングしてください。", [noun, verb], "ja", "en");
+			assert.deepEqual(
+				terms.map((t) => t.translation),
+				["settings", "configure"],
+			);
+		});
+
+		test("同じ訳語でも context が違う行は、それぞれの意味として残す", () => {
+			const screen = TermEntry.create("画面", { ja: LangTerm.create("設定"), en: LangTerm.create("settings") });
+			const file = TermEntry.create("設定ファイル", { ja: LangTerm.create("設定"), en: LangTerm.create("settings") });
+			const verb = TermEntry.create("動詞", { ja: LangTerm.create("設定"), en: LangTerm.create("configure") });
+			const terms = extractRelevantTerms("設定する。", [screen, file, verb], "ja", "en");
+			const [json] = termsToJson(terms).split(`\n${TERM_SENSES_NOTE}`);
+			assert.deepEqual(JSON.parse(json)[0].senses, [
+				{ translation: "settings", when: "画面" },
+				{ translation: "settings", when: "設定ファイル" },
+				{ translation: "configure", when: "動詞" },
 			]);
 		});
 

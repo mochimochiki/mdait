@@ -134,7 +134,11 @@ export namespace TermEntry {
 				const term1 = getTerm(entry1, lang);
 				const term2 = getTerm(entry2, lang);
 				if (term1 && term2 && term1.trim() === term2.trim()) {
-					return true;
+					// 基準言語の欄が空の行でも、訳し分けは守る。context が違い、照合に使った
+					// 言語以外で訳語が食い違えば別の意味（bank → Bank ／ Ufer など）
+					return (
+						entry1.context.trim() === entry2.context.trim() || !hasConflictingTranslation(entry1, entry2, lang)
+					);
 				}
 			}
 		}
