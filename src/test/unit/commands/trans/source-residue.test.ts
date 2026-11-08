@@ -9,8 +9,10 @@ import { strict as assert } from "node:assert";
 import {
 	findSourceResidue,
 	formatSourceResidueReason,
+	residueAllowedTerms,
 	shouldCheckSourceResidue,
 } from "../../../../commands/trans/source-residue";
+import { TermEntry } from "../../../../commands/term/term-entry";
 
 suite("findSourceResidue", () => {
 	suite("実例（日本語→簡体字中国語）", () => {
@@ -77,6 +79,40 @@ suite("findSourceResidue", () => {
 			assert.strictEqual(findSourceResidue("ja", "zh", translated).found, false);
 		});
 
+		test("山括弧で囲んだだけの本文はタグとみなさず、中の仮名を拾う", () => {
+			const result = findSourceResidue("ja", "zh", "请选择 <設定を開く>。");
+
+			assert.deepStrictEqual(result.fragments, ["設定を開く"]);
+		});
+
+		test("HTML タグと自動リンクの中の仮名は拾わない", () => {
+			const translated = [
+				'<img alt="設定画面" src="a.png">',
+				"<span>设置</span>",
+				"详见 <https://example.com/マニュアル> 或 <mailto:サポート@example.com>。",
+			].join("\n");
+
+			assert.strictEqual(findSourceResidue("ja", "zh", translated).found, false);
+		});
+
+		test("URL のすぐ後ろに続く全角の句読点と本文は URL とみなさず、中の仮名を拾う", () => {
+			const result = findSourceResidue("ja", "zh", "访问 https://example.com。設定を開く。");
+
+			assert.deepStrictEqual(result.fragments, ["設定を開く"]);
+		});
+
+		test("URL のホストの直後に空白なしで続く本文は URL とみなさず、中の仮名を拾う", () => {
+			const result = findSourceResidue("ja", "zh", "访问 https://example.com設定を開く");
+
+			assert.deepStrictEqual(result.fragments, ["設定を開く"]);
+		});
+
+		test("日本語を含む URL のパスは、全角の句読点の手前まで URL とみなす", () => {
+			const result = findSourceResidue("ja", "zh", "访问 https://example.jp/ヘルプ/設定。それから再起動。");
+
+			assert.deepStrictEqual(result.fragments, ["それから再起動"]);
+		});
+
 		test("中点と長音符だけでは訳し残しとみなさない", () => {
 			const result = findSourceResidue("ja", "zh", "列奥纳多・达・芬奇 —— 名画ー览");
 
@@ -133,6 +169,34 @@ suite("findSourceResidue", () => {
 			const message = formatSourceResidueReason(["本章では", "保守と校正"]);
 
 			assert.ok(message.includes("「本章では」, 「保守と校正」"), message);
+		});
+	});
+
+	suite("residueAllowedTerms", () => {
+		const glField = TermEntry.create("製品の機能名", {
+			ja: { term: "GL Field", variants: [] },
+			zh: { term: "GL Field", variants: ["GL フィールド"] },
+		});
+		const other = TermEntry.create("", {
+			ja: { term: "ミルクボックス", variants: [] },
+			zh: { term: "ミルクボックス", variants: [] },
+		});
+		const sourceOnly = TermEntry.create("", { ja: { term: "設定", variants: [] } });
+
+		test("訳文の言語の訳語と variants を、用語集の全体から集める", () => {
+			assert.deepStrictEqual(residueAllowedTerms([glField, other, sourceOnly], "zh"), [
+				"GL Field",
+				"GL フィールド",
+				"ミルクボックス",
+			]);
+		});
+
+		test("旧訳文で原語が variant に置き換わっていた用語も、改訂後の訳文で仮名を許す", () => {
+			// 改訂の旧訳文は「GL フィールド」と書いており、原語「GL Field」を含まない。
+			// ユニットの本文から用語を拾う作りでは、この用語が許す語から落ちていた
+			const revised = "在 GL フィールド 中设置。";
+
+			assert.strictEqual(findSourceResidue("ja", "zh", revised, residueAllowedTerms([glField], "zh")).found, false);
 		});
 	});
 });

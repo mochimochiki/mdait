@@ -13,6 +13,7 @@
  */
 import * as vscode from "vscode";
 import { stripCodeSegments } from "../../core/term/term-matcher";
+import { type TermEntry, TermEntry as TermEntryUtils } from "../term/term-entry";
 
 /** 調べた結果 */
 export interface SourceResidueResult {
@@ -65,15 +66,41 @@ export function shouldCheckSourceResidue(sourceLang: string, targetLang: string)
  * - HTML コメント（mdait のマーカーを含む）と HTML タグ・自動リンク
  * - リンクと画像の行き先 `](...)`、参照リンクの定義行
  * - URL
+ *
+ * 山括弧はタグ名が ASCII の英字で始まるときだけタグとみなす。`<設定を開く>` のような
+ * 山括弧で囲んだだけの本文まで消すと、その中の仮名を見逃す。
  */
 function stripNonProse(text: string): string {
 	return stripCodeSegments(text)
 		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(/<[^>\n]*>/g, "")
+		.replace(AUTOLINK, "")
+		.replace(HTML_TAG, "")
 		.replace(/\]\([^)\n]*\)/g, "]")
 		.replace(/^\s{0,3}\[[^\]\n]+\]:.*$/gm, "")
-		.replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, "");
+		.replace(URL_PATTERN, "");
 }
+
+/** 自動リンク（`<https://...>`・`<mailto:...>`）。CommonMark と同じく、スキームは英字で始まる2〜32文字 */
+const AUTOLINK = /<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/g;
+
+/** HTML の開始タグ・終了タグ（`<tag ...>`・`</tag>`）。タグ名は ASCII の英字で始まる */
+const HTML_TAG = /<\/?[A-Za-z][A-Za-z0-9-]*(?:[\s/][^>\n]*)?>/g;
+
+/**
+ * URL の終わりとみなす文字。空白・山括弧・引用符と、全角の句読点・かっこ。
+ * `访问 https://example.com。設定を開く。` の「。」以降を URL に含めない。
+ */
+const URL_STOP = "\\s<>\"\\u3000、。，．！？：；）」』】〉》〕］｝（「『【〈《〔［｛";
+
+/**
+ * URL。ホストまでは RFC 3986 で使える ASCII の文字（非予約・予約文字と `%`）に限り、
+ * 仮名・漢字の手前で切る。パス・クエリ・フラグメント（`/`・`?`・`#` のあと）は日本語を含んでよく、
+ * `URL_STOP` の手前まで続く。
+ */
+const URL_PATTERN = new RegExp(
+	`[a-z][a-z0-9+.-]*:\\/\\/[A-Za-z0-9\\-._~:@!$&'()*+,;=%\\[\\]]*(?:[/?#][^${URL_STOP}]*)?`,
+	"gi",
+);
 
 /**
  * 訳文に原文の仮名が残っていないかを調べる。
@@ -112,6 +139,29 @@ export function findSourceResidue(
 		}
 	}
 	return { found: fragments.length > 0, fragments };
+}
+
+/**
+ * 訳文に仮名のまま出てよい語（用語集の訳語と variants）を、訳文の言語について集める。
+ *
+ * **用語集の全体から集め、ユニットに出てくる用語には絞らない。** trans と validate の両方が
+ * これを使うので、同じ訳文には同じ判定が出る。trans でユニットの本文から用語を拾って絞ると、
+ * 改訂では本文が旧訳文なので、旧訳文で原語が訳語の variant（`GL フィールド` など）に
+ * 置き換わっていた用語が落ちる。すると用語集どおりの改訂にも確認待ちが付く。
+ * 用語集にある訳語は、どのユニットに出ても訳し残しではない。
+ *
+ * @param terms 用語集の全エントリ
+ * @param targetLang 訳文の言語
+ */
+export function residueAllowedTerms(terms: readonly TermEntry[], targetLang: string): string[] {
+	const result: string[] = [];
+	for (const entry of terms) {
+		const expected = TermEntryUtils.getTerm(entry, targetLang);
+		if (expected) {
+			result.push(expected, ...TermEntryUtils.getvariants(entry, targetLang));
+		}
+	}
+	return result;
 }
 
 /**

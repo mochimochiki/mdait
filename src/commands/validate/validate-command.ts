@@ -22,7 +22,7 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
 import { TermsRepository } from "../term/terms-repository";
-import { findSourceResidue, formatSourceResidueReason } from "../trans/source-residue";
+import { findSourceResidue, formatSourceResidueReason, residueAllowedTerms } from "../trans/source-residue";
 import { TranslationChecker } from "../trans/translation-checker";
 
 const logger = Logger.getInstance();
@@ -162,7 +162,7 @@ export async function validate_CoreProc(
 			}
 
 			const relFile = path.relative(workspaceRoot, targetFile).replace(/\\/g, "/");
-			const residueAllowed = checks.includes("residue") ? residueAllowedTerms(allTerms, pair) : undefined;
+			const residueAllowed = checks.includes("residue") ? residueAllowedTerms(allTerms, pair.targetLang) : undefined;
 			let lintTerms: TermLintTerm[] | undefined;
 			if (checks.includes("terms") && allTerms.length > 0) {
 				const cacheKey = `${pair.sourceLang}->${pair.targetLang}`;
@@ -258,20 +258,6 @@ function checkSourceResidue(
 			message: formatSourceResidueReason(residue.fragments),
 		},
 	];
-}
-
-/**
- * 訳文に仮名のまま出てよい語（用語集の訳語と variants）を言語ペアごとに集める。
- */
-function residueAllowedTerms(terms: readonly TermEntry[], pair: TransPair): string[] {
-	const result: string[] = [];
-	for (const entry of terms) {
-		const expected = TermEntryUtils.getTerm(entry, pair.targetLang);
-		if (expected) {
-			result.push(expected, ...TermEntryUtils.getvariants(entry, pair.targetLang));
-		}
-	}
-	return result;
 }
 
 /**

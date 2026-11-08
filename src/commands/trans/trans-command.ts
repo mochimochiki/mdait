@@ -56,7 +56,7 @@ import { reportTransOutcome, showConfigError, showNeedSyncError, showTranslation
 import { OperationRegistry } from "../shared/operation-registry";
 import type { TermEntry } from "../term/term-entry";
 import { buildFrontmatterContext } from "./frontmatter-context";
-import { findSourceResidue, formatSourceResidueReason } from "./source-residue";
+import { findSourceResidue, formatSourceResidueReason, residueAllowedTerms } from "./source-residue";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
@@ -751,11 +751,13 @@ async function translateUnit(
 		const config = Configuration.getInstance();
 		let termsJson: string | undefined;
 		const relevantTerms: TranslationTerm[] = [];
+		// 訳し残しの検査で仮名を許す語を集めるのに、用語集の全体も取っておく
+		let allTerms: readonly TermEntry[] = [];
 
 		try {
 			const termsFilePath = config.getTermsFilePath();
 			const cacheManager = TermsCacheManager.getInstance();
-			const allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
+			allTerms = await cacheManager.getTerms(termsFilePath, config.transPairs);
 			if (allTerms.length > 0) {
 				const extractedTerms = extractRelevantTerms(unit.content, allTerms, sourceLang, targetLang);
 				relevantTerms.push(...extractedTerms);
@@ -1101,12 +1103,12 @@ async function translateUnit(
 
 			// 原文の仮名が残っていれば、AI が訳し忘れた箇所がある。日本語→中国語では漢字が共通して
 			// 見落としやすいので、確認待ちにして人に回す。頼み直しはしない（ADR-261108-05）
-			// 仮名を許す語は validate と同じく訳語と variants。trans ではこのユニットに関係する用語に絞る
+			// 仮名を許す語は validate と同じく、用語集の全体の訳語と variants（理由は residueAllowedTerms）
 			const residue = findSourceResidue(
 				sourceLang,
 				targetLang,
 				resolvedResult.translatedText,
-				relevantTerms.flatMap((term) => [term.translation, ...(term.translationVariants ?? [])]),
+				residueAllowedTerms(allTerms, targetLang),
 			);
 			if (residue.found) {
 				reviewReasons.push(formatSourceResidueReason(residue.fragments));
