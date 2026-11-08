@@ -204,6 +204,53 @@ function conflictedFilesNotice(count: number): SyncNotice | undefined {
 }
 
 /**
+ * 失敗の通知に載せる、原文と訳文の組の名前。
+ *
+ * 書けないのはたいてい訳文の側なので、原文だけを挙げると、利用者は原文のほうを書き込めるように
+ * してしまう。訳文の行き先が決まらない（設定の誤り）ときは原文だけを挙げる。
+ */
+function describeSyncPair(sourceFile: string, targetFile: string | undefined | null): string {
+	const source = vscode.workspace.asRelativePath(sourceFile);
+	return targetFile ? `${source} → ${vscode.workspace.asRelativePath(targetFile)}` : source;
+}
+
+/**
+ * ファイル単位で同期に失敗したことを、**どのファイルが何の理由で**失敗したかとあわせて伝える。
+ *
+ * 完了の通知は「N 件失敗」としか言わないので、利用者はどのファイルを直せばよいか分からない。
+ * 実測では、訳文が読み取り専用（`svn:needs-lock`）で書けない形がこれに当たる。
+ * 書けるようにすれば次の同期で揃うので、その一手も添える。原因の一覧はログにあるので、
+ * 通知には最初の1件だけを載せる。1件だけのときは「最初の1件」と言わない。
+ */
+function failedFilesNotice(failures: ReadonlyArray<{ file: string; reason: string }>): SyncNotice | undefined {
+	if (failures.length === 0) {
+		return undefined;
+	}
+	const [first] = failures;
+	if (failures.length === 1) {
+		return {
+			kind: "file-errors",
+			detail: vscode.l10n.t(
+				"Could not sync {0}: {1}. If a file is read-only or locked (for example by svn:needs-lock), make it writable, then run sync again.",
+				first.file,
+				first.reason,
+			),
+			summary: vscode.l10n.t("{0} could not be synced", first.file),
+		};
+	}
+	return {
+		kind: "file-errors",
+		detail: vscode.l10n.t(
+			"Sync could not finish {0} file(s). The first one was {1}: {2}. If a file is read-only or locked (for example by svn:needs-lock), make it writable, then run sync again.",
+			failures.length,
+			first.file,
+			first.reason,
+		),
+		summary: vscode.l10n.t("{0} file(s) could not be synced, starting with {1}", failures.length, first.file),
+	};
+}
+
+/**
  * 原文か訳文のどちらかに競合マーカーが残っているか。
  *
  * 訳文も見るのは、訳文だけが競合している状態で sync すると、マーカー入りの本文が
@@ -679,6 +726,8 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 		let totalTargetEmptied = 0;
 		/** 合流の途中（競合マーカーが残っている）で飛ばしたファイル数 */
 		let totalConflicted = 0;
+		// ファイル単位で失敗した同期（通知で、どのファイルが何の理由で失敗したかを言う）
+		const failedFiles: Array<{ file: string; reason: string }> = [];
 		// ディレクトリごとの「SVN の競合ファイルを横に持つ原稿の名前」（この回の sync のあいだだけ使い回す）
 		const conflictOwners = new Map<string, ReadonlySet<string>>();
 
@@ -866,6 +915,10 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 						});
 						await statusManager.changeFileStatusWithError(sourceFile, error as Error);
 						errorCount++;
+						failedFiles.push({
+							file: describeSyncPair(sourceFile, fileExplorer.getTargetPath(sourceFile, pair)),
+							reason: error instanceof Error ? error.message : String(error),
+						});
 					}
 				}
 			};
@@ -1065,6 +1118,7 @@ export async function syncCommand(options?: SyncCommandOptions): Promise<SyncRes
 				sourceEmptiedNotice(totalSourceEmptied),
 				targetEmptiedNotice(totalTargetEmptied),
 				conflictedFilesNotice(totalConflicted),
+				failedFilesNotice(failedFiles),
 				newOrphansNotice(freshOrphans),
 				config.getOrphanTargetPolicy() === "delete"
 					? orphanDeletedNotice(totalDeleted, deletedUnitLabels)

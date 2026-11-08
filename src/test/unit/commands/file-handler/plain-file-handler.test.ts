@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type * as vscode from "vscode";
 import { isOperationCancelled } from "../../../../infra/errors/operation-cancelled";
-import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
+import { PlainFileHandler, plainContentHash } from "../../../../commands/file-handler/plain-file-handler";
 import type { Translator } from "../../../../commands/trans/translator";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { calculateHash } from "../../../../core/hash/hash-calculator";
@@ -126,6 +126,66 @@ suite("PlainFileHandler", () => {
 			const entry = store.getSoleEntry("target/test.txt");
 			assert.ok(entry);
 			assert.strictEqual(entry.need, `revise@${oldHash}`);
+		});
+
+		test("原文と訳文の改行コードだけが変わったときは、改訂待ちを付けない", async () => {
+			// svn:eol-style や autocrlf は取り出すたびに改行コードを書き換える。中身は一字も変わっていない
+			const sourceFile = path.join(tempDir, "source", "test.csv");
+			const targetFile = path.join(tempDir, "target", "test.csv");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+
+			fs.writeFileSync(sourceFile, "名前,値\n林檎,1\n", "utf-8");
+			fs.writeFileSync(targetFile, "name,value\napple,1\n", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setEntry({
+				path: "target/test.csv",
+				kind: "unit" as const, seat: seat(0),
+				level: 0,
+				titleHash: "",
+				hash: calculateHash("name,value\napple,1\n", false),
+				from: calculateHash("名前,値\n林檎,1\n", false),
+				need: "",
+			});
+
+			fs.writeFileSync(sourceFile, "名前,値\r\n林檎,1\r\n", "utf-8");
+			fs.writeFileSync(targetFile, "name,value\r\napple,1\r\n", "utf-8");
+			const result = await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(result.revisionsNeeded, 0);
+			assert.strictEqual(store.getSoleEntry("target/test.csv")?.need, "");
+		});
+
+		test("翻訳待ちの丸写しは、改行コードだけ違っても手訳とみなさない", async () => {
+			// 原文が CRLF、丸写しの訳文が LF（エディタや VCS が書き換えた）。中身はいまの原文そのもの
+			const sourceFile = path.join(tempDir, "source", "test.txt");
+			const targetFile = path.join(tempDir, "target", "test.txt");
+			mkdirp(path.dirname(sourceFile));
+			mkdirp(path.dirname(targetFile));
+			fs.writeFileSync(sourceFile, "一行目\r\n二行目\r\n", "utf-8");
+			fs.writeFileSync(targetFile, "一行目\n二行目\n", "utf-8");
+			const store = UnitStateStore.getInstance();
+			store.setEntry({
+				path: "target/test.txt",
+				kind: "unit" as const, seat: seat(0),
+				level: 0,
+				titleHash: "",
+				// 記録した本文の hash はいまの本文と違う（印を付けたあとで何か書き換わった形）
+				hash: calculateHash("別の本文", false),
+				from: plainContentHash("一行目\n二行目\n"),
+				need: "translate",
+			});
+
+			await handler.sync(sourceFile, targetFile);
+
+			assert.strictEqual(store.getSoleEntry("target/test.txt")?.need, "translate", "確認待ちへ切り替えない");
+		});
+
+		test("改行コードは中身ではないが、空白の違いは中身として扱う", () => {
+			assert.strictEqual(plainContentHash("a\r\nb\r\n"), plainContentHash("a\nb\n"));
+			assert.strictEqual(plainContentHash("a\rb"), plainContentHash("a\nb"));
+			assert.notStrictEqual(plainContentHash("a, b"), plainContentHash("a,b"), "CSV の空白は値の一部");
+			assert.notStrictEqual(plainContentHash("a\n\nb"), plainContentHash("a\nb"));
 		});
 
 		test("rebuild時（エントリなし）、need:reviewが付与されること", async () => {

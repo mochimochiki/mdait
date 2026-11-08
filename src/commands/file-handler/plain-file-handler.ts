@@ -37,6 +37,26 @@ import type { FileHandler, FileSyncResult, FileTranslateResult } from "./file-ha
 
 const logger = Logger.getInstance();
 
+/**
+ * 非 Markdown の原稿の中身のハッシュ。**改行コードを LF にそろえてから**計算する（ADR-261108-02）。
+ *
+ * 改行コードは中身ではない。`svn:eol-style` や Git の autocrlf は取り出すたびに改行コードを
+ * 書き換えるので、素のバイト列で比べると一字も変えていない原文が「変わった」と答え、訳し終えた
+ * ファイルに改訂待ちが付く（SVN で実測）。それ以外の正規化（空白・空行）はしない。非 Markdown では
+ * 空白そのものが中身になりうる（CSV の列・JSON の文字列）。
+ */
+export function plainContentHash(content: string): string {
+	return calculateHash(toLf(content), false);
+}
+
+/**
+ * 改行コードを LF にそろえる。ハッシュと同じ理由で、中身どうしを比べる場面（丸写しか・差分）でも
+ * これを通す。片方だけそろえると、ハッシュは「同じ」と言うのに比べると「違う」と答える
+ */
+function toLf(content: string): string {
+	return content.replace(/\r\n?/g, "\n");
+}
+
 /** need:revise のプレフィックス */
 const NEED_REVISE_PREFIX = "revise@";
 
@@ -83,9 +103,9 @@ export class PlainFileHandler implements FileHandler {
 	readonly fileType = "plain" as const;
 
 	async sync(sourceFile: string, targetFile: string): Promise<FileSyncResult> {
-		// 1. ソースファイル全内容を読み込み、CRC32ハッシュ計算（normalize:false）
+		// 1. ソースファイル全内容を読み込み、ハッシュを計算する（改行コードだけそろえる）
 		const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-		const sourceHash = calculateHash(sourceContent, false);
+		const sourceHash = plainContentHash(sourceContent);
 
 		// 2. ターゲットのワークスペース相対パスを算出
 		const targetRelPath = toWorkspaceRelativePath(targetFile);
@@ -96,7 +116,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 4. ターゲットの現在hashを再計算（rebuild の判定にも使う）
 		let targetContent = fs.readFileSync(targetFile, "utf-8");
-		let targetHash = calculateHash(targetContent, false);
+		let targetHash = plainContentHash(targetContent);
 
 		// 5. まだ訳していない丸写しが古い原文のままなら、いまの原文へ写し直す（Markdown と同じ規則）。
 		// 写し直さないと、訳文ファイルに古い原文が残り続けて訳文に見える
@@ -105,7 +125,7 @@ export class PlainFileHandler implements FileHandler {
 		if (staleCopy) {
 			writeManagedDocumentSync(targetFile, sourceContent);
 			targetContent = fs.readFileSync(targetFile, "utf-8");
-			targetHash = calculateHash(targetContent, false);
+			targetHash = plainContentHash(targetContent);
 		}
 
 		// 6. need判定。規則は Markdown と同じ `syncMarkerPair`（marker-sync.ts）に任せる。
@@ -121,8 +141,9 @@ export class PlainFileHandler implements FileHandler {
 				existing.need,
 				existing.hash,
 				targetHash,
-				targetContent,
-				sourceContent,
+				// 「いまの原文の丸写しか」は中身で比べる。改行コードだけ違う丸写しを手訳と取り違えない（ADR-261108-02）
+				toLf(targetContent),
+				toLf(sourceContent),
 				!!staleCopy,
 			);
 		if (writtenOver) {
@@ -132,8 +153,8 @@ export class PlainFileHandler implements FileHandler {
 		const wasAwaitingReview = existing?.need === "review";
 		const result = syncMarkerPair(sourceHash, targetHash, null, targetMarker, {
 			existingText,
-			// 丸写しかどうかは中身で答える（改行コードだけ違うものは丸写しとみなさない）
-			verbatimCopy: existingText ? targetContent === sourceContent : undefined,
+			// 丸写しかどうかは中身で答える。改行コードは中身ではない（ADR-261108-02）
+			verbatimCopy: existingText ? toLf(targetContent) === toLf(sourceContent) : undefined,
 		});
 		const need = result.targetMarker.need ?? "";
 
@@ -176,7 +197,7 @@ export class PlainFileHandler implements FileHandler {
 
 		// 1. ソースファイル読み込み、ハッシュ計算
 		const sourceContent = fs.readFileSync(sourceFile, "utf-8");
-		const sourceHash = calculateHash(sourceContent, false);
+		const sourceHash = plainContentHash(sourceContent);
 
 		// 2. ターゲットファイルにソース内容をコピー。
 		// **ここは唯一の入口（writeManagedDocument）を通さない。** まだファイルが無いので
@@ -271,15 +292,19 @@ export class PlainFileHandler implements FileHandler {
 		let oldSourceContent: string | undefined;
 
 		if (isRevise) {
-			// 現在のターゲット内容を前回翻訳として使用
-			previousTranslation = fs.readFileSync(targetFilePath, "utf-8");
+			// 現在のターゲット内容を前回翻訳として使用。差分もパッチも LF で組むので、ここでそろえる
+			// （書き戻すときは writeManagedDocument が訳文の改行コードへ戻す）
+			previousTranslation = toLf(fs.readFileSync(targetFilePath, "utf-8"));
 
 			// 旧ソースのハッシュから旧ソースコンテンツを取得
 			const oldHash = entry.need.slice(NEED_REVISE_PREFIX.length);
 			try {
-				const oldContent = await unitRegistryManager.loadUnitRegistry(oldHash);
-				if (oldContent && hasDiff(oldContent, sourceContent)) {
-					sourceDiff = createUnifiedDiff(oldContent, sourceContent);
+				// 控えは最後に見た改行コードのまま残っているので、両方そろえてから比べる。
+				// そろえないと、改行コードが変わった回の差分は全行が変わったことになる
+				const stored = await unitRegistryManager.loadUnitRegistry(oldHash);
+				const oldContent = stored === null ? null : toLf(stored);
+				if (oldContent && hasDiff(oldContent, toLf(sourceContent))) {
+					sourceDiff = createUnifiedDiff(oldContent, toLf(sourceContent));
 					oldSourceContent = oldContent;
 					logger.debug("trans", "Generated diff for plain file revision", {
 						file: targetRelPath,
@@ -436,9 +461,9 @@ export class PlainFileHandler implements FileHandler {
 		await writeManagedDocument(targetFilePath, translatedText);
 
 		// 12. UnitStateStore更新してディスクに保存
-		const sourceHash = calculateHash(sourceContent, false);
+		const sourceHash = plainContentHash(sourceContent);
 		store.setSoleEntry(targetRelPath, {
-			hash: calculateHash(translatedText, false),
+			hash: plainContentHash(translatedText),
 			from: sourceHash,
 			need: droppedCodeBlocks > 0 ? "review" : "",
 		});

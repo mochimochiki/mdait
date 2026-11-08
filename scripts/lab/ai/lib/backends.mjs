@@ -505,6 +505,10 @@ export class AgentBackend {
 							prompt_tokens: parsed.usage?.input_tokens,
 							completion_tokens: parsed.usage?.output_tokens,
 							cached_tokens: parsed.usage?.cache_read_input_tokens ?? 0,
+							// 費用を実測するための値。OpenAI 互換の応答には載らないが、transcript.jsonl に残る
+							cache_creation_tokens: parsed.usage?.cache_creation_input_tokens ?? 0,
+							cost_usd: parsed.total_cost_usd,
+							models: parsed.modelUsage ? Object.keys(parsed.modelUsage) : undefined,
 						},
 					});
 				} catch (error) {

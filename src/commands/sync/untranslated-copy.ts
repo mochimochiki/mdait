@@ -47,7 +47,9 @@ export async function isStaleUntranslatedCopy(
 	// **過去の原文そのものだったか**をスナップショット（`unit-registry`）に問い合わせる。
 	// 中身まで突き合わせるので、ハッシュがたまたま衝突しても人の書いた訳文を捨てない
 	const snapshot = await UnitRegistryManager.getInstance().loadUnitRegistry(targetHash);
-	return snapshot !== null && snapshot === targetContent;
+	// 改行コードはそろえて比べる。控えは最後に見た改行コードのまま残り、非 Markdown のハッシュは
+	// 改行コードを見ない（ADR-261108-02）。Markdown の本文はパーサーが LF にそろえるので変わらない
+	return snapshot !== null && snapshot.replace(/\r\n?/g, "\n") === targetContent.replace(/\r\n?/g, "\n");
 }
 
 /**

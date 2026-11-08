@@ -17,6 +17,7 @@ import * as vscode from "vscode";
 import { Configuration } from "../../infra/config/configuration";
 import { notifyWithReport, writeReport } from "../shared/report-file";
 import { buildConflictReport } from "./resolve-report";
+import { withSvnResolveHint } from "./svn-hint";
 import { type PreparedResolution, executeResolution, prepareResolution, undecidedCount } from "./resolve-core";
 import { collectWorkspaceConflicts, invalidateWorkspaceConflicts } from "../../ui/status/conflict-source";
 
@@ -154,7 +155,7 @@ export async function executeResolveConflicts(): Promise<void> {
 				? vscode.l10n.t("Cancelled. {0} file(s) were left unchanged.", skipped)
 				: remaining > 0
 					? vscode.l10n.t("Decide {0} more to write.", remaining)
-					: vscode.l10n.t("Resolved the merge conflicts."),
+					: withSvnResolveHint(vscode.l10n.t("Resolved the merge conflicts."), outcomes[0]?.filePath, "mdait-dir"),
 		uri,
 		unfinished > 0 || remaining > 0 ? "warning" : "info",
 		// 残っているときだけ、次の一手（一覧を開く）をレポートより前に置く

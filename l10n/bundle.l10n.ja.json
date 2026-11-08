@@ -711,5 +711,11 @@
   "This will reject the current translation of {0} unit(s) flagged need:review in {1} and mark them need:translate. Their text stays until they are translated. No AI is used.{2}": "{1} で need:review の {0} 件のユニットについて、いまの訳を採用せず need:translate にします。本文は訳し直すまでそのまま残ります。AI は使用しません。{2}",
   "{0} could not be saved ({1}).": "{0} を保存できませんでした（{1}）。",
   "The translation of {0} could not be saved because the file could not be written ({1}). Make sure the file is writable (not read-only or locked), then translate again.": "{0} の訳を保存できませんでした。ファイルに書き込めません（{1}）。ファイルが読み取り専用やロック中でないことを確かめてから、もう一度翻訳してください。",
-  "Translated {0} unit(s) in {1}, but {2} of them could not be saved because the file could not be written ({3}). Make sure the file is writable (not read-only or locked), then translate again.": "{1} の {0} ユニットを訳しましたが、ファイルに書き込めなかったため {2} ユニットを保存できませんでした（{3}）。ファイルが読み取り専用やロック中でないことを確かめてから、もう一度翻訳してください。"
+  "Translated {0} unit(s) in {1}, but {2} of them could not be saved because the file could not be written ({3}). Make sure the file is writable (not read-only or locked), then translate again.": "{1} の {0} ユニットを訳しましたが、ファイルに書き込めなかったため {2} ユニットを保存できませんでした（{3}）。ファイルが読み取り専用やロック中でないことを確かめてから、もう一度翻訳してください。",
+  "Sync could not finish {0} file(s). The first one was {1}: {2}. If a file is read-only or locked (for example by svn:needs-lock), make it writable, then run sync again.": "{0} 件のファイルを同期できませんでした。最初の1件は {1} です（{2}）。ファイルが読み取り専用やロック中（svn:needs-lock など）なら、書き込めるようにしてから、もう一度同期してください。",
+  "{0} file(s) could not be synced, starting with {1}": "{1} など {0} 件のファイルを同期できず",
+  "Could not sync {0}: {1}. If a file is read-only or locked (for example by svn:needs-lock), make it writable, then run sync again.": "{0} を同期できませんでした（{1}）。ファイルが読み取り専用やロック中（svn:needs-lock など）なら、書き込めるようにしてから、もう一度同期してください。",
+  "{0} could not be synced": "{0} を同期できず",
+  "{0} Subversion still marks the conflicted files in .mdait as conflicted: mark them resolved before you commit (TortoiseSVN \"Resolved\", or {1}).": "{0}Subversion の側では、.mdait の中の競合したファイルがまだ競合中のままです。コミットの前に「解決済み」にしてください（TortoiseSVN の「解決済み」、または {1}）。",
+  "{0} Subversion still marks this file as conflicted: mark it resolved before you commit (TortoiseSVN \"Resolved\", or {1}).": "{0}Subversion の側では、このファイルがまだ競合中のままです。コミットの前に「解決済み」にしてください（TortoiseSVN の「解決済み」、または {1}）。"
 }
