@@ -2,7 +2,7 @@
 /*
  * 決まった手順のスイープ — mdait の「機構」を端から確かめる。
  *
- * 見るのは次の14。P1〜P8 は旧 scripts/exploratory/run-sweep.js をそのまま引き継いでいる。
+ * 見るのは次の15。P1〜P8 は旧 scripts/exploratory/run-sweep.js をそのまま引き継いでいる。
  *   P1-sync          マーカーの形が揃っているか / need:translate が付くか / 2回目で何も変わらないか
  *   P2-trans         翻訳すると need:translate が消えるか / そのあと sync しても変わらないか
  *   P3-revise        原文を書き換えると need:revise@もとのハッシュ が付くか
@@ -17,6 +17,7 @@
  *   P12-adopt        既にある訳を取り込んでも本文が1文字も変わらず、あとから上書きもされないか
  *   P13-edge         端の原稿（空マーカー・コードブロック内の見本・空ファイル・frontmatter だけ）
  *   P14-level        見出しレベルの設定どおりに境目が決まり、変えても本文が失われないか
+ *   P15-residue      訳文に原文の仮名が残ると need:review が立ち、残らなければ立たないか
  *
  * 判定は2つに分ける。この分け方は「狼が来た」を防ぐための決まりなので、勝手に変えないこと。
  *   FAIL … 製品の側の不具合。1件でもあれば終了コード 1
@@ -42,6 +43,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { startShim } from "../ai/embed.mjs";
 import { parseArgs } from "../lib/args.mjs";
 import { sendCommand } from "../lib/ipc.mjs";
 import { saveStep } from "../lib/runs.mjs";
@@ -1726,6 +1728,63 @@ async function phase14() {
 }
 
 // ===========================================================================
+// P15 — 訳し残し（原文の仮名が訳文に残る）
+// ===========================================================================
+
+/**
+ * 決まった訳文を返し続ける台本の相手を、このプロセスの中に立てる。
+ *
+ * echo は訳文の仮名を x に置き換えて返すので、訳し残しの場面を作れない。
+ * ここでは訳文を台本で決め打ちし、何度聞かれても同じ答えを返させる。
+ */
+async function startFixedAnswerShim(name, translation) {
+	const scriptFile = path.join(LAB_DIR, `sweep-${name}.jsonl`);
+	fs.mkdirSync(LAB_DIR, { recursive: true });
+	const reply = { text: JSON.stringify({ translation, termSuggestions: [] }) };
+	fs.writeFileSync(scriptFile, `${JSON.stringify(reply)}\n`, "utf8");
+	return await startShim({ mode: "script", script: scriptFile, scriptLoop: true });
+}
+
+/** 決まった訳文で1ファイルを訳し、訳文のマーカーの need を返す。AI の相手は最後に必ず戻す */
+async function transWithFixedAnswer(name, relPath, translation) {
+	const shim = await startFixedAnswerShim(name, translation);
+	try {
+		configureAi(ws, { mode: "script", baseURL: shim.baseURL });
+		await reload();
+		const result = await trans(path.join(ws, relPath));
+		if (result.status === "error") return { error: String(result.error) };
+		return { needs: markerInfo(read(path.join(ws, relPath))).map((marker) => marker.need) };
+	} finally {
+		if (aiInfo?.baseURL) configureAi(ws, { mode: aiInfo.mode, baseURL: aiInfo.baseURL });
+		await reload();
+		await shim.close();
+	}
+}
+
+async function phase15() {
+	const P = "P15-residue";
+	await resetWs();
+	for (const name of ["residue-left", "residue-clean"]) {
+		fs.writeFileSync(path.join(contentDir(), "ja", `${name}.md`), "# 手順\n\n設定画面を開きます。\n", "utf8");
+	}
+	await sync();
+
+	// 訳文に原文の仮名が残っていたら、構造が合っていても need:review にする（ADR-261108-05）
+	const leftRel = "content/en/residue-left.md";
+	const left = await transWithFixedAnswer("residue-left", leftRel, "# Steps\n\nOpen the 設定画面を開きます screen.");
+	if (left.error) fail(P, leftRel, "transCommand が例外", left.error);
+	else if (left.needs.length === 1 && left.needs[0] === "review") ok(P, "訳文に仮名が残ると need:review が立つOK");
+	else fail(P, leftRel, `仮名が残る訳文で need:review が立たない: ${JSON.stringify(left.needs)}`, "");
+
+	// 同じ形の訳文でも、仮名が無ければ確認待ちにしない（上の need:review が構造の不一致によるものでないことの確認）
+	const cleanRel = "content/en/residue-clean.md";
+	const clean = await transWithFixedAnswer("residue-clean", cleanRel, "# Steps\n\nOpen the settings screen.");
+	if (clean.error) fail(P, cleanRel, "transCommand が例外", clean.error);
+	else if (clean.needs.length === 1 && clean.needs[0] === "") ok(P, "仮名の無い訳文は need が残らないOK");
+	else fail(P, cleanRel, `仮名の無い訳文で need が残る: ${JSON.stringify(clean.needs)}`, "");
+}
+
+// ===========================================================================
 // 段の一覧と入口
 // ===========================================================================
 
@@ -1744,6 +1803,7 @@ const PHASES = [
 	["P12-adopt", phase12],
 	["P13-edge", phase13],
 	["P14-level", phase14],
+	["P15-residue", phase15],
 ];
 
 /** --only の書き方（P1 / P1-sync / 1 のどれでも）を段の名前へ直す */

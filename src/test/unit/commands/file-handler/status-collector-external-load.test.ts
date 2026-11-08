@@ -73,4 +73,24 @@ suite("external: 起動直後の一覧にも unit-state のマーカーが載る
 			assert.strictEqual(unit.needFlag, "translate");
 		}
 	});
+
+	test("unit-state を読む前に1ファイルだけ集めても、訳文のユニットにマーカーが載ること", async () => {
+		const source = path.join(tempDir, "ja", "doc.md");
+		const target = path.join(tempDir, "en", "doc.md");
+		UnitStateStore.getInstance().load(mdaitDir);
+		await getFileHandler(target).syncNew(source, target);
+		UnitStateStore.getInstance().save(mdaitDir);
+
+		// 起動し直した状態で、一覧を組まずにファイル1つだけを集める
+		UnitStateStore.dispose();
+
+		const file = await new StatusCollector().collectFileStatus(target);
+
+		const units = file.children ?? [];
+		assert.strictEqual(units.length, 2);
+		for (const unit of units) {
+			assert.ok(unit.unitHash, "ユニットの hash が unit-state から載ること");
+			assert.strictEqual(unit.needFlag, "translate");
+		}
+	});
 });

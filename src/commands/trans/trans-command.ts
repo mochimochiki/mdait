@@ -1101,11 +1101,12 @@ async function translateUnit(
 
 			// 原文の仮名が残っていれば、AI が訳し忘れた箇所がある。日本語→中国語では漢字が共通して
 			// 見落としやすいので、確認待ちにして人に回す。頼み直しはしない（ADR-261108-05）
+			// 仮名を許す語は validate と同じく訳語と variants。trans ではこのユニットに関係する用語に絞る
 			const residue = findSourceResidue(
 				sourceLang,
 				targetLang,
 				resolvedResult.translatedText,
-				relevantTerms.map((term) => term.translation),
+				relevantTerms.flatMap((term) => [term.translation, ...(term.translationVariants ?? [])]),
 			);
 			if (residue.found) {
 				reviewReasons.push(formatSourceResidueReason(residue.fragments));

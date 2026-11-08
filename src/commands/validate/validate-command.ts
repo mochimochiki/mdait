@@ -101,7 +101,7 @@ export async function runDeterministicChecks(files: readonly string[]): Promise<
  * need が残るユニットは翻訳/レビューが先であり、検証しても意味がないためスキップする。
  *
  * @param scopePath 対象スコープ（ファイル/ディレクトリ）。省略時は全transPairのターゲット
- * @param checks 実行する検証種別（省略時は両方）
+ * @param checks 実行する検証種別（省略時は structure・terms・residue のすべて）
  */
 export async function validate_CoreProc(
 	scopePath: string | undefined,
@@ -125,14 +125,14 @@ export async function validate_CoreProc(
 		return report;
 	}
 
-	// 用語集は一度だけロード（terms チェック時のみ）
+	// 用語集は一度だけロード（terms か residue のチェック時のみ）
 	let allTerms: readonly TermEntry[] = [];
 	if (checks.includes("terms") || checks.includes("residue")) {
 		try {
 			const repository = await TermsRepository.load(config.getTermsFilePath());
 			allTerms = await repository.getAllEntries();
 		} catch {
-			// 用語集がない場合は terms チェックは違反0件（構造チェックのみ有効）
+			// 用語集がない場合、terms チェックは違反0件になり、residue は仮名を許す語なしで調べる
 			allTerms = [];
 		}
 	}
