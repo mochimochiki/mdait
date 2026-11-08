@@ -170,7 +170,7 @@ export async function expandTerm_CoreProc(
 			vscode.l10n.t("Terms file not found. Please run term detection first."),
 		);
 	}
-	const termsRepository: TermsRepository = await TermsRepository.load(termsPath);
+	const termsRepository: TermsRepository = await TermsRepository.load(termsPath, config.transPairs, config.primaryLang);
 
 	// 全用語を取得し未展開用語を抽出
 	const allTerms = await termsRepository.getAllEntries();

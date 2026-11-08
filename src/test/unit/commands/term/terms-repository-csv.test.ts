@@ -274,4 +274,24 @@ suite("TermsRepositoryCSV", () => {
 			["Apple", "Banana"],
 		);
 	});
+
+	test("主言語を渡さずに読んでも、訳語が同じ別の語の行を落とさない", async () => {
+		// ja→en の用語集。列名を並べ替えると en が先頭になり、訳語が同じ2行が同じ鍵になっていた
+		fs.writeFileSync(testFilePath, "﻿ja,en,context\n中継ハブ,Relay Hub,\n中継,Relay Hub,\n", "utf8");
+		const repository = await TermsRepositoryCSV.load(testFilePath);
+		const entries = await repository.getAllEntries();
+		assert.deepEqual(
+			entries.map((e) => e.languages.ja?.term),
+			["中継ハブ", "中継"],
+		);
+	});
+
+	test("言語ペアを渡して読むと、主言語の語で同じ語かを判定する", async () => {
+		fs.writeFileSync(testFilePath, "﻿en,ja,context\nRelay Hub,中継ハブ,\nRelay Hub,中継,\n", "utf8");
+		const repository = await TermsRepositoryCSV.load(testFilePath, [
+			{ sourceDir: "ja", targetDir: "en", sourceLang: "ja", targetLang: "en" },
+		]);
+		const entries = await repository.getAllEntries();
+		assert.equal(entries.length, 2);
+	});
 });

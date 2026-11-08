@@ -79,7 +79,7 @@ export class TermsCacheManager {
 			}
 
 			// キャッシュが無効またはファイルが更新されている場合は再読み込み
-			const repository = await TermsRepository.load(termsFilePath);
+			const repository = await TermsRepository.load(termsFilePath, transPairs);
 			const entries = await repository.getAllEntries();
 
 			// キャッシュを更新

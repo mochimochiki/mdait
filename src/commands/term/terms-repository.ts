@@ -109,14 +109,21 @@ export namespace TermsRepository {
 	 * 既存リポジトリを読み込み
 	 *
 	 * @param path ファイルパス
+	 * @param transPairs 言語ペア。**渡すこと。** 語を見分ける鍵は主言語の語で作る。主言語が
+	 *   分からないと、列の並びの先頭の言語で代用する（ADR-261108-07）
+	 * @param primaryLang 主言語（設定の `primaryLang`）
 	 */
-	export async function load(path: string): Promise<TermsRepository> {
+	export async function load(
+		path: string,
+		transPairs?: readonly TransPair[],
+		primaryLang?: string,
+	): Promise<TermsRepository> {
 		const format = detectFormat(path);
 
 		switch (format) {
 			case "csv": {
 				const { TermsRepositoryCSV } = await import("./terms-repository-csv.js");
-				return TermsRepositoryCSV.load(path);
+				return TermsRepositoryCSV.load(path, transPairs, primaryLang || undefined);
 			}
 			case "yaml": {
 				const { YamlTermsRepository } = await import("./terms-repository-yaml.js");

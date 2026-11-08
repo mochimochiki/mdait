@@ -129,7 +129,7 @@ export async function validate_CoreProc(
 	let allTerms: readonly TermEntry[] = [];
 	if (checks.includes("terms") || checks.includes("residue")) {
 		try {
-			const repository = await TermsRepository.load(config.getTermsFilePath());
+			const repository = await TermsRepository.load(config.getTermsFilePath(), config.transPairs, config.primaryLang);
 			allTerms = await repository.getAllEntries();
 		} catch {
 			// 用語集がない場合、terms チェックは違反0件になり、residue は仮名を許す語なしで調べる

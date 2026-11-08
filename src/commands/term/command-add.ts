@@ -75,7 +75,7 @@ export async function addToGlossaryCommand(args?: AddToGlossaryArgs): Promise<vo
 		// 合流の途中（競合マーカーが残っている）用語集を触ると**7語が1語になって成功の
 		// トーストが出た**。読めない理由は「無い」だけではないので、無いときだけ作る。
 		const termsRepository: TermsRepository = fs.existsSync(termFilePath)
-			? await TermsRepository.load(termFilePath)
+			? await TermsRepository.load(termFilePath, config.transPairs, config.primaryLang)
 			: await TermsRepository.create(termFilePath, config.transPairs);
 
 		// 新しい用語エントリを作成

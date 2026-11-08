@@ -168,7 +168,7 @@ export async function detectTerm_CoreProc(
 	// **読めなかったときに作り直してはいけない**（`command-add.ts` と同じ理由）。
 	const termsPath = config.getTermsFilePath();
 	const termsRepository: TermsRepository = fs.existsSync(termsPath)
-		? await TermsRepository.load(termsPath)
+		? await TermsRepository.load(termsPath, config.transPairs, config.primaryLang)
 		: await TermsRepository.create(termsPath, config.transPairs);
 
 	// 既存用語を読み込み
