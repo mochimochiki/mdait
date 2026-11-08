@@ -20,7 +20,7 @@ export interface ReviewReason {
 		| "blockquote_mismatch"
 		| "table_mismatch"
 		| "table_row_mismatch"
-		| "blockquote_line_mismatch"
+		| "blockquote_paragraph_mismatch"
 		| "link_mismatch"
 		| "image_mismatch"
 		| "structure_mismatch";
@@ -50,8 +50,13 @@ interface MarkdownStructure {
 	codeBlocks: number;
 	/** 引用ブロック数 */
 	blockquotes: number;
-	/** 引用ブロックの行数（入れ子は外側の引用で数える。空行を除く） */
-	blockquoteLines: number;
+	/**
+	 * 引用の中の段落の数。段落は、それを直接囲む一番内側の引用でだけ数える（入れ子を二重に数えない）。
+	 *
+	 * 行数で比べないのは、訳すと折り返しが変わるため。原文で2行に折り返した段落を訳文で
+	 * 1行にしても、遅延継続行（`> 引用\n続き`）を1行にまとめても、同じ段落のままである。
+	 */
+	blockquoteParagraphs: number;
 	/** テーブル数 */
 	tables: number;
 	/** テーブルごとの行数（見出し行を含む。出てくる順） */
@@ -102,8 +107,8 @@ export class TranslationChecker {
 		this.checkTables(sourceStructure, translatedStructure, reasons);
 		this.checkTableRows(sourceStructure, translatedStructure, reasons);
 
-		// 引用の行数のチェック
-		this.checkBlockquoteLines(sourceStructure, translatedStructure, reasons);
+		// 引用の中の段落の数のチェック
+		this.checkBlockquoteParagraphs(sourceStructure, translatedStructure, reasons);
 
 		// リンク数のチェック
 		this.checkLinks(sourceStructure, translatedStructure, reasons);
@@ -124,13 +129,12 @@ export class TranslationChecker {
 	 */
 	private extractStructure(text: string): MarkdownStructure {
 		const tokens = this.md.parse(text, {});
-		const lines = text.split("\n");
 		const structure: MarkdownStructure = {
 			headings: new Map<number, number>(),
 			listItems: 0,
 			codeBlocks: 0,
 			blockquotes: 0,
-			blockquoteLines: 0,
+			blockquoteParagraphs: 0,
 			tables: 0,
 			tableRows: [],
 			links: 0,
@@ -155,14 +159,16 @@ export class TranslationChecker {
 					break;
 				case "blockquote_open":
 					structure.blockquotes++;
-					// 行数は外側の引用だけで数える。内側の引用の行は外側の範囲に含まれている
-					if (blockquoteDepth === 0 && token.map) {
-						structure.blockquoteLines += countNonBlankLines(lines, token.map[0], token.map[1]);
-					}
 					blockquoteDepth++;
 					break;
 				case "blockquote_close":
 					blockquoteDepth--;
+					break;
+				case "paragraph_open":
+					// 段落はトークン列に1回だけ現れるので、入れ子の引用でも二重には数えない
+					if (blockquoteDepth > 0) {
+						structure.blockquoteParagraphs++;
+					}
 					break;
 				case "table_open":
 					structure.tables++;
@@ -303,19 +309,19 @@ export class TranslationChecker {
 	}
 
 	/**
-	 * 引用の行数をチェック
+	 * 引用の中の段落の数をチェック
 	 *
-	 * 引用ブロックの数が同じでも、引用の中の行が増えたり消えたりすることがある。
+	 * 引用ブロックの数が同じでも、引用の中の段落が増えたり消えたりすることがある。
 	 */
-	private checkBlockquoteLines(
+	private checkBlockquoteParagraphs(
 		source: MarkdownStructure,
 		translated: MarkdownStructure,
 		reasons: ReviewReason[],
 	): void {
-		if (source.blockquoteLines !== translated.blockquoteLines) {
+		if (source.blockquoteParagraphs !== translated.blockquoteParagraphs) {
 			reasons.push({
-				category: "blockquote_line_mismatch",
-				message: `引用の行数が不一致: 原文${source.blockquoteLines}行 vs 訳文${translated.blockquoteLines}行`,
+				category: "blockquote_paragraph_mismatch",
+				message: `引用の中の段落の数が不一致: 原文${source.blockquoteParagraphs}個 vs 訳文${translated.blockquoteParagraphs}個`,
 			});
 		}
 	}
@@ -351,15 +357,4 @@ export class TranslationChecker {
 			});
 		}
 	}
-}
-
-/** `lines` の `[start, end)` のうち、空白だけではない行を数える */
-function countNonBlankLines(lines: readonly string[], start: number, end: number): number {
-	let count = 0;
-	for (let at = start; at < end && at < lines.length; at++) {
-		if (lines[at].trim() !== "") {
-			count++;
-		}
-	}
-	return count;
 }

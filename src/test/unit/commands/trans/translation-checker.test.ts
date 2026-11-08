@@ -179,7 +179,7 @@ suite("TranslationChecker", () => {
 		});
 	});
 
-	suite("表の行数と引用の行数", () => {
+	suite("表の行数と引用の中の段落の数", () => {
 		// 実例（Haiku・改訂の linenum 形式）。原文は E502 のあとに E404 を1行足しただけなのに、
 		// モデルは `REPLACE 20`（E502 の行）の中に E502・E404・E901 の3行を書いた。
 		// E901 は 21 行目に元からあるため、当てはめると E901 の行が2つになる。
@@ -291,20 +291,47 @@ suite("TranslationChecker", () => {
 			assert.ok(!result.reasons.some((r) => r.category === "table_row_mismatch"));
 		});
 
-		test("引用ブロックの数が同じでも、引用の行数が違えば確認推奨にする", () => {
-			const source = "> **注意**\n> 原因を特定せずに初期化しない。\n> 記録した値が失われる。";
-			const translation = "> **Caution**\n> Do not initialize the device without identifying the cause.";
+		test("引用ブロックの数が同じでも、引用の中の段落の数が違えば確認推奨にする", () => {
+			const source = "> **注意**\n>\n> 原因を特定せずに初期化しない。\n>\n> 記録した値が失われる。";
+			const translation = "> **Caution**\n>\n> Do not initialize the device without identifying the cause.";
 
 			const result = checker.checkTranslationQuality(source, translation);
 
 			assert.ok(!result.reasons.some((r) => r.category === "blockquote_mismatch"));
-			const lineReason = result.reasons.find((r) => r.category === "blockquote_line_mismatch");
-			assert.ok(lineReason, "引用の行数の不一致を報告する");
-			assert.ok(lineReason.message.includes("原文3行"), lineReason.message);
-			assert.ok(lineReason.message.includes("訳文2行"), lineReason.message);
+			const reason = result.reasons.find((r) => r.category === "blockquote_paragraph_mismatch");
+			assert.ok(reason, "引用の中の段落の数の不一致を報告する");
+			assert.ok(reason.message.includes("原文3個"), reason.message);
+			assert.ok(reason.message.includes("訳文2個"), reason.message);
 		});
 
-		test("入れ子の引用は内側の行を二重に数えず、行数が同じなら問題なし", () => {
+		test("引用の中の段落を訳文で1行に折り返しても、段落の数が同じなら問題なし", () => {
+			const source = "> 一行目の文で\n> 二行目に続く文。";
+			const translation = "> The first sentence continues in line two.";
+
+			const result = checker.checkTranslationQuality(source, translation);
+
+			assert.strictEqual(result.needsReview, false, JSON.stringify(result.reasons));
+		});
+
+		test("引用の遅延継続行を訳文で1行にまとめても、段落の数が同じなら問題なし", () => {
+			const source = "> 引用\n続き";
+			const translation = "> Quote continued";
+
+			const result = checker.checkTranslationQuality(source, translation);
+
+			assert.strictEqual(result.needsReview, false, JSON.stringify(result.reasons));
+		});
+
+		test("入れ子の引用で内側の段落が消えたら、確認推奨にする", () => {
+			const source = "> 外側\n>\n> > 内側1\n> >\n> > 内側2";
+			const translation = "> Outer\n>\n> > Inner 1 and 2";
+
+			const result = checker.checkTranslationQuality(source, translation);
+
+			assert.ok(result.reasons.some((r) => r.category === "blockquote_paragraph_mismatch"));
+		});
+
+		test("入れ子の引用は内側の段落を二重に数えず、段落の数が同じなら問題なし", () => {
 			const source = "> 外側\n>\n> > 内側1\n> > 内側2";
 			const translation = "> Outer\n>\n> > Inner 1\n> > Inner 2";
 
