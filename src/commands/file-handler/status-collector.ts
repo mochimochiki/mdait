@@ -20,6 +20,7 @@ import {
 import { StatusItemTree } from "../../core/status/status-item-tree";
 import { isIndependentUnit } from "../../core/unit-state/independent-unit";
 import { isOrphanTarget } from "../../core/unit-state/orphan-target";
+import { UnitStateStore } from "../../core/unit-state/unit-state-store";
 import { Configuration } from "../../infra/config/configuration";
 import { resolveMarkerIO } from "../../infra/config/marker-io";
 import { FileExplorer } from "../../infra/workspace/file-explorer";
@@ -65,6 +66,7 @@ export class StatusCollector implements StatusCollectorPort {
 		const statusItemTree = new StatusItemTree();
 
 		try {
+			this.ensureExternalStateLoaded();
 			// 重複のないディレクトリリストを取得
 			const { targetDirs, sourceDirs } = this.fileExplorer.getUniqueDirectories(this.config);
 			const dirExtensions = this.collectDirectoryExtensions();
@@ -112,7 +114,26 @@ export class StatusCollector implements StatusCollectorPort {
 	 * @return FileStatusItem - ファイルのステータス
 	 */
 	public async collectFileStatus(filePath: string): Promise<FileStatusItem> {
+		this.ensureExternalStateLoaded();
 		return this.applyOrphanFlag(await this.collectFileStatusCore(filePath));
+	}
+
+	/**
+	 * external では、マーカーは本文ではなく `unit-state` にある。収集の前に必ず読み込んでおく。
+	 *
+	 * 読み込みは sync・翻訳・TM 登録などの中でしか行われていなかった。起動した直後に組んだ一覧には
+	 * マーカーが1つも載らず、一覧を見て動く TM 登録と用語検出が「対象0件」で何もせずに終わり、
+	 * 状態の取得も 0 ユニットと答えた（Lab で実測。sync を1回挟むと直る）。
+	 * `.mdait` が無いときは作らない（作るのは設定の作成と sync の役目）。
+	 */
+	private ensureExternalStateLoaded(): void {
+		if (!this.config.isExternalMarkers()) {
+			return;
+		}
+		const mdaitDir = this.config.getMdaitDir();
+		if (fs.existsSync(mdaitDir)) {
+			UnitStateStore.getInstance().ensureLoaded(mdaitDir);
+		}
 	}
 
 	/**
