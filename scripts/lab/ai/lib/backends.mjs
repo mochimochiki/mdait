@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { buildDigest } from "./digest.mjs";
-import { buildEchoAnswer } from "./echo-answers.mjs";
+import { buildEchoAnswer, maskKana } from "./echo-answers.mjs";
 import { readJsonl } from "./transcript.mjs";
 
 /** 要求が録音と食い違ったときに投げる。呼び出し側は 409 に変換する */
@@ -109,6 +109,7 @@ export function buildEchoTranslation(source, { limit = 200 } = {}) {
 		.replace(/\s+/g, " ")
 		.replace(/[{}]/g, "")
 		.trim();
+	const masked = maskKana(squashed);
 
 	const pieces = [];
 	let budget = limit;
@@ -119,12 +120,12 @@ export function buildEchoTranslation(source, { limit = 200 } = {}) {
 		pieces.push(text.slice(0, budget));
 		budget -= Math.min(text.length, budget);
 	};
-	for (const match of squashed.matchAll(CODE_BLOCK_PLACEHOLDER)) {
-		pushPlain(squashed.slice(cursor, match.index));
+	for (const match of masked.matchAll(CODE_BLOCK_PLACEHOLDER)) {
+		pushPlain(masked.slice(cursor, match.index));
 		pieces.push(match[0]);
 		cursor = match.index + match[0].length;
 	}
-	pushPlain(squashed.slice(cursor));
+	pushPlain(masked.slice(cursor));
 
 	return `${pieces.join(" ")} [MT]`.trim();
 }
