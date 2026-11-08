@@ -94,6 +94,158 @@ export function extractJsonFromResponse(rawResponse: string): string {
 }
 
 /**
+ * JSON として読む。読めなければ、文字列の中の書き損じを直してからもう一度だけ読む。
+ *
+ * **直すのは文字列リテラルの中だけで、封筒の形には手を付けない。** 直したあとも
+ * 読めなければ、最初の失敗をそのまま投げる（読めない理由を取り違えないため）。
+ *
+ * @param jsonString `extractJsonFromResponse` で取り出した文字列
+ * @returns パース結果
+ * @throws 直しても読めないとき、最初の `JSON.parse` の例外
+ */
+export function parseJsonLenient(jsonString: string): unknown {
+	try {
+		return JSON.parse(jsonString);
+	} catch (strictError) {
+		const repaired = repairJsonStringLiterals(jsonString);
+		if (repaired === jsonString) {
+			throw strictError;
+		}
+		try {
+			return JSON.parse(repaired);
+		} catch {
+			throw strictError;
+		}
+	}
+}
+
+/**
+ * JSON の文字列リテラルの中で、エスケープされていない `"` と改行・タブをエスケープし直す。
+ *
+ * 実測（Haiku 4.5・日本語→簡体字中国語）では、訳文と termSuggestions の中で
+ * 「」を `"设置画面"` のような ASCII の `"` に置き換え、エスケープせずに返した。
+ * 生の改行を文字列に入れた返答もあった。どちらも中身は正しく、封筒だけが読めない。
+ * やり直しても同じ書き方を繰り返すので、送り直しでは直らない。
+ *
+ * 文字列の中の `"` は、直後（空白を飛ばす）がその位置で閉じたときに来るべき文字の
+ * ときだけ閉じとみなす。キーなら `:`、値なら `}` / `]`、または `,` のあとに次の要素の
+ * 始まりが続くとき。それ以外は文字列の中身として `\"` に書き換える。
+ *
+ * @param text 読めなかった JSON 文字列
+ * @returns 書き換えた文字列。直す箇所が無ければ入力そのもの
+ */
+export function repairJsonStringLiterals(text: string): string {
+	let out = "";
+	// 開いている入れ子（"{" か "["）。キーの位置かどうかの判定に使う
+	const stack: string[] = [];
+	// オブジェクトの中で、次に来る文字列がキーかどうか
+	let expectingKey = false;
+	let i = 0;
+	while (i < text.length) {
+		const ch = text[i];
+		if (ch !== '"') {
+			if (ch === "{") {
+				stack.push("{");
+				expectingKey = true;
+			} else if (ch === "[") {
+				stack.push("[");
+				expectingKey = false;
+			} else if (ch === "}" || ch === "]") {
+				stack.pop();
+				expectingKey = false;
+			} else if (ch === ",") {
+				expectingKey = stack[stack.length - 1] === "{";
+			} else if (ch === ":") {
+				expectingKey = false;
+			}
+			out += ch;
+			i++;
+			continue;
+		}
+
+		// 文字列リテラルを読む
+		const isKey = expectingKey;
+		out += '"';
+		i++;
+		while (i < text.length) {
+			const c = text[i];
+			if (c === "\\") {
+				out += c + (text[i + 1] ?? "");
+				i += 2;
+				continue;
+			}
+			if (c === "\n") {
+				out += "\\n";
+				i++;
+				continue;
+			}
+			if (c === "\r") {
+				out += "\\r";
+				i++;
+				continue;
+			}
+			if (c === "\t") {
+				out += "\\t";
+				i++;
+				continue;
+			}
+			if (c === '"') {
+				if (closesString(text, i + 1, isKey, stack[stack.length - 1])) {
+					break;
+				}
+				out += '\\"';
+				i++;
+				continue;
+			}
+			out += c;
+			i++;
+		}
+		if (i < text.length) {
+			out += '"';
+			i++;
+		}
+		expectingKey = false;
+	}
+	return out;
+}
+
+/** `"` の直後（`from` 以降）が、文字列がそこで閉じたときに来るべき並びかを答える */
+function closesString(text: string, from: number, isKey: boolean, container: string | undefined): boolean {
+	const next = skipWhitespace(text, from);
+	if (next >= text.length) {
+		return true;
+	}
+	const c = text[next];
+	if (isKey) {
+		return c === ":";
+	}
+	if (container === undefined) {
+		return false;
+	}
+	if (c === "}" || c === "]") {
+		return true;
+	}
+	if (c !== ",") {
+		return false;
+	}
+	// 「,」のあとに次の要素が始まるときだけ閉じとみなす。オブジェクトなら次のキー
+	const after = skipWhitespace(text, next + 1);
+	const n = text[after];
+	if (container === "{") {
+		return n === '"' || n === "}";
+	}
+	return n !== undefined && /["{[\]\-0-9tfn]/.test(n);
+}
+
+function skipWhitespace(text: string, from: number): number {
+	let i = from;
+	while (i < text.length && /\s/.test(text[i])) {
+		i++;
+	}
+	return i;
+}
+
+/**
  * オブジェクト型ガード
  */
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -171,7 +323,7 @@ export function validateTranslationResponse(
 	// Step 2: JSONパース
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(jsonString);
+		parsed = parseJsonLenient(jsonString);
 	} catch (e) {
 		return {
 			valid: false,
@@ -358,7 +510,7 @@ export function validateRevisionPatchResponse(
 	// Step 2: JSONパース
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(jsonString);
+		parsed = parseJsonLenient(jsonString);
 	} catch (e) {
 		return {
 			valid: false,
