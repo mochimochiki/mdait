@@ -123,7 +123,7 @@ sequenceDiagram
 | `mdait_translate` | `{ path }`（ファイル/ディレクトリ） | ファイルごとの成功/失敗、needの遷移、チェッカー違反、失敗原因 | 訳文書換・AI使用 | あり（スコープ単位で1回、対象ユニット総数を表示） |
 | `mdait_term` | `{ action: "detect"\|"expand", path? }` | 追加/更新された用語一覧、未展開残数 | terms.csv書換・AI使用 | あり |
 | `mdait_tm` | `{ action: "commit", path? }` | 追加/更新TU数、スキップ理由内訳（needあり等） | translations.tmx書換・AI使用 | あり |
-| `mdait_validate` | `{ path?, checks?: ["structure","terms"] }` | 違反一覧（ファイル/ユニット/種別/期待値/実際値） | なし | なし（AI不使用・読取専用） |
+| `mdait_validate` | `{ path?, checks?: ["structure","terms","residue"] }` | 違反一覧（ファイル/ユニット/種別/期待値/実際値） | なし | なし（AI不使用・読取専用） |
 | `mdait_aiReview` | `{ path?, dryRun? }` | need:review ペアの verdict 集計（approved/mismatch/partial等）とエスカレーション一覧 | マーカー書換（need:review 解除）・AI使用 | あり |
 
 設計原則は [tools.md](tools.md) に従う: Commands/Core層の薄いラップ、確認UI、l10n、エラーの構造化返却（`ok:false` ＋ `error.code`/`error.message`）。
