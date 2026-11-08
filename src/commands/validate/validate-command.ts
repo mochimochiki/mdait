@@ -129,7 +129,7 @@ export async function validate_CoreProc(
 	let allTerms: readonly TermEntry[] = [];
 	if (checks.includes("terms") || checks.includes("residue")) {
 		try {
-			const repository = await TermsRepository.load(config.getTermsFilePath());
+			const repository = await TermsRepository.load(config.getTermsFilePath(), config.transPairs, config.primaryLang);
 			allTerms = await repository.getAllEntries();
 		} catch {
 			// 用語集がない場合、terms チェックは違反0件になり、residue は仮名を許す語なしで調べる
@@ -262,23 +262,34 @@ function checkSourceResidue(
 
 /**
  * 用語集エントリを言語ペアの TermLintTerm に変換する（両言語が揃うエントリのみ）
+ *
+ * 同じ原語の行が複数あるとき（訳し分け。ADR-261108-06）は1つにまとめ、**どの意味の訳語でも
+ * 正解**として扱う。どの出現がどの意味かは機械では決められないので、行ごとに照合すると、
+ * 正しく訳し分けた訳文でも「使わなかった方の意味」が必ず違反になる。
  */
-function toLintTerms(terms: readonly TermEntry[], pair: TransPair): TermLintTerm[] {
-	const result: TermLintTerm[] = [];
+export function toLintTerms(terms: readonly TermEntry[], pair: TransPair): TermLintTerm[] {
+	const bySource = new Map<string, { sourceVariants: string[]; accepted: string[] }>();
 	for (const entry of terms) {
 		const source = TermEntryUtils.getTerm(entry, pair.sourceLang);
 		const expected = TermEntryUtils.getTerm(entry, pair.targetLang);
 		if (!source || !expected) {
 			continue;
 		}
-		result.push({
-			source,
-			sourceVariants: TermEntryUtils.getvariants(entry, pair.sourceLang),
-			expected,
-			expectedVariants: TermEntryUtils.getvariants(entry, pair.targetLang),
-		});
+		const group = bySource.get(source) ?? { sourceVariants: [], accepted: [] };
+		bySource.set(source, group);
+		for (const variant of TermEntryUtils.getvariants(entry, pair.sourceLang)) {
+			if (!group.sourceVariants.includes(variant)) group.sourceVariants.push(variant);
+		}
+		for (const accepted of [expected, ...TermEntryUtils.getvariants(entry, pair.targetLang)]) {
+			if (!group.accepted.includes(accepted)) group.accepted.push(accepted);
+		}
 	}
-	return result;
+	return [...bySource.entries()].map(([source, group]) => ({
+		source,
+		sourceVariants: group.sourceVariants,
+		expected: group.accepted[0],
+		expectedVariants: group.accepted.slice(1),
+	}));
 }
 
 /**

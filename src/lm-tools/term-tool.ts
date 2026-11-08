@@ -300,7 +300,7 @@ async function resolveTermScopes(
  */
 async function countUnexpanded(config: Configuration, pair: TransPair): Promise<number> {
 	try {
-		const repository = await TermsRepository.load(config.getTermsFilePath());
+		const repository = await TermsRepository.load(config.getTermsFilePath(), config.transPairs, config.primaryLang);
 		const entries = await repository.getAllEntries();
 		return entries.filter(
 			(entry) => entry.languages[pair.sourceLang] && !entry.languages[pair.targetLang],

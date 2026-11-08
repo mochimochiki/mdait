@@ -35,6 +35,8 @@ export class TermsRepositoryCSV implements TermsRepository {
 	// DI: Configuration依存を除去するためインスタンスに保持
 	private currentTransPairs: readonly TransPair[] = [];
 	private currentPrimaryLang = "";
+	// 読み込んだ CSV の、列の並びどおりの言語（主言語の代用に使う）
+	private headerLanguageOrder: string[] = [];
 
 	private constructor(public readonly path: string) {}
 
@@ -131,9 +133,7 @@ export class TermsRepositoryCSV implements TermsRepository {
 			if (TermEntryUtils.isEmpty(candidate)) continue;
 
 			// 既存エントリとの同一性チェック（contextと言語で判定）
-			const duplicateIndex = mergedEntries.findIndex((existing) =>
-				TermEntryUtils.isSameEntry(existing, candidate, primaryLang),
-			);
+			const duplicateIndex = TermEntryUtils.findSameEntryIndex(mergedEntries, candidate, primaryLang);
 
 			if (duplicateIndex >= 0) {
 				// 同一エントリが見つかった場合はマージで更新
@@ -183,8 +183,11 @@ export class TermsRepositoryCSV implements TermsRepository {
 		for (const p of this.currentTransPairs) {
 			if (p.sourceLang) return p.sourceLang;
 		}
-		// それも無ければallLanguages先頭
-		return this.allLanguages[0] || "";
+		// それも無ければ、読み込んだ CSV の列の並びの先頭の言語（mdait は主言語の列を先頭に書く）。
+		// 並べ替えた言語の先頭（`allLanguages[0]`）を使ってはいけない — ja→en の用語集で en が
+		// 主言語になり、訳語が同じ別の語（中継ハブ／中継 → Relay Hub）が同じ鍵になって、
+		// 読み込みで後の行が黙って消えていた（ADR-261108-07）
+		return this.headerLanguageOrder[0] || this.allLanguages[0] || "";
 	}
 
 	// 内部: 列順序（primary → source → target → context → variants → unknown）に必要な情報を返す
@@ -470,6 +473,9 @@ export class TermsRepositoryCSV implements TermsRepository {
 		// ヘッダーから言語リストを抽出
 		const headers = Object.keys(records[0]);
 		const languages = TermEntryConverter.extractLanguagesFromHeaders(headers);
+		if (!options.keepPreserved || this.headerLanguageOrder.length === 0) {
+			this.headerLanguageOrder = headers.filter((h) => languages.includes(h.trim())).map((h) => h.trim());
+		}
 
 		// **両側を読むときは、言語も列の順も足す（消さない）。**
 		//
