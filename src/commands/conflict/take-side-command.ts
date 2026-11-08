@@ -21,6 +21,7 @@ import { decisionsFor, forgetDecisions, rememberDecision } from "./conflict-deci
 import { type ConflictParty, sideOf } from "./conflict-labels";
 import type { ChoiceSide } from "./resolution-plan";
 import { applyDecidedResolution, undecidedCount } from "./resolve-core";
+import { withSvnResolveHint } from "./svn-hint";
 
 const logger = Logger.getInstance();
 
@@ -96,7 +97,10 @@ export async function resolveDecidedFile(filePath: string | undefined): Promise<
 		invalidateWorkspaceConflicts();
 		if (outcome.written) {
 			void vscode.window.showInformationMessage(
-				vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(filePath)),
+				withSvnResolveHint(
+					vscode.l10n.t("Resolved every conflict in {0}.", vscode.workspace.asRelativePath(filePath)),
+					filePath,
+				),
 			);
 		}
 	} catch (error) {

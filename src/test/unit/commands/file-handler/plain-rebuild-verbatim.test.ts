@@ -13,8 +13,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PlainFileHandler } from "../../../../commands/file-handler/plain-file-handler";
-import { calculateHash } from "../../../../core/hash/hash-calculator";
+import { PlainFileHandler, plainContentHash } from "../../../../commands/file-handler/plain-file-handler";
 import { UnitRegistryManager } from "../../../../core/unit-registry/unit-registry-manager";
 import { UnitStateStore } from "../../../../core/unit-state/unit-state-store";
 import { Configuration } from "../../../../infra/config/configuration";
@@ -61,8 +60,8 @@ suite("非Markdown: 再構築で丸写しは翻訳待ち、訳済みは確認待
 		const entry = UnitStateStore.getInstance().getSoleEntry("target/notice.txt");
 		assert.ok(entry, "行が作られること");
 		assert.strictEqual(entry.need, "translate");
-		assert.strictEqual(entry.from, calculateHash(source, false));
-		assert.strictEqual(entry.hash, calculateHash(source, false));
+		assert.strictEqual(entry.from, plainContentHash(source));
+		assert.strictEqual(entry.hash, plainContentHash(source));
 		assert.strictEqual(result.modified, 1, "行が新しく作られたので modified に数えること");
 		assert.strictEqual(result.revisionsNeeded, 0, "丸写しは改訂待ちではないので数えないこと");
 		assert.strictEqual(result.unchanged, 0);
@@ -82,15 +81,15 @@ suite("非Markdown: 再構築で丸写しは翻訳待ち、訳済みは確認待
 		assert.strictEqual(result.adopted, 1, "紐の無い既訳を確認待ちで受けたら adopted に数えること");
 	});
 
-	test("改行コードだけが違う訳文は丸写しとみなさない（バイト列で判定する）", async () => {
-		// ハッシュは normalize:false で取るので、CRLF と LF は別物。syncNew の複製はバイト列を
-		// そのまま写すため、丸写しなら改行コードまで一致する。一致しないなら誰かが触っている
+	test("改行コードだけが違う訳文も丸写しとみなす（まだ訳していない）", async () => {
+		// 改行コードは中身ではない（ADR-261108-02）。svn:eol-style やエディタが改行コードを
+		// 書き換えただけの丸写しを確認待ちにすると、翻訳が飛ばされて原文のまま残る
 		fs.writeFileSync(sourceFile, "一行目\r\n二行目\r\n", "utf-8");
 		fs.writeFileSync(targetFile, "一行目\n二行目\n", "utf-8");
 
 		await handler.sync(sourceFile, targetFile);
 
-		assert.strictEqual(UnitStateStore.getInstance().getSoleEntry("target/notice.txt")?.need, "review");
+		assert.strictEqual(UnitStateStore.getInstance().getSoleEntry("target/notice.txt")?.need, "translate");
 	});
 
 	test("再構築のあとの2回目の sync は need を据え置く（冪等）", async () => {
