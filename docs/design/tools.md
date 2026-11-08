@@ -192,20 +192,21 @@ interface TmInput {
 
 ### 6. Validate Tool (`mdait_validate`)
 
-**機能**: 翻訳済みペアユニットの検証（構造チェック＋用語一貫性 term-lint）
+**機能**: 翻訳済みペアユニットの検証（構造チェック＋用語一貫性 term-lint＋訳し残し）
 
 **入力パラメータ**:
 ```typescript
 interface ValidateInput {
   path?: string;                          // ターゲットファイル/ディレクトリ。省略時は全transPair
-  checks?: ("structure" | "terms")[];     // 省略時は両方
+  checks?: ("structure" | "terms" | "residue")[];  // 省略時はすべて
 }
 ```
 
 **実装**:
 - `validate_CoreProc`（`src/commands/validate/validate-command.ts`）に委譲
-- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較
+- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較（見出しレベル別の数・リスト項目数・コードブロック数・引用の数と引用の中の段落の数・表の数と表ごとの行数・リンク数・画像数）
 - `terms`: `src/core/term/term-lint.ts` の機械照合（AI不使用・保守的閾値・コードブロック/インラインコード除外）
+- `residue`: `src/commands/trans/source-residue.ts` の `findSourceResidue`。原文が日本語で訳文が日本語以外のとき、訳文に仮名が残っていれば違反にする。コード・URL・用語集の訳語は除く。漢字だけの語は中国語と見分けられないので対象外（ADR-261108-05）
 - 検証対象は「翻訳済み」（from あり・need なし）ユニットのみ。need 残りはスキップ件数として報告
 - 違反は警告であり自動修正しない。`nextActions` で「訳文を直す／variants に追加する」の二択を提示
 

@@ -66,7 +66,7 @@ const tmPrompt = `You are a senior professional translator and translation-memor
 </primaryLanguageUnit>
 
 <localLanguageUnit>
-マイクロサービスは独立して配備できる設計である。 設計を見直した。 短い。 [MT]
+xxxxxーxxx独立xx配備xxx設計xxx。 設計x見直xx。 短x。 [MT]
 </localLanguageUnit>
 
 <ExistingTmEntries>

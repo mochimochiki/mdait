@@ -263,7 +263,12 @@ suite("BYOK shim: echo（原文から決まった訳文を作る）", () => {
 
 	test("訳文の長さは上限で抑える（目印はその勘定に入れない）", () => {
 		const translation = buildEchoTranslation(`${"あ".repeat(500)} __CODE_BLOCK_PLACEHOLDER_0__`, { limit: 20 });
-		assert.equal(translation, `${"あ".repeat(20)} __CODE_BLOCK_PLACEHOLDER_0__ [MT]`);
+		assert.equal(translation, `${"x".repeat(20)} __CODE_BLOCK_PLACEHOLDER_0__ [MT]`);
+	});
+
+	test("訳文に原文の仮名を残さない（漢字・英数字・記号はそのまま）", () => {
+		// 仮名が残ると、mdait は訳し残しとみなして確認待ちにする
+		assert.equal(buildEchoTranslation("設定画面でカメラを選ぶ。GL-7"), "設定画面xxxxx選x。GL-7 [MT]");
 	});
 });
 

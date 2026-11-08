@@ -1,7 +1,7 @@
 /**
  * @file validate-command.ts
  * @description
- *   翻訳済みペアユニットに対する検証（構造チェック＋用語一貫性 term-lint）のワークフロー。
+ *   翻訳済みペアユニットに対する検証（構造チェック＋用語一貫性 term-lint＋訳し残し）のワークフロー。
  *   読取専用・AI不使用。
  *
  *   人間向けの単独コマンドは持たない（ADR-260802-02）。呼び出し口は2つ:
@@ -22,12 +22,13 @@ import { FileExplorer } from "../../infra/workspace/file-explorer";
 import type { TermEntry } from "../term/term-entry";
 import { TermEntry as TermEntryUtils } from "../term/term-entry";
 import { TermsRepository } from "../term/terms-repository";
+import { findSourceResidue, formatSourceResidueReason, residueAllowedTerms } from "../trans/source-residue";
 import { TranslationChecker } from "../trans/translation-checker";
 
 const logger = Logger.getInstance();
 
 /** 検証の種別 */
-export type ValidateCheck = "structure" | "terms";
+export type ValidateCheck = "structure" | "terms" | "residue";
 
 /** 検証違反 */
 export interface ValidationViolation {
@@ -73,7 +74,7 @@ export interface ValidationReport {
  */
 export async function runDeterministicChecks(files: readonly string[]): Promise<ValidationReport> {
 	const merged: ValidationReport = {
-		checks: ["structure", "terms"],
+		checks: ["structure", "terms", "residue"],
 		filesChecked: 0,
 		unitsChecked: 0,
 		unitsSkipped: 0,
@@ -100,11 +101,11 @@ export async function runDeterministicChecks(files: readonly string[]): Promise<
  * need が残るユニットは翻訳/レビューが先であり、検証しても意味がないためスキップする。
  *
  * @param scopePath 対象スコープ（ファイル/ディレクトリ）。省略時は全transPairのターゲット
- * @param checks 実行する検証種別（省略時は両方）
+ * @param checks 実行する検証種別（省略時は structure・terms・residue のすべて）
  */
 export async function validate_CoreProc(
 	scopePath: string | undefined,
-	checks: ValidateCheck[] = ["structure", "terms"],
+	checks: ValidateCheck[] = ["structure", "terms", "residue"],
 ): Promise<ValidationReport> {
 	const config = Configuration.getInstance();
 	const fileExplorer = new FileExplorer();
@@ -124,14 +125,14 @@ export async function validate_CoreProc(
 		return report;
 	}
 
-	// 用語集は一度だけロード（terms チェック時のみ）
+	// 用語集は一度だけロード（terms か residue のチェック時のみ）
 	let allTerms: readonly TermEntry[] = [];
-	if (checks.includes("terms")) {
+	if (checks.includes("terms") || checks.includes("residue")) {
 		try {
 			const repository = await TermsRepository.load(config.getTermsFilePath());
 			allTerms = await repository.getAllEntries();
 		} catch {
-			// 用語集がない場合は terms チェックは違反0件（構造チェックのみ有効）
+			// 用語集がない場合、terms チェックは違反0件になり、residue は仮名を許す語なしで調べる
 			allTerms = [];
 		}
 	}
@@ -161,6 +162,7 @@ export async function validate_CoreProc(
 			}
 
 			const relFile = path.relative(workspaceRoot, targetFile).replace(/\\/g, "/");
+			const residueAllowed = checks.includes("residue") ? residueAllowedTerms(allTerms, pair.targetLang) : undefined;
 			let lintTerms: TermLintTerm[] | undefined;
 			if (checks.includes("terms") && allTerms.length > 0) {
 				const cacheKey = `${pair.sourceLang}->${pair.targetLang}`;
@@ -200,6 +202,11 @@ export async function validate_CoreProc(
 					}
 				}
 
+				// 訳し残しチェック（構造チェックとは別の関数に置く）
+				if (residueAllowed) {
+					report.violations.push(...checkSourceResidue(relFile, unit, pair, residueAllowed));
+				}
+
 				// 用語一貫性チェック（term-lint）
 				if (lintTerms && lintTerms.length > 0) {
 					const violations = lintUnitPair(sourceUnit.content, unit.content, lintTerms);
@@ -226,6 +233,31 @@ export async function validate_CoreProc(
 	}
 
 	return report;
+}
+
+/**
+ * 訳文ユニットに原文の仮名が残っていないかを調べ、違反にして返す。
+ */
+function checkSourceResidue(
+	relFile: string,
+	unit: MdaitUnit,
+	pair: TransPair,
+	allowedTerms: readonly string[],
+): ValidationViolation[] {
+	const residue = findSourceResidue(pair.sourceLang, pair.targetLang, unit.content, allowedTerms);
+	if (!residue.found || !unit.marker) {
+		return [];
+	}
+	return [
+		{
+			file: relFile,
+			unitHash: unit.marker.hash,
+			check: "residue",
+			actual: residue.fragments.join(" / "),
+			severity: "warning",
+			message: formatSourceResidueReason(residue.fragments),
+		},
+	];
 }
 
 /**

@@ -15,6 +15,11 @@ export interface TranslationTerm {
 	term: string;
 	/** 訳語（targetLang） */
 	translation: string;
+	/**
+	 * 訳語の表記揺れ（targetLang の variants）。指示文には載せず、訳文の確かめにだけ使う。
+	 * variants が無ければ省く
+	 */
+	translationVariants?: string[];
 	/** コンテキスト情報（オプション） */
 	context?: string;
 }
@@ -67,10 +72,12 @@ export function extractRelevantTerms(
 
 		// ユニット内容に原語またはその表記揺れが含まれるかチェック
 		if (isTermRelevant(haystack, entry, sourceLang)) {
+			const translationVariants = [...TermEntryUtils.getvariants(entry, targetLang)];
 			relevantTerms.push({
 				term: sourceTerm,
 				translation: targetTerm,
 				context: entry.context || undefined,
+				...(translationVariants.length > 0 ? { translationVariants } : {}),
 			});
 		}
 	}

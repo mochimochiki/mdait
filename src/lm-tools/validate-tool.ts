@@ -35,10 +35,10 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 			const requested = options.input.checks;
 			const checks: ValidateCheck[] =
 				requested && requested.length > 0
-					? requested.filter((c): c is ValidateCheck => c === "structure" || c === "terms")
-					: ["structure", "terms"];
+					? requested.filter((c): c is ValidateCheck => c === "structure" || c === "terms" || c === "residue")
+					: ["structure", "terms", "residue"];
 			if (checks.length === 0) {
-				const message = vscode.l10n.t("No valid checks specified. Use \"structure\" and/or \"terms\".");
+				const message = vscode.l10n.t("No valid checks specified. Use \"structure\", \"terms\" and/or \"residue\".");
 				return toToolResult(createErrorEnvelope(message, ToolErrorCode.InvalidInput, message));
 			}
 
@@ -66,14 +66,16 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 
 			const structureCount = report.violations.filter((v) => v.check === "structure").length;
 			const termsCount = report.violations.filter((v) => v.check === "terms").length;
+			const residueCount = report.violations.filter((v) => v.check === "residue").length;
 			const summary = vscode.l10n.t(
-				"Validation completed: {0} violation(s) ({1} structure, {2} terms) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).",
+				"Validation completed: {0} violation(s) ({1} structure, {2} terms, {6} residue) across {3} file(s), {4} translated unit(s) checked, {5} unit(s) skipped (need flags remain).",
 				report.violations.length,
 				structureCount,
 				termsCount,
 				report.filesChecked,
 				report.unitsChecked,
 				report.unitsSkipped,
+				residueCount,
 			);
 
 			const nextActions: string[] = [];
@@ -85,6 +87,11 @@ export class MdaitValidateTool implements vscode.LanguageModelTool<ValidateInput
 			if (structureCount > 0) {
 				nextActions.push(
 					"Structure violations indicate the translation's Markdown structure (headings/lists/code blocks/links) differs from the source. Inspect each unit and fix the target content, then re-run mdait_validate.",
+				);
+			}
+			if (residueCount > 0) {
+				nextActions.push(
+					"Residue violations mean Japanese kana remain in a non-Japanese translation: the AI left part of the source untranslated. Translate the quoted fragments in the target unit (or add an intentional kana name to the glossary as its translation), then re-run mdait_validate.",
 				);
 			}
 			if (report.unitsSkipped > 0) {

@@ -52,6 +52,22 @@ suite("TermExtractor", () => {
 			assert.strictEqual(result[0].translation, "開発プロセス");
 		});
 
+		test("訳語の variants を translationVariants として渡し、指示文の JSON には載せない", () => {
+			const unitContent = "GL Field の設定を開く。";
+			const allTerms = [
+				TermEntry.create("GL Field", {
+					ja: LangTerm.create("GL Field"),
+					zh: LangTerm.create("GL 场", ["GL フィールド"]),
+				}),
+			];
+
+			const result = extractRelevantTerms(unitContent, allTerms, "ja", "zh");
+
+			assert.strictEqual(result.length, 1);
+			assert.deepStrictEqual(result[0].translationVariants, ["GL フィールド"]);
+			assert.ok(!termsToJson(result).includes("GL フィールド"));
+		});
+
 		test("原語または訳語がない場合はスキップする", () => {
 			const unitContent = "This document uses term A and term B.";
 			const allTerms = [

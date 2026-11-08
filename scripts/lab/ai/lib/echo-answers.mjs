@@ -16,6 +16,15 @@
  *   - 分からない種類の仕事は null を返し、呼び出し側が従来どおり訳文を返す
  */
 
+/**
+ * 仮名を x に置き換える。echo の訳文は原文を潰したものなので、そのままだと仮名が残り、
+ * mdait は訳し残しとみなして確認待ちにする（ADR-261108-05）。訳文を作るときと、
+ * 文の対を訳文の中から探すときの両方で同じ置き換えをする。
+ */
+export function maskKana(text) {
+	return String(text ?? "").replace(/[ぁ-ゖゝ-ゟァ-ヺヽ-ヿㇰ-ㇿｦ-ｯｱ-ﾝ]/g, "x");
+}
+
 /** 用語（対訳あり）・用語（原文のみ）で使う、拾う語の上限 */
 const MAX_TERMS = 3;
 
@@ -189,9 +198,10 @@ function answerTmPairs(messages) {
 	for (const sentence of splitSentences(primaryUnit)) {
 		if (pairs.length >= MAX_TM_PAIRS) break;
 		if (!isWorthyForTm(sentence, primaryLang)) continue;
-		if (!localUnit.includes(sentence)) continue;
+		const local = maskKana(sentence);
+		if (!localUnit.includes(local)) continue;
 		if (pairs.some((pair) => pair.primary === sentence)) continue;
-		pairs.push({ type: "new", tuid: "-", primary: sentence, local: sentence });
+		pairs.push({ type: "new", tuid: "-", primary: sentence, local });
 	}
 	return JSON.stringify(pairs);
 }
