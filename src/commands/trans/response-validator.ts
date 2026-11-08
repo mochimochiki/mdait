@@ -94,29 +94,97 @@ export function extractJsonFromResponse(rawResponse: string): string {
 }
 
 /**
+ * 修復して読めた結果に許すキー。
+ *
+ * 修復は「どの `"` が閉じか」を推し量るので、取り違えると別の形のオブジェクトが読めてしまう。
+ * 知らないキーが混ざっていたら取り違えたとみなし、修復した結果を使わない。
+ */
+export interface LenientShape {
+	/** トップレベルのオブジェクトに許すキー */
+	topLevelKeys: readonly string[];
+	/** termSuggestions の各要素に許すキー */
+	termSuggestionKeys: readonly string[];
+}
+
+/** termSuggestions の要素に許すキー（`TermSuggestion` の定義と同じ） */
+const TERM_SUGGESTION_KEYS = [
+	"source",
+	"target",
+	"context",
+	"reason",
+] as const satisfies readonly (keyof TermSuggestion)[];
+
+/** 翻訳の答えに許すキー（`ParsedTranslationResponse` の定義と同じ） */
+const TRANSLATION_SHAPE: LenientShape = {
+	topLevelKeys: [
+		"translation",
+		"termSuggestions",
+		"warnings",
+	] as const satisfies readonly (keyof ParsedTranslationResponse)[],
+	termSuggestionKeys: TERM_SUGGESTION_KEYS,
+};
+
+/** 改訂パッチの答えに許すキー（`ParsedRevisionPatchResponse` の定義と同じ） */
+const REVISION_PATCH_SHAPE: LenientShape = {
+	topLevelKeys: [
+		"targetPatch",
+		"termSuggestions",
+		"warnings",
+	] as const satisfies readonly (keyof ParsedRevisionPatchResponse)[],
+	termSuggestionKeys: TERM_SUGGESTION_KEYS,
+};
+
+/**
  * JSON として読む。読めなければ、文字列の中の書き損じを直してからもう一度だけ読む。
  *
  * **直すのは文字列リテラルの中だけで、封筒の形には手を付けない。** 直したあとも
  * 読めなければ、最初の失敗をそのまま投げる（読めない理由を取り違えないため）。
  *
+ * 直して読めても、次のどちらかなら閉じの取り違えとみなし、やはり最初の失敗を投げる。
+ * - `shape` を渡したとき、知らないキーが混ざっている
+ * - キーと値の区切りのような並び（`": "`）の `"` を、文字列の中身としてエスケープした
+ *
  * @param jsonString `extractJsonFromResponse` で取り出した文字列
+ * @param shape 修復した結果に許すキー。省略時はキーを確かめない
  * @returns パース結果
  * @throws 直しても読めないとき、最初の `JSON.parse` の例外
  */
-export function parseJsonLenient(jsonString: string): unknown {
+export function parseJsonLenient(jsonString: string, shape?: LenientShape): unknown {
 	try {
 		return JSON.parse(jsonString);
 	} catch (strictError) {
-		const repaired = repairJsonStringLiterals(jsonString);
-		if (repaired === jsonString) {
+		const repair = repairJsonStringLiteralsDetailed(jsonString);
+		if (repair.text === jsonString || repair.escapedKeyLike) {
 			throw strictError;
 		}
+		let parsed: unknown;
 		try {
-			return JSON.parse(repaired);
+			parsed = JSON.parse(repair.text);
 		} catch {
 			throw strictError;
 		}
+		if (shape && !matchesShape(parsed, shape)) {
+			throw strictError;
+		}
+		return parsed;
 	}
+}
+
+/** トップレベルのキーと termSuggestions の要素のキーが、許したものだけかを答える */
+function matchesShape(value: unknown, shape: LenientShape): boolean {
+	if (!isObject(value)) {
+		return true;
+	}
+	if (!Object.keys(value).every((key) => shape.topLevelKeys.includes(key))) {
+		return false;
+	}
+	const suggestions = value.termSuggestions;
+	if (!Array.isArray(suggestions)) {
+		return true;
+	}
+	return suggestions.every(
+		(item) => !isObject(item) || Object.keys(item).every((key) => shape.termSuggestionKeys.includes(key)),
+	);
 }
 
 /**
@@ -127,15 +195,29 @@ export function parseJsonLenient(jsonString: string): unknown {
  * 生の改行を文字列に入れた返答もあった。どちらも中身は正しく、封筒だけが読めない。
  * やり直しても同じ書き方を繰り返すので、送り直しでは直らない。
  *
- * 文字列の中の `"` は、直後（空白を飛ばす）がその位置で閉じたときに来るべき文字の
- * ときだけ閉じとみなす。キーなら `:`、値なら `}` / `]`、または `,` のあとに次の要素の
- * 始まりが続くとき。それ以外は文字列の中身として `\"` に書き換える。
+ * 文字列の中の `"` は、直後（空白を飛ばす）がその位置で閉じたときに来るべき並びの
+ * ときだけ閉じとみなす。キーなら `:`、値なら `}` / `]`、または `,` のあとに次の要素が
+ * 続くとき。オブジェクトの中では `,` のあとの文字列を閉じの `"` まで先読みし、その直後が
+ * `:` であること（次のキーであること）まで確かめる。値の中の `"OK", "Cancel"` を
+ * 閉じと取り違えないためである。配列の中の文字列は、次の要素も文字列のときだけ閉じる。
+ * それ以外は文字列の中身として `\"` に書き換える。
  *
  * @param text 読めなかった JSON 文字列
  * @returns 書き換えた文字列。直す箇所が無ければ入力そのもの
  */
 export function repairJsonStringLiterals(text: string): string {
+	return repairJsonStringLiteralsDetailed(text).text;
+}
+
+interface RepairResult {
+	text: string;
+	/** キーと値の区切りのような並び（`": "`）の `"` を、中身としてエスケープしたか */
+	escapedKeyLike: boolean;
+}
+
+function repairJsonStringLiteralsDetailed(text: string): RepairResult {
 	let out = "";
+	let escapedKeyLike = false;
 	// 開いている入れ子（"{" か "["）。キーの位置かどうかの判定に使う
 	const stack: string[] = [];
 	// オブジェクトの中で、次に来る文字列がキーかどうか
@@ -193,6 +275,9 @@ export function repairJsonStringLiterals(text: string): string {
 				if (closesString(text, i + 1, isKey, stack[stack.length - 1])) {
 					break;
 				}
+				if (/^\s*:\s*"/.test(text.slice(i + 1, i + 64))) {
+					escapedKeyLike = true;
+				}
 				out += '\\"';
 				i++;
 				continue;
@@ -206,7 +291,7 @@ export function repairJsonStringLiterals(text: string): string {
 		}
 		expectingKey = false;
 	}
-	return out;
+	return { text: out, escapedKeyLike };
 }
 
 /** `"` の直後（`from` 以降）が、文字列がそこで閉じたときに来るべき並びかを答える */
@@ -228,13 +313,37 @@ function closesString(text: string, from: number, isKey: boolean, container: str
 	if (c !== ",") {
 		return false;
 	}
-	// 「,」のあとに次の要素が始まるときだけ閉じとみなす。オブジェクトなら次のキー
 	const after = skipWhitespace(text, next + 1);
 	const n = text[after];
 	if (container === "{") {
-		return n === '"' || n === "}";
+		// オブジェクトの中なら、次はキー。閉じの `"` の直後が `:` であるところまで確かめる
+		if (n === "}") {
+			return true;
+		}
+		return n === '"' && isFollowedByColon(text, after + 1);
 	}
-	return n !== undefined && /["{[\]\-0-9tfn]/.test(n);
+	// 配列の中の文字列なら、次の要素も文字列
+	return n === '"';
+}
+
+/** `from` から次の閉じの `"` まで読み、その直後（空白を飛ばす）が `:` かを答える */
+function isFollowedByColon(text: string, from: number): boolean {
+	let i = from;
+	while (i < text.length) {
+		const c = text[i];
+		if (c === "\\") {
+			i += 2;
+			continue;
+		}
+		if (c === "\n") {
+			return false;
+		}
+		if (c === '"') {
+			return text[skipWhitespace(text, i + 1)] === ":";
+		}
+		i++;
+	}
+	return false;
 }
 
 function skipWhitespace(text: string, from: number): number {
@@ -323,7 +432,7 @@ export function validateTranslationResponse(
 	// Step 2: JSONパース
 	let parsed: unknown;
 	try {
-		parsed = parseJsonLenient(jsonString);
+		parsed = parseJsonLenient(jsonString, TRANSLATION_SHAPE);
 	} catch (e) {
 		return {
 			valid: false,
@@ -510,7 +619,7 @@ export function validateRevisionPatchResponse(
 	// Step 2: JSONパース
 	let parsed: unknown;
 	try {
-		parsed = parseJsonLenient(jsonString);
+		parsed = parseJsonLenient(jsonString, REVISION_PATCH_SHAPE);
 	} catch (e) {
 		return {
 			valid: false,

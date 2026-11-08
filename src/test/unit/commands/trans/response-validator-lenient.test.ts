@@ -88,6 +88,56 @@ suite("ResponseValidator: 文字列の中の書き損じを直して読む", () 
 		});
 	});
 
+	suite('値の中の `"A", "B"` を閉じと取り違えない', () => {
+		test('訳文の中の "OK", "Cancel" で切らず、訳文を最後まで読む', () => {
+			const raw = '{"translation": "Choose "OK", "Cancel" or "Retry".", "termSuggestions": []}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.strictEqual(result.parsed?.translation, 'Choose "OK", "Cancel" or "Retry".');
+			assert.deepStrictEqual(result.parsed?.termSuggestions, []);
+		});
+
+		test('訳文の中の関数呼び出し foo("a", "b") で切らず、訳文を最後まで読む', () => {
+			const raw = '{"translation": "Call foo("a", "b") first.", "termSuggestions": []}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.strictEqual(result.parsed?.translation, 'Call foo("a", "b") first.');
+		});
+
+		test('改行をはさむ "a",\\n"b" で切らず、訳文を最後まで読む', () => {
+			const raw = '{"translation": "List:\n"a",\n"b"\nend", "termSuggestions": []}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.strictEqual(result.parsed?.translation, 'List:\n"a",\n"b"\nend');
+		});
+
+		test('改訂パッチの中の "OK", "Cancel" で切らず、パッチを最後まで読む', () => {
+			const raw = '{"targetPatch": "+Choose "OK", "Cancel".", "termSuggestions": []}';
+			const result = validateRevisionPatchResponse(raw);
+			assert.strictEqual(result.valid, true, result.error?.message);
+			assert.strictEqual(result.parsed?.targetPatch, '+Choose "OK", "Cancel".');
+		});
+
+		test("カンマの抜けた答えは、次のキーを値に取り込んで読まず、読めないとして落とす", () => {
+			const raw = '{"translation": "x" "termSuggestions": "y"}';
+			const result = validateTranslationResponse(raw);
+			assert.strictEqual(result.valid, false);
+			assert.strictEqual(result.error?.code, "JSON_PARSE_ERROR");
+		});
+
+		test("修復して termSuggestions の要素に知らないキーが現れたら、読めないとして落とす", () => {
+			const text = '{"translation": "見"A"", "termSuggestions": [{"source": "s", "note": "n"}]}';
+			assert.throws(() =>
+				parseJsonLenient(text, {
+					topLevelKeys: ["translation", "termSuggestions"],
+					termSuggestionKeys: ["source", "target"],
+				}),
+			);
+			// 形を問わなければ読める（落としているのがキーの確かめであることの確認）
+			assert.doesNotThrow(() => parseJsonLenient(text));
+		});
+	});
+
 	suite("parseJsonLenient", () => {
 		test("直しても読めない答えは、最初の失敗の理由で落とす", () => {
 			const text = '{"translation": "閉じていない';
@@ -97,7 +147,10 @@ suite("ResponseValidator: 文字列の中の書き損じを直して読む", () 
 			} catch (e) {
 				strictMessage = (e as Error).message;
 			}
-			assert.throws(() => parseJsonLenient(text), (e: Error) => e.message === strictMessage);
+			assert.throws(
+				() => parseJsonLenient(text),
+				(e: Error) => e.message === strictMessage,
+			);
 		});
 
 		test("改訂パッチの答えでも、エスケープ漏れの引用符を直して読む", () => {
