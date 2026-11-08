@@ -128,5 +128,6 @@ sequenceDiagram
 | [`translator-builder.ts`](../../src/commands/trans/translator-builder.ts) | `TranslatorBuilder` - `build()`でMD用、`buildPlain()`で非MD用Translatorを構築 |
 | [`translation-context.ts`](../../src/commands/trans/translation-context.ts) | `TranslationContext` - 翻訳コンテキスト（用語集・TM参照・`fileExtension`等） |
 | [`translation-checker.ts`](../../src/commands/trans/translation-checker.ts) | `TranslationChecker.checkTranslationQuality()` - 構造整合性チェック |
+| [`source-residue.ts`](../../src/commands/trans/source-residue.ts) | `findSourceResidue()` - 原文が日本語で訳文が日本語以外のとき、コード・URL・用語集の訳語を除いた訳文に仮名が残っていないかを調べる。見つかれば `need:review` にして理由をホバーに出す（MD のユニットのみ。ADR-261108-01） |
 | [`term-extractor.ts`](../../src/commands/trans/term-extractor.ts) | `extractRelevantTerms()` - 用語集から該当用語を抽出 |
 | [`response-validator.ts`](../../src/commands/trans/response-validator.ts) | `validateTranslationResponse()`, `extractJsonFromResponse()` - AIレスポンスのJSON混入検出・除去 |

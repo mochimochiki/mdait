@@ -56,6 +56,7 @@ import { reportTransOutcome, showConfigError, showNeedSyncError, showTranslation
 import { OperationRegistry } from "../shared/operation-registry";
 import type { TermEntry } from "../term/term-entry";
 import { buildFrontmatterContext } from "./frontmatter-context";
+import { findSourceResidue, formatSourceResidueReason } from "./source-residue";
 import { type TranslationTerm, extractRelevantTerms, termsToJson } from "./term-extractor";
 import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
@@ -1096,9 +1097,27 @@ async function translateUnit(
 			// 翻訳品質チェック
 			const checker = new TranslationChecker();
 			const checkResult = checker.checkTranslationQuality(sourceContent, resolvedResult.translatedText);
+			const reviewReasons = checkResult.reasons.map((r) => r.message);
+
+			// 原文の仮名が残っていれば、AI が訳し忘れた箇所がある。日本語→中国語では漢字が共通して
+			// 見落としやすいので、確認待ちにして人に回す。頼み直しはしない（ADR-261108-01）
+			const residue = findSourceResidue(
+				sourceLang,
+				targetLang,
+				resolvedResult.translatedText,
+				relevantTerms.map((term) => term.translation),
+			);
+			if (residue.found) {
+				reviewReasons.push(formatSourceResidueReason(residue.fragments));
+				logger.warn("trans", "Untranslated source text remains in the translation", {
+					unitHash: newHash,
+					fragments: residue.fragments,
+				});
+			}
+			const needsReview = checkResult.needsReview || residue.found;
 
 			// 確認推奨箇所がある場合はneed:reviewを設定
-			if (checkResult.needsReview) {
+			if (needsReview) {
 				unit.marker.setNeed("review");
 				logger.info("trans", "Setting need:review for unit due to quality concerns", { unitHash: newHash });
 			} else {
@@ -1108,7 +1127,6 @@ async function translateUnit(
 
 			// 翻訳サマリを保存
 			const duration = (Date.now() - startTime) / 1000; // 秒単位
-			const reviewReasons = checkResult.reasons.map((r) => r.message);
 			summaryManager.saveSummary(newHash, {
 				unitHash: newHash,
 				stats: {
@@ -1130,7 +1148,7 @@ async function translateUnit(
 				tmHit: !!context.tmReferences,
 				termHit: relevantTerms.length > 0,
 				duration,
-				needsReview: checkResult.needsReview,
+				needsReview,
 			});
 		}
 
