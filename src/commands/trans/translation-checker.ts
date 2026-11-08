@@ -19,6 +19,8 @@ export interface ReviewReason {
 		| "code_block_mismatch"
 		| "blockquote_mismatch"
 		| "table_mismatch"
+		| "table_row_mismatch"
+		| "blockquote_line_mismatch"
 		| "link_mismatch"
 		| "image_mismatch"
 		| "structure_mismatch";
@@ -48,8 +50,12 @@ interface MarkdownStructure {
 	codeBlocks: number;
 	/** 引用ブロック数 */
 	blockquotes: number;
+	/** 引用ブロックの行数（入れ子は外側の引用で数える。空行を除く） */
+	blockquoteLines: number;
 	/** テーブル数 */
 	tables: number;
+	/** テーブルごとの行数（見出し行を含む。出てくる順） */
+	tableRows: number[];
 	/** リンク数 */
 	links: number;
 	/** 画像数 */
@@ -92,8 +98,12 @@ export class TranslationChecker {
 		// 引用ブロック数のチェック
 		this.checkBlockquotes(sourceStructure, translatedStructure, reasons);
 
-		// テーブル数のチェック
+		// テーブル数と、テーブルごとの行数のチェック
 		this.checkTables(sourceStructure, translatedStructure, reasons);
+		this.checkTableRows(sourceStructure, translatedStructure, reasons);
+
+		// 引用の行数のチェック
+		this.checkBlockquoteLines(sourceStructure, translatedStructure, reasons);
 
 		// リンク数のチェック
 		this.checkLinks(sourceStructure, translatedStructure, reasons);
@@ -114,15 +124,19 @@ export class TranslationChecker {
 	 */
 	private extractStructure(text: string): MarkdownStructure {
 		const tokens = this.md.parse(text, {});
+		const lines = text.split("\n");
 		const structure: MarkdownStructure = {
 			headings: new Map<number, number>(),
 			listItems: 0,
 			codeBlocks: 0,
 			blockquotes: 0,
+			blockquoteLines: 0,
 			tables: 0,
+			tableRows: [],
 			links: 0,
 			images: 0,
 		};
+		let blockquoteDepth = 0;
 
 		for (const token of tokens) {
 			switch (token.type) {
@@ -141,9 +155,21 @@ export class TranslationChecker {
 					break;
 				case "blockquote_open":
 					structure.blockquotes++;
+					// 行数は外側の引用だけで数える。内側の引用の行は外側の範囲に含まれている
+					if (blockquoteDepth === 0 && token.map) {
+						structure.blockquoteLines += countNonBlankLines(lines, token.map[0], token.map[1]);
+					}
+					blockquoteDepth++;
+					break;
+				case "blockquote_close":
+					blockquoteDepth--;
 					break;
 				case "table_open":
 					structure.tables++;
+					structure.tableRows.push(0);
+					break;
+				case "tr_open":
+					structure.tableRows[structure.tableRows.length - 1]++;
 					break;
 			}
 
@@ -251,6 +277,50 @@ export class TranslationChecker {
 	}
 
 	/**
+	 * テーブルごとの行数をチェック
+	 *
+	 * テーブルの数だけを比べると、行が重複したり抜けたりしても見逃す
+	 * （改訂の当てはめで、置き換え範囲の直後の行をモデルが書き足して行が2つになった実例がある）。
+	 * テーブルの数が食い違うときは、どの表とどの表を比べるかが決まらないので、ここでは比べない。
+	 */
+	private checkTableRows(
+		source: MarkdownStructure,
+		translated: MarkdownStructure,
+		reasons: ReviewReason[],
+	): void {
+		if (source.tables !== translated.tables) {
+			return;
+		}
+		source.tableRows.forEach((sourceRows, index) => {
+			const translatedRows = translated.tableRows[index];
+			if (sourceRows !== translatedRows) {
+				reasons.push({
+					category: "table_row_mismatch",
+					message: `${index + 1}番目のテーブルの行数が不一致: 原文${sourceRows}行 vs 訳文${translatedRows}行`,
+				});
+			}
+		});
+	}
+
+	/**
+	 * 引用の行数をチェック
+	 *
+	 * 引用ブロックの数が同じでも、引用の中の行が増えたり消えたりすることがある。
+	 */
+	private checkBlockquoteLines(
+		source: MarkdownStructure,
+		translated: MarkdownStructure,
+		reasons: ReviewReason[],
+	): void {
+		if (source.blockquoteLines !== translated.blockquoteLines) {
+			reasons.push({
+				category: "blockquote_line_mismatch",
+				message: `引用の行数が不一致: 原文${source.blockquoteLines}行 vs 訳文${translated.blockquoteLines}行`,
+			});
+		}
+	}
+
+	/**
 	 * リンク数をチェック
 	 */
 	private checkLinks(
@@ -281,4 +351,15 @@ export class TranslationChecker {
 			});
 		}
 	}
+}
+
+/** `lines` の `[start, end)` のうち、空白だけではない行を数える */
+function countNonBlankLines(lines: readonly string[], start: number, end: number): number {
+	let count = 0;
+	for (let at = start; at < end && at < lines.length; at++) {
+		if (lines[at].trim() !== "") {
+			count++;
+		}
+	}
+	return count;
 }

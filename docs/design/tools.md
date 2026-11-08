@@ -204,7 +204,7 @@ interface ValidateInput {
 
 **実装**:
 - `validate_CoreProc`（`src/commands/validate/validate-command.ts`）に委譲
-- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較
+- `structure`: 既存 `TranslationChecker` による Markdown 構造カウント比較（見出しレベル別の数・リスト項目数・コードブロック数・引用の数と行数・表の数と表ごとの行数・リンク数・画像数）
 - `terms`: `src/core/term/term-lint.ts` の機械照合（AI不使用・保守的閾値・コードブロック/インラインコード除外）
 - 検証対象は「翻訳済み」（from あり・need なし）ユニットのみ。need 残りはスキップ件数として報告
 - 違反は警告であり自動修正しない。`nextActions` で「訳文を直す／variants に追加する」の二択を提示
