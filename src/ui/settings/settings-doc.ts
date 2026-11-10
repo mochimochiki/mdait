@@ -206,6 +206,10 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		vscode.l10n.t(
 			"Frontmatter keys to translate (e.g. 'title', 'description'). All other keys are copied verbatim. An empty list disables frontmatter translation.",
 		),
+	"trans.batchChars": () =>
+		vscode.l10n.t(
+			"When translating new units, consecutive units are sent to the AI together, up to this many source characters per request. Fewer requests cost less, and the AI sees more of the document, so headings and cross-references read consistently. 0 sends one unit per request.",
+		),
 	"trans.contextSize": () =>
 		vscode.l10n.t(
 			"How many neighboring units (before and after) are sent to the AI as reading context. More context improves consistency across section boundaries but increases token usage. 0 sends the unit alone.",
@@ -255,6 +259,10 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 	// --- prompts ---
 	"prompts.trans.translate": () =>
 		vscode.l10n.t("Custom prompt file for initial unit translation."),
+	"prompts.trans.translateBatch": () =>
+		vscode.l10n.t(
+			"Custom prompt file for translating several consecutive new units in one request (see trans.batchChars).",
+		),
 	"prompts.trans.revisePatch": () =>
 		vscode.l10n.t(
 			"Custom prompt file for diff-aware revision — updating an existing translation from a source diff while preserving manual edits.",

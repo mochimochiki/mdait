@@ -93,6 +93,7 @@ sequenceDiagram
       "keys": ["title", "description"]
     },
     "contextSize": 1,
+    "batchChars": 2500,
     "retryLimit": 1
   },
   "tm": {

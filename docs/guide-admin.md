@@ -30,6 +30,7 @@
 | `sync.copyAssets` | `true` | 差分ユニット内の画像などを訳文側へコピー。`false` または拡張子の配列も可 |
 | `ai.provider` / `ai.model` | — | AI プロバイダーとモデル |
 | `trans.contextSize` | `1` | 翻訳時に前後何ユニットを文脈として渡すか |
+| `trans.batchChars` | `2500` | 新しく訳すユニットを、原文で何文字までまとめて1回で頼むか。0 で1ユニットずつ頼む |
 | `trans.retryLimit` | `1` | 翻訳失敗時のリトライ上限（1〜5） |
 | `trans.concurrency` | `3` | ディレクトリ翻訳のファイル単位並列数（1〜8） |
 | `trans.maxUnitsPerRun` | `300` | 1 回の実行で扱うユニット数の上限。`0` で無制限 |

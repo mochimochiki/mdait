@@ -14,6 +14,8 @@
 export const PromptIds = {
 	/** Markdown翻訳用プロンプト */
 	TRANS_TRANSLATE: "trans.translate",
+	/** Markdown翻訳用プロンプト（連続するユニットをまとめて1回で頼む。ADR-261109-01） */
+	TRANS_TRANSLATE_BATCH: "trans.translateBatch",
 	/** 改訂パッチ翻訳用プロンプト */
 	TRANS_REVISE_PATCH: "trans.revisePatch",
 	/** 非MDファイル翻訳用プロンプト */
@@ -215,6 +217,95 @@ IMPORTANT: The diff above shows exactly what changed in the source text.
 - Focus your translation updates on the changed portions
 - Unchanged lines should generally keep the same translation
 {{/sourceDiff}}
+{{#tmReferences}}
+## Translation Memory Reference
+
+The following are past translations of similar sentences.
+Each entry is prefixed with how closely its source matches the current text (100% means the same sentence).
+Use them as reference for consistency, but prioritize accuracy and context.
+
+{{tmReferences}}
+{{/tmReferences}}`;
+
+/**
+ * trans.translateBatch - Markdown翻訳プロンプト（まとめて頼む形）
+ *
+ * @description
+ * 同じファイルで連続する新規翻訳のユニットを、一定の分量までまとめて1回で訳させる（ADR-261109-01）。
+ * `trans.translate` との違いは3つ。
+ * - **答えは素の Markdown**。JSON の文字列に訳を詰めさせない（逐語の書き写しとエスケープの負担を除く）。
+ * - **用語候補を求めない**。実測で答えの文字数の半分を占めていた。用語の検出は `term.detect` に任せる。
+ * - 原文は `@@@ UNIT n @@@` の行でユニットに分けて渡し、同じ行で分けて返させる。
+ *
+ * @input
+ * - {{sourceLang}} / {{targetLang}}
+ * - {{surroundingText}}: まとまりの前後のユニット（オプショナル）
+ * - {{terms}}: まとまり全体に当たった用語（オプショナル）
+ * - {{tmReferences}}: まとまり全体に当たった TM の参考（オプショナル）
+ *
+ * @output
+ * 区切りの行と、その後に続くユニットの訳文の並び（素のテキスト）。
+ */
+export const DEFAULT_TRANS_TRANSLATE_BATCH = `You are a professional translator specializing in Markdown documents.
+
+Your task is to translate the given text into the target language specified in the "Translation Direction" section of the user message.
+
+CRITICAL RULE (HIGHEST PRIORITY):
+- You MUST preserve the original Markdown structure EXACTLY.
+- Breaking Markdown structure is strictly forbidden, even if the translation itself is correct.
+
+ABSOLUTE LANGUAGE CONSTRAINT (HIGHEST PRIORITY AFTER MARKDOWN PRESERVATION):
+
+- The entire output MUST be written in the target language specified in the user message, including Headings.
+
+USER MESSAGE STRUCTURE:
+The user message begins with a "Translation Direction" section (source / target languages), followed by optional reference sections (Surrounding Text, Terminology, Translation Memory Reference). These sections are instructions and reference material — do NOT translate them.
+A line containing only "=== SOURCE TEXT ===" marks the start of the text to translate. Everything after that line is the translation target.
+
+UNITS:
+The text to translate is split into units. Each unit starts with a line of the form \`@@@ UNIT n @@@\`.
+- Output every separator line unchanged and in the same order, each followed by the translation of that unit.
+- Read the units as one continuous document, so the translation flows naturally across them, but never move text from one unit into another.
+
+CODE BLOCKS:
+- Code blocks in the text to translate appear as __CODE_BLOCK_PLACEHOLDER_n__. Reproduce each marker verbatim, on its own line, in the same order.
+- Code blocks in the reference sections are collapsed to __CODE_BLOCK_OMITTED__. That is an artifact of preparing the reference, not a change in the document, and the marker must never appear in your output.
+
+Markdown Preservation Rules:
+1. DO NOT add, remove, or modify any Markdown syntax, including but not limited to:
+  - Headings: #, ##, ###, ####
+  - Lists: -, *, +, 1., 2., etc.
+  - All other Markdown syntaxes
+2. Keep line breaks, blank lines, and indentation exactly as in the original text.
+3. Only translate the human-readable text content inside the Markdown structure. This includes link text, image alt text, and table cells: translate them, too.
+4. Do NOT translate placeholders such as __CODE_BLOCK_PLACEHOLDER_n__.
+5. If a line contains both Markdown syntax and text, translate ONLY the text portion and leave all symbols untouched.
+6. If you are unsure whether something is Markdown syntax, assume it IS and do NOT modify it.
+
+Translation Instructions:
+1. Translate accurately while preserving meaning, tone, and technical correctness.
+2. Follow the provided terminology list strictly when applicable.
+
+Self-Check (MANDATORY before responding):
+- Verify that the number of lines in each unit is unchanged.
+- Verify that all Markdown symbols remain in the same positions.
+- Verify that no Markdown elements were removed or altered.
+- Verify that every \`@@@ UNIT n @@@\` line is present, in order.
+
+Response Format:
+Output ONLY the translated units, each preceded by its separator line, with Markdown structure perfectly preserved. No JSON, no code fence around the whole output, no explanations.
+<!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+{{#surroundingText}}
+Surrounding Text (for reference only, do NOT translate):
+{{surroundingText}}
+{{/surroundingText}}
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}
 {{#tmReferences}}
 ## Translation Memory Reference
 
@@ -1206,6 +1297,7 @@ Return exactly one JSON object: {"ok": true} | {"corrections": [...]} | {"needBo
  */
 export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
+	[PromptIds.TRANS_TRANSLATE_BATCH]: DEFAULT_TRANS_TRANSLATE_BATCH,
 	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
 	[PromptIds.TRANS_TRANSLATE_PLAIN]: DEFAULT_TRANS_TRANSLATE_PLAIN,
 	[PromptIds.TRANS_REVISE_PATCH_PLAIN]: DEFAULT_TRANS_REVISE_PATCH_PLAIN,

@@ -70,6 +70,7 @@ Create `.mdait/mdait.json` in your workspace root:
   },
   "trans": {
     "contextSize": 1,
+    "batchChars": 2500,
     "retryLimit": 1,
     "frontmatter": { "keys": ["title", "description"] }
   },
@@ -90,6 +91,7 @@ Create `.mdait/mdait.json` in your workspace root:
 | `ai.provider` / `ai.model` | AI provider and model selection. |
 | `sync.level` | Heading depth for unit splitting (e.g., `3` = h1–h3). |
 | `trans.contextSize` | Number of surrounding units sent as context. |
+| `trans.batchChars` | Consecutive new units are translated together, up to this many source characters per request. `0` translates one unit per request. |
 | `trans.retryLimit` | Max retries on translation failure (1–5). |
 | `tm.maxReferences` | Max TM entries referenced per translation. |
 | `terms.filename` | Glossary filename (`terms.csv` or `terms.yaml`). |

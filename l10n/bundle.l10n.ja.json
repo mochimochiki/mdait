@@ -709,5 +709,7 @@
   "Sent {0} unit(s) in {1} back to translation ({2} skipped).": "{1} の {0} 件を翻訳待ちに戻しました（{2} 件スキップ）。",
   "Sending unit(s) back to translation...": "ユニットを翻訳待ちに戻しています...",
   "Confirm Sending Back to Translation": "翻訳待ちへの戻しの確認",
-  "This will reject the current translation of {0} unit(s) flagged need:review in {1} and mark them need:translate. Their text stays until they are translated. No AI is used.{2}": "{1} で need:review の {0} 件のユニットについて、いまの訳を採用せず need:translate にします。本文は訳し直すまでそのまま残ります。AI は使用しません。{2}"
+  "This will reject the current translation of {0} unit(s) flagged need:review in {1} and mark them need:translate. Their text stays until they are translated. No AI is used.{2}": "{1} で need:review の {0} 件のユニットについて、いまの訳を採用せず need:translate にします。本文は訳し直すまでそのまま残ります。AI は使用しません。{2}",
+  "When translating new units, consecutive units are sent to the AI together, up to this many source characters per request. Fewer requests cost less, and the AI sees more of the document, so headings and cross-references read consistently. 0 sends one unit per request.": "新しいユニットを訳すとき、連続するユニットを原文でこの文字数まで1回の依頼にまとめて AI に送ります。依頼の回数が減るので費用が下がり、AI が文書の広い範囲を見られるので、見出しや相互参照の訳が揃います。0 にすると1ユニットずつ送ります。",
+  "Custom prompt file for translating several consecutive new units in one request (see trans.batchChars).": "連続する新しいユニットを1回の依頼でまとめて訳すときのカスタムプロンプトファイルです（trans.batchChars を参照）。"
 }

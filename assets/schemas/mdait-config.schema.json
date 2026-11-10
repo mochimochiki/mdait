@@ -358,6 +358,16 @@
             3
           ]
         },
+        "batchChars": {
+          "type": "integer",
+          "description": "When translating new units, consecutive units are sent to the AI together, up to this many source characters per request. Fewer requests cost less, and the AI sees more of the document, so headings and cross-references read consistently. Set to 0 to send one unit per request.",
+          "minimum": 0,
+          "default": 2500,
+          "examples": [
+            0,
+            2500
+          ]
+        },
         "retryLimit": {
           "type": "integer",
           "description": "Maximum number of retries for translation failures. Limited to 1-5; values below 1 are raised to 1, and values 6+ are capped at 5.",
@@ -501,6 +511,13 @@
           "description": "Path to custom Markdown translation prompt file",
           "examples": [
             ".mdait/prompts/translate.txt"
+          ]
+        },
+        "trans.translateBatch": {
+          "type": "string",
+          "description": "Path to custom prompt file for translating several consecutive new units in one request",
+          "examples": [
+            ".mdait/prompts/translate-batch.txt"
           ]
         },
         "trans.revisePatch": {

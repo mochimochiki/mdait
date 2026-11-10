@@ -22,6 +22,7 @@ mdaitが各コマンドでAIに送信するプロンプトの設計と、カス�
 {
   "prompts": {
     "trans.translate": ".mdait/prompts/translate.txt",
+    "trans.translateBatch": ".mdait/prompts/translate-batch.txt",
     "trans.revisePatch": ".mdait/prompts/revise-patch.txt",
     "term.detect": ".mdait/prompts/term-detect.txt",
     "term.extractFromTranslations": ".mdait/prompts/term-extract.txt",

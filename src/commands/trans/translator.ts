@@ -16,11 +16,13 @@ import {
 	type ParsedTranslationResponse,
 	type ValidationError,
 	type ValidationResult,
+	validateBatchTranslationResponse,
 	validateRevisionPatchPlainResponse,
 	validateRevisionPatchResponse,
 	validateTranslationResponse,
 } from "./response-validator";
 import type { TranslationContext } from "./translation-context";
+import { joinBatchSource, splitBatchResponse } from "./unit-batch";
 
 /** コードブロックを退避した結果 */
 export interface ProtectedCodeBlocks {
@@ -393,6 +395,32 @@ export interface Translator {
 		cancellationToken?: vscode.CancellationToken,
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<RevisionPatchResult>;
+
+	/**
+	 * 連続する新規翻訳のユニットを、まとめて1回で訳す（ADR-261109-01）。
+	 *
+	 * 実装しない翻訳サービスもある（呼び出し側は1件ずつの `translate` へ戻る）。
+	 * 答えをユニットへ分けられなければ、送り直しのあとで `UnusableAIResponseError` を投げる。
+	 *
+	 * @param texts まとめるユニットの原文（ファイルの中の順）
+	 * @param context まとまり全体の参考（前後のユニット・用語・TM）
+	 * @returns `texts` と同じ順の訳。用語候補は含まない
+	 */
+	translateBatch?(
+		texts: readonly string[],
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
+	): Promise<TranslationResult[]>;
+
+	/**
+	 * まとめて頼む経路を使えるか。`trans.translate` の指示文だけを利用者が上書きしている
+	 * ときは使わない — 上書きは1件ずつ JSON で答える形に向けて書かれており、まとめて頼むと
+	 * 利用者の指示が効かなくなる。
+	 */
+	canTranslateBatch?(): boolean;
 }
 
 /**
@@ -590,6 +618,112 @@ export class AITranslator implements Translator {
 		);
 	}
 
+	canTranslateBatch(): boolean {
+		// 非MDファイル用の構成ではまとめない（ユニットが1つしかない）
+		if (this.promptConfig.translatePromptId !== PromptIds.TRANS_TRANSLATE) {
+			return false;
+		}
+		return !this.hasCustomPrompt(PromptIds.TRANS_TRANSLATE) || this.hasCustomPrompt(PromptIds.TRANS_TRANSLATE_BATCH);
+	}
+
+	async translateBatch(
+		texts: readonly string[],
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
+	): Promise<TranslationResult[]> {
+		const markdown = isMarkdownExtension(context.fileExtension);
+		// 区切りの行を挟んでから、まとまり全体でコードブロックを退避する。目印の番号は
+		// まとまりの中で通しになるので、答えを分ける前に全体で戻せる
+		const { text: protectedText, codeBlocks, placeholders } = protectCodeBlocks(joinBatchSource(texts), { markdown });
+		const promptParts = this.getPromptParts(PromptIds.TRANS_TRANSLATE_BATCH, {
+			sourceLang,
+			targetLang,
+			surroundingText: elideCodeBlocks(context.surroundingText, { markdown }),
+			terms: context.terms,
+			tmReferences: context.tmReferences,
+		});
+		const messages: AIMessage[] = [{ role: "user", content: buildUserMessage(promptParts, protectedText) }];
+		const logger = Logger.getInstance();
+
+		let lastError: ValidationError | undefined;
+		let lastRawResponse = "";
+		let attemptsMade = 0;
+		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+			if (cancellationToken?.isCancellationRequested) {
+				throw new OperationCancelledError("Translation cancelled");
+			}
+			const suffix = attempt > 0 && lastError ? this.buildBatchRetryPromptSuffix(lastError, attempt, texts.length) : "";
+			const attemptMessages = suffix ? this.appendToLastUserMessage(messages, suffix) : messages;
+			attemptsMade++;
+			lastRawResponse = await this.aiService.sendMessage(promptParts.system, attemptMessages, cancellationToken);
+			const validation = validateBatchTranslationResponse(lastRawResponse, texts.length);
+			if (validation.valid && validation.parsed !== undefined) {
+				const restored = restoreCodeBlocks(validation.parsed, placeholders, codeBlocks);
+				// **コードブロックを1つでも落とした答えは採らない。** 1件ずつの経路は落とした数を
+				// 警告に残して採るが、まとめた答えではどのユニットの分かを決められない。
+				// 送り直し、それでも落とすなら呼び出し側が1件ずつの経路へ戻る
+				const parts = restored.missing.length === 0 ? splitBatchResponse(restored.text, texts.length) : undefined;
+				if (parts) {
+					return parts.map((part) => {
+						const sanitized = sanitizeTranslationOutput(part);
+						return {
+							translatedText: sanitized.text,
+							termSuggestions: [],
+							warnings: sanitized.warnings,
+							droppedCodeBlocks: 0,
+						};
+					});
+				}
+				lastError = {
+					code: "UNIT_SEPARATOR_MISMATCH",
+					message:
+						restored.missing.length > 0
+							? `The answer dropped ${restored.missing.length} code block placeholder(s): ${restored.missing.join(", ")}`
+							: "The answer could not be split into units after restoring code blocks",
+					retryable: true,
+				};
+			} else {
+				lastError = validation.error;
+			}
+			if (!lastError?.retryable) {
+				break;
+			}
+			if (attempt > 0) {
+				logger.warn("trans", "Translation retry (batch)", {
+					attempt: attempt + 1,
+					maxRetries: this.maxRetries + 1,
+					units: texts.length,
+					reason: lastError.message,
+					unitHash: unitContext?.unitHash,
+				});
+			}
+		}
+		logger.warn("trans", "Batch translation failed after all retry attempts", {
+			totalAttempts: attemptsMade,
+			units: texts.length,
+			lastError: lastError ? formatError(lastError) : "No error details available",
+			unitHash: unitContext?.unitHash,
+			title: unitContext?.title,
+		});
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
+	}
+
+	/** まとめて頼んだ翻訳のやり直しの補足（素のテキストで、区切りをそろえるよう念を押す） */
+	private buildBatchRetryPromptSuffix(error: ValidationError, attemptNumber: number, count: number): string {
+		return `
+
+RETRY INSTRUCTION (Attempt ${attemptNumber}):
+The previous response was invalid: ${error.message}
+
+CRITICAL REMINDER:
+- Answer in PLAIN TEXT (Markdown). Do NOT output JSON. Do NOT wrap the answer in a code block.
+- Start with the line @@@ UNIT 1 @@@ and output every separator line from @@@ UNIT 1 @@@ to @@@ UNIT ${count} @@@, in order, each followed by the translation of that unit.
+- Reproduce every __CODE_BLOCK_PLACEHOLDER_n__ marker verbatim.`;
+	}
+
 	/**
 	 * リトライ付き翻訳実行
 	 */
@@ -694,8 +828,7 @@ export class AITranslator implements Translator {
 
 			// リトライ時は補足プロンプトを user message 側に追加する
 			// （system prompt を不変に保ち、プレフィックスキャッシュを維持するため）
-			const retryPromptSuffix =
-				attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt, format) : "";
+			const retryPromptSuffix = attempt > 0 && lastError ? this.buildRetryPromptSuffix(lastError, attempt, format) : "";
 			const attemptMessages = retryPromptSuffix ? this.appendToLastUserMessage(messages, retryPromptSuffix) : messages;
 
 			attemptsMade++;

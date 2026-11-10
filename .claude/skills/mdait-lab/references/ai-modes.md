@@ -59,7 +59,7 @@ lab up --ai script --script scripts/lab/ai/scenarios/nasty.jsonl
 ## replay — 回帰を守る
 
 ```bash
-lab regress        # = npm run test:byok:e2e。録音の12往復を再生。LLM 0回
+lab regress        # = npm run test:byok:e2e。録音の往復（新規翻訳6・改訂2）を再生。LLM 0回
 ```
 
 **これが落ちたら、指示文の組み立てが変わったということ。** 意図した変更なら録り直す。
