@@ -1443,7 +1443,27 @@ async function translateFrontmatterIfNeeded(
 
 	const translatedValues: Record<string, string> = {};
 	const isRevision = marker.needsRevision();
+	// 新しく訳すときは、全部のキーを1回で頼む（ADR-261109-01）。キーごとに頼むと、
+	// 題名と説明の2往復で同じ指示文を2回送る（実測で、まとめた本文と同じくらいの費用になった）。
+	// 改訂ではキーごとに前の訳を渡すので、今のまま1件ずつ頼む
+	if (!isRevision) {
+		const batched = await translateFrontmatterValuesInOneRequest(
+			keys.filter((key) => sourceValues[key] !== undefined),
+			sourceValues,
+			allTerms,
+			translator,
+			sourceLang,
+			targetLang,
+			cancellationToken,
+		);
+		if (batched) {
+			Object.assign(translatedValues, batched);
+		}
+	}
 	for (const key of keys) {
+		if (translatedValues[key] !== undefined) {
+			continue;
+		}
 		const sourceValue = sourceValues[key];
 		if (sourceValue === undefined) {
 			continue;
@@ -1517,6 +1537,63 @@ async function translateFrontmatterIfNeeded(
 	});
 
 	return { updated: true };
+}
+
+/**
+ * frontmatter の値を、まとめて頼む経路で1回で訳す。まとめないとき・答えが使えなかったときは
+ * undefined を返し、呼び出し側はキーごとに頼む。
+ */
+export async function translateFrontmatterValuesInOneRequest(
+	keys: readonly string[],
+	sourceValues: Record<string, string>,
+	allTerms: readonly TermEntry[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	cancellationToken?: vscode.CancellationToken,
+): Promise<Record<string, string> | undefined> {
+	const config = Configuration.getInstance();
+	if (
+		keys.length < 2 ||
+		config.trans.batchChars <= 0 ||
+		!translator.translateBatch ||
+		!translator.canTranslateBatch?.()
+	) {
+		return undefined;
+	}
+	const texts = keys.map((key) => sourceValues[key]);
+	const context = buildFrontmatterContext(texts.join("\n"), allTerms, sourceLang, targetLang);
+	try {
+		const tmResult = lookupTmReferences(
+			texts.join("\n"),
+			sourceLang,
+			targetLang,
+			undefined,
+			config.getTmMaxReferences() * keys.length,
+		);
+		if (tmResult) {
+			context.tmReferences = tmResult.formatted;
+		}
+	} catch (error) {
+		logger.debug("trans", "TM reference lookup skipped for frontmatter", formatError(error));
+	}
+	try {
+		const results = await translator.translateBatch(texts, sourceLang, targetLang, context, cancellationToken);
+		// 値は1行の文字列。答えが複数行に割れていたら採らない（題名が本文のように崩れる）
+		if (results.some((result, i) => result.translatedText.includes("\n") && !texts[i].includes("\n"))) {
+			logger.warn("trans", "Batched frontmatter translation split a one-line value; translating keys one by one");
+			return undefined;
+		}
+		return Object.fromEntries(keys.map((key, i) => [key, results[i].translatedText]));
+	} catch (error) {
+		if (isUnusableAIResponse(error)) {
+			logger.warn("trans", "Unusable batched frontmatter response; translating keys one by one", {
+				reason: error.reason,
+			});
+			return undefined;
+		}
+		throw error;
+	}
 }
 
 /**
