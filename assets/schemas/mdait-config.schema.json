@@ -527,6 +527,13 @@
             ".mdait/prompts/revise-patch.txt"
           ]
         },
+        "trans.revisePatchBatch": {
+          "type": "string",
+          "description": "Path to custom prompt file for revising several units of one file in one request",
+          "examples": [
+            ".mdait/prompts/revise-patch-batch.txt"
+          ]
+        },
         "term.detect": {
           "type": "string",
           "description": "Path to custom term detection prompt file",

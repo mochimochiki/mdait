@@ -51,6 +51,7 @@ export function buildUserMessage(parts: PromptParts, sourceText: string): string
  */
 const INSTRUCTION_SCOPE_ALIASES: Partial<Record<PromptId, readonly PromptId[]>> = {
 	[PromptIds.TRANS_TRANSLATE_BATCH]: [PromptIds.TRANS_TRANSLATE],
+	[PromptIds.TRANS_REVISE_PATCH_BATCH]: [PromptIds.TRANS_REVISE_PATCH],
 };
 
 /**

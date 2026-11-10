@@ -62,7 +62,13 @@ import { TermsCacheManager } from "./terms-cache-manager";
 import { TranslationChecker } from "./translation-checker";
 import { TranslationContext } from "./translation-context";
 import { type UnitLoopResult, type UnitPersistOutcome, runUnitLoop } from "./translation-run";
-import type { TranslationResult, Translator } from "./translator";
+import type {
+	RevisionBatchItem,
+	RevisionBatchResult,
+	RevisionPatchResult,
+	TranslationResult,
+	Translator,
+} from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
 import { planBatches } from "./unit-batch";
 
@@ -493,8 +499,14 @@ async function transFile_Exclusive(
 		// 置換用に旧マーカー文字列を保持しておく（翻訳するとマーカーが変わるため）
 		const oldMarkerTexts = unitsToTranslate.map((unit) => unit.marker?.toString() ?? "");
 
-		// 連続する新規翻訳のユニットを、分量の上限までまとめて頼む（ADR-261109-01）
-		const batch = await planBatchPrefetcher(markdown, unitsToTranslate, translator, sourceLang, targetLang, token);
+		// 連続する新規翻訳のユニットを、分量の上限までまとめて頼む（ADR-261109-01）。
+		// 改訂も同じファイルの分をまとめて頼む（ADR-261110-01）
+		const prefetch: UnitPrefetch = {
+			translate: await planBatchPrefetcher(markdown, unitsToTranslate, translator, sourceLang, targetLang, token),
+			revise: options?.forceFullTranslation
+				? undefined
+				: planRevisionPrefetcher(unitsToTranslate, translator, sourceLang, targetLang, token),
+		};
 
 		// 進行制御は VS Code 非依存の runUnitLoop に委ねる（単体テストで固定できる）。
 		// ここが持つのは「外界へどう触るか」だけ
@@ -517,7 +529,7 @@ async function transFile_Exclusive(
 					targetFilePath,
 					token,
 					options,
-					batch,
+					prefetch,
 				);
 				// 訳し終えたユニットは、進行中の見え方を先に更新する（1件ずつ緑になる）。
 				// 最終的な整合は finally の refreshFileStatus が担う。
@@ -745,7 +757,7 @@ async function translateUnit(
 	targetFilePath: string,
 	cancellationToken?: vscode.CancellationToken,
 	options?: TransRunOptions,
-	batch?: BatchPrefetcher,
+	prefetch?: UnitPrefetch,
 ): Promise<TranslateUnitMetrics> {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
@@ -888,6 +900,8 @@ async function translateUnit(
 		let translationResult: TranslationResult | null = null;
 		let usedPatchMode = false;
 		let patchFailure: PatchFailureReason | undefined;
+		// 改訂で AI が「訳を変えなくてよい」と答えた（据え置いて確認待ちにする）
+		let noChangeNeeded = false;
 
 		const canPatch =
 			!options?.forceFullTranslation && unit.marker?.needsRevision() && previousTranslation && context.sourceDiff;
@@ -919,29 +933,49 @@ async function translateUnit(
 
 		if (canPatch) {
 			try {
-				const patchResult = await translator.translateRevisionPatch(
-					sourceContent,
-					sourceLang,
-					targetLang,
-					context,
-					cancellationToken,
-					{
-						unitHash: unit.marker?.hash,
-						title: unit.title,
-					},
-				);
+				// まとめて頼んだ答えがあれば使う（ADR-261110-01）。無ければ1件ずつ頼む
+				const batched = await prefetch?.revise?.resultFor(unit);
+				// まとめた答えで NO CHANGE と言われたら、パッチは無い
+				const patchResult: RevisionPatchResult | undefined =
+					batched?.noChange === true
+						? undefined
+						: (batched ??
+							(await translator.translateRevisionPatch(
+								sourceContent,
+								sourceLang,
+								targetLang,
+								context,
+								cancellationToken,
+								{
+									unitHash: unit.marker?.hash,
+									title: unit.title,
+								},
+							)));
 
 				// 形式は AI に投げた指示文が決めている。**中身から推測しない**（ADR-260903-01）。
 				// 当てる前にパッチの失敗と分かっていたら（行番号の書き戻し）、当てずにその理由を使う
-				const patched: ReturnType<typeof applyRevisionPatch> = patchResult.patchFailure
-					? { ok: false, reason: patchResult.patchFailure }
-					: applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
-				if (patched.ok) {
+				const patched: ReturnType<typeof applyRevisionPatch> = !patchResult
+					? { ok: false, reason: "no-changes" }
+					: patchResult.patchFailure
+						? { ok: false, reason: patchResult.patchFailure }
+						: applyRevisionPatch(previousTranslation, patchResult.targetPatch, patchResult.format);
+				if (!patched.ok && patched.reason === "no-changes") {
+					// **「訳を変えなくてよい」は失敗ではない**（ADR-261110-01）。意味の変わらない誤字の
+					// 修正などで、AI が今と同じ訳を返したか NO CHANGE と答えた。訳文を据え置き、
+					// 改訂は済んだものとして確認待ちにする。失敗として need:revise に残すと、
+					// 「全文で訳し直す」へ誘導され、正しい訳が上書きされうる
+					logger.info("trans", "AI found no change needed for the revision; kept as-is for review", {
+						unitHash: unit.marker?.hash,
+					});
+					translationResult = { translatedText: previousTranslation };
+					usedPatchMode = true;
+					noChangeNeeded = true;
+				} else if (patched.ok) {
 					translationResult = {
 						translatedText: patched.text,
-						termSuggestions: patchResult.termSuggestions,
-						warnings: patchResult.warnings,
-						stats: patchResult.stats,
+						termSuggestions: patchResult?.termSuggestions,
+						warnings: patchResult?.warnings,
+						stats: patchResult?.stats,
 					};
 					usedPatchMode = true;
 				} else {
@@ -950,7 +984,7 @@ async function translateUnit(
 					logger.warn("trans", "Patch apply failed, keeping current translation", {
 						unitHash: unit.marker?.hash,
 						reason: patched.reason,
-						patchContent: patchResult.targetPatch,
+						patchContent: patchResult?.targetPatch ?? "",
 						baseContentPreview: previousTranslation.slice(0, 200),
 					});
 					patchFailure = patched.reason;
@@ -994,11 +1028,11 @@ async function translateUnit(
 			return { patched: false, tmHit: !!context.tmReferences, patchFailure };
 		}
 
-		if (!translationResult && batch) {
+		if (!translationResult && prefetch?.translate) {
 			// まとめて頼んだ訳があれば、それを使う（ADR-261109-01）。まとまりの最初のユニットの
 			// 番でまとめて訳し、残りのユニットは結果を受け取るだけ。まとめた答えが使えなかった
 			// ときは undefined が返り、このユニットは下の1件ずつの経路で訳し直す
-			translationResult = (await batch.resultFor(unit)) ?? null;
+			translationResult = (await prefetch.translate.resultFor(unit)) ?? null;
 		}
 
 		if (!translationResult) {
@@ -1104,7 +1138,14 @@ async function translateUnit(
 					fragments: residue.fragments,
 				});
 			}
-			const needsReview = checkResult.needsReview || residue.found;
+			if (noChangeNeeded) {
+				reviewReasons.push(
+					vscode.l10n.t(
+						"The source changed, but the AI found that the translation needs no change. Check that the translation still matches the source.",
+					),
+				);
+			}
+			const needsReview = checkResult.needsReview || residue.found || noChangeNeeded;
 
 			// 確認推奨箇所がある場合はneed:reviewを設定
 			if (needsReview) {
@@ -1164,13 +1205,13 @@ async function translateUnit(
  * 変わるのは AI に頼む回数だけで、まとまりの最初のユニットの番で1回だけ頼み、
  * 残りのユニットは同じ答えから自分の分を受け取る。
  */
-export class BatchPrefetcher {
+export class BatchPrefetcher<T> {
 	private readonly batchIndexOf = new Map<MdaitUnit, number>();
-	private readonly pending = new Map<number, Promise<TranslationResult[] | undefined>>();
+	private readonly pending = new Map<number, Promise<readonly (T | undefined)[] | undefined>>();
 
 	constructor(
 		private readonly batches: readonly (readonly MdaitUnit[])[],
-		private readonly run: (units: readonly MdaitUnit[]) => Promise<TranslationResult[] | undefined>,
+		private readonly run: (units: readonly MdaitUnit[]) => Promise<readonly (T | undefined)[] | undefined>,
 	) {
 		batches.forEach((units, i) => {
 			for (const unit of units) {
@@ -1179,8 +1220,8 @@ export class BatchPrefetcher {
 		});
 	}
 
-	/** そのユニットの訳。まとまりに入っていないか、まとめた答えが使えなかったときは undefined */
-	async resultFor(unit: MdaitUnit): Promise<TranslationResult | undefined> {
+	/** そのユニットの答え。まとまりに入っていないか、まとめた答えが使えなかったときは undefined */
+	async resultFor(unit: MdaitUnit): Promise<T | undefined> {
 		const index = this.batchIndexOf.get(unit);
 		if (index === undefined) {
 			return undefined;
@@ -1209,7 +1250,7 @@ async function planBatchPrefetcher(
 	sourceLang: string,
 	targetLang: string,
 	token: vscode.CancellationToken,
-): Promise<BatchPrefetcher | undefined> {
+): Promise<BatchPrefetcher<TranslationResult> | undefined> {
 	const config = Configuration.getInstance();
 	const budget = config.trans.batchChars;
 	if (budget <= 0 || !translator.translateBatch || !translator.canTranslateBatch?.()) {
@@ -1327,6 +1368,135 @@ async function translateBatchOfUnits(
 			// まとめた答えが使えなかった。各ユニットを1件ずつ頼み直す（訳さずに残すより良い）
 			logger.warn("trans", "Unusable batch response, falling back to one unit per request", {
 				units: units.length,
+				reason: error.reason,
+				detail: error.detail,
+			});
+			return undefined;
+		}
+		throw error;
+	}
+}
+
+/** ファイル翻訳の1回で、まとめて頼んだ答えを各ユニットへ渡すもの */
+interface UnitPrefetch {
+	/** 新規翻訳（ADR-261109-01） */
+	translate?: BatchPrefetcher<TranslationResult>;
+	/** 改訂（ADR-261110-01） */
+	revise?: BatchPrefetcher<RevisionBatchResult>;
+}
+
+/**
+ * ファイルの中の改訂のユニットを、まとまりに分ける。まとめないときは undefined。
+ *
+ * 改訂はユニットごとに独立して当てるので、新規翻訳と違って **隣り合っていなくてもまとめる**。
+ * 分量は前の訳文の長さで数える（依頼の大半は行番号付きの前の訳文になる）。
+ */
+function planRevisionPrefetcher(
+	unitsToTranslate: readonly MdaitUnit[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	token: vscode.CancellationToken,
+): BatchPrefetcher<RevisionBatchResult> | undefined {
+	const config = Configuration.getInstance();
+	const budget = config.trans.batchChars;
+	if (budget <= 0 || !translator.translateRevisionBatch || !translator.canTranslateRevisionBatch?.()) {
+		return undefined;
+	}
+	const revisions = unitsToTranslate.filter((unit) => unit.marker?.needsRevision());
+	if (revisions.length === 0) {
+		return undefined;
+	}
+	const plan = planBatches(
+		revisions.map((unit, i) => ({ position: i, length: unit.content.length, eligible: true })),
+		budget,
+	);
+	const batches = plan.map((indexes) => indexes.map((i) => revisions[i]));
+	return new BatchPrefetcher<RevisionBatchResult>(batches, (units) =>
+		translateRevisionBatchOfUnits(units, translator, sourceLang, targetLang, token),
+	);
+}
+
+/**
+ * 改訂のまとまり1つを頼む。差分が作れないユニットはまとまりから外す（1件ずつの経路が
+ * 「差分が作れない」として据え置く）。まとめた答えが使えなければ undefined。
+ */
+async function translateRevisionBatchOfUnits(
+	units: readonly MdaitUnit[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	token: vscode.CancellationToken,
+): Promise<(RevisionBatchResult | undefined)[] | undefined> {
+	if (!translator.translateRevisionBatch) {
+		return undefined;
+	}
+	const config = Configuration.getInstance();
+	const registry = UnitRegistryManager.getInstance();
+	const items: RevisionBatchItem[] = [];
+	const slot: (number | undefined)[] = [];
+	const sources: string[] = [];
+	for (const unit of units) {
+		const previousTranslation = resolvePreviousTranslation(unit);
+		const oldhash = unit.marker?.getOldHashFromNeed();
+		const source = await resolveUnitSourceContent(unit);
+		// 台帳の読み込みはユニットごとに受け止める。1件の壊れたスナップショットで、まとまりの
+		// ほかのユニットやファイルの残りを止めない（そのユニットは1件ずつの経路が据え置く）
+		let oldContent: string | undefined;
+		try {
+			oldContent = oldhash ? ((await registry.loadUnitRegistry(oldhash)) ?? undefined) : undefined;
+		} catch (error) {
+			logger.warn("trans", "Failed to load the previous source for a revision; leaving it out of the batch", {
+				oldhash,
+				...formatError(error),
+			});
+		}
+		if (!previousTranslation || !oldContent || !hasDiff(oldContent, source)) {
+			slot.push(undefined);
+			continue;
+		}
+		let tmReferences: string | undefined;
+		try {
+			tmReferences = lookupTmReferences(source, sourceLang, targetLang, oldContent)?.formatted;
+		} catch (error) {
+			logger.debug("trans", "TM reference lookup skipped (revision batch)", formatError(error));
+		}
+		slot.push(items.length);
+		sources.push(source);
+		items.push({ source, previousTranslation, sourceDiff: createUnifiedDiff(oldContent, source), tmReferences });
+	}
+	if (items.length === 0) {
+		return undefined;
+	}
+
+	let termsJson: string | undefined;
+	try {
+		const allTerms = await TermsCacheManager.getInstance().getTerms(config.getTermsFilePath(), config.transPairs);
+		if (allTerms.length > 0) {
+			const extracted = extractRelevantTerms(sources.join("\n\n"), allTerms, sourceLang, targetLang);
+			if (extracted.length > 0) {
+				termsJson = termsToJson(extracted);
+			}
+		}
+	} catch (error) {
+		logger.warn("trans", "Failed to load terms for revision batch", formatError(error));
+	}
+
+	try {
+		const results = await translator.translateRevisionBatch(
+			items,
+			sourceLang,
+			targetLang,
+			new TranslationContext([], [], termsJson),
+			token,
+			{ unitHash: units[0].marker?.hash, title: units[0].title },
+		);
+		logger.info("trans", "Revision batch completed", { units: items.length });
+		return slot.map((i) => (i === undefined ? undefined : results[i]));
+	} catch (error) {
+		if (isUnusableAIResponse(error)) {
+			logger.warn("trans", "Unusable revision batch response, falling back to one unit per request", {
+				units: items.length,
 				reason: error.reason,
 				detail: error.detail,
 			});

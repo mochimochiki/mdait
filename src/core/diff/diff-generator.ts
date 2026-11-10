@@ -168,6 +168,17 @@ function echoesLineNumbers(op: LineOp): boolean {
 }
 
 /**
+ * 行番号方式の答えを、当てはめと同じ読み方で読めるか。読めなければその理由を返す。
+ *
+ * AI の答えを検証する段で使う（ADR-261110-01）。`END` の閉じ忘れなどをここで見つければ、
+ * 当てはめで落ちる前にもう一度聞き直せる。
+ */
+export function lineNumberPatchSyntaxError(patch: string): PatchFailureReason | undefined {
+	const parsed = parseLineOps(patch);
+	return parsed.ok ? undefined : parsed.reason;
+}
+
+/**
  * 行番号方式の答えが、渡した行番号を本文に書き戻しているか。
  *
  * 当てはめる前（AI の答えを検証する段）で使う。ここで気づけば**同じ形式のまま
