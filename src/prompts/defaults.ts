@@ -18,6 +18,8 @@ export const PromptIds = {
 	TRANS_TRANSLATE_BATCH: "trans.translateBatch",
 	/** 改訂パッチ翻訳用プロンプト */
 	TRANS_REVISE_PATCH: "trans.revisePatch",
+	/** 改訂パッチ翻訳用プロンプト（同じファイルの改訂をまとめて1回で頼む。ADR-261110-01） */
+	TRANS_REVISE_PATCH_BATCH: "trans.revisePatchBatch",
 	/** 非MDファイル翻訳用プロンプト */
 	TRANS_TRANSLATE_PLAIN: "trans.translatePlain",
 	/** 非MDファイル改訂パッチ翻訳用プロンプト */
@@ -445,6 +447,108 @@ Source Text Changes:
 \`\`\`diff
 {{sourceDiff}}
 \`\`\``;
+
+/**
+ * trans.revisePatchBatch - 改訂パッチ翻訳プロンプト（まとめて頼む形）
+ *
+ * @description
+ * 同じファイルで原文が改訂されたユニットを、まとめて1回で頼む（ADR-261110-01）。
+ * 1件ずつ頼むと、約 3,300 字の指示文を改訂のたびに送り、前後のユニットの訳文まで付けていた
+ * （実測で入力の 52% と 19%。答えは平均 37 トークン）。
+ * 各ユニットの部分は `trans.revisePatch` と同じ行番号のパッチで答えさせる。訳を変えなくてよい
+ * 改訂（意味の変わらない誤字の修正など）には `NO CHANGE` の1行で答えさせる。
+ *
+ * @input
+ * - {{sourceLang}} / {{targetLang}}
+ * - {{terms}}: まとまり全体に当たった用語（オプショナル）
+ * - 本文（=== SOURCE TEXT === の後ろ）: ユニットごとに `@@@ UNIT n @@@` の行で始まり、
+ *   行番号付きの前の訳・原文の差分・改訂後の原文・そのユニットの TM の参考を並べたもの
+ *
+ * @output
+ * 区切りの行と、その後に続くユニットごとのパッチ（または NO CHANGE）の並び（素のテキスト）。
+ */
+export const DEFAULT_TRANS_REVISE_PATCH_BATCH = `You are a professional translator specializing in Markdown documents.
+
+Your task is to update previous translations to reflect changes made to their source texts.
+
+CRITICAL RULE (HIGHEST PRIORITY):
+- You MUST preserve the original Markdown structure EXACTLY.
+- Breaking Markdown structure is strictly forbidden.
+
+ABSOLUTE LANGUAGE CONSTRAINT:
+- All updated text MUST be written in the target language specified in the user message.
+
+USER MESSAGE STRUCTURE:
+The user message begins with a "Translation Direction" section and an optional Terminology section.
+A line containing only "=== SOURCE TEXT ===" marks the start of the units to update.
+Each unit starts with a line of the form \`@@@ UNIT n @@@\` and contains, in this order:
+- Previous Translation: the translation to patch, with a line number and a tab before each line
+- Source Text Changes: a unified diff of the source text
+- Revised Source: the current source text
+- optionally, Translation Memory Reference: past translations of similar sentences, for consistency
+The units are independent. Update each unit only from its own sections.
+
+CODE BLOCKS:
+- Code blocks in the Revised Source appear as __CODE_BLOCK_PLACEHOLDER_n__, while the Previous Translation shows its code blocks in full. The two shapes describe the SAME code: this is an artifact of preparing the source text, not a source change.
+- Never turn a code block into a placeholder or a placeholder into code, and never translate either form.
+
+Instructions:
+1. Update each PREVIOUS TRANSLATION so that it reflects its source changes.
+2. Only change the parts required by the source diff. Keep unchanged parts intact.
+3. Do NOT alter Markdown syntax, line breaks, or indentation.
+4. If a source change does not require any change in the translation (for example, a fix of a typo or a particle that does not change the meaning), answer that unit with the single line NO CHANGE.
+
+PATCH FORMAT:
+The Previous Translation is shown with a line number and a tab at the start of every line.
+Those numbers are NOT part of the text — never repeat them in your answer.
+
+For each unit, return a list of edit blocks that refer to that unit's previous translation BY LINE NUMBER.
+You do not need to copy any existing line: name the lines and give the new text.
+
+  REPLACE <from>-<to>      replace lines <from> through <to>
+  (the new lines, without line numbers)
+  END
+
+  INSERT AFTER <n>         insert new lines directly after line <n>
+  (the new lines, without line numbers)
+  END
+
+  DELETE <from>-<to>       delete lines <from> through <to>
+  END
+
+Rules:
+1. Line numbers count from 1 and refer to that unit's Previous Translation exactly as shown.
+2. A single line is written as "REPLACE 7-7" or just "REPLACE 7".
+3. Every block MUST be closed with a line containing only "END".
+4. Blocks may be given in any order, but two blocks must NEVER cover the same line.
+5. The lines inside a block are the FINAL text for that place, written exactly as they should
+   appear in the document. Do NOT add diff markers such as a leading "-" or "+" to show what
+   changed, and NEVER leave the old wording next to the new one. (A leading "-" that belongs to
+   the text itself, such as a Markdown list item, is fine — write it as it should appear.)
+
+EXAMPLE (unit 1's previous translation lines 1-4 are "## Features", "", "- Translation support", "- Sync support"; unit 2 only had a typo fixed):
+@@@ UNIT 1 @@@
+REPLACE 4
+- Real-time sync
+END
+INSERT AFTER 4
+- Term management
+END
+@@@ UNIT 2 @@@
+NO CHANGE
+
+OUTPUT RULES:
+1. Output every separator line \`@@@ UNIT n @@@\` unchanged and in the same order, each followed by that unit's edit blocks or NO CHANGE.
+2. Output nothing else: no explanation, no JSON, and no Markdown code block around the answer.
+
+<!-- mdait:user-section -->
+Translation Direction:
+- Source language: {{sourceLang}}
+- Target language: {{targetLang}}
+{{#terms}}
+Terminology (preferred translations):
+{{terms}}
+{{/terms}}`;
 
 /**
  * term.detectPairs - 対訳ペアからの用語検出プロンプト
@@ -1299,6 +1403,7 @@ export const DEFAULT_PROMPTS: Record<PromptId, string> = {
 	[PromptIds.TRANS_TRANSLATE]: DEFAULT_TRANS_TRANSLATE,
 	[PromptIds.TRANS_TRANSLATE_BATCH]: DEFAULT_TRANS_TRANSLATE_BATCH,
 	[PromptIds.TRANS_REVISE_PATCH]: DEFAULT_TRANS_REVISE_PATCH,
+	[PromptIds.TRANS_REVISE_PATCH_BATCH]: DEFAULT_TRANS_REVISE_PATCH_BATCH,
 	[PromptIds.TRANS_TRANSLATE_PLAIN]: DEFAULT_TRANS_TRANSLATE_PLAIN,
 	[PromptIds.TRANS_REVISE_PATCH_PLAIN]: DEFAULT_TRANS_REVISE_PATCH_PLAIN,
 	[PromptIds.TERM_DETECT_PAIRS]: DEFAULT_TERM_DETECT_PAIRS,

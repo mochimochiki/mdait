@@ -8,6 +8,12 @@
  * ここは VS Code に依存しない。依頼の組み立てと答えの分解だけを持つ。
  */
 
+/**
+ * まとめて頼んだ改訂で、訳を変えなくてよいユニットの答え（ADR-261110-01）。
+ * 意味の変わらない誤字の修正などで、AI が「直すところが無い」と答えるための1行。
+ */
+export const NO_CHANGE_ANSWER = "NO CHANGE";
+
 /** まとまりの中で、ユニットの頭に置く区切りの行 */
 export function unitSeparator(n: number): string {
 	return `@@@ UNIT ${n} @@@`;

@@ -267,6 +267,8 @@ const SETTING_DESCRIPTIONS: Record<string, () => string> = {
 		vscode.l10n.t(
 			"Custom prompt file for diff-aware revision — updating an existing translation from a source diff while preserving manual edits.",
 		),
+	"prompts.trans.revisePatchBatch": () =>
+		vscode.l10n.t("Custom prompt file for revising several units of one file in one request (see trans.batchChars)."),
 	"prompts.term.detect": () =>
 		vscode.l10n.t("Custom prompt file for glossary term detection."),
 	"prompts.term.extractFromTranslations": () =>

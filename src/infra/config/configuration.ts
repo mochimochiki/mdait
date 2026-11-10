@@ -183,6 +183,7 @@ interface MdaitConfig {
 		"trans.translate"?: string;
 		"trans.translateBatch"?: string;
 		"trans.revisePatch"?: string;
+		"trans.revisePatchBatch"?: string;
 		"term.detect"?: string;
 		"term.extractFromTranslations"?: string;
 		"term.translateTerms"?: string;

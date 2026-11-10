@@ -8,7 +8,7 @@
 
 import { patchEchoesLineNumbers } from "../../core/diff/diff-generator";
 import type { TermSuggestion } from "./translator";
-import { splitBatchResponse } from "./unit-batch";
+import { NO_CHANGE_ANSWER, splitBatchResponse } from "./unit-batch";
 
 /**
  * バリデーション結果
@@ -746,4 +746,50 @@ export function validateBatchTranslationResponse(rawResponse: string, count: num
 		};
 	}
 	return { valid: true, parsed: body };
+}
+
+/**
+ * まとめて頼んだ改訂（素のテキスト。`trans.revisePatchBatch`）をバリデートする（ADR-261110-01）。
+ *
+ * 区切りの行でユニットに分け、各ユニットの部分が `NO CHANGE` の1行か、行番号方式のパッチとして
+ * 読めるかを確かめる。1つでも読めなければ、まとまり全体のやり直しを頼む。
+ *
+ * @returns 通ったときは、ユニットごとの答え（`NO CHANGE` か、パッチの本文）
+ */
+export function validateRevisionBatchResponse(rawResponse: string, count: number): ValidationResult<string[]> {
+	const body = stripCodeFence(rawResponse ?? "");
+	if (!body.trim()) {
+		return {
+			valid: false,
+			error: { code: "EMPTY_RESPONSE", message: "The answer was empty", retryable: true },
+		};
+	}
+	const parts = splitBatchResponse(body, count);
+	if (!parts) {
+		return {
+			valid: false,
+			error: {
+				code: "UNIT_SEPARATOR_MISMATCH",
+				message: `The answer did not contain the ${count} unit separator lines (@@@ UNIT 1 @@@ to @@@ UNIT ${count} @@@) in order, each followed by edit blocks or NO CHANGE`,
+				retryable: true,
+			},
+		};
+	}
+	for (let i = 0; i < parts.length; i++) {
+		if (parts[i].trim() === NO_CHANGE_ANSWER) {
+			continue;
+		}
+		const unit = validateRevisionPatchPlainResponse(parts[i]);
+		if (!unit.valid) {
+			return {
+				valid: false,
+				error: {
+					code: unit.error?.code ?? "INVALID_FIELD_TYPE",
+					message: `Unit ${i + 1}: ${unit.error?.message ?? "invalid edit blocks"}`,
+					retryable: unit.error?.retryable ?? true,
+				},
+			};
+		}
+	}
+	return { valid: true, parsed: parts };
 }

@@ -17,12 +17,13 @@ import {
 	type ValidationError,
 	type ValidationResult,
 	validateBatchTranslationResponse,
+	validateRevisionBatchResponse,
 	validateRevisionPatchPlainResponse,
 	validateRevisionPatchResponse,
 	validateTranslationResponse,
 } from "./response-validator";
 import type { TranslationContext } from "./translation-context";
-import { joinBatchSource, splitBatchResponse } from "./unit-batch";
+import { NO_CHANGE_ANSWER, joinBatchSource, splitBatchResponse, unitSeparator } from "./unit-batch";
 
 /** コードブロックを退避した結果 */
 export interface ProtectedCodeBlocks {
@@ -378,6 +379,26 @@ export interface RevisionPatchResult {
 }
 
 /**
+ * まとめて頼む改訂の1ユニット分の材料（ADR-261110-01）
+ */
+export interface RevisionBatchItem {
+	/** 改訂後の原文 */
+	source: string;
+	/** パッチを当てる前の訳文 */
+	previousTranslation: string;
+	/** 原文の変更差分（unified diff） */
+	sourceDiff: string;
+	/** このユニットに当たった TM の参考（整形済み） */
+	tmReferences?: string;
+}
+
+/**
+ * まとめて頼んだ改訂の1ユニット分の答え。
+ * `noChange` は「原文の変更は訳を変えなくてよい」と AI が答えたことを表す。
+ */
+export type RevisionBatchResult = { noChange: true } | (RevisionPatchResult & { noChange?: false });
+
+/**
  * 翻訳サービスのインターフェース
  */
 export interface Translator {
@@ -444,6 +465,31 @@ export interface Translator {
 	 * 利用者の指示が効かなくなる。
 	 */
 	canTranslateBatch?(): boolean;
+
+	/**
+	 * 同じファイルの改訂を、まとめて1回で頼む（ADR-261110-01）。
+	 *
+	 * 答えをユニットへ分けられなければ、送り直しのあとで `UnusableAIResponseError` を投げる
+	 * （呼び出し側は1件ずつの `translateRevisionPatch` へ戻る）。
+	 *
+	 * @param items ユニットごとの材料
+	 * @param context まとまり全体の参考（用語）
+	 * @returns `items` と同じ順の答え
+	 */
+	translateRevisionBatch?(
+		items: readonly RevisionBatchItem[],
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
+	): Promise<RevisionBatchResult[]>;
+
+	/**
+	 * まとめて改訂を頼む経路を使えるか。`trans.revisePatch` だけを利用者が上書きしているときは
+	 * 使わない（上書きが効かなくなるため）。
+	 */
+	canTranslateRevisionBatch?(): boolean;
 }
 
 /**
@@ -738,6 +784,124 @@ export class AITranslator implements Translator {
 			title: unitContext?.title,
 		});
 		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
+	}
+
+	canTranslateRevisionBatch(): boolean {
+		if (this.promptConfig.revisePatchPromptId !== PromptIds.TRANS_REVISE_PATCH) {
+			return false;
+		}
+		// 旧来の形式（=/-/+）で読む上書きがあるときは、まとめた答えの形と合わない
+		if (this.resolvePatchFormat() !== "linenum") {
+			return this.hasCustomPrompt(PromptIds.TRANS_REVISE_PATCH_BATCH);
+		}
+		return true;
+	}
+
+	async translateRevisionBatch(
+		items: readonly RevisionBatchItem[],
+		sourceLang: string,
+		targetLang: string,
+		context: TranslationContext,
+		cancellationToken?: vscode.CancellationToken,
+		unitContext?: { unitHash?: string; title?: string },
+	): Promise<RevisionBatchResult[]> {
+		const markdown = isMarkdownExtension(context.fileExtension);
+		// コードブロックは改訂後の原文の側だけ目印にする。**前の訳文は生のまま渡す**
+		// （パッチはこの文の行番号を指すので、畳むと行がずれる）。目印の番号はユニットごとに
+		// 0 から振り、答えもユニットごとに戻す
+		const protectedSources = items.map((item) => protectCodeBlocks(item.source, { markdown }));
+		const blocks = items.map((item, i) => {
+			const lines = [
+				unitSeparator(i + 1),
+				"Previous Translation (target to patch), with a line number and a tab before each line:",
+				numberLinesForPatch(item.previousTranslation),
+				"",
+				"Source Text Changes:",
+				"```diff",
+				item.sourceDiff.replace(/\n+$/, ""),
+				"```",
+				"",
+				"Revised Source:",
+				protectedSources[i].text,
+			];
+			if (item.tmReferences) {
+				lines.push("", "Translation Memory Reference (past translations of similar sentences):", item.tmReferences);
+			}
+			return lines.join("\n");
+		});
+		const promptParts = this.getPromptParts(PromptIds.TRANS_REVISE_PATCH_BATCH, {
+			sourceLang,
+			targetLang,
+			terms: context.terms,
+		});
+		const messages: AIMessage[] = [{ role: "user", content: buildUserMessage(promptParts, blocks.join("\n\n")) }];
+		const logger = Logger.getInstance();
+
+		let lastError: ValidationError | undefined;
+		let lastRawResponse = "";
+		let attemptsMade = 0;
+		for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+			if (cancellationToken?.isCancellationRequested) {
+				throw new OperationCancelledError("Translation cancelled");
+			}
+			const suffix =
+				attempt > 0 && lastError ? this.buildRevisionBatchRetryPromptSuffix(lastError, attempt, items.length) : "";
+			const attemptMessages = suffix ? this.appendToLastUserMessage(messages, suffix) : messages;
+			attemptsMade++;
+			lastRawResponse = await this.aiService.sendMessage(promptParts.system, attemptMessages, cancellationToken);
+			const validation = validateRevisionBatchResponse(lastRawResponse, items.length);
+			if (validation.valid && validation.parsed) {
+				return validation.parsed.map((part, i): RevisionBatchResult => {
+					if (part.trim() === NO_CHANGE_ANSWER) {
+						return { noChange: true };
+					}
+					const restored = restoreCodeBlocks(part, protectedSources[i].placeholders, protectedSources[i].codeBlocks);
+					const sanitized = sanitizeTranslationOutput(restored.text);
+					return {
+						targetPatch: sanitized.text,
+						format: "linenum",
+						termSuggestions: [],
+						warnings: sanitized.warnings,
+						droppedCodeBlocks: 0,
+					};
+				});
+			}
+			lastError = validation.error;
+			if (!lastError?.retryable) {
+				break;
+			}
+			if (attempt > 0) {
+				logger.warn("trans", "Translation retry (revision batch)", {
+					attempt: attempt + 1,
+					maxRetries: this.maxRetries + 1,
+					units: items.length,
+					reason: lastError.message,
+					unitHash: unitContext?.unitHash,
+				});
+			}
+		}
+		logger.warn("trans", "Revision batch failed after all retry attempts", {
+			totalAttempts: attemptsMade,
+			units: items.length,
+			lastError: lastError ? formatError(lastError) : "No error details available",
+			unitHash: unitContext?.unitHash,
+			title: unitContext?.title,
+		});
+		throw buildUnusableResponseError(lastRawResponse, lastError, attemptsMade);
+	}
+
+	/** まとめて頼んだ改訂のやり直しの補足 */
+	private buildRevisionBatchRetryPromptSuffix(error: ValidationError, attemptNumber: number, count: number): string {
+		return `
+
+RETRY INSTRUCTION (Attempt ${attemptNumber}):
+The previous response was invalid: ${error.message}
+
+CRITICAL REMINDER:
+- Answer in PLAIN TEXT. Do NOT output JSON. Do NOT wrap the answer in a code block.
+- Output every separator line from @@@ UNIT 1 @@@ to @@@ UNIT ${count} @@@, in order.
+- After each separator, write that unit's edit blocks (REPLACE / INSERT AFTER / DELETE, each closed by END), or the single line NO CHANGE.
+- Never repeat the line numbers inside an edit block.`;
 	}
 
 	/** まとめて頼んだ翻訳のやり直しの補足（素のテキストで、区切りをそろえるよう念を押す） */
