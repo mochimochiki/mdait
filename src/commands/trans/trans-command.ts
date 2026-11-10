@@ -494,7 +494,7 @@ async function transFile_Exclusive(
 		const oldMarkerTexts = unitsToTranslate.map((unit) => unit.marker?.toString() ?? "");
 
 		// 連続する新規翻訳のユニットを、分量の上限までまとめて頼む（ADR-261109-01）
-		const batch = planBatchPrefetcher(markdown, unitsToTranslate, translator, sourceLang, targetLang, token);
+		const batch = await planBatchPrefetcher(markdown, unitsToTranslate, translator, sourceLang, targetLang, token);
 
 		// 進行制御は VS Code 非依存の runUnitLoop に委ねる（単体テストで固定できる）。
 		// ここが持つのは「外界へどう触るか」だけ
@@ -1202,24 +1202,32 @@ export class BatchPrefetcher {
  * まとめて頼む経路を持たないとき、`trans.batchChars` が 0 のとき、`trans.translate` の
  * 指示文だけが上書きされているとき（`canTranslateBatch`）はまとめない。
  */
-function planBatchPrefetcher(
+async function planBatchPrefetcher(
 	markdown: Markdown,
 	unitsToTranslate: readonly MdaitUnit[],
 	translator: Translator,
 	sourceLang: string,
 	targetLang: string,
 	token: vscode.CancellationToken,
-): BatchPrefetcher | undefined {
+): Promise<BatchPrefetcher | undefined> {
 	const config = Configuration.getInstance();
 	const budget = config.trans.batchChars;
 	if (budget <= 0 || !translator.translateBatch || !translator.canTranslateBatch?.()) {
 		return undefined;
 	}
+	// 分量は **実際に送る原文** で測る。訳文側の中身は、翻訳待ちへ戻したユニットでは既訳のまま
+	// なので、それで測ると上限を大きく超えた原文を1回で送ることがある。引いた原文は送るときにも使う
+	const sources = new Map<MdaitUnit, string>();
+	for (const unit of unitsToTranslate) {
+		if (!unit.marker?.needsRevision()) {
+			sources.set(unit, await resolveUnitSourceContent(unit));
+		}
+	}
 	const plan = planBatches(
 		unitsToTranslate.map((unit) => ({
 			position: markdown.units.indexOf(unit),
-			length: unit.content.length,
-			eligible: !unit.marker?.needsRevision(),
+			length: sources.get(unit)?.length ?? 0,
+			eligible: sources.has(unit),
 		})),
 		budget,
 	);
@@ -1228,7 +1236,7 @@ function planBatchPrefetcher(
 	}
 	const batches = plan.map((indexes) => indexes.map((i) => unitsToTranslate[i]));
 	return new BatchPrefetcher(batches, (units) =>
-		translateBatchOfUnits(units, markdown, translator, sourceLang, targetLang, token),
+		translateBatchOfUnits(units, sources, markdown, translator, sourceLang, targetLang, token),
 	);
 }
 
@@ -1239,6 +1247,7 @@ function planBatchPrefetcher(
  */
 async function translateBatchOfUnits(
 	units: readonly MdaitUnit[],
+	resolvedSources: ReadonlyMap<MdaitUnit, string>,
 	markdown: Markdown,
 	translator: Translator,
 	sourceLang: string,
@@ -1251,7 +1260,7 @@ async function translateBatchOfUnits(
 	}
 	const sources: string[] = [];
 	for (const unit of units) {
-		sources.push(await resolveUnitSourceContent(unit));
+		sources.push(resolvedSources.get(unit) ?? (await resolveUnitSourceContent(unit)));
 	}
 
 	// 用語: まとまり全体に当たったもの（1件ずつの経路と同じく、訳文のユニットの中身から引く）

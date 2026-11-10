@@ -9,7 +9,7 @@ import * as path from "node:path";
 import matter from "gray-matter";
 import * as vscode from "vscode";
 import { Configuration } from "../infra/config/configuration";
-import { DEFAULT_PROMPTS, type PromptId, SOURCE_TEXT_SEPARATOR, USER_SECTION_MARKER } from "./defaults";
+import { DEFAULT_PROMPTS, type PromptId, PromptIds, SOURCE_TEXT_SEPARATOR, USER_SECTION_MARKER } from "./defaults";
 
 /**
  * プロンプト内の変数を表す型
@@ -44,6 +44,14 @@ export function buildUserMessage(parts: PromptParts, sourceText: string): string
 	const context = parts.userContext ? `${parts.userContext}\n\n` : "";
 	return `${context}${SOURCE_TEXT_SEPARATOR}\n${sourceText}`;
 }
+
+/**
+ * 追加指示（`mdait-instructions.md` の `prompts`）の対象を受け継ぐ指示文。
+ * まとめて頼む形は、元の指示文と同じ仕事を別の形で頼むものなので、元を対象にした指示も当てる。
+ */
+const INSTRUCTION_SCOPE_ALIASES: Partial<Record<PromptId, readonly PromptId[]>> = {
+	[PromptIds.TRANS_TRANSLATE_BATCH]: [PromptIds.TRANS_TRANSLATE],
+};
 
 /**
  * インストラクションファイルのフロントマター
@@ -307,8 +315,11 @@ export class PromptProvider {
 			return this.instructionCache.content;
 		}
 
-		// 指定されたプロンプトIDリストに含まれている場合のみ適用
-		if (this.instructionCache.targetPrompts.includes(promptId)) {
+		// 指定されたプロンプトIDリストに含まれている場合のみ適用。まとめて頼む形の指示文は、
+		// 元の指示文を対象にした追加指示も受け継ぐ（ADR-261109-01。受け継がないと、新しい経路へ
+		// 移っただけで利用者の用語・文体の指示が黙って外れる）
+		const targets = this.instructionCache.targetPrompts;
+		if (targets.includes(promptId) || (INSTRUCTION_SCOPE_ALIASES[promptId] ?? []).some((id) => targets.includes(id))) {
 			return this.instructionCache.content;
 		}
 

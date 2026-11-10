@@ -249,6 +249,29 @@ export function restoreCodeBlocks(text: string, placeholders: string[], codeBloc
 }
 
 /**
+ * まとめて頼むユニットのコードブロックを、ユニットごとに退避する。目印の番号はまとまりの中で通しにする
+ * （同じ番号が別のユニットに出ると、AI が取り違えやすい）。
+ */
+export function protectUnitsWithSharedNumbering(texts: readonly string[], markdown: boolean): ProtectedCodeBlocks[] {
+	let offset = 0;
+	return texts.map((text) => {
+		const own = protectCodeBlocks(text, { markdown });
+		if (offset === 0 || own.placeholders.length === 0) {
+			offset += own.placeholders.length;
+			return own;
+		}
+		const renamed = own.placeholders.map((_, k) => `__CODE_BLOCK_PLACEHOLDER_${offset + k}__`);
+		let renamedText = own.text;
+		// 番号の大きい方から置き換える（_1__ と _10__ は別の文字列だが、念のため衝突を避ける順にする）
+		for (let k = own.placeholders.length - 1; k >= 0; k--) {
+			renamedText = renamedText.split(own.placeholders[k]).join(renamed[k]);
+		}
+		offset += own.placeholders.length;
+		return { text: renamedText, codeBlocks: own.codeBlocks, placeholders: renamed };
+	});
+}
+
+/**
  * 検証に落ちた応答を「使えない答え」の例外に変える。
  *
  * **生の応答をここから外へ出さない。** 以前はこの位置に「最後の生応答をそのまま
@@ -635,9 +658,12 @@ export class AITranslator implements Translator {
 		unitContext?: { unitHash?: string; title?: string },
 	): Promise<TranslationResult[]> {
 		const markdown = isMarkdownExtension(context.fileExtension);
-		// 区切りの行を挟んでから、まとまり全体でコードブロックを退避する。目印の番号は
-		// まとまりの中で通しになるので、答えを分ける前に全体で戻せる
-		const { text: protectedText, codeBlocks, placeholders } = protectCodeBlocks(joinBatchSource(texts), { markdown });
+		// コードブロックは **ユニットごとに** 退避する。つないでから退避すると、区切りの直後の
+		// インデントのコードがコードと見なされない（段落の続きになる）。目印の番号はまとまりの
+		// 中で通しにし、答えはユニットに分けてから、そのユニットの目印だけを戻す。戻してから
+		// 分けると、コードの中にある区切りに似た行まで区切りとして数えてしまう
+		const protectedUnits = protectUnitsWithSharedNumbering(texts, markdown);
+		const protectedText = joinBatchSource(protectedUnits.map((u) => u.text));
 		const promptParts = this.getPromptParts(PromptIds.TRANS_TRANSLATE_BATCH, {
 			sourceLang,
 			targetLang,
@@ -660,15 +686,21 @@ export class AITranslator implements Translator {
 			attemptsMade++;
 			lastRawResponse = await this.aiService.sendMessage(promptParts.system, attemptMessages, cancellationToken);
 			const validation = validateBatchTranslationResponse(lastRawResponse, texts.length);
-			if (validation.valid && validation.parsed !== undefined) {
-				const restored = restoreCodeBlocks(validation.parsed, placeholders, codeBlocks);
+			const parts =
+				validation.valid && validation.parsed !== undefined
+					? splitBatchResponse(validation.parsed, texts.length)
+					: undefined;
+			if (parts) {
+				const restored = parts.map((part, i) =>
+					restoreCodeBlocks(part, protectedUnits[i].placeholders, protectedUnits[i].codeBlocks),
+				);
+				const missing = restored.flatMap((r) => r.missing);
 				// **コードブロックを1つでも落とした答えは採らない。** 1件ずつの経路は落とした数を
-				// 警告に残して採るが、まとめた答えではどのユニットの分かを決められない。
+				// 警告に残して採るが、まとめた答えを部分的に採ると、どこが欠けたかが見えにくい。
 				// 送り直し、それでも落とすなら呼び出し側が1件ずつの経路へ戻る
-				const parts = restored.missing.length === 0 ? splitBatchResponse(restored.text, texts.length) : undefined;
-				if (parts) {
-					return parts.map((part) => {
-						const sanitized = sanitizeTranslationOutput(part);
+				if (missing.length === 0) {
+					return restored.map((r) => {
+						const sanitized = sanitizeTranslationOutput(r.text);
 						return {
 							translatedText: sanitized.text,
 							termSuggestions: [],
@@ -679,10 +711,7 @@ export class AITranslator implements Translator {
 				}
 				lastError = {
 					code: "UNIT_SEPARATOR_MISMATCH",
-					message:
-						restored.missing.length > 0
-							? `The answer dropped ${restored.missing.length} code block placeholder(s): ${restored.missing.join(", ")}`
-							: "The answer could not be split into units after restoring code blocks",
+					message: `The answer dropped ${missing.length} code block placeholder(s): ${missing.join(", ")}`,
 					retryable: true,
 				};
 			} else {

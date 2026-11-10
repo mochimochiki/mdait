@@ -12,13 +12,19 @@ import { strict as assert } from "node:assert";
 import { validateBatchTranslationResponse } from "../../../../commands/trans/response-validator";
 import { BatchPrefetcher } from "../../../../commands/trans/trans-command";
 import { TranslationContext } from "../../../../commands/trans/translation-context";
-import { AITranslator, PLAIN_PROMPT_CONFIG, type TranslationResult } from "../../../../commands/trans/translator";
+import {
+	AITranslator,
+	PLAIN_PROMPT_CONFIG,
+	type TranslationResult,
+	protectUnitsWithSharedNumbering,
+} from "../../../../commands/trans/translator";
 import { joinBatchSource, planBatches, splitBatchResponse } from "../../../../commands/trans/unit-batch";
 import { MdaitMarker } from "../../../../core/markdown/mdait-marker";
 import { MdaitUnit } from "../../../../core/markdown/mdait-unit";
 import type { AIMessage, AIService } from "../../../../infra/llm/ai-service";
 import { UnusableAIResponseError } from "../../../../infra/llm/unusable-response";
 import { PromptIds } from "../../../../prompts/defaults";
+import { PromptProvider } from "../../../../prompts/prompt-provider";
 
 /** 受け取った依頼を覚え、決めた順に答えを返す AI */
 class ScriptedAI implements AIService {
@@ -150,6 +156,25 @@ suite("まとめて訳す経路（ADR-261109-01）", () => {
 			assert.ok(!results.some((r) => r.translatedText.includes("__CODE_BLOCK")));
 		});
 
+		test("コードの中に区切りに似た行があっても、分けてから戻すので答えを採れる", async () => {
+			const ai = new ScriptedAI(fakeTranslate);
+			const translator = new AITranslator(ai, "ja", promptParts);
+			const code = "```text\n@@@ UNIT 2 @@@\n```";
+			const results = await translator.translateBatch([`# A\n\n${code}`, "## B\n\nb"], "ja", "en", context());
+			assert.strictEqual(ai.calls.length, 1);
+			assert.ok(results[0].translatedText.includes(code));
+			assert.match(results[1].translatedText, /EN: ## B/);
+		});
+
+		test("ユニットの頭にあるインデントのコードも、コードとして退避して送る", async () => {
+			const ai = new ScriptedAI(fakeTranslate);
+			const translator = new AITranslator(ai, "ja", promptParts);
+			const indented = '    print("警告")';
+			const results = await translator.translateBatch(["# A\n\na", `${indented}\n\nb`], "ja", "en", context());
+			assert.ok(!ai.calls[0].user.includes("print("), "インデントのコードを送っている");
+			assert.ok(results[1].translatedText.includes(indented));
+		});
+
 		test("区切りがそろっていない答えは送り直し、2回目で分けられれば採る", async () => {
 			const ai = new ScriptedAI((user, call) => (call === 1 ? "EN: all mixed together" : fakeTranslate(user)));
 			const translator = new AITranslator(ai, "ja", promptParts, undefined, 2);
@@ -177,6 +202,32 @@ suite("まとめて訳す経路（ADR-261109-01）", () => {
 				(error: unknown) => error instanceof UnusableAIResponseError,
 			);
 			assert.strictEqual(ai.calls.length, 2);
+		});
+	});
+
+	suite("protectUnitsWithSharedNumbering", () => {
+		test("ユニットごとに退避し、目印の番号はまとまりの中で通しにする", () => {
+			const units = protectUnitsWithSharedNumbering(["```\na\n```", "x", "```\nb\n```\n\n```\nc\n```"], true);
+			assert.deepStrictEqual(
+				units.map((u) => u.placeholders),
+				[["__CODE_BLOCK_PLACEHOLDER_0__"], [], ["__CODE_BLOCK_PLACEHOLDER_1__", "__CODE_BLOCK_PLACEHOLDER_2__"]],
+			);
+			assert.ok(units[2].text.includes("__CODE_BLOCK_PLACEHOLDER_2__"));
+			assert.ok(!units[2].text.includes("__CODE_BLOCK_PLACEHOLDER_0__"));
+		});
+	});
+
+	suite("追加指示（mdait-instructions.md）の対象", () => {
+		teardown(() => PromptProvider.dispose());
+		test("trans.translate を対象にした追加指示は、まとめて頼む指示文にも当てる", () => {
+			PromptProvider.dispose();
+			const provider = PromptProvider.getInstance();
+			(provider as unknown as { instructionCache: unknown }).instructionCache = {
+				content: "USE-BRITISH-SPELLING",
+				targetPrompts: [PromptIds.TRANS_TRANSLATE],
+			};
+			assert.ok(provider.getPromptParts(PromptIds.TRANS_TRANSLATE_BATCH).system.includes("USE-BRITISH-SPELLING"));
+			assert.ok(!provider.getPromptParts(PromptIds.TERM_DETECT_PAIRS).system.includes("USE-BRITISH-SPELLING"));
 		});
 	});
 
