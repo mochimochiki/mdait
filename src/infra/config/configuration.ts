@@ -53,6 +53,11 @@ export interface TransConfig {
 	};
 	/** 翻訳時に参照する前後のユニット数（コンテキストウィンドウサイズ） */
 	contextSize: number;
+	/**
+	 * 新規翻訳で、連続するユニットをまとめて1回で頼むときの原文の文字数の上限（ADR-261109-01）。
+	 * 0 でまとめない（1ユニットずつ頼む）。
+	 */
+	batchChars: number;
 	/** 翻訳失敗時のリトライ上限 */
 	retryLimit: number;
 	/** 非MDファイルの最大サイズ（バイト）。超過時はスキップ */
@@ -158,6 +163,7 @@ interface MdaitConfig {
 			keys?: string[];
 		};
 		contextSize?: number;
+		batchChars?: number;
 		retryLimit?: number;
 		maxFileSize?: number;
 		concurrency?: number;
@@ -175,6 +181,7 @@ interface MdaitConfig {
 	};
 	prompts?: {
 		"trans.translate"?: string;
+		"trans.translateBatch"?: string;
 		"trans.revisePatch"?: string;
 		"term.detect"?: string;
 		"term.extractFromTranslations"?: string;
@@ -282,6 +289,7 @@ export class Configuration {
 			keys: ["title", "description"],
 		},
 		contextSize: 1,
+		batchChars: 2500,
 		retryLimit: 1,
 		maxFileSize: 51200,
 		concurrency: 3,
@@ -548,6 +556,7 @@ export class Configuration {
 				keys: ["title", "description"],
 			},
 			contextSize: 1,
+			batchChars: 2500,
 			retryLimit: 1,
 			maxFileSize: 51200,
 			concurrency: 3,
@@ -724,6 +733,9 @@ export class Configuration {
 			}
 			if (config.trans?.contextSize !== undefined) {
 				this.trans.contextSize = config.trans.contextSize;
+			}
+			if (typeof config.trans?.batchChars === "number" && Number.isFinite(config.trans.batchChars)) {
+				this.trans.batchChars = Math.max(0, Math.floor(config.trans.batchChars));
 			}
 			if (config.trans?.retryLimit !== undefined) {
 				const normalizedRetryLimit = Math.min(5, Math.max(1, config.trans.retryLimit));

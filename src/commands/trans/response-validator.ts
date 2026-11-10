@@ -8,6 +8,7 @@
 
 import { patchEchoesLineNumbers } from "../../core/diff/diff-generator";
 import type { TermSuggestion } from "./translator";
+import { splitBatchResponse } from "./unit-batch";
 
 /**
  * バリデーション結果
@@ -43,7 +44,8 @@ export type ValidationErrorCode =
 	| "JSON_IN_CONTENT" // コンテンツ内にJSON混入
 	| "NESTED_JSON" // ネストされたJSON構造
 	| "EMPTY_RESPONSE" // answer が空（素のテキストで受けるときに使う）
-	| "LINE_NUMBER_ECHO"; // 行番号方式で、渡した行番号を本文へ書き戻した（専用の案内へつなぐため分ける）
+	| "LINE_NUMBER_ECHO" // 行番号方式で、渡した行番号を本文へ書き戻した（専用の案内へつなぐため分ける）
+	| "UNIT_SEPARATOR_MISMATCH"; // まとめて頼んだ翻訳で、ユニットの区切りの行がそろっていない
 
 /**
  * 翻訳レスポンスの内部表現
@@ -703,4 +705,45 @@ export function validateRevisionPatchResponse(
 			warnings: Array.isArray(parsed.warnings) ? parsed.warnings : undefined,
 		},
 	};
+}
+
+/**
+ * まとめて頼んだ翻訳（素のテキスト。`trans.translateBatch`）をバリデートする（ADR-261109-01）。
+ *
+ * 答えをユニットへ分けられるかをここで確かめる。分けられない答えを受け取ってから気づくと、
+ * やり直しを頼む機会が無い。通ったときは、包んでいたコードフェンスを剥がした本文を返す。
+ *
+ * @param rawResponse AI の生の答え
+ * @param count まとめたユニットの数
+ */
+export function validateBatchTranslationResponse(rawResponse: string, count: number): ValidationResult<string> {
+	const body = stripCodeFence(rawResponse ?? "");
+	if (!body.trim()) {
+		return {
+			valid: false,
+			error: { code: "EMPTY_RESPONSE", message: "The answer was empty", retryable: true },
+		};
+	}
+	// JSON で返してきたら指示に従っていない（素のテキストを求めている）
+	if (/^\s*\{\s*"\w+"\s*:/.test(body)) {
+		return {
+			valid: false,
+			error: {
+				code: "JSON_IN_CONTENT",
+				message: "The answer was JSON, but plain Markdown was requested",
+				retryable: true,
+			},
+		};
+	}
+	if (!splitBatchResponse(body, count)) {
+		return {
+			valid: false,
+			error: {
+				code: "UNIT_SEPARATOR_MISMATCH",
+				message: `The answer did not contain the ${count} unit separator lines (@@@ UNIT 1 @@@ to @@@ UNIT ${count} @@@) in order, each followed by a non-empty translation`,
+				retryable: true,
+			},
+		};
+	}
+	return { valid: true, parsed: body };
 }

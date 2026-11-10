@@ -64,6 +64,7 @@ import { TranslationContext } from "./translation-context";
 import { type UnitLoopResult, type UnitPersistOutcome, runUnitLoop } from "./translation-run";
 import type { TranslationResult, Translator } from "./translator";
 import { TranslatorBuilder } from "./translator-builder";
+import { planBatches } from "./unit-batch";
 
 const logger = Logger.getInstance();
 
@@ -492,6 +493,9 @@ async function transFile_Exclusive(
 		// 置換用に旧マーカー文字列を保持しておく（翻訳するとマーカーが変わるため）
 		const oldMarkerTexts = unitsToTranslate.map((unit) => unit.marker?.toString() ?? "");
 
+		// 連続する新規翻訳のユニットを、分量の上限までまとめて頼む（ADR-261109-01）
+		const batch = await planBatchPrefetcher(markdown, unitsToTranslate, translator, sourceLang, targetLang, token);
+
 		// 進行制御は VS Code 非依存の runUnitLoop に委ねる（単体テストで固定できる）。
 		// ここが持つのは「外界へどう触るか」だけ
 		loop = await runUnitLoop(unitsToTranslate, {
@@ -505,7 +509,16 @@ async function transFile_Exclusive(
 			beginUnit: (unit) => trackUnit(targetFilePath, unit.marker?.hash),
 			translateUnit: async (unit) => {
 				const oldHash = unit.marker?.hash;
-				const metrics = await translateUnit(unit, translator, sourceLang, targetLang, targetFilePath, token, options);
+				const metrics = await translateUnit(
+					unit,
+					translator,
+					sourceLang,
+					targetLang,
+					targetFilePath,
+					token,
+					options,
+					batch,
+				);
 				// 訳し終えたユニットは、進行中の見え方を先に更新する（1件ずつ緑になる）。
 				// 最終的な整合は finally の refreshFileStatus が担う。
 				// 失敗の印付けはここでは行わない — refresh がディスク由来の状態で
@@ -732,6 +745,7 @@ async function translateUnit(
 	targetFilePath: string,
 	cancellationToken?: vscode.CancellationToken,
 	options?: TransRunOptions,
+	batch?: BatchPrefetcher,
 ): Promise<TranslateUnitMetrics> {
 	const statusManager = StatusManager.getInstance();
 	const summaryManager = SummaryManager.getInstance();
@@ -826,41 +840,7 @@ async function translateUnit(
 
 		const context = new TranslationContext(previousTexts, nextTexts, termsJson, previousTranslation);
 
-		let sourceContent = unit.content;
-
-		// from属性がある場合は、StatusManagerベースで翻訳元ユニットのコンテンツを取得
-		if (unit.marker?.from) {
-			const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-			if (workspaceRoot) {
-				const tree = statusManager.getStatusItemTree();
-				const sourceUnit = tree.getUnitByHash(unit.marker.from);
-				if (sourceUnit) {
-					try {
-						if (sourceUnit.filePath) {
-							const sourceUri = vscode.Uri.file(sourceUnit.filePath);
-							const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
-							const sourceFileContent = sourceDoc.getText();
-							const sourceIo = resolveMarkerIO(config, sourceUnit.filePath, "source");
-							const sourceMarkdown = markdownParser.parse(sourceFileContent, config, sourceIo.provider, sourceIo.ctx);
-							// unitHashでユニットを特定
-							const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
-							if (sourceUnitData) {
-								sourceContent = sourceUnitData.content;
-							}
-						}
-					} catch (error) {
-						logger.warn("trans", "Failed to read source unit", {
-							filePath: sourceUnit.filePath,
-							...formatError(error),
-						});
-					}
-				} else {
-					logger.warn("trans", "Source unit not found", {
-						hash: unit.marker.from,
-					});
-				}
-			}
-		}
+		const sourceContent = await resolveUnitSourceContent(unit);
 
 		// revise@{oldhash}形式の場合、スナップショットからdiffを生成（ソースコンテンツ取得後）
 		let oldSourceContent: string | undefined;
@@ -1012,6 +992,13 @@ async function translateUnit(
 				reason: patchFailure,
 			});
 			return { patched: false, tmHit: !!context.tmReferences, patchFailure };
+		}
+
+		if (!translationResult && batch) {
+			// まとめて頼んだ訳があれば、それを使う（ADR-261109-01）。まとまりの最初のユニットの
+			// 番でまとめて訳し、残りのユニットは結果を受け取るだけ。まとめた答えが使えなかった
+			// ときは undefined が返り、このユニットは下の1件ずつの経路で訳し直す
+			translationResult = (await batch.resultFor(unit)) ?? null;
 		}
 
 		if (!translationResult) {
@@ -1171,6 +1158,231 @@ async function translateUnit(
 }
 
 /**
+ * まとめて頼んだ訳を、ユニットごとに受け渡す（ADR-261109-01）。
+ *
+ * ユニットの進め方（`runUnitLoop`）・後始末・品質の検査は1件ずつの経路のまま使う。
+ * 変わるのは AI に頼む回数だけで、まとまりの最初のユニットの番で1回だけ頼み、
+ * 残りのユニットは同じ答えから自分の分を受け取る。
+ */
+export class BatchPrefetcher {
+	private readonly batchIndexOf = new Map<MdaitUnit, number>();
+	private readonly pending = new Map<number, Promise<TranslationResult[] | undefined>>();
+
+	constructor(
+		private readonly batches: readonly (readonly MdaitUnit[])[],
+		private readonly run: (units: readonly MdaitUnit[]) => Promise<TranslationResult[] | undefined>,
+	) {
+		batches.forEach((units, i) => {
+			for (const unit of units) {
+				this.batchIndexOf.set(unit, i);
+			}
+		});
+	}
+
+	/** そのユニットの訳。まとまりに入っていないか、まとめた答えが使えなかったときは undefined */
+	async resultFor(unit: MdaitUnit): Promise<TranslationResult | undefined> {
+		const index = this.batchIndexOf.get(unit);
+		if (index === undefined) {
+			return undefined;
+		}
+		let promise = this.pending.get(index);
+		if (!promise) {
+			promise = this.run(this.batches[index]);
+			this.pending.set(index, promise);
+		}
+		const results = await promise;
+		return results?.[this.batches[index].indexOf(unit)];
+	}
+}
+
+/**
+ * ファイルの中の新規翻訳のユニットを、まとまりに分ける。まとめないときは undefined。
+ *
+ * まとめるのは **新しく訳すユニットだけ**（改訂はパッチで1件ずつ頼む）。翻訳サービスが
+ * まとめて頼む経路を持たないとき、`trans.batchChars` が 0 のとき、`trans.translate` の
+ * 指示文だけが上書きされているとき（`canTranslateBatch`）はまとめない。
+ */
+async function planBatchPrefetcher(
+	markdown: Markdown,
+	unitsToTranslate: readonly MdaitUnit[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	token: vscode.CancellationToken,
+): Promise<BatchPrefetcher | undefined> {
+	const config = Configuration.getInstance();
+	const budget = config.trans.batchChars;
+	if (budget <= 0 || !translator.translateBatch || !translator.canTranslateBatch?.()) {
+		return undefined;
+	}
+	// 分量は **実際に送る原文** で測る。訳文側の中身は、翻訳待ちへ戻したユニットでは既訳のまま
+	// なので、それで測ると上限を大きく超えた原文を1回で送ることがある。引いた原文は送るときにも使う
+	const sources = new Map<MdaitUnit, string>();
+	for (const unit of unitsToTranslate) {
+		if (!unit.marker?.needsRevision()) {
+			sources.set(unit, await resolveUnitSourceContent(unit));
+		}
+	}
+	const plan = planBatches(
+		unitsToTranslate.map((unit) => ({
+			position: markdown.units.indexOf(unit),
+			length: sources.get(unit)?.length ?? 0,
+			eligible: sources.has(unit),
+		})),
+		budget,
+	);
+	if (plan.length === 0) {
+		return undefined;
+	}
+	const batches = plan.map((indexes) => indexes.map((i) => unitsToTranslate[i]));
+	return new BatchPrefetcher(batches, (units) =>
+		translateBatchOfUnits(units, sources, markdown, translator, sourceLang, targetLang, token),
+	);
+}
+
+/**
+ * まとまり1つを訳す。まとめた答えが使えなければ undefined を返し、各ユニットは1件ずつの経路へ戻る。
+ *
+ * 参考（前後のユニット・用語・TM）は、まとまり全体に対して1回だけ組み立てる。
+ */
+async function translateBatchOfUnits(
+	units: readonly MdaitUnit[],
+	resolvedSources: ReadonlyMap<MdaitUnit, string>,
+	markdown: Markdown,
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	token: vscode.CancellationToken,
+): Promise<TranslationResult[] | undefined> {
+	const config = Configuration.getInstance();
+	if (!translator.translateBatch) {
+		return undefined;
+	}
+	const sources: string[] = [];
+	for (const unit of units) {
+		sources.push(resolvedSources.get(unit) ?? (await resolveUnitSourceContent(unit)));
+	}
+
+	// 用語: まとまり全体に当たったもの（1件ずつの経路と同じく、訳文のユニットの中身から引く）
+	let termsJson: string | undefined;
+	try {
+		const allTerms = await TermsCacheManager.getInstance().getTerms(config.getTermsFilePath(), config.transPairs);
+		if (allTerms.length > 0) {
+			const extracted = extractRelevantTerms(
+				units.map((u) => u.content).join("\n\n"),
+				allTerms,
+				sourceLang,
+				targetLang,
+			);
+			if (extracted.length > 0) {
+				termsJson = termsToJson(extracted);
+			}
+		}
+	} catch (error) {
+		logger.warn("trans", "Failed to load terms for batch translation", formatError(error));
+	}
+
+	// 前後のユニット: まとまりの前と後ろ（`trans.contextSize` 件ずつ）。前のユニットは
+	// この実行で訳し終えていれば訳文になっている（同じユニットのオブジェクトを書き換えるため）
+	const contextSize = config.trans.contextSize || 1;
+	const first = markdown.units.indexOf(units[0]);
+	const last = markdown.units.indexOf(units[units.length - 1]);
+	const previousTexts: string[] = [];
+	const nextTexts: string[] = [];
+	for (let i = 1; i <= contextSize; i++) {
+		if (first - i >= 0) {
+			previousTexts.unshift(markdown.units[first - i].content);
+		}
+		if (last >= 0 && last + i < markdown.units.length) {
+			nextTexts.push(markdown.units[last + i].content);
+		}
+	}
+	const context = new TranslationContext(previousTexts, nextTexts, termsJson);
+
+	// TM: まとまり全体の原文で引く。上限はユニット数ぶん広げる（1件ずつなら各ユニットに付いていた分）
+	try {
+		const tm = lookupTmReferences(
+			sources.join("\n\n"),
+			sourceLang,
+			targetLang,
+			undefined,
+			config.getTmMaxReferences() * units.length,
+		);
+		if (tm) {
+			context.tmReferences = tm.formatted;
+		}
+	} catch (error) {
+		logger.debug("trans", "TM reference lookup skipped (batch)", formatError(error));
+	}
+
+	try {
+		const results = await translator.translateBatch(sources, sourceLang, targetLang, context, token, {
+			unitHash: units[0].marker?.hash,
+			title: units[0].title,
+		});
+		logger.info("trans", "Batch translation completed", { units: units.length, chars: sources.join("").length });
+		return results;
+	} catch (error) {
+		if (isUnusableAIResponse(error)) {
+			// まとめた答えが使えなかった。各ユニットを1件ずつ頼み直す（訳さずに残すより良い）
+			logger.warn("trans", "Unusable batch response, falling back to one unit per request", {
+				units: units.length,
+				reason: error.reason,
+				detail: error.detail,
+			});
+			return undefined;
+		}
+		throw error;
+	}
+}
+
+/**
+ * 訳文のユニットが訳すべき原文の本文を引く。
+ *
+ * `from` があれば、原文のファイルから該当するユニットの本文を読む。読めなければ、
+ * 訳文のユニットの中身（初回同期で原文を丸写ししたもの）を使う。
+ */
+async function resolveUnitSourceContent(unit: MdaitUnit): Promise<string> {
+	let sourceContent = unit.content;
+	if (!unit.marker?.from) {
+		return sourceContent;
+	}
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!workspaceRoot) {
+		return sourceContent;
+	}
+	const config = Configuration.getInstance();
+	const tree = StatusManager.getInstance().getStatusItemTree();
+	const sourceUnit = tree.getUnitByHash(unit.marker.from);
+	if (!sourceUnit) {
+		logger.warn("trans", "Source unit not found", {
+			hash: unit.marker.from,
+		});
+		return sourceContent;
+	}
+	try {
+		if (sourceUnit.filePath) {
+			const sourceUri = vscode.Uri.file(sourceUnit.filePath);
+			const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
+			const sourceFileContent = sourceDoc.getText();
+			const sourceIo = resolveMarkerIO(config, sourceUnit.filePath, "source");
+			const sourceMarkdown = markdownParser.parse(sourceFileContent, config, sourceIo.provider, sourceIo.ctx);
+			// unitHashでユニットを特定
+			const sourceUnitData = sourceMarkdown.units.find((u) => u.marker?.hash === sourceUnit.unitHash);
+			if (sourceUnitData) {
+				sourceContent = sourceUnitData.content;
+			}
+		}
+	} catch (error) {
+		logger.warn("trans", "Failed to read source unit", {
+			filePath: sourceUnit.filePath,
+			...formatError(error),
+		});
+	}
+	return sourceContent;
+}
+
+/**
  * frontmatter 翻訳の終わり方。
  *
  * 本文のユニットと同じで、「AI の答えが使えなかった」は**訳さなかった**として返す。
@@ -1240,7 +1452,27 @@ async function translateFrontmatterIfNeeded(
 
 	const translatedValues: Record<string, string> = {};
 	const isRevision = marker.needsRevision();
+	// 新しく訳すときは、全部のキーを1回で頼む（ADR-261109-01）。キーごとに頼むと、
+	// 題名と説明の2往復で同じ指示文を2回送る（実測で、まとめた本文と同じくらいの費用になった）。
+	// 改訂ではキーごとに前の訳を渡すので、今のまま1件ずつ頼む
+	if (!isRevision) {
+		const batched = await translateFrontmatterValuesInOneRequest(
+			keys.filter((key) => sourceValues[key] !== undefined),
+			sourceValues,
+			allTerms,
+			translator,
+			sourceLang,
+			targetLang,
+			cancellationToken,
+		);
+		if (batched) {
+			Object.assign(translatedValues, batched);
+		}
+	}
 	for (const key of keys) {
+		if (translatedValues[key] !== undefined) {
+			continue;
+		}
 		const sourceValue = sourceValues[key];
 		if (sourceValue === undefined) {
 			continue;
@@ -1314,6 +1546,63 @@ async function translateFrontmatterIfNeeded(
 	});
 
 	return { updated: true };
+}
+
+/**
+ * frontmatter の値を、まとめて頼む経路で1回で訳す。まとめないとき・答えが使えなかったときは
+ * undefined を返し、呼び出し側はキーごとに頼む。
+ */
+export async function translateFrontmatterValuesInOneRequest(
+	keys: readonly string[],
+	sourceValues: Record<string, string>,
+	allTerms: readonly TermEntry[],
+	translator: Translator,
+	sourceLang: string,
+	targetLang: string,
+	cancellationToken?: vscode.CancellationToken,
+): Promise<Record<string, string> | undefined> {
+	const config = Configuration.getInstance();
+	if (
+		keys.length < 2 ||
+		config.trans.batchChars <= 0 ||
+		!translator.translateBatch ||
+		!translator.canTranslateBatch?.()
+	) {
+		return undefined;
+	}
+	const texts = keys.map((key) => sourceValues[key]);
+	const context = buildFrontmatterContext(texts.join("\n"), allTerms, sourceLang, targetLang);
+	try {
+		const tmResult = lookupTmReferences(
+			texts.join("\n"),
+			sourceLang,
+			targetLang,
+			undefined,
+			config.getTmMaxReferences() * keys.length,
+		);
+		if (tmResult) {
+			context.tmReferences = tmResult.formatted;
+		}
+	} catch (error) {
+		logger.debug("trans", "TM reference lookup skipped for frontmatter", formatError(error));
+	}
+	try {
+		const results = await translator.translateBatch(texts, sourceLang, targetLang, context, cancellationToken);
+		// 値は1行の文字列。答えが複数行に割れていたら採らない（題名が本文のように崩れる）
+		if (results.some((result, i) => result.translatedText.includes("\n") && !texts[i].includes("\n"))) {
+			logger.warn("trans", "Batched frontmatter translation split a one-line value; translating keys one by one");
+			return undefined;
+		}
+		return Object.fromEntries(keys.map((key, i) => [key, results[i].translatedText]));
+	} catch (error) {
+		if (isUnusableAIResponse(error)) {
+			logger.warn("trans", "Unusable batched frontmatter response; translating keys one by one", {
+				reason: error.reason,
+			});
+			return undefined;
+		}
+		throw error;
+	}
 }
 
 /**
@@ -1856,6 +2145,8 @@ export function lookupTmReferences(
 	sourceLang: string,
 	targetLang: string,
 	oldSourceContent?: string,
+	/** 参考の件数の上限。省略時は `tm.maxReferences`（まとめて頼むときはユニット数ぶん広げる） */
+	maxReferences?: number,
 ): { formatted: string; matches: TmReferenceInfo[] } | undefined {
 	const config = Configuration.getInstance();
 	if (!config.getTmEnabled()) {
@@ -1880,7 +2171,7 @@ export function lookupTmReferences(
 		store,
 		{
 			minQueryLength: config.getTmMinQueryLength(),
-			maxReferences: config.getTmMaxReferences(),
+			maxReferences: maxReferences ?? config.getTmMaxReferences(),
 			sourceLang,
 			targetLang,
 			trigramCache: store.getTrigramCache(),
