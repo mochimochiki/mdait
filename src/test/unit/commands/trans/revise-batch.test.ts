@@ -71,6 +71,13 @@ suite("改訂をまとめて頼む経路（ADR-261110-01）", () => {
 			assert.strictEqual(result.error?.code, "LINE_NUMBER_ECHO");
 		});
 
+		test("END で閉じていないブロックがあれば、当てはめる前にやり直しを頼む", () => {
+			const result = validateRevisionBatchResponse("@@@ UNIT 1 @@@\nREPLACE 3\nUpdated text\n@@@ UNIT 2 @@@\nNO CHANGE", 2);
+			assert.strictEqual(result.valid, false);
+			assert.match(result.error?.message ?? "", /^Unit 1: .*unterminated-block/);
+			assert.strictEqual(result.error?.retryable, true);
+		});
+
 		test("区切りがそろっていなければ、やり直しを頼める失敗にする", () => {
 			const result = validateRevisionBatchResponse("REPLACE 3\nx\nEND", 2);
 			assert.strictEqual(result.error?.code, "UNIT_SEPARATOR_MISMATCH");

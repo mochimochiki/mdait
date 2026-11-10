@@ -6,7 +6,7 @@
  * 不正なレスポンスを検出してリトライ判断の基礎情報を提供する。
  */
 
-import { patchEchoesLineNumbers } from "../../core/diff/diff-generator";
+import { lineNumberPatchSyntaxError, patchEchoesLineNumbers } from "../../core/diff/diff-generator";
 import type { TermSuggestion } from "./translator";
 import { NO_CHANGE_ANSWER, splitBatchResponse } from "./unit-batch";
 
@@ -787,6 +787,19 @@ export function validateRevisionBatchResponse(rawResponse: string, count: number
 					code: unit.error?.code ?? "INVALID_FIELD_TYPE",
 					message: `Unit ${i + 1}: ${unit.error?.message ?? "invalid edit blocks"}`,
 					retryable: unit.error?.retryable ?? true,
+				},
+			};
+		}
+		// 当てはめと同じ読み方で読めるかも確かめる。`END` の閉じ忘れを通すと、送り直しも
+		// 1件ずつへの戻りも起きず、当てはめで落ちて need:revise が残る
+		const syntaxError = lineNumberPatchSyntaxError(parts[i]);
+		if (syntaxError) {
+			return {
+				valid: false,
+				error: {
+					code: "INVALID_FIELD_TYPE",
+					message: `Unit ${i + 1}: the edit blocks could not be read (${syntaxError}). Close every block with a line containing only END`,
+					retryable: true,
 				},
 			};
 		}

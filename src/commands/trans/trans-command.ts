@@ -1440,7 +1440,17 @@ async function translateRevisionBatchOfUnits(
 		const previousTranslation = resolvePreviousTranslation(unit);
 		const oldhash = unit.marker?.getOldHashFromNeed();
 		const source = await resolveUnitSourceContent(unit);
-		const oldContent = oldhash ? await registry.loadUnitRegistry(oldhash) : undefined;
+		// 台帳の読み込みはユニットごとに受け止める。1件の壊れたスナップショットで、まとまりの
+		// ほかのユニットやファイルの残りを止めない（そのユニットは1件ずつの経路が据え置く）
+		let oldContent: string | undefined;
+		try {
+			oldContent = oldhash ? ((await registry.loadUnitRegistry(oldhash)) ?? undefined) : undefined;
+		} catch (error) {
+			logger.warn("trans", "Failed to load the previous source for a revision; leaving it out of the batch", {
+				oldhash,
+				...formatError(error),
+			});
+		}
 		if (!previousTranslation || !oldContent || !hasDiff(oldContent, source)) {
 			slot.push(undefined);
 			continue;
